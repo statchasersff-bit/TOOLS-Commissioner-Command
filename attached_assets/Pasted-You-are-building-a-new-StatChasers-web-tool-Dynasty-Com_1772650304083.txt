@@ -1,0 +1,215 @@
+You are building a new StatChasers web tool: “Dynasty Command Center”.
+It must use a TWO-LEVEL TAB SYSTEM:
+
+- Top row = MAIN TABS
+- Clicking a main tab reveals a SECOND ROW = SUB-TABS for that section
+- The layout and tab behavior should feel similar to our Rookie Hit Rates tool (main tabs -> sub tabs).
+
+TECH STACK / ASSUMPTIONS
+- React + TypeScript + Vite
+- TailwindCSS
+- Single-page app routing is OK (react-router optional). Use state-based navigation first; only use router if needed.
+- Create clean components and data models so we can wire Sleeper API later.
+
+STATCHASERS BRANDING (MUST FOLLOW)
+- Primary: White backgrounds in light mode. Dark mode supported automatically.
+- Brand Navy: #0b3a7a
+- Brand Gold: #d4af37
+- Premium style: subtle shadows, rounded-2xl, gold underline accents on headings, blueprint-style background accents (very subtle).
+- Buttons: navy fill + white text; secondary outline buttons with gold border.
+- Tabs: active tab has navy text + gold underline + pill background; inactive tabs are muted with hover.
+- Use consistent spacing (p-4/p-6), max width container (max-w-6xl or max-w-7xl), and responsive design.
+- All tables must be horizontally scrollable on mobile and have sticky first column for readability.
+
+NAV STRUCTURE (CRITICAL)
+Main Tabs (top row):
+1) Dashboard
+2) League Analyzer
+3) Team Breakdown
+4) Trade Center
+5) Draft Capital
+6) League Market
+7) Insights
+
+Each main tab has sub-tabs (second row):
+
+1) Dashboard sub-tabs:
+- Overview
+- League Snapshot
+- Key Insights
+
+2) League Analyzer sub-tabs:
+- Power Rankings
+- Tier Breakdown
+- Roster Comparison
+
+3) Team Breakdown sub-tabs:
+- Roster Strength
+- Age Curve
+- Depth Chart
+
+4) Trade Center sub-tabs:
+- Trade Finder
+- Trade Targets
+- Trade Block Scanner
+
+5) Draft Capital sub-tabs:
+- Pick Value
+- Pick Distribution
+
+6) League Market sub-tabs:
+- Positional Surplus
+- Market Value
+
+7) Insights sub-tabs:
+- Team Insights
+- League Trends
+
+LAYOUT (MUST BE PREMIUM)
+Top header area:
+- Left: StatChasers logo text (or placeholder) + tool title “Dynasty Command Center”
+- Right: League Selector dropdown (default “Select League”), plus a small “Share” button and “Export” button (disabled placeholders OK)
+Below header:
+- Main tabs row (scrollable on mobile)
+Below main tabs:
+- Sub-tabs row (scrollable on mobile)
+Main content:
+- Show a “section header” with gold underline
+- Content area uses Cards (white/dark), tables, and insight callouts
+
+DATA MODEL (MVP MOCK DATA)
+Do NOT integrate real APIs yet. Use mocked data with TypeScript types so we can wire Sleeper later.
+
+Create types:
+- League { id, name, platform, scoringFormat, teams: Team[] }
+- Team { id, name, owner, roster: Player[], picks: Pick[], metrics: TeamMetrics }
+- Player { id, name, pos, age, value, team, starter?: boolean }
+- Pick { year, round, ownerTeamId, projectedRange?: "Early"|"Mid"|"Late", value }
+- TeamMetrics { overall, starters, depth, youth, picks, qb, rb, wr, te, contenderWindowYears }
+
+Generate a sample league with 12 teams and plausible metrics.
+
+CORE UI COMPONENTS (BUILD THESE)
+1) <MainTabs> component
+- props: tabs[], activeTab, setActiveTab
+- horizontal scroll on mobile
+- active styling uses gold underline and navy text
+2) <SubTabs> component
+- same behavior, but smaller
+3) <LeagueSelector> component
+- dropdown with sample leagues
+4) <KpiCard> component
+- small metric cards
+5) <DataTable> component
+- supports sticky first column, zebra rows, sorting optional
+6) <InsightCallout> component
+- icon + text, can be “positive/neutral/negative” style
+
+MVP CONTENT FOR EACH SUB-TAB (PLACEHOLDERS OK BUT SHOULD LOOK REAL)
+
+DASHBOARD > OVERVIEW
+- KPI cards row:
+  - Your Team Rank, Power Score, Contender Tier, Playoff Odds, Avg Starter Age, Total Future 1sts
+- Below: 2-column layout
+  - Left card: “Your Strengths & Needs” (position grades)
+  - Right card: “Contender Window” (simple bar or timeline)
+- Below: “Recent League Movement” list (mock)
+
+DASHBOARD > LEAGUE SNAPSHOT
+- Table: Rank, Team, Overall Score, Tier, Starter Score, Depth, Youth, Picks
+- Add a “View Team” action button per row (placeholder)
+
+DASHBOARD > KEY INSIGHTS
+- 6-10 InsightCallouts (auto-generated from mock metrics)
+- Example insights:
+  - "Mak has the strongest WR room in the league."
+  - "Kevin owns the most future 1sts (4)."
+  - "Tyler is the oldest contender roster."
+
+LEAGUE ANALYZER > POWER RANKINGS
+- Visual tier list (stacked cards by tier) AND a sortable table beneath it
+- Tier list: Elite / Contender / Competitive / Rebuild
+
+LEAGUE ANALYZER > TIER BREAKDOWN
+- Show tier counts and a small visual distribution (simple bar)
+- Include explanation tooltip: “tiers based on overall + starters + picks + age”
+
+LEAGUE ANALYZER > ROSTER COMPARISON
+- Two dropdowns to select Team A vs Team B
+- Compare in table or bars: QB/RB/WR/TE, overall, starters, depth, youth, picks
+
+TEAM BREAKDOWN > ROSTER STRENGTH
+- Position grade cards
+- Table: Starters vs Bench by position
+- Include small “Suggested Focus” callout (ex: “RB depth is below league avg”)
+
+TEAM BREAKDOWN > AGE CURVE
+- Show age distribution buckets (21-24, 25-28, 29+)
+- Display contender window years
+- Include explanation text
+
+TEAM BREAKDOWN > DEPTH CHART
+- Group roster by position with Starter/Bench labels
+- Add search box for player names (local filter)
+
+TRADE CENTER > TRADE FINDER
+- Table of best trade partners with reasons:
+  - "RB surplus", "Rebuilding", "Needs WR"
+- Add “Target Players” expandable rows
+
+TRADE CENTER > TRADE TARGETS
+- Show recommended targets grouped by:
+  - Buy Low (rebuilders)
+  - Contender Push
+  - Youth Upside
+- Each player card shows: name, age, value, reason
+
+TRADE CENTER > TRADE BLOCK SCANNER
+- Identify “likely sellers” and “likely buyers” based on tiers
+- Show suggested trade block candidates (mock)
+
+DRAFT CAPITAL > PICK VALUE
+- Table of all picks for selected team + league totals
+- Show projected range column
+
+DRAFT CAPITAL > PICK DISTRIBUTION
+- Table: team vs total picks and total pick value
+- Highlight team with most picks
+
+LEAGUE MARKET > POSITIONAL SURPLUS
+- For each position, list top surplus teams and needy teams
+- Use chips/badges for surplus/need
+
+LEAGUE MARKET > MARKET VALUE
+- Show scarcity indicators by position (High/Medium/Low)
+- Provide 3 insights like “RB scarcity is high, expect higher trade costs”
+
+INSIGHTS > TEAM INSIGHTS
+- Per-team narrative insights
+- Add “Generate Report Card” button (placeholder)
+
+INSIGHTS > LEAGUE TRENDS
+- Trends like age trend, pick concentration, positional scarcity
+- Simple charts are optional; start with cards and tables
+
+INTERACTIONS / UX DETAILS (IMPORTANT)
+- When league changes, all tabs update.
+- Persist active main tab + subtab in URL query params if possible (ex: ?tab=trade&sub=targets). If not, persist in localStorage.
+- Smooth transitions between tab content (simple fade).
+- Loading skeleton states for tables/cards (even with mock data).
+- Empty-state design for when no league selected: show a centered card explaining “Select a league to begin”.
+
+ACCESSIBILITY / POLISH
+- Keyboard navigable tabs (arrow keys optional)
+- Proper focus states
+- No hard-coded tiny text; use readable sizes
+- Ensure mobile works: tabs scroll, tables scroll, cards stack
+
+DELIVERABLE
+- Provide the full React code with components and mock data in a clean folder structure:
+  /src
+    /components (Tabs, Cards, Table, Selector)
+    /pages (each main tab page)
+    /data (mock leagues)
+    /types (TS types)
+- Ensure it runs with npm install && npm run dev
