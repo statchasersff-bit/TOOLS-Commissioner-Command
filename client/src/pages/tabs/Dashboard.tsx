@@ -7,14 +7,18 @@ import { InsightCallout } from "@/components/InsightCallout";
 import { SectionHeader } from "@/components/SectionHeader";
 import { getTeamTier, getTierColor, generateInsights } from "@/data/mockData";
 import type { League, Team } from "@/types";
-import { Trophy, Zap, Target, Calendar, Users, Medal, ArrowRight } from "lucide-react";
+import { Trophy, Zap, Target, Calendar, Users, Medal, ArrowRight, Table, Lightbulb } from "lucide-react";
 
 interface DashboardProps {
   league: League;
   userTeam: Team;
 }
 
-export function DashboardOverview({ league, userTeam }: DashboardProps) {
+interface DashboardOverviewProps extends DashboardProps {
+  onNavigate?: (mainTab: string, subTab: string) => void;
+}
+
+export function DashboardOverview({ league, userTeam, onNavigate }: DashboardOverviewProps) {
   const sorted = [...league.teams].sort((a, b) => b.metrics.overall - a.metrics.overall);
   const rank = sorted.findIndex((t) => t.id === userTeam.id) + 1;
   const tier = getTeamTier(userTeam.metrics.overall);
@@ -39,15 +43,77 @@ export function DashboardOverview({ league, userTeam }: DashboardProps) {
 
   return (
     <div className="space-y-8">
-      <SectionHeader title="Overview" subtitle={`${userTeam.name} - managed by ${userTeam.owner}`} />
+      <div className="flex items-end justify-between flex-wrap gap-4">
+        <SectionHeader title="Overview" subtitle={`${userTeam.name} - managed by ${userTeam.owner}`} className="mb-0" />
+        {onNavigate && (
+          <div className="flex items-center gap-1.5" data-testid="jump-to-menu">
+            <span className="text-xs font-semibold text-muted-foreground mr-1">Jump to:</span>
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-xs h-7 px-2.5"
+              onClick={() => onNavigate("dashboard", "snapshot")}
+              data-testid="jump-to-snapshot"
+            >
+              <Table className="w-3 h-3 mr-1" />
+              Snapshot
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-xs h-7 px-2.5"
+              onClick={() => onNavigate("dashboard", "key-insights")}
+              data-testid="jump-to-insights"
+            >
+              <Lightbulb className="w-3 h-3 mr-1" />
+              Insights
+            </Button>
+          </div>
+        )}
+      </div>
 
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-        <KpiCard label="Team Rank" value={`#${rank}`} icon={Trophy} subtitle={`of ${league.teams.length}`} />
-        <KpiCard label="Power Score" value={userTeam.metrics.overall} icon={Zap} subtitle="Overall rating" />
-        <KpiCard label="Contender Tier" value={tier} icon={Medal} />
-        <KpiCard label="Playoff Odds" value={`${Math.max(5, playoffOdds)}%`} icon={Target} trend={playoffOdds > 50 ? "up" : "down"} />
-        <KpiCard label="Avg Starter Age" value={avgAge} icon={Calendar} trend={Number(avgAge) < 26 ? "up" : "down"} subtitle={Number(avgAge) < 26 ? "Young core" : "Veteran core"} />
-        <KpiCard label="Future 1sts" value={future1sts} icon={Users} />
+        <KpiCard
+          label="Team Rank"
+          value={`#${rank}`}
+          icon={Trophy}
+          subtitle={`of ${league.teams.length}`}
+          tooltip="Your team's position in the overall power rankings based on combined roster strength, depth, youth, and draft capital."
+        />
+        <KpiCard
+          label="Power Score"
+          value={userTeam.metrics.overall}
+          icon={Zap}
+          subtitle="Overall rating"
+          tooltip="A composite 0-100 score combining starter quality, roster depth, age curve, and future draft capital."
+        />
+        <KpiCard
+          label="Contender Tier"
+          value={tier}
+          icon={Medal}
+          tooltip="Your competitive classification: Elite (80+), Contender (60-79), Competitive (40-59), or Rebuild (below 40)."
+        />
+        <KpiCard
+          label="Playoff Odds"
+          value={`${Math.max(5, playoffOdds)}%`}
+          icon={Target}
+          trend={playoffOdds > 50 ? "up" : "down"}
+          tooltip="Estimated probability of making the playoffs based on your power ranking and league position."
+        />
+        <KpiCard
+          label="Avg Starter Age"
+          value={avgAge}
+          icon={Calendar}
+          trend={Number(avgAge) < 26 ? "up" : "down"}
+          subtitle={Number(avgAge) < 26 ? "Young core" : "Veteran core"}
+          tooltip="The average age of your starting lineup. Under 26 suggests a young, ascending roster with a longer contender window."
+        />
+        <KpiCard
+          label="Future 1sts"
+          value={future1sts}
+          icon={Users}
+          tooltip="The number of first-round draft picks you hold across all future draft years. More 1sts = more rebuild flexibility."
+        />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">

@@ -1,6 +1,8 @@
 import { Card } from "@/components/ui/card";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import type { LucideIcon } from "lucide-react";
+import { HelpCircle } from "lucide-react";
 
 interface KpiCardProps {
   label: string;
@@ -10,9 +12,10 @@ interface KpiCardProps {
   trend?: "up" | "down" | "neutral";
   className?: string;
   loading?: boolean;
+  tooltip?: string;
 }
 
-export function KpiCard({ label, value, icon: Icon, subtitle, trend, className, loading }: KpiCardProps) {
+export function KpiCard({ label, value, icon: Icon, subtitle, trend, className, loading, tooltip }: KpiCardProps) {
   if (loading) {
     return <KpiCardSkeleton />;
   }
@@ -21,9 +24,23 @@ export function KpiCard({ label, value, icon: Icon, subtitle, trend, className, 
     <Card className={cn("p-5 hover-elevate", className)} data-testid={`kpi-${label.toLowerCase().replace(/\s+/g, "-")}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
-          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider truncate">
-            {label}
-          </p>
+          <div className="flex items-center gap-1">
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider truncate">
+              {label}
+            </p>
+            {tooltip && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button className="text-muted-foreground/50 hover:text-muted-foreground transition-colors flex-shrink-0" data-testid={`tooltip-${label.toLowerCase().replace(/\s+/g, "-")}`}>
+                    <HelpCircle className="w-3 h-3" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="max-w-[220px]">
+                  <p className="text-xs leading-relaxed">{tooltip}</p>
+                </TooltipContent>
+              </Tooltip>
+            )}
+          </div>
           <p className="text-2xl font-bold mt-1.5 text-foreground leading-none">{value}</p>
           {subtitle && (
             <p className={cn(

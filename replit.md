@@ -6,7 +6,9 @@ A premium dynasty fantasy football league analysis tool built with React + TypeS
 ## Architecture
 - **Frontend-only MVP** with mock data (no database needed yet)
 - State-based navigation with URL query param persistence (?tab=X&sub=Y)
+- localStorage persistence for tab, sub-tab, and league selection (key: "sc-dynasty-state")
 - Two-level tab system: 7 main tabs, each with 2-3 sub-tabs
+- Empty state landing until league is selected; first selection lands on Dashboard > Overview
 
 ## Project Structure
 ```
@@ -39,6 +41,12 @@ client/src/
 - Brand Gold: #d4af37
 - Font: Inter
 - Dark mode supported via class toggle
+
+## UX Features
+- "Jump to" mini menu on Dashboard Overview links to Snapshot and Key Insights sub-tabs
+- KPI cards support "?" tooltip icons explaining what each metric means
+- State restored from localStorage on refresh (tab, sub-tab, league)
+- URL query params (?tab=X&sub=Y) take priority over localStorage when present
 
 ## UI Polish
 - Tabs: rounded-full pill shape with gold underline active indicator

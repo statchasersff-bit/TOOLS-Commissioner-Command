@@ -17,18 +17,33 @@ import { PickValue, PickDistribution } from "./tabs/DraftCapital";
 import { PositionalSurplus, MarketValue } from "./tabs/LeagueMarket";
 import { TeamInsights, LeagueTrends } from "./tabs/Insights";
 
+const STORAGE_KEY = "sc-dynasty-state";
+
+function loadSavedState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) return JSON.parse(raw) as { tab?: string; sub?: string; leagueId?: string };
+  } catch {}
+  return null;
+}
+
 function getInitialState() {
   const params = new URLSearchParams(window.location.search);
+  const saved = loadSavedState();
+  const urlTab = params.get("tab");
+  const urlSub = params.get("sub");
+
   return {
-    tab: params.get("tab") || "dashboard",
-    sub: params.get("sub") || "overview",
+    tab: urlTab || saved?.tab || "dashboard",
+    sub: urlSub || saved?.sub || "overview",
+    leagueId: saved?.leagueId || null,
   };
 }
 
 export default function DynastyCommandCenter() {
   const leagues = getLeagues();
-  const [selectedLeagueId, setSelectedLeagueId] = useState<string | null>(null);
   const initial = getInitialState();
+  const [selectedLeagueId, setSelectedLeagueId] = useState<string | null>(initial.leagueId);
   const [activeMainTab, setActiveMainTab] = useState(initial.tab);
   const [activeSubTab, setActiveSubTab] = useState(initial.sub);
   const [isTransitioning, setIsTransitioning] = useState(false);
@@ -42,7 +57,23 @@ export default function DynastyCommandCenter() {
     url.searchParams.set("tab", activeMainTab);
     url.searchParams.set("sub", activeSubTab);
     window.history.replaceState({}, "", url.toString());
-  }, [activeMainTab, activeSubTab]);
+
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        tab: activeMainTab,
+        sub: activeSubTab,
+        leagueId: selectedLeagueId,
+      }));
+    } catch {}
+  }, [activeMainTab, activeSubTab, selectedLeagueId]);
+
+  const handleLeagueSelect = useCallback((id: string) => {
+    setSelectedLeagueId(id);
+    if (!league) {
+      setActiveMainTab("dashboard");
+      setActiveSubTab("overview");
+    }
+  }, [league]);
 
   const handleMainTabChange = useCallback((id: string) => {
     setIsTransitioning(true);
@@ -55,6 +86,13 @@ export default function DynastyCommandCenter() {
   const handleSubTabChange = useCallback((id: string) => {
     setIsTransitioning(true);
     setActiveSubTab(id);
+    setTimeout(() => setIsTransitioning(false), 180);
+  }, []);
+
+  const navigateToSubTab = useCallback((mainTabId: string, subTabId: string) => {
+    setIsTransitioning(true);
+    setActiveMainTab(mainTabId);
+    setActiveSubTab(subTabId);
     setTimeout(() => setIsTransitioning(false), 180);
   }, []);
 
@@ -77,7 +115,7 @@ export default function DynastyCommandCenter() {
 
     const key = `${activeMainTab}:${activeSubTab}`;
     switch (key) {
-      case "dashboard:overview": return <DashboardOverview league={league} userTeam={userTeam} />;
+      case "dashboard:overview": return <DashboardOverview league={league} userTeam={userTeam} onNavigate={navigateToSubTab} />;
       case "dashboard:snapshot": return <DashboardSnapshot league={league} />;
       case "dashboard:key-insights": return <DashboardKeyInsights league={league} userTeam={userTeam} />;
       case "league-analyzer:power-rankings": return <PowerRankings league={league} />;
@@ -119,7 +157,7 @@ export default function DynastyCommandCenter() {
             <LeagueSelector
               leagues={leagues}
               selectedLeagueId={selectedLeagueId}
-              onSelect={setSelectedLeagueId}
+              onSelect={handleLeagueSelect}
             />
             <Button variant="outline" size="sm" disabled data-testid="button-share">
               <Share2 className="w-3 h-3 mr-1" /> Share
