@@ -13,7 +13,7 @@ export function InsightCallout({ text, type, className }: InsightCalloutProps) {
   return (
     <div
       className={cn(
-        "flex items-start gap-3 p-3 rounded-md border transition-colors",
+        "flex items-start gap-3 p-4 rounded-md border transition-colors",
         type === "positive" && "bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200/50 dark:border-emerald-800/30",
         type === "negative" && "bg-red-50/50 dark:bg-red-950/20 border-red-200/50 dark:border-red-800/30",
         type === "neutral" && "bg-blue-50/50 dark:bg-blue-950/20 border-blue-200/50 dark:border-blue-800/30",

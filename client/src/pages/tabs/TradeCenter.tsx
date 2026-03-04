@@ -33,12 +33,12 @@ export function TradeFinder({ league, userTeam }: TradeProps) {
   const columns = [
     { key: "name", header: "Team", sticky: true, render: (row: any) => (
       <div>
-        <span className="font-medium">{row.name}</span>
+        <span className="font-semibold">{row.name}</span>
         <span className="text-xs text-muted-foreground ml-2">({row.owner})</span>
       </div>
     )},
     { key: "tier", header: "Tier", render: (row: any) => <Badge variant="outline" className={getTierColor(row.tier)}>{row.tier}</Badge> },
-    { key: "overall", header: "Score", render: (row: any) => <span className="font-bold">{row.metrics.overall}</span> },
+    { key: "overall", header: "Score", render: (row: any) => <span className="font-bold text-lg">{row.metrics.overall}</span> },
     { key: "reasons", header: "Trade Reasons", render: (row: any) => (
       <div className="flex flex-wrap gap-1">
         {row.reasons.map((r: string, i: number) => (
@@ -54,7 +54,7 @@ export function TradeFinder({ league, userTeam }: TradeProps) {
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <SectionHeader title="Trade Finder" subtitle="Best trade partners based on roster needs" />
       <DataTable columns={columns} data={partners} />
     </div>
@@ -81,21 +81,21 @@ export function TradeTargets({ league, userTeam }: TradeProps) {
     .sort((a, b) => b.value - a.value)
     .slice(0, 5);
 
-  const renderGroup = (title: string, icon: any, players: any[], color: string) => (
-    <Card className="p-5">
-      <h3 className="text-sm font-semibold mb-4 flex items-center gap-2">
+  const renderGroup = (title: string, icon: any, players: any[]) => (
+    <Card className="p-6">
+      <h3 className="text-base font-bold mb-5 flex items-center gap-2">
         {icon}
         {title}
-        <span className="block h-0.5 w-8 bg-[#d4af37] rounded-full" />
+        <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full" />
       </h3>
-      <div className="space-y-3">
+      <div className="space-y-1">
         {players.length === 0 && <p className="text-xs text-muted-foreground">No targets found</p>}
         {players.map((p, i) => (
-          <div key={i} className="flex items-center justify-between py-2 border-b border-border/20 last:border-0">
+          <div key={i} className="flex items-center justify-between py-2.5 border-b border-border/20 last:border-0">
             <div className="flex items-center gap-2">
               <Badge variant="outline" className="text-xs w-8 justify-center">{p.pos}</Badge>
               <div>
-                <p className="text-sm font-medium">{p.name}</p>
+                <p className="text-sm font-semibold">{p.name}</p>
                 <p className="text-xs text-muted-foreground">From {p.ownerName}</p>
               </div>
             </div>
@@ -110,12 +110,12 @@ export function TradeTargets({ league, userTeam }: TradeProps) {
   );
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <SectionHeader title="Trade Targets" subtitle="Recommended acquisition targets by strategy" />
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {renderGroup("Buy Low", <TrendingDown className="w-4 h-4 text-emerald-500" />, buyLow, "emerald")}
-        {renderGroup("Contender Push", <Target className="w-4 h-4 text-blue-500" />, contenderPush, "blue")}
-        {renderGroup("Youth Upside", <TrendingUp className="w-4 h-4 text-amber-500" />, youthUpside, "amber")}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+        {renderGroup("Buy Low", <TrendingDown className="w-4 h-4 text-emerald-500" />, buyLow)}
+        {renderGroup("Contender Push", <Target className="w-4 h-4 text-blue-500" />, contenderPush)}
+        {renderGroup("Youth Upside", <TrendingUp className="w-4 h-4 text-amber-500" />, youthUpside)}
       </div>
     </div>
   );
@@ -130,22 +130,22 @@ export function TradeBlockScanner({ league }: { league: League }) {
   );
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <SectionHeader title="Trade Block Scanner" subtitle="Identify likely sellers and buyers in your league" />
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Card className="p-5">
-          <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+        <Card className="p-6">
+          <h3 className="text-base font-bold mb-4 flex items-center gap-2">
             <TrendingDown className="w-4 h-4 text-red-500" />
             Likely Sellers
-            <span className="block h-0.5 w-8 bg-[#d4af37] rounded-full" />
+            <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full" />
           </h3>
-          <div className="space-y-2">
+          <div className="space-y-2.5">
             {sellers.map((t) => (
-              <div key={t.id} className={cn("p-3 rounded-md", getTierBg("Rebuild"))}>
+              <div key={t.id} className={cn("p-3.5 rounded-md", getTierBg("Rebuild"))}>
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-medium">{t.name}</p>
+                    <p className="text-sm font-semibold">{t.name}</p>
                     <p className="text-xs text-muted-foreground">{t.owner}</p>
                   </div>
                   <Badge variant="outline" className={getTierColor("Rebuild")}>Rebuild</Badge>
@@ -156,20 +156,20 @@ export function TradeBlockScanner({ league }: { league: League }) {
           </div>
         </Card>
 
-        <Card className="p-5">
-          <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+        <Card className="p-6">
+          <h3 className="text-base font-bold mb-4 flex items-center gap-2">
             <TrendingUp className="w-4 h-4 text-emerald-500" />
             Likely Buyers
-            <span className="block h-0.5 w-8 bg-[#d4af37] rounded-full" />
+            <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full" />
           </h3>
-          <div className="space-y-2">
+          <div className="space-y-2.5">
             {buyers.map((t) => {
               const tier = getTeamTier(t.metrics.overall);
               return (
-                <div key={t.id} className={cn("p-3 rounded-md", getTierBg(tier))}>
+                <div key={t.id} className={cn("p-3.5 rounded-md", getTierBg(tier))}>
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm font-medium">{t.name}</p>
+                      <p className="text-sm font-semibold">{t.name}</p>
                       <p className="text-xs text-muted-foreground">{t.owner}</p>
                     </div>
                     <Badge variant="outline" className={getTierColor(tier)}>{tier}</Badge>
@@ -181,19 +181,19 @@ export function TradeBlockScanner({ league }: { league: League }) {
         </Card>
       </div>
 
-      <Card className="p-5">
-        <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+      <Card className="p-6">
+        <h3 className="text-base font-bold mb-4 flex items-center gap-2">
           Trade Block Candidates
           <Badge variant="secondary">{tradeBlockCandidates.length}</Badge>
-          <span className="block h-0.5 w-8 bg-[#d4af37] rounded-full" />
+          <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full" />
         </h3>
-        <div className="space-y-2">
+        <div className="space-y-1">
           {tradeBlockCandidates.map((p, i) => (
-            <div key={i} className="flex items-center justify-between py-2 border-b border-border/20 last:border-0">
+            <div key={i} className="flex items-center justify-between py-2.5 border-b border-border/20 last:border-0">
               <div className="flex items-center gap-2">
                 <Badge variant="outline" className="text-xs w-8 justify-center">{p.pos}</Badge>
                 <div>
-                  <p className="text-sm font-medium">{p.name}</p>
+                  <p className="text-sm font-semibold">{p.name}</p>
                   <p className="text-xs text-muted-foreground">{p.teamName} ({p.ownerName})</p>
                 </div>
               </div>

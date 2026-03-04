@@ -38,10 +38,10 @@ export function DashboardOverview({ league, userTeam }: DashboardProps) {
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <SectionHeader title="Overview" subtitle={`${userTeam.name} - managed by ${userTeam.owner}`} />
 
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         <KpiCard label="Team Rank" value={`#${rank}`} icon={Trophy} subtitle={`of ${league.teams.length}`} />
         <KpiCard label="Power Score" value={userTeam.metrics.overall} icon={Zap} subtitle="Overall rating" />
         <KpiCard label="Contender Tier" value={tier} icon={Medal} />
@@ -50,17 +50,17 @@ export function DashboardOverview({ league, userTeam }: DashboardProps) {
         <KpiCard label="Future 1sts" value={future1sts} icon={Users} />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <Card className="p-5">
-          <h3 className="text-sm font-semibold text-foreground mb-4 flex items-center gap-2">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <Card className="p-6">
+          <h3 className="text-base font-bold text-foreground mb-5 flex items-center gap-2">
             Strengths & Needs
-            <span className="block h-0.5 w-8 bg-[#d4af37] rounded-full" />
+            <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full" />
           </h3>
-          <div className="space-y-3">
+          <div className="space-y-4">
             {positions.map((p) => (
               <div key={p.pos} className="flex items-center gap-3">
-                <span className="text-xs font-semibold text-muted-foreground w-6">{p.pos}</span>
-                <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+                <span className="text-xs font-bold text-muted-foreground w-7">{p.pos}</span>
+                <div className="flex-1 h-2.5 bg-muted rounded-full overflow-hidden">
                   <div
                     className="h-full rounded-full transition-all bg-[#0b3a7a] dark:bg-blue-500"
                     style={{ width: `${p.score}%` }}
@@ -69,27 +69,27 @@ export function DashboardOverview({ league, userTeam }: DashboardProps) {
                 <Badge variant={p.grade === "A" ? "default" : p.grade === "B" ? "secondary" : "outline"}>
                   {p.grade}
                 </Badge>
-                <span className="text-xs text-muted-foreground w-8 text-right">{p.score}</span>
+                <span className="text-xs font-medium text-muted-foreground w-8 text-right">{p.score}</span>
               </div>
             ))}
           </div>
         </Card>
 
-        <Card className="p-5">
-          <h3 className="text-sm font-semibold text-foreground mb-4 flex items-center gap-2">
+        <Card className="p-6">
+          <h3 className="text-base font-bold text-foreground mb-5 flex items-center gap-2">
             Contender Window
-            <span className="block h-0.5 w-8 bg-[#d4af37] rounded-full" />
+            <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full" />
           </h3>
-          <div className="space-y-3">
-            <div className="flex items-center gap-2 mb-2">
-              <span className="text-3xl font-bold text-[#0b3a7a] dark:text-blue-400">{userTeam.metrics.contenderWindowYears}</span>
+          <div className="space-y-4">
+            <div className="flex items-baseline gap-2 mb-3">
+              <span className="text-4xl font-bold text-[#0b3a7a] dark:text-blue-400">{userTeam.metrics.contenderWindowYears}</span>
               <span className="text-sm text-muted-foreground">years projected</span>
             </div>
-            <div className="flex gap-1">
+            <div className="flex gap-1.5">
               {[1, 2, 3, 4, 5].map((y) => (
                 <div
                   key={y}
-                  className={`flex-1 h-8 rounded-md flex items-center justify-center text-xs font-medium ${
+                  className={`flex-1 h-10 rounded-md flex items-center justify-center text-xs font-semibold transition-colors ${
                     y <= userTeam.metrics.contenderWindowYears
                       ? "bg-[#0b3a7a] dark:bg-blue-600 text-white"
                       : "bg-muted text-muted-foreground"
@@ -99,21 +99,21 @@ export function DashboardOverview({ league, userTeam }: DashboardProps) {
                 </div>
               ))}
             </div>
-            <p className="text-xs text-muted-foreground mt-2">
+            <p className="text-xs text-muted-foreground mt-3 leading-relaxed">
               Based on roster age, starter strength, and draft capital projection.
             </p>
           </div>
         </Card>
       </div>
 
-      <Card className="p-5">
-        <h3 className="text-sm font-semibold text-foreground mb-4 flex items-center gap-2">
+      <Card className="p-6">
+        <h3 className="text-base font-bold text-foreground mb-5 flex items-center gap-2">
           Recent League Movement
-          <span className="block h-0.5 w-8 bg-[#d4af37] rounded-full" />
+          <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full" />
         </h3>
-        <div className="space-y-3">
+        <div className="space-y-1">
           {movements.map((m, i) => (
-            <div key={i} className="flex items-center gap-3 py-2 border-b border-border/30 last:border-0">
+            <div key={i} className="flex items-center gap-3 py-3 border-b border-border/30 last:border-0">
               <Badge variant={m.action === "Trade" ? "default" : "secondary"}>{m.action}</Badge>
               <span className="text-sm text-foreground flex-1">{m.detail}</span>
               <span className="text-xs text-muted-foreground whitespace-nowrap">{m.time}</span>
@@ -129,14 +129,14 @@ export function DashboardSnapshot({ league }: { league: League }) {
   const sorted = [...league.teams].sort((a, b) => b.metrics.overall - a.metrics.overall);
 
   const columns = [
-    { key: "rank", header: "#", sticky: true, render: (_: any, i: number) => <span className="font-semibold text-muted-foreground">{i + 1}</span> },
-    { key: "name", header: "Team", sticky: false, render: (row: any) => (
+    { key: "rank", header: "#", sticky: true, render: (_: any, i: number) => <span className="font-bold text-muted-foreground">{i + 1}</span> },
+    { key: "name", header: "Team", render: (row: any) => (
       <div>
-        <span className="font-medium text-foreground">{row.name}</span>
+        <span className="font-semibold text-foreground">{row.name}</span>
         <span className="text-xs text-muted-foreground ml-2">({row.owner})</span>
       </div>
     )},
-    { key: "overall", header: "Overall", render: (row: any) => <span className="font-bold">{row.metrics.overall}</span> },
+    { key: "overall", header: "Overall", render: (row: any) => <span className="font-bold text-lg">{row.metrics.overall}</span> },
     { key: "tier", header: "Tier", render: (row: any) => {
       const tier = getTeamTier(row.metrics.overall);
       return <Badge variant="outline" className={getTierColor(tier)}>{tier}</Badge>;
@@ -153,7 +153,7 @@ export function DashboardSnapshot({ league }: { league: League }) {
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <SectionHeader title="League Snapshot" subtitle="All teams ranked by overall power score" />
       <DataTable columns={columns} data={sorted} />
     </div>
@@ -164,9 +164,9 @@ export function DashboardKeyInsights({ league, userTeam }: DashboardProps) {
   const insights = generateInsights(league, userTeam.id);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <SectionHeader title="Key Insights" subtitle="Auto-generated analysis from league data" />
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {insights.map((insight, i) => (
           <InsightCallout key={i} text={insight.text} type={insight.type} />
         ))}

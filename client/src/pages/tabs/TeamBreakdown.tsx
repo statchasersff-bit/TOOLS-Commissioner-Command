@@ -35,15 +35,15 @@ export function RosterStrength({ league, userTeam }: TeamProps) {
   const bench = userTeam.roster.filter((p) => !p.starter);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <SectionHeader title="Roster Strength" subtitle={`${userTeam.name} position-by-position breakdown`} />
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {positions.map((p) => (
-          <Card key={p.pos} className="p-4 hover-elevate">
-            <p className="text-xs font-semibold text-muted-foreground uppercase">{p.pos}</p>
-            <p className="text-2xl font-bold mt-1">{p.score}</p>
-            <div className="flex items-center gap-1 mt-1">
+          <Card key={p.pos} className="p-5 hover-elevate">
+            <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">{p.pos}</p>
+            <p className="text-3xl font-bold mt-1.5">{p.score}</p>
+            <div className="flex items-center gap-1.5 mt-2">
               <span className="text-xs text-muted-foreground">Avg: {p.avg}</span>
               <Badge variant={p.score >= p.avg ? "default" : "outline"} className="text-xs">
                 {p.score >= p.avg ? "+" : ""}{p.score - p.avg}
@@ -60,43 +60,43 @@ export function RosterStrength({ league, userTeam }: TeamProps) {
         />
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Card className="p-5">
-          <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+        <Card className="p-6">
+          <h3 className="text-base font-bold mb-4 flex items-center gap-2">
             Starters ({starters.length})
-            <span className="block h-0.5 w-8 bg-[#d4af37] rounded-full" />
+            <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full" />
           </h3>
-          <div className="space-y-2">
+          <div className="space-y-1">
             {starters.map((p) => (
-              <div key={p.id} className="flex items-center justify-between py-1.5 border-b border-border/20 last:border-0">
+              <div key={p.id} className="flex items-center justify-between py-2.5 border-b border-border/20 last:border-0">
                 <div className="flex items-center gap-2">
                   <Badge variant="outline" className="text-xs w-8 justify-center">{p.pos}</Badge>
-                  <span className="text-sm font-medium">{p.name}</span>
+                  <span className="text-sm font-semibold">{p.name}</span>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-3">
                   <span className="text-xs text-muted-foreground">Age {p.age}</span>
-                  <span className="text-xs font-semibold">{p.value}</span>
+                  <span className="text-xs font-bold">{p.value}</span>
                 </div>
               </div>
             ))}
           </div>
         </Card>
 
-        <Card className="p-5">
-          <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+        <Card className="p-6">
+          <h3 className="text-base font-bold mb-4 flex items-center gap-2">
             Bench ({bench.length})
-            <span className="block h-0.5 w-8 bg-[#d4af37] rounded-full" />
+            <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full" />
           </h3>
-          <div className="space-y-2">
+          <div className="space-y-1">
             {bench.map((p) => (
-              <div key={p.id} className="flex items-center justify-between py-1.5 border-b border-border/20 last:border-0">
+              <div key={p.id} className="flex items-center justify-between py-2.5 border-b border-border/20 last:border-0">
                 <div className="flex items-center gap-2">
                   <Badge variant="outline" className="text-xs w-8 justify-center">{p.pos}</Badge>
                   <span className="text-sm">{p.name}</span>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-3">
                   <span className="text-xs text-muted-foreground">Age {p.age}</span>
-                  <span className="text-xs font-semibold">{p.value}</span>
+                  <span className="text-xs font-bold">{p.value}</span>
                 </div>
               </div>
             ))}
@@ -118,15 +118,15 @@ export function AgeCurve({ userTeam }: { userTeam: Team }) {
   const maxBucket = Math.max(...Object.values(buckets));
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <SectionHeader title="Age Curve" subtitle="Roster age distribution and contender window" />
 
-      <Card className="p-5">
-        <div className="grid grid-cols-3 gap-4">
+      <Card className="p-6">
+        <div className="grid grid-cols-3 gap-6">
           {Object.entries(buckets).map(([range, count]) => (
             <div key={range} className="text-center">
-              <div className="mx-auto w-full max-w-[80px]">
-                <div className="h-32 bg-muted rounded-md relative overflow-hidden flex items-end">
+              <div className="mx-auto w-full max-w-[90px]">
+                <div className="h-36 bg-muted rounded-md relative overflow-hidden flex items-end">
                   <div
                     className={cn(
                       "w-full rounded-md transition-all",
@@ -138,19 +138,19 @@ export function AgeCurve({ userTeam }: { userTeam: Team }) {
                   />
                 </div>
               </div>
-              <p className="text-lg font-bold mt-2">{count}</p>
-              <p className="text-xs text-muted-foreground">{range}</p>
+              <p className="text-xl font-bold mt-3">{count}</p>
+              <p className="text-xs text-muted-foreground font-medium">{range}</p>
             </div>
           ))}
         </div>
       </Card>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
         <KpiCard label="Contender Window" value={`${userTeam.metrics.contenderWindowYears} Years`} subtitle="Based on roster age and value" />
         <KpiCard label="Youth Score" value={userTeam.metrics.youth} subtitle={userTeam.metrics.youth >= 60 ? "Above average" : "Below average"} trend={userTeam.metrics.youth >= 60 ? "up" : "down"} />
       </div>
 
-      <Card className="p-5">
+      <Card className="p-6">
         <p className="text-sm text-muted-foreground leading-relaxed">
           Your roster skews {buckets["21-24"] > buckets["29+"] ? "younger" : "older"} with {buckets["21-24"]} players under 25.
           {userTeam.metrics.contenderWindowYears >= 3
@@ -173,7 +173,7 @@ export function DepthChart({ userTeam }: { userTeam: Team }) {
   }, [search, userTeam.roster]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <SectionHeader title="Depth Chart" subtitle="Full roster organized by position" />
 
       <div className="relative max-w-sm">
@@ -187,30 +187,30 @@ export function DepthChart({ userTeam }: { userTeam: Team }) {
         />
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
         {positions.map((pos) => {
           const players = filtered.filter((p) => p.pos === pos);
           if (players.length === 0 && search) return null;
           return (
-            <Card key={pos} className="p-5">
-              <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+            <Card key={pos} className="p-6">
+              <h3 className="text-base font-bold mb-4 flex items-center gap-2">
                 {pos}
                 <Badge variant="secondary">{players.length}</Badge>
-                <span className="block h-0.5 w-8 bg-[#d4af37] rounded-full" />
+                <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full" />
               </h3>
-              <div className="space-y-2">
+              <div className="space-y-1">
                 {players.sort((a, b) => (b.starter ? 1 : 0) - (a.starter ? 1 : 0) || b.value - a.value).map((p) => (
-                  <div key={p.id} className="flex items-center justify-between py-1.5 border-b border-border/20 last:border-0">
+                  <div key={p.id} className="flex items-center justify-between py-2.5 border-b border-border/20 last:border-0">
                     <div className="flex items-center gap-2">
                       <Badge variant={p.starter ? "default" : "outline"} className="text-xs">
                         {p.starter ? "Starter" : "Bench"}
                       </Badge>
-                      <span className={cn("text-sm", p.starter ? "font-medium" : "")}>{p.name}</span>
+                      <span className={cn("text-sm", p.starter ? "font-semibold" : "")}>{p.name}</span>
                     </div>
                     <div className="flex items-center gap-3">
                       <span className="text-xs text-muted-foreground">{p.team}</span>
                       <span className="text-xs text-muted-foreground">Age {p.age}</span>
-                      <span className="text-xs font-semibold w-6 text-right">{p.value}</span>
+                      <span className="text-xs font-bold w-6 text-right">{p.value}</span>
                     </div>
                   </div>
                 ))}

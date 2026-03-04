@@ -38,23 +38,23 @@ export function TeamInsights({ league }: InsightsProps) {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <SectionHeader title="Team Insights" subtitle="Per-team narrative analysis" />
 
-      <div className="space-y-4">
+      <div className="space-y-5">
         {sorted.map((team) => {
           const tier = getTeamTier(team.metrics.overall);
           const narratives = getTeamNarrative(team);
           return (
-            <Card key={team.id} className="p-5">
-              <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+            <Card key={team.id} className="p-6">
+              <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
                 <div className="flex items-center gap-2">
-                  <h3 className="text-sm font-semibold">{team.name}</h3>
+                  <h3 className="text-base font-bold">{team.name}</h3>
                   <span className="text-xs text-muted-foreground">({team.owner})</span>
                   <Badge variant="outline" className={getTierColor(tier)}>{tier}</Badge>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-lg font-bold">{team.metrics.overall}</span>
+                <div className="flex items-center gap-3">
+                  <span className="text-xl font-bold">{team.metrics.overall}</span>
                   <Button variant="outline" size="sm" data-testid={`button-report-${team.id}`}>
                     <FileText className="w-3 h-3 mr-1" /> Report Card
                   </Button>
@@ -96,57 +96,57 @@ export function LeagueTrends({ league }: InsightsProps) {
   });
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <SectionHeader title="League Trends" subtitle="Macro-level patterns and observations" />
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card className="p-5">
-          <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+        <Card className="p-6">
+          <h3 className="text-base font-bold mb-4 flex items-center gap-2">
             Age Trend
-            <span className="block h-0.5 w-8 bg-[#d4af37] rounded-full" />
+            <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full" />
           </h3>
-          <p className="text-2xl font-bold">{avgAge.toFixed(1)}</p>
-          <p className="text-xs text-muted-foreground mt-1">League-wide average player age</p>
+          <p className="text-3xl font-bold">{avgAge.toFixed(1)}</p>
+          <p className="text-xs text-muted-foreground mt-1.5">League-wide average player age</p>
           <InsightCallout
             text={avgAge > 26 ? "The league skews older -- youth assets may be undervalued." : "The league is relatively young -- expect competitive windows to last."}
             type={avgAge > 26 ? "negative" : "positive"}
-            className="mt-3"
+            className="mt-4"
           />
         </Card>
 
-        <Card className="p-5">
-          <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+        <Card className="p-6">
+          <h3 className="text-base font-bold mb-4 flex items-center gap-2">
             Pick Concentration
-            <span className="block h-0.5 w-8 bg-[#d4af37] rounded-full" />
+            <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full" />
           </h3>
-          <p className="text-2xl font-bold">{topPickHolder.name}</p>
-          <p className="text-xs text-muted-foreground mt-1">
+          <p className="text-3xl font-bold">{topPickHolder.name}</p>
+          <p className="text-xs text-muted-foreground mt-1.5">
             Holds {topPickHolder.picks} picks ({topPickHolder.pct}% of league total)
           </p>
-          <div className="mt-3 space-y-1">
+          <div className="mt-4 space-y-2">
             {pickConcentration.slice(0, 5).map((pc) => (
               <div key={pc.name} className="flex items-center justify-between text-xs">
-                <span>{pc.name}</span>
+                <span className="font-medium">{pc.name}</span>
                 <div className="flex items-center gap-2">
-                  <div className="w-16 h-1.5 bg-muted rounded-full overflow-hidden">
+                  <div className="w-20 h-2 bg-muted rounded-full overflow-hidden">
                     <div className="h-full bg-[#0b3a7a] dark:bg-blue-500 rounded-full" style={{ width: `${pc.pct}%` }} />
                   </div>
-                  <span className="text-muted-foreground w-6 text-right">{pc.picks}</span>
+                  <span className="text-muted-foreground w-6 text-right font-medium">{pc.picks}</span>
                 </div>
               </div>
             ))}
           </div>
         </Card>
 
-        <Card className="p-5">
-          <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+        <Card className="p-6">
+          <h3 className="text-base font-bold mb-4 flex items-center gap-2">
             Positional Scarcity
-            <span className="block h-0.5 w-8 bg-[#d4af37] rounded-full" />
+            <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full" />
           </h3>
-          <div className="space-y-3">
+          <div className="space-y-4">
             {posScarcity.map((ps) => (
               <div key={ps.pos} className="flex items-center justify-between">
-                <span className="text-sm font-medium">{ps.pos}</span>
+                <span className="text-sm font-semibold">{ps.pos}</span>
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-muted-foreground">{ps.below} needy</span>
                   <Badge variant={ps.below >= 4 ? "destructive" : ps.below >= 2 ? "secondary" : "outline"} className="text-xs">

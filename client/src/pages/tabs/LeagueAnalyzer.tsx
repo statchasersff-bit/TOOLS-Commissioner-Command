@@ -20,9 +20,9 @@ export function PowerRankings({ league }: AnalyzerProps) {
   sorted.forEach((t) => { tiers[getTeamTier(t.metrics.overall)].push(t); });
 
   const columns = [
-    { key: "rank", header: "#", sticky: true, render: (_: any, i: number) => <span className="font-semibold">{i + 1}</span> },
-    { key: "name", header: "Team", render: (row: any) => <span className="font-medium">{row.name} <span className="text-muted-foreground">({row.owner})</span></span> },
-    { key: "overall", header: "Overall", render: (row: any) => <span className="font-bold">{row.metrics.overall}</span> },
+    { key: "rank", header: "#", sticky: true, render: (_: any, i: number) => <span className="font-bold">{i + 1}</span> },
+    { key: "name", header: "Team", render: (row: any) => <span className="font-semibold">{row.name} <span className="text-muted-foreground font-normal">({row.owner})</span></span> },
+    { key: "overall", header: "Overall", render: (row: any) => <span className="font-bold text-lg">{row.metrics.overall}</span> },
     { key: "tier", header: "Tier", render: (row: any) => <Badge variant="outline" className={getTierColor(getTeamTier(row.metrics.overall))}>{getTeamTier(row.metrics.overall)}</Badge> },
     { key: "starters", header: "Starters", render: (row: any) => row.metrics.starters },
     { key: "depth", header: "Depth", render: (row: any) => row.metrics.depth },
@@ -30,23 +30,23 @@ export function PowerRankings({ league }: AnalyzerProps) {
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <SectionHeader title="Power Rankings" subtitle="Teams ranked and grouped by tier" />
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {(["Elite", "Contender", "Competitive", "Rebuild"] as Tier[]).map((tier) => (
-          <div key={tier} className={cn("rounded-md p-3 border border-border/40", getTierBg(tier))}>
-            <h4 className={cn("text-sm font-semibold mb-2", getTierColor(tier))}>{tier}</h4>
-            <div className="space-y-2">
+          <div key={tier} className={cn("rounded-md p-4 border border-border/40", getTierBg(tier))}>
+            <h4 className={cn("text-sm font-bold mb-3", getTierColor(tier))}>{tier}</h4>
+            <div className="space-y-2.5">
               {tiers[tier].length === 0 && <p className="text-xs text-muted-foreground">No teams</p>}
               {tiers[tier].map((team) => (
-                <Card key={team.id} className="p-3 hover-elevate">
+                <Card key={team.id} className="p-4 hover-elevate">
                   <div className="flex items-center justify-between gap-2">
                     <div>
-                      <p className="text-sm font-medium">{team.name}</p>
+                      <p className="text-sm font-semibold">{team.name}</p>
                       <p className="text-xs text-muted-foreground">{team.owner}</p>
                     </div>
-                    <span className="text-lg font-bold text-foreground">{team.metrics.overall}</span>
+                    <span className="text-xl font-bold text-foreground">{team.metrics.overall}</span>
                   </div>
                 </Card>
               ))}
@@ -66,12 +66,12 @@ export function TierBreakdown({ league }: AnalyzerProps) {
   const total = league.teams.length;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <SectionHeader title="Tier Breakdown" subtitle="Distribution of teams across competitive tiers" />
 
-      <Card className="p-5">
-        <div className="flex items-center gap-2 mb-4">
-          <h3 className="text-sm font-semibold">Tier Distribution</h3>
+      <Card className="p-6">
+        <div className="flex items-center gap-2 mb-5">
+          <h3 className="text-base font-bold">Tier Distribution</h3>
           <Tooltip>
             <TooltipTrigger>
               <Info className="w-3.5 h-3.5 text-muted-foreground" />
@@ -82,14 +82,14 @@ export function TierBreakdown({ league }: AnalyzerProps) {
           </Tooltip>
         </div>
 
-        <div className="space-y-4">
+        <div className="space-y-5">
           {(["Elite", "Contender", "Competitive", "Rebuild"] as Tier[]).map((tier) => (
-            <div key={tier} className="space-y-1">
+            <div key={tier} className="space-y-1.5">
               <div className="flex items-center justify-between">
-                <span className={cn("text-sm font-medium", getTierColor(tier))}>{tier}</span>
+                <span className={cn("text-sm font-semibold", getTierColor(tier))}>{tier}</span>
                 <span className="text-sm text-muted-foreground">{tierCounts[tier]} team{tierCounts[tier] !== 1 ? "s" : ""}</span>
               </div>
-              <div className="h-4 bg-muted rounded-full overflow-hidden">
+              <div className="h-5 bg-muted rounded-full overflow-hidden">
                 <div
                   className={cn(
                     "h-full rounded-full transition-all",
@@ -106,11 +106,11 @@ export function TierBreakdown({ league }: AnalyzerProps) {
         </div>
       </Card>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {(["Elite", "Contender", "Competitive", "Rebuild"] as Tier[]).map((tier) => (
-          <Card key={tier} className={cn("p-4 text-center", getTierBg(tier))}>
-            <p className="text-3xl font-bold">{tierCounts[tier]}</p>
-            <p className={cn("text-sm font-medium mt-1", getTierColor(tier))}>{tier}</p>
+          <Card key={tier} className={cn("p-5 text-center", getTierBg(tier))}>
+            <p className="text-4xl font-bold">{tierCounts[tier]}</p>
+            <p className={cn("text-sm font-semibold mt-1.5", getTierColor(tier))}>{tier}</p>
             <p className="text-xs text-muted-foreground mt-1">{Math.round((tierCounts[tier] / total) * 100)}% of league</p>
           </Card>
         ))}
@@ -139,7 +139,7 @@ export function RosterComparison({ league }: AnalyzerProps) {
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <SectionHeader title="Roster Comparison" subtitle="Compare two teams head-to-head" />
 
       <div className="flex flex-wrap items-center gap-4">
@@ -153,7 +153,7 @@ export function RosterComparison({ league }: AnalyzerProps) {
             ))}
           </SelectContent>
         </Select>
-        <span className="text-sm font-semibold text-muted-foreground">VS</span>
+        <span className="text-sm font-bold text-muted-foreground">VS</span>
         <Select value={teamBId} onValueChange={setTeamBId}>
           <SelectTrigger className="w-[200px]" data-testid="select-team-b">
             <SelectValue placeholder="Team B" />
@@ -167,29 +167,29 @@ export function RosterComparison({ league }: AnalyzerProps) {
       </div>
 
       {teamA && teamB && (
-        <Card className="p-5">
-          <div className="space-y-4">
+        <Card className="p-6">
+          <div className="space-y-5">
             {categories.map((cat) => {
               const valA = teamA.metrics[cat.key as keyof typeof teamA.metrics] as number;
               const valB = teamB.metrics[cat.key as keyof typeof teamB.metrics] as number;
               const maxVal = Math.max(valA, valB, 1);
               return (
-                <div key={cat.key} className="space-y-1">
+                <div key={cat.key} className="space-y-1.5">
                   <div className="flex items-center justify-between text-xs">
-                    <span className={cn("font-medium", valA >= valB ? "text-[#0b3a7a] dark:text-blue-400" : "text-muted-foreground")}>{valA}</span>
-                    <span className="font-semibold text-muted-foreground uppercase tracking-wide">{cat.label}</span>
-                    <span className={cn("font-medium", valB >= valA ? "text-[#d4af37]" : "text-muted-foreground")}>{valB}</span>
+                    <span className={cn("font-bold", valA >= valB ? "text-[#0b3a7a] dark:text-blue-400" : "text-muted-foreground")}>{valA}</span>
+                    <span className="font-semibold text-muted-foreground uppercase tracking-wider text-[11px]">{cat.label}</span>
+                    <span className={cn("font-bold", valB >= valA ? "text-[#d4af37]" : "text-muted-foreground")}>{valB}</span>
                   </div>
-                  <div className="flex gap-1 h-3">
+                  <div className="flex gap-1 h-3.5">
                     <div className="flex-1 flex justify-end">
                       <div
-                        className="h-full rounded-l-full bg-[#0b3a7a] dark:bg-blue-500"
+                        className="h-full rounded-l-full bg-[#0b3a7a] dark:bg-blue-500 transition-all"
                         style={{ width: `${(valA / maxVal) * 100}%` }}
                       />
                     </div>
                     <div className="flex-1">
                       <div
-                        className="h-full rounded-r-full bg-[#d4af37]"
+                        className="h-full rounded-r-full bg-[#d4af37] transition-all"
                         style={{ width: `${(valB / maxVal) * 100}%` }}
                       />
                     </div>
@@ -198,13 +198,13 @@ export function RosterComparison({ league }: AnalyzerProps) {
               );
             })}
           </div>
-          <div className="flex justify-between mt-4 pt-3 border-t border-border/40">
+          <div className="flex justify-between mt-5 pt-4 border-t border-border/40">
             <div className="text-center">
-              <p className="text-sm font-semibold text-[#0b3a7a] dark:text-blue-400">{teamA.name}</p>
+              <p className="text-sm font-bold text-[#0b3a7a] dark:text-blue-400">{teamA.name}</p>
               <p className="text-xs text-muted-foreground">{teamA.owner}</p>
             </div>
             <div className="text-center">
-              <p className="text-sm font-semibold text-[#d4af37]">{teamB.name}</p>
+              <p className="text-sm font-bold text-[#d4af37]">{teamB.name}</p>
               <p className="text-xs text-muted-foreground">{teamB.owner}</p>
             </div>
           </div>

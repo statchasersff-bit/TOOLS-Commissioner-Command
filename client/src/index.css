@@ -293,4 +293,32 @@
   .scrollbar-hide::-webkit-scrollbar {
     display: none;
   }
+
+  .blueprint-bg {
+    background-image:
+      linear-gradient(rgba(11, 58, 122, 0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(11, 58, 122, 0.03) 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
+  .dark .blueprint-bg {
+    background-image:
+      linear-gradient(rgba(100, 160, 255, 0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(100, 160, 255, 0.04) 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
+
+  .skeleton-pulse {
+    animation: skeleton-pulse 1.8s ease-in-out infinite;
+    background: linear-gradient(
+      90deg,
+      hsl(var(--muted)) 0%,
+      hsl(var(--muted) / 0.6) 50%,
+      hsl(var(--muted)) 100%
+    );
+    background-size: 200% 100%;
+  }
+  @keyframes skeleton-pulse {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
 }

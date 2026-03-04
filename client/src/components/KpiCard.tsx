@@ -9,20 +9,25 @@ interface KpiCardProps {
   subtitle?: string;
   trend?: "up" | "down" | "neutral";
   className?: string;
+  loading?: boolean;
 }
 
-export function KpiCard({ label, value, icon: Icon, subtitle, trend, className }: KpiCardProps) {
+export function KpiCard({ label, value, icon: Icon, subtitle, trend, className, loading }: KpiCardProps) {
+  if (loading) {
+    return <KpiCardSkeleton />;
+  }
+
   return (
-    <Card className={cn("p-4 hover-elevate", className)} data-testid={`kpi-${label.toLowerCase().replace(/\s+/g, "-")}`}>
-      <div className="flex items-start justify-between gap-2">
+    <Card className={cn("p-5 hover-elevate", className)} data-testid={`kpi-${label.toLowerCase().replace(/\s+/g, "-")}`}>
+      <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide truncate">
+          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider truncate">
             {label}
           </p>
-          <p className="text-2xl font-bold mt-1 text-foreground">{value}</p>
+          <p className="text-2xl font-bold mt-1.5 text-foreground leading-none">{value}</p>
           {subtitle && (
             <p className={cn(
-              "text-xs mt-1",
+              "text-xs mt-2",
               trend === "up" ? "text-emerald-600 dark:text-emerald-400" :
               trend === "down" ? "text-red-600 dark:text-red-400" :
               "text-muted-foreground"
@@ -32,10 +37,25 @@ export function KpiCard({ label, value, icon: Icon, subtitle, trend, className }
           )}
         </div>
         {Icon && (
-          <div className="p-2 rounded-md bg-[#0b3a7a]/10 dark:bg-blue-500/10 flex-shrink-0">
+          <div className="p-2.5 rounded-md bg-[#0b3a7a]/8 dark:bg-blue-400/10 flex-shrink-0">
             <Icon className="w-4 h-4 text-[#0b3a7a] dark:text-blue-400" />
           </div>
         )}
+      </div>
+    </Card>
+  );
+}
+
+export function KpiCardSkeleton() {
+  return (
+    <Card className="p-5" data-testid="kpi-skeleton">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex-1 space-y-3">
+          <div className="h-3 w-20 rounded skeleton-pulse" />
+          <div className="h-7 w-16 rounded skeleton-pulse" />
+          <div className="h-3 w-24 rounded skeleton-pulse" />
+        </div>
+        <div className="h-9 w-9 rounded-md skeleton-pulse" />
       </div>
     </Card>
   );

@@ -25,21 +25,21 @@ export function PositionalSurplus({ league }: MarketProps) {
   });
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <SectionHeader title="Positional Surplus" subtitle="Who has too much -- and who needs help" />
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
         {posData.map(({ pos, avg, surplus, needy }) => (
-          <Card key={pos} className="p-5">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold">{pos}</h3>
-              <span className="text-xs text-muted-foreground">Avg: {avg}</span>
+          <Card key={pos} className="p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-base font-bold">{pos}</h3>
+              <span className="text-xs text-muted-foreground font-medium">Avg: {avg}</span>
             </div>
 
-            <div className="space-y-3">
+            <div className="space-y-4">
               <div>
-                <p className="text-xs font-medium text-emerald-600 dark:text-emerald-400 mb-1">Surplus Teams</p>
-                <div className="flex flex-wrap gap-1">
+                <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 mb-2">Surplus Teams</p>
+                <div className="flex flex-wrap gap-1.5">
                   {surplus.length === 0 && <span className="text-xs text-muted-foreground">None</span>}
                   {surplus.map((t) => (
                     <Badge key={t.id} variant="secondary" className="text-xs">
@@ -49,8 +49,8 @@ export function PositionalSurplus({ league }: MarketProps) {
                 </div>
               </div>
               <div>
-                <p className="text-xs font-medium text-red-600 dark:text-red-400 mb-1">Needy Teams</p>
-                <div className="flex flex-wrap gap-1">
+                <p className="text-xs font-semibold text-red-600 dark:text-red-400 mb-2">Needy Teams</p>
+                <div className="flex flex-wrap gap-1.5">
                   {needy.length === 0 && <span className="text-xs text-muted-foreground">None</span>}
                   {needy.map((t) => (
                     <Badge key={t.id} variant="outline" className="text-xs">
@@ -89,17 +89,17 @@ export function MarketValue({ league }: MarketProps) {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <SectionHeader title="Market Value" subtitle="Positional scarcity indicators across the league" />
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {scarcityData.map((d) => (
-          <Card key={d.pos} className="p-4 hover-elevate text-center">
-            <p className="text-xs font-semibold text-muted-foreground uppercase">{d.pos}</p>
-            <p className="text-lg font-bold mt-1">{d.avg}</p>
+          <Card key={d.pos} className="p-5 hover-elevate text-center">
+            <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">{d.pos}</p>
+            <p className="text-2xl font-bold mt-1.5">{d.avg}</p>
             <Badge
               variant={d.scarcity === "High" ? "destructive" : d.scarcity === "Medium" ? "secondary" : "outline"}
-              className="mt-2"
+              className="mt-2.5"
             >
               {d.scarcity} Scarcity
             </Badge>
@@ -107,10 +107,10 @@ export function MarketValue({ league }: MarketProps) {
         ))}
       </div>
 
-      <Card className="p-5">
-        <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+      <Card className="p-6">
+        <h3 className="text-base font-bold mb-4 flex items-center gap-2">
           Market Insights
-          <span className="block h-0.5 w-8 bg-[#d4af37] rounded-full" />
+          <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full" />
         </h3>
         <div className="space-y-3">
           {insights.map((text, i) => (
@@ -119,16 +119,16 @@ export function MarketValue({ league }: MarketProps) {
         </div>
       </Card>
 
-      <Card className="p-5">
-        <h3 className="text-sm font-semibold mb-3">Scarcity Breakdown</h3>
-        <div className="space-y-3">
+      <Card className="p-6">
+        <h3 className="text-base font-bold mb-4">Scarcity Breakdown</h3>
+        <div className="space-y-4">
           {scarcityData.map((d) => (
-            <div key={d.pos} className="space-y-1">
+            <div key={d.pos} className="space-y-1.5">
               <div className="flex items-center justify-between text-xs">
-                <span className="font-medium">{d.pos}</span>
+                <span className="font-semibold">{d.pos}</span>
                 <span className="text-muted-foreground">{d.belowAvg} teams below avg</span>
               </div>
-              <div className="h-3 bg-muted rounded-full overflow-hidden">
+              <div className="h-3.5 bg-muted rounded-full overflow-hidden">
                 <div
                   className={cn(
                     "h-full rounded-full transition-all",

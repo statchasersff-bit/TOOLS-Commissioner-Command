@@ -49,26 +49,26 @@ export default function DynastyCommandCenter() {
     setActiveMainTab(id);
     const config = NAV_CONFIG.find((t) => t.id === id);
     if (config) setActiveSubTab(config.subTabs[0].id);
-    setTimeout(() => setIsTransitioning(false), 150);
+    setTimeout(() => setIsTransitioning(false), 180);
   }, []);
 
   const handleSubTabChange = useCallback((id: string) => {
     setIsTransitioning(true);
     setActiveSubTab(id);
-    setTimeout(() => setIsTransitioning(false), 150);
+    setTimeout(() => setIsTransitioning(false), 180);
   }, []);
 
   const renderContent = () => {
     if (!league || !userTeam) {
       return (
         <div className="flex items-center justify-center min-h-[60vh]">
-          <Card className="p-8 text-center max-w-md">
-            <div className="mx-auto w-12 h-12 rounded-full bg-[#0b3a7a]/10 dark:bg-blue-500/10 flex items-center justify-center mb-4">
-              <LayoutDashboard className="w-6 h-6 text-[#0b3a7a] dark:text-blue-400" />
+          <Card className="p-10 text-center max-w-md">
+            <div className="mx-auto w-16 h-16 rounded-full bg-[#0b3a7a]/8 dark:bg-blue-400/10 flex items-center justify-center mb-5">
+              <LayoutDashboard className="w-7 h-7 text-[#0b3a7a] dark:text-blue-400" />
             </div>
-            <h3 className="text-lg font-semibold mb-2" data-testid="text-empty-state">Select a League to Begin</h3>
-            <p className="text-sm text-muted-foreground">
-              Choose a league from the dropdown above to explore your dynasty command center.
+            <h3 className="text-xl font-bold mb-2" data-testid="text-empty-state">Select a League to Begin</h3>
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              Choose a league from the dropdown above to explore your dynasty command center with power rankings, trade tools, and deep roster analysis.
             </p>
           </Card>
         </div>
@@ -100,18 +100,18 @@ export default function DynastyCommandCenter() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background blueprint-bg">
       <header className="border-b border-border bg-background/95 backdrop-blur-sm sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-4 flex-wrap">
+        <div className="max-w-7xl mx-auto px-4 md:px-6 py-3.5 flex items-center justify-between gap-4 flex-wrap">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-md bg-[#0b3a7a] flex items-center justify-center flex-shrink-0">
+            <div className="w-9 h-9 rounded-md bg-[#0b3a7a] flex items-center justify-center flex-shrink-0">
               <span className="text-white font-bold text-sm">SC</span>
             </div>
             <div>
-              <h1 className="text-sm font-bold text-foreground leading-tight" data-testid="text-app-title">
+              <h1 className="text-base font-bold text-foreground leading-tight tracking-tight" data-testid="text-app-title">
                 StatChasers
               </h1>
-              <p className="text-xs text-[#d4af37] font-medium">Dynasty Command Center</p>
+              <p className="text-xs text-[#d4af37] font-semibold tracking-wide">Dynasty Command Center</p>
             </div>
           </div>
 
@@ -138,9 +138,9 @@ export default function DynastyCommandCenter() {
         <SubTabs tabs={currentMainConfig.subTabs} activeTab={activeSubTab} setActiveTab={handleSubTabChange} />
       )}
 
-      <main className="max-w-7xl mx-auto px-4 py-6">
+      <main className="max-w-7xl mx-auto px-4 md:px-6 py-8">
         <div
-          className={`transition-opacity duration-150 ${isTransitioning ? "opacity-0" : "opacity-100"}`}
+          className={`transition-opacity duration-180 ${isTransitioning ? "opacity-0" : "opacity-100"}`}
         >
           {renderContent()}
         </div>
