@@ -57,6 +57,15 @@ export interface MainTabConfig extends TabConfig {
   subTabs: TabConfig[];
 }
 
+export type ValueSourceId = "ktc" | "fantasycalc" | "dynastyprocess" | "market-avg" | "statchasers";
+
+export interface ValueSourceOption {
+  id: ValueSourceId;
+  label: string;
+  description: string;
+  active: boolean;
+}
+
 export type InsightType = "positive" | "neutral" | "negative";
 
 export interface Insight {

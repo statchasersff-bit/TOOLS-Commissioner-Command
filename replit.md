@@ -5,6 +5,8 @@ A premium dynasty fantasy football league analysis tool built with React + TypeS
 
 ## Architecture
 - **Frontend-only MVP** with mock data (no database needed yet)
+- **ValueModelProvider** context drives all value calculations (player values, pick values, team metrics)
+- Power Score formula: 0.45 Starter Value + 0.25 Bench Value + 0.20 Picks + 0.10 Youth
 - State-based navigation with URL query param persistence (?tab=X&sub=Y)
 - localStorage persistence for tab, sub-tab, and league selection (key: "sc-dynasty-state")
 - Two-level tab system: 7 main tabs, each with 2-3 sub-tabs
@@ -13,21 +15,24 @@ A premium dynasty fantasy football league analysis tool built with React + TypeS
 ## Project Structure
 ```
 client/src/
-  types/index.ts          - TypeScript interfaces (League, Team, Player, Pick, etc.)
+  types/index.ts          - TypeScript interfaces (League, Team, Player, Pick, ValueSourceId, etc.)
   data/mockData.ts        - Mock league data generator + nav config + utility functions
+  contexts/
+    ValueModelContext.tsx  - ValueModelProvider with getPlayerValue, getPickValue, calculateMetrics
   components/
     MainTabs.tsx           - Top-level tab navigation (rounded-full pills, gold underline)
     SubTabs.tsx            - Second-level tab navigation (rounded-full pills, gold underline)
-    LeagueSelector.tsx     - League dropdown selector
-    KpiCard.tsx            - Metric display cards with skeleton loading state
+    LeagueSelector.tsx     - League dropdown selector (pill-style)
+    ValueSourceSelector.tsx - Value source dropdown with Coming Soon items + tooltip
+    KpiCard.tsx            - Metric display cards with skeleton loading + tooltip support
     DataTable.tsx          - Sortable/scrollable data table with skeleton loading, sticky columns
     InsightCallout.tsx     - Positive/neutral/negative insight cards
     SectionHeader.tsx      - Section headers with gold accent bar (text-xl/2xl bold)
     ThemeToggle.tsx        - Dark/light mode toggle
   pages/
-    DynastyCommandCenter.tsx - Main page orchestrator (blueprint-bg texture)
+    DynastyCommandCenter.tsx - Main page orchestrator (blueprint-bg, value model wiring)
     tabs/
-      Dashboard.tsx        - Overview, League Snapshot, Key Insights
+      Dashboard.tsx        - Overview (with Jump to menu), League Snapshot, Key Insights
       LeagueAnalyzer.tsx   - Power Rankings, Tier Breakdown, Roster Comparison
       TeamBreakdown.tsx    - Roster Strength, Age Curve, Depth Chart
       TradeCenter.tsx      - Trade Finder, Trade Targets, Trade Block Scanner
@@ -36,6 +41,12 @@ client/src/
       Insights.tsx         - Team Insights, League Trends
 ```
 
+## Value Model
+- All player/pick values and team metrics flow through ValueModelProvider
+- DynastyCommandCenter normalizes the entire league (roster + picks + metrics) via useMemo on source change
+- Value sources: KeepTradeCut (active), FantasyCalc, DynastyProcess, Market Average, StatChasers Model (Coming Soon)
+- Source multipliers adjust all values; switching triggers a "Recalculating..." overlay animation
+
 ## Branding
 - Brand Navy: #0b3a7a
 - Brand Gold: #d4af37
@@ -43,8 +54,10 @@ client/src/
 - Dark mode supported via class toggle
 
 ## UX Features
+- Header control panel: League selector + Value Source selector with labels, pill-style dropdowns
 - "Jump to" mini menu on Dashboard Overview links to Snapshot and Key Insights sub-tabs
 - KPI cards support "?" tooltip icons explaining what each metric means
+- Value Source selector has "?" tooltip explaining the active source
 - State restored from localStorage on refresh (tab, sub-tab, league)
 - URL query params (?tab=X&sub=Y) take priority over localStorage when present
 

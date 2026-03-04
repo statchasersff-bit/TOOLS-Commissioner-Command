@@ -1,0 +1,143 @@
+Recommended Header Layout (Top Bar)
+
+Your tool header should look like this:
+
+StatChasers Dynasty Command Center
+----------------------------------------------------------
+
+League:        [ Dynasty D6 ▼ ]
+Value Source:  [ KeepTradeCut ▼ ]
+
+Share  |  Export
+
+This creates a control panel feel.
+
+Both selectors should update the entire tool instantly.
+
+Changing the value source should recalculate:
+
+Team values
+
+Power rankings
+
+Trade recommendations
+
+Positional strength
+
+Draft capital value
+
+Value Source Selector (Future Ready)
+
+Even though you start with KTC, design the dropdown to support multiple sources.
+
+Value Source ▼
+
+KeepTradeCut
+FantasyCalc
+DynastyProcess
+Market Average
+StatChasers Model (future)
+
+For now only KTC is active, others can show “Coming Soon”.
+
+This makes the product feel bigger than it is on day one.
+
+How the Value Model Should Flow Through the Tool
+
+Every player should have a value field:
+
+Player {
+  id
+  name
+  position
+  age
+  team
+  value
+}
+
+Then everything else derives from it.
+
+Team Value
+Team Value =
+Sum(player values) +
+Sum(pick values)
+Positional Strength
+Position Strength =
+Sum(top starters value)
+
+Example:
+
+RB Strength =
+RB1 value + RB2 value
+Depth Score
+Bench Value =
+Sum(non-starters value)
+Power Score
+Power Score =
+0.45 Starter Value
+0.25 Bench Value
+0.20 Picks
+0.10 Youth
+UX/UI Details (Important)
+Dropdown design
+
+Use pill-style selectors consistent with StatChasers branding.
+
+Example:
+
+[ Dynasty D6 ▼ ]   [ KeepTradeCut ▼ ]
+
+Styling:
+
+navy outline
+
+gold hover
+
+rounded-full
+
+subtle shadow
+
+When value source changes
+
+Add a small animation:
+
+Recalculating league analysis...
+
+Then update:
+
+rankings
+
+tables
+
+charts
+
+This makes the tool feel alive.
+
+Important UX Addition
+
+Next to the selector add a small info tooltip.
+
+Example:
+
+Value Source: KeepTradeCut (?)
+
+Tooltip text:
+
+KeepTradeCut values are crowd-sourced dynasty trade values widely used by the dynasty fantasy football community.
+
+This builds user trust instantly.
+
+Architecture Tip for Replit
+
+Tell Replit to build a ValueModelProvider.
+
+Example concept:
+
+ValueModelProvider
+   ├ getPlayerValue(playerId)
+   ├ getPickValue(pick)
+   └ calculateTeamValue(team)
+
+Then every part of the tool uses this.
+
+Later switching sources becomes extremely easy.

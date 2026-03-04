@@ -1,13 +1,15 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { MainTabs } from "@/components/MainTabs";
 import { SubTabs } from "@/components/SubTabs";
 import { LeagueSelector } from "@/components/LeagueSelector";
+import { ValueSourceSelector } from "@/components/ValueSourceSelector";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { useValueModel } from "@/contexts/ValueModelContext";
 import { NAV_CONFIG, getLeagues } from "@/data/mockData";
-import type { League } from "@/types";
-import { Share2, Download, LayoutDashboard } from "lucide-react";
+import type { League, Team } from "@/types";
+import { Share2, Download, LayoutDashboard, Loader2 } from "lucide-react";
 
 import { DashboardOverview, DashboardSnapshot, DashboardKeyInsights } from "./tabs/Dashboard";
 import { PowerRankings, TierBreakdown, RosterComparison } from "./tabs/LeagueAnalyzer";
@@ -48,7 +50,23 @@ export default function DynastyCommandCenter() {
   const [activeSubTab, setActiveSubTab] = useState(initial.sub);
   const [isTransitioning, setIsTransitioning] = useState(false);
 
-  const league = leagues.find((l) => l.id === selectedLeagueId) || null;
+  const { isRecalculating, getPlayerValue, getPickValue, calculateMetrics } = useValueModel();
+
+  const rawLeague = leagues.find((l) => l.id === selectedLeagueId) || null;
+
+  const league: League | null = useMemo(() => {
+    if (!rawLeague) return null;
+    return {
+      ...rawLeague,
+      teams: rawLeague.teams.map((team) => {
+        const roster = team.roster.map((p) => ({ ...p, value: getPlayerValue(p) }));
+        const picks = team.picks.map((p) => ({ ...p, value: getPickValue(p) }));
+        const adjustedTeam = { ...team, roster, picks };
+        return { ...adjustedTeam, metrics: calculateMetrics(adjustedTeam) };
+      }),
+    };
+  }, [rawLeague, getPlayerValue, getPickValue, calculateMetrics]);
+
   const userTeam = league?.teams[0] || null;
   const currentMainConfig = NAV_CONFIG.find((t) => t.id === activeMainTab);
 
@@ -69,11 +87,11 @@ export default function DynastyCommandCenter() {
 
   const handleLeagueSelect = useCallback((id: string) => {
     setSelectedLeagueId(id);
-    if (!league) {
+    if (!rawLeague) {
       setActiveMainTab("dashboard");
       setActiveSubTab("overview");
     }
-  }, [league]);
+  }, [rawLeague]);
 
   const handleMainTabChange = useCallback((id: string) => {
     setIsTransitioning(true);
@@ -153,19 +171,28 @@ export default function DynastyCommandCenter() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2 flex-wrap">
-            <LeagueSelector
-              leagues={leagues}
-              selectedLeagueId={selectedLeagueId}
-              onSelect={handleLeagueSelect}
-            />
-            <Button variant="outline" size="sm" disabled data-testid="button-share">
-              <Share2 className="w-3 h-3 mr-1" /> Share
-            </Button>
-            <Button variant="outline" size="sm" disabled data-testid="button-export">
-              <Download className="w-3 h-3 mr-1" /> Export
-            </Button>
-            <ThemeToggle />
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider hidden md:inline">League:</span>
+              <LeagueSelector
+                leagues={leagues}
+                selectedLeagueId={selectedLeagueId}
+                onSelect={handleLeagueSelect}
+              />
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider hidden md:inline">Value:</span>
+              <ValueSourceSelector />
+            </div>
+            <div className="flex items-center gap-1.5 border-l border-border/50 pl-3">
+              <Button variant="outline" size="sm" disabled data-testid="button-share">
+                <Share2 className="w-3 h-3 mr-1" /> Share
+              </Button>
+              <Button variant="outline" size="sm" disabled data-testid="button-export">
+                <Download className="w-3 h-3 mr-1" /> Export
+              </Button>
+              <ThemeToggle />
+            </div>
           </div>
         </div>
       </header>
@@ -176,9 +203,17 @@ export default function DynastyCommandCenter() {
         <SubTabs tabs={currentMainConfig.subTabs} activeTab={activeSubTab} setActiveTab={handleSubTabChange} />
       )}
 
-      <main className="max-w-7xl mx-auto px-4 md:px-6 py-8">
+      <main className="max-w-7xl mx-auto px-4 md:px-6 py-8 relative">
+        {isRecalculating && (
+          <div className="absolute inset-0 z-30 flex items-start justify-center pt-24" data-testid="recalculating-overlay">
+            <div className="bg-background/90 backdrop-blur-sm border border-border rounded-lg px-5 py-3 shadow-lg flex items-center gap-3">
+              <Loader2 className="w-4 h-4 text-[#d4af37] animate-spin" />
+              <span className="text-sm font-semibold text-foreground">Recalculating league analysis...</span>
+            </div>
+          </div>
+        )}
         <div
-          className={`transition-opacity duration-180 ${isTransitioning ? "opacity-0" : "opacity-100"}`}
+          className={`transition-opacity duration-180 ${isTransitioning || isRecalculating ? "opacity-30" : "opacity-100"}`}
         >
           {renderContent()}
         </div>
