@@ -248,7 +248,7 @@ export const NAV_CONFIG: MainTabConfig[] = [
   },
   {
     id: "dashboard",
-    label: "Dashboard",
+    label: "My Team",
     subTabs: [
       { id: "overview", label: "Overview" },
       { id: "roster-strength", label: "Roster Strength" },
