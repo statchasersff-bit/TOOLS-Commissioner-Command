@@ -674,7 +674,7 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
                         const bottomStart = teamRanks.total - topThird + 1;
                         return (
                           <span className={cn("font-bold", r <= topThird ? "text-emerald-600 dark:text-emerald-400" : r >= bottomStart ? "text-red-500 dark:text-red-400" : "text-foreground")}>
-                            #{r}<span className="text-xs text-muted-foreground font-normal"> / {teamRanks.total}</span>
+                            #{r}
                           </span>
                         );
                       })()}
@@ -686,7 +686,7 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
                         const bottomStart = teamRanks.total - topThird + 1;
                         return (
                           <span className={cn("font-bold", r <= topThird ? "text-emerald-600 dark:text-emerald-400" : r >= bottomStart ? "text-red-500 dark:text-red-400" : "text-foreground")}>
-                            #{r}<span className="text-xs text-muted-foreground font-normal"> / {teamRanks.total}</span>
+                            #{r}
                           </span>
                         );
                       })()}
