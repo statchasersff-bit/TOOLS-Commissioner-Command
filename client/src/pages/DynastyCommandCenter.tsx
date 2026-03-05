@@ -15,13 +15,13 @@ import { DataDiagnostics } from "@/components/DataDiagnostics";
 import { Share2, Download, LayoutDashboard, Loader2, Lock, Check, User } from "lucide-react";
 
 import { PortfolioConnect, PortfolioMyLeagues, PortfolioSummary } from "./tabs/Portfolio";
-import { DashboardOverview, DashboardSnapshot, DashboardKeyInsights } from "./tabs/Dashboard";
+import { DashboardOverview, DashboardSnapshot } from "./tabs/Dashboard";
 import { RosterComparison } from "./tabs/LeagueAnalyzer";
 import { RosterBreakdown } from "./tabs/TeamBreakdown";
 import { TradeFinder, TradeTargets, TradeBlockScanner } from "./tabs/TradeCenter";
 import { PickDistribution } from "./tabs/DraftCapital";
 import { PositionalSurplus, MarketValue } from "./tabs/LeagueMarket";
-import { TeamInsights, LeagueTrends } from "./tabs/Insights";
+import { LeagueIntelligence } from "./tabs/Insights";
 
 const STORAGE_KEY = "sc-dynasty-state";
 
@@ -251,7 +251,7 @@ export default function DynastyCommandCenter() {
     switch (key) {
       case "dashboard:overview": return <DashboardOverview league={league} userTeam={userTeam} onNavigate={navigateToSubTab} />;
       case "league-analyzer:power-rankings": return <DashboardSnapshot league={league} userTeam={userTeam} />;
-      case "league-analyzer:key-insights": return <DashboardKeyInsights league={league} userTeam={userTeam} />;
+      case "league-analyzer:league-intelligence": return <LeagueIntelligence league={league} userTeam={userTeam} />;
       case "league-analyzer:roster-comparison": return <RosterComparison league={league} />;
       case "dashboard:roster-breakdown": return <RosterBreakdown league={league} userTeam={userTeam} />;
       case "trade-center:trade-finder": return <TradeFinder league={league} userTeam={userTeam} />;
@@ -260,8 +260,6 @@ export default function DynastyCommandCenter() {
       case "league-analyzer:pick-distribution": return <PickDistribution league={league} />;
       case "trade-center:positional-surplus": return <PositionalSurplus league={league} />;
       case "league-market:market-value": return <MarketValue league={league} />;
-      case "league-analyzer:team-insights": return <TeamInsights league={league} />;
-      case "league-analyzer:league-trends": return <LeagueTrends league={league} />;
       default: return <div className="text-center text-muted-foreground py-12">Select a tab to get started</div>;
     }
   };

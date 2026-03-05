@@ -1,79 +1,40 @@
+import { useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { InsightCallout } from "@/components/InsightCallout";
 import { SectionHeader } from "@/components/SectionHeader";
-import { getTeamTier, getTierColor } from "@/data/mockData";
+import { getTeamTier, getTierColor, generateInsights } from "@/data/mockData";
 import type { League, Team } from "@/types";
-import { FileText } from "lucide-react";
+import { Trophy, Archive, Flame, Target, Compass, ChevronDown, ChevronRight, TrendingUp, TrendingDown } from "lucide-react";
 
-interface InsightsProps {
+const INSIGHT_CATEGORIES = [
+  { id: "league-leaders" as const, label: "League Leaders", icon: Trophy, description: "Who dominates each position group" },
+  { id: "draft-capital" as const, label: "Draft Capital", icon: Archive, description: "Future pick distribution across the league" },
+  { id: "contender-analysis" as const, label: "Contender Analysis", icon: Flame, description: "Championship window and competitive landscape" },
+  { id: "trade-opportunities" as const, label: "Trade Opportunities", icon: Target, description: "Positional weaknesses to exploit" },
+  { id: "your-team" as const, label: "Your Team", icon: Compass, description: "Personalized insights for your roster" },
+];
+
+interface Props {
   league: League;
+  userTeam: Team;
 }
 
-export function TeamInsights({ league }: InsightsProps) {
-  const sorted = [...league.teams].sort((a, b) => b.metrics.overall - a.metrics.overall);
+export function LeagueIntelligence({ league, userTeam }: Props) {
+  const insights = generateInsights(league, userTeam.id);
+  const [expandedTeams, setExpandedTeams] = useState<Set<string>>(new Set());
 
-  const getTeamNarrative = (team: Team): string[] => {
-    const tier = getTeamTier(team.metrics.overall);
-    const narratives: string[] = [];
-
-    if (tier === "Elite") {
-      narratives.push(`${team.owner}'s team is among the league's elite. With a ${team.metrics.overall} overall score, they should be pushing for a championship.`);
-    } else if (tier === "Contender") {
-      narratives.push(`${team.owner} is a solid contender with room to improve. One or two key additions could push them to elite status.`);
-    } else if (tier === "Competitive") {
-      narratives.push(`${team.owner} is in a tough spot -- competitive but not quite contending. A clear direction (buy or sell) would help.`);
-    } else {
-      narratives.push(`${team.owner} is in full rebuild mode. Focus on accumulating young assets and draft capital for the future.`);
-    }
-
-    if (team.metrics.qb >= 75) narratives.push("QB room is a major strength.");
-    if (team.metrics.rb < 40) narratives.push("RB depth is concerning and should be addressed.");
-    if (team.metrics.wr >= 75) narratives.push("WR corps is among the league's best.");
-    if (team.metrics.youth >= 70) narratives.push("Roster skews young with excellent long-term outlook.");
-    if (team.picks.filter(p => p.round === 1).length >= 3) narratives.push("Loaded with future first-round picks.");
-
-    return narratives;
+  const toggleTeam = (teamId: string) => {
+    setExpandedTeams(prev => {
+      const next = new Set(prev);
+      if (next.has(teamId)) next.delete(teamId);
+      else next.add(teamId);
+      return next;
+    });
   };
 
-  return (
-    <div className="space-y-8">
-      <SectionHeader title="Team Insights" subtitle="Per-team narrative analysis" />
+  const sorted = [...league.teams].sort((a, b) => b.metrics.overall - a.metrics.overall);
 
-      <div className="space-y-5">
-        {sorted.map((team) => {
-          const tier = getTeamTier(team.metrics.overall);
-          const narratives = getTeamNarrative(team);
-          return (
-            <Card key={team.id} className="p-6">
-              <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-                <div className="flex items-center gap-2">
-                  <h3 className="text-base font-bold">{team.name}</h3>
-                  <span className="text-xs text-muted-foreground">({team.owner})</span>
-                  <Badge variant="outline" className={getTierColor(tier)}>{tier}</Badge>
-                </div>
-                <div className="flex items-center gap-3">
-                  <span className="text-xl font-bold">{team.metrics.overall}</span>
-                  <Button variant="outline" size="sm" data-testid={`button-report-${team.id}`}>
-                    <FileText className="w-3 h-3 mr-1" /> Report Card
-                  </Button>
-                </div>
-              </div>
-              <div className="space-y-2">
-                {narratives.map((n, i) => (
-                  <p key={i} className="text-sm text-muted-foreground leading-relaxed">{n}</p>
-                ))}
-              </div>
-            </Card>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-export function LeagueTrends({ league }: InsightsProps) {
   const avgAge = league.teams.reduce((s, t) => {
     const teamAvg = t.roster.reduce((ps, p) => ps + p.age, 0) / t.roster.length;
     return s + teamAvg;
@@ -85,7 +46,6 @@ export function LeagueTrends({ league }: InsightsProps) {
     picks: t.picks.length,
     pct: Math.round((t.picks.length / totalPicks) * 100)
   })).sort((a, b) => b.picks - a.picks);
-
   const topPickHolder = pickConcentration[0];
 
   const posScarcity = (["QB", "RB", "WR", "TE"] as const).map(pos => {
@@ -95,68 +55,233 @@ export function LeagueTrends({ league }: InsightsProps) {
     return { pos, avg, below };
   });
 
+  const getStrengths = (team: Team): string[] => {
+    const strengths: string[] = [];
+    const leagueAvg = (key: "qb" | "rb" | "wr" | "te") =>
+      Math.round(league.teams.reduce((s, t) => s + t.metrics[key], 0) / league.teams.length);
+
+    if (team.metrics.qb >= leagueAvg("qb") + 10) strengths.push("Elite QB room");
+    if (team.metrics.rb >= leagueAvg("rb") + 10) strengths.push("Strong RB room");
+    if (team.metrics.wr >= leagueAvg("wr") + 10) strengths.push("Elite WR corps");
+    if (team.metrics.te >= leagueAvg("te") + 10) strengths.push("Strong TE room");
+    if (team.metrics.youth >= 70) strengths.push("Strong youth profile");
+    if (team.metrics.depth >= 70) strengths.push("Deep roster");
+    if (team.picks.filter(p => p.round === 1).length >= 3) strengths.push("Loaded with 1st round picks");
+    return strengths;
+  };
+
+  const getWeaknesses = (team: Team): string[] => {
+    const weaknesses: string[] = [];
+    const leagueAvg = (key: "qb" | "rb" | "wr" | "te") =>
+      Math.round(league.teams.reduce((s, t) => s + t.metrics[key], 0) / league.teams.length);
+
+    if (team.metrics.qb < leagueAvg("qb") - 10) weaknesses.push("QB depth");
+    if (team.metrics.rb < leagueAvg("rb") - 10) weaknesses.push("RB depth");
+    if (team.metrics.wr < leagueAvg("wr") - 10) weaknesses.push("WR depth");
+    if (team.metrics.te < leagueAvg("te") - 10) weaknesses.push("TE depth");
+    if (team.metrics.youth < 40) weaknesses.push("Aging roster");
+    if (team.picks.length <= 4) weaknesses.push("Limited draft capital");
+    return weaknesses;
+  };
+
+  const getOutlook = (team: Team): string => {
+    const tier = getTeamTier(team.metrics.overall);
+    if (tier === "Elite") return "Championship contender";
+    if (tier === "Contender") return "Competitive but not dominant";
+    if (tier === "Competitive") return "Middle of the pack — needs direction";
+    return "Rebuilding for the future";
+  };
+
   return (
-    <div className="space-y-8">
-      <SectionHeader title="League Trends" subtitle="Macro-level patterns and observations" />
+    <div className="space-y-10">
+      <SectionHeader title="League Intelligence" subtitle="AI-powered league analysis — leaders, trends, and team narratives" />
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-        <Card className="p-6">
-          <div className="mb-4">
-            <h3 className="text-base font-bold">Age Trend</h3>
-            <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
-          </div>
-          <p className="text-3xl font-bold">{avgAge.toFixed(1)}</p>
-          <p className="text-xs text-muted-foreground mt-1.5">League-wide average player age</p>
-          <InsightCallout
-            text={avgAge > 26 ? "The league skews older -- youth assets may be undervalued." : "The league is relatively young -- expect competitive windows to last."}
-            type={avgAge > 26 ? "negative" : "positive"}
-            className="mt-4"
-          />
-        </Card>
+      <div>
+        <div className="mb-5">
+          <h3 className="text-base font-bold text-foreground">League Leaders</h3>
+          <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
+        </div>
+        <p className="text-xs text-muted-foreground mb-4">Who dominates each category across the league</p>
 
-        <Card className="p-6">
-          <div className="mb-4">
-            <h3 className="text-base font-bold">Pick Concentration</h3>
-            <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
-          </div>
-          <p className="text-3xl font-bold">{topPickHolder.name}</p>
-          <p className="text-xs text-muted-foreground mt-1.5">
-            Holds {topPickHolder.picks} picks ({topPickHolder.pct}% of league total)
-          </p>
-          <div className="mt-4 space-y-2">
-            {pickConcentration.slice(0, 5).map((pc) => (
-              <div key={pc.name} className="flex items-center justify-between text-xs">
-                <span className="font-medium">{pc.name}</span>
-                <div className="flex items-center gap-2">
-                  <div className="w-20 h-2 bg-muted rounded-full overflow-hidden">
-                    <div className="h-full bg-[#0b3a7a] dark:bg-blue-500 rounded-full" style={{ width: `${pc.pct}%` }} />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-5" data-testid="league-leaders-cards">
+          {[
+            { label: "Best QB Room", team: [...league.teams].sort((a, b) => b.metrics.qb - a.metrics.qb)[0], stat: (t: Team) => t.metrics.qb },
+            { label: "Best RB Room", team: [...league.teams].sort((a, b) => b.metrics.rb - a.metrics.rb)[0], stat: (t: Team) => t.metrics.rb },
+            { label: "Best WR Room", team: [...league.teams].sort((a, b) => b.metrics.wr - a.metrics.wr)[0], stat: (t: Team) => t.metrics.wr },
+            { label: "Best TE Room", team: [...league.teams].sort((a, b) => b.metrics.te - a.metrics.te)[0], stat: (t: Team) => t.metrics.te },
+            { label: "Deepest Roster", team: [...league.teams].sort((a, b) => b.metrics.depth - a.metrics.depth)[0], stat: (t: Team) => t.metrics.depth },
+            { label: "Most Draft Capital", team: [...league.teams].sort((a, b) => b.picks.length - a.picks.length)[0], stat: (t: Team) => t.picks.length },
+          ].map(({ label, team, stat }) => (
+            <Card key={label} className="p-4 hover-elevate" data-testid={`leader-${label.toLowerCase().replace(/\s+/g, "-")}`}>
+              <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">{label}</p>
+              <p className="text-lg font-bold mt-1">{team.owner}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">{team.name} · {stat(team)}</p>
+            </Card>
+          ))}
+        </div>
+
+        {INSIGHT_CATEGORIES.map(({ id, label, icon: Icon, description }) => {
+          const categoryInsights = insights.filter((i) => i.category === id);
+          if (categoryInsights.length === 0) return null;
+
+          return (
+            <div key={id} className="mb-5" data-testid={`insight-category-${id}`}>
+              <div className="mb-3 flex items-center gap-3">
+                <div className="p-2 rounded-md bg-[#0b3a7a]/8 dark:bg-blue-400/10">
+                  <Icon className="w-4 h-4 text-[#0b3a7a] dark:text-blue-400" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-foreground">{label}</h3>
+                  <p className="text-xs text-muted-foreground">{description}</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pl-[52px]">
+                {categoryInsights.map((insight, i) => (
+                  <InsightCallout key={i} text={insight.text} type={insight.type} />
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div>
+        <div className="mb-5">
+          <h3 className="text-base font-bold text-foreground">League Trends</h3>
+          <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
+        </div>
+        <p className="text-xs text-muted-foreground mb-4">Macro-level patterns across the league</p>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+          <Card className="p-6" data-testid="trend-age">
+            <div className="mb-4">
+              <h3 className="text-base font-bold">Avg Roster Age</h3>
+              <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
+            </div>
+            <p className="text-3xl font-bold">{avgAge.toFixed(1)}</p>
+            <p className="text-xs text-muted-foreground mt-1.5">League-wide average player age</p>
+            <InsightCallout
+              text={avgAge > 26 ? "The league skews older — youth assets may be undervalued." : "The league is relatively young — expect competitive windows to last."}
+              type={avgAge > 26 ? "negative" : "positive"}
+              className="mt-4"
+            />
+          </Card>
+
+          <Card className="p-6" data-testid="trend-picks">
+            <div className="mb-4">
+              <h3 className="text-base font-bold">Pick Concentration</h3>
+              <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
+            </div>
+            <p className="text-3xl font-bold">{topPickHolder.name}</p>
+            <p className="text-xs text-muted-foreground mt-1.5">
+              Holds {topPickHolder.picks} picks ({topPickHolder.pct}% of league total)
+            </p>
+            <div className="mt-4 space-y-2">
+              {pickConcentration.slice(0, 5).map((pc) => (
+                <div key={pc.name} className="flex items-center justify-between text-xs">
+                  <span className="font-medium">{pc.name}</span>
+                  <div className="flex items-center gap-2">
+                    <div className="w-20 h-2 bg-muted rounded-full overflow-hidden">
+                      <div className="h-full bg-[#0b3a7a] dark:bg-blue-500 rounded-full" style={{ width: `${pc.pct}%` }} />
+                    </div>
+                    <span className="text-muted-foreground w-6 text-right font-medium">{pc.picks}</span>
                   </div>
-                  <span className="text-muted-foreground w-6 text-right font-medium">{pc.picks}</span>
                 </div>
-              </div>
-            ))}
-          </div>
-        </Card>
+              ))}
+            </div>
+          </Card>
 
-        <Card className="p-6">
-          <div className="mb-4">
-            <h3 className="text-base font-bold">Positional Scarcity</h3>
-            <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
-          </div>
-          <div className="space-y-4">
-            {posScarcity.map((ps) => (
-              <div key={ps.pos} className="flex items-center justify-between">
-                <span className="text-sm font-semibold">{ps.pos}</span>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-muted-foreground">{ps.below} needy</span>
-                  <Badge variant={ps.below >= 4 ? "destructive" : ps.below >= 2 ? "secondary" : "outline"} className="text-xs">
-                    {ps.below >= 4 ? "High" : ps.below >= 2 ? "Medium" : "Low"}
-                  </Badge>
+          <Card className="p-6" data-testid="trend-scarcity">
+            <div className="mb-4">
+              <h3 className="text-base font-bold">Positional Scarcity</h3>
+              <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
+            </div>
+            <div className="space-y-4">
+              {posScarcity.map((ps) => (
+                <div key={ps.pos} className="flex items-center justify-between">
+                  <span className="text-sm font-semibold">{ps.pos}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">{ps.below} needy</span>
+                    <Badge variant={ps.below >= 4 ? "destructive" : ps.below >= 2 ? "secondary" : "outline"} className="text-xs">
+                      {ps.below >= 4 ? "High" : ps.below >= 2 ? "Medium" : "Low"}
+                    </Badge>
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        </Card>
+              ))}
+            </div>
+          </Card>
+        </div>
+      </div>
+
+      <div>
+        <div className="mb-5">
+          <h3 className="text-base font-bold text-foreground">Team Narratives</h3>
+          <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
+        </div>
+        <p className="text-xs text-muted-foreground mb-4">Expandable per-team scouting report</p>
+
+        <div className="space-y-3" data-testid="team-narratives">
+          {sorted.map((team) => {
+            const tier = getTeamTier(team.metrics.overall);
+            const isExpanded = expandedTeams.has(team.id);
+            const strengths = getStrengths(team);
+            const weaknesses = getWeaknesses(team);
+            const outlook = getOutlook(team);
+
+            return (
+              <Card key={team.id} className="overflow-hidden" data-testid={`narrative-${team.id}`}>
+                <button
+                  onClick={() => toggleTeam(team.id)}
+                  className="w-full flex items-center justify-between p-4 hover:bg-muted/20 transition-colors text-left"
+                  data-testid={`button-expand-${team.id}`}
+                >
+                  <div className="flex items-center gap-3">
+                    {isExpanded ? <ChevronDown className="w-4 h-4 text-muted-foreground" /> : <ChevronRight className="w-4 h-4 text-muted-foreground" />}
+                    <span className="text-sm font-bold">{team.owner}</span>
+                    <span className="text-xs text-muted-foreground">{team.name}</span>
+                    <Badge variant="outline" className={getTierColor(tier)}>{tier}</Badge>
+                  </div>
+                  <span className="text-xl font-bold">{team.metrics.overall}</span>
+                </button>
+
+                {isExpanded && (
+                  <div className="px-4 pb-5 pt-1 border-t border-border/30 space-y-4">
+                    {strengths.length > 0 && (
+                      <div>
+                        <p className="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                          <TrendingUp className="w-3 h-3" /> Strengths
+                        </p>
+                        <ul className="space-y-1 pl-5">
+                          {strengths.map((s, i) => (
+                            <li key={i} className="text-sm text-muted-foreground list-disc">{s}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {weaknesses.length > 0 && (
+                      <div>
+                        <p className="text-xs font-bold text-red-500 dark:text-red-400 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                          <TrendingDown className="w-3 h-3" /> Weaknesses
+                        </p>
+                        <ul className="space-y-1 pl-5">
+                          {weaknesses.map((w, i) => (
+                            <li key={i} className="text-sm text-muted-foreground list-disc">{w}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    <div>
+                      <p className="text-xs font-bold text-[#0b3a7a] dark:text-blue-400 uppercase tracking-wider mb-1.5">Outlook</p>
+                      <p className="text-sm text-muted-foreground">{outlook}</p>
+                    </div>
+                  </div>
+                )}
+              </Card>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
