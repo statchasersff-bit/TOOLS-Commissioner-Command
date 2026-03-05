@@ -8,6 +8,7 @@ import {
   fetchPortfolioSummary,
   fetchCrossLeagueTrades,
   fetchDraftBoard,
+  detectLiveDrafts,
 } from "./sleeper";
 import {
   startCrawl,
@@ -112,6 +113,17 @@ export async function registerRoutes(
     } catch (err: any) {
       console.error("Draft board error:", err);
       res.status(500).json({ error: err.message || "Failed to fetch draft board" });
+    }
+  });
+
+  app.get("/api/sleeper/live-drafts/:userId", async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const results = await detectLiveDrafts(userId);
+      res.json(results);
+    } catch (err: any) {
+      console.error("Live draft detection error:", err);
+      res.status(500).json({ error: err.message || "Failed to detect live drafts" });
     }
   });
 

@@ -3,8 +3,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Search, RefreshCw, Trophy, Target } from "lucide-react";
+import { Loader2, Search, RefreshCw, Trophy, Target, Radio, Zap } from "lucide-react";
 import { useValueModel } from "@/contexts/ValueModelContext";
+import { useSleeper } from "@/contexts/SleeperContext";
 
 interface DraftPick {
   round: number;
@@ -33,6 +34,19 @@ interface DraftResponse {
   error: string | null;
 }
 
+interface LiveDraftInfo {
+  leagueId: string;
+  leagueName: string;
+  draftId: string;
+  status: string;
+  type: string;
+  season: string;
+  rounds: number;
+  teams: number;
+  picksMade: number;
+  totalPicks: number;
+}
+
 const POS_COLORS: Record<string, string> = {
   QB: "bg-red-500/15 text-red-700 dark:text-red-400 border-red-500/30",
   RB: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30",
@@ -50,7 +64,46 @@ export default function LiveDraft() {
   const [apiError, setApiError] = useState<string | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  const [liveDrafts, setLiveDrafts] = useState<LiveDraftInfo[]>([]);
+  const [isDetecting, setIsDetecting] = useState(false);
+  const [hasScanned, setHasScanned] = useState(false);
+  const [scanError, setScanError] = useState<string | null>(null);
+
   const { valuesBySleeperId, redraftValuesBySleeperId } = useValueModel();
+  const { isConnected, user } = useSleeper();
+
+  const scanForLiveDrafts = useCallback(async () => {
+    if (!user?.userId) return;
+    setIsDetecting(true);
+    setScanError(null);
+    try {
+      const res = await fetch(`/api/sleeper/live-drafts/${user.userId}`);
+      if (res.ok) {
+        const data: LiveDraftInfo[] = await res.json();
+        setLiveDrafts(data);
+      } else {
+        setScanError("Failed to scan leagues for live drafts");
+      }
+    } catch {
+      setScanError("Network error while scanning for live drafts");
+    }
+    setIsDetecting(false);
+    setHasScanned(true);
+  }, [user?.userId]);
+
+  useEffect(() => {
+    if (isConnected && user?.userId && !hasScanned) {
+      scanForLiveDrafts();
+    }
+  }, [isConnected, user?.userId, hasScanned, scanForLiveDrafts]);
+
+  const handleJoinLiveDraft = (leagueId: string) => {
+    setLeagueIdInput(leagueId);
+    setDraftData(null);
+    setApiError(null);
+    setActiveLeagueId(leagueId);
+    setAutoRefresh(true);
+  };
 
   const fetchDraft = useCallback(async (id?: string) => {
     const targetId = id || activeLeagueId;
@@ -165,6 +218,77 @@ export default function LiveDraft() {
           Enter a Sleeper league ID to load a draft board sorted by player value. Drafted players will appear faded.
         </p>
       </div>
+
+      {isConnected && (
+        <Card className={liveDrafts.length > 0 ? "border-emerald-500/40 bg-emerald-500/5" : ""}>
+          <CardContent className="pt-5 pb-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Radio className={`w-4 h-4 ${liveDrafts.length > 0 ? "text-emerald-500 animate-pulse" : "text-muted-foreground"}`} />
+                <span className="text-sm font-semibold text-foreground" data-testid="text-live-detector-title">Live Draft Detector</span>
+                {liveDrafts.length > 0 && (
+                  <Badge variant="secondary" className="text-[10px] bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30" data-testid="badge-live-count">
+                    {liveDrafts.length} LIVE
+                  </Badge>
+                )}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={scanForLiveDrafts}
+                disabled={isDetecting}
+                data-testid="button-scan-drafts"
+              >
+                {isDetecting ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : <RefreshCw className="w-3.5 h-3.5 mr-1.5" />}
+                {hasScanned ? "Re-scan" : "Scan"}
+              </Button>
+            </div>
+            {isDetecting && !hasScanned && (
+              <p className="text-xs text-muted-foreground" data-testid="text-scanning">Scanning your leagues for active drafts...</p>
+            )}
+            {scanError && (
+              <p className="text-xs text-red-500" data-testid="text-scan-error">{scanError}</p>
+            )}
+            {hasScanned && liveDrafts.length === 0 && !isDetecting && !scanError && (
+              <p className="text-xs text-muted-foreground" data-testid="text-no-live-drafts">No active drafts detected across your leagues. You can still enter a league ID manually below.</p>
+            )}
+            {liveDrafts.length > 0 && (
+              <div className="space-y-2" data-testid="list-live-drafts">
+                {liveDrafts.map((ld) => (
+                  <div
+                    key={ld.draftId}
+                    className="flex items-center justify-between gap-3 p-3 rounded-lg border border-emerald-500/20 bg-background"
+                    data-testid={`live-draft-${ld.leagueId}`}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <Zap className="w-3.5 h-3.5 text-[#d4af37] flex-shrink-0" />
+                        <span className="font-medium text-sm text-foreground truncate" data-testid={`text-live-league-name-${ld.leagueId}`}>
+                          {ld.leagueName}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-3 mt-1 ml-5.5">
+                        <span className="text-[11px] text-muted-foreground">{ld.type} &middot; {ld.teams} teams &middot; {ld.rounds} rounds</span>
+                        <span className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400" data-testid={`text-live-progress-${ld.leagueId}`}>
+                          {ld.picksMade}/{ld.totalPicks} picks
+                        </span>
+                      </div>
+                    </div>
+                    <Button
+                      size="sm"
+                      onClick={() => handleJoinLiveDraft(ld.leagueId)}
+                      data-testid={`button-join-draft-${ld.leagueId}`}
+                    >
+                      <Target className="w-3.5 h-3.5 mr-1.5" />
+                      Join Board
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardContent className="pt-6">

@@ -587,6 +587,48 @@ export async function fetchPortfolioSummary(
   };
 }
 
+export async function detectLiveDrafts(userId: string) {
+  const leagues = await fetchJson<SleeperLeagueRaw[]>(
+    `${SLEEPER_API}/user/${userId}/leagues/nfl/2026`
+  );
+  if (!leagues || !Array.isArray(leagues)) return [];
+
+  const results: { leagueId: string; leagueName: string; draftId: string; status: string; type: string; season: string; rounds: number; teams: number; picksMade: number; totalPicks: number }[] = [];
+
+  const checks = leagues.map(async (lg) => {
+    try {
+      const drafts = await fetchJson<any[]>(`${SLEEPER_API}/league/${lg.league_id}/drafts`);
+      if (!drafts || drafts.length === 0) return;
+      for (const d of drafts) {
+        if (d.status === "drafting") {
+          const rounds = d.settings?.rounds || 4;
+          const teams = d.settings?.teams || lg.total_rosters || 12;
+          let picksMade = 0;
+          try {
+            const picks = await fetchJson<any[]>(`${SLEEPER_API}/draft/${d.draft_id}/picks`);
+            picksMade = (picks || []).filter((p: any) => p.player_id).length;
+          } catch {}
+          results.push({
+            leagueId: lg.league_id,
+            leagueName: lg.name,
+            draftId: d.draft_id,
+            status: d.status,
+            type: d.type || "snake",
+            season: d.season,
+            rounds,
+            teams,
+            picksMade,
+            totalPicks: rounds * teams,
+          });
+        }
+      }
+    } catch {}
+  });
+
+  await Promise.all(checks);
+  return results;
+}
+
 export async function fetchDraftBoard(leagueId: string) {
   const draftsRaw = await fetchJson<any[]>(`${SLEEPER_API}/league/${leagueId}/drafts`);
   if (!draftsRaw || draftsRaw.length === 0) {
