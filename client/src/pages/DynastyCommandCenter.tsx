@@ -16,7 +16,7 @@ import { Share2, Download, LayoutDashboard, Loader2, Lock, Check, User } from "l
 
 import { PortfolioConnect, PortfolioMyLeagues, PortfolioSummary } from "./tabs/Portfolio";
 import { DashboardOverview, DashboardSnapshot, DashboardKeyInsights } from "./tabs/Dashboard";
-import { PowerRankings, TierBreakdown, RosterComparison } from "./tabs/LeagueAnalyzer";
+import { PowerRankings, RosterComparison } from "./tabs/LeagueAnalyzer";
 import { RosterStrength, AgeCurve, DepthChart } from "./tabs/TeamBreakdown";
 import { TradeFinder, TradeTargets, TradeBlockScanner } from "./tabs/TradeCenter";
 import { PickValue, PickDistribution } from "./tabs/DraftCapital";
@@ -253,7 +253,6 @@ export default function DynastyCommandCenter() {
       case "dashboard:snapshot": return <DashboardSnapshot league={league} />;
       case "dashboard:key-insights": return <DashboardKeyInsights league={league} userTeam={userTeam} />;
       case "league-analyzer:power-rankings": return <PowerRankings league={league} />;
-      case "league-analyzer:tier-breakdown": return <TierBreakdown league={league} />;
       case "league-analyzer:roster-comparison": return <RosterComparison league={league} />;
       case "team-breakdown:roster-strength": return <RosterStrength league={league} userTeam={userTeam} />;
       case "team-breakdown:age-curve": return <AgeCurve userTeam={userTeam} />;
