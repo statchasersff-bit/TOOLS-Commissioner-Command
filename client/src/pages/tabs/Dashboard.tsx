@@ -1,3 +1,4 @@
+import { useState, useMemo } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -6,7 +7,7 @@ import { InsightCallout } from "@/components/InsightCallout";
 import { SectionHeader } from "@/components/SectionHeader";
 import { getTeamTier, getTierColor, generateInsights } from "@/data/mockData";
 import type { League, Team } from "@/types";
-import { Trophy, Zap, Target, Calendar, Users, Medal, ArrowRight, Table, Lightbulb, Compass, Flame, Sprout, Archive } from "lucide-react";
+import { Trophy, Zap, Target, Calendar, Users, Medal, ArrowRight, ArrowUp, ArrowDown, ArrowUpDown, Table, Lightbulb, Compass, Flame, Sprout, Archive } from "lucide-react";
 
 interface DashboardProps {
   league: League;
@@ -434,9 +435,64 @@ function PowerBar({ value, max }: { value: number; max: number }) {
   );
 }
 
+type SortKey = "name" | "overall" | "starters" | "depth" | "youth" | "picks";
+
+function SortableHeader({ label, sortKey, activeSortKey, sortDir, onSort, className }: {
+  label: string; sortKey: SortKey; activeSortKey: SortKey; sortDir: "asc" | "desc";
+  onSort: (key: SortKey) => void; className?: string;
+}) {
+  const isActive = activeSortKey === sortKey;
+  return (
+    <th
+      className={`px-4 py-3 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap cursor-pointer select-none hover:text-foreground transition-colors ${className || ""}`}
+      onClick={() => onSort(sortKey)}
+      data-testid={`sort-${sortKey}`}
+    >
+      <span className="inline-flex items-center gap-1">
+        {label}
+        {isActive ? (
+          sortDir === "asc" ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />
+        ) : (
+          <ArrowUpDown className="w-3 h-3 opacity-30" />
+        )}
+      </span>
+    </th>
+  );
+}
+
 export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
   const teams = league.teams;
   const maxOverall = Math.max(...teams.map(t => t.metrics.overall), 1);
+  const [sortKey, setSortKey] = useState<SortKey>("overall");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+
+  function handleSort(key: SortKey) {
+    if (sortKey === key) {
+      setSortDir(d => d === "asc" ? "desc" : "asc");
+    } else {
+      setSortKey(key);
+      setSortDir("desc");
+    }
+  }
+
+  const sortedTeams = useMemo(() => {
+    const accessor: Record<SortKey, (t: Team) => number | string> = {
+      name: t => t.name.toLowerCase(),
+      overall: t => t.metrics.overall,
+      starters: t => t.metrics.starters,
+      depth: t => t.metrics.depth,
+      youth: t => t.metrics.youth,
+      picks: t => t.metrics.picks,
+    };
+    return [...teams].sort((a, b) => {
+      const va = accessor[sortKey](a);
+      const vb = accessor[sortKey](b);
+      if (typeof va === "number" && typeof vb === "number") {
+        return sortDir === "asc" ? va - vb : vb - va;
+      }
+      return sortDir === "asc" ? String(va).localeCompare(String(vb)) : String(vb).localeCompare(String(va));
+    });
+  }, [teams, sortKey, sortDir]);
 
   return (
     <div className="space-y-6">
@@ -450,7 +506,16 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
           <thead>
             <tr className="border-b border-border/40">
               <th className="sticky left-0 z-10 bg-muted/30 dark:bg-muted/20" rowSpan={2} />
-              <th className="bg-muted/30 dark:bg-muted/20" rowSpan={2} />
+              <th className="bg-muted/30 dark:bg-muted/20 cursor-pointer select-none hover:text-foreground transition-colors" rowSpan={2} onClick={() => handleSort("name")} data-testid="sort-name">
+                <span className="inline-flex items-center gap-1 px-4 py-3 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">
+                  Team
+                  {sortKey === "name" ? (
+                    sortDir === "asc" ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />
+                  ) : (
+                    <ArrowUpDown className="w-3 h-3 opacity-30" />
+                  )}
+                </span>
+              </th>
               <th className="px-3 py-1.5 text-center text-[10px] font-bold text-[#0b3a7a] dark:text-blue-400 uppercase tracking-widest border-b border-border/20 bg-muted/30 dark:bg-muted/20" colSpan={2} data-testid="col-group-strength">
                 Team Strength
               </th>
@@ -463,16 +528,16 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
               <th className="bg-muted/30 dark:bg-muted/20" rowSpan={2} />
             </tr>
             <tr className="border-b border-border bg-muted/30 dark:bg-muted/20">
-              <th className="px-4 py-3 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Overall</th>
+              <SortableHeader label="Overall" sortKey="overall" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
               <th className="px-4 py-3 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Tier</th>
-              <th className="px-4 py-3 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap border-l border-border/30">Starters</th>
-              <th className="px-4 py-3 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Depth</th>
-              <th className="px-4 py-3 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Youth</th>
-              <th className="px-4 py-3 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap border-l border-border/30">Picks</th>
+              <SortableHeader label="Starters" sortKey="starters" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="border-l border-border/30" />
+              <SortableHeader label="Depth" sortKey="depth" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+              <SortableHeader label="Youth" sortKey="youth" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+              <SortableHeader label="Picks" sortKey="picks" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="border-l border-border/30" />
             </tr>
           </thead>
           <tbody>
-            {[...teams].sort((a, b) => b.metrics.overall - a.metrics.overall).map((team, idx) => {
+            {sortedTeams.map((team, idx) => {
               const rank = idx + 1;
               const tier = getTeamTier(team.metrics.overall);
               const isUser = team.id === userTeam.id;

@@ -31,15 +31,15 @@ export function TradeFinder({ league, userTeam }: TradeProps) {
     .sort((a, b) => b.reasons.length - a.reasons.length);
 
   const columns = [
-    { key: "name", header: "Team", sticky: true, render: (row: any) => (
+    { key: "name", header: "Team", sticky: true, sortable: true, sortAccessor: (row: any) => row.name, render: (row: any) => (
       <div>
         <span className="font-semibold">{row.name}</span>
         <span className="text-xs text-muted-foreground ml-2">({row.owner})</span>
       </div>
     )},
-    { key: "tier", header: "Tier", render: (row: any) => <Badge variant="outline" className={getTierColor(row.tier)}>{row.tier}</Badge> },
-    { key: "overall", header: "Score", render: (row: any) => <span className="font-bold text-lg">{row.metrics.overall}</span> },
-    { key: "reasons", header: "Trade Reasons", render: (row: any) => (
+    { key: "tier", header: "Tier", sortable: true, sortAccessor: (row: any) => row.metrics.overall, render: (row: any) => <Badge variant="outline" className={getTierColor(row.tier)}>{row.tier}</Badge> },
+    { key: "overall", header: "Score", sortable: true, sortAccessor: (row: any) => row.metrics.overall, render: (row: any) => <span className="font-bold text-lg">{row.metrics.overall}</span> },
+    { key: "reasons", header: "Trade Reasons", sortable: true, sortAccessor: (row: any) => row.reasons.length, render: (row: any) => (
       <div className="flex flex-wrap gap-1">
         {row.reasons.map((r: string, i: number) => (
           <Badge key={i} variant="secondary" className="text-xs">{r}</Badge>

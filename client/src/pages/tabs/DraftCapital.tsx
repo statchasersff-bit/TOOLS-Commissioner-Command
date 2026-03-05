@@ -12,9 +12,9 @@ interface DraftProps {
 
 export function PickValue({ league, userTeam }: DraftProps) {
   const columns = [
-    { key: "year", header: "Year", sticky: true, render: (row: any) => <span className="font-semibold">{row.year}</span> },
-    { key: "round", header: "Round", render: (row: any) => <span>Round {row.round}</span> },
-    { key: "projectedRange", header: "Projected", render: (row: any) => (
+    { key: "year", header: "Year", sticky: true, sortable: true, sortAccessor: (row: any) => row.year, render: (row: any) => <span className="font-semibold">{row.year}</span> },
+    { key: "round", header: "Round", sortable: true, sortAccessor: (row: any) => row.round, render: (row: any) => <span>Round {row.round}</span> },
+    { key: "projectedRange", header: "Projected", sortable: true, sortAccessor: (row: any) => row.projectedRange === "Early" ? 1 : row.projectedRange === "Mid" ? 2 : 3, render: (row: any) => (
       <Badge variant="outline" className={cn(
         row.projectedRange === "Early" ? "text-emerald-600 dark:text-emerald-400" :
         row.projectedRange === "Late" ? "text-red-600 dark:text-red-400" :
@@ -23,7 +23,7 @@ export function PickValue({ league, userTeam }: DraftProps) {
         {row.projectedRange}
       </Badge>
     )},
-    { key: "value", header: "Value", render: (row: any) => <span className="font-bold text-lg">{row.value}</span> },
+    { key: "value", header: "Value", sortable: true, sortAccessor: (row: any) => row.value, render: (row: any) => <span className="font-bold text-lg">{row.value}</span> },
   ];
 
   const totalValue = userTeam.picks.reduce((s, p) => s + p.value, 0);
@@ -77,15 +77,15 @@ export function PickDistribution({ league }: { league: League }) {
 
   const columns = [
     { key: "rank", header: "#", sticky: true, render: (_: any, i: number) => <span className="font-bold text-muted-foreground">{i + 1}</span> },
-    { key: "name", header: "Team", render: (row: any) => (
+    { key: "name", header: "Team", sortable: true, sortAccessor: (row: any) => row.name, render: (row: any) => (
       <div>
         <span className="font-semibold">{row.name}</span>
         <span className="text-xs text-muted-foreground ml-2">({row.owner})</span>
       </div>
     )},
-    { key: "totalPicks", header: "Picks", render: (row: any) => <span className="font-semibold">{row.totalPicks}</span> },
-    { key: "firstRounders", header: "1sts", render: (row: any) => <span className="font-bold text-[#d4af37]">{row.firstRounders}</span> },
-    { key: "totalPickValue", header: "Total Value", render: (row: any) => <span className="font-bold text-lg">{row.totalPickValue}</span> },
+    { key: "totalPicks", header: "Picks", sortable: true, sortAccessor: (row: any) => row.totalPicks, render: (row: any) => <span className="font-semibold">{row.totalPicks}</span> },
+    { key: "firstRounders", header: "1sts", sortable: true, sortAccessor: (row: any) => row.firstRounders, render: (row: any) => <span className="font-bold text-[#d4af37]">{row.firstRounders}</span> },
+    { key: "totalPickValue", header: "Total Value", sortable: true, sortAccessor: (row: any) => row.totalPickValue, render: (row: any) => <span className="font-bold text-lg">{row.totalPickValue}</span> },
     { key: "bar", header: "", render: (row: any) => (
       <div className="w-28 h-2.5 bg-muted rounded-full overflow-hidden">
         <div className="h-full bg-[#0b3a7a] dark:bg-blue-500 rounded-full transition-all" style={{ width: `${(row.totalPickValue / maxPickValue) * 100}%` }} />

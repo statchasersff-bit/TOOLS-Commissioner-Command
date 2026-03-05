@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -26,6 +26,9 @@ import {
   AlertTriangle,
   Crown,
   BarChart3,
+  ArrowUp,
+  ArrowDown,
+  ArrowUpDown,
 } from "lucide-react";
 
 export function PortfolioConnect() {
@@ -256,6 +259,94 @@ export function PortfolioMyLeagues({ onSelectLeague, onNavigate }: PortfolioMyLe
   );
 }
 
+type RecordSortKey = "leagueName" | "format" | "wins" | "rank";
+
+function PortfolioSortHeader({ label, sortKey, activeSortKey, sortDir, onSort }: {
+  label: string; sortKey: RecordSortKey; activeSortKey: RecordSortKey; sortDir: "asc" | "desc";
+  onSort: (key: RecordSortKey) => void;
+}) {
+  const isActive = activeSortKey === sortKey;
+  return (
+    <th
+      className="px-4 py-2.5 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider cursor-pointer select-none hover:text-foreground transition-colors"
+      onClick={() => onSort(sortKey)}
+      data-testid={`sort-record-${sortKey}`}
+    >
+      <span className="inline-flex items-center gap-1">
+        {label}
+        {isActive ? (
+          sortDir === "asc" ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />
+        ) : (
+          <ArrowUpDown className="w-3 h-3 opacity-30" />
+        )}
+      </span>
+    </th>
+  );
+}
+
+function SortableLeagueRecords({ records }: { records: any[] }) {
+  const [sortKey, setSortKey] = useState<RecordSortKey>("leagueName");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+
+  function handleSort(key: RecordSortKey) {
+    if (sortKey === key) {
+      setSortDir(d => d === "asc" ? "desc" : "asc");
+    } else {
+      setSortKey(key);
+      setSortDir(key === "leagueName" || key === "format" ? "asc" : "desc");
+    }
+  }
+
+  const sorted = useMemo(() => {
+    const accessor: Record<RecordSortKey, (r: any) => number | string> = {
+      leagueName: r => r.leagueName.toLowerCase(),
+      format: r => r.format,
+      wins: r => r.wins - r.losses,
+      rank: r => r.rank,
+    };
+    return [...records].sort((a, b) => {
+      const va = accessor[sortKey](a);
+      const vb = accessor[sortKey](b);
+      if (typeof va === "number" && typeof vb === "number") {
+        return sortDir === "asc" ? va - vb : vb - va;
+      }
+      return sortDir === "asc" ? String(va).localeCompare(String(vb)) : String(vb).localeCompare(String(va));
+    });
+  }, [records, sortKey, sortDir]);
+
+  return (
+    <div className="overflow-x-auto rounded-md border border-border/40">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-border bg-muted/30">
+            <PortfolioSortHeader label="League" sortKey="leagueName" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+            <PortfolioSortHeader label="Format" sortKey="format" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+            <PortfolioSortHeader label="Record" sortKey="wins" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+            <PortfolioSortHeader label="Rank" sortKey="rank" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+          </tr>
+        </thead>
+        <tbody>
+          {sorted.map((rec: any) => (
+            <tr key={rec.leagueId} className="border-b border-border/20 hover:bg-muted/10" data-testid={`league-record-${rec.leagueId}`}>
+              <td className="px-4 py-2.5 font-medium">{rec.leagueName}</td>
+              <td className="px-4 py-2.5">
+                <Badge variant="outline" className="text-[10px]">{rec.format}</Badge>
+              </td>
+              <td className="px-4 py-2.5 font-semibold">{rec.wins}-{rec.losses}{rec.ties > 0 ? `-${rec.ties}` : ""}</td>
+              <td className="px-4 py-2.5">
+                <span className={`font-semibold ${rec.rank <= 3 ? "text-emerald-600 dark:text-emerald-400" : rec.rank <= Math.ceil(rec.totalRosters * 0.7) ? "text-foreground" : "text-red-500 dark:text-red-400"}`}>
+                  #{rec.rank}
+                </span>
+                <span className="text-muted-foreground"> / {rec.totalRosters}</span>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export function PortfolioSummary() {
   const { isConnected, user, leagues } = useSleeper();
 
@@ -370,35 +461,7 @@ export function PortfolioSummary() {
             </div>
 
             {summaryData.leagueRecords.length > 0 && (
-              <div className="overflow-x-auto rounded-md border border-border/40">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-border bg-muted/30">
-                      <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">League</th>
-                      <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Format</th>
-                      <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Record</th>
-                      <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Rank</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {summaryData.leagueRecords.map((rec: any) => (
-                      <tr key={rec.leagueId} className="border-b border-border/20 hover:bg-muted/10" data-testid={`league-record-${rec.leagueId}`}>
-                        <td className="px-4 py-2.5 font-medium">{rec.leagueName}</td>
-                        <td className="px-4 py-2.5">
-                          <Badge variant="outline" className="text-[10px]">{rec.format}</Badge>
-                        </td>
-                        <td className="px-4 py-2.5 font-semibold">{rec.wins}-{rec.losses}{rec.ties > 0 ? `-${rec.ties}` : ""}</td>
-                        <td className="px-4 py-2.5">
-                          <span className={`font-semibold ${rec.rank <= 3 ? "text-emerald-600 dark:text-emerald-400" : rec.rank <= Math.ceil(rec.totalRosters * 0.7) ? "text-foreground" : "text-red-500 dark:text-red-400"}`}>
-                            #{rec.rank}
-                          </span>
-                          <span className="text-muted-foreground"> / {rec.totalRosters}</span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <SortableLeagueRecords records={summaryData.leagueRecords} />
             )}
           </Card>
 

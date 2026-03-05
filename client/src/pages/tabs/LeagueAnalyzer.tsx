@@ -21,12 +21,12 @@ export function PowerRankings({ league }: AnalyzerProps) {
 
   const columns = [
     { key: "rank", header: "#", sticky: true, render: (_: any, i: number) => <span className="font-bold">{i + 1}</span> },
-    { key: "name", header: "Team", render: (row: any) => <span className="font-semibold">{row.name} <span className="text-muted-foreground font-normal">({row.owner})</span></span> },
-    { key: "overall", header: "Overall", render: (row: any) => <span className="font-bold text-lg">{row.metrics.overall}</span> },
-    { key: "tier", header: "Tier", render: (row: any) => <Badge variant="outline" className={getTierColor(getTeamTier(row.metrics.overall))}>{getTeamTier(row.metrics.overall)}</Badge> },
-    { key: "starters", header: "Starters", render: (row: any) => row.metrics.starters },
-    { key: "depth", header: "Depth", render: (row: any) => row.metrics.depth },
-    { key: "youth", header: "Youth", render: (row: any) => row.metrics.youth },
+    { key: "name", header: "Team", sortable: true, sortAccessor: (row: any) => row.name, render: (row: any) => <span className="font-semibold">{row.name} <span className="text-muted-foreground font-normal">({row.owner})</span></span> },
+    { key: "overall", header: "Overall", sortable: true, sortAccessor: (row: any) => row.metrics.overall, render: (row: any) => <span className="font-bold text-lg">{row.metrics.overall}</span> },
+    { key: "tier", header: "Tier", sortable: true, sortAccessor: (row: any) => row.metrics.overall, render: (row: any) => <Badge variant="outline" className={getTierColor(getTeamTier(row.metrics.overall))}>{getTeamTier(row.metrics.overall)}</Badge> },
+    { key: "starters", header: "Starters", sortable: true, sortAccessor: (row: any) => row.metrics.starters, render: (row: any) => row.metrics.starters },
+    { key: "depth", header: "Depth", sortable: true, sortAccessor: (row: any) => row.metrics.depth, render: (row: any) => row.metrics.depth },
+    { key: "youth", header: "Youth", sortable: true, sortAccessor: (row: any) => row.metrics.youth, render: (row: any) => row.metrics.youth },
   ];
 
   return (
@@ -55,7 +55,7 @@ export function PowerRankings({ league }: AnalyzerProps) {
         ))}
       </div>
 
-      <DataTable columns={columns} data={sorted} />
+      <DataTable columns={columns} data={sorted} defaultSortKey="overall" defaultSortDir="desc" />
     </div>
   );
 }
