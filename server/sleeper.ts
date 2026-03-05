@@ -131,7 +131,7 @@ export async function fetchSleeperLeagues(
     return [];
   }
   const dynastyOnly = raw.filter((lg) =>
-    lg.settings?.type === 2
+    lg.settings?.type === 2 && lg.settings?.best_ball !== 1
   );
   return dynastyOnly.map((lg) => ({
     leagueId: lg.league_id,

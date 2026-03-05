@@ -287,6 +287,7 @@ function PortfolioSortHeader({ label, sortKey, activeSortKey, sortDir, onSort }:
 function SortableLeagueRecords({ records }: { records: any[] }) {
   const [sortKey, setSortKey] = useState<RecordSortKey>("leagueName");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [showAll, setShowAll] = useState(false);
 
   function handleSort(key: RecordSortKey) {
     if (sortKey === key) {
@@ -326,8 +327,8 @@ function SortableLeagueRecords({ records }: { records: any[] }) {
           </tr>
         </thead>
         <tbody>
-          {sorted.map((rec: any) => (
-            <tr key={rec.leagueId} className="border-b border-border/20 hover:bg-muted/10" data-testid={`league-record-${rec.leagueId}`}>
+          {(showAll ? sorted : sorted.slice(0, 10)).map((rec: any, idx: number) => (
+            <tr key={`${rec.leagueId}-${idx}`} className="border-b border-border/20 hover:bg-muted/10" data-testid={`league-record-${rec.leagueId}`}>
               <td className="px-4 py-2.5 font-medium">{rec.leagueName}</td>
               <td className="px-4 py-2.5">
                 <Badge variant="outline" className="text-[10px]">{rec.format}</Badge>
@@ -343,6 +344,15 @@ function SortableLeagueRecords({ records }: { records: any[] }) {
           ))}
         </tbody>
       </table>
+      {sorted.length > 10 && (
+        <button
+          onClick={() => setShowAll(prev => !prev)}
+          className="w-full py-2.5 text-xs font-semibold text-[#0b3a7a] dark:text-blue-400 hover:bg-muted/20 transition-colors border-t border-border/40"
+          data-testid="button-toggle-leagues"
+        >
+          {showAll ? "Show Less" : `Show All ${sorted.length} Leagues`}
+        </button>
+      )}
     </div>
   );
 }
