@@ -5,6 +5,7 @@ import {
   fetchSleeperUser,
   fetchSleeperLeagues,
   fetchSleeperLeagueFull,
+  fetchPortfolioSummary,
 } from "./sleeper";
 
 export async function registerRoutes(
@@ -58,6 +59,18 @@ export async function registerRoutes(
     } catch (err: any) {
       console.error("Sleeper league full fetch error:", err);
       res.status(500).json({ error: err.message || "Failed to fetch league data" });
+    }
+  });
+
+  app.get("/api/sleeper/user/:userId/portfolio-summary", async (req, res) => {
+    try {
+      const season = (req.query.season as string) || "2026";
+      const leagues = await fetchSleeperLeagues(req.params.userId, season);
+      const summary = await fetchPortfolioSummary(req.params.userId, leagues);
+      res.json(summary);
+    } catch (err: any) {
+      console.error("Portfolio summary error:", err);
+      res.status(500).json({ error: err.message || "Failed to fetch portfolio summary" });
     }
   });
 

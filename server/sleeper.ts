@@ -28,6 +28,13 @@ interface SleeperRosterRaw {
   owner_id: string;
   players: string[];
   starters: string[];
+  settings?: {
+    wins?: number;
+    losses?: number;
+    ties?: number;
+    fpts?: number;
+    [key: string]: any;
+  };
 }
 
 interface SleeperLeagueUserRaw {
@@ -302,5 +309,192 @@ export async function fetchSleeperLeagueFull(leagueId: string, userId: string) {
     userTeamId: userTeamIdStr,
     format,
     scoringFormat,
+  };
+}
+
+export interface PortfolioSummaryData {
+  totalWins: number;
+  totalLosses: number;
+  totalTies: number;
+  winRate: number;
+  leagueRecords: Array<{
+    leagueId: string;
+    leagueName: string;
+    wins: number;
+    losses: number;
+    ties: number;
+    rank: number;
+    totalRosters: number;
+    format: string;
+  }>;
+  contenderCount: number;
+  middleCount: number;
+  rebuildCount: number;
+  playoffTeams: number;
+  avgRank: number;
+  playerExposure: Array<{
+    playerId: string;
+    name: string;
+    pos: string;
+    team: string;
+    leagueCount: number;
+    exposure: number;
+  }>;
+  lineupAlerts: Array<{
+    leagueId: string;
+    leagueName: string;
+    issues: Array<{
+      slot: string;
+      reason: string;
+      playerName?: string;
+    }>;
+  }>;
+}
+
+export async function fetchPortfolioSummary(
+  userId: string,
+  leagueSummaries: SleeperLeagueSummary[]
+): Promise<PortfolioSummaryData> {
+  const playersDb = await getSleeperPlayers();
+  const validPositions = new Set(["QB", "RB", "WR", "TE"]);
+
+  const playerExposureMap = new Map<string, { name: string; pos: string; team: string; count: number }>();
+  const leagueRecords: PortfolioSummaryData["leagueRecords"] = [];
+  const lineupAlerts: PortfolioSummaryData["lineupAlerts"] = [];
+  let totalWins = 0, totalLosses = 0, totalTies = 0;
+  let contenderCount = 0, middleCount = 0, rebuildCount = 0, playoffTeams = 0;
+  let totalRank = 0;
+
+  const fetchPromises = leagueSummaries.map(async (ls) => {
+    try {
+      const [rostersRaw, leagueRaw] = await Promise.all([
+        fetchJson<SleeperRosterRaw[]>(`${SLEEPER_API}/league/${ls.leagueId}/rosters`),
+        fetchJson<SleeperLeagueRaw>(`${SLEEPER_API}/league/${ls.leagueId}`),
+      ]);
+
+      const userRoster = rostersRaw.find((r) => r.owner_id === userId);
+      if (!userRoster) return;
+
+      const wins = userRoster.settings?.wins ?? 0;
+      const losses = userRoster.settings?.losses ?? 0;
+      const ties = userRoster.settings?.ties ?? 0;
+
+      const sortedByWins = [...rostersRaw].sort((a, b) => {
+        const aW = a.settings?.wins ?? 0;
+        const bW = b.settings?.wins ?? 0;
+        if (bW !== aW) return bW - aW;
+        const aFpts = a.settings?.fpts ?? 0;
+        const bFpts = b.settings?.fpts ?? 0;
+        return bFpts - aFpts;
+      });
+      const rank = sortedByWins.findIndex((r) => r.roster_id === userRoster.roster_id) + 1;
+      const total = rostersRaw.length;
+      const playoffSlots = Math.max(Math.floor(total / 2), 1);
+
+      leagueRecords.push({
+        leagueId: ls.leagueId,
+        leagueName: ls.name,
+        wins,
+        losses,
+        ties,
+        rank,
+        totalRosters: total,
+        format: ls.format,
+      });
+
+      totalWins += wins;
+      totalLosses += losses;
+      totalTies += ties;
+      totalRank += rank;
+
+      if (rank <= 3) contenderCount++;
+      else if (rank <= Math.ceil(total * 0.7)) middleCount++;
+      else rebuildCount++;
+
+      if (rank <= playoffSlots) playoffTeams++;
+
+      for (const pid of userRoster.players || []) {
+        const pData = playersDb[pid];
+        if (!pData) continue;
+        const pos = pData.fantasy_positions?.[0] || pData.position;
+        if (!validPositions.has(pos)) continue;
+        const existing = playerExposureMap.get(pid);
+        if (existing) {
+          existing.count++;
+        } else {
+          playerExposureMap.set(pid, {
+            name: pData.full_name || `${pData.first_name} ${pData.last_name}`,
+            pos,
+            team: pData.team || "FA",
+            count: 1,
+          });
+        }
+      }
+
+      const issues: Array<{ slot: string; reason: string; playerName?: string }> = [];
+      const starters = userRoster.starters || [];
+      const rosterPositions = leagueRaw.roster_positions || [];
+
+      for (let i = 0; i < starters.length; i++) {
+        const slotName = rosterPositions[i] || `SLOT ${i + 1}`;
+        if (slotName === "BN") continue;
+        const pid = starters[i];
+        if (!pid || pid === "0") {
+          issues.push({ slot: slotName, reason: "Empty" });
+          continue;
+        }
+        const pData = playersDb[pid];
+        if (pData) {
+          const injuryStatus = (pData as any).injury_status;
+          if (injuryStatus === "Out") issues.push({ slot: slotName, reason: "OUT", playerName: pData.full_name });
+          else if (injuryStatus === "IR") issues.push({ slot: slotName, reason: "IR", playerName: pData.full_name });
+          else if (injuryStatus === "Doubtful") issues.push({ slot: slotName, reason: "Doubtful", playerName: pData.full_name });
+        }
+      }
+
+      if (issues.length > 0) {
+        lineupAlerts.push({
+          leagueId: ls.leagueId,
+          leagueName: ls.name,
+          issues,
+        });
+      }
+    } catch (err) {
+      console.error(`Portfolio summary: error fetching league ${ls.leagueId}:`, err);
+    }
+  });
+
+  await Promise.all(fetchPromises);
+
+  const totalGames = totalWins + totalLosses + totalTies;
+  const winRate = totalGames > 0 ? Math.round((totalWins / totalGames) * 100) : 0;
+  const avgRank = leagueRecords.length > 0 ? parseFloat((totalRank / leagueRecords.length).toFixed(1)) : 0;
+
+  const totalLeagues = leagueSummaries.length;
+  const playerExposure = Array.from(playerExposureMap.entries())
+    .map(([playerId, data]) => ({
+      playerId,
+      name: data.name,
+      pos: data.pos,
+      team: data.team,
+      leagueCount: data.count,
+      exposure: Math.round((data.count / totalLeagues) * 100),
+    }))
+    .sort((a, b) => b.leagueCount - a.leagueCount)
+    .slice(0, 20);
+
+  return {
+    totalWins,
+    totalLosses,
+    totalTies,
+    winRate,
+    leagueRecords: leagueRecords.sort((a, b) => a.rank - b.rank),
+    contenderCount,
+    middleCount,
+    rebuildCount,
+    playoffTeams,
+    avgRank,
+    playerExposure,
+    lineupAlerts,
   };
 }

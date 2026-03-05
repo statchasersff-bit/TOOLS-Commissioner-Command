@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -6,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { KpiCard } from "@/components/KpiCard";
 import { SectionHeader } from "@/components/SectionHeader";
 import { useSleeper } from "@/contexts/SleeperContext";
+import { getPositionColor } from "@/data/mockData";
 import {
   Link,
   CheckCircle,
@@ -19,6 +21,11 @@ import {
   Calendar,
   Shield,
   Check,
+  TrendingUp,
+  Target,
+  AlertTriangle,
+  Crown,
+  BarChart3,
 } from "lucide-react";
 
 export function PortfolioConnect() {
@@ -250,7 +257,17 @@ export function PortfolioMyLeagues({ onSelectLeague, onNavigate }: PortfolioMyLe
 }
 
 export function PortfolioSummary() {
-  const { isConnected, leagues } = useSleeper();
+  const { isConnected, user, leagues } = useSleeper();
+
+  const { data: summaryData, isLoading: summaryLoading } = useQuery({
+    queryKey: ["/api/sleeper/user", user?.userId, "portfolio-summary"],
+    queryFn: async () => {
+      const res = await fetch(`/api/sleeper/user/${user!.userId}/portfolio-summary`);
+      if (!res.ok) throw new Error("Failed to fetch portfolio summary");
+      return res.json();
+    },
+    enabled: isConnected && !!user?.userId && leagues.length > 0,
+  });
 
   if (!isConnected) {
     return (
@@ -281,51 +298,233 @@ export function PortfolioSummary() {
   const seasons = Array.from(new Set(leagues.map((l) => l.season)));
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <SectionHeader title="Portfolio Summary" subtitle="Overview of your dynasty portfolio across all leagues" />
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <KpiCard label="Total Leagues" value={leagues.length} icon={Trophy} />
+        <KpiCard label="SF Leagues" value={sfCount} icon={Shield} subtitle={`${oneQbCount} 1QB`} />
         <KpiCard
-          label="Total Leagues"
-          value={leagues.length}
-          icon={Trophy}
-          data-testid="kpi-total-leagues"
+          label="Win Rate"
+          value={summaryLoading ? "..." : summaryData ? `${summaryData.winRate}%` : "--"}
+          icon={TrendingUp}
+          subtitle={summaryData ? `${summaryData.totalWins}W - ${summaryData.totalLosses}L` : undefined}
+          loading={summaryLoading}
         />
         <KpiCard
-          label="SF Leagues"
-          value={sfCount}
-          icon={Shield}
-          subtitle={`${oneQbCount} 1QB`}
-          data-testid="kpi-sf-leagues"
-        />
-        <KpiCard
-          label="1QB Leagues"
-          value={oneQbCount}
-          icon={Users}
-          subtitle={`${sfCount} SF`}
-          data-testid="kpi-1qb-leagues"
-        />
-        <KpiCard
-          label="Seasons"
-          value={seasons.join(", ")}
-          icon={Calendar}
-          data-testid="kpi-seasons"
+          label="Avg Rank"
+          value={summaryLoading ? "..." : summaryData ? summaryData.avgRank : "--"}
+          icon={BarChart3}
+          subtitle={summaryData ? `${summaryData.playoffTeams} playoff teams` : undefined}
+          loading={summaryLoading}
         />
       </div>
 
-      <Card className="p-6" data-testid="portfolio-overview-text">
-        <div className="mb-4">
-          <h3 className="text-base font-bold text-foreground">Portfolio Overview</h3>
-          <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
-        </div>
-        <p className="text-sm text-muted-foreground leading-relaxed">
-          You are managing <strong className="text-foreground">{leagues.length}</strong> dynasty league{leagues.length !== 1 ? "s" : ""} across{" "}
-          {seasons.length} season{seasons.length !== 1 ? "s" : ""}. Your portfolio includes{" "}
-          <strong className="text-foreground">{sfCount}</strong> Superflex and{" "}
-          <strong className="text-foreground">{oneQbCount}</strong> 1QB format league{oneQbCount !== 1 ? "s" : ""}.
-          Select a league from the <strong>My Leagues</strong> tab to dive into detailed analysis.
-        </p>
-      </Card>
+      {summaryLoading && (
+        <Card className="p-8 text-center">
+          <Loader2 className="w-6 h-6 animate-spin text-[#0b3a7a] mx-auto mb-3" />
+          <p className="text-sm text-muted-foreground">Analyzing your portfolio across {leagues.length} leagues...</p>
+        </Card>
+      )}
+
+      {summaryData && (
+        <>
+          <Card className="p-6" data-testid="portfolio-performance">
+            <div className="mb-5">
+              <h3 className="text-base font-bold text-foreground">Portfolio Performance</h3>
+              <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+              <div className="text-center p-3 rounded-lg bg-muted/30 border border-border/40">
+                <p className="text-2xl font-bold text-foreground">{summaryData.totalWins}-{summaryData.totalLosses}{summaryData.totalTies > 0 ? `-${summaryData.totalTies}` : ""}</p>
+                <p className="text-[11px] text-muted-foreground uppercase tracking-wider mt-1">Total Record</p>
+              </div>
+              <div className="text-center p-3 rounded-lg bg-muted/30 border border-border/40">
+                <p className="text-2xl font-bold text-foreground">{summaryData.winRate}%</p>
+                <p className="text-[11px] text-muted-foreground uppercase tracking-wider mt-1">Win Rate</p>
+              </div>
+              <div className="text-center p-3 rounded-lg bg-muted/30 border border-border/40">
+                <p className="text-2xl font-bold text-foreground">{summaryData.avgRank}</p>
+                <p className="text-[11px] text-muted-foreground uppercase tracking-wider mt-1">Avg League Rank</p>
+              </div>
+              <div className="text-center p-3 rounded-lg bg-muted/30 border border-border/40">
+                <p className="text-2xl font-bold text-foreground">{summaryData.playoffTeams} / {leagues.length}</p>
+                <p className="text-[11px] text-muted-foreground uppercase tracking-wider mt-1">Playoff Teams</p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 mb-4">
+              <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200/50 dark:border-emerald-800/30">
+                <Crown className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-400">Contenders (Top 3): {summaryData.contenderCount}</span>
+              </div>
+              <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200/50 dark:border-blue-800/30">
+                <BarChart3 className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                <span className="text-xs font-semibold text-blue-700 dark:text-blue-400">Middle: {summaryData.middleCount}</span>
+              </div>
+              <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-red-50 dark:bg-red-950/30 border border-red-200/50 dark:border-red-800/30">
+                <Target className="w-3.5 h-3.5 text-red-600 dark:text-red-400" />
+                <span className="text-xs font-semibold text-red-700 dark:text-red-400">Rebuilding: {summaryData.rebuildCount}</span>
+              </div>
+            </div>
+
+            {summaryData.leagueRecords.length > 0 && (
+              <div className="overflow-x-auto rounded-md border border-border/40">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border bg-muted/30">
+                      <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">League</th>
+                      <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Format</th>
+                      <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Record</th>
+                      <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Rank</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {summaryData.leagueRecords.map((rec: any) => (
+                      <tr key={rec.leagueId} className="border-b border-border/20 hover:bg-muted/10" data-testid={`league-record-${rec.leagueId}`}>
+                        <td className="px-4 py-2.5 font-medium">{rec.leagueName}</td>
+                        <td className="px-4 py-2.5">
+                          <Badge variant="outline" className="text-[10px]">{rec.format}</Badge>
+                        </td>
+                        <td className="px-4 py-2.5 font-semibold">{rec.wins}-{rec.losses}{rec.ties > 0 ? `-${rec.ties}` : ""}</td>
+                        <td className="px-4 py-2.5">
+                          <span className={`font-semibold ${rec.rank <= 3 ? "text-emerald-600 dark:text-emerald-400" : rec.rank <= Math.ceil(rec.totalRosters * 0.7) ? "text-foreground" : "text-red-500 dark:text-red-400"}`}>
+                            #{rec.rank}
+                          </span>
+                          <span className="text-muted-foreground"> / {rec.totalRosters}</span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Card>
+
+          <Card className="p-6" data-testid="player-exposure">
+            <div className="mb-5">
+              <h3 className="text-base font-bold text-foreground">Top Rostered Players</h3>
+              <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
+            </div>
+            <p className="text-xs text-muted-foreground mb-4">Player exposure across your {leagues.length} dynasty leagues</p>
+
+            {summaryData.playerExposure.length > 0 ? (
+              <div className="space-y-2">
+                {summaryData.playerExposure.slice(0, 15).map((player: any) => {
+                  const isOverexposed = player.exposure >= 50;
+                  return (
+                    <div key={player.playerId} className="flex items-center justify-between py-2 border-b border-border/20 last:border-0" data-testid={`exposure-${player.playerId}`}>
+                      <div className="flex items-center gap-2.5">
+                        <Badge variant="outline" className={`text-xs w-8 justify-center ${getPositionColor(player.pos)}`}>{player.pos}</Badge>
+                        <div>
+                          <span className="text-sm font-semibold">{player.name}</span>
+                          <span className="text-xs text-muted-foreground ml-2">{player.team}</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-24 h-2 bg-muted rounded-full overflow-hidden">
+                            <div
+                              className={`h-full rounded-full ${isOverexposed ? "bg-amber-500" : "bg-[#0b3a7a] dark:bg-blue-500"}`}
+                              style={{ width: `${player.exposure}%` }}
+                            />
+                          </div>
+                          <span className="text-xs font-bold w-10 text-right">{player.exposure}%</span>
+                        </div>
+                        <span className="text-xs text-muted-foreground w-16 text-right">{player.leagueCount} league{player.leagueCount !== 1 ? "s" : ""}</span>
+                        {isOverexposed && <AlertTriangle className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">No player data available.</p>
+            )}
+
+            {summaryData.playerExposure.filter((p: any) => p.exposure >= 50).length > 0 && (
+              <div className="mt-4 p-3 rounded-md bg-amber-50 dark:bg-amber-950/20 border border-amber-200/50 dark:border-amber-800/30">
+                <div className="flex items-center gap-2 mb-1.5">
+                  <AlertTriangle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                  <span className="text-xs font-bold text-amber-700 dark:text-amber-400">Overexposure Warning</span>
+                </div>
+                <div className="space-y-0.5">
+                  {summaryData.playerExposure.filter((p: any) => p.exposure >= 50).map((p: any) => (
+                    <p key={p.playerId} className="text-xs text-amber-700 dark:text-amber-400">
+                      {p.name} — {p.exposure}% exposure across your portfolio
+                    </p>
+                  ))}
+                </div>
+              </div>
+            )}
+          </Card>
+
+          {summaryData.lineupAlerts.length > 0 && (
+            <Card className="p-6 border-amber-200/50 dark:border-amber-800/30" data-testid="lineup-alerts">
+              <div className="mb-5">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-base font-bold text-foreground">Lineup Alerts</h3>
+                  <Badge className="bg-amber-500 text-white text-[10px] px-1.5">
+                    {summaryData.lineupAlerts.reduce((sum: number, la: any) => sum + la.issues.length, 0)} issues
+                  </Badge>
+                </div>
+                <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
+              </div>
+              <p className="text-xs text-muted-foreground mb-4">
+                {summaryData.lineupAlerts.length} league{summaryData.lineupAlerts.length !== 1 ? "s" : ""} need attention
+              </p>
+
+              <div className="overflow-x-auto rounded-md border border-border/40">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border bg-muted/30">
+                      <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">League</th>
+                      <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Issue</th>
+                      <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Player</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {summaryData.lineupAlerts.flatMap((la: any) =>
+                      la.issues.map((issue: any, i: number) => (
+                        <tr key={`${la.leagueId}-${i}`} className="border-b border-border/20 hover:bg-muted/10">
+                          <td className="px-4 py-2.5 font-medium">{i === 0 ? la.leagueName : ""}</td>
+                          <td className="px-4 py-2.5">
+                            <Badge variant="outline" className={`text-[10px] ${
+                              issue.reason === "OUT" || issue.reason === "IR" ? "bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800" :
+                              issue.reason === "Empty" ? "bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800" :
+                              "bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800"
+                            }`}>
+                              {issue.slot}: {issue.reason}
+                            </Badge>
+                          </td>
+                          <td className="px-4 py-2.5 text-muted-foreground">{issue.playerName || "—"}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          )}
+        </>
+      )}
+
+      {!summaryData && !summaryLoading && (
+        <Card className="p-6" data-testid="portfolio-overview-text">
+          <div className="mb-4">
+            <h3 className="text-base font-bold text-foreground">Portfolio Overview</h3>
+            <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
+          </div>
+          <p className="text-sm text-muted-foreground leading-relaxed">
+            You are managing <strong className="text-foreground">{leagues.length}</strong> dynasty league{leagues.length !== 1 ? "s" : ""} across{" "}
+            {seasons.length} season{seasons.length !== 1 ? "s" : ""}. Your portfolio includes{" "}
+            <strong className="text-foreground">{sfCount}</strong> Superflex and{" "}
+            <strong className="text-foreground">{oneQbCount}</strong> 1QB format league{oneQbCount !== 1 ? "s" : ""}.
+            Select a league from the <strong>My Leagues</strong> tab to dive into detailed analysis.
+          </p>
+        </Card>
+      )}
     </div>
   );
 }
