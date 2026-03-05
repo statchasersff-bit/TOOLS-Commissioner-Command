@@ -632,20 +632,47 @@ export async function detectLiveDrafts(userId: string) {
 export async function fetchDraftBoard(leagueId: string) {
   const draftsRaw = await fetchJson<any[]>(`${SLEEPER_API}/league/${leagueId}/drafts`);
   if (!draftsRaw || draftsRaw.length === 0) {
-    return { draft: null, picks: [], players: {} as Record<string, { name: string; pos: string; team: string }>, error: "No drafts found for this league" };
+    return { draft: null, picks: [], players: {} as Record<string, { name: string; pos: string; team: string }>, draftSlots: [] as { slot: number; rosterId: number; displayName: string }[], error: "No drafts found for this league" };
   }
 
   const draft = draftsRaw[0];
   const draftId = draft.draft_id;
 
-  const [picksRaw, playersDb] = await Promise.all([
+  const [picksRaw, playersDb, leagueUsers] = await Promise.all([
     fetchJson<any[]>(`${SLEEPER_API}/draft/${draftId}/picks`),
     getSleeperPlayers(),
+    fetchJson<SleeperLeagueUserRaw[]>(`${SLEEPER_API}/league/${leagueId}/users`).catch(() => [] as SleeperLeagueUserRaw[]),
   ]);
+
+  const userNameMap = new Map<string, string>();
+  for (const u of (leagueUsers || [])) {
+    userNameMap.set(u.user_id, u.metadata?.team_name || u.display_name || u.user_id);
+  }
+
+  const slotToRosterId: Record<number, number> = draft.slot_to_roster_id || {};
+  const draftOrder: Record<string, number> = draft.draft_order || {};
+
+  const rosterIdToUserId = new Map<number, string>();
+  for (const [userId, slot] of Object.entries(draftOrder)) {
+    const rosterId = slotToRosterId[slot as any];
+    if (rosterId) rosterIdToUserId.set(rosterId, userId);
+  }
+
+  const numTeams = draft.settings?.teams || Object.keys(slotToRosterId).length || 12;
+  const rounds = draft.settings?.rounds || 4;
+
+  const draftSlots: { slot: number; rosterId: number; displayName: string }[] = [];
+  for (let s = 1; s <= numTeams; s++) {
+    const rosterId = slotToRosterId[s] || s;
+    const userId = rosterIdToUserId.get(rosterId);
+    const displayName = userId ? (userNameMap.get(userId) || `Team ${s}`) : `Team ${s}`;
+    draftSlots.push({ slot: s, rosterId, displayName });
+  }
 
   const picks = (picksRaw || []).map((p: any) => ({
     round: p.round,
     pickNo: p.pick_no,
+    draftSlot: p.draft_slot || 0,
     rosterId: p.roster_id,
     playerId: p.player_id,
     playerName: p.metadata?.first_name && p.metadata?.last_name
@@ -675,13 +702,14 @@ export async function fetchDraftBoard(leagueId: string) {
       draftId,
       status: draft.status,
       type: draft.type,
-      rounds: draft.settings?.rounds || 4,
-      teams: draft.settings?.teams || draft.draft_order ? Object.keys(draft.draft_order || {}).length : 12,
+      rounds,
+      teams: numTeams,
       season: draft.season,
       leagueName: draft.metadata?.name || "",
     },
     picks,
     players: playerMap,
+    draftSlots,
     error: null,
   };
 }

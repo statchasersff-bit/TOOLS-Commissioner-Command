@@ -1,0 +1,251 @@
+Rename + Reframe
+Main Tab name
+
+Positional Analysis (or Position Market)
+
+What it does
+
+For the selected league, it:
+
+Scores every team’s position strength
+
+Labels Surplus / Neutral / Need by position
+
+Suggests trade partners and target lists driven by supply/demand
+
+Sub-tabs (recommended)
+1) Position Overview
+
+A league-wide heatmap / matrix:
+
+Teams down the left, positions across the top.
+
+Team	QB	RB	WR	TE	Picks
+Mak	Surplus	Need	Strong	Neutral	Avg
+Team B	Need	Surplus	Neutral	Need	High
+
+This is the premium view. One glance explains the whole league economy.
+
+2) Surplus & Needs
+
+Position selector chips at top:
+
+QB RB WR TE
+
+When user clicks RB, show two columns:
+
+RB Surplus Teams
+RB Need Teams
+
+Each row shows:
+
+rank at that position
+
+“surplus amount” (how many startable assets above baseline)
+
+a button: Find Deals
+
+3) Trade Opportunities
+
+This is where the tool generates actual “who to trade with” results, but now it’s grounded.
+
+Filters:
+
+Position to move: RB
+
+My side: Sell or Buy
+
+Team tier: contenders/rebuilders
+
+Include picks toggle
+
+Outputs ranked rows:
+
+Partner | Why | Targets | What they could want from you
+
+Example row:
+
+Partner: Kevin
+
+Why: “RB Need (#12), WR surplus (#2)”
+
+Targets: “RB2 value range”
+
+Offer ideas: “WR3 + 2nd”
+
+4) Player Targets by Position
+
+For the selected position, show:
+
+best targets from surplus teams
+
+best sell candidates from your roster
+
+This is where you can add logic like:
+
+contenders should buy points
+
+rebuilders should buy youth/picks
+
+How to calculate “surplus” and “need”
+
+This is the key.
+
+You already have value-source-driven player values (FantasyCalc). Use that.
+
+Step 1: Determine starters baseline
+
+Based on league settings:
+
+starters needed at each position
+
+use typical assumptions if unknown
+
+Example:
+
+QB: 1 (SF might value 2)
+
+RB: 2
+
+WR: 2
+
+TE: 1
+
+FLEX: count toward best remaining RB/WR/TE
+
+Step 2: Compute each team’s “starter set” value per position
+
+For each team:
+
+sort players at position by value desc
+
+take top N starters required
+
+sum values → Starter Strength
+
+Step 3: Compute depth score
+
+Sum next M players (bench tier) → Depth Strength
+
+Step 4: Convert to league percentile ranks
+
+For each position:
+
+rank teams by starter strength
+
+label:
+
+Top 25% = Surplus
+
+Middle 50% = Neutral
+
+Bottom 25% = Need
+
+That’s easy to understand and consistent.
+
+Bonus: “Surplus amount”
+
+Surplus amount = (your starter+depth value) − (league median)
+
+UX/UI improvements for your table screenshot
+
+Your current view is table-heavy and hard to scan.
+
+Here’s how to premium-ize it:
+
+1) Replace “reasons” chips with structured badges
+
+Badges like:
+
+RB Surplus
+
+TE Need
+
+Picks Rich
+
+And keep the “(#rank)” detail in a tooltip or secondary line.
+
+2) Add a position filter row above the table
+
+Instead of one table with everything, make the UI answer:
+
+“Show me RB market”
+
+“Show me QB market”
+
+3) Add a “Deal Lens” drawer
+
+Click a partner row → opens a side panel:
+
+Their needs
+
+Your needs
+
+Suggested targets
+
+“Build trade in calculator” button (prefills Trade Calculator)
+
+This is SUPER premium.
+
+Best part: connect this directly to Trade Calculator
+
+Every suggestion should have:
+✅ Build Trade button that adds the suggested assets into the calculator.
+
+This will make the whole tool feel cohesive.
+
+What to tell Replit AI (copy/paste)
+Replace the existing “Trade Finder” section with a new main tab called “Positional Analysis” (or “Position Market”).
+
+Goal:
+Analyze positional surplus/need across the league and generate trade opportunities based on supply/demand.
+
+Sub-tabs:
+1) Position Overview
+2) Surplus & Needs
+3) Trade Opportunities
+4) Targets
+
+Calculations (value-source driven):
+- Use the selected Value Source values (FantasyCalc) for all player values.
+- Determine starters baseline from league settings (or default assumptions: QB1, RB2, WR2, TE1, FLEX2).
+- For each team and position:
+  - StarterStrength = sum(top N players at that position by value)
+  - DepthStrength = sum(next M players by value) (M=3 default)
+  - TotalPosStrength = StarterStrength + 0.5*DepthStrength
+- For each position, rank teams by TotalPosStrength and label:
+  - Top 25%: Surplus
+  - Middle 50%: Neutral
+  - Bottom 25%: Need
+- Compute “Surplus Amount” = team TotalPosStrength - league median for that position.
+
+UI:
+Position Overview:
+- Heatmap/matrix: Teams x Positions with colored status (Surplus/Neutral/Need) and rank in tooltip.
+
+Surplus & Needs:
+- Position selector chips (QB/RB/WR/TE).
+- Two columns listing Surplus teams vs Need teams.
+- Each team row shows:
+  - position rank
+  - surplus amount
+  - quick action “Find Deals”.
+
+Trade Opportunities:
+- Generates partner rows for the user’s selected team:
+  - Partner team
+  - Why badges (e.g., “RB Need”, “WR Surplus”)
+  - Suggested targets (players from their surplus position)
+  - Suggested offers (assets from my surplus positions + picks)
+- Each row has button “Build Trade” that opens Trade Calculator with assets prefilled.
+
+Targets:
+- For selected position, show:
+  - “Buy Targets” (from surplus teams)
+  - “Sell Candidates” (from my roster) if I have surplus
+- Each player card includes value, age, team, and action buttons.
+
+Premium UX:
+- Use StatChasers navy/gold styling, rounded-2xl cards, gold underline headers.
+- Add a side drawer on clicking a team to show deeper “Market Profile” and one-click trade builder.
+- Mobile responsive: matrix scroll, lists stack, sticky headers.

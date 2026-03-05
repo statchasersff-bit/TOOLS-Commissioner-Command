@@ -3,13 +3,14 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Search, RefreshCw, Trophy, Target, Radio, Zap } from "lucide-react";
+import { Loader2, Search, RefreshCw, Trophy, Target, Radio, Zap, LayoutGrid, List } from "lucide-react";
 import { useValueModel } from "@/contexts/ValueModelContext";
 import { useSleeper } from "@/contexts/SleeperContext";
 
 interface DraftPick {
   round: number;
   pickNo: number;
+  draftSlot: number;
   rosterId: number;
   playerId: string;
   playerName: string;
@@ -27,10 +28,17 @@ interface DraftInfo {
   leagueName: string;
 }
 
+interface DraftSlot {
+  slot: number;
+  rosterId: number;
+  displayName: string;
+}
+
 interface DraftResponse {
   draft: DraftInfo | null;
   picks: DraftPick[];
   players: Record<string, { name: string; pos: string; team: string }>;
+  draftSlots: DraftSlot[];
   error: string | null;
 }
 
@@ -47,7 +55,21 @@ interface LiveDraftInfo {
   totalPicks: number;
 }
 
-const POS_COLORS: Record<string, string> = {
+const POS_BG: Record<string, string> = {
+  QB: "bg-red-500/20 border-red-500/40",
+  RB: "bg-emerald-500/20 border-emerald-500/40",
+  WR: "bg-blue-500/20 border-blue-500/40",
+  TE: "bg-orange-500/20 border-orange-500/40",
+};
+
+const POS_TEXT: Record<string, string> = {
+  QB: "text-red-700 dark:text-red-400",
+  RB: "text-emerald-700 dark:text-emerald-400",
+  WR: "text-blue-700 dark:text-blue-400",
+  TE: "text-orange-700 dark:text-orange-400",
+};
+
+const POS_BADGE: Record<string, string> = {
   QB: "bg-red-500/15 text-red-700 dark:text-red-400 border-red-500/30",
   RB: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30",
   WR: "bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/30",
@@ -63,6 +85,7 @@ export default function LiveDraft() {
   const [isLoading, setIsLoading] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [viewMode, setViewMode] = useState<"board" | "list">("board");
 
   const [liveDrafts, setLiveDrafts] = useState<LiveDraftInfo[]>([]);
   const [isDetecting, setIsDetecting] = useState(false);
@@ -147,64 +170,69 @@ export default function LiveDraft() {
     return new Set(draftData.picks.map(p => p.playerId).filter(Boolean));
   }, [draftData]);
 
-  const boardPlayers = useMemo(() => {
-    if (!draftData) return [];
+  const boardGrid = useMemo(() => {
+    if (!draftData?.draft) return null;
+    const { rounds, teams } = draftData.draft;
+    const slots = draftData.draftSlots || [];
 
-    const allPlayers: { id: string; name: string; pos: string; team: string; value: number; picked: boolean; pickInfo?: DraftPick }[] = [];
-
-    const pickMap = new Map<string, DraftPick>();
+    const pickByRoundRoster = new Map<string, DraftPick>();
     for (const pick of draftData.picks) {
-      if (pick.playerId) pickMap.set(pick.playerId, pick);
-    }
-
-    for (const [id, p] of Object.entries(draftData.players)) {
-      const value = valuesBySleeperId[id] || redraftValuesBySleeperId[id] || 0;
-      if (value <= 0 && !pickedPlayerIds.has(id)) continue;
-      allPlayers.push({
-        id,
-        name: p.name,
-        pos: p.pos,
-        team: p.team,
-        value,
-        picked: pickedPlayerIds.has(id),
-        pickInfo: pickMap.get(id),
-      });
-    }
-
-    for (const pick of draftData.picks) {
-      if (pick.playerId && !draftData.players[pick.playerId]) {
-        allPlayers.push({
-          id: pick.playerId,
-          name: pick.playerName,
-          pos: pick.pos,
-          team: pick.team,
-          value: valuesBySleeperId[pick.playerId] || redraftValuesBySleeperId[pick.playerId] || 0,
-          picked: true,
-          pickInfo: pick,
-        });
+      if (pick.playerId) {
+        pickByRoundRoster.set(`${pick.round}-${pick.rosterId}`, pick);
       }
     }
 
-    allPlayers.sort((a, b) => b.value - a.value);
-    return allPlayers;
+    const grid: (DraftPick | null)[][] = [];
+    for (let r = 1; r <= rounds; r++) {
+      const row: (DraftPick | null)[] = [];
+      for (let s = 0; s < (slots.length || teams); s++) {
+        const rosterId = slots[s]?.rosterId ?? (s + 1);
+        row.push(pickByRoundRoster.get(`${r}-${rosterId}`) || null);
+      }
+      grid.push(row);
+    }
+
+    return grid;
+  }, [draftData]);
+
+  const bestAvailable = useMemo(() => {
+    if (!draftData) return [];
+    const players: { id: string; name: string; pos: string; team: string; value: number }[] = [];
+
+    for (const [id, p] of Object.entries(draftData.players)) {
+      if (pickedPlayerIds.has(id)) continue;
+      const value = valuesBySleeperId[id] || redraftValuesBySleeperId[id] || 0;
+      if (value <= 0) continue;
+      players.push({ id, name: p.name, pos: p.pos, team: p.team, value });
+    }
+
+    players.sort((a, b) => b.value - a.value);
+    return players;
   }, [draftData, valuesBySleeperId, redraftValuesBySleeperId, pickedPlayerIds]);
 
-  const filteredPlayers = useMemo(() => {
-    if (posFilter === "ALL") return boardPlayers;
-    return boardPlayers.filter(p => p.pos === posFilter);
-  }, [boardPlayers, posFilter]);
+  const filteredBestAvailable = useMemo(() => {
+    if (posFilter === "ALL") return bestAvailable;
+    return bestAvailable.filter(p => p.pos === posFilter);
+  }, [bestAvailable, posFilter]);
 
   const stats = useMemo(() => {
-    const total = boardPlayers.length;
-    const picked = boardPlayers.filter(p => p.picked).length;
+    if (!draftData?.draft) return { total: 0, picked: 0, available: 0 };
+    const total = draftData.draft.rounds * draftData.draft.teams;
+    const picked = draftData.picks.filter(p => p.playerId).length;
     return { total, picked, available: total - picked };
-  }, [boardPlayers]);
+  }, [draftData]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (leagueIdInput.trim()) {
+      setDraftData(null);
+      setApiError(null);
       setActiveLeagueId(leagueIdInput.trim());
     }
+  };
+
+  const getPlayerValue = (playerId: string) => {
+    return valuesBySleeperId[playerId] || redraftValuesBySleeperId[playerId] || 0;
   };
 
   return (
@@ -215,7 +243,7 @@ export default function LiveDraft() {
         </h2>
         <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
         <p className="text-sm text-muted-foreground mt-2" data-testid="text-draft-description">
-          Enter a Sleeper league ID to load a draft board sorted by player value. Drafted players will appear faded.
+          Enter a Sleeper league ID to load a visual draft board. Track picks in real-time with auto-refresh.
         </p>
       </div>
 
@@ -337,6 +365,22 @@ export default function LiveDraft() {
               </div>
             </div>
             <div className="flex items-center gap-2">
+              <div className="flex items-center border border-border rounded-md overflow-hidden">
+                <button
+                  className={`px-2.5 py-1.5 text-xs ${viewMode === "board" ? "bg-[#0b3a7a] text-white" : "bg-background text-muted-foreground hover:bg-muted/50"}`}
+                  onClick={() => setViewMode("board")}
+                  data-testid="button-view-board"
+                >
+                  <LayoutGrid className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  className={`px-2.5 py-1.5 text-xs ${viewMode === "list" ? "bg-[#0b3a7a] text-white" : "bg-background text-muted-foreground hover:bg-muted/50"}`}
+                  onClick={() => setViewMode("list")}
+                  data-testid="button-view-list"
+                >
+                  <List className="w-3.5 h-3.5" />
+                </button>
+              </div>
               <Button
                 variant={autoRefresh ? "default" : "outline"}
                 size="sm"
@@ -353,94 +397,199 @@ export default function LiveDraft() {
             </div>
           </div>
 
-          <div className="flex items-center gap-3 flex-wrap">
-            <div className="flex items-center gap-1.5">
-              {["ALL", "QB", "RB", "WR", "TE"].map(pos => (
-                <Button
-                  key={pos}
-                  variant={posFilter === pos ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setPosFilter(pos)}
-                  data-testid={`button-filter-${pos.toLowerCase()}`}
-                >
-                  {pos}
-                </Button>
-              ))}
-            </div>
-            <div className="flex items-center gap-4 text-xs text-muted-foreground ml-auto">
-              <span data-testid="text-available-count"><span className="font-semibold text-emerald-600 dark:text-emerald-400">{stats.available}</span> available</span>
-              <span data-testid="text-picked-count"><span className="font-semibold text-muted-foreground">{stats.picked}</span> drafted</span>
+          <div className="flex items-center gap-4 text-xs text-muted-foreground">
+            <span data-testid="text-picked-count"><span className="font-semibold text-foreground">{stats.picked}</span>/{stats.total} picks made</span>
+            <span data-testid="text-available-count"><span className="font-semibold text-emerald-600 dark:text-emerald-400">{stats.available}</span> remaining</span>
+            <div className="flex items-center gap-2 ml-auto">
+              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-red-500/20 border border-red-500/40" />QB</span>
+              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-emerald-500/20 border border-emerald-500/40" />RB</span>
+              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-blue-500/20 border border-blue-500/40" />WR</span>
+              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-orange-500/20 border border-orange-500/40" />TE</span>
             </div>
           </div>
 
-          <Card>
-            <CardContent className="p-0">
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm" data-testid="table-draft-board">
-                  <thead>
-                    <tr className="border-b border-border/50 bg-muted/30">
-                      <th className="px-4 py-3 text-left font-semibold text-muted-foreground w-16" data-testid="th-rank">#</th>
-                      <th className="px-4 py-3 text-left font-semibold text-muted-foreground" data-testid="th-player">Player</th>
-                      <th className="px-4 py-3 text-left font-semibold text-muted-foreground w-16" data-testid="th-pos">Pos</th>
-                      <th className="px-4 py-3 text-left font-semibold text-muted-foreground w-20" data-testid="th-team">Team</th>
-                      <th className="px-4 py-3 text-right font-semibold text-muted-foreground w-24" data-testid="th-value">Value</th>
-                      <th className="px-4 py-3 text-center font-semibold text-muted-foreground w-24" data-testid="th-status">Status</th>
-                      <th className="px-4 py-3 text-left font-semibold text-muted-foreground w-20" data-testid="th-pick">Pick</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredPlayers.map((player, idx) => (
-                      <tr
+          {viewMode === "board" && boardGrid && (
+            <div className="flex gap-4">
+              <Card className="flex-1 min-w-0">
+                <CardContent className="p-0">
+                  <div className="overflow-x-auto">
+                    <div className="min-w-max" data-testid="draft-board-grid">
+                      <div className="flex border-b border-border/50 bg-muted/30 sticky top-0 z-10">
+                        <div className="w-12 flex-shrink-0 px-2 py-2.5 text-[10px] font-semibold text-muted-foreground text-center">RD</div>
+                        {(draftData.draftSlots || []).map((slot) => (
+                          <div
+                            key={slot.slot}
+                            className="w-28 flex-shrink-0 px-1.5 py-2.5 text-center border-l border-border/20"
+                          >
+                            <div className="text-[10px] font-semibold text-foreground truncate" data-testid={`slot-header-${slot.slot}`}>
+                              {slot.displayName}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {boardGrid.map((row, roundIdx) => (
+                        <div key={roundIdx} className="flex border-b border-border/20">
+                          <div className="w-12 flex-shrink-0 px-2 py-1.5 flex items-center justify-center">
+                            <span className="text-[10px] font-bold text-muted-foreground">{roundIdx + 1}</span>
+                          </div>
+                          {row.map((pick, slotIdx) => {
+                            if (pick && pick.playerId) {
+                              const value = getPlayerValue(pick.playerId);
+                              return (
+                                <div
+                                  key={slotIdx}
+                                  className={`w-28 flex-shrink-0 px-1.5 py-1.5 border-l border-border/20 ${POS_BG[pick.pos] || "bg-muted/10"}`}
+                                  data-testid={`pick-cell-${roundIdx + 1}-${slotIdx + 1}`}
+                                >
+                                  <div className="flex items-center justify-between">
+                                    <span className={`text-[10px] font-bold ${POS_TEXT[pick.pos] || "text-muted-foreground"}`}>{pick.pos}</span>
+                                    <span className="text-[9px] text-muted-foreground font-mono">{pick.round}.{String(pick.pickNo).padStart(2, "0")}</span>
+                                  </div>
+                                  <div className="text-[11px] font-semibold text-foreground leading-tight truncate mt-0.5" title={pick.playerName}>
+                                    {pick.playerName.split(" ").pop()}
+                                  </div>
+                                  <div className="flex items-center justify-between mt-0.5">
+                                    <span className="text-[9px] text-muted-foreground">{pick.team}</span>
+                                    {value > 0 && <span className="text-[9px] font-mono font-semibold text-muted-foreground">{value.toLocaleString()}</span>}
+                                  </div>
+                                </div>
+                              );
+                            }
+                            return (
+                              <div
+                                key={slotIdx}
+                                className="w-28 flex-shrink-0 px-1.5 py-1.5 border-l border-border/20 bg-background"
+                                data-testid={`pick-cell-${roundIdx + 1}-${slotIdx + 1}`}
+                              >
+                                <div className="text-[10px] text-muted-foreground/30 text-center py-2.5">—</div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="w-64 flex-shrink-0">
+                <CardContent className="p-0">
+                  <div className="px-3 py-2.5 border-b border-border/50 bg-muted/30 sticky top-0 z-10">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-semibold text-foreground" data-testid="text-best-available-title">Best Available</span>
+                      <span className="text-[10px] text-muted-foreground">{filteredBestAvailable.length}</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      {["ALL", "QB", "RB", "WR", "TE"].map(pos => (
+                        <button
+                          key={pos}
+                          className={`px-1.5 py-0.5 text-[10px] rounded font-medium transition-colors ${
+                            posFilter === pos
+                              ? "bg-[#0b3a7a] text-white"
+                              : "text-muted-foreground hover:bg-muted/50"
+                          }`}
+                          onClick={() => setPosFilter(pos)}
+                          data-testid={`button-filter-${pos.toLowerCase()}`}
+                        >
+                          {pos}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="max-h-[600px] overflow-y-auto" data-testid="best-available-list">
+                    {filteredBestAvailable.slice(0, 50).map((player, idx) => (
+                      <div
                         key={player.id}
-                        className={`border-b border-border/20 transition-colors ${
-                          player.picked
-                            ? "opacity-35"
-                            : "hover:bg-muted/20"
-                        }`}
-                        data-testid={`row-player-${player.id}`}
+                        className="flex items-center gap-2 px-3 py-1.5 border-b border-border/10 hover:bg-muted/20"
+                        data-testid={`ba-player-${player.id}`}
                       >
-                        <td className="px-4 py-2.5 text-muted-foreground font-mono text-xs" data-testid={`text-rank-${player.id}`}>{idx + 1}</td>
-                        <td className="px-4 py-2.5" data-testid={`text-name-${player.id}`}>
-                          <span className={`font-medium ${player.picked ? "line-through text-muted-foreground" : "text-foreground"}`}>
-                            {player.name}
-                          </span>
-                        </td>
-                        <td className="px-4 py-2.5" data-testid={`text-pos-${player.id}`}>
-                          <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${POS_COLORS[player.pos] || ""}`}>
-                            {player.pos}
-                          </Badge>
-                        </td>
-                        <td className="px-4 py-2.5 text-xs text-muted-foreground" data-testid={`text-team-${player.id}`}>{player.team}</td>
-                        <td className="px-4 py-2.5 text-right font-mono text-xs font-semibold" data-testid={`text-value-${player.id}`}>
-                          {player.value.toLocaleString()}
-                        </td>
-                        <td className="px-4 py-2.5 text-center" data-testid={`text-status-${player.id}`}>
-                          {player.picked ? (
-                            <Badge variant="secondary" className="text-[10px]">Drafted</Badge>
-                          ) : (
-                            <Badge variant="outline" className="text-[10px] border-emerald-500/30 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10">
-                              Available
-                            </Badge>
-                          )}
-                        </td>
-                        <td className="px-4 py-2.5 text-xs text-muted-foreground font-mono" data-testid={`text-pick-${player.id}`}>
-                          {player.pickInfo ? `${player.pickInfo.round}.${String(player.pickInfo.pickNo).padStart(2, "0")}` : "—"}
-                        </td>
-                      </tr>
+                        <span className="text-[10px] text-muted-foreground w-5 text-right font-mono">{idx + 1}</span>
+                        <Badge variant="outline" className={`text-[9px] px-1 py-0 ${POS_BADGE[player.pos] || ""}`}>
+                          {player.pos}
+                        </Badge>
+                        <div className="flex-1 min-w-0">
+                          <span className="text-[11px] font-medium text-foreground truncate block">{player.name}</span>
+                        </div>
+                        <span className="text-[10px] font-mono font-semibold text-muted-foreground">{player.value.toLocaleString()}</span>
+                      </div>
                     ))}
-                    {filteredPlayers.length === 0 && (
-                      <tr>
-                        <td colSpan={7} className="px-4 py-12 text-center text-muted-foreground" data-testid="text-empty-state">
-                          <Target className="w-8 h-8 mx-auto mb-2 opacity-40" />
-                          <p>No players to display</p>
-                        </td>
-                      </tr>
+                    {filteredBestAvailable.length === 0 && (
+                      <div className="px-3 py-8 text-center text-[11px] text-muted-foreground">No players available</div>
                     )}
-                  </tbody>
-                </table>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
+          {viewMode === "list" && (
+            <>
+              <div className="flex items-center gap-1.5">
+                {["ALL", "QB", "RB", "WR", "TE"].map(pos => (
+                  <Button
+                    key={pos}
+                    variant={posFilter === pos ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setPosFilter(pos)}
+                    data-testid={`button-filter-${pos.toLowerCase()}`}
+                  >
+                    {pos}
+                  </Button>
+                ))}
               </div>
-            </CardContent>
-          </Card>
+              <Card>
+                <CardContent className="p-0">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm" data-testid="table-draft-board">
+                      <thead>
+                        <tr className="border-b border-border/50 bg-muted/30">
+                          <th className="px-4 py-3 text-left font-semibold text-muted-foreground w-16">Pick</th>
+                          <th className="px-4 py-3 text-left font-semibold text-muted-foreground">Player</th>
+                          <th className="px-4 py-3 text-left font-semibold text-muted-foreground w-16">Pos</th>
+                          <th className="px-4 py-3 text-left font-semibold text-muted-foreground w-20">Team</th>
+                          <th className="px-4 py-3 text-right font-semibold text-muted-foreground w-24">Value</th>
+                          <th className="px-4 py-3 text-left font-semibold text-muted-foreground">Drafter</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {draftData.picks
+                          .filter(p => p.playerId && (posFilter === "ALL" || p.pos === posFilter))
+                          .map((pick) => {
+                            const value = getPlayerValue(pick.playerId);
+                            const drafter = draftData.draftSlots?.find(s => s.rosterId === pick.rosterId);
+                            return (
+                              <tr key={`${pick.round}-${pick.pickNo}`} className="border-b border-border/20 hover:bg-muted/20" data-testid={`list-pick-${pick.round}-${pick.pickNo}`}>
+                                <td className="px-4 py-2.5 font-mono text-xs text-muted-foreground">
+                                  {pick.round}.{String(pick.pickNo).padStart(2, "0")}
+                                </td>
+                                <td className="px-4 py-2.5 font-medium text-foreground">{pick.playerName}</td>
+                                <td className="px-4 py-2.5">
+                                  <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${POS_BADGE[pick.pos] || ""}`}>
+                                    {pick.pos}
+                                  </Badge>
+                                </td>
+                                <td className="px-4 py-2.5 text-xs text-muted-foreground">{pick.team}</td>
+                                <td className="px-4 py-2.5 text-right font-mono text-xs font-semibold">{value > 0 ? value.toLocaleString() : "—"}</td>
+                                <td className="px-4 py-2.5 text-xs text-muted-foreground">{drafter?.displayName || `Roster ${pick.rosterId}`}</td>
+                              </tr>
+                            );
+                          })}
+                        {draftData.picks.filter(p => p.playerId).length === 0 && (
+                          <tr>
+                            <td colSpan={6} className="px-4 py-12 text-center text-muted-foreground">
+                              <Target className="w-8 h-8 mx-auto mb-2 opacity-40" />
+                              <p>No picks made yet</p>
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </CardContent>
+              </Card>
+            </>
+          )}
         </>
       )}
 
@@ -459,8 +608,8 @@ export default function LiveDraft() {
             <Trophy className="w-12 h-12 mx-auto mb-4 text-[#d4af37] opacity-50" />
             <h3 className="font-semibold text-lg text-foreground mb-1" data-testid="text-empty-title">Enter a League ID to get started</h3>
             <p className="text-sm text-muted-foreground max-w-md mx-auto" data-testid="text-empty-description">
-              Paste a Sleeper league ID above and the draft board will load, showing all players ranked by value.
-              Players that have been drafted will be faded out.
+              Paste a Sleeper league ID above and a visual draft board will load with pick-by-pick tracking,
+              position color coding, and a best available player list.
             </p>
           </CardContent>
         </Card>
