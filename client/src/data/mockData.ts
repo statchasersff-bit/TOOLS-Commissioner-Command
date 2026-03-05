@@ -263,6 +263,8 @@ export const NAV_CONFIG: MainTabConfig[] = [
       { id: "power-rankings", label: "Power Rankings" },
       { id: "roster-comparison", label: "Roster Comparison" },
       { id: "key-insights", label: "Key Insights" },
+      { id: "pick-value", label: "Pick Value" },
+      { id: "pick-distribution", label: "Pick Distribution" },
     ],
   },
   {
@@ -272,14 +274,6 @@ export const NAV_CONFIG: MainTabConfig[] = [
       { id: "trade-finder", label: "Trade Finder" },
       { id: "trade-targets", label: "Trade Targets" },
       { id: "trade-block", label: "Trade Block Scanner" },
-    ],
-  },
-  {
-    id: "draft-capital",
-    label: "Draft Capital",
-    subTabs: [
-      { id: "pick-value", label: "Pick Value" },
-      { id: "pick-distribution", label: "Pick Distribution" },
     ],
   },
   {

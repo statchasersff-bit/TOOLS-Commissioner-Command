@@ -259,8 +259,8 @@ export default function DynastyCommandCenter() {
       case "trade-center:trade-finder": return <TradeFinder league={league} userTeam={userTeam} />;
       case "trade-center:trade-targets": return <TradeTargets league={league} userTeam={userTeam} />;
       case "trade-center:trade-block": return <TradeBlockScanner league={league} />;
-      case "draft-capital:pick-value": return <PickValue league={league} userTeam={userTeam} />;
-      case "draft-capital:pick-distribution": return <PickDistribution league={league} />;
+      case "league-analyzer:pick-value": return <PickValue league={league} userTeam={userTeam} />;
+      case "league-analyzer:pick-distribution": return <PickDistribution league={league} />;
       case "league-market:positional-surplus": return <PositionalSurplus league={league} />;
       case "league-market:market-value": return <MarketValue league={league} />;
       case "insights:team-insights": return <TeamInsights league={league} />;
