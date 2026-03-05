@@ -64,6 +64,9 @@ A premium dynasty fantasy football league analysis tool built with React + TypeS
 ## Trade Calculator
 - Premium trade evaluation tool in `client/src/pages/tabs/TradeCenter.tsx`
 - Two-column trade builder: Side A / Side B with player search + pick picker
+- **Trade Partner Selector**: Dropdown to pick a league team as trade partner; loads their roster on Side B
+- **Auto-Roster Loading**: Side A pre-loaded with user's team roster; Side B loads partner's roster when selected or when a player search auto-detects the owning team
+- **Inline Roster Panels**: Each side shows a scrollable roster list (sorted by dynasty value) where clicking a player adds them to the trade; added players are dimmed/strikethrough
 - Uses FantasyCalc dynasty values for player valuations, static pick table for picks
 - **Value Adjustment** (diminishing returns): weights [1.00, 0.85, 0.72, 0.60, 0.50, 0.42, 0.36, 0.31] applied to sorted asset values
 - **Overpay Tax**: optional -3% penalty when top asset > 35% of raw total

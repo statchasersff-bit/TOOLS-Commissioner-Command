@@ -423,26 +423,36 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
   const [sideB, setSideB] = useState<TradeAsset[]>([]);
   const [valueAdjustment, setValueAdjustment] = useState(true);
   const [overpayTax, setOverpayTax] = useState(false);
+  const [tradePartnerId, setTradePartnerId] = useState<string>("");
+  const [sideARosterId, setSideARosterId] = useState<string>(userTeam.id);
+  const [sideBRosterId, setSideBRosterId] = useState<string>("");
 
   const leagueFormat = useMemo(() => {
     const sf = league.scoringFormat?.toLowerCase() || "";
     return sf.includes("sf") || sf.includes("superflex") ? "SF" : "1QB";
   }, [league]);
 
-  const allPlayers = useMemo(() => {
-    const seen = new Set<string>();
-    const players: Player[] = [];
+  const playerToTeamMap = useMemo(() => {
+    const map = new Map<string, string>();
     for (const team of league.teams) {
       for (const p of team.roster) {
-        const key = p.sleeperId || p.id;
-        if (!seen.has(key)) {
-          seen.add(key);
-          players.push(p);
-        }
+        map.set(p.sleeperId || p.id, team.id);
       }
     }
-    return players;
+    return map;
   }, [league]);
+
+  const sideATeam = useMemo(() => league.teams.find((t) => t.id === sideARosterId), [league, sideARosterId]);
+  const sideBTeam = useMemo(() => league.teams.find((t) => t.id === sideBRosterId), [league, sideBRosterId]);
+
+  const sideAPlayers = useMemo(() => sideATeam?.roster || [], [sideATeam]);
+  const sideBPlayers = useMemo(() => sideBTeam?.roster || [], [sideBTeam]);
+
+  const handleTradePartnerChange = useCallback((teamId: string) => {
+    setTradePartnerId(teamId);
+    setSideBRosterId(teamId);
+    setSideB([]);
+  }, []);
 
   const addPlayer = useCallback((side: "a" | "b", player: Player) => {
     const setter = side === "a" ? setSideA : setSideB;
@@ -456,7 +466,18 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
       pos: player.pos,
     };
     setter((prev) => [...prev, asset]);
-  }, [getPlayerValue]);
+
+    const playerId = player.sleeperId || player.id;
+    const ownerTeamId = playerToTeamMap.get(playerId);
+    if (ownerTeamId) {
+      if (side === "a" && !sideARosterId) {
+        setSideARosterId(ownerTeamId);
+      } else if (side === "b" && !sideBRosterId) {
+        setSideBRosterId(ownerTeamId);
+        setTradePartnerId(ownerTeamId);
+      }
+    }
+  }, [getPlayerValue, playerToTeamMap, sideARosterId, sideBRosterId]);
 
   const addPick = useCallback((side: "a" | "b", year: number, round: number, range: "Early" | "Mid" | "Late") => {
     const setter = side === "a" ? setSideA : setSideB;
@@ -482,7 +503,10 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
   const clearAll = useCallback(() => {
     setSideA([]);
     setSideB([]);
-  }, []);
+    setTradePartnerId("");
+    setSideARosterId(userTeam.id);
+    setSideBRosterId("");
+  }, [userTeam.id]);
 
   const rawA = calculateRawTotal(sideA);
   const rawB = calculateRawTotal(sideB);
@@ -539,21 +563,47 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
     });
   }, [league, userTeam, sideA, sideB, getPlayerValue]);
 
+  const allPlayers = useMemo(() => {
+    const seen = new Set<string>();
+    const players: Player[] = [];
+    for (const team of league.teams) {
+      for (const p of team.roster) {
+        const key = p.sleeperId || p.id;
+        if (!seen.has(key)) {
+          seen.add(key);
+          players.push(p);
+        }
+      }
+    }
+    return players;
+  }, [league]);
+
   const renderSide = (side: "a" | "b", assets: TradeAsset[], rawTotal: number) => {
     const sideLabel = side === "a" ? "A" : "B";
+    const rosterTeam = side === "a" ? sideATeam : sideBTeam;
+    const rosterPlayers = side === "a" ? sideAPlayers : sideBPlayers;
+    const addedPlayerIds = new Set(assets.filter((a) => a.type === "player" && a.player).map((a) => a.player!.sleeperId || a.player!.id));
+
     return (
       <Card className="p-5 flex-1">
         <div className="mb-4">
-          <h3 className="text-sm font-bold flex items-center gap-2" data-testid={`text-side-${side}-header`}>
-            <Scale className="w-4 h-4 text-[#0b3a7a] dark:text-blue-400" />
-            Side {sideLabel} Gets...
-          </h3>
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-bold flex items-center gap-2" data-testid={`text-side-${side}-header`}>
+              <Scale className="w-4 h-4 text-[#0b3a7a] dark:text-blue-400" />
+              Side {sideLabel} Gets...
+            </h3>
+            {rosterTeam && (
+              <Badge variant="secondary" className="text-[10px]" data-testid={`badge-side-${side}-team`}>
+                {rosterTeam.owner || rosterTeam.name}
+              </Badge>
+            )}
+          </div>
           <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
         </div>
 
         <div className="space-y-3">
           <PlayerSearchInput
-            allPlayers={allPlayers}
+            allPlayers={rosterPlayers.length > 0 ? rosterPlayers : allPlayers}
             onAdd={(p) => addPlayer(side, p)}
             side={side}
             getPlayerValue={getPlayerValue}
@@ -607,6 +657,43 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
               {rawTotal.toLocaleString()}
             </span>
           </div>
+
+          {rosterTeam && rosterPlayers.length > 0 && (
+            <div className="mt-3 pt-3 border-t border-border/30">
+              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+                {rosterTeam.owner || rosterTeam.name}'s Roster
+              </p>
+              <div className="max-h-48 overflow-y-auto space-y-0.5">
+                {[...rosterPlayers]
+                  .sort((a, b) => getPlayerValue(b) - getPlayerValue(a))
+                  .map((p) => {
+                    const pid = p.sleeperId || p.id;
+                    const isAdded = addedPlayerIds.has(pid);
+                    const val = getPlayerValue(p);
+                    return (
+                      <button
+                        key={pid}
+                        className={cn(
+                          "w-full flex items-center gap-1.5 px-2 py-1.5 rounded text-left text-xs transition-colors",
+                          isAdded
+                            ? "bg-[#d4af37]/10 opacity-50 cursor-default"
+                            : "hover:bg-muted/40 cursor-pointer"
+                        )}
+                        onClick={() => !isAdded && addPlayer(side, p)}
+                        disabled={isAdded}
+                        data-testid={`button-roster-player-${side}-${pid}`}
+                      >
+                        <Badge variant="outline" className={`text-[9px] w-6 justify-center flex-shrink-0 ${getPositionColor(p.pos)}`}>
+                          {p.pos}
+                        </Badge>
+                        <span className={cn("flex-1 truncate", isAdded && "line-through")}>{p.name}</span>
+                        <span className="text-[10px] text-muted-foreground flex-shrink-0">{val > 0 ? val.toLocaleString() : "-"}</span>
+                      </button>
+                    );
+                  })}
+              </div>
+            </div>
+          )}
         </div>
       </Card>
     );
@@ -621,6 +708,26 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
           <Badge variant="outline" className="text-xs" data-testid="badge-format">
             {leagueFormat}
           </Badge>
+
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">Trade with:</span>
+            <Select value={tradePartnerId || "none"} onValueChange={(v) => handleTradePartnerChange(v === "none" ? "" : v)}>
+              <SelectTrigger className="w-[160px] h-8 text-xs" data-testid="select-trade-partner">
+                <SelectValue placeholder="Select team..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Select team...</SelectItem>
+                {league.teams
+                  .filter((t) => t.id !== userTeam.id)
+                  .sort((a, b) => (a.owner || a.name).localeCompare(b.owner || b.name))
+                  .map((t) => (
+                    <SelectItem key={t.id} value={t.id}>
+                      {t.owner || t.name}
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+          </div>
 
           <div className="flex items-center gap-2">
             <Switch
