@@ -85,48 +85,51 @@ export function RosterBreakdown({ league, userTeam }: TeamProps) {
           </div>
         )}
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mt-5">
-          <Card className="p-6">
-            <div className="mb-4">
-              <h3 className="text-base font-bold">Starters ({starters.length})</h3>
-              <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
-            </div>
-            <div className="space-y-1">
-              {starters.map((p) => (
-                <div key={p.id} className="flex items-center justify-between py-2.5 border-b border-border/20 last:border-0" data-testid={`starter-${p.id}`}>
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline" className={`text-xs w-8 justify-center ${getPositionColor(p.pos)}`}>{p.pos}</Badge>
-                    <span className="text-sm font-semibold">{p.name}</span>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs text-muted-foreground">Age {p.age}</span>
-                    <span className="text-xs font-bold">{p.value}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </Card>
+        <div className="relative max-w-sm mt-5 mb-5">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input
+            placeholder="Search players..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-9"
+            data-testid="input-search-depth"
+          />
+        </div>
 
-          <Card className="p-6">
-            <div className="mb-4">
-              <h3 className="text-base font-bold">Bench ({bench.length})</h3>
-              <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
-            </div>
-            <div className="space-y-1">
-              {bench.map((p) => (
-                <div key={p.id} className="flex items-center justify-between py-2.5 border-b border-border/20 last:border-0" data-testid={`bench-${p.id}`}>
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline" className={`text-xs w-8 justify-center ${getPositionColor(p.pos)}`}>{p.pos}</Badge>
-                    <span className="text-sm">{p.name}</span>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs text-muted-foreground">Age {p.age}</span>
-                    <span className="text-xs font-bold">{p.value}</span>
-                  </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          {depthPositions.map((pos) => {
+            const players = filtered.filter((p) => p.pos === pos);
+            if (players.length === 0 && search) return null;
+            return (
+              <Card key={pos} className="p-6" data-testid={`depth-${pos.toLowerCase()}`}>
+                <div className="mb-4">
+                  <h3 className="text-base font-bold flex items-center gap-2">
+                    {pos}
+                    <Badge variant="secondary">{players.length}</Badge>
+                  </h3>
+                  <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
                 </div>
-              ))}
-            </div>
-          </Card>
+                <div className="space-y-1">
+                  {players.sort((a, b) => (b.starter ? 1 : 0) - (a.starter ? 1 : 0) || b.value - a.value).map((p) => (
+                    <div key={p.id} className="flex items-center justify-between py-2.5 border-b border-border/20 last:border-0" data-testid={`depth-player-${p.id}`}>
+                      <div className="flex items-center gap-2">
+                        <Badge variant={p.starter ? "default" : "outline"} className="text-xs">
+                          {p.starter ? "Starter" : "Bench"}
+                        </Badge>
+                        <span className={cn("text-sm", p.starter ? "font-semibold" : "")}>{p.name}</span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs text-muted-foreground">{p.team}</span>
+                        <span className="text-xs text-muted-foreground">Age {p.age}</span>
+                        <span className="text-xs font-bold w-6 text-right">{p.value}</span>
+                      </div>
+                    </div>
+                  ))}
+                  {players.length === 0 && <p className="text-xs text-muted-foreground">No players found</p>}
+                </div>
+              </Card>
+            );
+          })}
         </div>
       </div>
 
@@ -174,60 +177,6 @@ export function RosterBreakdown({ league, userTeam }: TeamProps) {
             }
           </p>
         </Card>
-      </div>
-
-      <div>
-        <div className="mb-5">
-          <h3 className="text-base font-bold text-foreground">Depth Chart</h3>
-          <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
-        </div>
-
-        <div className="relative max-w-sm mb-5">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            placeholder="Search players..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9"
-            data-testid="input-search-depth"
-          />
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-          {depthPositions.map((pos) => {
-            const players = filtered.filter((p) => p.pos === pos);
-            if (players.length === 0 && search) return null;
-            return (
-              <Card key={pos} className="p-6" data-testid={`depth-${pos.toLowerCase()}`}>
-                <div className="mb-4">
-                  <h3 className="text-base font-bold flex items-center gap-2">
-                    {pos}
-                    <Badge variant="secondary">{players.length}</Badge>
-                  </h3>
-                  <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
-                </div>
-                <div className="space-y-1">
-                  {players.sort((a, b) => (b.starter ? 1 : 0) - (a.starter ? 1 : 0) || b.value - a.value).map((p) => (
-                    <div key={p.id} className="flex items-center justify-between py-2.5 border-b border-border/20 last:border-0" data-testid={`depth-player-${p.id}`}>
-                      <div className="flex items-center gap-2">
-                        <Badge variant={p.starter ? "default" : "outline"} className="text-xs">
-                          {p.starter ? "Starter" : "Bench"}
-                        </Badge>
-                        <span className={cn("text-sm", p.starter ? "font-semibold" : "")}>{p.name}</span>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <span className="text-xs text-muted-foreground">{p.team}</span>
-                        <span className="text-xs text-muted-foreground">Age {p.age}</span>
-                        <span className="text-xs font-bold w-6 text-right">{p.value}</span>
-                      </div>
-                    </div>
-                  ))}
-                  {players.length === 0 && <p className="text-xs text-muted-foreground">No players found</p>}
-                </div>
-              </Card>
-            );
-          })}
-        </div>
       </div>
     </div>
   );

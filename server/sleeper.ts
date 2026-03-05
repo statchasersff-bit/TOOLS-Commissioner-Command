@@ -126,7 +126,7 @@ export async function fetchSleeperUser(username: string): Promise<SleeperUser> {
 
 export async function fetchSleeperLeagues(
   userId: string,
-  season: string = "2026"
+  season: string = "2025"
 ): Promise<SleeperLeagueSummary[]> {
   const raw = await fetchJson<SleeperLeagueRaw[]>(
     `${SLEEPER_API}/user/${userId}/leagues/nfl/${season}`

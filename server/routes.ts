@@ -39,7 +39,7 @@ export async function registerRoutes(
 
   app.get("/api/sleeper/user/:userId/leagues", async (req, res) => {
     try {
-      const season = (req.query.season as string) || "2026";
+      const season = (req.query.season as string) || "2025";
       const leagues = await fetchSleeperLeagues(req.params.userId, season);
       res.json(leagues);
     } catch (err: any) {
@@ -64,7 +64,7 @@ export async function registerRoutes(
 
   app.get("/api/sleeper/user/:userId/portfolio-summary", async (req, res) => {
     try {
-      const season = (req.query.season as string) || "2026";
+      const season = (req.query.season as string) || "2025";
       const leagues = await fetchSleeperLeagues(req.params.userId, season);
       const summary = await fetchPortfolioSummary(req.params.userId, leagues);
       res.json(summary);
