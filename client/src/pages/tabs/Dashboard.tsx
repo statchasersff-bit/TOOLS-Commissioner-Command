@@ -6,7 +6,9 @@ import { DataTable } from "@/components/DataTable";
 import { InsightCallout } from "@/components/InsightCallout";
 import { SectionHeader } from "@/components/SectionHeader";
 import { getTeamTier, getTierColor, generateInsights } from "@/data/mockData";
+import { useValueModel } from "@/contexts/ValueModelContext";
 import type { League, Team } from "@/types";
+import { cn } from "@/lib/utils";
 import { Trophy, Zap, Target, Calendar, Users, Medal, ArrowRight, ArrowUp, ArrowDown, ArrowUpDown, Table, Lightbulb, Compass, Flame, Sprout, Archive, ChevronDown, ChevronUp } from "lucide-react";
 
 interface DashboardProps {
@@ -447,7 +449,7 @@ function posBarColor(rank: number): string {
   return "bg-red-400";
 }
 
-type SortKey = "name" | "overall" | "starters" | "depth" | "youth" | "picks";
+type SortKey = "name" | "overall" | "redraftRank" | "dynastyRank" | "picks";
 
 function SortableHeader({ label, sortKey, activeSortKey, sortDir, onSort, className }: {
   label: string; sortKey: SortKey; activeSortKey: SortKey; sortDir: "asc" | "desc";
@@ -474,10 +476,27 @@ function SortableHeader({ label, sortKey, activeSortKey, sortDir, onSort, classN
 
 export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
   const teams = league.teams;
+  const { getPlayerValue, getRedraftValue, optimizeLineup } = useValueModel();
   const maxOverall = Math.max(...teams.map(t => t.metrics.overall), 1);
   const [sortKey, setSortKey] = useState<SortKey>("overall");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+
+  const teamRanks = useMemo(() => {
+    const rosterPositions = league.rosterPositions || [];
+    const total = teams.length;
+    const redraftTotals = teams.map(t => {
+      const roster = rosterPositions.length > 0 ? optimizeLineup(t.roster, rosterPositions) : t.roster;
+      return { id: t.id, total: roster.filter(p => p.starter).reduce((s, p) => s + getRedraftValue(p), 0) };
+    }).sort((a, b) => b.total - a.total);
+    const dynastyTotals = teams.map(t => ({
+      id: t.id, total: t.roster.reduce((s, p) => s + getPlayerValue(p), 0),
+    })).sort((a, b) => b.total - a.total);
+    const ranks: Record<string, { redraftRank: number; dynastyRank: number }> = {};
+    redraftTotals.forEach((e, i) => { ranks[e.id] = { redraftRank: i + 1, dynastyRank: total }; });
+    dynastyTotals.forEach((e, i) => { if (ranks[e.id]) ranks[e.id].dynastyRank = i + 1; });
+    return { ranks, total };
+  }, [teams, league.rosterPositions, getPlayerValue, getRedraftValue, optimizeLineup]);
 
   const toggleRow = (teamId: string) => {
     setExpandedRows(prev => {
@@ -514,9 +533,8 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
     const accessor: Record<SortKey, (t: Team) => number | string> = {
       name: t => t.name.toLowerCase(),
       overall: t => t.metrics.overall,
-      starters: t => t.metrics.starters,
-      depth: t => t.metrics.depth,
-      youth: t => t.metrics.youth,
+      redraftRank: t => -(teamRanks.ranks[t.id]?.redraftRank ?? teamRanks.total),
+      dynastyRank: t => -(teamRanks.ranks[t.id]?.dynastyRank ?? teamRanks.total),
       picks: t => t.metrics.picks,
     };
     return [...teams].sort((a, b) => {
@@ -527,7 +545,7 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
       }
       return sortDir === "asc" ? String(va).localeCompare(String(vb)) : String(vb).localeCompare(String(va));
     });
-  }, [teams, sortKey, sortDir]);
+  }, [teams, sortKey, sortDir, teamRanks]);
 
   const leaders = useMemo(() => [
     { label: "Best QB Room", team: [...teams].sort((a, b) => b.metrics.qb - a.metrics.qb)[0] },
@@ -538,13 +556,13 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
     { label: "Most Draft Capital", team: [...teams].sort((a, b) => b.picks.length - a.picks.length)[0] },
   ], [teams]);
 
-  const colCount = 9;
+  const colCount = 8;
 
   return (
     <div className="space-y-6">
       <SectionHeader
         title="League Power Rankings"
-        subtitle="FantasyCalc algorithm ranking every roster based on starters, depth, youth, and draft capital."
+        subtitle="League-wide roster rankings by redraft value, dynasty value, and draft capital."
       />
 
       <div data-testid="league-dominators">
@@ -580,8 +598,8 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
               <th className="px-3 py-1.5 text-center text-[10px] font-bold text-[#0b3a7a] dark:text-blue-400 uppercase tracking-widest border-b border-border/20 bg-muted/30 dark:bg-muted/20" colSpan={2} data-testid="col-group-strength">
                 Team Strength
               </th>
-              <th className="px-3 py-1.5 text-center text-[10px] font-bold text-[#0b3a7a] dark:text-blue-400 uppercase tracking-widest border-b border-border/20 bg-muted/30 dark:bg-muted/20 border-l border-border/30" colSpan={3} data-testid="col-group-roster">
-                Roster Build
+              <th className="px-3 py-1.5 text-center text-[10px] font-bold text-[#0b3a7a] dark:text-blue-400 uppercase tracking-widest border-b border-border/20 bg-muted/30 dark:bg-muted/20 border-l border-border/30" colSpan={2} data-testid="col-group-roster">
+                Roster Value
               </th>
               <th className="px-3 py-1.5 text-center text-[10px] font-bold text-[#0b3a7a] dark:text-blue-400 uppercase tracking-widest border-b border-border/20 bg-muted/30 dark:bg-muted/20 border-l border-border/30" colSpan={1} data-testid="col-group-capital">
                 Draft Capital
@@ -591,9 +609,8 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
             <tr className="border-b border-border bg-muted/30 dark:bg-muted/20">
               <SortableHeader label="Power" sortKey="overall" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
               <th className="px-4 py-3 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Tier</th>
-              <SortableHeader label="Starters" sortKey="starters" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="border-l border-border/30" />
-              <SortableHeader label="Depth" sortKey="depth" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-              <SortableHeader label="Youth" sortKey="youth" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+              <SortableHeader label="Redraft" sortKey="redraftRank" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="border-l border-border/30" />
+              <SortableHeader label="Dynasty" sortKey="dynastyRank" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
               <SortableHeader label="Draft" sortKey="picks" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="border-l border-border/30" />
             </tr>
           </thead>
@@ -650,9 +667,30 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
                     <td className="px-4 py-3.5 whitespace-nowrap">
                       <Badge variant="outline" className={getTierColor(tier)}>{tier}</Badge>
                     </td>
-                    <td className="px-4 py-3.5 whitespace-nowrap border-l border-border/15 font-medium">{team.metrics.starters}</td>
-                    <td className="px-4 py-3.5 whitespace-nowrap font-medium">{team.metrics.depth}</td>
-                    <td className="px-4 py-3.5 whitespace-nowrap font-medium">{team.metrics.youth}</td>
+                    <td className="px-4 py-3.5 whitespace-nowrap border-l border-border/15" data-testid={`redraft-rank-${team.id}`}>
+                      {(() => {
+                        const r = teamRanks.ranks[team.id]?.redraftRank ?? teamRanks.total;
+                        const topThird = Math.ceil(teamRanks.total / 3);
+                        const bottomStart = teamRanks.total - topThird + 1;
+                        return (
+                          <span className={cn("font-bold", r <= topThird ? "text-emerald-600 dark:text-emerald-400" : r >= bottomStart ? "text-red-500 dark:text-red-400" : "text-foreground")}>
+                            #{r}<span className="text-xs text-muted-foreground font-normal"> / {teamRanks.total}</span>
+                          </span>
+                        );
+                      })()}
+                    </td>
+                    <td className="px-4 py-3.5 whitespace-nowrap" data-testid={`dynasty-rank-${team.id}`}>
+                      {(() => {
+                        const r = teamRanks.ranks[team.id]?.dynastyRank ?? teamRanks.total;
+                        const topThird = Math.ceil(teamRanks.total / 3);
+                        const bottomStart = teamRanks.total - topThird + 1;
+                        return (
+                          <span className={cn("font-bold", r <= topThird ? "text-emerald-600 dark:text-emerald-400" : r >= bottomStart ? "text-red-500 dark:text-red-400" : "text-foreground")}>
+                            #{r}<span className="text-xs text-muted-foreground font-normal"> / {teamRanks.total}</span>
+                          </span>
+                        );
+                      })()}
+                    </td>
                     <td className="px-4 py-3.5 whitespace-nowrap border-l border-border/15 font-medium">{team.metrics.picks}</td>
                     <td className="px-4 py-3.5 whitespace-nowrap">
                       {isExpanded
