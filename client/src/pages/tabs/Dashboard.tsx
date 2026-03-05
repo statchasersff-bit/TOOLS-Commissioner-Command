@@ -118,10 +118,10 @@ export function DashboardOverview({ league, userTeam, onNavigate }: DashboardOve
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         <Card className="p-6">
-          <h3 className="text-base font-bold text-foreground mb-5 flex items-center gap-2">
-            Strengths & Needs
-            <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full" />
-          </h3>
+          <div className="mb-5">
+            <h3 className="text-base font-bold text-foreground">Strengths & Needs</h3>
+            <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
+          </div>
           <div className="space-y-4">
             {positions.map((p) => (
               <div key={p.pos} className="flex items-center gap-3">
@@ -142,10 +142,10 @@ export function DashboardOverview({ league, userTeam, onNavigate }: DashboardOve
         </Card>
 
         <Card className="p-6">
-          <h3 className="text-base font-bold text-foreground mb-5 flex items-center gap-2">
-            Contender Window
-            <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full" />
-          </h3>
+          <div className="mb-5">
+            <h3 className="text-base font-bold text-foreground">Contender Window</h3>
+            <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
+          </div>
           <div className="space-y-4">
             <div className="flex items-baseline gap-2 mb-3">
               <span className="text-4xl font-bold text-[#0b3a7a] dark:text-blue-400">{userTeam.metrics.contenderWindowYears}</span>
@@ -173,10 +173,10 @@ export function DashboardOverview({ league, userTeam, onNavigate }: DashboardOve
       </div>
 
       <Card className="p-6">
-        <h3 className="text-base font-bold text-foreground mb-5 flex items-center gap-2">
-          Recent League Movement
-          <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full" />
-        </h3>
+        <div className="mb-5">
+          <h3 className="text-base font-bold text-foreground">Recent League Movement</h3>
+          <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
+        </div>
         <div className="space-y-1">
           {movements.map((m, i) => (
             <div key={i} className="flex items-center gap-3 py-3 border-b border-border/30 last:border-0">

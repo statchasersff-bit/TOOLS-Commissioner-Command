@@ -62,10 +62,10 @@ export function RosterStrength({ league, userTeam }: TeamProps) {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
         <Card className="p-6">
-          <h3 className="text-base font-bold mb-4 flex items-center gap-2">
-            Starters ({starters.length})
-            <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full" />
-          </h3>
+          <div className="mb-4">
+            <h3 className="text-base font-bold">Starters ({starters.length})</h3>
+            <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
+          </div>
           <div className="space-y-1">
             {starters.map((p) => (
               <div key={p.id} className="flex items-center justify-between py-2.5 border-b border-border/20 last:border-0">
@@ -83,10 +83,10 @@ export function RosterStrength({ league, userTeam }: TeamProps) {
         </Card>
 
         <Card className="p-6">
-          <h3 className="text-base font-bold mb-4 flex items-center gap-2">
-            Bench ({bench.length})
-            <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full" />
-          </h3>
+          <div className="mb-4">
+            <h3 className="text-base font-bold">Bench ({bench.length})</h3>
+            <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
+          </div>
           <div className="space-y-1">
             {bench.map((p) => (
               <div key={p.id} className="flex items-center justify-between py-2.5 border-b border-border/20 last:border-0">
@@ -193,11 +193,13 @@ export function DepthChart({ userTeam }: { userTeam: Team }) {
           if (players.length === 0 && search) return null;
           return (
             <Card key={pos} className="p-6">
-              <h3 className="text-base font-bold mb-4 flex items-center gap-2">
-                {pos}
-                <Badge variant="secondary">{players.length}</Badge>
-                <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full" />
-              </h3>
+              <div className="mb-4">
+                <h3 className="text-base font-bold flex items-center gap-2">
+                  {pos}
+                  <Badge variant="secondary">{players.length}</Badge>
+                </h3>
+                <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
+              </div>
               <div className="space-y-1">
                 {players.sort((a, b) => (b.starter ? 1 : 0) - (a.starter ? 1 : 0) || b.value - a.value).map((p) => (
                   <div key={p.id} className="flex items-center justify-between py-2.5 border-b border-border/20 last:border-0">

@@ -101,10 +101,10 @@ export function LeagueTrends({ league }: InsightsProps) {
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
         <Card className="p-6">
-          <h3 className="text-base font-bold mb-4 flex items-center gap-2">
-            Age Trend
-            <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full" />
-          </h3>
+          <div className="mb-4">
+            <h3 className="text-base font-bold">Age Trend</h3>
+            <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
+          </div>
           <p className="text-3xl font-bold">{avgAge.toFixed(1)}</p>
           <p className="text-xs text-muted-foreground mt-1.5">League-wide average player age</p>
           <InsightCallout
@@ -115,10 +115,10 @@ export function LeagueTrends({ league }: InsightsProps) {
         </Card>
 
         <Card className="p-6">
-          <h3 className="text-base font-bold mb-4 flex items-center gap-2">
-            Pick Concentration
-            <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full" />
-          </h3>
+          <div className="mb-4">
+            <h3 className="text-base font-bold">Pick Concentration</h3>
+            <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
+          </div>
           <p className="text-3xl font-bold">{topPickHolder.name}</p>
           <p className="text-xs text-muted-foreground mt-1.5">
             Holds {topPickHolder.picks} picks ({topPickHolder.pct}% of league total)
@@ -139,10 +139,10 @@ export function LeagueTrends({ league }: InsightsProps) {
         </Card>
 
         <Card className="p-6">
-          <h3 className="text-base font-bold mb-4 flex items-center gap-2">
-            Positional Scarcity
-            <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full" />
-          </h3>
+          <div className="mb-4">
+            <h3 className="text-base font-bold">Positional Scarcity</h3>
+            <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
+          </div>
           <div className="space-y-4">
             {posScarcity.map((ps) => (
               <div key={ps.pos} className="flex items-center justify-between">

@@ -83,11 +83,13 @@ export function TradeTargets({ league, userTeam }: TradeProps) {
 
   const renderGroup = (title: string, icon: any, players: any[]) => (
     <Card className="p-6">
-      <h3 className="text-base font-bold mb-5 flex items-center gap-2">
-        {icon}
-        {title}
-        <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full" />
-      </h3>
+      <div className="mb-5">
+        <h3 className="text-base font-bold flex items-center gap-2">
+          {icon}
+          {title}
+        </h3>
+        <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
+      </div>
       <div className="space-y-1">
         {players.length === 0 && <p className="text-xs text-muted-foreground">No targets found</p>}
         {players.map((p, i) => (
@@ -135,11 +137,13 @@ export function TradeBlockScanner({ league }: { league: League }) {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
         <Card className="p-6">
-          <h3 className="text-base font-bold mb-4 flex items-center gap-2">
-            <TrendingDown className="w-4 h-4 text-red-500" />
-            Likely Sellers
-            <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full" />
-          </h3>
+          <div className="mb-4">
+            <h3 className="text-base font-bold flex items-center gap-2">
+              <TrendingDown className="w-4 h-4 text-red-500" />
+              Likely Sellers
+            </h3>
+            <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
+          </div>
           <div className="space-y-2.5">
             {sellers.map((t) => (
               <div key={t.id} className={cn("p-3.5 rounded-md", getTierBg("Rebuild"))}>
@@ -157,11 +161,13 @@ export function TradeBlockScanner({ league }: { league: League }) {
         </Card>
 
         <Card className="p-6">
-          <h3 className="text-base font-bold mb-4 flex items-center gap-2">
-            <TrendingUp className="w-4 h-4 text-emerald-500" />
-            Likely Buyers
-            <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full" />
-          </h3>
+          <div className="mb-4">
+            <h3 className="text-base font-bold flex items-center gap-2">
+              <TrendingUp className="w-4 h-4 text-emerald-500" />
+              Likely Buyers
+            </h3>
+            <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
+          </div>
           <div className="space-y-2.5">
             {buyers.map((t) => {
               const tier = getTeamTier(t.metrics.overall);
@@ -182,11 +188,13 @@ export function TradeBlockScanner({ league }: { league: League }) {
       </div>
 
       <Card className="p-6">
-        <h3 className="text-base font-bold mb-4 flex items-center gap-2">
-          Trade Block Candidates
-          <Badge variant="secondary">{tradeBlockCandidates.length}</Badge>
-          <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full" />
-        </h3>
+        <div className="mb-4">
+          <h3 className="text-base font-bold flex items-center gap-2">
+            Trade Block Candidates
+            <Badge variant="secondary">{tradeBlockCandidates.length}</Badge>
+          </h3>
+          <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
+        </div>
         <div className="space-y-1">
           {tradeBlockCandidates.map((p, i) => (
             <div key={i} className="flex items-center justify-between py-2.5 border-b border-border/20 last:border-0">

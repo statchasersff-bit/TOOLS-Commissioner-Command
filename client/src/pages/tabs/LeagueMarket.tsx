@@ -108,10 +108,10 @@ export function MarketValue({ league }: MarketProps) {
       </div>
 
       <Card className="p-6">
-        <h3 className="text-base font-bold mb-4 flex items-center gap-2">
-          Market Insights
-          <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full" />
-        </h3>
+        <div className="mb-4">
+          <h3 className="text-base font-bold">Market Insights</h3>
+          <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
+        </div>
         <div className="space-y-3">
           {insights.map((text, i) => (
             <InsightCallout key={i} text={text} type={text.includes("high") || text.includes("High") ? "negative" : "neutral"} />
