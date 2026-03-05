@@ -1,0 +1,243 @@
+a Trade Calculator tab is a must, and you can make it feel way more premium than Dynasty Daddy by leaning into (1) your two-level tab layout, (2) your value-source selector (FantasyCalc), and (3) league-context insights.
+
+Below is a full blueprint + Replit AI build instructions for an advanced trade calculator that uses the selected value source and adds StatChasers-grade UX.
+
+What the Trade Calculator tab should do
+
+A trade calc shouldn’t just say “Team 1: 10,200 vs Team 2: 9,900”.
+
+It should answer:
+
+Is this fair on market values?
+
+Who “wins” for contenders vs rebuilders?
+
+What does each team gain/lose by position?
+
+What similar trades happened in this league / database? (optional, later)
+
+So the goal is a calculator + decision engine.
+
+Trade Center → Sub-tabs (updated)
+
+Under Trade Center, add:
+
+Trade Finder
+
+Trade Targets
+
+Trade Block Scanner
+
+Trade Calculator ✅ (new)
+
+Trade Database (optional)
+
+Trade Calculator UX layout (StatChasers premium)
+
+Match the Dynasty Daddy structure but cleaner:
+
+Top Controls Row
+
+Toggle: SF / 1QB (this sets FantasyCalc format)
+
+Dropdown: Value Source (already global; show it here too)
+
+Toggle: Include Picks (on)
+
+Toggle: Apply “Overpay Tax” (off by default)
+
+Two Trade Columns (main interaction)
+
+Team 1 Gets… | Team 2 Gets…
+
+Player search (autocomplete)
+
+“Add Pick” button with picker (Year / Round / Early/Mid/Late)
+
+List of assets added with remove (×)
+
+Mid Strip (primary result)
+
+Big totals:
+
+Team 1 total value
+
+Team 2 total value
+
+Difference (and “fairness” badge)
+
+Example:
+
+Fair (≤5%)
+
+Slight Overpay (5–12%)
+
+Overpay (12%+)
+
+“Context” Panel (advanced)
+
+Toggle: Contender Mode vs Rebuild Mode
+
+Shows value adjustment by archetype:
+
+contenders value points now (vets + starting RB/QB)
+
+rebuilders value youth + picks more
+
+(Keep it lightweight — don’t invent StatChasers values; it’s just adjustments to market values.)
+
+Bottom Panels
+
+Team Fit / Position Impact
+
+pre/post trade starter strength by position (QB/RB/WR/TE)
+
+(You can compute this using roster + fantasycalc values)
+
+Market Volume
+
+simple weekly trade volume bar chart (optional placeholder)
+
+Similar Completed Trades
+
+button linking to Trade Database filtered to that player (future)
+
+Advanced features you can add without being “StatChasers values”
+
+Even with FantasyCalc as the only value source, you can still build elite logic:
+
+1) Key-asset weight / “value adjustment” (Dynasty Daddy style)
+
+Dynasty Daddy appears to “weight” the most valuable asset in a deal so massive 6-for-1 trades aren’t unfairly “equal” on totals.
+
+You should do this too — it’s genuinely helpful.
+
+Recommended formula (simple + good)
+
+For each side:
+
+Sort asset values descending: v1 ≥ v2 ≥ v3…
+
+Apply diminishing weights:
+
+weightedSideValue = 1.00*v1 + 0.85*v2 + 0.72*v3 + 0.60*v4 + 0.50*v5 + 0.42*v6 ...
+
+This creates a “consolidation premium” naturally.
+
+Then report both:
+
+Raw Total
+
+Adjusted Total
+
+Users love seeing both.
+
+2) “Overpay tax” toggle
+
+Optional toggle that penalizes the side receiving the best player if it’s a consolidation deal.
+
+Example:
+
+If top asset > 35% of total package, apply -3% to the side receiving the stud (or +3% required to be “fair”).
+
+3) Pick value handling
+
+Since FantasyCalc may not give pick values (depends), use your own pick table:
+
+2026–2028
+
+Round 1–4
+
+Early/Mid/Late
+
+And show them as assets with clear labels.
+
+What to tell Replit AI (copy/paste build instructions)
+Add a new sub-tab under Trade Center: “Trade Calculator”.
+
+CORE REQUIREMENTS
+- It must use the currently selected Value Source (FantasyCalc) and format (SF/1QB).
+- Users build a trade by selecting players and picks for each side.
+- Show totals, differences, and fairness labels.
+- Include “Value Adjustment” (diminishing returns) like Dynasty Daddy to prevent 6-for-1 deals from appearing equal.
+
+UI LAYOUT (PREMIUM)
+Top control strip:
+- Toggle: Format (SF / 1QB) -> drives FantasyCalc format selection
+- Toggle: Include Picks (default ON)
+- Toggle: Apply Value Adjustment (default ON)
+- Toggle: Overpay Tax (default OFF)
+- Buttons: Share (copy link), Clear
+
+Main trade builder:
+- Two columns with cards:
+  Left: “Team 1 gets…”
+  Right: “Team 2 gets…”
+- Each side has:
+  - Player search autocomplete (from Sleeper player DB; in MVP can use mock player list)
+  - “Add Pick” button opens modal:
+    Year (2026/2027/2028), Round (1–4), Range (Early/Mid/Late)
+  - List of selected assets with remove icons
+  - Count of pieces
+
+Calculation panel:
+- Display:
+  - Raw Total for Team 1 and Team 2
+  - Adjusted Total for Team 1 and Team 2 (if Value Adjustment enabled)
+  - Difference and fairness badge:
+    Fair: <= 5%
+    Slight Overpay: 5–12%
+    Overpay: > 12%
+
+Value Adjustment algorithm:
+- For each side, collect asset values and sort descending.
+- Apply weights per index:
+  weights = [1.00, 0.85, 0.72, 0.60, 0.50, 0.42, 0.36, 0.31]
+- weightedTotal = sum(values[i] * weights[i] for i < weights.length) + sum(values[i] * weights[-1] for remaining)
+- Show explanation tooltip: “Diminishing returns on extra pieces; emphasizes the key asset.”
+
+Overpay Tax (optional toggle):
+- If enabled, and top asset comprises > 35% of that side’s raw total, reduce that side’s adjusted total by 3% (or require them to “win” by 3% to be fair). Explain via tooltip.
+
+Team Fit / Position Impact (advanced but doable):
+- If league data is available (user has selected a league and rosters loaded):
+  - Show a mini table: QB/RB/WR/TE starter value BEFORE vs AFTER for each team.
+  - Also show “Contender Score” change (based on starter value only).
+- If no league data, show placeholder empty state.
+
+Share links:
+- Serialize trade state into URL params:
+  ?tab=trade&sub=calculator&t1=playerId,playerId,pickKey&t2=...
+- Add “Copy share link” button.
+
+Pick values:
+- Use local pick value table:
+  pickKey format: YYYY_R_round_range (ex: 2027_1_early)
+- Add pick labels in UI: “2027 Early 1st”.
+
+Branding:
+- StatChasers navy (#0b3a7a) and gold (#d4af37)
+- Gold underline on “Trade Calculator” header
+- Rounded-2xl cards, subtle shadows, blueprint background at low opacity
+- Mobile responsive: columns stack and tables scroll horizontally
+
+DELIVERABLES
+- Add new components:
+  /src/tradeCalc/TradeCalculator.tsx
+  /src/tradeCalc/AssetPicker.tsx
+  /src/tradeCalc/valueAdjustment.ts
+  /src/tradeCalc/share.ts
+- Integrate into existing main tab/sub-tab system.
+Extra: how to make it feel more premium than Dynasty Daddy
+
+Add these finishing touches:
+
+Asset chips with pos colors in light mode (subtle) + consistent in dark mode
+
+Inline “suggested counter”: if diff > 12%, show “Add ~X value to Team 2 to make fair”
+
+Quick-add buttons under each side:
+
+“Add 2027 Mid 2nd”
+
+“Add Bench WR” (just a shortcut to open player search)
