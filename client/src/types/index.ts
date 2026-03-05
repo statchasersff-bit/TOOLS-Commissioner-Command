@@ -69,9 +69,12 @@ export interface ValueSourceOption {
 
 export type InsightType = "positive" | "neutral" | "negative";
 
+export type InsightCategory = "league-leaders" | "draft-capital" | "contender-analysis" | "trade-opportunities" | "your-team";
+
 export interface Insight {
   text: string;
   type: InsightType;
+  category: InsightCategory;
 }
 
 export interface SleeperUser {

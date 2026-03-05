@@ -526,17 +526,44 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
   );
 }
 
+const INSIGHT_CATEGORIES = [
+  { id: "league-leaders" as const, label: "League Leaders", icon: Trophy, description: "Who dominates each position group" },
+  { id: "draft-capital" as const, label: "Draft Capital", icon: Archive, description: "Future pick distribution across the league" },
+  { id: "contender-analysis" as const, label: "Contender Analysis", icon: Flame, description: "Championship window and competitive landscape" },
+  { id: "trade-opportunities" as const, label: "Trade Opportunities", icon: Target, description: "Positional weaknesses to exploit" },
+  { id: "your-team" as const, label: "Your Team", icon: Compass, description: "Personalized insights for your roster" },
+];
+
 export function DashboardKeyInsights({ league, userTeam }: DashboardProps) {
   const insights = generateInsights(league, userTeam.id);
 
   return (
     <div className="space-y-8">
       <SectionHeader title="Key Insights" subtitle="Auto-generated analysis from league data" />
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {insights.map((insight, i) => (
-          <InsightCallout key={i} text={insight.text} type={insight.type} />
-        ))}
-      </div>
+
+      {INSIGHT_CATEGORIES.map(({ id, label, icon: Icon, description }) => {
+        const categoryInsights = insights.filter((i) => i.category === id);
+        if (categoryInsights.length === 0) return null;
+
+        return (
+          <div key={id} data-testid={`insight-category-${id}`}>
+            <div className="mb-4 flex items-center gap-3">
+              <div className="p-2 rounded-md bg-[#0b3a7a]/8 dark:bg-blue-400/10">
+                <Icon className="w-4 h-4 text-[#0b3a7a] dark:text-blue-400" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-foreground">{label}</h3>
+                <p className="text-xs text-muted-foreground">{description}</p>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pl-[52px]">
+              {categoryInsights.map((insight, i) => (
+                <InsightCallout key={i} text={insight.text} type={insight.type} />
+              ))}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
