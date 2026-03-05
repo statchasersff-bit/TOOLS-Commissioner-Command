@@ -415,25 +415,25 @@ export function DashboardOverview({ league, userTeam, onNavigate }: DashboardOve
 }
 
 export function DashboardSnapshot({ league }: { league: League }) {
-  const sorted = [...league.teams].sort((a, b) => b.metrics.overall - a.metrics.overall);
+  const teams = league.teams;
 
   const columns = [
     { key: "rank", header: "#", sticky: true, render: (_: any, i: number) => <span className="font-bold text-muted-foreground">{i + 1}</span> },
-    { key: "name", header: "Team", render: (row: any) => (
+    { key: "name", header: "Team", sortable: true, sortAccessor: (row: any) => row.name.toLowerCase(), render: (row: any) => (
       <div>
         <span className="font-semibold text-foreground">{row.name}</span>
         <span className="text-xs text-muted-foreground ml-2">({row.owner})</span>
       </div>
     )},
-    { key: "overall", header: "Overall", render: (row: any) => <span className="font-bold text-lg">{row.metrics.overall}</span> },
-    { key: "tier", header: "Tier", render: (row: any) => {
+    { key: "overall", header: "Overall", sortable: true, sortAccessor: (row: any) => row.metrics.overall, render: (row: any) => <span className="font-bold text-lg">{row.metrics.overall}</span> },
+    { key: "tier", header: "Tier", sortable: true, sortAccessor: (row: any) => row.metrics.overall, render: (row: any) => {
       const tier = getTeamTier(row.metrics.overall);
       return <Badge variant="outline" className={getTierColor(tier)}>{tier}</Badge>;
     }},
-    { key: "starters", header: "Starters", render: (row: any) => row.metrics.starters },
-    { key: "depth", header: "Depth", render: (row: any) => row.metrics.depth },
-    { key: "youth", header: "Youth", render: (row: any) => row.metrics.youth },
-    { key: "picks", header: "Picks", render: (row: any) => row.metrics.picks },
+    { key: "starters", header: "Starters", sortable: true, sortAccessor: (row: any) => row.metrics.starters, render: (row: any) => row.metrics.starters },
+    { key: "depth", header: "Depth", sortable: true, sortAccessor: (row: any) => row.metrics.depth, render: (row: any) => row.metrics.depth },
+    { key: "youth", header: "Youth", sortable: true, sortAccessor: (row: any) => row.metrics.youth, render: (row: any) => row.metrics.youth },
+    { key: "picks", header: "Picks", sortable: true, sortAccessor: (row: any) => row.metrics.picks, render: (row: any) => row.metrics.picks },
     { key: "action", header: "", render: () => (
       <Button variant="ghost" size="sm" data-testid="button-view-team">
         View <ArrowRight className="w-3 h-3 ml-1" />
@@ -444,7 +444,7 @@ export function DashboardSnapshot({ league }: { league: League }) {
   return (
     <div className="space-y-8">
       <SectionHeader title="League Snapshot" subtitle="All teams ranked by overall power score" />
-      <DataTable columns={columns} data={sorted} />
+      <DataTable columns={columns} data={teams} defaultSortKey="overall" defaultSortDir="desc" />
     </div>
   );
 }

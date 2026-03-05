@@ -1,4 +1,6 @@
+import { useState, useMemo } from "react";
 import { cn } from "@/lib/utils";
+import { ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 
 interface Column<T> {
   key: string;
@@ -6,6 +8,8 @@ interface Column<T> {
   render?: (row: T, index: number) => React.ReactNode;
   className?: string;
   sticky?: boolean;
+  sortable?: boolean;
+  sortAccessor?: (row: T) => number | string;
 }
 
 interface DataTableProps<T> {
@@ -15,6 +19,8 @@ interface DataTableProps<T> {
   className?: string;
   highlightRow?: (row: T) => boolean;
   loading?: boolean;
+  defaultSortKey?: string;
+  defaultSortDir?: "asc" | "desc";
 }
 
 export function DataTable<T extends Record<string, any>>({
@@ -24,7 +30,39 @@ export function DataTable<T extends Record<string, any>>({
   className,
   highlightRow,
   loading,
+  defaultSortKey,
+  defaultSortDir = "desc",
 }: DataTableProps<T>) {
+  const [sortKey, setSortKey] = useState<string | null>(defaultSortKey ?? null);
+  const [sortDir, setSortDir] = useState<"asc" | "desc">(defaultSortDir);
+
+  const sortedData = useMemo(() => {
+    if (!sortKey) return data;
+    const col = columns.find((c) => c.key === sortKey);
+    if (!col?.sortable) return data;
+
+    const accessor = col.sortAccessor ?? ((row: T) => row[sortKey]);
+    return [...data].sort((a, b) => {
+      const va = accessor(a);
+      const vb = accessor(b);
+      if (typeof va === "number" && typeof vb === "number") {
+        return sortDir === "asc" ? va - vb : vb - va;
+      }
+      const sa = String(va).toLowerCase();
+      const sb = String(vb).toLowerCase();
+      return sortDir === "asc" ? sa.localeCompare(sb) : sb.localeCompare(sa);
+    });
+  }, [data, sortKey, sortDir, columns]);
+
+  function handleSort(key: string) {
+    if (sortKey === key) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir("desc");
+    }
+  }
+
   if (loading) {
     return <DataTableSkeleton columns={columns.length} rows={6} />;
   }
@@ -40,16 +78,32 @@ export function DataTable<T extends Record<string, any>>({
                 className={cn(
                   "px-4 py-3.5 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap",
                   col.sticky && "sticky left-0 z-10 bg-muted/30 dark:bg-muted/20",
+                  col.sortable && "cursor-pointer select-none hover:text-foreground transition-colors",
                   col.className
                 )}
+                onClick={col.sortable ? () => handleSort(col.key) : undefined}
+                data-testid={col.sortable ? `sort-${col.key}` : undefined}
               >
-                {col.header}
+                <span className="inline-flex items-center gap-1">
+                  {col.header}
+                  {col.sortable && (
+                    sortKey === col.key ? (
+                      sortDir === "asc" ? (
+                        <ArrowUp className="w-3 h-3" />
+                      ) : (
+                        <ArrowDown className="w-3 h-3" />
+                      )
+                    ) : (
+                      <ArrowUpDown className="w-3 h-3 opacity-30" />
+                    )
+                  )}
+                </span>
               </th>
             ))}
           </tr>
         </thead>
         <tbody>
-          {data.map((row, idx) => {
+          {sortedData.map((row, idx) => {
             const isEven = idx % 2 === 0;
             const rowBg = isEven ? "bg-background" : "bg-muted/10 dark:bg-muted/5";
             const isHighlighted = highlightRow?.(row);
