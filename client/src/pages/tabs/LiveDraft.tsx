@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Search, RefreshCw, Trophy, Target } from "lucide-react";
-import { useValueModel } from "../../contexts/ValueModelContext";
+import { useValueModel } from "@/contexts/ValueModelContext";
 
 interface DraftPick {
   round: number;
@@ -50,7 +50,7 @@ export default function LiveDraft() {
   const [apiError, setApiError] = useState<string | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const { dynastyValues, redraftValues } = useValueModel();
+  const { valuesBySleeperId, redraftValuesBySleeperId } = useValueModel();
 
   const fetchDraft = useCallback(async (id?: string) => {
     const targetId = id || activeLeagueId;
@@ -105,7 +105,7 @@ export default function LiveDraft() {
     }
 
     for (const [id, p] of Object.entries(draftData.players)) {
-      const value = dynastyValues[id] || redraftValues[id] || 0;
+      const value = valuesBySleeperId[id] || redraftValuesBySleeperId[id] || 0;
       if (value <= 0 && !pickedPlayerIds.has(id)) continue;
       allPlayers.push({
         id,
@@ -125,7 +125,7 @@ export default function LiveDraft() {
           name: pick.playerName,
           pos: pick.pos,
           team: pick.team,
-          value: dynastyValues[pick.playerId] || redraftValues[pick.playerId] || 0,
+          value: valuesBySleeperId[pick.playerId] || redraftValuesBySleeperId[pick.playerId] || 0,
           picked: true,
           pickInfo: pick,
         });
@@ -134,7 +134,7 @@ export default function LiveDraft() {
 
     allPlayers.sort((a, b) => b.value - a.value);
     return allPlayers;
-  }, [draftData, dynastyValues, redraftValues, pickedPlayerIds]);
+  }, [draftData, valuesBySleeperId, redraftValuesBySleeperId, pickedPlayerIds]);
 
   const filteredPlayers = useMemo(() => {
     if (posFilter === "ALL") return boardPlayers;
