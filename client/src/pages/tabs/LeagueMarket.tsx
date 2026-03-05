@@ -15,64 +15,6 @@ interface MarketProps {
   league: League;
 }
 
-export function PositionalSurplus({ league }: MarketProps) {
-  const positions = ["QB", "RB", "WR", "TE"] as const;
-
-  const posData = positions.map((pos) => {
-    const metricKey = pos.toLowerCase() as "qb" | "rb" | "wr" | "te";
-    const avg = Math.round(league.teams.reduce((s, t) => s + t.metrics[metricKey], 0) / league.teams.length);
-    const surplus = league.teams
-      .filter((t) => t.metrics[metricKey] > avg + 10)
-      .sort((a, b) => b.metrics[metricKey] - a.metrics[metricKey]);
-    const needy = league.teams
-      .filter((t) => t.metrics[metricKey] < avg - 10)
-      .sort((a, b) => a.metrics[metricKey] - b.metrics[metricKey]);
-    return { pos, avg, surplus, needy };
-  });
-
-  return (
-    <div className="space-y-8">
-      <SectionHeader title="Positional Surplus" subtitle="Who has too much -- and who needs help" />
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        {posData.map(({ pos, avg, surplus, needy }) => (
-          <Card key={pos} className="p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-base font-bold">{pos}</h3>
-              <span className="text-xs text-muted-foreground font-medium">Avg: {avg}</span>
-            </div>
-
-            <div className="space-y-4">
-              <div>
-                <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 mb-2">Surplus Teams</p>
-                <div className="flex flex-wrap gap-1.5">
-                  {surplus.length === 0 && <span className="text-xs text-muted-foreground">None</span>}
-                  {surplus.map((t) => (
-                    <Badge key={t.id} variant="secondary" className="text-xs">
-                      {t.owner} ({t.metrics[pos.toLowerCase() as "qb" | "rb" | "wr" | "te"]})
-                    </Badge>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <p className="text-xs font-semibold text-red-600 dark:text-red-400 mb-2">Needy Teams</p>
-                <div className="flex flex-wrap gap-1.5">
-                  {needy.length === 0 && <span className="text-xs text-muted-foreground">None</span>}
-                  {needy.map((t) => (
-                    <Badge key={t.id} variant="outline" className="text-xs">
-                      {t.owner} ({t.metrics[pos.toLowerCase() as "qb" | "rb" | "wr" | "te"]})
-                    </Badge>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </Card>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 interface PlayerRow {
   name: string;
   pos: string;

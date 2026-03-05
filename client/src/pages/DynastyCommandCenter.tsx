@@ -20,7 +20,7 @@ import { RosterComparison } from "./tabs/LeagueAnalyzer";
 import { RosterBreakdown } from "./tabs/TeamBreakdown";
 import { TradeFinder, TradeTargets, TradeBlockScanner, TradeCalculator, TradeDatabase } from "./tabs/TradeCenter";
 import { PickDistribution } from "./tabs/DraftCapital";
-import { PositionalSurplus, MarketValue } from "./tabs/LeagueMarket";
+import { MarketValue } from "./tabs/LeagueMarket";
 import { LeagueIntelligence } from "./tabs/Insights";
 
 const STORAGE_KEY = "sc-dynasty-state";
@@ -268,7 +268,6 @@ export default function DynastyCommandCenter() {
       case "trade-center:trade-targets": return <TradeTargets league={league} userTeam={userTeam} />;
       case "trade-center:trade-block": return <TradeBlockScanner league={league} />;
       case "league-analyzer:pick-distribution": return <PickDistribution league={league} />;
-      case "trade-center:positional-surplus": return <PositionalSurplus league={league} />;
       case "league-market:market-value": return <MarketValue league={league} />;
       default: return <div className="text-center text-muted-foreground py-12">Select a tab to get started</div>;
     }
