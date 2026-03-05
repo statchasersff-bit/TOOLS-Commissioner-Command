@@ -263,7 +263,6 @@ export const NAV_CONFIG: MainTabConfig[] = [
       { id: "power-rankings", label: "Power Rankings" },
       { id: "roster-comparison", label: "Roster Comparison" },
       { id: "key-insights", label: "Key Insights" },
-      { id: "pick-value", label: "Pick Value" },
       { id: "pick-distribution", label: "Pick Distribution" },
     ],
   },

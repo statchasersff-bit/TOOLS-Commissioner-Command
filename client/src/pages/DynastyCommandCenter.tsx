@@ -19,7 +19,7 @@ import { DashboardOverview, DashboardSnapshot, DashboardKeyInsights } from "./ta
 import { RosterComparison } from "./tabs/LeagueAnalyzer";
 import { RosterStrength, AgeCurve, DepthChart } from "./tabs/TeamBreakdown";
 import { TradeFinder, TradeTargets, TradeBlockScanner } from "./tabs/TradeCenter";
-import { PickValue, PickDistribution } from "./tabs/DraftCapital";
+import { PickDistribution } from "./tabs/DraftCapital";
 import { PositionalSurplus, MarketValue } from "./tabs/LeagueMarket";
 import { TeamInsights, LeagueTrends } from "./tabs/Insights";
 
@@ -259,7 +259,6 @@ export default function DynastyCommandCenter() {
       case "trade-center:trade-finder": return <TradeFinder league={league} userTeam={userTeam} />;
       case "trade-center:trade-targets": return <TradeTargets league={league} userTeam={userTeam} />;
       case "trade-center:trade-block": return <TradeBlockScanner league={league} />;
-      case "league-analyzer:pick-value": return <PickValue league={league} userTeam={userTeam} />;
       case "league-analyzer:pick-distribution": return <PickDistribution league={league} />;
       case "league-market:positional-surplus": return <PositionalSurplus league={league} />;
       case "league-market:market-value": return <MarketValue league={league} />;
