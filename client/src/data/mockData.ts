@@ -264,6 +264,8 @@ export const NAV_CONFIG: MainTabConfig[] = [
       { id: "roster-comparison", label: "Roster Comparison" },
       { id: "key-insights", label: "Key Insights" },
       { id: "pick-distribution", label: "Pick Distribution" },
+      { id: "team-insights", label: "Team Insights" },
+      { id: "league-trends", label: "League Trends" },
     ],
   },
   {
@@ -281,14 +283,6 @@ export const NAV_CONFIG: MainTabConfig[] = [
     label: "Players",
     subTabs: [
       { id: "market-value", label: "Market Value" },
-    ],
-  },
-  {
-    id: "insights",
-    label: "Insights",
-    subTabs: [
-      { id: "team-insights", label: "Team Insights" },
-      { id: "league-trends", label: "League Trends" },
     ],
   },
 ];

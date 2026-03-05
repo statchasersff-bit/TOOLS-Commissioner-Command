@@ -262,8 +262,8 @@ export default function DynastyCommandCenter() {
       case "league-analyzer:pick-distribution": return <PickDistribution league={league} />;
       case "trade-center:positional-surplus": return <PositionalSurplus league={league} />;
       case "league-market:market-value": return <MarketValue league={league} />;
-      case "insights:team-insights": return <TeamInsights league={league} />;
-      case "insights:league-trends": return <LeagueTrends league={league} />;
+      case "league-analyzer:team-insights": return <TeamInsights league={league} />;
+      case "league-analyzer:league-trends": return <LeagueTrends league={league} />;
       default: return <div className="text-center text-muted-foreground py-12">Select a tab to get started</div>;
     }
   };
