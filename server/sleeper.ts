@@ -290,6 +290,7 @@ export async function fetchSleeperLeagueFull(leagueId: string, userId: string) {
       id: teamId,
       name: teamName,
       owner: ownerName,
+      ownerId: roster.owner_id || undefined,
       roster: rosterPlayers,
       picks: ownedPicks,
       metrics: { ...defaultMetrics },
@@ -584,4 +585,102 @@ export async function fetchPortfolioSummary(
     playerExposure,
     lineupAlerts,
   };
+}
+
+export async function fetchCrossLeagueTrades(
+  userId: string,
+  currentLeagueId: string,
+  currentRosterPlayerIds: string[]
+) {
+  const RATE_MS = 350;
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+  const leagues = await fetchJson<SleeperLeagueRaw[]>(
+    `${SLEEPER_API}/user/${userId}/leagues/nfl/2026`
+  );
+  if (!leagues || !Array.isArray(leagues)) return { trades: [], leaguesScanned: 0 };
+
+  const otherLeagues = leagues.filter(
+    (lg) => lg.league_id !== currentLeagueId && lg.settings?.type === 2 && lg.settings?.best_ball !== 1
+  );
+
+  const playersDb = await getSleeperPlayers();
+  const currentRosterSet = new Set(currentRosterPlayerIds);
+  const results: Array<{
+    playerName: string;
+    playerId: string;
+    pos: string;
+    team: string;
+    leagueName: string;
+    leagueId: string;
+    tradedTo: string;
+    timestamp: number;
+  }> = [];
+
+  for (const lg of otherLeagues.slice(0, 8)) {
+    await sleep(RATE_MS);
+
+    let rostersRaw: any[] | null = null;
+    let usersRaw: any[] | null = null;
+    try {
+      [rostersRaw, usersRaw] = await Promise.all([
+        fetchJson<any[]>(`${SLEEPER_API}/league/${lg.league_id}/rosters`),
+        fetchJson<any[]>(`${SLEEPER_API}/league/${lg.league_id}/users`),
+      ]);
+    } catch {
+      continue;
+    }
+    if (!rostersRaw || !usersRaw) continue;
+
+    const userRoster = rostersRaw.find((r: any) => r.owner_id === userId);
+    if (!userRoster) continue;
+
+    const userRosterId = userRoster.roster_id;
+    const ownerMap = new Map<number, string>();
+    for (const r of rostersRaw) {
+      const u = usersRaw.find((u: any) => u.user_id === r.owner_id);
+      ownerMap.set(r.roster_id, u?.display_name || u?.username || `Roster ${r.roster_id}`);
+    }
+
+    for (let round = 1; round <= 18; round++) {
+      await sleep(RATE_MS);
+      let txns: any[] | null = null;
+      try {
+        txns = await fetchJson<any[]>(`${SLEEPER_API}/league/${lg.league_id}/transactions/${round}`);
+      } catch {
+        continue;
+      }
+      if (!txns) continue;
+
+      const completedTrades = txns.filter(
+        (t: any) => t.type === "trade" && t.status === "complete" && t.roster_ids?.includes(userRosterId)
+      );
+
+      for (const trade of completedTrades) {
+        if (!trade.drops) continue;
+        const droppedByUser = Object.entries(trade.drops)
+          .filter(([, rosterId]) => rosterId === userRosterId)
+          .map(([playerId]) => playerId);
+
+        for (const pid of droppedByUser) {
+          if (currentRosterSet.has(pid)) {
+            const p = playersDb[pid];
+            const addedToRosterId = trade.adds?.[pid];
+            results.push({
+              playerName: p ? `${p.first_name} ${p.last_name}` : `Unknown (${pid})`,
+              playerId: pid,
+              pos: p?.position || "??",
+              team: p?.team || "FA",
+              leagueName: lg.name,
+              leagueId: lg.league_id,
+              tradedTo: ownerMap.get(addedToRosterId) || "Unknown",
+              timestamp: trade.status_updated || 0,
+            });
+          }
+        }
+      }
+    }
+  }
+
+  return { trades: results, leaguesScanned: otherLeagues.slice(0, 8).length };
 }

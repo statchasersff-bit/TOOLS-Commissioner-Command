@@ -491,6 +491,138 @@ export function TradeTargets({ league, userTeam }: TradeProps) {
   );
 }
 
+interface CrossLeagueTrade {
+  playerName: string;
+  playerId: string;
+  pos: string;
+  team: string;
+  leagueName: string;
+  leagueId: string;
+  tradedTo: string;
+  timestamp: number;
+}
+
+function CrossLeagueTradeIntel({ league }: { league: League }) {
+  const [selectedTeamId, setSelectedTeamId] = useState<string>("");
+  const [results, setResults] = useState<{ trades: CrossLeagueTrade[]; leaguesScanned: number } | null>(null);
+
+  const selectedTeam = league.teams.find(t => t.id === selectedTeamId);
+
+  const mutation = useMutation({
+    mutationFn: async () => {
+      if (!selectedTeam?.ownerId) throw new Error("No owner ID available");
+      const rosterPlayerIds = selectedTeam.roster.map(p => p.sleeperId).filter(Boolean);
+      const res = await apiRequest("POST", "/api/sleeper/cross-league-trades", {
+        userId: selectedTeam.ownerId,
+        currentLeagueId: league.id,
+        rosterPlayerIds,
+      });
+      return res.json();
+    },
+    onSuccess: (data) => setResults(data),
+  });
+
+  const canAnalyze = !!selectedTeam?.ownerId && selectedTeam.roster.length > 0;
+
+  const handleAnalyze = () => {
+    if (!selectedTeamId || !canAnalyze) return;
+    setResults(null);
+    mutation.mutate();
+  };
+
+  return (
+    <Card className="p-6" data-testid="card-cross-league-intel">
+      <div className="mb-5">
+        <h3 className="text-base font-bold flex items-center gap-2">
+          <Search className="w-4 h-4 text-[#0b3a7a] dark:text-blue-400" />
+          Cross-League Trade Intel
+        </h3>
+        <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
+        <p className="text-[10px] text-muted-foreground mt-2">
+          Select a league member to scan their other leagues for players they've traded away that they still roster here
+        </p>
+      </div>
+
+      <div className="flex items-center gap-3 mb-5">
+        <Select value={selectedTeamId} onValueChange={(v) => { setSelectedTeamId(v); setResults(null); }}>
+          <SelectTrigger className="w-[260px]" data-testid="select-cross-league-team">
+            <SelectValue placeholder="Select a team member..." />
+          </SelectTrigger>
+          <SelectContent>
+            {league.teams.filter(t => t.ownerId).map(t => (
+              <SelectItem key={t.id} value={t.id} data-testid={`option-team-${t.id}`}>
+                {t.owner} — {t.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Button
+          onClick={handleAnalyze}
+          disabled={!selectedTeamId || !canAnalyze || mutation.isPending}
+          size="sm"
+          variant="default"
+          data-testid="button-analyze-cross-league"
+        >
+          {mutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Search className="w-4 h-4 mr-1" />}
+          Analyze
+        </Button>
+      </div>
+
+      {selectedTeam && !selectedTeam.ownerId && (
+        <p className="text-xs text-muted-foreground mb-3">This team has no linked Sleeper account — cross-league analysis unavailable.</p>
+      )}
+
+      {mutation.isPending && (
+        <div className="text-center py-6">
+          <Loader2 className="w-6 h-6 animate-spin text-[#0b3a7a] mx-auto mb-2" />
+          <p className="text-xs text-muted-foreground">Scanning {selectedTeam?.owner}'s other leagues... This may take a minute.</p>
+        </div>
+      )}
+
+      {mutation.isError && (
+        <p className="text-xs text-red-500" data-testid="text-cross-league-error">Failed to scan leagues. Please try again.</p>
+      )}
+
+      {results && !mutation.isPending && (
+        <div data-testid="cross-league-results">
+          <p className="text-[10px] text-muted-foreground mb-3">
+            Scanned {results.leaguesScanned} other dynasty league{results.leaguesScanned !== 1 ? "s" : ""}
+          </p>
+          {results.trades.length === 0 ? (
+            <div className="text-center py-4">
+              <p className="text-sm text-muted-foreground">No cross-league trade signals found for {selectedTeam?.owner}.</p>
+              <p className="text-[10px] text-muted-foreground mt-1">They haven't traded away any players in other leagues that they still roster here.</p>
+            </div>
+          ) : (
+            <div className="space-y-0">
+              {results.trades.map((t, i) => (
+                <div key={`${t.playerId}-${t.leagueId}-${i}`} className="flex items-center justify-between py-2.5 border-b border-border/20 last:border-0" data-testid={`cross-league-trade-${t.playerId}`}>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Badge variant="outline" className={`text-xs w-8 justify-center flex-shrink-0 ${getPositionColor(t.pos)}`}>{t.pos}</Badge>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold truncate">{t.playerName}</p>
+                      <p className="text-[10px] text-muted-foreground truncate">{t.team}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 flex-shrink-0">
+                    <div className="text-right">
+                      <p className="text-[10px] font-medium text-red-500 dark:text-red-400">Traded away in</p>
+                      <p className="text-xs text-muted-foreground truncate max-w-[160px]">{t.leagueName}</p>
+                    </div>
+                    <Badge variant="outline" className="text-[10px] border-amber-300 dark:border-amber-700 text-amber-600 dark:text-amber-400">
+                      Sell Signal
+                    </Badge>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </Card>
+  );
+}
+
 export function TradeBlockScanner({ league }: { league: League }) {
   const sellers = league.teams.filter((t) => getTeamTier(t.metrics.overall) === "Rebuild");
   const buyers = league.teams.filter((t) => ["Elite", "Contender"].includes(getTeamTier(t.metrics.overall)));
@@ -582,6 +714,8 @@ export function TradeBlockScanner({ league }: { league: League }) {
           {tradeBlockCandidates.length === 0 && <p className="text-xs text-muted-foreground">No trade block candidates found</p>}
         </div>
       </Card>
+
+      <CrossLeagueTradeIntel league={league} />
     </div>
   );
 }

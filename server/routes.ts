@@ -6,6 +6,7 @@ import {
   fetchSleeperLeagues,
   fetchSleeperLeagueFull,
   fetchPortfolioSummary,
+  fetchCrossLeagueTrades,
 } from "./sleeper";
 import {
   startCrawl,
@@ -99,6 +100,20 @@ export async function registerRoutes(
     } catch (err: any) {
       console.error("Portfolio summary error:", err);
       res.status(500).json({ error: err.message || "Failed to fetch portfolio summary" });
+    }
+  });
+
+  app.post("/api/sleeper/cross-league-trades", async (req, res) => {
+    try {
+      const { userId, currentLeagueId, rosterPlayerIds } = req.body;
+      if (!userId || !currentLeagueId || !Array.isArray(rosterPlayerIds) || rosterPlayerIds.length === 0) {
+        return res.status(400).json({ error: "userId, currentLeagueId, and a non-empty rosterPlayerIds array are required" });
+      }
+      const result = await fetchCrossLeagueTrades(userId, currentLeagueId, rosterPlayerIds);
+      res.json(result);
+    } catch (err: any) {
+      console.error("Cross-league trades error:", err);
+      res.status(500).json({ error: err.message || "Failed to fetch cross-league trades" });
     }
   });
 
