@@ -24,7 +24,8 @@ A premium dynasty fantasy football league analysis tool built with React + TypeS
 - **Data transform**: Sleeper rosters → our League/Team/Player format with proper starter detection, pick allocation (rounds 1-4, years 2025-2028), and format detection (SF/1QB)
 - **Context**: `SleeperContext.tsx` manages connection state with `connect()`, `disconnect()`, `refresh()`, `setActiveLeague()`
 - **Auto-reconnect**: On mount, if stored username exists in localStorage, auto-reconnects
-- **Season**: Uses 2025 as current season
+- **Season**: Uses 2026 as current season
+- **Dynasty filter**: Only shows dynasty leagues (settings.type === 2), excludes redraft/keeper
 
 ## Value Source Integration (FantasyCalc)
 - **Backend proxy**: `GET /api/values/fantasycalc?format=sf|1qb` proxies and caches FantasyCalc API

@@ -42,7 +42,7 @@ export function SleeperProvider({ children }: { children: React.ReactNode }) {
       const userData: SleeperUser = await userRes.json();
       setUser(userData);
 
-      const leaguesRes = await fetch(`/api/sleeper/user/${userData.userId}/leagues?season=2025`);
+      const leaguesRes = await fetch(`/api/sleeper/user/${userData.userId}/leagues?season=2026`);
       if (!leaguesRes.ok) {
         throw new Error("Failed to fetch leagues");
       }

@@ -38,7 +38,7 @@ export async function registerRoutes(
 
   app.get("/api/sleeper/user/:userId/leagues", async (req, res) => {
     try {
-      const season = (req.query.season as string) || "2025";
+      const season = (req.query.season as string) || "2026";
       const leagues = await fetchSleeperLeagues(req.params.userId, season);
       res.json(leagues);
     } catch (err: any) {
