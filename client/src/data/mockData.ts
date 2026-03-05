@@ -261,9 +261,7 @@ export const NAV_CONFIG: MainTabConfig[] = [
     label: "My Team",
     subTabs: [
       { id: "overview", label: "Overview" },
-      { id: "roster-strength", label: "Roster Strength" },
-      { id: "age-curve", label: "Age Curve" },
-      { id: "depth-chart", label: "Depth Chart" },
+      { id: "roster-breakdown", label: "Roster Breakdown" },
     ],
   },
   {
