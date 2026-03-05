@@ -31,8 +31,8 @@ export function RosterStrength({ league, userTeam }: TeamProps) {
 
   const weakest = positions.sort((a, b) => (a.score - a.avg) - (b.score - b.avg))[0];
 
-  const starters = userTeam.roster.filter((p) => p.starter);
-  const bench = userTeam.roster.filter((p) => !p.starter);
+  const starters = [...userTeam.roster.filter((p) => p.starter)].sort((a, b) => b.value - a.value);
+  const bench = [...userTeam.roster.filter((p) => !p.starter)].sort((a, b) => b.value - a.value);
 
   return (
     <div className="space-y-8">
