@@ -3,7 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/DataTable";
 import { SectionHeader } from "@/components/SectionHeader";
-import { getTeamTier, getTierColor, getTierBg } from "@/data/mockData";
+import { getTeamTier, getTierColor, getTierBg, getPositionColor } from "@/data/mockData";
 import type { League, Team, Tier } from "@/types";
 import { cn } from "@/lib/utils";
 import { ArrowRightLeft, TrendingUp, TrendingDown, Target } from "lucide-react";
@@ -95,7 +95,7 @@ export function TradeTargets({ league, userTeam }: TradeProps) {
         {players.map((p, i) => (
           <div key={i} className="flex items-center justify-between py-2.5 border-b border-border/20 last:border-0">
             <div className="flex items-center gap-2">
-              <Badge variant="outline" className="text-xs w-8 justify-center">{p.pos}</Badge>
+              <Badge variant="outline" className={`text-xs w-8 justify-center ${getPositionColor(p.pos)}`}>{p.pos}</Badge>
               <div>
                 <p className="text-sm font-semibold">{p.name}</p>
                 <p className="text-xs text-muted-foreground">From {p.ownerName}</p>
@@ -199,7 +199,7 @@ export function TradeBlockScanner({ league }: { league: League }) {
           {tradeBlockCandidates.map((p, i) => (
             <div key={i} className="flex items-center justify-between py-2.5 border-b border-border/20 last:border-0">
               <div className="flex items-center gap-2">
-                <Badge variant="outline" className="text-xs w-8 justify-center">{p.pos}</Badge>
+                <Badge variant="outline" className={`text-xs w-8 justify-center ${getPositionColor(p.pos)}`}>{p.pos}</Badge>
                 <div>
                   <p className="text-sm font-semibold">{p.name}</p>
                   <p className="text-xs text-muted-foreground">{p.teamName} ({p.ownerName})</p>

@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { KpiCard } from "@/components/KpiCard";
 import { InsightCallout } from "@/components/InsightCallout";
 import { SectionHeader } from "@/components/SectionHeader";
+import { getPositionColor } from "@/data/mockData";
 import type { League, Team, Player } from "@/types";
 import { cn } from "@/lib/utils";
 import { Search } from "lucide-react";
@@ -70,7 +71,7 @@ export function RosterStrength({ league, userTeam }: TeamProps) {
             {starters.map((p) => (
               <div key={p.id} className="flex items-center justify-between py-2.5 border-b border-border/20 last:border-0">
                 <div className="flex items-center gap-2">
-                  <Badge variant="outline" className="text-xs w-8 justify-center">{p.pos}</Badge>
+                  <Badge variant="outline" className={`text-xs w-8 justify-center ${getPositionColor(p.pos)}`}>{p.pos}</Badge>
                   <span className="text-sm font-semibold">{p.name}</span>
                 </div>
                 <div className="flex items-center gap-3">
@@ -91,7 +92,7 @@ export function RosterStrength({ league, userTeam }: TeamProps) {
             {bench.map((p) => (
               <div key={p.id} className="flex items-center justify-between py-2.5 border-b border-border/20 last:border-0">
                 <div className="flex items-center gap-2">
-                  <Badge variant="outline" className="text-xs w-8 justify-center">{p.pos}</Badge>
+                  <Badge variant="outline" className={`text-xs w-8 justify-center ${getPositionColor(p.pos)}`}>{p.pos}</Badge>
                   <span className="text-sm">{p.name}</span>
                 </div>
                 <div className="flex items-center gap-3">
