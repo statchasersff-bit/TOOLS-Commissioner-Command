@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import { getFantasyCalcValues } from "./fantasycalc";
 
 const SLEEPER_API = "https://api.sleeper.app/v1";
 const PLAYERS_CACHE_PATH = "/tmp/sleeper_players.json";
@@ -33,6 +34,9 @@ interface SleeperRosterRaw {
     losses?: number;
     ties?: number;
     fpts?: number;
+    ppts?: number;
+    ppts_decimal?: number;
+    fpts_decimal?: number;
     [key: string]: any;
   };
 }
@@ -323,9 +327,12 @@ export interface PortfolioSummaryData {
     wins: number;
     losses: number;
     ties: number;
-    rank: number;
+    standing: number;
     totalRosters: number;
     format: string;
+    valueRank: number;
+    maxPfRank: number;
+    playoffOdds: number;
   }>;
   contenderCount: number;
   middleCount: number;
@@ -358,6 +365,19 @@ export async function fetchPortfolioSummary(
   const playersDb = await getSleeperPlayers();
   const validPositions = new Set(["QB", "RB", "WR", "TE"]);
 
+  let fcValuesSf: Record<string, number> = {};
+  let fcValues1Qb: Record<string, number> = {};
+  try {
+    const [sfData, oqbData] = await Promise.all([
+      getFantasyCalcValues("sf"),
+      getFantasyCalcValues("1qb"),
+    ]);
+    fcValuesSf = sfData.valuesBySleeperId;
+    fcValues1Qb = oqbData.valuesBySleeperId;
+  } catch (err) {
+    console.error("Failed to fetch FantasyCalc values for portfolio:", err);
+  }
+
   const playerExposureMap = new Map<string, { name: string; pos: string; team: string; count: number }>();
   const leagueRecords: PortfolioSummaryData["leagueRecords"] = [];
   const lineupAlerts: PortfolioSummaryData["lineupAlerts"] = [];
@@ -387,9 +407,47 @@ export async function fetchPortfolioSummary(
         const bFpts = b.settings?.fpts ?? 0;
         return bFpts - aFpts;
       });
-      const rank = sortedByWins.findIndex((r) => r.roster_id === userRoster.roster_id) + 1;
+      const standing = sortedByWins.findIndex((r) => r.roster_id === userRoster.roster_id) + 1;
       const total = rostersRaw.length;
       const playoffSlots = Math.max(Math.floor(total / 2), 1);
+
+      const isSf = ls.format === "SF";
+      const fcValues = isSf ? fcValuesSf : fcValues1Qb;
+
+      const hasValues = Object.keys(fcValues).length > 0;
+      let valueRank = 0;
+      if (hasValues) {
+        const rosterValues = rostersRaw.map((r) => {
+          const totalValue = (r.players || []).reduce((sum, pid) => sum + (fcValues[pid] || 0), 0);
+          return { rosterId: r.roster_id, totalValue };
+        });
+        rosterValues.sort((a, b) => b.totalValue - a.totalValue);
+        valueRank = rosterValues.findIndex((r) => r.rosterId === userRoster.roster_id) + 1;
+      }
+
+      const hasPpts = rostersRaw.some((r) => (r.settings?.ppts ?? 0) > 0);
+      let maxPfRank = 0;
+      if (hasPpts) {
+        const rosterMaxPf = rostersRaw.map((r) => {
+          const ppts = (r.settings?.ppts ?? 0) + (r.settings?.ppts_decimal ?? 0) / 100;
+          return { rosterId: r.roster_id, ppts };
+        });
+        rosterMaxPf.sort((a, b) => b.ppts - a.ppts);
+        maxPfRank = rosterMaxPf.findIndex((r) => r.rosterId === userRoster.roster_id) + 1;
+      }
+
+      const totalGamesPlayed = wins + losses + ties;
+      let playoffOdds: number;
+      if (total <= 1) {
+        playoffOdds = 100;
+      } else if (totalGamesPlayed === 0) {
+        playoffOdds = Math.round((playoffSlots / total) * 100);
+      } else {
+        const standingPct = (total - standing) / (total - 1);
+        const gamesWeight = Math.min(totalGamesPlayed / 14, 1);
+        const rawOdds = standingPct * gamesWeight + (playoffSlots / total) * (1 - gamesWeight);
+        playoffOdds = Math.min(99, Math.max(1, Math.round(rawOdds * 100)));
+      }
 
       leagueRecords.push({
         leagueId: ls.leagueId,
@@ -397,21 +455,24 @@ export async function fetchPortfolioSummary(
         wins,
         losses,
         ties,
-        rank,
+        standing,
         totalRosters: total,
         format: ls.format,
+        valueRank,
+        maxPfRank,
+        playoffOdds,
       });
 
       totalWins += wins;
       totalLosses += losses;
       totalTies += ties;
-      totalRank += rank;
+      totalRank += standing;
 
-      if (rank <= 3) contenderCount++;
-      else if (rank <= Math.ceil(total * 0.7)) middleCount++;
+      if (standing <= 3) contenderCount++;
+      else if (standing <= Math.ceil(total * 0.7)) middleCount++;
       else rebuildCount++;
 
-      if (rank <= playoffSlots) playoffTeams++;
+      if (standing <= playoffSlots) playoffTeams++;
 
       for (const pid of userRoster.players || []) {
         const pData = playersDb[pid];
@@ -488,7 +549,7 @@ export async function fetchPortfolioSummary(
     totalLosses,
     totalTies,
     winRate,
-    leagueRecords: leagueRecords.sort((a, b) => a.rank - b.rank),
+    leagueRecords: leagueRecords.sort((a, b) => a.standing - b.standing),
     contenderCount,
     middleCount,
     rebuildCount,
