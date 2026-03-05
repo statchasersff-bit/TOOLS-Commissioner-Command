@@ -7,6 +7,14 @@ import {
   fetchSleeperLeagueFull,
   fetchPortfolioSummary,
 } from "./sleeper";
+import {
+  startCrawl,
+  pauseCrawl,
+  resumeCrawl,
+  getCrawlStatus,
+  searchTrades,
+  getTradeStats,
+} from "./tradeCrawler";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -85,6 +93,74 @@ export async function registerRoutes(
     } catch (err: any) {
       console.error("Portfolio summary error:", err);
       res.status(500).json({ error: err.message || "Failed to fetch portfolio summary" });
+    }
+  });
+
+  app.post("/api/crawler/start", async (req, res) => {
+    try {
+      const { username } = req.body;
+      if (!username) {
+        return res.status(400).json({ error: "username is required" });
+      }
+      const status = await startCrawl(username);
+      res.json(status);
+    } catch (err: any) {
+      console.error("Crawler start error:", err);
+      res.status(500).json({ error: err.message || "Failed to start crawler" });
+    }
+  });
+
+  app.post("/api/crawler/pause", async (_req, res) => {
+    try {
+      const status = await pauseCrawl();
+      res.json(status);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || "Failed to pause crawler" });
+    }
+  });
+
+  app.post("/api/crawler/resume", async (_req, res) => {
+    try {
+      const status = await resumeCrawl();
+      res.json(status);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || "Failed to resume crawler" });
+    }
+  });
+
+  app.get("/api/crawler/status", async (_req, res) => {
+    try {
+      const status = await getCrawlStatus();
+      res.json(status);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || "Failed to get crawler status" });
+    }
+  });
+
+  app.get("/api/trades/search", async (req, res) => {
+    try {
+      const result = await searchTrades({
+        q: req.query.q as string,
+        format: req.query.format as string,
+        scoring: req.query.scoring as string,
+        leagueSize: req.query.leagueSize ? parseInt(req.query.leagueSize as string) : undefined,
+        season: req.query.season as string,
+        page: req.query.page ? parseInt(req.query.page as string) : 1,
+        limit: req.query.limit ? parseInt(req.query.limit as string) : 50,
+      });
+      res.json(result);
+    } catch (err: any) {
+      console.error("Trade search error:", err);
+      res.status(500).json({ error: err.message || "Failed to search trades" });
+    }
+  });
+
+  app.get("/api/trades/stats", async (_req, res) => {
+    try {
+      const stats = await getTradeStats();
+      res.json(stats);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || "Failed to get trade stats" });
     }
   });
 

@@ -18,7 +18,7 @@ import { PortfolioConnect, PortfolioMyLeagues, PortfolioSummary } from "./tabs/P
 import { DashboardOverview, DashboardSnapshot } from "./tabs/Dashboard";
 import { RosterComparison } from "./tabs/LeagueAnalyzer";
 import { RosterBreakdown } from "./tabs/TeamBreakdown";
-import { TradeFinder, TradeTargets, TradeBlockScanner } from "./tabs/TradeCenter";
+import { TradeFinder, TradeTargets, TradeBlockScanner, TradeCalculator, TradeDatabase } from "./tabs/TradeCenter";
 import { PickDistribution } from "./tabs/DraftCapital";
 import { PositionalSurplus, MarketValue } from "./tabs/LeagueMarket";
 import { LeagueIntelligence } from "./tabs/Insights";
@@ -254,6 +254,8 @@ export default function DynastyCommandCenter() {
       case "league-analyzer:league-intelligence": return <LeagueIntelligence league={league} userTeam={userTeam} />;
       case "league-analyzer:roster-comparison": return <RosterComparison league={league} />;
       case "dashboard:roster-breakdown": return <RosterBreakdown league={league} userTeam={userTeam} />;
+      case "trade-center:trade-database": return <TradeDatabase league={league} />;
+      case "trade-center:trade-calculator": return <TradeCalculator league={league} userTeam={userTeam} />;
       case "trade-center:trade-finder": return <TradeFinder league={league} userTeam={userTeam} />;
       case "trade-center:trade-targets": return <TradeTargets league={league} userTeam={userTeam} />;
       case "trade-center:trade-block": return <TradeBlockScanner league={league} />;

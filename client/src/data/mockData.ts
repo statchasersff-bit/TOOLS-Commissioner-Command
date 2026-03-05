@@ -278,6 +278,8 @@ export const NAV_CONFIG: MainTabConfig[] = [
     id: "trade-center",
     label: "Trade Center",
     subTabs: [
+      { id: "trade-database", label: "Trade Database" },
+      { id: "trade-calculator", label: "Trade Calculator" },
       { id: "trade-finder", label: "Trade Finder" },
       { id: "trade-targets", label: "Trade Targets" },
       { id: "trade-block", label: "Trade Block Scanner" },

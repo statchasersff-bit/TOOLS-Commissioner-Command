@@ -94,3 +94,50 @@ export interface SleeperLeagueSummary {
   format: string;
   status: string;
 }
+
+export interface TradeAssetPlayer {
+  sleeperId: string;
+  name: string;
+  pos: string;
+  age: number;
+  team: string;
+}
+
+export interface TradeAssetPick {
+  season: string;
+  round: number;
+  originalOwnerName: string;
+}
+
+export interface TradeSide {
+  rosterId: number;
+  teamName: string;
+  ownerName: string;
+  playersReceived: TradeAssetPlayer[];
+  picksReceived: TradeAssetPick[];
+}
+
+export interface TradeRecord {
+  tradeId: string;
+  season: string;
+  week: number;
+  timestamp: number;
+  leagueName: string;
+  leagueFormat: string;
+  leagueScoringFormat: string;
+  leagueTotalRosters: number;
+  sides: TradeSide[];
+}
+
+export interface CrawlStatus {
+  status: "idle" | "running" | "paused" | "completed";
+  seedUsername: string | null;
+  currentDegree: number;
+  maxDegree: number;
+  leaguesDiscovered: number;
+  leaguesCrawled: number;
+  tradesCollected: number;
+  usersDiscovered: number;
+  startedAt: string | null;
+  updatedAt: string | null;
+}
