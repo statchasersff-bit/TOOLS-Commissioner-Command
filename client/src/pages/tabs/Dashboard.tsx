@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, Fragment } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -7,7 +7,7 @@ import { InsightCallout } from "@/components/InsightCallout";
 import { SectionHeader } from "@/components/SectionHeader";
 import { getTeamTier, getTierColor, generateInsights } from "@/data/mockData";
 import type { League, Team } from "@/types";
-import { Trophy, Zap, Target, Calendar, Users, Medal, ArrowRight, ArrowUp, ArrowDown, ArrowUpDown, Table, Lightbulb, Compass, Flame, Sprout, Archive } from "lucide-react";
+import { Trophy, Zap, Target, Calendar, Users, Medal, ArrowRight, ArrowUp, ArrowDown, ArrowUpDown, Table, Lightbulb, Compass, Flame, Sprout, Archive, ChevronDown, ChevronUp } from "lucide-react";
 
 interface DashboardProps {
   league: League;
@@ -435,6 +435,18 @@ function PowerBar({ value, max }: { value: number; max: number }) {
   );
 }
 
+function posRankColor(rank: number): string {
+  if (rank <= 3) return "text-emerald-600 dark:text-emerald-400 bg-emerald-500/10";
+  if (rank <= 7) return "text-amber-600 dark:text-amber-400 bg-amber-500/10";
+  return "text-red-500 dark:text-red-400 bg-red-500/10";
+}
+
+function posBarColor(rank: number): string {
+  if (rank <= 3) return "bg-emerald-500";
+  if (rank <= 7) return "bg-amber-500";
+  return "bg-red-400";
+}
+
 type SortKey = "name" | "overall" | "starters" | "depth" | "youth" | "picks";
 
 function SortableHeader({ label, sortKey, activeSortKey, sortDir, onSort, className }: {
@@ -465,6 +477,16 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
   const maxOverall = Math.max(...teams.map(t => t.metrics.overall), 1);
   const [sortKey, setSortKey] = useState<SortKey>("overall");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+
+  const toggleRow = (teamId: string) => {
+    setExpandedRows(prev => {
+      const next = new Set(prev);
+      if (next.has(teamId)) next.delete(teamId);
+      else next.add(teamId);
+      return next;
+    });
+  };
 
   function handleSort(key: SortKey) {
     if (sortKey === key) {
@@ -474,6 +496,19 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
       setSortDir("desc");
     }
   }
+
+  const posRanks = useMemo(() => {
+    const positions = ["qb", "rb", "wr", "te"] as const;
+    const rankMap: Record<string, Record<string, number>> = {};
+    positions.forEach(pos => {
+      const sorted = [...teams].sort((a, b) => b.metrics[pos] - a.metrics[pos]);
+      sorted.forEach((t, i) => {
+        if (!rankMap[t.id]) rankMap[t.id] = {};
+        rankMap[t.id][pos] = i + 1;
+      });
+    });
+    return rankMap;
+  }, [teams]);
 
   const sortedTeams = useMemo(() => {
     const accessor: Record<SortKey, (t: Team) => number | string> = {
@@ -494,12 +529,38 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
     });
   }, [teams, sortKey, sortDir]);
 
+  const leaders = useMemo(() => [
+    { label: "Best QB Room", team: [...teams].sort((a, b) => b.metrics.qb - a.metrics.qb)[0] },
+    { label: "Best RB Room", team: [...teams].sort((a, b) => b.metrics.rb - a.metrics.rb)[0] },
+    { label: "Best WR Room", team: [...teams].sort((a, b) => b.metrics.wr - a.metrics.wr)[0] },
+    { label: "Best TE Room", team: [...teams].sort((a, b) => b.metrics.te - a.metrics.te)[0] },
+    { label: "Deepest Roster", team: [...teams].sort((a, b) => b.metrics.depth - a.metrics.depth)[0] },
+    { label: "Most Draft Capital", team: [...teams].sort((a, b) => b.picks.length - a.picks.length)[0] },
+  ], [teams]);
+
+  const colCount = 9;
+
   return (
     <div className="space-y-6">
       <SectionHeader
         title="League Power Rankings"
         subtitle="FantasyCalc algorithm ranking every roster based on starters, depth, youth, and draft capital."
       />
+
+      <div data-testid="league-dominators">
+        <div className="mb-4">
+          <h3 className="text-sm font-bold text-foreground">League Dominators</h3>
+          <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          {leaders.map(({ label, team }) => (
+            <Card key={label} className="p-3.5 hover-elevate" data-testid={`dominator-${label.toLowerCase().replace(/\s+/g, "-")}`}>
+              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">{label}</p>
+              <p className="text-sm font-bold mt-1 truncate">{team.owner}</p>
+            </Card>
+          ))}
+        </div>
+      </div>
 
       <div className="overflow-x-auto rounded-md border border-border/60" data-testid="power-rankings-table">
         <table className="w-full text-sm">
@@ -528,12 +589,12 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
               <th className="bg-muted/30 dark:bg-muted/20" rowSpan={2} />
             </tr>
             <tr className="border-b border-border bg-muted/30 dark:bg-muted/20">
-              <SortableHeader label="Overall" sortKey="overall" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+              <SortableHeader label="Power" sortKey="overall" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
               <th className="px-4 py-3 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Tier</th>
               <SortableHeader label="Starters" sortKey="starters" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="border-l border-border/30" />
               <SortableHeader label="Depth" sortKey="depth" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
               <SortableHeader label="Youth" sortKey="youth" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-              <SortableHeader label="Picks" sortKey="picks" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="border-l border-border/30" />
+              <SortableHeader label="Draft" sortKey="picks" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="border-l border-border/30" />
             </tr>
           </thead>
           <tbody>
@@ -542,46 +603,115 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
               const tier = getTeamTier(team.metrics.overall);
               const isUser = team.id === userTeam.id;
               const isEven = idx % 2 === 0;
+              const isExpanded = expandedRows.has(team.id);
               const rowBg = isUser
                 ? "bg-[#0b3a7a]/5 dark:bg-blue-400/8"
                 : isEven ? "bg-background" : "bg-muted/10 dark:bg-muted/5";
 
+              const teamPosRanks = posRanks[team.id] || {};
+              const topPositions = (["qb", "rb", "wr", "te"] as const)
+                .map(p => ({ pos: p.toUpperCase(), rank: teamPosRanks[p] || 0 }))
+                .filter(p => p.rank <= 3)
+                .sort((a, b) => a.rank - b.rank);
+
               return (
-                <tr
-                  key={team.id}
-                  className={`border-b border-border/20 transition-colors hover:bg-muted/20 dark:hover:bg-muted/15 ${rowBg}`}
-                  data-testid={`ranking-row-${team.id}`}
-                >
-                  <td className={`px-4 py-3.5 whitespace-nowrap sticky left-0 z-10 ${isUser ? "bg-[#0b3a7a]/5 dark:bg-blue-400/8" : rowBg}`}>
-                    <RankBadge rank={rank} />
-                  </td>
-                  <td className="px-4 py-3.5 whitespace-nowrap">
-                    <div className="flex items-center gap-2">
-                      <div>
-                        <span className={`font-semibold text-foreground ${isUser ? "text-[#0b3a7a] dark:text-blue-400" : ""}`}>{team.name}</span>
-                        <span className="text-xs text-muted-foreground ml-2">({team.owner})</span>
+                <Fragment key={team.id}>
+                  <tr
+                    className={`border-b border-border/20 transition-colors hover:bg-muted/20 dark:hover:bg-muted/15 cursor-pointer ${rowBg}`}
+                    data-testid={`ranking-row-${team.id}`}
+                    onClick={() => toggleRow(team.id)}
+                  >
+                    <td className={`px-4 py-3.5 whitespace-nowrap sticky left-0 z-10 ${isUser ? "bg-[#0b3a7a]/5 dark:bg-blue-400/8" : rowBg}`}>
+                      <RankBadge rank={rank} />
+                    </td>
+                    <td className="px-4 py-3.5 whitespace-nowrap">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <div className="flex items-center gap-2">
+                          <span className={`font-semibold text-foreground ${isUser ? "text-[#0b3a7a] dark:text-blue-400" : ""}`}>{team.name}</span>
+                          <span className="text-xs text-muted-foreground">({team.owner})</span>
+                          {isUser && (
+                            <Badge className="text-[10px] px-1.5 py-0 bg-[#0b3a7a] text-white dark:bg-blue-600" data-testid="your-team-badge">You</Badge>
+                          )}
+                        </div>
+                        {topPositions.length > 0 && (
+                          <div className="flex gap-1">
+                            {topPositions.map(p => (
+                              <span key={p.pos} className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" data-testid={`badge-${team.id}-${p.pos.toLowerCase()}`}>
+                                {p.pos} #{p.rank}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                       </div>
-                      {isUser && (
-                        <Badge className="text-[10px] px-1.5 py-0 bg-[#0b3a7a] text-white dark:bg-blue-600" data-testid="your-team-badge">You</Badge>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3.5 whitespace-nowrap">
-                    <PowerBar value={team.metrics.overall} max={maxOverall} />
-                  </td>
-                  <td className="px-4 py-3.5 whitespace-nowrap">
-                    <Badge variant="outline" className={getTierColor(tier)}>{tier}</Badge>
-                  </td>
-                  <td className="px-4 py-3.5 whitespace-nowrap border-l border-border/15 font-medium">{team.metrics.starters}</td>
-                  <td className="px-4 py-3.5 whitespace-nowrap font-medium">{team.metrics.depth}</td>
-                  <td className="px-4 py-3.5 whitespace-nowrap font-medium">{team.metrics.youth}</td>
-                  <td className="px-4 py-3.5 whitespace-nowrap border-l border-border/15 font-medium">{team.metrics.picks}</td>
-                  <td className="px-4 py-3.5 whitespace-nowrap">
-                    <Button variant="ghost" size="sm" className="text-xs text-[#0b3a7a] dark:text-blue-400 hover:text-[#0b3a7a] dark:hover:text-blue-300" data-testid={`button-analyze-team-${team.id}`}>
-                      Analyze Team <ArrowRight className="w-3 h-3 ml-1" />
-                    </Button>
-                  </td>
-                </tr>
+                    </td>
+                    <td className="px-4 py-3.5 whitespace-nowrap">
+                      <PowerBar value={team.metrics.overall} max={maxOverall} />
+                    </td>
+                    <td className="px-4 py-3.5 whitespace-nowrap">
+                      <Badge variant="outline" className={getTierColor(tier)}>{tier}</Badge>
+                    </td>
+                    <td className="px-4 py-3.5 whitespace-nowrap border-l border-border/15 font-medium">{team.metrics.starters}</td>
+                    <td className="px-4 py-3.5 whitespace-nowrap font-medium">{team.metrics.depth}</td>
+                    <td className="px-4 py-3.5 whitespace-nowrap font-medium">{team.metrics.youth}</td>
+                    <td className="px-4 py-3.5 whitespace-nowrap border-l border-border/15 font-medium">{team.metrics.picks}</td>
+                    <td className="px-4 py-3.5 whitespace-nowrap">
+                      {isExpanded
+                        ? <ChevronUp className="w-4 h-4 text-muted-foreground" />
+                        : <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                      }
+                    </td>
+                  </tr>
+
+                  {isExpanded && (
+                    <tr className={`border-b border-border/20 ${rowBg}`} data-testid={`expanded-${team.id}`}>
+                      <td colSpan={colCount} className="px-6 py-4">
+                        <div className="flex flex-col md:flex-row gap-6">
+                          <div className="flex-1">
+                            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-3">Roster Strength Profile</p>
+                            <div className="space-y-2.5">
+                              {(["qb", "rb", "wr", "te"] as const).map(pos => {
+                                const score = team.metrics[pos];
+                                const pRank = teamPosRanks[pos] || teams.length;
+                                return (
+                                  <div key={pos} className="flex items-center gap-3" data-testid={`profile-${team.id}-${pos}`}>
+                                    <span className="text-xs font-bold w-6 uppercase">{pos}</span>
+                                    <div className="flex-1 h-3 bg-muted rounded-full overflow-hidden max-w-[200px]">
+                                      <div className={`h-full rounded-full transition-all ${posBarColor(pRank)}`} style={{ width: `${score}%` }} />
+                                    </div>
+                                    <span className="text-sm font-bold w-8 text-right">{score}</span>
+                                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${posRankColor(pRank)}`}>
+                                      #{pRank}
+                                    </span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+
+                          <div className="flex-1">
+                            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-3">Position Rank Heat Map</p>
+                            <div className="grid grid-cols-4 gap-2">
+                              {(["qb", "rb", "wr", "te"] as const).map(pos => {
+                                const pRank = teamPosRanks[pos] || teams.length;
+                                return (
+                                  <div key={pos} className={`text-center p-3 rounded-lg ${posRankColor(pRank)}`} data-testid={`heatmap-${team.id}-${pos}`}>
+                                    <p className="text-[10px] font-bold uppercase">{pos}</p>
+                                    <p className="text-xl font-bold mt-1">#{pRank}</p>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                            <div className="flex items-center gap-4 mt-3 text-[10px] text-muted-foreground">
+                              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500" /> 1-3</span>
+                              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500" /> 4-7</span>
+                              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-400" /> 8+</span>
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
               );
             })}
           </tbody>
