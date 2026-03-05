@@ -6,7 +6,7 @@ import { InsightCallout } from "@/components/InsightCallout";
 import { SectionHeader } from "@/components/SectionHeader";
 import { getTeamTier, getTierColor, generateInsights } from "@/data/mockData";
 import type { League, Team } from "@/types";
-import { Trophy, Zap, Target, Calendar, Users, Medal, ArrowRight, Table, Lightbulb } from "lucide-react";
+import { Trophy, Zap, Target, Calendar, Users, Medal, ArrowRight, Table, Lightbulb, Compass, Flame, Sprout, Archive } from "lucide-react";
 
 interface DashboardProps {
   league: League;
@@ -61,6 +61,155 @@ function SnapshotStat({ label, value, context, contextColor, icon: Icon, testId 
       <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mt-1.5">{label}</p>
       <p className={`text-[11px] font-medium mt-1 ${contextColor || "text-muted-foreground"}`}>{context}</p>
     </div>
+  );
+}
+
+function getWinNowScore(team: Team, league: League): number {
+  const sorted = [...league.teams].sort((a, b) => b.metrics.starters - a.metrics.starters);
+  const starterRank = sorted.findIndex(t => t.id === team.id) + 1;
+  const starterPct = 1 - (starterRank - 1) / league.teams.length;
+
+  const depthSorted = [...league.teams].sort((a, b) => b.metrics.depth - a.metrics.depth);
+  const depthRank = depthSorted.findIndex(t => t.id === team.id) + 1;
+  const depthPct = 1 - (depthRank - 1) / league.teams.length;
+
+  const raw = starterPct * 0.7 + depthPct * 0.3;
+  return Math.round(raw * 100) / 10;
+}
+
+function getYouthScore(team: Team, league: League): number {
+  const sorted = [...league.teams].sort((a, b) => b.metrics.youth - a.metrics.youth);
+  const youthRank = sorted.findIndex(t => t.id === team.id) + 1;
+  const youthPct = 1 - (youthRank - 1) / league.teams.length;
+
+  const starters = team.roster.filter(p => p.starter);
+  const avgAge = starters.length > 0 ? starters.reduce((s, p) => s + p.age, 0) / starters.length : 27;
+  const ageFactor = Math.max(0, Math.min(1, (30 - avgAge) / 8));
+
+  const raw = youthPct * 0.6 + ageFactor * 0.4;
+  return Math.round(raw * 100) / 10;
+}
+
+function getDraftCapitalLevel(team: Team, league: League): "High" | "Medium" | "Low" {
+  const total = league.teams.length;
+  const sorted = [...league.teams].sort((a, b) => b.metrics.picks - a.metrics.picks);
+  const pickRank = sorted.findIndex(t => t.id === team.id) + 1;
+  const pct = pickRank / total;
+  if (pct <= 0.33) return "High";
+  if (pct <= 0.66) return "Medium";
+  return "Low";
+}
+
+function getStrategy(winNow: number, youth: number, capital: "High" | "Medium" | "Low"): { label: string; color: string } {
+  if (winNow >= 7 && youth >= 6) return { label: "Dynasty Powerhouse", color: "text-emerald-600 dark:text-emerald-400" };
+  if (winNow >= 7) return { label: "Win-Now Contender", color: "text-blue-600 dark:text-blue-400" };
+  if (winNow >= 5 && youth >= 5) return { label: "Soft Contender", color: "text-blue-500 dark:text-blue-400" };
+  if (winNow >= 5) return { label: "Aging Contender", color: "text-amber-600 dark:text-amber-400" };
+  if (youth >= 7 && capital === "High") return { label: "Rising Dynasty", color: "text-emerald-500 dark:text-emerald-400" };
+  if (youth >= 6) return { label: "Youth Movement", color: "text-cyan-600 dark:text-cyan-400" };
+  if (capital === "High") return { label: "Capital Rich Rebuild", color: "text-purple-600 dark:text-purple-400" };
+  return { label: "Full Rebuild", color: "text-red-500 dark:text-red-400" };
+}
+
+function getDirection(team: Team): string {
+  const posScores = [
+    { pos: "QB", score: team.metrics.qb },
+    { pos: "RB", score: team.metrics.rb },
+    { pos: "WR", score: team.metrics.wr },
+    { pos: "TE", score: team.metrics.te },
+  ];
+  const weakest = posScores.reduce((min, p) => p.score < min.score ? p : min, posScores[0]);
+  const strongest = posScores.reduce((max, p) => p.score > max.score ? p : max, posScores[0]);
+
+  if (weakest.score < 30) return `Aggressively buy ${weakest.pos} depth`;
+  if (weakest.score < 50) return `Target ${weakest.pos} upgrades in trades`;
+  if (strongest.score >= 75 && weakest.score >= 50) return `Maintain balance, sell aging assets at peak`;
+  return `Shore up ${weakest.pos} while window is open`;
+}
+
+function ScoreBar({ value, max = 10, color }: { value: number; max?: number; color: string }) {
+  const pct = Math.min(100, (value / max) * 100);
+  return (
+    <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
+      <div className={`h-full rounded-full transition-all ${color}`} style={{ width: `${pct}%` }} />
+    </div>
+  );
+}
+
+function TeamIdentityCard({ league, userTeam }: DashboardProps) {
+  const winNow = getWinNowScore(userTeam, league);
+  const youth = getYouthScore(userTeam, league);
+  const capital = getDraftCapitalLevel(userTeam, league);
+  const strategy = getStrategy(winNow, youth, capital);
+  const direction = getDirection(userTeam);
+
+  const capitalColor = capital === "High" ? "text-emerald-600 dark:text-emerald-400" : capital === "Medium" ? "text-amber-600 dark:text-amber-400" : "text-red-500 dark:text-red-400";
+  const capitalBg = capital === "High" ? "bg-emerald-100 dark:bg-emerald-900/40 border-emerald-200 dark:border-emerald-800" : capital === "Medium" ? "bg-amber-100 dark:bg-amber-900/40 border-amber-200 dark:border-amber-800" : "bg-red-100 dark:bg-red-900/40 border-red-200 dark:border-red-800";
+
+  return (
+    <Card className="p-6" data-testid="team-identity-card">
+      <div className="mb-5">
+        <h3 className="text-base font-bold text-foreground">Team Identity</h3>
+        <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="space-y-5">
+          <div data-testid="identity-win-now">
+            <div className="flex items-center justify-between mb-1.5">
+              <div className="flex items-center gap-2">
+                <Flame className="w-4 h-4 text-orange-500" />
+                <span className="text-sm font-semibold text-foreground">Win-Now Score</span>
+              </div>
+              <span className="text-lg font-bold text-foreground">{winNow} <span className="text-xs font-normal text-muted-foreground">/ 10</span></span>
+            </div>
+            <ScoreBar value={winNow} color="bg-orange-500" />
+          </div>
+
+          <div data-testid="identity-youth">
+            <div className="flex items-center justify-between mb-1.5">
+              <div className="flex items-center gap-2">
+                <Sprout className="w-4 h-4 text-emerald-500" />
+                <span className="text-sm font-semibold text-foreground">Youth Score</span>
+              </div>
+              <span className="text-lg font-bold text-foreground">{youth} <span className="text-xs font-normal text-muted-foreground">/ 10</span></span>
+            </div>
+            <ScoreBar value={youth} color="bg-emerald-500" />
+          </div>
+
+          <div data-testid="identity-draft-capital">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Archive className="w-4 h-4 text-[#0b3a7a] dark:text-blue-400" />
+                <span className="text-sm font-semibold text-foreground">Draft Capital</span>
+              </div>
+              <Badge className={`text-xs font-bold border ${capitalBg} ${capitalColor}`} data-testid="identity-capital-badge">
+                {capital}
+              </Badge>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex flex-col justify-between">
+          <div className="rounded-lg bg-muted/40 border border-border/50 p-5" data-testid="identity-strategy">
+            <div className="flex items-center gap-2 mb-3">
+              <Compass className="w-4 h-4 text-[#d4af37]" />
+              <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Suggested Strategy</span>
+            </div>
+            <p className={`text-xl font-bold leading-tight ${strategy.color}`} data-testid="identity-strategy-label">
+              {strategy.label}
+            </p>
+          </div>
+
+          <div className="rounded-lg bg-[#0b3a7a]/5 dark:bg-blue-400/5 border border-[#0b3a7a]/10 dark:border-blue-400/10 p-4 mt-3" data-testid="identity-direction">
+            <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Suggested Direction</span>
+            <p className="text-sm font-semibold text-foreground mt-1.5 leading-relaxed" data-testid="identity-direction-text">
+              "{direction}"
+            </p>
+          </div>
+        </div>
+      </div>
+    </Card>
   );
 }
 
@@ -187,6 +336,8 @@ export function DashboardOverview({ league, userTeam, onNavigate }: DashboardOve
           />
         </div>
       </Card>
+
+      <TeamIdentityCard league={league} userTeam={userTeam} />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         <Card className="p-6">
