@@ -106,6 +106,7 @@ function normalizeApiResponse(
     source: "fantasycalc",
     format,
     updatedAt: new Date().toISOString(),
+    cachedAt: new Date().toISOString(),
     valuesBySleeperId,
     players,
     unmatched,

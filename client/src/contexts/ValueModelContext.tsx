@@ -9,6 +9,21 @@ const VALUE_SOURCES: ValueSourceOption[] = [
   { id: "custom", label: "Custom Upload", description: "Upload your own CSV of player values. Coming soon.", active: false },
 ];
 
+export interface UnmatchedRow {
+  name: string;
+  pos: string;
+  team: string;
+  value: number;
+}
+
+export interface ValueDiagnostics {
+  updatedAt: string;
+  mappedCount: number;
+  unmatchedCount: number;
+  unmatchedRows: UnmatchedRow[];
+  fetchedAt: string | null;
+}
+
 interface ValueModel {
   sourceId: ValueSourceId;
   sources: ValueSourceOption[];
@@ -17,6 +32,7 @@ interface ValueModel {
   isLoading: boolean;
   isSnapshot: boolean;
   unmatchedCount: number;
+  diagnostics: ValueDiagnostics;
   getPlayerValue: (player: Player) => number;
   getPickValue: (pick: Pick) => number;
   calculateTeamValue: (team: Team) => number;
@@ -28,11 +44,18 @@ const ValueModelContext = createContext<ValueModel | null>(null);
 export function ValueModelProvider({ children }: { children: React.ReactNode }) {
   const [sourceId, setSourceIdRaw] = useState<ValueSourceId>("fantasycalc");
   const [isRecalculating, setIsRecalculating] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [isSnapshot, setIsSnapshot] = useState(false);
   const [unmatchedCount, setUnmatchedCount] = useState(0);
   const [valuesBySleeperId, setValuesBySleeperId] = useState<Record<string, number>>({});
   const [nameValueMap, setNameValueMap] = useState<Record<string, number>>({});
+  const [diagnostics, setDiagnostics] = useState<ValueDiagnostics>({
+    updatedAt: "",
+    mappedCount: 0,
+    unmatchedCount: 0,
+    unmatchedRows: [],
+    fetchedAt: null,
+  });
 
   useEffect(() => {
     if (sourceId !== "fantasycalc") return;
@@ -44,7 +67,7 @@ export function ValueModelProvider({ children }: { children: React.ReactNode }) 
         if (!r.ok) throw new Error(`API error ${r.status}`);
         return r.json();
       })
-      .then((data: { valuesBySleeperId: Record<string, number>; players: Array<{ name: string; pos: string; value: number }>; unmatched: any[]; updatedAt: string }) => {
+      .then((data: { valuesBySleeperId: Record<string, number>; players: Array<{ name: string; pos: string; value: number }>; unmatched: UnmatchedRow[]; updatedAt: string }) => {
         if (cancelled) return;
         setValuesBySleeperId(data.valuesBySleeperId);
         const byName: Record<string, number> = {};
@@ -52,14 +75,28 @@ export function ValueModelProvider({ children }: { children: React.ReactNode }) 
           byName[`${p.name.toLowerCase().trim()}|${p.pos}`] = p.value;
         }
         setNameValueMap(byName);
-        setUnmatchedCount(data.unmatched?.length || 0);
+        const uc = data.unmatched?.length || 0;
+        setUnmatchedCount(uc);
         setIsSnapshot(data.updatedAt === "snapshot");
+        setDiagnostics({
+          updatedAt: data.updatedAt,
+          mappedCount: Object.keys(data.valuesBySleeperId).length,
+          unmatchedCount: uc,
+          unmatchedRows: data.unmatched || [],
+          fetchedAt: new Date().toISOString(),
+        });
         setIsLoading(false);
       })
-      .catch(() => {
+      .catch((err) => {
         if (cancelled) return;
+        console.warn("[ValueModel] FantasyCalc fetch failed, using mock fallback:", err);
         setIsLoading(false);
         setIsSnapshot(true);
+        setDiagnostics((prev) => ({
+          ...prev,
+          updatedAt: "fetch-failed",
+          fetchedAt: new Date().toISOString(),
+        }));
       });
 
     return () => { cancelled = true; };
@@ -76,12 +113,12 @@ export function ValueModelProvider({ children }: { children: React.ReactNode }) 
   }, []);
 
   const getPlayerValue = useCallback((player: Player): number => {
-    if (sourceId === "fantasycalc" && Object.keys(valuesBySleeperId).length > 0) {
+    if (sourceId === "fantasycalc" && valuesBySleeperId && Object.keys(valuesBySleeperId).length > 0) {
       if (player.sleeperId && valuesBySleeperId[player.sleeperId] !== undefined) {
         return valuesBySleeperId[player.sleeperId];
       }
       const nameKey = `${player.name.toLowerCase().trim()}|${player.pos}`;
-      if (nameValueMap[nameKey] !== undefined) {
+      if (nameValueMap && nameValueMap[nameKey] !== undefined) {
         return nameValueMap[nameKey];
       }
     }
@@ -167,11 +204,12 @@ export function ValueModelProvider({ children }: { children: React.ReactNode }) 
     isLoading,
     isSnapshot,
     unmatchedCount,
+    diagnostics,
     getPlayerValue,
     getPickValue,
     calculateTeamValue,
     calculateMetrics,
-  }), [sourceId, setSourceId, isRecalculating, isLoading, isSnapshot, unmatchedCount, getPlayerValue, getPickValue, calculateTeamValue, calculateMetrics]);
+  }), [sourceId, setSourceId, isRecalculating, isLoading, isSnapshot, unmatchedCount, diagnostics, getPlayerValue, getPickValue, calculateTeamValue, calculateMetrics]);
 
   return (
     <ValueModelContext.Provider value={value}>

@@ -10,7 +10,7 @@ interface LeagueSelectorProps {
 export function LeagueSelector({ leagues, selectedLeagueId, onSelect }: LeagueSelectorProps) {
   return (
     <Select value={selectedLeagueId || ""} onValueChange={onSelect}>
-      <SelectTrigger className="w-[180px] text-sm rounded-full border-[#0b3a7a]/20 dark:border-blue-400/20 hover:border-[#d4af37] transition-colors" data-testid="select-league">
+      <SelectTrigger className="w-[180px] h-9 text-sm rounded-full border-[#0b3a7a]/30 dark:border-blue-400/25 bg-background hover:border-[#d4af37] dark:hover:border-[#d4af37] focus:ring-[#d4af37]/30 transition-all duration-200" data-testid="select-league">
         <SelectValue placeholder="Select League" />
       </SelectTrigger>
       <SelectContent>

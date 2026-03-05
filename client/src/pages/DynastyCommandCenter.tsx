@@ -9,6 +9,7 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { useValueModel } from "@/contexts/ValueModelContext";
 import { NAV_CONFIG, getLeagues } from "@/data/mockData";
 import type { League, Team } from "@/types";
+import { DataDiagnostics } from "@/components/DataDiagnostics";
 import { Share2, Download, LayoutDashboard, Loader2 } from "lucide-react";
 
 import { DashboardOverview, DashboardSnapshot, DashboardKeyInsights } from "./tabs/Dashboard";
@@ -209,20 +210,23 @@ export default function DynastyCommandCenter() {
       )}
 
       <main className="max-w-7xl mx-auto px-4 md:px-6 py-8 relative">
-        {isRecalculating && (
+        {(isRecalculating || (isLoading && selectedLeagueId)) && (
           <div className="absolute inset-0 z-30 flex items-start justify-center pt-24" data-testid="recalculating-overlay">
             <div className="bg-background/90 backdrop-blur-sm border border-border rounded-lg px-5 py-3 shadow-lg flex items-center gap-3">
               <Loader2 className="w-4 h-4 text-[#d4af37] animate-spin" />
-              <span className="text-sm font-semibold text-foreground">Recalculating league analysis...</span>
+              <span className="text-sm font-semibold text-foreground">
+                {isLoading ? "Loading FantasyCalc values..." : "Recalculating league analysis..."}
+              </span>
             </div>
           </div>
         )}
         <div
-          className={`transition-opacity duration-180 ${isTransitioning || isRecalculating ? "opacity-30" : "opacity-100"}`}
+          className={`transition-opacity duration-180 ${isTransitioning || isRecalculating || isLoading ? "opacity-30" : "opacity-100"}`}
         >
           {renderContent()}
         </div>
       </main>
+      <DataDiagnostics />
     </div>
   );
 }
