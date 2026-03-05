@@ -24,55 +24,117 @@ interface TradeProps {
 }
 
 export function TradeFinder({ league, userTeam }: TradeProps) {
-  const { getPlayerValue, getRedraftValue } = useValueModel();
+  const { getPlayerValue, getRedraftValue, optimizeLineup } = useValueModel();
 
   const partners = useMemo(() => {
-    const calcScore = (team: Team) => {
-      const starters = team.roster.filter((p) => p.starter);
-      const redraftTotal = starters.reduce((s, p) => s + getRedraftValue(p), 0);
-      const dynastyTotal = team.roster.reduce((s, p) => s + getPlayerValue(p), 0);
-      const maxRedraft = Math.max(starters.length * 5000, 1);
-      const maxDynasty = Math.max(team.roster.length * 3000, 1);
-      const redraftScore = Math.min(99, Math.max(10, Math.round((redraftTotal / maxRedraft) * 100)));
-      const dynastyScore = Math.min(99, Math.max(10, Math.round((dynastyTotal / maxDynasty) * 100)));
-      return { redraftScore, dynastyScore };
-    };
+    const positions = ["QB", "RB", "WR", "TE"] as const;
+    const rosterPositions = league.rosterPositions || [];
 
-    const userScores = calcScore(userTeam);
+    const posRedraftTotals: Record<string, Record<string, number>> = {};
+    const posDynastyTotals: Record<string, Record<string, number>> = {};
+    league.teams.forEach(t => {
+      const roster = rosterPositions.length > 0 ? optimizeLineup(t.roster, rosterPositions) : t.roster;
+      posRedraftTotals[t.id] = {};
+      posDynastyTotals[t.id] = {};
+      positions.forEach(pos => {
+        posRedraftTotals[t.id][pos] = roster.filter(p => p.starter && p.pos === pos).reduce((s, p) => s + getRedraftValue(p), 0);
+        posDynastyTotals[t.id][pos] = t.roster.filter(p => p.pos === pos).reduce((s, p) => s + getPlayerValue(p), 0);
+      });
+    });
+
+    const posRedraftRanks: Record<string, Record<string, number>> = {};
+    const posDynastyRanks: Record<string, Record<string, number>> = {};
+    const total = league.teams.length;
+    positions.forEach(pos => {
+      const byRedraft = [...league.teams].sort((a, b) => (posRedraftTotals[b.id][pos] || 0) - (posRedraftTotals[a.id][pos] || 0));
+      byRedraft.forEach((t, i) => {
+        if (!posRedraftRanks[t.id]) posRedraftRanks[t.id] = {};
+        posRedraftRanks[t.id][pos] = i + 1;
+      });
+      const byDynasty = [...league.teams].sort((a, b) => (posDynastyTotals[b.id][pos] || 0) - (posDynastyTotals[a.id][pos] || 0));
+      byDynasty.forEach((t, i) => {
+        if (!posDynastyRanks[t.id]) posDynastyRanks[t.id] = {};
+        posDynastyRanks[t.id][pos] = i + 1;
+      });
+    });
+
+    const topThird = Math.ceil(total / 3);
+    const bottomStart = total - topThird + 1;
+
+    const userRedraft = posRedraftRanks[userTeam.id] || {};
+    const userDynasty = posDynastyRanks[userTeam.id] || {};
+
+    const totalRedraft = league.teams.map(t => {
+      const roster = rosterPositions.length > 0 ? optimizeLineup(t.roster, rosterPositions) : t.roster;
+      return { id: t.id, total: roster.filter(p => p.starter).reduce((s, p) => s + getRedraftValue(p), 0) };
+    });
+    totalRedraft.sort((a, b) => b.total - a.total);
+    const totalDynasty = league.teams.map(t => ({
+      id: t.id, total: t.roster.reduce((s, p) => s + getPlayerValue(p), 0),
+    }));
+    totalDynasty.sort((a, b) => b.total - a.total);
+    const overallRedraftRank: Record<string, number> = {};
+    const overallDynastyRank: Record<string, number> = {};
+    totalRedraft.forEach((e, i) => { overallRedraftRank[e.id] = i + 1; });
+    totalDynasty.forEach((e, i) => { overallDynastyRank[e.id] = i + 1; });
 
     return league.teams
       .filter((t) => t.id !== userTeam.id)
       .map((t) => {
-        const scores = calcScore(t);
+        const tRedraft = posRedraftRanks[t.id] || {};
+        const tDynasty = posDynastyRanks[t.id] || {};
         const tier = getTeamTier(t.metrics.overall);
 
         const redraftReasons: string[] = [];
         const dynastyReasons: string[] = [];
 
-        if (t.metrics.rb > 70 && userTeam.metrics.rb < 50) redraftReasons.push("RB surplus");
-        if (t.metrics.wr > 70 && userTeam.metrics.wr < 50) redraftReasons.push("WR surplus");
-        if (tier === "Contender" && t.metrics.te < 40) redraftReasons.push("Needs TE");
-        if (tier === "Contender" && t.metrics.qb < 50) redraftReasons.push("Needs QB");
+        positions.forEach(pos => {
+          if (tRedraft[pos] <= topThird && userRedraft[pos] >= bottomStart) {
+            redraftReasons.push(`${pos} surplus (they #${tRedraft[pos]}, you #${userRedraft[pos]})`);
+          }
+          if (tRedraft[pos] >= bottomStart && userRedraft[pos] <= topThird) {
+            redraftReasons.push(`Needs ${pos} (they #${tRedraft[pos]})`);
+          }
+        });
 
-        if (scores.redraftScore > scores.dynastyScore + 15) dynastyReasons.push("Win-now roster, dynasty weak");
-        if (scores.dynastyScore > scores.redraftScore + 15) redraftReasons.push("Strong dynasty, weak starters");
-        if (tier === "Rebuild") dynastyReasons.push("Rebuilding — selling vets");
-        if (t.picks.filter((p) => p.round === 1).length >= 3) dynastyReasons.push("Pick rich");
+        positions.forEach(pos => {
+          if (tDynasty[pos] <= topThird && userDynasty[pos] >= bottomStart) {
+            dynastyReasons.push(`${pos} surplus (they #${tDynasty[pos]}, you #${userDynasty[pos]})`);
+          }
+          if (tDynasty[pos] >= bottomStart && userDynasty[pos] <= topThird) {
+            dynastyReasons.push(`Needs ${pos} (they #${tDynasty[pos]})`);
+          }
+        });
 
-        const youngStars = t.roster.filter((p) => p.age <= 24 && getPlayerValue(p) >= 3000);
-        if (youngStars.length >= 3) dynastyReasons.push("Young core");
-
-        const agingVets = t.roster.filter((p) => p.starter && p.age >= 28 && getRedraftValue(p) >= 3000);
-        if (agingVets.length >= 3) redraftReasons.push("Aging vets to sell");
-
-        if (redraftReasons.length === 0 && dynastyReasons.length === 0) {
-          redraftReasons.push("Balanced");
+        const tOverallRedraft = overallRedraftRank[t.id] || total;
+        const tOverallDynasty = overallDynastyRank[t.id] || total;
+        if (tOverallDynasty <= topThird && tOverallRedraft >= bottomStart) {
+          const agingTargets = t.roster.filter(p => p.age >= 28 && getRedraftValue(p) >= 2000);
+          if (agingTargets.length > 0) {
+            redraftReasons.push(`Strong dynasty, weak redraft — ${agingTargets.length} aging target${agingTargets.length > 1 ? "s" : ""}`);
+          } else {
+            redraftReasons.push("Strong dynasty, weak redraft");
+          }
         }
 
-        return { ...t, redraftScore: scores.redraftScore, dynastyScore: scores.dynastyScore, redraftReasons, dynastyReasons, tier };
+        if (tOverallRedraft <= topThird && tOverallDynasty >= bottomStart) {
+          dynastyReasons.push("Win-now heavy, dynasty thin");
+        }
+
+        return {
+          ...t,
+          redraftRank: tOverallRedraft,
+          dynastyRank: tOverallDynasty,
+          redraftReasons,
+          dynastyReasons,
+          tier,
+          reasonCount: redraftReasons.length + dynastyReasons.length,
+        };
       })
-      .sort((a, b) => (b.redraftReasons.length + b.dynastyReasons.length) - (a.redraftReasons.length + a.dynastyReasons.length));
-  }, [league, userTeam, getPlayerValue, getRedraftValue]);
+      .sort((a, b) => b.reasonCount - a.reasonCount);
+  }, [league, userTeam, getPlayerValue, getRedraftValue, optimizeLineup]);
+
+  const total = league.teams.length;
 
   const columns = [
     { key: "name", header: "Team", sticky: true, sortable: true, sortAccessor: (row: any) => row.name, render: (row: any) => (
@@ -82,11 +144,15 @@ export function TradeFinder({ league, userTeam }: TradeProps) {
       </div>
     )},
     { key: "tier", header: "Tier", sortable: true, sortAccessor: (row: any) => row.metrics.overall, render: (row: any) => <Badge variant="outline" className={getTierColor(row.tier)}>{row.tier}</Badge> },
-    { key: "redraftScore", header: "Redraft", sortable: true, sortAccessor: (row: any) => row.redraftScore, render: (row: any) => (
-      <span className="font-bold text-base" data-testid={`text-redraft-score-${row.id}`}>{row.redraftScore}</span>
+    { key: "redraftRank", header: "Redraft", sortable: true, sortAccessor: (row: any) => row.redraftRank, render: (row: any) => (
+      <span className={cn("font-bold text-base", row.redraftRank <= Math.ceil(total / 3) ? "text-emerald-600 dark:text-emerald-400" : row.redraftRank >= total - Math.ceil(total / 3) + 1 ? "text-red-500 dark:text-red-400" : "text-foreground")} data-testid={`text-redraft-rank-${row.id}`}>
+        #{row.redraftRank}<span className="text-xs text-muted-foreground font-normal"> / {total}</span>
+      </span>
     )},
-    { key: "dynastyScore", header: "Dynasty", sortable: true, sortAccessor: (row: any) => row.dynastyScore, render: (row: any) => (
-      <span className="font-bold text-base" data-testid={`text-dynasty-score-${row.id}`}>{row.dynastyScore}</span>
+    { key: "dynastyRank", header: "Dynasty", sortable: true, sortAccessor: (row: any) => row.dynastyRank, render: (row: any) => (
+      <span className={cn("font-bold text-base", row.dynastyRank <= Math.ceil(total / 3) ? "text-emerald-600 dark:text-emerald-400" : row.dynastyRank >= total - Math.ceil(total / 3) + 1 ? "text-red-500 dark:text-red-400" : "text-foreground")} data-testid={`text-dynasty-rank-${row.id}`}>
+        #{row.dynastyRank}<span className="text-xs text-muted-foreground font-normal"> / {total}</span>
+      </span>
     )},
     { key: "redraftReasons", header: "Redraft Reasons", sortable: true, sortAccessor: (row: any) => row.redraftReasons.length, render: (row: any) => (
       <div className="flex flex-wrap gap-1">
@@ -111,7 +177,7 @@ export function TradeFinder({ league, userTeam }: TradeProps) {
 
   return (
     <div className="space-y-8">
-      <SectionHeader title="Trade Finder" subtitle="Best trade partners based on roster needs" />
+      <SectionHeader title="Trade Finder" subtitle="Best trade partners based on positional surplus/deficit and roster imbalance" />
       <DataTable columns={columns} data={partners} />
     </div>
   );

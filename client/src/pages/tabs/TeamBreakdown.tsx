@@ -6,6 +6,7 @@ import { KpiCard } from "@/components/KpiCard";
 import { InsightCallout } from "@/components/InsightCallout";
 import { SectionHeader } from "@/components/SectionHeader";
 import { getPositionColor } from "@/data/mockData";
+import { useValueModel } from "@/contexts/ValueModelContext";
 import type { League, Team, Player } from "@/types";
 import { cn } from "@/lib/utils";
 import { Search } from "lucide-react";
@@ -17,22 +18,50 @@ interface TeamProps {
 
 export function RosterBreakdown({ league, userTeam }: TeamProps) {
   const [search, setSearch] = useState("");
+  const { getRedraftValue, getPlayerValue, optimizeLineup } = useValueModel();
 
-  const leagueAvg = {
-    qb: Math.round(league.teams.reduce((s, t) => s + t.metrics.qb, 0) / league.teams.length),
-    rb: Math.round(league.teams.reduce((s, t) => s + t.metrics.rb, 0) / league.teams.length),
-    wr: Math.round(league.teams.reduce((s, t) => s + t.metrics.wr, 0) / league.teams.length),
-    te: Math.round(league.teams.reduce((s, t) => s + t.metrics.te, 0) / league.teams.length),
-  };
+  const posRanks = useMemo(() => {
+    const positions = ["QB", "RB", "WR", "TE"] as const;
+    const total = league.teams.length;
+    const rosterPositions = league.rosterPositions || [];
 
-  const positions: Array<{ pos: string; score: number; avg: number }> = [
-    { pos: "QB", score: userTeam.metrics.qb, avg: leagueAvg.qb },
-    { pos: "RB", score: userTeam.metrics.rb, avg: leagueAvg.rb },
-    { pos: "WR", score: userTeam.metrics.wr, avg: leagueAvg.wr },
-    { pos: "TE", score: userTeam.metrics.te, avg: leagueAvg.te },
+    const redraftRanks: Record<string, Record<string, number>> = {};
+    const dynastyRanks: Record<string, Record<string, number>> = {};
+
+    positions.forEach(pos => {
+      const redraftTotals = league.teams.map(t => {
+        const roster = rosterPositions.length > 0 ? optimizeLineup(t.roster, rosterPositions) : t.roster;
+        const starters = roster.filter(p => p.starter && p.pos === pos);
+        return { id: t.id, total: starters.reduce((s, p) => s + getRedraftValue(p), 0) };
+      });
+      redraftTotals.sort((a, b) => b.total - a.total);
+      redraftTotals.forEach((entry, i) => {
+        if (!redraftRanks[entry.id]) redraftRanks[entry.id] = {};
+        redraftRanks[entry.id][pos] = i + 1;
+      });
+
+      const dynastyTotals = league.teams.map(t => {
+        const allAtPos = t.roster.filter(p => p.pos === pos);
+        return { id: t.id, total: allAtPos.reduce((s, p) => s + getPlayerValue(p), 0) };
+      });
+      dynastyTotals.sort((a, b) => b.total - a.total);
+      dynastyTotals.forEach((entry, i) => {
+        if (!dynastyRanks[entry.id]) dynastyRanks[entry.id] = {};
+        dynastyRanks[entry.id][pos] = i + 1;
+      });
+    });
+
+    return { redraftRanks, dynastyRanks, total };
+  }, [league, getRedraftValue, getPlayerValue, optimizeLineup]);
+
+  const positions: Array<{ pos: string; redraftRank: number; dynastyRank: number; total: number }> = [
+    { pos: "QB", redraftRank: posRanks.redraftRanks[userTeam.id]?.QB || posRanks.total, dynastyRank: posRanks.dynastyRanks[userTeam.id]?.QB || posRanks.total, total: posRanks.total },
+    { pos: "RB", redraftRank: posRanks.redraftRanks[userTeam.id]?.RB || posRanks.total, dynastyRank: posRanks.dynastyRanks[userTeam.id]?.RB || posRanks.total, total: posRanks.total },
+    { pos: "WR", redraftRank: posRanks.redraftRanks[userTeam.id]?.WR || posRanks.total, dynastyRank: posRanks.dynastyRanks[userTeam.id]?.WR || posRanks.total, total: posRanks.total },
+    { pos: "TE", redraftRank: posRanks.redraftRanks[userTeam.id]?.TE || posRanks.total, dynastyRank: posRanks.dynastyRanks[userTeam.id]?.TE || posRanks.total, total: posRanks.total },
   ];
 
-  const weakest = [...positions].sort((a, b) => (a.score - a.avg) - (b.score - b.avg))[0];
+  const weakest = [...positions].sort((a, b) => a.dynastyRank - b.dynastyRank).reverse()[0];
 
   const starters = [...userTeam.roster.filter((p) => p.starter)].sort((a, b) => b.value - a.value);
   const bench = [...userTeam.roster.filter((p) => !p.starter)].sort((a, b) => b.value - a.value);
@@ -62,24 +91,40 @@ export function RosterBreakdown({ league, userTeam }: TeamProps) {
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {positions.map((p) => (
-            <Card key={p.pos} className="p-5 hover-elevate" data-testid={`strength-${p.pos.toLowerCase()}`}>
-              <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">{p.pos}</p>
-              <p className="text-3xl font-bold mt-1.5">{p.score}</p>
-              <div className="flex items-center gap-1.5 mt-2">
-                <span className="text-xs text-muted-foreground">Avg: {p.avg}</span>
-                <Badge variant={p.score >= p.avg ? "default" : "outline"} className="text-xs">
-                  {p.score >= p.avg ? "+" : ""}{p.score - p.avg}
-                </Badge>
-              </div>
-            </Card>
-          ))}
+          {positions.map((p) => {
+            const rankColor = (rank: number, total: number) => {
+              const topThird = Math.ceil(total / 3);
+              const bottomThird = total - topThird;
+              if (rank <= topThird) return "text-emerald-600 dark:text-emerald-400";
+              if (rank <= bottomThird) return "text-foreground";
+              return "text-red-500 dark:text-red-400";
+            };
+            return (
+              <Card key={p.pos} className="p-5 hover-elevate" data-testid={`strength-${p.pos.toLowerCase()}`}>
+                <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">{p.pos}</p>
+                <div className="mt-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-semibold text-muted-foreground uppercase">Redraft</span>
+                    <span className={cn("text-lg font-bold", rankColor(p.redraftRank, p.total))} data-testid={`text-redraft-rank-${p.pos.toLowerCase()}`}>
+                      #{p.redraftRank}<span className="text-xs text-muted-foreground font-normal"> / {p.total}</span>
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-semibold text-muted-foreground uppercase">Dynasty</span>
+                    <span className={cn("text-lg font-bold", rankColor(p.dynastyRank, p.total))} data-testid={`text-dynasty-rank-${p.pos.toLowerCase()}`}>
+                      #{p.dynastyRank}<span className="text-xs text-muted-foreground font-normal"> / {p.total}</span>
+                    </span>
+                  </div>
+                </div>
+              </Card>
+            );
+          })}
         </div>
 
-        {weakest.score < weakest.avg && (
+        {weakest.dynastyRank > Math.ceil(weakest.total * 0.66) && (
           <div className="mt-4">
             <InsightCallout
-              text={`${weakest.pos} depth is below league average (${weakest.score} vs ${weakest.avg}). Consider targeting ${weakest.pos} in trades.`}
+              text={`${weakest.pos} ranks near the bottom of the league (#${weakest.dynastyRank} / ${weakest.total} dynasty). Consider targeting ${weakest.pos} in trades.`}
               type="negative"
             />
           </div>
