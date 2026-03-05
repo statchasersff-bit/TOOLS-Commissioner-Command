@@ -65,7 +65,7 @@ export default function DynastyCommandCenter() {
   const [fetchedLeague, setFetchedLeague] = useState<{ league: League; userTeamId: string | null } | null>(null);
   const [isLeagueLoading, setIsLeagueLoading] = useState(false);
 
-  const { isRecalculating, isLoading, getPlayerValue, getPickValue, calculateMetrics, optimizeLineup } = useValueModel();
+  const { isRecalculating, isLoading, getPlayerValue, getPickValue, calculateAllTeamMetrics, optimizeLineup } = useValueModel();
   const sleeper = useSleeper();
 
   const sleeperLeaguesAsLeagues = useMemo(() => {
@@ -107,19 +107,23 @@ export default function DynastyCommandCenter() {
     if (!fetchedLeague?.league) return null;
     const raw = fetchedLeague.league;
     const positions = raw.rosterPositions;
+    const adjustedTeams = raw.teams.map((team) => {
+      const valuedRoster = team.roster.map((p) => ({ ...p, value: getPlayerValue(p) }));
+      const roster = positions
+        ? optimizeLineup(valuedRoster, positions)
+        : valuedRoster;
+      const picks = team.picks.map((p) => ({ ...p, value: getPickValue(p) }));
+      return { ...team, roster, picks };
+    });
+    const metricsMap = calculateAllTeamMetrics(adjustedTeams, positions);
     return {
       ...raw,
-      teams: raw.teams.map((team) => {
-        const valuedRoster = team.roster.map((p) => ({ ...p, value: getPlayerValue(p) }));
-        const roster = positions
-          ? optimizeLineup(valuedRoster, positions)
-          : valuedRoster;
-        const picks = team.picks.map((p) => ({ ...p, value: getPickValue(p) }));
-        const adjustedTeam = { ...team, roster, picks };
-        return { ...adjustedTeam, metrics: calculateMetrics(adjustedTeam, positions) };
-      }),
+      teams: adjustedTeams.map((team) => ({
+        ...team,
+        metrics: metricsMap.get(team.id) || { overall: 50, starters: 50, depth: 50, youth: 50, picks: 50, qb: 50, rb: 50, wr: 50, te: 50, contenderWindowYears: 2 },
+      })),
     };
-  }, [fetchedLeague, getPlayerValue, getPickValue, calculateMetrics, optimizeLineup]);
+  }, [fetchedLeague, getPlayerValue, getPickValue, calculateAllTeamMetrics, optimizeLineup]);
 
   const userTeam = useMemo(() => {
     if (!league || !fetchedLeague?.userTeamId) return league?.teams[0] || null;

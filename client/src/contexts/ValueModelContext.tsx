@@ -38,7 +38,7 @@ interface ValueModel {
   getRedraftValue: (player: Player) => number;
   getPickValue: (pick: Pick) => number;
   calculateTeamValue: (team: Team) => number;
-  calculateMetrics: (team: Team, rosterPositions?: string[]) => TeamMetrics;
+  calculateAllTeamMetrics: (teams: Team[], rosterPositions?: string[]) => Map<string, TeamMetrics>;
   optimizeLineup: (roster: Player[], rosterPositions: string[]) => Player[];
   valuesBySleeperId: Record<string, number>;
   redraftValuesBySleeperId: Record<string, number>;
@@ -225,66 +225,89 @@ export function ValueModelProvider({ children }: { children: React.ReactNode }) 
     return roster.map((p) => ({ ...p, starter: starterIds.has(p.id) }));
   }, [getRedraftValue]);
 
-  const calculateMetrics = useCallback((team: Team, rosterPositions?: string[]): TeamMetrics => {
-    const roster = rosterPositions
-      ? optimizeLineup(team.roster, rosterPositions)
-      : team.roster;
-    const picks = team.picks;
+  const calculateAllTeamMetrics = useCallback((teams: Team[], rosterPositions?: string[]): Map<string, TeamMetrics> => {
+    if (teams.length === 0) return new Map();
 
-    const starters = roster.filter((p) => p.starter);
-    const bench = roster.filter((p) => !p.starter);
+    const scale = (raw: number, min: number, max: number) =>
+      max === min ? 50 : Math.min(99, Math.max(10, Math.round(10 + ((raw - min) / (max - min)) * 89)));
 
-    const starterRedraftValue = starters.reduce((s, p) => s + getRedraftValue(p), 0);
-    const benchValue = bench.reduce((s, p) => s + getPlayerValue(p), 0);
-    const picksTotalValue = picks.reduce((s, p) => s + getPickValue(p), 0);
+    const rawData = teams.map((team) => {
+      const roster = rosterPositions
+        ? optimizeLineup(team.roster, rosterPositions)
+        : team.roster;
+      const starters = roster.filter((p) => p.starter);
+      const bench = roster.filter((p) => !p.starter);
 
-    const starterAvgAge = starters.length > 0
-      ? starters.reduce((s, p) => s + p.age, 0) / starters.length
-      : 26;
-    const youthScore = Math.max(0, Math.min(100, Math.round(100 - (starterAvgAge - 23) * 8)));
+      const starterRedraft = starters.reduce((s, p) => s + getRedraftValue(p), 0);
+      const benchDynasty = bench.reduce((s, p) => s + getPlayerValue(p), 0);
+      const picksTotal = team.picks.reduce((s, p) => s + getPickValue(p), 0);
+      const starterAvgAge = starters.length > 0
+        ? starters.reduce((s, p) => s + p.age, 0) / starters.length
+        : 26;
 
-    const maxStarterValue = Math.max(starters.length * 5000, 1);
-    const maxBenchValue = Math.max(bench.length * 3000, 1);
-    const maxPickValue = 40000;
+      const posTotal = (pos: string) =>
+        starters.filter((p) => p.pos === pos).reduce((s, p) => s + getRedraftValue(p), 0);
 
-    const starterScore = Math.min(99, Math.max(10, Math.round((starterRedraftValue / maxStarterValue) * 100)));
-    const depthScore = Math.min(99, Math.max(10, Math.round((benchValue / maxBenchValue) * 100)));
-    const picksScore = Math.min(99, Math.max(10, Math.round((picksTotalValue / maxPickValue) * 100)));
+      return {
+        id: team.id,
+        starterRedraft,
+        benchDynasty,
+        picksTotal,
+        starterAvgAge,
+        qbRaw: posTotal("QB"),
+        rbRaw: posTotal("RB"),
+        wrRaw: posTotal("WR"),
+        teRaw: posTotal("TE"),
+      };
+    });
 
-    const overall = Math.min(99, Math.max(10, Math.round(
-      starterScore * 0.45 +
-      depthScore * 0.25 +
-      picksScore * 0.20 +
-      youthScore * 0.10
-    )));
+    const minMax = (arr: number[]) => ({ min: Math.min(...arr), max: Math.max(...arr) });
+    const starterRange = minMax(rawData.map((d) => d.starterRedraft));
+    const depthRange = minMax(rawData.map((d) => d.benchDynasty));
+    const picksRange = minMax(rawData.map((d) => d.picksTotal));
+    const qbRange = minMax(rawData.map((d) => d.qbRaw));
+    const rbRange = minMax(rawData.map((d) => d.rbRaw));
+    const wrRange = minMax(rawData.map((d) => d.wrRaw));
+    const teRange = minMax(rawData.map((d) => d.teRaw));
 
-    const posScore = (pos: string) => {
-      const posPlayers = starters.filter((p) => p.pos === pos);
-      const total = posPlayers.reduce((s, p) => s + getRedraftValue(p), 0);
-      const maxPos = pos === "QB" ? 10000 : pos === "WR" ? 20000 : pos === "RB" ? 15000 : 8000;
-      return Math.min(99, Math.max(10, Math.round((total / maxPos) * 100)));
-    };
+    const result = new Map<string, TeamMetrics>();
 
-    const contenderWindowYears = youthScore >= 70 && starterScore >= 55
-      ? 4
-      : youthScore >= 50 && starterScore >= 45
-        ? 3
-        : youthScore >= 30 && starterScore >= 35
-          ? 2
-          : 1;
+    for (const d of rawData) {
+      const starterScore = scale(d.starterRedraft, starterRange.min, starterRange.max);
+      const depthScore = scale(d.benchDynasty, depthRange.min, depthRange.max);
+      const picksScore = scale(d.picksTotal, picksRange.min, picksRange.max);
+      const youthScore = Math.max(0, Math.min(100, Math.round(100 - (d.starterAvgAge - 23) * 8)));
 
-    return {
-      overall,
-      starters: starterScore,
-      depth: depthScore,
-      youth: youthScore,
-      picks: picksScore,
-      qb: posScore("QB"),
-      rb: posScore("RB"),
-      wr: posScore("WR"),
-      te: posScore("TE"),
-      contenderWindowYears,
-    };
+      const overall = Math.min(99, Math.max(10, Math.round(
+        starterScore * 0.45 +
+        depthScore * 0.25 +
+        picksScore * 0.20 +
+        youthScore * 0.10
+      )));
+
+      const contenderWindowYears = youthScore >= 70 && starterScore >= 55
+        ? 4
+        : youthScore >= 50 && starterScore >= 45
+          ? 3
+          : youthScore >= 30 && starterScore >= 35
+            ? 2
+            : 1;
+
+      result.set(d.id, {
+        overall,
+        starters: starterScore,
+        depth: depthScore,
+        youth: youthScore,
+        picks: picksScore,
+        qb: scale(d.qbRaw, qbRange.min, qbRange.max),
+        rb: scale(d.rbRaw, rbRange.min, rbRange.max),
+        wr: scale(d.wrRaw, wrRange.min, wrRange.max),
+        te: scale(d.teRaw, teRange.min, teRange.max),
+        contenderWindowYears,
+      });
+    }
+
+    return result;
   }, [getPlayerValue, getRedraftValue, getPickValue, optimizeLineup]);
 
   const value = useMemo<ValueModel>(() => ({
@@ -300,11 +323,11 @@ export function ValueModelProvider({ children }: { children: React.ReactNode }) 
     getRedraftValue,
     getPickValue,
     calculateTeamValue,
-    calculateMetrics,
+    calculateAllTeamMetrics,
     optimizeLineup,
     valuesBySleeperId,
     redraftValuesBySleeperId,
-  }), [sourceId, setSourceId, isRecalculating, isLoading, isSnapshot, unmatchedCount, diagnostics, getPlayerValue, getRedraftValue, getPickValue, calculateTeamValue, calculateMetrics, optimizeLineup, valuesBySleeperId, redraftValuesBySleeperId]);
+  }), [sourceId, setSourceId, isRecalculating, isLoading, isSnapshot, unmatchedCount, diagnostics, getPlayerValue, getRedraftValue, getPickValue, calculateTeamValue, calculateAllTeamMetrics, optimizeLineup, valuesBySleeperId, redraftValuesBySleeperId]);
 
   return (
     <ValueModelContext.Provider value={value}>
