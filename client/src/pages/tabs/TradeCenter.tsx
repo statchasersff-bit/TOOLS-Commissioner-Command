@@ -588,26 +588,31 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
   const positionImpact = useMemo(() => {
     if (!league || !userTeam) return null;
     const positions: ("QB" | "RB" | "WR" | "TE")[] = ["QB", "RB", "WR", "TE"];
-    const starters = userTeam.roster.filter((p) => p.starter);
 
-    const addedA = sideA.filter((a) => a.type === "player" && a.player).map((a) => a.player!);
-    const removedA = sideB.filter((a) => a.type === "player" && a.player).map((a) => a.player!);
+    const playersGivenBySideA = sideA.filter((a) => a.type === "player" && a.player).map((a) => a.player!);
+    const playersGivenBySideB = sideB.filter((a) => a.type === "player" && a.player).map((a) => a.player!);
 
-    return positions.map((pos) => {
-      const currentStarters = starters.filter((p) => p.pos === pos);
-      const currentVal = currentStarters.reduce((s, p) => s + getPlayerValue(p), 0);
+    const calcImpact = (team: Team | undefined) => {
+      if (!team) return null;
+      const starters = team.roster.filter((p) => p.starter);
+      const isUserSide = team.id === sideARosterId;
+      const receiving = isUserSide ? playersGivenBySideB : playersGivenBySideA;
+      const giving = isUserSide ? playersGivenBySideA : playersGivenBySideB;
 
-      const added = addedA.filter((p) => p.pos === pos);
-      const removed = removedA.filter((p) => p.pos === pos);
-      const addedVal = added.reduce((s, p) => s + getPlayerValue(p), 0);
-      const removedVal = removed.reduce((s, p) => s + getPlayerValue(p), 0);
+      return positions.map((pos) => {
+        const currentVal = starters.filter((p) => p.pos === pos).reduce((s, p) => s + getPlayerValue(p), 0);
+        const addedVal = receiving.filter((p) => p.pos === pos).reduce((s, p) => s + getPlayerValue(p), 0);
+        const removedVal = giving.filter((p) => p.pos === pos).reduce((s, p) => s + getPlayerValue(p), 0);
+        const afterVal = currentVal + addedVal - removedVal;
+        return { pos, before: currentVal, after: afterVal, change: afterVal - currentVal };
+      });
+    };
 
-      const afterVal = currentVal + addedVal - removedVal;
-      const change = afterVal - currentVal;
-
-      return { pos, before: currentVal, after: afterVal, change };
-    });
-  }, [league, userTeam, sideA, sideB, getPlayerValue]);
+    return {
+      sideA: calcImpact(sideATeam),
+      sideB: calcImpact(sideBTeam),
+    };
+  }, [league, userTeam, sideA, sideB, getPlayerValue, sideATeam, sideBTeam, sideARosterId]);
 
   const allPlayers = useMemo(() => {
     const seen = new Set<string>();
@@ -906,42 +911,54 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
             Load a league to see position impact analysis
           </p>
         ) : positionImpact && (sideA.length > 0 || sideB.length > 0) ? (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm" data-testid="table-position-impact">
-              <thead>
-                <tr className="border-b border-border bg-muted/20">
-                  <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Position</th>
-                  <th className="px-4 py-2.5 text-right text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Before</th>
-                  <th className="px-4 py-2.5 text-right text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">After</th>
-                  <th className="px-4 py-2.5 text-right text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Change</th>
-                </tr>
-              </thead>
-              <tbody>
-                {positionImpact.map((row) => (
-                  <tr key={row.pos} className="border-b border-border/20">
-                    <td className="px-4 py-2.5">
-                      <Badge variant="outline" className={`text-[10px] w-7 justify-center ${getPositionColor(row.pos)}`}>{row.pos}</Badge>
-                    </td>
-                    <td className="px-4 py-2.5 text-right font-medium">{row.before.toLocaleString()}</td>
-                    <td className="px-4 py-2.5 text-right font-medium">{row.after.toLocaleString()}</td>
-                    <td className="px-4 py-2.5 text-right">
-                      <span className={cn(
-                        "font-semibold",
-                        row.change > 0 && "text-emerald-600 dark:text-emerald-400",
-                        row.change < 0 && "text-red-600 dark:text-red-400",
-                        row.change === 0 && "text-muted-foreground"
-                      )}>
-                        {row.change > 0 ? "+" : ""}{row.change.toLocaleString()}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {([
+              { key: "sideA", label: sideATeam?.owner || sideATeam?.name || "Side A", data: positionImpact.sideA, testId: "table-position-impact-a" },
+              { key: "sideB", label: sideBTeam?.owner || sideBTeam?.name || "Side B", data: positionImpact.sideB, testId: "table-position-impact-b" },
+            ] as const).map(({ key, label, data, testId }) => (
+              <div key={key}>
+                <p className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wider" data-testid={`text-impact-label-${key}`}>{label}</p>
+                {data ? (
+                  <table className="w-full text-sm" data-testid={testId}>
+                    <thead>
+                      <tr className="border-b border-border bg-muted/20">
+                        <th className="px-3 py-2 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Pos</th>
+                        <th className="px-3 py-2 text-right text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Before</th>
+                        <th className="px-3 py-2 text-right text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">After</th>
+                        <th className="px-3 py-2 text-right text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Δ</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.map((row) => (
+                        <tr key={row.pos} className="border-b border-border/20">
+                          <td className="px-3 py-2">
+                            <Badge variant="outline" className={`text-[10px] w-7 justify-center ${getPositionColor(row.pos)}`}>{row.pos}</Badge>
+                          </td>
+                          <td className="px-3 py-2 text-right font-medium text-xs">{row.before.toLocaleString()}</td>
+                          <td className="px-3 py-2 text-right font-medium text-xs">{row.after.toLocaleString()}</td>
+                          <td className="px-3 py-2 text-right">
+                            <span className={cn(
+                              "font-semibold text-xs",
+                              row.change > 0 && "text-emerald-600 dark:text-emerald-400",
+                              row.change < 0 && "text-red-600 dark:text-red-400",
+                              row.change === 0 && "text-muted-foreground"
+                            )}>
+                              {row.change > 0 ? "+" : ""}{row.change.toLocaleString()}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                ) : (
+                  <p className="text-xs text-muted-foreground py-3 text-center">Select a trade partner to see impact</p>
+                )}
+              </div>
+            ))}
           </div>
         ) : (
           <p className="text-xs text-muted-foreground py-4 text-center" data-testid="text-empty-impact">
-            Add assets to both sides to see position impact on your team
+            Add assets to both sides to see position impact
           </p>
         )}
       </Card>
