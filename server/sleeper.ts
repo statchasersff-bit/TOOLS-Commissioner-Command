@@ -1,6 +1,6 @@
 import fs from "fs";
 import path from "path";
-import { getFantasyCalcValues } from "./fantasycalc";
+import { getFantasyCalcValues, getFantasyCalcRedraftValues } from "./fantasycalc";
 
 const SLEEPER_API = "https://api.sleeper.app/v1";
 const PLAYERS_CACHE_PATH = "/tmp/sleeper_players.json";
@@ -336,7 +336,8 @@ export interface PortfolioSummaryData {
     standing: number;
     totalRosters: number;
     format: string;
-    valueRank: number;
+    redraftRank: number;
+    dynastyRank: number;
     maxPfRank: number;
     playoffOdds: number;
   }>;
@@ -373,13 +374,19 @@ export async function fetchPortfolioSummary(
 
   let fcValuesSf: Record<string, number> = {};
   let fcValues1Qb: Record<string, number> = {};
+  let fcRedraftSf: Record<string, number> = {};
+  let fcRedraft1Qb: Record<string, number> = {};
   try {
-    const [sfData, oqbData] = await Promise.all([
+    const [sfData, oqbData, sfRedraft, oqbRedraft] = await Promise.all([
       getFantasyCalcValues("sf"),
       getFantasyCalcValues("1qb"),
+      getFantasyCalcRedraftValues("sf"),
+      getFantasyCalcRedraftValues("1qb"),
     ]);
     fcValuesSf = sfData.valuesBySleeperId;
     fcValues1Qb = oqbData.valuesBySleeperId;
+    fcRedraftSf = sfRedraft.valuesBySleeperId;
+    fcRedraft1Qb = oqbRedraft.valuesBySleeperId;
   } catch (err) {
     console.error("Failed to fetch FantasyCalc values for portfolio:", err);
   }
@@ -418,17 +425,29 @@ export async function fetchPortfolioSummary(
       const playoffSlots = Math.max(Math.floor(total / 2), 1);
 
       const isSf = ls.format === "SF";
-      const fcValues = isSf ? fcValuesSf : fcValues1Qb;
+      const fcDynasty = isSf ? fcValuesSf : fcValues1Qb;
+      const fcRedraft = isSf ? fcRedraftSf : fcRedraft1Qb;
 
-      const hasValues = Object.keys(fcValues).length > 0;
-      let valueRank = 0;
-      if (hasValues) {
+      const hasDynastyValues = Object.keys(fcDynasty).length > 0;
+      let dynastyRank = 0;
+      if (hasDynastyValues) {
         const rosterValues = rostersRaw.map((r) => {
-          const totalValue = (r.players || []).reduce((sum, pid) => sum + (fcValues[pid] || 0), 0);
+          const totalValue = (r.players || []).reduce((sum, pid) => sum + (fcDynasty[pid] || 0), 0);
           return { rosterId: r.roster_id, totalValue };
         });
         rosterValues.sort((a, b) => b.totalValue - a.totalValue);
-        valueRank = rosterValues.findIndex((r) => r.rosterId === userRoster.roster_id) + 1;
+        dynastyRank = rosterValues.findIndex((r) => r.rosterId === userRoster.roster_id) + 1;
+      }
+
+      const hasRedraftValues = Object.keys(fcRedraft).length > 0;
+      let redraftRank = 0;
+      if (hasRedraftValues) {
+        const rosterValues = rostersRaw.map((r) => {
+          const totalValue = (r.players || []).reduce((sum, pid) => sum + (fcRedraft[pid] || 0), 0);
+          return { rosterId: r.roster_id, totalValue };
+        });
+        rosterValues.sort((a, b) => b.totalValue - a.totalValue);
+        redraftRank = rosterValues.findIndex((r) => r.rosterId === userRoster.roster_id) + 1;
       }
 
       const hasPpts = rostersRaw.some((r) => (r.settings?.ppts ?? 0) > 0);
@@ -464,7 +483,8 @@ export async function fetchPortfolioSummary(
         standing,
         totalRosters: total,
         format: ls.format,
-        valueRank,
+        redraftRank,
+        dynastyRank,
         maxPfRank,
         playoffOdds,
       });
