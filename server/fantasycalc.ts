@@ -106,7 +106,6 @@ function normalizeApiResponse(
     source: "fantasycalc",
     format,
     updatedAt: new Date().toISOString(),
-    cachedAt: new Date().toISOString(),
     valuesBySleeperId,
     players,
     unmatched,
@@ -153,5 +152,47 @@ export async function getFantasyCalcValues(
         `Failed to fetch FantasyCalc values and no snapshot available: ${err}`
       );
     }
+  }
+}
+
+export async function getFantasyCalcRedraftValues(
+  format: string = "sf"
+): Promise<FantasyCalcResponse> {
+  const cacheKey = `redraft_${format}`;
+  const cachePath = getCachePath(cacheKey);
+
+  if (isCacheValid(cachePath)) {
+    try {
+      const cached = JSON.parse(fs.readFileSync(cachePath, "utf-8"));
+      return cached as FantasyCalcResponse;
+    } catch {}
+  }
+
+  const numQbs = format === "sf" ? 2 : 1;
+  const url = `${API_BASE}?isDynasty=false&numQbs=${numQbs}&numTeams=12&ppr=1`;
+
+  try {
+    console.log(`[FantasyCalc] Fetching redraft values (${format})...`);
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`FantasyCalc redraft API returned ${response.status}`);
+    }
+    const raw: FantasyCalcPlayer[] = await response.json();
+    const normalized = normalizeApiResponse(raw, `redraft_${format}`);
+
+    fs.writeFileSync(cachePath, JSON.stringify(normalized), "utf-8");
+    console.log(`[FantasyCalc] Redraft values cached (${format}, ${normalized.players.length} players).`);
+
+    return normalized;
+  } catch (err) {
+    console.warn(`[FantasyCalc] Redraft fetch failed, returning empty:`, err);
+    return {
+      source: "fantasycalc",
+      format: `redraft_${format}`,
+      updatedAt: "unavailable",
+      valuesBySleeperId: {},
+      players: [],
+      unmatched: [],
+    };
   }
 }

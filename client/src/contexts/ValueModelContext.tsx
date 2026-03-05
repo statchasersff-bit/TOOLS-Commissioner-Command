@@ -35,10 +35,12 @@ interface ValueModel {
   unmatchedCount: number;
   diagnostics: ValueDiagnostics;
   getPlayerValue: (player: Player) => number;
+  getRedraftValue: (player: Player) => number;
   getPickValue: (pick: Pick) => number;
   calculateTeamValue: (team: Team) => number;
   calculateMetrics: (team: Team) => TeamMetrics;
   valuesBySleeperId: Record<string, number>;
+  redraftValuesBySleeperId: Record<string, number>;
 }
 
 const ValueModelContext = createContext<ValueModel | null>(null);
@@ -51,6 +53,8 @@ export function ValueModelProvider({ children }: { children: React.ReactNode }) 
   const [unmatchedCount, setUnmatchedCount] = useState(0);
   const [valuesBySleeperId, setValuesBySleeperId] = useState<Record<string, number>>({});
   const [nameValueMap, setNameValueMap] = useState<Record<string, number>>({});
+  const [redraftValuesBySleeperId, setRedraftValuesBySleeperId] = useState<Record<string, number>>({});
+  const [redraftNameValueMap, setRedraftNameValueMap] = useState<Record<string, number>>({});
   const [diagnostics, setDiagnostics] = useState<ValueDiagnostics>({
     updatedAt: "",
     mappedCount: 0,
@@ -64,27 +68,49 @@ export function ValueModelProvider({ children }: { children: React.ReactNode }) 
     let cancelled = false;
     setIsLoading(true);
 
-    fetch("/api/values/fantasycalc?format=sf")
-      .then((r) => {
-        if (!r.ok) throw new Error(`API error ${r.status}`);
+    Promise.all([
+      fetch("/api/values/fantasycalc?format=sf").then((r) => {
+        if (!r.ok) throw new Error(`Dynasty API error ${r.status}`);
         return r.json();
-      })
-      .then((data: { valuesBySleeperId: Record<string, number>; players: Array<{ name: string; pos: string; value: number }>; unmatched: UnmatchedRow[]; updatedAt: string }) => {
+      }),
+      fetch("/api/values/fantasycalc/redraft?format=sf").then((r) => {
+        if (!r.ok) throw new Error(`Redraft API error ${r.status}`);
+        return r.json();
+      }).catch((err) => {
+        console.warn("[ValueModel] Redraft fetch failed, will use dynasty fallback:", err);
+        return null;
+      }),
+    ])
+      .then(([dynastyData, redraftData]: [any, any]) => {
         if (cancelled) return;
-        setValuesBySleeperId(data.valuesBySleeperId);
+
+        setValuesBySleeperId(dynastyData.valuesBySleeperId);
         const byName: Record<string, number> = {};
-        for (const p of data.players) {
+        for (const p of dynastyData.players) {
           byName[`${p.name.toLowerCase().trim()}|${p.pos}`] = p.value;
         }
         setNameValueMap(byName);
-        const uc = data.unmatched?.length || 0;
+
+        if (redraftData && redraftData.valuesBySleeperId && Object.keys(redraftData.valuesBySleeperId).length > 0) {
+          setRedraftValuesBySleeperId(redraftData.valuesBySleeperId);
+          const redraftByName: Record<string, number> = {};
+          for (const p of redraftData.players || []) {
+            redraftByName[`${p.name.toLowerCase().trim()}|${p.pos}`] = p.value;
+          }
+          setRedraftNameValueMap(redraftByName);
+        } else {
+          setRedraftValuesBySleeperId(dynastyData.valuesBySleeperId);
+          setRedraftNameValueMap(byName);
+        }
+
+        const uc = dynastyData.unmatched?.length || 0;
         setUnmatchedCount(uc);
-        setIsSnapshot(data.updatedAt === "snapshot");
+        setIsSnapshot(dynastyData.updatedAt === "snapshot");
         setDiagnostics({
-          updatedAt: data.updatedAt,
-          mappedCount: Object.keys(data.valuesBySleeperId).length,
+          updatedAt: dynastyData.updatedAt,
+          mappedCount: Object.keys(dynastyData.valuesBySleeperId).length,
           unmatchedCount: uc,
-          unmatchedRows: data.unmatched || [],
+          unmatchedRows: dynastyData.unmatched || [],
           fetchedAt: new Date().toISOString(),
         });
         setIsLoading(false);
@@ -127,6 +153,19 @@ export function ValueModelProvider({ children }: { children: React.ReactNode }) 
     return player.value;
   }, [sourceId, valuesBySleeperId, nameValueMap]);
 
+  const getRedraftValue = useCallback((player: Player): number => {
+    if (sourceId === "fantasycalc" && redraftValuesBySleeperId && Object.keys(redraftValuesBySleeperId).length > 0) {
+      if (player.sleeperId && redraftValuesBySleeperId[player.sleeperId] !== undefined) {
+        return redraftValuesBySleeperId[player.sleeperId];
+      }
+      const nameKey = `${player.name.toLowerCase().trim()}|${player.pos}`;
+      if (redraftNameValueMap && redraftNameValueMap[nameKey] !== undefined) {
+        return redraftNameValueMap[nameKey];
+      }
+    }
+    return getPlayerValue(player);
+  }, [sourceId, redraftValuesBySleeperId, redraftNameValueMap, getPlayerValue]);
+
   const getPickValue = useCallback((pick: Pick): number => {
     const range = (pick.projectedRange || "Mid").toLowerCase() as "early" | "mid" | "late";
     return getStaticPickValue(pick.year, pick.round, range);
@@ -145,7 +184,7 @@ export function ValueModelProvider({ children }: { children: React.ReactNode }) 
     const starters = roster.filter((p) => p.starter);
     const bench = roster.filter((p) => !p.starter);
 
-    const starterValue = starters.reduce((s, p) => s + getPlayerValue(p), 0);
+    const starterRedraftValue = starters.reduce((s, p) => s + getRedraftValue(p), 0);
     const benchValue = bench.reduce((s, p) => s + getPlayerValue(p), 0);
     const picksTotalValue = picks.reduce((s, p) => s + getPickValue(p), 0);
 
@@ -158,7 +197,7 @@ export function ValueModelProvider({ children }: { children: React.ReactNode }) 
     const maxBenchValue = Math.max(bench.length * 3000, 1);
     const maxPickValue = 40000;
 
-    const starterScore = Math.min(99, Math.max(10, Math.round((starterValue / maxStarterValue) * 100)));
+    const starterScore = Math.min(99, Math.max(10, Math.round((starterRedraftValue / maxStarterValue) * 100)));
     const depthScore = Math.min(99, Math.max(10, Math.round((benchValue / maxBenchValue) * 100)));
     const picksScore = Math.min(99, Math.max(10, Math.round((picksTotalValue / maxPickValue) * 100)));
 
@@ -171,16 +210,16 @@ export function ValueModelProvider({ children }: { children: React.ReactNode }) 
 
     const posScore = (pos: string) => {
       const posPlayers = starters.filter((p) => p.pos === pos);
-      const total = posPlayers.reduce((s, p) => s + getPlayerValue(p), 0);
+      const total = posPlayers.reduce((s, p) => s + getRedraftValue(p), 0);
       const maxPos = pos === "QB" ? 10000 : pos === "WR" ? 20000 : pos === "RB" ? 15000 : 8000;
       return Math.min(99, Math.max(10, Math.round((total / maxPos) * 100)));
     };
 
-    const contenderWindowYears = youthScore >= 70 && overall >= 65
+    const contenderWindowYears = youthScore >= 70 && starterScore >= 55
       ? 4
-      : youthScore >= 50 && overall >= 55
+      : youthScore >= 50 && starterScore >= 45
         ? 3
-        : youthScore >= 30 && overall >= 45
+        : youthScore >= 30 && starterScore >= 35
           ? 2
           : 1;
 
@@ -196,7 +235,7 @@ export function ValueModelProvider({ children }: { children: React.ReactNode }) 
       te: posScore("TE"),
       contenderWindowYears,
     };
-  }, [getPlayerValue, getPickValue]);
+  }, [getPlayerValue, getRedraftValue, getPickValue]);
 
   const value = useMemo<ValueModel>(() => ({
     sourceId,
@@ -208,11 +247,13 @@ export function ValueModelProvider({ children }: { children: React.ReactNode }) 
     unmatchedCount,
     diagnostics,
     getPlayerValue,
+    getRedraftValue,
     getPickValue,
     calculateTeamValue,
     calculateMetrics,
     valuesBySleeperId,
-  }), [sourceId, setSourceId, isRecalculating, isLoading, isSnapshot, unmatchedCount, diagnostics, getPlayerValue, getPickValue, calculateTeamValue, calculateMetrics, valuesBySleeperId]);
+    redraftValuesBySleeperId,
+  }), [sourceId, setSourceId, isRecalculating, isLoading, isSnapshot, unmatchedCount, diagnostics, getPlayerValue, getRedraftValue, getPickValue, calculateTeamValue, calculateMetrics, valuesBySleeperId, redraftValuesBySleeperId]);
 
   return (
     <ValueModelContext.Provider value={value}>

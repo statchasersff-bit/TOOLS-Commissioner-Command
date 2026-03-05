@@ -1,6 +1,6 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { getFantasyCalcValues } from "./fantasycalc";
+import { getFantasyCalcValues, getFantasyCalcRedraftValues } from "./fantasycalc";
 import {
   fetchSleeperUser,
   fetchSleeperLeagues,
@@ -23,6 +23,20 @@ export async function registerRoutes(
     } catch (err: any) {
       console.error("FantasyCalc fetch error:", err);
       res.status(500).json({ error: err.message || "Failed to fetch values" });
+    }
+  });
+
+  app.get("/api/values/fantasycalc/redraft", async (req, res) => {
+    try {
+      const format = (req.query.format as string) || "sf";
+      if (format !== "sf" && format !== "1qb") {
+        return res.status(400).json({ error: "format must be 'sf' or '1qb'" });
+      }
+      const data = await getFantasyCalcRedraftValues(format);
+      res.json(data);
+    } catch (err: any) {
+      console.error("FantasyCalc redraft fetch error:", err);
+      res.status(500).json({ error: err.message || "Failed to fetch redraft values" });
     }
   });
 

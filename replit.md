@@ -36,9 +36,11 @@ A premium dynasty fantasy football league analysis tool built with React + TypeS
 - **Dynasty filter**: Only shows dynasty leagues (settings.type === 2), excludes redraft/keeper
 
 ## Value Source Integration (FantasyCalc)
-- **Backend proxy**: `GET /api/values/fantasycalc?format=sf|1qb` proxies and caches FantasyCalc API
-- **Daily caching**: File-based cache at `/tmp/fantasycalc_cache_{format}.json`, 24-hour TTL
-- **Dev fallback**: Snapshot file at `server/data/fantasycalc_snapshot_sf.json` used when API unreachable
+- **Dynasty values**: `GET /api/values/fantasycalc?format=sf|1qb` — dynasty trade values (isDynasty=true), used for player display values, depth scores, trade analysis, portfolio views
+- **Redraft values**: `GET /api/values/fantasycalc/redraft?format=sf|1qb` — redraft rankings (isDynasty=false), used for all competing/contending analysis: starter scores, position scores (qb/rb/wr/te), contender window, and overall power score (which factors starter scores at 45%)
+- **Dual-value architecture**: ValueModelContext fetches both dynasty and redraft values in parallel. `getPlayerValue()` returns dynasty values; `getRedraftValue()` returns redraft values. `calculateMetrics()` uses redraft for starters/positions/contending and dynasty for depth/bench
+- **Daily caching**: File-based cache at `/tmp/fantasycalc_cache_{format}.json` and `/tmp/fantasycalc_cache_redraft_{format}.json`, 24-hour TTL
+- **Dev fallback**: Snapshot file at `server/data/fantasycalc_snapshot_sf.json` used when dynasty API unreachable; redraft gracefully falls back to dynasty values if unavailable
 - **Player matching**: Uses sleeperId from FantasyCalc API directly; falls back to name+pos matching
 - **Pick values**: Static table in `client/src/data/pickValues.ts` (rounds 1-4, years 2025-2028, early/mid/late tiers)
 - **Attribution**: "Values provided by FantasyCalc.com" visible in header when FantasyCalc is active
