@@ -251,6 +251,9 @@ export const NAV_CONFIG: MainTabConfig[] = [
     label: "Dashboard",
     subTabs: [
       { id: "overview", label: "Overview" },
+      { id: "roster-strength", label: "Roster Strength" },
+      { id: "age-curve", label: "Age Curve" },
+      { id: "depth-chart", label: "Depth Chart" },
     ],
   },
   {
@@ -260,15 +263,6 @@ export const NAV_CONFIG: MainTabConfig[] = [
       { id: "power-rankings", label: "Power Rankings" },
       { id: "roster-comparison", label: "Roster Comparison" },
       { id: "key-insights", label: "Key Insights" },
-    ],
-  },
-  {
-    id: "team-breakdown",
-    label: "Team Breakdown",
-    subTabs: [
-      { id: "roster-strength", label: "Roster Strength" },
-      { id: "age-curve", label: "Age Curve" },
-      { id: "depth-chart", label: "Depth Chart" },
     ],
   },
   {

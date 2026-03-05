@@ -253,9 +253,9 @@ export default function DynastyCommandCenter() {
       case "league-analyzer:power-rankings": return <DashboardSnapshot league={league} userTeam={userTeam} />;
       case "league-analyzer:key-insights": return <DashboardKeyInsights league={league} userTeam={userTeam} />;
       case "league-analyzer:roster-comparison": return <RosterComparison league={league} />;
-      case "team-breakdown:roster-strength": return <RosterStrength league={league} userTeam={userTeam} />;
-      case "team-breakdown:age-curve": return <AgeCurve userTeam={userTeam} />;
-      case "team-breakdown:depth-chart": return <DepthChart userTeam={userTeam} />;
+      case "dashboard:roster-strength": return <RosterStrength league={league} userTeam={userTeam} />;
+      case "dashboard:age-curve": return <AgeCurve userTeam={userTeam} />;
+      case "dashboard:depth-chart": return <DepthChart userTeam={userTeam} />;
       case "trade-center:trade-finder": return <TradeFinder league={league} userTeam={userTeam} />;
       case "trade-center:trade-targets": return <TradeTargets league={league} userTeam={userTeam} />;
       case "trade-center:trade-block": return <TradeBlockScanner league={league} />;
