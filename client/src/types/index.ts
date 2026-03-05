@@ -50,7 +50,7 @@ export interface League {
   format?: "SF" | "1QB";
 }
 
-export type Tier = "Elite" | "Contender" | "Competitive" | "Rebuild";
+export type Tier = "Juggernaut" | "Contender" | "Ascending" | "Competitive" | "Rebuild" | "Directionless" | "Taco";
 
 export interface TabConfig {
   id: string;

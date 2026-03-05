@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { InsightCallout } from "@/components/InsightCallout";
 import { SectionHeader } from "@/components/SectionHeader";
-import { getTeamTier, getTierColor, generateInsights } from "@/data/mockData";
+import { getLeagueTeamTiers, getTierColor, getTierEmoji, generateInsights } from "@/data/mockData";
 import type { League, Team } from "@/types";
 import { Trophy, Archive, Flame, Target, Compass, ChevronDown, ChevronRight, TrendingUp, TrendingDown } from "lucide-react";
 
@@ -84,12 +84,19 @@ export function LeagueIntelligence({ league, userTeam }: Props) {
     return weaknesses;
   };
 
+  const insightTierMap = useMemo(() => getLeagueTeamTiers(league.teams), [league.teams]);
+
   const getOutlook = (team: Team): string => {
-    const tier = getTeamTier(team.metrics.overall);
-    if (tier === "Elite") return "Championship contender";
-    if (tier === "Contender") return "Competitive but not dominant";
-    if (tier === "Competitive") return "Middle of the pack — needs direction";
-    return "Rebuilding for the future";
+    const tier = insightTierMap.get(team.id)?.tier ?? "Competitive";
+    switch (tier) {
+      case "Juggernaut": return "Championship contender — league problem";
+      case "Contender": return "Built to win this year";
+      case "Ascending": return "The future is bright — probably a year early";
+      case "Competitive": return "Good roster, not scary";
+      case "Rebuild": return "Playing the long game";
+      case "Directionless": return "Unclear direction — roster is messy";
+      case "Taco": return "Dynasty team turned seasonal rental";
+    }
   };
 
   return (
@@ -222,7 +229,8 @@ export function LeagueIntelligence({ league, userTeam }: Props) {
 
         <div className="space-y-3" data-testid="team-narratives">
           {sorted.map((team) => {
-            const tier = getTeamTier(team.metrics.overall);
+            const tierInfo = insightTierMap.get(team.id);
+            const tier = tierInfo?.tier ?? "Competitive";
             const isExpanded = expandedTeams.has(team.id);
             const strengths = getStrengths(team);
             const weaknesses = getWeaknesses(team);
@@ -239,7 +247,7 @@ export function LeagueIntelligence({ league, userTeam }: Props) {
                     {isExpanded ? <ChevronDown className="w-4 h-4 text-muted-foreground" /> : <ChevronRight className="w-4 h-4 text-muted-foreground" />}
                     <span className="text-sm font-bold">{team.owner}</span>
                     <span className="text-xs text-muted-foreground">{team.name}</span>
-                    <Badge variant="outline" className={getTierColor(tier)}>{tier}</Badge>
+                    <Badge variant="outline" className={getTierColor(tier)}>{getTierEmoji(tier)} {tier}</Badge>
                   </div>
                   <span className="text-xl font-bold">{team.metrics.overall}</span>
                 </button>

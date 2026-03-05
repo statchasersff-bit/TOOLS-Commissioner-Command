@@ -1,11 +1,11 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DataTable } from "@/components/DataTable";
 import { SectionHeader } from "@/components/SectionHeader";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { getTeamTier, getTierColor, getTierBg } from "@/data/mockData";
+import { getLeagueTeamTiers, getTierColor, getTierBg, getTierEmoji, getTierTooltip } from "@/data/mockData";
 import type { League, Team, Tier } from "@/types";
 import { cn } from "@/lib/utils";
 import { Info } from "lucide-react";
@@ -14,16 +14,45 @@ interface AnalyzerProps {
   league: League;
 }
 
+const TIER_ORDER: Tier[] = ["Juggernaut", "Contender", "Ascending", "Competitive", "Rebuild", "Directionless", "Taco"];
+const TIER_BAR_COLOR: Record<Tier, string> = {
+  Juggernaut: "bg-[#d4af37]",
+  Contender: "bg-blue-500",
+  Ascending: "bg-emerald-500",
+  Competitive: "bg-amber-500",
+  Rebuild: "bg-orange-500",
+  Directionless: "bg-purple-500",
+  Taco: "bg-red-500",
+};
+
 export function PowerRankings({ league }: AnalyzerProps) {
   const sorted = [...league.teams].sort((a, b) => b.metrics.overall - a.metrics.overall);
-  const tiers: Record<Tier, Team[]> = { Elite: [], Contender: [], Competitive: [], Rebuild: [] };
-  sorted.forEach((t) => { tiers[getTeamTier(t.metrics.overall)].push(t); });
+  const tierMap = useMemo(() => getLeagueTeamTiers(league.teams), [league.teams]);
+
+  const tiers = useMemo(() => {
+    const groups: Record<Tier, Team[]> = { Juggernaut: [], Contender: [], Ascending: [], Competitive: [], Rebuild: [], Directionless: [], Taco: [] };
+    sorted.forEach((t) => { const ti = tierMap.get(t.id); if (ti) groups[ti.tier].push(t); });
+    return groups;
+  }, [sorted, tierMap]);
 
   const columns = [
     { key: "rank", header: "#", sticky: true, render: (_: any, i: number) => <span className="font-bold">{i + 1}</span> },
     { key: "name", header: "Team", sortable: true, sortAccessor: (row: any) => row.name, render: (row: any) => <span className="font-semibold">{row.name} <span className="text-muted-foreground font-normal">({row.owner})</span></span> },
     { key: "overall", header: "Overall", sortable: true, sortAccessor: (row: any) => row.metrics.overall, render: (row: any) => <span className="font-bold text-lg">{row.metrics.overall}</span> },
-    { key: "tier", header: "Tier", sortable: true, sortAccessor: (row: any) => row.metrics.overall, render: (row: any) => <Badge variant="outline" className={getTierColor(getTeamTier(row.metrics.overall))}>{getTeamTier(row.metrics.overall)}</Badge> },
+    { key: "tier", header: "Tier", sortable: true, sortAccessor: (row: any) => { const ti = tierMap.get(row.id); return ti ? TIER_ORDER.indexOf(ti.tier) : 99; }, render: (row: any) => {
+      const ti = tierMap.get(row.id);
+      if (!ti) return null;
+      return (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Badge variant="outline" className={cn(getTierColor(ti.tier), "cursor-default")} data-testid={`tier-badge-${row.id}`}>
+              {getTierEmoji(ti.tier)} {ti.tier}
+            </Badge>
+          </TooltipTrigger>
+          <TooltipContent><p className="text-xs max-w-[220px]">{ti.tooltip}</p></TooltipContent>
+        </Tooltip>
+      );
+    }},
     { key: "starters", header: "Starters", sortable: true, sortAccessor: (row: any) => row.metrics.starters, render: (row: any) => row.metrics.starters },
     { key: "depth", header: "Depth", sortable: true, sortAccessor: (row: any) => row.metrics.depth, render: (row: any) => row.metrics.depth },
     { key: "youth", header: "Youth", sortable: true, sortAccessor: (row: any) => row.metrics.youth, render: (row: any) => row.metrics.youth },
@@ -31,14 +60,20 @@ export function PowerRankings({ league }: AnalyzerProps) {
 
   return (
     <div className="space-y-8">
-      <SectionHeader title="Power Rankings" subtitle="Teams ranked and grouped by tier" />
+      <SectionHeader title="Power Rankings" subtitle="Teams ranked and grouped by archetype" />
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {(["Elite", "Contender", "Competitive", "Rebuild"] as Tier[]).map((tier) => (
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        {TIER_ORDER.filter(tier => tiers[tier].length > 0).map((tier) => (
           <div key={tier} className={cn("rounded-md p-4 border border-border/40", getTierBg(tier))}>
-            <h4 className={cn("text-sm font-bold mb-3", getTierColor(tier))}>{tier}</h4>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <h4 className={cn("text-sm font-bold mb-3 cursor-default flex items-center gap-1.5", getTierColor(tier))}>
+                  <span>{getTierEmoji(tier)}</span> {tier}
+                </h4>
+              </TooltipTrigger>
+              <TooltipContent><p className="text-xs max-w-[220px]">{getTierTooltip(tier)}</p></TooltipContent>
+            </Tooltip>
             <div className="space-y-2.5">
-              {tiers[tier].length === 0 && <p className="text-xs text-muted-foreground">No teams</p>}
               {tiers[tier].map((team) => (
                 <Card key={team.id} className="p-4 hover-elevate">
                   <div className="flex items-center justify-between gap-2">
@@ -61,13 +96,17 @@ export function PowerRankings({ league }: AnalyzerProps) {
 }
 
 export function TierBreakdown({ league }: AnalyzerProps) {
-  const tierCounts: Record<Tier, number> = { Elite: 0, Contender: 0, Competitive: 0, Rebuild: 0 };
-  league.teams.forEach((t) => { tierCounts[getTeamTier(t.metrics.overall)]++; });
+  const tierMap = useMemo(() => getLeagueTeamTiers(league.teams), [league.teams]);
+  const tierCounts = useMemo(() => {
+    const counts: Record<Tier, number> = { Juggernaut: 0, Contender: 0, Ascending: 0, Competitive: 0, Rebuild: 0, Directionless: 0, Taco: 0 };
+    league.teams.forEach((t) => { const ti = tierMap.get(t.id); if (ti) counts[ti.tier]++; });
+    return counts;
+  }, [league.teams, tierMap]);
   const total = league.teams.length;
 
   return (
     <div className="space-y-8">
-      <SectionHeader title="Tier Breakdown" subtitle="Distribution of teams across competitive tiers" />
+      <SectionHeader title="Tier Breakdown" subtitle="Distribution of teams across competitive archetypes" />
 
       <Card className="p-6">
         <div className="flex items-center gap-2 mb-5">
@@ -77,27 +116,28 @@ export function TierBreakdown({ league }: AnalyzerProps) {
               <Info className="w-3.5 h-3.5 text-muted-foreground" />
             </TooltipTrigger>
             <TooltipContent>
-              <p className="text-xs max-w-[200px]">Tiers based on overall score combining starters, depth, picks, and age metrics.</p>
+              <p className="text-xs max-w-[200px]">Archetypes based on Power, Dynasty, Redraft, and Draft capital rankings.</p>
             </TooltipContent>
           </Tooltip>
         </div>
 
         <div className="space-y-5">
-          {(["Elite", "Contender", "Competitive", "Rebuild"] as Tier[]).map((tier) => (
+          {TIER_ORDER.map((tier) => (
             <div key={tier} className="space-y-1.5">
               <div className="flex items-center justify-between">
-                <span className={cn("text-sm font-semibold", getTierColor(tier))}>{tier}</span>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className={cn("text-sm font-semibold cursor-default flex items-center gap-1", getTierColor(tier))}>
+                      {getTierEmoji(tier)} {tier}
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent><p className="text-xs max-w-[220px]">{getTierTooltip(tier)}</p></TooltipContent>
+                </Tooltip>
                 <span className="text-sm text-muted-foreground">{tierCounts[tier]} team{tierCounts[tier] !== 1 ? "s" : ""}</span>
               </div>
               <div className="h-5 bg-muted rounded-full overflow-hidden">
                 <div
-                  className={cn(
-                    "h-full rounded-full transition-all",
-                    tier === "Elite" ? "bg-emerald-500" :
-                    tier === "Contender" ? "bg-blue-500" :
-                    tier === "Competitive" ? "bg-amber-500" :
-                    "bg-red-500"
-                  )}
+                  className={cn("h-full rounded-full transition-all", TIER_BAR_COLOR[tier])}
                   style={{ width: `${(tierCounts[tier] / total) * 100}%` }}
                 />
               </div>
@@ -106,11 +146,13 @@ export function TierBreakdown({ league }: AnalyzerProps) {
         </div>
       </Card>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {(["Elite", "Contender", "Competitive", "Rebuild"] as Tier[]).map((tier) => (
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+        {TIER_ORDER.filter(tier => tierCounts[tier] > 0).map((tier) => (
           <Card key={tier} className={cn("p-5 text-center", getTierBg(tier))}>
             <p className="text-4xl font-bold">{tierCounts[tier]}</p>
-            <p className={cn("text-sm font-semibold mt-1.5", getTierColor(tier))}>{tier}</p>
+            <p className={cn("text-sm font-semibold mt-1.5 flex items-center justify-center gap-1", getTierColor(tier))}>
+              {getTierEmoji(tier)} {tier}
+            </p>
             <p className="text-xs text-muted-foreground mt-1">{Math.round((tierCounts[tier] / total) * 100)}% of league</p>
           </Card>
         ))}

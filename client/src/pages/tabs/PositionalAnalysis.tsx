@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useValueModel } from "@/contexts/ValueModelContext";
-import { getTeamTier, getTierColor, getPositionColor } from "@/data/mockData";
+import { getLeagueTeamTiers, getTierColor, getTierEmoji, getPositionColor, isContenderTier, isRebuilderTier } from "@/data/mockData";
 import { cn } from "@/lib/utils";
 import type { League, Team, Player, Pick, Tier } from "@/types";
 import {
@@ -149,6 +149,7 @@ export function PositionalAnalysis({ league, userTeam, onNavigateToCalculator }:
 
 function usePositionalProfiles(league: League, userTeam: Team) {
   const { getPlayerValue, getPickValue } = useValueModel();
+  const profileTierMap = useMemo(() => getLeagueTeamTiers(league.teams), [league.teams]);
 
   return useMemo(() => {
     const total = league.teams.length;
@@ -201,7 +202,7 @@ function usePositionalProfiles(league: League, userTeam: Team) {
     const pickSorted = [...league.teams].sort((a, b) => pickTotals[b.id] - pickTotals[a.id]);
 
     const profiles: TeamPosProfile[] = league.teams.map(team => {
-      const tier = getTeamTier(team.metrics.overall);
+      const tier = profileTierMap.get(team.id)?.tier ?? "Competitive";
       const positions: TeamPosProfile["positions"] = {} as any;
 
       for (const pos of POSITIONS) {
@@ -229,7 +230,7 @@ function usePositionalProfiles(league: League, userTeam: Team) {
     });
 
     return { profiles, total };
-  }, [league, userTeam, getPlayerValue, getPickValue]);
+  }, [league, userTeam, getPlayerValue, getPickValue, profileTierMap]);
 }
 
 function PositionOverview({ league, userTeam }: { league: League; userTeam: Team }) {
@@ -474,6 +475,7 @@ function TradeOpportunities({ league, userTeam }: { league: League; userTeam: Te
   const [aggressiveness, setAggressiveness] = useState<"conservative" | "balanced" | "aggressive">("balanced");
   const [includeStuds, setIncludeStuds] = useState(false);
   const [expandedPartner, setExpandedPartner] = useState<string | null>(null);
+  const tradeBlockTierMap = useMemo(() => getLeagueTeamTiers(league.teams), [league.teams]);
 
   const fairnessThreshold = aggressiveness === "conservative" ? 0.08 : aggressiveness === "balanced" ? 0.12 : 0.18;
 
@@ -489,8 +491,8 @@ function TradeOpportunities({ league, userTeam }: { league: League; userTeam: Te
       .flatMap(t => {
         const dynastyRank = rankedTeams.findIndex(rt => rt.id === t.id) + 1;
         const redraftRank = [...league.teams].sort((a, b) => (b.metrics?.starters ?? 0) - (a.metrics?.starters ?? 0)).findIndex(rt => rt.id === t.id) + 1;
-        const tier = getTeamTier(t.metrics?.overall ?? 50);
-        const isRebuilder = tier === "Rebuild";
+        const tier = tradeBlockTierMap.get(t.id)?.tier ?? "Competitive";
+        const isRebuilder = isRebuilderTier(tier);
         const isDynastyStrong = dynastyRank <= topThird && redraftRank >= bottomStart;
         if (!isRebuilder && !isDynastyStrong) return [];
         return t.roster
@@ -527,8 +529,8 @@ function TradeOpportunities({ league, userTeam }: { league: League; userTeam: Te
         let fallbackSells: PosLabel[] = [];
         let fallbackBuys: PosLabel[] = [];
         if (uSells.length === 0 && uBuys.length === 0 && tierMatch) {
-          const userTier = getTeamTier(userTeam.metrics.overall);
-          if (userTier === "Contender" || userTier === "Elite") {
+          const userTier = tradeBlockTierMap.get(userTeam.id)?.tier ?? "Competitive";
+          if (isContenderTier(userTier)) {
             fallbackBuys = POSITIONS.filter(pos => partner.positions[pos].rank <= Math.ceil(league.teams.length * 0.4));
           } else {
             fallbackSells = POSITIONS.filter(pos => userProfile.positions[pos].rank <= Math.ceil(league.teams.length * 0.4));
@@ -550,7 +552,9 @@ function TradeOpportunities({ league, userTeam }: { league: League; userTeam: Te
 
         const suggestions = generateSuggestions(
           userTeam, partner.team, userProfile, partner,
-          effectiveSells, effectiveBuys, getPlayerValue, getPickValue, includeStuds, fairnessThreshold, aggressiveness
+          effectiveSells, effectiveBuys, getPlayerValue, getPickValue, includeStuds, fairnessThreshold, aggressiveness,
+          tradeBlockTierMap.get(userTeam.id)?.tier ?? "Competitive",
+          tradeBlockTierMap.get(partner.teamId)?.tier ?? "Competitive"
         );
 
         return {
@@ -818,6 +822,8 @@ function generateSuggestions(
   includeStuds: boolean,
   fairnessThreshold: number,
   aggressiveness: "conservative" | "balanced" | "aggressive",
+  userTier: Tier,
+  partnerTier: Tier,
 ): TradeSuggestion[] {
   const suggestions: TradeSuggestion[] = [];
 
@@ -845,16 +851,13 @@ function generateSuggestions(
   const myPicks = userTeam.picks.map(p => ({ ...p, val: getPickValue(p) })).sort((a, b) => b.val - a.val);
   const theirPicks = partnerTeam.picks.map(p => ({ ...p, val: getPickValue(p) })).sort((a, b) => b.val - a.val);
 
-  const userTier = getTeamTier(userTeam.metrics.overall);
-  const partnerTier = getTeamTier(partnerTeam.metrics.overall);
-
   function checkFairness(side1Values: number[], side2Values: number[], applyTierPremium = false): { fair: boolean; fairness: "Fair" | "Reasonable" | "Aggressive"; rawS1: number; rawS2: number; adjS1: number; adjS2: number } {
     let rawS1 = side1Values.reduce((s, v) => s + v, 0);
     let rawS2 = side2Values.reduce((s, v) => s + v, 0);
     const adjS1 = adjustedTotal(side1Values);
     const adjS2 = adjustedTotal(side2Values);
 
-    if (applyTierPremium && (partnerTier === "Rebuild")) {
+    if (applyTierPremium && isRebuilderTier(partnerTier)) {
       const premiumNeeded = rawS2 * 0.05;
       if (rawS1 < rawS2 + premiumNeeded) {
         return { fair: false, fairness: "Aggressive", rawS1, rawS2, adjS1, adjS2 };
@@ -927,7 +930,7 @@ function generateSuggestions(
     }
   }
 
-  if ((userTier === "Elite" || userTier === "Contender") && (partnerTier === "Rebuild" || partnerTier === "Competitive")) {
+  if (isContenderTier(userTier) && (isRebuilderTier(partnerTier) || partnerTier === "Competitive")) {
     for (const buy of theirBuyCandidates.slice(0, 2)) {
       const twoSells = mySellCandidates
         .filter(s => s.val < buy.val * 0.8)
@@ -954,7 +957,7 @@ function generateSuggestions(
     }
   }
 
-  if ((userTier === "Rebuild" || userTier === "Competitive") && (partnerTier === "Contender" || partnerTier === "Elite")) {
+  if ((isRebuilderTier(userTier) || userTier === "Competitive") && isContenderTier(partnerTier)) {
     const oldSells = mySellCandidates
       .filter(s => (s.pos === "RB" && s.age >= 26) || (s.pos !== "RB" && s.age >= 27))
       .slice(0, 3);
@@ -1069,7 +1072,8 @@ function PlayerTargets({ league, userTeam }: { league: League; userTeam: Team })
   const { getPlayerValue } = useValueModel();
 
   const userProfile = useMemo(() => profiles.find(p => p.teamId === userTeam.id), [profiles, userTeam]);
-  const userTier = getTeamTier(userTeam.metrics.overall);
+  const targetsTierMap = useMemo(() => getLeagueTeamTiers(league.teams), [league.teams]);
+  const userTier = targetsTierMap.get(userTeam.id)?.tier ?? "Competitive";
 
   const buyTargets = useMemo(() => {
     const surplusTeams = profiles.filter(p =>
@@ -1106,8 +1110,8 @@ function PlayerTargets({ league, userTeam }: { league: League; userTeam: Team })
       .filter(p => p.val > 100);
   }, [userTeam, userProfile, selectedPos, getPlayerValue]);
 
-  const buyStrategy = userTier === "Contender" || userTier === "Elite" ? "Buy production (high redraft value)" : "Buy youth & upside";
-  const sellStrategy = userTier === "Rebuild" ? "Sell older players for picks & youth" : "Move depth for upgrades";
+  const buyStrategy = isContenderTier(userTier) ? "Buy production (high redraft value)" : "Buy youth & upside";
+  const sellStrategy = isRebuilderTier(userTier) ? "Sell older players for picks & youth" : "Move depth for upgrades";
 
   return (
     <div className="space-y-5">

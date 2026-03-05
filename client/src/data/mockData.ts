@@ -136,27 +136,124 @@ export function getPositionColor(pos: string): string {
 }
 
 export function getTeamTier(overall: number): Tier {
-  if (overall >= 80) return "Elite";
-  if (overall >= 65) return "Contender";
-  if (overall >= 45) return "Competitive";
-  return "Rebuild";
+  if (overall >= 80) return "Juggernaut";
+  if (overall >= 68) return "Contender";
+  if (overall >= 55) return "Ascending";
+  if (overall >= 42) return "Competitive";
+  if (overall >= 30) return "Rebuild";
+  if (overall >= 20) return "Directionless";
+  return "Taco";
+}
+
+export function classifyTeamTier(
+  ranks: { power: number; dynasty: number; redraft: number; draft: number },
+  totalTeams: number
+): Tier {
+  const strong = Math.ceil(totalTeams / 3);
+  const weak = totalTeams - strong + 1;
+  const mid = Math.ceil(totalTeams / 2);
+  const top25 = Math.max(1, Math.ceil(totalTeams / 4));
+  const { power, dynasty, redraft, draft } = ranks;
+
+  if (power <= top25 && dynasty <= strong && redraft <= strong) return "Juggernaut";
+  if (power <= strong && redraft <= mid) return "Contender";
+  if (dynasty <= strong && power > strong && power < weak) return "Ascending";
+  if (dynasty >= weak && draft >= weak && power >= weak) return "Taco";
+  if (redraft >= weak && (dynasty <= mid || draft <= strong)) return "Rebuild";
+  if (power >= weak && dynasty > strong && dynasty < weak && draft > strong && draft < weak) return "Directionless";
+  if (power > strong && power < weak && dynasty > strong && dynasty < weak) return "Competitive";
+  return "Competitive";
+}
+
+export function getLeagueTeamTiers(teams: Team[]): Map<string, { tier: Tier; tooltip: string }> {
+  const total = teams.length;
+  if (total === 0) return new Map();
+
+  const byPower = [...teams].sort((a, b) => (b.metrics?.overall ?? 0) - (a.metrics?.overall ?? 0));
+  const byDynasty = [...teams].sort((a, b) => (b.metrics?.depth ?? 0) - (a.metrics?.depth ?? 0));
+  const byRedraft = [...teams].sort((a, b) => (b.metrics?.starters ?? 0) - (a.metrics?.starters ?? 0));
+  const byDraft = [...teams].sort((a, b) => (b.metrics?.picks ?? 0) - (a.metrics?.picks ?? 0));
+
+  const result = new Map<string, { tier: Tier; tooltip: string }>();
+
+  for (const team of teams) {
+    const power = byPower.findIndex(t => t.id === team.id) + 1;
+    const dynasty = byDynasty.findIndex(t => t.id === team.id) + 1;
+    const redraft = byRedraft.findIndex(t => t.id === team.id) + 1;
+    const draft = byDraft.findIndex(t => t.id === team.id) + 1;
+
+    const tier = classifyTeamTier({ power, dynasty, redraft, draft }, total);
+    result.set(team.id, { tier, tooltip: getTierTooltip(tier) });
+  }
+
+  return result;
+}
+
+export function isContenderTier(tier: Tier): boolean {
+  return tier === "Juggernaut" || tier === "Contender";
+}
+
+export function isRebuilderTier(tier: Tier): boolean {
+  return tier === "Rebuild" || tier === "Taco" || tier === "Directionless";
+}
+
+export function getTierTooltip(tier: Tier): string {
+  switch (tier) {
+    case "Juggernaut": return "League problem. Nobody wants to see this team in the playoffs.";
+    case "Contender": return "Built to win this year.";
+    case "Ascending": return "The future is bright. Probably a year early.";
+    case "Competitive": return "Good roster, not scary.";
+    case "Rebuild": return "Playing the long game.";
+    case "Directionless": return "The roster construction equivalent of throwing darts.";
+    case "Taco": return "Congratulations. You've successfully turned a dynasty team into a seasonal rental.";
+  }
+}
+
+export function getTierEmoji(tier: Tier): string {
+  switch (tier) {
+    case "Juggernaut": return "🏆";
+    case "Contender": return "💪";
+    case "Ascending": return "📈";
+    case "Competitive": return "🎯";
+    case "Rebuild": return "🧠";
+    case "Directionless": return "🎰";
+    case "Taco": return "🤡";
+  }
 }
 
 export function getTierColor(tier: Tier): string {
   switch (tier) {
-    case "Elite": return "text-emerald-600 dark:text-emerald-400";
+    case "Juggernaut": return "text-[#d4af37] dark:text-[#d4af37]";
     case "Contender": return "text-blue-600 dark:text-blue-400";
+    case "Ascending": return "text-emerald-600 dark:text-emerald-400";
     case "Competitive": return "text-amber-600 dark:text-amber-400";
-    case "Rebuild": return "text-red-600 dark:text-red-400";
+    case "Rebuild": return "text-orange-600 dark:text-orange-400";
+    case "Directionless": return "text-purple-600 dark:text-purple-400";
+    case "Taco": return "text-red-600 dark:text-red-400";
   }
 }
 
 export function getTierBg(tier: Tier): string {
   switch (tier) {
-    case "Elite": return "bg-emerald-50 dark:bg-emerald-950/30";
+    case "Juggernaut": return "bg-[#d4af37]/10 dark:bg-[#d4af37]/10";
     case "Contender": return "bg-blue-50 dark:bg-blue-950/30";
+    case "Ascending": return "bg-emerald-50 dark:bg-emerald-950/30";
     case "Competitive": return "bg-amber-50 dark:bg-amber-950/30";
-    case "Rebuild": return "bg-red-50 dark:bg-red-950/30";
+    case "Rebuild": return "bg-orange-50 dark:bg-orange-950/30";
+    case "Directionless": return "bg-purple-50 dark:bg-purple-950/30";
+    case "Taco": return "bg-red-50 dark:bg-red-950/30";
+  }
+}
+
+export function getTierBorderColor(tier: Tier): string {
+  switch (tier) {
+    case "Juggernaut": return "border-[#d4af37]/40";
+    case "Contender": return "border-blue-300 dark:border-blue-700";
+    case "Ascending": return "border-emerald-300 dark:border-emerald-700";
+    case "Competitive": return "border-amber-300 dark:border-amber-700";
+    case "Rebuild": return "border-orange-300 dark:border-orange-700";
+    case "Directionless": return "border-purple-300 dark:border-purple-700";
+    case "Taco": return "border-red-300 dark:border-red-700";
   }
 }
 
@@ -205,14 +302,15 @@ export function generateInsights(league: League, userTeamId: string): Insight[] 
     insights.push({ text: `${oldestContender.owner} has the oldest contender roster (avg starter age ${avg}).`, type: "negative", category: "contender-analysis" });
   }
 
-  const rebuildTeams = league.teams.filter((t) => t.metrics.overall < 45);
+  const tierMap = getLeagueTeamTiers(league.teams);
+  const rebuildTeams = league.teams.filter((t) => { const ti = tierMap.get(t.id); return ti && isRebuilderTier(ti.tier); });
   if (rebuildTeams.length > 0) {
-    insights.push({ text: `${rebuildTeams.length} team(s) in full rebuild mode — look for buy-low opportunities.`, type: "neutral", category: "contender-analysis" });
+    insights.push({ text: `${rebuildTeams.length} team(s) in rebuild mode — look for buy-low opportunities.`, type: "neutral", category: "contender-analysis" });
   }
 
-  const eliteTeams = league.teams.filter((t) => t.metrics.overall >= 80);
-  if (eliteTeams.length > 0) {
-    insights.push({ text: `${eliteTeams.length} elite-tier team(s) in this league: ${eliteTeams.map(t => t.owner).join(", ")}.`, type: "positive", category: "contender-analysis" });
+  const juggernauts = league.teams.filter((t) => tierMap.get(t.id)?.tier === "Juggernaut");
+  if (juggernauts.length > 0) {
+    insights.push({ text: `${juggernauts.length} Juggernaut(s) in this league: ${juggernauts.map(t => t.owner).join(", ")}.`, type: "positive", category: "contender-analysis" });
   }
 
   const worstTE = [...league.teams].sort((a, b) => a.metrics.te - b.metrics.te)[0];
@@ -228,10 +326,11 @@ export function generateInsights(league: League, userTeamId: string): Insight[] 
     insights.push({ text: `Your RB room is below league average — consider targeting RB depth.`, type: "negative", category: "your-team" });
   }
 
-  if (userTeam.metrics.overall >= 75) {
-    insights.push({ text: `Your team is in the top tier — push for a championship window move.`, type: "positive", category: "your-team" });
-  } else if (userTeam.metrics.overall < 45) {
-    insights.push({ text: `Your team is in rebuild mode — accumulate picks and young assets.`, type: "neutral", category: "your-team" });
+  const userTierInfo = tierMap.get(userTeam.id);
+  if (userTierInfo && isContenderTier(userTierInfo.tier)) {
+    insights.push({ text: `Your team is a ${userTierInfo.tier} — push for a championship window move.`, type: "positive", category: "your-team" });
+  } else if (userTierInfo && isRebuilderTier(userTierInfo.tier)) {
+    insights.push({ text: `Your team is in ${userTierInfo.tier} mode — accumulate picks and young assets.`, type: "neutral", category: "your-team" });
   }
 
   if (userTeam.metrics.qb >= 70) {

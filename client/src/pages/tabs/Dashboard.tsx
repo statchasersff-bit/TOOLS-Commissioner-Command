@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/DataTable";
 import { InsightCallout } from "@/components/InsightCallout";
 import { SectionHeader } from "@/components/SectionHeader";
-import { getTeamTier, getTierColor, generateInsights } from "@/data/mockData";
+import { getLeagueTeamTiers, getTierColor, getTierEmoji, getTierTooltip, isContenderTier, isRebuilderTier, generateInsights } from "@/data/mockData";
 import { useValueModel } from "@/contexts/ValueModelContext";
 import type { League, Team } from "@/types";
 import { cn } from "@/lib/utils";
@@ -37,10 +37,13 @@ function getPercentileColor(rank: number, total: number): string {
 
 function getTierBadgeClasses(tier: string): string {
   switch (tier) {
-    case "Elite": return "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800";
+    case "Juggernaut": return "bg-[#d4af37]/15 text-[#d4af37] border-[#d4af37]/40";
     case "Contender": return "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800";
+    case "Ascending": return "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800";
     case "Competitive": return "bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800";
-    case "Rebuild": return "bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800";
+    case "Rebuild": return "bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-400 border-orange-200 dark:border-orange-800";
+    case "Directionless": return "bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-400 border-purple-200 dark:border-purple-800";
+    case "Taco": return "bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800";
     default: return "bg-muted text-muted-foreground";
   }
 }
@@ -220,7 +223,9 @@ export function DashboardOverview({ league, userTeam, onNavigate }: DashboardOve
   const sorted = [...league.teams].sort((a, b) => b.metrics.overall - a.metrics.overall);
   const rank = sorted.findIndex((t) => t.id === userTeam.id) + 1;
   const total = league.teams.length;
-  const tier = getTeamTier(userTeam.metrics.overall);
+  const tierMap = useMemo(() => getLeagueTeamTiers(league.teams), [league.teams]);
+  const tierInfo = tierMap.get(userTeam.id);
+  const tier = tierInfo?.tier ?? "Competitive";
   const starterAges = userTeam.roster.filter((p) => p.starter);
   const avgAge = starterAges.length > 0 ? (starterAges.reduce((s, p) => s + p.age, 0) / starterAges.length).toFixed(1) : "N/A";
   const future1sts = userTeam.picks.filter((p) => p.round === 1).length;
@@ -306,11 +311,11 @@ export function DashboardOverview({ league, userTeam, onNavigate }: DashboardOve
               <Medal className="w-4 h-4 text-[#0b3a7a] dark:text-blue-400" />
             </div>
             <Badge className={`text-sm font-bold px-3 py-0.5 border ${getTierBadgeClasses(tier)}`} data-testid="snapshot-tier-badge">
-              {tier}
+              {getTierEmoji(tier)} {tier}
             </Badge>
-            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mt-2">Tier</p>
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mt-2">Archetype</p>
             <p className={`text-[11px] font-medium mt-1 ${getTierColor(tier)}`}>
-              {tier === "Elite" ? "Championship caliber" : tier === "Contender" ? "Playoff threat" : tier === "Competitive" ? "Fringe contender" : "Asset accumulation"}
+              {tierInfo?.tooltip ?? ""}
             </p>
           </div>
           <SnapshotStat
@@ -482,6 +487,8 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
+  const snapshotTierMap = useMemo(() => getLeagueTeamTiers(teams), [teams]);
+
   const teamRanks = useMemo(() => {
     const rosterPositions = league.rosterPositions || [];
     const total = teams.length;
@@ -619,7 +626,7 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
           <tbody>
             {sortedTeams.map((team, idx) => {
               const rank = idx + 1;
-              const tier = getTeamTier(team.metrics.overall);
+              const tier = snapshotTierMap.get(team.id)?.tier ?? "Competitive";
               const isUser = team.id === userTeam.id;
               const isEven = idx % 2 === 0;
               const isExpanded = expandedRows.has(team.id);
@@ -667,7 +674,9 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
                       <PowerBar value={team.metrics.overall} max={maxOverall} />
                     </td>
                     <td className="px-4 py-3.5 whitespace-nowrap">
-                      <Badge variant="outline" className={getTierColor(tier)}>{tier}</Badge>
+                      <Badge variant="outline" className={cn(getTierColor(tier), "cursor-default")} data-testid={`tier-badge-snapshot-${team.id}`}>
+                        {getTierEmoji(tier)} {tier}
+                      </Badge>
                     </td>
                     <td className="px-4 py-3.5 whitespace-nowrap border-l border-border/15" data-testid={`redraft-rank-${team.id}`}>
                       {(() => {

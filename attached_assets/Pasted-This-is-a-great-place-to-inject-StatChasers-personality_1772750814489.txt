@@ -1,0 +1,274 @@
+This is a great place to inject StatChasers personality. A lot of fantasy tools are sterile — yours can be data-driven but entertaining, which actually increases shareability and retention.
+
+You already have the perfect inputs:
+
+Power → current competitive strength
+
+Dynasty Rank → long-term roster quality
+
+Redraft Rank → current season strength
+
+Draft Rank → future capital
+
+So the Tier system should classify team archetypes, not just strength.
+
+Below is a clean logic system + fun tier names.
+
+Step 1 — Core Signals
+
+Convert the ranks into signals.
+
+For a 12-team league:
+
+Strong
+
+Rank 1-4
+
+Middle
+
+Rank 5-8
+
+Weak
+
+Rank 9-12
+
+Define:
+
+isContender = power <= 4 AND redraft <= 4
+strongRoster = dynasty <= 4
+futureLoaded = draft <= 4
+futureDead = draft >= 9
+weakNow = redraft >= 9
+weakRoster = dynasty >= 9
+Step 2 — Tier Categories
+
+Instead of just “contender / rebuild”, use archetypes.
+
+🏆 Tier 1 — Juggernaut
+
+Definition
+
+power <= 3
+AND dynasty <= 4
+AND redraft <= 4
+
+Meaning
+
+Best team now AND later.
+
+Tooltip
+
+League problem. Nobody wants to see this team in the playoffs.
+
+💪 Tier 2 — Contender
+
+Definition
+
+power <= 4
+AND redraft <= 6
+
+Meaning
+
+Strong playoff team.
+
+Tooltip
+
+Built to win this year.
+
+📈 Tier 3 — Ascending Power
+
+Definition
+
+dynasty <= 4
+AND power between 5–8
+
+Meaning
+
+Roster loaded but not dominating yet.
+
+Tooltip
+
+The future is bright. Probably a year early.
+
+🎯 Tier 4 — Competitive
+
+Definition
+
+power 5–8
+AND dynasty 5–8
+
+Meaning
+
+Solid but unspectacular.
+
+Tooltip
+
+Good roster, not scary.
+
+🧠 Tier 5 — Rebuild (Smart)
+
+Definition
+
+weakNow
+AND strongRoster
+OR futureLoaded
+
+Meaning:
+
+Bad now but intentionally rebuilding.
+
+Tooltip:
+
+Playing the long game.
+
+🎰 Tier 6 — Chaos Manager
+
+Definition
+
+dynasty 5–8
+AND draft 5–8
+AND power 9–12
+
+Meaning:
+
+Roster is messy and unclear direction.
+
+Tooltip:
+
+Nobody knows what the plan is.
+
+🤡 Tier 7 — Taco
+
+Definition
+
+weakRoster
+AND futureDead
+AND power >= 9
+
+Meaning:
+
+Bad roster and no picks.
+
+Tooltip:
+
+The rebuild has not yet begun.
+
+Step 3 — Suggested Tier Names (Fun Version)
+Tier	Name	Tone
+1	Juggernaut	dominant
+2	Contender	strong
+3	Ascending Power	rising
+4	Competitive	middle
+5	Strategic Rebuild	smart rebuild
+6	Directionless	chaos
+7	League Taco	comedic
+Step 4 — Fun UI Badges (StatChasers style)
+
+Example tags next to team name:
+
+WR #1
+QB #2
+Pick Rich
+RB Weak
+
+Plus tier color coding:
+
+Tier	Color
+Juggernaut	Gold
+Contender	Blue
+Ascending	Green
+Competitive	Yellow
+Rebuild	Orange
+Directionless	Purple
+Taco	Red
+Step 5 — Entertainment Layer (optional but VERY shareable)
+
+Hover tooltip jokes.
+
+Example:
+
+League Taco
+
+Congratulations. You've successfully turned a dynasty team into a seasonal rental.
+
+Directionless
+
+The roster construction equivalent of throwing darts.
+
+Ascending Power
+
+One good rookie draft away from becoming terrifying.
+
+Step 6 — Example applied to your screenshot
+
+Based on your image:
+
+Team	Tier
+makitrain	Juggernaut
+Steve4560	Contender
+Mwilson25	Contender
+alexf6942	Ascending Power
+Mayfield Bakers	Competitive
+OGgramps	Competitive
+Tfi23687	Competitive
+motley99	Competitive
+Young Gunz	Strategic Rebuild
+BigGame33	Directionless
+brittlebones85	Competitive
+kpickette	League Taco
+Step 7 — Code logic (what to tell Replit)
+
+Give this to Replit AI:
+
+Create a tier classification system for league teams using Power, Dynasty Rank, Redraft Rank, and Draft Rank.
+
+For a 12-team league:
+
+Strong rank = 1-4
+Middle rank = 5-8
+Weak rank = 9-12
+
+Definitions:
+
+Juggernaut
+power <= 3 AND dynasty <= 4 AND redraft <= 4
+
+Contender
+power <= 4 AND redraft <= 6
+
+Ascending Power
+dynasty <= 4 AND power between 5 and 8
+
+Competitive
+power between 5 and 8 AND dynasty between 5 and 8
+
+Strategic Rebuild
+redraft >= 9 AND (dynasty <= 6 OR draft <= 4)
+
+Directionless
+power >= 9 AND dynasty between 5 and 8 AND draft between 5 and 8
+
+League Taco
+dynasty >= 9 AND draft >= 9 AND power >= 9
+
+Return:
+{
+  tierName,
+  tierColor,
+  tooltip
+}
+My honest recommendation
+
+Do NOT go full toxic with the names.
+
+People will screenshot and share these pages.
+
+You want funny but not insulting.
+
+Bad example:
+
+❌ "Idiot Manager"
+
+Good example:
+
+✅ "League Taco"

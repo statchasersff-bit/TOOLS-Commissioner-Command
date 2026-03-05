@@ -11,7 +11,7 @@ import { DataTable } from "@/components/DataTable";
 import { SectionHeader } from "@/components/SectionHeader";
 import { useValueModel } from "@/contexts/ValueModelContext";
 import { useSleeper } from "@/contexts/SleeperContext";
-import { getTeamTier, getTierColor, getTierBg, getPositionColor } from "@/data/mockData";
+import { getLeagueTeamTiers, getTierColor, getTierBg, getTierEmoji, getPositionColor, isContenderTier, isRebuilderTier } from "@/data/mockData";
 import { getStaticPickValue } from "@/data/pickValues";
 import { apiRequest } from "@/lib/queryClient";
 import type { League, Team, Tier, Player, Pick, TradeRecord, TradeSide, CrawlStatus } from "@/types";
@@ -25,6 +25,7 @@ interface TradeProps {
 
 export function TradeFinder({ league, userTeam }: TradeProps) {
   const { getPlayerValue, getRedraftValue, optimizeLineup } = useValueModel();
+  const tradeFinderTierMap = useMemo(() => getLeagueTeamTiers(league.teams), [league.teams]);
 
   const partners = useMemo(() => {
     const positions = ["QB", "RB", "WR", "TE"] as const;
@@ -83,7 +84,7 @@ export function TradeFinder({ league, userTeam }: TradeProps) {
       .map((t) => {
         const tRedraft = posRedraftRanks[t.id] || {};
         const tDynasty = posDynastyRanks[t.id] || {};
-        const tier = getTeamTier(t.metrics.overall);
+        const tier = tradeFinderTierMap.get(t.id)?.tier ?? "Competitive";
 
         const redraftReasons: string[] = [];
         const dynastyReasons: string[] = [];
@@ -184,8 +185,8 @@ export function TradeFinder({ league, userTeam }: TradeProps) {
       .flatMap(t => {
         const tOverallDynasty = partners.find(p => p.id === t.id)?.dynastyRank ?? total;
         const tOverallRedraft = partners.find(p => p.id === t.id)?.redraftRank ?? total;
-        const tier = getTeamTier(t.metrics.overall);
-        const isRebuilder = tier === "Rebuild";
+        const tier = tradeFinderTierMap.get(t.id)?.tier ?? "Competitive";
+        const isRebuilder = isRebuilderTier(tier);
         const isDynastyStrong = tOverallDynasty <= topThird && tOverallRedraft >= bottomStart;
 
         if (!isRebuilder && !isDynastyStrong) return [];
@@ -199,11 +200,11 @@ export function TradeFinder({ league, userTeam }: TradeProps) {
             tier,
             redraftVal: getRedraftValue(p),
             dynastyVal: getPlayerValue(p),
-            reason: isRebuilder ? "Rebuilder" : "Dynasty-heavy",
+            reason: isRebuilder ? "Rebuilder" as const : "Dynasty-heavy" as const,
           }));
       })
       .sort((a, b) => b.redraftVal - a.redraftVal);
-  }, [league, userTeam, partners, total, getRedraftValue, getPlayerValue]);
+  }, [league, userTeam, partners, total, getRedraftValue, getPlayerValue, tradeFinderTierMap]);
 
   return (
     <div className="space-y-8">
@@ -242,7 +243,7 @@ export function TradeFinder({ league, userTeam }: TradeProps) {
                   <p className="text-xs font-bold text-[#0b3a7a] dark:text-blue-400">{p.redraftVal.toLocaleString()}</p>
                   <p className="text-[10px] text-muted-foreground">redraft</p>
                 </div>
-                <Badge variant="outline" className={cn("text-[10px]", p.reason === "Rebuilder" ? getTierColor("Rebuild") : "text-amber-600 dark:text-amber-400 border-amber-300 dark:border-amber-700")}>
+                <Badge variant="outline" className={cn("text-[10px]", p.reason === "Rebuilder" ? getTierColor("Rebuild") : "text-amber-600 dark:text-amber-400 border-amber-300 dark:border-amber-700")} data-testid={`trade-block-reason-${p.sleeperId || p.id}`}>
                   {p.reason}
                 </Badge>
               </div>
@@ -624,8 +625,9 @@ function CrossLeagueTradeIntel({ league }: { league: League }) {
 }
 
 export function TradeBlockScanner({ league }: { league: League }) {
-  const sellers = league.teams.filter((t) => getTeamTier(t.metrics.overall) === "Rebuild");
-  const buyers = league.teams.filter((t) => ["Elite", "Contender"].includes(getTeamTier(t.metrics.overall)));
+  const scannerTierMap = useMemo(() => getLeagueTeamTiers(league.teams), [league.teams]);
+  const sellers = league.teams.filter((t) => { const ti = scannerTierMap.get(t.id); return ti && isRebuilderTier(ti.tier); });
+  const buyers = league.teams.filter((t) => { const ti = scannerTierMap.get(t.id); return ti && isContenderTier(ti.tier); });
 
   const tradeBlockCandidates = sellers.flatMap((t) =>
     t.roster.filter((p) => p.starter && p.age >= 27).map((p) => ({ ...p, teamName: t.name, ownerName: t.owner }))
@@ -645,17 +647,20 @@ export function TradeBlockScanner({ league }: { league: League }) {
             <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
           </div>
           <div className="space-y-2.5">
-            {sellers.map((t) => (
-              <div key={t.id} className={cn("p-3.5 rounded-md", getTierBg("Rebuild"))}>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-semibold">{t.name}</p>
-                    <p className="text-xs text-muted-foreground">{t.owner}</p>
+            {sellers.map((t) => {
+              const tier = scannerTierMap.get(t.id)?.tier ?? "Rebuild";
+              return (
+                <div key={t.id} className={cn("p-3.5 rounded-md", getTierBg(tier))}>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-semibold">{t.name}</p>
+                      <p className="text-xs text-muted-foreground">{t.owner}</p>
+                    </div>
+                    <Badge variant="outline" className={getTierColor(tier)}>{getTierEmoji(tier)} {tier}</Badge>
                   </div>
-                  <Badge variant="outline" className={getTierColor("Rebuild")}>Rebuild</Badge>
                 </div>
-              </div>
-            ))}
+              );
+            })}
             {sellers.length === 0 && <p className="text-xs text-muted-foreground">No clear sellers identified</p>}
           </div>
         </Card>
@@ -670,7 +675,7 @@ export function TradeBlockScanner({ league }: { league: League }) {
           </div>
           <div className="space-y-2.5">
             {buyers.map((t) => {
-              const tier = getTeamTier(t.metrics.overall);
+              const tier = scannerTierMap.get(t.id)?.tier ?? "Contender";
               return (
                 <div key={t.id} className={cn("p-3.5 rounded-md", getTierBg(tier))}>
                   <div className="flex items-center justify-between">
@@ -678,7 +683,7 @@ export function TradeBlockScanner({ league }: { league: League }) {
                       <p className="text-sm font-semibold">{t.name}</p>
                       <p className="text-xs text-muted-foreground">{t.owner}</p>
                     </div>
-                    <Badge variant="outline" className={getTierColor(tier)}>{tier}</Badge>
+                    <Badge variant="outline" className={getTierColor(tier)}>{getTierEmoji(tier)} {tier}</Badge>
                   </div>
                 </div>
               );
