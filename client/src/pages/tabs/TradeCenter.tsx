@@ -24,21 +24,55 @@ interface TradeProps {
 }
 
 export function TradeFinder({ league, userTeam }: TradeProps) {
-  const partners = league.teams
-    .filter((t) => t.id !== userTeam.id)
-    .map((t) => {
-      const reasons: string[] = [];
-      const tier = getTeamTier(t.metrics.overall);
-      if (t.metrics.rb > 70 && userTeam.metrics.rb < 50) reasons.push("RB surplus");
-      if (t.metrics.wr > 70 && userTeam.metrics.wr < 50) reasons.push("WR surplus");
-      if (tier === "Rebuild") reasons.push("Rebuilding - selling vets");
-      if (tier === "Contender" && t.metrics.te < 40) reasons.push("Needs TE");
-      if (tier === "Contender" && t.metrics.qb < 50) reasons.push("Needs QB");
-      if (t.picks.filter((p) => p.round === 1).length >= 3) reasons.push("Pick rich");
-      if (reasons.length === 0) reasons.push("Balanced roster");
-      return { ...t, reasons, tier };
-    })
-    .sort((a, b) => b.reasons.length - a.reasons.length);
+  const { getPlayerValue, getRedraftValue } = useValueModel();
+
+  const partners = useMemo(() => {
+    const calcScore = (team: Team) => {
+      const starters = team.roster.filter((p) => p.starter);
+      const redraftTotal = starters.reduce((s, p) => s + getRedraftValue(p), 0);
+      const dynastyTotal = team.roster.reduce((s, p) => s + getPlayerValue(p), 0);
+      const maxRedraft = Math.max(starters.length * 5000, 1);
+      const maxDynasty = Math.max(team.roster.length * 3000, 1);
+      const redraftScore = Math.min(99, Math.max(10, Math.round((redraftTotal / maxRedraft) * 100)));
+      const dynastyScore = Math.min(99, Math.max(10, Math.round((dynastyTotal / maxDynasty) * 100)));
+      return { redraftScore, dynastyScore };
+    };
+
+    const userScores = calcScore(userTeam);
+
+    return league.teams
+      .filter((t) => t.id !== userTeam.id)
+      .map((t) => {
+        const scores = calcScore(t);
+        const tier = getTeamTier(t.metrics.overall);
+
+        const redraftReasons: string[] = [];
+        const dynastyReasons: string[] = [];
+
+        if (t.metrics.rb > 70 && userTeam.metrics.rb < 50) redraftReasons.push("RB surplus");
+        if (t.metrics.wr > 70 && userTeam.metrics.wr < 50) redraftReasons.push("WR surplus");
+        if (tier === "Contender" && t.metrics.te < 40) redraftReasons.push("Needs TE");
+        if (tier === "Contender" && t.metrics.qb < 50) redraftReasons.push("Needs QB");
+
+        if (scores.redraftScore > scores.dynastyScore + 15) dynastyReasons.push("Win-now roster, dynasty weak");
+        if (scores.dynastyScore > scores.redraftScore + 15) redraftReasons.push("Strong dynasty, weak starters");
+        if (tier === "Rebuild") dynastyReasons.push("Rebuilding — selling vets");
+        if (t.picks.filter((p) => p.round === 1).length >= 3) dynastyReasons.push("Pick rich");
+
+        const youngStars = t.roster.filter((p) => p.age <= 24 && getPlayerValue(p) >= 3000);
+        if (youngStars.length >= 3) dynastyReasons.push("Young core");
+
+        const agingVets = t.roster.filter((p) => p.starter && p.age >= 28 && getRedraftValue(p) >= 3000);
+        if (agingVets.length >= 3) redraftReasons.push("Aging vets to sell");
+
+        if (redraftReasons.length === 0 && dynastyReasons.length === 0) {
+          redraftReasons.push("Balanced");
+        }
+
+        return { ...t, redraftScore: scores.redraftScore, dynastyScore: scores.dynastyScore, redraftReasons, dynastyReasons, tier };
+      })
+      .sort((a, b) => (b.redraftReasons.length + b.dynastyReasons.length) - (a.redraftReasons.length + a.dynastyReasons.length));
+  }, [league, userTeam, getPlayerValue, getRedraftValue]);
 
   const columns = [
     { key: "name", header: "Team", sticky: true, sortable: true, sortAccessor: (row: any) => row.name, render: (row: any) => (
@@ -48,11 +82,23 @@ export function TradeFinder({ league, userTeam }: TradeProps) {
       </div>
     )},
     { key: "tier", header: "Tier", sortable: true, sortAccessor: (row: any) => row.metrics.overall, render: (row: any) => <Badge variant="outline" className={getTierColor(row.tier)}>{row.tier}</Badge> },
-    { key: "overall", header: "Score", sortable: true, sortAccessor: (row: any) => row.metrics.overall, render: (row: any) => <span className="font-bold text-lg">{row.metrics.overall}</span> },
-    { key: "reasons", header: "Trade Reasons", sortable: true, sortAccessor: (row: any) => row.reasons.length, render: (row: any) => (
+    { key: "redraftScore", header: "Redraft", sortable: true, sortAccessor: (row: any) => row.redraftScore, render: (row: any) => (
+      <span className="font-bold text-base" data-testid={`text-redraft-score-${row.id}`}>{row.redraftScore}</span>
+    )},
+    { key: "dynastyScore", header: "Dynasty", sortable: true, sortAccessor: (row: any) => row.dynastyScore, render: (row: any) => (
+      <span className="font-bold text-base" data-testid={`text-dynasty-score-${row.id}`}>{row.dynastyScore}</span>
+    )},
+    { key: "redraftReasons", header: "Redraft Reasons", sortable: true, sortAccessor: (row: any) => row.redraftReasons.length, render: (row: any) => (
       <div className="flex flex-wrap gap-1">
-        {row.reasons.map((r: string, i: number) => (
-          <Badge key={i} variant="secondary" className="text-xs">{r}</Badge>
+        {row.redraftReasons.map((r: string, i: number) => (
+          <Badge key={i} variant="secondary" className="text-xs" data-testid={`badge-redraft-reason-${row.id}-${i}`}>{r}</Badge>
+        ))}
+      </div>
+    )},
+    { key: "dynastyReasons", header: "Dynasty Reasons", sortable: true, sortAccessor: (row: any) => row.dynastyReasons.length, render: (row: any) => (
+      <div className="flex flex-wrap gap-1">
+        {row.dynastyReasons.map((r: string, i: number) => (
+          <Badge key={i} variant="outline" className="text-xs" data-testid={`badge-dynasty-reason-${row.id}-${i}`}>{r}</Badge>
         ))}
       </div>
     )},
