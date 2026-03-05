@@ -175,10 +175,81 @@ export function TradeFinder({ league, userTeam }: TradeProps) {
     )},
   ];
 
+  const tradeBlockCandidates = useMemo(() => {
+    const topThird = Math.ceil(total / 3);
+    const bottomStart = total - topThird + 1;
+
+    return league.teams
+      .filter(t => t.id !== userTeam.id)
+      .flatMap(t => {
+        const tOverallDynasty = partners.find(p => p.id === t.id)?.dynastyRank ?? total;
+        const tOverallRedraft = partners.find(p => p.id === t.id)?.redraftRank ?? total;
+        const tier = getTeamTier(t.metrics.overall);
+        const isRebuilder = tier === "Rebuild";
+        const isDynastyStrong = tOverallDynasty <= topThird && tOverallRedraft >= bottomStart;
+
+        if (!isRebuilder && !isDynastyStrong) return [];
+
+        return t.roster
+          .filter(p => p.age >= 27 && getRedraftValue(p) >= 1500)
+          .map(p => ({
+            ...p,
+            teamName: t.name,
+            ownerName: t.owner,
+            tier,
+            redraftVal: getRedraftValue(p),
+            dynastyVal: getPlayerValue(p),
+            reason: isRebuilder ? "Rebuilder" : "Dynasty-heavy",
+          }));
+      })
+      .sort((a, b) => b.redraftVal - a.redraftVal);
+  }, [league, userTeam, partners, total, getRedraftValue, getPlayerValue]);
+
   return (
     <div className="space-y-8">
       <SectionHeader title="Trade Finder" subtitle="Best trade partners based on positional surplus/deficit and roster imbalance" />
       <DataTable columns={columns} data={partners} />
+
+      <Card className="p-6" data-testid="card-trade-block-candidates">
+        <div className="mb-5">
+          <h3 className="text-base font-bold flex items-center gap-2">
+            Trade Block Candidates
+            <Badge variant="secondary">{tradeBlockCandidates.length}</Badge>
+          </h3>
+          <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
+          <p className="text-[10px] text-muted-foreground mt-2">
+            Veteran players (27+) on rebuilding or dynasty-heavy teams with strong redraft value — likely trade targets
+          </p>
+        </div>
+        <div className="space-y-0">
+          {tradeBlockCandidates.length === 0 && <p className="text-xs text-muted-foreground">No trade block candidates found</p>}
+          {tradeBlockCandidates.slice(0, 20).map((p, i) => (
+            <div key={`${p.sleeperId || p.id}-${i}`} className="flex items-center justify-between py-2.5 border-b border-border/20 last:border-0" data-testid={`trade-block-candidate-${p.sleeperId || p.id}`}>
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="text-xs text-muted-foreground w-5 text-right">{i + 1}.</span>
+                <Badge variant="outline" className={`text-xs w-8 justify-center flex-shrink-0 ${getPositionColor(p.pos)}`}>{p.pos}</Badge>
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold truncate">{p.name}</p>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] text-muted-foreground">{p.teamName}</span>
+                    <span className="text-[10px] text-muted-foreground">· {p.ownerName}</span>
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <span className="text-xs text-muted-foreground">Age {p.age}</span>
+                <div className="text-right">
+                  <p className="text-xs font-bold text-[#0b3a7a] dark:text-blue-400">{p.redraftVal.toLocaleString()}</p>
+                  <p className="text-[10px] text-muted-foreground">redraft</p>
+                </div>
+                <Badge variant="outline" className={cn("text-[10px]", p.reason === "Rebuilder" ? getTierColor("Rebuild") : "text-amber-600 dark:text-amber-400 border-amber-300 dark:border-amber-700")}>
+                  {p.reason}
+                </Badge>
+              </div>
+            </div>
+          ))}
+        </div>
+      </Card>
     </div>
   );
 }
