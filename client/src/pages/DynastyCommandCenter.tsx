@@ -1,17 +1,20 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { MainTabs } from "@/components/MainTabs";
 import { SubTabs } from "@/components/SubTabs";
 import { LeagueSelector } from "@/components/LeagueSelector";
 import { ValueSourceSelector, ValueAttribution } from "@/components/ValueSourceSelector";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useValueModel } from "@/contexts/ValueModelContext";
-import { NAV_CONFIG, getLeagues } from "@/data/mockData";
+import { useSleeper } from "@/contexts/SleeperContext";
+import { NAV_CONFIG } from "@/data/mockData";
 import type { League, Team } from "@/types";
 import { DataDiagnostics } from "@/components/DataDiagnostics";
-import { Share2, Download, LayoutDashboard, Loader2 } from "lucide-react";
+import { Share2, Download, LayoutDashboard, Loader2, Lock, Check, User } from "lucide-react";
 
+import { PortfolioConnect, PortfolioMyLeagues, PortfolioSummary } from "./tabs/Portfolio";
 import { DashboardOverview, DashboardSnapshot, DashboardKeyInsights } from "./tabs/Dashboard";
 import { PowerRankings, TierBreakdown, RosterComparison } from "./tabs/LeagueAnalyzer";
 import { RosterStrength, AgeCurve, DepthChart } from "./tabs/TeamBreakdown";
@@ -37,38 +40,88 @@ function getInitialState() {
   const urlSub = params.get("sub");
 
   return {
-    tab: urlTab || saved?.tab || "dashboard",
-    sub: urlSub || saved?.sub || "overview",
+    tab: urlTab || saved?.tab || "portfolio",
+    sub: urlSub || saved?.sub || "connect",
     leagueId: saved?.leagueId || null,
   };
 }
 
+function formatTimeAgo(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "Just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
+}
+
 export default function DynastyCommandCenter() {
-  const leagues = getLeagues();
   const initial = getInitialState();
   const [selectedLeagueId, setSelectedLeagueId] = useState<string | null>(initial.leagueId);
   const [activeMainTab, setActiveMainTab] = useState(initial.tab);
   const [activeSubTab, setActiveSubTab] = useState(initial.sub);
   const [isTransitioning, setIsTransitioning] = useState(false);
+  const [fetchedLeague, setFetchedLeague] = useState<{ league: League; userTeamId: string | null } | null>(null);
+  const [isLeagueLoading, setIsLeagueLoading] = useState(false);
 
   const { isRecalculating, isLoading, getPlayerValue, getPickValue, calculateMetrics } = useValueModel();
+  const sleeper = useSleeper();
 
-  const rawLeague = leagues.find((l) => l.id === selectedLeagueId) || null;
+  const sleeperLeaguesAsLeagues = useMemo(() => {
+    return sleeper.leagues.map((sl) => ({
+      id: sl.leagueId,
+      name: sl.name,
+      platform: "sleeper" as string,
+      scoringFormat: `${sl.scoringFormat} ${sl.format}`,
+      teams: [] as Team[],
+    }));
+  }, [sleeper.leagues]);
+
+  useEffect(() => {
+    if (!selectedLeagueId || !sleeper.isConnected || !sleeper.user) return;
+    let cancelled = false;
+    setIsLeagueLoading(true);
+
+    fetch(`/api/sleeper/league/${selectedLeagueId}/full?userId=${sleeper.user.userId}`)
+      .then((r) => {
+        if (!r.ok) throw new Error("Failed to fetch league");
+        return r.json();
+      })
+      .then((data: { league: League; userTeamId: string | null }) => {
+        if (cancelled) return;
+        setFetchedLeague(data);
+        setIsLeagueLoading(false);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        console.error("League fetch error:", err);
+        setFetchedLeague(null);
+        setIsLeagueLoading(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [selectedLeagueId, sleeper.isConnected, sleeper.user]);
 
   const league: League | null = useMemo(() => {
-    if (!rawLeague) return null;
+    if (!fetchedLeague?.league) return null;
+    const raw = fetchedLeague.league;
     return {
-      ...rawLeague,
-      teams: rawLeague.teams.map((team) => {
+      ...raw,
+      teams: raw.teams.map((team) => {
         const roster = team.roster.map((p) => ({ ...p, value: getPlayerValue(p) }));
         const picks = team.picks.map((p) => ({ ...p, value: getPickValue(p) }));
         const adjustedTeam = { ...team, roster, picks };
         return { ...adjustedTeam, metrics: calculateMetrics(adjustedTeam) };
       }),
     };
-  }, [rawLeague, getPlayerValue, getPickValue, calculateMetrics]);
+  }, [fetchedLeague, getPlayerValue, getPickValue, calculateMetrics]);
 
-  const userTeam = league?.teams[0] || null;
+  const userTeam = useMemo(() => {
+    if (!league || !fetchedLeague?.userTeamId) return league?.teams[0] || null;
+    return league.teams.find((t) => t.id === fetchedLeague.userTeamId) || league.teams[0] || null;
+  }, [league, fetchedLeague]);
+
   const currentMainConfig = NAV_CONFIG.find((t) => t.id === activeMainTab);
 
   useEffect(() => {
@@ -88,11 +141,8 @@ export default function DynastyCommandCenter() {
 
   const handleLeagueSelect = useCallback((id: string) => {
     setSelectedLeagueId(id);
-    if (!rawLeague) {
-      setActiveMainTab("dashboard");
-      setActiveSubTab("overview");
-    }
-  }, [rawLeague]);
+    sleeper.setActiveLeague(id);
+  }, [sleeper]);
 
   const handleMainTabChange = useCallback((id: string) => {
     setIsTransitioning(true);
@@ -115,21 +165,86 @@ export default function DynastyCommandCenter() {
     setTimeout(() => setIsTransitioning(false), 180);
   }, []);
 
-  const renderContent = () => {
-    if (!league || !userTeam) {
-      return (
-        <div className="flex items-center justify-center min-h-[60vh]">
-          <Card className="p-10 text-center max-w-md">
-            <div className="mx-auto w-16 h-16 rounded-full bg-[#0b3a7a]/8 dark:bg-blue-400/10 flex items-center justify-center mb-5">
-              <LayoutDashboard className="w-7 h-7 text-[#0b3a7a] dark:text-blue-400" />
-            </div>
-            <h3 className="text-xl font-bold mb-2" data-testid="text-empty-state">Select a League to Begin</h3>
-            <p className="text-sm text-muted-foreground leading-relaxed">
-              Choose a league from the dropdown above to explore your dynasty command center with power rankings, trade tools, and deep roster analysis.
-            </p>
-          </Card>
+  const handlePortfolioLeagueSelect = useCallback((leagueId: string) => {
+    setSelectedLeagueId(leagueId);
+    sleeper.setActiveLeague(leagueId);
+  }, [sleeper]);
+
+  const renderLockedState = () => (
+    <div className="flex items-center justify-center min-h-[60vh]">
+      <Card className="p-10 text-center max-w-md" data-testid="locked-state-card">
+        <div className="mx-auto w-16 h-16 rounded-full bg-[#0b3a7a]/8 dark:bg-blue-400/10 flex items-center justify-center mb-5">
+          <Lock className="w-7 h-7 text-[#0b3a7a] dark:text-blue-400" />
         </div>
-      );
+        <h3 className="text-xl font-bold mb-2">Connect Sleeper to Unlock</h3>
+        <p className="text-sm text-muted-foreground leading-relaxed mb-6">
+          Link your Sleeper account to access real-time dynasty analysis powered by your actual rosters and picks.
+        </p>
+        <div className="text-left space-y-2.5 mb-6 max-w-xs mx-auto">
+          {[
+            "Real-time roster analysis",
+            "Multi-league portfolio view",
+            "FantasyCalc-powered valuations",
+          ].map((text) => (
+            <div key={text} className="flex items-center gap-2.5">
+              <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
+              <span className="text-sm text-muted-foreground">{text}</span>
+            </div>
+          ))}
+        </div>
+        <Button
+          className="bg-[#0b3a7a] hover:bg-[#0b3a7a]/90 text-white"
+          onClick={() => navigateToSubTab("portfolio", "connect")}
+          data-testid="button-connect-sleeper-locked"
+        >
+          Connect Sleeper
+        </Button>
+      </Card>
+    </div>
+  );
+
+  const renderSelectLeague = () => (
+    <div className="flex items-center justify-center min-h-[60vh]">
+      <Card className="p-10 text-center max-w-md" data-testid="select-league-card">
+        <div className="mx-auto w-16 h-16 rounded-full bg-[#0b3a7a]/8 dark:bg-blue-400/10 flex items-center justify-center mb-5">
+          <LayoutDashboard className="w-7 h-7 text-[#0b3a7a] dark:text-blue-400" />
+        </div>
+        <h3 className="text-xl font-bold mb-2" data-testid="text-empty-state">Select a League to Begin</h3>
+        <p className="text-sm text-muted-foreground leading-relaxed mb-6">
+          Choose a league to explore your dynasty command center with power rankings, trade tools, and deep roster analysis.
+        </p>
+        <Button
+          variant="outline"
+          onClick={() => navigateToSubTab("portfolio", "my-leagues")}
+          data-testid="button-go-to-leagues"
+        >
+          Go to My Leagues
+        </Button>
+      </Card>
+    </div>
+  );
+
+  const renderContent = () => {
+    if (activeMainTab === "portfolio") {
+      const key = `portfolio:${activeSubTab}`;
+      switch (key) {
+        case "portfolio:connect":
+          return <PortfolioConnect />;
+        case "portfolio:my-leagues":
+          return <PortfolioMyLeagues onSelectLeague={handlePortfolioLeagueSelect} onNavigate={navigateToSubTab} />;
+        case "portfolio:portfolio-summary":
+          return <PortfolioSummary />;
+        default:
+          return <PortfolioConnect />;
+      }
+    }
+
+    if (!sleeper.isConnected) {
+      return renderLockedState();
+    }
+
+    if (!league || !userTeam) {
+      return renderSelectLeague();
     }
 
     const key = `${activeMainTab}:${activeSubTab}`;
@@ -156,6 +271,8 @@ export default function DynastyCommandCenter() {
     }
   };
 
+  const showLoadingOverlay = isLeagueLoading || isRecalculating || (isLoading && selectedLeagueId && sleeper.isConnected);
+
   return (
     <div className="min-h-screen bg-background blueprint-bg">
       <header className="border-b border-border bg-background/95 backdrop-blur-sm sticky top-0 z-50">
@@ -174,14 +291,28 @@ export default function DynastyCommandCenter() {
             </div>
 
             <div className="flex items-center gap-3 flex-wrap">
-              <div className="flex items-center gap-1.5">
-                <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider hidden md:inline">League:</span>
-                <LeagueSelector
-                  leagues={leagues}
-                  selectedLeagueId={selectedLeagueId}
-                  onSelect={handleLeagueSelect}
-                />
-              </div>
+              {sleeper.isConnected && sleeper.user && (
+                <div className="flex items-center gap-1.5 border-r border-border/50 pr-3">
+                  <div className="w-6 h-6 rounded-full bg-[#0b3a7a]/10 dark:bg-blue-400/10 flex items-center justify-center flex-shrink-0">
+                    <User className="w-3 h-3 text-[#0b3a7a] dark:text-blue-400" />
+                  </div>
+                  <span className="text-xs font-medium text-foreground hidden md:inline" data-testid="text-sleeper-user">
+                    {sleeper.user.displayName}
+                  </span>
+                </div>
+              )}
+
+              {sleeper.isConnected && (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider hidden md:inline">League:</span>
+                  <LeagueSelector
+                    leagues={sleeperLeaguesAsLeagues}
+                    selectedLeagueId={selectedLeagueId}
+                    onSelect={handleLeagueSelect}
+                  />
+                </div>
+              )}
+
               <div className="flex items-center gap-1.5">
                 <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider hidden md:inline">Value:</span>
                 <ValueSourceSelector />
@@ -197,7 +328,12 @@ export default function DynastyCommandCenter() {
               </div>
             </div>
           </div>
-          <div className="flex justify-end mt-1">
+          <div className="flex items-center justify-end gap-3 mt-1">
+            {sleeper.isConnected && sleeper.lastSyncTime && (
+              <Badge variant="outline" className="text-[10px] font-medium" data-testid="badge-sync-status">
+                Synced {formatTimeAgo(sleeper.lastSyncTime)}
+              </Badge>
+            )}
             <ValueAttribution />
           </div>
         </div>
@@ -210,18 +346,18 @@ export default function DynastyCommandCenter() {
       )}
 
       <main className="max-w-7xl mx-auto px-4 md:px-6 py-8 relative">
-        {(isRecalculating || (isLoading && selectedLeagueId)) && (
+        {showLoadingOverlay && (
           <div className="absolute inset-0 z-30 flex items-start justify-center pt-24" data-testid="recalculating-overlay">
             <div className="bg-background/90 backdrop-blur-sm border border-border rounded-lg px-5 py-3 shadow-lg flex items-center gap-3">
               <Loader2 className="w-4 h-4 text-[#d4af37] animate-spin" />
               <span className="text-sm font-semibold text-foreground">
-                {isLoading ? "Loading FantasyCalc values..." : "Recalculating league analysis..."}
+                {isLeagueLoading ? "Loading league data..." : isLoading ? "Loading FantasyCalc values..." : "Recalculating league analysis..."}
               </span>
             </div>
           </div>
         )}
         <div
-          className={`transition-opacity duration-180 ${isTransitioning || isRecalculating || isLoading ? "opacity-30" : "opacity-100"}`}
+          className={`transition-opacity duration-180 ${isTransitioning || showLoadingOverlay ? "opacity-30" : "opacity-100"}`}
         >
           {renderContent()}
         </div>

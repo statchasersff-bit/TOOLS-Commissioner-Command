@@ -4,6 +4,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ValueModelProvider } from "@/contexts/ValueModelContext";
+import { SleeperProvider } from "@/contexts/SleeperContext";
 import DynastyCommandCenter from "@/pages/DynastyCommandCenter";
 
 function Router() {
@@ -19,10 +20,12 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <ValueModelProvider>
-          <Toaster />
-          <Router />
-        </ValueModelProvider>
+        <SleeperProvider>
+          <ValueModelProvider>
+            <Toaster />
+            <Router />
+          </ValueModelProvider>
+        </SleeperProvider>
       </TooltipProvider>
     </QueryClientProvider>
   );

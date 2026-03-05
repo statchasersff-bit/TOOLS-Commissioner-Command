@@ -73,3 +73,21 @@ export interface Insight {
   text: string;
   type: InsightType;
 }
+
+export interface SleeperUser {
+  userId: string;
+  username: string;
+  displayName: string;
+  avatar: string | null;
+}
+
+export interface SleeperLeagueSummary {
+  leagueId: string;
+  name: string;
+  season: string;
+  totalRosters: number;
+  rosterPositions: string[];
+  scoringFormat: string;
+  format: string;
+  status: string;
+}

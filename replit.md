@@ -1,16 +1,30 @@
 # Dynasty Command Center - StatChasers
 
 ## Overview
-A premium dynasty fantasy football league analysis tool built with React + TypeScript + Vite. Uses a two-level tab navigation system (main tabs -> sub tabs) with mock data ready to be wired to Sleeper API.
+A premium dynasty fantasy football league analysis tool built with React + TypeScript + Vite. Uses Sleeper API integration for real league data, FantasyCalc for player values, and a two-level tab navigation system (main tabs -> sub tabs).
 
 ## Architecture
-- **Frontend + Express backend** with mock roster data and real FantasyCalc values
+- **Frontend + Express backend** with Sleeper API proxy and FantasyCalc values
+- **SleeperProvider** context manages account connection, league list, active league
 - **ValueModelProvider** context drives all value calculations (player values, pick values, team metrics)
 - Power Score formula: 0.45 Starter Value + 0.25 Bench Value + 0.20 Picks + 0.10 Youth
 - State-based navigation with URL query param persistence (?tab=X&sub=Y)
-- localStorage persistence for tab, sub-tab, and league selection (key: "sc-dynasty-state")
-- Two-level tab system: 7 main tabs, each with 2-3 sub-tabs
-- Empty state landing until league is selected; first selection lands on Dashboard > Overview
+- localStorage persistence for tab/sub/league ("sc-dynasty-state") and Sleeper connection ("sc-sleeper-connection")
+- Two-level tab system: 8 main tabs (Portfolio first), each with 2-3 sub-tabs
+- Portfolio tab renders freely; all other tabs locked behind Sleeper connection
+- Default state: portfolio:connect
+
+## Sleeper API Integration
+- **Backend proxy**: `server/sleeper.ts` handles all Sleeper API calls
+- **Endpoints**:
+  - `GET /api/sleeper/user/:username` → user lookup
+  - `GET /api/sleeper/user/:userId/leagues?season=2025` → league summaries
+  - `GET /api/sleeper/league/:leagueId/full?userId=xxx` → full league data transformed to our League/Team format
+- **Player DB**: Cached at `/tmp/sleeper_players.json` (24h TTL), maps Sleeper player IDs to metadata
+- **Data transform**: Sleeper rosters → our League/Team/Player format with proper starter detection, pick allocation (rounds 1-4, years 2025-2028), and format detection (SF/1QB)
+- **Context**: `SleeperContext.tsx` manages connection state with `connect()`, `disconnect()`, `refresh()`, `setActiveLeague()`
+- **Auto-reconnect**: On mount, if stored username exists in localStorage, auto-reconnects
+- **Season**: Uses 2025 as current season
 
 ## Value Source Integration (FantasyCalc)
 - **Backend proxy**: `GET /api/values/fantasycalc?format=sf|1qb` proxies and caches FantasyCalc API
@@ -24,18 +38,20 @@ A premium dynasty fantasy football league analysis tool built with React + TypeS
 ```
 server/
   index.ts               - Express server setup
-  routes.ts              - API routes (FantasyCalc proxy endpoint)
+  routes.ts              - API routes (FantasyCalc proxy, Sleeper proxy endpoints)
   fantasycalc.ts         - FantasyCalc API fetcher + file cache + snapshot fallback
+  sleeper.ts             - Sleeper API proxy (user, leagues, full league transform, player DB cache)
   data/
     fantasycalc_snapshot_sf.json - Dev fallback snapshot of FantasyCalc values
 
 client/src/
-  types/index.ts          - TypeScript interfaces (League, Team, Player, Pick, ValueSourceId, etc.)
+  types/index.ts          - TypeScript interfaces (League, Team, Player, Pick, SleeperUser, SleeperLeagueSummary, etc.)
   data/
-    mockData.ts           - Mock league data generator + nav config + utility functions
+    mockData.ts           - Nav config (NAV_CONFIG with Portfolio first) + utility functions
     pickValues.ts         - Static pick value table (round × year × projected range)
   contexts/
     ValueModelContext.tsx  - ValueModelProvider with FantasyCalc API fetch, getPlayerValue, getPickValue, calculateMetrics
+    SleeperContext.tsx     - SleeperProvider with connect/disconnect/refresh, league list, active league, localStorage persistence
   components/
     MainTabs.tsx           - Top-level tab navigation (rounded-full pills, gold underline)
     SubTabs.tsx            - Second-level tab navigation (rounded-full pills, gold underline)
@@ -47,8 +63,9 @@ client/src/
     SectionHeader.tsx      - Section headers with gold accent bar (text-xl/2xl bold)
     ThemeToggle.tsx        - Dark/light mode toggle
   pages/
-    DynastyCommandCenter.tsx - Main page orchestrator (blueprint-bg, value model wiring)
+    DynastyCommandCenter.tsx - Main page orchestrator (Portfolio integration, locking, Sleeper data flow, header controls)
     tabs/
+      Portfolio.tsx        - PortfolioConnect, PortfolioMyLeagues, PortfolioSummary
       Dashboard.tsx        - Overview (with Jump to menu), League Snapshot, Key Insights
       LeagueAnalyzer.tsx   - Power Rankings, Tier Breakdown, Roster Comparison
       TeamBreakdown.tsx    - Roster Strength, Age Curve, Depth Chart
@@ -62,7 +79,7 @@ client/src/
 - FantasyCalc (active): fetches real player values from API via backend proxy, cached daily
 - KTC, DLF, Custom Upload: listed as "Coming Soon" / disabled
 - Value sources: FantasyCalc (active default), KeepTradeCut (Coming Soon), DLF (Coming Soon), Custom Upload (Coming Soon)
-- Mock roster data is enriched with real FantasyCalc values via name+sleeperId matching
+- Sleeper roster data enriched with real FantasyCalc values via sleeperId matching
 - Switching sources triggers a "Recalculating..." overlay animation
 
 ## Branding
@@ -70,16 +87,17 @@ client/src/
 - Brand Gold: #d4af37
 - Font: Inter
 - Dark mode supported via class toggle
+- Gold underline pattern: `<div className="mb-X"><h3>Title</h3><span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" /></div>`
+- DO NOT use Popover component (causes React dual-instance hook error) — use Tooltip instead
 
 ## UX Features
-- Header control panel: League selector + Value Source selector with labels, pill-style dropdowns
-- FantasyCalc attribution line below header selectors when FantasyCalc is active
-- Loading state with spinner when fetching values
-- Snapshot (dev) badge when using fallback data
-- "Jump to" mini menu on Dashboard Overview links to Snapshot and Key Insights sub-tabs
-- KPI cards support "?" tooltip icons explaining what each metric means
-- Value Source selector has "?" tooltip explaining the active source
-- State restored from localStorage on refresh (tab, sub-tab, league)
+- Portfolio tab is first/default — user connects Sleeper account, browses leagues, views portfolio summary
+- Non-portfolio tabs locked with premium-feel card until Sleeper is connected
+- Header shows: SC logo, user badge (when connected), league selector, value source selector, share/export buttons, theme toggle
+- Sync status badge shows time since last Sleeper data refresh
+- FantasyCalc attribution line below header selectors
+- Loading overlays for league fetch, value recalculation
+- State restored from localStorage on refresh (tab, sub-tab, league, Sleeper connection)
 
 ## UI Polish
 - Tabs: rounded-full pill shape with gold underline active indicator

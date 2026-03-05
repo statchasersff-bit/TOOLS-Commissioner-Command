@@ -203,6 +203,15 @@ export function generateInsights(league: League, userTeamId: string): Insight[] 
 
 export const NAV_CONFIG: MainTabConfig[] = [
   {
+    id: "portfolio",
+    label: "Portfolio",
+    subTabs: [
+      { id: "connect", label: "Connect" },
+      { id: "my-leagues", label: "My Leagues" },
+      { id: "portfolio-summary", label: "Portfolio Summary" },
+    ],
+  },
+  {
     id: "dashboard",
     label: "Dashboard",
     subTabs: [
