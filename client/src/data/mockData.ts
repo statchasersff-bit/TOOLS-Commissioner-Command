@@ -273,13 +273,13 @@ export const NAV_CONFIG: MainTabConfig[] = [
       { id: "trade-finder", label: "Trade Finder" },
       { id: "trade-targets", label: "Trade Targets" },
       { id: "trade-block", label: "Trade Block Scanner" },
+      { id: "positional-surplus", label: "Positional Surplus" },
     ],
   },
   {
     id: "league-market",
     label: "League Market",
     subTabs: [
-      { id: "positional-surplus", label: "Positional Surplus" },
       { id: "market-value", label: "Market Value" },
     ],
   },
