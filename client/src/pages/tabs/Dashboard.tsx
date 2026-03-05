@@ -599,7 +599,7 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
                 Team Strength
               </th>
               <th className="px-3 py-1.5 text-center text-[10px] font-bold text-[#0b3a7a] dark:text-blue-400 uppercase tracking-widest border-b border-border/20 bg-muted/30 dark:bg-muted/20 border-l border-border/30" colSpan={2} data-testid="col-group-roster">
-                Roster Value
+                Draft Rank
               </th>
               <th className="px-3 py-1.5 text-center text-[10px] font-bold text-[#0b3a7a] dark:text-blue-400 uppercase tracking-widest border-b border-border/20 bg-muted/30 dark:bg-muted/20 border-l border-border/30" colSpan={1} data-testid="col-group-capital">
                 Draft Capital
