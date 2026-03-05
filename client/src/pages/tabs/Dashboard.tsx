@@ -259,7 +259,7 @@ export function DashboardOverview({ league, userTeam, onNavigate }: DashboardOve
               data-testid="jump-to-snapshot"
             >
               <Table className="w-3 h-3 mr-1" />
-              Snapshot
+              Rankings
             </Button>
             <Button
               variant="outline"
@@ -414,37 +414,114 @@ export function DashboardOverview({ league, userTeam, onNavigate }: DashboardOve
   );
 }
 
-export function DashboardSnapshot({ league }: { league: League }) {
-  const teams = league.teams;
+function RankBadge({ rank }: { rank: number }) {
+  if (rank === 1) return <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-[#d4af37]/15 text-[#d4af37] font-bold text-sm" data-testid="rank-badge-1">1</span>;
+  if (rank === 2) return <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-gray-300/20 dark:bg-gray-500/20 text-gray-500 dark:text-gray-400 font-bold text-sm" data-testid="rank-badge-2">2</span>;
+  if (rank === 3) return <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-amber-700/10 dark:bg-amber-600/15 text-amber-700 dark:text-amber-500 font-bold text-sm" data-testid="rank-badge-3">3</span>;
+  return <span className="inline-flex items-center justify-center w-7 h-7 text-muted-foreground font-semibold text-sm">{rank}</span>;
+}
 
-  const columns = [
-    { key: "rank", header: "#", sticky: true, render: (_: any, i: number) => <span className="font-bold text-muted-foreground">{i + 1}</span> },
-    { key: "name", header: "Team", sortable: true, sortAccessor: (row: any) => row.name.toLowerCase(), render: (row: any) => (
-      <div>
-        <span className="font-semibold text-foreground">{row.name}</span>
-        <span className="text-xs text-muted-foreground ml-2">({row.owner})</span>
+function PowerBar({ value, max }: { value: number; max: number }) {
+  const pct = max > 0 ? Math.round((value / max) * 100) : 0;
+  const color = value >= 70 ? "bg-emerald-500" : value >= 50 ? "bg-[#0b3a7a] dark:bg-blue-500" : value >= 30 ? "bg-amber-500" : "bg-red-400";
+  return (
+    <div className="flex items-center gap-2.5 min-w-[140px]">
+      <span className="font-bold text-base w-7 text-right">{value}</span>
+      <div className="flex-1 h-2.5 bg-muted rounded-full overflow-hidden">
+        <div className={`h-full rounded-full transition-all ${color}`} style={{ width: `${pct}%` }} />
       </div>
-    )},
-    { key: "overall", header: "Overall", sortable: true, sortAccessor: (row: any) => row.metrics.overall, render: (row: any) => <span className="font-bold text-lg">{row.metrics.overall}</span> },
-    { key: "tier", header: "Tier", sortable: true, sortAccessor: (row: any) => row.metrics.overall, render: (row: any) => {
-      const tier = getTeamTier(row.metrics.overall);
-      return <Badge variant="outline" className={getTierColor(tier)}>{tier}</Badge>;
-    }},
-    { key: "starters", header: "Starters", sortable: true, sortAccessor: (row: any) => row.metrics.starters, render: (row: any) => row.metrics.starters },
-    { key: "depth", header: "Depth", sortable: true, sortAccessor: (row: any) => row.metrics.depth, render: (row: any) => row.metrics.depth },
-    { key: "youth", header: "Youth", sortable: true, sortAccessor: (row: any) => row.metrics.youth, render: (row: any) => row.metrics.youth },
-    { key: "picks", header: "Picks", sortable: true, sortAccessor: (row: any) => row.metrics.picks, render: (row: any) => row.metrics.picks },
-    { key: "action", header: "", render: () => (
-      <Button variant="ghost" size="sm" data-testid="button-view-team">
-        View <ArrowRight className="w-3 h-3 ml-1" />
-      </Button>
-    )},
-  ];
+    </div>
+  );
+}
+
+export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
+  const teams = league.teams;
+  const maxOverall = Math.max(...teams.map(t => t.metrics.overall), 1);
 
   return (
-    <div className="space-y-8">
-      <SectionHeader title="League Snapshot" subtitle="All teams ranked by overall power score" />
-      <DataTable columns={columns} data={teams} defaultSortKey="overall" defaultSortDir="desc" />
+    <div className="space-y-6">
+      <SectionHeader
+        title="League Power Rankings"
+        subtitle="FantasyCalc algorithm ranking every roster based on starters, depth, youth, and draft capital."
+      />
+
+      <div className="overflow-x-auto rounded-md border border-border/60" data-testid="power-rankings-table">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-border/40">
+              <th className="sticky left-0 z-10 bg-muted/30 dark:bg-muted/20" rowSpan={2} />
+              <th className="bg-muted/30 dark:bg-muted/20" rowSpan={2} />
+              <th className="px-3 py-1.5 text-center text-[10px] font-bold text-[#0b3a7a] dark:text-blue-400 uppercase tracking-widest border-b border-border/20 bg-muted/30 dark:bg-muted/20" colSpan={2} data-testid="col-group-strength">
+                Team Strength
+              </th>
+              <th className="px-3 py-1.5 text-center text-[10px] font-bold text-[#0b3a7a] dark:text-blue-400 uppercase tracking-widest border-b border-border/20 bg-muted/30 dark:bg-muted/20 border-l border-border/30" colSpan={3} data-testid="col-group-roster">
+                Roster Build
+              </th>
+              <th className="px-3 py-1.5 text-center text-[10px] font-bold text-[#0b3a7a] dark:text-blue-400 uppercase tracking-widest border-b border-border/20 bg-muted/30 dark:bg-muted/20 border-l border-border/30" colSpan={1} data-testid="col-group-capital">
+                Draft Capital
+              </th>
+              <th className="bg-muted/30 dark:bg-muted/20" rowSpan={2} />
+            </tr>
+            <tr className="border-b border-border bg-muted/30 dark:bg-muted/20">
+              <th className="px-4 py-3 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Overall</th>
+              <th className="px-4 py-3 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Tier</th>
+              <th className="px-4 py-3 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap border-l border-border/30">Starters</th>
+              <th className="px-4 py-3 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Depth</th>
+              <th className="px-4 py-3 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Youth</th>
+              <th className="px-4 py-3 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap border-l border-border/30">Picks</th>
+            </tr>
+          </thead>
+          <tbody>
+            {[...teams].sort((a, b) => b.metrics.overall - a.metrics.overall).map((team, idx) => {
+              const rank = idx + 1;
+              const tier = getTeamTier(team.metrics.overall);
+              const isUser = team.id === userTeam.id;
+              const isEven = idx % 2 === 0;
+              const rowBg = isUser
+                ? "bg-[#0b3a7a]/5 dark:bg-blue-400/8"
+                : isEven ? "bg-background" : "bg-muted/10 dark:bg-muted/5";
+
+              return (
+                <tr
+                  key={team.id}
+                  className={`border-b border-border/20 transition-colors hover:bg-muted/20 dark:hover:bg-muted/15 ${rowBg}`}
+                  data-testid={`ranking-row-${team.id}`}
+                >
+                  <td className={`px-4 py-3.5 whitespace-nowrap sticky left-0 z-10 ${isUser ? "bg-[#0b3a7a]/5 dark:bg-blue-400/8" : rowBg}`}>
+                    <RankBadge rank={rank} />
+                  </td>
+                  <td className="px-4 py-3.5 whitespace-nowrap">
+                    <div className="flex items-center gap-2">
+                      <div>
+                        <span className={`font-semibold text-foreground ${isUser ? "text-[#0b3a7a] dark:text-blue-400" : ""}`}>{team.name}</span>
+                        <span className="text-xs text-muted-foreground ml-2">({team.owner})</span>
+                      </div>
+                      {isUser && (
+                        <Badge className="text-[10px] px-1.5 py-0 bg-[#0b3a7a] text-white dark:bg-blue-600" data-testid="your-team-badge">You</Badge>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3.5 whitespace-nowrap">
+                    <PowerBar value={team.metrics.overall} max={maxOverall} />
+                  </td>
+                  <td className="px-4 py-3.5 whitespace-nowrap">
+                    <Badge variant="outline" className={getTierColor(tier)}>{tier}</Badge>
+                  </td>
+                  <td className="px-4 py-3.5 whitespace-nowrap border-l border-border/15 font-medium">{team.metrics.starters}</td>
+                  <td className="px-4 py-3.5 whitespace-nowrap font-medium">{team.metrics.depth}</td>
+                  <td className="px-4 py-3.5 whitespace-nowrap font-medium">{team.metrics.youth}</td>
+                  <td className="px-4 py-3.5 whitespace-nowrap border-l border-border/15 font-medium">{team.metrics.picks}</td>
+                  <td className="px-4 py-3.5 whitespace-nowrap">
+                    <Button variant="ghost" size="sm" className="text-xs text-[#0b3a7a] dark:text-blue-400 hover:text-[#0b3a7a] dark:hover:text-blue-300" data-testid={`button-analyze-team-${team.id}`}>
+                      Analyze Team <ArrowRight className="w-3 h-3 ml-1" />
+                    </Button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
