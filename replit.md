@@ -67,7 +67,7 @@ client/src/
     DynastyCommandCenter.tsx - Main page orchestrator (Portfolio integration, locking, Sleeper data flow, header controls)
     tabs/
       Portfolio.tsx        - PortfolioConnect, PortfolioMyLeagues, PortfolioSummary
-      Dashboard.tsx        - Overview (with Jump to menu), League Snapshot, Key Insights
+      Dashboard.tsx        - Overview (Team Snapshot card with SnapshotStat, percentile indicators, tier badge; Jump to menu), League Snapshot, Key Insights
       LeagueAnalyzer.tsx   - Power Rankings, Tier Breakdown, Roster Comparison
       TeamBreakdown.tsx    - Roster Strength, Age Curve, Depth Chart
       TradeCenter.tsx      - Trade Finder, Trade Targets, Trade Block Scanner

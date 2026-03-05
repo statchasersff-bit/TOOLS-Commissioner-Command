@@ -1,7 +1,6 @@
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { KpiCard } from "@/components/KpiCard";
 import { DataTable } from "@/components/DataTable";
 import { InsightCallout } from "@/components/InsightCallout";
 import { SectionHeader } from "@/components/SectionHeader";
@@ -18,14 +17,69 @@ interface DashboardOverviewProps extends DashboardProps {
   onNavigate?: (mainTab: string, subTab: string) => void;
 }
 
+function getPercentileLabel(rank: number, total: number): string {
+  const topPct = Math.round((rank / total) * 100);
+  if (topPct <= 25) return `Top ${topPct}%`;
+  if (topPct <= 50) return `Top ${topPct}%`;
+  return `Bottom ${100 - topPct}%`;
+}
+
+function getPercentileColor(rank: number, total: number): string {
+  const topPct = (rank / total) * 100;
+  if (topPct <= 25) return "text-emerald-600 dark:text-emerald-400";
+  if (topPct <= 50) return "text-blue-600 dark:text-blue-400";
+  if (topPct <= 75) return "text-amber-600 dark:text-amber-400";
+  return "text-red-500 dark:text-red-400";
+}
+
+function getTierBadgeClasses(tier: string): string {
+  switch (tier) {
+    case "Elite": return "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800";
+    case "Contender": return "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800";
+    case "Competitive": return "bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800";
+    case "Rebuild": return "bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800";
+    default: return "bg-muted text-muted-foreground";
+  }
+}
+
+interface SnapshotStatProps {
+  label: string;
+  value: string | number;
+  context: string;
+  contextColor?: string;
+  icon: React.ElementType;
+  testId: string;
+}
+
+function SnapshotStat({ label, value, context, contextColor, icon: Icon, testId }: SnapshotStatProps) {
+  return (
+    <div className="flex flex-col items-center text-center p-4 rounded-lg bg-muted/30 border border-border/40" data-testid={testId}>
+      <div className="p-2 rounded-md bg-[#0b3a7a]/8 dark:bg-blue-400/10 mb-2.5">
+        <Icon className="w-4 h-4 text-[#0b3a7a] dark:text-blue-400" />
+      </div>
+      <p className="text-2xl font-bold text-foreground leading-none">{value}</p>
+      <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mt-1.5">{label}</p>
+      <p className={`text-[11px] font-medium mt-1 ${contextColor || "text-muted-foreground"}`}>{context}</p>
+    </div>
+  );
+}
+
 export function DashboardOverview({ league, userTeam, onNavigate }: DashboardOverviewProps) {
   const sorted = [...league.teams].sort((a, b) => b.metrics.overall - a.metrics.overall);
   const rank = sorted.findIndex((t) => t.id === userTeam.id) + 1;
+  const total = league.teams.length;
   const tier = getTeamTier(userTeam.metrics.overall);
   const starterAges = userTeam.roster.filter((p) => p.starter);
   const avgAge = starterAges.length > 0 ? (starterAges.reduce((s, p) => s + p.age, 0) / starterAges.length).toFixed(1) : "N/A";
   const future1sts = userTeam.picks.filter((p) => p.round === 1).length;
   const playoffOdds = rank <= 6 ? Math.round(95 - (rank - 1) * 12) : Math.round(40 - (rank - 6) * 6);
+  const clampedOdds = Math.max(5, playoffOdds);
+
+  const leagueAvg1sts = Math.round(league.teams.reduce((s, t) => s + t.picks.filter(p => p.round === 1).length, 0) / total * 10) / 10;
+  const leagueAvgAge = (league.teams.reduce((s, t) => {
+    const st = t.roster.filter(p => p.starter);
+    return s + (st.length > 0 ? st.reduce((a, p) => a + p.age, 0) / st.length : 0);
+  }, 0) / total).toFixed(1);
 
   const positions: Array<{ pos: string; score: number; grade: string }> = [
     { pos: "QB", score: userTeam.metrics.qb, grade: userTeam.metrics.qb >= 75 ? "A" : userTeam.metrics.qb >= 60 ? "B" : userTeam.metrics.qb >= 40 ? "C" : "D" },
@@ -72,49 +126,67 @@ export function DashboardOverview({ league, userTeam, onNavigate }: DashboardOve
         )}
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-        <KpiCard
-          label="Team Rank"
-          value={`#${rank}`}
-          icon={Trophy}
-          subtitle={`of ${league.teams.length}`}
-          tooltip="Your team's position in the overall power rankings based on combined roster strength, depth, youth, and draft capital."
-        />
-        <KpiCard
-          label="Power Score"
-          value={userTeam.metrics.overall}
-          icon={Zap}
-          subtitle="Overall rating"
-          tooltip="A composite 0-100 score combining starter quality, roster depth, age curve, and future draft capital."
-        />
-        <KpiCard
-          label="Contender Tier"
-          value={tier}
-          icon={Medal}
-          tooltip="Your competitive classification: Elite (80+), Contender (60-79), Competitive (40-59), or Rebuild (below 40)."
-        />
-        <KpiCard
-          label="Playoff Odds"
-          value={`${Math.max(5, playoffOdds)}%`}
-          icon={Target}
-          trend={playoffOdds > 50 ? "up" : "down"}
-          tooltip="Estimated probability of making the playoffs based on your power ranking and league position."
-        />
-        <KpiCard
-          label="Avg Starter Age"
-          value={avgAge}
-          icon={Calendar}
-          trend={Number(avgAge) < 26 ? "up" : "down"}
-          subtitle={Number(avgAge) < 26 ? "Young core" : "Veteran core"}
-          tooltip="The average age of your starting lineup. Under 26 suggests a young, ascending roster with a longer contender window."
-        />
-        <KpiCard
-          label="Future 1sts"
-          value={future1sts}
-          icon={Users}
-          tooltip="The number of first-round draft picks you hold across all future draft years. More 1sts = more rebuild flexibility."
-        />
-      </div>
+      <Card className="p-6" data-testid="team-snapshot-card">
+        <div className="mb-5">
+          <h3 className="text-base font-bold text-foreground">Team Snapshot</h3>
+          <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
+        </div>
+
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+          <SnapshotStat
+            label="League Rank"
+            value={`#${rank} / ${total}`}
+            context={getPercentileLabel(rank, total)}
+            contextColor={getPercentileColor(rank, total)}
+            icon={Trophy}
+            testId="snapshot-league-rank"
+          />
+          <SnapshotStat
+            label="Power Score"
+            value={userTeam.metrics.overall}
+            context={getPercentileLabel(rank, total)}
+            contextColor={getPercentileColor(rank, total)}
+            icon={Zap}
+            testId="snapshot-power-score"
+          />
+          <div className="flex flex-col items-center text-center p-4 rounded-lg bg-muted/30 border border-border/40" data-testid="snapshot-tier">
+            <div className="p-2 rounded-md bg-[#0b3a7a]/8 dark:bg-blue-400/10 mb-2.5">
+              <Medal className="w-4 h-4 text-[#0b3a7a] dark:text-blue-400" />
+            </div>
+            <Badge className={`text-sm font-bold px-3 py-0.5 border ${getTierBadgeClasses(tier)}`} data-testid="snapshot-tier-badge">
+              {tier}
+            </Badge>
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mt-2">Tier</p>
+            <p className={`text-[11px] font-medium mt-1 ${getTierColor(tier)}`}>
+              {tier === "Elite" ? "Championship caliber" : tier === "Contender" ? "Playoff threat" : tier === "Competitive" ? "Fringe contender" : "Asset accumulation"}
+            </p>
+          </div>
+          <SnapshotStat
+            label="Playoff Odds"
+            value={`${clampedOdds}%`}
+            context={clampedOdds >= 60 ? "Strong outlook" : clampedOdds >= 40 ? "On the bubble" : "Long shot"}
+            contextColor={clampedOdds >= 60 ? "text-emerald-600 dark:text-emerald-400" : clampedOdds >= 40 ? "text-amber-600 dark:text-amber-400" : "text-red-500 dark:text-red-400"}
+            icon={Target}
+            testId="snapshot-playoff-odds"
+          />
+          <SnapshotStat
+            label="Starter Age"
+            value={avgAge}
+            context={`Lg avg: ${leagueAvgAge}`}
+            contextColor={Number(avgAge) < Number(leagueAvgAge) ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"}
+            icon={Calendar}
+            testId="snapshot-starter-age"
+          />
+          <SnapshotStat
+            label="Future 1sts"
+            value={future1sts}
+            context={`Lg avg: ${leagueAvg1sts}`}
+            contextColor={future1sts >= leagueAvg1sts ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"}
+            icon={Users}
+            testId="snapshot-future-1sts"
+          />
+        </div>
+      </Card>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         <Card className="p-6">
