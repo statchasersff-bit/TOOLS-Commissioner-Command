@@ -6,6 +6,7 @@ const VALUE_SOURCES: ValueSourceOption[] = [
   { id: "fantasycalc", label: "FantasyCalc", description: "FantasyCalc values update daily. StatChasers caches values once per day.", active: true },
   { id: "ktc", label: "KeepTradeCut", description: "KeepTradeCut crowd-sourced dynasty trade values. Coming soon.", active: false },
   { id: "dlf", label: "DLF", description: "Dynasty League Football expert-driven dynasty valuations. Coming soon.", active: false },
+  { id: "flock", label: "Flock Fantasy", description: "Flock Fantasy dynasty player valuations. Coming soon.", active: false },
   { id: "custom", label: "Custom Upload", description: "Upload your own CSV of player values. Coming soon.", active: false },
 ];
 

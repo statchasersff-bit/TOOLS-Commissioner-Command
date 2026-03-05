@@ -58,7 +58,7 @@ export interface MainTabConfig extends TabConfig {
   subTabs: TabConfig[];
 }
 
-export type ValueSourceId = "fantasycalc" | "ktc" | "dlf" | "custom";
+export type ValueSourceId = "fantasycalc" | "ktc" | "dlf" | "flock" | "custom";
 
 export interface ValueSourceOption {
   id: ValueSourceId;
