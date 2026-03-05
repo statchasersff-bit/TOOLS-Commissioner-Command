@@ -45,6 +45,8 @@ export interface League {
   platform: string;
   scoringFormat: string;
   teams: Team[];
+  rosterPositions?: string[];
+  format?: "SF" | "1QB";
 }
 
 export type Tier = "Elite" | "Contender" | "Competitive" | "Rebuild";

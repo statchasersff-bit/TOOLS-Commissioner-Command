@@ -29,7 +29,8 @@ A premium dynasty fantasy football league analysis tool built with React + TypeS
   - `GET /api/sleeper/league/:leagueId/full?userId=xxx` → full league data transformed to our League/Team format
   - `GET /api/sleeper/user/:userId/portfolio-summary` → cross-league portfolio analysis (records, player exposure, lineup alerts)
 - **Player DB**: Cached at `/tmp/sleeper_players.json` (24h TTL), maps Sleeper player IDs to metadata
-- **Data transform**: Sleeper rosters → our League/Team/Player format with proper starter detection, pick allocation (rounds 1-4, years 2025-2028), and format detection (SF/1QB)
+- **Data transform**: Sleeper rosters → our League/Team/Player format with pick allocation (rounds 1-4, years 2025-2028), format detection (SF/1QB), and rosterPositions (starter slots only, BN/IR filtered)
+- **Auto-Optimal Lineup**: Starting lineup is NOT pulled from Sleeper's saved starters. Instead, `optimizeLineup()` in ValueModelContext fills each roster slot (QB, RB, WR, TE, FLEX, SUPER_FLEX, REC_FLEX, WRRB_FLEX) with the highest redraft-value eligible player. Positional slots filled first, then flex slots. This ensures win-now/contender analysis reflects true team potential.
 - **Context**: `SleeperContext.tsx` manages connection state with `connect()`, `disconnect()`, `refresh()`, `setActiveLeague()`
 - **Auto-reconnect**: On mount, if stored username exists in localStorage, auto-reconnects
 - **Season**: Uses 2026 as current season

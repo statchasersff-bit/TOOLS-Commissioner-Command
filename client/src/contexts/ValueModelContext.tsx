@@ -38,7 +38,8 @@ interface ValueModel {
   getRedraftValue: (player: Player) => number;
   getPickValue: (pick: Pick) => number;
   calculateTeamValue: (team: Team) => number;
-  calculateMetrics: (team: Team) => TeamMetrics;
+  calculateMetrics: (team: Team, rosterPositions?: string[]) => TeamMetrics;
+  optimizeLineup: (roster: Player[], rosterPositions: string[]) => Player[];
   valuesBySleeperId: Record<string, number>;
   redraftValuesBySleeperId: Record<string, number>;
 }
@@ -177,8 +178,57 @@ export function ValueModelProvider({ children }: { children: React.ReactNode }) 
     return rosterValue + pickValue;
   }, [getPlayerValue, getPickValue]);
 
-  const calculateMetrics = useCallback((team: Team): TeamMetrics => {
-    const roster = team.roster;
+  const optimizeLineup = useCallback((roster: Player[], rosterPositions: string[]): Player[] => {
+    const SLOT_ELIGIBILITY: Record<string, string[]> = {
+      QB: ["QB"],
+      RB: ["RB"],
+      WR: ["WR"],
+      TE: ["TE"],
+      FLEX: ["RB", "WR", "TE"],
+      SUPER_FLEX: ["QB", "RB", "WR", "TE"],
+      REC_FLEX: ["WR", "TE"],
+      WRRB_FLEX: ["WR", "RB"],
+    };
+
+    const sorted = [...roster]
+      .map((p) => ({ ...p, redraftVal: getRedraftValue(p) }))
+      .sort((a, b) => b.redraftVal - a.redraftVal);
+
+    const used = new Set<string>();
+    const starterIds = new Set<string>();
+
+    const positionalSlots = rosterPositions.filter(
+      (s) => s === "QB" || s === "RB" || s === "WR" || s === "TE"
+    );
+    const flexSlots = rosterPositions.filter(
+      (s) => s !== "QB" && s !== "RB" && s !== "WR" && s !== "TE" && SLOT_ELIGIBILITY[s]
+    );
+
+    for (const slot of positionalSlots) {
+      const eligible = SLOT_ELIGIBILITY[slot] || [];
+      const best = sorted.find((p) => eligible.includes(p.pos) && !used.has(p.id));
+      if (best) {
+        used.add(best.id);
+        starterIds.add(best.id);
+      }
+    }
+
+    for (const slot of flexSlots) {
+      const eligible = SLOT_ELIGIBILITY[slot] || [];
+      const best = sorted.find((p) => eligible.includes(p.pos) && !used.has(p.id));
+      if (best) {
+        used.add(best.id);
+        starterIds.add(best.id);
+      }
+    }
+
+    return roster.map((p) => ({ ...p, starter: starterIds.has(p.id) }));
+  }, [getRedraftValue]);
+
+  const calculateMetrics = useCallback((team: Team, rosterPositions?: string[]): TeamMetrics => {
+    const roster = rosterPositions
+      ? optimizeLineup(team.roster, rosterPositions)
+      : team.roster;
     const picks = team.picks;
 
     const starters = roster.filter((p) => p.starter);
@@ -235,7 +285,7 @@ export function ValueModelProvider({ children }: { children: React.ReactNode }) 
       te: posScore("TE"),
       contenderWindowYears,
     };
-  }, [getPlayerValue, getRedraftValue, getPickValue]);
+  }, [getPlayerValue, getRedraftValue, getPickValue, optimizeLineup]);
 
   const value = useMemo<ValueModel>(() => ({
     sourceId,
@@ -251,9 +301,10 @@ export function ValueModelProvider({ children }: { children: React.ReactNode }) 
     getPickValue,
     calculateTeamValue,
     calculateMetrics,
+    optimizeLineup,
     valuesBySleeperId,
     redraftValuesBySleeperId,
-  }), [sourceId, setSourceId, isRecalculating, isLoading, isSnapshot, unmatchedCount, diagnostics, getPlayerValue, getRedraftValue, getPickValue, calculateTeamValue, calculateMetrics, valuesBySleeperId, redraftValuesBySleeperId]);
+  }), [sourceId, setSourceId, isRecalculating, isLoading, isSnapshot, unmatchedCount, diagnostics, getPlayerValue, getRedraftValue, getPickValue, calculateTeamValue, calculateMetrics, optimizeLineup, valuesBySleeperId, redraftValuesBySleeperId]);
 
   return (
     <ValueModelContext.Provider value={value}>

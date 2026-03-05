@@ -302,6 +302,10 @@ export async function fetchSleeperLeagueFull(leagueId: string, userId: string) {
   const userTeamId = rostersRaw.find((r) => r.owner_id === userId);
   const userTeamIdStr = userTeamId ? `roster_${userTeamId.roster_id}` : null;
 
+  const starterPositions = (leagueRaw.roster_positions || []).filter(
+    (p: string) => p !== "BN" && p !== "IR"
+  );
+
   return {
     league: {
       id: leagueRaw.league_id,
@@ -309,6 +313,8 @@ export async function fetchSleeperLeagueFull(leagueId: string, userId: string) {
       platform: "sleeper",
       scoringFormat: `${scoringFormat} ${format}`,
       teams,
+      rosterPositions: starterPositions,
+      format,
     },
     userTeamId: userTeamIdStr,
     format,
