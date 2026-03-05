@@ -94,9 +94,25 @@ export const crawlQueue = pgTable("crawl_queue", {
   addedAt: timestamp("added_at").defaultNow(),
 });
 
+export const playerValueSnapshots = pgTable("player_value_snapshots", {
+  id: serial("id").primaryKey(),
+  sleeperId: varchar("sleeper_id", { length: 20 }).notNull(),
+  name: text("name").notNull(),
+  pos: varchar("pos", { length: 5 }).notNull(),
+  team: varchar("team", { length: 10 }),
+  age: integer("age"),
+  dynastyValue: integer("dynasty_value").notNull().default(0),
+  dynastyValueSf: integer("dynasty_value_sf").notNull().default(0),
+  redraftValue: integer("redraft_value").notNull().default(0),
+  redraftValueSf: integer("redraft_value_sf").notNull().default(0),
+  snapshotDate: varchar("snapshot_date", { length: 10 }).notNull(),
+  capturedAt: timestamp("captured_at").defaultNow(),
+});
+
 export type CrawledLeague = typeof crawledLeagues.$inferSelect;
 export type CrawledUser = typeof crawledUsers.$inferSelect;
 export type Trade = typeof trades.$inferSelect;
 export type TradeAsset = typeof tradeAssets.$inferSelect;
 export type CrawlState = typeof crawlState.$inferSelect;
 export type CrawlQueueItem = typeof crawlQueue.$inferSelect;
+export type PlayerValueSnapshot = typeof playerValueSnapshots.$inferSelect;

@@ -15,6 +15,12 @@ import {
   searchTrades,
   getTradeStats,
 } from "./tradeCrawler";
+import {
+  captureValueSnapshot,
+  getValueChanges,
+  getAvailableSnapshotDates,
+  startSnapshotScheduler,
+} from "./valueSnapshots";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -163,6 +169,38 @@ export async function registerRoutes(
       res.status(500).json({ error: err.message || "Failed to get trade stats" });
     }
   });
+
+  app.post("/api/values/snapshot", async (_req, res) => {
+    try {
+      const result = await captureValueSnapshot();
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || "Failed to capture snapshot" });
+    }
+  });
+
+  app.get("/api/values/changes", async (req, res) => {
+    try {
+      const format = (req.query.format as string) === "1qb" ? "1qb" : "sf";
+      const type = (req.query.type as string) === "redraft" ? "redraft" : "dynasty";
+      const days = parseInt(req.query.days as string) || 30;
+      const changes = await getValueChanges(format, type, Math.min(days, 90));
+      res.json(changes);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || "Failed to get value changes" });
+    }
+  });
+
+  app.get("/api/values/snapshot-dates", async (_req, res) => {
+    try {
+      const dates = await getAvailableSnapshotDates();
+      res.json(dates);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || "Failed to get snapshot dates" });
+    }
+  });
+
+  startSnapshotScheduler();
 
   return httpServer;
 }
