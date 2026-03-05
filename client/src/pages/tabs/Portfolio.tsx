@@ -349,7 +349,6 @@ function SortableLeagueRecords({ records }: { records: any[] }) {
                     <span className={`font-semibold ${rec.redraftRank <= 3 ? "text-emerald-600 dark:text-emerald-400" : rec.redraftRank <= Math.ceil(rec.totalRosters * 0.7) ? "text-foreground" : "text-red-500 dark:text-red-400"}`}>
                       #{rec.redraftRank}
                     </span>
-                    <span className="text-muted-foreground"> / {rec.totalRosters}</span>
                   </>
                 ) : (
                   <span className="text-muted-foreground text-xs">N/A</span>
@@ -361,7 +360,6 @@ function SortableLeagueRecords({ records }: { records: any[] }) {
                     <span className={`font-semibold ${rec.dynastyRank <= 3 ? "text-emerald-600 dark:text-emerald-400" : rec.dynastyRank <= Math.ceil(rec.totalRosters * 0.7) ? "text-foreground" : "text-red-500 dark:text-red-400"}`}>
                       #{rec.dynastyRank}
                     </span>
-                    <span className="text-muted-foreground"> / {rec.totalRosters}</span>
                   </>
                 ) : (
                   <span className="text-muted-foreground text-xs">N/A</span>
