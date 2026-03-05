@@ -265,7 +265,7 @@ export function DashboardOverview({ league, userTeam, onNavigate }: DashboardOve
               variant="outline"
               size="sm"
               className="text-xs h-7 px-2.5"
-              onClick={() => onNavigate("dashboard", "key-insights")}
+              onClick={() => onNavigate("league-analyzer", "key-insights")}
               data-testid="jump-to-insights"
             >
               <Lightbulb className="w-3 h-3 mr-1" />

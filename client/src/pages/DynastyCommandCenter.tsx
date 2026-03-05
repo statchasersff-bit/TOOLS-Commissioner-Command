@@ -250,8 +250,8 @@ export default function DynastyCommandCenter() {
     const key = `${activeMainTab}:${activeSubTab}`;
     switch (key) {
       case "dashboard:overview": return <DashboardOverview league={league} userTeam={userTeam} onNavigate={navigateToSubTab} />;
-      case "dashboard:key-insights": return <DashboardKeyInsights league={league} userTeam={userTeam} />;
       case "league-analyzer:power-rankings": return <DashboardSnapshot league={league} userTeam={userTeam} />;
+      case "league-analyzer:key-insights": return <DashboardKeyInsights league={league} userTeam={userTeam} />;
       case "league-analyzer:roster-comparison": return <RosterComparison league={league} />;
       case "team-breakdown:roster-strength": return <RosterStrength league={league} userTeam={userTeam} />;
       case "team-breakdown:age-curve": return <AgeCurve userTeam={userTeam} />;

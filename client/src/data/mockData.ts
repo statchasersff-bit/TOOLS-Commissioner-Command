@@ -251,7 +251,6 @@ export const NAV_CONFIG: MainTabConfig[] = [
     label: "Dashboard",
     subTabs: [
       { id: "overview", label: "Overview" },
-      { id: "key-insights", label: "Key Insights" },
     ],
   },
   {
@@ -260,6 +259,7 @@ export const NAV_CONFIG: MainTabConfig[] = [
     subTabs: [
       { id: "power-rankings", label: "Power Rankings" },
       { id: "roster-comparison", label: "Roster Comparison" },
+      { id: "key-insights", label: "Key Insights" },
     ],
   },
   {
