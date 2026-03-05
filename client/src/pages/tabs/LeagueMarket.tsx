@@ -1,9 +1,15 @@
+import { useState, useMemo } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { InsightCallout } from "@/components/InsightCallout";
 import { SectionHeader } from "@/components/SectionHeader";
+import { useValueModel } from "@/contexts/ValueModelContext";
+import { getPositionColor } from "@/data/mockData";
 import type { League } from "@/types";
 import { cn } from "@/lib/utils";
+import { Search } from "lucide-react";
 
 interface MarketProps {
   league: League;
@@ -67,80 +73,190 @@ export function PositionalSurplus({ league }: MarketProps) {
   );
 }
 
+interface PlayerRow {
+  name: string;
+  pos: string;
+  team: string;
+  dynastyValue: number;
+  redraftValue: number;
+  sleeperId: string;
+}
+
+type SortKey = "name" | "pos" | "dynastyValue" | "redraftValue";
+type SortDir = "asc" | "desc";
+
 export function MarketValue({ league }: MarketProps) {
-  const positions = ["QB", "RB", "WR", "TE"] as const;
+  const { sourceId, sources, valuesBySleeperId, redraftValuesBySleeperId } = useValueModel();
+  const [search, setSearch] = useState("");
+  const [posFilter, setPosFilter] = useState("all");
+  const [sortKey, setSortKey] = useState<SortKey>("dynastyValue");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
 
-  const scarcityData = positions.map((pos) => {
-    const metricKey = pos.toLowerCase() as "qb" | "rb" | "wr" | "te";
-    const scores = league.teams.map((t) => t.metrics[metricKey]);
-    const avg = Math.round(scores.reduce((s, v) => s + v, 0) / scores.length);
-    const stdDev = Math.sqrt(scores.reduce((s, v) => s + (v - avg) ** 2, 0) / scores.length);
-    const belowAvg = scores.filter((s) => s < avg - 5).length;
-    const scarcity: "High" | "Medium" | "Low" = belowAvg >= 5 ? "High" : belowAvg >= 3 ? "Medium" : "Low";
-    return { pos, avg, stdDev: Math.round(stdDev), scarcity, belowAvg };
-  });
+  const activeSource = sources.find((s) => s.id === sourceId);
 
-  const insights = scarcityData
-    .filter((d) => d.scarcity === "High")
-    .map((d) => `${d.pos} scarcity is high with ${d.belowAvg} teams below average -- expect higher trade costs for ${d.pos}.`);
+  const allPlayers = useMemo<PlayerRow[]>(() => {
+    const seen = new Set<string>();
+    const rows: PlayerRow[] = [];
 
-  if (insights.length === 0) {
-    insights.push("No positions show extreme scarcity -- the market is relatively balanced.");
-  }
+    for (const team of league.teams) {
+      for (const p of team.roster) {
+        const id = p.sleeperId || p.id;
+        if (seen.has(id)) continue;
+        seen.add(id);
+        rows.push({
+          name: p.name,
+          pos: p.pos,
+          team: p.team,
+          sleeperId: id,
+          dynastyValue: valuesBySleeperId[id] ?? p.value ?? 0,
+          redraftValue: redraftValuesBySleeperId[id] ?? valuesBySleeperId[id] ?? p.value ?? 0,
+        });
+      }
+    }
+
+    return rows;
+  }, [league, valuesBySleeperId, redraftValuesBySleeperId]);
+
+  const filtered = useMemo(() => {
+    let rows = allPlayers;
+
+    if (search.trim()) {
+      const q = search.toLowerCase().trim();
+      rows = rows.filter((r) => r.name.toLowerCase().includes(q));
+    }
+
+    if (posFilter !== "all") {
+      rows = rows.filter((r) => r.pos === posFilter);
+    }
+
+    rows = [...rows].sort((a, b) => {
+      let cmp = 0;
+      if (sortKey === "name") cmp = a.name.localeCompare(b.name);
+      else if (sortKey === "pos") cmp = a.pos.localeCompare(b.pos);
+      else cmp = (a[sortKey] ?? 0) - (b[sortKey] ?? 0);
+      return sortDir === "desc" ? -cmp : cmp;
+    });
+
+    return rows;
+  }, [allPlayers, search, posFilter, sortKey, sortDir]);
+
+  const toggleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir((d) => (d === "desc" ? "asc" : "desc"));
+    } else {
+      setSortKey(key);
+      setSortDir("desc");
+    }
+  };
+
+  const sortIndicator = (key: SortKey) =>
+    sortKey === key ? (sortDir === "desc" ? " ▼" : " ▲") : "";
 
   return (
-    <div className="space-y-8">
-      <SectionHeader title="Market Value" subtitle="Positional scarcity indicators across the league" />
+    <div className="space-y-6">
+      <SectionHeader
+        title="Market Value"
+        subtitle={`Trade values from ${activeSource?.label || "selected source"}`}
+      />
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {scarcityData.map((d) => (
-          <Card key={d.pos} className="p-5 hover-elevate text-center">
-            <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">{d.pos}</p>
-            <p className="text-2xl font-bold mt-1.5">{d.avg}</p>
-            <Badge
-              variant={d.scarcity === "High" ? "destructive" : d.scarcity === "Medium" ? "secondary" : "outline"}
-              className="mt-2.5"
-            >
-              {d.scarcity} Scarcity
-            </Badge>
-          </Card>
-        ))}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative flex-1 min-w-[200px] max-w-sm">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input
+            placeholder="Search player..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-9 h-9 text-sm"
+            data-testid="input-market-search"
+          />
+        </div>
+        <Select value={posFilter} onValueChange={setPosFilter}>
+          <SelectTrigger className="w-[100px] h-9 text-xs" data-testid="select-market-pos">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Pos</SelectItem>
+            <SelectItem value="QB">QB</SelectItem>
+            <SelectItem value="RB">RB</SelectItem>
+            <SelectItem value="WR">WR</SelectItem>
+            <SelectItem value="TE">TE</SelectItem>
+          </SelectContent>
+        </Select>
+        <Badge variant="secondary" className="text-xs" data-testid="badge-player-count">
+          {filtered.length} players
+        </Badge>
       </div>
 
-      <Card className="p-6">
-        <div className="mb-4">
-          <h3 className="text-base font-bold">Market Insights</h3>
-          <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
-        </div>
-        <div className="space-y-3">
-          {insights.map((text, i) => (
-            <InsightCallout key={i} text={text} type={text.includes("high") || text.includes("High") ? "negative" : "neutral"} />
-          ))}
-        </div>
-      </Card>
-
-      <Card className="p-6">
-        <h3 className="text-base font-bold mb-4">Scarcity Breakdown</h3>
-        <div className="space-y-4">
-          {scarcityData.map((d) => (
-            <div key={d.pos} className="space-y-1.5">
-              <div className="flex items-center justify-between text-xs">
-                <span className="font-semibold">{d.pos}</span>
-                <span className="text-muted-foreground">{d.belowAvg} teams below avg</span>
-              </div>
-              <div className="h-3.5 bg-muted rounded-full overflow-hidden">
-                <div
-                  className={cn(
-                    "h-full rounded-full transition-all",
-                    d.scarcity === "High" ? "bg-red-500" :
-                    d.scarcity === "Medium" ? "bg-amber-500" :
-                    "bg-emerald-500"
-                  )}
-                  style={{ width: `${(d.belowAvg / league.teams.length) * 100}%` }}
-                />
-              </div>
-            </div>
-          ))}
+      <Card className="overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm" data-testid="table-market-values">
+            <thead>
+              <tr className="border-b bg-muted/40">
+                <th
+                  className="text-left px-4 py-3 font-semibold text-xs uppercase tracking-wider cursor-pointer hover:text-[#d4af37] select-none"
+                  onClick={() => toggleSort("name")}
+                  data-testid="th-name"
+                >
+                  Player{sortIndicator("name")}
+                </th>
+                <th
+                  className="text-left px-4 py-3 font-semibold text-xs uppercase tracking-wider cursor-pointer hover:text-[#d4af37] select-none w-20"
+                  onClick={() => toggleSort("pos")}
+                  data-testid="th-pos"
+                >
+                  Pos{sortIndicator("pos")}
+                </th>
+                <th
+                  className="text-right px-4 py-3 font-semibold text-xs uppercase tracking-wider cursor-pointer hover:text-[#d4af37] select-none w-32"
+                  onClick={() => toggleSort("redraftValue")}
+                  data-testid="th-redraft"
+                >
+                  Redraft{sortIndicator("redraftValue")}
+                </th>
+                <th
+                  className="text-right px-4 py-3 font-semibold text-xs uppercase tracking-wider cursor-pointer hover:text-[#d4af37] select-none w-32"
+                  onClick={() => toggleSort("dynastyValue")}
+                  data-testid="th-dynasty"
+                >
+                  Dynasty{sortIndicator("dynastyValue")}
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.length === 0 && (
+                <tr>
+                  <td colSpan={4} className="text-center py-8 text-muted-foreground text-sm">
+                    No players found
+                  </td>
+                </tr>
+              )}
+              {filtered.map((row) => (
+                <tr
+                  key={row.sleeperId}
+                  className="border-b border-border/30 hover:bg-muted/20 transition-colors"
+                  data-testid={`row-player-${row.sleeperId}`}
+                >
+                  <td className="px-4 py-2.5">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium" data-testid={`text-player-name-${row.sleeperId}`}>{row.name}</span>
+                      <span className="text-[11px] text-muted-foreground">{row.team}</span>
+                    </div>
+                  </td>
+                  <td className="px-4 py-2.5">
+                    <Badge variant="outline" className={`text-[10px] w-8 justify-center ${getPositionColor(row.pos)}`}>
+                      {row.pos}
+                    </Badge>
+                  </td>
+                  <td className="px-4 py-2.5 text-right font-mono text-sm" data-testid={`text-redraft-${row.sleeperId}`}>
+                    {row.redraftValue.toLocaleString()}
+                  </td>
+                  <td className="px-4 py-2.5 text-right font-mono text-sm font-semibold" data-testid={`text-dynasty-${row.sleeperId}`}>
+                    {row.dynastyValue.toLocaleString()}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </Card>
     </div>
