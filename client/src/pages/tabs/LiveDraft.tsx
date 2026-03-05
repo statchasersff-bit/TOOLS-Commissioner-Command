@@ -1,5 +1,4 @@
-import { useState, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -46,17 +45,49 @@ export default function LiveDraft() {
   const [activeLeagueId, setActiveLeagueId] = useState<string | null>(null);
   const [posFilter, setPosFilter] = useState<string>("ALL");
   const [autoRefresh, setAutoRefresh] = useState(false);
+  const [draftData, setDraftData] = useState<DraftResponse | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [apiError, setApiError] = useState<string | null>(null);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const { dynastyValues, redraftValues } = useValueModel();
 
-  const { data: draftData, isLoading, error, refetch } = useQuery<DraftResponse>({
-    queryKey: ["/api/sleeper/draft", activeLeagueId],
-    enabled: !!activeLeagueId,
-    refetchInterval: autoRefresh ? 15000 : false,
-    retry: false,
-  });
+  const fetchDraft = useCallback(async (id?: string) => {
+    const targetId = id || activeLeagueId;
+    if (!targetId) return;
+    setIsLoading(true);
+    setApiError(null);
+    try {
+      const res = await fetch(`/api/sleeper/draft/${targetId}`);
+      const data: DraftResponse = await res.json();
+      if (!res.ok) {
+        setApiError((data as any).error || "Failed to fetch draft");
+        return;
+      }
+      if (data.error) {
+        setApiError(data.error);
+        return;
+      }
+      setDraftData(data);
+    } catch (err: any) {
+      setApiError(err.message || "Network error");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [activeLeagueId]);
 
-  const apiError = error ? (error as any).message : draftData?.error;
+  useEffect(() => {
+    if (activeLeagueId) fetchDraft(activeLeagueId);
+  }, [activeLeagueId]);
+
+  useEffect(() => {
+    if (autoRefresh && activeLeagueId) {
+      intervalRef.current = setInterval(() => fetchDraft(), 15000);
+    }
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, [autoRefresh, activeLeagueId, fetchDraft]);
 
   const pickedPlayerIds = useMemo(() => {
     if (!draftData) return new Set<string>();
@@ -191,7 +222,7 @@ export default function LiveDraft() {
                 <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${autoRefresh ? "animate-spin" : ""}`} />
                 {autoRefresh ? "Auto-refresh On" : "Auto-refresh"}
               </Button>
-              <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isLoading} data-testid="button-refresh">
+              <Button variant="outline" size="sm" onClick={() => fetchDraft()} disabled={isLoading} data-testid="button-refresh">
                 <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
                 Refresh
               </Button>
