@@ -292,4 +292,11 @@ export const NAV_CONFIG: MainTabConfig[] = [
       { id: "market-value", label: "Market Value" },
     ],
   },
+  {
+    id: "live-draft",
+    label: "Live Draft",
+    subTabs: [
+      { id: "draft-board", label: "Draft Board" },
+    ],
+  },
 ];

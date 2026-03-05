@@ -7,6 +7,7 @@ import {
   fetchSleeperLeagueFull,
   fetchPortfolioSummary,
   fetchCrossLeagueTrades,
+  fetchDraftBoard,
 } from "./sleeper";
 import {
   startCrawl,
@@ -100,6 +101,17 @@ export async function registerRoutes(
     } catch (err: any) {
       console.error("Portfolio summary error:", err);
       res.status(500).json({ error: err.message || "Failed to fetch portfolio summary" });
+    }
+  });
+
+  app.get("/api/sleeper/draft/:leagueId", async (req, res) => {
+    try {
+      const { leagueId } = req.params;
+      const result = await fetchDraftBoard(leagueId);
+      res.json(result);
+    } catch (err: any) {
+      console.error("Draft board error:", err);
+      res.status(500).json({ error: err.message || "Failed to fetch draft board" });
     }
   });
 

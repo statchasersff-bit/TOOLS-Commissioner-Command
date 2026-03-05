@@ -587,6 +587,63 @@ export async function fetchPortfolioSummary(
   };
 }
 
+export async function fetchDraftBoard(leagueId: string) {
+  const draftsRaw = await fetchJson<any[]>(`${SLEEPER_API}/league/${leagueId}/drafts`);
+  if (!draftsRaw || draftsRaw.length === 0) {
+    return { draft: null, picks: [], players: {} as Record<string, { name: string; pos: string; team: string }>, error: "No drafts found for this league" };
+  }
+
+  const draft = draftsRaw[0];
+  const draftId = draft.draft_id;
+
+  const [picksRaw, playersDb] = await Promise.all([
+    fetchJson<any[]>(`${SLEEPER_API}/draft/${draftId}/picks`),
+    getSleeperPlayers(),
+  ]);
+
+  const picks = (picksRaw || []).map((p: any) => ({
+    round: p.round,
+    pickNo: p.pick_no,
+    rosterId: p.roster_id,
+    playerId: p.player_id,
+    playerName: p.metadata?.first_name && p.metadata?.last_name
+      ? `${p.metadata.first_name} ${p.metadata.last_name}`
+      : playersDb[p.player_id]
+        ? `${playersDb[p.player_id].first_name} ${playersDb[p.player_id].last_name}`
+        : `Unknown`,
+    pos: p.metadata?.position || playersDb[p.player_id]?.position || "??",
+    team: p.metadata?.team || playersDb[p.player_id]?.team || "FA",
+  }));
+
+  const pickedPlayerIds = new Set(picks.map((p: any) => p.playerId).filter(Boolean));
+
+  const playerMap: Record<string, { name: string; pos: string; team: string }> = {};
+  for (const [id, p] of Object.entries(playersDb)) {
+    if (!p.position || !["QB", "RB", "WR", "TE"].includes(p.position)) continue;
+    if (p.active === false && !pickedPlayerIds.has(id)) continue;
+    playerMap[id] = {
+      name: `${p.first_name} ${p.last_name}`,
+      pos: p.position,
+      team: p.team || "FA",
+    };
+  }
+
+  return {
+    draft: {
+      draftId,
+      status: draft.status,
+      type: draft.type,
+      rounds: draft.settings?.rounds || 4,
+      teams: draft.settings?.teams || draft.draft_order ? Object.keys(draft.draft_order || {}).length : 12,
+      season: draft.season,
+      leagueName: draft.metadata?.name || "",
+    },
+    picks,
+    players: playerMap,
+    error: null,
+  };
+}
+
 export async function fetchCrossLeagueTrades(
   userId: string,
   currentLeagueId: string,

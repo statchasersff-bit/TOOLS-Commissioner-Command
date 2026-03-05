@@ -22,6 +22,7 @@ import { TradeFinder, TradeTargets, TradeBlockScanner, TradeCalculator, TradeDat
 import { PickDistribution } from "./tabs/DraftCapital";
 import { MarketValue } from "./tabs/LeagueMarket";
 import { LeagueIntelligence } from "./tabs/Insights";
+import LiveDraft from "./tabs/LiveDraft";
 
 const STORAGE_KEY = "sc-dynasty-state";
 
@@ -233,6 +234,10 @@ export default function DynastyCommandCenter() {
   );
 
   const renderContent = () => {
+    if (activeMainTab === "live-draft") {
+      return <LiveDraft />;
+    }
+
     if (activeMainTab === "portfolio") {
       const key = `portfolio:${activeSubTab}`;
       switch (key) {
