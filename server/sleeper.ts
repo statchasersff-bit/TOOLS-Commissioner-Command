@@ -123,6 +123,9 @@ export async function fetchSleeperLeagues(
   if (!raw || !Array.isArray(raw)) {
     return [];
   }
+  raw.forEach((lg) => {
+    console.log(`[Sleeper] League "${lg.name}" — settings.type=${lg.settings?.type}, previous_league_id=${(lg as any).previous_league_id}`);
+  });
   const dynastyOnly = raw.filter((lg) => lg.settings?.type === 2);
   return dynastyOnly.map((lg) => ({
     leagueId: lg.league_id,
