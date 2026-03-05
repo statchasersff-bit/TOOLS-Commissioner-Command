@@ -38,6 +38,7 @@ interface ValueModel {
   getPickValue: (pick: Pick) => number;
   calculateTeamValue: (team: Team) => number;
   calculateMetrics: (team: Team) => TeamMetrics;
+  valuesBySleeperId: Record<string, number>;
 }
 
 const ValueModelContext = createContext<ValueModel | null>(null);
@@ -210,7 +211,8 @@ export function ValueModelProvider({ children }: { children: React.ReactNode }) 
     getPickValue,
     calculateTeamValue,
     calculateMetrics,
-  }), [sourceId, setSourceId, isRecalculating, isLoading, isSnapshot, unmatchedCount, diagnostics, getPlayerValue, getPickValue, calculateTeamValue, calculateMetrics]);
+    valuesBySleeperId,
+  }), [sourceId, setSourceId, isRecalculating, isLoading, isSnapshot, unmatchedCount, diagnostics, getPlayerValue, getPickValue, calculateTeamValue, calculateMetrics, valuesBySleeperId]);
 
   return (
     <ValueModelContext.Provider value={value}>

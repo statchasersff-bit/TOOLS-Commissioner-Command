@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { KpiCard } from "@/components/KpiCard";
 import { SectionHeader } from "@/components/SectionHeader";
 import { useSleeper } from "@/contexts/SleeperContext";
+import { useValueModel } from "@/contexts/ValueModelContext";
 import { getPositionColor } from "@/data/mockData";
 import {
   Link,
@@ -394,6 +395,8 @@ function SortableLeagueRecords({ records }: { records: any[] }) {
 
 export function PortfolioSummary() {
   const { isConnected, user, leagues } = useSleeper();
+  const { valuesBySleeperId, sourceId, sources } = useValueModel();
+  const activeSourceLabel = sources.find(s => s.id === sourceId)?.label ?? sourceId;
 
   const { data: summaryData, isLoading: summaryLoading } = useQuery({
     queryKey: ["/api/sleeper/user", user?.userId, "portfolio-summary"],
@@ -515,22 +518,29 @@ export function PortfolioSummary() {
               <h3 className="text-base font-bold text-foreground">Top Rostered Players</h3>
               <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
             </div>
-            <p className="text-xs text-muted-foreground mb-4">Player exposure across your {leagues.length} dynasty leagues</p>
+            <p className="text-xs text-muted-foreground mb-4">
+              Player exposure across your {leagues.length} dynasty leagues
+              {activeSourceLabel && <span className="ml-1">· Values from <span className="font-semibold">{activeSourceLabel}</span></span>}
+            </p>
 
             {summaryData.playerExposure.length > 0 ? (
               <div className="space-y-2">
                 {summaryData.playerExposure.slice(0, 15).map((player: any) => {
                   const isOverexposed = player.exposure >= 50;
+                  const dynastyValue = valuesBySleeperId[player.playerId] ?? 0;
                   return (
                     <div key={player.playerId} className="flex items-center justify-between py-2 border-b border-border/20 last:border-0" data-testid={`exposure-${player.playerId}`}>
-                      <div className="flex items-center gap-2.5">
-                        <Badge variant="outline" className={`text-xs w-8 justify-center ${getPositionColor(player.pos)}`}>{player.pos}</Badge>
-                        <div>
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <Badge variant="outline" className={`text-xs w-8 justify-center flex-shrink-0 ${getPositionColor(player.pos)}`}>{player.pos}</Badge>
+                        <div className="min-w-0">
                           <span className="text-sm font-semibold">{player.name}</span>
                           <span className="text-xs text-muted-foreground ml-2">{player.team}</span>
                         </div>
                       </div>
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-3 flex-shrink-0">
+                        <span className={`text-xs font-bold w-14 text-right ${dynastyValue > 0 ? "text-[#0b3a7a] dark:text-blue-400" : "text-muted-foreground"}`} data-testid={`value-${player.playerId}`}>
+                          {dynastyValue > 0 ? dynastyValue.toLocaleString() : "—"}
+                        </span>
                         <div className="flex items-center gap-1.5">
                           <div className="w-24 h-2 bg-muted rounded-full overflow-hidden">
                             <div
