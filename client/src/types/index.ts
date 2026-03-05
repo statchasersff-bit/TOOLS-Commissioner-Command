@@ -19,6 +19,7 @@ export interface Player {
   value: number;
   team: string;
   starter?: boolean;
+  sleeperId?: string;
 }
 
 export interface Pick {
@@ -57,7 +58,7 @@ export interface MainTabConfig extends TabConfig {
   subTabs: TabConfig[];
 }
 
-export type ValueSourceId = "ktc" | "fantasycalc" | "dynastyprocess" | "market-avg" | "statchasers";
+export type ValueSourceId = "fantasycalc" | "ktc" | "dlf" | "custom";
 
 export interface ValueSourceOption {
   id: ValueSourceId;

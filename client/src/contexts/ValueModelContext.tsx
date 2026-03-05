@@ -1,27 +1,22 @@
-import { createContext, useContext, useState, useCallback, useMemo } from "react";
+import { createContext, useContext, useState, useCallback, useMemo, useEffect } from "react";
 import type { ValueSourceId, ValueSourceOption, Player, Pick, Team, TeamMetrics } from "../types";
+import { getStaticPickValue } from "../data/pickValues";
 
 const VALUE_SOURCES: ValueSourceOption[] = [
-  { id: "ktc", label: "KeepTradeCut", description: "KeepTradeCut values are crowd-sourced dynasty trade values widely used by the dynasty fantasy football community.", active: true },
-  { id: "fantasycalc", label: "FantasyCalc", description: "Algorithmic dynasty values combining production, age, and draft capital analysis.", active: false },
-  { id: "dynastyprocess", label: "DynastyProcess", description: "Data-driven dynasty valuations using historical trade data and projections.", active: false },
-  { id: "market-avg", label: "Market Average", description: "Blended average across all active value sources for consensus pricing.", active: false },
-  { id: "statchasers", label: "StatChasers Model", description: "Our proprietary model combining analytics, film grades, and market data. Coming soon.", active: false },
+  { id: "fantasycalc", label: "FantasyCalc", description: "FantasyCalc values update daily. StatChasers caches values once per day.", active: true },
+  { id: "ktc", label: "KeepTradeCut", description: "KeepTradeCut crowd-sourced dynasty trade values. Coming soon.", active: false },
+  { id: "dlf", label: "DLF", description: "Dynasty League Football expert-driven dynasty valuations. Coming soon.", active: false },
+  { id: "custom", label: "Custom Upload", description: "Upload your own CSV of player values. Coming soon.", active: false },
 ];
-
-const SOURCE_MULTIPLIERS: Record<ValueSourceId, number> = {
-  ktc: 1.0,
-  fantasycalc: 0.95,
-  dynastyprocess: 1.05,
-  "market-avg": 1.0,
-  statchasers: 1.0,
-};
 
 interface ValueModel {
   sourceId: ValueSourceId;
   sources: ValueSourceOption[];
   setSourceId: (id: ValueSourceId) => void;
   isRecalculating: boolean;
+  isLoading: boolean;
+  isSnapshot: boolean;
+  unmatchedCount: number;
   getPlayerValue: (player: Player) => number;
   getPickValue: (pick: Pick) => number;
   calculateTeamValue: (team: Team) => number;
@@ -31,8 +26,44 @@ interface ValueModel {
 const ValueModelContext = createContext<ValueModel | null>(null);
 
 export function ValueModelProvider({ children }: { children: React.ReactNode }) {
-  const [sourceId, setSourceIdRaw] = useState<ValueSourceId>("ktc");
+  const [sourceId, setSourceIdRaw] = useState<ValueSourceId>("fantasycalc");
   const [isRecalculating, setIsRecalculating] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSnapshot, setIsSnapshot] = useState(false);
+  const [unmatchedCount, setUnmatchedCount] = useState(0);
+  const [valuesBySleeperId, setValuesBySleeperId] = useState<Record<string, number>>({});
+  const [nameValueMap, setNameValueMap] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    if (sourceId !== "fantasycalc") return;
+    let cancelled = false;
+    setIsLoading(true);
+
+    fetch("/api/values/fantasycalc?format=sf")
+      .then((r) => {
+        if (!r.ok) throw new Error(`API error ${r.status}`);
+        return r.json();
+      })
+      .then((data: { valuesBySleeperId: Record<string, number>; players: Array<{ name: string; pos: string; value: number }>; unmatched: any[]; updatedAt: string }) => {
+        if (cancelled) return;
+        setValuesBySleeperId(data.valuesBySleeperId);
+        const byName: Record<string, number> = {};
+        for (const p of data.players) {
+          byName[`${p.name.toLowerCase().trim()}|${p.pos}`] = p.value;
+        }
+        setNameValueMap(byName);
+        setUnmatchedCount(data.unmatched?.length || 0);
+        setIsSnapshot(data.updatedAt === "snapshot");
+        setIsLoading(false);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setIsLoading(false);
+        setIsSnapshot(true);
+      });
+
+    return () => { cancelled = true; };
+  }, [sourceId]);
 
   const setSourceId = useCallback((id: ValueSourceId) => {
     const source = VALUE_SOURCES.find((s) => s.id === id);
@@ -44,21 +75,29 @@ export function ValueModelProvider({ children }: { children: React.ReactNode }) 
     }, 400);
   }, []);
 
-  const multiplier = SOURCE_MULTIPLIERS[sourceId];
-
   const getPlayerValue = useCallback((player: Player): number => {
-    return Math.round(player.value * multiplier);
-  }, [multiplier]);
+    if (sourceId === "fantasycalc" && Object.keys(valuesBySleeperId).length > 0) {
+      if (player.sleeperId && valuesBySleeperId[player.sleeperId] !== undefined) {
+        return valuesBySleeperId[player.sleeperId];
+      }
+      const nameKey = `${player.name.toLowerCase().trim()}|${player.pos}`;
+      if (nameValueMap[nameKey] !== undefined) {
+        return nameValueMap[nameKey];
+      }
+    }
+    return player.value;
+  }, [sourceId, valuesBySleeperId, nameValueMap]);
 
   const getPickValue = useCallback((pick: Pick): number => {
-    return Math.round(pick.value * multiplier);
-  }, [multiplier]);
+    const range = (pick.projectedRange || "Mid").toLowerCase() as "early" | "mid" | "late";
+    return getStaticPickValue(pick.year, pick.round, range);
+  }, []);
 
   const calculateTeamValue = useCallback((team: Team): number => {
-    const rosterValue = team.roster.reduce((s, p) => s + Math.round(p.value * multiplier), 0);
-    const pickValue = team.picks.reduce((s, p) => s + Math.round(p.value * multiplier), 0);
+    const rosterValue = team.roster.reduce((s, p) => s + getPlayerValue(p), 0);
+    const pickValue = team.picks.reduce((s, p) => s + getPickValue(p), 0);
     return rosterValue + pickValue;
-  }, [multiplier]);
+  }, [getPlayerValue, getPickValue]);
 
   const calculateMetrics = useCallback((team: Team): TeamMetrics => {
     const roster = team.roster;
@@ -67,18 +106,18 @@ export function ValueModelProvider({ children }: { children: React.ReactNode }) 
     const starters = roster.filter((p) => p.starter);
     const bench = roster.filter((p) => !p.starter);
 
-    const starterValue = starters.reduce((s, p) => s + Math.round(p.value * multiplier), 0);
-    const benchValue = bench.reduce((s, p) => s + Math.round(p.value * multiplier), 0);
-    const picksTotalValue = picks.reduce((s, p) => s + Math.round(p.value * multiplier), 0);
+    const starterValue = starters.reduce((s, p) => s + getPlayerValue(p), 0);
+    const benchValue = bench.reduce((s, p) => s + getPlayerValue(p), 0);
+    const picksTotalValue = picks.reduce((s, p) => s + getPickValue(p), 0);
 
     const starterAvgAge = starters.length > 0
       ? starters.reduce((s, p) => s + p.age, 0) / starters.length
       : 26;
     const youthScore = Math.max(0, Math.min(100, Math.round(100 - (starterAvgAge - 23) * 8)));
 
-    const maxStarterValue = Math.max(starters.length * 60, 1);
-    const maxBenchValue = Math.max(bench.length * 40, 1);
-    const maxPickValue = 400;
+    const maxStarterValue = Math.max(starters.length * 5000, 1);
+    const maxBenchValue = Math.max(bench.length * 3000, 1);
+    const maxPickValue = 40000;
 
     const starterScore = Math.min(99, Math.max(10, Math.round((starterValue / maxStarterValue) * 100)));
     const depthScore = Math.min(99, Math.max(10, Math.round((benchValue / maxBenchValue) * 100)));
@@ -93,8 +132,9 @@ export function ValueModelProvider({ children }: { children: React.ReactNode }) 
 
     const posScore = (pos: string) => {
       const posPlayers = starters.filter((p) => p.pos === pos);
-      const total = posPlayers.reduce((s, p) => s + Math.round(p.value * multiplier), 0);
-      return Math.min(99, Math.max(10, Math.round(total * 1.5)));
+      const total = posPlayers.reduce((s, p) => s + getPlayerValue(p), 0);
+      const maxPos = pos === "QB" ? 10000 : pos === "WR" ? 20000 : pos === "RB" ? 15000 : 8000;
+      return Math.min(99, Math.max(10, Math.round((total / maxPos) * 100)));
     };
 
     const contenderWindowYears = youthScore >= 70 && overall >= 65
@@ -117,18 +157,21 @@ export function ValueModelProvider({ children }: { children: React.ReactNode }) 
       te: posScore("TE"),
       contenderWindowYears,
     };
-  }, [multiplier]);
+  }, [getPlayerValue, getPickValue]);
 
   const value = useMemo<ValueModel>(() => ({
     sourceId,
     sources: VALUE_SOURCES,
     setSourceId,
     isRecalculating,
+    isLoading,
+    isSnapshot,
+    unmatchedCount,
     getPlayerValue,
     getPickValue,
     calculateTeamValue,
     calculateMetrics,
-  }), [sourceId, setSourceId, isRecalculating, getPlayerValue, getPickValue, calculateTeamValue, calculateMetrics]);
+  }), [sourceId, setSourceId, isRecalculating, isLoading, isSnapshot, unmatchedCount, getPlayerValue, getPickValue, calculateTeamValue, calculateMetrics]);
 
   return (
     <ValueModelContext.Provider value={value}>

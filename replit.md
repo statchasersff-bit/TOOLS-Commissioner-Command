@@ -4,7 +4,7 @@
 A premium dynasty fantasy football league analysis tool built with React + TypeScript + Vite. Uses a two-level tab navigation system (main tabs -> sub tabs) with mock data ready to be wired to Sleeper API.
 
 ## Architecture
-- **Frontend-only MVP** with mock data (no database needed yet)
+- **Frontend + Express backend** with mock roster data and real FantasyCalc values
 - **ValueModelProvider** context drives all value calculations (player values, pick values, team metrics)
 - Power Score formula: 0.45 Starter Value + 0.25 Bench Value + 0.20 Picks + 0.10 Youth
 - State-based navigation with URL query param persistence (?tab=X&sub=Y)
@@ -12,18 +12,35 @@ A premium dynasty fantasy football league analysis tool built with React + TypeS
 - Two-level tab system: 7 main tabs, each with 2-3 sub-tabs
 - Empty state landing until league is selected; first selection lands on Dashboard > Overview
 
+## Value Source Integration (FantasyCalc)
+- **Backend proxy**: `GET /api/values/fantasycalc?format=sf|1qb` proxies and caches FantasyCalc API
+- **Daily caching**: File-based cache at `/tmp/fantasycalc_cache_{format}.json`, 24-hour TTL
+- **Dev fallback**: Snapshot file at `server/data/fantasycalc_snapshot_sf.json` used when API unreachable
+- **Player matching**: Uses sleeperId from FantasyCalc API directly; falls back to name+pos matching
+- **Pick values**: Static table in `client/src/data/pickValues.ts` (rounds 1-4, years 2025-2028, early/mid/late tiers)
+- **Attribution**: "Values provided by FantasyCalc.com" visible in header when FantasyCalc is active
+
 ## Project Structure
 ```
+server/
+  index.ts               - Express server setup
+  routes.ts              - API routes (FantasyCalc proxy endpoint)
+  fantasycalc.ts         - FantasyCalc API fetcher + file cache + snapshot fallback
+  data/
+    fantasycalc_snapshot_sf.json - Dev fallback snapshot of FantasyCalc values
+
 client/src/
   types/index.ts          - TypeScript interfaces (League, Team, Player, Pick, ValueSourceId, etc.)
-  data/mockData.ts        - Mock league data generator + nav config + utility functions
+  data/
+    mockData.ts           - Mock league data generator + nav config + utility functions
+    pickValues.ts         - Static pick value table (round × year × projected range)
   contexts/
-    ValueModelContext.tsx  - ValueModelProvider with getPlayerValue, getPickValue, calculateMetrics
+    ValueModelContext.tsx  - ValueModelProvider with FantasyCalc API fetch, getPlayerValue, getPickValue, calculateMetrics
   components/
     MainTabs.tsx           - Top-level tab navigation (rounded-full pills, gold underline)
     SubTabs.tsx            - Second-level tab navigation (rounded-full pills, gold underline)
     LeagueSelector.tsx     - League dropdown selector (pill-style)
-    ValueSourceSelector.tsx - Value source dropdown with Coming Soon items + tooltip
+    ValueSourceSelector.tsx - Value source dropdown + ValueAttribution component
     KpiCard.tsx            - Metric display cards with skeleton loading + tooltip support
     DataTable.tsx          - Sortable/scrollable data table with skeleton loading, sticky columns
     InsightCallout.tsx     - Positive/neutral/negative insight cards
@@ -42,10 +59,11 @@ client/src/
 ```
 
 ## Value Model
-- All player/pick values and team metrics flow through ValueModelProvider
-- DynastyCommandCenter normalizes the entire league (roster + picks + metrics) via useMemo on source change
-- Value sources: KeepTradeCut (active), FantasyCalc, DynastyProcess, Market Average, StatChasers Model (Coming Soon)
-- Source multipliers adjust all values; switching triggers a "Recalculating..." overlay animation
+- FantasyCalc (active): fetches real player values from API via backend proxy, cached daily
+- KTC, DLF, Custom Upload: listed as "Coming Soon" / disabled
+- Value sources: FantasyCalc (active default), KeepTradeCut (Coming Soon), DLF (Coming Soon), Custom Upload (Coming Soon)
+- Mock roster data is enriched with real FantasyCalc values via name+sleeperId matching
+- Switching sources triggers a "Recalculating..." overlay animation
 
 ## Branding
 - Brand Navy: #0b3a7a
@@ -55,11 +73,13 @@ client/src/
 
 ## UX Features
 - Header control panel: League selector + Value Source selector with labels, pill-style dropdowns
+- FantasyCalc attribution line below header selectors when FantasyCalc is active
+- Loading state with spinner when fetching values
+- Snapshot (dev) badge when using fallback data
 - "Jump to" mini menu on Dashboard Overview links to Snapshot and Key Insights sub-tabs
 - KPI cards support "?" tooltip icons explaining what each metric means
 - Value Source selector has "?" tooltip explaining the active source
 - State restored from localStorage on refresh (tab, sub-tab, league)
-- URL query params (?tab=X&sub=Y) take priority over localStorage when present
 
 ## UI Polish
 - Tabs: rounded-full pill shape with gold underline active indicator
@@ -68,11 +88,10 @@ client/src/
 - Blueprint background: subtle grid texture on main page (adapts to dark mode)
 - Skeleton loading: skeleton-pulse animation for KpiCard and DataTable
 - DataTable: sticky first column with proper background inheritance, alternating row colors
-- Typography: bolder headings (text-base font-bold) inside cards, uppercase tracking-wider labels
 
 ## Tech Stack
 - React 18 + TypeScript
-- Vite dev server
+- Vite dev server + Express backend
 - TailwindCSS with shadcn/ui components
 - Wouter for routing
-- No database - mock data only for MVP
+- File-based caching for API responses

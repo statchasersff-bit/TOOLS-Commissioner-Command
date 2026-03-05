@@ -1,0 +1,128 @@
+We are integrating FantasyCalc as the first external value source into the StatChasers “Dynasty Command Center” tool.
+
+GOAL
+- Add a “Value Source” selector next to the “League Selector” in the header.
+- Value Source = FantasyCalc (only enabled source for now).
+- Pull player values from FantasyCalc (via backend proxy endpoint) and use them to power:
+  - team values
+  - league power rankings
+  - positional strength grades
+  - trade center scoring inputs
+- Implement caching (once per day) as FantasyCalc recommends.
+- Display attribution "FantasyCalc" / “FantasyCalc.com” + link on every page where their data is used (global placement acceptable if visible on all pages).
+
+IMPORTANT CONSTRAINTS
+- Do NOT scrape. Use FantasyCalc API (or the simplest supported endpoint available).
+- Cache API responses on OUR server (or edge) and refresh at most once per day.
+- Frontend must never call FantasyCalc directly; it must call our proxy endpoint.
+- Provide a mapping layer from FantasyCalc players to Sleeper player IDs.
+
+UI / UX REQUIREMENTS
+Header row (right side):
+- League Selector dropdown
+- Value Source dropdown
+- Small attribution line underneath dropdowns:
+  “Values provided by FantasyCalc.com” (clickable link)
+- Tooltip next to Value Source:
+  “FantasyCalc values update daily. StatChasers caches values once per day.”
+
+When Value Source changes or loads:
+- Show a subtle skeleton / shimmer state “Loading FantasyCalc values…”
+
+VALUE SOURCE SELECTOR
+- Options:
+  - FantasyCalc (enabled)
+  - KeepTradeCut (Coming soon)
+  - DLF (Coming soon)
+  - Custom Upload (Coming soon)
+- Only FantasyCalc is functional.
+
+ARCHITECTURE
+Create a “value provider” system so later sources are easy:
+- /src/values/
+  - ValueProvider.ts (interface)
+  - fantasycalcProvider.ts (implementation)
+  - index.ts (select provider)
+- A single function should power everything:
+  getPlayerValue(sleeperId: string): number
+  getPickValue(pickKey: string): number
+  calculateTeamValue(team): { startersValue, benchValue, picksValue, totalValue }
+
+BACKEND PROXY + DAILY CACHE
+Implement a backend endpoint:
+- GET /api/values/fantasycalc?format=sf|1qb
+This endpoint must:
+1) Check cache (KV/SQLite/file) for “fantasycalc_values_{format}”
+2) If cached AND less than 24 hours old -> return cached JSON
+3) Else fetch fresh from FantasyCalc API, normalize, store in cache with timestamp, return JSON
+
+Caching requirements:
+- store:
+  { updatedAt, source: "fantasycalc", format, values: [{name,pos,team,value,externalId?}] }
+- TTL target: 24h
+
+DEV MODE:
+- If FantasyCalc endpoint or key is missing, fall back to a local snapshot file:
+  /src/data/fantasycalc_snapshot_sf.json and _1qb.json
+- Add a banner warning in dev: “Using snapshot values (dev mode)”
+
+PLAYER ID MAPPING (CRITICAL)
+We need to map FantasyCalc player rows to Sleeper IDs.
+Build a mapping module:
+- Load Sleeper player database from a local file:
+  /src/data/sleeper_players.json (or fetch once and save)
+Create a function:
+  mapFantasyCalcRowToSleeperId(row): string | null
+
+Matching logic (order):
+1) Exact match on (normalizedName + pos + team)
+2) If not found, match on (normalizedName + pos) and pick the best by team similarity
+3) Handle suffixes (Jr, Sr, II, III), punctuation, apostrophes, hyphens
+4) If still not found, return null and log unmatched rows
+
+Return values endpoint format after mapping:
+- GET /api/values/fantasycalc returns:
+  {
+    source: "fantasycalc",
+    format: "sf",
+    updatedAt: "...",
+    valuesBySleeperId: { "sleeperId": 7420, ... },
+    unmatched: [{name,pos,team,value}]
+  }
+
+Frontend should:
+- fetch this once after league selection
+- store in context state
+- expose getPlayerValue() to all pages
+- if unmatched length > 0, show a small “Mapping issues detected” expandable panel (dev only)
+
+PICK VALUES
+Add a pick value table (not from FantasyCalc unless they explicitly provide pick values):
+- /src/values/pickValues.ts
+Use a basic Early/Mid/Late framework for each round (1st–4th) and future years 2026–2028.
+Represent picks as keys like:
+  "2027_1st_early", "2027_1st_mid", "2027_1st_late", etc.
+In Draft Capital and Team Value, if projectedRange is unknown, default to “mid”.
+
+INTEGRATION POINTS IN TOOL
+- Team Value:
+  total = startersValue + benchValue + picksValue
+- League Power Rankings:
+  rank teams by totalValue (and optionally show component columns)
+- Positional Strength:
+  compute position totals based on starters at that position
+- Trade Center:
+  show target players with their FantasyCalc value and age
+
+ATTRIBUTION (MUST)
+On EVERY page (since tabs are pages), show:
+- “Values provided by FantasyCalc.com” as a link to FantasyCalc.com
+Place it in a visible consistent area:
+- either just under the header selectors or sticky footer within the tool shell
+Also add a small “FantasyCalc” badge near any tables that display raw values.
+
+DELIVERABLES
+- Working integration with mocked league data and real provider architecture.
+- Backend proxy + caching implemented.
+- Mapping module implemented with logs for unmatched.
+- UI: selectors + attribution + loading states + dev fallback snapshot.

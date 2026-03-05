@@ -4,7 +4,7 @@ import { Card } from "@/components/ui/card";
 import { MainTabs } from "@/components/MainTabs";
 import { SubTabs } from "@/components/SubTabs";
 import { LeagueSelector } from "@/components/LeagueSelector";
-import { ValueSourceSelector } from "@/components/ValueSourceSelector";
+import { ValueSourceSelector, ValueAttribution } from "@/components/ValueSourceSelector";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useValueModel } from "@/contexts/ValueModelContext";
 import { NAV_CONFIG, getLeagues } from "@/data/mockData";
@@ -50,7 +50,7 @@ export default function DynastyCommandCenter() {
   const [activeSubTab, setActiveSubTab] = useState(initial.sub);
   const [isTransitioning, setIsTransitioning] = useState(false);
 
-  const { isRecalculating, getPlayerValue, getPickValue, calculateMetrics } = useValueModel();
+  const { isRecalculating, isLoading, getPlayerValue, getPickValue, calculateMetrics } = useValueModel();
 
   const rawLeague = leagues.find((l) => l.id === selectedLeagueId) || null;
 
@@ -158,41 +158,46 @@ export default function DynastyCommandCenter() {
   return (
     <div className="min-h-screen bg-background blueprint-bg">
       <header className="border-b border-border bg-background/95 backdrop-blur-sm sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 md:px-6 py-3.5 flex items-center justify-between gap-4 flex-wrap">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-md bg-[#0b3a7a] flex items-center justify-center flex-shrink-0">
-              <span className="text-white font-bold text-sm">SC</span>
+        <div className="max-w-7xl mx-auto px-4 md:px-6 py-3.5">
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-md bg-[#0b3a7a] flex items-center justify-center flex-shrink-0">
+                <span className="text-white font-bold text-sm">SC</span>
+              </div>
+              <div>
+                <h1 className="text-base font-bold text-foreground leading-tight tracking-tight" data-testid="text-app-title">
+                  StatChasers
+                </h1>
+                <p className="text-xs text-[#d4af37] font-semibold tracking-wide">Dynasty Command Center</p>
+              </div>
             </div>
-            <div>
-              <h1 className="text-base font-bold text-foreground leading-tight tracking-tight" data-testid="text-app-title">
-                StatChasers
-              </h1>
-              <p className="text-xs text-[#d4af37] font-semibold tracking-wide">Dynasty Command Center</p>
+
+            <div className="flex items-center gap-3 flex-wrap">
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider hidden md:inline">League:</span>
+                <LeagueSelector
+                  leagues={leagues}
+                  selectedLeagueId={selectedLeagueId}
+                  onSelect={handleLeagueSelect}
+                />
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider hidden md:inline">Value:</span>
+                <ValueSourceSelector />
+              </div>
+              <div className="flex items-center gap-1.5 border-l border-border/50 pl-3">
+                <Button variant="outline" size="sm" disabled data-testid="button-share">
+                  <Share2 className="w-3 h-3 mr-1" /> Share
+                </Button>
+                <Button variant="outline" size="sm" disabled data-testid="button-export">
+                  <Download className="w-3 h-3 mr-1" /> Export
+                </Button>
+                <ThemeToggle />
+              </div>
             </div>
           </div>
-
-          <div className="flex items-center gap-3 flex-wrap">
-            <div className="flex items-center gap-1.5">
-              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider hidden md:inline">League:</span>
-              <LeagueSelector
-                leagues={leagues}
-                selectedLeagueId={selectedLeagueId}
-                onSelect={handleLeagueSelect}
-              />
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider hidden md:inline">Value:</span>
-              <ValueSourceSelector />
-            </div>
-            <div className="flex items-center gap-1.5 border-l border-border/50 pl-3">
-              <Button variant="outline" size="sm" disabled data-testid="button-share">
-                <Share2 className="w-3 h-3 mr-1" /> Share
-              </Button>
-              <Button variant="outline" size="sm" disabled data-testid="button-export">
-                <Download className="w-3 h-3 mr-1" /> Export
-              </Button>
-              <ThemeToggle />
-            </div>
+          <div className="flex justify-end mt-1">
+            <ValueAttribution />
           </div>
         </div>
       </header>
