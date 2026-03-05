@@ -255,8 +255,8 @@ export function DashboardOverview({ league, userTeam, onNavigate }: DashboardOve
               variant="outline"
               size="sm"
               className="text-xs h-7 px-2.5"
-              onClick={() => onNavigate("dashboard", "snapshot")}
-              data-testid="jump-to-snapshot"
+              onClick={() => onNavigate("league-analyzer", "power-rankings")}
+              data-testid="jump-to-rankings"
             >
               <Table className="w-3 h-3 mr-1" />
               Rankings
