@@ -492,9 +492,11 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
     const dynastyTotals = teams.map(t => ({
       id: t.id, total: t.roster.reduce((s, p) => s + getPlayerValue(p), 0),
     })).sort((a, b) => b.total - a.total);
-    const ranks: Record<string, { redraftRank: number; dynastyRank: number }> = {};
-    redraftTotals.forEach((e, i) => { ranks[e.id] = { redraftRank: i + 1, dynastyRank: total }; });
+    const picksTotals = [...teams].sort((a, b) => b.metrics.picks - a.metrics.picks);
+    const ranks: Record<string, { redraftRank: number; dynastyRank: number; picksRank: number }> = {};
+    redraftTotals.forEach((e, i) => { ranks[e.id] = { redraftRank: i + 1, dynastyRank: total, picksRank: total }; });
     dynastyTotals.forEach((e, i) => { if (ranks[e.id]) ranks[e.id].dynastyRank = i + 1; });
+    picksTotals.forEach((t, i) => { if (ranks[t.id]) ranks[t.id].picksRank = i + 1; });
     return { ranks, total };
   }, [teams, league.rosterPositions, getPlayerValue, getRedraftValue, optimizeLineup]);
 
@@ -535,7 +537,7 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
       overall: t => t.metrics.overall,
       redraftRank: t => -(teamRanks.ranks[t.id]?.redraftRank ?? teamRanks.total),
       dynastyRank: t => -(teamRanks.ranks[t.id]?.dynastyRank ?? teamRanks.total),
-      picks: t => t.metrics.picks,
+      picks: t => -(teamRanks.ranks[t.id]?.picksRank ?? teamRanks.total),
     };
     return [...teams].sort((a, b) => {
       const va = accessor[sortKey](a);
@@ -691,7 +693,18 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
                         );
                       })()}
                     </td>
-                    <td className="px-4 py-3.5 whitespace-nowrap border-l border-border/15 font-medium">{team.metrics.picks}</td>
+                    <td className="px-4 py-3.5 whitespace-nowrap border-l border-border/15" data-testid={`picks-rank-${team.id}`}>
+                      {(() => {
+                        const r = teamRanks.ranks[team.id]?.picksRank ?? teamRanks.total;
+                        const topThird = Math.ceil(teamRanks.total / 3);
+                        const bottomStart = teamRanks.total - topThird + 1;
+                        return (
+                          <span className={cn("font-bold", r <= topThird ? "text-emerald-600 dark:text-emerald-400" : r >= bottomStart ? "text-red-500 dark:text-red-400" : "text-foreground")}>
+                            #{r}
+                          </span>
+                        );
+                      })()}
+                    </td>
                     <td className="px-4 py-3.5 whitespace-nowrap">
                       {isExpanded
                         ? <ChevronUp className="w-4 h-4 text-muted-foreground" />
