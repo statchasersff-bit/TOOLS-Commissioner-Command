@@ -479,6 +479,35 @@ function TradeOpportunities({ league, userTeam }: { league: League; userTeam: Te
 
   const userProfile = useMemo(() => profiles.find(p => p.teamId === userTeam.id), [profiles, userTeam]);
 
+  const tradeBlockCandidates = useMemo(() => {
+    const total = league.teams.length;
+    const topThird = Math.ceil(total / 3);
+    const bottomStart = total - topThird + 1;
+    const rankedTeams = [...league.teams].sort((a, b) => (b.metrics?.overall ?? 0) - (a.metrics?.overall ?? 0));
+    return league.teams
+      .filter(t => t.id !== userTeam.id)
+      .flatMap(t => {
+        const dynastyRank = rankedTeams.findIndex(rt => rt.id === t.id) + 1;
+        const redraftRank = [...league.teams].sort((a, b) => (b.metrics?.starters ?? 0) - (a.metrics?.starters ?? 0)).findIndex(rt => rt.id === t.id) + 1;
+        const tier = getTeamTier(t.metrics?.overall ?? 50);
+        const isRebuilder = tier === "Rebuild";
+        const isDynastyStrong = dynastyRank <= topThird && redraftRank >= bottomStart;
+        if (!isRebuilder && !isDynastyStrong) return [];
+        return t.roster
+          .filter(p => p.age >= 27 && getRedraftValue(p) >= 1500)
+          .map(p => ({
+            ...p,
+            teamName: t.name,
+            ownerName: t.owner,
+            tier,
+            redraftVal: getRedraftValue(p),
+            dynastyVal: getPlayerValue(p),
+            reason: isRebuilder ? "Rebuilder" as const : "Dynasty-heavy" as const,
+          }));
+      })
+      .sort((a, b) => b.redraftVal - a.redraftVal);
+  }, [league, userTeam, getRedraftValue, getPlayerValue]);
+
   const partnerOpportunities = useMemo(() => {
     if (!userProfile) return [];
 
@@ -732,6 +761,47 @@ function TradeOpportunities({ league, userTeam }: { league: League; userTeam: Te
           );
         })}
       </div>
+
+      <Card className="p-6" data-testid="card-trade-block-candidates">
+        <div className="mb-5">
+          <h3 className="text-base font-bold flex items-center gap-2">
+            Trade Block Candidates
+            <Badge variant="secondary">{tradeBlockCandidates.length}</Badge>
+          </h3>
+          <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
+          <p className="text-[10px] text-muted-foreground mt-2">
+            Veteran players (27+) on rebuilding or dynasty-heavy teams with strong redraft value — likely trade targets
+          </p>
+        </div>
+        <div className="space-y-0">
+          {tradeBlockCandidates.length === 0 && <p className="text-xs text-muted-foreground">No trade block candidates found</p>}
+          {tradeBlockCandidates.slice(0, 20).map((p, i) => (
+            <div key={`${p.sleeperId || p.id}-${i}`} className="flex items-center justify-between py-2.5 border-b border-border/20 last:border-0" data-testid={`trade-block-candidate-${p.sleeperId || p.id}`}>
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="text-xs text-muted-foreground w-5 text-right">{i + 1}.</span>
+                <Badge variant="outline" className={`text-xs w-8 justify-center flex-shrink-0 ${getPositionColor(p.pos)}`}>{p.pos}</Badge>
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold truncate">{p.name}</p>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] text-muted-foreground">{p.teamName}</span>
+                    <span className="text-[10px] text-muted-foreground">· {p.ownerName}</span>
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <span className="text-xs text-muted-foreground">Age {p.age}</span>
+                <div className="text-right">
+                  <p className="text-xs font-bold text-[#0b3a7a] dark:text-blue-400">{p.redraftVal.toLocaleString()}</p>
+                  <p className="text-[10px] text-muted-foreground">redraft</p>
+                </div>
+                <Badge variant="outline" className={cn("text-[10px]", p.reason === "Rebuilder" ? getTierColor("Rebuild") : "text-amber-600 dark:text-amber-400 border-amber-300 dark:border-amber-700")}>
+                  {p.reason}
+                </Badge>
+              </div>
+            </div>
+          ))}
+        </div>
+      </Card>
     </div>
   );
 }
