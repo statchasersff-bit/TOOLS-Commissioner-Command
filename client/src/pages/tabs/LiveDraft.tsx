@@ -64,6 +64,15 @@ const POS_CELL_BG: Record<string, string> = {
   DEF: "bg-slate-500/20 dark:bg-slate-500/25 border-slate-500/30 text-slate-900 dark:text-slate-200",
 };
 
+const POS_CELL_PROJECTION: Record<string, string> = {
+  QB: "bg-red-500/8 dark:bg-red-500/10 border-red-500/15 text-red-800/60 dark:text-red-300/50",
+  RB: "bg-emerald-500/8 dark:bg-emerald-500/10 border-emerald-500/15 text-emerald-800/60 dark:text-emerald-300/50",
+  WR: "bg-blue-500/8 dark:bg-blue-500/10 border-blue-500/15 text-blue-800/60 dark:text-blue-300/50",
+  TE: "bg-orange-500/8 dark:bg-orange-500/10 border-orange-500/15 text-orange-800/60 dark:text-orange-300/50",
+  K: "bg-purple-500/5 dark:bg-purple-500/8 border-purple-500/10 text-purple-800/50 dark:text-purple-300/40",
+  DEF: "bg-slate-500/5 dark:bg-slate-500/8 border-slate-500/10 text-slate-800/50 dark:text-slate-300/40",
+};
+
 const POS_BADGE_SM: Record<string, string> = {
   QB: "text-red-600 dark:text-red-400",
   RB: "text-emerald-600 dark:text-emerald-400",
@@ -177,7 +186,7 @@ export default function LiveDraft() {
   const boardGrid = useMemo(() => {
     const rounds = draftData?.draft?.rounds || Math.ceil(fullBoard.length / teamCount);
     const effectiveRounds = Math.min(rounds, Math.ceil(fullBoard.length / teamCount));
-    const grid: Array<Array<{ rank: number; player: typeof fullBoard[0] | null; pick: DraftPick | null; isSnake: boolean }>> = [];
+    const grid: Array<Array<{ rank: number; player: typeof fullBoard[0] | null; pick: DraftPick | null; isSnake: boolean; isDrafted: boolean }>> = [];
 
     const pickMap = new Map<string, DraftPick>();
     if (draftData) {
@@ -198,21 +207,21 @@ export default function LiveDraft() {
 
         const draftPick = pickMap.get(`${r + 1}-${actualSlot + 1}`);
 
-        let matchedPlayer = player;
+        let draftedPlayer: typeof fullBoard[0] | null = null;
         if (draftPick?.playerId && draftData?.players) {
           const pInfo = draftData.players[draftPick.playerId];
           if (pInfo) {
             const found = fullBoard.find(p => p.sleeperId === draftPick.playerId);
-            if (found) matchedPlayer = found;
-            else matchedPlayer = { sleeperId: draftPick.playerId, name: pInfo.name, pos: pInfo.pos, team: pInfo.team, value: 0, age: 0 };
+            draftedPlayer = found || { sleeperId: draftPick.playerId, name: pInfo.name, pos: pInfo.pos, team: pInfo.team, value: 0, age: 0 };
           }
         }
 
         row.push({
           rank: overallPick + 1,
-          player: draftPick?.playerId ? matchedPlayer : (draftData ? null : player),
+          player: draftedPlayer || player,
           pick: draftPick || null,
           isSnake: isSnakeRound,
+          isDrafted: !!draftedPlayer,
         });
       }
       grid.push(row);
@@ -449,6 +458,12 @@ export default function LiveDraft() {
               <span className="w-3 h-3 rounded border-2 border-dashed border-border/60" />
               Empty pick
             </span>
+            {draftData && (
+              <span className="flex items-center gap-1.5 ml-2 pl-2 border-l border-border/40">
+                <span className="w-3 h-3 rounded bg-muted/30 border border-border/30 opacity-50" />
+                Projected (by rank)
+              </span>
+            )}
           </div>
 
           {dynastyPlayerList.length === 0 ? (
@@ -483,8 +498,13 @@ export default function LiveDraft() {
                           {row.map((cell, slotIdx) => {
                             const hasPlayer = !!cell.player;
                             const pos = cell.player?.pos || cell.pick?.pos || "";
-                            const cellStyle = hasPlayer ? (POS_CELL_BG[pos] || "bg-muted/20 border-border/30 text-foreground") : "";
-                            const isEmpty = !hasPlayer && !cell.pick?.playerId;
+                            const isProjection = hasPlayer && !cell.isDrafted && !!draftData;
+                            const cellStyle = hasPlayer
+                              ? isProjection
+                                ? (POS_CELL_PROJECTION[pos] || "bg-muted/10 border-border/20 text-muted-foreground")
+                                : (POS_CELL_BG[pos] || "bg-muted/20 border-border/30 text-foreground")
+                              : "";
+                            const isEmpty = !hasPlayer;
 
                             return (
                               <div
@@ -497,12 +517,12 @@ export default function LiveDraft() {
                               >
                                 {hasPlayer ? (
                                   <>
-                                    <span className="text-[10px] md:text-[11px] font-bold leading-tight text-center truncate w-full px-0.5">
+                                    <span className={`text-[10px] md:text-[11px] leading-tight text-center truncate w-full px-0.5 ${isProjection ? "font-medium opacity-70" : "font-bold"}`}>
                                       {cell.player!.name.split(" ").length > 1
                                         ? `${cell.player!.name.split(" ")[0][0]}. ${cell.player!.name.split(" ").slice(1).join(" ")}`
                                         : cell.player!.name}
                                     </span>
-                                    <span className={`text-[9px] font-bold mt-0.5 ${POS_BADGE_SM[pos] || "text-muted-foreground"}`}>
+                                    <span className={`text-[9px] font-bold mt-0.5 ${isProjection ? "opacity-50 " : ""}${POS_BADGE_SM[pos] || "text-muted-foreground"}`}>
                                       {pos}
                                     </span>
                                   </>
