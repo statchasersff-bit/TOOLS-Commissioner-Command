@@ -248,11 +248,11 @@ function PositionOverview({ league, userTeam }: { league: League; userTeam: Team
             <table className="w-full text-sm" data-testid="position-overview-table">
               <thead>
                 <tr className="border-b border-border/50 bg-muted/30">
-                  <th className="px-4 py-3 text-left font-semibold text-muted-foreground">Team</th>
+                  <th className="px-1.5 sm:px-4 py-2.5 sm:py-3 text-left text-xs sm:text-sm font-semibold text-muted-foreground">Team</th>
                   {POSITIONS.map(pos => (
-                    <th key={pos} className="px-3 py-3 text-center font-semibold text-muted-foreground w-24">{pos}</th>
+                    <th key={pos} className="px-1 sm:px-3 py-2.5 sm:py-3 text-center text-xs sm:text-sm font-semibold text-muted-foreground">{pos}</th>
                   ))}
-                  <th className="px-3 py-3 text-center font-semibold text-muted-foreground w-20">Picks</th>
+                  <th className="px-1 sm:px-3 py-2.5 sm:py-3 text-center text-xs sm:text-sm font-semibold text-muted-foreground">PKS</th>
                 </tr>
               </thead>
               <tbody>
@@ -267,10 +267,10 @@ function PositionOverview({ league, userTeam }: { league: League; userTeam: Team
                       )}
                       data-testid={`overview-row-${profile.teamId}`}
                     >
-                      <td className={cn("px-4 py-2.5", isUser ? "bg-blue-50/50 dark:bg-blue-950/20" : "")}>
-                        <div className="flex items-center gap-2">
+                      <td className={cn("px-1.5 sm:px-4 py-2", isUser ? "bg-blue-50/50 dark:bg-blue-950/20" : "")}>
+                        <div className="flex items-center gap-1 sm:gap-2">
                           {isUser && <div className="w-1.5 h-1.5 rounded-full bg-[#d4af37]" />}
-                          <span className={cn("font-semibold text-foreground", isUser && "text-[#0b3a7a] dark:text-blue-400")}>
+                          <span className={cn("font-semibold text-[11px] sm:text-sm text-foreground truncate max-w-[60px] sm:max-w-none", isUser && "text-[#0b3a7a] dark:text-blue-400")}>
                             {profile.team.owner}
                           </span>
                         </div>
@@ -278,11 +278,11 @@ function PositionOverview({ league, userTeam }: { league: League; userTeam: Team
                       {POSITIONS.map(pos => {
                         const p = profile.positions[pos];
                         return (
-                          <td key={pos} className={cn("px-3 py-2.5 text-center", getStatusCellBg(p.status))}>
+                          <td key={pos} className={cn("px-1 sm:px-3 py-2 text-center", getStatusCellBg(p.status))}>
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <div className="inline-block">
-                                  <Badge variant="outline" className={cn("text-[10px] font-semibold", getStatusColor(p.status))} data-testid={`status-${profile.teamId}-${pos}`}>
+                                  <Badge variant="outline" className={cn("text-[8px] sm:text-[10px] px-1 sm:px-1.5 font-semibold", getStatusColor(p.status))} data-testid={`status-${profile.teamId}-${pos}`}>
                                     {p.status}
                                   </Badge>
                                 </div>
@@ -297,8 +297,8 @@ function PositionOverview({ league, userTeam }: { league: League; userTeam: Team
                           </td>
                         );
                       })}
-                      <td className="px-3 py-2.5 text-center">
-                        <Badge variant="outline" className={cn("text-[10px] font-semibold",
+                      <td className="px-1 sm:px-3 py-2 text-center">
+                        <Badge variant="outline" className={cn("text-[8px] sm:text-[10px] px-1 sm:px-1.5 font-semibold",
                           profile.pickStrength === "High" ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30" :
                           profile.pickStrength === "Low" ? "bg-red-500/15 text-red-700 dark:text-red-400 border-red-500/30" :
                           "bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20"
