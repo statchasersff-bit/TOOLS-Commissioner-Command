@@ -635,7 +635,9 @@ export function TradeBlockScanner({ league }: { league: League }) {
 
   return (
     <div className="space-y-8">
-      <SectionHeader title="Trade Block Scanner" subtitle="Identify likely sellers and buyers in your league" />
+      <SectionHeader title="Trade Intel" subtitle="Identify likely sellers and buyers in your league" />
+
+      <CrossLeagueTradeIntel league={league} />
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
         <Card className="p-6">
@@ -720,7 +722,6 @@ export function TradeBlockScanner({ league }: { league: League }) {
         </div>
       </Card>
 
-      <CrossLeagueTradeIntel league={league} />
     </div>
   );
 }
