@@ -249,7 +249,6 @@ function PositionOverview({ league, userTeam }: { league: League; userTeam: Team
               <thead>
                 <tr className="border-b border-border/50 bg-muted/30">
                   <th className="px-4 py-3 text-left font-semibold text-muted-foreground sticky left-0 bg-muted/30 z-10">Team</th>
-                  <th className="px-3 py-3 text-center font-semibold text-muted-foreground w-16">Tier</th>
                   {POSITIONS.map(pos => (
                     <th key={pos} className="px-3 py-3 text-center font-semibold text-muted-foreground w-24">{pos}</th>
                   ))}
@@ -275,9 +274,6 @@ function PositionOverview({ league, userTeam }: { league: League; userTeam: Team
                             {profile.team.owner}
                           </span>
                         </div>
-                      </td>
-                      <td className="px-3 py-2.5 text-center">
-                        <Badge variant="outline" className={cn("text-[10px]", getTierColor(profile.tier))}>{profile.tier}</Badge>
                       </td>
                       {POSITIONS.map(pos => {
                         const p = profile.positions[pos];
