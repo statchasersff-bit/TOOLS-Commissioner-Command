@@ -1038,10 +1038,6 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
       <Card className="p-3 sm:p-4">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 sm:gap-4 flex-wrap">
-            <Badge variant="outline" className="text-xs" data-testid="badge-format">
-              {leagueFormat}
-            </Badge>
-
             <div className="flex items-center gap-1.5">
               <Switch
                 checked={valueAdjustment}
