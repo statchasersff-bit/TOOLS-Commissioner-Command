@@ -86,11 +86,11 @@ export function MobileMenuButton({ tabs, activeTab, setActiveTab }: MobileMenuBu
     <>
       <button
         onClick={() => setIsOpen(true)}
-        className="md:hidden flex items-center justify-center w-9 h-9 rounded-lg border border-border/60 bg-background/80 hover:bg-muted/60 transition-colors"
+        className="md:hidden flex items-center justify-center w-10 h-10 rounded-lg bg-[#0b3a7a] hover:bg-[#0d4a9a] transition-colors shadow-md shadow-[#0b3a7a]/25"
         data-testid="button-mobile-menu"
         aria-label="Open navigation menu"
       >
-        <Menu className="w-5 h-5 text-foreground" />
+        <Menu className="w-5 h-5 text-white" />
       </button>
 
       {isOpen && (

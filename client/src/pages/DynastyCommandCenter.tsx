@@ -340,9 +340,9 @@ export default function DynastyCommandCenter() {
                 </Button>
               </div>
 
-              <div className="flex items-center gap-1.5">
-                <ThemeToggle />
+              <div className="flex items-center gap-2">
                 <MobileMenuButton tabs={NAV_CONFIG} activeTab={activeMainTab} setActiveTab={handleMainTabChange} />
+                <ThemeToggle />
               </div>
             </div>
           </div>
