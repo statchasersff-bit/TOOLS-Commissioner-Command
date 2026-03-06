@@ -45,9 +45,12 @@ The application is a **fully static React SPA** (no backend required). All exter
 - **Players**: Market value analysis
 - **Live Draft**: Dynasty rankings board with Sleeper draft integration
 
-## External APIs (Called Directly from Frontend)
-- **Sleeper API** (`https://api.sleeper.app/v1/`) — User, leagues, rosters, drafts, transactions (public, CORS-enabled)
-- **FantasyCalc API** (`https://api.fantasycalc.com/values/current`) — Dynasty and redraft player values (public, CORS-enabled)
+## External APIs & Static Data
+- **Sleeper API** (`https://api.sleeper.app/v1/`) — User, leagues, rosters, drafts, transactions (called directly from browser, public CORS-enabled)
+- **FantasyCalc Values** — Bundled as static JSON files in `client/src/data/`:
+  - `fantasycalc_dynasty_sf.json` — Dynasty superflex values (389 players)
+  - `fantasycalc_redraft_sf.json` — Redraft superflex values (199 players)
+  - Updated manually; no runtime API calls to FantasyCalc
 
 ## Build & Deploy
 - Dev: `npm run dev` (starts Express server + Vite for development)
