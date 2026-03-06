@@ -627,7 +627,6 @@ function CrossLeagueTradeIntel({ league }: { league: League }) {
 export function TradeBlockScanner({ league }: { league: League }) {
   const scannerTierMap = useMemo(() => getLeagueTeamTiers(league.teams), [league.teams]);
   const sellers = league.teams.filter((t) => { const ti = scannerTierMap.get(t.id); return ti && isRebuilderTier(ti.tier); });
-  const buyers = league.teams.filter((t) => { const ti = scannerTierMap.get(t.id); return ti && isContenderTier(ti.tier); });
 
   const tradeBlockCandidates = sellers.flatMap((t) =>
     t.roster.filter((p) => p.starter && p.age >= 27).map((p) => ({ ...p, teamName: t.name, ownerName: t.owner }))
@@ -638,61 +637,6 @@ export function TradeBlockScanner({ league }: { league: League }) {
       <SectionHeader title="Trade Intel" subtitle="Identify likely sellers and buyers in your league" />
 
       <CrossLeagueTradeIntel league={league} />
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        <Card className="p-6">
-          <div className="mb-4">
-            <h3 className="text-base font-bold flex items-center gap-2">
-              <TrendingDown className="w-4 h-4 text-red-500" />
-              Likely Sellers
-            </h3>
-            <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
-          </div>
-          <div className="space-y-2.5">
-            {sellers.map((t) => {
-              const tier = scannerTierMap.get(t.id)?.tier ?? "Rebuild";
-              return (
-                <div key={t.id} className={cn("p-3.5 rounded-md", getTierBg(tier))}>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-semibold">{t.name}</p>
-                      <p className="text-xs text-muted-foreground">{t.owner}</p>
-                    </div>
-                    <Badge variant="outline" className={getTierColor(tier)}>{getTierEmoji(tier)} {tier}</Badge>
-                  </div>
-                </div>
-              );
-            })}
-            {sellers.length === 0 && <p className="text-xs text-muted-foreground">No clear sellers identified</p>}
-          </div>
-        </Card>
-
-        <Card className="p-6">
-          <div className="mb-4">
-            <h3 className="text-base font-bold flex items-center gap-2">
-              <TrendingUp className="w-4 h-4 text-emerald-500" />
-              Likely Buyers
-            </h3>
-            <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
-          </div>
-          <div className="space-y-2.5">
-            {buyers.map((t) => {
-              const tier = scannerTierMap.get(t.id)?.tier ?? "Contender";
-              return (
-                <div key={t.id} className={cn("p-3.5 rounded-md", getTierBg(tier))}>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-semibold">{t.name}</p>
-                      <p className="text-xs text-muted-foreground">{t.owner}</p>
-                    </div>
-                    <Badge variant="outline" className={getTierColor(tier)}>{getTierEmoji(tier)} {tier}</Badge>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </Card>
-      </div>
 
       <Card className="p-6">
         <div className="mb-4">
