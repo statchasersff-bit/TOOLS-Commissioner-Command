@@ -477,27 +477,8 @@ export function PortfolioSummary() {
         <>
           <Card className="p-6" data-testid="portfolio-performance">
             <div className="mb-5">
-              <h3 className="text-base font-bold text-foreground">Portfolio Performance</h3>
+              <h3 className="text-base font-bold text-foreground">League Breakdown</h3>
               <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
-            </div>
-
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-              <div className="text-center p-3 rounded-lg bg-muted/30 border border-border/40">
-                <p className="text-2xl font-bold text-foreground">{summaryData.totalWins}-{summaryData.totalLosses}{summaryData.totalTies > 0 ? `-${summaryData.totalTies}` : ""}</p>
-                <p className="text-[11px] text-muted-foreground uppercase tracking-wider mt-1">Total Record</p>
-              </div>
-              <div className="text-center p-3 rounded-lg bg-muted/30 border border-border/40">
-                <p className="text-2xl font-bold text-foreground">{summaryData.winRate}%</p>
-                <p className="text-[11px] text-muted-foreground uppercase tracking-wider mt-1">Win Rate</p>
-              </div>
-              <div className="text-center p-3 rounded-lg bg-muted/30 border border-border/40">
-                <p className="text-2xl font-bold text-foreground">{summaryData.avgRank}</p>
-                <p className="text-[11px] text-muted-foreground uppercase tracking-wider mt-1">Avg League Rank</p>
-              </div>
-              <div className="text-center p-3 rounded-lg bg-muted/30 border border-border/40">
-                <p className="text-2xl font-bold text-foreground">N/A</p>
-                <p className="text-[11px] text-muted-foreground uppercase tracking-wider mt-1">Playoff Teams</p>
-              </div>
             </div>
 
             <div className="flex items-center gap-3 mb-4">
