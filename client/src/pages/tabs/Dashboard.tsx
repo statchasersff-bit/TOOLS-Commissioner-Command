@@ -438,7 +438,7 @@ function SortableHeader({ label, sortKey, activeSortKey, sortDir, onSort, classN
   const isActive = activeSortKey === sortKey;
   return (
     <th
-      className={`px-4 py-3 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap cursor-pointer select-none hover:text-foreground transition-colors ${className || ""}`}
+      className={`px-2 sm:px-4 py-3 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap cursor-pointer select-none hover:text-foreground transition-colors ${className || ""}`}
       onClick={() => onSort(sortKey)}
       data-testid={`sort-${sortKey}`}
     >
@@ -611,7 +611,7 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
             </tr>
             <tr className="border-b border-border bg-muted/30 dark:bg-muted/20">
               <SortableHeader label="Overall" sortKey="overall" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-              <th className="px-4 py-3 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Tier</th>
+              <th className="px-2 sm:px-4 py-3 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Tier</th>
               <SortableHeader label="Redraft" sortKey="redraftRank" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="border-l border-border/30" />
               <SortableHeader label="Dynasty" sortKey="dynastyRank" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
               <SortableHeader label="Draft" sortKey="picks" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="border-l border-border/30" />
@@ -644,7 +644,7 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
                     <td className={`px-1.5 sm:px-3 py-3.5 whitespace-nowrap ${isUser ? "bg-[#0b3a7a]/5 dark:bg-blue-400/8" : ""}`}>
                       <RankBadge rank={rank} />
                     </td>
-                    <td className="px-4 py-3.5 whitespace-nowrap">
+                    <td className="px-2 sm:px-4 py-3.5 whitespace-nowrap">
                       <div className="flex items-center gap-2 flex-wrap">
                         <div className="flex items-center gap-2">
                           <span className={`font-semibold text-foreground ${isUser ? "text-[#0b3a7a] dark:text-blue-400" : ""}`}>{team.owner}</span>
@@ -654,15 +654,16 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
                         </div>
                       </div>
                     </td>
-                    <td className="px-4 py-3.5 whitespace-nowrap">
+                    <td className="px-2 sm:px-4 py-3.5 whitespace-nowrap">
                       <PowerBar value={team.metrics.overall} max={maxOverall} />
                     </td>
-                    <td className="px-4 py-3.5 whitespace-nowrap">
+                    <td className="px-2 sm:px-4 py-3.5 whitespace-nowrap">
                       <Badge variant="outline" className={cn(getTierColor(tier), "cursor-default")} data-testid={`tier-badge-snapshot-${team.id}`}>
-                        {getTierEmoji(tier)} {tier}
+                        <span>{getTierEmoji(tier)}</span>
+                        <span className="hidden sm:inline"> {tier}</span>
                       </Badge>
                     </td>
-                    <td className="px-4 py-3.5 whitespace-nowrap border-l border-border/15" data-testid={`redraft-rank-${team.id}`}>
+                    <td className="px-2 sm:px-4 py-3.5 whitespace-nowrap border-l border-border/15" data-testid={`redraft-rank-${team.id}`}>
                       {(() => {
                         const r = teamRanks.ranks[team.id]?.redraftRank ?? teamRanks.total;
                         const topThird = Math.ceil(teamRanks.total / 3);
@@ -674,7 +675,7 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
                         );
                       })()}
                     </td>
-                    <td className="px-4 py-3.5 whitespace-nowrap" data-testid={`dynasty-rank-${team.id}`}>
+                    <td className="px-2 sm:px-4 py-3.5 whitespace-nowrap" data-testid={`dynasty-rank-${team.id}`}>
                       {(() => {
                         const r = teamRanks.ranks[team.id]?.dynastyRank ?? teamRanks.total;
                         const topThird = Math.ceil(teamRanks.total / 3);
@@ -686,7 +687,7 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
                         );
                       })()}
                     </td>
-                    <td className="px-4 py-3.5 whitespace-nowrap border-l border-border/15" data-testid={`picks-rank-${team.id}`}>
+                    <td className="px-2 sm:px-4 py-3.5 whitespace-nowrap border-l border-border/15" data-testid={`picks-rank-${team.id}`}>
                       {(() => {
                         const r = teamRanks.ranks[team.id]?.picksRank ?? teamRanks.total;
                         const topThird = Math.ceil(teamRanks.total / 3);
