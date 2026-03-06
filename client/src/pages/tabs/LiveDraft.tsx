@@ -130,7 +130,7 @@ export default function LiveDraft() {
     setApiError(null);
     setActiveLeagueId(leagueId);
     setTeamCount(teams);
-    setAutoRefresh(true);
+    setAutoRefresh(false);
   };
 
   const fetchDraft = useCallback(async (id?: string) => {
