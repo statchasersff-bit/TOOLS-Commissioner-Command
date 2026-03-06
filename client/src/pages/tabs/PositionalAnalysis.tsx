@@ -99,9 +99,9 @@ export function PositionalAnalysis({ league, userTeam, onNavigateToCalculator }:
   const [activeSubTab, setActiveSubTab] = useState<"overview" | "surplus" | "opportunities" | "targets">("overview");
 
   const subTabs = [
-    { id: "overview" as const, label: "Position Overview", icon: BarChart3 },
-    { id: "surplus" as const, label: "Surplus & Needs", icon: Scale },
-    { id: "opportunities" as const, label: "Trade Opportunities", icon: ArrowRightLeft },
+    { id: "overview" as const, label: "Overview", icon: BarChart3 },
+    { id: "surplus" as const, label: "Surplus", icon: Scale },
+    { id: "opportunities" as const, label: "Trades", icon: ArrowRightLeft },
     { id: "targets" as const, label: "Targets", icon: Target },
   ];
 
@@ -117,7 +117,7 @@ export function PositionalAnalysis({ league, userTeam, onNavigateToCalculator }:
         </p>
       </div>
 
-      <div className="flex items-center gap-1 border-b border-border/50 pb-0" data-testid="positional-sub-tabs">
+      <div className="flex items-center gap-0 border-b border-border/50 pb-0" data-testid="positional-sub-tabs">
         {subTabs.map(tab => {
           const Icon = tab.icon;
           return (
@@ -125,14 +125,14 @@ export function PositionalAnalysis({ league, userTeam, onNavigateToCalculator }:
               key={tab.id}
               onClick={() => setActiveSubTab(tab.id)}
               className={cn(
-                "flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium border-b-2 transition-colors -mb-[1px]",
+                "flex items-center gap-1 px-2 sm:px-3.5 py-2 text-xs sm:text-sm font-medium border-b-2 transition-colors -mb-[1px]",
                 activeSubTab === tab.id
                   ? "border-[#0b3a7a] text-[#0b3a7a] dark:text-blue-400 dark:border-blue-400"
                   : "border-transparent text-muted-foreground hover:text-foreground"
               )}
               data-testid={`tab-${tab.id}`}
             >
-              <Icon className="w-3.5 h-3.5" />
+              <Icon className="w-3.5 h-3.5 hidden sm:block" />
               {tab.label}
             </button>
           );
