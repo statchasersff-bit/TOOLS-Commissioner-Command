@@ -13,6 +13,8 @@ import { NAV_CONFIG } from "@/data/mockData";
 import type { League, Team } from "@/types";
 import { DataDiagnostics } from "@/components/DataDiagnostics";
 import { Share2, Download, LayoutDashboard, Loader2, Lock, Check, User } from "lucide-react";
+import logoDark from "@assets/statchasers_logo_transparent_dark_1772764844282.png";
+import logoLight from "@assets/statchasers_logo_transparent_light_1772764844283.png";
 
 import { PortfolioConnect, PortfolioMyLeagues, PortfolioSummary } from "./tabs/Portfolio";
 import { DashboardOverview, DashboardSnapshot } from "./tabs/Dashboard";
@@ -292,8 +294,9 @@ export default function DynastyCommandCenter() {
         <div className="max-w-7xl mx-auto px-3 md:px-6 py-2.5 md:py-3">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2.5 flex-shrink-0">
-              <div className="w-8 h-8 md:w-9 md:h-9 rounded-lg bg-[#0b3a7a] flex items-center justify-center flex-shrink-0 shadow-sm shadow-[#0b3a7a]/20">
-                <span className="text-white font-bold text-xs md:text-sm tracking-tight">SC</span>
+              <div className="w-8 h-8 md:w-9 md:h-9 rounded-lg flex items-center justify-center flex-shrink-0">
+                <img src={logoDark} alt="StatChasers" className="w-8 h-8 md:w-9 md:h-9 hidden dark:block" />
+                <img src={logoLight} alt="StatChasers" className="w-8 h-8 md:w-9 md:h-9 block dark:hidden" />
               </div>
               <div className="leading-none">
                 <h1 className="text-sm md:text-base font-bold text-foreground leading-tight tracking-tight" data-testid="text-app-title">
