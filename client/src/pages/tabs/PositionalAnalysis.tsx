@@ -248,7 +248,7 @@ function PositionOverview({ league, userTeam }: { league: League; userTeam: Team
             <table className="w-full text-sm" data-testid="position-overview-table">
               <thead>
                 <tr className="border-b border-border/50 bg-muted/30">
-                  <th className="px-4 py-3 text-left font-semibold text-muted-foreground sticky left-0 bg-muted/30 z-10">Team</th>
+                  <th className="px-4 py-3 text-left font-semibold text-muted-foreground">Team</th>
                   {POSITIONS.map(pos => (
                     <th key={pos} className="px-3 py-3 text-center font-semibold text-muted-foreground w-24">{pos}</th>
                   ))}
@@ -267,7 +267,7 @@ function PositionOverview({ league, userTeam }: { league: League; userTeam: Team
                       )}
                       data-testid={`overview-row-${profile.teamId}`}
                     >
-                      <td className={cn("px-4 py-2.5 sticky left-0 z-10", isUser ? "bg-blue-50/50 dark:bg-blue-950/20" : "bg-background")}>
+                      <td className={cn("px-4 py-2.5", isUser ? "bg-blue-50/50 dark:bg-blue-950/20" : "")}>
                         <div className="flex items-center gap-2">
                           {isUser && <div className="w-1.5 h-1.5 rounded-full bg-[#d4af37]" />}
                           <span className={cn("font-semibold text-foreground", isUser && "text-[#0b3a7a] dark:text-blue-400")}>
