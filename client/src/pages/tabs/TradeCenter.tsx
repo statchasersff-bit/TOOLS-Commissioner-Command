@@ -268,43 +268,41 @@ export function TradeTargets({ league, userTeam }: TradeProps) {
   );
 }
 
-interface CrossLeagueTrade {
-  playerName: string;
-  playerId: string;
-  pos: string;
-  team: string;
-  leagueName: string;
-  leagueId: string;
-  tradedTo: string;
-  timestamp: number;
-}
-
 function CrossLeagueTradeIntel({ league }: { league: League }) {
   const [selectedTeamId, setSelectedTeamId] = useState<string>("");
-  const [results, setResults] = useState<{ trades: CrossLeagueTrade[]; leaguesScanned: number } | null>(null);
+  const [results, setResults] = useState<{ trades: import("@/lib/sleeperApi").CrossLeagueTradeResult[]; leaguesScanned: number } | null>(null);
 
   const selectedTeam = league.teams.find(t => t.id === selectedTeamId);
 
   const [isScanning, setIsScanning] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
+  const [scanProgress, setScanProgress] = useState("");
 
-  const canAnalyze = !!selectedTeam?.ownerId && selectedTeam.roster.length > 0;
+  const canAnalyze = !!selectedTeam?.ownerId;
 
   const handleAnalyze = async () => {
     if (!selectedTeamId || !canAnalyze || !selectedTeam?.ownerId) return;
     setResults(null);
     setIsScanning(true);
     setScanError(null);
+    setScanProgress("Fetching leagues...");
     try {
       const { fetchCrossLeagueTrades } = await import("@/lib/sleeperApi");
-      const rosterPlayerIds = selectedTeam.roster.map(p => p.sleeperId).filter(Boolean);
-      const data = await fetchCrossLeagueTrades(selectedTeam.ownerId, league.id, rosterPlayerIds);
+      setScanProgress("Scanning trades across leagues...");
+      const data = await fetchCrossLeagueTrades(selectedTeam.ownerId);
       setResults(data);
     } catch (err: any) {
       setScanError(err.message || "Failed to scan cross-league trades");
     } finally {
       setIsScanning(false);
+      setScanProgress("");
     }
+  };
+
+  const formatDate = (ts: number) => {
+    if (!ts) return "";
+    const d = new Date(ts);
+    return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
   };
 
   return (
@@ -316,7 +314,7 @@ function CrossLeagueTradeIntel({ league }: { league: League }) {
         </h3>
         <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
         <p className="text-[10px] text-muted-foreground mt-2">
-          Select a league member to scan their other leagues for players they've traded away that they still roster here
+          Scan a user's recent trades across all their dynasty leagues (last 3 months)
         </p>
       </div>
 
@@ -341,7 +339,7 @@ function CrossLeagueTradeIntel({ league }: { league: League }) {
           data-testid="button-analyze-cross-league"
         >
           {isScanning ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Search className="w-4 h-4 mr-1" />}
-          Analyze
+          Scan
         </Button>
       </div>
 
@@ -352,7 +350,8 @@ function CrossLeagueTradeIntel({ league }: { league: League }) {
       {isScanning && (
         <div className="text-center py-6">
           <Loader2 className="w-6 h-6 animate-spin text-[#0b3a7a] mx-auto mb-2" />
-          <p className="text-xs text-muted-foreground">Scanning {selectedTeam?.owner}'s other leagues... This may take a minute.</p>
+          <p className="text-xs text-muted-foreground">{scanProgress || "Scanning..."}</p>
+          <p className="text-[10px] text-muted-foreground mt-1">This may take a minute — scanning up to 15 leagues.</p>
         </div>
       )}
 
@@ -363,32 +362,65 @@ function CrossLeagueTradeIntel({ league }: { league: League }) {
       {results && !isScanning && (
         <div data-testid="cross-league-results">
           <p className="text-[10px] text-muted-foreground mb-3">
-            Scanned {results.leaguesScanned} other dynasty league{results.leaguesScanned !== 1 ? "s" : ""}
+            Scanned {results.leaguesScanned} dynasty league{results.leaguesScanned !== 1 ? "s" : ""} · {results.trades.length} trade{results.trades.length !== 1 ? "s" : ""} in the last 3 months
           </p>
           {results.trades.length === 0 ? (
             <div className="text-center py-4">
-              <p className="text-sm text-muted-foreground">No cross-league trade signals found for {selectedTeam?.owner}.</p>
-              <p className="text-[10px] text-muted-foreground mt-1">They haven't traded away any players in other leagues that they still roster here.</p>
+              <p className="text-sm text-muted-foreground">No trades found for {selectedTeam?.owner} in the last 3 months.</p>
             </div>
           ) : (
-            <div className="space-y-0">
-              {results.trades.map((t, i) => (
-                <div key={`${t.playerId}-${t.leagueId}-${i}`} className="flex items-center justify-between py-2.5 border-b border-border/20 last:border-0" data-testid={`cross-league-trade-${t.playerId}`}>
-                  <div className="flex items-center gap-2 min-w-0">
-                    <Badge variant="outline" className={`text-xs w-8 justify-center flex-shrink-0 ${getPositionColor(t.pos)}`}>{t.pos}</Badge>
+            <div className="space-y-3">
+              {results.trades.map((trade, i) => (
+                <div key={`${trade.leagueId}-${trade.timestamp}-${i}`} className="border border-border/30 rounded-lg p-4" data-testid={`cross-league-trade-${i}`}>
+                  <div className="flex items-center justify-between mb-3">
                     <div className="min-w-0">
-                      <p className="text-sm font-semibold truncate">{t.playerName}</p>
-                      <p className="text-[10px] text-muted-foreground truncate">{t.team}</p>
+                      <p className="text-xs font-bold text-foreground truncate">{trade.leagueName}</p>
+                      <p className="text-[10px] text-muted-foreground">with {trade.tradePartner} · {formatDate(trade.timestamp)}</p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-3 flex-shrink-0">
-                    <div className="text-right">
-                      <p className="text-[10px] font-medium text-red-500 dark:text-red-400">Traded away in</p>
-                      <p className="text-xs text-muted-foreground truncate max-w-[160px]">{t.leagueName}</p>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <p className="text-[10px] font-bold text-red-500 dark:text-red-400 uppercase tracking-wider mb-1.5">Sent</p>
+                      <div className="space-y-1">
+                        {trade.sent.map((p, j) => (
+                          <div key={`sent-${p.playerId}-${j}`} className="flex items-center gap-1.5">
+                            <Badge variant="outline" className={`text-[9px] px-1 py-0 w-7 justify-center flex-shrink-0 ${getPositionColor(p.pos)}`}>{p.pos}</Badge>
+                            <span className="text-xs truncate">{p.name}</span>
+                          </div>
+                        ))}
+                        {trade.sentPicks.map((pick, j) => (
+                          <div key={`sent-pick-${j}`} className="flex items-center gap-1.5">
+                            <Badge variant="outline" className="text-[9px] px-1 py-0 w-7 justify-center flex-shrink-0 text-amber-600 dark:text-amber-400 border-amber-300 dark:border-amber-700">PK</Badge>
+                            <span className="text-xs truncate">{pick}</span>
+                          </div>
+                        ))}
+                        {trade.sent.length === 0 && trade.sentPicks.length === 0 && (
+                          <p className="text-[10px] text-muted-foreground italic">None</p>
+                        )}
+                      </div>
                     </div>
-                    <Badge variant="outline" className="text-[10px] border-amber-300 dark:border-amber-700 text-amber-600 dark:text-amber-400">
-                      Sell Signal
-                    </Badge>
+
+                    <div>
+                      <p className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-1.5">Received</p>
+                      <div className="space-y-1">
+                        {trade.received.map((p, j) => (
+                          <div key={`recv-${p.playerId}-${j}`} className="flex items-center gap-1.5">
+                            <Badge variant="outline" className={`text-[9px] px-1 py-0 w-7 justify-center flex-shrink-0 ${getPositionColor(p.pos)}`}>{p.pos}</Badge>
+                            <span className="text-xs truncate">{p.name}</span>
+                          </div>
+                        ))}
+                        {trade.receivedPicks.map((pick, j) => (
+                          <div key={`recv-pick-${j}`} className="flex items-center gap-1.5">
+                            <Badge variant="outline" className="text-[9px] px-1 py-0 w-7 justify-center flex-shrink-0 text-amber-600 dark:text-amber-400 border-amber-300 dark:border-amber-700">PK</Badge>
+                            <span className="text-xs truncate">{pick}</span>
+                          </div>
+                        ))}
+                        {trade.received.length === 0 && trade.receivedPicks.length === 0 && (
+                          <p className="text-[10px] text-muted-foreground italic">None</p>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
               ))}

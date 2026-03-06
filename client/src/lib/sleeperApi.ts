@@ -817,41 +817,47 @@ export async function fetchDraftBoard(leagueId: string) {
   };
 }
 
-export async function fetchCrossLeagueTrades(
-  userId: string,
-  currentLeagueId: string,
-  currentRosterPlayerIds: string[]
-) {
-  const RATE_MS = 350;
+export interface CrossLeagueTradeResult {
+  leagueName: string;
+  leagueId: string;
+  timestamp: number;
+  sent: Array<{ name: string; playerId: string; pos: string; nflTeam: string }>;
+  received: Array<{ name: string; playerId: string; pos: string; nflTeam: string }>;
+  sentPicks: string[];
+  receivedPicks: string[];
+  tradePartner: string;
+}
+
+export async function fetchCrossLeagueTrades(userId: string) {
+  const RATE_MS = 300;
   const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  const THREE_MONTHS_MS = 90 * 24 * 60 * 60 * 1000;
+  const cutoff = Date.now() - THREE_MONTHS_MS;
 
-  const leagues = await fetchJson<SleeperLeagueRaw[]>(
-    `${SLEEPER_API}/user/${userId}/leagues/nfl/2026`
-  );
-  if (!leagues || !Array.isArray(leagues))
-    return { trades: [], leaguesScanned: 0 };
+  const seasons = ["2025", "2026"];
+  let allLeaguesRaw: SleeperLeagueRaw[] = [];
+  for (const season of seasons) {
+    const raw = await fetchJson<SleeperLeagueRaw[]>(
+      `${SLEEPER_API}/user/${userId}/leagues/nfl/${season}`
+    );
+    if (raw && Array.isArray(raw)) allLeaguesRaw.push(...raw);
+  }
 
-  const otherLeagues = leagues.filter(
-    (lg) =>
-      lg.league_id !== currentLeagueId &&
-      lg.settings?.type === 2 &&
-      lg.settings?.best_ball !== 1
-  );
+  const seenIds = new Set<string>();
+  const leagues = allLeaguesRaw.filter((lg) => {
+    if (seenIds.has(lg.league_id)) return false;
+    seenIds.add(lg.league_id);
+    return lg.settings?.type === 2 && lg.settings?.best_ball !== 1;
+  });
+
+  if (leagues.length === 0) return { trades: [], leaguesScanned: 0 };
 
   const playersDb = await getSleeperPlayers();
-  const currentRosterSet = new Set(currentRosterPlayerIds);
-  const results: Array<{
-    playerName: string;
-    playerId: string;
-    pos: string;
-    team: string;
-    leagueName: string;
-    leagueId: string;
-    tradedTo: string;
-    timestamp: number;
-  }> = [];
+  const results: CrossLeagueTradeResult[] = [];
+  let scanned = 0;
 
-  for (const lg of otherLeagues.slice(0, 8)) {
+  for (const lg of leagues.slice(0, 15)) {
+    scanned++;
     await sleep(RATE_MS);
 
     let rostersRaw: any[] | null = null;
@@ -873,60 +879,95 @@ export async function fetchCrossLeagueTrades(
     const ownerMap = new Map<number, string>();
     for (const r of rostersRaw) {
       const u = usersRaw.find((u: any) => u.user_id === r.owner_id);
-      ownerMap.set(
-        r.roster_id,
-        u?.display_name || u?.username || `Roster ${r.roster_id}`
+      ownerMap.set(r.roster_id, u?.display_name || u?.username || `Roster ${r.roster_id}`);
+    }
+
+    const weekPromises = [];
+    for (let week = 1; week <= 18; week++) {
+      weekPromises.push(
+        fetchJson<any[]>(`${SLEEPER_API}/league/${lg.league_id}/transactions/${week}`).catch(() => [])
       );
     }
 
-    for (let round = 1; round <= 18; round++) {
-      await sleep(RATE_MS);
-      let txns: any[] | null = null;
-      try {
-        txns = await fetchJson<any[]>(
-          `${SLEEPER_API}/league/${lg.league_id}/transactions/${round}`
-        );
-      } catch {
-        continue;
+    await sleep(RATE_MS);
+    const weekResults = await Promise.all(weekPromises);
+    const allTxns = weekResults.flat().filter(Boolean);
+
+    const completedTrades = allTxns.filter(
+      (t: any) =>
+        t.type === "trade" &&
+        t.status === "complete" &&
+        t.roster_ids?.includes(userRosterId) &&
+        (t.status_updated || 0) >= cutoff
+    );
+
+    for (const trade of completedTrades) {
+      const sent: CrossLeagueTradeResult["sent"] = [];
+      const received: CrossLeagueTradeResult["received"] = [];
+      const sentPicks: string[] = [];
+      const receivedPicks: string[] = [];
+      let partnerId: number | null = null;
+
+      for (const rid of trade.roster_ids || []) {
+        if (rid !== userRosterId) { partnerId = rid; break; }
       }
-      if (!txns) continue;
 
-      const completedTrades = txns.filter(
-        (t: any) =>
-          t.type === "trade" &&
-          t.status === "complete" &&
-          t.roster_ids?.includes(userRosterId)
-      );
-
-      for (const trade of completedTrades) {
-        if (!trade.drops) continue;
-        const droppedByUser = Object.entries(trade.drops)
-          .filter(([, rosterId]) => rosterId === userRosterId)
-          .map(([playerId]) => playerId);
-
-        for (const pid of droppedByUser) {
-          if (currentRosterSet.has(pid)) {
+      if (trade.drops) {
+        for (const [pid, rosterId] of Object.entries(trade.drops)) {
+          if ((rosterId as number) === userRosterId) {
             const p = playersDb[pid];
-            const addedToRosterId = (trade.adds as any)?.[pid];
-            results.push({
-              playerName: p
-                ? `${p.first_name} ${p.last_name}`
-                : `Unknown (${pid})`,
+            sent.push({
+              name: p ? `${p.first_name} ${p.last_name}` : `Unknown (${pid})`,
               playerId: pid,
               pos: p?.position || "??",
-              team: p?.team || "FA",
-              leagueName: lg.name,
-              leagueId: lg.league_id,
-              tradedTo: ownerMap.get(addedToRosterId) || "Unknown",
-              timestamp: trade.status_updated || 0,
+              nflTeam: p?.team || "FA",
             });
           }
         }
       }
+
+      if (trade.adds) {
+        for (const [pid, rosterId] of Object.entries(trade.adds)) {
+          if ((rosterId as number) === userRosterId) {
+            const p = playersDb[pid];
+            received.push({
+              name: p ? `${p.first_name} ${p.last_name}` : `Unknown (${pid})`,
+              playerId: pid,
+              pos: p?.position || "??",
+              nflTeam: p?.team || "FA",
+            });
+          }
+        }
+      }
+
+      if (trade.draft_picks) {
+        for (const pick of trade.draft_picks) {
+          const label = `${pick.season} Round ${pick.round}`;
+          if (pick.previous_owner_id === userRosterId) {
+            sentPicks.push(label);
+          } else if (pick.owner_id === userRosterId) {
+            receivedPicks.push(label);
+          }
+        }
+      }
+
+      if (sent.length === 0 && received.length === 0 && sentPicks.length === 0 && receivedPicks.length === 0) continue;
+
+      results.push({
+        leagueName: lg.name,
+        leagueId: lg.league_id,
+        timestamp: trade.status_updated || 0,
+        sent,
+        received,
+        sentPicks,
+        receivedPicks,
+        tradePartner: partnerId ? (ownerMap.get(partnerId) || "Unknown") : "Unknown",
+      });
     }
   }
 
-  return { trades: results, leaguesScanned: otherLeagues.slice(0, 8).length };
+  results.sort((a, b) => b.timestamp - a.timestamp);
+  return { trades: results, leaguesScanned: scanned };
 }
 
 export async function fetchLeagueTransactions(leagueId: string) {
