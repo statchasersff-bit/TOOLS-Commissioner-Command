@@ -64,7 +64,8 @@ export function SubTabs({ tabs, activeTab, setActiveTab }: SubTabsProps) {
                 "relative px-3.5 md:px-4 py-2 text-xs font-semibold whitespace-nowrap rounded-full transition-all duration-200 snap-center",
                 activeTab === tab.id
                   ? "text-white dark:text-white bg-[#0b3a7a] dark:bg-[#0b3a7a]/80"
-                  : "text-muted-foreground/70 hover:text-foreground hover:bg-muted/40"
+                  : "text-muted-foreground/70 hover:text-foreground hover:bg-muted/40",
+                tab.id === "league-roast" && "hidden md:inline-flex"
               )}
             >
               {tab.label}
