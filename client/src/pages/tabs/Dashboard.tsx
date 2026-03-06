@@ -96,24 +96,22 @@ function getYouthScore(team: Team, league: League): number {
   return Math.round(raw * 100) / 10;
 }
 
-function getDraftCapitalLevel(team: Team, league: League): "High" | "Medium" | "Low" {
+function getDraftCapitalScore(team: Team, league: League): number {
   const total = league.teams.length;
   const sorted = [...league.teams].sort((a, b) => b.metrics.picks - a.metrics.picks);
   const pickRank = sorted.findIndex(t => t.id === team.id) + 1;
-  const pct = pickRank / total;
-  if (pct <= 0.33) return "High";
-  if (pct <= 0.66) return "Medium";
-  return "Low";
+  const pct = 1 - (pickRank - 1) / total;
+  return Math.round(pct * 100) / 10;
 }
 
-function getStrategy(winNow: number, youth: number, capital: "High" | "Medium" | "Low"): { label: string; color: string } {
+function getStrategy(winNow: number, youth: number, capital: number): { label: string; color: string } {
   if (winNow >= 7 && youth >= 6) return { label: "Dynasty Powerhouse", color: "text-emerald-600 dark:text-emerald-400" };
   if (winNow >= 7) return { label: "Win-Now Contender", color: "text-blue-600 dark:text-blue-400" };
   if (winNow >= 5 && youth >= 5) return { label: "Soft Contender", color: "text-blue-500 dark:text-blue-400" };
   if (winNow >= 5) return { label: "Aging Contender", color: "text-amber-600 dark:text-amber-400" };
-  if (youth >= 7 && capital === "High") return { label: "Rising Dynasty", color: "text-emerald-500 dark:text-emerald-400" };
+  if (youth >= 7 && capital >= 7) return { label: "Rising Dynasty", color: "text-emerald-500 dark:text-emerald-400" };
   if (youth >= 6) return { label: "Youth Movement", color: "text-cyan-600 dark:text-cyan-400" };
-  if (capital === "High") return { label: "Capital Rich Rebuild", color: "text-purple-600 dark:text-purple-400" };
+  if (capital >= 7) return { label: "Capital Rich Rebuild", color: "text-purple-600 dark:text-purple-400" };
   return { label: "Full Rebuild", color: "text-red-500 dark:text-red-400" };
 }
 
@@ -145,12 +143,9 @@ function ScoreBar({ value, max = 10, color }: { value: number; max?: number; col
 function TeamIdentityCard({ league, userTeam }: DashboardProps) {
   const winNow = getWinNowScore(userTeam, league);
   const youth = getYouthScore(userTeam, league);
-  const capital = getDraftCapitalLevel(userTeam, league);
+  const capital = getDraftCapitalScore(userTeam, league);
   const strategy = getStrategy(winNow, youth, capital);
   const direction = getDirection(userTeam);
-
-  const capitalColor = capital === "High" ? "text-emerald-600 dark:text-emerald-400" : capital === "Medium" ? "text-amber-600 dark:text-amber-400" : "text-red-500 dark:text-red-400";
-  const capitalBg = capital === "High" ? "bg-emerald-100 dark:bg-emerald-900/40 border-emerald-200 dark:border-emerald-800" : capital === "Medium" ? "bg-amber-100 dark:bg-amber-900/40 border-amber-200 dark:border-amber-800" : "bg-red-100 dark:bg-red-900/40 border-red-200 dark:border-red-800";
 
   return (
     <Card className="p-6" data-testid="team-identity-card">
@@ -176,7 +171,7 @@ function TeamIdentityCard({ league, userTeam }: DashboardProps) {
             <div className="flex items-center justify-between mb-1.5">
               <div className="flex items-center gap-2">
                 <Sprout className="w-4 h-4 text-emerald-500" />
-                <span className="text-sm font-semibold text-foreground">Youth Score</span>
+                <span className="text-sm font-semibold text-foreground">Long-Term Score</span>
               </div>
               <span className="text-lg font-bold text-foreground">{youth} <span className="text-xs font-normal text-muted-foreground">/ 10</span></span>
             </div>
@@ -184,15 +179,14 @@ function TeamIdentityCard({ league, userTeam }: DashboardProps) {
           </div>
 
           <div data-testid="identity-draft-capital">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between mb-1.5">
               <div className="flex items-center gap-2">
                 <Archive className="w-4 h-4 text-[#0b3a7a] dark:text-blue-400" />
                 <span className="text-sm font-semibold text-foreground">Draft Capital</span>
               </div>
-              <Badge className={`text-xs font-bold border ${capitalBg} ${capitalColor}`} data-testid="identity-capital-badge">
-                {capital}
-              </Badge>
+              <span className="text-lg font-bold text-foreground">{capital} <span className="text-xs font-normal text-muted-foreground">/ 10</span></span>
             </div>
+            <ScoreBar value={capital} color="bg-[#0b3a7a] dark:bg-blue-500" />
           </div>
         </div>
 
