@@ -971,15 +971,32 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
   const maxVal = Math.max(finalA, finalB, 1);
   const diffPct = (diff / maxVal) * 100;
 
-  const fairnessLabel = diffPct <= 5 ? "Fair" : diffPct <= 12 ? "Slight Overpay" : "Overpay";
-  const fairnessColor = diffPct <= 5
-    ? "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400"
-    : diffPct <= 12
-      ? "bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400"
-      : "bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-400";
+  const signedDiff = finalA - finalB;
+  const winnerSide = signedDiff >= 0 ? "A" : "B";
+  const loserSide = signedDiff >= 0 ? "B" : "A";
+  const winnerLabel = winnerSide === "a" ? (sideATeam?.owner || sideATeam?.name || "Side A") : (sideBTeam?.owner || sideBTeam?.name || "Side B");
 
-  const winnerSide = finalA >= finalB ? "A" : "B";
-  const loserSide = finalA >= finalB ? "B" : "A";
+  const meterPosition = useMemo(() => {
+    if (finalA === 0 && finalB === 0) return 50;
+    const total = finalA + finalB;
+    const ratio = finalA / total;
+    const clamped = Math.max(0.1, Math.min(0.9, ratio));
+    return clamped * 100;
+  }, [finalA, finalB]);
+
+  const getVerdictLabel = (pct: number): string => {
+    if (diffPct <= 4) return "Dead Even";
+    if (diffPct <= 9) return `Slight Edge: Side ${winnerSide}`;
+    if (diffPct <= 19) return `Clear Win for Side ${winnerSide}`;
+    return `Major Win for Side ${winnerSide}`;
+  };
+
+  const getVerdictStyle = (pct: number): string => {
+    if (pct <= 4) return "bg-[#0b3a7a]/10 dark:bg-blue-400/15 text-[#0b3a7a] dark:text-blue-300 border-[#0b3a7a]/20 dark:border-blue-400/30";
+    if (pct <= 9) return "bg-[#d4af37]/10 dark:bg-[#d4af37]/15 text-[#d4af37] dark:text-[#e8c84a] border-[#d4af37]/30";
+    if (pct <= 19) return "bg-emerald-500/10 dark:bg-emerald-400/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30";
+    return "bg-red-500/10 dark:bg-red-400/15 text-red-700 dark:text-red-400 border-red-500/30";
+  };
 
   const positionImpact = useMemo(() => {
     if (!league || !userTeam) return null;

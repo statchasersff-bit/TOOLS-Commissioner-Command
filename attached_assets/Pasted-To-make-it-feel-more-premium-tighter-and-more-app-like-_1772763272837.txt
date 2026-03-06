@@ -1,0 +1,276 @@
+To make it feel more premium, tighter, and more app-like on mobile, I’d focus on 5 things:
+
+1. Tighten the header hierarchy
+
+Right now the header has a lot happening:
+
+logo
+
+product title
+
+subtitle
+
+source dropdown
+
+help icon
+
+theme icon
+
+menu icon
+
+attribution text
+
+On mobile, that’s a lot of competing elements.
+
+Improve it
+
+Make the top row simpler:
+
+logo
+
+title/subtitle block
+
+theme + menu buttons
+
+Move the “Values provided by FantasyCalc.com” text below the source selector in a smaller muted style
+
+Reduce vertical spacing between title and subtitle slightly
+
+Make the source row feel like one intentional control row
+
+Specific polish
+
+shrink subtitle a bit
+
+make the divider line between icons shorter/subtler
+
+align help icon better with dropdown height
+
+make the menu and theme buttons the exact same size and padding
+
+2. Improve the main sub-tab bar
+
+This is one of the biggest opportunities.
+
+Right now the tab row feels a little too flat and spread out. The active tab underline is nice, but the whole thing could feel more premium.
+
+Improve it
+
+Reduce horizontal padding slightly so labels fit better
+
+Add a little more contrast between active and inactive tabs
+
+Make inactive tabs slightly dimmer
+
+Give the active tab a stronger “selected” feel:
+
+brighter text
+
+gold underline
+
+maybe a subtle dark pill/hover surface behind active state
+
+Best upgrade
+
+Convert the sub-tabs into a horizontally scrollable segmented row on mobile with:
+
+snap scrolling
+
+no cramped text
+
+better spacing
+
+fade edge hint if more tabs exist off screen
+
+That feels much more native/mobile.
+
+3. Make the unlock card feel more premium
+
+The card is solid, but it can feel a little more refined.
+
+What to improve
+
+Reduce empty space above the lock icon slightly
+
+Tighten spacing between:
+
+icon
+
+heading
+
+description
+
+checklist
+
+CTA
+
+The body copy is a little wide and long for mobile, so reduce line length visually by tightening card padding or slightly reducing font size
+
+Checklist items should have slightly tighter spacing between checkmark and text
+
+Stronger premium feel
+
+Give the card a slightly clearer border/glow against the blueprint background
+
+Add a very subtle top-to-bottom gradient inside the card
+
+Increase contrast between card and page background
+
+Make the icon circle a bit more intentional with a subtle inner glow or ring
+
+CTA button
+
+The button is good, but can be better:
+
+slightly taller
+
+stronger shadow/glow
+
+maybe full-width on mobile or close to full-width
+
+slightly bolder label
+
+That will make the primary action feel more important.
+
+4. Create more consistent spacing rhythm
+
+Mobile polish often comes down to spacing consistency more than visuals.
+
+Right now I’d standardize all vertical spacing around a system like:
+
+8px micro spacing
+
+12px small spacing
+
+16px standard spacing
+
+24px section spacing
+
+32px larger separation
+
+Where this matters
+
+title to subtitle
+
+source row to attribution
+
+header to tabs
+
+tabs to card
+
+icon to heading
+
+heading to paragraph
+
+paragraph to checklist
+
+checklist to button
+
+When that rhythm is consistent, the whole screen feels much more designed.
+
+5. Make it feel more “StatChasers” branded
+
+It looks good, but the premium brand feel can go further.
+
+Add more brand touches
+
+use your signature gold more intentionally, not too much
+
+keep blue as the structural color and gold as the highlight color
+
+consider a subtle blueprint/glass effect on header controls
+
+make the menu popup strongly branded:
+
+dark navy
+
+gold active state
+
+polished icons
+
+smooth animation
+
+Small branding wins
+
+logo tile could feel a touch more premium with a softer shadow or subtle gradient
+
+menu button icon stroke weight should match theme icon stroke weight
+
+ensure all rounded corners use a consistent radius family
+
+My biggest recommendations in order
+
+If you only do a few things, do these first:
+
+1. Make the sub-tab row horizontally scrollable and more premium
+This will immediately improve mobile UX.
+
+2. Tighten the header and reduce clutter
+Especially the attribution text placement.
+
+3. Refine the unlock card spacing and CTA
+This is your key conversion area.
+
+4. Standardize spacing/radius/icon sizing across the page
+This is what makes it feel truly polished.
+
+What to tell Replit
+
+Send this:
+
+Please polish the mobile UI to make it feel more premium, cleaner, and more app-like while keeping the current overall design direction.
+
+Focus areas:
+
+1. Header polish
+- Simplify the visual hierarchy in the header
+- Keep logo, title/subtitle, theme toggle, and menu button
+- Make theme and menu buttons identical in size/padding/alignment
+- Reduce clutter and tighten spacing
+- Move “Values provided by FantasyCalc.com” into a smaller, muted supporting text position below the source controls
+- Make the divider and help icon more subtle and better aligned
+
+2. Sub-tab bar polish
+- Improve the mobile tab row styling
+- Keep the existing sub-tabs, but make them feel more premium
+- Make the tab row horizontally scrollable on mobile if needed
+- Use stronger active state styling:
+  - brighter active text
+  - gold underline
+  - more contrast between active and inactive tabs
+- Add smooth horizontal scrolling / snapping behavior if appropriate
+
+3. Unlock card polish
+- Tighten vertical spacing inside the card
+- Reduce excess empty space above the icon
+- Improve spacing between heading, description, bullets, and CTA
+- Make the card feel more premium with subtle border/gradient/shadow treatment
+- Improve checklist spacing and alignment
+- Make the primary CTA slightly taller and more prominent on mobile
+
+4. Consistency polish
+- Standardize spacing rhythm across the page
+- Standardize corner radii
+- Standardize icon sizes and control heights
+- Make the mobile layout feel intentional and cohesive
+
+5. Branding polish
+- Make it feel more StatChasers-branded and premium
+- Use dark navy + blueprint styling with gold accents
+- Keep the design clean, not overdesigned
+- Subtle glow/glass effects are okay if restrained
+
+Please prioritize:
+1. better mobile tab bar
+2. cleaner header hierarchy
+3. tighter card spacing
+4. stronger CTA presentation
+
+Do not redesign the page from scratch.
+Do not remove existing functionality.
+Keep the current structure, but make it look more polished and premium on mobile.
+
+Please also share:
+- what UI changes you made
+- what spacing/size values you standardized
+- any mobile-specific CSS adjustments I may want to fine-tune
