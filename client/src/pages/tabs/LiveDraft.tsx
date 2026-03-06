@@ -163,7 +163,7 @@ export default function LiveDraft() {
 
   useEffect(() => {
     if (autoRefresh && activeLeagueId) {
-      intervalRef.current = setInterval(() => fetchDraft(), 15000);
+      intervalRef.current = setInterval(() => fetchDraft(), 45000);
     }
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
@@ -408,23 +408,11 @@ export default function LiveDraft() {
                   </span>
                 )}
               </div>
-              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <span>League Size:</span>
-                <div className="flex items-center border border-border rounded-md overflow-hidden">
-                  {[8, 10, 12, 14, 16].map(n => (
-                    <button
-                      key={n}
-                      className={`px-2 py-1 text-xs font-medium transition-colors ${
-                        teamCount === n ? "bg-[#0b3a7a] text-white" : "bg-background text-muted-foreground hover:bg-muted/50"
-                      }`}
-                      onClick={() => setTeamCount(n)}
-                      data-testid={`button-teams-${n}`}
-                    >
-                      {n}
-                    </button>
-                  ))}
-                </div>
-              </div>
+              {teamCount && (
+                <span className="text-xs text-muted-foreground" data-testid="text-team-count">
+                  {teamCount} teams
+                </span>
+              )}
             </div>
             <div className="flex items-center gap-2">
               {draftData?.draft && (
