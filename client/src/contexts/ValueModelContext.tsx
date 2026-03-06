@@ -25,6 +25,15 @@ export interface ValueDiagnostics {
   fetchedAt: string | null;
 }
 
+export interface RankedPlayer {
+  sleeperId: string;
+  name: string;
+  pos: string;
+  team: string;
+  value: number;
+  age: number;
+}
+
 interface ValueModel {
   sourceId: ValueSourceId;
   sources: ValueSourceOption[];
@@ -42,6 +51,7 @@ interface ValueModel {
   optimizeLineup: (roster: Player[], rosterPositions: string[]) => Player[];
   valuesBySleeperId: Record<string, number>;
   redraftValuesBySleeperId: Record<string, number>;
+  dynastyPlayerList: RankedPlayer[];
 }
 
 const ValueModelContext = createContext<ValueModel | null>(null);
@@ -56,6 +66,7 @@ export function ValueModelProvider({ children }: { children: React.ReactNode }) 
   const [nameValueMap, setNameValueMap] = useState<Record<string, number>>({});
   const [redraftValuesBySleeperId, setRedraftValuesBySleeperId] = useState<Record<string, number>>({});
   const [redraftNameValueMap, setRedraftNameValueMap] = useState<Record<string, number>>({});
+  const [dynastyPlayerList, setDynastyPlayerList] = useState<RankedPlayer[]>([]);
   const [diagnostics, setDiagnostics] = useState<ValueDiagnostics>({
     updatedAt: "",
     mappedCount: 0,
@@ -91,6 +102,11 @@ export function ValueModelProvider({ children }: { children: React.ReactNode }) 
           byName[`${p.name.toLowerCase().trim()}|${p.pos}`] = p.value;
         }
         setNameValueMap(byName);
+        setDynastyPlayerList(
+          (dynastyData.players || [])
+            .filter((p: any) => p.sleeperId && p.value > 0)
+            .sort((a: any, b: any) => b.value - a.value)
+        );
 
         if (redraftData && redraftData.valuesBySleeperId && Object.keys(redraftData.valuesBySleeperId).length > 0) {
           setRedraftValuesBySleeperId(redraftData.valuesBySleeperId);
@@ -327,7 +343,8 @@ export function ValueModelProvider({ children }: { children: React.ReactNode }) 
     optimizeLineup,
     valuesBySleeperId,
     redraftValuesBySleeperId,
-  }), [sourceId, setSourceId, isRecalculating, isLoading, isSnapshot, unmatchedCount, diagnostics, getPlayerValue, getRedraftValue, getPickValue, calculateTeamValue, calculateAllTeamMetrics, optimizeLineup, valuesBySleeperId, redraftValuesBySleeperId]);
+    dynastyPlayerList,
+  }), [sourceId, setSourceId, isRecalculating, isLoading, isSnapshot, unmatchedCount, diagnostics, getPlayerValue, getRedraftValue, getPickValue, calculateTeamValue, calculateAllTeamMetrics, optimizeLineup, valuesBySleeperId, redraftValuesBySleeperId, dynastyPlayerList]);
 
   return (
     <ValueModelContext.Provider value={value}>
