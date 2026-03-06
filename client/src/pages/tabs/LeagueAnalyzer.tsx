@@ -184,9 +184,9 @@ export function RosterComparison({ league }: AnalyzerProps) {
     <div className="space-y-8">
       <SectionHeader title="Roster Comparison" subtitle="Compare two teams head-to-head" />
 
-      <div className="flex flex-wrap items-center gap-4">
+      <div className="flex items-center gap-2 sm:gap-4">
         <Select value={teamAId} onValueChange={setTeamAId}>
-          <SelectTrigger className="w-[200px]" data-testid="select-team-a">
+          <SelectTrigger className="min-w-0 flex-1 sm:w-[200px] sm:flex-none" data-testid="select-team-a">
             <SelectValue placeholder="Team A" />
           </SelectTrigger>
           <SelectContent>
@@ -195,9 +195,9 @@ export function RosterComparison({ league }: AnalyzerProps) {
             ))}
           </SelectContent>
         </Select>
-        <span className="text-sm font-bold text-muted-foreground">VS</span>
+        <span className="text-sm font-bold text-muted-foreground shrink-0">VS</span>
         <Select value={teamBId} onValueChange={setTeamBId}>
-          <SelectTrigger className="w-[200px]" data-testid="select-team-b">
+          <SelectTrigger className="min-w-0 flex-1 sm:w-[200px] sm:flex-none" data-testid="select-team-b">
             <SelectValue placeholder="Team B" />
           </SelectTrigger>
           <SelectContent>
