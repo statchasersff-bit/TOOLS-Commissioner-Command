@@ -408,9 +408,9 @@ function PowerBar({ value, max }: { value: number; max: number }) {
   const pct = max > 0 ? Math.round((value / max) * 100) : 0;
   const color = value >= 70 ? "bg-emerald-500" : value >= 50 ? "bg-[#0b3a7a] dark:bg-blue-500" : value >= 30 ? "bg-amber-500" : "bg-red-400";
   return (
-    <div className="flex items-center gap-2.5 min-w-[140px]">
-      <span className="font-bold text-base w-7 text-right">{value}</span>
-      <div className="flex-1 h-2.5 bg-muted rounded-full overflow-hidden">
+    <div className="flex items-center gap-1.5 min-w-[80px]">
+      <span className="font-bold text-sm w-6 text-right">{value}</span>
+      <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
         <div className={`h-full rounded-full transition-all ${color}`} style={{ width: `${pct}%` }} />
       </div>
     </div>
