@@ -302,7 +302,7 @@ export default function DynastyCommandCenter() {
                 <h1 className="text-sm md:text-base font-bold text-foreground leading-tight tracking-tight" data-testid="text-app-title">
                   StatChasers
                 </h1>
-                <p className="text-[10px] md:text-xs text-[#d4af37] font-semibold tracking-wide leading-tight mt-0.5">Dynasty Command Center</p>
+                <p className="text-[10px] md:text-xs text-[#d4af37] font-semibold tracking-wide leading-tight mt-0.5">Dynasty Command</p>
               </div>
             </div>
 
