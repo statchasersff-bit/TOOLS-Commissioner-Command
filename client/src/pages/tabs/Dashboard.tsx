@@ -587,7 +587,7 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border/40">
-              <th className="sticky left-0 z-10 bg-muted/30 dark:bg-muted/20" rowSpan={2} />
+              <th className="sticky left-0 z-10 bg-muted/30 dark:bg-muted/20 px-1.5 sm:px-3" rowSpan={2} />
               <th className="bg-muted/30 dark:bg-muted/20 cursor-pointer select-none hover:text-foreground transition-colors" rowSpan={2} onClick={() => handleSort("name")} data-testid="sort-name">
                 <span className="inline-flex items-center gap-1 px-4 py-3 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">
                   Team
@@ -641,7 +641,7 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
                     data-testid={`ranking-row-${team.id}`}
                     onClick={() => toggleRow(team.id)}
                   >
-                    <td className={`px-4 py-3.5 whitespace-nowrap sticky left-0 z-10 ${isUser ? "bg-[#0b3a7a]/5 dark:bg-blue-400/8" : rowBg}`}>
+                    <td className={`px-1.5 sm:px-3 py-3.5 whitespace-nowrap sticky left-0 z-10 ${isUser ? "bg-[#0b3a7a]/5 dark:bg-blue-400/8" : rowBg}`}>
                       <RankBadge rank={rank} />
                     </td>
                     <td className="px-4 py-3.5 whitespace-nowrap">
