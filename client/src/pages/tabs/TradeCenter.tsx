@@ -1001,23 +1001,53 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
   const positionImpact = useMemo(() => {
     if (!league || !userTeam) return null;
     const positions: ("QB" | "RB" | "WR" | "TE")[] = ["QB", "RB", "WR", "TE"];
+    const rosterPositions = league.rosterPositions || [];
 
     const playersGivenBySideA = sideA.filter((a) => a.type === "player" && a.player).map((a) => a.player!);
     const playersGivenBySideB = sideB.filter((a) => a.type === "player" && a.player).map((a) => a.player!);
 
+    const getTeamPosTotals = (teamId: string, pos: string, mode: "dynasty" | "redraft", deltaReceiving: Player[], deltaGiving: Player[]) => {
+      const team = league.teams.find(t => t.id === teamId);
+      if (!team) return 0;
+      const roster = rosterPositions.length > 0 ? optimizeLineup(team.roster, rosterPositions) : team.roster;
+      const base = mode === "redraft"
+        ? roster.filter(p => p.starter && p.pos === pos).reduce((s, p) => s + getRedraftValue(p), 0)
+        : team.roster.filter(p => p.pos === pos).reduce((s, p) => s + getPlayerValue(p), 0);
+      const added = deltaReceiving.filter(p => p.pos === pos).reduce((s, p) => mode === "redraft" ? s + getRedraftValue(p) : s + getPlayerValue(p), 0);
+      const removed = deltaGiving.filter(p => p.pos === pos).reduce((s, p) => mode === "redraft" ? s + getRedraftValue(p) : s + getPlayerValue(p), 0);
+      return base + added - removed;
+    };
+
+    const getRank = (teamId: string, pos: string, mode: "dynasty" | "redraft", receiving: Player[], giving: Player[]) => {
+      const myTotal = getTeamPosTotals(teamId, pos, mode, receiving, giving);
+      let rank = 1;
+      for (const t of league.teams) {
+        if (t.id === teamId) continue;
+        const otherRoster = rosterPositions.length > 0 ? optimizeLineup(t.roster, rosterPositions) : t.roster;
+        const otherTotal = mode === "redraft"
+          ? otherRoster.filter(p => p.starter && p.pos === pos).reduce((s, p) => s + getRedraftValue(p), 0)
+          : t.roster.filter(p => p.pos === pos).reduce((s, p) => s + getPlayerValue(p), 0);
+        if (otherTotal > myTotal) rank++;
+      }
+      return rank;
+    };
+
     const calcImpact = (team: Team | undefined) => {
       if (!team) return null;
-      const starters = team.roster.filter((p) => p.starter);
       const isUserSide = team.id === sideARosterId;
       const receiving = isUserSide ? playersGivenBySideB : playersGivenBySideA;
       const giving = isUserSide ? playersGivenBySideA : playersGivenBySideB;
 
       return positions.map((pos) => {
-        const currentVal = starters.filter((p) => p.pos === pos).reduce((s, p) => s + getPlayerValue(p), 0);
-        const addedVal = receiving.filter((p) => p.pos === pos).reduce((s, p) => s + getPlayerValue(p), 0);
-        const removedVal = giving.filter((p) => p.pos === pos).reduce((s, p) => s + getPlayerValue(p), 0);
-        const afterVal = currentVal + addedVal - removedVal;
-        return { pos, before: currentVal, after: afterVal, change: afterVal - currentVal };
+        const dynastyBefore = getRank(team.id, pos, "dynasty", [], []);
+        const dynastyAfter = getRank(team.id, pos, "dynasty", receiving, giving);
+        const redraftBefore = getRank(team.id, pos, "redraft", [], []);
+        const redraftAfter = getRank(team.id, pos, "redraft", receiving, giving);
+        return {
+          pos,
+          dynastyBefore, dynastyAfter, dynastyChange: dynastyBefore - dynastyAfter,
+          redraftBefore, redraftAfter, redraftChange: redraftBefore - redraftAfter,
+        };
       });
     };
 
@@ -1025,7 +1055,7 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
       sideA: calcImpact(sideATeam),
       sideB: calcImpact(sideBTeam),
     };
-  }, [league, userTeam, sideA, sideB, getPlayerValue, sideATeam, sideBTeam, sideARosterId]);
+  }, [league, userTeam, sideA, sideB, getPlayerValue, getRedraftValue, optimizeLineup, sideATeam, sideBTeam, sideARosterId]);
 
   const allPlayers = useMemo(() => {
     const seen = new Set<string>();
@@ -1361,32 +1391,44 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
                   <table className="w-full text-sm" data-testid={testId}>
                     <thead>
                       <tr className="border-b border-border bg-muted/20">
-                        <th className="px-3 py-2 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Pos</th>
-                        <th className="px-3 py-2 text-right text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Before</th>
-                        <th className="px-3 py-2 text-right text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">After</th>
-                        <th className="px-3 py-2 text-right text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Δ</th>
+                        <th className="px-2 py-2 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Pos</th>
+                        <th className="px-1 py-2 text-center text-[10px] font-semibold text-muted-foreground uppercase tracking-wider" colSpan={2}>Redraft</th>
+                        <th className="px-1 py-2 text-center text-[10px] font-semibold text-muted-foreground uppercase tracking-wider border-l border-border/30" colSpan={2}>Dynasty</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {data.map((row) => (
-                        <tr key={row.pos} className="border-b border-border/20">
-                          <td className="px-3 py-2">
-                            <Badge variant="outline" className={`text-[10px] w-7 justify-center ${getPositionColor(row.pos)}`}>{row.pos}</Badge>
-                          </td>
-                          <td className="px-3 py-2 text-right font-medium text-xs">{row.before.toLocaleString()}</td>
-                          <td className="px-3 py-2 text-right font-medium text-xs">{row.after.toLocaleString()}</td>
-                          <td className="px-3 py-2 text-right">
-                            <span className={cn(
-                              "font-semibold text-xs",
-                              row.change > 0 && "text-emerald-600 dark:text-emerald-400",
-                              row.change < 0 && "text-red-600 dark:text-red-400",
-                              row.change === 0 && "text-muted-foreground"
-                            )}>
-                              {row.change > 0 ? "+" : ""}{row.change.toLocaleString()}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
+                      {data.map((row) => {
+                        const renderRankChange = (before: number, after: number, change: number) => (
+                          <div className="flex items-center gap-1 justify-center">
+                            <span className="text-[11px] text-muted-foreground">#{before}</span>
+                            <span className="text-[10px] text-muted-foreground/60">→</span>
+                            <span className="text-[11px] font-semibold">{`#${after}`}</span>
+                            {change !== 0 && (
+                              <span className={cn(
+                                "text-[10px] font-bold ml-0.5",
+                                change > 0 && "text-emerald-600 dark:text-emerald-400",
+                                change < 0 && "text-red-600 dark:text-red-400",
+                              )}>
+                                {change > 0 ? `↑${change}` : `↓${Math.abs(change)}`}
+                              </span>
+                            )}
+                          </div>
+                        );
+
+                        return (
+                          <tr key={row.pos} className="border-b border-border/20">
+                            <td className="px-2 py-2">
+                              <Badge variant="outline" className={`text-[10px] w-7 justify-center ${getPositionColor(row.pos)}`}>{row.pos}</Badge>
+                            </td>
+                            <td className="px-1 py-2" colSpan={2}>
+                              {renderRankChange(row.redraftBefore, row.redraftAfter, row.redraftChange)}
+                            </td>
+                            <td className="px-1 py-2 border-l border-border/20" colSpan={2}>
+                              {renderRankChange(row.dynastyBefore, row.dynastyAfter, row.dynastyChange)}
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 ) : (
