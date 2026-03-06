@@ -241,12 +241,6 @@ export function DashboardOverview({ league, userTeam, onNavigate }: DashboardOve
     { pos: "TE", score: userTeam.metrics.te, grade: userTeam.metrics.te >= 75 ? "A" : userTeam.metrics.te >= 60 ? "B" : userTeam.metrics.te >= 40 ? "C" : "D" },
   ];
 
-  const movements = [
-    { action: "Trade", detail: `${sorted[2]?.owner} traded a 2026 1st to ${sorted[5]?.owner}`, time: "2 days ago" },
-    { action: "Waiver", detail: `${sorted[0]?.owner} picked up a free agent RB`, time: "3 days ago" },
-    { action: "Trade", detail: `${sorted[7]?.owner} acquired a WR from ${sorted[1]?.owner}`, time: "5 days ago" },
-    { action: "Drop", detail: `${sorted[4]?.owner} dropped a bench TE`, time: "1 week ago" },
-  ];
 
   return (
     <div className="space-y-8">
@@ -399,21 +393,6 @@ export function DashboardOverview({ league, userTeam, onNavigate }: DashboardOve
         </Card>
       </div>
 
-      <Card className="p-6">
-        <div className="mb-5">
-          <h3 className="text-base font-bold text-foreground">Recent League Movement</h3>
-          <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
-        </div>
-        <div className="space-y-1">
-          {movements.map((m, i) => (
-            <div key={i} className="flex items-center gap-3 py-3 border-b border-border/30 last:border-0">
-              <Badge variant={m.action === "Trade" ? "default" : "secondary"}>{m.action}</Badge>
-              <span className="text-sm text-foreground flex-1">{m.detail}</span>
-              <span className="text-xs text-muted-foreground whitespace-nowrap">{m.time}</span>
-            </div>
-          ))}
-        </div>
-      </Card>
     </div>
   );
 }
