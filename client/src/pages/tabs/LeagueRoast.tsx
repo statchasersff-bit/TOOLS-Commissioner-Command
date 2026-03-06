@@ -25,30 +25,30 @@ interface ReportCard {
 }
 
 function scoreToLetter(score: number): string {
-  if (score >= 97) return "A+";
-  if (score >= 93) return "A";
-  if (score >= 90) return "A-";
-  if (score >= 87) return "B+";
-  if (score >= 83) return "B";
-  if (score >= 80) return "B-";
-  if (score >= 77) return "C+";
-  if (score >= 73) return "C";
-  if (score >= 70) return "C-";
-  if (score >= 67) return "D+";
-  if (score >= 63) return "D";
-  if (score >= 60) return "D-";
+  if (score >= 90) return "A+";
+  if (score >= 83) return "A";
+  if (score >= 78) return "A-";
+  if (score >= 73) return "B+";
+  if (score >= 67) return "B";
+  if (score >= 62) return "B-";
+  if (score >= 56) return "C+";
+  if (score >= 50) return "C";
+  if (score >= 44) return "C-";
+  if (score >= 38) return "D+";
+  if (score >= 30) return "D";
+  if (score >= 22) return "D-";
   return "F";
 }
 
 function subScoreToLetter(score: number): string {
-  if (score >= 90) return "A";
-  if (score >= 80) return "B+";
-  if (score >= 70) return "B";
-  if (score >= 60) return "B-";
-  if (score >= 50) return "C+";
-  if (score >= 40) return "C";
-  if (score >= 30) return "D+";
-  if (score >= 20) return "D";
+  if (score >= 85) return "A";
+  if (score >= 75) return "B+";
+  if (score >= 65) return "B";
+  if (score >= 55) return "B-";
+  if (score >= 45) return "C+";
+  if (score >= 35) return "C";
+  if (score >= 25) return "D+";
+  if (score >= 15) return "D";
   return "F";
 }
 
