@@ -253,52 +253,65 @@ export function RosterComparison({ league }: AnalyzerProps) {
         </Card>
       )}
 
-      {teamA && teamB && (
-        <div className="grid grid-cols-2 gap-2 sm:gap-5">
-          {[
-            { team: teamA, color: "text-[#0b3a7a] dark:text-blue-400", accent: "border-[#0b3a7a]/20 dark:border-blue-400/20", label: "A" },
-            { team: teamB, color: "text-[#d4af37]", accent: "border-[#d4af37]/20", label: "B" },
-          ].map(({ team, color, accent, label }) => {
-            const grouped = (["QB", "RB", "WR", "TE"] as const).map(pos => ({
-              pos,
-              players: [...team.roster].filter(p => p.pos === pos).sort((a, b) => b.value - a.value),
-            }));
-            return (
-              <Card key={team.id} className={`p-2.5 sm:p-5 border-t-2 ${accent}`} data-testid={`roster-card-${label.toLowerCase()}`}>
-                <div className="mb-3 sm:mb-4">
+      {teamA && teamB && (() => {
+        const positions = ["QB", "RB", "WR", "TE"] as const;
+        const getPlayers = (team: typeof teamA, pos: string) =>
+          [...team.roster].filter(p => p.pos === pos).sort((a, b) => b.value - a.value);
+        const teamConfig = [
+          { team: teamA, color: "text-[#0b3a7a] dark:text-blue-400", accent: "border-[#0b3a7a]/20 dark:border-blue-400/20" },
+          { team: teamB, color: "text-[#d4af37]", accent: "border-[#d4af37]/20" },
+        ];
+
+        return (
+          <div className="space-y-4 sm:space-y-5">
+            <div className="grid grid-cols-2 gap-2 sm:gap-5">
+              {teamConfig.map(({ team, color }) => (
+                <div key={team.id} className="px-1 sm:px-2">
                   <h3 className={`text-xs sm:text-sm font-bold ${color} truncate`}>{team.name}</h3>
                   <p className="text-[10px] sm:text-xs text-muted-foreground truncate">{team.owner}</p>
                   <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
                 </div>
-                <div className="space-y-3 sm:space-y-4">
-                  {grouped.map(({ pos, players }) => (
-                    <div key={pos}>
-                      <div className="flex items-center gap-1.5 sm:gap-2 mb-1.5">
-                        <Badge variant="outline" className={`text-[9px] sm:text-[10px] w-6 sm:w-7 justify-center ${POS_COLORS[pos]}`}>{pos}</Badge>
-                        <span className="text-[9px] sm:text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">{players.length}</span>
-                      </div>
-                      <div className="space-y-0.5">
-                        {players.map(p => (
-                          <div key={p.id} className="flex items-center justify-between py-0.5 sm:py-1 px-1 sm:px-2 rounded-md hover:bg-muted/30 transition-colors" data-testid={`roster-player-${p.id}`}>
-                            <div className="flex items-center gap-1 sm:gap-2 min-w-0">
-                              {p.starter && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 flex-shrink-0" />}
-                              <span className={`text-[10px] sm:text-xs truncate ${p.starter ? "font-semibold text-foreground" : "text-muted-foreground"}`}>{p.name}</span>
+              ))}
+            </div>
+
+            {positions.map(pos => {
+              const playersA = getPlayers(teamA, pos);
+              const playersB = getPlayers(teamB, pos);
+              const maxRows = Math.max(playersA.length, playersB.length, 1);
+
+              return (
+                <div key={pos}>
+                  <div className="flex items-center gap-1.5 sm:gap-2 mb-1.5 px-1 sm:px-2">
+                    <Badge variant="outline" className={`text-[9px] sm:text-[10px] w-6 sm:w-7 justify-center ${POS_COLORS[pos]}`}>{pos}</Badge>
+                    <span className="text-[9px] sm:text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">
+                      {playersA.length} vs {playersB.length}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 sm:gap-5">
+                    {[playersA, playersB].map((players, colIdx) => (
+                      <div key={colIdx} className="space-y-0.5">
+                        {Array.from({ length: maxRows }).map((_, rowIdx) => {
+                          const p = players[rowIdx];
+                          if (!p) return <div key={rowIdx} className="py-0.5 sm:py-1 px-1 sm:px-2 h-[22px] sm:h-[28px]" />;
+                          return (
+                            <div key={p.id} className="flex items-center justify-between py-0.5 sm:py-1 px-1 sm:px-2 rounded-md hover:bg-muted/30 transition-colors" data-testid={`roster-player-${p.id}`}>
+                              <div className="flex items-center gap-1 sm:gap-2 min-w-0">
+                                {p.starter && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 flex-shrink-0" />}
+                                <span className={`text-[10px] sm:text-xs truncate ${p.starter ? "font-semibold text-foreground" : "text-muted-foreground"}`}>{p.name}</span>
+                              </div>
+                              <span className="text-[10px] sm:text-xs font-mono font-semibold text-muted-foreground ml-1 flex-shrink-0">{p.value > 0 ? p.value.toLocaleString() : "—"}</span>
                             </div>
-                            <span className="text-[10px] sm:text-xs font-mono font-semibold text-muted-foreground ml-1 flex-shrink-0">{p.value > 0 ? p.value.toLocaleString() : "—"}</span>
-                          </div>
-                        ))}
-                        {players.length === 0 && (
-                          <p className="text-[10px] sm:text-[11px] text-muted-foreground/50 py-1 px-1 sm:px-2">None</p>
-                        )}
+                          );
+                        })}
                       </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
-              </Card>
-            );
-          })}
-        </div>
-      )}
+              );
+            })}
+          </div>
+        );
+      })()}
     </div>
   );
 }
