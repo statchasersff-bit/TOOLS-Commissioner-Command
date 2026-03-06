@@ -146,7 +146,6 @@ export function LeagueIntelligence({ league, userTeam }: Props) {
                   <div className="flex items-center gap-3">
                     {isExpanded ? <ChevronDown className="w-4 h-4 text-muted-foreground" /> : <ChevronRight className="w-4 h-4 text-muted-foreground" />}
                     <span className="text-sm font-bold">{team.owner}</span>
-                    <span className="text-xs text-muted-foreground">{team.name}</span>
                     <Badge variant="outline" className={getTierColor(tier)}>{getTierEmoji(tier)} {tier}</Badge>
                   </div>
                   <span className="text-xl font-bold">{team.metrics.overall}</span>
