@@ -274,6 +274,7 @@ export default function DynastyCommandCenter() {
       case "league-analyzer:roster-comparison": return <RosterComparison league={league} />;
       case "league-analyzer:transactions": return <Transactions />;
       case "league-analyzer:league-roast": return <LeagueRoast league={league} userTeam={userTeam} />;
+      case "dont-click:league-roast": return <LeagueRoast league={league} userTeam={userTeam} />;
       case "dashboard:roster-breakdown": return <RosterBreakdown league={league} userTeam={userTeam} />;
       case "trade-center:trade-database": return <TradeDatabase league={league} />;
       case "trade-center:trade-calculator": return <TradeCalculator league={league} userTeam={userTeam} />;

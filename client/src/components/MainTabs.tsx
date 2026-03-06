@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { cn } from "@/lib/utils";
-import { Menu, X, BarChart2, Shield, SearchCheck, ArrowLeftRight, UserRound, Zap } from "lucide-react";
+import { Menu, X, BarChart2, Shield, SearchCheck, ArrowLeftRight, UserRound, Zap, Skull } from "lucide-react";
 import type { MainTabConfig } from "../types";
 import logoDark from "@assets/statchasers_logo_transparent_dark_1772764844282.png";
 import logoLight from "@assets/statchasers_logo_transparent_light_1772764844283.png";
@@ -12,6 +12,7 @@ const TAB_ICONS: Record<string, typeof BarChart2> = {
   "trade-center": ArrowLeftRight,
   "league-market": UserRound,
   "live-draft": Zap,
+  "dont-click": Skull,
 };
 
 interface MainTabsProps {
