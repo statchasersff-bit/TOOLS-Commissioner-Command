@@ -1165,34 +1165,44 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
               <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">
                 {rosterTeam.owner || rosterTeam.name}'s Roster
               </p>
-              <div className="max-h-48 overflow-y-auto space-y-0.5">
-                {[...rosterPlayers]
-                  .sort((a, b) => getPlayerValue(b) - getPlayerValue(a))
-                  .map((p) => {
-                    const pid = p.sleeperId || p.id;
-                    const isAdded = addedPlayerIds.has(pid);
-                    const val = getPlayerValue(p);
-                    return (
-                      <button
-                        key={pid}
-                        className={cn(
-                          "w-full flex items-center gap-1.5 px-2 py-1.5 rounded text-left text-xs transition-colors",
-                          isAdded
-                            ? "bg-[#d4af37]/10 opacity-50 cursor-default"
-                            : "hover:bg-muted/40 cursor-pointer"
-                        )}
-                        onClick={() => !isAdded && addPlayer(side, p)}
-                        disabled={isAdded}
-                        data-testid={`button-roster-player-${side}-${pid}`}
-                      >
-                        <Badge variant="outline" className={`text-[9px] w-6 justify-center flex-shrink-0 ${getPositionColor(p.pos)}`}>
-                          {p.pos}
-                        </Badge>
-                        <span className={cn("flex-1 truncate", isAdded && "line-through")}>{p.name}</span>
-                        <span className="text-[10px] text-muted-foreground flex-shrink-0">{val > 0 ? val.toLocaleString() : "-"}</span>
-                      </button>
-                    );
-                  })}
+              <div className="grid grid-cols-4 gap-2 max-h-64 overflow-y-auto">
+                {(["QB", "RB", "WR", "TE"] as const).map((pos) => {
+                  const posPlayers = [...rosterPlayers]
+                    .filter((p) => p.pos === pos)
+                    .sort((a, b) => getPlayerValue(b) - getPlayerValue(a));
+                  return (
+                    <div key={pos} className="space-y-0.5">
+                      <p className={`text-[10px] font-bold uppercase tracking-wider text-center pb-1 border-b border-border/30 ${getPositionColor(pos)}`}>
+                        {pos}
+                      </p>
+                      {posPlayers.map((p) => {
+                        const pid = p.sleeperId || p.id;
+                        const isAdded = addedPlayerIds.has(pid);
+                        const val = getPlayerValue(p);
+                        return (
+                          <button
+                            key={pid}
+                            className={cn(
+                              "w-full flex flex-col px-1.5 py-1 rounded text-left text-xs transition-colors",
+                              isAdded
+                                ? "bg-[#d4af37]/10 opacity-50 cursor-default"
+                                : "hover:bg-muted/40 cursor-pointer"
+                            )}
+                            onClick={() => !isAdded && addPlayer(side, p)}
+                            disabled={isAdded}
+                            data-testid={`button-roster-player-${side}-${pid}`}
+                          >
+                            <span className={cn("truncate text-[11px] font-medium", isAdded && "line-through")}>{p.name}</span>
+                            <span className="text-[9px] text-muted-foreground">{val > 0 ? val.toLocaleString() : "-"}</span>
+                          </button>
+                        );
+                      })}
+                      {posPlayers.length === 0 && (
+                        <p className="text-[9px] text-muted-foreground/50 text-center py-2">—</p>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
