@@ -17,7 +17,7 @@ A premium dynasty fantasy football league analysis tool built with React + TypeS
 ## Tab Navigation Structure
 - **Portfolio**: Connect, My Leagues, Portfolio Summary
 - **My Team** (id: dashboard): Overview, Roster Strength, Age Curve, Depth Chart
-- **League Analyzer**: Power Rankings, Roster Comparison, Key Insights, Pick Distribution, Team Insights, League Trends
+- **League Analyzer**: Power Rankings, Roster Comparison, League Intelligence, League Economy, Pick Distribution
 - **Trade Center**: Trade Database, Trade Calculator, Positional Analysis, Trade Targets, Trade Block Scanner
 - **Players** (id: league-market): Market Value
 - **Live Draft** (id: live-draft): Draft Board

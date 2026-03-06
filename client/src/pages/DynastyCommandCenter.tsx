@@ -23,6 +23,7 @@ import { PositionalAnalysis } from "./tabs/PositionalAnalysis";
 import { PickDistribution } from "./tabs/DraftCapital";
 import { MarketValue } from "./tabs/LeagueMarket";
 import { LeagueIntelligence } from "./tabs/Insights";
+import { LeagueEconomy } from "./tabs/LeagueEconomy";
 import LiveDraft from "./tabs/LiveDraft";
 
 const STORAGE_KEY = "sc-dynasty-state";
@@ -266,6 +267,7 @@ export default function DynastyCommandCenter() {
       case "dashboard:overview": return <DashboardOverview league={league} userTeam={userTeam} onNavigate={navigateToSubTab} />;
       case "league-analyzer:power-rankings": return <DashboardSnapshot league={league} userTeam={userTeam} />;
       case "league-analyzer:league-intelligence": return <LeagueIntelligence league={league} userTeam={userTeam} />;
+      case "league-analyzer:league-economy": return <LeagueEconomy league={league} />;
       case "league-analyzer:roster-comparison": return <RosterComparison league={league} />;
       case "dashboard:roster-breakdown": return <RosterBreakdown league={league} userTeam={userTeam} />;
       case "trade-center:trade-database": return <TradeDatabase league={league} />;

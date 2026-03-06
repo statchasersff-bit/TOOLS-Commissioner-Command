@@ -1,0 +1,279 @@
+League Economy: what it should show
+
+At a glance, answer:
+
+Who controls future picks?
+
+Who has the most tradable surplus?
+
+Is the league top-heavy or balanced?
+
+Which positions are scarce?
+
+Which teams are buyers vs sellers right now?
+
+Add a new sub-tab: League Economy
+
+Put it under League Market or Insights.
+
+Sub-tabs inside League Economy (optional)
+
+Economy Overview
+
+Pick Concentration
+
+Positional Scarcity
+
+Trade Liquidity
+
+(Or keep it one page with sections.)
+
+1) Economy Overview (the hero view)
+A) “Power vs Future” Quadrant (2x2)
+
+Plot each team on a quadrant:
+
+X-axis = Now Score (Redraft rank / starter value)
+
+Y-axis = Future Score (Draft rank + Dynasty roster quality)
+
+Quadrants:
+
+Win-Now Kings (high now, low future)
+
+Dynasty Death Star (high now, high future)
+
+Rebuild With Ammo (low now, high future)
+
+Rebuild Hell (low now, low future)
+
+This is the single best “economy chart.”
+
+No need for fancy charts initially — a quadrant grid with team chips is enough.
+
+B) “League Parity” Score (shareable)
+
+Compute how balanced the league is:
+
+Parity Score (0–100) using dispersion of Power scores.
+
+Simple method:
+
+Calculate std dev of powerScore across teams
+
+Normalize to 0–100 scale (lower spread = higher parity)
+
+Output:
+
+Parity: 78/100 (High)
+
+Description: “Most teams are within 8 points of the median.”
+
+C) “Picks Monopoly” meter
+
+Show top 3 teams by pick value share:
+
+“BigGame33 controls 11% of league pick value”
+
+“Top 3 teams control 31% of all pick value”
+
+This becomes a talking point in league chats.
+
+2) Pick Concentration section (super easy, super sticky)
+Pick Inventory Table
+
+Columns:
+
+Team
+
+of 1sts (next 3 yrs)
+
+Total pick value
+
+Best pick (e.g. “2027 Early 1st”)
+
+“Ammo Rating” badge
+
+Ammo Rating:
+
+Loaded (top 25% pick value)
+
+Average
+
+Dry (bottom 25%)
+
+3) Positional Scarcity section
+
+This is a league-level statistic:
+
+For each position (QB/RB/WR/TE):
+
+Compute:
+
+“Top tier share” concentration
+
+Scarcity index
+
+Scarcity Index
+
+For each team, take top starters at that position (league settings)
+
+Compute distribution
+
+Higher inequality = more scarce
+
+Output:
+
+QB Scarcity: High
+
+RB Scarcity: Medium
+
+WR Scarcity: Low
+
+TE Scarcity: High
+
+Then show “Have / Need” list:
+
+Teams with surplus
+
+Teams with need
+
+This ties directly to your Positional Analysis tab.
+
+4) Trade Liquidity section (fun + useful)
+
+This answers: “Is the league active?”
+
+Trade Volume Meter
+
+Use Sleeper transaction history:
+
+trades per week/season
+
+7-day trend
+
+Then compute:
+Liquidity Score 0–100
+
+higher if more trades
+
+higher if more teams participating
+
+lower if same 2 teams always trade
+
+Output:
+
+“Liquidity: 64/100 (Active)”
+
+“9/12 teams have traded in last 60 days”
+
+The “League Economy” metrics (exact formulas)
+A) Now Score
+
+Use:
+
+Redraft rank OR starter value
+
+normalized to 0–100
+
+Example:
+
+nowScore = percentile(starterValueAllTeams, thisTeamStarterValue) * 100
+B) Future Score
+
+Combine:
+
+Dynasty roster strength (youth / long-term)
+
+Draft capital value
+
+Example:
+
+futureScore = 0.6 * dynastyPercentile + 0.4 * draftPercentile
+C) League Parity (0–100)
+
+Simple:
+
+parity = 100 - normalize(stdDev(powerScore), minStd, maxStd) * 100
+
+(You can calibrate min/max based on typical ranges; start with a clamp.)
+
+D) Picks Monopoly %
+pickShare = teamPickValue / sumAllTeamsPickValue
+E) Positional Scarcity Index
+
+Quick version:
+
+For each position, compute the ratio:
+
+(sum of top 3 teams starter value) / (sum of bottom 3 teams starter value)
+
+Then:
+
+= 1.8 => High scarcity
+
+1.3–1.79 => Medium
+
+< 1.3 => Low
+
+What to tell Replit AI (copy/paste)
+Add a new sub-tab called “League Economy” under League Market (or Insights).
+
+This page visualizes league-wide economic dynamics using our existing computed metrics:
+- Power score
+- Dynasty rank / dynasty value
+- Redraft rank / starter value
+- Draft capital value
+
+Sections:
+
+1) Economy Overview
+A) Quadrant view (Power vs Future)
+- X-axis: NowScore (starter value percentile)
+- Y-axis: FutureScore (0.6 dynasty percentile + 0.4 draft percentile)
+- Plot each team as a chip inside a 2x2 grid:
+  - Dynasty Death Star (high now, high future)
+  - Win-Now Kings (high now, low future)
+  - Rebuild With Ammo (low now, high future)
+  - Rebuild Hell (low now, low future)
+
+B) League Parity Score (0–100)
+- Compute std dev of powerScore across teams
+- Convert to parity score: lower spread = higher parity
+- Display with a label: High / Medium / Low parity
+
+C) Picks Monopoly
+- Compute each team pickValue share and show top 3
+- Show “Top 3 control X% of pick value”
+
+2) Pick Concentration
+- Table: team, #1sts next 3 years, total pick value, ammo rating
+- Ammo rating: Loaded (top 25%), Average, Dry (bottom 25%)
+
+3) Positional Scarcity
+- For QB/RB/WR/TE compute scarcity index:
+  scarcity = (sum starter values of top 3 teams) / (sum starter values of bottom 3 teams)
+- Label: High (>=1.8), Medium (1.3–1.79), Low (<1.3)
+- Show surplus/need lists per position (from Positional Analysis calculations)
+
+4) Trade Liquidity (if transactions available)
+- Compute trades per week + # teams trading in last 60 days
+- Liquidity score: based on volume + participation breadth
+
+Premium UI:
+- StatChasers navy/gold, gold underline headers, rounded-2xl cards
+- Quadrant grid is the hero with team chips and hover tooltips.
+- Add “Share” button that exports a summary image or generates a share link (placeholder ok).
+The fun layer (StatChasers personality)
+
+Add playful labels on the quadrant:
+
+Dynasty Death Star (high now/high future)
+
+Win-Now Kings (high now/low future)
+
+Rebuild With Ammo (low now/high future)
+
+Rebuild Hell (low now/low future)
+
+These are memeable but not personal attacks.
