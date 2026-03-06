@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { MainTabs } from "@/components/MainTabs";
+import { MainTabs, MobileMenuButton } from "@/components/MainTabs";
 import { SubTabs } from "@/components/SubTabs";
 import { LeagueSelector } from "@/components/LeagueSelector";
 import { ValueSourceSelector, ValueAttribution } from "@/components/ValueSourceSelector";
@@ -326,13 +326,14 @@ export default function DynastyCommandCenter() {
                 <ValueSourceSelector />
               </div>
               <div className="flex items-center gap-1.5 border-l border-border/50 pl-3">
-                <Button variant="outline" size="sm" disabled data-testid="button-share">
+                <Button variant="outline" size="sm" disabled className="hidden md:inline-flex" data-testid="button-share">
                   <Share2 className="w-3 h-3 mr-1" /> Share
                 </Button>
-                <Button variant="outline" size="sm" disabled data-testid="button-export">
+                <Button variant="outline" size="sm" disabled className="hidden md:inline-flex" data-testid="button-export">
                   <Download className="w-3 h-3 mr-1" /> Export
                 </Button>
                 <ThemeToggle />
+                <MobileMenuButton tabs={NAV_CONFIG} activeTab={activeMainTab} setActiveTab={handleMainTabChange} />
               </div>
             </div>
           </div>
