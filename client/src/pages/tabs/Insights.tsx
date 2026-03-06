@@ -110,7 +110,7 @@ export function LeagueIntelligence({ league, userTeam }: Props) {
         </div>
         <p className="text-xs text-muted-foreground mb-4">Who dominates each category across the league</p>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-5" data-testid="league-leaders-cards">
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3 mb-5" data-testid="league-leaders-cards">
           {[
             { label: "Best QB Room", team: [...league.teams].sort((a, b) => b.metrics.qb - a.metrics.qb)[0], stat: (t: Team) => t.metrics.qb },
             { label: "Best RB Room", team: [...league.teams].sort((a, b) => b.metrics.rb - a.metrics.rb)[0], stat: (t: Team) => t.metrics.rb },
