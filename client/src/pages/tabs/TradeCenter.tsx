@@ -871,6 +871,28 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
           <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
         </div>
 
+        {side === "b" && (
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-xs text-muted-foreground">Trade with:</span>
+            <Select value={tradePartnerId || "none"} onValueChange={(v) => handleTradePartnerChange(v === "none" ? "" : v)}>
+              <SelectTrigger className="flex-1 h-8 text-xs" data-testid="select-trade-partner">
+                <SelectValue placeholder="Select team..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Select team...</SelectItem>
+                {league.teams
+                  .filter((t) => t.id !== userTeam.id)
+                  .sort((a, b) => (a.owner || a.name).localeCompare(b.owner || b.name))
+                  .map((t) => (
+                    <SelectItem key={t.id} value={t.id}>
+                      {t.owner || t.name}
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
         <div className="space-y-3">
           <PlayerSearchInput
             allPlayers={rosterPlayers.length > 0 ? rosterPlayers : allPlayers}
@@ -986,26 +1008,6 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
           <Badge variant="outline" className="text-xs" data-testid="badge-format">
             {leagueFormat}
           </Badge>
-
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">Trade with:</span>
-            <Select value={tradePartnerId || "none"} onValueChange={(v) => handleTradePartnerChange(v === "none" ? "" : v)}>
-              <SelectTrigger className="w-[160px] h-8 text-xs" data-testid="select-trade-partner">
-                <SelectValue placeholder="Select team..." />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">Select team...</SelectItem>
-                {league.teams
-                  .filter((t) => t.id !== userTeam.id)
-                  .sort((a, b) => (a.owner || a.name).localeCompare(b.owner || b.name))
-                  .map((t) => (
-                    <SelectItem key={t.id} value={t.id}>
-                      {t.owner || t.name}
-                    </SelectItem>
-                  ))}
-              </SelectContent>
-            </Select>
-          </div>
 
           <div className="flex items-center gap-2">
             <Switch
