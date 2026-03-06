@@ -589,7 +589,7 @@ interface PickAdderProps {
 
 function PickAdder({ onAdd, side }: PickAdderProps) {
   const [show, setShow] = useState(false);
-  const [year, setYear] = useState("2025");
+  const [year, setYear] = useState("2026");
   const [round, setRound] = useState("1");
   const [range, setRange] = useState<"Early" | "Mid" | "Late">("Mid");
 
@@ -613,7 +613,6 @@ function PickAdder({ onAdd, side }: PickAdderProps) {
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="2025">2025</SelectItem>
           <SelectItem value="2026">2026</SelectItem>
           <SelectItem value="2027">2027</SelectItem>
           <SelectItem value="2028">2028</SelectItem>

@@ -6,10 +6,9 @@ const PICK_VALUES: Record<string, Record<string, number>> = {
 };
 
 const YEAR_MULTIPLIER: Record<number, number> = {
-  2025: 1.0,
-  2026: 0.9,
-  2027: 0.8,
-  2028: 0.7,
+  2026: 1.0,
+  2027: 0.9,
+  2028: 0.8,
 };
 
 export function getStaticPickValue(

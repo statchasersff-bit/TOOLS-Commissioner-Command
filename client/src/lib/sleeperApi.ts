@@ -219,7 +219,7 @@ export async function fetchSleeperLeagueFull(leagueId: string, userId: string) {
     contenderWindowYears: 0,
   };
 
-  const pickYears = [2025, 2026, 2027, 2028];
+  const pickYears = [2026, 2027, 2028];
   const pickRounds = [1, 2, 3, 4];
 
   const teams = rostersRaw.map((roster) => {
