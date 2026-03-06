@@ -220,11 +220,11 @@ export default function LiveDraft() {
     <div className="space-y-6">
       <div>
         <h2 className="text-2xl font-bold tracking-tight text-foreground" data-testid="live-draft-title">
-          Dynasty Rankings Board
+          Live Draft Board
         </h2>
         <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
         <p className="text-sm text-muted-foreground mt-2" data-testid="text-draft-description">
-          Dynasty source rankings ordered by value with pick slot assignments. Connect a Sleeper draft to fade picked players in real-time.
+          Track your dynasty drafts in real-time with dynasty values and pick slot assignments.
         </p>
       </div>
 
@@ -328,193 +328,6 @@ export default function LiveDraft() {
         </Card>
       )}
 
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-3 flex-wrap">
-          <div className="flex items-center gap-2">
-            <Trophy className="w-4 h-4 text-[#d4af37]" />
-            <span className="font-semibold text-foreground" data-testid="text-rankings-title">
-              Dynasty Rankings
-            </span>
-            {draftData?.draft && (
-              <Badge variant="outline" className="text-xs" data-testid="text-draft-status">
-                {draftData.draft.status === "drafting" ? "LIVE" : draftData.draft.status}
-              </Badge>
-            )}
-          </div>
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <span>League Size:</span>
-            <div className="flex items-center border border-border rounded-md overflow-hidden">
-              {[8, 10, 12, 14, 16].map(n => (
-                <button
-                  key={n}
-                  className={`px-2 py-1 text-xs font-medium transition-colors ${
-                    teamCount === n ? "bg-[#0b3a7a] text-white" : "bg-background text-muted-foreground hover:bg-muted/50"
-                  }`}
-                  onClick={() => setTeamCount(n)}
-                  data-testid={`button-teams-${n}`}
-                >
-                  {n}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          {draftData?.draft && (
-            <>
-              <Button
-                variant={autoRefresh ? "default" : "outline"}
-                size="sm"
-                onClick={() => setAutoRefresh(!autoRefresh)}
-                data-testid="button-auto-refresh"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${autoRefresh ? "animate-spin" : ""}`} />
-                {autoRefresh ? "Auto-refresh On" : "Auto-refresh"}
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => fetchDraft()} disabled={isLoading} data-testid="button-refresh">
-                <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
-                Refresh
-              </Button>
-            </>
-          )}
-        </div>
-      </div>
-
-      <div className="flex items-center gap-4 text-xs text-muted-foreground flex-wrap">
-        <div className="flex items-center gap-1.5">
-          {["ALL", "QB", "RB", "WR", "TE"].map(pos => (
-            <button
-              key={pos}
-              className={`px-2.5 py-1 rounded-full text-xs font-medium transition-all ${
-                posFilter === pos
-                  ? "bg-[#0b3a7a] text-white shadow-sm"
-                  : "bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground"
-              }`}
-              onClick={() => setPosFilter(pos)}
-              data-testid={`button-filter-${pos.toLowerCase()}`}
-            >
-              {pos}
-            </button>
-          ))}
-        </div>
-        <span className="ml-auto" data-testid="text-stats-summary">
-          {posFilter !== "ALL" && <><span className="font-semibold text-foreground">{stats.showing}</span> {posFilter}s · </>}
-          <span className="font-semibold text-foreground">{stats.available}</span>/{stats.total} available
-          {stats.drafted > 0 && (
-            <> · <span className="font-semibold text-muted-foreground">{stats.drafted}</span> drafted</>
-          )}
-        </span>
-        <div className="flex items-center gap-2">
-          <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-red-500/20 border border-red-500/40" />QB</span>
-          <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-emerald-500/20 border border-emerald-500/40" />RB</span>
-          <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-blue-500/20 border border-blue-500/40" />WR</span>
-          <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-orange-500/20 border border-orange-500/40" />TE</span>
-        </div>
-      </div>
-
-      {dynastyPlayerList.length === 0 ? (
-        <Card>
-          <CardContent className="py-16 text-center">
-            <Loader2 className="w-8 h-8 mx-auto mb-3 animate-spin text-[#0b3a7a]" />
-            <p className="text-sm text-muted-foreground" data-testid="text-loading">Loading dynasty rankings...</p>
-          </CardContent>
-        </Card>
-      ) : (
-        <>
-          <Card className="rounded-2xl overflow-hidden">
-            <CardContent className="p-0">
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm" data-testid="rankings-board">
-                  <thead>
-                    <tr className="border-b border-border/50 bg-muted/30 sticky top-0 z-10">
-                      <th className="px-3 py-2.5 text-center font-bold text-[11px] text-muted-foreground uppercase tracking-wider w-16">Pick</th>
-                      <th className="px-3 py-2.5 text-center font-bold text-[11px] text-muted-foreground uppercase tracking-wider w-10">Rank</th>
-                      <th className="px-3 py-2.5 text-left font-bold text-[11px] text-muted-foreground uppercase tracking-wider">Player</th>
-                      <th className="px-3 py-2.5 text-center font-bold text-[11px] text-muted-foreground uppercase tracking-wider w-14">Pos</th>
-                      <th className="px-3 py-2.5 text-center font-bold text-[11px] text-muted-foreground uppercase tracking-wider w-14">NFL</th>
-                      <th className="px-3 py-2.5 text-center font-bold text-[11px] text-muted-foreground uppercase tracking-wider w-14">Age</th>
-                      <th className="px-3 py-2.5 text-right font-bold text-[11px] text-muted-foreground uppercase tracking-wider w-20">Value</th>
-                      {draftData && <th className="px-3 py-2.5 text-left font-bold text-[11px] text-muted-foreground uppercase tracking-wider w-32">Drafted By</th>}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {visiblePlayers.map((player, idx) => {
-                      const isDrafted = pickedPlayerIds.has(player.sleeperId);
-                      const draftInfo = pickedByMap.get(player.sleeperId);
-                      const rank = globalRankMap.get(player.sleeperId) ?? idx + 1;
-                      const pickLabel = formatPickLabel(rank, teamCount);
-                      const isNewRound = posFilter === "ALL" && idx > 0 && Math.ceil((idx + 1) / teamCount) !== Math.ceil(idx / teamCount);
-
-                      return (
-                        <tr
-                          key={player.sleeperId}
-                          className={`
-                            border-b border-border/20 transition-colors
-                            ${isDrafted ? "opacity-30" : ""}
-                            ${!isDrafted ? POS_ROW_BG[player.pos] || "" : ""}
-                            ${isNewRound ? "border-t-2 border-t-[#d4af37]/30" : ""}
-                          `}
-                          data-testid={`rank-row-${player.sleeperId}`}
-                        >
-                          <td className="px-3 py-2 text-center">
-                            <span className={`font-mono text-xs font-bold ${isDrafted ? "line-through text-muted-foreground" : "text-[#0b3a7a] dark:text-[#d4af37]"}`}>
-                              {pickLabel}
-                            </span>
-                          </td>
-                          <td className="px-3 py-2 text-center">
-                            <span className="text-xs text-muted-foreground font-mono">{rank}</span>
-                          </td>
-                          <td className="px-3 py-2">
-                            <span className={`font-medium ${isDrafted ? "line-through text-muted-foreground" : "text-foreground"}`}>
-                              {player.name}
-                            </span>
-                          </td>
-                          <td className="px-3 py-2 text-center">
-                            <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${POS_BADGE[player.pos] || ""}`}>
-                              {player.pos}
-                            </Badge>
-                          </td>
-                          <td className="px-3 py-2 text-center text-xs text-muted-foreground">{player.team}</td>
-                          <td className="px-3 py-2 text-center text-xs text-muted-foreground">{player.age > 0 ? player.age.toFixed(1) : "—"}</td>
-                          <td className="px-3 py-2 text-right">
-                            <span className={`font-mono text-xs font-semibold ${isDrafted ? "text-muted-foreground" : "text-foreground"}`}>
-                              {player.value.toLocaleString()}
-                            </span>
-                          </td>
-                          {draftData && (
-                            <td className="px-3 py-2">
-                              {draftInfo ? (
-                                <span className="text-xs text-muted-foreground">
-                                  {draftInfo.drafter}
-                                  <span className="ml-1 font-mono text-[10px]">({draftInfo.round}.{String(draftInfo.pickNo).padStart(2, "0")})</span>
-                                </span>
-                              ) : null}
-                            </td>
-                          )}
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </CardContent>
-          </Card>
-
-          {hasMore && (
-            <div className="flex justify-center">
-              <Button
-                variant="outline"
-                onClick={() => setShowCount(prev => Math.min(prev + 60, 300))}
-                data-testid="button-show-more"
-              >
-                <ChevronDown className="w-4 h-4 mr-1.5" />
-                Show More ({Math.min(rankedPlayers.length - showCount, 60)} more)
-              </Button>
-            </div>
-          )}
-        </>
-      )}
-
       {isLoading && (
         <Card>
           <CardContent className="py-16 text-center">
@@ -522,6 +335,211 @@ export default function LiveDraft() {
             <p className="text-sm text-muted-foreground" data-testid="text-loading-draft">Loading draft data...</p>
           </CardContent>
         </Card>
+      )}
+
+      {!activeLeagueId && !isLoading && (
+        <div className="flex flex-col items-center justify-center py-20 text-center" data-testid="draft-empty-state">
+          <div className="w-16 h-16 rounded-2xl bg-[#0b3a7a]/10 dark:bg-blue-400/10 flex items-center justify-center mb-6">
+            <Trophy className="w-8 h-8 text-[#0b3a7a] dark:text-blue-400" />
+          </div>
+          <h3 className="text-lg font-bold text-foreground mb-2">Select a Draft to Begin</h3>
+          <p className="text-sm text-muted-foreground max-w-sm">
+            {isConnected
+              ? "Pick a live draft above or enter a league ID to load the draft board."
+              : "Connect your Sleeper account to auto-detect live drafts, or enter a league ID manually above."}
+          </p>
+        </div>
+      )}
+
+      {activeLeagueId && !isLoading && (
+        <>
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div className="flex items-center gap-3 flex-wrap">
+              <div className="flex items-center gap-2">
+                <Trophy className="w-4 h-4 text-[#d4af37]" />
+                <span className="font-semibold text-foreground" data-testid="text-rankings-title">
+                  Draft Board
+                </span>
+                {draftData?.draft && (
+                  <Badge variant="outline" className="text-xs" data-testid="text-draft-status">
+                    {draftData.draft.status === "drafting" ? "LIVE" : draftData.draft.status}
+                  </Badge>
+                )}
+              </div>
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span>League Size:</span>
+                <div className="flex items-center border border-border rounded-md overflow-hidden">
+                  {[8, 10, 12, 14, 16].map(n => (
+                    <button
+                      key={n}
+                      className={`px-2 py-1 text-xs font-medium transition-colors ${
+                        teamCount === n ? "bg-[#0b3a7a] text-white" : "bg-background text-muted-foreground hover:bg-muted/50"
+                      }`}
+                      onClick={() => setTeamCount(n)}
+                      data-testid={`button-teams-${n}`}
+                    >
+                      {n}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              {draftData?.draft && (
+                <>
+                  <Button
+                    variant={autoRefresh ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setAutoRefresh(!autoRefresh)}
+                    data-testid="button-auto-refresh"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${autoRefresh ? "animate-spin" : ""}`} />
+                    {autoRefresh ? "Auto-refresh On" : "Auto-refresh"}
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => fetchDraft()} disabled={isLoading} data-testid="button-refresh">
+                    <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
+                    Refresh
+                  </Button>
+                </>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-4 text-xs text-muted-foreground flex-wrap">
+            <div className="flex items-center gap-1.5">
+              {["ALL", "QB", "RB", "WR", "TE"].map(pos => (
+                <button
+                  key={pos}
+                  className={`px-2.5 py-1 rounded-full text-xs font-medium transition-all ${
+                    posFilter === pos
+                      ? "bg-[#0b3a7a] text-white shadow-sm"
+                      : "bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground"
+                  }`}
+                  onClick={() => setPosFilter(pos)}
+                  data-testid={`button-filter-${pos.toLowerCase()}`}
+                >
+                  {pos}
+                </button>
+              ))}
+            </div>
+            <span className="ml-auto" data-testid="text-stats-summary">
+              {posFilter !== "ALL" && <><span className="font-semibold text-foreground">{stats.showing}</span> {posFilter}s · </>}
+              <span className="font-semibold text-foreground">{stats.available}</span>/{stats.total} available
+              {stats.drafted > 0 && (
+                <> · <span className="font-semibold text-muted-foreground">{stats.drafted}</span> drafted</>
+              )}
+            </span>
+            <div className="flex items-center gap-2">
+              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-red-500/20 border border-red-500/40" />QB</span>
+              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-emerald-500/20 border border-emerald-500/40" />RB</span>
+              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-blue-500/20 border border-blue-500/40" />WR</span>
+              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-orange-500/20 border border-orange-500/40" />TE</span>
+            </div>
+          </div>
+
+          {dynastyPlayerList.length === 0 ? (
+            <Card>
+              <CardContent className="py-16 text-center">
+                <Loader2 className="w-8 h-8 mx-auto mb-3 animate-spin text-[#0b3a7a]" />
+                <p className="text-sm text-muted-foreground" data-testid="text-loading">Loading dynasty rankings...</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <>
+              <Card className="rounded-2xl overflow-hidden">
+                <CardContent className="p-0">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm" data-testid="rankings-board">
+                      <thead>
+                        <tr className="border-b border-border/50 bg-muted/30 sticky top-0 z-10">
+                          <th className="px-3 py-2.5 text-center font-bold text-[11px] text-muted-foreground uppercase tracking-wider w-16">Pick</th>
+                          <th className="px-3 py-2.5 text-center font-bold text-[11px] text-muted-foreground uppercase tracking-wider w-10">Rank</th>
+                          <th className="px-3 py-2.5 text-left font-bold text-[11px] text-muted-foreground uppercase tracking-wider">Player</th>
+                          <th className="px-3 py-2.5 text-center font-bold text-[11px] text-muted-foreground uppercase tracking-wider w-14">Pos</th>
+                          <th className="px-3 py-2.5 text-center font-bold text-[11px] text-muted-foreground uppercase tracking-wider w-14">NFL</th>
+                          <th className="px-3 py-2.5 text-center font-bold text-[11px] text-muted-foreground uppercase tracking-wider w-14">Age</th>
+                          <th className="px-3 py-2.5 text-right font-bold text-[11px] text-muted-foreground uppercase tracking-wider w-20">Value</th>
+                          {draftData && <th className="px-3 py-2.5 text-left font-bold text-[11px] text-muted-foreground uppercase tracking-wider w-32">Drafted By</th>}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {visiblePlayers.map((player, idx) => {
+                          const isDrafted = pickedPlayerIds.has(player.sleeperId);
+                          const draftInfo = pickedByMap.get(player.sleeperId);
+                          const rank = globalRankMap.get(player.sleeperId) ?? idx + 1;
+                          const pickLabel = formatPickLabel(rank, teamCount);
+                          const isNewRound = posFilter === "ALL" && idx > 0 && Math.ceil((idx + 1) / teamCount) !== Math.ceil(idx / teamCount);
+
+                          return (
+                            <tr
+                              key={player.sleeperId}
+                              className={`
+                                border-b border-border/20 transition-colors
+                                ${isDrafted ? "opacity-30" : ""}
+                                ${!isDrafted ? POS_ROW_BG[player.pos] || "" : ""}
+                                ${isNewRound ? "border-t-2 border-t-[#d4af37]/30" : ""}
+                              `}
+                              data-testid={`rank-row-${player.sleeperId}`}
+                            >
+                              <td className="px-3 py-2 text-center">
+                                <span className={`font-mono text-xs font-bold ${isDrafted ? "line-through text-muted-foreground" : "text-[#0b3a7a] dark:text-[#d4af37]"}`}>
+                                  {pickLabel}
+                                </span>
+                              </td>
+                              <td className="px-3 py-2 text-center">
+                                <span className="text-xs text-muted-foreground font-mono">{rank}</span>
+                              </td>
+                              <td className="px-3 py-2">
+                                <span className={`font-medium ${isDrafted ? "line-through text-muted-foreground" : "text-foreground"}`}>
+                                  {player.name}
+                                </span>
+                              </td>
+                              <td className="px-3 py-2 text-center">
+                                <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${POS_BADGE[player.pos] || ""}`}>
+                                  {player.pos}
+                                </Badge>
+                              </td>
+                              <td className="px-3 py-2 text-center text-xs text-muted-foreground">{player.team}</td>
+                              <td className="px-3 py-2 text-center text-xs text-muted-foreground">{player.age > 0 ? player.age.toFixed(1) : "—"}</td>
+                              <td className="px-3 py-2 text-right">
+                                <span className={`font-mono text-xs font-semibold ${isDrafted ? "text-muted-foreground" : "text-foreground"}`}>
+                                  {player.value.toLocaleString()}
+                                </span>
+                              </td>
+                              {draftData && (
+                                <td className="px-3 py-2">
+                                  {draftInfo ? (
+                                    <span className="text-xs text-muted-foreground">
+                                      {draftInfo.drafter}
+                                      <span className="ml-1 font-mono text-[10px]">({draftInfo.round}.{String(draftInfo.pickNo).padStart(2, "0")})</span>
+                                    </span>
+                                  ) : null}
+                                </td>
+                              )}
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {hasMore && (
+                <div className="flex justify-center">
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowCount(prev => Math.min(prev + 60, 300))}
+                    data-testid="button-show-more"
+                  >
+                    <ChevronDown className="w-4 h-4 mr-1.5" />
+                    Show More ({Math.min(rankedPlayers.length - showCount, 60)} more)
+                  </Button>
+                </div>
+              )}
+            </>
+          )}
+        </>
       )}
     </div>
   );
