@@ -17,7 +17,7 @@ A premium dynasty fantasy football league analysis tool built with React + TypeS
 ## Tab Navigation Structure
 - **Portfolio**: Connect, My Leagues, Portfolio Summary
 - **My Team** (id: dashboard): Overview, Roster Strength, Age Curve, Depth Chart
-- **League Analyzer**: Power Rankings, Roster Comparison, League Intelligence, League Economy, Pick Distribution
+- **League Analyzer**: Power Rankings, Roster Comparison, League Intelligence, League Economy
 - **Trade Center**: Trade Database, Trade Calculator, Positional Analysis, Trade Targets, Trade Block Scanner
 - **Players** (id: league-market): Market Value
 - **Live Draft** (id: live-draft): Dynasty Rankings Board — ranks top 300 players by dynasty value with pick labels (1.01, 1.12 etc.) based on configurable league size; connects to Sleeper drafts to fade/strikethrough drafted players; position filtering preserves global ranks
