@@ -95,7 +95,8 @@ export default function LiveDraft() {
   const [hasScanned, setHasScanned] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
 
-  const { dynastyPlayerList } = useValueModel();
+  const { dynastyPlayerList, redraftValuesBySleeperId } = useValueModel();
+  const [rankMode, setRankMode] = useState<"dynasty" | "redraft">("dynasty");
   const { isConnected, user } = useSleeper();
 
   const scanForLiveDrafts = useCallback(async () => {
@@ -170,7 +171,17 @@ export default function LiveDraft() {
     };
   }, [autoRefresh, activeLeagueId, fetchDraft]);
 
-  const fullBoard = useMemo(() => dynastyPlayerList.slice(0, 300), [dynastyPlayerList]);
+  const redraftPlayerList = useMemo(() => {
+    if (!redraftValuesBySleeperId || Object.keys(redraftValuesBySleeperId).length === 0) return dynastyPlayerList;
+    return [...dynastyPlayerList]
+      .map(p => ({ ...p, redraftValue: redraftValuesBySleeperId[p.sleeperId] ?? 0 }))
+      .sort((a, b) => b.redraftValue - a.redraftValue);
+  }, [dynastyPlayerList, redraftValuesBySleeperId]);
+
+  const fullBoard = useMemo(() => {
+    const list = rankMode === "redraft" ? redraftPlayerList : dynastyPlayerList;
+    return list.slice(0, 300);
+  }, [rankMode, dynastyPlayerList, redraftPlayerList]);
 
   const globalRankMap = useMemo(() => {
     const map = new Map<string, number>();
@@ -408,11 +419,33 @@ export default function LiveDraft() {
                   </span>
                 )}
               </div>
-              {teamCount && (
-                <span className="text-xs text-muted-foreground" data-testid="text-team-count">
-                  {teamCount} teams
-                </span>
-              )}
+              <div className="flex items-center gap-3">
+                {teamCount && (
+                  <span className="text-xs text-muted-foreground" data-testid="text-team-count">
+                    {teamCount} teams
+                  </span>
+                )}
+                <div className="flex items-center border border-border rounded-md overflow-hidden" data-testid="toggle-rank-mode">
+                  <button
+                    className={`px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+                      rankMode === "dynasty" ? "bg-[#0b3a7a] text-white" : "bg-background text-muted-foreground hover:bg-muted/50"
+                    }`}
+                    onClick={() => setRankMode("dynasty")}
+                    data-testid="button-rank-dynasty"
+                  >
+                    Dynasty
+                  </button>
+                  <button
+                    className={`px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+                      rankMode === "redraft" ? "bg-[#0b3a7a] text-white" : "bg-background text-muted-foreground hover:bg-muted/50"
+                    }`}
+                    onClick={() => setRankMode("redraft")}
+                    data-testid="button-rank-redraft"
+                  >
+                    Redraft
+                  </button>
+                </div>
+              </div>
             </div>
             <div className="flex items-center gap-2">
               {draftData?.draft && (
