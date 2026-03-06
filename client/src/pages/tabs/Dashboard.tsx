@@ -9,7 +9,7 @@ import { getLeagueTeamTiers, getTierColor, getTierEmoji, getTierTooltip, isConte
 import { useValueModel } from "@/contexts/ValueModelContext";
 import type { League, Team } from "@/types";
 import { cn } from "@/lib/utils";
-import { Trophy, Zap, Target, Calendar, Users, Medal, ArrowRight, ArrowUp, ArrowDown, ArrowUpDown, Table, Lightbulb, Compass, Flame, Sprout, Archive, ChevronDown, ChevronUp } from "lucide-react";
+import { Trophy, Zap, Target, Calendar, Users, Medal, ArrowRight, ArrowUp, ArrowDown, ArrowUpDown, Table, ArrowRightLeft, Compass, Flame, Sprout, Archive, ChevronDown, ChevronUp } from "lucide-react";
 
 interface DashboardProps {
   league: League;
@@ -263,11 +263,11 @@ export function DashboardOverview({ league, userTeam, onNavigate }: DashboardOve
               variant="outline"
               size="sm"
               className="text-xs h-7 px-2.5"
-              onClick={() => onNavigate("league-analyzer", "key-insights")}
-              data-testid="jump-to-insights"
+              onClick={() => onNavigate("trade-center", "trade-calculator")}
+              data-testid="jump-to-trade-calc"
             >
-              <Lightbulb className="w-3 h-3 mr-1" />
-              Insights
+              <ArrowRightLeft className="w-3 h-3 mr-1" />
+              Trade Calculator
             </Button>
           </div>
         )}
