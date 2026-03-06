@@ -1254,66 +1254,84 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
       </div>
 
       {(sideA.length > 0 || sideB.length > 0) && (
-        <Card className="p-5">
-          <div className="mb-4">
+        <Card className="p-5 border-border/60 dark:border-[#1a2d4a]/80 bg-gradient-to-b from-background to-muted/10 dark:from-[#0c1929] dark:to-[#0a1628]">
+          <div className="mb-5">
             <h3 className="text-sm font-bold flex items-center gap-2">
               <ArrowRightLeft className="w-4 h-4 text-[#0b3a7a] dark:text-blue-400" />
-              Trade Analysis
+              Trade Verdict
             </h3>
             <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="space-y-2">
-              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Raw Total</p>
-              <div className="flex items-center justify-between">
-                <div className="text-center flex-1">
-                  <p className="text-xs text-muted-foreground">Side A</p>
-                  <p className="text-lg font-bold" data-testid="text-analysis-raw-a">{rawA.toLocaleString()}</p>
-                </div>
-                <span className="text-muted-foreground text-xs">vs</span>
-                <div className="text-center flex-1">
-                  <p className="text-xs text-muted-foreground">Side B</p>
-                  <p className="text-lg font-bold" data-testid="text-analysis-raw-b">{rawB.toLocaleString()}</p>
-                </div>
+          <div className="space-y-5">
+            <div className="relative px-1">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Side B Wins</span>
+                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Side A Wins</span>
+              </div>
+
+              <div className="relative h-3 rounded-full overflow-hidden" style={{ background: "linear-gradient(90deg, #dfe5ee 0%, #dfe5ee 100%)" }}>
+                <div className="absolute inset-0 dark:hidden" style={{ background: "linear-gradient(90deg, #dfe5ee 0%, #e8ecf2 50%, #dfe5ee 100%)" }} />
+                <div className="absolute inset-0 hidden dark:block" style={{ background: "linear-gradient(90deg, #12284a 0%, #1a3560 50%, #12284a 100%)" }} />
+
+                {[25, 50, 75].map(pct => (
+                  <div key={pct} className="absolute top-0 bottom-0 w-px bg-border/40 dark:bg-white/10" style={{ left: `${pct}%` }} />
+                ))}
+
+                <div className="absolute top-0 bottom-0 w-0.5 bg-[#d4af37]/60 z-10" style={{ left: "50%" }} />
+
+                <div
+                  className="absolute top-1/2 -translate-y-1/2 w-4 h-4 rounded-full border-2 border-[#d4af37] shadow-lg shadow-[#d4af37]/30 z-20 transition-all duration-700 ease-out"
+                  style={{
+                    left: `clamp(8px, ${meterPosition}% - 8px, calc(100% - 8px))`,
+                    background: "linear-gradient(135deg, #0b3a7a 0%, #d4af37 100%)",
+                  }}
+                  data-testid="meter-indicator"
+                />
+              </div>
+
+              <div className="flex items-center justify-center mt-1">
+                <span className="text-[9px] text-muted-foreground/50 font-medium">Fair Value</span>
               </div>
             </div>
 
-            {valueAdjustment && (
-              <div className="space-y-2">
-                <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Adjusted Total</p>
-                <div className="flex items-center justify-between">
-                  <div className="text-center flex-1">
-                    <p className="text-xs text-muted-foreground">Side A</p>
-                    <p className="text-lg font-bold" data-testid="text-analysis-adj-a">{Math.round(finalA).toLocaleString()}</p>
-                  </div>
-                  <span className="text-muted-foreground text-xs">vs</span>
-                  <div className="text-center flex-1">
-                    <p className="text-xs text-muted-foreground">Side B</p>
-                    <p className="text-lg font-bold" data-testid="text-analysis-adj-b">{Math.round(finalB).toLocaleString()}</p>
-                  </div>
-                </div>
-              </div>
-            )}
+            <div className="flex items-center justify-center">
+              <Badge className={`text-xs px-4 py-1.5 font-bold border ${getVerdictStyle(diffPct)}`} data-testid="badge-verdict">
+                {getVerdictLabel(diffPct)}
+              </Badge>
+            </div>
 
-            <div className="space-y-2">
-              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Verdict</p>
-              <div className="flex flex-col items-center gap-2">
-                <Badge className={fairnessColor} data-testid="badge-fairness">
-                  {fairnessLabel}
-                </Badge>
-                {diff > 0 && (
-                  <p className="text-xs text-muted-foreground" data-testid="text-diff">
-                    {Math.round(diff).toLocaleString()} ({diffPct.toFixed(1)}%) in favor of Side {winnerSide}
-                  </p>
+            <div className="grid grid-cols-3 gap-3 text-center">
+              <div className="p-3 rounded-lg bg-muted/20 dark:bg-muted/10 border border-border/20">
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Side A</p>
+                <p className="text-lg font-bold text-foreground" data-testid="text-analysis-final-a">{Math.round(finalA).toLocaleString()}</p>
+                {valueAdjustment && rawA !== finalA && (
+                  <p className="text-[10px] text-muted-foreground/60 mt-0.5">raw {rawA.toLocaleString()}</p>
                 )}
               </div>
-              {diffPct > 12 && (
-                <p className="text-xs text-muted-foreground mt-2" data-testid="text-counter-suggestion">
-                  Add ~{Math.round(diff).toLocaleString()} value to Side {loserSide} to balance
+              <div className="p-3 rounded-lg bg-muted/20 dark:bg-muted/10 border border-border/20">
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Difference</p>
+                <p className={`text-lg font-bold ${diff === 0 ? "text-muted-foreground" : "text-foreground"}`} data-testid="text-analysis-diff">
+                  {diff === 0 ? "Even" : `${signedDiff > 0 ? "+" : ""}${Math.round(signedDiff).toLocaleString()}`}
                 </p>
-              )}
+                {diff > 0 && (
+                  <p className="text-[10px] text-muted-foreground/60 mt-0.5">{diffPct.toFixed(1)}%</p>
+                )}
+              </div>
+              <div className="p-3 rounded-lg bg-muted/20 dark:bg-muted/10 border border-border/20">
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Side B</p>
+                <p className="text-lg font-bold text-foreground" data-testid="text-analysis-final-b">{Math.round(finalB).toLocaleString()}</p>
+                {valueAdjustment && rawB !== finalB && (
+                  <p className="text-[10px] text-muted-foreground/60 mt-0.5">raw {rawB.toLocaleString()}</p>
+                )}
+              </div>
             </div>
+
+            {diffPct > 12 && (
+              <p className="text-xs text-center text-muted-foreground" data-testid="text-counter-suggestion">
+                Add ~{Math.round(diff).toLocaleString()} value to Side {loserSide} to balance this trade
+              </p>
+            )}
           </div>
         </Card>
       )}

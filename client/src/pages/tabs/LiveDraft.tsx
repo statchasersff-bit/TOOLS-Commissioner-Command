@@ -3,10 +3,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Search, RefreshCw, Trophy, Target, Radio, Zap, ChevronDown } from "lucide-react";
+import { Loader2, Search, RefreshCw, Trophy, Target, Radio, Zap } from "lucide-react";
 import { useValueModel } from "@/contexts/ValueModelContext";
 import { useSleeper } from "@/contexts/SleeperContext";
-import type { RankedPlayer } from "@/contexts/ValueModelContext";
 
 interface DraftPick {
   round: number;
@@ -56,37 +55,31 @@ interface LiveDraftInfo {
   totalPicks: number;
 }
 
-const POS_BADGE: Record<string, string> = {
-  QB: "bg-red-500/15 text-red-700 dark:text-red-400 border-red-500/30",
-  RB: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30",
-  WR: "bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/30",
-  TE: "bg-orange-500/15 text-orange-700 dark:text-orange-400 border-orange-500/30",
+const POS_CELL_BG: Record<string, string> = {
+  QB: "bg-red-500/25 dark:bg-red-500/30 border-red-500/40 text-red-900 dark:text-red-200",
+  RB: "bg-emerald-500/25 dark:bg-emerald-500/30 border-emerald-500/40 text-emerald-900 dark:text-emerald-200",
+  WR: "bg-blue-500/25 dark:bg-blue-500/30 border-blue-500/40 text-blue-900 dark:text-blue-200",
+  TE: "bg-orange-500/25 dark:bg-orange-500/30 border-orange-500/40 text-orange-900 dark:text-orange-200",
+  K: "bg-purple-500/20 dark:bg-purple-500/25 border-purple-500/30 text-purple-900 dark:text-purple-200",
+  DEF: "bg-slate-500/20 dark:bg-slate-500/25 border-slate-500/30 text-slate-900 dark:text-slate-200",
 };
 
-const POS_ROW_BG: Record<string, string> = {
-  QB: "bg-red-500/5",
-  RB: "bg-emerald-500/5",
-  WR: "bg-blue-500/5",
-  TE: "bg-orange-500/5",
+const POS_BADGE_SM: Record<string, string> = {
+  QB: "text-red-600 dark:text-red-400",
+  RB: "text-emerald-600 dark:text-emerald-400",
+  WR: "text-blue-600 dark:text-blue-400",
+  TE: "text-orange-600 dark:text-orange-400",
 };
-
-function formatPickLabel(rank: number, teamsInLeague: number): string {
-  const round = Math.ceil(rank / teamsInLeague);
-  const pick = ((rank - 1) % teamsInLeague) + 1;
-  return `${round}.${String(pick).padStart(2, "0")}`;
-}
 
 export default function LiveDraft() {
   const [leagueIdInput, setLeagueIdInput] = useState("");
   const [activeLeagueId, setActiveLeagueId] = useState<string | null>(null);
-  const [posFilter, setPosFilter] = useState<string>("ALL");
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [draftData, setDraftData] = useState<DraftResponse | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [teamCount, setTeamCount] = useState(12);
-  const [showCount, setShowCount] = useState(120);
 
   const [liveDrafts, setLiveDrafts] = useState<LiveDraftInfo[]>([]);
   const [isDetecting, setIsDetecting] = useState(false);
@@ -168,29 +161,7 @@ export default function LiveDraft() {
     };
   }, [autoRefresh, activeLeagueId, fetchDraft]);
 
-  const pickedPlayerIds = useMemo(() => {
-    if (!draftData) return new Set<string>();
-    return new Set(draftData.picks.map(p => p.playerId).filter(Boolean));
-  }, [draftData]);
-
-  const pickedByMap = useMemo(() => {
-    if (!draftData) return new Map<string, { round: number; pickNo: number; drafter: string }>();
-    const map = new Map<string, { round: number; pickNo: number; drafter: string }>();
-    for (const pick of draftData.picks) {
-      if (pick.playerId) {
-        const drafter = draftData.draftSlots?.find(s => s.rosterId === pick.rosterId)?.displayName || `Team ${pick.rosterId}`;
-        map.set(pick.playerId, { round: pick.round, pickNo: pick.pickNo, drafter });
-      }
-    }
-    return map;
-  }, [draftData]);
-
   const fullBoard = useMemo(() => dynastyPlayerList.slice(0, 300), [dynastyPlayerList]);
-
-  const rankedPlayers = useMemo(() => {
-    if (posFilter === "ALL") return fullBoard;
-    return fullBoard.filter(p => p.pos === posFilter);
-  }, [fullBoard, posFilter]);
 
   const globalRankMap = useMemo(() => {
     const map = new Map<string, number>();
@@ -198,11 +169,71 @@ export default function LiveDraft() {
     return map;
   }, [fullBoard]);
 
+  const pickedPlayerIds = useMemo(() => {
+    if (!draftData) return new Set<string>();
+    return new Set(draftData.picks.map(p => p.playerId).filter(Boolean));
+  }, [draftData]);
+
+  const boardGrid = useMemo(() => {
+    const rounds = draftData?.draft?.rounds || Math.ceil(fullBoard.length / teamCount);
+    const effectiveRounds = Math.min(rounds, Math.ceil(fullBoard.length / teamCount));
+    const grid: Array<Array<{ rank: number; player: typeof fullBoard[0] | null; pick: DraftPick | null; isSnake: boolean }>> = [];
+
+    const pickMap = new Map<string, DraftPick>();
+    if (draftData) {
+      for (const p of draftData.picks) {
+        const key = `${p.round}-${p.draftSlot}`;
+        pickMap.set(key, p);
+      }
+    }
+
+    for (let r = 0; r < effectiveRounds; r++) {
+      const row: typeof grid[0] = [];
+      const isSnakeRound = r % 2 === 1;
+
+      for (let slot = 0; slot < teamCount; slot++) {
+        const actualSlot = isSnakeRound ? (teamCount - 1 - slot) : slot;
+        const overallPick = r * teamCount + slot;
+        const player = overallPick < fullBoard.length ? fullBoard[overallPick] : null;
+
+        const draftPick = pickMap.get(`${r + 1}-${actualSlot + 1}`);
+
+        let matchedPlayer = player;
+        if (draftPick?.playerId && draftData?.players) {
+          const pInfo = draftData.players[draftPick.playerId];
+          if (pInfo) {
+            const found = fullBoard.find(p => p.sleeperId === draftPick.playerId);
+            if (found) matchedPlayer = found;
+            else matchedPlayer = { sleeperId: draftPick.playerId, name: pInfo.name, pos: pInfo.pos, team: pInfo.team, value: 0, age: 0 };
+          }
+        }
+
+        row.push({
+          rank: overallPick + 1,
+          player: draftPick?.playerId ? matchedPlayer : (draftData ? null : player),
+          pick: draftPick || null,
+          isSnake: isSnakeRound,
+        });
+      }
+      grid.push(row);
+    }
+    return grid;
+  }, [fullBoard, teamCount, draftData]);
+
+  const slotHeaders = useMemo(() => {
+    if (draftData?.draftSlots && draftData.draftSlots.length > 0) {
+      return draftData.draftSlots
+        .sort((a, b) => a.slot - b.slot)
+        .map(s => s.displayName);
+    }
+    return Array.from({ length: teamCount }, (_, i) => `Pick ${i + 1}`);
+  }, [draftData, teamCount]);
+
   const stats = useMemo(() => {
-    const totalDrafted = fullBoard.filter(p => pickedPlayerIds.has(p.sleeperId)).length;
-    const filteredDrafted = rankedPlayers.filter(p => pickedPlayerIds.has(p.sleeperId)).length;
-    return { total: fullBoard.length, drafted: totalDrafted, showing: rankedPlayers.length, filteredDrafted, available: fullBoard.length - totalDrafted };
-  }, [fullBoard, rankedPlayers, pickedPlayerIds]);
+    const totalDrafted = draftData?.picks.filter(p => p.playerId).length || 0;
+    const totalPicks = (draftData?.draft?.rounds || 0) * teamCount;
+    return { drafted: totalDrafted, total: totalPicks };
+  }, [draftData, teamCount]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -213,9 +244,6 @@ export default function LiveDraft() {
     }
   };
 
-  const visiblePlayers = rankedPlayers.slice(0, showCount);
-  const hasMore = rankedPlayers.length > showCount;
-
   return (
     <div className="space-y-6">
       <div>
@@ -224,7 +252,7 @@ export default function LiveDraft() {
         </h2>
         <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
         <p className="text-sm text-muted-foreground mt-2" data-testid="text-draft-description">
-          Track your dynasty drafts in real-time with dynasty values and pick slot assignments.
+          Track your dynasty drafts in real-time with a visual board layout.
         </p>
       </div>
 
@@ -365,6 +393,11 @@ export default function LiveDraft() {
                     {draftData.draft.status === "drafting" ? "LIVE" : draftData.draft.status}
                   </Badge>
                 )}
+                {draftData && stats.drafted > 0 && (
+                  <span className="text-xs text-muted-foreground" data-testid="text-board-progress">
+                    {stats.drafted} / {stats.total} picks made
+                  </span>
+                )}
               </div>
               <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 <span>League Size:</span>
@@ -406,35 +439,16 @@ export default function LiveDraft() {
           </div>
 
           <div className="flex items-center gap-4 text-xs text-muted-foreground flex-wrap">
-            <div className="flex items-center gap-1.5">
-              {["ALL", "QB", "RB", "WR", "TE"].map(pos => (
-                <button
-                  key={pos}
-                  className={`px-2.5 py-1 rounded-full text-xs font-medium transition-all ${
-                    posFilter === pos
-                      ? "bg-[#0b3a7a] text-white shadow-sm"
-                      : "bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground"
-                  }`}
-                  onClick={() => setPosFilter(pos)}
-                  data-testid={`button-filter-${pos.toLowerCase()}`}
-                >
-                  {pos}
-                </button>
-              ))}
-            </div>
-            <span className="ml-auto" data-testid="text-stats-summary">
-              {posFilter !== "ALL" && <><span className="font-semibold text-foreground">{stats.showing}</span> {posFilter}s · </>}
-              <span className="font-semibold text-foreground">{stats.available}</span>/{stats.total} available
-              {stats.drafted > 0 && (
-                <> · <span className="font-semibold text-muted-foreground">{stats.drafted}</span> drafted</>
-              )}
-            </span>
             <div className="flex items-center gap-2">
-              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-red-500/20 border border-red-500/40" />QB</span>
-              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-emerald-500/20 border border-emerald-500/40" />RB</span>
-              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-blue-500/20 border border-blue-500/40" />WR</span>
-              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-orange-500/20 border border-orange-500/40" />TE</span>
+              <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-red-500/30 border border-red-500/40" />QB</span>
+              <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-emerald-500/30 border border-emerald-500/40" />RB</span>
+              <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-blue-500/30 border border-blue-500/40" />WR</span>
+              <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-orange-500/30 border border-orange-500/40" />TE</span>
             </div>
+            <span className="flex items-center gap-1.5">
+              <span className="w-3 h-3 rounded border-2 border-dashed border-border/60" />
+              Empty pick
+            </span>
           </div>
 
           {dynastyPlayerList.length === 0 ? (
@@ -445,99 +459,68 @@ export default function LiveDraft() {
               </CardContent>
             </Card>
           ) : (
-            <>
-              <Card className="rounded-2xl overflow-hidden">
-                <CardContent className="p-0">
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm" data-testid="rankings-board">
-                      <thead>
-                        <tr className="border-b border-border/50 bg-muted/30 sticky top-0 z-10">
-                          <th className="px-3 py-2.5 text-center font-bold text-[11px] text-muted-foreground uppercase tracking-wider w-16">Pick</th>
-                          <th className="px-3 py-2.5 text-center font-bold text-[11px] text-muted-foreground uppercase tracking-wider w-10">Rank</th>
-                          <th className="px-3 py-2.5 text-left font-bold text-[11px] text-muted-foreground uppercase tracking-wider">Player</th>
-                          <th className="px-3 py-2.5 text-center font-bold text-[11px] text-muted-foreground uppercase tracking-wider w-14">Pos</th>
-                          <th className="px-3 py-2.5 text-center font-bold text-[11px] text-muted-foreground uppercase tracking-wider w-14">NFL</th>
-                          <th className="px-3 py-2.5 text-center font-bold text-[11px] text-muted-foreground uppercase tracking-wider w-14">Age</th>
-                          <th className="px-3 py-2.5 text-right font-bold text-[11px] text-muted-foreground uppercase tracking-wider w-20">Value</th>
-                          {draftData && <th className="px-3 py-2.5 text-left font-bold text-[11px] text-muted-foreground uppercase tracking-wider w-32">Drafted By</th>}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {visiblePlayers.map((player, idx) => {
-                          const isDrafted = pickedPlayerIds.has(player.sleeperId);
-                          const draftInfo = pickedByMap.get(player.sleeperId);
-                          const rank = globalRankMap.get(player.sleeperId) ?? idx + 1;
-                          const pickLabel = formatPickLabel(rank, teamCount);
-                          const isNewRound = posFilter === "ALL" && idx > 0 && Math.ceil((idx + 1) / teamCount) !== Math.ceil(idx / teamCount);
+            <Card className="rounded-2xl overflow-hidden">
+              <CardContent className="p-0">
+                <div className="overflow-x-auto">
+                  <div className="min-w-[700px]" data-testid="draft-board-grid">
+                    <div className="grid gap-px bg-border/30" style={{ gridTemplateColumns: `48px repeat(${teamCount}, 1fr)` }}>
+                      <div className="bg-muted/50 dark:bg-muted/20 p-1.5 flex items-center justify-center">
+                        <span className="text-[10px] font-bold text-muted-foreground uppercase">Rd</span>
+                      </div>
+                      {slotHeaders.map((header, i) => (
+                        <div key={i} className="bg-muted/50 dark:bg-muted/20 p-1.5 text-center" data-testid={`col-header-${i}`}>
+                          <span className="text-[10px] font-bold text-muted-foreground uppercase truncate block leading-tight">
+                            {header.length > 8 ? header.slice(0, 7) + "…" : header}
+                          </span>
+                        </div>
+                      ))}
 
-                          return (
-                            <tr
-                              key={player.sleeperId}
-                              className={`
-                                border-b border-border/20 transition-colors
-                                ${isDrafted ? "opacity-30" : ""}
-                                ${!isDrafted ? POS_ROW_BG[player.pos] || "" : ""}
-                                ${isNewRound ? "border-t-2 border-t-[#d4af37]/30" : ""}
-                              `}
-                              data-testid={`rank-row-${player.sleeperId}`}
-                            >
-                              <td className="px-3 py-2 text-center">
-                                <span className={`font-mono text-xs font-bold ${isDrafted ? "line-through text-muted-foreground" : "text-[#0b3a7a] dark:text-[#d4af37]"}`}>
-                                  {pickLabel}
-                                </span>
-                              </td>
-                              <td className="px-3 py-2 text-center">
-                                <span className="text-xs text-muted-foreground font-mono">{rank}</span>
-                              </td>
-                              <td className="px-3 py-2">
-                                <span className={`font-medium ${isDrafted ? "line-through text-muted-foreground" : "text-foreground"}`}>
-                                  {player.name}
-                                </span>
-                              </td>
-                              <td className="px-3 py-2 text-center">
-                                <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${POS_BADGE[player.pos] || ""}`}>
-                                  {player.pos}
-                                </Badge>
-                              </td>
-                              <td className="px-3 py-2 text-center text-xs text-muted-foreground">{player.team}</td>
-                              <td className="px-3 py-2 text-center text-xs text-muted-foreground">{player.age > 0 ? player.age.toFixed(1) : "—"}</td>
-                              <td className="px-3 py-2 text-right">
-                                <span className={`font-mono text-xs font-semibold ${isDrafted ? "text-muted-foreground" : "text-foreground"}`}>
-                                  {player.value.toLocaleString()}
-                                </span>
-                              </td>
-                              {draftData && (
-                                <td className="px-3 py-2">
-                                  {draftInfo ? (
-                                    <span className="text-xs text-muted-foreground">
-                                      {draftInfo.drafter}
-                                      <span className="ml-1 font-mono text-[10px]">({draftInfo.round}.{String(draftInfo.pickNo).padStart(2, "0")})</span>
+                      {boardGrid.map((row, roundIdx) => (
+                        <>
+                          <div key={`round-${roundIdx}`} className="bg-muted/30 dark:bg-muted/10 p-1.5 flex items-center justify-center border-t border-border/20">
+                            <span className="text-xs font-bold text-[#0b3a7a] dark:text-[#d4af37]">{roundIdx + 1}</span>
+                          </div>
+                          {row.map((cell, slotIdx) => {
+                            const hasPlayer = !!cell.player;
+                            const pos = cell.player?.pos || cell.pick?.pos || "";
+                            const cellStyle = hasPlayer ? (POS_CELL_BG[pos] || "bg-muted/20 border-border/30 text-foreground") : "";
+                            const isEmpty = !hasPlayer && !cell.pick?.playerId;
+
+                            return (
+                              <div
+                                key={`${roundIdx}-${slotIdx}`}
+                                className={`
+                                  p-1 md:p-1.5 border-t border-border/20 flex flex-col items-center justify-center min-h-[52px] md:min-h-[56px] transition-colors
+                                  ${hasPlayer ? `${cellStyle} border rounded-sm` : isEmpty ? "bg-background border border-dashed border-border/30 rounded-sm" : "bg-muted/10 rounded-sm"}
+                                `}
+                                data-testid={`cell-${roundIdx + 1}-${slotIdx + 1}`}
+                              >
+                                {hasPlayer ? (
+                                  <>
+                                    <span className="text-[10px] md:text-[11px] font-bold leading-tight text-center truncate w-full px-0.5">
+                                      {cell.player!.name.split(" ").length > 1
+                                        ? `${cell.player!.name.split(" ")[0][0]}. ${cell.player!.name.split(" ").slice(1).join(" ")}`
+                                        : cell.player!.name}
                                     </span>
-                                  ) : null}
-                                </td>
-                              )}
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
+                                    <span className={`text-[9px] font-bold mt-0.5 ${POS_BADGE_SM[pos] || "text-muted-foreground"}`}>
+                                      {pos}
+                                    </span>
+                                  </>
+                                ) : (
+                                  <span className="text-[10px] text-muted-foreground/40 font-mono">
+                                    {roundIdx + 1}.{String(slotIdx + 1).padStart(2, "0")}
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </>
+                      ))}
+                    </div>
                   </div>
-                </CardContent>
-              </Card>
-
-              {hasMore && (
-                <div className="flex justify-center">
-                  <Button
-                    variant="outline"
-                    onClick={() => setShowCount(prev => Math.min(prev + 60, 300))}
-                    data-testid="button-show-more"
-                  >
-                    <ChevronDown className="w-4 h-4 mr-1.5" />
-                    Show More ({Math.min(rankedPlayers.length - showCount, 60)} more)
-                  </Button>
                 </div>
-              )}
-            </>
+              </CardContent>
+            </Card>
           )}
         </>
       )}
