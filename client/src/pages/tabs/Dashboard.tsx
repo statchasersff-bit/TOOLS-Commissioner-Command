@@ -538,6 +538,49 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
     return rankMap;
   }, [teams]);
 
+  const strengthProfiles = useMemo(() => {
+    const positions = ["QB", "RB", "WR", "TE"] as const;
+    const rosterPositions = league.rosterPositions || [];
+
+    const dynastyByTeam: Record<string, Record<string, number>> = {};
+    const redraftByTeam: Record<string, Record<string, number>> = {};
+
+    teams.forEach(team => {
+      const dyn: Record<string, number> = {};
+      const rdf: Record<string, number> = {};
+      positions.forEach(p => { dyn[p] = 0; rdf[p] = 0; });
+
+      team.roster.forEach(player => {
+        const pos = player.pos as string;
+        if (positions.includes(pos as any)) {
+          dyn[pos] += getPlayerValue(player);
+        }
+      });
+
+      const optimized = rosterPositions.length > 0 ? optimizeLineup(team.roster, rosterPositions) : team.roster;
+      optimized.filter(p => p.starter).forEach(player => {
+        const pos = player.pos as string;
+        if (positions.includes(pos as any)) {
+          rdf[pos] += getRedraftValue(player);
+        }
+      });
+
+      dynastyByTeam[team.id] = dyn;
+      redraftByTeam[team.id] = rdf;
+    });
+
+    const dynastyRanks: Record<string, Record<string, number>> = {};
+    const redraftRanks: Record<string, Record<string, number>> = {};
+    positions.forEach(pos => {
+      const dSorted = [...teams].sort((a, b) => (dynastyByTeam[b.id]?.[pos] ?? 0) - (dynastyByTeam[a.id]?.[pos] ?? 0));
+      const rSorted = [...teams].sort((a, b) => (redraftByTeam[b.id]?.[pos] ?? 0) - (redraftByTeam[a.id]?.[pos] ?? 0));
+      dSorted.forEach((t, i) => { if (!dynastyRanks[t.id]) dynastyRanks[t.id] = {}; dynastyRanks[t.id][pos] = i + 1; });
+      rSorted.forEach((t, i) => { if (!redraftRanks[t.id]) redraftRanks[t.id] = {}; redraftRanks[t.id][pos] = i + 1; });
+    });
+
+    return { dynastyByTeam, redraftByTeam, dynastyRanks, redraftRanks };
+  }, [teams, league.rosterPositions, getPlayerValue, getRedraftValue, optimizeLineup]);
+
   const sortedTeams = useMemo(() => {
     const accessor: Record<SortKey, (t: Team) => number | string> = {
       name: t => t.name.toLowerCase(),
@@ -698,55 +741,69 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
                     </td>
                   </tr>
 
-                  {isExpanded && (
-                    <tr className={`border-b border-border/20 ${rowBg}`} data-testid={`expanded-${team.id}`}>
-                      <td colSpan={colCount} className="px-6 py-4">
-                        <div className="flex flex-col md:flex-row gap-6">
-                          <div className="flex-1">
-                            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-3">Roster Strength Profile</p>
-                            <div className="space-y-2.5">
-                              {(["qb", "rb", "wr", "te"] as const).map(pos => {
-                                const score = team.metrics[pos];
-                                const pRank = teamPosRanks[pos] || teams.length;
-                                return (
-                                  <div key={pos} className="flex items-center gap-3" data-testid={`profile-${team.id}-${pos}`}>
-                                    <span className="text-xs font-bold w-6 uppercase">{pos}</span>
-                                    <div className="flex-1 h-3 bg-muted rounded-full overflow-hidden max-w-[200px]">
-                                      <div className={`h-full rounded-full transition-all ${posBarColor(pRank)}`} style={{ width: `${score}%` }} />
+                  {isExpanded && (() => {
+                    const dynastyValues = strengthProfiles.dynastyByTeam[team.id] || {};
+                    const redraftValues = strengthProfiles.redraftByTeam[team.id] || {};
+                    const dRanks = strengthProfiles.dynastyRanks[team.id] || {};
+                    const rRanks = strengthProfiles.redraftRanks[team.id] || {};
+                    const maxDynasty = Math.max(...(["QB", "RB", "WR", "TE"] as const).flatMap(p => teams.map(t => strengthProfiles.dynastyByTeam[t.id]?.[p] ?? 0)), 1);
+                    const maxRedraft = Math.max(...(["QB", "RB", "WR", "TE"] as const).flatMap(p => teams.map(t => strengthProfiles.redraftByTeam[t.id]?.[p] ?? 0)), 1);
+                    return (
+                      <tr className={`border-b border-border/20 ${rowBg}`} data-testid={`expanded-${team.id}`}>
+                        <td colSpan={colCount} className="px-6 py-4">
+                          <div className="flex flex-col md:flex-row gap-6">
+                            <div className="flex-1">
+                              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-3">Dynasty Roster Strength</p>
+                              <p className="text-[10px] text-muted-foreground mb-3">Full roster dynasty value by position</p>
+                              <div className="space-y-2.5">
+                                {(["QB", "RB", "WR", "TE"] as const).map(pos => {
+                                  const value = dynastyValues[pos] ?? 0;
+                                  const pRank = dRanks[pos] ?? teams.length;
+                                  const pct = maxDynasty > 0 ? (value / maxDynasty) * 100 : 0;
+                                  return (
+                                    <div key={pos} className="flex items-center gap-3" data-testid={`dynasty-profile-${team.id}-${pos.toLowerCase()}`}>
+                                      <span className="text-xs font-bold w-6">{pos}</span>
+                                      <div className="flex-1 h-3 bg-muted rounded-full overflow-hidden max-w-[200px]">
+                                        <div className={`h-full rounded-full transition-all ${posBarColor(pRank)}`} style={{ width: `${Math.max(pct, 2)}%` }} />
+                                      </div>
+                                      <span className="text-xs font-mono font-semibold w-14 text-right text-muted-foreground">{value.toLocaleString()}</span>
+                                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${posRankColor(pRank)}`}>
+                                        #{pRank}
+                                      </span>
                                     </div>
-                                    <span className="text-sm font-bold w-8 text-right">{score}</span>
-                                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${posRankColor(pRank)}`}>
-                                      #{pRank}
-                                    </span>
-                                  </div>
-                                );
-                              })}
+                                  );
+                                })}
+                              </div>
                             </div>
-                          </div>
 
-                          <div className="flex-1">
-                            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-3">Position Rank Heat Map</p>
-                            <div className="grid grid-cols-4 gap-2">
-                              {(["qb", "rb", "wr", "te"] as const).map(pos => {
-                                const pRank = teamPosRanks[pos] || teams.length;
-                                return (
-                                  <div key={pos} className={`text-center p-3 rounded-lg ${posRankColor(pRank)}`} data-testid={`heatmap-${team.id}-${pos}`}>
-                                    <p className="text-[10px] font-bold uppercase">{pos}</p>
-                                    <p className="text-xl font-bold mt-1">#{pRank}</p>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                            <div className="flex items-center gap-4 mt-3 text-[10px] text-muted-foreground">
-                              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500" /> 1-3</span>
-                              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500" /> 4-7</span>
-                              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-400" /> 8+</span>
+                            <div className="flex-1">
+                              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-3">Redraft Roster Strength</p>
+                              <p className="text-[10px] text-muted-foreground mb-3">Optimal starter redraft value by position</p>
+                              <div className="space-y-2.5">
+                                {(["QB", "RB", "WR", "TE"] as const).map(pos => {
+                                  const value = redraftValues[pos] ?? 0;
+                                  const pRank = rRanks[pos] ?? teams.length;
+                                  const pct = maxRedraft > 0 ? (value / maxRedraft) * 100 : 0;
+                                  return (
+                                    <div key={pos} className="flex items-center gap-3" data-testid={`redraft-profile-${team.id}-${pos.toLowerCase()}`}>
+                                      <span className="text-xs font-bold w-6">{pos}</span>
+                                      <div className="flex-1 h-3 bg-muted rounded-full overflow-hidden max-w-[200px]">
+                                        <div className={`h-full rounded-full transition-all ${posBarColor(pRank)}`} style={{ width: `${Math.max(pct, 2)}%` }} />
+                                      </div>
+                                      <span className="text-xs font-mono font-semibold w-14 text-right text-muted-foreground">{value.toLocaleString()}</span>
+                                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${posRankColor(pRank)}`}>
+                                        #{pRank}
+                                      </span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      </td>
-                    </tr>
-                  )}
+                        </td>
+                      </tr>
+                    );
+                  })()}
                 </Fragment>
               );
             })}
