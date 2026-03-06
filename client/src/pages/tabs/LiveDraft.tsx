@@ -461,7 +461,7 @@ export default function LiveDraft() {
             {draftData && (
               <span className="flex items-center gap-1.5 ml-2 pl-2 border-l border-border/40">
                 <span className="w-3 h-3 rounded bg-muted/30 border border-border/30 opacity-50" />
-                Projected (by rank)
+                Already drafted
               </span>
             )}
           </div>
@@ -498,9 +498,9 @@ export default function LiveDraft() {
                           {row.map((cell, slotIdx) => {
                             const hasPlayer = !!cell.player;
                             const pos = cell.player?.pos || cell.pick?.pos || "";
-                            const isProjection = hasPlayer && !cell.isDrafted && !!draftData;
+                            const wasDrafted = hasPlayer && cell.isDrafted && !!draftData;
                             const cellStyle = hasPlayer
-                              ? isProjection
+                              ? wasDrafted
                                 ? (POS_CELL_PROJECTION[pos] || "bg-muted/10 border-border/20 text-muted-foreground")
                                 : (POS_CELL_BG[pos] || "bg-muted/20 border-border/30 text-foreground")
                               : "";
@@ -517,12 +517,12 @@ export default function LiveDraft() {
                               >
                                 {hasPlayer ? (
                                   <>
-                                    <span className={`text-[10px] md:text-[11px] leading-tight text-center truncate w-full px-0.5 ${isProjection ? "font-medium opacity-70" : "font-bold"}`}>
+                                    <span className={`text-[10px] md:text-[11px] leading-tight text-center truncate w-full px-0.5 ${wasDrafted ? "font-medium opacity-60" : "font-bold"}`}>
                                       {cell.player!.name.split(" ").length > 1
                                         ? `${cell.player!.name.split(" ")[0][0]}. ${cell.player!.name.split(" ").slice(1).join(" ")}`
                                         : cell.player!.name}
                                     </span>
-                                    <span className={`text-[9px] font-bold mt-0.5 ${isProjection ? "opacity-50 " : ""}${POS_BADGE_SM[pos] || "text-muted-foreground"}`}>
+                                    <span className={`text-[9px] font-bold mt-0.5 ${wasDrafted ? "opacity-40 " : ""}${POS_BADGE_SM[pos] || "text-muted-foreground"}`}>
                                       {pos}
                                     </span>
                                   </>
