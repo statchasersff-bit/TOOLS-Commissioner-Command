@@ -223,7 +223,8 @@ export function DashboardOverview({ league, userTeam, onNavigate }: DashboardOve
   const starterAges = userTeam.roster.filter((p) => p.starter);
   const avgAge = starterAges.length > 0 ? (starterAges.reduce((s, p) => s + p.age, 0) / starterAges.length).toFixed(1) : "N/A";
   const future1sts = userTeam.picks.filter((p) => p.round === 1).length;
-  const seasonStarted = league.teams.some(t => t.metrics.starters > 0 && t.metrics.overall > 0);
+  const currentMonth = new Date().getMonth();
+  const seasonStarted = currentMonth >= 8 && currentMonth <= 11;
   const playoffOdds = rank <= 6 ? Math.round(95 - (rank - 1) * 12) : Math.round(40 - (rank - 6) * 6);
   const clampedOdds = Math.max(5, playoffOdds);
 
