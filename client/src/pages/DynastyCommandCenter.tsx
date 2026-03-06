@@ -246,13 +246,13 @@ export default function DynastyCommandCenter() {
       const key = `portfolio:${activeSubTab}`;
       switch (key) {
         case "portfolio:connect":
-          return <PortfolioConnect />;
+          return <PortfolioConnect onNavigate={navigateToSubTab} />;
         case "portfolio:my-leagues":
           return <PortfolioMyLeagues onSelectLeague={handlePortfolioLeagueSelect} onNavigate={navigateToSubTab} />;
         case "portfolio:portfolio-summary":
           return <PortfolioSummary />;
         default:
-          return <PortfolioConnect />;
+          return <PortfolioConnect onNavigate={navigateToSubTab} />;
       }
     }
 

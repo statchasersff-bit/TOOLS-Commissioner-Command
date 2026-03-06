@@ -29,9 +29,10 @@ import {
   ArrowUp,
   ArrowDown,
   ArrowUpDown,
+  ArrowRightLeft,
 } from "lucide-react";
 
-export function PortfolioConnect() {
+export function PortfolioConnect({ onNavigate }: { onNavigate?: (mainTab: string, subTab: string) => void }) {
   const { isConnected, user, isLoading, error, lastSyncTime, connect, disconnect, refresh } = useSleeper();
   const [username, setUsername] = useState("");
 
@@ -74,6 +75,29 @@ export function PortfolioConnect() {
                 Last synced: {formatSyncTime(lastSyncTime)}
               </p>
             )}
+            {onNavigate && (
+              <div className="w-full grid grid-cols-2 gap-3 pt-2">
+                <Button
+                  variant="outline"
+                  className="h-auto py-4 flex flex-col items-center gap-2 border-[#0b3a7a]/30 dark:border-blue-400/30 hover:bg-[#0b3a7a]/5 dark:hover:bg-blue-400/10"
+                  onClick={() => onNavigate("league-analyzer", "power-rankings")}
+                  data-testid="button-go-power-rankings"
+                >
+                  <Trophy className="w-5 h-5 text-[#0b3a7a] dark:text-blue-400" />
+                  <span className="text-xs font-bold">Power Rankings</span>
+                </Button>
+                <Button
+                  variant="outline"
+                  className="h-auto py-4 flex flex-col items-center gap-2 border-[#d4af37]/40 hover:bg-[#d4af37]/5"
+                  onClick={() => onNavigate("trade-center", "trade-calculator")}
+                  data-testid="button-go-trade-center"
+                >
+                  <ArrowRightLeft className="w-5 h-5 text-[#d4af37]" />
+                  <span className="text-xs font-bold">Trade Center</span>
+                </Button>
+              </div>
+            )}
+
             <div className="flex items-center gap-2 pt-2">
               <Button
                 variant="outline"
