@@ -208,11 +208,27 @@ export async function fetchSleeperLeagueFull(leagueId: string, userId: string) {
 
   const rosterIdToSlot2026 = new Map<number, number>();
   if (draftsRaw && Array.isArray(draftsRaw)) {
-    const draft2026 = draftsRaw.find((d: any) => d.season === "2026" && d.slot_to_roster_id);
+    const draft2026 = draftsRaw.find((d: any) => d.season === "2026");
     if (draft2026) {
       const slotToRoster: Record<string, number> = draft2026.slot_to_roster_id || {};
-      for (const [slotStr, rosterId] of Object.entries(slotToRoster)) {
-        rosterIdToSlot2026.set(rosterId, parseInt(slotStr, 10));
+      if (Object.keys(slotToRoster).length > 0) {
+        for (const [slotStr, rosterId] of Object.entries(slotToRoster)) {
+          rosterIdToSlot2026.set(rosterId, parseInt(slotStr, 10));
+        }
+      } else {
+        const draftOrder: Record<string, number> = draft2026.draft_order || {};
+        if (Object.keys(draftOrder).length > 0) {
+          const ownerToRoster = new Map<string, number>();
+          for (const r of rostersRaw) {
+            if (r.owner_id) ownerToRoster.set(r.owner_id, r.roster_id);
+          }
+          for (const [userId, slot] of Object.entries(draftOrder)) {
+            const rosterId = ownerToRoster.get(userId);
+            if (rosterId !== undefined) {
+              rosterIdToSlot2026.set(rosterId, slot);
+            }
+          }
+        }
       }
     }
   }
