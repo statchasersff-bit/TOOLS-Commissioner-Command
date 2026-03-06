@@ -54,8 +54,11 @@ The application is a **fully static React SPA** (no backend required). All exter
 
 ## Build & Deploy
 - Dev: `npm run dev` (starts Express server + Vite for development)
-- Static build: Vite outputs to `dist/public/`
-- Cloudflare Pages: `client/public/_redirects` handles SPA routing
+- Static build: `npx tsx script/build-static.ts` — outputs to `dist/public/`
+- Base path: `/Dynasty-Command/Launch/` (configured in `vite.config.ts`)
+- Bluehost: Upload contents of `dist/public/` to `public_html/Dynasty-Command/Launch/`
+- `.htaccess` included in build for Apache SPA routing
+- `_redirects` included for Cloudflare Pages SPA routing
 - No database required for the static frontend
 
 ## Legacy (Server-Side, Not Used in Static Build)
