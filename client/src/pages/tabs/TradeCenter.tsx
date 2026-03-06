@@ -1035,56 +1035,58 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
     <div className="space-y-6">
       <SectionHeader title="Trade Calculator" subtitle="Evaluate trades with dynasty values and diminishing returns" />
 
-      <Card className="p-4">
-        <div className="flex items-center gap-4 flex-wrap">
-          <Badge variant="outline" className="text-xs" data-testid="badge-format">
-            {leagueFormat}
-          </Badge>
+      <Card className="p-3 sm:p-4">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 sm:gap-4 flex-wrap">
+            <Badge variant="outline" className="text-xs" data-testid="badge-format">
+              {leagueFormat}
+            </Badge>
 
-          <div className="flex items-center gap-2">
-            <Switch
-              checked={valueAdjustment}
-              onCheckedChange={setValueAdjustment}
-              data-testid="switch-value-adjustment"
-            />
-            <span className="text-sm font-medium">Value Adjustment</span>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Info className="w-3.5 h-3.5 text-muted-foreground cursor-help" data-testid="icon-info-value-adjustment" />
-              </TooltipTrigger>
-              <TooltipContent className="max-w-xs">
-                <p className="text-xs">Diminishing returns on extra pieces; emphasizes the key asset in the deal. Assets are sorted by value and weighted: 100%, 85%, 72%, 60%, 50%, 42%, 36%, 31%.</p>
-              </TooltipContent>
-            </Tooltip>
+            <div className="flex items-center gap-1.5">
+              <Switch
+                checked={valueAdjustment}
+                onCheckedChange={setValueAdjustment}
+                data-testid="switch-value-adjustment"
+              />
+              <span className="text-xs sm:text-sm font-medium whitespace-nowrap">Value Adj.</span>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Info className="w-3.5 h-3.5 text-muted-foreground cursor-help flex-shrink-0" data-testid="icon-info-value-adjustment" />
+                </TooltipTrigger>
+                <TooltipContent className="max-w-xs">
+                  <p className="text-xs">Diminishing returns on extra pieces; emphasizes the key asset in the deal. Assets are sorted by value and weighted: 100%, 85%, 72%, 60%, 50%, 42%, 36%, 31%.</p>
+                </TooltipContent>
+              </Tooltip>
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <Switch
+                checked={overpayTax}
+                onCheckedChange={setOverpayTax}
+                data-testid="switch-overpay-tax"
+              />
+              <span className="text-xs sm:text-sm font-medium whitespace-nowrap">Overpay Tax</span>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Info className="w-3.5 h-3.5 text-muted-foreground cursor-help flex-shrink-0" data-testid="icon-info-overpay-tax" />
+                </TooltipTrigger>
+                <TooltipContent className="max-w-xs">
+                  <p className="text-xs">Penalizes consolidation deals. If the top asset is more than 35% of that side's raw total, a 3% penalty is applied to the adjusted total.</p>
+                </TooltipContent>
+              </Tooltip>
+            </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <Switch
-              checked={overpayTax}
-              onCheckedChange={setOverpayTax}
-              data-testid="switch-overpay-tax"
-            />
-            <span className="text-sm font-medium">Overpay Tax</span>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Info className="w-3.5 h-3.5 text-muted-foreground cursor-help" data-testid="icon-info-overpay-tax" />
-              </TooltipTrigger>
-              <TooltipContent className="max-w-xs">
-                <p className="text-xs">Penalizes consolidation deals. If the top asset is more than 35% of that side's raw total, a 3% penalty is applied to the adjusted total.</p>
-              </TooltipContent>
-            </Tooltip>
-          </div>
-
-          <div className="ml-auto">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={clearAll}
-              data-testid="button-clear-trade"
-            >
-              <RotateCcw className="w-3 h-3 mr-1" /> Clear
-            </Button>
-          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={clearAll}
+            className="flex-shrink-0 h-8 px-2.5 sm:px-3"
+            data-testid="button-clear-trade"
+          >
+            <RotateCcw className="w-3 h-3 sm:mr-1" />
+            <span className="hidden sm:inline">Clear</span>
+          </Button>
         </div>
       </Card>
 
