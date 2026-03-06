@@ -6,6 +6,7 @@ import { DataTable } from "@/components/DataTable";
 import { SectionHeader } from "@/components/SectionHeader";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { getLeagueTeamTiers, getTierColor, getTierBg, getTierEmoji, getTierTooltip } from "@/data/mockData";
+import { formatPickLabel } from "@/types";
 import type { League, Team, Tier } from "@/types";
 import { cn } from "@/lib/utils";
 import { Info } from "lucide-react";
@@ -335,7 +336,7 @@ export function RosterComparison({ league }: AnalyzerProps) {
                           if (!pk) return <div key={rowIdx} className="py-0.5 sm:py-1 px-1 sm:px-2 h-[22px] sm:h-[28px]" />;
                           return (
                             <div key={`${pk.year}-${pk.round}-${rowIdx}`} className="flex items-center justify-between py-0.5 sm:py-1 px-1 sm:px-2 rounded-md hover:bg-muted/30 transition-colors">
-                              <span className="text-[10px] sm:text-xs font-semibold text-foreground">{pk.year} Rd {pk.round}</span>
+                              <span className="text-[10px] sm:text-xs font-semibold text-foreground">{formatPickLabel(pk)}</span>
                               <span className="text-[10px] sm:text-xs font-mono font-semibold text-muted-foreground ml-1 flex-shrink-0">{pk.value > 0 ? pk.value.toLocaleString() : "—"}</span>
                             </div>
                           );

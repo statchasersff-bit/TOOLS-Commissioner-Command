@@ -5,6 +5,7 @@ import { SectionHeader } from "@/components/SectionHeader";
 import { getLeagueTeamTiers, getTierColor, getTierEmoji, isContenderTier, isRebuilderTier } from "@/data/mockData";
 import { useValueModel } from "@/contexts/ValueModelContext";
 import type { League, Team, Tier } from "@/types";
+import { formatPickLabel } from "@/types";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   TrendingUp, TrendingDown, Crosshair,
@@ -267,7 +268,7 @@ function PickConcentration({ league }: { league: League }) {
                   <td className="p-3 text-center">{d.pickCount}</td>
                   <td className="p-3 text-center font-mono text-xs">{d.totalValue.toLocaleString()}</td>
                   <td className="p-3 text-xs">
-                    {d.bestPick ? `${d.bestPick.year} ${d.bestPick.projectedRange ?? ""} Rd ${d.bestPick.round}` : "—"}
+                    {d.bestPick ? formatPickLabel(d.bestPick) : "—"}
                   </td>
                   <td className="p-3 text-center">
                     <Badge variant="outline" className={`text-[10px] ${ammoColor(d.ammo)}`}>{d.ammo}</Badge>

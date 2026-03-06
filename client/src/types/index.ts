@@ -26,6 +26,8 @@ export interface Pick {
   year: number;
   round: number;
   ownerTeamId: string;
+  originalRosterId?: number;
+  pickSlot?: number;
   projectedRange?: "Early" | "Mid" | "Late";
   value: number;
 }
@@ -143,4 +145,11 @@ export interface CrawlStatus {
   usersDiscovered: number;
   startedAt: string | null;
   updatedAt: string | null;
+}
+
+export function formatPickLabel(pick: Pick): string {
+  if (pick.pickSlot !== undefined && pick.pickSlot > 0) {
+    return `${pick.year} ${pick.round}.${String(pick.pickSlot).padStart(2, "0")}`;
+  }
+  return `${pick.year} Rd ${pick.round}`;
 }
