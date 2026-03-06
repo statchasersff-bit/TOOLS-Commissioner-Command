@@ -659,8 +659,7 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
                     </td>
                     <td className="px-2 sm:px-4 py-3.5 whitespace-nowrap">
                       <Badge variant="outline" className={cn(getTierColor(tier), "cursor-default")} data-testid={`tier-badge-snapshot-${team.id}`}>
-                        <span>{getTierEmoji(tier)}</span>
-                        <span className="hidden sm:inline"> {tier}</span>
+                        <span>{getTierEmoji(tier)} {tier}</span>
                       </Badge>
                     </td>
                     <td className="px-2 sm:px-4 py-3.5 whitespace-nowrap border-l border-border/15" data-testid={`redraft-rank-${team.id}`}>
