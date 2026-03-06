@@ -280,8 +280,8 @@ export function RosterComparison({ league }: AnalyzerProps) {
               const maxRows = Math.max(playersA.length, playersB.length, 1);
 
               return (
-                <div key={pos}>
-                  <div className="flex items-center gap-1.5 sm:gap-2 mb-1.5 px-1 sm:px-2">
+                <Card key={pos} className="p-2.5 sm:p-4">
+                  <div className="flex items-center gap-1.5 sm:gap-2 mb-2 sm:mb-3">
                     <Badge variant="outline" className={`text-[9px] sm:text-[10px] w-6 sm:w-7 justify-center ${POS_COLORS[pos]}`}>{pos}</Badge>
                     <span className="text-[9px] sm:text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">
                       {playersA.length} vs {playersB.length}
@@ -306,7 +306,7 @@ export function RosterComparison({ league }: AnalyzerProps) {
                       </div>
                     ))}
                   </div>
-                </div>
+                </Card>
               );
             })}
           </div>
