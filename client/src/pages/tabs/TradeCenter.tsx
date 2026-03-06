@@ -677,6 +677,8 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
   const [sideARosterId, setSideARosterId] = useState<string>(userTeam.id);
   const [sideBRosterId, setSideBRosterId] = useState<string>("");
 
+  const [expandedInfo, setExpandedInfo] = useState<string | null>(null);
+
   const leagueFormat = useMemo(() => {
     const sf = league.scoringFormat?.toLowerCase() || "";
     return sf.includes("sf") || sf.includes("superflex") ? "SF" : "1QB";
@@ -1044,17 +1046,15 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
                 onCheckedChange={setValueAdjustment}
                 data-testid="switch-value-adjustment"
               />
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button type="button" className="flex items-center gap-1 cursor-help" data-testid="trigger-info-value-adjustment">
-                    <span className="text-xs sm:text-sm font-medium whitespace-nowrap">Value Adj.</span>
-                    <Info className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent className="max-w-xs">
-                  <p className="text-xs">Diminishing returns on extra pieces; emphasizes the key asset in the deal. Assets are sorted by value and weighted: 100%, 85%, 72%, 60%, 50%, 42%, 36%, 31%.</p>
-                </TooltipContent>
-              </Tooltip>
+              <button
+                type="button"
+                className="flex items-center gap-1 cursor-help"
+                onClick={() => setExpandedInfo(expandedInfo === "value-adj" ? null : "value-adj")}
+                data-testid="trigger-info-value-adjustment"
+              >
+                <span className="text-xs sm:text-sm font-medium whitespace-nowrap">Value Adj.</span>
+                <Info className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+              </button>
             </div>
 
             <div className="flex items-center gap-1.5">
@@ -1063,17 +1063,15 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
                 onCheckedChange={setOverpayTax}
                 data-testid="switch-overpay-tax"
               />
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button type="button" className="flex items-center gap-1 cursor-help" data-testid="trigger-info-overpay-tax">
-                    <span className="text-xs sm:text-sm font-medium whitespace-nowrap">Overpay Tax</span>
-                    <Info className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent className="max-w-xs">
-                  <p className="text-xs">Penalizes consolidation deals. If the top asset is more than 35% of that side's raw total, a 3% penalty is applied to the adjusted total.</p>
-                </TooltipContent>
-              </Tooltip>
+              <button
+                type="button"
+                className="flex items-center gap-1 cursor-help"
+                onClick={() => setExpandedInfo(expandedInfo === "overpay" ? null : "overpay")}
+                data-testid="trigger-info-overpay-tax"
+              >
+                <span className="text-xs sm:text-sm font-medium whitespace-nowrap">Overpay Tax</span>
+                <Info className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+              </button>
             </div>
           </div>
 
@@ -1088,6 +1086,17 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
             <span className="hidden sm:inline">Clear</span>
           </Button>
         </div>
+
+        {expandedInfo === "value-adj" && (
+          <p className="text-xs text-muted-foreground mt-3 px-1" data-testid="text-info-value-adjustment">
+            Diminishing returns on extra pieces; emphasizes the key asset in the deal. Assets are sorted by value and weighted: 100%, 85%, 72%, 60%, 50%, 42%, 36%, 31%.
+          </p>
+        )}
+        {expandedInfo === "overpay" && (
+          <p className="text-xs text-muted-foreground mt-3 px-1" data-testid="text-info-overpay-tax">
+            Penalizes consolidation deals. If the top asset is more than 35% of that side's raw total, a 3% penalty is applied to the adjusted total.
+          </p>
+        )}
       </Card>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
