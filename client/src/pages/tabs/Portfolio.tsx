@@ -461,7 +461,7 @@ export function PortfolioSummary() {
           label="Avg Rank"
           value={summaryLoading ? "..." : summaryData ? summaryData.avgRank : "--"}
           icon={BarChart3}
-          subtitle={summaryData ? `${summaryData.playoffTeams} playoff teams` : undefined}
+          subtitle="Season hasn't started"
           loading={summaryLoading}
         />
       </div>
@@ -495,7 +495,7 @@ export function PortfolioSummary() {
                 <p className="text-[11px] text-muted-foreground uppercase tracking-wider mt-1">Avg League Rank</p>
               </div>
               <div className="text-center p-3 rounded-lg bg-muted/30 border border-border/40">
-                <p className="text-2xl font-bold text-foreground">{summaryData.playoffTeams} / {leagues.length}</p>
+                <p className="text-2xl font-bold text-foreground">N/A</p>
                 <p className="text-[11px] text-muted-foreground uppercase tracking-wider mt-1">Playoff Teams</p>
               </div>
             </div>
