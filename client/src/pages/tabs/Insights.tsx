@@ -103,6 +103,23 @@ export function LeagueIntelligence({ league, userTeam }: Props) {
     <div className="space-y-10">
       <SectionHeader title="League Intelligence" subtitle="Per-team scouting reports — strengths, weaknesses, and outlook" />
 
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3" data-testid="league-leaders-cards">
+        {[
+          { label: "Best QB Room", team: [...league.teams].sort((a, b) => b.metrics.qb - a.metrics.qb)[0], stat: (t: Team) => t.metrics.qb },
+          { label: "Best RB Room", team: [...league.teams].sort((a, b) => b.metrics.rb - a.metrics.rb)[0], stat: (t: Team) => t.metrics.rb },
+          { label: "Best WR Room", team: [...league.teams].sort((a, b) => b.metrics.wr - a.metrics.wr)[0], stat: (t: Team) => t.metrics.wr },
+          { label: "Best TE Room", team: [...league.teams].sort((a, b) => b.metrics.te - a.metrics.te)[0], stat: (t: Team) => t.metrics.te },
+          { label: "Deepest Roster", team: [...league.teams].sort((a, b) => b.metrics.depth - a.metrics.depth)[0], stat: (t: Team) => t.metrics.depth },
+          { label: "Most Draft Capital", team: [...league.teams].sort((a, b) => b.picks.length - a.picks.length)[0], stat: (t: Team) => t.picks.length },
+        ].map(({ label, team, stat }) => (
+          <Card key={label} className="p-4 hover-elevate" data-testid={`leader-${label.toLowerCase().replace(/\s+/g, "-")}`}>
+            <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">{label}</p>
+            <p className="text-lg font-bold mt-1">{team.owner}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">{team.name} · {stat(team)}</p>
+          </Card>
+        ))}
+      </div>
+
       <div>
         <div className="mb-5">
           <h3 className="text-base font-bold text-foreground">Team Narratives</h3>
