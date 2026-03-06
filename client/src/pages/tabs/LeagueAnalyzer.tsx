@@ -309,6 +309,47 @@ export function RosterComparison({ league }: AnalyzerProps) {
                 </Card>
               );
             })}
+
+            {(() => {
+              const getPicks = (team: typeof teamA) =>
+                [...team.picks].sort((a, b) => a.year - b.year || a.round - b.round);
+              const picksA = getPicks(teamA);
+              const picksB = getPicks(teamB);
+              const maxPickRows = Math.max(picksA.length, picksB.length, 1);
+              const totalValueA = picksA.reduce((s, p) => s + p.value, 0);
+              const totalValueB = picksB.reduce((s, p) => s + p.value, 0);
+
+              return (
+                <Card className="p-2.5 sm:p-4" data-testid="draft-capital-comparison">
+                  <div className="flex items-center gap-1.5 sm:gap-2 mb-2 sm:mb-3">
+                    <Badge variant="outline" className="text-[9px] sm:text-[10px] bg-purple-500/15 text-purple-700 dark:text-purple-400 border-purple-500/30 justify-center">PICKS</Badge>
+                    <span className="text-[9px] sm:text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">
+                      {picksA.length} vs {picksB.length}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 sm:gap-5">
+                    {[picksA, picksB].map((picks, colIdx) => (
+                      <div key={colIdx} className="space-y-0.5">
+                        {Array.from({ length: maxPickRows }).map((_, rowIdx) => {
+                          const pk = picks[rowIdx];
+                          if (!pk) return <div key={rowIdx} className="py-0.5 sm:py-1 px-1 sm:px-2 h-[22px] sm:h-[28px]" />;
+                          return (
+                            <div key={`${pk.year}-${pk.round}-${rowIdx}`} className="flex items-center justify-between py-0.5 sm:py-1 px-1 sm:px-2 rounded-md hover:bg-muted/30 transition-colors">
+                              <span className="text-[10px] sm:text-xs font-semibold text-foreground">{pk.year} Rd {pk.round}</span>
+                              <span className="text-[10px] sm:text-xs font-mono font-semibold text-muted-foreground ml-1 flex-shrink-0">{pk.value > 0 ? pk.value.toLocaleString() : "—"}</span>
+                            </div>
+                          );
+                        })}
+                        <div className="flex items-center justify-between py-1 px-1 sm:px-2 border-t border-border/40 mt-1">
+                          <span className="text-[10px] sm:text-xs font-bold text-muted-foreground">Total</span>
+                          <span className="text-[10px] sm:text-xs font-mono font-bold text-foreground">{(colIdx === 0 ? totalValueA : totalValueB).toLocaleString()}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+              );
+            })()}
           </div>
         );
       })()}
