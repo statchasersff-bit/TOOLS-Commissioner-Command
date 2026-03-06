@@ -364,7 +364,7 @@ export default function DynastyCommandCenter() {
           <div className="flex items-center justify-end gap-2 mt-1">
             {sleeper.isConnected && sleeper.lastSyncTime && (
               <Badge variant="outline" className="text-[9px] md:text-[10px] font-medium" data-testid="badge-sync-status">
-                Synced {formatTimeAgo(sleeper.lastSyncTime)}
+                Sleeper synced {formatTimeAgo(sleeper.lastSyncTime)}
               </Badge>
             )}
             <ValueAttribution />

@@ -83,12 +83,12 @@ export function ValueAttribution() {
       {isLoading ? (
         <span className="flex items-center gap-1.5 text-muted-foreground/70">
           <Loader2 className="w-3 h-3 animate-spin text-[#d4af37]" />
-          Loading FantasyCalc values…
+          Loading values…
         </span>
       ) : (
         <>
           <span>
-            Values provided by{" "}
+            Values sourced from{" "}
             <a
               href="https://fantasycalc.com"
               target="_blank"
