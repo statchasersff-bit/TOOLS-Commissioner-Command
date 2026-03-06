@@ -674,15 +674,6 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
                             <Badge className="text-[10px] px-1.5 py-0 bg-[#0b3a7a] text-white dark:bg-blue-600" data-testid="your-team-badge">You</Badge>
                           )}
                         </div>
-                        {topPositions.length > 0 && (
-                          <div className="flex gap-1">
-                            {topPositions.map(p => (
-                              <span key={p.pos} className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" data-testid={`badge-${team.id}-${p.pos.toLowerCase()}`}>
-                                {p.pos} #{p.rank}
-                              </span>
-                            ))}
-                          </div>
-                        )}
                       </div>
                     </td>
                     <td className="px-4 py-3.5 whitespace-nowrap">
