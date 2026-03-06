@@ -37,7 +37,7 @@ export function PowerRankings({ league }: AnalyzerProps) {
 
   const columns = [
     { key: "rank", header: "#", sticky: true, render: (_: any, i: number) => <span className="font-bold">{i + 1}</span> },
-    { key: "name", header: "Team", sortable: true, sortAccessor: (row: any) => row.name, render: (row: any) => <span className="font-semibold">{row.name} <span className="text-muted-foreground font-normal">({row.owner})</span></span> },
+    { key: "name", header: "Team", sortable: true, sortAccessor: (row: any) => row.owner, render: (row: any) => <span className="font-semibold">{row.owner}</span> },
     { key: "overall", header: "Overall", sortable: true, sortAccessor: (row: any) => row.metrics.overall, render: (row: any) => <span className="font-bold text-lg">{row.metrics.overall}</span> },
     { key: "tier", header: "Tier", sortable: true, sortAccessor: (row: any) => { const ti = tierMap.get(row.id); return ti ? TIER_ORDER.indexOf(ti.tier) : 99; }, render: (row: any) => {
       const ti = tierMap.get(row.id);
