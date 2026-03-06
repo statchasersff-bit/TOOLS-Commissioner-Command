@@ -1274,6 +1274,21 @@ export function TradeDatabase({ league }: { league: League }) {
         <p className="text-sm text-muted-foreground max-w-md">
           A massive dynasty trade database is being built. Search, filter, and analyze real trades across the Sleeper network.
         </p>
+
+        <div className="mt-8 p-5 rounded-xl border border-[#d4af37]/30 bg-[#d4af37]/5 max-w-md">
+          <p className="text-sm font-bold text-foreground mb-1" data-testid="text-rookie-cta">Need Help Determining 2026 Rookie Pick Values?</p>
+          <p className="text-xs text-muted-foreground mb-4">See Free Draft Guide w/ Tiers</p>
+          <a
+            href="https://statchasers.com/rookie-guide/"
+            target="_blank"
+            rel="noopener noreferrer"
+            data-testid="link-rookie-guide"
+          >
+            <Button variant="default" size="sm" className="bg-[#d4af37] hover:bg-[#c5a033] text-black font-bold">
+              View Rookie Guide
+            </Button>
+          </a>
+        </div>
       </div>
     </div>
   );
