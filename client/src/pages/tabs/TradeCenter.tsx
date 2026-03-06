@@ -1253,6 +1253,23 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
           </p>
         )}
       </Card>
+
+      <div className="flex justify-center">
+        <div className="p-5 rounded-xl border border-[#d4af37]/30 bg-[#d4af37]/5 max-w-md text-center">
+          <p className="text-sm font-bold text-foreground mb-1" data-testid="text-hit-rates-cta">Curious How Often Rookie Picks Hit?</p>
+          <p className="text-xs text-muted-foreground mb-4">See the data from 2017 — explore historical rookie hit rates by round and position.</p>
+          <a
+            href="https://statchasers.com/rookie-hit-rates/"
+            target="_blank"
+            rel="noopener noreferrer"
+            data-testid="link-rookie-hit-rates"
+          >
+            <Button variant="default" size="sm" className="bg-[#d4af37] hover:bg-[#c5a033] text-black font-bold">
+              View Rookie Hit Rates
+            </Button>
+          </a>
+        </div>
+      </div>
     </div>
   );
 }
