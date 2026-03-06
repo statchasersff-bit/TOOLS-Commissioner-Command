@@ -610,7 +610,7 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
               <th className="bg-muted/30 dark:bg-muted/20" rowSpan={2} />
             </tr>
             <tr className="border-b border-border bg-muted/30 dark:bg-muted/20">
-              <SortableHeader label="Power" sortKey="overall" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+              <SortableHeader label="Overall" sortKey="overall" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
               <th className="px-4 py-3 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Tier</th>
               <SortableHeader label="Redraft" sortKey="redraftRank" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="border-l border-border/30" />
               <SortableHeader label="Dynasty" sortKey="dynastyRank" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
