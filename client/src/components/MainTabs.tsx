@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback } from "react";
 import { cn } from "@/lib/utils";
 import { Menu, X, BarChart2, Shield, SearchCheck, ArrowLeftRight, UserRound, Zap } from "lucide-react";
 import type { MainTabConfig } from "../types";
+import logoDark from "@assets/statchasers_logo_transparent_dark_1772764844282.png";
+import logoLight from "@assets/statchasers_logo_transparent_light_1772764844283.png";
 
 const TAB_ICONS: Record<string, typeof BarChart2> = {
   portfolio: BarChart2,
@@ -105,12 +107,11 @@ export function MobileMenuButton({ tabs, activeTab, setActiveTab }: MobileMenuBu
           <div className="absolute inset-x-3 top-3 bottom-auto max-h-[calc(100vh-24px)] bg-[#0a1628] rounded-2xl border border-[#1a2d4a] shadow-2xl shadow-black/40 animate-in slide-in-from-top-2 fade-in duration-250 overflow-hidden">
             <div className="flex items-center justify-between px-5 pt-5 pb-2">
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-lg bg-[#0b3a7a] flex items-center justify-center flex-shrink-0 shadow-md shadow-[#0b3a7a]/30">
-                  <span className="text-white font-bold text-sm tracking-tight">SC</span>
-                </div>
+                <img src={logoDark} alt="StatChasers" className="w-9 h-9 hidden dark:block" />
+                <img src={logoLight} alt="StatChasers" className="w-9 h-9 block dark:hidden" />
                 <div>
                   <p className="text-[15px] font-bold text-white leading-tight tracking-tight">StatChasers</p>
-                  <p className="text-[10px] text-[#d4af37] font-semibold tracking-widest uppercase">Command Center</p>
+                  <p className="text-[10px] text-[#d4af37] font-semibold tracking-widest uppercase">Dynasty Command</p>
                 </div>
               </div>
               <button
