@@ -252,6 +252,61 @@ export function RosterComparison({ league }: AnalyzerProps) {
           </div>
         </Card>
       )}
+
+      {teamA && teamB && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          {[
+            { team: teamA, color: "text-[#0b3a7a] dark:text-blue-400", accent: "border-[#0b3a7a]/20 dark:border-blue-400/20", label: "A" },
+            { team: teamB, color: "text-[#d4af37]", accent: "border-[#d4af37]/20", label: "B" },
+          ].map(({ team, color, accent, label }) => {
+            const grouped = (["QB", "RB", "WR", "TE"] as const).map(pos => ({
+              pos,
+              players: [...team.roster].filter(p => p.pos === pos).sort((a, b) => b.value - a.value),
+            }));
+            return (
+              <Card key={team.id} className={`p-5 border-t-2 ${accent}`} data-testid={`roster-card-${label.toLowerCase()}`}>
+                <div className="mb-4">
+                  <h3 className={`text-sm font-bold ${color}`}>{team.name}</h3>
+                  <p className="text-xs text-muted-foreground">{team.owner}</p>
+                  <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
+                </div>
+                <div className="space-y-4">
+                  {grouped.map(({ pos, players }) => (
+                    <div key={pos}>
+                      <div className="flex items-center gap-2 mb-1.5">
+                        <Badge variant="outline" className={`text-[10px] w-7 justify-center ${POS_COLORS[pos]}`}>{pos}</Badge>
+                        <span className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">{players.length} players</span>
+                      </div>
+                      <div className="space-y-0.5">
+                        {players.map(p => (
+                          <div key={p.id} className="flex items-center justify-between py-1 px-2 rounded-md hover:bg-muted/30 transition-colors" data-testid={`roster-player-${p.id}`}>
+                            <div className="flex items-center gap-2 min-w-0">
+                              {p.starter && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 flex-shrink-0" />}
+                              <span className={`text-xs truncate ${p.starter ? "font-semibold text-foreground" : "text-muted-foreground"}`}>{p.name}</span>
+                              <span className="text-[10px] text-muted-foreground/60 flex-shrink-0">{p.team}</span>
+                            </div>
+                            <span className="text-xs font-mono font-semibold text-muted-foreground ml-2 flex-shrink-0">{p.value > 0 ? p.value.toLocaleString() : "—"}</span>
+                          </div>
+                        ))}
+                        {players.length === 0 && (
+                          <p className="text-[11px] text-muted-foreground/50 py-1 px-2">None</p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
+
+const POS_COLORS: Record<string, string> = {
+  QB: "bg-red-500/15 text-red-700 dark:text-red-400 border-red-500/30",
+  RB: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30",
+  WR: "bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/30",
+  TE: "bg-orange-500/15 text-orange-700 dark:text-orange-400 border-orange-500/30",
+};
