@@ -556,15 +556,6 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
     });
   }, [teams, sortKey, sortDir, teamRanks]);
 
-  const leaders = useMemo(() => [
-    { label: "Best QB Room", team: [...teams].sort((a, b) => b.metrics.qb - a.metrics.qb)[0] },
-    { label: "Best RB Room", team: [...teams].sort((a, b) => b.metrics.rb - a.metrics.rb)[0] },
-    { label: "Best WR Room", team: [...teams].sort((a, b) => b.metrics.wr - a.metrics.wr)[0] },
-    { label: "Best TE Room", team: [...teams].sort((a, b) => b.metrics.te - a.metrics.te)[0] },
-    { label: "Deepest Roster", team: [...teams].sort((a, b) => b.metrics.depth - a.metrics.depth)[0] },
-    { label: "Most Draft Capital", team: [...teams].sort((a, b) => b.picks.length - a.picks.length)[0] },
-  ], [teams]);
-
   const colCount = 8;
 
   return (
@@ -573,21 +564,6 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
         title="League Power Rankings"
         subtitle="League-wide roster rankings by redraft value, dynasty value, and draft capital."
       />
-
-      <div data-testid="league-dominators">
-        <div className="mb-4">
-          <h3 className="text-sm font-bold text-foreground">League Dominators</h3>
-          <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
-        </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-          {leaders.map(({ label, team }) => (
-            <Card key={label} className="p-3.5 hover-elevate" data-testid={`dominator-${label.toLowerCase().replace(/\s+/g, "-")}`}>
-              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">{label}</p>
-              <p className="text-sm font-bold mt-1 truncate">{team.owner}</p>
-            </Card>
-          ))}
-        </div>
-      </div>
 
       <div className="overflow-x-auto rounded-md border border-border/60" data-testid="power-rankings-table">
         <table className="w-full text-sm">
