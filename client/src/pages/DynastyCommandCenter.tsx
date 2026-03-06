@@ -28,6 +28,7 @@ import { LeagueIntelligence } from "./tabs/Insights";
 import { LeagueEconomy } from "./tabs/LeagueEconomy";
 import LiveDraft from "./tabs/LiveDraft";
 import Transactions from "./tabs/Transactions";
+import { LeagueRoast } from "./tabs/LeagueRoast";
 
 const STORAGE_KEY = "sc-dynasty-state";
 
@@ -272,6 +273,7 @@ export default function DynastyCommandCenter() {
       case "league-analyzer:league-economy": return <LeagueEconomy league={league} />;
       case "league-analyzer:roster-comparison": return <RosterComparison league={league} />;
       case "league-analyzer:transactions": return <Transactions />;
+      case "league-analyzer:league-roast": return <LeagueRoast league={league} userTeam={userTeam} />;
       case "dashboard:roster-breakdown": return <RosterBreakdown league={league} userTeam={userTeam} />;
       case "trade-center:trade-database": return <TradeDatabase league={league} />;
       case "trade-center:trade-calculator": return <TradeCalculator league={league} userTeam={userTeam} />;

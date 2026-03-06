@@ -1,0 +1,464 @@
+the grades need to feel legit first, funny second. That’s what makes people trust it enough to share.
+
+Here’s a clean grading system for the Dynasty League Report Card / Don’t Click This tab.
+
+Core idea
+
+Give every team:
+
+an Overall Score out of 100
+
+a letter grade from A+ to F
+
+a few subgrades
+
+one strength
+
+one weakness
+
+one roast line
+
+one archetype
+
+That way it feels like a real report card, not random banter.
+
+Best grading categories
+
+I’d use 6 core buckets:
+
+Starter Strength
+
+Depth
+
+Youth / Longevity
+
+Draft Capital
+
+Positional Balance
+
+Contender Outlook
+
+That gives you a nice mix of current strength and dynasty health.
+
+1. Starter Strength
+
+This should matter the most.
+
+Measures how strong the actual starting lineup is right now.
+
+For example:
+
+QB starters
+
+RB starters
+
+WR starters
+
+TE starter
+
+FLEX-worthy assets
+
+Possible weight:
+30% of total score
+
+Example logic:
+
+Sum dynasty values of best legal starting lineup
+
+Compare to league average
+
+Convert to 0–100
+
+Interpretation:
+
+90+ = elite weekly firepower
+
+75–89 = strong contender base
+
+60–74 = average
+
+under 60 = weak starting core
+
+2. Depth
+
+Measures how much usable value exists beyond starters.
+
+Possible weight:
+15%
+
+Logic:
+
+Count bench players above a minimum dynasty value threshold
+
+Reward teams with real insulation, not empty filler
+
+Why this matters:
+A team with a great starting lineup but no bench should not look flawless.
+
+3. Youth / Longevity
+
+Measures future stability.
+
+Possible weight:
+15%
+
+Logic ideas:
+
+Age-adjusted roster score
+
+Weight young cornerstone players heavily
+
+Penalize old RB-heavy teams more than old WR-heavy teams
+
+Example:
+
+young elite QB/WR rooms score very well
+
+old RB/WR cores drop fast
+
+4. Draft Capital
+
+Measures future flexibility.
+
+Possible weight:
+15%
+
+Logic:
+
+Sum value of current and future rookie picks
+
+Heavier weight on next 2 draft classes
+
+Extra bonus for premium picks
+
+This is crucial for dynasty because a middling roster with lots of picks should not grade like a dead team.
+
+5. Positional Balance
+
+Measures whether the roster is actually functional.
+
+Possible weight:
+10%
+
+Logic:
+
+enough startable QBs in SF
+
+enough RBs to survive
+
+enough WRs to compete
+
+TE viability
+
+avoid over-concentration in one room
+
+Examples of penalties:
+
+stacked WR room but zero RBs
+
+one elite QB and no QB2 in superflex
+
+no usable TE
+
+top-heavy roster with weak FLEX options
+
+This category helps generate good blurbs too.
+
+6. Contender Outlook
+
+This is the “what should this team do now?” bucket.
+
+Possible weight:
+15%
+
+Logic:
+Blend:
+
+current starter strength
+
+age curve
+
+pick capital
+
+bench insulation
+
+This determines whether the team is:
+
+all-in contender
+
+fringe playoff team
+
+productive struggle
+
+rebuilder
+
+rebuild disaster
+
+This category is very useful for the summary language.
+
+Suggested total formula
+
+A good starting formula:
+
+Overall Score =
+0.30 * Starter Strength
++ 0.15 * Depth
++ 0.15 * Youth/Longevity
++ 0.15 * Draft Capital
++ 0.10 * Positional Balance
++ 0.15 * Contender Outlook
+Letter grade scale
+
+Keep this simple and satisfying.
+
+97–100 = A+
+93–96  = A
+90–92  = A-
+87–89  = B+
+83–86  = B
+80–82  = B-
+77–79  = C+
+73–76  = C
+70–72  = C-
+67–69  = D+
+63–66  = D
+60–62  = D-
+Below 60 = F
+
+This gives enough spread without making every team a B.
+
+What each grade should mean
+
+A range
+True title threat or dynasty powerhouse
+
+B range
+Good team, real strengths, but some flaw or limited ceiling
+
+C range
+Middle class team, not bad, not scary
+
+D range
+Clear weaknesses, shaky direction
+
+F
+League clown car / rebuild emergency
+
+Best way to present it in UI
+
+For each team card:
+
+Mak — A- (91)
+Contender Score: 88
+Dynasty Health: 84
+Draft Flexibility: 71
+
+Strength: Elite WR core
+Weakness: Thin RB depth
+Outlook: Win-now contender
+Roast: Runs the league like a hedge fund with shoulder pads.
+
+That’s the sweet spot.
+
+Suggested subgrades
+
+To make it more fun, show 4 visible subgrades instead of all 6 raw buckets.
+
+Use:
+
+Win Now
+
+Future
+
+Depth
+
+Asset Flexibility
+
+These map nicely to the deeper formula behind the scenes.
+
+Example:
+
+Category	Grade
+Win Now	A
+Future	B+
+Depth	B
+Asset Flexibility	C+
+
+Then overall = A-
+
+That feels premium.
+
+Archetype system
+
+This is where it gets fun.
+
+Use formulas to assign each team a personality.
+
+Archetypes
+
+The Juggernaut
+High starter strength + high depth
+
+The Architect
+Strong young core + strong picks
+
+The Gambler
+High contender score + low future score
+
+The Investor
+High picks + weak current lineup
+
+The Paper Tiger
+Strong starters + weak depth/future
+
+The Treadmill
+Average everywhere, elite nowhere
+
+The Time Traveler
+Weak current roster but obsessed with future picks
+
+The Sicko
+Too many niche assets, weird roster construction
+
+These will absolutely get screenshotted.
+
+Roast logic by data type
+
+The roast should come from actual roster traits.
+
+If old roster
+
+“This team belongs in a retirement community.”
+
+If no picks
+
+“He traded away the future for a sixth-place finish.”
+
+If too many picks
+
+“Collects draft picks like they’re Pokémon cards.”
+
+If zero depth
+
+“One injury away from starting a guy last active in 2023.”
+
+If rebuilding forever
+
+“Still rebuilding. At this point it’s a lifestyle.”
+
+If hyper-aggressive
+
+“Trades like the league is shutting down tomorrow.”
+
+If top-heavy
+
+“Great starting lineup, terrifying bench.”
+
+That keeps the humor grounded in real team structure.
+
+Best Team / Worst Team logic
+
+Don’t just use overall score blindly.
+
+Use labels:
+
+Best Team
+
+highest overall score, with a bias toward current lineup strength
+
+Worst Team
+
+lowest overall score, with a bias against empty future assets and no starters
+
+That helps avoid weird outcomes where a total rebuild with lots of picks gets labeled “worst” when there’s actually a dead-end old roster that deserves it more.
+
+“Luckily you’re not the worst…” flow
+
+This is how I’d script it.
+
+If user is not last
+
+We told you not to click here.
+Luckily, you’re not the worst manager in your league.
+
+Then:
+
+show their grade first
+
+then show league bottom 3
+
+then the roast section
+
+If user is last
+
+We told you not to click here.
+Unfortunately… we have some bad news.
+
+Then:
+
+show their F grade
+
+their biggest issue
+
+their roast
+
+rebuild outlook
+
+That emotional hook is gold.
+
+Bonus badges
+
+These make it feel richer:
+
+Best Team
+
+Worst Team
+
+Best Future
+
+Most Desperate
+
+Pick Hoarder
+
+Trade Addict
+
+Win-Now Maniac
+
+Chaos GM
+
+Most Fragile Contender
+
+These can appear as pills on team cards.
+
+League-wide grades too
+
+You should also grade the entire league.
+
+League Strength Score
+
+Based on:
+
+total concentration of elite assets
+
+parity
+
+trade activity
+
+lineup quality
+
+Example:
+League Strength Score: 82 — Competitive League
+
+League labels:
+
+90+ Elite Shark Tank
+
+80–89 Competitive
+
+70–79 Solid
+
+60–69 Mid
+
+under 60 Mickey Mouse League
+
+That’s very shareable too.

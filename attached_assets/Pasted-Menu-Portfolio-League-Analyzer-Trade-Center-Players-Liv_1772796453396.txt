@@ -1,0 +1,171 @@
+Menu:
+
+Portfolio
+League Analyzer
+Trade Center
+Players
+Live Draft
+🚫 Don't Click This
+Step 2 – Suspense Screen
+
+Large headline:
+
+We told you not to click here.
+
+Subtext:
+
+If your league mates see this report, friendships may be ruined.
+
+Button:
+
+Reveal the League Truth
+
+Step 3 – The Twist
+
+When the user loads their league:
+
+If they are not the worst team:
+
+Luckily… you're not the worst manager in your league.
+
+Then show:
+
+League Rankings
+Rank	Manager	Score
+1	Mak	94
+2	Mike	88
+3	Sarah	72
+12	Jake	41
+
+Then highlight:
+
+Worst GM: Jake
+
+If they ARE the worst team
+
+Even funnier.
+
+Message:
+
+Unfortunately… we have some bad news.
+
+Then:
+
+You are currently the worst GM in your league.
+
+Followed by the roast.
+
+The Roast Section
+
+Example:
+
+League Roast
+
+Mak
+"Runs the league like the Patriots in 2007."
+
+Jake
+"Rebuilding since the Obama administration."
+
+Sarah
+"Owns more future picks than actual players."
+
+Mike
+"Trades like tomorrow doesn't exist."
+
+Dynasty Personality Types
+
+After the roast show archetypes.
+
+Example:
+
+Dynasty Archetypes
+Manager	Type
+Mak	The Architect
+Mike	The Gambler
+Sarah	The Investor
+Jake	The Time Traveler
+
+These are highly shareable.
+
+Viral Share Section
+
+Add button:
+
+Generate League Roast Image
+
+Export graphic like:
+
+StatChasers League Roast
+
+Worst GM
+Jake
+
+"Rebuilding since 2019"
+
+Best GM
+Mak
+
+"Running a dynasty empire"
+
+Perfect for:
+
+• Sleeper chat
+• Discord
+• Reddit
+
+Bonus Feature (Makes It Even Funnier)
+
+Add:
+
+League Awards
+
+Worst Trade
+Luckiest Manager
+Trade Addict
+Pick Hoarder
+Future Tanker
+
+Example:
+
+Worst Trade
+
+Mike traded:
+
+Breece Hall
+
+for
+
+Miles Sanders + 3rd
+
+Value Loss: 38%
+
+UX Placement Suggestion
+
+Put it under League Analyzer like this:
+
+League Analyzer
+   Power Rankings
+   League Intelligence
+   Transactions
+   🚫 Don't Click This
+
+So it feels like a hidden feature.
+
+One Small Detail That Will Make It Viral
+
+Use dynamic insults based on data.
+
+Example:
+
+If team is old:
+
+This roster belongs in a retirement home.
+
+If they have no picks:
+
+This team sold the future for a 7th place finish.
+
+If rebuilding forever:
+
+Still rebuilding… respect the commitment.
