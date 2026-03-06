@@ -182,29 +182,31 @@ export default function DynastyCommandCenter() {
   }, [sleeper]);
 
   const renderLockedState = () => (
-    <div className="flex items-center justify-center min-h-[60vh]">
-      <Card className="p-10 text-center max-w-md" data-testid="locked-state-card">
-        <div className="mx-auto w-16 h-16 rounded-full bg-[#0b3a7a]/8 dark:bg-blue-400/10 flex items-center justify-center mb-5">
-          <Lock className="w-7 h-7 text-[#0b3a7a] dark:text-blue-400" />
+    <div className="flex items-center justify-center min-h-[50vh] md:min-h-[60vh] px-4">
+      <Card className="p-6 md:p-10 text-center max-w-sm md:max-w-md w-full border-border/60 dark:border-[#1a2d4a]/80 bg-gradient-to-b from-background to-muted/20 dark:from-[#0c1929] dark:to-[#0a1628] shadow-xl shadow-black/5 dark:shadow-black/30" data-testid="locked-state-card">
+        <div className="mx-auto w-14 h-14 md:w-16 md:h-16 rounded-2xl bg-[#0b3a7a]/10 dark:bg-blue-400/10 flex items-center justify-center mb-4 ring-1 ring-[#0b3a7a]/15 dark:ring-blue-400/15">
+          <Lock className="w-6 h-6 md:w-7 md:h-7 text-[#0b3a7a] dark:text-blue-400" />
         </div>
-        <h3 className="text-xl font-bold mb-2">Connect Sleeper to Unlock</h3>
-        <p className="text-sm text-muted-foreground leading-relaxed mb-6">
-          Link your Sleeper account to access real-time dynasty analysis powered by your actual rosters and picks.
+        <h3 className="text-lg md:text-xl font-bold mb-1.5">Connect Sleeper to Unlock</h3>
+        <p className="text-[13px] md:text-sm text-muted-foreground leading-relaxed mb-5 max-w-[280px] mx-auto">
+          Link your Sleeper account for real-time dynasty analysis with your actual rosters and picks.
         </p>
-        <div className="text-left space-y-2.5 mb-6 max-w-xs mx-auto">
+        <div className="text-left space-y-2 mb-5 max-w-[260px] mx-auto">
           {[
             "Real-time roster analysis",
             "Multi-league portfolio view",
             "FantasyCalc-powered valuations",
           ].map((text) => (
-            <div key={text} className="flex items-center gap-2.5">
-              <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
-              <span className="text-sm text-muted-foreground">{text}</span>
+            <div key={text} className="flex items-center gap-2">
+              <div className="w-5 h-5 rounded-full bg-emerald-500/10 dark:bg-emerald-400/10 flex items-center justify-center flex-shrink-0">
+                <Check className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+              </div>
+              <span className="text-[13px] text-muted-foreground">{text}</span>
             </div>
           ))}
         </div>
         <Button
-          className="bg-[#0b3a7a] hover:bg-[#0b3a7a]/90 text-white"
+          className="w-full md:w-auto bg-[#0b3a7a] hover:bg-[#0b3a7a]/90 text-white h-11 md:h-10 text-sm font-semibold shadow-md shadow-[#0b3a7a]/20 hover:shadow-lg hover:shadow-[#0b3a7a]/30 transition-all"
           onClick={() => navigateToSubTab("portfolio", "connect")}
           data-testid="button-connect-sleeper-locked"
         >
@@ -215,17 +217,18 @@ export default function DynastyCommandCenter() {
   );
 
   const renderSelectLeague = () => (
-    <div className="flex items-center justify-center min-h-[60vh]">
-      <Card className="p-10 text-center max-w-md" data-testid="select-league-card">
-        <div className="mx-auto w-16 h-16 rounded-full bg-[#0b3a7a]/8 dark:bg-blue-400/10 flex items-center justify-center mb-5">
-          <LayoutDashboard className="w-7 h-7 text-[#0b3a7a] dark:text-blue-400" />
+    <div className="flex items-center justify-center min-h-[50vh] md:min-h-[60vh] px-4">
+      <Card className="p-6 md:p-10 text-center max-w-sm md:max-w-md w-full border-border/60 dark:border-[#1a2d4a]/80 bg-gradient-to-b from-background to-muted/20 dark:from-[#0c1929] dark:to-[#0a1628] shadow-xl shadow-black/5 dark:shadow-black/30" data-testid="select-league-card">
+        <div className="mx-auto w-14 h-14 md:w-16 md:h-16 rounded-2xl bg-[#0b3a7a]/10 dark:bg-blue-400/10 flex items-center justify-center mb-4 ring-1 ring-[#0b3a7a]/15 dark:ring-blue-400/15">
+          <LayoutDashboard className="w-6 h-6 md:w-7 md:h-7 text-[#0b3a7a] dark:text-blue-400" />
         </div>
-        <h3 className="text-xl font-bold mb-2" data-testid="text-empty-state">Select a League to Begin</h3>
-        <p className="text-sm text-muted-foreground leading-relaxed mb-6">
-          Choose a league to explore your dynasty command center with power rankings, trade tools, and deep roster analysis.
+        <h3 className="text-lg md:text-xl font-bold mb-1.5" data-testid="text-empty-state">Select a League to Begin</h3>
+        <p className="text-[13px] md:text-sm text-muted-foreground leading-relaxed mb-5 max-w-[280px] mx-auto">
+          Choose a league to explore power rankings, trade tools, and deep roster analysis.
         </p>
         <Button
           variant="outline"
+          className="w-full md:w-auto h-11 md:h-10 text-sm font-semibold"
           onClick={() => navigateToSubTab("portfolio", "my-leagues")}
           data-testid="button-go-to-leagues"
         >
@@ -285,36 +288,36 @@ export default function DynastyCommandCenter() {
 
   return (
     <div className="min-h-screen bg-background blueprint-bg">
-      <header className="border-b border-border bg-background/95 backdrop-blur-sm sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 md:px-6 py-3.5">
-          <div className="flex items-center justify-between gap-4 flex-wrap">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-md bg-[#0b3a7a] flex items-center justify-center flex-shrink-0">
-                <span className="text-white font-bold text-sm">SC</span>
+      <header className="border-b border-border/60 bg-background/95 backdrop-blur-sm sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto px-3 md:px-6 py-2.5 md:py-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5 flex-shrink-0">
+              <div className="w-8 h-8 md:w-9 md:h-9 rounded-lg bg-[#0b3a7a] flex items-center justify-center flex-shrink-0 shadow-sm shadow-[#0b3a7a]/20">
+                <span className="text-white font-bold text-xs md:text-sm tracking-tight">SC</span>
               </div>
-              <div>
-                <h1 className="text-base font-bold text-foreground leading-tight tracking-tight" data-testid="text-app-title">
+              <div className="leading-none">
+                <h1 className="text-sm md:text-base font-bold text-foreground leading-tight tracking-tight" data-testid="text-app-title">
                   StatChasers
                 </h1>
-                <p className="text-xs text-[#d4af37] font-semibold tracking-wide">Dynasty Command Center</p>
+                <p className="text-[10px] md:text-xs text-[#d4af37] font-semibold tracking-wide leading-tight mt-0.5">Dynasty Command Center</p>
               </div>
             </div>
 
-            <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex items-center gap-2 md:gap-3">
               {sleeper.isConnected && sleeper.user && (
-                <div className="flex items-center gap-1.5 border-r border-border/50 pr-3">
+                <div className="hidden md:flex items-center gap-1.5 border-r border-border/40 pr-3">
                   <div className="w-6 h-6 rounded-full bg-[#0b3a7a]/10 dark:bg-blue-400/10 flex items-center justify-center flex-shrink-0">
                     <User className="w-3 h-3 text-[#0b3a7a] dark:text-blue-400" />
                   </div>
-                  <span className="text-xs font-medium text-foreground hidden md:inline" data-testid="text-sleeper-user">
+                  <span className="text-xs font-medium text-foreground" data-testid="text-sleeper-user">
                     {sleeper.user.displayName}
                   </span>
                 </div>
               )}
 
               {sleeper.isConnected && (
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider hidden md:inline">League:</span>
+                <div className="hidden md:flex items-center gap-1.5">
+                  <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">League:</span>
                   <LeagueSelector
                     leagues={sleeperLeaguesAsLeagues}
                     selectedLeagueId={selectedLeagueId}
@@ -323,25 +326,41 @@ export default function DynastyCommandCenter() {
                 </div>
               )}
 
-              <div className="flex items-center gap-1.5">
-                <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider hidden md:inline">Value:</span>
+              <div className="hidden md:flex items-center gap-1.5">
+                <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Value:</span>
                 <ValueSourceSelector />
               </div>
-              <div className="flex items-center gap-1.5 border-l border-border/50 pl-3">
-                <Button variant="outline" size="sm" disabled className="hidden md:inline-flex" data-testid="button-share">
+
+              <div className="hidden md:flex items-center gap-1.5 border-l border-border/40 pl-3">
+                <Button variant="outline" size="sm" disabled data-testid="button-share">
                   <Share2 className="w-3 h-3 mr-1" /> Share
                 </Button>
-                <Button variant="outline" size="sm" disabled className="hidden md:inline-flex" data-testid="button-export">
+                <Button variant="outline" size="sm" disabled data-testid="button-export">
                   <Download className="w-3 h-3 mr-1" /> Export
                 </Button>
+              </div>
+
+              <div className="flex items-center gap-1.5">
                 <ThemeToggle />
                 <MobileMenuButton tabs={NAV_CONFIG} activeTab={activeMainTab} setActiveTab={handleMainTabChange} />
               </div>
             </div>
           </div>
-          <div className="flex items-center justify-end gap-3 mt-1">
+
+          <div className="flex items-center justify-between gap-2 mt-1.5 md:hidden">
+            {sleeper.isConnected && (
+              <LeagueSelector
+                leagues={sleeperLeaguesAsLeagues}
+                selectedLeagueId={selectedLeagueId}
+                onSelect={handleLeagueSelect}
+              />
+            )}
+            <ValueSourceSelector />
+          </div>
+
+          <div className="flex items-center justify-end gap-2 mt-1">
             {sleeper.isConnected && sleeper.lastSyncTime && (
-              <Badge variant="outline" className="text-[10px] font-medium" data-testid="badge-sync-status">
+              <Badge variant="outline" className="text-[9px] md:text-[10px] font-medium" data-testid="badge-sync-status">
                 Synced {formatTimeAgo(sleeper.lastSyncTime)}
               </Badge>
             )}
@@ -356,7 +375,7 @@ export default function DynastyCommandCenter() {
         <SubTabs tabs={currentMainConfig.subTabs} activeTab={activeSubTab} setActiveTab={handleSubTabChange} />
       )}
 
-      <main className="max-w-7xl mx-auto px-4 md:px-6 py-8 relative">
+      <main className="max-w-7xl mx-auto px-3 md:px-6 py-6 md:py-8 relative">
         {showLoadingOverlay && (
           <div className="absolute inset-0 z-30 flex items-start justify-center pt-24" data-testid="recalculating-overlay">
             <div className="bg-background/90 backdrop-blur-sm border border-border rounded-lg px-5 py-3 shadow-lg flex items-center gap-3">

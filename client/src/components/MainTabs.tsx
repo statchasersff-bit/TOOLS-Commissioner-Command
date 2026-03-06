@@ -20,7 +20,7 @@ interface MainTabsProps {
 
 export function MainTabs({ tabs, activeTab, setActiveTab }: MainTabsProps) {
   return (
-    <div className="border-b border-border bg-background/80 backdrop-blur-sm sticky top-[57px] z-40 hidden md:block">
+    <div className="border-b border-border/60 bg-background/80 backdrop-blur-sm sticky top-[53px] z-40 hidden md:block">
       <div className="max-w-7xl mx-auto">
         <nav
           className="flex gap-1.5 overflow-x-auto px-4 md:px-6 py-2 scrollbar-hide"
