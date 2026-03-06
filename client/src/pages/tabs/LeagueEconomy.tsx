@@ -260,8 +260,8 @@ function PickConcentration({ league }: { league: League }) {
               {pickData.map((d, i) => (
                 <tr key={d.team.id} className={`border-b border-border/50 ${i % 2 === 0 ? "" : "bg-muted/10"}`} data-testid={`pick-row-${d.team.id}`}>
                   <td className="p-3">
-                    <span className="font-bold text-sm">{d.team.owner}</span>
-                    <span className="text-xs text-muted-foreground ml-2">{d.team.name}</span>
+                    <div className="font-bold text-sm leading-tight">{d.team.name}</div>
+                    <div className="text-[11px] text-muted-foreground leading-tight">{d.team.owner}</div>
                   </td>
                   <td className="p-3 text-center font-bold">{d.firstCount}</td>
                   <td className="p-3 text-center">{d.pickCount}</td>
