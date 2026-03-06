@@ -229,6 +229,7 @@ export function DashboardOverview({ league, userTeam, onNavigate }: DashboardOve
   const starterAges = userTeam.roster.filter((p) => p.starter);
   const avgAge = starterAges.length > 0 ? (starterAges.reduce((s, p) => s + p.age, 0) / starterAges.length).toFixed(1) : "N/A";
   const future1sts = userTeam.picks.filter((p) => p.round === 1).length;
+  const seasonStarted = league.teams.some(t => t.metrics.starters > 0 && t.metrics.overall > 0);
   const playoffOdds = rank <= 6 ? Math.round(95 - (rank - 1) * 12) : Math.round(40 - (rank - 6) * 6);
   const clampedOdds = Math.max(5, playoffOdds);
 
@@ -320,9 +321,9 @@ export function DashboardOverview({ league, userTeam, onNavigate }: DashboardOve
           </div>
           <SnapshotStat
             label="Playoff Odds"
-            value={`${clampedOdds}%`}
-            context={clampedOdds >= 60 ? "Strong outlook" : clampedOdds >= 40 ? "On the bubble" : "Long shot"}
-            contextColor={clampedOdds >= 60 ? "text-emerald-600 dark:text-emerald-400" : clampedOdds >= 40 ? "text-amber-600 dark:text-amber-400" : "text-red-500 dark:text-red-400"}
+            value={seasonStarted ? `${clampedOdds}%` : "N/A"}
+            context={seasonStarted ? (clampedOdds >= 60 ? "Strong outlook" : clampedOdds >= 40 ? "On the bubble" : "Long shot") : "Season hasn't started"}
+            contextColor={!seasonStarted ? "text-muted-foreground" : clampedOdds >= 60 ? "text-emerald-600 dark:text-emerald-400" : clampedOdds >= 40 ? "text-amber-600 dark:text-amber-400" : "text-red-500 dark:text-red-400"}
             icon={Target}
             testId="snapshot-playoff-odds"
           />
