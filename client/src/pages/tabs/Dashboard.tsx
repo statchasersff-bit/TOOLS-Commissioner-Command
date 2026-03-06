@@ -647,8 +647,7 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
                     <td className="px-4 py-3.5 whitespace-nowrap">
                       <div className="flex items-center gap-2 flex-wrap">
                         <div className="flex items-center gap-2">
-                          <span className={`font-semibold text-foreground ${isUser ? "text-[#0b3a7a] dark:text-blue-400" : ""}`}>{team.name}</span>
-                          <span className="text-xs text-muted-foreground">({team.owner})</span>
+                          <span className={`font-semibold text-foreground ${isUser ? "text-[#0b3a7a] dark:text-blue-400" : ""}`}>{team.owner}</span>
                           {isUser && (
                             <Badge className="text-[10px] px-1.5 py-0 bg-[#0b3a7a] text-white dark:bg-blue-600" data-testid="your-team-badge">You</Badge>
                           )}
