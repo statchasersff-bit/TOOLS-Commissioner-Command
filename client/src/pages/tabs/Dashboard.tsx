@@ -431,8 +431,8 @@ function posBarColor(rank: number): string {
 
 type SortKey = "name" | "overall" | "redraftRank" | "dynastyRank" | "picks";
 
-function SortableHeader({ label, sortKey, activeSortKey, sortDir, onSort, className }: {
-  label: string; sortKey: SortKey; activeSortKey: SortKey; sortDir: "asc" | "desc";
+function SortableHeader({ label, mobileLabel, sortKey, activeSortKey, sortDir, onSort, className }: {
+  label: string; mobileLabel?: string; sortKey: SortKey; activeSortKey: SortKey; sortDir: "asc" | "desc";
   onSort: (key: SortKey) => void; className?: string;
 }) {
   const isActive = activeSortKey === sortKey;
@@ -443,7 +443,7 @@ function SortableHeader({ label, sortKey, activeSortKey, sortDir, onSort, classN
       data-testid={`sort-${sortKey}`}
     >
       <span className="inline-flex items-center gap-1">
-        {label}
+        {mobileLabel ? (<><span className="sm:hidden">{mobileLabel}</span><span className="hidden sm:inline">{label}</span></>) : label}
         {isActive ? (
           sortDir === "asc" ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />
         ) : (
@@ -612,9 +612,9 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
             <tr className="border-b border-border bg-muted/30 dark:bg-muted/20">
               <SortableHeader label="Overall" sortKey="overall" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
               <th className="px-2 sm:px-4 py-3 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Tier</th>
-              <SortableHeader label="Redraft" sortKey="redraftRank" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="border-l border-border/30" />
-              <SortableHeader label="Dynasty" sortKey="dynastyRank" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-              <SortableHeader label="Draft" sortKey="picks" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="border-l border-border/30" />
+              <SortableHeader label="Redraft" mobileLabel="Red" sortKey="redraftRank" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="border-l border-border/30" />
+              <SortableHeader label="Dynasty" mobileLabel="Dyn" sortKey="dynastyRank" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+              <SortableHeader label="Draft" mobileLabel="Pcks" sortKey="picks" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="border-l border-border/30" />
             </tr>
           </thead>
           <tbody>
