@@ -1,5 +1,4 @@
-import { useState, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useState, useMemo, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -405,15 +404,26 @@ export function PortfolioSummary() {
   const { valuesBySleeperId, sourceId, sources } = useValueModel();
   const activeSourceLabel = sources.find(s => s.id === sourceId)?.label ?? sourceId;
 
-  const { data: summaryData, isLoading: summaryLoading } = useQuery({
-    queryKey: ["/api/sleeper/user", user?.userId, "portfolio-summary"],
-    queryFn: async () => {
-      const res = await fetch(`/api/sleeper/user/${user!.userId}/portfolio-summary`);
-      if (!res.ok) throw new Error("Failed to fetch portfolio summary");
-      return res.json();
-    },
-    enabled: isConnected && !!user?.userId && leagues.length > 0,
-  });
+  const [summaryData, setSummaryData] = useState<any>(null);
+  const [summaryLoading, setSummaryLoading] = useState(false);
+
+  useEffect(() => {
+    if (!isConnected || !user?.userId || leagues.length === 0) return;
+    let cancelled = false;
+    setSummaryLoading(true);
+    import("@/lib/sleeperApi").then(({ fetchPortfolioSummary }) =>
+      fetchPortfolioSummary(user!.userId, leagues)
+    ).then((data) => {
+      if (!cancelled) {
+        setSummaryData(data);
+        setSummaryLoading(false);
+      }
+    }).catch((err) => {
+      console.error("Portfolio summary error:", err);
+      if (!cancelled) setSummaryLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [isConnected, user?.userId, leagues]);
 
   if (!isConnected) {
     return (

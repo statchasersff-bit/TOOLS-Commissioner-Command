@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useCallback, useMemo, useEffect } from "react";
 import type { ValueSourceId, ValueSourceOption, Player, Pick, Team, TeamMetrics } from "../types";
 import { getStaticPickValue } from "../data/pickValues";
+import { getFantasyCalcValues, getFantasyCalcRedraftValues } from "@/lib/fantasycalcApi";
 
 const VALUE_SOURCES: ValueSourceOption[] = [
   { id: "fantasycalc", label: "FantasyCalc", description: "FantasyCalc values update daily. StatChasers caches values once per day.", active: true },
@@ -81,14 +82,8 @@ export function ValueModelProvider({ children }: { children: React.ReactNode }) 
     setIsLoading(true);
 
     Promise.all([
-      fetch("/api/values/fantasycalc?format=sf").then((r) => {
-        if (!r.ok) throw new Error(`Dynasty API error ${r.status}`);
-        return r.json();
-      }),
-      fetch("/api/values/fantasycalc/redraft?format=sf").then((r) => {
-        if (!r.ok) throw new Error(`Redraft API error ${r.status}`);
-        return r.json();
-      }).catch((err) => {
+      getFantasyCalcValues("sf"),
+      getFantasyCalcRedraftValues("sf").catch((err) => {
         console.warn("[ValueModel] Redraft fetch failed, will use dynasty fallback:", err);
         return null;
       }),

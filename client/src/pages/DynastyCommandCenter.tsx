@@ -11,6 +11,7 @@ import { useValueModel } from "@/contexts/ValueModelContext";
 import { useSleeper } from "@/contexts/SleeperContext";
 import { NAV_CONFIG } from "@/data/mockData";
 import type { League, Team } from "@/types";
+import { fetchSleeperLeagueFull } from "@/lib/sleeperApi";
 import { DataDiagnostics } from "@/components/DataDiagnostics";
 import { Share2, Download, LayoutDashboard, Loader2, Lock, Check, User } from "lucide-react";
 import logoDark from "@assets/statchasers_logo_transparent_dark_1772764844282.png";
@@ -88,11 +89,7 @@ export default function DynastyCommandCenter() {
     let cancelled = false;
     setIsLeagueLoading(true);
 
-    fetch(`/api/sleeper/league/${selectedLeagueId}/full?userId=${sleeper.user.userId}`)
-      .then((r) => {
-        if (!r.ok) throw new Error("Failed to fetch league");
-        return r.json();
-      })
+    fetchSleeperLeagueFull(selectedLeagueId, sleeper.user.userId)
       .then((data: { league: League; userTeamId: string | null }) => {
         if (cancelled) return;
         setFetchedLeague(data);

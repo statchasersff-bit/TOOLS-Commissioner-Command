@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useCallback, useEffect } from "react";
 import type { SleeperUser, SleeperLeagueSummary } from "../types";
+import { fetchSleeperUser, fetchSleeperLeagues } from "@/lib/sleeperApi";
 
 const STORAGE_KEY = "sc-sleeper-connection";
 
@@ -34,19 +35,10 @@ export function SleeperProvider({ children }: { children: React.ReactNode }) {
     setError(null);
 
     try {
-      const userRes = await fetch(`/api/sleeper/user/${encodeURIComponent(username)}`);
-      if (!userRes.ok) {
-        const body = await userRes.json().catch(() => ({}));
-        throw new Error(body.error || `User "${username}" not found`);
-      }
-      const userData: SleeperUser = await userRes.json();
+      const userData = await fetchSleeperUser(username);
       setUser(userData);
 
-      const leaguesRes = await fetch(`/api/sleeper/user/${userData.userId}/leagues?season=2026`);
-      if (!leaguesRes.ok) {
-        throw new Error("Failed to fetch leagues");
-      }
-      const leaguesData: SleeperLeagueSummary[] = await leaguesRes.json();
+      const leaguesData = await fetchSleeperLeagues(userData.userId, "2026");
       setLeagues(leaguesData);
       setLastSyncTime(new Date().toISOString());
 

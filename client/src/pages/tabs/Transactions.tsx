@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { SectionHeader } from "@/components/SectionHeader";
 import { useSleeper } from "@/contexts/SleeperContext";
+import { fetchLeagueTransactions as fetchLeagueTransactionsApi } from "@/lib/sleeperApi";
 import { getPositionColor } from "@/data/mockData";
 import { cn } from "@/lib/utils";
 import { ArrowRightLeft, UserPlus, UserMinus, Loader2, RefreshCw, ChevronDown } from "lucide-react";
@@ -49,9 +50,7 @@ export default function Transactions() {
     setIsLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/sleeper/league/${activeLeagueId}/transactions`);
-      if (!res.ok) throw new Error("Failed to fetch transactions");
-      const data = await res.json();
+      const data = await fetchLeagueTransactionsApi(activeLeagueId);
       setTransactions(data.transactions || []);
     } catch (err: any) {
       setError(err.message || "Failed to load transactions");

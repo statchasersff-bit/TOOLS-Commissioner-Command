@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Loader2, Search, RefreshCw, Trophy, Target, Radio, Zap } from "lucide-react";
 import { useValueModel } from "@/contexts/ValueModelContext";
 import { useSleeper } from "@/contexts/SleeperContext";
+import { detectLiveDrafts as detectLiveDraftsApi, fetchDraftBoard as fetchDraftBoardApi } from "@/lib/sleeperApi";
 
 interface DraftPick {
   round: number;
@@ -104,13 +105,8 @@ export default function LiveDraft() {
     setIsDetecting(true);
     setScanError(null);
     try {
-      const res = await fetch(`/api/sleeper/live-drafts/${user.userId}`);
-      if (res.ok) {
-        const data: LiveDraftInfo[] = await res.json();
-        setLiveDrafts(data);
-      } else {
-        setScanError("Failed to scan leagues for live drafts");
-      }
+      const data: LiveDraftInfo[] = await detectLiveDraftsApi(user.userId);
+      setLiveDrafts(data);
     } catch {
       setScanError("Network error while scanning for live drafts");
     }
@@ -139,12 +135,7 @@ export default function LiveDraft() {
     setIsLoading(true);
     setApiError(null);
     try {
-      const res = await fetch(`/api/sleeper/draft/${targetId}`);
-      const data: DraftResponse = await res.json();
-      if (!res.ok) {
-        setApiError((data as any).error || "Failed to fetch draft");
-        return;
-      }
+      const data: DraftResponse = await fetchDraftBoardApi(targetId);
       if (data.error) {
         setApiError(data.error);
         return;

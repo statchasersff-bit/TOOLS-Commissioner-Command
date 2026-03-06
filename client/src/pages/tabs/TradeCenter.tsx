@@ -1,5 +1,4 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,7 +12,6 @@ import { useValueModel } from "@/contexts/ValueModelContext";
 import { useSleeper } from "@/contexts/SleeperContext";
 import { getLeagueTeamTiers, getTierColor, getTierBg, getTierEmoji, getPositionColor, isContenderTier, isRebuilderTier } from "@/data/mockData";
 import { getStaticPickValue } from "@/data/pickValues";
-import { apiRequest } from "@/lib/queryClient";
 import type { League, Team, Tier, Player, Pick, TradeRecord, TradeSide, CrawlStatus } from "@/types";
 import { cn } from "@/lib/utils";
 import { ArrowRightLeft, TrendingUp, TrendingDown, Target, X, Plus, Search, Info, Scale, RotateCcw, Database, Play, Pause, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
@@ -255,239 +253,17 @@ export function TradeFinder({ league, userTeam }: TradeProps) {
   );
 }
 
-interface ValueChange {
-  sleeperId: string;
-  name: string;
-  pos: string;
-  team: string | null;
-  age: number | null;
-  currentValue: number;
-  previousValue: number;
-  change: number;
-  changePct: number;
-}
-
 export function TradeTargets({ league, userTeam }: TradeProps) {
-  const { sourceId } = useValueModel();
-  const format = league.format === "SF" ? "sf" : "1qb";
-
-  const [valueType, setValueType] = useState<"dynasty" | "redraft">("dynasty");
-  const [days, setDays] = useState(30);
-
-  const { data: changes, isLoading } = useQuery<ValueChange[]>({
-    queryKey: ["/api/values/changes", format, valueType, days],
-    queryFn: async () => {
-      const res = await fetch(`/api/values/changes?format=${format}&type=${valueType}&days=${days}`);
-      if (!res.ok) throw new Error("Failed to fetch value changes");
-      return res.json();
-    },
-  });
-
-  const { data: snapshotDates } = useQuery<string[]>({
-    queryKey: ["/api/values/snapshot-dates"],
-    queryFn: async () => {
-      const res = await fetch("/api/values/snapshot-dates");
-      if (!res.ok) throw new Error("Failed to fetch snapshot dates");
-      return res.json();
-    },
-  });
-
-  const leagueSleeperIds = useMemo(() => {
-    const ids = new Set<string>();
-    league.teams.forEach(t => {
-      t.roster.forEach(p => {
-        if (p.sleeperId) ids.add(p.sleeperId);
-      });
-    });
-    return ids;
-  }, [league]);
-
-  const ownerMap = useMemo(() => {
-    const map = new Map<string, string>();
-    league.teams.forEach(t => {
-      t.roster.forEach(p => {
-        if (p.sleeperId) map.set(p.sleeperId, t.id === userTeam.id ? "Your Team" : t.owner);
-      });
-    });
-    return map;
-  }, [league, userTeam]);
-
-  const { buyLow, sellHigh } = useMemo(() => {
-    if (!changes || changes.length === 0) return { buyLow: [], sellHigh: [] };
-
-    const relevantChanges = changes.filter(c => c.currentValue >= 500);
-
-    const buyLow = relevantChanges
-      .filter(c => c.change < 0)
-      .sort((a, b) => a.change - b.change)
-      .slice(0, 15)
-      .map(c => ({
-        ...c,
-        inLeague: leagueSleeperIds.has(c.sleeperId),
-        owner: ownerMap.get(c.sleeperId) || null,
-      }));
-
-    const sellHigh = relevantChanges
-      .filter(c => c.change > 0)
-      .sort((a, b) => b.change - a.change)
-      .slice(0, 15)
-      .map(c => ({
-        ...c,
-        inLeague: leagueSleeperIds.has(c.sleeperId),
-        owner: ownerMap.get(c.sleeperId) || null,
-      }));
-
-    return { buyLow, sellHigh };
-  }, [changes, leagueSleeperIds, ownerMap]);
-
-  const dateCount = snapshotDates?.length || 0;
-  const hasMultipleSnapshots = dateCount >= 2;
-
-  const renderPlayerRow = (p: ValueChange & { inLeague: boolean; owner: string | null }, idx: number, isBuyLow: boolean) => (
-    <div
-      key={p.sleeperId}
-      className={cn(
-        "flex items-center justify-between py-2.5 border-b border-border/20 last:border-0",
-        p.inLeague && "bg-blue-50/50 dark:bg-blue-950/20"
-      )}
-      data-testid={`${isBuyLow ? "buy-low" : "sell-high"}-${p.sleeperId}`}
-    >
-      <div className="flex items-center gap-2 min-w-0">
-        <span className="text-xs text-muted-foreground w-5 text-right">{idx + 1}.</span>
-        <Badge variant="outline" className={`text-xs w-8 justify-center flex-shrink-0 ${getPositionColor(p.pos)}`}>{p.pos}</Badge>
-        <div className="min-w-0">
-          <p className="text-sm font-semibold truncate">{p.name}</p>
-          <div className="flex items-center gap-1.5">
-            {p.team && <span className="text-[10px] text-muted-foreground">{p.team}</span>}
-            {p.age && <span className="text-[10px] text-muted-foreground">· Age {p.age}</span>}
-            {p.inLeague && p.owner && (
-              <span className={cn("text-[10px] font-medium", p.owner === "Your Team" ? "text-[#0b3a7a] dark:text-blue-400" : "text-muted-foreground")}>
-                · {p.owner}
-              </span>
-            )}
-          </div>
-        </div>
-      </div>
-      <div className="flex items-center gap-2 flex-shrink-0">
-        <div className="text-right">
-          <p className="text-sm font-bold">{p.currentValue.toLocaleString()}</p>
-          <p className="text-[10px] text-muted-foreground">was {p.previousValue.toLocaleString()}</p>
-        </div>
-        <Badge
-          variant={isBuyLow ? "outline" : "secondary"}
-          className={cn(
-            "text-xs min-w-[52px] justify-center",
-            isBuyLow
-              ? "text-red-600 dark:text-red-400 border-red-300 dark:border-red-800"
-              : "text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30"
-          )}
-          data-testid={`badge-change-${p.sleeperId}`}
-        >
-          {p.change > 0 ? "+" : ""}{p.change.toLocaleString()}
-        </Badge>
-      </div>
-    </div>
-  );
-
   return (
     <div className="space-y-8">
       <SectionHeader title="Trade Targets" subtitle="Buy-low and sell-high opportunities based on value trends" />
-
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-semibold text-muted-foreground">Value Type:</span>
-          <div className="flex rounded-md border border-border overflow-hidden">
-            <button
-              onClick={() => setValueType("dynasty")}
-              className={cn("px-3 py-1.5 text-xs font-semibold transition-colors", valueType === "dynasty" ? "bg-[#0b3a7a] text-white" : "hover:bg-muted/50")}
-              data-testid="button-dynasty-values"
-            >
-              Dynasty
-            </button>
-            <button
-              onClick={() => setValueType("redraft")}
-              className={cn("px-3 py-1.5 text-xs font-semibold transition-colors", valueType === "redraft" ? "bg-[#0b3a7a] text-white" : "hover:bg-muted/50")}
-              data-testid="button-redraft-values"
-            >
-              Redraft
-            </button>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-semibold text-muted-foreground">Period:</span>
-          <Select value={String(days)} onValueChange={(v) => setDays(Number(v))}>
-            <SelectTrigger className="w-[100px] h-8 text-xs" data-testid="select-days">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="7">7 days</SelectItem>
-              <SelectItem value="14">14 days</SelectItem>
-              <SelectItem value="30">30 days</SelectItem>
-              <SelectItem value="60">60 days</SelectItem>
-              <SelectItem value="90">90 days</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        {snapshotDates && (
-          <span className="text-[10px] text-muted-foreground">
-            {dateCount} snapshot{dateCount !== 1 ? "s" : ""} available
-            {dateCount > 0 && ` (${snapshotDates[snapshotDates.length - 1]} — ${snapshotDates[0]})`}
-          </span>
-        )}
-      </div>
-
-      {isLoading && (
-        <Card className="p-8 text-center">
-          <Loader2 className="w-6 h-6 animate-spin text-[#0b3a7a] mx-auto mb-3" />
-          <p className="text-sm text-muted-foreground">Loading value changes...</p>
-        </Card>
-      )}
-
-      {!isLoading && !hasMultipleSnapshots && (
-        <Card className="p-8 text-center" data-testid="snapshot-notice">
-          <Info className="w-6 h-6 text-[#0b3a7a] mx-auto mb-3" />
-          <p className="text-sm font-semibold mb-1">Building Value History</p>
-          <p className="text-xs text-muted-foreground max-w-md mx-auto">
-            Player values are captured daily. Once we have at least 2 snapshots, you'll see buy-low and sell-high opportunities based on value changes.
-            {dateCount === 1 && " First snapshot captured today — check back tomorrow!"}
-            {dateCount === 0 && " The first snapshot will be captured shortly."}
-          </p>
-        </Card>
-      )}
-
-      {!isLoading && hasMultipleSnapshots && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-          <Card className="p-6" data-testid="card-buy-low">
-            <div className="mb-5">
-              <h3 className="text-base font-bold flex items-center gap-2">
-                <TrendingDown className="w-4 h-4 text-emerald-500" />
-                Buy Low
-              </h3>
-              <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
-              <p className="text-[10px] text-muted-foreground mt-2">Players whose {valueType} value dropped the most — potential bargains</p>
-            </div>
-            <div className="space-y-0">
-              {buyLow.length === 0 && <p className="text-xs text-muted-foreground">No significant value drops found</p>}
-              {buyLow.map((p, i) => renderPlayerRow(p, i, true))}
-            </div>
-          </Card>
-
-          <Card className="p-6" data-testid="card-sell-high">
-            <div className="mb-5">
-              <h3 className="text-base font-bold flex items-center gap-2">
-                <TrendingUp className="w-4 h-4 text-red-500" />
-                Sell High
-              </h3>
-              <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
-              <p className="text-[10px] text-muted-foreground mt-2">Players whose {valueType} value surged the most — consider cashing in</p>
-            </div>
-            <div className="space-y-0">
-              {sellHigh.length === 0 && <p className="text-xs text-muted-foreground">No significant value rises found</p>}
-              {sellHigh.map((p, i) => renderPlayerRow(p, i, false))}
-            </div>
-          </Card>
-        </div>
-      )}
+      <Card className="p-8 text-center" data-testid="snapshot-notice">
+        <Info className="w-6 h-6 text-[#0b3a7a] mx-auto mb-3" />
+        <p className="text-sm font-semibold mb-1">Coming Soon</p>
+        <p className="text-xs text-muted-foreground max-w-md mx-auto">
+          Value trend tracking is being migrated to a new architecture. Buy-low and sell-high trade targets will return in a future update.
+        </p>
+      </Card>
     </div>
   );
 }
@@ -509,26 +285,26 @@ function CrossLeagueTradeIntel({ league }: { league: League }) {
 
   const selectedTeam = league.teams.find(t => t.id === selectedTeamId);
 
-  const mutation = useMutation({
-    mutationFn: async () => {
-      if (!selectedTeam?.ownerId) throw new Error("No owner ID available");
-      const rosterPlayerIds = selectedTeam.roster.map(p => p.sleeperId).filter(Boolean);
-      const res = await apiRequest("POST", "/api/sleeper/cross-league-trades", {
-        userId: selectedTeam.ownerId,
-        currentLeagueId: league.id,
-        rosterPlayerIds,
-      });
-      return res.json();
-    },
-    onSuccess: (data) => setResults(data),
-  });
+  const [isScanning, setIsScanning] = useState(false);
+  const [scanError, setScanError] = useState<string | null>(null);
 
   const canAnalyze = !!selectedTeam?.ownerId && selectedTeam.roster.length > 0;
 
-  const handleAnalyze = () => {
-    if (!selectedTeamId || !canAnalyze) return;
+  const handleAnalyze = async () => {
+    if (!selectedTeamId || !canAnalyze || !selectedTeam?.ownerId) return;
     setResults(null);
-    mutation.mutate();
+    setIsScanning(true);
+    setScanError(null);
+    try {
+      const { fetchCrossLeagueTrades } = await import("@/lib/sleeperApi");
+      const rosterPlayerIds = selectedTeam.roster.map(p => p.sleeperId).filter(Boolean);
+      const data = await fetchCrossLeagueTrades(selectedTeam.ownerId, league.id, rosterPlayerIds);
+      setResults(data);
+    } catch (err: any) {
+      setScanError(err.message || "Failed to scan cross-league trades");
+    } finally {
+      setIsScanning(false);
+    }
   };
 
   return (
@@ -559,12 +335,12 @@ function CrossLeagueTradeIntel({ league }: { league: League }) {
         </Select>
         <Button
           onClick={handleAnalyze}
-          disabled={!selectedTeamId || !canAnalyze || mutation.isPending}
+          disabled={!selectedTeamId || !canAnalyze || isScanning}
           size="sm"
           variant="default"
           data-testid="button-analyze-cross-league"
         >
-          {mutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Search className="w-4 h-4 mr-1" />}
+          {isScanning ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Search className="w-4 h-4 mr-1" />}
           Analyze
         </Button>
       </div>
@@ -573,18 +349,18 @@ function CrossLeagueTradeIntel({ league }: { league: League }) {
         <p className="text-xs text-muted-foreground mb-3">This team has no linked Sleeper account — cross-league analysis unavailable.</p>
       )}
 
-      {mutation.isPending && (
+      {isScanning && (
         <div className="text-center py-6">
           <Loader2 className="w-6 h-6 animate-spin text-[#0b3a7a] mx-auto mb-2" />
           <p className="text-xs text-muted-foreground">Scanning {selectedTeam?.owner}'s other leagues... This may take a minute.</p>
         </div>
       )}
 
-      {mutation.isError && (
-        <p className="text-xs text-red-500" data-testid="text-cross-league-error">Failed to scan leagues. Please try again.</p>
+      {scanError && (
+        <p className="text-xs text-red-500" data-testid="text-cross-league-error">{scanError}</p>
       )}
 
-      {results && !mutation.isPending && (
+      {results && !isScanning && (
         <div data-testid="cross-league-results">
           <p className="text-[10px] text-muted-foreground mb-3">
             Scanned {results.leaguesScanned} other dynasty league{results.leaguesScanned !== 1 ? "s" : ""}
@@ -860,7 +636,7 @@ interface TradeCalculatorProps {
 }
 
 export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
-  const { getPlayerValue, valuesBySleeperId } = useValueModel();
+  const { getPlayerValue, getRedraftValue, optimizeLineup, valuesBySleeperId } = useValueModel();
   const [sideA, setSideA] = useState<TradeAsset[]>([]);
   const [sideB, setSideB] = useState<TradeAsset[]>([]);
   const [valueAdjustment, setValueAdjustment] = useState(true);
