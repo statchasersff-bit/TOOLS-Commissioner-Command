@@ -1123,7 +1123,6 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
                       {posPlayers.map((p) => {
                         const pid = p.sleeperId || p.id;
                         const isAdded = addedPlayerIds.has(pid);
-                        const val = getPlayerValue(p);
                         return (
                           <button
                             key={pid}
@@ -1138,7 +1137,6 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
                             data-testid={`button-roster-player-${side}-${pid}`}
                           >
                             <span className={cn("truncate text-[11px] font-medium", isAdded && "line-through")}>{p.name}</span>
-                            <span className="text-[9px] text-muted-foreground">{val > 0 ? val.toLocaleString() : "-"}</span>
                           </button>
                         );
                       })}
