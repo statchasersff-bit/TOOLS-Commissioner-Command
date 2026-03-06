@@ -73,10 +73,22 @@ export function ValueSourceSelector() {
   );
 }
 
+function formatValuesDate(iso: string): string {
+  if (!iso || iso === "snapshot" || iso === "fetch-failed") return "";
+  try {
+    const d = new Date(iso);
+    return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  } catch {
+    return "";
+  }
+}
+
 export function ValueAttribution() {
-  const { sourceId, isLoading, isSnapshot, unmatchedCount } = useValueModel();
+  const { sourceId, isLoading, unmatchedCount, diagnostics } = useValueModel();
 
   if (sourceId !== "fantasycalc") return null;
+
+  const dateStr = formatValuesDate(diagnostics.updatedAt);
 
   return (
     <div className="flex items-center gap-2 text-[10px] text-muted-foreground" data-testid="text-value-attribution">
@@ -98,12 +110,8 @@ export function ValueAttribution() {
             >
               FantasyCalc.com
             </a>
+            {dateStr && <> · Updated {dateStr}</>}
           </span>
-          {isSnapshot && (
-            <span className="bg-amber-500/12 text-amber-700 dark:text-amber-400 border border-amber-500/15 dark:border-amber-400/20 px-1.5 py-0.5 rounded-full text-[9px] font-semibold" data-testid="badge-snapshot-warning">
-              Snapshot
-            </span>
-          )}
           {unmatchedCount > 0 && (
             <span className="bg-orange-500/12 text-orange-700 dark:text-orange-400 border border-orange-500/15 dark:border-orange-400/20 px-1.5 py-0.5 rounded-full text-[9px] font-semibold" data-testid="badge-unmatched-warning">
               {unmatchedCount} unmapped

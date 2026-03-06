@@ -53,15 +53,6 @@ function getInitialState() {
   };
 }
 
-function formatTimeAgo(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "Just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  return `${Math.floor(hrs / 24)}d ago`;
-}
 
 export default function DynastyCommandCenter() {
   const initial = getInitialState();
@@ -362,11 +353,6 @@ export default function DynastyCommandCenter() {
           </div>
 
           <div className="flex items-center justify-end gap-2 mt-1">
-            {sleeper.isConnected && sleeper.lastSyncTime && (
-              <Badge variant="outline" className="text-[9px] md:text-[10px] font-medium" data-testid="badge-sync-status">
-                Sleeper synced {formatTimeAgo(sleeper.lastSyncTime)}
-              </Badge>
-            )}
             <ValueAttribution />
           </div>
         </div>
