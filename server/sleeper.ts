@@ -811,3 +811,105 @@ export async function fetchCrossLeagueTrades(
 
   return { trades: results, leaguesScanned: otherLeagues.slice(0, 8).length };
 }
+
+export async function fetchLeagueTransactions(leagueId: string) {
+  const players = await getSleeperPlayers();
+  const [leagueRaw, rostersRaw, usersRaw] = await Promise.all([
+    fetchJson<SleeperLeagueRaw>(`${SLEEPER_API}/league/${leagueId}`),
+    fetchJson<SleeperRosterRaw[]>(`${SLEEPER_API}/league/${leagueId}/rosters`),
+    fetchJson<SleeperLeagueUserRaw[]>(`${SLEEPER_API}/league/${leagueId}/users`),
+  ]);
+
+  const rosterOwnerMap = new Map<number, string>();
+  const ownerNameMap = new Map<string, string>();
+  for (const u of usersRaw) {
+    ownerNameMap.set(u.user_id, u.metadata?.team_name || u.display_name || u.user_id);
+  }
+  for (const r of rostersRaw) {
+    rosterOwnerMap.set(r.roster_id, ownerNameMap.get(r.owner_id) || `Team ${r.roster_id}`);
+  }
+
+  const totalWeeks = 18;
+  const allTransactions: any[] = [];
+
+  const weekPromises = [];
+  for (let week = 1; week <= totalWeeks; week++) {
+    weekPromises.push(
+      fetchJson<any[]>(`${SLEEPER_API}/league/${leagueId}/transactions/${week}`)
+        .then(txns => txns.map((t: any) => ({ ...t, week })))
+        .catch(() => [])
+    );
+  }
+  const weekResults = await Promise.all(weekPromises);
+  for (const txns of weekResults) {
+    allTransactions.push(...txns);
+  }
+
+  allTransactions.sort((a, b) => (b.status_updated || 0) - (a.status_updated || 0));
+
+  const formatted = allTransactions
+    .filter((t: any) => t.status === "complete")
+    .map((t: any) => {
+      const type: string = t.type;
+      const timestamp = t.status_updated || t.created;
+      const week = t.week;
+
+      const adds: Array<{ playerId: string; name: string; pos: string; team: string; rosterId: number; teamName: string }> = [];
+      const drops: Array<{ playerId: string; name: string; pos: string; team: string; rosterId: number; teamName: string }> = [];
+      const draftPicks: Array<{ season: string; round: number; fromTeam: string; toTeam: string }> = [];
+
+      if (t.adds) {
+        for (const [pid, rid] of Object.entries(t.adds)) {
+          const p = players[pid];
+          adds.push({
+            playerId: pid,
+            name: p?.full_name || pid,
+            pos: p?.position || "?",
+            team: p?.team || "FA",
+            rosterId: rid as number,
+            teamName: rosterOwnerMap.get(rid as number) || `Team ${rid}`,
+          });
+        }
+      }
+
+      if (t.drops) {
+        for (const [pid, rid] of Object.entries(t.drops)) {
+          const p = players[pid];
+          drops.push({
+            playerId: pid,
+            name: p?.full_name || pid,
+            pos: p?.position || "?",
+            team: p?.team || "FA",
+            rosterId: rid as number,
+            teamName: rosterOwnerMap.get(rid as number) || `Team ${rid}`,
+          });
+        }
+      }
+
+      if (t.draft_picks && Array.isArray(t.draft_picks)) {
+        for (const dp of t.draft_picks) {
+          draftPicks.push({
+            season: dp.season,
+            round: dp.round,
+            fromTeam: rosterOwnerMap.get(dp.previous_owner_id) || `Team ${dp.previous_owner_id}`,
+            toTeam: rosterOwnerMap.get(dp.owner_id) || `Team ${dp.owner_id}`,
+          });
+        }
+      }
+
+      const rosterIds = new Set<number>();
+      if (t.roster_ids) t.roster_ids.forEach((r: number) => rosterIds.add(r));
+      const involvedTeams = [...rosterIds].map(rid => ({
+        rosterId: rid,
+        teamName: rosterOwnerMap.get(rid) || `Team ${rid}`,
+      }));
+
+      return { type, timestamp, week, adds, drops, draftPicks, involvedTeams };
+    });
+
+  return {
+    transactions: formatted,
+    leagueName: leagueRaw.name,
+    totalRosters: leagueRaw.total_rosters,
+  };
+}

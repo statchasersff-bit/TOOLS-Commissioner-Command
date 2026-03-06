@@ -9,6 +9,7 @@ import {
   fetchCrossLeagueTrades,
   fetchDraftBoard,
   detectLiveDrafts,
+  fetchLeagueTransactions,
 } from "./sleeper";
 import {
   startCrawl,
@@ -124,6 +125,17 @@ export async function registerRoutes(
     } catch (err: any) {
       console.error("Live draft detection error:", err);
       res.status(500).json({ error: err.message || "Failed to detect live drafts" });
+    }
+  });
+
+  app.get("/api/sleeper/league/:leagueId/transactions", async (req, res) => {
+    try {
+      const { leagueId } = req.params;
+      const result = await fetchLeagueTransactions(leagueId);
+      res.json(result);
+    } catch (err: any) {
+      console.error("Transactions fetch error:", err);
+      res.status(500).json({ error: err.message || "Failed to fetch transactions" });
     }
   });
 

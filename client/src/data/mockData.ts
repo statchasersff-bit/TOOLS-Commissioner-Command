@@ -371,6 +371,7 @@ export const NAV_CONFIG: MainTabConfig[] = [
       { id: "roster-comparison", label: "Roster Comparison" },
       { id: "league-intelligence", label: "League Intelligence" },
       { id: "league-economy", label: "League Economy" },
+      { id: "transactions", label: "Transactions" },
     ],
   },
   {
