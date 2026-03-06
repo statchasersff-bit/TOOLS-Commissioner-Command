@@ -7,17 +7,16 @@ import { useValueModel } from "@/contexts/ValueModelContext";
 import type { League, Team, Tier } from "@/types";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
-  TrendingUp, TrendingDown, Target, Crosshair,
+  TrendingUp, TrendingDown, Crosshair,
   Crown, Rocket, Skull, HelpCircle, Package, BarChart3,
   Activity, Users, Zap, AlertTriangle
 } from "lucide-react";
 
-type EconomySection = "overview" | "picks" | "scarcity" | "liquidity";
+type EconomySection = "overview" | "picks" | "liquidity";
 
 const SECTION_TABS: { id: EconomySection; label: string; icon: typeof BarChart3 }[] = [
   { id: "overview", label: "Economy Overview", icon: BarChart3 },
   { id: "picks", label: "Pick Concentration", icon: Package },
-  { id: "scarcity", label: "Positional Scarcity", icon: Target },
   { id: "liquidity", label: "Trade Liquidity", icon: Activity },
 ];
 
@@ -286,93 +285,6 @@ function PickConcentration({ league }: { league: League }) {
 type PosKey = "QB" | "RB" | "WR" | "TE";
 const POSITIONS: PosKey[] = ["QB", "RB", "WR", "TE"];
 
-function PositionalScarcity({ league }: { league: League }) {
-  const { getPlayerValue } = useValueModel();
-
-  const scarcityData = useMemo(() => {
-    return POSITIONS.map(pos => {
-      const teamValues = league.teams.map(team => {
-        const posPlayers = team.roster.filter(p => p.pos === pos);
-        const sorted = [...posPlayers].map(p => ({ ...p, val: getPlayerValue(p) })).sort((a, b) => b.val - a.val);
-        const starterCount = pos === "QB" ? 1 : pos === "RB" ? 2 : pos === "WR" ? 3 : 1;
-        const starterValue = sorted.slice(0, starterCount).reduce((s, p) => s + p.val, 0);
-        return { team, starterValue, total: sorted.reduce((s, p) => s + p.val, 0) };
-      });
-
-      const sorted = [...teamValues].sort((a, b) => b.starterValue - a.starterValue);
-      const top3Sum = sorted.slice(0, 3).reduce((s, t) => s + t.starterValue, 0);
-      const bot3Sum = sorted.slice(-3).reduce((s, t) => s + t.starterValue, 0);
-      const ratio = bot3Sum > 0 ? top3Sum / bot3Sum : 10;
-      const level = ratio >= 1.8 ? "High" as const : ratio >= 1.3 ? "Medium" as const : "Low" as const;
-
-      const surplusTeams = sorted.slice(0, Math.ceil(sorted.length / 3)).map(t => t.team.owner);
-      const needTeams = sorted.slice(-Math.ceil(sorted.length / 3)).map(t => t.team.owner);
-
-      return { pos, ratio: Math.round(ratio * 100) / 100, level, surplusTeams, needTeams };
-    });
-  }, [league.teams, getPlayerValue]);
-
-  const scarcityColor = (level: "High" | "Medium" | "Low") => {
-    switch (level) {
-      case "High": return "bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-400 border-red-300 dark:border-red-700";
-      case "Medium": return "bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-400 border-yellow-300 dark:border-yellow-700";
-      case "Low": return "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 border-emerald-300 dark:border-emerald-700";
-    }
-  };
-
-  const posColor = (pos: string) => {
-    switch (pos) {
-      case "QB": return "text-red-600 dark:text-red-400";
-      case "RB": return "text-emerald-600 dark:text-emerald-400";
-      case "WR": return "text-blue-600 dark:text-blue-400";
-      case "TE": return "text-yellow-600 dark:text-yellow-400";
-      default: return "";
-    }
-  };
-
-  return (
-    <div className="space-y-5">
-      <div>
-        <h3 className="text-base font-bold text-foreground">Positional Scarcity Index</h3>
-        <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
-        <p className="text-xs text-muted-foreground mt-2">How concentrated top talent is at each position</p>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4" data-testid="scarcity-cards">
-        {scarcityData.map(({ pos, ratio, level, surplusTeams, needTeams }) => (
-          <Card key={pos} className="p-4 rounded-2xl" data-testid={`scarcity-${pos}`}>
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <span className={`text-lg font-black ${posColor(pos)}`}>{pos}</span>
-                <span className="text-xs text-muted-foreground">Scarcity</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Badge variant="outline" className={scarcityColor(level)}>{level}</Badge>
-                <span className="text-xs font-mono text-muted-foreground">{ratio}x</span>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <p className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-1">Surplus</p>
-                {surplusTeams.map(name => (
-                  <p key={name} className="text-xs text-muted-foreground truncate">{name}</p>
-                ))}
-              </div>
-              <div>
-                <p className="text-[10px] font-bold text-red-600 dark:text-red-400 uppercase tracking-wider mb-1">Need</p>
-                {needTeams.map(name => (
-                  <p key={name} className="text-xs text-muted-foreground truncate">{name}</p>
-                ))}
-              </div>
-            </div>
-          </Card>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 function TradeLiquidity({ league }: { league: League }) {
   const tierMap = useMemo(() => getLeagueTeamTiers(league.teams), [league.teams]);
 
@@ -514,7 +426,6 @@ export function LeagueEconomy({ league }: { league: League }) {
 
       {activeSection === "overview" && <EconomyOverview league={league} />}
       {activeSection === "picks" && <PickConcentration league={league} />}
-      {activeSection === "scarcity" && <PositionalScarcity league={league} />}
       {activeSection === "liquidity" && <TradeLiquidity league={league} />}
     </div>
   );
