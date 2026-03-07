@@ -1161,6 +1161,12 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
               const compact = maxCount > 4;
               const imgSize = compact ? "w-9 h-9 sm:w-11 sm:h-11" : "w-11 h-11 sm:w-14 sm:h-14";
               const overlap = compact ? "-space-x-2.5" : "-space-x-3";
+              const posBorder: Record<string, string> = {
+                QB: "border-red-500",
+                RB: "border-emerald-500",
+                WR: "border-blue-500",
+                TE: "border-yellow-500",
+              };
 
               return (
                 <div className="flex items-center justify-between gap-2 px-2">
@@ -1169,7 +1175,7 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
                       {playersA.map((a, i) => (
                         <div
                           key={a.id}
-                          className={`relative ${imgSize} rounded-full border-2 border-[#0b3a7a] dark:border-blue-400 overflow-hidden bg-muted/30 shadow-md`}
+                          className={`relative ${imgSize} rounded-full border-2 ${posBorder[a.player?.pos || ""] || "border-muted-foreground"} overflow-hidden bg-muted/30 shadow-md`}
                           style={{ zIndex: 20 - i }}
                         >
                           <img
@@ -1200,7 +1206,7 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
                       {playersB.map((a, i) => (
                         <div
                           key={a.id}
-                          className={`relative ${imgSize} rounded-full border-2 border-[#d4af37] overflow-hidden bg-muted/30 shadow-md`}
+                          className={`relative ${imgSize} rounded-full border-2 ${posBorder[a.player?.pos || ""] || "border-muted-foreground"} overflow-hidden bg-muted/30 shadow-md`}
                           style={{ zIndex: 20 - i }}
                         >
                           <img
