@@ -1238,7 +1238,7 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
 
             {diffPct > 12 && (
               <p className="text-xs text-center text-muted-foreground" data-testid="text-counter-suggestion">
-                Add ~{Math.round(diff).toLocaleString()} value to {loserSide === "a" ? (sideATeam?.owner || "Side A") : (sideBTeam?.owner || "Side B")} to balance this trade
+                {loserSide === "A" ? (sideATeam?.owner || "Side A") : (sideBTeam?.owner || "Side B")} needs to add ~{Math.round(diff).toLocaleString()} in value to make this fair
               </p>
             )}
           </div>
