@@ -794,10 +794,11 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
   }, [finalA, finalB]);
 
   const getVerdictLabel = (pct: number): string => {
+    const winner = winnerSide === "A" ? (sideATeam?.owner || "Side A") : (sideBTeam?.owner || "Side B");
     if (diffPct <= 4) return "Dead Even";
-    if (diffPct <= 9) return `Slight Edge: Side ${winnerSide}`;
-    if (diffPct <= 19) return `Clear Win for Side ${winnerSide}`;
-    return `Major Win for Side ${winnerSide}`;
+    if (diffPct <= 9) return `Slight Edge: ${winner}`;
+    if (diffPct <= 19) return `Clear Win for ${winner}`;
+    return `Major Win for ${winner}`;
   };
 
   const getVerdictStyle = (pct: number): string => {
