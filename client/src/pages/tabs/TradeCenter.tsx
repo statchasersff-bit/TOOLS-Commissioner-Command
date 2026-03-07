@@ -1151,6 +1151,64 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
               </Badge>
             </div>
 
+            <div className="flex items-center justify-between gap-2 px-2">
+              <div className="flex-1 flex flex-col items-center gap-2">
+                <div className="flex items-center -space-x-3">
+                  {sideA.filter(a => a.type === "player" && a.player?.sleeperId).slice(0, 4).map((a, i) => (
+                    <div
+                      key={a.id}
+                      className="relative w-11 h-11 sm:w-14 sm:h-14 rounded-full border-2 border-[#0b3a7a] dark:border-blue-400 overflow-hidden bg-muted/30 shadow-md"
+                      style={{ zIndex: 10 - i }}
+                    >
+                      <img
+                        src={`https://sleepercdn.com/content/nfl/players/${a.player!.sleeperId}.jpg`}
+                        alt={a.label}
+                        className="w-full h-full object-cover"
+                        onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                      />
+                    </div>
+                  ))}
+                  {sideA.filter(a => a.type === "pick").length > 0 && (
+                    <div className="relative w-11 h-11 sm:w-14 sm:h-14 rounded-full border-2 border-[#d4af37]/60 bg-[#0b3a7a]/10 dark:bg-[#d4af37]/10 shadow-md flex items-center justify-center" style={{ zIndex: 5 }}>
+                      <span className="text-[9px] sm:text-[10px] font-bold text-[#d4af37]">{sideA.filter(a => a.type === "pick").length} PK</span>
+                    </div>
+                  )}
+                </div>
+                <p className="text-[10px] font-bold text-muted-foreground truncate max-w-[120px]">{sideATeam?.owner || "Side A"}</p>
+              </div>
+
+              <div className="flex-shrink-0 px-2">
+                <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-gradient-to-br from-[#0b3a7a] to-[#d4af37] flex items-center justify-center shadow-lg">
+                  <ArrowRightLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-white" />
+                </div>
+              </div>
+
+              <div className="flex-1 flex flex-col items-center gap-2">
+                <div className="flex items-center -space-x-3">
+                  {sideB.filter(a => a.type === "player" && a.player?.sleeperId).slice(0, 4).map((a, i) => (
+                    <div
+                      key={a.id}
+                      className="relative w-11 h-11 sm:w-14 sm:h-14 rounded-full border-2 border-[#d4af37] overflow-hidden bg-muted/30 shadow-md"
+                      style={{ zIndex: 10 - i }}
+                    >
+                      <img
+                        src={`https://sleepercdn.com/content/nfl/players/${a.player!.sleeperId}.jpg`}
+                        alt={a.label}
+                        className="w-full h-full object-cover"
+                        onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                      />
+                    </div>
+                  ))}
+                  {sideB.filter(a => a.type === "pick").length > 0 && (
+                    <div className="relative w-11 h-11 sm:w-14 sm:h-14 rounded-full border-2 border-[#d4af37]/60 bg-[#0b3a7a]/10 dark:bg-[#d4af37]/10 shadow-md flex items-center justify-center" style={{ zIndex: 5 }}>
+                      <span className="text-[9px] sm:text-[10px] font-bold text-[#d4af37]">{sideB.filter(a => a.type === "pick").length} PK</span>
+                    </div>
+                  )}
+                </div>
+                <p className="text-[10px] font-bold text-muted-foreground truncate max-w-[120px]">{sideBTeam?.owner || "Side B"}</p>
+              </div>
+            </div>
+
             <div className="grid grid-cols-3 gap-3 text-center">
               <div className="p-3 rounded-lg bg-muted/20 dark:bg-muted/10 border border-border/20">
                 <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">{sideATeam?.owner || "Side A"}</p>
