@@ -1116,8 +1116,8 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
           <div className="space-y-5">
             <div className="relative px-1">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Side B Wins</span>
-                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Side A Wins</span>
+                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">{sideBTeam?.owner || "Side B"} Wins</span>
+                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">{sideATeam?.owner || "Side A"} Wins</span>
               </div>
 
               <div className="relative h-3 rounded-full overflow-hidden" style={{ background: "linear-gradient(90deg, #dfe5ee 0%, #dfe5ee 100%)" }}>
@@ -1153,7 +1153,7 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
 
             <div className="grid grid-cols-3 gap-3 text-center">
               <div className="p-3 rounded-lg bg-muted/20 dark:bg-muted/10 border border-border/20">
-                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Side A</p>
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">{sideATeam?.owner || "Side A"}</p>
                 <p className="text-lg font-bold text-foreground" data-testid="text-analysis-final-a">{Math.round(finalA).toLocaleString()}</p>
                 {valueAdjustment && rawA !== finalA && (
                   <p className="text-[10px] text-muted-foreground/60 mt-0.5">raw {rawA.toLocaleString()}</p>
@@ -1169,7 +1169,7 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
                 )}
               </div>
               <div className="p-3 rounded-lg bg-muted/20 dark:bg-muted/10 border border-border/20">
-                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Side B</p>
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">{sideBTeam?.owner || "Side B"}</p>
                 <p className="text-lg font-bold text-foreground" data-testid="text-analysis-final-b">{Math.round(finalB).toLocaleString()}</p>
                 {valueAdjustment && rawB !== finalB && (
                   <p className="text-[10px] text-muted-foreground/60 mt-0.5">raw {rawB.toLocaleString()}</p>
@@ -1179,7 +1179,7 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
 
             {diffPct > 12 && (
               <p className="text-xs text-center text-muted-foreground" data-testid="text-counter-suggestion">
-                Add ~{Math.round(diff).toLocaleString()} value to Side {loserSide} to balance this trade
+                Add ~{Math.round(diff).toLocaleString()} value to {loserSide === "a" ? (sideATeam?.owner || "Side A") : (sideBTeam?.owner || "Side B")} to balance this trade
               </p>
             )}
           </div>
