@@ -238,68 +238,66 @@ export function DashboardOverview({ league, userTeam, onNavigate }: DashboardOve
         )}
       </div>
 
-      <Card className="p-6" data-testid="archetype-card">
-        <div className="flex flex-col md:flex-row md:items-center gap-5">
-          <div className="flex-1">
-            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Archetype</p>
-            <div className="flex items-center gap-3 mb-2">
-              <Badge className={`text-lg font-bold px-4 py-1 border ${getTierBadgeClasses(tier)}`} data-testid="archetype-badge">
-                {tier}
-              </Badge>
-            </div>
-            <p className="text-sm text-muted-foreground leading-relaxed max-w-lg" data-testid="archetype-description">
-              {tierDescription}
-            </p>
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4" data-testid="overview-top-row">
+        <Card className="p-5 lg:col-span-4" data-testid="archetype-card">
+          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Archetype</p>
+          <div className="flex items-center gap-3 mb-2">
+            <Badge className={`text-lg font-bold px-4 py-1 border ${getTierBadgeClasses(tier)}`} data-testid="archetype-badge">
+              {tier}
+            </Badge>
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-3 flex-shrink-0">
-            <SnapshotStat
-              label="Power Rank"
-              value={`#${rank} / ${total}`}
-              context={getPercentileLabel(rank, total)}
-              contextColor={getPercentileColor(rank, total)}
-              icon={Trophy}
-              testId="snapshot-power-rank"
-            />
-            <SnapshotStat
-              label="Playoff Odds"
-              value={seasonStarted ? `${clampedOdds}%` : "--"}
-              context={seasonStarted ? (clampedOdds >= 60 ? "Strong outlook" : clampedOdds >= 40 ? "On the bubble" : "Long shot") : "Preseason \u2013 Not available"}
-              contextColor={!seasonStarted ? "text-muted-foreground" : clampedOdds >= 60 ? "text-emerald-600 dark:text-emerald-400" : clampedOdds >= 40 ? "text-amber-600 dark:text-amber-400" : "text-red-500 dark:text-red-400"}
-              icon={Target}
-              testId="snapshot-playoff-odds"
-            />
-            <SnapshotStat
-              label="Avg Starter Age"
-              value={avgAge}
-              context={`Lg avg: ${leagueAvgAge}`}
-              contextColor={Number(avgAge) < Number(leagueAvgAge) ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"}
-              icon={Calendar}
-              testId="snapshot-starter-age"
-            />
-            <SnapshotStat
-              label="Future 1sts"
-              value={future1sts}
-              context={`Lg avg: ${leagueAvg1sts}`}
-              contextColor={future1sts >= leagueAvg1sts ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"}
-              icon={Users}
-              testId="snapshot-future-1sts"
-            />
-          </div>
+          <p className="text-sm text-muted-foreground leading-relaxed" data-testid="archetype-description">
+            {tierDescription}
+          </p>
+        </Card>
+        <div className="lg:col-span-8 grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <SnapshotStat
+            label="Power Rank"
+            value={`#${rank} / ${total}`}
+            context={getPercentileLabel(rank, total)}
+            contextColor={getPercentileColor(rank, total)}
+            icon={Trophy}
+            testId="snapshot-power-rank"
+          />
+          <SnapshotStat
+            label="Playoff Odds"
+            value={seasonStarted ? `${clampedOdds}%` : "--"}
+            context={seasonStarted ? (clampedOdds >= 60 ? "Strong outlook" : clampedOdds >= 40 ? "On the bubble" : "Long shot") : "Preseason \u2013 Not available"}
+            contextColor={!seasonStarted ? "text-muted-foreground" : clampedOdds >= 60 ? "text-emerald-600 dark:text-emerald-400" : clampedOdds >= 40 ? "text-amber-600 dark:text-amber-400" : "text-red-500 dark:text-red-400"}
+            icon={Target}
+            testId="snapshot-playoff-odds"
+          />
+          <SnapshotStat
+            label="Avg Starter Age"
+            value={avgAge}
+            context={`Lg avg: ${leagueAvgAge}`}
+            contextColor={Number(avgAge) < Number(leagueAvgAge) ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"}
+            icon={Calendar}
+            testId="snapshot-starter-age"
+          />
+          <SnapshotStat
+            label="Future 1sts"
+            value={future1sts}
+            context={`Lg avg: ${leagueAvg1sts}`}
+            contextColor={future1sts >= leagueAvg1sts ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"}
+            icon={Users}
+            testId="snapshot-future-1sts"
+          />
         </div>
-      </Card>
+      </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        <Card className="p-6 lg:col-span-2" data-testid="team-identity-card">
-          <div className="mb-5">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+        <Card className="p-5 lg:col-span-4" data-testid="team-identity-card">
+          <div className="mb-4">
             <h3 className="text-base font-bold text-foreground">Team Identity</h3>
             <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
           </div>
-          <div className="space-y-5">
+          <div className="space-y-4">
             <div data-testid="identity-win-now">
               <div className="flex items-center justify-between mb-1.5">
                 <div className="flex items-center gap-2">
                   <Flame className="w-4 h-4 text-orange-500" />
-                  <span className="text-sm font-semibold text-foreground">Win-Now Score</span>
+                  <span className="text-sm font-semibold text-foreground">Win-Now</span>
                 </div>
                 <span className="text-lg font-bold text-foreground">{winNow} <span className="text-xs font-normal text-muted-foreground">/ 10</span></span>
               </div>
@@ -309,7 +307,7 @@ export function DashboardOverview({ league, userTeam, onNavigate }: DashboardOve
               <div className="flex items-center justify-between mb-1.5">
                 <div className="flex items-center gap-2">
                   <Sprout className="w-4 h-4 text-emerald-500" />
-                  <span className="text-sm font-semibold text-foreground">Long-Term Score</span>
+                  <span className="text-sm font-semibold text-foreground">Long-Term</span>
                 </div>
                 <span className="text-lg font-bold text-foreground">{youth} <span className="text-xs font-normal text-muted-foreground">/ 10</span></span>
               </div>
@@ -328,40 +326,12 @@ export function DashboardOverview({ league, userTeam, onNavigate }: DashboardOve
           </div>
         </Card>
 
-        <div className="flex flex-col gap-5">
-          <Card className="p-5 flex-1" data-testid="dynasty-window-card">
-            <div className="flex items-center gap-2 mb-3">
-              <MapPin className="w-4 h-4 text-[#d4af37]" />
-              <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Dynasty Window</span>
-            </div>
-            <p className={`text-xl font-bold leading-tight ${dynastyWindowColor}`} data-testid="dynasty-window-label">
-              {dynastyWindowLabel}
-            </p>
-            <p className="text-xs text-muted-foreground mt-1.5" data-testid="dynasty-window-subtitle">
-              {dynastyWindowSubtitle}
-            </p>
-          </Card>
-
-          <Card className="p-5 flex-1" data-testid="suggested-direction-card">
-            <div className="flex items-center gap-2 mb-3">
-              <Compass className="w-4 h-4 text-[#d4af37]" />
-              <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Suggested Direction</span>
-            </div>
-            <p className="text-sm font-semibold text-foreground leading-relaxed" data-testid="suggested-direction-text">
-              "{suggestedDirection}"
-            </p>
-          </Card>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        <Card className="p-6" data-testid="strengths-needs-card">
-          <div className="mb-1">
+        <Card className="p-5 lg:col-span-4" data-testid="strengths-needs-card">
+          <div className="mb-4">
             <h3 className="text-base font-bold text-foreground">Strengths & Needs</h3>
             <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
-            <p className="text-[11px] text-muted-foreground mt-2">Position grade and strength score</p>
           </div>
-          <div className="space-y-3 mt-4">
+          <div className="space-y-3">
             {positions.map((p) => (
               <div key={p.pos} className="flex items-center gap-3" data-testid={`strength-${p.pos.toLowerCase()}`}>
                 <span className="text-xs font-bold text-muted-foreground w-7">{p.pos}</span>
@@ -374,27 +344,50 @@ export function DashboardOverview({ league, userTeam, onNavigate }: DashboardOve
                 <span className={`text-xs font-bold px-2 py-0.5 rounded border ${getGradeColor(p.grade)}`} data-testid={`grade-${p.pos.toLowerCase()}`}>
                   {p.grade}
                 </span>
-                <span className="text-xs font-medium text-muted-foreground w-8 text-right" data-testid={`score-${p.pos.toLowerCase()}`}>{p.score}</span>
+                <span className="text-xs font-medium text-muted-foreground w-6 text-right" data-testid={`score-${p.pos.toLowerCase()}`}>{p.score}</span>
               </div>
             ))}
           </div>
         </Card>
 
-        <Card className="p-6" data-testid="contender-window-card">
-          <div className="mb-5">
-            <h3 className="text-base font-bold text-foreground">Contender Window</h3>
-            <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
-          </div>
-          <div className="space-y-4">
-            <div className="flex items-baseline gap-2 mb-3">
-              <span className="text-4xl font-bold text-[#0b3a7a] dark:text-blue-400">{userTeam.metrics.contenderWindowYears}</span>
-              <span className="text-sm text-muted-foreground">years projected</span>
+        <div className="lg:col-span-4 flex flex-col gap-4">
+          <Card className="p-5 flex-1" data-testid="dynasty-window-card">
+            <div className="flex items-center gap-2 mb-2">
+              <MapPin className="w-4 h-4 text-[#d4af37]" />
+              <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Dynasty Window</span>
             </div>
-            <div className="flex gap-1.5">
+            <p className={`text-xl font-bold leading-tight ${dynastyWindowColor}`} data-testid="dynasty-window-label">
+              {dynastyWindowLabel}
+            </p>
+            <p className="text-xs text-muted-foreground mt-1" data-testid="dynasty-window-subtitle">
+              {dynastyWindowSubtitle}
+            </p>
+          </Card>
+
+          <Card className="p-5 flex-1" data-testid="suggested-direction-card">
+            <div className="flex items-center gap-2 mb-2">
+              <Compass className="w-4 h-4 text-[#d4af37]" />
+              <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Suggested Direction</span>
+            </div>
+            <p className="text-sm font-semibold text-foreground leading-relaxed" data-testid="suggested-direction-text">
+              "{suggestedDirection}"
+            </p>
+          </Card>
+
+          <Card className="p-5 flex-1" data-testid="contender-window-card">
+            <div className="flex items-center gap-2 mb-2">
+              <Calendar className="w-4 h-4 text-[#d4af37]" />
+              <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Contender Window</span>
+            </div>
+            <div className="flex items-baseline gap-2 mb-2">
+              <span className="text-2xl font-bold text-[#0b3a7a] dark:text-blue-400">{userTeam.metrics.contenderWindowYears}</span>
+              <span className="text-xs text-muted-foreground">years projected</span>
+            </div>
+            <div className="flex gap-1">
               {[1, 2, 3, 4, 5].map((y) => (
                 <div
                   key={y}
-                  className={`flex-1 h-10 rounded-md flex items-center justify-center text-xs font-semibold transition-colors ${
+                  className={`flex-1 h-7 rounded-md flex items-center justify-center text-[10px] font-semibold transition-colors ${
                     y <= userTeam.metrics.contenderWindowYears
                       ? "bg-[#0b3a7a] dark:bg-blue-600 text-white"
                       : "bg-muted text-muted-foreground"
@@ -404,11 +397,8 @@ export function DashboardOverview({ league, userTeam, onNavigate }: DashboardOve
                 </div>
               ))}
             </div>
-            <p className="text-xs text-muted-foreground mt-3 leading-relaxed">
-              Based on roster age, starter strength, and draft capital projection.
-            </p>
-          </div>
-        </Card>
+          </Card>
+        </div>
       </div>
 
     </div>
