@@ -283,12 +283,23 @@ export function ValueModelProvider({ children }: { children: React.ReactNode }) 
 
     const result = new Map<string, TeamMetrics>();
 
+    const starterRanked = [...rawData].sort((a, b) => b.starterRedraft - a.starterRedraft);
+    const dynastyRanked = [...rawData].sort((a, b) => b.totalDynasty - a.totalDynasty);
+    const picksRanked = [...rawData].sort((a, b) => b.picksTotal - a.picksTotal);
+    const rankSums: Record<string, number> = {};
+    starterRanked.forEach((d, i) => { rankSums[d.id] = i + 1; });
+    dynastyRanked.forEach((d, i) => { rankSums[d.id] = (rankSums[d.id] || 0) + i + 1; });
+    picksRanked.forEach((d, i) => { rankSums[d.id] = (rankSums[d.id] || 0) + i + 1; });
+    const sortedByRankSum = Object.entries(rankSums).sort((a, b) => a[1] - b[1]);
+    const n = rawData.length;
+
     for (const d of rawData) {
       const starterScore = scale(d.starterRedraft, starterRange.min, starterRange.max);
       const depthScore = scale(d.totalDynasty, depthRange.min, depthRange.max);
       const picksScore = scale(d.picksTotal, picksRange.min, picksRange.max);
       const youthScore = Math.max(0, Math.min(100, Math.round(100 - (d.starterAvgAge - 23) * 8)));
-      const overall = Math.min(99, Math.max(10, Math.round((starterScore + depthScore + picksScore) / 3)));
+      const overallRank = sortedByRankSum.findIndex(e => e[0] === d.id);
+      const overall = Math.min(99, Math.max(10, Math.round(10 + ((n - 1 - overallRank) / Math.max(1, n - 1)) * 89)));
 
       const contenderWindowYears = youthScore >= 70 && starterScore >= 55
         ? 4
