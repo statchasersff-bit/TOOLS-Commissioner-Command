@@ -1,0 +1,91 @@
+Yes — please adjust the tier logic.
+
+The UI hierarchy is now good, but the archetype classification is still too narrow.
+
+Problem example:
+- RED #5 / 12
+- DYN #1 / 12
+- PCKS #6 / 12
+
+This currently renders as:
+- Archetype: Balanced
+- Dynasty Window: Dynasty Death Star
+
+That is not ideal. A team with elite dynasty value and decent current strength should not fall to Balanced just because it barely missed the top-33% RED cutoff and does not have top-25% pick capital.
+
+GOAL
+Make the archetype logic better capture teams with elite long-term roster value even when they are not top-tier in pick capital.
+
+Please revise the classification logic with the following changes.
+
+NEW PRIORITY ORDER
+1. Taco
+2. Juggernaut
+3. Future Powerhouse
+4. Pick Hoarder
+5. Win-Now
+6. Contender
+7. Balanced
+
+UPDATED DEFINITIONS
+
+Taco
+- bottom 25% in RED
+- bottom 25% in DYN
+- bottom 25% in PCKS
+
+Juggernaut
+- top 25% in RED AND top 25% in DYN
+OR
+- top 25% in RED AND top 50% in DYN AND top 25% in PCKS
+
+Future Powerhouse
+A team should classify as Future Powerhouse if ANY of these are true:
+- top 25% in DYN AND top 25% in PCKS
+OR
+- top 10% in DYN AND top 50% in RED
+OR
+- top 10% in DYN AND top 50% in PCKS
+
+Important:
+This is meant to capture teams with elite long-term roster value even if they are not pick-hoarding teams.
+
+Pick Hoarder
+- top 25% in PCKS
+- bottom 25% in RED
+- bottom 50% in DYN
+- not already classified above
+
+Win-Now
+- top 33% in RED
+- bottom 50% in DYN
+- bottom 50% in PCKS
+- not already classified above
+
+Contender
+- top 50% in RED
+- top 33% in DYN
+- not already classified above
+
+Balanced
+- all remaining teams
+
+NOTES
+1. Keep Archetype as the primary identity label.
+2. Keep Dynasty Window as a separate chart/quadrant label.
+3. Keep Suggested Direction as actionable text only.
+4. Preserve the debug output so we can inspect why a team got a certain archetype.
+
+ADDITIONAL REQUEST
+Please add support for a “top 10%” helper bucket using the same rounding approach:
+- top X% = ceil(teamCount * X%)
+
+In a 12-team league, top 10% should effectively mean rank 1 or 2 depending on the rounding logic; please show exactly how this resolves.
+
+After updating, please show me:
+1. the revised classifyTier logic
+2. the exact classification for this test case:
+   - RED #5 / 12
+   - DYN #1 / 12
+   - PCKS #6 / 12
+3. the debug flags for that test case

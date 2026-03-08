@@ -144,17 +144,20 @@ export function getTeamTier(overall: number): Tier {
 }
 
 export interface TierDebugFlags {
+  redTop10: boolean;
   redTop25: boolean;
   redTop33: boolean;
   redTop50: boolean;
   redBottom25: boolean;
   redBottom33: boolean;
   redBottom50: boolean;
+  dynTop10: boolean;
   dynTop25: boolean;
   dynTop33: boolean;
   dynTop50: boolean;
   dynBottom25: boolean;
   dynBottom50: boolean;
+  pcksTop10: boolean;
   pcksTop25: boolean;
   pcksTop33: boolean;
   pcksTop50: boolean;
@@ -171,7 +174,7 @@ export interface TierResult {
 const TIER_DESCRIPTIONS: Record<Tier, string> = {
   "Taco": "Bottom-tier in current strength, dynasty value, and draft capital.",
   "Juggernaut": "Elite current strength with a strong long-term foundation.",
-  "Future Powerhouse": "Loaded with long-term value and draft capital, even if not fully built to win now.",
+  "Future Powerhouse": "Loaded with elite long-term roster value, positioned to dominate for years.",
   "Pick Hoarder": "Built around future rookie picks more than current competitive strength.",
   "Win-Now": "Strong current roster, but long-term value and draft capital have been sacrificed.",
   "Contender": "A strong current team with enough long-term value to stay competitive.",
@@ -184,6 +187,7 @@ function getTierFlags(
   ranks: { redraft: number; dynasty: number; draft: number },
   totalTeams: number
 ): TierDebugFlags {
+  const top10 = Math.max(1, Math.ceil(totalTeams * 0.10));
   const top25 = Math.max(1, Math.ceil(totalTeams * 0.25));
   const top33 = Math.max(1, Math.ceil(totalTeams * 0.33));
   const top50 = Math.max(1, Math.ceil(totalTeams * 0.50));
@@ -198,17 +202,20 @@ function getTierFlags(
   const { redraft, dynasty, draft } = ranks;
 
   return {
+    redTop10: redraft <= top10,
     redTop25: redraft <= top25,
     redTop33: redraft <= top33,
     redTop50: redraft <= top50,
     redBottom25: redraft >= bottom25Start,
     redBottom33: redraft >= bottom33Start,
     redBottom50: redraft >= bottom50Start,
+    dynTop10: dynasty <= top10,
     dynTop25: dynasty <= top25,
     dynTop33: dynasty <= top33,
     dynTop50: dynasty <= top50,
     dynBottom25: dynasty >= bottom25Start,
     dynBottom50: dynasty >= bottom50Start,
+    pcksTop10: draft <= top10,
     pcksTop25: draft <= top25,
     pcksTop33: draft <= top33,
     pcksTop50: draft <= top50,
@@ -234,7 +241,11 @@ export function classifyTeamTier(
     return { tier: "Juggernaut", tierDescription: TIER_DESCRIPTIONS["Juggernaut"], debug: flags };
   }
 
-  if (flags.dynTop25 && flags.pcksTop25) {
+  if (
+    (flags.dynTop25 && flags.pcksTop25) ||
+    (flags.dynTop10 && flags.redTop50) ||
+    (flags.dynTop10 && flags.pcksTop50)
+  ) {
     return { tier: "Future Powerhouse", tierDescription: TIER_DESCRIPTIONS["Future Powerhouse"], debug: flags };
   }
 
@@ -246,16 +257,8 @@ export function classifyTeamTier(
     return { tier: "Win-Now", tierDescription: TIER_DESCRIPTIONS["Win-Now"], debug: flags };
   }
 
-  if (flags.redTop33 && flags.dynTop50) {
+  if (flags.redTop50 && flags.dynTop33) {
     return { tier: "Contender", tierDescription: TIER_DESCRIPTIONS["Contender"], debug: flags };
-  }
-
-  if (flags.redBottom50 && (flags.dynTop50 || flags.pcksTop33)) {
-    return { tier: "Rebuilder", tierDescription: TIER_DESCRIPTIONS["Rebuilder"], debug: flags };
-  }
-
-  if (flags.redBottom33 && flags.dynBottom50) {
-    return { tier: "Weak / Directionless", tierDescription: TIER_DESCRIPTIONS["Weak / Directionless"], debug: flags };
   }
 
   return { tier: "Balanced", tierDescription: TIER_DESCRIPTIONS["Balanced"], debug: flags };
