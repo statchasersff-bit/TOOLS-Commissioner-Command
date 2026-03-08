@@ -40,13 +40,15 @@ The application is a **fully static React SPA** (no backend required). All exter
 ## Tier Classification System
 Teams are classified using a priority-based decision tree in `client/src/data/mockData.ts`:
 - **Inputs**: RED (redraft/starter rank), DYN (dynasty/depth rank), PCKS (pick capital rank)
-- **Priority order**: Taco → Juggernaut → Future Powerhouse → Pick Hoarder → Win-Now → Balanced
+- **Priority order**: Taco → Juggernaut → Future Powerhouse → Pick Hoarder → Win-Now → Contender → Balanced
 - **Balanced** is the universal fallback (no N/A tier exists)
 - `classifyTeamTier()` returns `TierResult` with `{ tier, tierDescription, debug }` for debugging
 - `getLeagueTeamTiers()` returns a Map with `{ tier, tooltip, tierDescription, debug }` per team
-- Tier type: `"Juggernaut" | "Win-Now" | "Future Powerhouse" | "Pick Hoarder" | "Taco" | "Balanced"`
+- Tier type: `"Juggernaut" | "Win-Now" | "Future Powerhouse" | "Pick Hoarder" | "Taco" | "Contender" | "Balanced"`
 - Helper functions: `getTierColor`, `getTierEmoji`, `getTierBg`, `getTierBorderColor`, `getTierTooltip`
-- Contender tiers: Juggernaut, Win-Now; Rebuilder tiers: Future Powerhouse, Pick Hoarder, Taco
+- Contender tiers: Juggernaut, Win-Now, Contender; Rebuilder tiers: Future Powerhouse, Pick Hoarder, Taco
+- Pick Hoarder requires: top 25% PCKS + bottom 25% RED + bottom 50% DYN (tightened from previous)
+- Contender requires: top 33% RED + top 50% DYN (catches strong teams that aren't quite Juggernaut/Win-Now)
 
 ## Features
 - **Portfolio**: Sleeper account connection, cross-league analysis, player exposure, lineup alerts

@@ -171,6 +171,7 @@ const TIER_DESCRIPTIONS: Record<Tier, string> = {
   "Future Powerhouse": "Loaded with long-term value and draft capital, even if not fully built to win now.",
   "Pick Hoarder": "Built around future rookie picks more than current competitive strength.",
   "Win-Now": "Strong current roster, but long-term value and draft capital have been sacrificed.",
+  "Contender": "A strong current team with enough long-term value to stay competitive.",
   "Balanced": "A competitive-window profile without an extreme dynasty archetype.",
 };
 
@@ -226,12 +227,16 @@ export function classifyTeamTier(
     return { tier: "Future Powerhouse", tierDescription: TIER_DESCRIPTIONS["Future Powerhouse"], debug: flags };
   }
 
-  if (flags.pcksTop25 && flags.redBottom50) {
+  if (flags.pcksTop25 && flags.redBottom25 && flags.dynBottom50) {
     return { tier: "Pick Hoarder", tierDescription: TIER_DESCRIPTIONS["Pick Hoarder"], debug: flags };
   }
 
   if (flags.redTop33 && flags.dynBottom50 && flags.pcksBottom50) {
     return { tier: "Win-Now", tierDescription: TIER_DESCRIPTIONS["Win-Now"], debug: flags };
+  }
+
+  if (flags.redTop33 && flags.dynTop50) {
+    return { tier: "Contender", tierDescription: TIER_DESCRIPTIONS["Contender"], debug: flags };
   }
 
   return { tier: "Balanced", tierDescription: TIER_DESCRIPTIONS["Balanced"], debug: flags };
@@ -267,7 +272,7 @@ export function getLeagueTeamTiers(teams: Team[]): Map<string, { tier: Tier; too
 }
 
 export function isContenderTier(tier: Tier): boolean {
-  return tier === "Juggernaut" || tier === "Win-Now";
+  return tier === "Juggernaut" || tier === "Win-Now" || tier === "Contender";
 }
 
 export function isRebuilderTier(tier: Tier): boolean {
@@ -285,6 +290,7 @@ export function getTierEmoji(tier: Tier): string {
     case "Future Powerhouse": return "📈";
     case "Pick Hoarder": return "🎰";
     case "Taco": return "🤡";
+    case "Contender": return "🔥";
     case "Balanced": return "⚖️";
   }
 }
@@ -296,6 +302,7 @@ export function getTierColor(tier: Tier): string {
     case "Future Powerhouse": return "text-emerald-600 dark:text-emerald-400";
     case "Pick Hoarder": return "text-purple-600 dark:text-purple-400";
     case "Taco": return "text-red-600 dark:text-red-400";
+    case "Contender": return "text-amber-600 dark:text-amber-400";
     case "Balanced": return "text-slate-600 dark:text-slate-400";
   }
 }
@@ -307,6 +314,7 @@ export function getTierBg(tier: Tier): string {
     case "Future Powerhouse": return "bg-emerald-50 dark:bg-emerald-950/30";
     case "Pick Hoarder": return "bg-purple-50 dark:bg-purple-950/30";
     case "Taco": return "bg-red-50 dark:bg-red-950/30";
+    case "Contender": return "bg-amber-50 dark:bg-amber-950/30";
     case "Balanced": return "bg-slate-50 dark:bg-slate-900/30";
   }
 }
@@ -318,6 +326,7 @@ export function getTierBorderColor(tier: Tier): string {
     case "Future Powerhouse": return "border-emerald-300 dark:border-emerald-700";
     case "Pick Hoarder": return "border-purple-300 dark:border-purple-700";
     case "Taco": return "border-red-300 dark:border-red-700";
+    case "Contender": return "border-amber-300 dark:border-amber-700";
     case "Balanced": return "border-slate-300 dark:border-slate-700";
   }
 }

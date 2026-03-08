@@ -165,6 +165,7 @@ function getOutlookText(tier: Tier): string {
     case "Future Powerhouse": return "The future is bright — loaded with assets.";
     case "Pick Hoarder": return "Stockpiling picks but roster needs work.";
     case "Taco": return "Bottom of the barrel across the board.";
+    case "Contender": return "Strong team with enough dynasty value to stay competitive.";
     case "Balanced": return "Competitive roster without an extreme archetype.";
   }
 }
