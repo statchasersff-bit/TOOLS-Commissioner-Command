@@ -252,6 +252,7 @@ export function ValueModelProvider({ children }: { children: React.ReactNode }) 
       const starterRedraft = starters.reduce((s, p) => s + getRedraftValue(p), 0);
       const totalDynasty = roster.reduce((s, p) => s + getPlayerValue(p), 0);
       const picksTotal = team.picks.reduce((s, p) => s + getPickValue(p), 0);
+      const combinedTotal = starterRedraft + totalDynasty + picksTotal;
       const starterAvgAge = starters.length > 0
         ? starters.reduce((s, p) => s + p.age, 0) / starters.length
         : 26;
@@ -264,6 +265,7 @@ export function ValueModelProvider({ children }: { children: React.ReactNode }) 
         starterRedraft,
         totalDynasty,
         picksTotal,
+        combinedTotal,
         starterAvgAge,
         qbRaw: posTotal("QB"),
         rbRaw: posTotal("RB"),
@@ -273,6 +275,7 @@ export function ValueModelProvider({ children }: { children: React.ReactNode }) 
     });
 
     const minMax = (arr: number[]) => ({ min: Math.min(...arr), max: Math.max(...arr) });
+    const overallRange = minMax(rawData.map((d) => d.combinedTotal));
     const starterRange = minMax(rawData.map((d) => d.starterRedraft));
     const depthRange = minMax(rawData.map((d) => d.totalDynasty));
     const picksRange = minMax(rawData.map((d) => d.picksTotal));
@@ -284,17 +287,11 @@ export function ValueModelProvider({ children }: { children: React.ReactNode }) 
     const result = new Map<string, TeamMetrics>();
 
     for (const d of rawData) {
+      const overall = scale(d.combinedTotal, overallRange.min, overallRange.max);
       const starterScore = scale(d.starterRedraft, starterRange.min, starterRange.max);
       const depthScore = scale(d.totalDynasty, depthRange.min, depthRange.max);
       const picksScore = scale(d.picksTotal, picksRange.min, picksRange.max);
       const youthScore = Math.max(0, Math.min(100, Math.round(100 - (d.starterAvgAge - 23) * 8)));
-
-      const overall = Math.min(99, Math.max(10, Math.round(
-        starterScore * 0.45 +
-        depthScore * 0.25 +
-        picksScore * 0.20 +
-        youthScore * 0.10
-      )));
 
       const contenderWindowYears = youthScore >= 70 && starterScore >= 55
         ? 4
