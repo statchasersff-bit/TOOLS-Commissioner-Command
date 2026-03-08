@@ -115,7 +115,7 @@ export function LeagueIntelligence({ league, userTeam }: Props) {
           <Card key={label} className="p-4 hover-elevate" data-testid={`leader-${label.toLowerCase().replace(/\s+/g, "-")}`}>
             <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">{label}</p>
             <p className="text-lg font-bold mt-1">{team.owner}</p>
-            <p className="text-xs text-muted-foreground mt-0.5">{team.name} · {stat(team)}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">{team.name}</p>
           </Card>
         ))}
       </div>
