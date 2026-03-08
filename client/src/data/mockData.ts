@@ -545,7 +545,6 @@ export const NAV_CONFIG: MainTabConfig[] = [
       { id: "league-intelligence", label: "Intel" },
       { id: "league-economy", label: "Economy" },
       { id: "transactions", label: "Transactions" },
-      { id: "league-roast", label: "\u{1F6AB} Don't Click" },
     ],
   },
   {
@@ -571,13 +570,6 @@ export const NAV_CONFIG: MainTabConfig[] = [
     label: "Live Draft",
     subTabs: [
       { id: "draft-board", label: "Draft Board" },
-    ],
-  },
-  {
-    id: "dont-click",
-    label: "\u{1F6AB} Don't Click This",
-    subTabs: [
-      { id: "league-roast", label: "Report Card" },
     ],
   },
 ];
