@@ -214,20 +214,8 @@ function TeamIdentityCard({ league, userTeam }: DashboardProps) {
 }
 
 export function DashboardOverview({ league, userTeam, onNavigate }: DashboardOverviewProps) {
-  const { getPlayerValue, getRedraftValue, getPickValue, optimizeLineup } = useValueModel();
-  const overviewRanks = useMemo(() => {
-    const rosterPositions = league.rosterPositions || [];
-    const t = league.teams;
-    const redraft = t.map(tm => ({ id: tm.id, v: (rosterPositions.length > 0 ? optimizeLineup(tm.roster, rosterPositions) : tm.roster).filter(p => p.starter).reduce((s, p) => s + getRedraftValue(p), 0) })).sort((a, b) => b.v - a.v);
-    const dynasty = t.map(tm => ({ id: tm.id, v: tm.roster.reduce((s, p) => s + getPlayerValue(p), 0) })).sort((a, b) => b.v - a.v);
-    const picks = t.map(tm => ({ id: tm.id, v: tm.picks.reduce((s, p) => s + getPickValue(p), 0) })).sort((a, b) => b.v - a.v);
-    const sums: Record<string, number> = {};
-    redraft.forEach((e, i) => { sums[e.id] = i + 1; });
-    dynasty.forEach((e, i) => { sums[e.id] = (sums[e.id] || 0) + i + 1; });
-    picks.forEach((e, i) => { sums[e.id] = (sums[e.id] || 0) + i + 1; });
-    return Object.entries(sums).sort((a, b) => a[1] - b[1]).map(e => e[0]);
-  }, [league.teams, league.rosterPositions, getPlayerValue, getRedraftValue, getPickValue, optimizeLineup]);
-  const rank = overviewRanks.indexOf(userTeam.id) + 1;
+  const sorted = [...league.teams].sort((a, b) => b.metrics.overall - a.metrics.overall);
+  const rank = sorted.findIndex((t) => t.id === userTeam.id) + 1;
   const total = league.teams.length;
   const tierMap = useMemo(() => getLeagueTeamTiers(league.teams), [league.teams]);
   const tierInfo = tierMap.get(userTeam.id);
@@ -441,7 +429,7 @@ function posBarColor(rank: number): string {
   return "bg-red-400";
 }
 
-type SortKey = "name" | "rankSum" | "redraftRank" | "dynastyRank" | "picks";
+type SortKey = "name" | "overall" | "redraftRank" | "dynastyRank" | "picks";
 
 function SortableHeader({ label, mobileLabel, sortKey, activeSortKey, sortDir, onSort, className }: {
   label: string; mobileLabel?: string; sortKey: SortKey; activeSortKey: SortKey; sortDir: "asc" | "desc";
@@ -469,8 +457,8 @@ function SortableHeader({ label, mobileLabel, sortKey, activeSortKey, sortDir, o
 export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
   const teams = league.teams;
   const { getPlayerValue, getRedraftValue, optimizeLineup } = useValueModel();
-  const [sortKey, setSortKey] = useState<SortKey>("rankSum");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [sortKey, setSortKey] = useState<SortKey>("overall");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
   const snapshotTierMap = useMemo(() => getLeagueTeamTiers(teams), [teams]);
@@ -486,11 +474,10 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
       id: t.id, total: t.roster.reduce((s, p) => s + getPlayerValue(p), 0),
     })).sort((a, b) => b.total - a.total);
     const picksTotals = [...teams].sort((a, b) => b.metrics.picks - a.metrics.picks);
-    const ranks: Record<string, { redraftRank: number; dynastyRank: number; picksRank: number; rankSum: number }> = {};
-    redraftTotals.forEach((e, i) => { ranks[e.id] = { redraftRank: i + 1, dynastyRank: total, picksRank: total, rankSum: 0 }; });
+    const ranks: Record<string, { redraftRank: number; dynastyRank: number; picksRank: number }> = {};
+    redraftTotals.forEach((e, i) => { ranks[e.id] = { redraftRank: i + 1, dynastyRank: total, picksRank: total }; });
     dynastyTotals.forEach((e, i) => { if (ranks[e.id]) ranks[e.id].dynastyRank = i + 1; });
     picksTotals.forEach((t, i) => { if (ranks[t.id]) ranks[t.id].picksRank = i + 1; });
-    Object.values(ranks).forEach(r => { r.rankSum = r.redraftRank + r.dynastyRank + r.picksRank; });
     return { ranks, total };
   }, [teams, league.rosterPositions, getPlayerValue, getRedraftValue, optimizeLineup]);
 
@@ -571,10 +558,10 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
   const sortedTeams = useMemo(() => {
     const accessor: Record<SortKey, (t: Team) => number | string> = {
       name: t => t.name.toLowerCase(),
-      rankSum: t => teamRanks.ranks[t.id]?.rankSum ?? teamRanks.total * 3,
-      redraftRank: t => teamRanks.ranks[t.id]?.redraftRank ?? teamRanks.total,
-      dynastyRank: t => teamRanks.ranks[t.id]?.dynastyRank ?? teamRanks.total,
-      picks: t => teamRanks.ranks[t.id]?.picksRank ?? teamRanks.total,
+      overall: t => t.metrics.overall,
+      redraftRank: t => -(teamRanks.ranks[t.id]?.redraftRank ?? teamRanks.total),
+      dynastyRank: t => -(teamRanks.ranks[t.id]?.dynastyRank ?? teamRanks.total),
+      picks: t => -(teamRanks.ranks[t.id]?.picksRank ?? teamRanks.total),
     };
     return [...teams].sort((a, b) => {
       const va = accessor[sortKey](a);
