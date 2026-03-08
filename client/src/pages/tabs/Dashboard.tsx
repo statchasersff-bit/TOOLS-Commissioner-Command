@@ -118,18 +118,19 @@ function getSuggestedDirection(team: Team, tier: string): string {
   const strongest = posScores.reduce((max, p) => p.score > max.score ? p : max, posScores[0]);
 
   if (tier === "Taco") return "Sell everything for future picks and young players";
-  if (tier === "Weak / Directionless") return "Identify a direction: sell aging assets or acquire picks";
+  if (tier === "Rebuilder") return "Target young upside players and stockpile future picks";
   if (tier === "Pick Hoarder") return "Package picks for an elite starter to accelerate the rebuild";
   if (tier === "Future Powerhouse") return "Hold and let the young core mature";
-  if (tier === "Rebuilder") return "Target young upside players and stockpile future picks";
-  if (tier === "Pretender") return `Upgrade ${weakest.pos} to push into true contender status`;
+  if (tier === "Weak / Directionless") return "Choose a direction: sell aging assets or acquire picks";
+  if (tier === "Pretender") return `Upgrade ${weakest.pos} or pivot toward a retool`;
+  if (tier === "Juggernaut") return "Consolidate depth into elite starters to maximize your title window";
+  if (tier === "Win-Now") return "Convert future assets into immediate production";
 
+  if (strongest.score >= 85 && weakest.score <= 40) return `Trade ${strongest.pos} depth to upgrade ${weakest.pos}`;
   if (weakest.score < 30) return `Aggressively buy ${weakest.pos} depth`;
   if (weakest.score < 50) return `Target ${weakest.pos} upgrades in trades`;
-  if (strongest.score >= 75 && weakest.score >= 50) return "Maintain balance, sell aging assets at peak";
-  if (tier === "Juggernaut") return "Consolidate depth for elite starters to maximize your window";
-  if (tier === "Win-Now") return "Convert future assets into immediate production";
-  return `Shore up ${weakest.pos} while window is open`;
+  if (strongest.score >= 75 && weakest.score >= 50) return "Maintain balance and sell aging assets at peak value";
+  return `Shore up ${weakest.pos} while your window is open`;
 }
 
 function getGrade(score: number): string {
