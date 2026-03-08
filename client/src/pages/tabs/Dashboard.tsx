@@ -555,6 +555,13 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
     return { dynastyByTeam, redraftByTeam, dynastyRanks, redraftRanks };
   }, [teams, league.rosterPositions, getPlayerValue, getRedraftValue, optimizeLineup]);
 
+  const overallRanks = useMemo(() => {
+    const byOverall = [...teams].sort((a, b) => b.metrics.overall - a.metrics.overall);
+    const map: Record<string, number> = {};
+    byOverall.forEach((t, i) => { map[t.id] = i + 1; });
+    return map;
+  }, [teams]);
+
   const sortedTeams = useMemo(() => {
     const accessor: Record<SortKey, (t: Team) => number | string> = {
       name: t => t.name.toLowerCase(),
@@ -617,7 +624,7 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
           </thead>
           <tbody>
             {sortedTeams.map((team, idx) => {
-              const rank = idx + 1;
+              const rank = overallRanks[team.id] ?? idx + 1;
               const tier = snapshotTierMap.get(team.id)?.tier ?? "Competitive";
               const isUser = team.id === userTeam.id;
               const isEven = idx % 2 === 0;
