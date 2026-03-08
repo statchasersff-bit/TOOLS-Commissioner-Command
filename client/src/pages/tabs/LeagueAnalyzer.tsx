@@ -15,15 +15,14 @@ interface AnalyzerProps {
   league: League;
 }
 
-const TIER_ORDER: Tier[] = ["Juggernaut", "Contender", "Ascending", "Competitive", "Rebuild", "Directionless", "Taco"];
+const TIER_ORDER: Tier[] = ["Juggernaut", "Win-Now", "Future Powerhouse", "Pick Hoarder", "Taco", "N/A"];
 const TIER_BAR_COLOR: Record<Tier, string> = {
-  Juggernaut: "bg-[#d4af37]",
-  Contender: "bg-blue-500",
-  Ascending: "bg-emerald-500",
-  Competitive: "bg-amber-500",
-  Rebuild: "bg-orange-500",
-  Directionless: "bg-purple-500",
-  Taco: "bg-red-500",
+  "Juggernaut": "bg-[#d4af37]",
+  "Win-Now": "bg-blue-500",
+  "Future Powerhouse": "bg-emerald-500",
+  "Pick Hoarder": "bg-purple-500",
+  "Taco": "bg-red-500",
+  "N/A": "bg-muted-foreground",
 };
 
 export function PowerRankings({ league }: AnalyzerProps) {
@@ -31,7 +30,7 @@ export function PowerRankings({ league }: AnalyzerProps) {
   const tierMap = useMemo(() => getLeagueTeamTiers(league.teams), [league.teams]);
 
   const tiers = useMemo(() => {
-    const groups: Record<Tier, Team[]> = { Juggernaut: [], Contender: [], Ascending: [], Competitive: [], Rebuild: [], Directionless: [], Taco: [] };
+    const groups: Record<Tier, Team[]> = { "Juggernaut": [], "Win-Now": [], "Future Powerhouse": [], "Pick Hoarder": [], "Taco": [], "N/A": [] };
     sorted.forEach((t) => { const ti = tierMap.get(t.id); if (ti) groups[ti.tier].push(t); });
     return groups;
   }, [sorted, tierMap]);
@@ -98,7 +97,7 @@ export function PowerRankings({ league }: AnalyzerProps) {
 export function TierBreakdown({ league }: AnalyzerProps) {
   const tierMap = useMemo(() => getLeagueTeamTiers(league.teams), [league.teams]);
   const tierCounts = useMemo(() => {
-    const counts: Record<Tier, number> = { Juggernaut: 0, Contender: 0, Ascending: 0, Competitive: 0, Rebuild: 0, Directionless: 0, Taco: 0 };
+    const counts: Record<Tier, number> = { "Juggernaut": 0, "Win-Now": 0, "Future Powerhouse": 0, "Pick Hoarder": 0, "Taco": 0, "N/A": 0 };
     league.teams.forEach((t) => { const ti = tierMap.get(t.id); if (ti) counts[ti.tier]++; });
     return counts;
   }, [league.teams, tierMap]);

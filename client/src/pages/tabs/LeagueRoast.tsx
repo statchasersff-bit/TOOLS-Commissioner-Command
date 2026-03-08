@@ -161,12 +161,11 @@ function getBadges(team: Team, league: League, rank: number): string[] {
 function getOutlookText(tier: Tier): string {
   switch (tier) {
     case "Juggernaut": return "Championship favorite. League problem.";
-    case "Contender": return "Built to compete this year.";
-    case "Ascending": return "The future is bright — not quite there yet.";
-    case "Competitive": return "Solid roster, not scary.";
-    case "Rebuild": return "Playing the long game.";
-    case "Directionless": return "Unclear direction — needs a plan.";
-    case "Taco": return "Dynasty team turned seasonal rental.";
+    case "Win-Now": return "Built to compete this year.";
+    case "Future Powerhouse": return "The future is bright — loaded with assets.";
+    case "Pick Hoarder": return "Stockpiling picks but roster needs work.";
+    case "Taco": return "Bottom of the barrel across the board.";
+    case "N/A": return "Doesn't fit a clear archetype.";
   }
 }
 
@@ -191,7 +190,7 @@ function buildReportCards(league: League, userTeamId: string): ReportCard[] {
     const rank = i + 1;
     const m = team.metrics;
     const tierInfo = tierMap.get(team.id);
-    const tier = tierInfo?.tier ?? "Competitive";
+    const tier = tierInfo?.tier ?? "N/A";
     const archetype = getArchetype(team);
 
     const winNowScore = Math.round(m.starters * 0.7 + m.depth * 0.3);

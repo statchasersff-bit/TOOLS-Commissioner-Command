@@ -87,15 +87,14 @@ export function LeagueIntelligence({ league, userTeam }: Props) {
   const insightTierMap = useMemo(() => getLeagueTeamTiers(league.teams), [league.teams]);
 
   const getOutlook = (team: Team): string => {
-    const tier = insightTierMap.get(team.id)?.tier ?? "Competitive";
+    const tier = insightTierMap.get(team.id)?.tier ?? "N/A";
     switch (tier) {
       case "Juggernaut": return "Championship contender — league problem";
-      case "Contender": return "Built to win this year";
-      case "Ascending": return "The future is bright — probably a year early";
-      case "Competitive": return "Good roster, not scary";
-      case "Rebuild": return "Playing the long game";
-      case "Directionless": return "Unclear direction — roster is messy";
-      case "Taco": return "Dynasty team turned seasonal rental";
+      case "Win-Now": return "Built to win this year";
+      case "Future Powerhouse": return "The future is bright — loaded with assets";
+      case "Pick Hoarder": return "Stockpiling picks but roster needs work";
+      case "Taco": return "Bottom of the barrel across the board";
+      case "N/A": return "Doesn't fit a clear archetype";
     }
   };
 
@@ -130,7 +129,7 @@ export function LeagueIntelligence({ league, userTeam }: Props) {
         <div className="space-y-3" data-testid="team-narratives">
           {sorted.map((team) => {
             const tierInfo = insightTierMap.get(team.id);
-            const tier = tierInfo?.tier ?? "Competitive";
+            const tier = tierInfo?.tier ?? "N/A";
             const isExpanded = expandedTeams.has(team.id);
             const strengths = getStrengths(team);
             const weaknesses = getWeaknesses(team);

@@ -137,11 +137,9 @@ export function getPositionColor(pos: string): string {
 
 export function getTeamTier(overall: number): Tier {
   if (overall >= 80) return "Juggernaut";
-  if (overall >= 68) return "Contender";
-  if (overall >= 55) return "Ascending";
-  if (overall >= 42) return "Competitive";
-  if (overall >= 30) return "Rebuild";
-  if (overall >= 20) return "Directionless";
+  if (overall >= 60) return "Win-Now";
+  if (overall >= 40) return "Future Powerhouse";
+  if (overall >= 20) return "Pick Hoarder";
   return "Taco";
 }
 
@@ -149,22 +147,17 @@ export function classifyTeamTier(
   ranks: { power: number; dynasty: number; redraft: number; draft: number },
   totalTeams: number
 ): Tier {
-  const strong = Math.ceil(totalTeams / 3);
-  const weak = totalTeams - strong + 1;
-  const mid = Math.ceil(totalTeams / 2);
   const top25 = Math.max(1, Math.ceil(totalTeams / 4));
-  const { power, dynasty, redraft, draft } = ranks;
+  const mid = Math.ceil(totalTeams / 2);
+  const bottom25 = totalTeams - top25 + 1;
+  const { dynasty, redraft, draft } = ranks;
 
-  if (power <= top25 && dynasty <= strong && redraft <= strong) return "Juggernaut";
-  if (power <= top25 && redraft <= mid && dynasty <= mid) return "Juggernaut";
-  if (power <= strong && redraft <= mid) return "Contender";
-  if (dynasty <= strong && draft <= strong && redraft >= weak) return "Ascending";
-  if (dynasty <= strong && power > strong && power < weak) return "Ascending";
-  if (dynasty >= weak && draft >= weak && power >= weak) return "Taco";
-  if (redraft >= weak && (dynasty <= mid || draft <= strong)) return "Rebuild";
-  if (power >= weak && dynasty > strong && dynasty < weak && draft > strong && draft < weak) return "Directionless";
-  if (power > strong && power < weak && dynasty > strong && dynasty < weak) return "Competitive";
-  return "Competitive";
+  if (redraft <= top25 && dynasty <= top25 && draft <= mid) return "Juggernaut";
+  if (redraft <= mid && dynasty > mid && draft > mid) return "Win-Now";
+  if (redraft >= bottom25 && (dynasty <= top25 || draft <= top25)) return "Future Powerhouse";
+  if (draft <= top25 && dynasty >= bottom25 && redraft >= bottom25) return "Pick Hoarder";
+  if (draft >= bottom25 && dynasty >= bottom25 && redraft >= bottom25) return "Taco";
+  return "N/A";
 }
 
 export function getLeagueTeamTiers(teams: Team[]): Map<string, { tier: Tier; tooltip: string }> {
@@ -192,70 +185,65 @@ export function getLeagueTeamTiers(teams: Team[]): Map<string, { tier: Tier; too
 }
 
 export function isContenderTier(tier: Tier): boolean {
-  return tier === "Juggernaut" || tier === "Contender";
+  return tier === "Juggernaut" || tier === "Win-Now";
 }
 
 export function isRebuilderTier(tier: Tier): boolean {
-  return tier === "Rebuild" || tier === "Taco" || tier === "Directionless";
+  return tier === "Future Powerhouse" || tier === "Pick Hoarder" || tier === "Taco";
 }
 
 export function getTierTooltip(tier: Tier): string {
   switch (tier) {
-    case "Juggernaut": return "League problem. Nobody wants to see this team in the playoffs.";
-    case "Contender": return "Built to win this year.";
-    case "Ascending": return "The future is bright. Probably a year early.";
-    case "Competitive": return "Good roster, not scary.";
-    case "Rebuild": return "Playing the long game.";
-    case "Directionless": return "The roster construction equivalent of throwing darts.";
-    case "Taco": return "Congratulations. You've successfully turned a dynasty team into a seasonal rental.";
+    case "Juggernaut": return "Elite across the board. Top 25% redraft, dynasty, and top 50% picks.";
+    case "Win-Now": return "Strong starters but thin on dynasty and draft capital.";
+    case "Future Powerhouse": return "Weak now but loaded with dynasty value or draft capital.";
+    case "Pick Hoarder": return "Stockpiling picks but the roster needs work.";
+    case "Taco": return "Bottom 25% in picks, dynasty, and redraft.";
+    case "N/A": return "Doesn't fit a clear archetype.";
   }
 }
 
 export function getTierEmoji(tier: Tier): string {
   switch (tier) {
     case "Juggernaut": return "🏆";
-    case "Contender": return "💪";
-    case "Ascending": return "📈";
-    case "Competitive": return "🎯";
-    case "Rebuild": return "🧠";
-    case "Directionless": return "🎰";
+    case "Win-Now": return "💪";
+    case "Future Powerhouse": return "📈";
+    case "Pick Hoarder": return "🎰";
     case "Taco": return "🤡";
+    case "N/A": return "➖";
   }
 }
 
 export function getTierColor(tier: Tier): string {
   switch (tier) {
     case "Juggernaut": return "text-[#d4af37] dark:text-[#d4af37]";
-    case "Contender": return "text-blue-600 dark:text-blue-400";
-    case "Ascending": return "text-emerald-600 dark:text-emerald-400";
-    case "Competitive": return "text-amber-600 dark:text-amber-400";
-    case "Rebuild": return "text-orange-600 dark:text-orange-400";
-    case "Directionless": return "text-purple-600 dark:text-purple-400";
+    case "Win-Now": return "text-blue-600 dark:text-blue-400";
+    case "Future Powerhouse": return "text-emerald-600 dark:text-emerald-400";
+    case "Pick Hoarder": return "text-purple-600 dark:text-purple-400";
     case "Taco": return "text-red-600 dark:text-red-400";
+    case "N/A": return "text-muted-foreground";
   }
 }
 
 export function getTierBg(tier: Tier): string {
   switch (tier) {
     case "Juggernaut": return "bg-[#d4af37]/10 dark:bg-[#d4af37]/10";
-    case "Contender": return "bg-blue-50 dark:bg-blue-950/30";
-    case "Ascending": return "bg-emerald-50 dark:bg-emerald-950/30";
-    case "Competitive": return "bg-amber-50 dark:bg-amber-950/30";
-    case "Rebuild": return "bg-orange-50 dark:bg-orange-950/30";
-    case "Directionless": return "bg-purple-50 dark:bg-purple-950/30";
+    case "Win-Now": return "bg-blue-50 dark:bg-blue-950/30";
+    case "Future Powerhouse": return "bg-emerald-50 dark:bg-emerald-950/30";
+    case "Pick Hoarder": return "bg-purple-50 dark:bg-purple-950/30";
     case "Taco": return "bg-red-50 dark:bg-red-950/30";
+    case "N/A": return "bg-muted/20";
   }
 }
 
 export function getTierBorderColor(tier: Tier): string {
   switch (tier) {
     case "Juggernaut": return "border-[#d4af37]/40";
-    case "Contender": return "border-blue-300 dark:border-blue-700";
-    case "Ascending": return "border-emerald-300 dark:border-emerald-700";
-    case "Competitive": return "border-amber-300 dark:border-amber-700";
-    case "Rebuild": return "border-orange-300 dark:border-orange-700";
-    case "Directionless": return "border-purple-300 dark:border-purple-700";
+    case "Win-Now": return "border-blue-300 dark:border-blue-700";
+    case "Future Powerhouse": return "border-emerald-300 dark:border-emerald-700";
+    case "Pick Hoarder": return "border-purple-300 dark:border-purple-700";
     case "Taco": return "border-red-300 dark:border-red-700";
+    case "N/A": return "border-border";
   }
 }
 

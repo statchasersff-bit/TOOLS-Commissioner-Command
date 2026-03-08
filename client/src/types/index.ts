@@ -52,7 +52,7 @@ export interface League {
   format?: "SF" | "1QB";
 }
 
-export type Tier = "Juggernaut" | "Contender" | "Ascending" | "Competitive" | "Rebuild" | "Directionless" | "Taco";
+export type Tier = "Juggernaut" | "Win-Now" | "Future Powerhouse" | "Pick Hoarder" | "Taco" | "N/A";
 
 export interface TabConfig {
   id: string;

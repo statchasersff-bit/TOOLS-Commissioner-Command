@@ -82,7 +82,7 @@ export function TradeFinder({ league, userTeam }: TradeProps) {
       .map((t) => {
         const tRedraft = posRedraftRanks[t.id] || {};
         const tDynasty = posDynastyRanks[t.id] || {};
-        const tier = tradeFinderTierMap.get(t.id)?.tier ?? "Competitive";
+        const tier = tradeFinderTierMap.get(t.id)?.tier ?? "N/A";
 
         const redraftReasons: string[] = [];
         const dynastyReasons: string[] = [];
@@ -183,7 +183,7 @@ export function TradeFinder({ league, userTeam }: TradeProps) {
       .flatMap(t => {
         const tOverallDynasty = partners.find(p => p.id === t.id)?.dynastyRank ?? total;
         const tOverallRedraft = partners.find(p => p.id === t.id)?.redraftRank ?? total;
-        const tier = tradeFinderTierMap.get(t.id)?.tier ?? "Competitive";
+        const tier = tradeFinderTierMap.get(t.id)?.tier ?? "N/A";
         const isRebuilder = isRebuilderTier(tier);
         const isDynastyStrong = tOverallDynasty <= topThird && tOverallRedraft >= bottomStart;
 
@@ -241,7 +241,7 @@ export function TradeFinder({ league, userTeam }: TradeProps) {
                   <p className="text-xs font-bold text-[#0b3a7a] dark:text-blue-400">{p.redraftVal.toLocaleString()}</p>
                   <p className="text-[10px] text-muted-foreground">redraft</p>
                 </div>
-                <Badge variant="outline" className={cn("text-[10px]", p.reason === "Rebuilder" ? getTierColor("Rebuild") : "text-amber-600 dark:text-amber-400 border-amber-300 dark:border-amber-700")} data-testid={`trade-block-reason-${p.sleeperId || p.id}`}>
+                <Badge variant="outline" className={cn("text-[10px]", p.reason === "Rebuilder" ? getTierColor("Future Powerhouse") : "text-amber-600 dark:text-amber-400 border-amber-300 dark:border-amber-700")} data-testid={`trade-block-reason-${p.sleeperId || p.id}`}>
                   {p.reason}
                 </Badge>
               </div>
