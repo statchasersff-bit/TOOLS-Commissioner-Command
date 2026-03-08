@@ -128,7 +128,7 @@ function getSuggestedDirection(team: Team, tier: string): string {
   if (weakest.score < 50) return `Target ${weakest.pos} upgrades in trades`;
   if (strongest.score >= 75 && weakest.score >= 50) return "Maintain balance, sell aging assets at peak";
   if (tier === "Juggernaut") return "Consolidate depth for elite starters to maximize your window";
-  if (tier === "Win-Now") return "Sell aging production before value drops";
+  if (tier === "Win-Now") return "Convert future assets into immediate production";
   return `Shore up ${weakest.pos} while window is open`;
 }
 
