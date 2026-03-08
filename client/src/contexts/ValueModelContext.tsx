@@ -256,8 +256,20 @@ export function ValueModelProvider({ children }: { children: React.ReactNode }) 
         ? starters.reduce((s, p) => s + p.age, 0) / starters.length
         : 26;
 
-      const posTotal = (pos: string) =>
-        starters.filter((p) => p.pos === pos).reduce((s, p) => s + getRedraftValue(p), 0);
+      const posStrength = (pos: string) => {
+        const posPlayers = [...team.roster]
+          .filter((p) => p.pos === pos)
+          .map((p) => ({ ...p, val: getPlayerValue(p) }))
+          .sort((a, b) => b.val - a.val);
+        const starterCount = rosterPositions
+          ? rosterPositions.filter((s) => s === pos).length || 1
+          : 1;
+        const posStarters = posPlayers.slice(0, starterCount);
+        const depthPlayers = posPlayers.slice(starterCount, starterCount + 3);
+        const starterVal = posStarters.reduce((s, p) => s + p.val, 0);
+        const depthVal = depthPlayers.reduce((s, p) => s + p.val, 0);
+        return starterVal + 0.5 * depthVal;
+      };
 
       return {
         id: team.id,
@@ -265,10 +277,10 @@ export function ValueModelProvider({ children }: { children: React.ReactNode }) 
         totalDynasty,
         picksTotal,
         starterAvgAge,
-        qbRaw: posTotal("QB"),
-        rbRaw: posTotal("RB"),
-        wrRaw: posTotal("WR"),
-        teRaw: posTotal("TE"),
+        qbStrength: posStrength("QB"),
+        rbStrength: posStrength("RB"),
+        wrStrength: posStrength("WR"),
+        teStrength: posStrength("TE"),
       };
     });
 
@@ -276,14 +288,17 @@ export function ValueModelProvider({ children }: { children: React.ReactNode }) 
     const starterRange = minMax(rawData.map((d) => d.starterRedraft));
     const depthRange = minMax(rawData.map((d) => d.totalDynasty));
     const picksRange = minMax(rawData.map((d) => d.picksTotal));
-    const qbRange = minMax(rawData.map((d) => d.qbRaw));
-    const rbRange = minMax(rawData.map((d) => d.rbRaw));
-    const wrRange = minMax(rawData.map((d) => d.wrRaw));
-    const teRange = minMax(rawData.map((d) => d.teRaw));
 
     const result = new Map<string, TeamMetrics>();
 
     const overallRange = minMax(rawData.map((d) => d.starterRedraft + d.totalDynasty + d.picksTotal));
+
+    const posRank = (pos: "qbStrength" | "rbStrength" | "wrStrength" | "teStrength", teamId: string) => {
+      const sorted = [...rawData].sort((a, b) => b[pos] - a[pos]);
+      const rank = sorted.findIndex((d) => d.id === teamId) + 1;
+      const total = sorted.length;
+      return Math.max(10, Math.min(99, Math.round(((total - rank) / (total - 1)) * 89 + 10)));
+    };
 
     for (const d of rawData) {
       const combinedRaw = d.starterRedraft + d.totalDynasty + d.picksTotal;
@@ -307,10 +322,10 @@ export function ValueModelProvider({ children }: { children: React.ReactNode }) 
         depth: depthScore,
         youth: youthScore,
         picks: picksScore,
-        qb: scale(d.qbRaw, qbRange.min, qbRange.max),
-        rb: scale(d.rbRaw, rbRange.min, rbRange.max),
-        wr: scale(d.wrRaw, wrRange.min, wrRange.max),
-        te: scale(d.teRaw, teRange.min, teRange.max),
+        qb: posRank("qbStrength", d.id),
+        rb: posRank("rbStrength", d.id),
+        wr: posRank("wrStrength", d.id),
+        te: posRank("teStrength", d.id),
         contenderWindowYears,
       });
     }
