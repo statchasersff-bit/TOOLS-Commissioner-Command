@@ -250,7 +250,7 @@ export function ValueModelProvider({ children }: { children: React.ReactNode }) 
       const bench = roster.filter((p) => !p.starter);
 
       const starterRedraft = starters.reduce((s, p) => s + getRedraftValue(p), 0);
-      const benchDynasty = bench.reduce((s, p) => s + getPlayerValue(p), 0);
+      const totalDynasty = roster.reduce((s, p) => s + getPlayerValue(p), 0);
       const picksTotal = team.picks.reduce((s, p) => s + getPickValue(p), 0);
       const starterAvgAge = starters.length > 0
         ? starters.reduce((s, p) => s + p.age, 0) / starters.length
@@ -262,7 +262,7 @@ export function ValueModelProvider({ children }: { children: React.ReactNode }) 
       return {
         id: team.id,
         starterRedraft,
-        benchDynasty,
+        totalDynasty,
         picksTotal,
         starterAvgAge,
         qbRaw: posTotal("QB"),
@@ -274,7 +274,7 @@ export function ValueModelProvider({ children }: { children: React.ReactNode }) 
 
     const minMax = (arr: number[]) => ({ min: Math.min(...arr), max: Math.max(...arr) });
     const starterRange = minMax(rawData.map((d) => d.starterRedraft));
-    const depthRange = minMax(rawData.map((d) => d.benchDynasty));
+    const depthRange = minMax(rawData.map((d) => d.totalDynasty));
     const picksRange = minMax(rawData.map((d) => d.picksTotal));
     const qbRange = minMax(rawData.map((d) => d.qbRaw));
     const rbRange = minMax(rawData.map((d) => d.rbRaw));
@@ -285,7 +285,7 @@ export function ValueModelProvider({ children }: { children: React.ReactNode }) 
 
     for (const d of rawData) {
       const starterScore = scale(d.starterRedraft, starterRange.min, starterRange.max);
-      const depthScore = scale(d.benchDynasty, depthRange.min, depthRange.max);
+      const depthScore = scale(d.totalDynasty, depthRange.min, depthRange.max);
       const picksScore = scale(d.picksTotal, picksRange.min, picksRange.max);
       const youthScore = Math.max(0, Math.min(100, Math.round(100 - (d.starterAvgAge - 23) * 8)));
 

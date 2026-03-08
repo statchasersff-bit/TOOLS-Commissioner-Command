@@ -55,7 +55,7 @@ export function PowerRankings({ league }: AnalyzerProps) {
       );
     }},
     { key: "starters", header: "Starters", sortable: true, sortAccessor: (row: any) => row.metrics.starters, render: (row: any) => row.metrics.starters },
-    { key: "depth", header: "Depth", sortable: true, sortAccessor: (row: any) => row.metrics.depth, render: (row: any) => row.metrics.depth },
+    { key: "depth", header: "Dynasty", sortable: true, sortAccessor: (row: any) => row.metrics.depth, render: (row: any) => row.metrics.depth },
     { key: "youth", header: "Youth", sortable: true, sortAccessor: (row: any) => row.metrics.youth, render: (row: any) => row.metrics.youth },
   ];
 
@@ -172,7 +172,7 @@ export function RosterComparison({ league }: AnalyzerProps) {
   const categories = [
     { key: "overall", label: "Overall" },
     { key: "starters", label: "Starters" },
-    { key: "depth", label: "Depth" },
+    { key: "depth", label: "Dynasty" },
     { key: "youth", label: "Youth" },
     { key: "qb", label: "QB" },
     { key: "rb", label: "RB" },

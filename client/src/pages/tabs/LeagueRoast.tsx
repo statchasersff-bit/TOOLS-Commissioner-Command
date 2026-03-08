@@ -446,7 +446,7 @@ export function LeagueRoast({ league, userTeam }: { league: League; userTeam: Te
                       {[
                         { label: "Win Now", grade: rc.winNow },
                         { label: "Future", grade: rc.future },
-                        { label: "Depth", grade: rc.depth },
+                        { label: "Dynasty", grade: rc.depth },
                         { label: "Flex", grade: rc.assetFlex },
                       ].map(sub => (
                         <div key={sub.label}>
