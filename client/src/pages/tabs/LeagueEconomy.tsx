@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { SectionHeader } from "@/components/SectionHeader";
@@ -8,10 +8,10 @@ import type { League, Team, Tier } from "@/types";
 import { formatPickLabel } from "@/types";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
-  TrendingUp, TrendingDown, Crosshair,
-  Crown, Rocket, Skull, HelpCircle, Package, BarChart3,
-  Activity, Users, Zap, AlertTriangle
-} from "lucide-react";
+  ScatterChart, Scatter, XAxis, YAxis, CartesianGrid,
+  Tooltip as RechartsTooltip, ResponsiveContainer, ReferenceLine, Label
+} from "recharts";
+import { Package, BarChart3, Activity, AlertTriangle } from "lucide-react";
 
 type EconomySection = "overview" | "picks" | "liquidity";
 
@@ -38,7 +38,7 @@ function computeFutureScore(teams: Team[], team: Team): number {
   const allDraft = teams.map(t => t.metrics.picks);
   const dynastyPct = computePercentile(allDynasty, team.metrics.depth);
   const draftPct = computePercentile(allDraft, team.metrics.picks);
-  return Math.round(0.5 * dynastyPct + 0.5 * draftPct);
+  return Math.round(0.7 * dynastyPct + 0.3 * draftPct);
 }
 
 function computeParityScore(teams: Team[]): { score: number; label: string; description: string } {
@@ -66,27 +66,61 @@ interface QuadrantTeam {
   now: number;
   future: number;
   tier: Tier;
+  redRank: number;
+  dynRank: number;
+  pcksRank: number;
 }
 
-function getQuadrantLabel(now: number, future: number): { label: string; icon: typeof Crown; color: string } {
-  if (now >= 50 && future >= 50) return { label: "Dynasty Death Star", icon: Crown, color: "text-yellow-500" };
-  if (now >= 50 && future < 50) return { label: "Win-Now Kings", icon: Zap, color: "text-red-500" };
-  if (now < 50 && future >= 50) return { label: "Rebuild With Ammo", icon: Rocket, color: "text-emerald-500" };
-  return { label: "Rebuild Hell", icon: Skull, color: "text-muted-foreground" };
+function getQuadrantColor(now: number, future: number, avgNow: number, avgFuture: number): string {
+  if (now >= avgNow && future >= avgFuture) return "#d4af37";
+  if (now >= avgNow && future < avgFuture) return "#ef4444";
+  if (now < avgNow && future >= avgFuture) return "#10b981";
+  return "#64748b";
+}
+
+function getQuadrantLabel(now: number, future: number, avgNow: number, avgFuture: number): string {
+  if (now >= avgNow && future >= avgFuture) return "Dynasty Death Star";
+  if (now >= avgNow && future < avgFuture) return "Win-Now Kings";
+  if (now < avgNow && future >= avgFuture) return "Rebuild With Ammo";
+  return "Rebuild Hell";
+}
+
+function DynastyWindowTooltip({ active, payload }: any) {
+  if (!active || !payload?.length) return null;
+  const d = payload[0].payload;
+  return (
+    <div className="bg-[#0a1628] border border-[#1e3a5f] rounded-lg px-3 py-2 shadow-xl text-xs" data-testid="scatter-tooltip">
+      <p className="font-bold text-white mb-1">{d.teamName}</p>
+      <div className="space-y-0.5 text-slate-300">
+        <p>RED Rank: <span className="font-semibold text-white">{d.redRank}</span></p>
+        <p>DYN Rank: <span className="font-semibold text-white">{d.dynRank}</span></p>
+        <p>PCKS Rank: <span className="font-semibold text-white">{d.pcksRank}</span></p>
+      </div>
+      <div className="mt-1.5 pt-1.5 border-t border-[#1e3a5f]">
+        <p className="text-slate-400">Tier: <span className="font-semibold text-white">{d.tier}</span></p>
+        <p className="text-slate-400">Quadrant: <span className="font-semibold text-white">{d.quadrant}</span></p>
+      </div>
+    </div>
+  );
 }
 
 function EconomyOverview({ league }: { league: League }) {
   const tierMap = useMemo(() => getLeagueTeamTiers(league.teams), [league.teams]);
 
-  const quadrantTeams: QuadrantTeam[] = useMemo(() =>
-    league.teams.map(team => ({
+  const quadrantTeams: QuadrantTeam[] = useMemo(() => {
+    const byRedraft = [...league.teams].sort((a, b) => (b.metrics?.starters ?? 0) - (a.metrics?.starters ?? 0));
+    const byDynasty = [...league.teams].sort((a, b) => (b.metrics?.depth ?? 0) - (a.metrics?.depth ?? 0));
+    const byDraft = [...league.teams].sort((a, b) => (b.metrics?.picks ?? 0) - (a.metrics?.picks ?? 0));
+    return league.teams.map(team => ({
       team,
       now: computeNowScore(league.teams, team),
       future: computeFutureScore(league.teams, team),
       tier: tierMap.get(team.id)?.tier ?? "Balanced",
-    })),
-    [league.teams, tierMap]
-  );
+      redRank: byRedraft.findIndex(t => t.id === team.id) + 1,
+      dynRank: byDynasty.findIndex(t => t.id === team.id) + 1,
+      pcksRank: byDraft.findIndex(t => t.id === team.id) + 1,
+    }));
+  }, [league.teams, tierMap]);
 
   const parity = useMemo(() => computeParityScore(league.teams), [league.teams]);
 
@@ -106,59 +140,115 @@ function EconomyOverview({ league }: { league: League }) {
     return { top3, top3Pct, total: totalValue };
   }, [league.teams]);
 
-  const quadrants = useMemo(() => {
-    const deathStar = quadrantTeams.filter(t => t.now >= 50 && t.future >= 50);
-    const winNow = quadrantTeams.filter(t => t.now >= 50 && t.future < 50);
-    const rebuildAmmo = quadrantTeams.filter(t => t.now < 50 && t.future >= 50);
-    const rebuildHell = quadrantTeams.filter(t => t.now < 50 && t.future < 50);
-    return { deathStar, winNow, rebuildAmmo, rebuildHell };
+  const avgNow = useMemo(() => {
+    const sum = quadrantTeams.reduce((s, t) => s + t.now, 0);
+    return quadrantTeams.length > 0 ? sum / quadrantTeams.length : 50;
   }, [quadrantTeams]);
+
+  const avgFuture = useMemo(() => {
+    const sum = quadrantTeams.reduce((s, t) => s + t.future, 0);
+    return quadrantTeams.length > 0 ? sum / quadrantTeams.length : 50;
+  }, [quadrantTeams]);
+
+  const scatterData = useMemo(() =>
+    quadrantTeams.map(qt => ({
+      x: qt.now,
+      y: qt.future,
+      teamName: qt.team.owner,
+      tier: qt.tier,
+      redRank: qt.redRank,
+      dynRank: qt.dynRank,
+      pcksRank: qt.pcksRank,
+      quadrant: getQuadrantLabel(qt.now, qt.future, avgNow, avgFuture),
+      fill: getQuadrantColor(qt.now, qt.future, avgNow, avgFuture),
+    })),
+    [quadrantTeams, avgNow, avgFuture]
+  );
 
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="text-base font-bold text-foreground">Power vs Future Quadrant</h3>
+        <h3 className="text-base font-bold text-foreground">Dynasty Window</h3>
         <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
         <p className="text-xs text-muted-foreground mt-2">Where each team sits in the win-now vs future value spectrum</p>
       </div>
 
-      <div className="grid grid-cols-2 gap-3" data-testid="economy-quadrant">
-        {[
-          { key: "deathStar", label: "Dynasty Death Star", teams: quadrants.deathStar, icon: Crown, color: "border-yellow-500/50 bg-yellow-500/5", textColor: "text-yellow-600 dark:text-yellow-400", desc: "High Now + High Future" },
-          { key: "winNow", label: "Win-Now Kings", teams: quadrants.winNow, icon: Zap, color: "border-red-500/50 bg-red-500/5", textColor: "text-red-600 dark:text-red-400", desc: "High Now + Low Future" },
-          { key: "rebuildAmmo", label: "Rebuild With Ammo", teams: quadrants.rebuildAmmo, icon: Rocket, color: "border-emerald-500/50 bg-emerald-500/5", textColor: "text-emerald-600 dark:text-emerald-400", desc: "Low Now + High Future" },
-          { key: "rebuildHell", label: "Rebuild Hell", teams: quadrants.rebuildHell, icon: Skull, color: "border-muted bg-muted/20", textColor: "text-muted-foreground", desc: "Low Now + Low Future" },
-        ].map(({ key, label, teams, icon: Icon, color, textColor, desc }) => (
-          <Card key={key} className={`p-4 border-2 ${color} rounded-2xl min-h-[140px]`} data-testid={`quadrant-${key}`}>
-            <div className="flex items-center gap-2 mb-1">
-              <Icon className={`w-4 h-4 ${textColor}`} />
-              <span className={`text-xs font-bold uppercase tracking-wider ${textColor}`}>{label}</span>
+      <Card className="p-4 md:p-6 rounded-2xl bg-[#0a1628] border-[#1e3a5f]" data-testid="dynasty-window-chart">
+        <div className="flex flex-wrap gap-x-5 gap-y-1 mb-4 justify-center">
+          {[
+            { label: "Dynasty Death Star", color: "#d4af37" },
+            { label: "Win-Now Kings", color: "#ef4444" },
+            { label: "Rebuild With Ammo", color: "#10b981" },
+            { label: "Rebuild Hell", color: "#64748b" },
+          ].map(q => (
+            <div key={q.label} className="flex items-center gap-1.5">
+              <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: q.color }} />
+              <span className="text-[10px] text-slate-400">{q.label}</span>
             </div>
-            <p className="text-[10px] text-muted-foreground mb-3">{desc}</p>
-            <div className="flex flex-wrap gap-1.5">
-              <TooltipProvider>
-                {teams.map(qt => (
-                  <Tooltip key={qt.team.id}>
-                    <TooltipTrigger asChild>
-                      <div className="px-2 py-1 rounded-lg bg-background border border-border text-xs font-medium cursor-default hover:border-[#d4af37]/50 transition-colors" data-testid={`chip-${qt.team.id}`}>
-                        {qt.team.owner}
-                      </div>
-                    </TooltipTrigger>
-                    <TooltipContent side="top" className="text-xs">
-                      <p className="font-bold">{qt.team.name}</p>
-                      <p>Now Score: {qt.now} · Future Score: {qt.future}</p>
-                      <p>{getTierEmoji(qt.tier)} {qt.tier}</p>
-                    </TooltipContent>
-                  </Tooltip>
-                ))}
-              </TooltipProvider>
-              {teams.length === 0 && (
-                <span className="text-[10px] text-muted-foreground italic">No teams</span>
-              )}
-            </div>
-          </Card>
-        ))}
-      </div>
+          ))}
+        </div>
+        <ResponsiveContainer width="100%" height={380}>
+          <ScatterChart margin={{ top: 20, right: 30, bottom: 30, left: 20 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#1e3a5f" strokeOpacity={0.5} />
+            <XAxis
+              type="number"
+              dataKey="x"
+              domain={[0, 100]}
+              tick={{ fill: "#94a3b8", fontSize: 11 }}
+              tickLine={{ stroke: "#334155" }}
+              axisLine={{ stroke: "#334155" }}
+            >
+              <Label value="Current Power →" position="bottom" offset={10} style={{ fill: "#94a3b8", fontSize: 12, fontWeight: 600 }} />
+            </XAxis>
+            <YAxis
+              type="number"
+              dataKey="y"
+              domain={[0, 100]}
+              tick={{ fill: "#94a3b8", fontSize: 11 }}
+              tickLine={{ stroke: "#334155" }}
+              axisLine={{ stroke: "#334155" }}
+            >
+              <Label value="Future Strength →" angle={-90} position="left" offset={0} style={{ fill: "#94a3b8", fontSize: 12, fontWeight: 600 }} />
+            </YAxis>
+            <ReferenceLine x={avgNow} stroke="#d4af37" strokeOpacity={0.3} strokeDasharray="6 4" />
+            <ReferenceLine y={avgFuture} stroke="#d4af37" strokeOpacity={0.3} strokeDasharray="6 4" />
+            <RechartsTooltip content={<DynastyWindowTooltip />} cursor={false} />
+            <Scatter
+              data={scatterData}
+              nameKey="teamName"
+              shape={(props: any) => {
+                const { cx, cy, payload } = props;
+                return (
+                  <circle
+                    cx={cx}
+                    cy={cy}
+                    r={8}
+                    fill={payload.fill}
+                    stroke={payload.fill}
+                    strokeWidth={2}
+                    fillOpacity={0.8}
+                    style={{ cursor: "pointer" }}
+                  />
+                );
+              }}
+            />
+          </ScatterChart>
+        </ResponsiveContainer>
+        <div className="grid grid-cols-2 gap-2 mt-3">
+          <div className="text-center py-1.5 rounded-lg bg-[#10b981]/10 border border-[#10b981]/20">
+            <span className="text-[10px] text-emerald-400 font-semibold">↑ Rebuild With Ammo</span>
+          </div>
+          <div className="text-center py-1.5 rounded-lg bg-[#d4af37]/10 border border-[#d4af37]/20">
+            <span className="text-[10px] text-[#d4af37] font-semibold">↗ Dynasty Death Star</span>
+          </div>
+          <div className="text-center py-1.5 rounded-lg bg-[#64748b]/10 border border-[#64748b]/20">
+            <span className="text-[10px] text-slate-400 font-semibold">↙ Rebuild Hell</span>
+          </div>
+          <div className="text-center py-1.5 rounded-lg bg-[#ef4444]/10 border border-[#ef4444]/20">
+            <span className="text-[10px] text-red-400 font-semibold">→ Win-Now Kings</span>
+          </div>
+        </div>
+      </Card>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Card className="p-5 rounded-2xl" data-testid="parity-score">

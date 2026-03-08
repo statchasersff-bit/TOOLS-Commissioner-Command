@@ -1,0 +1,122 @@
+We want to replace the current “Power vs Future Quadrant” UI (which shows four static boxes with team names) with a true Dynasty Window scatter chart.
+
+GOAL
+Visualize the league competitive window with a two-axis chart.
+
+X-axis = Current Power (RED score)
+Y-axis = Future Strength (DYN + PCKS score)
+
+Each team should be plotted as a point on the chart.
+
+CHART REQUIREMENTS
+
+Use a scatter plot.
+
+Each team dot should display:
+- team name
+- color based on quadrant
+- hover tooltip with:
+   team name
+   RED rank
+   DYN rank
+   PCKS rank
+   tier label (Juggernaut, Win-Now, etc)
+
+AXES
+
+X Axis
+Label: Current Power
+Value: normalized RED score or inverse rank
+
+Y Axis
+Label: Future Strength
+Value: weighted combination
+
+Future Score Formula:
+futureScore = (dynScore * 0.7) + (picksScore * 0.3)
+
+QUADRANT DIVIDERS
+
+Add vertical and horizontal midlines dividing the chart into four quadrants.
+
+Midpoints should be league average.
+
+QUADRANT LABELS
+
+Top Right
+Dynasty Death Star
+High Now + High Future
+
+Top Left
+Rebuild With Ammo
+Low Now + High Future
+
+Bottom Right
+Win-Now Kings
+High Now + Low Future
+
+Bottom Left
+Rebuild Hell
+Low Now + Low Future
+
+DOT COLORING
+
+Dynasty Death Star
+gold
+
+Win-Now Kings
+red
+
+Rebuild With Ammo
+green
+
+Rebuild Hell
+gray
+
+INTERACTION
+
+Hover:
+show team tooltip
+
+Click:
+open team analysis panel (future feature)
+
+VISUAL STYLE
+
+Match StatChasers design system:
+dark background
+navy grid
+gold accents
+
+Add subtle grid lines behind chart.
+
+TECH IMPLEMENTATION
+
+Use either:
+Recharts ScatterChart
+or Chart.js scatter
+
+Prefer Recharts if already installed.
+
+DATA INPUT
+
+Each team object should include:
+
+{
+ teamName,
+ redScore,
+ dynScore,
+ picksScore
+}
+
+Compute:
+
+futureScore = dynScore * 0.7 + picksScore * 0.3
+
+Use normalized values so axes range from 0-100.
+
+OUTPUT
+
+Render the Dynasty Window chart above the league analysis section.
+
+Remove the current four-card quadrant layout completely.
