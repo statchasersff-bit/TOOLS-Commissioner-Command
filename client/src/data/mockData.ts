@@ -180,6 +180,7 @@ const TIER_DESCRIPTIONS: Record<Tier, string> = {
   "Contender": "A strong current team with enough long-term value to stay competitive.",
   "Rebuilder": "Not built to win right now, but positioned to improve through long-term assets.",
   "Weak / Directionless": "Lacking both current strength and a clear long-term advantage.",
+  "Pretender": "A solid, playoff-caliber team without the elite edge to be a true contender.",
   "Balanced": "A middle-of-the-pack profile without an extreme dynasty archetype.",
 };
 
@@ -259,6 +260,10 @@ export function classifyTeamTier(
 
   if (flags.redTop50 && flags.dynTop33) {
     return { tier: "Contender", tierDescription: TIER_DESCRIPTIONS["Contender"], debug: flags };
+  }
+
+  if (flags.redTop33 && flags.dynTop50) {
+    return { tier: "Pretender", tierDescription: TIER_DESCRIPTIONS["Pretender"], debug: flags };
   }
 
   if (flags.redBottom33 && (flags.pcksTop50 || flags.dynTop50)) {
@@ -345,7 +350,7 @@ export function getDynastyWindowColor(label: string): string {
 }
 
 export function isContenderTier(tier: Tier): boolean {
-  return tier === "Juggernaut" || tier === "Win-Now" || tier === "Contender";
+  return tier === "Juggernaut" || tier === "Win-Now" || tier === "Contender" || tier === "Pretender";
 }
 
 export function isRebuilderTier(tier: Tier): boolean {
@@ -364,6 +369,7 @@ export function getTierEmoji(tier: Tier): string {
     case "Pick Hoarder": return "🎰";
     case "Taco": return "🤡";
     case "Contender": return "🔥";
+    case "Pretender": return "🎭";
     case "Rebuilder": return "🔨";
     case "Weak / Directionless": return "😶";
     case "Balanced": return "⚖️";
@@ -378,6 +384,7 @@ export function getTierColor(tier: Tier): string {
     case "Pick Hoarder": return "text-purple-600 dark:text-purple-400";
     case "Taco": return "text-red-600 dark:text-red-400";
     case "Contender": return "text-amber-600 dark:text-amber-400";
+    case "Pretender": return "text-sky-600 dark:text-sky-400";
     case "Rebuilder": return "text-orange-600 dark:text-orange-400";
     case "Weak / Directionless": return "text-rose-600 dark:text-rose-400";
     case "Balanced": return "text-slate-600 dark:text-slate-400";
@@ -392,6 +399,7 @@ export function getTierBg(tier: Tier): string {
     case "Pick Hoarder": return "bg-purple-50 dark:bg-purple-950/30";
     case "Taco": return "bg-red-50 dark:bg-red-950/30";
     case "Contender": return "bg-amber-50 dark:bg-amber-950/30";
+    case "Pretender": return "bg-sky-50 dark:bg-sky-950/30";
     case "Rebuilder": return "bg-orange-50 dark:bg-orange-950/30";
     case "Weak / Directionless": return "bg-rose-50 dark:bg-rose-950/30";
     case "Balanced": return "bg-slate-50 dark:bg-slate-900/30";
@@ -406,6 +414,7 @@ export function getTierBorderColor(tier: Tier): string {
     case "Pick Hoarder": return "border-purple-300 dark:border-purple-700";
     case "Taco": return "border-red-300 dark:border-red-700";
     case "Contender": return "border-amber-300 dark:border-amber-700";
+    case "Pretender": return "border-sky-300 dark:border-sky-700";
     case "Rebuilder": return "border-orange-300 dark:border-orange-700";
     case "Weak / Directionless": return "border-rose-300 dark:border-rose-700";
     case "Balanced": return "border-slate-300 dark:border-slate-700";
