@@ -261,6 +261,10 @@ export function classifyTeamTier(
     return { tier: "Contender", tierDescription: TIER_DESCRIPTIONS["Contender"], debug: flags };
   }
 
+  if (flags.redBottom33 && (flags.pcksTop50 || flags.dynTop50)) {
+    return { tier: "Rebuilder", tierDescription: TIER_DESCRIPTIONS["Rebuilder"], debug: flags };
+  }
+
   return { tier: "Balanced", tierDescription: TIER_DESCRIPTIONS["Balanced"], debug: flags };
 }
 
