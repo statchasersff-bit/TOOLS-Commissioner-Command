@@ -258,14 +258,6 @@ export function DashboardOverview({ league, userTeam, onNavigate }: DashboardOve
               testId="snapshot-power-rank"
             />
             <SnapshotStat
-              label="Power Score"
-              value={userTeam.metrics.overall}
-              context={getPercentileLabel(rank, total)}
-              contextColor={getPercentileColor(rank, total)}
-              icon={Zap}
-              testId="snapshot-power-score"
-            />
-            <SnapshotStat
               label="Playoff Odds"
               value={seasonStarted ? `${clampedOdds}%` : "--"}
               context={seasonStarted ? (clampedOdds >= 60 ? "Strong outlook" : clampedOdds >= 40 ? "On the bubble" : "Long shot") : "Preseason \u2013 Not available"}
