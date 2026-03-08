@@ -429,7 +429,7 @@ function posBarColor(rank: number): string {
   return "bg-red-400";
 }
 
-type SortKey = "name" | "overall" | "redraftRank" | "dynastyRank" | "picks";
+type SortKey = "name" | "redraftRank" | "dynastyRank" | "picks";
 
 function SortableHeader({ label, mobileLabel, sortKey, activeSortKey, sortDir, onSort, className }: {
   label: string; mobileLabel?: string; sortKey: SortKey; activeSortKey: SortKey; sortDir: "asc" | "desc";
@@ -457,8 +457,7 @@ function SortableHeader({ label, mobileLabel, sortKey, activeSortKey, sortDir, o
 export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
   const teams = league.teams;
   const { getPlayerValue, getRedraftValue, optimizeLineup } = useValueModel();
-  const maxOverall = Math.max(...teams.map(t => t.metrics.overall), 1);
-  const [sortKey, setSortKey] = useState<SortKey>("overall");
+  const [sortKey, setSortKey] = useState<SortKey>("name");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
@@ -559,7 +558,6 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
   const sortedTeams = useMemo(() => {
     const accessor: Record<SortKey, (t: Team) => number | string> = {
       name: t => t.name.toLowerCase(),
-      overall: t => t.metrics.overall,
       redraftRank: t => -(teamRanks.ranks[t.id]?.redraftRank ?? teamRanks.total),
       dynastyRank: t => -(teamRanks.ranks[t.id]?.dynastyRank ?? teamRanks.total),
       picks: t => -(teamRanks.ranks[t.id]?.picksRank ?? teamRanks.total),
@@ -574,7 +572,7 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
     });
   }, [teams, sortKey, sortDir, teamRanks]);
 
-  const colCount = 8;
+  const colCount = 7;
 
   return (
     <div className="space-y-6">
@@ -598,7 +596,7 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
                   )}
                 </span>
               </th>
-              <th className="px-3 py-1.5 text-center text-[10px] font-bold text-[#0b3a7a] dark:text-blue-400 uppercase tracking-widest border-b border-border/20 bg-muted/30 dark:bg-muted/20" colSpan={2} data-testid="col-group-strength">
+              <th className="px-3 py-1.5 text-center text-[10px] font-bold text-[#0b3a7a] dark:text-blue-400 uppercase tracking-widest border-b border-border/20 bg-muted/30 dark:bg-muted/20" colSpan={1} data-testid="col-group-strength">
                 Team Strength
               </th>
               <th className="px-3 py-1.5 text-center text-[10px] font-bold text-[#0b3a7a] dark:text-blue-400 uppercase tracking-widest border-b border-border/20 bg-muted/30 dark:bg-muted/20 border-l border-border/30" colSpan={2} data-testid="col-group-roster">
@@ -610,7 +608,6 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
               <th className="bg-muted/30 dark:bg-muted/20" rowSpan={2} />
             </tr>
             <tr className="border-b border-border bg-muted/30 dark:bg-muted/20">
-              <SortableHeader label="Overall" sortKey="overall" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
               <th className="px-2 sm:px-4 py-3 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Tier</th>
               <SortableHeader label="Redraft" mobileLabel="Red" sortKey="redraftRank" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="border-l border-border/30" />
               <SortableHeader label="Dynasty" mobileLabel="Dyn" sortKey="dynastyRank" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
@@ -653,9 +650,6 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
                           )}
                         </div>
                       </div>
-                    </td>
-                    <td className="px-2 sm:px-4 py-3.5 whitespace-nowrap">
-                      <PowerBar value={team.metrics.overall} max={maxOverall} />
                     </td>
                     <td className="px-2 sm:px-4 py-3.5 whitespace-nowrap">
                       <Badge variant="outline" className={cn(getTierColor(tier), "cursor-default")} data-testid={`tier-badge-snapshot-${team.id}`}>
