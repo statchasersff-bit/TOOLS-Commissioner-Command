@@ -594,33 +594,13 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border/40">
-              <SortableHeader label="Rank" sortKey="overall" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} rowSpan={2} />
-              <th className="bg-muted/30 dark:bg-muted/20 cursor-pointer select-none hover:text-foreground transition-colors" rowSpan={2} onClick={() => handleSort("name")} data-testid="sort-name">
-                <span className="inline-flex items-center gap-1 px-4 py-3 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">
-                  Team
-                  {sortKey === "name" ? (
-                    sortDir === "asc" ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />
-                  ) : (
-                    <ArrowUpDown className="w-3 h-3 opacity-30" />
-                  )}
-                </span>
-              </th>
-              <th className="px-3 py-1.5 text-center text-[10px] font-bold text-[#0b3a7a] dark:text-blue-400 uppercase tracking-widest border-b border-border/20 bg-muted/30 dark:bg-muted/20" colSpan={1} data-testid="col-group-strength">
-                Team Strength
-              </th>
-              <th className="px-3 py-1.5 text-center text-[10px] font-bold text-[#0b3a7a] dark:text-blue-400 uppercase tracking-widest border-b border-border/20 bg-muted/30 dark:bg-muted/20 border-l border-border/30" colSpan={2} data-testid="col-group-roster">
-                Roster Value
-              </th>
-              <th className="px-3 py-1.5 text-center text-[10px] font-bold text-[#0b3a7a] dark:text-blue-400 uppercase tracking-widest border-b border-border/20 bg-muted/30 dark:bg-muted/20 border-l border-border/30" colSpan={1} data-testid="col-group-capital">
-                Draft Capital
-              </th>
-              <th className="bg-muted/30 dark:bg-muted/20" rowSpan={2} />
-            </tr>
-            <tr className="border-b border-border bg-muted/30 dark:bg-muted/20">
-              <th className="px-2 sm:px-4 py-3 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Tier</th>
-              <SortableHeader label="Redraft" mobileLabel="Red" sortKey="redraftRank" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="border-l border-border/30" />
+              <SortableHeader label="Rank" sortKey="overall" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+              <SortableHeader label="Team" sortKey="name" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+              <th className="px-2 sm:px-4 py-3 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap bg-muted/30 dark:bg-muted/20">Tier</th>
+              <SortableHeader label="Redraft" mobileLabel="Red" sortKey="redraftRank" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
               <SortableHeader label="Dynasty" mobileLabel="Dyn" sortKey="dynastyRank" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-              <SortableHeader label="Draft" mobileLabel="Pcks" sortKey="picks" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="border-l border-border/30" />
+              <SortableHeader label="Draft" mobileLabel="Pcks" sortKey="picks" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+              <th className="bg-muted/30 dark:bg-muted/20" />
             </tr>
           </thead>
           <tbody>
