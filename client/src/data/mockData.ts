@@ -156,7 +156,9 @@ export function classifyTeamTier(
   const { power, dynasty, redraft, draft } = ranks;
 
   if (power <= top25 && dynasty <= strong && redraft <= strong) return "Juggernaut";
+  if (power <= top25 && redraft <= mid && dynasty <= mid) return "Juggernaut";
   if (power <= strong && redraft <= mid) return "Contender";
+  if (dynasty <= strong && draft <= strong && redraft >= weak) return "Ascending";
   if (dynasty <= strong && power > strong && power < weak) return "Ascending";
   if (dynasty >= weak && draft >= weak && power >= weak) return "Taco";
   if (redraft >= weak && (dynasty <= mid || draft <= strong)) return "Rebuild";

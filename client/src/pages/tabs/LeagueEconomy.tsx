@@ -38,7 +38,7 @@ function computeFutureScore(teams: Team[], team: Team): number {
   const allDraft = teams.map(t => t.metrics.picks);
   const dynastyPct = computePercentile(allDynasty, team.metrics.depth);
   const draftPct = computePercentile(allDraft, team.metrics.picks);
-  return Math.round(0.6 * dynastyPct + 0.4 * draftPct);
+  return Math.round(0.5 * dynastyPct + 0.5 * draftPct);
 }
 
 function computeParityScore(teams: Team[]): { score: number; label: string; description: string } {
