@@ -5,11 +5,11 @@ import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/DataTable";
 import { InsightCallout } from "@/components/InsightCallout";
 import { SectionHeader } from "@/components/SectionHeader";
-import { getLeagueTeamTiers, getTierColor, getTierEmoji, getTierTooltip, isContenderTier, isRebuilderTier, generateInsights } from "@/data/mockData";
+import { getLeagueTeamTiers, getTierColor, getTierEmoji, getTierTooltip, isContenderTier, isRebuilderTier, generateInsights, computeNowScore, computeFutureScore, getDynastyWindowLabel, getDynastyWindowSubtitle, getDynastyWindowColor } from "@/data/mockData";
 import { useValueModel } from "@/contexts/ValueModelContext";
 import type { League, Team } from "@/types";
 import { cn } from "@/lib/utils";
-import { Trophy, Zap, Target, Calendar, Users, Medal, ArrowRight, ArrowUp, ArrowDown, ArrowUpDown, Table, ArrowRightLeft, Compass, Flame, Sprout, Archive, ChevronDown, ChevronUp } from "lucide-react";
+import { Trophy, Zap, Target, Calendar, Users, Medal, ArrowRight, ArrowUp, ArrowDown, ArrowUpDown, Table, ArrowRightLeft, Compass, Flame, Sprout, Archive, ChevronDown, ChevronUp, MapPin } from "lucide-react";
 
 interface DashboardProps {
   league: League;
@@ -106,18 +106,7 @@ function getDraftCapitalScore(team: Team, league: League): number {
   return Math.round(pct * 100) / 10;
 }
 
-function getStrategy(winNow: number, youth: number, capital: number): { label: string; color: string } {
-  if (winNow >= 7 && youth >= 6) return { label: "Dynasty Powerhouse", color: "text-emerald-600 dark:text-emerald-400" };
-  if (winNow >= 7) return { label: "Win-Now Contender", color: "text-blue-600 dark:text-blue-400" };
-  if (winNow >= 5 && youth >= 5) return { label: "Soft Contender", color: "text-blue-500 dark:text-blue-400" };
-  if (winNow >= 5) return { label: "Aging Contender", color: "text-amber-600 dark:text-amber-400" };
-  if (youth >= 7 && capital >= 7) return { label: "Rising Dynasty", color: "text-emerald-500 dark:text-emerald-400" };
-  if (youth >= 6) return { label: "Youth Movement", color: "text-cyan-600 dark:text-cyan-400" };
-  if (capital >= 7) return { label: "Capital Rich Rebuild", color: "text-purple-600 dark:text-purple-400" };
-  return { label: "Full Rebuild", color: "text-red-500 dark:text-red-400" };
-}
-
-function getDirection(team: Team): string {
+function getSuggestedDirection(team: Team, tier: string): string {
   const posScores = [
     { pos: "QB", score: team.metrics.qb },
     { pos: "RB", score: team.metrics.rb },
@@ -127,10 +116,35 @@ function getDirection(team: Team): string {
   const weakest = posScores.reduce((min, p) => p.score < min.score ? p : min, posScores[0]);
   const strongest = posScores.reduce((max, p) => p.score > max.score ? p : max, posScores[0]);
 
+  if (tier === "Taco") return "Sell everything for future picks and young players";
+  if (tier === "Weak / Directionless") return "Identify a direction: sell aging assets or acquire picks";
+  if (tier === "Pick Hoarder") return "Package picks for an elite starter to accelerate the rebuild";
+  if (tier === "Future Powerhouse") return "Hold and let the young core mature";
+  if (tier === "Rebuilder") return "Target young upside players and stockpile future picks";
+
   if (weakest.score < 30) return `Aggressively buy ${weakest.pos} depth`;
   if (weakest.score < 50) return `Target ${weakest.pos} upgrades in trades`;
-  if (strongest.score >= 75 && weakest.score >= 50) return `Maintain balance, sell aging assets at peak`;
+  if (strongest.score >= 75 && weakest.score >= 50) return "Maintain balance, sell aging assets at peak";
+  if (tier === "Juggernaut") return "Consolidate depth for elite starters to maximize your window";
+  if (tier === "Win-Now") return "Sell aging production before value drops";
   return `Shore up ${weakest.pos} while window is open`;
+}
+
+function getGrade(score: number): string {
+  if (score >= 75) return "A";
+  if (score >= 60) return "B";
+  if (score >= 40) return "C";
+  return "D";
+}
+
+function getGradeColor(grade: string): string {
+  switch (grade) {
+    case "A": return "text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border-emerald-500/20";
+    case "B": return "text-blue-600 dark:text-blue-400 bg-blue-500/10 border-blue-500/20";
+    case "C": return "text-amber-600 dark:text-amber-400 bg-amber-500/10 border-amber-500/20";
+    case "D": return "text-red-500 dark:text-red-400 bg-red-500/10 border-red-500/20";
+    default: return "text-muted-foreground";
+  }
 }
 
 function ScoreBar({ value, max = 10, color }: { value: number; max?: number; color: string }) {
@@ -142,79 +156,6 @@ function ScoreBar({ value, max = 10, color }: { value: number; max?: number; col
   );
 }
 
-function TeamIdentityCard({ league, userTeam }: DashboardProps) {
-  const winNow = getWinNowScore(userTeam, league);
-  const youth = getYouthScore(userTeam, league);
-  const capital = getDraftCapitalScore(userTeam, league);
-  const strategy = getStrategy(winNow, youth, capital);
-  const direction = getDirection(userTeam);
-
-  return (
-    <Card className="p-6" data-testid="team-identity-card">
-      <div className="mb-5">
-        <h3 className="text-base font-bold text-foreground">Team Identity</h3>
-        <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="space-y-5">
-          <div data-testid="identity-win-now">
-            <div className="flex items-center justify-between mb-1.5">
-              <div className="flex items-center gap-2">
-                <Flame className="w-4 h-4 text-orange-500" />
-                <span className="text-sm font-semibold text-foreground">Win-Now Score</span>
-              </div>
-              <span className="text-lg font-bold text-foreground">{winNow} <span className="text-xs font-normal text-muted-foreground">/ 10</span></span>
-            </div>
-            <ScoreBar value={winNow} color="bg-orange-500" />
-          </div>
-
-          <div data-testid="identity-youth">
-            <div className="flex items-center justify-between mb-1.5">
-              <div className="flex items-center gap-2">
-                <Sprout className="w-4 h-4 text-emerald-500" />
-                <span className="text-sm font-semibold text-foreground">Long-Term Score</span>
-              </div>
-              <span className="text-lg font-bold text-foreground">{youth} <span className="text-xs font-normal text-muted-foreground">/ 10</span></span>
-            </div>
-            <ScoreBar value={youth} color="bg-emerald-500" />
-          </div>
-
-          <div data-testid="identity-draft-capital">
-            <div className="flex items-center justify-between mb-1.5">
-              <div className="flex items-center gap-2">
-                <Archive className="w-4 h-4 text-[#0b3a7a] dark:text-blue-400" />
-                <span className="text-sm font-semibold text-foreground">Draft Capital</span>
-              </div>
-              <span className="text-lg font-bold text-foreground">{capital} <span className="text-xs font-normal text-muted-foreground">/ 10</span></span>
-            </div>
-            <ScoreBar value={capital} color="bg-[#0b3a7a] dark:bg-blue-500" />
-          </div>
-        </div>
-
-        <div className="flex flex-col justify-between">
-          <div className="rounded-lg bg-muted/40 border border-border/50 p-5" data-testid="identity-strategy">
-            <div className="flex items-center gap-2 mb-3">
-              <Compass className="w-4 h-4 text-[#d4af37]" />
-              <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Suggested Strategy</span>
-            </div>
-            <p className={`text-xl font-bold leading-tight ${strategy.color}`} data-testid="identity-strategy-label">
-              {strategy.label}
-            </p>
-          </div>
-
-          <div className="rounded-lg bg-[#0b3a7a]/5 dark:bg-blue-400/5 border border-[#0b3a7a]/10 dark:border-blue-400/10 p-4 mt-3" data-testid="identity-direction">
-            <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Suggested Direction</span>
-            <p className="text-sm font-semibold text-foreground mt-1.5 leading-relaxed" data-testid="identity-direction-text">
-              "{direction}"
-            </p>
-          </div>
-        </div>
-      </div>
-    </Card>
-  );
-}
-
 export function DashboardOverview({ league, userTeam, onNavigate }: DashboardOverviewProps) {
   const sorted = [...league.teams].sort((a, b) => b.metrics.overall - a.metrics.overall);
   const rank = sorted.findIndex((t) => t.id === userTeam.id) + 1;
@@ -222,6 +163,7 @@ export function DashboardOverview({ league, userTeam, onNavigate }: DashboardOve
   const tierMap = useMemo(() => getLeagueTeamTiers(league.teams), [league.teams]);
   const tierInfo = tierMap.get(userTeam.id);
   const tier = tierInfo?.tier ?? "Balanced";
+  const tierDescription = tierInfo?.tierDescription ?? "";
   const starterAges = userTeam.roster.filter((p) => p.starter);
   const avgAge = starterAges.length > 0 ? (starterAges.reduce((s, p) => s + p.age, 0) / starterAges.length).toFixed(1) : "N/A";
   const future1sts = userTeam.picks.filter((p) => p.round === 1).length;
@@ -236,13 +178,31 @@ export function DashboardOverview({ league, userTeam, onNavigate }: DashboardOve
     return s + (st.length > 0 ? st.reduce((a, p) => a + p.age, 0) / st.length : 0);
   }, 0) / total).toFixed(1);
 
-  const positions: Array<{ pos: string; score: number; grade: string }> = [
-    { pos: "QB", score: userTeam.metrics.qb, grade: userTeam.metrics.qb >= 75 ? "A" : userTeam.metrics.qb >= 60 ? "B" : userTeam.metrics.qb >= 40 ? "C" : "D" },
-    { pos: "RB", score: userTeam.metrics.rb, grade: userTeam.metrics.rb >= 75 ? "A" : userTeam.metrics.rb >= 60 ? "B" : userTeam.metrics.rb >= 40 ? "C" : "D" },
-    { pos: "WR", score: userTeam.metrics.wr, grade: userTeam.metrics.wr >= 75 ? "A" : userTeam.metrics.wr >= 60 ? "B" : userTeam.metrics.wr >= 40 ? "C" : "D" },
-    { pos: "TE", score: userTeam.metrics.te, grade: userTeam.metrics.te >= 75 ? "A" : userTeam.metrics.te >= 60 ? "B" : userTeam.metrics.te >= 40 ? "C" : "D" },
-  ];
+  const winNow = getWinNowScore(userTeam, league);
+  const youth = getYouthScore(userTeam, league);
+  const capital = getDraftCapitalScore(userTeam, league);
+  const suggestedDirection = getSuggestedDirection(userTeam, tier);
 
+  const nowScore = useMemo(() => computeNowScore(league.teams, userTeam), [league.teams, userTeam]);
+  const futureScore = useMemo(() => computeFutureScore(league.teams, userTeam), [league.teams, userTeam]);
+  const avgNow = useMemo(() => {
+    const scores = league.teams.map(t => computeNowScore(league.teams, t));
+    return scores.reduce((a, b) => a + b, 0) / scores.length;
+  }, [league.teams]);
+  const avgFuture = useMemo(() => {
+    const scores = league.teams.map(t => computeFutureScore(league.teams, t));
+    return scores.reduce((a, b) => a + b, 0) / scores.length;
+  }, [league.teams]);
+  const dynastyWindowLabel = getDynastyWindowLabel(nowScore, futureScore, avgNow, avgFuture);
+  const dynastyWindowSubtitle = getDynastyWindowSubtitle(dynastyWindowLabel);
+  const dynastyWindowColor = getDynastyWindowColor(dynastyWindowLabel);
+
+  const positions: Array<{ pos: string; score: number; grade: string }> = [
+    { pos: "QB", score: userTeam.metrics.qb, grade: getGrade(userTeam.metrics.qb) },
+    { pos: "RB", score: userTeam.metrics.rb, grade: getGrade(userTeam.metrics.rb) },
+    { pos: "WR", score: userTeam.metrics.wr, grade: getGrade(userTeam.metrics.wr) },
+    { pos: "TE", score: userTeam.metrics.te, grade: getGrade(userTeam.metrics.te) },
+  ];
 
   return (
     <div className="space-y-8">
@@ -275,79 +235,140 @@ export function DashboardOverview({ league, userTeam, onNavigate }: DashboardOve
         )}
       </div>
 
-      <Card className="p-6" data-testid="team-snapshot-card">
-        <div className="mb-5">
-          <h3 className="text-base font-bold text-foreground">Team Snapshot</h3>
-          <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
-        </div>
-
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-          <SnapshotStat
-            label="League Rank"
-            value={`#${rank} / ${total}`}
-            context={getPercentileLabel(rank, total)}
-            contextColor={getPercentileColor(rank, total)}
-            icon={Trophy}
-            testId="snapshot-league-rank"
-          />
-          <SnapshotStat
-            label="Power Score"
-            value={userTeam.metrics.overall}
-            context={getPercentileLabel(rank, total)}
-            contextColor={getPercentileColor(rank, total)}
-            icon={Zap}
-            testId="snapshot-power-score"
-          />
-          <div className="flex flex-col items-center text-center p-4 rounded-lg bg-muted/30 border border-border/40" data-testid="snapshot-tier">
-            <div className="p-2 rounded-md bg-[#0b3a7a]/8 dark:bg-blue-400/10 mb-2.5">
-              <Medal className="w-4 h-4 text-[#0b3a7a] dark:text-blue-400" />
+      <Card className="p-6" data-testid="archetype-card">
+        <div className="flex flex-col md:flex-row md:items-center gap-5">
+          <div className="flex-1">
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Archetype</p>
+            <div className="flex items-center gap-3 mb-2">
+              <Badge className={`text-lg font-bold px-4 py-1 border ${getTierBadgeClasses(tier)}`} data-testid="archetype-badge">
+                {tier}
+              </Badge>
             </div>
-            <Badge className={`text-sm font-bold px-3 py-0.5 border ${getTierBadgeClasses(tier)}`} data-testid="snapshot-tier-badge">
-              {getTierEmoji(tier)} {tier}
-            </Badge>
-            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mt-2">Archetype</p>
-            <p className={`text-[11px] font-medium mt-1 ${getTierColor(tier)}`}>
-              {tierInfo?.tooltip ?? ""}
+            <p className="text-sm text-muted-foreground leading-relaxed max-w-lg" data-testid="archetype-description">
+              {tierDescription}
             </p>
           </div>
-          <SnapshotStat
-            label="Playoff Odds"
-            value={seasonStarted ? `${clampedOdds}%` : "N/A"}
-            context={seasonStarted ? (clampedOdds >= 60 ? "Strong outlook" : clampedOdds >= 40 ? "On the bubble" : "Long shot") : "Season hasn't started"}
-            contextColor={!seasonStarted ? "text-muted-foreground" : clampedOdds >= 60 ? "text-emerald-600 dark:text-emerald-400" : clampedOdds >= 40 ? "text-amber-600 dark:text-amber-400" : "text-red-500 dark:text-red-400"}
-            icon={Target}
-            testId="snapshot-playoff-odds"
-          />
-          <SnapshotStat
-            label="Starter Age"
-            value={avgAge}
-            context={`Lg avg: ${leagueAvgAge}`}
-            contextColor={Number(avgAge) < Number(leagueAvgAge) ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"}
-            icon={Calendar}
-            testId="snapshot-starter-age"
-          />
-          <SnapshotStat
-            label="Future 1sts"
-            value={future1sts}
-            context={`Lg avg: ${leagueAvg1sts}`}
-            contextColor={future1sts >= leagueAvg1sts ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"}
-            icon={Users}
-            testId="snapshot-future-1sts"
-          />
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3 flex-shrink-0">
+            <SnapshotStat
+              label="Power Rank"
+              value={`#${rank} / ${total}`}
+              context={getPercentileLabel(rank, total)}
+              contextColor={getPercentileColor(rank, total)}
+              icon={Trophy}
+              testId="snapshot-power-rank"
+            />
+            <SnapshotStat
+              label="Power Score"
+              value={userTeam.metrics.overall}
+              context={getPercentileLabel(rank, total)}
+              contextColor={getPercentileColor(rank, total)}
+              icon={Zap}
+              testId="snapshot-power-score"
+            />
+            <SnapshotStat
+              label="Playoff Odds"
+              value={seasonStarted ? `${clampedOdds}%` : "--"}
+              context={seasonStarted ? (clampedOdds >= 60 ? "Strong outlook" : clampedOdds >= 40 ? "On the bubble" : "Long shot") : "Preseason \u2013 Not available"}
+              contextColor={!seasonStarted ? "text-muted-foreground" : clampedOdds >= 60 ? "text-emerald-600 dark:text-emerald-400" : clampedOdds >= 40 ? "text-amber-600 dark:text-amber-400" : "text-red-500 dark:text-red-400"}
+              icon={Target}
+              testId="snapshot-playoff-odds"
+            />
+            <SnapshotStat
+              label="Avg Starter Age"
+              value={avgAge}
+              context={`Lg avg: ${leagueAvgAge}`}
+              contextColor={Number(avgAge) < Number(leagueAvgAge) ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"}
+              icon={Calendar}
+              testId="snapshot-starter-age"
+            />
+            <SnapshotStat
+              label="Future 1sts"
+              value={future1sts}
+              context={`Lg avg: ${leagueAvg1sts}`}
+              contextColor={future1sts >= leagueAvg1sts ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"}
+              icon={Users}
+              testId="snapshot-future-1sts"
+            />
+          </div>
         </div>
       </Card>
 
-      <TeamIdentityCard league={league} userTeam={userTeam} />
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        <Card className="p-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        <Card className="p-6 lg:col-span-2" data-testid="team-identity-card">
           <div className="mb-5">
-            <h3 className="text-base font-bold text-foreground">Strengths & Needs</h3>
+            <h3 className="text-base font-bold text-foreground">Team Identity</h3>
             <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
           </div>
-          <div className="space-y-4">
+          <div className="space-y-5">
+            <div data-testid="identity-win-now">
+              <div className="flex items-center justify-between mb-1.5">
+                <div className="flex items-center gap-2">
+                  <Flame className="w-4 h-4 text-orange-500" />
+                  <span className="text-sm font-semibold text-foreground">Win-Now Score</span>
+                </div>
+                <span className="text-lg font-bold text-foreground">{winNow} <span className="text-xs font-normal text-muted-foreground">/ 10</span></span>
+              </div>
+              <ScoreBar value={winNow} color="bg-orange-500" />
+            </div>
+            <div data-testid="identity-youth">
+              <div className="flex items-center justify-between mb-1.5">
+                <div className="flex items-center gap-2">
+                  <Sprout className="w-4 h-4 text-emerald-500" />
+                  <span className="text-sm font-semibold text-foreground">Long-Term Score</span>
+                </div>
+                <span className="text-lg font-bold text-foreground">{youth} <span className="text-xs font-normal text-muted-foreground">/ 10</span></span>
+              </div>
+              <ScoreBar value={youth} color="bg-emerald-500" />
+            </div>
+            <div data-testid="identity-draft-capital">
+              <div className="flex items-center justify-between mb-1.5">
+                <div className="flex items-center gap-2">
+                  <Archive className="w-4 h-4 text-[#0b3a7a] dark:text-blue-400" />
+                  <span className="text-sm font-semibold text-foreground">Draft Capital</span>
+                </div>
+                <span className="text-lg font-bold text-foreground">{capital} <span className="text-xs font-normal text-muted-foreground">/ 10</span></span>
+              </div>
+              <ScoreBar value={capital} color="bg-[#0b3a7a] dark:bg-blue-500" />
+            </div>
+          </div>
+        </Card>
+
+        <div className="flex flex-col gap-5">
+          <Card className="p-5 flex-1" data-testid="dynasty-window-card">
+            <div className="flex items-center gap-2 mb-3">
+              <MapPin className="w-4 h-4 text-[#d4af37]" />
+              <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Dynasty Window</span>
+            </div>
+            <p className={`text-xl font-bold leading-tight ${dynastyWindowColor}`} data-testid="dynasty-window-label">
+              {dynastyWindowLabel}
+            </p>
+            <p className="text-xs text-muted-foreground mt-1.5" data-testid="dynasty-window-subtitle">
+              {dynastyWindowSubtitle}
+            </p>
+          </Card>
+
+          <Card className="p-5 flex-1" data-testid="suggested-direction-card">
+            <div className="flex items-center gap-2 mb-3">
+              <Compass className="w-4 h-4 text-[#d4af37]" />
+              <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Suggested Direction</span>
+            </div>
+            <p className="text-sm font-semibold text-foreground leading-relaxed" data-testid="suggested-direction-text">
+              "{suggestedDirection}"
+            </p>
+          </Card>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <Card className="p-6" data-testid="strengths-needs-card">
+          <div className="mb-1">
+            <h3 className="text-base font-bold text-foreground">Strengths & Needs</h3>
+            <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
+            <p className="text-[11px] text-muted-foreground mt-2">Position grade and strength score</p>
+          </div>
+          <div className="space-y-3 mt-4">
             {positions.map((p) => (
-              <div key={p.pos} className="flex items-center gap-3">
+              <div key={p.pos} className="flex items-center gap-3" data-testid={`strength-${p.pos.toLowerCase()}`}>
                 <span className="text-xs font-bold text-muted-foreground w-7">{p.pos}</span>
                 <div className="flex-1 h-2.5 bg-muted rounded-full overflow-hidden">
                   <div
@@ -355,16 +376,16 @@ export function DashboardOverview({ league, userTeam, onNavigate }: DashboardOve
                     style={{ width: `${p.score}%` }}
                   />
                 </div>
-                <Badge variant={p.grade === "A" ? "default" : p.grade === "B" ? "secondary" : "outline"}>
+                <span className={`text-xs font-bold px-2 py-0.5 rounded border ${getGradeColor(p.grade)}`} data-testid={`grade-${p.pos.toLowerCase()}`}>
                   {p.grade}
-                </Badge>
-                <span className="text-xs font-medium text-muted-foreground w-8 text-right">{p.score}</span>
+                </span>
+                <span className="text-xs font-medium text-muted-foreground w-8 text-right" data-testid={`score-${p.pos.toLowerCase()}`}>{p.score}</span>
               </div>
             ))}
           </div>
         </Card>
 
-        <Card className="p-6">
+        <Card className="p-6" data-testid="contender-window-card">
           <div className="mb-5">
             <h3 className="text-base font-bold text-foreground">Contender Window</h3>
             <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />

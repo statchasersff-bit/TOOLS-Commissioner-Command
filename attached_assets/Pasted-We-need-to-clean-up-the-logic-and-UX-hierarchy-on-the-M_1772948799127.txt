@@ -1,0 +1,321 @@
+We need to clean up the logic and UX hierarchy on the My Team page so the labels are consistent and the page reads more clearly.
+
+CURRENT ISSUE
+The page can currently show conflicting labels like:
+- Archetype: Balanced
+- Suggested Strategy: Dynasty Powerhouse
+- Economy Label / Quadrant: Dynasty Death Star
+
+These should not conflict.
+
+Example profile:
+- RED rank = 5 / 12
+- DYN rank = 1 / 12
+- PCKS rank = 6 / 12
+
+This should not feel like “Balanced” if the long-term profile is elite.
+
+GOAL
+Make the My Team page use one consistent team identity system, improve card order / hierarchy, and make labels easier to understand.
+
+====================================
+1) UNIFY TEAM IDENTITY LABELING
+====================================
+
+Right now we have multiple naming systems:
+- Archetype
+- Economy label / quadrant label
+- Suggested Strategy
+
+We need to separate these clearly so they do different jobs.
+
+Please refactor to use these definitions:
+
+A) ARCHETYPE
+This should be the primary classification label from the tier logic.
+Examples:
+- Juggernaut
+- Win-Now
+- Future Powerhouse
+- Pick Hoarder
+- Contender
+- Rebuilder
+- Balanced
+- Taco
+
+This is the main “what kind of team is this?” label.
+
+B) DYNASTY WINDOW / QUADRANT
+This should be a separate visual placement label based on the current-vs-future chart.
+Examples:
+- Dynasty Death Star
+- Win-Now Kings
+- Rebuild With Ammo
+- Rebuild Hell
+
+This is NOT the same thing as Archetype.
+It should be displayed as a secondary contextual label, not the primary identity.
+
+C) SUGGESTED DIRECTION
+This should be actionable advice, not a label that competes with Archetype.
+Examples:
+- Aggressively buy RB depth
+- Consolidate depth for elite starters
+- Sell aging veterans for picks
+- Stay patient and build through youth
+
+Remove any strategy labels like “Dynasty Powerhouse” from the Suggested Strategy field if they duplicate or conflict with Archetype.
+
+If we still want a short non-action label there, rename that section to:
+- Competitive Window
+or
+- Team Outlook
+
+But the preferred setup is:
+- Archetype = classification
+- Dynasty Window = chart quadrant
+- Suggested Direction = actionable advice
+
+====================================
+2) FIX THE ARCHETYPE LOGIC DISPLAY
+====================================
+
+The page should use the same archetype result returned from the main classification function.
+Do not derive a separate archetype independently in the My Team page.
+
+Please make sure the My Team page consumes:
+{
+  tier,
+  tierDescription,
+  dynastyWindowLabel,
+  suggestedDirection
+}
+
+The page should not invent a second conflicting label.
+
+If the backend currently returns “Balanced” but team identity scores clearly show strong now + strong future, inspect whether:
+- the archetype classification logic is too broad
+- or the displayed label is pulling from the wrong source
+
+Please trace the exact source of each label and make sure the UI uses the correct field.
+
+====================================
+3) CHANGE THE PAGE HIERARCHY
+====================================
+
+Reorder the top summary cards / sections so the page reads in a more intuitive way.
+
+CURRENT PROBLEM
+The page appears to prioritize:
+- League Rank
+- Power Score
+- Archetype
+
+But users first want to know:
+1. What kind of team do I have?
+2. How strong is it?
+3. What should I do?
+
+NEW TOP-OF-PAGE ORDER
+
+At the top of the page, the summary area should be ordered like this:
+
+1. Archetype
+2. Archetype description
+3. Power Rank
+4. Power Score
+5. Playoff Odds
+6. Average Starter Age
+7. Future 1sts
+
+Then below that:
+- Team Identity scores
+- Dynasty Window / quadrant
+- Suggested Direction
+- Strengths & Needs
+
+If the top summary is card-based, the first / most visually prominent card should be Archetype.
+
+====================================
+4) RENAME/CLARIFY CERTAIN LABELS
+====================================
+
+Please make these wording changes:
+
+A) “League Rank” → “Power Rank”
+Reason:
+This makes it clear the rank is based on the power model, not standings.
+
+Display example:
+Power Rank
+#4 / 12
+
+B) “Starter Age” → “Average Starter Age”
+Reason:
+Clearer and more descriptive.
+
+Display example:
+Average Starter Age
+24.1
+League Avg: 25.5
+
+C) “Suggested Strategy” → “Suggested Direction”
+Reason:
+This should be clear actionable advice, not another classification label.
+
+D) If “Playoff Odds” is unavailable before the season starts, do not show “N/A”.
+Instead show:
+Preseason – Not available
+or
+Available after Week 1
+
+Preferred display:
+Playoff Odds
+Preseason – Not available
+
+====================================
+5) FIX THE POSITION STRENGTH DISPLAY
+====================================
+
+Right now the Strengths & Needs section can show things like:
+RB
+D
+10
+
+That number is ambiguous.
+
+Please make the display clearer.
+
+Preferred format:
+QB
+Grade: A
+Score: 79
+
+RB
+Grade: D
+Score: 10
+
+WR
+Grade: B
+Score: 67
+
+TE
+Grade: D
+Score: 25
+
+If space is tight, use:
+QB  A  79
+but add a small label above the section or tooltip clarifying that the number is the positional strength score.
+
+Preferred section title:
+Strengths & Needs
+
+Optional subtitle:
+Position grade and strength score
+
+====================================
+6) ADD A “DYNASTY WINDOW” CARD OR ROW
+====================================
+
+Please add a clearly labeled row/card for the quadrant result.
+
+Display like:
+Dynasty Window
+Dynasty Death Star
+
+Subtitle:
+High Now + High Future
+
+This should sit below Team Identity or alongside it, but it should not replace Archetype.
+
+Important:
+Archetype and Dynasty Window are both valid, but they serve different purposes.
+
+Example:
+Archetype = Future Powerhouse
+Dynasty Window = Dynasty Death Star
+
+That is acceptable if the logic supports it.
+What is NOT acceptable is:
+Archetype = Balanced
+Suggested Strategy = Dynasty Powerhouse
+Dynasty Window = Dynasty Death Star
+
+====================================
+7) ADD SIMPLE DISPLAY RULES TO PREVENT CONFLICTS
+====================================
+
+Please add guardrails so the UI cannot show conflicting high-level labels.
+
+Rules:
+- Only one primary identity label should exist: Archetype
+- Dynasty Window is always secondary
+- Suggested Direction must always be actionable text, not a second archetype label
+- If Suggested Direction matches or resembles an archetype name, replace it with a real action sentence
+
+Examples of good Suggested Direction:
+- Aggressively buy RB depth
+- Package picks for an elite starter
+- Hold and let the young core mature
+- Sell aging production before value drops
+
+Examples to avoid in Suggested Direction:
+- Dynasty Powerhouse
+- Balanced
+- Rebuilder
+- Win-Now
+
+====================================
+8) IMPLEMENTATION DETAILS
+====================================
+
+Please identify where the My Team page currently pulls:
+- tier / archetype
+- quadrant label
+- suggested strategy text
+- top summary card order
+
+Refactor so all summary display fields come from a single normalized view-model object.
+
+Something like:
+
+const teamSummary = {
+  archetype: tier,
+  archetypeDescription: tierDescription,
+  powerRankLabel: `#${rank} / ${teamCount}`,
+  powerScore,
+  playoffOddsDisplay,
+  averageStarterAge,
+  averageStarterAgeLeagueAvg,
+  futureFirsts,
+  futureFirstsLeagueAvg,
+  dynastyWindowLabel,
+  dynastyWindowSubtitle,
+  suggestedDirection,
+  teamIdentity: {
+    winNowScore,
+    longTermScore,
+    draftCapitalScore,
+  },
+  strengths: [...]
+};
+
+Then render from that view-model instead of composing labels ad hoc in multiple places.
+
+====================================
+9) PLEASE SHOW ME
+====================================
+
+After making the update, please show me:
+1. Which file(s) were changed
+2. The new summary card order
+3. The exact mapping of:
+   - archetype
+   - dynasty window
+   - suggested direction
+4. One sample output for this specific profile:
+   - RED #5 / 12
+   - DYN #1 / 12
+   - PCKS #6 / 12
+
+For that sample, I want to verify that the page no longer presents conflicting labels.

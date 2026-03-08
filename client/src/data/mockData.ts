@@ -290,6 +290,53 @@ export function getLeagueTeamTiers(teams: Team[]): Map<string, { tier: Tier; too
   return result;
 }
 
+function computePercentile(values: number[], val: number): number {
+  const sorted = [...values].sort((a, b) => a - b);
+  const idx = sorted.findIndex(v => v >= val);
+  if (idx === -1) return 100;
+  return Math.round((idx / sorted.length) * 100);
+}
+
+export function computeNowScore(teams: Team[], team: Team): number {
+  const allStarters = teams.map(t => t.metrics.starters);
+  return computePercentile(allStarters, team.metrics.starters);
+}
+
+export function computeFutureScore(teams: Team[], team: Team): number {
+  const allDynasty = teams.map(t => t.metrics.depth);
+  const allDraft = teams.map(t => t.metrics.picks);
+  const dynastyPct = computePercentile(allDynasty, team.metrics.depth);
+  const draftPct = computePercentile(allDraft, team.metrics.picks);
+  return Math.round(0.7 * dynastyPct + 0.3 * draftPct);
+}
+
+export function getDynastyWindowLabel(now: number, future: number, avgNow: number, avgFuture: number): string {
+  if (now >= avgNow && future >= avgFuture) return "Dynasty Death Star";
+  if (now >= avgNow && future < avgFuture) return "Win-Now Kings";
+  if (now < avgNow && future >= avgFuture) return "Rebuild With Ammo";
+  return "Rebuild Hell";
+}
+
+export function getDynastyWindowSubtitle(label: string): string {
+  switch (label) {
+    case "Dynasty Death Star": return "High Now + High Future";
+    case "Win-Now Kings": return "High Now + Low Future";
+    case "Rebuild With Ammo": return "Low Now + High Future";
+    case "Rebuild Hell": return "Low Now + Low Future";
+    default: return "";
+  }
+}
+
+export function getDynastyWindowColor(label: string): string {
+  switch (label) {
+    case "Dynasty Death Star": return "text-[#d4af37]";
+    case "Win-Now Kings": return "text-red-400";
+    case "Rebuild With Ammo": return "text-emerald-400";
+    case "Rebuild Hell": return "text-slate-400";
+    default: return "text-muted-foreground";
+  }
+}
+
 export function isContenderTier(tier: Tier): boolean {
   return tier === "Juggernaut" || tier === "Win-Now" || tier === "Contender";
 }

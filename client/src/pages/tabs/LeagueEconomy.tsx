@@ -2,7 +2,7 @@ import { useState, useMemo, useCallback } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { SectionHeader } from "@/components/SectionHeader";
-import { getLeagueTeamTiers, getTierColor, getTierEmoji, isContenderTier, isRebuilderTier } from "@/data/mockData";
+import { getLeagueTeamTiers, getTierColor, getTierEmoji, isContenderTier, isRebuilderTier, computeNowScore, computeFutureScore, getDynastyWindowLabel as getQuadrantLabel } from "@/data/mockData";
 import { useValueModel } from "@/contexts/ValueModelContext";
 import type { League, Team, Tier } from "@/types";
 import { formatPickLabel } from "@/types";
@@ -20,26 +20,6 @@ const SECTION_TABS: { id: EconomySection; label: string; icon: typeof BarChart3 
   { id: "picks", label: "Pick Concentration", icon: Package },
   { id: "liquidity", label: "Trade Liquidity", icon: Activity },
 ];
-
-function computePercentile(values: number[], val: number): number {
-  const sorted = [...values].sort((a, b) => a - b);
-  const idx = sorted.findIndex(v => v >= val);
-  if (idx === -1) return 100;
-  return Math.round((idx / sorted.length) * 100);
-}
-
-function computeNowScore(teams: Team[], team: Team): number {
-  const allStarters = teams.map(t => t.metrics.starters);
-  return computePercentile(allStarters, team.metrics.starters);
-}
-
-function computeFutureScore(teams: Team[], team: Team): number {
-  const allDynasty = teams.map(t => t.metrics.depth);
-  const allDraft = teams.map(t => t.metrics.picks);
-  const dynastyPct = computePercentile(allDynasty, team.metrics.depth);
-  const draftPct = computePercentile(allDraft, team.metrics.picks);
-  return Math.round(0.7 * dynastyPct + 0.3 * draftPct);
-}
 
 function computeParityScore(teams: Team[]): { score: number; label: string; description: string } {
   const scores = teams.map(t => t.metrics.overall);
@@ -76,13 +56,6 @@ function getQuadrantColor(now: number, future: number, avgNow: number, avgFuture
   if (now >= avgNow && future < avgFuture) return "#ef4444";
   if (now < avgNow && future >= avgFuture) return "#10b981";
   return "#64748b";
-}
-
-function getQuadrantLabel(now: number, future: number, avgNow: number, avgFuture: number): string {
-  if (now >= avgNow && future >= avgFuture) return "Dynasty Death Star";
-  if (now >= avgNow && future < avgFuture) return "Win-Now Kings";
-  if (now < avgNow && future >= avgFuture) return "Rebuild With Ammo";
-  return "Rebuild Hell";
 }
 
 function DynastyWindowTooltip({ active, payload }: any) {
