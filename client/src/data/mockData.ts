@@ -148,12 +148,15 @@ export interface TierDebugFlags {
   redTop33: boolean;
   redTop50: boolean;
   redBottom25: boolean;
+  redBottom33: boolean;
   redBottom50: boolean;
   dynTop25: boolean;
+  dynTop33: boolean;
   dynTop50: boolean;
   dynBottom25: boolean;
   dynBottom50: boolean;
   pcksTop25: boolean;
+  pcksTop33: boolean;
   pcksTop50: boolean;
   pcksBottom25: boolean;
   pcksBottom50: boolean;
@@ -172,7 +175,9 @@ const TIER_DESCRIPTIONS: Record<Tier, string> = {
   "Pick Hoarder": "Built around future rookie picks more than current competitive strength.",
   "Win-Now": "Strong current roster, but long-term value and draft capital have been sacrificed.",
   "Contender": "A strong current team with enough long-term value to stay competitive.",
-  "Balanced": "A competitive-window profile without an extreme dynasty archetype.",
+  "Rebuilder": "Not built to win right now, but positioned to improve through long-term assets.",
+  "Weak / Directionless": "Lacking both current strength and a clear long-term advantage.",
+  "Balanced": "A middle-of-the-pack profile without an extreme dynasty archetype.",
 };
 
 function getTierFlags(
@@ -187,6 +192,9 @@ function getTierFlags(
   const bottom50Start = totalTeams - bottom50Count + 1;
   const bottom25Start = totalTeams - bottom25Count + 1;
 
+  const bottom33Count = Math.max(1, Math.ceil(totalTeams * 0.33));
+  const bottom33Start = totalTeams - bottom33Count + 1;
+
   const { redraft, dynasty, draft } = ranks;
 
   return {
@@ -194,12 +202,15 @@ function getTierFlags(
     redTop33: redraft <= top33,
     redTop50: redraft <= top50,
     redBottom25: redraft >= bottom25Start,
+    redBottom33: redraft >= bottom33Start,
     redBottom50: redraft >= bottom50Start,
     dynTop25: dynasty <= top25,
+    dynTop33: dynasty <= top33,
     dynTop50: dynasty <= top50,
     dynBottom25: dynasty >= bottom25Start,
     dynBottom50: dynasty >= bottom50Start,
     pcksTop25: draft <= top25,
+    pcksTop33: draft <= top33,
     pcksTop50: draft <= top50,
     pcksBottom25: draft >= bottom25Start,
     pcksBottom50: draft >= bottom50Start,
@@ -239,6 +250,14 @@ export function classifyTeamTier(
     return { tier: "Contender", tierDescription: TIER_DESCRIPTIONS["Contender"], debug: flags };
   }
 
+  if (flags.redBottom50 && (flags.dynTop50 || flags.pcksTop33)) {
+    return { tier: "Rebuilder", tierDescription: TIER_DESCRIPTIONS["Rebuilder"], debug: flags };
+  }
+
+  if (flags.redBottom33 && flags.dynBottom50) {
+    return { tier: "Weak / Directionless", tierDescription: TIER_DESCRIPTIONS["Weak / Directionless"], debug: flags };
+  }
+
   return { tier: "Balanced", tierDescription: TIER_DESCRIPTIONS["Balanced"], debug: flags };
 }
 
@@ -276,7 +295,7 @@ export function isContenderTier(tier: Tier): boolean {
 }
 
 export function isRebuilderTier(tier: Tier): boolean {
-  return tier === "Future Powerhouse" || tier === "Pick Hoarder" || tier === "Taco";
+  return tier === "Future Powerhouse" || tier === "Pick Hoarder" || tier === "Taco" || tier === "Rebuilder" || tier === "Weak / Directionless";
 }
 
 export function getTierTooltip(tier: Tier): string {
@@ -291,6 +310,8 @@ export function getTierEmoji(tier: Tier): string {
     case "Pick Hoarder": return "🎰";
     case "Taco": return "🤡";
     case "Contender": return "🔥";
+    case "Rebuilder": return "🔨";
+    case "Weak / Directionless": return "😶";
     case "Balanced": return "⚖️";
   }
 }
@@ -303,6 +324,8 @@ export function getTierColor(tier: Tier): string {
     case "Pick Hoarder": return "text-purple-600 dark:text-purple-400";
     case "Taco": return "text-red-600 dark:text-red-400";
     case "Contender": return "text-amber-600 dark:text-amber-400";
+    case "Rebuilder": return "text-orange-600 dark:text-orange-400";
+    case "Weak / Directionless": return "text-rose-600 dark:text-rose-400";
     case "Balanced": return "text-slate-600 dark:text-slate-400";
   }
 }
@@ -315,6 +338,8 @@ export function getTierBg(tier: Tier): string {
     case "Pick Hoarder": return "bg-purple-50 dark:bg-purple-950/30";
     case "Taco": return "bg-red-50 dark:bg-red-950/30";
     case "Contender": return "bg-amber-50 dark:bg-amber-950/30";
+    case "Rebuilder": return "bg-orange-50 dark:bg-orange-950/30";
+    case "Weak / Directionless": return "bg-rose-50 dark:bg-rose-950/30";
     case "Balanced": return "bg-slate-50 dark:bg-slate-900/30";
   }
 }
@@ -327,6 +352,8 @@ export function getTierBorderColor(tier: Tier): string {
     case "Pick Hoarder": return "border-purple-300 dark:border-purple-700";
     case "Taco": return "border-red-300 dark:border-red-700";
     case "Contender": return "border-amber-300 dark:border-amber-700";
+    case "Rebuilder": return "border-orange-300 dark:border-orange-700";
+    case "Weak / Directionless": return "border-rose-300 dark:border-rose-700";
     case "Balanced": return "border-slate-300 dark:border-slate-700";
   }
 }

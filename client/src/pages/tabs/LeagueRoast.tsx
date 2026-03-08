@@ -166,7 +166,9 @@ function getOutlookText(tier: Tier): string {
     case "Pick Hoarder": return "Stockpiling picks but roster needs work.";
     case "Taco": return "Bottom of the barrel across the board.";
     case "Contender": return "Strong team with enough dynasty value to stay competitive.";
-    case "Balanced": return "Competitive roster without an extreme archetype.";
+    case "Rebuilder": return "Not built to win now, but positioned to improve.";
+    case "Weak / Directionless": return "Lacking current strength and a clear long-term plan.";
+    case "Balanced": return "Middle-of-the-pack without an extreme archetype.";
   }
 }
 
