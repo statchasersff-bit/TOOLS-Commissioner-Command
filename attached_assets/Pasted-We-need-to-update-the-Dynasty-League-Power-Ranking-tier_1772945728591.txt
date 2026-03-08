@@ -1,0 +1,215 @@
+We need to update the Dynasty League Power Ranking tier classification logic to eliminate N/A gaps, reduce overlap, and make the labels feel more intentional and premium.
+
+Please make the following changes.
+
+GOAL
+Replace the current tier logic with a priority-based decision tree so every team gets a tier. The final fallback tier should be “Balanced” or “The Treadmill” instead of N/A.
+
+CONTEXT
+We currently use 3 ranking inputs for each team:
+- RED = redraft / current roster strength
+- DYN = dynasty / long-term roster value
+- PCKS = rookie pick capital
+
+These values are currently treated as percentile/rank buckets such as top 25%, top 33%, top 50%, bottom 50%, bottom 25%.
+
+WHAT TO CHANGE
+
+1) ADD EXPLICIT BUCKET HELPERS
+Create reusable helpers so the classification logic is readable and consistent.
+
+For each team, determine whether it is:
+- top 25% in RED
+- top 33% in RED
+- top 50% in RED
+- top 25% in DYN
+- top 50% in DYN
+- top 25% in PCKS
+- top 50% in PCKS
+- bottom 25% in RED
+- bottom 50% in RED
+- bottom 25% in DYN
+- bottom 50% in DYN
+- bottom 25% in PCKS
+- bottom 50% in PCKS
+
+If this is currently based on ordinal rank, keep it rank-based for now, but centralize the logic so it is easy to adjust later.
+
+Please handle league-size rounding consistently:
+- Top X% = ceil(teamCount * X%)
+- Bottom X% = ceil(teamCount * X%)
+Example:
+- 12-team league, top 25% = top 3
+- 10-team league, top 25% = top 3
+- 12-team league, top 33% = top 4
+
+If two teams are tied in score but ranks already exist, use the existing rank values rather than recalculating custom tie logic.
+
+2) REPLACE THE CURRENT TIER LOGIC WITH A PRIORITY-BASED DECISION TREE
+We do NOT want multiple possible labels. We want the first matching rule in order.
+
+Use this exact priority order:
+
+1. Taco
+2. Juggernaut
+3. Future Powerhouse
+4. Pick Hoarder
+5. Win-Now
+6. Balanced
+
+Use these exact definitions:
+
+TACO
+- bottom 25% in RED
+- bottom 25% in DYN
+- bottom 25% in PCKS
+
+JUGGERNAUT
+A team is Juggernaut if:
+- top 25% in RED AND top 25% in DYN
+OR
+- top 25% in RED AND top 50% in DYN AND top 25% in PCKS
+
+FUTURE POWERHOUSE
+A team is Future Powerhouse if:
+- top 25% in DYN
+- top 25% in PCKS
+- and NOT already classified as Juggernaut
+
+PICK HOARDER
+A team is Pick Hoarder if:
+- top 25% in PCKS
+- bottom 50% in RED
+- and NOT already classified as Future Powerhouse or Juggernaut
+
+WIN-NOW
+A team is Win-Now if:
+- top 33% in RED
+- bottom 50% in DYN
+- bottom 50% in PCKS
+- and NOT already classified above
+
+BALANCED
+Any team that does not match the rules above should be classified as:
+- Balanced
+
+IMPORTANT
+Balanced replaces N/A completely. We do not want N/A returned anymore.
+
+3) RETURN A TIER EXPLANATION OBJECT
+Wherever tier data is generated, please return not just the tier name, but also a short explanation string so we can use it in tooltips, badges, or detail cards later.
+
+Use these exact descriptions for now:
+
+Taco:
+“Bottom-tier in current strength, dynasty value, and draft capital.”
+
+Juggernaut:
+“Elite current strength with a strong long-term foundation.”
+
+Future Powerhouse:
+“Loaded with long-term value and draft capital, even if not fully built to win now.”
+
+Pick Hoarder:
+“Built around future rookie picks more than current competitive strength.”
+
+Win-Now:
+“Strong current roster, but long-term value and draft capital have been sacrificed.”
+
+Balanced:
+“A competitive-window profile without an extreme dynasty archetype.”
+
+Please return something like:
+{
+  tier: "Juggernaut",
+  tierDescription: "Elite current strength with a strong long-term foundation."
+}
+
+4) ADD DEBUG FIELDS TEMPORARILY
+For testing, please also return a debug object showing which thresholds the team hit.
+
+Example:
+{
+  tier: "Balanced",
+  tierDescription: "...",
+  debug: {
+    redTop25: false,
+    redTop33: true,
+    redTop50: true,
+    redBottom25: false,
+    dynTop25: false,
+    dynTop50: true,
+    dynBottom50: false,
+    pcksTop25: false,
+    pcksBottom50: true
+  }
+}
+
+This will help us validate why each team got its label.
+
+5) UPDATE UI DISPLAY
+Wherever the tier currently renders, make sure it uses the new tier values:
+- Taco
+- Juggernaut
+- Future Powerhouse
+- Pick Hoarder
+- Win-Now
+- Balanced
+
+If there is any UI showing N/A, remove that fallback and replace it with Balanced.
+
+6) OPTIONAL STYLING MAPPING
+If there is a tier-to-color or tier-to-badge mapping, add/update it with these suggested labels:
+- Juggernaut = premium / elite
+- Win-Now = aggressive / danger
+- Future Powerhouse = upward / growth
+- Pick Hoarder = picks / asset-heavy
+- Balanced = neutral / steady
+- Taco = weak / low-end
+
+No need to over-design this yet; just make sure the tier names are supported cleanly.
+
+IMPLEMENTATION NOTES
+Please look for the existing power ranking tier function and refactor it into:
+- small helper functions for percentile bucket checks
+- one main classifyTier(team, leagueSize) function
+- one map of tier descriptions
+- one optional debug payload
+
+If possible, keep the function pure and avoid mixing UI rendering with classification logic.
+
+PSEUDOCODE TARGET
+
+function classifyTier(team, leagueSize) {
+  const flags = getTierFlags(team, leagueSize);
+
+  if (flags.redBottom25 && flags.dynBottom25 && flags.pcksBottom25) {
+    return tacoResult(flags);
+  }
+
+  if (
+    (flags.redTop25 && flags.dynTop25) ||
+    (flags.redTop25 && flags.dynTop50 && flags.pcksTop25)
+  ) {
+    return juggernautResult(flags);
+  }
+
+  if (flags.dynTop25 && flags.pcksTop25) {
+    return futurePowerhouseResult(flags);
+  }
+
+  if (flags.pcksTop25 && flags.redBottom50) {
+    return pickHoarderResult(flags);
+  }
+
+  if (flags.redTop33 && flags.dynBottom50 && flags.pcksBottom50) {
+    return winNowResult(flags);
+  }
+
+  return balancedResult(flags);
+}
+
+Please implement this cleanly in the existing codebase and show me:
+1. which file(s) you changed
+2. the final classifyTier logic
+3. one example output for each tier

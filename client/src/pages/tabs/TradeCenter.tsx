@@ -82,7 +82,7 @@ export function TradeFinder({ league, userTeam }: TradeProps) {
       .map((t) => {
         const tRedraft = posRedraftRanks[t.id] || {};
         const tDynasty = posDynastyRanks[t.id] || {};
-        const tier = tradeFinderTierMap.get(t.id)?.tier ?? "N/A";
+        const tier = tradeFinderTierMap.get(t.id)?.tier ?? "Balanced";
 
         const redraftReasons: string[] = [];
         const dynastyReasons: string[] = [];
@@ -183,7 +183,7 @@ export function TradeFinder({ league, userTeam }: TradeProps) {
       .flatMap(t => {
         const tOverallDynasty = partners.find(p => p.id === t.id)?.dynastyRank ?? total;
         const tOverallRedraft = partners.find(p => p.id === t.id)?.redraftRank ?? total;
-        const tier = tradeFinderTierMap.get(t.id)?.tier ?? "N/A";
+        const tier = tradeFinderTierMap.get(t.id)?.tier ?? "Balanced";
         const isRebuilder = isRebuilderTier(tier);
         const isDynastyStrong = tOverallDynasty <= topThird && tOverallRedraft >= bottomStart;
 

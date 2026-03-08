@@ -42,7 +42,7 @@ function getTierBadgeClasses(tier: string): string {
     case "Future Powerhouse": return "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800";
     case "Pick Hoarder": return "bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-400 border-purple-200 dark:border-purple-800";
     case "Taco": return "bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800";
-    case "N/A": return "bg-muted text-muted-foreground";
+    case "Balanced": return "bg-slate-100 dark:bg-slate-900/40 text-slate-700 dark:text-slate-400 border-slate-200 dark:border-slate-800";
     default: return "bg-muted text-muted-foreground";
   }
 }
@@ -218,7 +218,7 @@ export function DashboardOverview({ league, userTeam, onNavigate }: DashboardOve
   const total = league.teams.length;
   const tierMap = useMemo(() => getLeagueTeamTiers(league.teams), [league.teams]);
   const tierInfo = tierMap.get(userTeam.id);
-  const tier = tierInfo?.tier ?? "N/A";
+  const tier = tierInfo?.tier ?? "Balanced";
   const starterAges = userTeam.roster.filter((p) => p.starter);
   const avgAge = starterAges.length > 0 ? (starterAges.reduce((s, p) => s + p.age, 0) / starterAges.length).toFixed(1) : "N/A";
   const future1sts = userTeam.picks.filter((p) => p.round === 1).length;
@@ -605,7 +605,7 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
           <tbody>
             {sortedTeams.map((team, idx) => {
               const rank = overallRanks[team.id] ?? idx + 1;
-              const tier = snapshotTierMap.get(team.id)?.tier ?? "N/A";
+              const tier = snapshotTierMap.get(team.id)?.tier ?? "Balanced";
               const isUser = team.id === userTeam.id;
               const isEven = idx % 2 === 0;
               const isExpanded = expandedRows.has(team.id);

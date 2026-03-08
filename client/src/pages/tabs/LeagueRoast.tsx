@@ -165,7 +165,7 @@ function getOutlookText(tier: Tier): string {
     case "Future Powerhouse": return "The future is bright — loaded with assets.";
     case "Pick Hoarder": return "Stockpiling picks but roster needs work.";
     case "Taco": return "Bottom of the barrel across the board.";
-    case "N/A": return "Doesn't fit a clear archetype.";
+    case "Balanced": return "Competitive roster without an extreme archetype.";
   }
 }
 
@@ -190,7 +190,7 @@ function buildReportCards(league: League, userTeamId: string): ReportCard[] {
     const rank = i + 1;
     const m = team.metrics;
     const tierInfo = tierMap.get(team.id);
-    const tier = tierInfo?.tier ?? "N/A";
+    const tier = tierInfo?.tier ?? "Balanced";
     const archetype = getArchetype(team);
 
     const winNowScore = Math.round(m.starters * 0.7 + m.depth * 0.3);

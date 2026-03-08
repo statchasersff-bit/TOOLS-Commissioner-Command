@@ -143,24 +143,101 @@ export function getTeamTier(overall: number): Tier {
   return "Taco";
 }
 
+export interface TierDebugFlags {
+  redTop25: boolean;
+  redTop33: boolean;
+  redTop50: boolean;
+  redBottom25: boolean;
+  redBottom50: boolean;
+  dynTop25: boolean;
+  dynTop50: boolean;
+  dynBottom25: boolean;
+  dynBottom50: boolean;
+  pcksTop25: boolean;
+  pcksTop50: boolean;
+  pcksBottom25: boolean;
+  pcksBottom50: boolean;
+}
+
+export interface TierResult {
+  tier: Tier;
+  tierDescription: string;
+  debug: TierDebugFlags;
+}
+
+const TIER_DESCRIPTIONS: Record<Tier, string> = {
+  "Taco": "Bottom-tier in current strength, dynasty value, and draft capital.",
+  "Juggernaut": "Elite current strength with a strong long-term foundation.",
+  "Future Powerhouse": "Loaded with long-term value and draft capital, even if not fully built to win now.",
+  "Pick Hoarder": "Built around future rookie picks more than current competitive strength.",
+  "Win-Now": "Strong current roster, but long-term value and draft capital have been sacrificed.",
+  "Balanced": "A competitive-window profile without an extreme dynasty archetype.",
+};
+
+function getTierFlags(
+  ranks: { redraft: number; dynasty: number; draft: number },
+  totalTeams: number
+): TierDebugFlags {
+  const top25 = Math.max(1, Math.ceil(totalTeams * 0.25));
+  const top33 = Math.max(1, Math.ceil(totalTeams * 0.33));
+  const top50 = Math.max(1, Math.ceil(totalTeams * 0.50));
+  const bottom50Count = Math.max(1, Math.ceil(totalTeams * 0.50));
+  const bottom25Count = Math.max(1, Math.ceil(totalTeams * 0.25));
+  const bottom50Start = totalTeams - bottom50Count + 1;
+  const bottom25Start = totalTeams - bottom25Count + 1;
+
+  const { redraft, dynasty, draft } = ranks;
+
+  return {
+    redTop25: redraft <= top25,
+    redTop33: redraft <= top33,
+    redTop50: redraft <= top50,
+    redBottom25: redraft >= bottom25Start,
+    redBottom50: redraft >= bottom50Start,
+    dynTop25: dynasty <= top25,
+    dynTop50: dynasty <= top50,
+    dynBottom25: dynasty >= bottom25Start,
+    dynBottom50: dynasty >= bottom50Start,
+    pcksTop25: draft <= top25,
+    pcksTop50: draft <= top50,
+    pcksBottom25: draft >= bottom25Start,
+    pcksBottom50: draft >= bottom50Start,
+  };
+}
+
 export function classifyTeamTier(
   ranks: { power: number; dynasty: number; redraft: number; draft: number },
   totalTeams: number
-): Tier {
-  const top25 = Math.max(1, Math.ceil(totalTeams / 4));
-  const mid = Math.ceil(totalTeams / 2);
-  const bottom25 = totalTeams - top25 + 1;
-  const { dynasty, redraft, draft } = ranks;
+): TierResult {
+  const flags = getTierFlags(ranks, totalTeams);
 
-  if (redraft <= top25 && dynasty <= top25 && draft <= mid) return "Juggernaut";
-  if (redraft <= mid && dynasty > mid && draft > mid) return "Win-Now";
-  if (redraft >= bottom25 && (dynasty <= top25 || draft <= top25)) return "Future Powerhouse";
-  if (draft <= top25 && dynasty >= bottom25 && redraft >= bottom25) return "Pick Hoarder";
-  if (draft >= bottom25 && dynasty >= bottom25 && redraft >= bottom25) return "Taco";
-  return "N/A";
+  if (flags.redBottom25 && flags.dynBottom25 && flags.pcksBottom25) {
+    return { tier: "Taco", tierDescription: TIER_DESCRIPTIONS["Taco"], debug: flags };
+  }
+
+  if (
+    (flags.redTop25 && flags.dynTop25) ||
+    (flags.redTop25 && flags.dynTop50 && flags.pcksTop25)
+  ) {
+    return { tier: "Juggernaut", tierDescription: TIER_DESCRIPTIONS["Juggernaut"], debug: flags };
+  }
+
+  if (flags.dynTop25 && flags.pcksTop25) {
+    return { tier: "Future Powerhouse", tierDescription: TIER_DESCRIPTIONS["Future Powerhouse"], debug: flags };
+  }
+
+  if (flags.pcksTop25 && flags.redBottom50) {
+    return { tier: "Pick Hoarder", tierDescription: TIER_DESCRIPTIONS["Pick Hoarder"], debug: flags };
+  }
+
+  if (flags.redTop33 && flags.dynBottom50 && flags.pcksBottom50) {
+    return { tier: "Win-Now", tierDescription: TIER_DESCRIPTIONS["Win-Now"], debug: flags };
+  }
+
+  return { tier: "Balanced", tierDescription: TIER_DESCRIPTIONS["Balanced"], debug: flags };
 }
 
-export function getLeagueTeamTiers(teams: Team[]): Map<string, { tier: Tier; tooltip: string }> {
+export function getLeagueTeamTiers(teams: Team[]): Map<string, { tier: Tier; tooltip: string; tierDescription: string; debug: TierDebugFlags }> {
   const total = teams.length;
   if (total === 0) return new Map();
 
@@ -169,7 +246,7 @@ export function getLeagueTeamTiers(teams: Team[]): Map<string, { tier: Tier; too
   const byRedraft = [...teams].sort((a, b) => (b.metrics?.starters ?? 0) - (a.metrics?.starters ?? 0));
   const byDraft = [...teams].sort((a, b) => (b.metrics?.picks ?? 0) - (a.metrics?.picks ?? 0));
 
-  const result = new Map<string, { tier: Tier; tooltip: string }>();
+  const result = new Map<string, { tier: Tier; tooltip: string; tierDescription: string; debug: TierDebugFlags }>();
 
   for (const team of teams) {
     const power = byPower.findIndex(t => t.id === team.id) + 1;
@@ -177,8 +254,13 @@ export function getLeagueTeamTiers(teams: Team[]): Map<string, { tier: Tier; too
     const redraft = byRedraft.findIndex(t => t.id === team.id) + 1;
     const draft = byDraft.findIndex(t => t.id === team.id) + 1;
 
-    const tier = classifyTeamTier({ power, dynasty, redraft, draft }, total);
-    result.set(team.id, { tier, tooltip: getTierTooltip(tier) });
+    const tierResult = classifyTeamTier({ power, dynasty, redraft, draft }, total);
+    result.set(team.id, {
+      tier: tierResult.tier,
+      tooltip: tierResult.tierDescription,
+      tierDescription: tierResult.tierDescription,
+      debug: tierResult.debug,
+    });
   }
 
   return result;
@@ -193,14 +275,7 @@ export function isRebuilderTier(tier: Tier): boolean {
 }
 
 export function getTierTooltip(tier: Tier): string {
-  switch (tier) {
-    case "Juggernaut": return "Elite across the board. Top 25% redraft, dynasty, and top 50% picks.";
-    case "Win-Now": return "Strong starters but thin on dynasty and draft capital.";
-    case "Future Powerhouse": return "Weak now but loaded with dynasty value or draft capital.";
-    case "Pick Hoarder": return "Stockpiling picks but the roster needs work.";
-    case "Taco": return "Bottom 25% in picks, dynasty, and redraft.";
-    case "N/A": return "Doesn't fit a clear archetype.";
-  }
+  return TIER_DESCRIPTIONS[tier];
 }
 
 export function getTierEmoji(tier: Tier): string {
@@ -210,7 +285,7 @@ export function getTierEmoji(tier: Tier): string {
     case "Future Powerhouse": return "📈";
     case "Pick Hoarder": return "🎰";
     case "Taco": return "🤡";
-    case "N/A": return "➖";
+    case "Balanced": return "⚖️";
   }
 }
 
@@ -221,7 +296,7 @@ export function getTierColor(tier: Tier): string {
     case "Future Powerhouse": return "text-emerald-600 dark:text-emerald-400";
     case "Pick Hoarder": return "text-purple-600 dark:text-purple-400";
     case "Taco": return "text-red-600 dark:text-red-400";
-    case "N/A": return "text-muted-foreground";
+    case "Balanced": return "text-slate-600 dark:text-slate-400";
   }
 }
 
@@ -232,7 +307,7 @@ export function getTierBg(tier: Tier): string {
     case "Future Powerhouse": return "bg-emerald-50 dark:bg-emerald-950/30";
     case "Pick Hoarder": return "bg-purple-50 dark:bg-purple-950/30";
     case "Taco": return "bg-red-50 dark:bg-red-950/30";
-    case "N/A": return "bg-muted/20";
+    case "Balanced": return "bg-slate-50 dark:bg-slate-900/30";
   }
 }
 
@@ -243,7 +318,7 @@ export function getTierBorderColor(tier: Tier): string {
     case "Future Powerhouse": return "border-emerald-300 dark:border-emerald-700";
     case "Pick Hoarder": return "border-purple-300 dark:border-purple-700";
     case "Taco": return "border-red-300 dark:border-red-700";
-    case "N/A": return "border-border";
+    case "Balanced": return "border-slate-300 dark:border-slate-700";
   }
 }
 

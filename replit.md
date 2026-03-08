@@ -37,6 +37,17 @@ The application is a **fully static React SPA** (no backend required). All exter
 - Skeleton loading for KPIs and data tables
 - Subtle blueprint grid texture background
 
+## Tier Classification System
+Teams are classified using a priority-based decision tree in `client/src/data/mockData.ts`:
+- **Inputs**: RED (redraft/starter rank), DYN (dynasty/depth rank), PCKS (pick capital rank)
+- **Priority order**: Taco → Juggernaut → Future Powerhouse → Pick Hoarder → Win-Now → Balanced
+- **Balanced** is the universal fallback (no N/A tier exists)
+- `classifyTeamTier()` returns `TierResult` with `{ tier, tierDescription, debug }` for debugging
+- `getLeagueTeamTiers()` returns a Map with `{ tier, tooltip, tierDescription, debug }` per team
+- Tier type: `"Juggernaut" | "Win-Now" | "Future Powerhouse" | "Pick Hoarder" | "Taco" | "Balanced"`
+- Helper functions: `getTierColor`, `getTierEmoji`, `getTierBg`, `getTierBorderColor`, `getTierTooltip`
+- Contender tiers: Juggernaut, Win-Now; Rebuilder tiers: Future Powerhouse, Pick Hoarder, Taco
+
 ## Features
 - **Portfolio**: Sleeper account connection, cross-league analysis, player exposure, lineup alerts
 - **My Team**: Roster strength, age curve, depth chart

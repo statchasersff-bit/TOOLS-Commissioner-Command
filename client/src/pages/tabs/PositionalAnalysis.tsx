@@ -202,7 +202,7 @@ function usePositionalProfiles(league: League, userTeam: Team) {
     const pickSorted = [...league.teams].sort((a, b) => pickTotals[b.id] - pickTotals[a.id]);
 
     const profiles: TeamPosProfile[] = league.teams.map(team => {
-      const tier = profileTierMap.get(team.id)?.tier ?? "N/A";
+      const tier = profileTierMap.get(team.id)?.tier ?? "Balanced";
       const positions: TeamPosProfile["positions"] = {} as any;
 
       for (const pos of POSITIONS) {
@@ -487,7 +487,7 @@ function TradeOpportunities({ league, userTeam }: { league: League; userTeam: Te
       .flatMap(t => {
         const dynastyRank = rankedTeams.findIndex(rt => rt.id === t.id) + 1;
         const redraftRank = [...league.teams].sort((a, b) => (b.metrics?.starters ?? 0) - (a.metrics?.starters ?? 0)).findIndex(rt => rt.id === t.id) + 1;
-        const tier = tradeBlockTierMap.get(t.id)?.tier ?? "N/A";
+        const tier = tradeBlockTierMap.get(t.id)?.tier ?? "Balanced";
         const isRebuilder = isRebuilderTier(tier);
         const isDynastyStrong = dynastyRank <= topThird && redraftRank >= bottomStart;
         if (!isRebuilder && !isDynastyStrong) return [];
@@ -525,7 +525,7 @@ function TradeOpportunities({ league, userTeam }: { league: League; userTeam: Te
         let fallbackSells: PosLabel[] = [];
         let fallbackBuys: PosLabel[] = [];
         if (uSells.length === 0 && uBuys.length === 0 && tierMatch) {
-          const userTier = tradeBlockTierMap.get(userTeam.id)?.tier ?? "N/A";
+          const userTier = tradeBlockTierMap.get(userTeam.id)?.tier ?? "Balanced";
           if (isContenderTier(userTier)) {
             fallbackBuys = POSITIONS.filter(pos => partner.positions[pos].rank <= Math.ceil(league.teams.length * 0.4));
           } else {
@@ -549,8 +549,8 @@ function TradeOpportunities({ league, userTeam }: { league: League; userTeam: Te
         const suggestions = generateSuggestions(
           userTeam, partner.team, userProfile, partner,
           effectiveSells, effectiveBuys, getPlayerValue, getPickValue, includeStuds, fairnessThreshold, aggressiveness,
-          tradeBlockTierMap.get(userTeam.id)?.tier ?? "N/A",
-          tradeBlockTierMap.get(partner.teamId)?.tier ?? "N/A"
+          tradeBlockTierMap.get(userTeam.id)?.tier ?? "Balanced",
+          tradeBlockTierMap.get(partner.teamId)?.tier ?? "Balanced"
         );
 
         return {
@@ -926,7 +926,7 @@ function generateSuggestions(
     }
   }
 
-  if (isContenderTier(userTier) && (isRebuilderTier(partnerTier) || partnerTier === "N/A")) {
+  if (isContenderTier(userTier) && (isRebuilderTier(partnerTier) || partnerTier === "Balanced")) {
     for (const buy of theirBuyCandidates.slice(0, 2)) {
       const twoSells = mySellCandidates
         .filter(s => s.val < buy.val * 0.8)
@@ -953,7 +953,7 @@ function generateSuggestions(
     }
   }
 
-  if ((isRebuilderTier(userTier) || userTier === "N/A") && isContenderTier(partnerTier)) {
+  if ((isRebuilderTier(userTier) || userTier === "Balanced") && isContenderTier(partnerTier)) {
     const oldSells = mySellCandidates
       .filter(s => (s.pos === "RB" && s.age >= 26) || (s.pos !== "RB" && s.age >= 27))
       .slice(0, 3);
@@ -1069,7 +1069,7 @@ function PlayerTargets({ league, userTeam }: { league: League; userTeam: Team })
 
   const userProfile = useMemo(() => profiles.find(p => p.teamId === userTeam.id), [profiles, userTeam]);
   const targetsTierMap = useMemo(() => getLeagueTeamTiers(league.teams), [league.teams]);
-  const userTier = targetsTierMap.get(userTeam.id)?.tier ?? "N/A";
+  const userTier = targetsTierMap.get(userTeam.id)?.tier ?? "Balanced";
 
   const buyTargets = useMemo(() => {
     const surplusTeams = profiles.filter(p =>

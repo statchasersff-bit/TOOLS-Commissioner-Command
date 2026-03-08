@@ -83,7 +83,7 @@ function EconomyOverview({ league }: { league: League }) {
       team,
       now: computeNowScore(league.teams, team),
       future: computeFutureScore(league.teams, team),
-      tier: tierMap.get(team.id)?.tier ?? "N/A",
+      tier: tierMap.get(team.id)?.tier ?? "Balanced",
     })),
     [league.teams, tierMap]
   );
@@ -291,8 +291,8 @@ function TradeLiquidity({ league }: { league: League }) {
 
   const liquidityData = useMemo(() => {
     const totalTeams = league.teams.length;
-    const contenders = league.teams.filter(t => isContenderTier(tierMap.get(t.id)?.tier ?? "N/A")).length;
-    const rebuilders = league.teams.filter(t => isRebuilderTier(tierMap.get(t.id)?.tier ?? "N/A")).length;
+    const contenders = league.teams.filter(t => isContenderTier(tierMap.get(t.id)?.tier ?? "Balanced")).length;
+    const rebuilders = league.teams.filter(t => isRebuilderTier(tierMap.get(t.id)?.tier ?? "Balanced")).length;
     const midTeams = totalTeams - contenders - rebuilders;
 
     const hasBuyers = contenders >= 2;
@@ -312,7 +312,7 @@ function TradeLiquidity({ league }: { league: League }) {
 
   const buyerSeller = useMemo(() => {
     return league.teams.map(team => {
-      const tier = tierMap.get(team.id)?.tier ?? "N/A";
+      const tier = tierMap.get(team.id)?.tier ?? "Balanced";
       const role = isContenderTier(tier) ? "Buyer" as const : isRebuilderTier(tier) ? "Seller" as const : "Neutral" as const;
       return { team, tier, role };
     }).sort((a, b) => {
