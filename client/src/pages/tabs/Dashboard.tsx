@@ -431,16 +431,17 @@ function posBarColor(rank: number): string {
 
 type SortKey = "name" | "overall" | "redraftRank" | "dynastyRank" | "picks";
 
-function SortableHeader({ label, mobileLabel, sortKey, activeSortKey, sortDir, onSort, className }: {
+function SortableHeader({ label, mobileLabel, sortKey, activeSortKey, sortDir, onSort, className, rowSpan }: {
   label: string; mobileLabel?: string; sortKey: SortKey; activeSortKey: SortKey; sortDir: "asc" | "desc";
-  onSort: (key: SortKey) => void; className?: string;
+  onSort: (key: SortKey) => void; className?: string; rowSpan?: number;
 }) {
   const isActive = activeSortKey === sortKey;
   return (
     <th
-      className={`px-2 sm:px-4 py-3 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap cursor-pointer select-none hover:text-foreground transition-colors ${className || ""}`}
+      className={`px-2 sm:px-4 py-3 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap cursor-pointer select-none hover:text-foreground transition-colors bg-muted/30 dark:bg-muted/20 ${className || ""}`}
       onClick={() => onSort(sortKey)}
       data-testid={`sort-${sortKey}`}
+      rowSpan={rowSpan}
     >
       <span className="inline-flex items-center gap-1">
         {mobileLabel ? (<><span className="sm:hidden">{mobileLabel}</span><span className="hidden sm:inline">{label}</span></>) : label}
@@ -593,7 +594,7 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border/40">
-              <th className="bg-muted/30 dark:bg-muted/20 px-1.5 sm:px-3 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap" rowSpan={2}>Rank</th>
+              <SortableHeader label="Rank" sortKey="overall" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} rowSpan={2} />
               <th className="bg-muted/30 dark:bg-muted/20 cursor-pointer select-none hover:text-foreground transition-colors" rowSpan={2} onClick={() => handleSort("name")} data-testid="sort-name">
                 <span className="inline-flex items-center gap-1 px-4 py-3 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">
                   Team
