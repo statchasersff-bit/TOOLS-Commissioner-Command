@@ -13,8 +13,9 @@ function Router() {
   return (
     <WouterRouter base={BASE_PATH}>
       <Switch>
+        <Route path="/:tab/:sub" component={DynastyCommandCenter} />
+        <Route path="/:tab" component={DynastyCommandCenter} />
         <Route path="/" component={DynastyCommandCenter} />
-        <Route component={DynastyCommandCenter} />
       </Switch>
     </WouterRouter>
   );

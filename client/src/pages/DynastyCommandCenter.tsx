@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
+import { useRoute, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -40,22 +41,20 @@ function loadSavedState() {
   return null;
 }
 
-function getInitialState() {
-  const params = new URLSearchParams(window.location.search);
+function getInitialState(pathTab?: string, pathSub?: string) {
   const saved = loadSavedState();
-  const urlTab = params.get("tab");
-  const urlSub = params.get("sub");
 
   return {
-    tab: urlTab || saved?.tab || "portfolio",
-    sub: urlSub || saved?.sub || "connect",
+    tab: pathTab || saved?.tab || "portfolio",
+    sub: pathSub || saved?.sub || "connect",
     leagueId: saved?.leagueId || null,
   };
 }
 
 
-export default function DynastyCommandCenter() {
-  const initial = getInitialState();
+export default function DynastyCommandCenter({ params }: { params?: { tab?: string; sub?: string } }) {
+  const [, setLocation] = useLocation();
+  const initial = getInitialState(params?.tab, params?.sub);
   const [selectedLeagueId, setSelectedLeagueId] = useState<string | null>(initial.leagueId);
   const [activeMainTab, setActiveMainTab] = useState(initial.tab);
   const [activeSubTab, setActiveSubTab] = useState(initial.sub);
@@ -127,10 +126,7 @@ export default function DynastyCommandCenter() {
   const currentMainConfig = NAV_CONFIG.find((t) => t.id === activeMainTab);
 
   useEffect(() => {
-    const url = new URL(window.location.href);
-    url.searchParams.set("tab", activeMainTab);
-    url.searchParams.set("sub", activeSubTab);
-    window.history.replaceState({}, "", url.toString());
+    setLocation(`/${activeMainTab}/${activeSubTab}`, { replace: true });
 
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({
@@ -139,7 +135,7 @@ export default function DynastyCommandCenter() {
         leagueId: selectedLeagueId,
       }));
     } catch {}
-  }, [activeMainTab, activeSubTab, selectedLeagueId]);
+  }, [activeMainTab, activeSubTab, selectedLeagueId, setLocation]);
 
   const handleLeagueSelect = useCallback((id: string) => {
     setSelectedLeagueId(id);
