@@ -175,19 +175,6 @@ function EconomyOverview({ league }: { league: League }) {
       </div>
 
       <Card className="p-4 md:p-6 rounded-2xl bg-[#0a1628] border-[#1e3a5f]" data-testid="dynasty-window-chart">
-        <div className="flex flex-wrap gap-x-5 gap-y-1 mb-4 justify-center">
-          {[
-            { label: "Dynasty Death Star", color: "#d4af37" },
-            { label: "Win-Now Kings", color: "#ef4444" },
-            { label: "Rebuild With Ammo", color: "#10b981" },
-            { label: "Rebuild Hell", color: "#64748b" },
-          ].map(q => (
-            <div key={q.label} className="flex items-center gap-1.5">
-              <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: q.color }} />
-              <span className="text-[10px] text-slate-400">{q.label}</span>
-            </div>
-          ))}
-        </div>
         <ResponsiveContainer width="100%" height={380}>
           <ScatterChart margin={{ top: 20, right: 30, bottom: 30, left: 20 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#1e3a5f" strokeOpacity={0.5} />
@@ -230,16 +217,16 @@ function EconomyOverview({ league }: { league: League }) {
                     <g style={{ cursor: "pointer" }}>
                       <defs>
                         <clipPath id={clipId}>
-                          <circle cx={cx} cy={cy} r={r} />
+                          <circle cx={cx} cy={cy} r={r - 1.5} />
                         </clipPath>
                       </defs>
-                      <circle cx={cx} cy={cy} r={r + 1.5} fill="#0f172a" stroke="#334155" strokeWidth={2} />
+                      <circle cx={cx} cy={cy} r={r} fill={payload.fill} stroke={payload.fill} strokeWidth={2.5} />
                       <image
                         href={payload.avatar}
-                        x={cx - r}
-                        y={cy - r}
-                        width={r * 2}
-                        height={r * 2}
+                        x={cx - r + 1.5}
+                        y={cy - r + 1.5}
+                        width={(r - 1.5) * 2}
+                        height={(r - 1.5) * 2}
                         clipPath={`url(#${clipId})`}
                         preserveAspectRatio="xMidYMid slice"
                       />
@@ -248,8 +235,8 @@ function EconomyOverview({ league }: { league: League }) {
                 }
                 return (
                   <g style={{ cursor: "pointer" }}>
-                    <circle cx={cx} cy={cy} r={r} fill="#1e293b" stroke="#334155" strokeWidth={2} />
-                    <text x={cx} y={cy + 1} textAnchor="middle" dominantBaseline="central" fill="#94a3b8" fontSize={10} fontWeight={700}>
+                    <circle cx={cx} cy={cy} r={r} fill={payload.fill} stroke={payload.fill} strokeWidth={2.5} fillOpacity={0.25} />
+                    <text x={cx} y={cy + 1} textAnchor="middle" dominantBaseline="central" fill="#fff" fontSize={10} fontWeight={700}>
                       {(payload.teamName || "?").slice(0, 2).toUpperCase()}
                     </text>
                   </g>
