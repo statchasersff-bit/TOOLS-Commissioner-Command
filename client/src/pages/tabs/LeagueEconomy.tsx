@@ -9,7 +9,7 @@ import { formatPickLabel } from "@/types";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   ScatterChart, Scatter, XAxis, YAxis, CartesianGrid,
-  Tooltip as RechartsTooltip, ResponsiveContainer, ReferenceLine, Label
+  Tooltip as RechartsTooltip, ResponsiveContainer, ReferenceLine, ReferenceArea, Label
 } from "recharts";
 import { Package, BarChart3, Activity, AlertTriangle } from "lucide-react";
 
@@ -211,8 +211,12 @@ function EconomyOverview({ league }: { league: League }) {
             >
               <Label value="Future Strength →" angle={-90} position="left" offset={0} style={{ fill: "#94a3b8", fontSize: 12, fontWeight: 600 }} />
             </YAxis>
-            <ReferenceLine x={avgNow} stroke="#d4af37" strokeOpacity={0.3} strokeDasharray="6 4" />
-            <ReferenceLine y={avgFuture} stroke="#d4af37" strokeOpacity={0.3} strokeDasharray="6 4" />
+            <ReferenceArea x1={avgNow} x2={100} y1={avgFuture} y2={100} fill="#d4af37" fillOpacity={0.07} />
+            <ReferenceArea x1={avgNow} x2={100} y1={0} y2={avgFuture} fill="#ef4444" fillOpacity={0.06} />
+            <ReferenceArea x1={0} x2={avgNow} y1={avgFuture} y2={100} fill="#10b981" fillOpacity={0.06} />
+            <ReferenceArea x1={0} x2={avgNow} y1={0} y2={avgFuture} fill="#64748b" fillOpacity={0.05} />
+            <ReferenceLine x={avgNow} stroke="#d4af37" strokeOpacity={0.35} strokeDasharray="6 4" />
+            <ReferenceLine y={avgFuture} stroke="#d4af37" strokeOpacity={0.35} strokeDasharray="6 4" />
             <RechartsTooltip content={<DynastyWindowTooltip />} cursor={false} />
             <Scatter
               data={scatterData}
@@ -226,16 +230,16 @@ function EconomyOverview({ league }: { league: League }) {
                     <g style={{ cursor: "pointer" }}>
                       <defs>
                         <clipPath id={clipId}>
-                          <circle cx={cx} cy={cy} r={r - 1.5} />
+                          <circle cx={cx} cy={cy} r={r} />
                         </clipPath>
                       </defs>
-                      <circle cx={cx} cy={cy} r={r} fill={payload.fill} stroke={payload.fill} strokeWidth={2.5} />
+                      <circle cx={cx} cy={cy} r={r + 1.5} fill="#0f172a" stroke="#334155" strokeWidth={2} />
                       <image
                         href={payload.avatar}
-                        x={cx - r + 1.5}
-                        y={cy - r + 1.5}
-                        width={(r - 1.5) * 2}
-                        height={(r - 1.5) * 2}
+                        x={cx - r}
+                        y={cy - r}
+                        width={r * 2}
+                        height={r * 2}
                         clipPath={`url(#${clipId})`}
                         preserveAspectRatio="xMidYMid slice"
                       />
@@ -244,8 +248,8 @@ function EconomyOverview({ league }: { league: League }) {
                 }
                 return (
                   <g style={{ cursor: "pointer" }}>
-                    <circle cx={cx} cy={cy} r={r} fill={payload.fill} stroke={payload.fill} strokeWidth={2.5} fillOpacity={0.25} />
-                    <text x={cx} y={cy + 1} textAnchor="middle" dominantBaseline="central" fill="#fff" fontSize={10} fontWeight={700}>
+                    <circle cx={cx} cy={cy} r={r} fill="#1e293b" stroke="#334155" strokeWidth={2} />
+                    <text x={cx} y={cy + 1} textAnchor="middle" dominantBaseline="central" fill="#94a3b8" fontSize={10} fontWeight={700}>
                       {(payload.teamName || "?").slice(0, 2).toUpperCase()}
                     </text>
                   </g>
