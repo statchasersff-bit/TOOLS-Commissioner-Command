@@ -37,6 +37,7 @@ export interface Team {
   name: string;
   owner: string;
   ownerId?: string;
+  avatar?: string | null;
   roster: Player[];
   picks: Pick[];
   metrics: TeamMetrics;

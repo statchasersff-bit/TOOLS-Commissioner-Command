@@ -331,11 +331,17 @@ export async function fetchSleeperLeagueFull(leagueId: string, userId: string) {
       }
     }
 
+    const avatarId = ownerUser?.avatar || null;
+    const avatarUrl = avatarId
+      ? `https://sleepercdn.com/avatars/thumbs/${avatarId}`
+      : null;
+
     return {
       id: teamId,
       name: teamName,
       owner: ownerName,
       ownerId: roster.owner_id || undefined,
+      avatar: avatarUrl,
       roster: rosterPlayers,
       picks: ownedPicks,
       metrics: { ...defaultMetrics },

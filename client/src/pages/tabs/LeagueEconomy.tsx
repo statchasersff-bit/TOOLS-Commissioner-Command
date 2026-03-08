@@ -155,6 +155,7 @@ function EconomyOverview({ league }: { league: League }) {
       x: qt.now,
       y: qt.future,
       teamName: qt.team.owner,
+      avatar: qt.team.avatar || null,
       tier: qt.tier,
       redRank: qt.redRank,
       dynRank: qt.dynRank,
@@ -218,17 +219,36 @@ function EconomyOverview({ league }: { league: League }) {
               nameKey="teamName"
               shape={(props: any) => {
                 const { cx, cy, payload } = props;
+                const r = 16;
+                const clipId = `avatar-clip-${cx}-${cy}`;
+                if (payload.avatar) {
+                  return (
+                    <g style={{ cursor: "pointer" }}>
+                      <defs>
+                        <clipPath id={clipId}>
+                          <circle cx={cx} cy={cy} r={r - 1.5} />
+                        </clipPath>
+                      </defs>
+                      <circle cx={cx} cy={cy} r={r} fill={payload.fill} stroke={payload.fill} strokeWidth={2.5} />
+                      <image
+                        href={payload.avatar}
+                        x={cx - r + 1.5}
+                        y={cy - r + 1.5}
+                        width={(r - 1.5) * 2}
+                        height={(r - 1.5) * 2}
+                        clipPath={`url(#${clipId})`}
+                        preserveAspectRatio="xMidYMid slice"
+                      />
+                    </g>
+                  );
+                }
                 return (
-                  <circle
-                    cx={cx}
-                    cy={cy}
-                    r={8}
-                    fill={payload.fill}
-                    stroke={payload.fill}
-                    strokeWidth={2}
-                    fillOpacity={0.8}
-                    style={{ cursor: "pointer" }}
-                  />
+                  <g style={{ cursor: "pointer" }}>
+                    <circle cx={cx} cy={cy} r={r} fill={payload.fill} stroke={payload.fill} strokeWidth={2.5} fillOpacity={0.25} />
+                    <text x={cx} y={cy + 1} textAnchor="middle" dominantBaseline="central" fill="#fff" fontSize={10} fontWeight={700}>
+                      {(payload.teamName || "?").slice(0, 2).toUpperCase()}
+                    </text>
+                  </g>
                 );
               }}
             />
