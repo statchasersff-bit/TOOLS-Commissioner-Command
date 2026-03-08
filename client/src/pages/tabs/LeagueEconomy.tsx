@@ -186,7 +186,7 @@ function EconomyOverview({ league }: { league: League }) {
               tickLine={{ stroke: "#334155" }}
               axisLine={{ stroke: "#334155" }}
             >
-              <Label value="Current Power →" position="bottom" offset={10} style={{ fill: "#94a3b8", fontSize: 12, fontWeight: 600 }} />
+              <Label value="Current Power →" position="insideBottom" offset={-15} style={{ fill: "#94a3b8", fontSize: 12, fontWeight: 600 }} />
             </XAxis>
             <YAxis
               type="number"
@@ -196,7 +196,7 @@ function EconomyOverview({ league }: { league: League }) {
               tickLine={{ stroke: "#334155" }}
               axisLine={{ stroke: "#334155" }}
             >
-              <Label value="Future Strength →" angle={-90} position="left" offset={0} style={{ fill: "#94a3b8", fontSize: 12, fontWeight: 600 }} />
+              <Label value="Future Strength →" angle={-90} position="insideLeft" offset={10} style={{ fill: "#94a3b8", fontSize: 12, fontWeight: 600 }} />
             </YAxis>
             <ReferenceArea x1={avgNow} x2={100} y1={avgFuture} y2={100} fill="#d4af37" fillOpacity={0.07} />
             <ReferenceArea x1={avgNow} x2={100} y1={0} y2={avgFuture} fill="#ef4444" fillOpacity={0.06} />
