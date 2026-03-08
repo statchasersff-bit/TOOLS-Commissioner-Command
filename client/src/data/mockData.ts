@@ -148,6 +148,7 @@ export interface TierDebugFlags {
   redTop25: boolean;
   redTop33: boolean;
   redTop50: boolean;
+  redBottom10: boolean;
   redBottom25: boolean;
   redBottom33: boolean;
   redBottom50: boolean;
@@ -155,6 +156,7 @@ export interface TierDebugFlags {
   dynTop25: boolean;
   dynTop33: boolean;
   dynTop50: boolean;
+  dynBottom10: boolean;
   dynBottom25: boolean;
   dynBottom50: boolean;
   pcksTop10: boolean;
@@ -197,6 +199,8 @@ function getTierFlags(
   const bottom50Start = totalTeams - bottom50Count + 1;
   const bottom25Start = totalTeams - bottom25Count + 1;
 
+  const bottom10Count = Math.max(1, Math.ceil(totalTeams * 0.10));
+  const bottom10Start = totalTeams - bottom10Count + 1;
   const bottom33Count = Math.max(1, Math.ceil(totalTeams * 0.33));
   const bottom33Start = totalTeams - bottom33Count + 1;
 
@@ -207,6 +211,7 @@ function getTierFlags(
     redTop25: redraft <= top25,
     redTop33: redraft <= top33,
     redTop50: redraft <= top50,
+    redBottom10: redraft >= bottom10Start,
     redBottom25: redraft >= bottom25Start,
     redBottom33: redraft >= bottom33Start,
     redBottom50: redraft >= bottom50Start,
@@ -214,6 +219,7 @@ function getTierFlags(
     dynTop25: dynasty <= top25,
     dynTop33: dynasty <= top33,
     dynTop50: dynasty <= top50,
+    dynBottom10: dynasty >= bottom10Start,
     dynBottom25: dynasty >= bottom25Start,
     dynBottom50: dynasty >= bottom50Start,
     pcksTop10: draft <= top10,
@@ -231,7 +237,10 @@ export function classifyTeamTier(
 ): TierResult {
   const flags = getTierFlags(ranks, totalTeams);
 
-  if (flags.redBottom25 && flags.dynBottom25 && flags.pcksBottom25) {
+  if (
+    (flags.redBottom25 && flags.dynBottom25 && flags.pcksBottom25) ||
+    (flags.redBottom10 && flags.dynBottom10)
+  ) {
     return { tier: "Taco", tierDescription: TIER_DESCRIPTIONS["Taco"], debug: flags };
   }
 
