@@ -14,7 +14,7 @@ import { getLeagueTeamTiers, getTierColor, getTierBg, getTierEmoji, getPositionC
 import { getStaticPickValue } from "@/data/pickValues";
 import type { League, Team, Tier, Player, Pick, TradeRecord, TradeSide, CrawlStatus } from "@/types";
 import { cn } from "@/lib/utils";
-import { ArrowRightLeft, TrendingUp, TrendingDown, Target, X, Plus, Search, Info, Scale, RotateCcw, Database, Play, Pause, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
+import { ArrowRightLeft, TrendingUp, TrendingDown, Target, X, Plus, Search, Info, Scale, RotateCcw, Database, Play, Pause, Loader2, ChevronLeft, ChevronRight, ChevronDown } from "lucide-react";
 
 interface TradeProps {
   league: League;
@@ -882,6 +882,75 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
     return players;
   }, [league]);
 
+  const [rosterOpenA, setRosterOpenA] = useState(false);
+  const [rosterOpenB, setRosterOpenB] = useState(false);
+
+  const RosterCollapsible = ({ rosterTeam, rosterPlayers, addedPlayerIds, side, addPlayer, getPlayerValue }: {
+    rosterTeam: Team;
+    rosterPlayers: Player[];
+    addedPlayerIds: Set<string>;
+    side: "a" | "b";
+    addPlayer: (side: "a" | "b", p: Player) => void;
+    getPlayerValue: (p: Player) => number;
+  }) => {
+    const isOpen = side === "a" ? rosterOpenA : rosterOpenB;
+    const setOpen = side === "a" ? setRosterOpenA : setRosterOpenB;
+
+    return (
+      <div className="mt-3 pt-3 border-t border-border/30">
+        <button
+          className="flex items-center gap-1.5 w-full text-left group"
+          onClick={() => setOpen(!isOpen)}
+          data-testid={`button-toggle-roster-${side}`}
+        >
+          <ChevronRight className={cn("w-3.5 h-3.5 text-muted-foreground transition-transform", isOpen && "rotate-90")} />
+          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider group-hover:text-foreground transition-colors">
+            {rosterTeam.owner || rosterTeam.name}'s Roster
+          </p>
+        </button>
+        {isOpen && (
+          <div className="grid grid-cols-4 gap-2 max-h-64 overflow-y-auto mt-2">
+            {(["QB", "RB", "WR", "TE"] as const).map((pos) => {
+              const posPlayers = [...rosterPlayers]
+                .filter((p) => p.pos === pos)
+                .sort((a, b) => getPlayerValue(b) - getPlayerValue(a));
+              return (
+                <div key={pos} className="space-y-0.5">
+                  <p className={`text-[10px] font-bold uppercase tracking-wider text-center pb-1 border-b border-border/30 ${getPositionColor(pos)}`}>
+                    {pos}
+                  </p>
+                  {posPlayers.map((p) => {
+                    const pid = p.sleeperId || p.id;
+                    const isAdded = addedPlayerIds.has(pid);
+                    return (
+                      <button
+                        key={pid}
+                        className={cn(
+                          "w-full flex flex-col px-1.5 py-1 rounded text-left text-xs transition-colors",
+                          isAdded
+                            ? "bg-[#d4af37]/10 opacity-50 cursor-default"
+                            : "hover:bg-muted/40 cursor-pointer"
+                        )}
+                        onClick={() => !isAdded && addPlayer(side, p)}
+                        disabled={isAdded}
+                        data-testid={`button-roster-player-${side}-${pid}`}
+                      >
+                        <span className={cn("truncate text-[11px] font-medium", isAdded && "line-through")}>{p.name}</span>
+                      </button>
+                    );
+                  })}
+                  {posPlayers.length === 0 && (
+                    <p className="text-[9px] text-muted-foreground/50 text-center py-2">—</p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const renderSide = (side: "a" | "b", assets: TradeAsset[], rawTotal: number) => {
     const sideLabel = side === "a" ? "A" : "B";
     const rosterTeam = side === "a" ? sideATeam : sideBTeam;
@@ -985,48 +1054,14 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
           </div>
 
           {rosterTeam && rosterPlayers.length > 0 && (
-            <div className="mt-3 pt-3 border-t border-border/30">
-              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-                {rosterTeam.owner || rosterTeam.name}'s Roster
-              </p>
-              <div className="grid grid-cols-4 gap-2 max-h-64 overflow-y-auto">
-                {(["QB", "RB", "WR", "TE"] as const).map((pos) => {
-                  const posPlayers = [...rosterPlayers]
-                    .filter((p) => p.pos === pos)
-                    .sort((a, b) => getPlayerValue(b) - getPlayerValue(a));
-                  return (
-                    <div key={pos} className="space-y-0.5">
-                      <p className={`text-[10px] font-bold uppercase tracking-wider text-center pb-1 border-b border-border/30 ${getPositionColor(pos)}`}>
-                        {pos}
-                      </p>
-                      {posPlayers.map((p) => {
-                        const pid = p.sleeperId || p.id;
-                        const isAdded = addedPlayerIds.has(pid);
-                        return (
-                          <button
-                            key={pid}
-                            className={cn(
-                              "w-full flex flex-col px-1.5 py-1 rounded text-left text-xs transition-colors",
-                              isAdded
-                                ? "bg-[#d4af37]/10 opacity-50 cursor-default"
-                                : "hover:bg-muted/40 cursor-pointer"
-                            )}
-                            onClick={() => !isAdded && addPlayer(side, p)}
-                            disabled={isAdded}
-                            data-testid={`button-roster-player-${side}-${pid}`}
-                          >
-                            <span className={cn("truncate text-[11px] font-medium", isAdded && "line-through")}>{p.name}</span>
-                          </button>
-                        );
-                      })}
-                      {posPlayers.length === 0 && (
-                        <p className="text-[9px] text-muted-foreground/50 text-center py-2">—</p>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
+            <RosterCollapsible
+              rosterTeam={rosterTeam}
+              rosterPlayers={rosterPlayers}
+              addedPlayerIds={addedPlayerIds}
+              side={side}
+              addPlayer={addPlayer}
+              getPlayerValue={getPlayerValue}
+            />
           )}
         </div>
       </Card>
