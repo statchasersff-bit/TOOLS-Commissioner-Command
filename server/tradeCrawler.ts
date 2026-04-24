@@ -40,6 +40,38 @@ async function fetchJson<T>(url: string): Promise<T | null> {
   }
 }
 
+interface SleeperDraftInfo {
+  draft_id: string;
+  season: string;
+  type: string;
+  slot_to_roster_id?: Record<string, number>;
+}
+
+/**
+ * Returns a Map<rosterId, slotNumber> for the rookie draft of `season` in `leagueId`.
+ * Dynasty rookie drafts are linear, so round 1 slot 5 = "1.05" for any round.
+ */
+async function fetchLeagueDraftSlots(leagueId: string, season: string): Promise<Map<number, number>> {
+  const slotMap = new Map<number, number>();
+  try {
+    const drafts = await fetchJson<SleeperDraftInfo[]>(`${SLEEPER_API}/league/${leagueId}/drafts`);
+    if (!drafts?.length) return slotMap;
+
+    const rookieDraft = drafts.find((d) => d.season === season);
+    if (!rookieDraft) return slotMap;
+
+    const detail = await fetchJson<SleeperDraftInfo>(`${SLEEPER_API}/draft/${rookieDraft.draft_id}`);
+    if (!detail?.slot_to_roster_id) return slotMap;
+
+    for (const [slot, rosterId] of Object.entries(detail.slot_to_roster_id)) {
+      slotMap.set(rosterId, parseInt(slot, 10));
+    }
+  } catch {
+    // silently skip — pick will just show round without slot
+  }
+  return slotMap;
+}
+
 interface SleeperTransactionRaw {
   transaction_id: string;
   type: string;
@@ -259,6 +291,7 @@ async function processLeague(leagueId: string, degree: number) {
     console.log(`[Crawler] Fetching trades for league ${leagueInfo.name} (${leagueInfo.season})`);
 
     const leagueTrades = await fetchLeagueTransactions(leagueInfo.league_id);
+    const draftSlots = await fetchLeagueDraftSlots(leagueInfo.league_id, leagueInfo.season);
 
     await d.insert(crawledLeagues).values({
       id: leagueInfo.league_id,
@@ -339,6 +372,7 @@ async function processLeague(leagueId: string, degree: number) {
           if (!pick.owner_id || !pick.previous_owner_id) continue;
           const receiverInfo = rosterOwnerMap.get(pick.owner_id);
           const originalOwnerInfo = rosterOwnerMap.get(pick.roster_id);
+          const slot = draftSlots.get(pick.roster_id) ?? null;
 
           assetRows.push({
             tradeId: trade.transaction_id,
@@ -348,6 +382,7 @@ async function processLeague(leagueId: string, degree: number) {
             assetType: "pick",
             pickSeason: pick.season,
             pickRound: pick.round,
+            pickSlot: slot,
             pickOriginalRosterId: pick.roster_id,
             pickOriginalOwnerName: originalOwnerInfo?.ownerName || null,
             direction: "received",
@@ -361,6 +396,7 @@ async function processLeague(leagueId: string, degree: number) {
             assetType: "pick",
             pickSeason: pick.season,
             pickRound: pick.round,
+            pickSlot: slot,
             pickOriginalRosterId: pick.roster_id,
             pickOriginalOwnerName: originalOwnerInfo?.ownerName || null,
             direction: "sent",
@@ -692,6 +728,7 @@ export async function searchTrades(params: {
           .map((a) => ({
             season: a.pickSeason || "",
             round: a.pickRound || 0,
+            slot: a.pickSlot ?? null,
             originalOwnerName: a.pickOriginalOwnerName || "Unknown",
           })),
       };
@@ -740,6 +777,7 @@ export async function ingestLeagueTrades(params: {
   }
 
   const rawTransactions = await fetchLeagueTransactions(params.leagueId);
+  const draftSlots = await fetchLeagueDraftSlots(params.leagueId, params.season);
 
   const filteredTransactions = params.sinceMs
     ? rawTransactions.filter((t) => (t.status_updated || 0) >= params.sinceMs!)
@@ -831,6 +869,7 @@ export async function ingestLeagueTrades(params: {
     if (trade.draft_picks) {
       for (const pick of trade.draft_picks) {
         if (!pick.owner_id || !pick.previous_owner_id) continue;
+        const slot = draftSlots.get(pick.roster_id) ?? null;
 
         assetRows.push({
           tradeId: trade.transaction_id,
@@ -840,6 +879,7 @@ export async function ingestLeagueTrades(params: {
           assetType: "pick",
           pickSeason: pick.season,
           pickRound: pick.round,
+          pickSlot: slot,
           pickOriginalRosterId: pick.roster_id,
           pickOriginalOwnerName: null,
           direction: "received",
@@ -853,6 +893,7 @@ export async function ingestLeagueTrades(params: {
           assetType: "pick",
           pickSeason: pick.season,
           pickRound: pick.round,
+          pickSlot: slot,
           pickOriginalRosterId: pick.roster_id,
           pickOriginalOwnerName: null,
           direction: "sent",
@@ -1007,4 +1048,51 @@ export async function getTradeStats() {
     scoringBreakdown: scoringBreakdown.map((r) => ({ scoring: r.scoring, count: r.count })),
     seasonBreakdown: seasonBreakdown.map((r) => ({ season: r.season, count: r.count })),
   };
+}
+
+/**
+ * One-time backfill: for every crawled league, fetch its rookie draft slot
+ * order and update any pick assets that are still missing a pickSlot.
+ */
+export async function backfillPickSlots(): Promise<{ updated: number; leagues: number }> {
+  const d = getDb();
+
+  const leagues = await d
+    .select({ id: crawledLeagues.id, season: crawledLeagues.season })
+    .from(crawledLeagues);
+
+  let totalUpdated = 0;
+
+  for (const league of leagues) {
+    const slotMap = await fetchLeagueDraftSlots(league.id, league.season);
+    if (slotMap.size === 0) continue;
+
+    // Find all pick assets linked to this league that have no slot yet
+    const unslottedPicks = await d
+      .select({ id: tradeAssets.id, pickOriginalRosterId: tradeAssets.pickOriginalRosterId })
+      .from(tradeAssets)
+      .innerJoin(trades, eq(tradeAssets.tradeId, trades.id))
+      .where(
+        and(
+          eq(trades.leagueId, league.id),
+          eq(tradeAssets.assetType, "pick"),
+          sql`${tradeAssets.pickSlot} IS NULL`,
+          eq(tradeAssets.pickSeason, league.season)
+        )
+      );
+
+    for (const asset of unslottedPicks) {
+      if (asset.pickOriginalRosterId == null) continue;
+      const slot = slotMap.get(asset.pickOriginalRosterId);
+      if (slot == null) continue;
+
+      await d
+        .update(tradeAssets)
+        .set({ pickSlot: slot })
+        .where(eq(tradeAssets.id, asset.id));
+      totalUpdated++;
+    }
+  }
+
+  return { updated: totalUpdated, leagues: leagues.length };
 }

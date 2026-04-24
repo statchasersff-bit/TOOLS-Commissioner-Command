@@ -115,6 +115,7 @@ export interface TradeAssetPlayer {
 export interface TradeAssetPick {
   season: string;
   round: number;
+  slot?: number | null;
   originalOwnerName: string;
 }
 

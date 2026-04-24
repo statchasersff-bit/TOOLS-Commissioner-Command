@@ -66,6 +66,7 @@ export const tradeAssets = pgTable("trade_assets", {
   playerAge: integer("player_age"),
   pickSeason: varchar("pick_season", { length: 10 }),
   pickRound: integer("pick_round"),
+  pickSlot: integer("pick_slot"),
   pickOriginalRosterId: integer("pick_original_roster_id"),
   pickOriginalOwnerName: text("pick_original_owner_name"),
   direction: varchar("direction", { length: 10 }).notNull(),

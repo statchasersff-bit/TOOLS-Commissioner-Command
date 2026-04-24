@@ -20,6 +20,7 @@ import {
   getTradeStats,
   ingestLeagueTrades,
   ingestUserLeagues,
+  backfillPickSlots,
 } from "./tradeCrawler";
 import {
   captureValueSnapshot,
@@ -285,7 +286,23 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/trades/backfill-pick-slots", async (_req, res) => {
+    try {
+      const result = await backfillPickSlots();
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || "Failed to backfill pick slots" });
+    }
+  });
+
   startSnapshotScheduler();
+
+  // Run pick-slot backfill in background on startup (non-blocking)
+  backfillPickSlots().then((r) => {
+    if (r.updated > 0) {
+      console.log(`[PickSlots] Backfilled ${r.updated} pick assets across ${r.leagues} leagues.`);
+    }
+  }).catch(() => {});
 
   return httpServer;
 }
