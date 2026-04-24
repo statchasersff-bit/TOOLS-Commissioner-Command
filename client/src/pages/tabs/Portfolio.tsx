@@ -577,10 +577,25 @@ export function PortfolioSummary() {
                   return (
                     <div key={player.playerId} className="flex items-center justify-between py-2 border-b border-border/20 last:border-0" data-testid={`exposure-${player.playerId}`}>
                       <div className="flex items-center gap-2.5 min-w-0">
-                        <Badge variant="outline" className={`text-xs w-8 justify-center flex-shrink-0 ${getPositionColor(player.pos)}`}>{player.pos}</Badge>
+                        <div className="w-9 h-9 rounded-full flex-shrink-0 overflow-hidden bg-muted ring-1 ring-border/40">
+                          <img
+                            src={`https://sleepercdn.com/content/nfl/players/thumb/${player.playerId}.jpg`}
+                            alt={player.name}
+                            className="w-full h-full object-cover object-top"
+                            onError={(e) => {
+                              const el = e.target as HTMLImageElement;
+                              el.style.display = "none";
+                              el.parentElement!.classList.add("flex", "items-center", "justify-center");
+                              el.parentElement!.innerHTML = `<span class="text-[10px] font-bold text-muted-foreground">${player.pos}</span>`;
+                            }}
+                          />
+                        </div>
                         <div className="min-w-0">
-                          <span className="text-sm font-semibold">{player.name}</span>
-                          <span className="text-xs text-muted-foreground ml-2">{player.team}</span>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-sm font-semibold">{player.name}</span>
+                            <Badge variant="outline" className={`text-[10px] px-1 py-0 h-4 flex-shrink-0 ${getPositionColor(player.pos)}`}>{player.pos}</Badge>
+                          </div>
+                          <span className="text-xs text-muted-foreground">{player.team}</span>
                         </div>
                       </div>
                       <div className="flex items-center gap-3 flex-shrink-0">
