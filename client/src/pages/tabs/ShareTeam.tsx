@@ -79,7 +79,7 @@ function pickLabel(p: Pick): string {
 
 export function ShareTeam({ league, userTeam }: Props) {
   const { toast } = useToast();
-  const { getPlayerValue } = useValueModel();
+  const { getPlayerValue, getRedraftValue } = useValueModel();
   const cardRef = useRef<HTMLDivElement>(null);
 
   const [hideManagerName, setHideManagerName] = useState(false);
@@ -108,11 +108,22 @@ export function ShareTeam({ league, userTeam }: Props) {
 
     const byDynValue = (team: Team) =>
       team.roster.reduce((s, p) => s + getPlayerValue(p), 0);
-    const sortedByValue = [...league.teams].sort(
+    const sortedByDyn = [...league.teams].sort(
       (a, b) => byDynValue(b) - byDynValue(a)
     );
-    const rosterValueRank =
-      sortedByValue.findIndex((t) => t.id === userTeam.id) + 1;
+    const dynastyRank =
+      sortedByDyn.findIndex((t) => t.id === userTeam.id) + 1;
+
+    // Competing rank = sum of redraft values for starters only
+    const byCompetingValue = (team: Team) =>
+      team.roster
+        .filter((p) => p.starter)
+        .reduce((s, p) => s + getRedraftValue(p), 0);
+    const sortedByCompeting = [...league.teams].sort(
+      (a, b) => byCompetingValue(b) - byCompetingValue(a)
+    );
+    const competingRank =
+      sortedByCompeting.findIndex((t) => t.id === userTeam.id) + 1;
 
     const overallPct = overallRank / total;
     let archetype: Archetype;
@@ -159,13 +170,13 @@ export function ShareTeam({ league, userTeam }: Props) {
     const format  = league.format ?? (scoringParts[1] === "SF" ? "SF" : "1QB");
 
     return {
-      total, overallRank, rosterValueRank,
+      total, overallRank, dynastyRank, competingRank,
       qbRank, rbRank, wrRank, teRank, picksRank,
       archetype, corePlayers, posStrengths,
       rosterByPos, sortedPickGroups,
       scoring, format,
     };
-  }, [league, userTeam, getPlayerValue]);
+  }, [league, userTeam, getPlayerValue, getRedraftValue]);
 
   const displayName  = (hideManagerName || anonMode) ? "Anonymous Manager" : (userTeam.owner || "Your Team");
   const displayLeague = (hideLeagueName || anonMode)
@@ -334,8 +345,9 @@ export function ShareTeam({ league, userTeam }: Props) {
                 {computed.archetype}
               </div>
               <div className="flex items-center gap-3">
-                <RankPill label="Overall" rank={computed.overallRank} total={computed.total} />
-                <RankPill label="Roster"  rank={computed.rosterValueRank} total={computed.total} />
+                <RankPill label="Overall"   rank={computed.overallRank}   total={computed.total} />
+                <RankPill label="Dynasty"   rank={computed.dynastyRank}   total={computed.total} />
+                <RankPill label="Competing" rank={computed.competingRank} total={computed.total} />
               </div>
             </div>
           </div>
