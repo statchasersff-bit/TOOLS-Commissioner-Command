@@ -56,8 +56,8 @@ interface TradeSuggestion {
   id: string;
   template: string;
   headline: string;
-  youGive: { label: string; value: number; pos?: string; age?: number; type: "player" | "pick" }[];
-  youGet: { label: string; value: number; pos?: string; age?: number; type: "player" | "pick" }[];
+  youGive: { label: string; value: number; pos?: string; age?: number; type: "player" | "pick"; sleeperId?: string }[];
+  youGet: { label: string; value: number; pos?: string; age?: number; type: "player" | "pick"; sleeperId?: string }[];
   rawSide1: number;
   rawSide2: number;
   adjustedSide1: number;
@@ -640,9 +640,18 @@ function TradeOpportunities({ league, userTeam }: { league: League; userTeam: Te
                   data-testid={`btn-expand-${opp.partner.teamId}`}
                 >
                   <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
-                      <Users className="w-4 h-4 text-muted-foreground" />
-                    </div>
+                    {opp.partner.team.avatar ? (
+                      <img
+                        src={opp.partner.team.avatar}
+                        alt={opp.partner.team.owner}
+                        className="w-9 h-9 rounded-full object-cover flex-shrink-0 ring-1 ring-border/40"
+                        onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                      />
+                    ) : (
+                      <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center flex-shrink-0 ring-1 ring-border/30">
+                        <span className="text-sm font-bold text-muted-foreground">{opp.partner.team.owner.charAt(0).toUpperCase()}</span>
+                      </div>
+                    )}
                     <div>
                       <div className="flex items-center gap-2">
                         <span className="font-semibold text-foreground">{opp.partner.team.owner}</span>
@@ -702,12 +711,23 @@ function TradeOpportunities({ league, userTeam }: { league: League; userTeam: Te
                             <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-2">You Give</p>
                             {sug.youGive.map((a, i) => (
                               <div key={i} className="flex items-center justify-between py-1">
-                                <div className="flex items-center gap-1.5">
-                                  {a.pos && <Badge variant="outline" className={cn("text-[9px] px-1 py-0", getPositionColor(a.pos))}>{a.pos}</Badge>}
-                                  {a.type === "pick" && <Badge variant="outline" className="text-[9px] px-1 py-0">PICK</Badge>}
-                                  <span className="text-xs font-medium text-foreground">{a.label}</span>
+                                <div className="flex items-center gap-1.5 min-w-0">
+                                  {a.type === "player" && a.sleeperId ? (
+                                    <div className="w-6 h-6 rounded-full flex-shrink-0 overflow-hidden bg-muted ring-1 ring-border/30">
+                                      <img
+                                        src={`https://sleepercdn.com/content/nfl/players/thumb/${a.sleeperId}.jpg`}
+                                        alt={a.label}
+                                        className="w-full h-full object-cover object-top"
+                                        onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                                      />
+                                    </div>
+                                  ) : a.type === "pick" ? (
+                                    <Badge variant="outline" className="text-[9px] px-1 py-0 flex-shrink-0">PICK</Badge>
+                                  ) : null}
+                                  {a.pos && a.type === "player" && <Badge variant="outline" className={cn("text-[9px] px-1 py-0 flex-shrink-0", getPositionColor(a.pos))}>{a.pos}</Badge>}
+                                  <span className="text-xs font-medium text-foreground truncate">{a.label}</span>
                                 </div>
-                                <span className="text-[10px] font-mono text-muted-foreground">{a.value.toLocaleString()}</span>
+                                <span className="text-[10px] font-mono text-muted-foreground flex-shrink-0 ml-1">{a.value.toLocaleString()}</span>
                               </div>
                             ))}
                             <div className="mt-2 pt-2 border-t border-border/20 flex items-center justify-between">
@@ -723,12 +743,23 @@ function TradeOpportunities({ league, userTeam }: { league: League; userTeam: Te
                             <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-2">You Get</p>
                             {sug.youGet.map((a, i) => (
                               <div key={i} className="flex items-center justify-between py-1">
-                                <div className="flex items-center gap-1.5">
-                                  {a.pos && <Badge variant="outline" className={cn("text-[9px] px-1 py-0", getPositionColor(a.pos))}>{a.pos}</Badge>}
-                                  {a.type === "pick" && <Badge variant="outline" className="text-[9px] px-1 py-0">PICK</Badge>}
-                                  <span className="text-xs font-medium text-foreground">{a.label}</span>
+                                <div className="flex items-center gap-1.5 min-w-0">
+                                  {a.type === "player" && a.sleeperId ? (
+                                    <div className="w-6 h-6 rounded-full flex-shrink-0 overflow-hidden bg-muted ring-1 ring-border/30">
+                                      <img
+                                        src={`https://sleepercdn.com/content/nfl/players/thumb/${a.sleeperId}.jpg`}
+                                        alt={a.label}
+                                        className="w-full h-full object-cover object-top"
+                                        onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                                      />
+                                    </div>
+                                  ) : a.type === "pick" ? (
+                                    <Badge variant="outline" className="text-[9px] px-1 py-0 flex-shrink-0">PICK</Badge>
+                                  ) : null}
+                                  {a.pos && a.type === "player" && <Badge variant="outline" className={cn("text-[9px] px-1 py-0 flex-shrink-0", getPositionColor(a.pos))}>{a.pos}</Badge>}
+                                  <span className="text-xs font-medium text-foreground truncate">{a.label}</span>
                                 </div>
-                                <span className="text-[10px] font-mono text-muted-foreground">{a.value.toLocaleString()}</span>
+                                <span className="text-[10px] font-mono text-muted-foreground flex-shrink-0 ml-1">{a.value.toLocaleString()}</span>
                               </div>
                             ))}
                             <div className="mt-2 pt-2 border-t border-border/20 flex items-center justify-between">
@@ -881,8 +912,8 @@ function generateSuggestions(
           id: `1for1-${sell.id}-${buy.id}`,
           template: "1-for-1",
           headline: `${sell.pos} → ${buy.pos} swap`,
-          youGive: [{ label: sell.name, value: sell.val, pos: sell.pos, age: sell.age, type: "player" }],
-          youGet: [{ label: buy.name, value: buy.val, pos: buy.pos, age: buy.age, type: "player" }],
+          youGive: [{ label: sell.name, value: sell.val, pos: sell.pos, age: sell.age, type: "player", sleeperId: sell.sleeperId }],
+          youGet: [{ label: buy.name, value: buy.val, pos: buy.pos, age: buy.age, type: "player", sleeperId: buy.sleeperId }],
           rawSide1: check.rawS1, rawSide2: check.rawS2,
           adjustedSide1: check.adjS1, adjustedSide2: check.adjS2,
           fairness: check.fairness,
@@ -908,10 +939,10 @@ function generateSuggestions(
               template: "Player + Pick",
               headline: `${sell.pos} + Pick → ${buy.pos} upgrade`,
               youGive: [
-                { label: sell.name, value: sell.val, pos: sell.pos, age: sell.age, type: "player" },
+                { label: sell.name, value: sell.val, pos: sell.pos, age: sell.age, type: "player", sleeperId: sell.sleeperId },
                 { label: `${bestPick.year} Rd ${bestPick.round} (${bestPick.projectedRange || "Mid"})`, value: bestPick.val, type: "pick" },
               ],
-              youGet: [{ label: buy.name, value: buy.val, pos: buy.pos, age: buy.age, type: "player" }],
+              youGet: [{ label: buy.name, value: buy.val, pos: buy.pos, age: buy.age, type: "player", sleeperId: buy.sleeperId }],
               rawSide1: check.rawS1, rawSide2: check.rawS2,
               adjustedSide1: check.adjS1, adjustedSide2: check.adjS2,
               fairness: check.fairness,
@@ -938,8 +969,8 @@ function generateSuggestions(
             id: `consolidation-${buy.id}`,
             template: "2-for-1",
             headline: `Consolidate depth → ${buy.pos} stud`,
-            youGive: twoSells.map(s => ({ label: s.name, value: s.val, pos: s.pos, age: s.age, type: "player" as const })),
-            youGet: [{ label: buy.name, value: buy.val, pos: buy.pos, age: buy.age, type: "player" }],
+            youGive: twoSells.map(s => ({ label: s.name, value: s.val, pos: s.pos, age: s.age, type: "player" as const, sleeperId: s.sleeperId })),
+            youGet: [{ label: buy.name, value: buy.val, pos: buy.pos, age: buy.age, type: "player", sleeperId: buy.sleeperId }],
             rawSide1: check.rawS1, rawSide2: check.rawS2,
             adjustedSide1: check.adjS1, adjustedSide2: check.adjS2,
             fairness: check.fairness,
@@ -967,7 +998,7 @@ function generateSuggestions(
           const gap = sell.val - buy.val;
           const balancePick = gap > 200 ? theirPicks.find(p => p.val >= gap * 0.3 && p.val <= gap * 1.5) : null;
           const side2: number[] = [buy.val];
-          const getItems: TradeSuggestion["youGet"] = [{ label: buy.name, value: buy.val, pos: buy.pos, age: buy.age, type: "player" }];
+          const getItems: TradeSuggestion["youGet"] = [{ label: buy.name, value: buy.val, pos: buy.pos, age: buy.age, type: "player", sleeperId: buy.sleeperId }];
           if (balancePick) {
             side2.push(balancePick.val);
             getItems.push({ label: `${balancePick.year} Rd ${balancePick.round} (${balancePick.projectedRange || "Mid"})`, value: balancePick.val, type: "pick" });
@@ -978,7 +1009,7 @@ function generateSuggestions(
               id: `rebuild-${sell.id}-${buy.id}`,
               template: "Rebuild Flip",
               headline: `Sell ${sell.name} → youth + capital`,
-              youGive: [{ label: sell.name, value: sell.val, pos: sell.pos, age: sell.age, type: "player" }],
+              youGive: [{ label: sell.name, value: sell.val, pos: sell.pos, age: sell.age, type: "player", sleeperId: sell.sleeperId }],
               youGet: getItems,
               rawSide1: check.rawS1, rawSide2: check.rawS2,
               adjustedSide1: check.adjS1, adjustedSide2: check.adjS2,
@@ -1013,10 +1044,10 @@ function generateSuggestions(
                       template: "Pick Swap",
                       headline: `${sell.pos} + pick → ${buy.pos}`,
                       youGive: [
-                        { label: sell.name, value: sell.val, pos: sell.pos, age: sell.age, type: "player" },
+                        { label: sell.name, value: sell.val, pos: sell.pos, age: sell.age, type: "player", sleeperId: sell.sleeperId },
                         { label: `${myBalancePick.year} Rd ${myBalancePick.round} (${myBalancePick.projectedRange || "Mid"})`, value: myBalancePick.val, type: "pick" },
                       ],
-                      youGet: [{ label: buy.name, value: buy.val, pos: buy.pos, age: buy.age, type: "player" }],
+                      youGet: [{ label: buy.name, value: buy.val, pos: buy.pos, age: buy.age, type: "player", sleeperId: buy.sleeperId }],
                       rawSide1: check2.rawS1, rawSide2: check2.rawS2,
                       adjustedSide1: check2.adjS1, adjustedSide2: check2.adjS2,
                       fairness: check2.fairness,
@@ -1035,9 +1066,9 @@ function generateSuggestions(
                   id: `pickswap-${sell.id}-${buy.id}`,
                   template: "Pick Swap",
                   headline: `${sell.pos} → ${buy.pos} + pick`,
-                  youGive: [{ label: sell.name, value: sell.val, pos: sell.pos, age: sell.age, type: "player" }],
+                  youGive: [{ label: sell.name, value: sell.val, pos: sell.pos, age: sell.age, type: "player", sleeperId: sell.sleeperId }],
                   youGet: [
-                    { label: buy.name, value: buy.val, pos: buy.pos, age: buy.age, type: "player" },
+                    { label: buy.name, value: buy.val, pos: buy.pos, age: buy.age, type: "player", sleeperId: buy.sleeperId },
                     { label: `${balancePick.year} Rd ${balancePick.round} (${balancePick.projectedRange || "Mid"})`, value: balancePick.val, type: "pick" },
                   ],
                   rawSide1: check.rawS1, rawSide2: check.rawS2,
