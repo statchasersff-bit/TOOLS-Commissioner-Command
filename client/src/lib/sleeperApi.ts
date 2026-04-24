@@ -399,6 +399,7 @@ export interface PortfolioSummaryData {
     standing: number;
     totalRosters: number;
     format: string;
+    scoringFormat: string;
     redraftRank: number;
     dynastyRank: number;
     pfRank: number;
@@ -641,6 +642,7 @@ export async function fetchPortfolioSummary(
         standing,
         totalRosters: total,
         format: ls.format,
+        scoringFormat: ls.scoringFormat,
         redraftRank,
         dynastyRank,
         pfRank,
