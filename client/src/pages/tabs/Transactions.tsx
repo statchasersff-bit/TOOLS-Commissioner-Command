@@ -177,13 +177,15 @@ export default function Transactions({ leagueId }: { leagueId: string }) {
                 className="p-4 hover:border-[#d4af37]/30 transition-colors"
                 data-testid={`transaction-${idx}`}
               >
-                <div className="flex items-center gap-2 mb-2.5 flex-wrap">
-                  <Badge variant="outline" className={cn("text-[10px] flex items-center gap-1", getTypeBadgeStyle(txn.type))}>
-                    {getTypeIcon(txn.type)}
-                    {getTypeLabel(txn.type)}
-                  </Badge>
-                  <Badge variant="outline" className="text-[10px]">Wk {txn.week}</Badge>
-                  <span className="text-[10px] text-muted-foreground ml-auto">{formatDate(txn.timestamp)}</span>
+                <div className="flex items-center justify-between gap-2 mb-2.5">
+                  <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+                    <Badge variant="outline" className={cn("text-[10px] flex items-center gap-1 shrink-0", getTypeBadgeStyle(txn.type))}>
+                      {getTypeIcon(txn.type)}
+                      {getTypeLabel(txn.type)}
+                    </Badge>
+                    <Badge variant="outline" className="text-[10px] shrink-0">Wk {txn.week}</Badge>
+                  </div>
+                  <span className="text-[10px] text-muted-foreground whitespace-nowrap shrink-0">{formatDate(txn.timestamp)}</span>
                 </div>
 
                 {txn.type === "trade" ? (
@@ -232,10 +234,10 @@ function TradeTransaction({ txn }: { txn: Transaction }) {
           <p className="text-xs font-semibold mb-1.5" data-testid={`trade-team-${side.rosterId}`}>{side.teamName} receives:</p>
           <div className="space-y-0.5">
             {side.received.map((p, i) => (
-              <div key={i} className="flex items-center gap-1.5 py-0.5">
-                <Badge variant="outline" className={cn("text-[9px] w-6 justify-center", getPositionColor(p.pos))}>{p.pos}</Badge>
-                <span className="text-xs font-medium">{p.name}</span>
-                {p.team && <span className="text-[10px] text-muted-foreground">{p.team}</span>}
+              <div key={i} className="flex items-center gap-1.5 py-0.5 min-w-0">
+                <Badge variant="outline" className={cn("text-[9px] w-6 justify-center shrink-0", getPositionColor(p.pos))}>{p.pos}</Badge>
+                <span className="text-xs font-medium truncate">{p.name}</span>
+                {p.team && <span className="text-[10px] text-muted-foreground shrink-0">{p.team}</span>}
               </div>
             ))}
             {side.picksReceived.map((dp, i) => (
@@ -261,19 +263,19 @@ function AddDropTransaction({ txn }: { txn: Transaction }) {
     <div className="space-y-1">
       <p className="text-[11px] font-semibold text-muted-foreground mb-1" data-testid="transaction-team-name">{teamName}</p>
       {txn.adds.map((p, i) => (
-        <div key={`add-${i}`} className="flex items-center gap-1.5 py-0.5">
-          <span className="text-emerald-500 text-[10px] font-bold w-5">ADD</span>
-          <Badge variant="outline" className={cn("text-[9px] w-6 justify-center", getPositionColor(p.pos))}>{p.pos}</Badge>
-          <span className="text-xs font-medium">{p.name}</span>
-          {p.team && <span className="text-[10px] text-muted-foreground">{p.team}</span>}
+        <div key={`add-${i}`} className="flex items-center gap-1.5 py-0.5 min-w-0">
+          <span className="text-emerald-500 text-[10px] font-bold w-7 shrink-0">ADD</span>
+          <Badge variant="outline" className={cn("text-[9px] w-6 justify-center shrink-0", getPositionColor(p.pos))}>{p.pos}</Badge>
+          <span className="text-xs font-medium truncate">{p.name}</span>
+          {p.team && <span className="text-[10px] text-muted-foreground shrink-0">{p.team}</span>}
         </div>
       ))}
       {txn.drops.map((p, i) => (
-        <div key={`drop-${i}`} className="flex items-center gap-1.5 py-0.5">
-          <span className="text-red-500 text-[10px] font-bold w-5">DROP</span>
-          <Badge variant="outline" className={cn("text-[9px] w-6 justify-center", getPositionColor(p.pos))}>{p.pos}</Badge>
-          <span className="text-xs font-medium text-muted-foreground">{p.name}</span>
-          {p.team && <span className="text-[10px] text-muted-foreground">{p.team}</span>}
+        <div key={`drop-${i}`} className="flex items-center gap-1.5 py-0.5 min-w-0">
+          <span className="text-red-500 text-[10px] font-bold w-7 shrink-0">DROP</span>
+          <Badge variant="outline" className={cn("text-[9px] w-6 justify-center shrink-0", getPositionColor(p.pos))}>{p.pos}</Badge>
+          <span className="text-xs font-medium text-muted-foreground truncate">{p.name}</span>
+          {p.team && <span className="text-[10px] text-muted-foreground shrink-0">{p.team}</span>}
         </div>
       ))}
     </div>
