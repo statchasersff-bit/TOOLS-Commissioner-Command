@@ -492,7 +492,6 @@ export async function fetchPortfolioSummary(
       const standing =
         sortedByWins.findIndex((r) => r.roster_id === userRoster.roster_id) + 1;
       const total = rostersRaw.length;
-      const playoffSlots = Math.max(Math.floor(total / 2), 1);
 
       const isSf = ls.format === "SF";
       const fcDynasty = isSf ? fcValuesSf : fcValues1Qb;
@@ -547,19 +546,70 @@ export async function fetchPortfolioSummary(
           ) + 1;
       }
 
-      const totalGamesPlayed = wins + losses + ties;
-      let playoffOdds: number;
-      if (total <= 1) {
-        playoffOdds = 100;
-      } else if (totalGamesPlayed === 0) {
-        playoffOdds = Math.round((playoffSlots / total) * 100);
-      } else {
-        const standingPct = (total - standing) / (total - 1);
-        const gamesWeight = Math.min(totalGamesPlayed / 14, 1);
-        const rawOdds =
-          standingPct * gamesWeight + (playoffSlots / total) * (1 - gamesWeight);
-        playoffOdds = Math.min(99, Math.max(1, Math.round(rawOdds * 100)));
+      // Starter-only redraft rank — more predictive of actual performance than full roster
+      let redraftStarterRank = 0;
+      if (hasRedraftValues) {
+        const starterValues = rostersRaw.map((r) => {
+          const starters = (r.starters || []).filter((pid) => pid && pid !== "0");
+          const value = starters.reduce((sum, pid) => sum + (fcRedraft[pid] || 0), 0);
+          return { rosterId: r.roster_id, value };
+        });
+        starterValues.sort((a, b) => b.value - a.value);
+        redraftStarterRank =
+          starterValues.findIndex((r) => r.rosterId === userRoster.roster_id) + 1 || 0;
       }
+
+      // Actual playoff slots from Sleeper settings; fall back to ~1/3 of league
+      const playoffSlots = leagueRaw.settings?.playoff_teams
+        ?? Math.max(2, Math.round(total / 3));
+
+      const totalGamesPlayed = wins + losses + ties;
+      // Regular season length: week before playoffs start, default 14
+      const regularSeasonGames = leagueRaw.settings?.playoff_week_start
+        ? Math.max(1, leagueRaw.settings.playoff_week_start - 1)
+        : 14;
+      const seasonProgress = Math.min(totalGamesPlayed / regularSeasonGames, 1);
+
+      // --- Standing score ---
+      // In a playoff spot → 0.55–0.95 based on comfort margin above the cutline
+      // Out of a playoff spot → 0.05–0.45 based on how close to the bubble
+      let standingScore: number;
+      if (total <= 1) {
+        standingScore = 1;
+      } else if (standing <= playoffSlots) {
+        const comfortMargin = playoffSlots > 1
+          ? (playoffSlots - standing) / (playoffSlots - 1)
+          : 1;
+        standingScore = 0.55 + comfortMargin * 0.40;
+      } else {
+        const spotsBack = standing - playoffSlots;
+        const maxSpotsBack = Math.max(1, total - playoffSlots);
+        standingScore = 0.45 * (1 - spotsBack / maxSpotsBack);
+      }
+
+      // --- Talent score (redraft starter rank) ---
+      // Same shape as standing score but based on projected talent vs cutline
+      let talentScore: number;
+      if (redraftStarterRank === 0 || total <= 1) {
+        // No talent data — use base rate
+        talentScore = playoffSlots / total;
+      } else if (redraftStarterRank <= playoffSlots) {
+        const comfortMargin = playoffSlots > 1
+          ? (playoffSlots - redraftStarterRank) / (playoffSlots - 1)
+          : 1;
+        talentScore = 0.55 + comfortMargin * 0.40;
+      } else {
+        const spotsBack = redraftStarterRank - playoffSlots;
+        const maxSpotsBack = Math.max(1, total - playoffSlots);
+        talentScore = 0.45 * (1 - spotsBack / maxSpotsBack);
+      }
+
+      // --- Blend: early season = talent-heavy, late season = standing-heavy ---
+      // standingWeight: 0.15 (week 0) → 0.85 (week 14+)
+      const standingWeight = 0.15 + 0.70 * seasonProgress;
+      const talentWeight = 1 - standingWeight;
+      const rawOdds = standingWeight * standingScore + talentWeight * talentScore;
+      const playoffOdds = Math.min(99, Math.max(1, Math.round(rawOdds * 100)));
 
       leagueRecords.push({
         leagueId: ls.leagueId,
