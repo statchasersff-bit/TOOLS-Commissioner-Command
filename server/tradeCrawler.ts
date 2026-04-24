@@ -306,10 +306,7 @@ async function processLeague(leagueId: string, degree: number) {
     }).onConflictDoNothing();
 
     for (const trade of leagueTrades) {
-      const existingTrade = await d.select().from(trades).where(eq(trades.id, trade.transaction_id)).limit(1);
-      if (existingTrade.length > 0) continue;
-
-      await d.insert(trades).values({
+      const insertedTrade = await d.insert(trades).values({
         id: trade.transaction_id,
         leagueId: leagueInfo.league_id,
         season: leagueInfo.season,
@@ -321,7 +318,10 @@ async function processLeague(leagueId: string, degree: number) {
         leagueFormat: format,
         leagueScoringFormat: scoringFormat,
         leagueTotalRosters: leagueInfo.total_rosters || 0,
-      });
+      }).onConflictDoNothing().returning({ id: trades.id });
+
+      // If no row was returned, this trade already exists — skip asset insertion
+      if (insertedTrade.length === 0) continue;
 
       const assetRows: Array<typeof tradeAssets.$inferInsert> = [];
       const involvedRosters = new Set(trade.roster_ids || []);
@@ -798,18 +798,7 @@ export async function ingestLeagueTrades(params: {
   let skipped = 0;
 
   for (const trade of filteredTransactions) {
-    const existingTrade = await d
-      .select({ id: trades.id })
-      .from(trades)
-      .where(eq(trades.id, trade.transaction_id))
-      .limit(1);
-
-    if (existingTrade.length > 0) {
-      skipped++;
-      continue;
-    }
-
-    await d.insert(trades).values({
+    const insertedTrade = await d.insert(trades).values({
       id: trade.transaction_id,
       leagueId: params.leagueId,
       season: params.season,
@@ -821,7 +810,13 @@ export async function ingestLeagueTrades(params: {
       leagueFormat: params.format,
       leagueScoringFormat: params.scoringFormat,
       leagueTotalRosters: params.teamCount,
-    }).onConflictDoNothing();
+    }).onConflictDoNothing().returning({ id: trades.id });
+
+    // If no row was returned, this trade already exists — skip asset insertion
+    if (insertedTrade.length === 0) {
+      skipped++;
+      continue;
+    }
 
     const assetRows: Array<typeof tradeAssets.$inferInsert> = [];
     const involvedRosters = new Set(trade.roster_ids || []);
