@@ -392,7 +392,7 @@ function SortableLeagueRecords({ records }: { records: any[] }) {
               <td className="px-4 py-2.5">
                 {rec.redraftRank > 0 ? (
                   <span className={`font-semibold ${rec.redraftRank <= 3 ? "text-emerald-600 dark:text-emerald-400" : rec.redraftRank <= Math.ceil(rec.totalRosters * 0.7) ? "text-foreground" : "text-red-500 dark:text-red-400"}`}>
-                    #{rec.redraftRank}<span className="text-muted-foreground font-normal"> / {rec.totalRosters}</span>
+                    #{rec.redraftRank}
                   </span>
                 ) : (
                   <span className="text-muted-foreground text-xs">N/A</span>
@@ -401,7 +401,7 @@ function SortableLeagueRecords({ records }: { records: any[] }) {
               <td className="px-4 py-2.5">
                 {rec.dynastyRank > 0 ? (
                   <span className={`font-semibold ${rec.dynastyRank <= 3 ? "text-emerald-600 dark:text-emerald-400" : rec.dynastyRank <= Math.ceil(rec.totalRosters * 0.7) ? "text-foreground" : "text-red-500 dark:text-red-400"}`}>
-                    #{rec.dynastyRank}<span className="text-muted-foreground font-normal"> / {rec.totalRosters}</span>
+                    #{rec.dynastyRank}
                   </span>
                 ) : (
                   <span className="text-muted-foreground text-xs">N/A</span>
@@ -428,7 +428,7 @@ function SortableLeagueRecords({ records }: { records: any[] }) {
               <td className="px-4 py-2.5" data-testid={`text-standing-${rec.leagueId}`}>
                 {rec.standing > 0 ? (
                   <span className={`font-semibold ${rec.standing <= 3 ? "text-emerald-600 dark:text-emerald-400" : rec.standing <= Math.ceil(rec.totalRosters * 0.7) ? "text-foreground" : "text-red-500 dark:text-red-400"}`}>
-                    #{rec.standing}<span className="text-muted-foreground font-normal"> / {rec.totalRosters}</span>
+                    #{rec.standing}
                   </span>
                 ) : (
                   <span className="text-muted-foreground text-xs">N/A</span>
