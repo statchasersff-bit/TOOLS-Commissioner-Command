@@ -824,6 +824,13 @@ export async function fetchDraftBoard(leagueId: string) {
       p.metadata?.position || playersDb[p.player_id]?.position || "??",
     team: p.metadata?.team || playersDb[p.player_id]?.team || "FA",
     pickedAt: typeof p.picked_at === "number" ? p.picked_at : null,
+    isAutoPick: !!(
+      p.is_auto ||
+      p.picked_by_auto ||
+      p.auto_pick ||
+      p.metadata?.auto ||
+      p.metadata?.is_auto
+    ),
   }));
 
   const pickedPlayerIds = new Set(

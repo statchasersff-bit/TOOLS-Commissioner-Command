@@ -18,6 +18,7 @@ interface DraftPick {
   pos: string;
   team: string;
   pickedAt: number | null;
+  isAutoPick: boolean;
 }
 
 interface DraftInfo {
@@ -87,6 +88,7 @@ interface PickTimerStat {
   managerName: string;
   totalMs: number;
   pickCount: number;
+  autoPickCount: number;
   avgMs: number;
   longestMs: number;
 }
@@ -115,7 +117,18 @@ function buildPickTimerStats(
   const hasTimestamps = sorted.some(p => p.pickedAt !== null);
   if (!hasTimestamps) return { stats: [], hasTimestamps: false };
 
-  const managerMap = new Map<number, { name: string; totalMs: number; pickCount: number; longestMs: number }>();
+  const managerMap = new Map<number, { name: string; totalMs: number; pickCount: number; autoPickCount: number; longestMs: number }>();
+
+  for (const pick of sorted) {
+    const rosterId = pick.rosterId;
+    const name = slotMap.get(rosterId) || `Roster ${rosterId}`;
+    if (!managerMap.has(rosterId)) {
+      managerMap.set(rosterId, { name, totalMs: 0, pickCount: 0, autoPickCount: 0, longestMs: 0 });
+    }
+    if (pick.isAutoPick) {
+      managerMap.get(rosterId)!.autoPickCount += 1;
+    }
+  }
 
   for (let i = 1; i < sorted.length; i++) {
     const prev = sorted[i - 1];
@@ -132,7 +145,7 @@ function buildPickTimerStats(
       existing.pickCount += 1;
       if (diffMs > existing.longestMs) existing.longestMs = diffMs;
     } else {
-      managerMap.set(rosterId, { name, totalMs: diffMs, pickCount: 1, longestMs: diffMs });
+      managerMap.set(rosterId, { name, totalMs: diffMs, pickCount: 1, autoPickCount: 0, longestMs: diffMs });
     }
   }
 
@@ -143,6 +156,7 @@ function buildPickTimerStats(
       managerName: v.name,
       totalMs: v.totalMs,
       pickCount: v.pickCount,
+      autoPickCount: v.autoPickCount,
       avgMs: Math.round(v.totalMs / v.pickCount),
       longestMs: v.longestMs,
     }));
@@ -150,7 +164,7 @@ function buildPickTimerStats(
   return { stats, hasTimestamps: true };
 }
 
-type TimerSortKey = "avgMs" | "totalMs" | "pickCount" | "longestMs";
+type TimerSortKey = "avgMs" | "totalMs" | "pickCount" | "autoPickCount" | "longestMs";
 
 function PickTimerView({ draftData, isLoading }: {
   draftData: { picks: DraftPick[]; draftSlots: { slot: number; rosterId: number; displayName: string }[] } | null;
@@ -243,10 +257,15 @@ function PickTimerView({ draftData, isLoading }: {
               <tr className="border-b border-border/40 bg-muted/30">
                 <th className="text-left px-3 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider w-10">#</th>
                 <th className="text-left px-3 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Manager</th>
-                {(["totalMs", "pickCount", "avgMs", "longestMs"] as TimerSortKey[]).map((k) => (
-                  <th key={k} className="text-right px-3 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider cursor-pointer hover:text-foreground transition-colors" onClick={() => handleSort(k)} data-testid={`th-sort-${k}`}>
+                {(["totalMs", "pickCount", "autoPickCount", "avgMs", "longestMs"] as TimerSortKey[]).map((k) => (
+                  <th
+                    key={k}
+                    className="text-right px-3 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider cursor-pointer hover:text-foreground transition-colors"
+                    onClick={() => handleSort(k)}
+                    data-testid={`th-sort-${k}`}
+                  >
                     <span className="inline-flex items-center gap-1 justify-end">
-                      {k === "totalMs" ? "Total" : k === "pickCount" ? "Picks" : k === "avgMs" ? "Avg / Pick" : "Longest"}
+                      {k === "totalMs" ? "Total Time" : k === "pickCount" ? "# of Picks" : k === "autoPickCount" ? "Auto Picks" : k === "avgMs" ? "Avg / Pick" : "Longest"}
                       <SortIcon k={k} />
                     </span>
                   </th>
@@ -260,6 +279,12 @@ function PickTimerView({ draftData, isLoading }: {
                   <td className="px-3 py-2.5 font-semibold text-foreground">{s.managerName}</td>
                   <td className="px-3 py-2.5 text-right font-mono text-xs text-muted-foreground">{formatDuration(s.totalMs)}</td>
                   <td className="px-3 py-2.5 text-right text-xs text-muted-foreground">{s.pickCount}</td>
+                  <td className="px-3 py-2.5 text-right text-xs" data-testid={`cell-auto-picks-${s.managerId}`}>
+                    {s.autoPickCount > 0
+                      ? <span className="inline-flex items-center justify-end gap-1 font-semibold text-amber-500 dark:text-amber-400">{s.autoPickCount}</span>
+                      : <span className="text-muted-foreground/60">0</span>
+                    }
+                  </td>
                   <td className={`px-3 py-2.5 text-right font-bold font-mono text-sm ${sortKey === "avgMs" ? "text-foreground" : "text-muted-foreground"}`}>{formatDuration(s.avgMs)}</td>
                   <td className={`px-3 py-2.5 text-right font-mono text-xs ${sortKey === "longestMs" ? "text-foreground" : "text-muted-foreground"}`}>{formatDuration(s.longestMs)}</td>
                 </tr>
