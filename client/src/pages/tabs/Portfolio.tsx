@@ -337,7 +337,7 @@ function PortfolioSortHeader({ label, sortKey, activeSortKey, sortDir, onSort }:
 }
 
 function SortableLeagueRecords({ records }: { records: any[] }) {
-  const [sortKey, setSortKey] = useState<RecordSortKey>("leagueName");
+  const [sortKey, setSortKey] = useState<RecordSortKey>("standing");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [showAll, setShowAll] = useState(false);
 
@@ -352,7 +352,7 @@ function SortableLeagueRecords({ records }: { records: any[] }) {
 
   const sorted = useMemo(() => {
     const accessor: Record<RecordSortKey, (r: any) => number | string> = {
-      leagueName: r => r.leagueName.toLowerCase(),
+      leagueName: r => (r.leagueName || "").toLowerCase(),
       format: r => r.format,
       wins: r => r.wins - r.losses,
       redraftRank: r => r.redraftRank || 999,
