@@ -313,23 +313,23 @@ export function PortfolioMyLeagues({ onSelectLeague, onNavigate }: PortfolioMyLe
 
 type RecordSortKey = "leagueName" | "wins" | "redraftRank" | "dynastyRank" | "playoffOdds" | "pfRank" | "maxPfRank" | "standing";
 
-function PortfolioSortHeader({ label, sortKey, activeSortKey, sortDir, onSort }: {
+function PortfolioSortHeader({ label, sortKey, activeSortKey, sortDir, onSort, align = "center" }: {
   label: string; sortKey: RecordSortKey; activeSortKey: RecordSortKey; sortDir: "asc" | "desc";
-  onSort: (key: RecordSortKey) => void;
+  onSort: (key: RecordSortKey) => void; align?: "left" | "center";
 }) {
   const isActive = activeSortKey === sortKey;
   return (
     <th
-      className="px-4 py-2.5 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider cursor-pointer select-none hover:text-foreground transition-colors"
+      className={`px-2 py-2 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider cursor-pointer select-none hover:text-foreground transition-colors whitespace-nowrap ${align === "center" ? "text-center" : "text-left"}`}
       onClick={() => onSort(sortKey)}
       data-testid={`sort-record-${sortKey}`}
     >
-      <span className="inline-flex items-center gap-1">
+      <span className={`inline-flex items-center gap-0.5 ${align === "center" ? "justify-center" : ""}`}>
         {label}
         {isActive ? (
-          sortDir === "asc" ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />
+          sortDir === "asc" ? <ArrowUp className="w-2.5 h-2.5" /> : <ArrowDown className="w-2.5 h-2.5" />
         ) : (
-          <ArrowUpDown className="w-3 h-3 opacity-30" />
+          <ArrowUpDown className="w-2.5 h-2.5 opacity-30" />
         )}
       </span>
     </th>
@@ -371,79 +371,57 @@ function SortableLeagueRecords({ records }: { records: any[] }) {
     });
   }, [records, sortKey, sortDir]);
 
+  const rankCell = (rank: number, total: number) =>
+    rank > 0
+      ? <span className={`font-semibold tabular-nums ${rank <= 3 ? "text-emerald-600 dark:text-emerald-400" : rank <= Math.ceil(total * 0.7) ? "text-foreground" : "text-red-500 dark:text-red-400"}`}>#{rank}</span>
+      : <span className="text-muted-foreground text-[11px]">—</span>;
+
   return (
     <div className="overflow-x-auto rounded-md border border-border/40">
-      <table className="w-full text-sm">
+      <table className="w-full text-xs">
         <thead>
           <tr className="border-b border-border bg-muted/30">
-            <PortfolioSortHeader label="League" sortKey="leagueName" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-            <PortfolioSortHeader label="Record" sortKey="wins" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-            <PortfolioSortHeader label="Redraft Rank" sortKey="redraftRank" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-            <PortfolioSortHeader label="Dynasty Rank" sortKey="dynastyRank" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-            <PortfolioSortHeader label="Playoff Odds" sortKey="playoffOdds" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-            <PortfolioSortHeader label="PF Rank" sortKey="pfRank" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-            <PortfolioSortHeader label="Max PF Rank" sortKey="maxPfRank" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-            <PortfolioSortHeader label="Standing" sortKey="standing" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+            <PortfolioSortHeader label="League" sortKey="leagueName" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} align="left" />
+            <PortfolioSortHeader label="Rec" sortKey="wins" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+            <PortfolioSortHeader label="Redraft" sortKey="redraftRank" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+            <PortfolioSortHeader label="Dynasty" sortKey="dynastyRank" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+            <PortfolioSortHeader label="Plf%" sortKey="playoffOdds" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+            <PortfolioSortHeader label="PF Rk" sortKey="pfRank" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+            <PortfolioSortHeader label="Max PF" sortKey="maxPfRank" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+            <PortfolioSortHeader label="Stnd" sortKey="standing" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
           </tr>
         </thead>
         <tbody>
           {(showAll ? sorted : sorted.slice(0, 10)).map((rec: any, idx: number) => (
             <tr key={`${rec.leagueId}-${idx}`} className="border-b border-border/20 hover:bg-muted/10" data-testid={`league-record-${rec.leagueId}`}>
-              <td className="px-4 py-2.5 font-medium">{rec.leagueName}</td>
-              <td className="px-4 py-2.5 font-semibold">{rec.wins}-{rec.losses}{rec.ties > 0 ? `-${rec.ties}` : ""}</td>
-              <td className="px-4 py-2.5">
-                {rec.redraftRank > 0 ? (
-                  <span className={`font-semibold ${rec.redraftRank <= 3 ? "text-emerald-600 dark:text-emerald-400" : rec.redraftRank <= Math.ceil(rec.totalRosters * 0.7) ? "text-foreground" : "text-red-500 dark:text-red-400"}`}>
-                    #{rec.redraftRank}
-                  </span>
-                ) : (
-                  <span className="text-muted-foreground text-xs">N/A</span>
-                )}
+              <td className="px-2 py-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  {rec.avatar ? (
+                    <img src={rec.avatar} alt="" className="w-6 h-6 rounded-full flex-shrink-0 object-cover bg-muted" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                  ) : (
+                    <div className="w-6 h-6 rounded-full flex-shrink-0 bg-[#0b3a7a]/20 dark:bg-blue-900/40 flex items-center justify-center">
+                      <span className="text-[9px] font-bold text-[#0b3a7a] dark:text-blue-400 uppercase">{rec.leagueName?.[0] ?? "?"}</span>
+                    </div>
+                  )}
+                  <span className="font-medium truncate max-w-[160px]" title={rec.leagueName}>{rec.leagueName}</span>
+                </div>
               </td>
-              <td className="px-4 py-2.5">
-                {rec.dynastyRank > 0 ? (
-                  <span className={`font-semibold ${rec.dynastyRank <= 3 ? "text-emerald-600 dark:text-emerald-400" : rec.dynastyRank <= Math.ceil(rec.totalRosters * 0.7) ? "text-foreground" : "text-red-500 dark:text-red-400"}`}>
-                    #{rec.dynastyRank}
-                  </span>
-                ) : (
-                  <span className="text-muted-foreground text-xs">N/A</span>
-                )}
+              <td className="px-2 py-2 text-center font-semibold tabular-nums whitespace-nowrap">{rec.wins}-{rec.losses}{rec.ties > 0 ? `-${rec.ties}` : ""}</td>
+              <td className="px-2 py-2 text-center">{rankCell(rec.redraftRank, rec.totalRosters)}</td>
+              <td className="px-2 py-2 text-center">{rankCell(rec.dynastyRank, rec.totalRosters)}</td>
+              <td className="px-2 py-2 text-center" data-testid={`text-playoff-odds-${rec.leagueId}`}>
+                {rec.playoffOdds != null
+                  ? <span className={`font-semibold tabular-nums ${rec.playoffOdds >= 70 ? "text-emerald-600 dark:text-emerald-400" : rec.playoffOdds >= 40 ? "text-foreground" : "text-red-500 dark:text-red-400"}`}>{rec.playoffOdds}%</span>
+                  : <span className="text-muted-foreground text-[11px]">—</span>}
               </td>
-              <td className="px-4 py-2.5" data-testid={`text-playoff-odds-${rec.leagueId}`}>
-                {rec.playoffOdds != null ? (
-                  <span className={`font-semibold ${rec.playoffOdds >= 70 ? "text-emerald-600 dark:text-emerald-400" : rec.playoffOdds >= 40 ? "text-foreground" : "text-red-500 dark:text-red-400"}`}>
-                    {rec.playoffOdds}%
-                  </span>
-                ) : (
-                  <span className="text-muted-foreground text-xs">N/A</span>
-                )}
+              <td className="px-2 py-2 text-center" data-testid={`text-pf-rank-${rec.leagueId}`}>{rankCell(rec.pfRank, rec.totalRosters)}</td>
+              <td className="px-2 py-2 text-center">
+                {rec.maxPfRank > 0
+                  ? <span className={`font-semibold tabular-nums ${rec.maxPfRank <= 3 ? "text-emerald-600 dark:text-emerald-400" : rec.maxPfRank <= Math.ceil(rec.totalRosters * 0.7) ? "text-foreground" : "text-red-500 dark:text-red-400"}`}>#{rec.maxPfRank}<span className="text-muted-foreground font-normal">/{rec.totalRosters}</span></span>
+                  : <span className="text-muted-foreground text-[11px]">—</span>}
               </td>
-              <td className="px-4 py-2.5" data-testid={`text-pf-rank-${rec.leagueId}`}>
-                {rec.pfRank > 0 ? (
-                  <span className={`font-semibold ${rec.pfRank <= 3 ? "text-emerald-600 dark:text-emerald-400" : rec.pfRank <= Math.ceil(rec.totalRosters * 0.7) ? "text-foreground" : "text-red-500 dark:text-red-400"}`}>
-                    #{rec.pfRank}
-                  </span>
-                ) : (
-                  <span className="text-muted-foreground text-xs">N/A</span>
-                )}
-              </td>
-              <td className="px-4 py-2.5">
-                {rec.maxPfRank > 0 ? (
-                  <span className={`font-semibold ${rec.maxPfRank <= 3 ? "text-emerald-600 dark:text-emerald-400" : rec.maxPfRank <= Math.ceil(rec.totalRosters * 0.7) ? "text-foreground" : "text-red-500 dark:text-red-400"}`}>
-                    #{rec.maxPfRank}<span className="text-muted-foreground font-normal"> / {rec.totalRosters}</span>
-                  </span>
-                ) : (
-                  <span className="text-muted-foreground text-xs">N/A</span>
-                )}
-              </td>
-              <td className="px-4 py-2.5" data-testid={`text-standing-${rec.leagueId}`}>
-                {rec.totalGamesPlayed > 0 && rec.standing > 0 ? (
-                  <span className={`font-semibold ${rec.standing <= 3 ? "text-emerald-600 dark:text-emerald-400" : rec.standing <= Math.ceil(rec.totalRosters * 0.7) ? "text-foreground" : "text-red-500 dark:text-red-400"}`}>
-                    #{rec.standing}
-                  </span>
-                ) : (
-                  <span className="text-muted-foreground text-xs">N/A</span>
-                )}
+              <td className="px-2 py-2 text-center" data-testid={`text-standing-${rec.leagueId}`}>
+                {rec.totalGamesPlayed > 0 && rec.standing > 0 ? rankCell(rec.standing, rec.totalRosters) : <span className="text-muted-foreground text-[11px]">—</span>}
               </td>
             </tr>
           ))}

@@ -85,6 +85,7 @@ export interface SleeperLeagueSummary {
   format: string;
   status: string;
   draftId: string | null;
+  avatar: string | null;
 }
 
 function deriveFormat(rosterPositions: string[]): string {
@@ -153,6 +154,7 @@ export async function fetchSleeperLeagues(
     format: deriveFormat(lg.roster_positions || []),
     status: lg.status,
     draftId: lg.draft_id ?? null,
+    avatar: (lg as any).avatar ?? null,
   }));
 }
 
@@ -389,6 +391,7 @@ export interface PortfolioSummaryData {
   leagueRecords: Array<{
     leagueId: string;
     leagueName: string;
+    avatar: string | null;
     wins: number;
     losses: number;
     ties: number;
@@ -628,6 +631,9 @@ export async function fetchPortfolioSummary(
       leagueRecords.push({
         leagueId: ls.leagueId,
         leagueName: ls.name,
+        avatar: ls.avatar
+          ? `https://sleepercdn.com/avatars/thumbs/${ls.avatar}`
+          : null,
         wins,
         losses,
         ties,
