@@ -392,11 +392,13 @@ export interface PortfolioSummaryData {
     wins: number;
     losses: number;
     ties: number;
+    totalGamesPlayed: number;
     standing: number;
     totalRosters: number;
     format: string;
     redraftRank: number;
     dynastyRank: number;
+    pfRank: number;
     maxPfRank: number;
     playoffOdds: number;
   }>;
@@ -559,6 +561,18 @@ export async function fetchPortfolioSummary(
           starterValues.findIndex((r) => r.rosterId === userRoster.roster_id) + 1 || 0;
       }
 
+      // Actual points-scored (PF) rank — based on fpts accumulated this season
+      const rosterPf = rostersRaw.map((r) => {
+        const pf = (r.settings?.fpts ?? 0) + (r.settings?.fpts_decimal ?? 0) / 100;
+        return { rosterId: r.roster_id, pf };
+      });
+      const hasPf = rosterPf.some((r) => r.pf > 0);
+      let pfRank = 0;
+      if (hasPf) {
+        rosterPf.sort((a, b) => b.pf - a.pf);
+        pfRank = rosterPf.findIndex((r) => r.rosterId === userRoster.roster_id) + 1 || 0;
+      }
+
       // Actual playoff slots from Sleeper settings; fall back to ~1/3 of league
       const playoffSlots = leagueRaw.settings?.playoff_teams
         ?? Math.max(2, Math.round(total / 3));
@@ -617,11 +631,13 @@ export async function fetchPortfolioSummary(
         wins,
         losses,
         ties,
+        totalGamesPlayed,
         standing,
         totalRosters: total,
         format: ls.format,
         redraftRank,
         dynastyRank,
+        pfRank,
         maxPfRank,
         playoffOdds,
       });

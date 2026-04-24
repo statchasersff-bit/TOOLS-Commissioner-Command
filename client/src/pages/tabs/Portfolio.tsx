@@ -311,7 +311,7 @@ export function PortfolioMyLeagues({ onSelectLeague, onNavigate }: PortfolioMyLe
   );
 }
 
-type RecordSortKey = "leagueName" | "wins" | "redraftRank" | "dynastyRank" | "playoffOdds" | "maxPfRank" | "standing";
+type RecordSortKey = "leagueName" | "wins" | "redraftRank" | "dynastyRank" | "playoffOdds" | "pfRank" | "maxPfRank" | "standing";
 
 function PortfolioSortHeader({ label, sortKey, activeSortKey, sortDir, onSort }: {
   label: string; sortKey: RecordSortKey; activeSortKey: RecordSortKey; sortDir: "asc" | "desc";
@@ -357,6 +357,7 @@ function SortableLeagueRecords({ records }: { records: any[] }) {
       redraftRank: r => r.redraftRank || 999,
       dynastyRank: r => r.dynastyRank || 999,
       playoffOdds: r => r.playoffOdds,
+      pfRank: r => r.pfRank || 999,
       maxPfRank: r => r.maxPfRank || 999,
       standing: r => r.standing,
     };
@@ -380,6 +381,7 @@ function SortableLeagueRecords({ records }: { records: any[] }) {
             <PortfolioSortHeader label="Redraft Rank" sortKey="redraftRank" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
             <PortfolioSortHeader label="Dynasty Rank" sortKey="dynastyRank" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
             <PortfolioSortHeader label="Playoff Odds" sortKey="playoffOdds" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+            <PortfolioSortHeader label="PF Rank" sortKey="pfRank" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
             <PortfolioSortHeader label="Max PF Rank" sortKey="maxPfRank" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
             <PortfolioSortHeader label="Standing" sortKey="standing" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
           </tr>
@@ -416,6 +418,15 @@ function SortableLeagueRecords({ records }: { records: any[] }) {
                   <span className="text-muted-foreground text-xs">N/A</span>
                 )}
               </td>
+              <td className="px-4 py-2.5" data-testid={`text-pf-rank-${rec.leagueId}`}>
+                {rec.pfRank > 0 ? (
+                  <span className={`font-semibold ${rec.pfRank <= 3 ? "text-emerald-600 dark:text-emerald-400" : rec.pfRank <= Math.ceil(rec.totalRosters * 0.7) ? "text-foreground" : "text-red-500 dark:text-red-400"}`}>
+                    #{rec.pfRank}
+                  </span>
+                ) : (
+                  <span className="text-muted-foreground text-xs">N/A</span>
+                )}
+              </td>
               <td className="px-4 py-2.5">
                 {rec.maxPfRank > 0 ? (
                   <span className={`font-semibold ${rec.maxPfRank <= 3 ? "text-emerald-600 dark:text-emerald-400" : rec.maxPfRank <= Math.ceil(rec.totalRosters * 0.7) ? "text-foreground" : "text-red-500 dark:text-red-400"}`}>
@@ -426,7 +437,7 @@ function SortableLeagueRecords({ records }: { records: any[] }) {
                 )}
               </td>
               <td className="px-4 py-2.5" data-testid={`text-standing-${rec.leagueId}`}>
-                {rec.standing > 0 ? (
+                {rec.totalGamesPlayed > 0 && rec.standing > 0 ? (
                   <span className={`font-semibold ${rec.standing <= 3 ? "text-emerald-600 dark:text-emerald-400" : rec.standing <= Math.ceil(rec.totalRosters * 0.7) ? "text-foreground" : "text-red-500 dark:text-red-400"}`}>
                     #{rec.standing}
                   </span>
