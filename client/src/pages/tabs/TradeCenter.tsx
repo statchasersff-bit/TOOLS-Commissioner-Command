@@ -12,6 +12,7 @@ import { useValueModel } from "@/contexts/ValueModelContext";
 import { useSleeper } from "@/contexts/SleeperContext";
 import { getLeagueTeamTiers, getTierColor, getTierBg, getTierEmoji, getPositionColor, isContenderTier, isRebuilderTier } from "@/data/mockData";
 import { getStaticPickValue } from "@/data/pickValues";
+import { API_BASE } from "@/lib/apiBase";
 import type { League, Team, Tier, Player, Pick, TradeRecord, TradeSide, CrawlStatus } from "@/types";
 import { cn } from "@/lib/utils";
 import { ArrowRightLeft, TrendingUp, TrendingDown, Target, X, Plus, Search, Info, Scale, RotateCcw, Database, Play, Pause, Loader2, ChevronLeft, ChevronRight, ChevronDown } from "lucide-react";
@@ -1435,7 +1436,7 @@ export function TradeDatabase({ league }: { league: League }) {
   }, [query]);
 
   useEffect(() => {
-    fetch("/api/trades/stats")
+    fetch(`${API_BASE}/api/trades/stats`)
       .then((r) => r.json())
       .then((data) => setStats(data))
       .catch(() => {});
@@ -1452,7 +1453,7 @@ export function TradeDatabase({ league }: { league: League }) {
     if (scoring !== "all") params.set("scoring", scoring);
     if (teamSize !== "all") params.set("leagueSize", teamSize);
 
-    fetch(`/api/trades/search?${params}`)
+    fetch(`${API_BASE}/api/trades/search?${params}`)
       .then((r) => r.json())
       .then((data) => {
         if (cancelled) return;
@@ -1477,7 +1478,7 @@ export function TradeDatabase({ league }: { league: League }) {
     if (scoring !== "all") params.set("scoring", scoring);
     if (teamSize !== "all") params.set("leagueSize", teamSize);
 
-    fetch(`/api/trades/search?${params}`)
+    fetch(`${API_BASE}/api/trades/search?${params}`)
       .then((r) => r.json())
       .then((data) => {
         setTradeResults((prev) => [...prev, ...(data.trades || [])]);

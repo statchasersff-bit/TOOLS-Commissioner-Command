@@ -29,6 +29,7 @@ import { MarketValue } from "./tabs/LeagueMarket";
 import { LeagueIntelligence } from "./tabs/Insights";
 import { LeagueEconomy } from "./tabs/LeagueEconomy";
 import LiveDraft from "./tabs/LiveDraft";
+import { API_BASE } from "@/lib/apiBase";
 import Transactions from "./tabs/Transactions";
 import { LeagueRoast } from "./tabs/LeagueRoast";
 
@@ -126,7 +127,7 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
 
   useEffect(() => {
     if (!sleeper.user?.username) return;
-    fetch("/api/trades/ingest-user", {
+    fetch(`${API_BASE}/api/trades/ingest-user`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username: sleeper.user.username }),
@@ -137,7 +138,7 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
     if (!fetchedLeague || !selectedLeagueId) return;
     const summary = sleeper.leagues.find((l) => l.leagueId === selectedLeagueId);
     if (!summary) return;
-    fetch("/api/trades/ingest-league", {
+    fetch(`${API_BASE}/api/trades/ingest-league`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

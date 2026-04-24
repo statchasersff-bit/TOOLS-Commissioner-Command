@@ -6,6 +6,27 @@ import { createServer } from "http";
 const app = express();
 const httpServer = createServer(app);
 
+// CORS — allow the configured origins (comma-separated CORS_ORIGIN env var)
+// or fall back to same-origin when not set (dev / Replit full-stack mode).
+const CORS_ORIGINS = process.env.CORS_ORIGIN
+  ? process.env.CORS_ORIGIN.split(",").map((s) => s.trim())
+  : [];
+
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (origin && (CORS_ORIGINS.includes(origin) || CORS_ORIGINS.includes("*"))) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    res.setHeader("Access-Control-Max-Age", "86400");
+  }
+  if (req.method === "OPTIONS") {
+    res.sendStatus(204);
+    return;
+  }
+  next();
+});
+
 declare module "http" {
   interface IncomingMessage {
     rawBody: unknown;

@@ -33,6 +33,10 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+  app.get("/api/health", (_req, res) => {
+    res.json({ status: "ok", ts: Date.now() });
+  });
+
   app.get("/api/values/fantasycalc", async (req, res) => {
     try {
       const format = (req.query.format as string) || "sf";
