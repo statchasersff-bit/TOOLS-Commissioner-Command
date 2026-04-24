@@ -311,7 +311,7 @@ export function PortfolioMyLeagues({ onSelectLeague, onNavigate }: PortfolioMyLe
   );
 }
 
-type RecordSortKey = "leagueName" | "format" | "wins" | "redraftRank" | "dynastyRank" | "playoffOdds" | "maxPfRank" | "standing";
+type RecordSortKey = "leagueName" | "wins" | "redraftRank" | "dynastyRank" | "playoffOdds" | "maxPfRank" | "standing";
 
 function PortfolioSortHeader({ label, sortKey, activeSortKey, sortDir, onSort }: {
   label: string; sortKey: RecordSortKey; activeSortKey: RecordSortKey; sortDir: "asc" | "desc";
@@ -346,14 +346,13 @@ function SortableLeagueRecords({ records }: { records: any[] }) {
       setSortDir(d => d === "asc" ? "desc" : "asc");
     } else {
       setSortKey(key);
-      setSortDir(key === "leagueName" || key === "format" ? "asc" : "desc");
+      setSortDir(key === "leagueName" ? "asc" : "desc");
     }
   }
 
   const sorted = useMemo(() => {
     const accessor: Record<RecordSortKey, (r: any) => number | string> = {
       leagueName: r => (r.leagueName || "").toLowerCase(),
-      format: r => r.format,
       wins: r => r.wins - r.losses,
       redraftRank: r => r.redraftRank || 999,
       dynastyRank: r => r.dynastyRank || 999,
@@ -377,7 +376,6 @@ function SortableLeagueRecords({ records }: { records: any[] }) {
         <thead>
           <tr className="border-b border-border bg-muted/30">
             <PortfolioSortHeader label="League" sortKey="leagueName" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-            <PortfolioSortHeader label="Format" sortKey="format" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
             <PortfolioSortHeader label="Record" sortKey="wins" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
             <PortfolioSortHeader label="Redraft Rank" sortKey="redraftRank" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
             <PortfolioSortHeader label="Dynasty Rank" sortKey="dynastyRank" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
@@ -390,49 +388,51 @@ function SortableLeagueRecords({ records }: { records: any[] }) {
           {(showAll ? sorted : sorted.slice(0, 10)).map((rec: any, idx: number) => (
             <tr key={`${rec.leagueId}-${idx}`} className="border-b border-border/20 hover:bg-muted/10" data-testid={`league-record-${rec.leagueId}`}>
               <td className="px-4 py-2.5 font-medium">{rec.leagueName}</td>
-              <td className="px-4 py-2.5">
-                <Badge variant="outline" className="text-[10px]">{rec.format}</Badge>
-              </td>
               <td className="px-4 py-2.5 font-semibold">{rec.wins}-{rec.losses}{rec.ties > 0 ? `-${rec.ties}` : ""}</td>
               <td className="px-4 py-2.5">
                 {rec.redraftRank > 0 ? (
-                  <>
-                    <span className={`font-semibold ${rec.redraftRank <= 3 ? "text-emerald-600 dark:text-emerald-400" : rec.redraftRank <= Math.ceil(rec.totalRosters * 0.7) ? "text-foreground" : "text-red-500 dark:text-red-400"}`}>
-                      #{rec.redraftRank}
-                    </span>
-                  </>
+                  <span className={`font-semibold ${rec.redraftRank <= 3 ? "text-emerald-600 dark:text-emerald-400" : rec.redraftRank <= Math.ceil(rec.totalRosters * 0.7) ? "text-foreground" : "text-red-500 dark:text-red-400"}`}>
+                    #{rec.redraftRank}<span className="text-muted-foreground font-normal"> / {rec.totalRosters}</span>
+                  </span>
                 ) : (
                   <span className="text-muted-foreground text-xs">N/A</span>
                 )}
               </td>
               <td className="px-4 py-2.5">
                 {rec.dynastyRank > 0 ? (
-                  <>
-                    <span className={`font-semibold ${rec.dynastyRank <= 3 ? "text-emerald-600 dark:text-emerald-400" : rec.dynastyRank <= Math.ceil(rec.totalRosters * 0.7) ? "text-foreground" : "text-red-500 dark:text-red-400"}`}>
-                      #{rec.dynastyRank}
-                    </span>
-                  </>
+                  <span className={`font-semibold ${rec.dynastyRank <= 3 ? "text-emerald-600 dark:text-emerald-400" : rec.dynastyRank <= Math.ceil(rec.totalRosters * 0.7) ? "text-foreground" : "text-red-500 dark:text-red-400"}`}>
+                    #{rec.dynastyRank}<span className="text-muted-foreground font-normal"> / {rec.totalRosters}</span>
+                  </span>
                 ) : (
                   <span className="text-muted-foreground text-xs">N/A</span>
                 )}
               </td>
-              <td className="px-4 py-2.5">
-                <span className="text-muted-foreground text-xs" data-testid="text-playoff-odds">N/A</span>
+              <td className="px-4 py-2.5" data-testid={`text-playoff-odds-${rec.leagueId}`}>
+                {rec.playoffOdds != null ? (
+                  <span className={`font-semibold ${rec.playoffOdds >= 70 ? "text-emerald-600 dark:text-emerald-400" : rec.playoffOdds >= 40 ? "text-foreground" : "text-red-500 dark:text-red-400"}`}>
+                    {rec.playoffOdds}%
+                  </span>
+                ) : (
+                  <span className="text-muted-foreground text-xs">N/A</span>
+                )}
               </td>
               <td className="px-4 py-2.5">
                 {rec.maxPfRank > 0 ? (
-                  <>
-                    <span className={`font-semibold ${rec.maxPfRank <= 3 ? "text-emerald-600 dark:text-emerald-400" : rec.maxPfRank <= Math.ceil(rec.totalRosters * 0.7) ? "text-foreground" : "text-red-500 dark:text-red-400"}`}>
-                      #{rec.maxPfRank}
-                    </span>
-                    <span className="text-muted-foreground"> / {rec.totalRosters}</span>
-                  </>
+                  <span className={`font-semibold ${rec.maxPfRank <= 3 ? "text-emerald-600 dark:text-emerald-400" : rec.maxPfRank <= Math.ceil(rec.totalRosters * 0.7) ? "text-foreground" : "text-red-500 dark:text-red-400"}`}>
+                    #{rec.maxPfRank}<span className="text-muted-foreground font-normal"> / {rec.totalRosters}</span>
+                  </span>
                 ) : (
                   <span className="text-muted-foreground text-xs">N/A</span>
                 )}
               </td>
-              <td className="px-4 py-2.5">
-                <span className="text-muted-foreground text-xs" data-testid="text-standing">N/A</span>
+              <td className="px-4 py-2.5" data-testid={`text-standing-${rec.leagueId}`}>
+                {rec.standing > 0 ? (
+                  <span className={`font-semibold ${rec.standing <= 3 ? "text-emerald-600 dark:text-emerald-400" : rec.standing <= Math.ceil(rec.totalRosters * 0.7) ? "text-foreground" : "text-red-500 dark:text-red-400"}`}>
+                    #{rec.standing}<span className="text-muted-foreground font-normal"> / {rec.totalRosters}</span>
+                  </span>
+                ) : (
+                  <span className="text-muted-foreground text-xs">N/A</span>
+                )}
               </td>
             </tr>
           ))}
