@@ -639,13 +639,27 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
                       <RankBadge rank={rank} />
                     </td>
                     <td className="px-2 sm:px-4 py-3.5 whitespace-nowrap">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <div className="flex items-center gap-2">
-                          <span className={`font-semibold text-foreground ${isUser ? "text-[#0b3a7a] dark:text-blue-400" : ""}`}>{team.owner}</span>
-                          {isUser && (
-                            <Badge className="text-[10px] px-1.5 py-0 bg-[#0b3a7a] text-white dark:bg-blue-600" data-testid="your-team-badge">You</Badge>
-                          )}
-                        </div>
+                      <div className="flex items-center gap-2">
+                        {team.avatar ? (
+                          <img
+                            src={team.avatar}
+                            alt={team.owner}
+                            className="w-6 h-6 rounded-full object-cover flex-shrink-0"
+                            data-testid={`img-avatar-ranking-${team.id}`}
+                            onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                          />
+                        ) : (
+                          <div
+                            className="w-6 h-6 rounded-full bg-[#0b3a7a]/20 dark:bg-blue-400/20 flex items-center justify-center text-[10px] font-bold text-[#0b3a7a] dark:text-blue-400 flex-shrink-0"
+                            data-testid={`img-avatar-ranking-${team.id}`}
+                          >
+                            {(team.owner || "?").charAt(0).toUpperCase()}
+                          </div>
+                        )}
+                        <span className={`font-semibold text-foreground ${isUser ? "text-[#0b3a7a] dark:text-blue-400" : ""}`}>{team.owner}</span>
+                        {isUser && (
+                          <Badge className="text-[10px] px-1.5 py-0 bg-[#0b3a7a] text-white dark:bg-blue-600" data-testid="your-team-badge">You</Badge>
+                        )}
                       </div>
                     </td>
                     <td className="px-2 sm:px-4 py-3.5 whitespace-nowrap">
