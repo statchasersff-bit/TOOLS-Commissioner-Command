@@ -148,6 +148,15 @@ export function ShareTeam({ league, userTeam }: Props) {
     }
     const sortedPickGroups = [...picksByYearRound.entries()].sort(([a], [b]) => a.localeCompare(b));
 
+    // Group picks by year for compact display
+    const picksByYear = new Map<number, { round: number; count: number; range?: string }[]>();
+    for (const [, picks] of sortedPickGroups) {
+      const year = picks[0].year;
+      if (!picksByYear.has(year)) picksByYear.set(year, []);
+      picksByYear.get(year)!.push({ round: picks[0].round, count: picks.length, range: picks[0].projectedRange });
+    }
+    const sortedPickYears = [...picksByYear.entries()].sort(([a], [b]) => a - b);
+
     const scoringParts = league.scoringFormat?.split(" ") ?? [];
     const scoring = scoringParts[0] === "Half" ? "Half-PPR" : scoringParts[0] ?? "PPR";
     const format  = league.format ?? (scoringParts[1] === "SF" ? "SF" : "1QB");
@@ -167,7 +176,7 @@ export function ShareTeam({ league, userTeam }: Props) {
       total, overallRank, dynastyRank, competingRank, overallStrength,
       qbRank, rbRank, wrRank, teRank, picksRank,
       archetype, corePlayers, posStrengths,
-      rosterByPos, sortedPickGroups,
+      rosterByPos, sortedPickGroups, sortedPickYears,
       scoring, format,
       avgAge, totalValue, startersValue, future1sts,
     };
@@ -273,7 +282,7 @@ export function ShareTeam({ league, userTeam }: Props) {
       </Card>
 
       {/* Two-column layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-[420px_1fr] gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-[38%_62%] gap-6">
 
         {/* ── LEFT: Share Card (exported as PNG) ── */}
         <div
@@ -419,67 +428,30 @@ export function ShareTeam({ league, userTeam }: Props) {
         </div>
 
         {/* ── RIGHT: Roster Preview ── */}
-        <div className="space-y-5 min-w-0">
-          <div className="flex items-center justify-between">
+        <div className="space-y-3 min-w-0">
+
+          {/* Roster summary bar */}
+          <div className="flex items-center justify-between flex-wrap gap-2">
             <h3 className="text-sm font-bold text-foreground">Roster Preview</h3>
-            <Badge variant="outline" className="text-[10px]">
-              {userTeam.roster.length} players · {userTeam.picks.length} picks
-            </Badge>
+            <div className="flex items-center gap-2 text-[11px] text-muted-foreground flex-wrap">
+              <span className="font-semibold text-foreground">{userTeam.roster.length} players</span>
+              <span>·</span>
+              <span>{userTeam.picks.length} picks</span>
+              <span>·</span>
+              <span>Avg Age <span className="font-semibold text-foreground">{computed.avgAge}</span></span>
+              {!hideValues && computed.totalValue > 0 && (
+                <>
+                  <span>·</span>
+                  <span>Value <span className="font-semibold text-foreground">{computed.totalValue.toLocaleString()}</span></span>
+                </>
+              )}
+            </div>
           </div>
 
-          {/* Players by position */}
-          {(["QB", "RB", "WR", "TE"] as const).map((pos) => {
-            const players = computed.rosterByPos[pos];
-            if (!players || players.length === 0) return null;
-            return (
-              <Card key={pos} className="border-border/40 bg-card/50 overflow-hidden">
-                <div className="px-3 py-2 border-b border-border/20 flex items-center gap-2 sticky top-0 bg-card/95 backdrop-blur-sm z-10">
-                  <Badge variant="outline" className={cn("text-[10px] px-1.5 py-0 h-4", getPositionColor(pos))}>
-                    {pos}
-                  </Badge>
-                  <span className="text-xs font-semibold text-muted-foreground">({players.length})</span>
-                </div>
-                <div className="divide-y divide-border/10">
-                  {players.map((player) => (
-                    <PlayerRow
-                      key={player.id}
-                      player={player}
-                      value={getPlayerValue(player)}
-                      hideValues={hideValues}
-                      showAge={showAges}
-                    />
-                  ))}
-                </div>
-              </Card>
-            );
-          })}
-
-          {/* Picks */}
-          {computed.sortedPickGroups.length > 0 && (
-            <Card className="border-border/40 bg-card/50 overflow-hidden">
-              <div className="px-3 py-2 border-b border-border/20 flex items-center gap-2 sticky top-0 bg-card/95 backdrop-blur-sm z-10">
-                <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 border-[#d4af37]/40 text-[#d4af37]">
-                  Picks
-                </Badge>
-                <span className="text-xs font-semibold text-muted-foreground">({userTeam.picks.length})</span>
-              </div>
-              <div className="px-3 py-2 grid grid-cols-2 sm:grid-cols-3 gap-1.5">
-                {computed.sortedPickGroups.map(([key, picks]) => (
-                  <div key={key} className="flex items-center gap-1.5" data-testid={`pick-group-${key}`}>
-                    <ChevronRight className="w-3 h-3 text-[#d4af37] flex-shrink-0" />
-                    <span className="text-xs text-foreground font-medium">
-                      {pickLabel(picks[0])}{picks.length > 1 ? ` ×${picks.length}` : ""}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </Card>
-          )}
-
-          {/* Core players callout */}
+          {/* Core players — pinned at top */}
           {computed.corePlayers.length > 0 && (
-            <Card className="border-[#d4af37]/20 bg-[#d4af37]/5 p-3">
-              <div className="text-[10px] font-bold text-[#d4af37] uppercase tracking-wider mb-2">Core Players</div>
+            <Card className="border-[#d4af37]/25 bg-[#d4af37]/5 px-3 py-2.5">
+              <div className="text-[10px] font-bold text-[#d4af37] uppercase tracking-wider mb-1.5">Core Players</div>
               <div className="flex flex-wrap gap-1.5">
                 {computed.corePlayers.map((p) => (
                   <div
@@ -496,6 +468,76 @@ export function ShareTeam({ league, userTeam }: Props) {
                     )}
                   </div>
                 ))}
+              </div>
+            </Card>
+          )}
+
+          {/* 2-column position grid: QB+RB | WR+TE */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {/* Left col: QB + RB */}
+            <div className="space-y-3">
+              {(["QB", "RB"] as const).map((pos) => {
+                const players = computed.rosterByPos[pos];
+                if (!players || players.length === 0) return null;
+                return (
+                  <PosGroup
+                    key={pos}
+                    pos={pos}
+                    players={players}
+                    getPlayerValue={getPlayerValue}
+                    hideValues={hideValues}
+                    showAges={showAges}
+                  />
+                );
+              })}
+            </div>
+            {/* Right col: WR + TE */}
+            <div className="space-y-3">
+              {(["WR", "TE"] as const).map((pos) => {
+                const players = computed.rosterByPos[pos];
+                if (!players || players.length === 0) return null;
+                return (
+                  <PosGroup
+                    key={pos}
+                    pos={pos}
+                    players={players}
+                    getPlayerValue={getPlayerValue}
+                    hideValues={hideValues}
+                    showAges={showAges}
+                  />
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Picks — full width, grouped by year */}
+          {computed.sortedPickYears.length > 0 && (
+            <Card className="border-border/40 bg-card/50 overflow-hidden">
+              <div className="px-3 py-2 border-b border-border/20 flex items-center gap-2">
+                <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 border-[#d4af37]/40 text-[#d4af37]">
+                  Picks
+                </Badge>
+                <span className="text-xs font-semibold text-muted-foreground">({userTeam.picks.length} total)</span>
+              </div>
+              <div className="px-3 py-2 space-y-1.5">
+                {computed.sortedPickYears.map(([year, rounds]) => {
+                  const rdLabel = (r: number) => r === 1 ? "1st" : r === 2 ? "2nd" : r === 3 ? "3rd" : `${r}th`;
+                  return (
+                    <div key={year} className="flex items-center gap-2" data-testid={`pick-year-${year}`}>
+                      <span className="text-[11px] font-bold text-[#d4af37] w-9 flex-shrink-0">{year}</span>
+                      <div className="flex items-center gap-1 flex-wrap">
+                        {rounds.map((r, i) => (
+                          <span key={r.round} className="flex items-center gap-1">
+                            {i > 0 && <span className="text-muted-foreground/40">·</span>}
+                            <span className="text-xs text-foreground font-medium">
+                              {rdLabel(r.round)}{r.count > 1 ? ` ×${r.count}` : ""}
+                            </span>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </Card>
           )}
@@ -545,16 +587,46 @@ function SnapshotRow({ icon: Icon, label, value, gold }: {
   );
 }
 
+function PosGroup({ pos, players, getPlayerValue, hideValues, showAges }: {
+  pos: string;
+  players: Player[];
+  getPlayerValue: (p: Player) => number;
+  hideValues: boolean;
+  showAges: boolean;
+}) {
+  return (
+    <Card className="border-border/40 bg-card/50 overflow-hidden">
+      <div className="px-2.5 py-1.5 border-b border-border/20 flex items-center gap-1.5 bg-card/95">
+        <Badge variant="outline" className={cn("text-[10px] px-1.5 py-0 h-4", getPositionColor(pos))}>
+          {pos}
+        </Badge>
+        <span className="text-[11px] font-semibold text-muted-foreground">({players.length})</span>
+      </div>
+      <div className="divide-y divide-border/10">
+        {players.map((player) => (
+          <PlayerRow
+            key={player.id}
+            player={player}
+            value={getPlayerValue(player)}
+            hideValues={hideValues}
+            showAge={showAges}
+          />
+        ))}
+      </div>
+    </Card>
+  );
+}
+
 function PlayerRow({ player, value, hideValues, showAge }: {
   player: Player; value: number; hideValues: boolean; showAge: boolean;
 }) {
   const sleeperId = player.sleeperId ?? player.id;
   return (
     <div
-      className="flex items-center gap-2.5 px-3 py-1.5 transition-colors hover:bg-muted/30"
+      className="flex items-center gap-2 px-2.5 py-1.5 transition-colors hover:bg-muted/30 group"
       data-testid={`player-row-${player.id}`}
     >
-      <div className="w-8 h-8 rounded-full bg-muted overflow-hidden ring-1 ring-border/30 flex-shrink-0">
+      <div className="w-7 h-7 rounded-full bg-muted overflow-hidden ring-1 ring-border/30 flex-shrink-0">
         <img
           src={`https://sleepercdn.com/content/nfl/players/thumb/${sleeperId}.jpg`}
           alt={player.name}
@@ -563,14 +635,21 @@ function PlayerRow({ player, value, hideValues, showAge }: {
         />
       </div>
       <div className="flex-1 min-w-0">
-        <div className="text-sm font-semibold truncate">{player.name}</div>
-        <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-          <span>{player.team || "—"}</span>
-          {showAge && player.age > 0 && <span>· Age {player.age}</span>}
+        <div className="flex items-center gap-1 flex-wrap">
+          <span className="text-xs font-semibold truncate">{player.name}</span>
+          {player.starter ? (
+            <span className="text-[9px] font-bold px-1 py-0 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 flex-shrink-0">START</span>
+          ) : (
+            <span className="text-[9px] font-bold px-1 py-0 rounded bg-muted/60 text-muted-foreground border border-border/30 flex-shrink-0">BN</span>
+          )}
+        </div>
+        <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+          <span>{player.team || "FA"}</span>
+          {showAge && player.age > 0 && <span>· {player.age}y</span>}
         </div>
       </div>
       {!hideValues && value > 0 && (
-        <span className="text-xs font-bold text-[#0b3a7a] dark:text-blue-400 tabular-nums flex-shrink-0">
+        <span className="text-[11px] font-bold text-[#0b3a7a] dark:text-blue-400 tabular-nums flex-shrink-0">
           {value.toLocaleString()}
         </span>
       )}
