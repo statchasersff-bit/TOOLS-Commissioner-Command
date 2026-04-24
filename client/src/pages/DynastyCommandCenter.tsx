@@ -23,7 +23,7 @@ import { DashboardOverview, DashboardSnapshot } from "./tabs/Dashboard";
 import { RosterComparison } from "./tabs/LeagueAnalyzer";
 import { RosterBreakdown } from "./tabs/TeamBreakdown";
 import { ShareTeam } from "./tabs/ShareTeam";
-import { TradeTargets, TradeBlockScanner, TradeCalculator, TradeDatabase } from "./tabs/TradeCenter";
+import { TradeBlockScanner, TradeCalculator, TradeDatabase } from "./tabs/TradeCenter";
 import { PositionalAnalysis } from "./tabs/PositionalAnalysis";
 import { MarketValue } from "./tabs/LeagueMarket";
 import { LeagueIntelligence } from "./tabs/Insights";
@@ -286,7 +286,6 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
       case "trade-center:trade-database": return <TradeDatabase league={league} />;
       case "trade-center:trade-calculator": return <TradeCalculator league={league} userTeam={userTeam} />;
       case "trade-center:positional-analysis": return <PositionalAnalysis league={league} userTeam={userTeam} />;
-      case "trade-center:trade-targets": return <TradeTargets league={league} userTeam={userTeam} />;
       case "trade-center:trade-block": return <TradeBlockScanner league={league} />;
       case "league-market:market-value": return <MarketValue league={league} />;
       default: return <div className="text-center text-muted-foreground py-12">Select a tab to get started</div>;

@@ -253,20 +253,6 @@ export function TradeFinder({ league, userTeam }: TradeProps) {
   );
 }
 
-export function TradeTargets({ league, userTeam }: TradeProps) {
-  return (
-    <div className="space-y-8">
-      <SectionHeader title="Trade Targets" subtitle="Buy-low and sell-high opportunities based on value trends" />
-      <Card className="p-8 text-center" data-testid="snapshot-notice">
-        <Info className="w-6 h-6 text-[#0b3a7a] mx-auto mb-3" />
-        <p className="text-sm font-semibold mb-1">Coming Soon</p>
-        <p className="text-xs text-muted-foreground max-w-md mx-auto">
-          Value trend tracking is being migrated to a new architecture. Buy-low and sell-high trade targets will return in a future update.
-        </p>
-      </Card>
-    </div>
-  );
-}
 
 function CrossLeagueTradeIntel({ league }: { league: League }) {
   const [selectedTeamId, setSelectedTeamId] = useState<string>("");
