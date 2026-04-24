@@ -125,6 +125,15 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
   }, [league, fetchedLeague]);
 
   useEffect(() => {
+    if (!sleeper.user?.username) return;
+    fetch("/api/trades/ingest-user", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: sleeper.user.username }),
+    }).catch(() => {});
+  }, [sleeper.user?.userId]);
+
+  useEffect(() => {
     if (!fetchedLeague || !selectedLeagueId) return;
     const summary = sleeper.leagues.find((l) => l.leagueId === selectedLeagueId);
     if (!summary) return;

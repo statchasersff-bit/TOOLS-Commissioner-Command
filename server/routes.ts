@@ -19,6 +19,7 @@ import {
   searchTrades,
   getTradeStats,
   ingestLeagueTrades,
+  ingestUserLeagues,
 } from "./tradeCrawler";
 import {
   captureValueSnapshot,
@@ -210,6 +211,18 @@ export async function registerRoutes(
     } catch (err: any) {
       console.error("Trade search error:", err);
       res.status(500).json({ error: err.message || "Failed to search trades" });
+    }
+  });
+
+  app.post("/api/trades/ingest-user", async (req, res) => {
+    try {
+      const { username } = req.body;
+      if (!username) return res.status(400).json({ error: "username is required" });
+      const result = await ingestUserLeagues(username);
+      res.json(result);
+    } catch (err: any) {
+      console.error("User ingest error:", err);
+      res.status(500).json({ error: err.message || "Failed to ingest user leagues" });
     }
   });
 
