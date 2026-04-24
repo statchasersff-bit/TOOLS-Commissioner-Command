@@ -823,6 +823,7 @@ export async function fetchDraftBoard(leagueId: string) {
     pos:
       p.metadata?.position || playersDb[p.player_id]?.position || "??",
     team: p.metadata?.team || playersDb[p.player_id]?.team || "FA",
+    pickedAt: typeof p.picked_at === "number" ? p.picked_at : null,
   }));
 
   const pickedPlayerIds = new Set(

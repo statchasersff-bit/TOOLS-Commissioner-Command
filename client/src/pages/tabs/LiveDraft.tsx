@@ -3,7 +3,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Search, RefreshCw, Trophy, Target, Radio, Zap } from "lucide-react";
+import { Loader2, Search, RefreshCw, Trophy, Target, Radio, Zap, Timer, ChevronUp, ChevronDown, Minus } from "lucide-react";
 import { useValueModel } from "@/contexts/ValueModelContext";
 import { useSleeper } from "@/contexts/SleeperContext";
 import { detectLiveDrafts as detectLiveDraftsApi, fetchDraftBoard as fetchDraftBoardApi } from "@/lib/sleeperApi";
@@ -17,6 +17,7 @@ interface DraftPick {
   playerName: string;
   pos: string;
   team: string;
+  pickedAt: number | null;
 }
 
 interface DraftInfo {
@@ -81,7 +82,197 @@ const POS_BADGE_SM: Record<string, string> = {
   TE: "text-orange-600 dark:text-orange-400",
 };
 
-export default function LiveDraft() {
+interface PickTimerStat {
+  managerId: string;
+  managerName: string;
+  totalMs: number;
+  pickCount: number;
+  avgMs: number;
+  longestMs: number;
+}
+
+function formatDuration(ms: number): string {
+  const totalSeconds = Math.round(ms / 1000);
+  if (totalSeconds < 60) return `${totalSeconds}s`;
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (hours > 0) return `${hours}h ${String(minutes).padStart(2, "0")}m`;
+  return `${minutes}m ${String(seconds).padStart(2, "0")}s`;
+}
+
+function buildPickTimerStats(
+  picks: DraftPick[],
+  draftSlots: { slot: number; rosterId: number; displayName: string }[]
+): { stats: PickTimerStat[]; hasTimestamps: boolean } {
+  const slotMap = new Map<number, string>();
+  for (const s of draftSlots) slotMap.set(s.rosterId, s.displayName);
+
+  const sorted = [...picks]
+    .filter(p => p.playerId)
+    .sort((a, b) => a.pickNo - b.pickNo);
+
+  const hasTimestamps = sorted.some(p => p.pickedAt !== null);
+  if (!hasTimestamps) return { stats: [], hasTimestamps: false };
+
+  const managerMap = new Map<number, { name: string; totalMs: number; pickCount: number; longestMs: number }>();
+
+  for (let i = 1; i < sorted.length; i++) {
+    const prev = sorted[i - 1];
+    const curr = sorted[i];
+    if (!prev.pickedAt || !curr.pickedAt) continue;
+    const diffMs = curr.pickedAt - prev.pickedAt;
+    if (diffMs <= 0) continue;
+
+    const rosterId = curr.rosterId;
+    const name = slotMap.get(rosterId) || `Roster ${rosterId}`;
+    const existing = managerMap.get(rosterId);
+    if (existing) {
+      existing.totalMs += diffMs;
+      existing.pickCount += 1;
+      if (diffMs > existing.longestMs) existing.longestMs = diffMs;
+    } else {
+      managerMap.set(rosterId, { name, totalMs: diffMs, pickCount: 1, longestMs: diffMs });
+    }
+  }
+
+  const stats: PickTimerStat[] = Array.from(managerMap.entries())
+    .filter(([, v]) => v.pickCount > 0)
+    .map(([id, v]) => ({
+      managerId: String(id),
+      managerName: v.name,
+      totalMs: v.totalMs,
+      pickCount: v.pickCount,
+      avgMs: Math.round(v.totalMs / v.pickCount),
+      longestMs: v.longestMs,
+    }));
+
+  return { stats, hasTimestamps: true };
+}
+
+type TimerSortKey = "avgMs" | "totalMs" | "pickCount" | "longestMs";
+
+function PickTimerView({ draftData, isLoading }: {
+  draftData: { picks: DraftPick[]; draftSlots: { slot: number; rosterId: number; displayName: string }[] } | null;
+  isLoading: boolean;
+}) {
+  const [sortKey, setSortKey] = useState<TimerSortKey>("avgMs");
+  const [sortDir, setSortDir] = useState<"desc" | "asc">("desc");
+
+  const { stats, hasTimestamps } = useMemo(() => {
+    if (!draftData) return { stats: [], hasTimestamps: false };
+    return buildPickTimerStats(draftData.picks, draftData.draftSlots);
+  }, [draftData]);
+
+  const sorted = useMemo(() => {
+    return [...stats].sort((a, b) => {
+      const diff = a[sortKey] - b[sortKey];
+      return sortDir === "desc" ? -diff : diff;
+    });
+  }, [stats, sortKey, sortDir]);
+
+  const handleSort = (key: TimerSortKey) => {
+    if (sortKey === key) {
+      setSortDir(d => d === "desc" ? "asc" : "desc");
+    } else {
+      setSortKey(key);
+      setSortDir("desc");
+    }
+  };
+
+  const SortIcon = ({ k }: { k: TimerSortKey }) => {
+    if (sortKey !== k) return <Minus className="w-3 h-3 opacity-30" />;
+    return sortDir === "desc" ? <ChevronDown className="w-3 h-3" /> : <ChevronUp className="w-3 h-3" />;
+  };
+
+  const slowest = stats.length > 0 ? [...stats].sort((a, b) => b.avgMs - a.avgMs)[0] : null;
+  const fastest = stats.length > 0 ? [...stats].sort((a, b) => a.avgMs - b.avgMs)[0] : null;
+  const longestPick = stats.length > 0 ? [...stats].sort((a, b) => b.longestMs - a.longestMs)[0] : null;
+
+  const emptyState = (msg: string) => (
+    <Card>
+      <CardContent className="py-16 text-center">
+        <Timer className="w-8 h-8 mx-auto mb-3 text-muted-foreground/40" />
+        <p className="text-sm text-muted-foreground" data-testid="text-pick-timer-empty">{msg}</p>
+      </CardContent>
+    </Card>
+  );
+
+  if (isLoading) return (
+    <Card>
+      <CardContent className="py-16 text-center">
+        <Loader2 className="w-8 h-8 mx-auto mb-3 animate-spin text-[#0b3a7a]" />
+        <p className="text-sm text-muted-foreground">Loading draft data...</p>
+      </CardContent>
+    </Card>
+  );
+
+  if (!draftData) return emptyState("Pick timing will appear once draft picks are made.");
+  if (!hasTimestamps) return emptyState("Pick timing data is unavailable for this draft.");
+  if (draftData.picks.filter(p => p.playerId && p.pickedAt).length < 2)
+    return emptyState("At least two completed picks are needed to calculate pick timing.");
+  if (stats.length === 0) return emptyState("Pick timing will appear once draft picks are made.");
+
+  return (
+    <div className="space-y-5" data-testid="pick-timer-view">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <Card className="p-4" data-testid="card-slowest-picker">
+          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Slowest Avg Picker</p>
+          <p className="text-base font-bold text-foreground truncate">{slowest?.managerName ?? "—"}</p>
+          <p className="text-2xl font-bold text-red-500 dark:text-red-400">{slowest ? formatDuration(slowest.avgMs) : "—"}</p>
+          <p className="text-[11px] text-muted-foreground">avg per pick</p>
+        </Card>
+        <Card className="p-4" data-testid="card-fastest-picker">
+          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Fastest Avg Picker</p>
+          <p className="text-base font-bold text-foreground truncate">{fastest?.managerName ?? "—"}</p>
+          <p className="text-2xl font-bold text-emerald-500 dark:text-emerald-400">{fastest ? formatDuration(fastest.avgMs) : "—"}</p>
+          <p className="text-[11px] text-muted-foreground">avg per pick</p>
+        </Card>
+        <Card className="p-4" data-testid="card-longest-pick">
+          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Longest Single Pick</p>
+          <p className="text-base font-bold text-foreground truncate">{longestPick?.managerName ?? "—"}</p>
+          <p className="text-2xl font-bold text-amber-500 dark:text-amber-400">{longestPick ? formatDuration(longestPick.longestMs) : "—"}</p>
+          <p className="text-[11px] text-muted-foreground">single pick time</p>
+        </Card>
+      </div>
+
+      <Card className="overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm" data-testid="pick-timer-table">
+            <thead>
+              <tr className="border-b border-border/40 bg-muted/30">
+                <th className="text-left px-3 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider w-10">#</th>
+                <th className="text-left px-3 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Manager</th>
+                {(["totalMs", "pickCount", "avgMs", "longestMs"] as TimerSortKey[]).map((k) => (
+                  <th key={k} className="text-right px-3 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider cursor-pointer hover:text-foreground transition-colors" onClick={() => handleSort(k)} data-testid={`th-sort-${k}`}>
+                    <span className="inline-flex items-center gap-1 justify-end">
+                      {k === "totalMs" ? "Total" : k === "pickCount" ? "Picks" : k === "avgMs" ? "Avg / Pick" : "Longest"}
+                      <SortIcon k={k} />
+                    </span>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {sorted.map((s, i) => (
+                <tr key={s.managerId} className="border-b border-border/20 hover:bg-muted/20 transition-colors" data-testid={`row-timer-${s.managerId}`}>
+                  <td className="px-3 py-2.5 text-xs font-medium text-muted-foreground">{i + 1}</td>
+                  <td className="px-3 py-2.5 font-semibold text-foreground">{s.managerName}</td>
+                  <td className="px-3 py-2.5 text-right font-mono text-xs text-muted-foreground">{formatDuration(s.totalMs)}</td>
+                  <td className="px-3 py-2.5 text-right text-xs text-muted-foreground">{s.pickCount}</td>
+                  <td className={`px-3 py-2.5 text-right font-bold font-mono text-sm ${sortKey === "avgMs" ? "text-foreground" : "text-muted-foreground"}`}>{formatDuration(s.avgMs)}</td>
+                  <td className={`px-3 py-2.5 text-right font-mono text-xs ${sortKey === "longestMs" ? "text-foreground" : "text-muted-foreground"}`}>{formatDuration(s.longestMs)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+export default function LiveDraft({ subTab = "draft-board" }: { subTab?: string }) {
   const [leagueIdInput, setLeagueIdInput] = useState("");
   const [activeLeagueId, setActiveLeagueId] = useState<string | null>(null);
   const [autoRefresh, setAutoRefresh] = useState(false);
@@ -259,11 +450,13 @@ export default function LiveDraft() {
     <div className="space-y-6">
       <div>
         <h2 className="text-2xl font-bold tracking-tight text-foreground" data-testid="live-draft-title">
-          Live Draft Board
+          {subTab === "pick-timer" ? "Pick Timer" : "Live Draft Board"}
         </h2>
         <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
         <p className="text-sm text-muted-foreground mt-2" data-testid="text-draft-description">
-          Track your dynasty drafts in real-time with a visual board layout.
+          {subTab === "pick-timer"
+            ? "See how long each manager takes on their picks — load a draft to view timing data."
+            : "Track your dynasty drafts in real-time with a visual board layout."}
         </p>
       </div>
 
@@ -376,7 +569,7 @@ export default function LiveDraft() {
         </Card>
       )}
 
-      {!activeLeagueId && !isLoading && (
+      {!activeLeagueId && !isLoading && subTab !== "pick-timer" && (
         <div className="flex flex-col items-center justify-center py-20 text-center" data-testid="draft-empty-state">
           <div className="w-16 h-16 rounded-2xl bg-[#0b3a7a]/10 dark:bg-blue-400/10 flex items-center justify-center mb-6">
             <Trophy className="w-8 h-8 text-[#0b3a7a] dark:text-blue-400" />
@@ -390,7 +583,11 @@ export default function LiveDraft() {
         </div>
       )}
 
-      {activeLeagueId && !isLoading && (
+      {subTab === "pick-timer" && (
+        <PickTimerView draftData={draftData} isLoading={isLoading} />
+      )}
+
+      {subTab !== "pick-timer" && activeLeagueId && !isLoading && (
         <>
           <div className="flex items-center justify-between flex-wrap gap-3">
             <div className="flex items-center gap-3 flex-wrap">

@@ -1,0 +1,114 @@
+Add a new tab inside the Live Draft section called “Pick Timer” next to the existing “Draft Board” tab.
+
+Goal:
+Create a live draft analytics tab that measures how long each manager takes to make picks during a live draft.
+
+Tab Placement:
+- In the Live Draft section, add a tab navigation item:
+  - Draft Board
+  - Pick Timer
+- The Pick Timer tab should use the same styling, card structure, spacing, and dark/premium StatChasers design system as the existing Live Draft UI.
+
+Core Functionality:
+Use the live draft pick data from Sleeper to calculate how long each manager takes between picks.
+
+Data Logic:
+For each draft pick:
+- Determine the timestamp when the previous pick was made.
+- Determine the timestamp when the current pick was made.
+- Pick time = current pick timestamp - previous pick timestamp.
+- Assign that pick time to the manager who made the current pick.
+- For the first pick of the draft, either:
+  - exclude it from timing calculations, or
+  - calculate from draft start time if draft_start_time is available.
+Prefer excluding the first pick unless draft start timestamp is reliable.
+
+Manager Aggregation:
+For each manager, calculate:
+- Manager name
+- Total Time spent picking
+- Number of timed picks
+- Average time per pick
+- Longest single pick time
+
+Table Columns:
+1. Rank
+   - Label column as “#”
+   - Rank managers by longest average pick time or total time.
+   - Default sort should be Avg / Pick descending.
+2. Manager
+3. Total Time
+4. # of Picks
+5. Avg / Pick
+6. Longest
+
+Formatting:
+- Format time as readable durations:
+  - Under 60 seconds: “42s”
+  - 1+ minutes: “2m 14s”
+  - 1+ hours if needed: “1h 04m”
+- Avg / Pick and Longest should use the same duration formatter.
+- Total Time should also use readable duration format.
+
+Sorting:
+- Default sort: Avg / Pick descending.
+- Allow sorting by:
+  - Total Time
+  - # of Picks
+  - Avg / Pick
+  - Longest
+- Rank number should update based on current sort.
+
+Empty / Loading States:
+- If the draft has not started, show:
+  “Pick timing will appear once draft picks are made.”
+- If there is only one pick, show:
+  “At least two completed picks are needed to calculate pick timing.”
+- If timestamps are missing, show a graceful fallback:
+  “Pick timing data is unavailable for this draft.”
+
+UI Enhancements:
+Add 3 small summary cards above the table:
+1. Slowest Avg Picker
+   - Manager + Avg / Pick
+2. Fastest Avg Picker
+   - Manager + Avg / Pick
+3. Longest Single Pick
+   - Manager + time
+
+Important Edge Cases:
+- Do not include skipped/invalid picks if they do not have timestamps.
+- Do not count picks where the time difference is negative or missing.
+- If a manager has 0 timed picks, exclude them from the ranked table.
+- Match user IDs to manager/display names using existing roster/user mapping logic already used by the draft board.
+- If manager name is missing, fallback to team name, then user ID.
+
+Implementation Notes:
+- Keep this logic separate in a helper function if possible, such as:
+  buildPickTimerStats(picks, users, rosters, draftStartTime)
+- Return an array of manager timing objects:
+  {
+    managerId,
+    managerName,
+    totalMs,
+    pickCount,
+    avgMs,
+    longestMs
+  }
+- Reuse existing Live Draft data fetch/state rather than creating duplicate API calls if the draft board already has the pick data.
+- Make the tab reactive so if live draft data refreshes, Pick Timer updates automatically.
+
+Design:
+- Use the same table/card styling as the rest of Dynasty Command.
+- Make the table mobile-friendly.
+- On mobile, allow horizontal scroll or convert rows into stacked cards if that pattern already exists.
+- Add a short subtitle under the tab title:
+  “Track which managers are flying through picks — and who is milking the clock.”
+
+Acceptance Criteria:
+- A new “Pick Timer” tab appears next to “Draft Board.”
+- The table ranks managers by pick speed.
+- Total Time, # of Picks, Avg / Pick, and Longest are correctly calculated.
+- Summary cards populate correctly.
+- Empty states work before the draft has enough picks.
+- UI matches the existing StatChasers Live Draft styling.

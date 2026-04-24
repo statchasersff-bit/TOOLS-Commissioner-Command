@@ -227,7 +227,7 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
 
   const renderContent = () => {
     if (activeMainTab === "live-draft") {
-      return <LiveDraft />;
+      return <LiveDraft subTab={activeSubTab} />;
     }
 
     if (activeMainTab === "portfolio") {
