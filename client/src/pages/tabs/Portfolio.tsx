@@ -507,7 +507,7 @@ export function PortfolioSummary() {
 
   return (
     <div className="space-y-8">
-      <SectionHeader title="Portfolio Summary" subtitle="Overview of your dynasty portfolio across all leagues" />
+      <SectionHeader title="My Portfolio" subtitle="Overview of your dynasty portfolio across all leagues" />
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <KpiCard label="Total Leagues" value={leagues.length} icon={Trophy} />
