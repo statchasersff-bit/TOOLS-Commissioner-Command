@@ -57,6 +57,13 @@ interface ValueModel {
 
 const ValueModelContext = createContext<ValueModel | null>(null);
 
+const PICK_RANGE_MULTIPLIERS: Record<number, Record<string, number>> = {
+  1: { early: 1.70, mid: 1.0, late: 0.78 },
+  2: { early: 1.19, mid: 1.0, late: 0.91 },
+  3: { early: 1.17, mid: 1.0, late: 0.90 },
+  4: { early: 1.09, mid: 1.0, late: 0.92 },
+};
+
 export function ValueModelProvider({ children }: { children: React.ReactNode }) {
   const [sourceId, setSourceIdRaw] = useState<ValueSourceId>("fantasycalc");
   const [isRecalculating, setIsRecalculating] = useState(false);
@@ -179,9 +186,18 @@ export function ValueModelProvider({ children }: { children: React.ReactNode }) 
   }, [sourceId, redraftValuesBySleeperId, redraftNameValueMap, getPlayerValue]);
 
   const getPickValue = useCallback((pick: Pick): number => {
-    const range = (pick.projectedRange || "Mid").toLowerCase() as "early" | "mid" | "late";
-    return getStaticPickValue(pick.year, pick.round, range);
-  }, []);
+    const range = (pick.projectedRange || "mid").toLowerCase() as "early" | "mid" | "late";
+    const fpKey = `FP_${pick.year}_${pick.round}`;
+    const baseValue = valuesBySleeperId[fpKey];
+
+    if (!baseValue) {
+      return getStaticPickValue(pick.year, pick.round, range);
+    }
+
+    const roundMults = PICK_RANGE_MULTIPLIERS[pick.round] ?? { early: 1.15, mid: 1.0, late: 0.90 };
+    const mult = roundMults[range] ?? 1.0;
+    return Math.round(baseValue * mult);
+  }, [valuesBySleeperId]);
 
   const calculateTeamValue = useCallback((team: Team): number => {
     const rosterValue = team.roster.reduce((s, p) => s + getPlayerValue(p), 0);
