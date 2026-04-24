@@ -40,7 +40,18 @@ export function PowerRankings({ league }: AnalyzerProps) {
 
   const columns = [
     { key: "rank", header: "Rank", sticky: true, render: (_: any, i: number) => <span className="font-bold">{i + 1}</span> },
-    { key: "name", header: "Team", sortable: true, sortAccessor: (row: any) => row.owner, render: (row: any) => <span className="font-semibold">{row.owner}</span> },
+    { key: "name", header: "Team", sortable: true, sortAccessor: (row: any) => row.owner, render: (row: any) => (
+      <div className="flex items-center gap-2">
+        {row.avatar ? (
+          <img src={row.avatar} alt={row.owner} className="w-6 h-6 rounded-full object-cover flex-shrink-0" data-testid={`img-avatar-table-${row.id}`} />
+        ) : (
+          <div className="w-6 h-6 rounded-full bg-[#0b3a7a]/20 dark:bg-blue-400/20 flex items-center justify-center text-[10px] font-bold text-[#0b3a7a] dark:text-blue-400 flex-shrink-0" data-testid={`img-avatar-table-${row.id}`}>
+            {(row.owner || "?").charAt(0).toUpperCase()}
+          </div>
+        )}
+        <span className="font-semibold">{row.owner}</span>
+      </div>
+    )},
     { key: "tier", header: "Tier", sortable: true, sortAccessor: (row: any) => { const ti = tierMap.get(row.id); return ti ? TIER_ORDER.indexOf(ti.tier) : 99; }, render: (row: any) => {
       const ti = tierMap.get(row.id);
       if (!ti) return null;
@@ -77,13 +88,22 @@ export function PowerRankings({ league }: AnalyzerProps) {
             </Tooltip>
             <div className="space-y-2.5">
               {tiers[tier].map((team) => (
-                <Card key={team.id} className="p-4 hover-elevate">
-                  <div className="flex items-center justify-between gap-2">
-                    <div>
-                      <p className="text-sm font-semibold">{team.name}</p>
-                      <p className="text-xs text-muted-foreground">{team.owner}</p>
+                <Card key={team.id} className="p-3 hover-elevate" data-testid={`tier-card-${team.id}`}>
+                  <div className="flex items-center gap-2.5">
+                    <div className="flex-shrink-0">
+                      {team.avatar ? (
+                        <img src={team.avatar} alt={team.owner} className="w-8 h-8 rounded-full object-cover" data-testid={`img-avatar-tier-${team.id}`} />
+                      ) : (
+                        <div className="w-8 h-8 rounded-full bg-[#0b3a7a]/20 dark:bg-blue-400/20 flex items-center justify-center text-xs font-bold text-[#0b3a7a] dark:text-blue-400" data-testid={`img-avatar-tier-${team.id}`}>
+                          {(team.owner || "?").charAt(0).toUpperCase()}
+                        </div>
+                      )}
                     </div>
-                    <span className="text-xl font-bold text-foreground">{team.metrics.overall}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold truncate">{team.name}</p>
+                      <p className="text-xs text-muted-foreground truncate">{team.owner}</p>
+                    </div>
+                    <span className="text-lg font-bold text-foreground flex-shrink-0">{team.metrics.overall}</span>
                   </div>
                 </Card>
               ))}
