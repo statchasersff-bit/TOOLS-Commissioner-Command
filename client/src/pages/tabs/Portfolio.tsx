@@ -197,6 +197,23 @@ interface PortfolioMyLeaguesProps {
 export function PortfolioMyLeagues({ onSelectLeague, onNavigate }: PortfolioMyLeaguesProps) {
   const { isConnected, leagues, activeLeagueId, setActiveLeague } = useSleeper();
   const [search, setSearch] = useState("");
+  const [sortMode, setSortMode] = useState<"sleeper" | "az">("sleeper");
+
+  const filtered = useMemo(() => {
+    const base = leagues
+      .map((l, i) => ({ ...l, _sleeperIdx: i }))
+      .filter((l) => l.name.toLowerCase().includes(search.toLowerCase()));
+    if (sortMode === "az") {
+      return [...base].sort((a, b) => a.name.localeCompare(b.name));
+    }
+    return base;
+  }, [leagues, search, sortMode]);
+
+  const handleLeagueClick = (leagueId: string) => {
+    setActiveLeague(leagueId);
+    onSelectLeague(leagueId);
+    onNavigate("dashboard", "overview");
+  };
 
   if (!isConnected) {
     return (
@@ -211,27 +228,39 @@ export function PortfolioMyLeagues({ onSelectLeague, onNavigate }: PortfolioMyLe
     );
   }
 
-  const filtered = leagues.filter((l) =>
-    l.name.toLowerCase().includes(search.toLowerCase())
-  );
-
-  const handleLeagueClick = (leagueId: string) => {
-    setActiveLeague(leagueId);
-    onSelectLeague(leagueId);
-    onNavigate("dashboard", "overview");
-  };
-
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <SectionHeader title="My Leagues" subtitle={`${leagues.length} league${leagues.length !== 1 ? "s" : ""} found`} />
 
-      <Input
-        placeholder="Search leagues..."
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        className="max-w-sm"
-        data-testid="input-search-leagues"
-      />
+      <div className="flex items-center gap-3 flex-wrap">
+        <Input
+          placeholder="Search leagues..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="max-w-xs h-8 text-sm"
+          data-testid="input-search-leagues"
+        />
+        <div className="flex items-center border border-border rounded-md overflow-hidden shrink-0" data-testid="toggle-league-sort">
+          <button
+            className={`px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+              sortMode === "sleeper" ? "bg-[#0b3a7a] text-white" : "bg-background text-muted-foreground hover:bg-muted/50"
+            }`}
+            onClick={() => setSortMode("sleeper")}
+            data-testid="button-sort-sleeper"
+          >
+            Sleeper Order
+          </button>
+          <button
+            className={`px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+              sortMode === "az" ? "bg-[#0b3a7a] text-white" : "bg-background text-muted-foreground hover:bg-muted/50"
+            }`}
+            onClick={() => setSortMode("az")}
+            data-testid="button-sort-az"
+          >
+            A → Z
+          </button>
+        </div>
+      </div>
 
       {filtered.length === 0 ? (
         <Card className="p-8 text-center" data-testid="no-leagues-found">
@@ -239,40 +268,39 @@ export function PortfolioMyLeagues({ onSelectLeague, onNavigate }: PortfolioMyLe
           <p className="text-sm text-muted-foreground">No leagues match your search.</p>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
           {filtered.map((league) => {
             const isActive = activeLeagueId === league.leagueId;
             return (
               <Card
                 key={league.leagueId}
-                className={`p-5 cursor-pointer hover-elevate transition-colors ${
+                className={`px-4 py-3 cursor-pointer hover-elevate transition-colors ${
                   isActive ? "ring-2 ring-[#d4af37]" : ""
                 }`}
                 onClick={() => handleLeagueClick(league.leagueId)}
                 data-testid={`card-league-${league.leagueId}`}
               >
-                <div className="space-y-3">
-                  <div>
-                    <h4 className="font-semibold text-foreground text-sm truncate" data-testid={`text-league-name-${league.leagueId}`}>
+                <div className="flex items-center justify-between gap-3 min-w-0">
+                  <div className="min-w-0 flex-1">
+                    <h4 className="font-semibold text-foreground text-sm truncate leading-tight" data-testid={`text-league-name-${league.leagueId}`}>
                       {league.name}
                     </h4>
-                    <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
+                    <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                      <Badge variant={league.format === "SF" ? "default" : "secondary"} className="text-[10px] px-1.5 py-0 h-4" data-testid={`badge-format-${league.leagueId}`}>
+                        {league.format}
+                      </Badge>
+                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4" data-testid={`badge-scoring-${league.leagueId}`}>
+                        {league.scoringFormat}
+                      </Badge>
+                      <span className="text-[11px] text-muted-foreground flex items-center gap-1">
+                        <Users className="w-3 h-3" />
+                        {league.totalRosters}t · {league.season}
+                      </span>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <Badge variant={league.format === "SF" ? "default" : "secondary"} data-testid={`badge-format-${league.leagueId}`}>
-                      {league.format}
-                    </Badge>
-                    <Badge variant="outline" data-testid={`badge-scoring-${league.leagueId}`}>
-                      {league.scoringFormat}
-                    </Badge>
-                  </div>
-                  <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-                    <span className="flex items-center gap-1">
-                      <Users className="w-3 h-3" />
-                      {league.totalRosters} teams
-                    </span>
-                    <span>{league.season}</span>
-                  </div>
+                  {isActive && (
+                    <Check className="w-4 h-4 text-[#d4af37] shrink-0" data-testid={`icon-active-${league.leagueId}`} />
+                  )}
                 </div>
               </Card>
             );
