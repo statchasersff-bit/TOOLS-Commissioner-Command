@@ -43,7 +43,7 @@ export function PowerRankings({ league }: AnalyzerProps) {
     { key: "name", header: "Team", sortable: true, sortAccessor: (row: any) => row.owner, render: (row: any) => (
       <div className="flex items-center gap-2">
         {row.avatar ? (
-          <img src={row.avatar} alt={row.owner} className="w-6 h-6 rounded-full object-cover flex-shrink-0" data-testid={`img-avatar-table-${row.id}`} />
+          <img src={row.avatar} alt={row.owner} className="w-6 h-6 rounded-full object-cover flex-shrink-0" data-testid={`img-avatar-table-${row.id}`} onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
         ) : (
           <div className="w-6 h-6 rounded-full bg-[#0b3a7a]/20 dark:bg-blue-400/20 flex items-center justify-center text-[10px] font-bold text-[#0b3a7a] dark:text-blue-400 flex-shrink-0" data-testid={`img-avatar-table-${row.id}`}>
             {(row.owner || "?").charAt(0).toUpperCase()}
@@ -92,7 +92,7 @@ export function PowerRankings({ league }: AnalyzerProps) {
                   <div className="flex items-center gap-2.5">
                     <div className="flex-shrink-0">
                       {team.avatar ? (
-                        <img src={team.avatar} alt={team.owner} className="w-8 h-8 rounded-full object-cover" data-testid={`img-avatar-tier-${team.id}`} />
+                        <img src={team.avatar} alt={team.owner} className="w-8 h-8 rounded-full object-cover" data-testid={`img-avatar-tier-${team.id}`} onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
                       ) : (
                         <div className="w-8 h-8 rounded-full bg-[#0b3a7a]/20 dark:bg-blue-400/20 flex items-center justify-center text-xs font-bold text-[#0b3a7a] dark:text-blue-400" data-testid={`img-avatar-tier-${team.id}`}>
                           {(team.owner || "?").charAt(0).toUpperCase()}

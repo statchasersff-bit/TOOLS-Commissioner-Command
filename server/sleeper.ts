@@ -286,11 +286,13 @@ export async function fetchSleeperLeagueFull(leagueId: string, userId: string) {
       }
     }
 
+    const avatarHash = ownerUser?.avatar || null;
     return {
       id: teamId,
       name: teamName,
       owner: ownerName,
       ownerId: roster.owner_id || undefined,
+      avatar: avatarHash ? `https://sleepercdn.com/avatars/thumbs/${avatarHash}` : null,
       roster: rosterPlayers,
       picks: ownedPicks,
       metrics: { ...defaultMetrics },
