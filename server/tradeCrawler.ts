@@ -729,7 +729,7 @@ export async function searchTrades(params: {
             season: a.pickSeason || "",
             round: a.pickRound || 0,
             slot: a.pickSlot ?? null,
-            originalOwnerName: a.pickOriginalOwnerName || "Unknown",
+            originalOwnerName: a.pickOriginalOwnerName || null,
           })),
       };
     });
@@ -739,7 +739,7 @@ export async function searchTrades(params: {
       season: trade.season,
       week: trade.week,
       timestamp: trade.timestamp,
-      leagueName: trade.leagueName || "Unknown",
+      leagueName: trade.leagueName || null,
       leagueFormat: trade.leagueFormat || "1QB",
       leagueScoringFormat: trade.leagueScoringFormat || "PPR",
       leagueTotalRosters: trade.leagueTotalRosters || 0,

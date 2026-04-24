@@ -132,7 +132,7 @@ export interface TradeRecord {
   season: string;
   week: number;
   timestamp: number;
-  leagueName: string;
+  leagueName: string | null;
   leagueFormat: string;
   leagueScoringFormat: string;
   leagueTotalRosters: number;

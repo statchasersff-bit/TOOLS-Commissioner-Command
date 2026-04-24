@@ -1767,7 +1767,7 @@ function TradeCard({
                         <span className="text-xs font-medium">
                           {pickLabel}
                         </span>
-                        {p.originalOwnerName && p.originalOwnerName !== "Unknown" && (
+                        {p.originalOwnerName && (
                           <span className="text-[10px] text-muted-foreground">({p.originalOwnerName}'s)</span>
                         )}
                       </div>
