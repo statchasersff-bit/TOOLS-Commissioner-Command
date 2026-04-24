@@ -1,0 +1,271 @@
+This should be similar in concept to DynastyHelper’s share team view, but with StatChasers branding and better UX.
+
+Tab placement:
+- Add “Share My Team” as a new main tab in Dynasty Command.
+- It should sit near My Team / Portfolio / League Analyzer if applicable.
+
+Main Layout:
+Create a two-column layout on desktop:
+- Left column: team summary/share card controls
+- Right column: roster preview
+On mobile:
+- Stack vertically.
+
+Top Controls:
+Add:
+- League/team selector dropdown
+- Copy Link button
+- Export Image button
+- Export Anonymous button
+- Optional: Copy Blurb button
+
+Buttons:
+1. Copy Link
+- Copies a shareable URL with league/team context.
+- Include query params for leagueId and rosterId/teamId.
+- Show toast: “Share link copied.”
+
+2. Export Image
+- Exports the visible team card/share layout as a PNG.
+- Use html-to-image or the existing image export library if already available.
+- Include StatChasers branding.
+- Show toast on success or error.
+
+3. Export Anonymous
+- Same export, but hides:
+  - Manager name
+  - League name if privacy toggle is on
+  - Any user/avatar that identifies the owner
+- Replace with:
+  - “Anonymous Dynasty Team”
+  - “12-Team SF Dynasty”
+- Still show roster, scores, positional values, and league settings.
+
+4. Copy Blurb
+Generate a text blurb useful for Discord, Sleeper chat, Reddit, or orphan recruiting.
+
+Example:
+“12T Dynasty SF PPR TEP team in [League Name]. Record: 7-2. Core players: Ja’Marr Chase, Malik Nabers, Josh Jacobs, Baker Mayfield. Team strengths: WR, Picks. Needs: QB. View full team: [share link]”
+
+Share Card Left Column:
+Include a branded team summary card with:
+- StatChasers logo/avatar
+- Manager/team name
+- League name
+- Record
+- Standing
+- Team archetype badge:
+  - Elite Contender
+  - Contender
+  - Fringe
+  - Rebuild
+  - Orphan Target
+- Overall Score
+- Roster Value Rank
+- Projected Points Rank
+- Future Picks Rank if data exists
+
+League Settings Mini Card:
+Show:
+- Teams
+- Format: SF or 1QB
+- Passing TD scoring
+- PPR
+- TEP
+- Starting lineup format
+Example:
+Roster: QB · RB · RB · WR · WR · WR · TE · FLEX · FLEX · SF
+
+Positional Value Card:
+Show QB, RB, WR, TE, Picks rows.
+Each row should include:
+- Small horizontal bar
+- Rank, ex: #2 of 12
+- Label:
+  - Elite
+  - Strong
+  - Average
+  - Weak
+Use color-coded labels.
+
+Suggested positional score logic:
+- Use existing positional value/strength if already available.
+- If not, estimate from player market values grouped by position.
+- Rank each team within the league by position group value.
+- Label:
+  - Rank 1-3 = Elite/Strong depending on league size
+  - Middle = Average
+  - Bottom third = Weak
+
+Brand/Footer Card:
+Include:
+- StatChasers logo
+- “Built with StatChasers Dynasty Command”
+- Optional CTA:
+  - “Analyze your dynasty team at StatChasers.com”
+
+Roster Preview Right Column:
+Show full roster grouped by position:
+- QB
+- RB
+- WR
+- TE
+- Picks
+- Taxi
+- IR
+
+Each player row:
+- Player headshot/avatar if available
+- Player name
+- Team abbreviation
+- Age
+- Value
+- Injury/badge if applicable:
+  - OUT
+  - IR
+  - BYE
+  - Rookie
+- Sort by value descending within position.
+
+For picks:
+Show future picks grouped by year:
+- 2026 1st
+- 2026 2nd
+- 2027 1st
+etc.
+Show quantity if multiple.
+
+Privacy / Display Toggles:
+Add small toggles:
+- Hide manager name
+- Hide league name
+- Hide values
+- Show picks
+- Show ages
+- Compact mode
+
+Image Export Requirements:
+The exported image should include:
+- Summary header
+- Record/standing
+- League settings
+- Positional value
+- Roster preview
+- StatChasers branding
+- Clean dark theme
+- Good spacing
+- No broken overflow
+- Works at common social share widths
+
+Recommended export sizes:
+- Desktop/export container width around 900-1100px
+- Keep background dark
+- Add subtle grid/glow background consistent with StatChasers branding
+- Use gold accents and premium cards
+
+Backend / Data Requirements:
+Create a normalized share team object:
+
+{
+  leagueId,
+  leagueName,
+  rosterId,
+  managerName,
+  teamName,
+  avatar,
+  record: {
+    wins,
+    losses,
+    ties,
+    winPct
+  },
+  standingRank,
+  teamCount,
+  settings: {
+    isDynasty,
+    isSuperflex,
+    isBestBall,
+    ppr,
+    tep,
+    passingTd,
+    rosterPositions
+  },
+  scores: {
+    overall,
+    contender,
+    rosterValue,
+    projectedPoints,
+    futurePicks
+  },
+  ranks: {
+    overallRank,
+    rosterValueRank,
+    projectedPointsRank,
+    futurePicksRank,
+    qbRank,
+    rbRank,
+    wrRank,
+    teRank,
+    picksRank
+  },
+  strengths: {
+    qb,
+    rb,
+    wr,
+    te,
+    picks
+  },
+  roster: {
+    QB: [],
+    RB: [],
+    WR: [],
+    TE: [],
+    Picks: [],
+    IR: [],
+    Taxi: []
+  },
+  corePlayers: [],
+  weaknesses: [],
+  archetype
+}
+
+Core player logic:
+- Top 4-6 players by market value.
+- Prefer QB/WR/RB/TE starters.
+- Exclude low-value depth pieces.
+
+Weakness logic:
+- Any position group ranked bottom third in the league.
+- Especially flag QB weakness in SF leagues.
+
+Archetype logic:
+- Elite Contender = top 2 overall score or top 2 projected points + strong roster value.
+- Contender = top 4 overall/projected points.
+- Fringe = middle third.
+- Rebuild = bottom third but high picks value.
+- Orphan Target = weak current roster but strong picks/youth.
+
+UI Copy:
+Section title:
+“Share My Team”
+
+Subtitle:
+“Create a clean, shareable snapshot of any dynasty roster.”
+
+Empty State:
+“Select a league to generate your share card.”
+
+Loading State:
+Use skeleton cards for summary and roster.
+
+Error State:
+“Couldn’t generate this team card. Try refreshing league data.”
+
+Important:
+Do not simply copy DynastyHelper visually. Use StatChasers styling:
+- Dark navy/black background
+- Gold accents
+- Premium card borders
+- Strong typography
+- Small glowing badges
+- Clean export-ready layout

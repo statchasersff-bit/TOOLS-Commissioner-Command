@@ -22,6 +22,7 @@ import { PortfolioConnect, PortfolioSummary } from "./tabs/Portfolio";
 import { DashboardOverview, DashboardSnapshot } from "./tabs/Dashboard";
 import { RosterComparison } from "./tabs/LeagueAnalyzer";
 import { RosterBreakdown } from "./tabs/TeamBreakdown";
+import { ShareTeam } from "./tabs/ShareTeam";
 import { TradeTargets, TradeBlockScanner, TradeCalculator, TradeDatabase } from "./tabs/TradeCenter";
 import { PositionalAnalysis } from "./tabs/PositionalAnalysis";
 import { MarketValue } from "./tabs/LeagueMarket";
@@ -248,13 +249,14 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
     const key = `${activeMainTab}:${activeSubTab}`;
     switch (key) {
       case "dashboard:overview": return <DashboardOverview league={league} userTeam={userTeam} onNavigate={navigateToSubTab} />;
+      case "dashboard:roster-breakdown": return <RosterBreakdown league={league} userTeam={userTeam} />;
+      case "dashboard:share-team": return <ShareTeam league={league} userTeam={userTeam} />;
       case "league-analyzer:power-rankings": return <DashboardSnapshot league={league} userTeam={userTeam} />;
       case "league-analyzer:league-intelligence": return <LeagueIntelligence league={league} userTeam={userTeam} />;
       case "league-analyzer:league-economy": return <LeagueEconomy league={league} />;
       case "league-analyzer:roster-comparison": return <RosterComparison league={league} />;
       case "league-analyzer:transactions": return <Transactions />;
       case "dont-click:league-roast": return <LeagueRoast league={league} userTeam={userTeam} />;
-      case "dashboard:roster-breakdown": return <RosterBreakdown league={league} userTeam={userTeam} />;
       case "trade-center:trade-database": return <TradeDatabase league={league} />;
       case "trade-center:trade-calculator": return <TradeCalculator league={league} userTeam={userTeam} />;
       case "trade-center:positional-analysis": return <PositionalAnalysis league={league} userTeam={userTeam} />;
