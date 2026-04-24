@@ -41,6 +41,9 @@ export interface Team {
   roster: Player[];
   picks: Pick[];
   metrics: TeamMetrics;
+  wins?: number;
+  losses?: number;
+  ties?: number;
 }
 
 export interface League {

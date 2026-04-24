@@ -296,6 +296,9 @@ export async function fetchSleeperLeagueFull(leagueId: string, userId: string) {
       roster: rosterPlayers,
       picks: ownedPicks,
       metrics: { ...defaultMetrics },
+      wins: roster.settings?.wins ?? 0,
+      losses: roster.settings?.losses ?? 0,
+      ties: roster.settings?.ties ?? 0,
     };
   });
 

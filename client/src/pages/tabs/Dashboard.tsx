@@ -170,10 +170,46 @@ export function DashboardOverview({ league, userTeam, onNavigate }: DashboardOve
   const starterAges = userTeam.roster.filter((p) => p.starter);
   const avgAge = starterAges.length > 0 ? (starterAges.reduce((s, p) => s + p.age, 0) / starterAges.length).toFixed(1) : "N/A";
   const future1sts = userTeam.picks.filter((p) => p.round === 1).length;
-  const currentMonth = new Date().getMonth();
-  const seasonStarted = currentMonth >= 8 && currentMonth <= 11;
-  const playoffOdds = rank <= 6 ? Math.round(95 - (rank - 1) * 12) : Math.round(40 - (rank - 6) * 6);
-  const clampedOdds = Math.max(5, playoffOdds);
+
+  // Compute playoff odds using the same blended formula as the Portfolio tab.
+  // Blend actual standing (weighted more as the season progresses) with dynasty rank talent.
+  const playoffSlots = Math.max(Math.floor(total / 2), 1);
+  const sortedByRecord = [...league.teams].sort((a, b) => {
+    const aW = a.wins ?? 0, bW = b.wins ?? 0;
+    if (bW !== aW) return bW - aW;
+    return (b.wins ?? 0) - (a.wins ?? 0);
+  });
+  const standing = sortedByRecord.findIndex((t) => t.id === userTeam.id) + 1 || rank;
+  const totalGamesPlayed = (userTeam.wins ?? 0) + (userTeam.losses ?? 0) + (userTeam.ties ?? 0);
+  const regularSeasonGames = 14;
+  const seasonProgress = Math.min(totalGamesPlayed / regularSeasonGames, 1);
+
+  let standingScore: number;
+  if (total <= 1) {
+    standingScore = 1;
+  } else if (standing <= playoffSlots) {
+    const comfortMargin = playoffSlots > 1 ? (playoffSlots - standing) / (playoffSlots - 1) : 1;
+    standingScore = 0.55 + comfortMargin * 0.40;
+  } else {
+    const spotsBack = standing - playoffSlots;
+    standingScore = 0.45 * (1 - spotsBack / Math.max(1, total - playoffSlots));
+  }
+
+  let talentScore: number;
+  if (rank <= playoffSlots) {
+    const comfortMargin = playoffSlots > 1 ? (playoffSlots - rank) / (playoffSlots - 1) : 1;
+    talentScore = 0.55 + comfortMargin * 0.40;
+  } else {
+    const spotsBack = rank - playoffSlots;
+    talentScore = 0.45 * (1 - spotsBack / Math.max(1, total - playoffSlots));
+  }
+
+  const standingWeight = 0.15 + 0.70 * seasonProgress;
+  const talentWeight = 1 - standingWeight;
+  const clampedOdds = Math.min(99, Math.max(1, Math.round((standingWeight * standingScore + talentWeight * talentScore) * 100)));
+
+  const oddsContext = clampedOdds >= 70 ? "Strong outlook" : clampedOdds >= 50 ? "Favorable" : clampedOdds >= 35 ? "On the bubble" : "Long shot";
+  const oddsColor = clampedOdds >= 60 ? "text-emerald-600 dark:text-emerald-400" : clampedOdds >= 40 ? "text-amber-600 dark:text-amber-400" : "text-red-500 dark:text-red-400";
 
   const leagueAvg1sts = Math.round(league.teams.reduce((s, t) => s + t.picks.filter(p => p.round === 1).length, 0) / total * 10) / 10;
   const leagueAvgAge = (league.teams.reduce((s, t) => {
@@ -261,9 +297,9 @@ export function DashboardOverview({ league, userTeam, onNavigate }: DashboardOve
           />
           <SnapshotStat
             label="Playoff Odds"
-            value={seasonStarted ? `${clampedOdds}%` : "--"}
-            context={seasonStarted ? (clampedOdds >= 60 ? "Strong outlook" : clampedOdds >= 40 ? "On the bubble" : "Long shot") : "Preseason \u2013 Not available"}
-            contextColor={!seasonStarted ? "text-muted-foreground" : clampedOdds >= 60 ? "text-emerald-600 dark:text-emerald-400" : clampedOdds >= 40 ? "text-amber-600 dark:text-amber-400" : "text-red-500 dark:text-red-400"}
+            value={`${clampedOdds}%`}
+            context={oddsContext}
+            contextColor={oddsColor}
             icon={Target}
             testId="snapshot-playoff-odds"
           />
