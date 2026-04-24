@@ -394,16 +394,23 @@ function SortableLeagueRecords({ records }: { records: any[] }) {
         <tbody>
           {(showAll ? sorted : sorted.slice(0, 10)).map((rec: any, idx: number) => (
             <tr key={`${rec.leagueId}-${idx}`} className="border-b border-border/20 hover:bg-muted/10" data-testid={`league-record-${rec.leagueId}`}>
-              <td className="px-2 py-2">
-                <div className="flex items-center gap-2 min-w-0">
+              <td className="px-3 py-2">
+                <div className="flex items-center gap-2.5 min-w-0">
                   {rec.avatar ? (
-                    <img src={rec.avatar} alt="" className="w-6 h-6 rounded-full flex-shrink-0 object-cover bg-muted" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                    <img src={rec.avatar} alt="" className="w-9 h-9 rounded-full flex-shrink-0 object-cover bg-muted ring-1 ring-border/40" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
                   ) : (
-                    <div className="w-6 h-6 rounded-full flex-shrink-0 bg-[#0b3a7a]/20 dark:bg-blue-900/40 flex items-center justify-center">
-                      <span className="text-[9px] font-bold text-[#0b3a7a] dark:text-blue-400 uppercase">{rec.leagueName?.[0] ?? "?"}</span>
+                    <div className="w-9 h-9 rounded-full flex-shrink-0 bg-[#0b3a7a]/20 dark:bg-blue-900/40 flex items-center justify-center ring-1 ring-border/40">
+                      <span className="text-xs font-bold text-[#0b3a7a] dark:text-blue-400 uppercase">{rec.leagueName?.[0] ?? "?"}</span>
                     </div>
                   )}
-                  <span className="font-medium truncate max-w-[160px]" title={rec.leagueName}>{rec.leagueName}</span>
+                  <div className="min-w-0">
+                    <div className="font-semibold text-sm text-foreground truncate max-w-[180px]" title={rec.leagueName}>{rec.leagueName}</div>
+                    <div className="flex items-center gap-1 mt-0.5 flex-wrap">
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-muted/60 text-muted-foreground">Dynasty</span>
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-muted/60 text-muted-foreground">{rec.totalRosters} Teams</span>
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-muted/60 text-muted-foreground">{rec.format}</span>
+                    </div>
+                  </div>
                 </div>
               </td>
               <td className="px-2 py-2 text-center font-semibold tabular-nums whitespace-nowrap">{rec.wins}-{rec.losses}{rec.ties > 0 ? `-${rec.ties}` : ""}</td>
