@@ -383,26 +383,26 @@ function SurplusNeeds({ league, userTeam, onSwitchTab }: { league: League; userT
                   className={cn("flex items-center justify-between py-3 border-b border-border/20 last:border-0", isUser && "bg-blue-50/30 dark:bg-blue-950/10 -mx-2 px-2 rounded")}
                   data-testid={`surplus-team-${profile.teamId}`}
                 >
-                  <div className="flex items-center gap-2 min-w-0">
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
                     {isUser && <div className="w-1.5 h-1.5 rounded-full bg-[#d4af37] flex-shrink-0" />}
-                    <div>
-                      <span className="text-sm font-semibold text-foreground">{profile.team.owner}</span>
-                      <div className="flex items-center gap-2 mt-0.5">
+                    <div className="min-w-0">
+                      <span className="text-sm font-semibold text-foreground truncate block">{profile.team.owner}</span>
+                      <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                         <span className="text-xs text-muted-foreground">#{p.rank}</span>
                         <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">+{p.surplusAmount.toLocaleString()}</span>
-                        <Badge variant="outline" className={cn("text-[9px]", getTierColor(profile.tier))}>{profile.tier}</Badge>
+                        <Badge variant="outline" className={cn("text-[9px] flex-shrink-0", getTierColor(profile.tier))}>{profile.tier}</Badge>
                       </div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <div className="text-right mr-2">
+                  <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                    <div className="text-right">
                       <p className="text-xs text-muted-foreground">Top players</p>
-                      <p className="text-[10px] text-foreground font-medium truncate max-w-[140px]">
+                      <p className="text-[10px] text-foreground font-medium">
                         {p.starterPlayers.slice(0, 2).map(pl => pl.name.split(" ").pop()).join(", ")}
                       </p>
                     </div>
                     {!isUser && (
-                      <Button variant="outline" size="sm" className="text-xs" onClick={() => onSwitchTab("opportunities")} data-testid={`btn-find-deals-${profile.teamId}`}>
+                      <Button variant="outline" size="sm" className="text-xs flex-shrink-0" onClick={() => onSwitchTab("opportunities")} data-testid={`btn-find-deals-${profile.teamId}`}>
                         Find Deals
                       </Button>
                     )}
@@ -431,26 +431,26 @@ function SurplusNeeds({ league, userTeam, onSwitchTab }: { league: League; userT
                   className={cn("flex items-center justify-between py-3 border-b border-border/20 last:border-0", isUser && "bg-blue-50/30 dark:bg-blue-950/10 -mx-2 px-2 rounded")}
                   data-testid={`need-team-${profile.teamId}`}
                 >
-                  <div className="flex items-center gap-2 min-w-0">
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
                     {isUser && <div className="w-1.5 h-1.5 rounded-full bg-[#d4af37] flex-shrink-0" />}
-                    <div>
-                      <span className="text-sm font-semibold text-foreground">{profile.team.owner}</span>
-                      <div className="flex items-center gap-2 mt-0.5">
+                    <div className="min-w-0">
+                      <span className="text-sm font-semibold text-foreground truncate block">{profile.team.owner}</span>
+                      <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                         <span className="text-xs text-muted-foreground">#{p.rank}</span>
                         <span className="text-xs text-red-500 dark:text-red-400 font-medium">{p.surplusAmount.toLocaleString()}</span>
-                        <Badge variant="outline" className={cn("text-[9px]", getTierColor(profile.tier))}>{profile.tier}</Badge>
+                        <Badge variant="outline" className={cn("text-[9px] flex-shrink-0", getTierColor(profile.tier))}>{profile.tier}</Badge>
                       </div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <div className="text-right mr-2">
+                  <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                    <div className="text-right">
                       <p className="text-xs text-muted-foreground">Top players</p>
-                      <p className="text-[10px] text-foreground font-medium truncate max-w-[140px]">
+                      <p className="text-[10px] text-foreground font-medium">
                         {p.starterPlayers.slice(0, 2).map(pl => pl.name.split(" ").pop()).join(", ")}
                       </p>
                     </div>
                     {!isUser && (
-                      <Button variant="outline" size="sm" className="text-xs" onClick={() => onSwitchTab("opportunities")} data-testid={`btn-find-deals-need-${profile.teamId}`}>
+                      <Button variant="outline" size="sm" className="text-xs flex-shrink-0" onClick={() => onSwitchTab("opportunities")} data-testid={`btn-find-deals-need-${profile.teamId}`}>
                         Find Deals
                       </Button>
                     )}
