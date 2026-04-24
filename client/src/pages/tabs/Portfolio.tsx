@@ -404,7 +404,7 @@ function SortableLeagueRecords({ records }: { records: any[] }) {
                     </div>
                   )}
                   <div className="min-w-0">
-                    <div className="font-semibold text-sm text-foreground truncate max-w-[180px]" title={rec.leagueName}>{rec.leagueName}</div>
+                    <div className="font-semibold text-sm text-foreground truncate" title={rec.leagueName}>{rec.leagueName}</div>
                     <div className="flex items-center gap-1 mt-0.5 flex-wrap">
                       <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-muted/60 text-muted-foreground">{rec.scoringFormat === "Half" ? "Half-PPR" : rec.scoringFormat}</span>
                       <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-muted/60 text-muted-foreground">{rec.totalRosters} Teams</span>
