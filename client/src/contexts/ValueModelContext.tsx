@@ -185,8 +185,14 @@ export function ValueModelProvider({ children }: { children: React.ReactNode }) 
     return getPlayerValue(player);
   }, [sourceId, redraftValuesBySleeperId, redraftNameValueMap, getPlayerValue]);
 
-  const getPickValue = useCallback((pick: Pick): number => {
+  const getPickValue = useCallback((pick: Pick, totalRosters?: number): number => {
     const range = (pick.projectedRange || "mid").toLowerCase() as "early" | "mid" | "late";
+
+    // For 2026 picks with a known draft slot, use exact values regardless of FantasyCalc
+    if (pick.year === 2026 && pick.pickSlot != null && pick.pickSlot > 0 && totalRosters != null) {
+      return getStaticPickValue(pick.year, pick.round, range, pick.pickSlot, totalRosters);
+    }
+
     const fpKey = `FP_${pick.year}_${pick.round}`;
     const baseValue = valuesBySleeperId[fpKey];
 

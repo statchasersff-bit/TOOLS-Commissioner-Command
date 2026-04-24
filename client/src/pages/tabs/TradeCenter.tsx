@@ -1688,7 +1688,7 @@ function TradeCard({
   const sideValues = trade.sides.map((side) => {
     const playerValue = side.playersReceived.reduce((sum, p) => sum + getPlayerValue(p.sleeperId), 0);
     const pickValue = side.picksReceived.reduce((sum, p) => {
-      return sum + getStaticPickValue(parseInt(p.season) || 2026, p.round, "mid");
+      return sum + getStaticPickValue(parseInt(p.season) || 2026, p.round, "mid", p.slot, trade.leagueTotalRosters);
     }, 0);
     return playerValue + pickValue;
   });
@@ -1768,7 +1768,7 @@ function TradeCard({
                 })}
 
                 {side.picksReceived.map((p, pi) => {
-                  const val = getStaticPickValue(parseInt(p.season) || 2026, p.round, "mid");
+                  const val = getStaticPickValue(parseInt(p.season) || 2026, p.round, "mid", p.slot, trade.leagueTotalRosters);
                   const pickLabel = p.slot != null
                     ? `${p.season} ${p.round}.${String(p.slot).padStart(2, "0")}`
                     : `${p.season} Round ${p.round}`;
