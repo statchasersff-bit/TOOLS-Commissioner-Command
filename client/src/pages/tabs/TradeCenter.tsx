@@ -385,8 +385,16 @@ function CrossLeagueTradeIntel({ league }: { league: League }) {
                       <div className="space-y-1">
                         {trade.sent.map((p, j) => (
                           <div key={`sent-${p.playerId}-${j}`} className="flex items-center gap-1.5">
-                            <Badge variant="outline" className={`text-[9px] px-1 py-0 w-7 justify-center flex-shrink-0 ${getPositionColor(p.pos)}`}>{p.pos}</Badge>
-                            <span className="text-xs truncate">{p.name}</span>
+                            <div className="w-6 h-6 rounded-full flex-shrink-0 overflow-hidden bg-muted ring-1 ring-border/30">
+                              <img
+                                src={`https://sleepercdn.com/content/nfl/players/thumb/${p.playerId}.jpg`}
+                                alt={p.name}
+                                className="w-full h-full object-cover object-top"
+                                onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                              />
+                            </div>
+                            <span className="text-xs truncate flex-1">{p.name}</span>
+                            <Badge variant="outline" className={`text-[9px] px-1 py-0 h-4 flex-shrink-0 ${getPositionColor(p.pos)}`}>{p.pos}</Badge>
                           </div>
                         ))}
                         {trade.sentPicks.map((pick, j) => (
@@ -406,8 +414,16 @@ function CrossLeagueTradeIntel({ league }: { league: League }) {
                       <div className="space-y-1">
                         {trade.received.map((p, j) => (
                           <div key={`recv-${p.playerId}-${j}`} className="flex items-center gap-1.5">
-                            <Badge variant="outline" className={`text-[9px] px-1 py-0 w-7 justify-center flex-shrink-0 ${getPositionColor(p.pos)}`}>{p.pos}</Badge>
-                            <span className="text-xs truncate">{p.name}</span>
+                            <div className="w-6 h-6 rounded-full flex-shrink-0 overflow-hidden bg-muted ring-1 ring-border/30">
+                              <img
+                                src={`https://sleepercdn.com/content/nfl/players/thumb/${p.playerId}.jpg`}
+                                alt={p.name}
+                                className="w-full h-full object-cover object-top"
+                                onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                              />
+                            </div>
+                            <span className="text-xs truncate flex-1">{p.name}</span>
+                            <Badge variant="outline" className={`text-[9px] px-1 py-0 h-4 flex-shrink-0 ${getPositionColor(p.pos)}`}>{p.pos}</Badge>
                           </div>
                         ))}
                         {trade.receivedPicks.map((pick, j) => (
@@ -455,21 +471,34 @@ export function TradeBlockScanner({ league }: { league: League }) {
           <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
         </div>
         <div className="space-y-1">
-          {tradeBlockCandidates.map((p, i) => (
-            <div key={i} className="flex items-center justify-between py-2.5 border-b border-border/20 last:border-0">
-              <div className="flex items-center gap-2">
-                <Badge variant="outline" className={`text-xs w-8 justify-center ${getPositionColor(p.pos)}`}>{p.pos}</Badge>
-                <div>
-                  <p className="text-sm font-semibold">{p.name}</p>
-                  <p className="text-xs text-muted-foreground">{p.teamName} ({p.ownerName})</p>
+          {tradeBlockCandidates.map((p, i) => {
+            const sleeperId = p.sleeperId ?? p.id;
+            return (
+              <div key={i} className="flex items-center justify-between py-2 border-b border-border/20 last:border-0">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-9 h-9 rounded-full flex-shrink-0 overflow-hidden bg-muted ring-1 ring-border/40">
+                    <img
+                      src={`https://sleepercdn.com/content/nfl/players/thumb/${sleeperId}.jpg`}
+                      alt={p.name}
+                      className="w-full h-full object-cover object-top"
+                      onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                    />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <p className="text-sm font-semibold">{p.name}</p>
+                      <Badge variant="outline" className={`text-[10px] px-1 py-0 h-4 flex-shrink-0 ${getPositionColor(p.pos)}`}>{p.pos}</Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground truncate">{p.teamName} ({p.ownerName})</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <span className="text-xs text-muted-foreground">Age {p.age}</span>
+                  <Badge variant="secondary">{p.value} pts</Badge>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">Age {p.age}</span>
-                <Badge variant="secondary">{p.value} pts</Badge>
-              </div>
-            </div>
-          ))}
+            );
+          })}
           {tradeBlockCandidates.length === 0 && <p className="text-xs text-muted-foreground">No trade block candidates found</p>}
         </div>
       </Card>
