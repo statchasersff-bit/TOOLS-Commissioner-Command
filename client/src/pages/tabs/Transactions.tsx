@@ -3,7 +3,6 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { SectionHeader } from "@/components/SectionHeader";
-import { useSleeper } from "@/contexts/SleeperContext";
 import { fetchLeagueTransactions as fetchLeagueTransactionsApi } from "@/lib/sleeperApi";
 import { getPositionColor } from "@/data/mockData";
 import { cn } from "@/lib/utils";
@@ -37,8 +36,7 @@ interface Transaction {
 
 type FilterType = "all" | "trade" | "waiver" | "free_agent";
 
-export default function Transactions() {
-  const { activeLeagueId } = useSleeper();
+export default function Transactions({ leagueId }: { leagueId: string }) {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -46,11 +44,10 @@ export default function Transactions() {
   const [showCount, setShowCount] = useState(50);
 
   const fetchTransactions = async () => {
-    if (!activeLeagueId) return;
     setIsLoading(true);
     setError(null);
     try {
-      const data = await fetchLeagueTransactionsApi(activeLeagueId);
+      const data = await fetchLeagueTransactionsApi(leagueId);
       setTransactions(data.transactions || []);
     } catch (err: any) {
       setError(err.message || "Failed to load transactions");
@@ -60,8 +57,8 @@ export default function Transactions() {
   };
 
   useEffect(() => {
-    if (activeLeagueId) fetchTransactions();
-  }, [activeLeagueId]);
+    fetchTransactions();
+  }, [leagueId]);
 
   const filtered = useMemo(() => {
     if (filter === "all") return transactions;
@@ -125,19 +122,7 @@ export default function Transactions() {
         subtitle="League trades, waivers, and free agent pickups"
       />
 
-      {!activeLeagueId && (
-        <div className="flex flex-col items-center justify-center py-20 text-center" data-testid="transactions-no-league">
-          <div className="w-16 h-16 rounded-2xl bg-[#0b3a7a]/10 dark:bg-blue-400/10 flex items-center justify-center mb-6">
-            <ArrowRightLeft className="w-8 h-8 text-[#0b3a7a] dark:text-blue-400" />
-          </div>
-          <h3 className="text-lg font-bold text-foreground mb-2">No League Selected</h3>
-          <p className="text-sm text-muted-foreground max-w-sm">
-            Connect your Sleeper account and select a league to view transactions.
-          </p>
-        </div>
-      )}
-
-      {activeLeagueId && isLoading && (
+      {isLoading && (
         <Card className="p-12 text-center">
           <Loader2 className="w-8 h-8 mx-auto mb-3 animate-spin text-[#0b3a7a]" data-testid="transactions-loading" />
           <p className="text-sm text-muted-foreground">Loading transactions...</p>
@@ -153,7 +138,7 @@ export default function Transactions() {
         </Card>
       )}
 
-      {activeLeagueId && !isLoading && !error && (
+      {!isLoading && !error && (
         <>
           <div className="flex items-center justify-between flex-wrap gap-3">
             <div className="flex items-center gap-1.5">
