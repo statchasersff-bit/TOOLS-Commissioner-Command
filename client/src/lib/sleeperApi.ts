@@ -483,6 +483,14 @@ export async function fetchPortfolioSummary(
       const userRoster = rostersRaw.find((r) => r.owner_id === userId);
       if (!userRoster) return;
 
+      // Skip empty/orphan leagues — no players means no real team has been drafted
+      const userPlayers = userRoster.players || [];
+      if (userPlayers.length === 0) return;
+
+      // Skip leagues where the majority of rosters are unclaimed (orphan pools)
+      const ownedRosters = rostersRaw.filter((r) => r.owner_id !== null).length;
+      if (ownedRosters < Math.ceil(rostersRaw.length / 2)) return;
+
       const wins = userRoster.settings?.wins ?? 0;
       const losses = userRoster.settings?.losses ?? 0;
       const ties = userRoster.settings?.ties ?? 0;
