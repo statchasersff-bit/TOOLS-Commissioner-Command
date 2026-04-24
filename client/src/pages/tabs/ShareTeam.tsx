@@ -11,8 +11,9 @@ import { getPositionColor } from "@/data/mockData";
 import type { League, Team, Player, Pick } from "@/types";
 import { cn } from "@/lib/utils";
 import {
-  Copy, Download, Image, Share2, Eye, EyeOff, Loader2,
+  Copy, Image, Share2, EyeOff, Loader2,
   Shield, Star, TrendingDown, Zap, Target, ChevronRight,
+  Users, TrendingUp, Trophy,
 } from "lucide-react";
 import logoDark from "@assets/statchasers_logo_transparent_dark_1772764844282.png";
 
@@ -65,12 +66,6 @@ function archetypeConfig(a: Archetype) {
   }
 }
 
-function formatRosterPositions(positions: string[]): string {
-  return positions
-    .filter((p) => p !== "BN")
-    .join(" · ");
-}
-
 function pickLabel(p: Pick): string {
   const round = p.round === 1 ? "1st" : p.round === 2 ? "2nd" : p.round === 3 ? "3rd" : `${p.round}th`;
   const range = p.projectedRange ? ` (${p.projectedRange})` : "";
@@ -93,37 +88,29 @@ export function ShareTeam({ league, userTeam }: Props) {
     const total = league.teams.length;
 
     const rankByMetric = (key: keyof typeof userTeam.metrics) => {
-      const sorted = [...league.teams].sort(
-        (a, b) => b.metrics[key] - a.metrics[key]
-      );
+      const sorted = [...league.teams].sort((a, b) => b.metrics[key] - a.metrics[key]);
       return sorted.findIndex((t) => t.id === userTeam.id) + 1;
     };
 
-    const overallRank   = rankByMetric("overall");
-    const qbRank        = rankByMetric("qb");
-    const rbRank        = rankByMetric("rb");
-    const wrRank        = rankByMetric("wr");
-    const teRank        = rankByMetric("te");
-    const picksRank     = rankByMetric("picks");
+    const overallRank = rankByMetric("overall");
+    const qbRank      = rankByMetric("qb");
+    const rbRank      = rankByMetric("rb");
+    const wrRank      = rankByMetric("wr");
+    const teRank      = rankByMetric("te");
+    const picksRank   = rankByMetric("picks");
 
-    const byDynValue = (team: Team) =>
-      team.roster.reduce((s, p) => s + getPlayerValue(p), 0);
-    const sortedByDyn = [...league.teams].sort(
-      (a, b) => byDynValue(b) - byDynValue(a)
-    );
-    const dynastyRank =
-      sortedByDyn.findIndex((t) => t.id === userTeam.id) + 1;
+    const byDynValue = (t: Team) => t.roster.reduce((s, p) => s + getPlayerValue(p), 0);
+    const dynastyRank = [...league.teams]
+      .sort((a, b) => byDynValue(b) - byDynValue(a))
+      .findIndex((t) => t.id === userTeam.id) + 1;
 
-    // Competing rank = sum of redraft values for starters only
-    const byCompetingValue = (team: Team) =>
-      team.roster
-        .filter((p) => p.starter)
-        .reduce((s, p) => s + getRedraftValue(p), 0);
-    const sortedByCompeting = [...league.teams].sort(
-      (a, b) => byCompetingValue(b) - byCompetingValue(a)
-    );
-    const competingRank =
-      sortedByCompeting.findIndex((t) => t.id === userTeam.id) + 1;
+    const byCompetingValue = (t: Team) =>
+      t.roster.filter((p) => p.starter).reduce((s, p) => s + getRedraftValue(p), 0);
+    const competingRank = [...league.teams]
+      .sort((a, b) => byCompetingValue(b) - byCompetingValue(a))
+      .findIndex((t) => t.id === userTeam.id) + 1;
+
+    const overallStrength = strengthLabel(overallRank, total);
 
     const overallPct = overallRank / total;
     let archetype: Archetype;
@@ -147,92 +134,91 @@ export function ShareTeam({ league, userTeam }: Props) {
 
     const rosterByPos: Record<string, Player[]> = { QB: [], RB: [], WR: [], TE: [] };
     for (const p of userTeam.roster) {
-      if (rosterByPos[p.pos]) {
-        rosterByPos[p.pos].push(p);
-      }
+      if (rosterByPos[p.pos]) rosterByPos[p.pos].push(p);
     }
     for (const pos of Object.keys(rosterByPos)) {
       rosterByPos[pos].sort((a, b) => getPlayerValue(b) - getPlayerValue(a));
     }
 
-    const picksByYearRound: Map<string, Pick[]> = new Map();
+    const picksByYearRound = new Map<string, Pick[]>();
     for (const pk of userTeam.picks) {
       const key = `${pk.year}-${pk.round}`;
       if (!picksByYearRound.has(key)) picksByYearRound.set(key, []);
       picksByYearRound.get(key)!.push(pk);
     }
-    const sortedPickGroups = [...picksByYearRound.entries()].sort(([a], [b]) =>
-      a.localeCompare(b)
-    );
+    const sortedPickGroups = [...picksByYearRound.entries()].sort(([a], [b]) => a.localeCompare(b));
 
     const scoringParts = league.scoringFormat?.split(" ") ?? [];
     const scoring = scoringParts[0] === "Half" ? "Half-PPR" : scoringParts[0] ?? "PPR";
     const format  = league.format ?? (scoringParts[1] === "SF" ? "SF" : "1QB");
 
+    // Team Snapshot stats
+    const playersWithAge = userTeam.roster.filter((p) => p.age > 0);
+    const avgAge = playersWithAge.length
+      ? (playersWithAge.reduce((s, p) => s + p.age, 0) / playersWithAge.length).toFixed(1)
+      : "—";
+    const totalValue = Math.round(byDynValue(userTeam));
+    const startersValue = Math.round(
+      userTeam.roster.filter((p) => p.starter).reduce((s, p) => s + getPlayerValue(p), 0)
+    );
+    const future1sts = userTeam.picks.filter((p) => p.round === 1).length;
+
     return {
-      total, overallRank, dynastyRank, competingRank,
+      total, overallRank, dynastyRank, competingRank, overallStrength,
       qbRank, rbRank, wrRank, teRank, picksRank,
       archetype, corePlayers, posStrengths,
       rosterByPos, sortedPickGroups,
       scoring, format,
+      avgAge, totalValue, startersValue, future1sts,
     };
   }, [league, userTeam, getPlayerValue, getRedraftValue]);
 
-  const displayName  = (hideManagerName || anonMode) ? "Anonymous Manager" : (userTeam.owner || "Your Team");
-  const displayLeague = (hideLeagueName || anonMode)
-    ? `${computed.total}-Team ${computed.format} Dynasty`
-    : league.name;
+  const displayName   = (hideManagerName || anonMode) ? "Anonymous Manager" : (userTeam.owner || "Your Team");
+  const displayLeague = (hideLeagueName  || anonMode) ? `${computed.total}-Team ${computed.format} Dynasty` : league.name;
 
   const copyLink = useCallback(() => {
     const url = new URL(window.location.href);
     url.searchParams.set("leagueId", league.id);
     url.searchParams.set("teamId", userTeam.id);
-    navigator.clipboard.writeText(url.toString()).then(() => {
-      toast({ title: "Share link copied!", description: "Send this link to anyone." });
-    });
+    navigator.clipboard.writeText(url.toString()).then(() =>
+      toast({ title: "Share link copied!", description: "Send this link to anyone." })
+    );
   }, [league.id, userTeam.id, toast]);
 
-  const doExport = useCallback(
-    async (anon: boolean) => {
-      if (!cardRef.current) return;
-      setIsExporting(true);
-      if (anon) setAnonMode(true);
-      await new Promise((r) => setTimeout(r, 80));
-      try {
-        const dataUrl = await toPng(cardRef.current, {
-          cacheBust: true,
-          backgroundColor: "#0a1628",
-          pixelRatio: 2,
-        });
-        const link = document.createElement("a");
-        link.download = anon ? "dynasty-team-anonymous.png" : "dynasty-team-share.png";
-        link.href = dataUrl;
-        link.click();
-        toast({ title: "Image exported!", description: "Your share card was saved as a PNG." });
-      } catch {
-        toast({ title: "Export failed", description: "Try again or check browser permissions.", variant: "destructive" });
-      } finally {
-        setIsExporting(false);
-        if (anon) setAnonMode(false);
-      }
-    },
-    [toast]
-  );
+  const doExport = useCallback(async (anon: boolean) => {
+    if (!cardRef.current) return;
+    setIsExporting(true);
+    if (anon) setAnonMode(true);
+    await new Promise((r) => setTimeout(r, 120));
+    try {
+      const dataUrl = await toPng(cardRef.current, {
+        cacheBust: true,
+        backgroundColor: "#080f1e",
+        pixelRatio: 2,
+      });
+      const link = document.createElement("a");
+      link.download = anon ? "dynasty-team-anonymous.png" : "dynasty-team-share.png";
+      link.href = dataUrl;
+      link.click();
+      toast({ title: "Image exported!", description: "Your share card was saved as a PNG." });
+    } catch {
+      toast({ title: "Export failed", description: "Try again or check browser permissions.", variant: "destructive" });
+    } finally {
+      setIsExporting(false);
+      if (anon) setAnonMode(false);
+    }
+  }, [toast]);
 
   const copyBlurb = useCallback(() => {
     const core = computed.corePlayers.slice(0, 4).map((p) => p.name).join(", ");
     const strengths = Object.entries(computed.posStrengths)
-      .filter(([, v]) => v.label === "Elite" || v.label === "Strong")
-      .map(([pos]) => pos);
+      .filter(([, v]) => v.label === "Elite" || v.label === "Strong").map(([pos]) => pos);
     const needs = Object.entries(computed.posStrengths)
-      .filter(([, v]) => v.label === "Weak")
-      .map(([pos]) => pos);
-
+      .filter(([, v]) => v.label === "Weak").map(([pos]) => pos);
     const leagueStr = hideLeagueName ? `${computed.total}-Team ${computed.format} ${computed.scoring}` : league.name;
     const url = new URL(window.location.href);
     url.searchParams.set("leagueId", league.id);
     url.searchParams.set("teamId", userTeam.id);
-
     const blurb = [
       `${computed.total}-Team Dynasty ${computed.format} ${computed.scoring} team in ${leagueStr}.`,
       `Ranked #${computed.overallRank} of ${computed.total} — ${computed.archetype}.`,
@@ -240,13 +226,10 @@ export function ShareTeam({ league, userTeam }: Props) {
       strengths.length ? `Strengths: ${strengths.join(", ")}.` : "",
       needs.length ? `Needs: ${needs.join(", ")}.` : "",
       `View full team: ${url.toString()}`,
-    ]
-      .filter(Boolean)
-      .join(" ");
-
-    navigator.clipboard.writeText(blurb).then(() => {
-      toast({ title: "Blurb copied!", description: "Ready to paste in Discord, Sleeper, or Reddit." });
-    });
+    ].filter(Boolean).join(" ");
+    navigator.clipboard.writeText(blurb).then(() =>
+      toast({ title: "Blurb copied!", description: "Ready to paste in Discord, Sleeper, or Reddit." })
+    );
   }, [computed, league, userTeam, hideLeagueName, toast]);
 
   const { icon: ArchIcon, color: archColor, bg: archBg } = archetypeConfig(computed.archetype);
@@ -266,27 +249,11 @@ export function ShareTeam({ league, userTeam }: Props) {
         <Button size="sm" variant="outline" onClick={copyLink} data-testid="button-copy-link">
           <Copy className="w-3.5 h-3.5 mr-1.5" /> Copy Link
         </Button>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => doExport(false)}
-          disabled={isExporting}
-          data-testid="button-export-image"
-        >
-          {isExporting ? (
-            <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
-          ) : (
-            <Image className="w-3.5 h-3.5 mr-1.5" />
-          )}
+        <Button size="sm" variant="outline" onClick={() => doExport(false)} disabled={isExporting} data-testid="button-export-image">
+          {isExporting ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <Image className="w-3.5 h-3.5 mr-1.5" />}
           Export Image
         </Button>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => doExport(true)}
-          disabled={isExporting}
-          data-testid="button-export-anonymous"
-        >
+        <Button size="sm" variant="outline" onClick={() => doExport(true)} disabled={isExporting} data-testid="button-export-anonymous">
           <EyeOff className="w-3.5 h-3.5 mr-1.5" /> Export Anonymous
         </Button>
         <Button size="sm" variant="outline" onClick={copyBlurb} data-testid="button-copy-blurb">
@@ -298,116 +265,161 @@ export function ShareTeam({ league, userTeam }: Props) {
       <Card className="p-3 border-border/40 bg-card/50">
         <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
           <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Privacy</span>
-          <ToggleSwitch id="hide-name"   label="Hide Name"         checked={hideManagerName} onCheckedChange={setHideManagerName} />
-          <ToggleSwitch id="hide-league" label="Hide League Name"  checked={hideLeagueName}  onCheckedChange={setHideLeagueName} />
-          <ToggleSwitch id="hide-values" label="Hide Values"       checked={hideValues}       onCheckedChange={setHideValues} />
-          <ToggleSwitch id="show-ages"   label="Show Ages"         checked={showAges}         onCheckedChange={setShowAges} />
+          <ToggleSwitch id="hide-name"   label="Hide Name"        checked={hideManagerName} onCheckedChange={setHideManagerName} />
+          <ToggleSwitch id="hide-league" label="Hide League Name" checked={hideLeagueName}  onCheckedChange={setHideLeagueName} />
+          <ToggleSwitch id="hide-values" label="Hide Values"      checked={hideValues}      onCheckedChange={setHideValues} />
+          <ToggleSwitch id="show-ages"   label="Show Ages"        checked={showAges}        onCheckedChange={setShowAges} />
         </div>
       </Card>
 
       {/* Two-column layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-[400px_1fr] gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-[420px_1fr] gap-6">
 
-        {/* ── LEFT: Share Card (exported) ── */}
+        {/* ── LEFT: Share Card (exported as PNG) ── */}
         <div
           ref={cardRef}
-          className="rounded-xl overflow-hidden border border-[#1a2d4a] bg-[#0a1628] space-y-0 min-w-0"
-          style={{ fontFamily: "system-ui, -apple-system, sans-serif" }}
+          className="rounded-xl overflow-hidden min-w-0"
+          style={{
+            fontFamily: "system-ui, -apple-system, sans-serif",
+            background: "linear-gradient(160deg, #0d1b2e 0%, #080f1e 100%)",
+            border: "1px solid #1e3050",
+            boxShadow: "0 0 0 1px rgba(212,175,55,0.12), 0 0 32px rgba(11,58,122,0.3)",
+          }}
         >
-          {/* Team header */}
-          <div className="px-5 pt-5 pb-4 border-b border-[#1a2d4a]">
-            <div className="flex items-start gap-3.5 mb-3.5">
+          {/* Gold top accent bar */}
+          <div style={{ height: 3, background: "linear-gradient(90deg, #d4af37, #0b3a7a, transparent)" }} />
+
+          {/* ── Header: Manager + League ── */}
+          <div className="px-5 pt-4 pb-4" style={{ borderBottom: "1px solid rgba(212,175,55,0.12)" }}>
+            <div className="flex items-center gap-3.5 mb-3">
               {userTeam.avatar && !anonMode ? (
                 <img
                   src={`https://sleepercdn.com/avatars/thumbs/${userTeam.avatar}`}
                   alt={displayName}
-                  className="w-12 h-12 rounded-full ring-2 ring-[#d4af37]/40 object-cover flex-shrink-0"
+                  className="w-14 h-14 rounded-full object-cover flex-shrink-0"
+                  style={{ boxShadow: "0 0 0 2px #d4af37, 0 0 12px rgba(212,175,55,0.25)" }}
                 />
               ) : (
-                <div className="w-12 h-12 rounded-full bg-[#0b3a7a]/40 ring-2 ring-[#1a2d4a] flex items-center justify-center flex-shrink-0">
-                  <Shield className="w-5 h-5 text-blue-400" />
+                <div
+                  className="w-14 h-14 rounded-full flex items-center justify-center flex-shrink-0"
+                  style={{ background: "rgba(11,58,122,0.35)", boxShadow: "0 0 0 2px #1e3050" }}
+                >
+                  <Shield className="w-6 h-6 text-blue-400" />
                 </div>
               )}
-              <div className="min-w-0">
-                <div className="text-[11px] text-muted-foreground font-medium uppercase tracking-wider mb-0.5">Manager</div>
-                <div className="text-base font-bold text-white truncate" data-testid="text-share-manager">{displayName}</div>
-                <div className="text-sm text-[#94a3b8] truncate" data-testid="text-share-league">{displayLeague}</div>
+              <div className="min-w-0 flex-1">
+                <div className="text-[10px] font-semibold uppercase tracking-widest mb-0.5" style={{ color: "#d4af37", opacity: 0.8 }}>Dynasty Manager</div>
+                <div className="text-xl font-extrabold text-white leading-tight truncate" data-testid="text-share-manager">
+                  {displayName}
+                </div>
+                <div className="text-[11px] mt-0.5 truncate" style={{ color: "#7a9bbf" }} data-testid="text-share-league">
+                  {displayLeague}
+                </div>
               </div>
             </div>
 
-            {/* Archetype + rank row */}
-            <div className="flex items-center justify-between flex-wrap gap-2">
+            {/* Archetype badge + league format pills */}
+            <div className="flex items-center gap-2 flex-wrap">
               <div
-                className={cn("inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-semibold", archBg, archColor)}
+                className={cn("inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-bold", archBg, archColor)}
                 data-testid="text-share-archetype"
               >
                 <ArchIcon className="w-3 h-3" />
                 {computed.archetype}
               </div>
-              <div className="flex items-center gap-3">
-                <RankPill label="Overall"   rank={computed.overallRank}   total={computed.total} />
-                <RankPill label="Dynasty"   rank={computed.dynastyRank}   total={computed.total} />
-                <RankPill label="Competing" rank={computed.competingRank} total={computed.total} />
-              </div>
+              <span className="text-[10px] font-semibold px-2 py-0.5 rounded" style={{ background: "rgba(30,48,80,0.8)", color: "#7a9bbf", border: "1px solid #1e3050" }}>
+                {computed.total}T {computed.format}
+              </span>
+              <span className="text-[10px] font-semibold px-2 py-0.5 rounded" style={{ background: "rgba(30,48,80,0.8)", color: "#7a9bbf", border: "1px solid #1e3050" }}>
+                {computed.scoring}
+              </span>
             </div>
           </div>
 
-          {/* League settings mini-card */}
-          <div className="px-5 py-3.5 border-b border-[#1a2d4a]">
-            <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2.5">League Settings</div>
-            <div className="flex items-center gap-3 flex-wrap">
-              <SettingPill value={`${computed.total} Teams`} />
-              <SettingPill value={computed.format} highlight />
-              <SettingPill value={computed.scoring} />
-              {league.rosterPositions && league.rosterPositions.length > 0 && (
-                <div className="w-full mt-1">
-                  <span className="text-[10px] text-muted-foreground font-medium">
-                    Lineup: {formatRosterPositions(league.rosterPositions.filter(p => p !== "BN"))}
-                  </span>
-                </div>
+          {/* ── Semantic rank row: Strength / Value Rank / Win Outlook ── */}
+          <div className="grid grid-cols-3" style={{ borderBottom: "1px solid rgba(212,175,55,0.12)" }}>
+            <SemanticStat
+              label="Strength"
+              value={computed.overallStrength}
+              valueClass={strengthColor(computed.overallStrength)}
+              sublabel={`#${computed.overallRank} of ${computed.total}`}
+              noBorder
+            />
+            <SemanticStat
+              label="Value Rank"
+              value={`#${computed.dynastyRank}`}
+              sublabel={`of ${computed.total} teams`}
+            />
+            <SemanticStat
+              label="Win Outlook"
+              value={`#${computed.competingRank}`}
+              sublabel={`of ${computed.total} teams`}
+            />
+          </div>
+
+          {/* ── Team Snapshot ── */}
+          <div className="px-5 py-3.5" style={{ borderBottom: "1px solid rgba(212,175,55,0.12)" }}>
+            <div className="text-[10px] font-bold uppercase tracking-widest mb-2.5" style={{ color: "#d4af37", opacity: 0.75 }}>
+              Team Snapshot
+            </div>
+            <div className="grid grid-cols-2 gap-x-6 gap-y-1.5">
+              <SnapshotRow icon={Users}       label="Avg Age"       value={`${computed.avgAge} yrs`} />
+              {!hideValues && (
+                <>
+                  <SnapshotRow icon={TrendingUp}  label="Total Value"    value={computed.totalValue > 0 ? computed.totalValue.toLocaleString() : "—"} />
+                  <SnapshotRow icon={Trophy}      label="Starters Value" value={computed.startersValue > 0 ? computed.startersValue.toLocaleString() : "—"} />
+                </>
               )}
+              <SnapshotRow icon={Star}        label="Future 1sts"   value={`${computed.future1sts} pick${computed.future1sts !== 1 ? "s" : ""}`} gold />
             </div>
           </div>
 
-          {/* Positional value */}
-          <div className="px-5 py-3.5 border-b border-[#1a2d4a]">
-            <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2.5">Positional Strength</div>
+          {/* ── League settings mini-card ── */}
+          <div className="px-5 py-3" style={{ borderBottom: "1px solid rgba(212,175,55,0.12)" }}>
+            <div className="text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: "#d4af37", opacity: 0.75 }}>
+              League Settings
+            </div>
+            {league.rosterPositions && league.rosterPositions.length > 0 && (
+              <div className="text-[10px] leading-relaxed" style={{ color: "#7a9bbf" }}>
+                Lineup: {league.rosterPositions.filter(p => p !== "BN").join(" · ")}
+              </div>
+            )}
+          </div>
+
+          {/* ── Positional Strength ── */}
+          <div className="px-5 py-3.5" style={{ borderBottom: "1px solid rgba(212,175,55,0.12)" }}>
+            <div className="text-[10px] font-bold uppercase tracking-widest mb-2.5" style={{ color: "#d4af37", opacity: 0.75 }}>
+              Positional Strength
+            </div>
             <div className="space-y-2">
               {Object.entries(computed.posStrengths).map(([pos, { rank, label }]) => {
                 const fillPct = Math.max(8, ((computed.total - rank + 1) / computed.total) * 100);
                 return (
                   <div key={pos} className="flex items-center gap-2.5" data-testid={`pos-strength-${pos}`}>
-                    <span className="text-[11px] font-bold text-muted-foreground w-8 flex-shrink-0">{pos}</span>
-                    <div className="flex-1 h-1.5 bg-[#1a2d4a] rounded-full overflow-hidden">
-                      <div
-                        className={cn("h-full rounded-full transition-all", strengthBar(label))}
-                        style={{ width: `${fillPct}%` }}
-                      />
+                    <span className="text-[11px] font-bold w-8 flex-shrink-0" style={{ color: "#7a9bbf" }}>{pos}</span>
+                    <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: "#1a2d4a" }}>
+                      <div className={cn("h-full rounded-full", strengthBar(label))} style={{ width: `${fillPct}%` }} />
                     </div>
-                    <span className="text-[10px] text-muted-foreground w-10 text-right flex-shrink-0">
-                      #{rank}/{computed.total}
-                    </span>
-                    <span className={cn("text-[10px] font-bold w-12 flex-shrink-0", strengthColor(label))}>
-                      {label}
-                    </span>
+                    <span className="text-[10px] w-10 text-right flex-shrink-0" style={{ color: "#4a6280" }}>#{rank}/{computed.total}</span>
+                    <span className={cn("text-[10px] font-bold w-12 flex-shrink-0", strengthColor(label))}>{label}</span>
                   </div>
                 );
               })}
             </div>
           </div>
 
-          {/* Brand footer */}
-          <div className="px-5 py-3 flex items-center justify-between">
+          {/* ── Brand footer ── */}
+          <div className="px-5 py-2.5 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <img src={logoDark} alt="StatChasers" className="w-5 h-5 opacity-90" />
-              <span className="text-[10px] font-semibold text-[#d4af37] tracking-wide">StatChasers Dynasty Command</span>
+              <span className="text-[10px] font-bold tracking-wide" style={{ color: "#d4af37" }}>StatChasers Dynasty Command</span>
             </div>
-            <span className="text-[9px] text-muted-foreground">statchasers.com</span>
+            <span className="text-[9px]" style={{ color: "#2a4060" }}>statchasers.com</span>
           </div>
         </div>
 
         {/* ── RIGHT: Roster Preview ── */}
-        <div className="space-y-4 min-w-0">
+        <div className="space-y-5 min-w-0">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-bold text-foreground">Roster Preview</h3>
             <Badge variant="outline" className="text-[10px]">
@@ -421,11 +433,11 @@ export function ShareTeam({ league, userTeam }: Props) {
             if (!players || players.length === 0) return null;
             return (
               <Card key={pos} className="border-border/40 bg-card/50 overflow-hidden">
-                <div className="px-3 py-2 border-b border-border/20 flex items-center gap-2">
+                <div className="px-3 py-2 border-b border-border/20 flex items-center gap-2 sticky top-0 bg-card/95 backdrop-blur-sm z-10">
                   <Badge variant="outline" className={cn("text-[10px] px-1.5 py-0 h-4", getPositionColor(pos))}>
                     {pos}
                   </Badge>
-                  <span className="text-[11px] text-muted-foreground">{players.length} player{players.length !== 1 ? "s" : ""}</span>
+                  <span className="text-xs font-semibold text-muted-foreground">({players.length})</span>
                 </div>
                 <div className="divide-y divide-border/10">
                   {players.map((player) => (
@@ -445,11 +457,11 @@ export function ShareTeam({ league, userTeam }: Props) {
           {/* Picks */}
           {computed.sortedPickGroups.length > 0 && (
             <Card className="border-border/40 bg-card/50 overflow-hidden">
-              <div className="px-3 py-2 border-b border-border/20 flex items-center gap-2">
+              <div className="px-3 py-2 border-b border-border/20 flex items-center gap-2 sticky top-0 bg-card/95 backdrop-blur-sm z-10">
                 <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 border-[#d4af37]/40 text-[#d4af37]">
                   Picks
                 </Badge>
-                <span className="text-[11px] text-muted-foreground">{userTeam.picks.length} total</span>
+                <span className="text-xs font-semibold text-muted-foreground">({userTeam.picks.length})</span>
               </div>
               <div className="px-3 py-2 grid grid-cols-2 sm:grid-cols-3 gap-1.5">
                 {computed.sortedPickGroups.map(([key, picks]) => (
@@ -467,9 +479,7 @@ export function ShareTeam({ league, userTeam }: Props) {
           {/* Core players callout */}
           {computed.corePlayers.length > 0 && (
             <Card className="border-[#d4af37]/20 bg-[#d4af37]/5 p-3">
-              <div className="text-[10px] font-semibold text-[#d4af37] uppercase tracking-wider mb-2">
-                Core Players
-              </div>
+              <div className="text-[10px] font-bold text-[#d4af37] uppercase tracking-wider mb-2">Core Players</div>
               <div className="flex flex-wrap gap-1.5">
                 {computed.corePlayers.map((p) => (
                   <div
@@ -497,9 +507,7 @@ export function ShareTeam({ league, userTeam }: Props) {
 
 /* ── Sub-components ── */
 
-function ToggleSwitch({
-  id, label, checked, onCheckedChange,
-}: {
+function ToggleSwitch({ id, label, checked, onCheckedChange }: {
   id: string; label: string; checked: boolean; onCheckedChange: (v: boolean) => void;
 }) {
   return (
@@ -510,53 +518,52 @@ function ToggleSwitch({
   );
 }
 
-function RankPill({ label, rank, total }: { label: string; rank: number; total: number }) {
+function SemanticStat({ label, value, valueClass, sublabel, noBorder }: {
+  label: string; value: string; valueClass?: string; sublabel: string; noBorder?: boolean;
+}) {
   return (
-    <div className="text-center">
-      <div className="text-[10px] text-muted-foreground">{label}</div>
-      <div className="text-sm font-bold text-white">#{rank}<span className="text-[10px] text-muted-foreground">/{total}</span></div>
+    <div
+      className="px-4 py-3 text-center"
+      style={noBorder ? {} : { borderLeft: "1px solid rgba(212,175,55,0.1)" }}
+    >
+      <div className="text-[9px] font-bold uppercase tracking-widest mb-1" style={{ color: "#4a6280" }}>{label}</div>
+      <div className={cn("text-sm font-extrabold text-white", valueClass)}>{value}</div>
+      <div className="text-[9px] mt-0.5" style={{ color: "#4a6280" }}>{sublabel}</div>
     </div>
   );
 }
 
-function SettingPill({ value, highlight }: { value: string; highlight?: boolean }) {
+function SnapshotRow({ icon: Icon, label, value, gold }: {
+  icon: React.ElementType; label: string; value: string; gold?: boolean;
+}) {
   return (
-    <span
-      className={cn(
-        "inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold",
-        highlight
-          ? "bg-[#0b3a7a]/30 border border-[#0b3a7a]/50 text-blue-300"
-          : "bg-[#1a2d4a]/60 border border-[#1a2d4a] text-muted-foreground"
-      )}
-    >
-      {value}
-    </span>
+    <div className="flex items-center gap-2">
+      <Icon className={cn("w-3 h-3 flex-shrink-0", gold ? "text-[#d4af37]" : "text-blue-400/60")} />
+      <span className="text-[10px] flex-1" style={{ color: "#4a6280" }}>{label}</span>
+      <span className={cn("text-[11px] font-bold", gold ? "text-[#d4af37]" : "text-white")}>{value}</span>
+    </div>
   );
 }
 
-function PlayerRow({
-  player, value, hideValues, showAge,
-}: {
+function PlayerRow({ player, value, hideValues, showAge }: {
   player: Player; value: number; hideValues: boolean; showAge: boolean;
 }) {
   const sleeperId = player.sleeperId ?? player.id;
   return (
-    <div className="flex items-center gap-2.5 px-3 py-1.5" data-testid={`player-row-${player.id}`}>
+    <div
+      className="flex items-center gap-2.5 px-3 py-1.5 transition-colors hover:bg-muted/30"
+      data-testid={`player-row-${player.id}`}
+    >
       <div className="w-8 h-8 rounded-full bg-muted overflow-hidden ring-1 ring-border/30 flex-shrink-0">
         <img
           src={`https://sleepercdn.com/content/nfl/players/thumb/${sleeperId}.jpg`}
           alt={player.name}
           className="w-full h-full object-cover object-top"
-          onError={(e) => {
-            const el = e.target as HTMLImageElement;
-            el.style.display = "none";
-          }}
+          onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
         />
       </div>
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1.5">
-          <span className="text-sm font-semibold truncate">{player.name}</span>
-        </div>
+        <div className="text-sm font-semibold truncate">{player.name}</div>
         <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
           <span>{player.team || "—"}</span>
           {showAge && player.age > 0 && <span>· Age {player.age}</span>}
