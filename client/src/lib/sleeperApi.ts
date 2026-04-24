@@ -19,6 +19,7 @@ interface SleeperLeagueRaw {
   roster_positions: string[];
   scoring_settings: { rec?: number; [key: string]: any };
   status: string;
+  draft_id?: string | null;
   settings: any;
 }
 
@@ -83,6 +84,7 @@ export interface SleeperLeagueSummary {
   scoringFormat: string;
   format: string;
   status: string;
+  draftId: string | null;
 }
 
 function deriveFormat(rosterPositions: string[]): string {
@@ -134,9 +136,13 @@ export async function fetchSleeperLeagues(
   if (!raw || !Array.isArray(raw)) {
     return [];
   }
-  const dynastyOnly = raw.filter(
-    (lg) => lg.settings?.type === 2 && lg.settings?.best_ball !== 1
-  );
+  const dynastyOnly = raw.filter((lg) => {
+    if (lg.settings?.type !== 2) return false;
+    if (lg.settings?.best_ball === 1) return false;
+    if (lg.status === "inactive") return false;
+    if (lg.status === "pre_draft" && !lg.draft_id) return false;
+    return true;
+  });
   return dynastyOnly.map((lg) => ({
     leagueId: lg.league_id,
     name: lg.name,
@@ -146,6 +152,7 @@ export async function fetchSleeperLeagues(
     scoringFormat: deriveScoringFormat(lg.scoring_settings),
     format: deriveFormat(lg.roster_positions || []),
     status: lg.status,
+    draftId: lg.draft_id ?? null,
   }));
 }
 
