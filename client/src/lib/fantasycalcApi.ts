@@ -1,6 +1,3 @@
-import dynastyData from "@/data/fantasycalc_dynasty_sf.json";
-import redraftData from "@/data/fantasycalc_redraft_sf.json";
-
 export interface FantasyCalcResponse {
   source: "fantasycalc";
   format: string;
@@ -24,13 +21,21 @@ export interface FantasyCalcResponse {
 }
 
 export async function getFantasyCalcValues(
-  _format: string = "sf"
+  format: string = "sf"
 ): Promise<FantasyCalcResponse> {
-  return dynastyData as FantasyCalcResponse;
+  const res = await fetch(`/api/values/fantasycalc?format=${encodeURIComponent(format)}`);
+  if (!res.ok) {
+    throw new Error(`FantasyCalc values request failed: ${res.status}`);
+  }
+  return res.json() as Promise<FantasyCalcResponse>;
 }
 
 export async function getFantasyCalcRedraftValues(
-  _format: string = "sf"
+  format: string = "sf"
 ): Promise<FantasyCalcResponse> {
-  return redraftData as FantasyCalcResponse;
+  const res = await fetch(`/api/values/fantasycalc/redraft?format=${encodeURIComponent(format)}`);
+  if (!res.ok) {
+    throw new Error(`FantasyCalc redraft request failed: ${res.status}`);
+  }
+  return res.json() as Promise<FantasyCalcResponse>;
 }
