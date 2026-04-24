@@ -385,7 +385,7 @@ function SortableLeagueRecords({ records }: { records: any[] }) {
             <PortfolioSortHeader label="Rec" sortKey="wins" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
             <PortfolioSortHeader label="Redraft" sortKey="redraftRank" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
             <PortfolioSortHeader label="Dynasty" sortKey="dynastyRank" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-            <PortfolioSortHeader label="Plf%" sortKey="playoffOdds" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+            <PortfolioSortHeader label="Playoff%" sortKey="playoffOdds" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
             <PortfolioSortHeader label="PF Rk" sortKey="pfRank" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
             <PortfolioSortHeader label="Max PF" sortKey="maxPfRank" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
             <PortfolioSortHeader label="Stnd" sortKey="standing" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
