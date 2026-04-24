@@ -676,8 +676,8 @@ export async function searchTrades(params: {
       const firstAsset = rosterAssets[0];
       return {
         rosterId,
-        teamName: firstAsset?.rosterTeamName || "Unknown",
-        ownerName: firstAsset?.rosterOwnerName || "Unknown",
+        teamName: firstAsset?.rosterTeamName || "",
+        ownerName: firstAsset?.rosterOwnerName || "",
         playersReceived: received
           .filter((a) => a.assetType === "player")
           .map((a) => ({
@@ -716,6 +716,153 @@ export async function searchTrades(params: {
     page,
     limit,
   };
+}
+
+export async function ingestLeagueTrades(params: {
+  leagueId: string;
+  season: string;
+  teamCount: number;
+  format: string;
+  scoringFormat: string;
+}): Promise<{ inserted: number; skipped: number; alreadyIndexed: boolean }> {
+  const d = getDb();
+  const playersDb = await getSleeperPlayers();
+
+  const existingLeague = await d
+    .select({ id: crawledLeagues.id })
+    .from(crawledLeagues)
+    .where(eq(crawledLeagues.id, params.leagueId))
+    .limit(1);
+
+  if (existingLeague.length > 0) {
+    return { inserted: 0, skipped: 0, alreadyIndexed: true };
+  }
+
+  const rawTransactions = await fetchLeagueTransactions(params.leagueId);
+
+  await d.insert(crawledLeagues).values({
+    id: params.leagueId,
+    name: "user-contributed",
+    season: params.season,
+    totalRosters: params.teamCount,
+    format: params.format,
+    scoringFormat: params.scoringFormat,
+    rosterPositions: [],
+    tradeCount: rawTransactions.length,
+  }).onConflictDoNothing();
+
+  let inserted = 0;
+  let skipped = 0;
+
+  for (const trade of rawTransactions) {
+    const existingTrade = await d
+      .select({ id: trades.id })
+      .from(trades)
+      .where(eq(trades.id, trade.transaction_id))
+      .limit(1);
+
+    if (existingTrade.length > 0) {
+      skipped++;
+      continue;
+    }
+
+    await d.insert(trades).values({
+      id: trade.transaction_id,
+      leagueId: params.leagueId,
+      season: params.season,
+      week: trade.leg || 0,
+      timestamp: trade.status_updated || Date.now(),
+      rosterIds: trade.roster_ids || [],
+      status: trade.status,
+      leagueName: null,
+      leagueFormat: params.format,
+      leagueScoringFormat: params.scoringFormat,
+      leagueTotalRosters: params.teamCount,
+    }).onConflictDoNothing();
+
+    const assetRows: Array<typeof tradeAssets.$inferInsert> = [];
+    const involvedRosters = new Set(trade.roster_ids || []);
+
+    if (trade.adds) {
+      for (const [playerId, rosterId] of Object.entries(trade.adds)) {
+        const player = playersDb[playerId];
+        assetRows.push({
+          tradeId: trade.transaction_id,
+          rosterId: rosterId as number,
+          rosterOwnerName: null,
+          rosterTeamName: null,
+          assetType: "player",
+          playerSleeperId: playerId,
+          playerName: player?.full_name || `Player ${playerId}`,
+          playerPos: player?.position || null,
+          playerTeam: player?.team || null,
+          playerAge: player?.age || null,
+          direction: "received",
+        });
+      }
+    }
+
+    if (trade.drops) {
+      for (const [playerId, rosterId] of Object.entries(trade.drops)) {
+        const rid = rosterId as number;
+        if (!involvedRosters.has(rid)) continue;
+        const player = playersDb[playerId];
+        assetRows.push({
+          tradeId: trade.transaction_id,
+          rosterId: rid,
+          rosterOwnerName: null,
+          rosterTeamName: null,
+          assetType: "player",
+          playerSleeperId: playerId,
+          playerName: player?.full_name || `Player ${playerId}`,
+          playerPos: player?.position || null,
+          playerTeam: player?.team || null,
+          playerAge: player?.age || null,
+          direction: "sent",
+        });
+      }
+    }
+
+    if (trade.draft_picks) {
+      for (const pick of trade.draft_picks) {
+        if (!pick.owner_id || !pick.previous_owner_id) continue;
+
+        assetRows.push({
+          tradeId: trade.transaction_id,
+          rosterId: pick.owner_id,
+          rosterOwnerName: null,
+          rosterTeamName: null,
+          assetType: "pick",
+          pickSeason: pick.season,
+          pickRound: pick.round,
+          pickOriginalRosterId: pick.roster_id,
+          pickOriginalOwnerName: null,
+          direction: "received",
+        });
+
+        assetRows.push({
+          tradeId: trade.transaction_id,
+          rosterId: pick.previous_owner_id,
+          rosterOwnerName: null,
+          rosterTeamName: null,
+          assetType: "pick",
+          pickSeason: pick.season,
+          pickRound: pick.round,
+          pickOriginalRosterId: pick.roster_id,
+          pickOriginalOwnerName: null,
+          direction: "sent",
+        });
+      }
+    }
+
+    if (assetRows.length > 0) {
+      await d.insert(tradeAssets).values(assetRows);
+    }
+
+    inserted++;
+  }
+
+  return { inserted, skipped, alreadyIndexed: false };
 }
 
 export async function getTradeStats() {

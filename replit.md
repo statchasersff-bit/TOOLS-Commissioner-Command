@@ -57,9 +57,18 @@ Teams are classified using a priority-based decision tree in `client/src/data/mo
 - **Portfolio**: Sleeper account connection, cross-league analysis, player exposure, lineup alerts
 - **My Team**: Roster strength, age curve, depth chart
 - **League Analyzer**: Power rankings, roster comparison, league intelligence
-- **Trade Center**: Trade calculator with position impact analysis, cross-league trade intel
+- **Trade Center**: Trade calculator with position impact analysis, cross-league trade intel, Trade Database with player search + format/scoring/size filters
 - **Players**: Market value analysis
 - **Live Draft**: Dynasty rankings board with Sleeper draft integration
+
+## Trade Database (server/tradeCrawler.ts + server/routes.ts)
+Organic user-contributed trade database. When a user analyzes any league, their league's historical trades are silently ingested in the background via `POST /api/trades/ingest-league`. Privacy-first: no owner names, team names, or league names stored.
+- `ingestLeagueTrades()` — deduplicates by trade_id, stores anonymized player/pick assets
+- `searchTrades()` — player name search, format/scoring/teamSize filters, paginated
+- `getTradeStats()` — total trade count + league count
+- `GET /api/trades/search` + `GET /api/trades/stats` — frontend search endpoints
+- `POST /api/trades/ingest-league` — background ingestion endpoint called from DynastyCommandCenter after every league load
+- `TradeDatabase` component shows live search UI with filter chips, stats banner, and paginated TradeCard results
 
 ## External APIs & Static Data
 - **Sleeper API** (`https://api.sleeper.app/v1/`) — User, leagues, rosters, drafts, transactions (called directly from browser, public CORS-enabled)

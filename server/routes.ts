@@ -18,6 +18,7 @@ import {
   getCrawlStatus,
   searchTrades,
   getTradeStats,
+  ingestLeagueTrades,
 } from "./tradeCrawler";
 import {
   captureValueSnapshot,
@@ -209,6 +210,26 @@ export async function registerRoutes(
     } catch (err: any) {
       console.error("Trade search error:", err);
       res.status(500).json({ error: err.message || "Failed to search trades" });
+    }
+  });
+
+  app.post("/api/trades/ingest-league", async (req, res) => {
+    try {
+      const { leagueId, season, teamCount, format, scoringFormat } = req.body;
+      if (!leagueId) {
+        return res.status(400).json({ error: "leagueId is required" });
+      }
+      const result = await ingestLeagueTrades({
+        leagueId,
+        season: season || "2025",
+        teamCount: teamCount || 12,
+        format: format || "1QB",
+        scoringFormat: scoringFormat || "PPR",
+      });
+      res.json(result);
+    } catch (err: any) {
+      console.error("Trade ingest error:", err);
+      res.status(500).json({ error: err.message || "Failed to ingest trades" });
     }
   });
 

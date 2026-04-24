@@ -124,6 +124,23 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
     return league.teams.find((t) => t.id === fetchedLeague.userTeamId) || league.teams[0] || null;
   }, [league, fetchedLeague]);
 
+  useEffect(() => {
+    if (!fetchedLeague || !selectedLeagueId) return;
+    const summary = sleeper.leagues.find((l) => l.leagueId === selectedLeagueId);
+    if (!summary) return;
+    fetch("/api/trades/ingest-league", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        leagueId: selectedLeagueId,
+        season: summary.season,
+        teamCount: summary.totalRosters || fetchedLeague.league.teams.length,
+        format: summary.format || fetchedLeague.league.format || "1QB",
+        scoringFormat: summary.scoringFormat || fetchedLeague.league.scoringFormat || "PPR",
+      }),
+    }).catch(() => {});
+  }, [fetchedLeague, selectedLeagueId, sleeper.leagues]);
+
   const currentMainConfig = NAV_CONFIG.find((t) => t.id === activeMainTab);
 
   useEffect(() => {

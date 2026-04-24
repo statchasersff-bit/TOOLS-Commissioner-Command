@@ -812,7 +812,7 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
   const signedDiff = finalA - finalB;
   const winnerSide = signedDiff >= 0 ? "A" : "B";
   const loserSide = signedDiff >= 0 ? "B" : "A";
-  const winnerLabel = winnerSide === "a" ? (sideATeam?.owner || sideATeam?.name || "Side A") : (sideBTeam?.owner || sideBTeam?.name || "Side B");
+  const winnerLabel = winnerSide === "A" ? (sideATeam?.owner || sideATeam?.name || "Side A") : (sideBTeam?.owner || sideBTeam?.name || "Side B");
 
   const meterPosition = useMemo(() => {
     if (finalA === 0 && finalB === 0) return 50;
@@ -1426,39 +1426,252 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
   );
 }
 
+const TRADE_DB_LIMIT = 20;
+
 export function TradeDatabase({ league }: { league: League }) {
+  const { valuesBySleeperId } = useValueModel();
+
+  const [stats, setStats] = useState<{ totalTrades: number; totalLeagues: number } | null>(null);
+  const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
+  const [format, setFormat] = useState("all");
+  const [scoring, setScoring] = useState("all");
+  const [teamSize, setTeamSize] = useState("all");
+  const [tradeResults, setTradeResults] = useState<TradeRecord[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [isSearching, setIsSearching] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQuery(query), 400);
+    return () => clearTimeout(t);
+  }, [query]);
+
+  useEffect(() => {
+    fetch("/api/trades/stats")
+      .then((r) => r.json())
+      .then((data) => setStats(data))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    setIsSearching(true);
+    setPage(1);
+
+    const params = new URLSearchParams({ page: "1", limit: String(TRADE_DB_LIMIT) });
+    if (debouncedQuery) params.set("q", debouncedQuery);
+    if (format !== "all") params.set("format", format);
+    if (scoring !== "all") params.set("scoring", scoring);
+    if (teamSize !== "all") params.set("leagueSize", teamSize);
+
+    fetch(`/api/trades/search?${params}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (cancelled) return;
+        setTradeResults(data.trades || []);
+        setTotal(data.total || 0);
+        setIsSearching(false);
+      })
+      .catch(() => {
+        if (!cancelled) setIsSearching(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [debouncedQuery, format, scoring, teamSize]);
+
+  const loadMore = useCallback(() => {
+    const nextPage = page + 1;
+    setIsLoadingMore(true);
+
+    const params = new URLSearchParams({ page: String(nextPage), limit: String(TRADE_DB_LIMIT) });
+    if (debouncedQuery) params.set("q", debouncedQuery);
+    if (format !== "all") params.set("format", format);
+    if (scoring !== "all") params.set("scoring", scoring);
+    if (teamSize !== "all") params.set("leagueSize", teamSize);
+
+    fetch(`/api/trades/search?${params}`)
+      .then((r) => r.json())
+      .then((data) => {
+        setTradeResults((prev) => [...prev, ...(data.trades || [])]);
+        setTotal(data.total || 0);
+        setPage(nextPage);
+        setIsLoadingMore(false);
+      })
+      .catch(() => setIsLoadingMore(false));
+  }, [page, debouncedQuery, format, scoring, teamSize]);
+
+  const formatDate = useCallback((ts: number) => {
+    return new Date(ts).toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+  }, []);
+
+  const getPlayerValueById = useCallback(
+    (sleeperId: string) => valuesBySleeperId[sleeperId] || 0,
+    [valuesBySleeperId]
+  );
+
+  const hasMore = tradeResults.length < total;
+  const isEmpty = !isSearching && tradeResults.length === 0;
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <SectionHeader
         title="Trade Database"
-        subtitle="Dynasty trade intelligence powered by network analysis"
+        subtitle="Real dynasty trades contributed by the StatChasers community"
       />
 
-      <div className="flex flex-col items-center justify-center py-24 text-center" data-testid="trade-database-coming-soon">
-        <div className="w-16 h-16 rounded-2xl bg-[#0b3a7a]/10 dark:bg-blue-400/10 flex items-center justify-center mb-6">
-          <Database className="w-8 h-8 text-[#0b3a7a] dark:text-blue-400" />
-        </div>
-        <h2 className="text-2xl font-bold text-foreground mb-2" data-testid="text-coming-soon-title">Coming Soon</h2>
-        <p className="text-3xl font-black text-[#d4af37] mb-3" data-testid="text-trade-count">1M+ trades analyzed</p>
-        <p className="text-sm text-muted-foreground max-w-md">
-          A massive dynasty trade database is being built. Search, filter, and analyze real trades across the Sleeper network.
-        </p>
+      <div className="flex items-start gap-3 p-3 rounded-lg bg-[#0b3a7a]/5 dark:bg-blue-400/5 border border-[#0b3a7a]/10 dark:border-blue-400/10" data-testid="trade-db-stats-banner">
+        <Database className="w-4 h-4 text-[#0b3a7a] dark:text-blue-400 flex-shrink-0 mt-0.5" />
+        {stats ? (
+          <p className="text-sm leading-snug">
+            <span className="font-bold text-foreground" data-testid="text-total-trades">{stats.totalTrades.toLocaleString()}</span>
+            <span className="text-muted-foreground"> trades indexed from </span>
+            <span className="font-bold text-foreground" data-testid="text-total-leagues">{stats.totalLeagues.toLocaleString()}</span>
+            <span className="text-muted-foreground"> leagues — grows automatically as users analyze their leagues</span>
+          </p>
+        ) : (
+          <p className="text-sm text-muted-foreground">Loading database stats...</p>
+        )}
+      </div>
 
-        <div className="mt-8 p-5 rounded-xl border border-[#d4af37]/30 bg-[#d4af37]/5 max-w-md">
-          <p className="text-sm font-bold text-foreground mb-1" data-testid="text-rookie-cta">Need Help Determining 2026 Rookie Pick Values?</p>
-          <p className="text-xs text-muted-foreground mb-4">See Free Draft Guide w/ Tiers</p>
-          <a
-            href="https://statchasers.com/rookie-guide/"
-            target="_blank"
-            rel="noopener noreferrer"
-            data-testid="link-rookie-guide"
-          >
-            <Button variant="default" size="sm" className="bg-[#d4af37] hover:bg-[#c5a033] text-black font-bold">
-              View Rookie Guide
-            </Button>
-          </a>
+      <div className="space-y-3">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+          <Input
+            className="pl-9 pr-9"
+            placeholder="Search by player name..."
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            data-testid="input-trade-search"
+          />
+          {query && (
+            <button
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+              onClick={() => setQuery("")}
+              data-testid="button-clear-search"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <div className="flex gap-1">
+            {(["all", "SF", "1QB"] as const).map((f) => (
+              <button
+                key={f}
+                onClick={() => setFormat(f)}
+                className={cn(
+                  "px-3 py-1 rounded-full text-xs font-medium border transition-colors",
+                  format === f
+                    ? "bg-[#0b3a7a] text-white border-[#0b3a7a] dark:bg-blue-500 dark:border-blue-500"
+                    : "bg-transparent text-muted-foreground border-border hover:border-foreground/30"
+                )}
+                data-testid={`button-format-${f}`}
+              >
+                {f === "all" ? "All Formats" : f}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex gap-1">
+            {(["all", "PPR", "Half", "Standard"] as const).map((s) => (
+              <button
+                key={s}
+                onClick={() => setScoring(s)}
+                className={cn(
+                  "px-3 py-1 rounded-full text-xs font-medium border transition-colors",
+                  scoring === s
+                    ? "bg-[#0b3a7a] text-white border-[#0b3a7a] dark:bg-blue-500 dark:border-blue-500"
+                    : "bg-transparent text-muted-foreground border-border hover:border-foreground/30"
+                )}
+                data-testid={`button-scoring-${s}`}
+              >
+                {s === "all" ? "All Scoring" : s}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex gap-1">
+            {(["all", "10", "12", "14"] as const).map((size) => (
+              <button
+                key={size}
+                onClick={() => setTeamSize(size)}
+                className={cn(
+                  "px-3 py-1 rounded-full text-xs font-medium border transition-colors",
+                  teamSize === size
+                    ? "bg-[#0b3a7a] text-white border-[#0b3a7a] dark:bg-blue-500 dark:border-blue-500"
+                    : "bg-transparent text-muted-foreground border-border hover:border-foreground/30"
+                )}
+                data-testid={`button-teamsize-${size}`}
+              >
+                {size === "all" ? "All Sizes" : `${size}-team`}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
+
+      {!isSearching && total > 0 && (
+        <p className="text-xs text-muted-foreground" data-testid="text-results-count">
+          Showing {tradeResults.length.toLocaleString()} of {total.toLocaleString()} trades
+        </p>
+      )}
+
+      {isSearching && tradeResults.length === 0 ? (
+        <div className="flex items-center justify-center py-16" data-testid="trade-db-loading">
+          <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+        </div>
+      ) : isEmpty ? (
+        <div className="flex flex-col items-center justify-center py-16 text-center" data-testid="trade-db-empty">
+          <Database className="w-8 h-8 text-muted-foreground mb-3" />
+          <p className="text-sm font-medium text-foreground mb-1">No trades found</p>
+          <p className="text-xs text-muted-foreground mb-4">
+            {debouncedQuery || format !== "all" || scoring !== "all" || teamSize !== "all"
+              ? "Try adjusting your search or filters"
+              : "The database grows as users analyze their leagues"}
+          </p>
+          {stats?.totalTrades === 0 && (
+            <div className="mt-2 p-4 rounded-xl border border-[#d4af37]/30 bg-[#d4af37]/5 max-w-xs">
+              <p className="text-xs font-semibold text-foreground mb-1">Database is warming up</p>
+              <p className="text-xs text-muted-foreground">
+                Trades populate automatically each time a user analyzes a league. Check back soon!
+              </p>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="space-y-4" data-testid="trade-db-results">
+          {tradeResults.map((trade) => (
+            <TradeCard
+              key={trade.tradeId}
+              trade={trade}
+              getPlayerValue={getPlayerValueById}
+              formatDate={formatDate}
+            />
+          ))}
+
+          {hasMore && (
+            <div className="flex justify-center pt-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={loadMore}
+                disabled={isLoadingMore}
+                data-testid="button-load-more-trades"
+              >
+                {isLoadingMore && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                Load More
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -1511,8 +1724,14 @@ function TradeCard({
             >
               <div className="flex items-center justify-between mb-2">
                 <div>
-                  <p className="text-sm font-semibold" data-testid={`text-team-name-${side.rosterId}`}>{side.teamName}</p>
-                  <p className="text-[10px] text-muted-foreground">{side.ownerName} receives:</p>
+                  <p className="text-sm font-semibold" data-testid={`text-team-name-${side.rosterId}`}>
+                    {side.teamName || `Side ${String.fromCharCode(65 + idx)}`}
+                  </p>
+                  {side.ownerName ? (
+                    <p className="text-[10px] text-muted-foreground">{side.ownerName} receives:</p>
+                  ) : (
+                    <p className="text-[10px] text-muted-foreground">receives:</p>
+                  )}
                 </div>
                 <div className="text-right">
                   <p className="text-sm font-bold" data-testid={`text-side-total-${side.rosterId}`}>{sideTotal.toLocaleString()}</p>
