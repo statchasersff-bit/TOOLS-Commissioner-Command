@@ -294,7 +294,7 @@ export function ShareTeam({ league, userTeam }: Props) {
             <div className="flex items-center gap-3.5 mb-3">
               {userTeam.avatar && !anonMode ? (
                 <img
-                  src={`https://sleepercdn.com/avatars/thumbs/${userTeam.avatar}`}
+                  src={userTeam.avatar!}
                   alt={displayName}
                   className="w-14 h-14 rounded-full object-cover flex-shrink-0"
                   style={{ boxShadow: "0 0 0 2px #d4af37, 0 0 12px rgba(212,175,55,0.25)" }}
