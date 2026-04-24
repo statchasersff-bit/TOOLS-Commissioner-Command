@@ -115,9 +115,25 @@ export function LeagueIntelligence({ league, userTeam }: Props) {
           { label: "Most Draft Capital", team: [...league.teams].sort((a, b) => b.picks.length - a.picks.length)[0], stat: (t: Team) => t.picks.length },
         ].map(({ label, team, stat }) => (
           <Card key={label} className="p-4 hover-elevate" data-testid={`leader-${label.toLowerCase().replace(/\s+/g, "-")}`}>
-            <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">{label}</p>
-            <p className="text-lg font-bold mt-1">{team.owner}</p>
-            <p className="text-xs text-muted-foreground mt-0.5">{team.name}</p>
+            <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider mb-2">{label}</p>
+            <div className="flex items-center gap-2.5">
+              {team.avatar ? (
+                <img
+                  src={team.avatar}
+                  alt={team.owner}
+                  className="w-8 h-8 rounded-full object-cover flex-shrink-0 ring-1 ring-border/40"
+                  onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                />
+              ) : (
+                <div className="w-8 h-8 rounded-full bg-muted flex-shrink-0 ring-1 ring-border/40 flex items-center justify-center">
+                  <span className="text-xs font-bold text-muted-foreground">{team.owner.charAt(0).toUpperCase()}</span>
+                </div>
+              )}
+              <div className="min-w-0">
+                <p className="text-sm font-bold truncate">{team.owner}</p>
+                <p className="text-[10px] text-muted-foreground truncate">{team.name}</p>
+              </div>
+            </div>
           </Card>
         ))}
       </div>
@@ -146,7 +162,19 @@ export function LeagueIntelligence({ league, userTeam }: Props) {
                   data-testid={`button-expand-${team.id}`}
                 >
                   <div className="flex items-center gap-3">
-                    {isExpanded ? <ChevronDown className="w-4 h-4 text-muted-foreground" /> : <ChevronRight className="w-4 h-4 text-muted-foreground" />}
+                    {isExpanded ? <ChevronDown className="w-4 h-4 text-muted-foreground flex-shrink-0" /> : <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0" />}
+                    {team.avatar ? (
+                      <img
+                        src={team.avatar}
+                        alt={team.owner}
+                        className="w-8 h-8 rounded-full object-cover flex-shrink-0 ring-1 ring-border/40"
+                        onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                      />
+                    ) : (
+                      <div className="w-8 h-8 rounded-full bg-muted flex-shrink-0 ring-1 ring-border/40 flex items-center justify-center">
+                        <span className="text-xs font-bold text-muted-foreground">{team.owner.charAt(0).toUpperCase()}</span>
+                      </div>
+                    )}
                     <span className="text-sm font-bold">{team.owner}</span>
                     <Badge variant="outline" className={getTierColor(tier)}>{getTierEmoji(tier)} {tier}</Badge>
                   </div>
