@@ -724,6 +724,7 @@ export async function ingestLeagueTrades(params: {
   teamCount: number;
   format: string;
   scoringFormat: string;
+  sinceMs?: number;
 }): Promise<{ inserted: number; skipped: number; alreadyIndexed: boolean }> {
   const d = getDb();
   const playersDb = await getSleeperPlayers();
@@ -740,6 +741,10 @@ export async function ingestLeagueTrades(params: {
 
   const rawTransactions = await fetchLeagueTransactions(params.leagueId);
 
+  const filteredTransactions = params.sinceMs
+    ? rawTransactions.filter((t) => (t.status_updated || 0) >= params.sinceMs!)
+    : rawTransactions;
+
   await d.insert(crawledLeagues).values({
     id: params.leagueId,
     name: "user-contributed",
@@ -748,13 +753,13 @@ export async function ingestLeagueTrades(params: {
     format: params.format,
     scoringFormat: params.scoringFormat,
     rosterPositions: [],
-    tradeCount: rawTransactions.length,
+    tradeCount: filteredTransactions.length,
   }).onConflictDoNothing();
 
   let inserted = 0;
   let skipped = 0;
 
-  for (const trade of rawTransactions) {
+  for (const trade of filteredTransactions) {
     const existingTrade = await d
       .select({ id: trades.id })
       .from(trades)
@@ -867,65 +872,97 @@ export async function ingestLeagueTrades(params: {
 
 export async function ingestUserLeagues(username: string): Promise<{ started: number; alreadyIndexed: number }> {
   const d = getDb();
+  const SIX_MONTHS_MS = 6 * 30 * 24 * 60 * 60 * 1000;
+  const sinceMs = Date.now() - SIX_MONTHS_MS;
+  const seasons = ["2026", "2025"];
 
+  // 1. Resolve username → user_id
   const userRes = await fetch(`${SLEEPER_API}/user/${username}`);
   if (!userRes.ok) throw new Error("Sleeper user not found");
   const userData = (await userRes.json()) as { user_id: string };
 
-  const seasons = ["2026", "2025"];
-  const toProcess: Array<{
-    leagueId: string;
-    season: string;
-    format: string;
-    scoringFormat: string;
-    teamCount: number;
-  }> = [];
-  let alreadyIndexed = 0;
+  // Helper: fetch dynasty leagues for a single user
+  async function fetchDynastyLeaguesForUser(userId: string): Promise<SleeperLeagueInfo[]> {
+    const result: SleeperLeagueInfo[] = [];
+    for (const season of seasons) {
+      await sleep(RATE_LIMIT_MS);
+      const leagues = await fetchJson<SleeperLeagueInfo[]>(
+        `${SLEEPER_API}/user/${userId}/leagues/nfl/${season}`
+      );
+      if (!leagues) continue;
+      leagues
+        .filter((lg) => lg.settings?.type === 2 && lg.settings?.best_ball !== 1)
+        .forEach((lg) => result.push(lg));
+    }
+    return result;
+  }
 
-  for (const season of seasons) {
+  // 2. Get the entered user's own leagues
+  const seedLeagues = await fetchDynastyLeaguesForUser(userData.user_id);
+
+  // 3. Discover all unique members across those leagues
+  const allMemberIds = new Set<string>([userData.user_id]);
+  for (const lg of seedLeagues) {
     await sleep(RATE_LIMIT_MS);
-    const leagues = await fetchJson<SleeperLeagueInfo[]>(
-      `${SLEEPER_API}/user/${userData.user_id}/leagues/nfl/${season}`
+    const users = await fetchJson<SleeperUserInfo[]>(
+      `${SLEEPER_API}/league/${lg.league_id}/users`
     );
-    if (!leagues || !Array.isArray(leagues)) continue;
-
-    const dynastyLeagues = leagues.filter(
-      (lg) => lg.settings?.type === 2 && lg.settings?.best_ball !== 1
-    );
-
-    for (const lg of dynastyLeagues) {
-      const existing = await d
-        .select({ id: crawledLeagues.id })
-        .from(crawledLeagues)
-        .where(eq(crawledLeagues.id, lg.league_id))
-        .limit(1);
-
-      if (existing.length > 0) {
-        alreadyIndexed++;
-        continue;
-      }
-
-      toProcess.push({
-        leagueId: lg.league_id,
-        season: lg.season,
-        format: deriveFormat(lg.roster_positions || []),
-        scoringFormat: deriveScoringFormat(lg.scoring_settings || {}),
-        teamCount: lg.total_rosters || 12,
-      });
+    if (users) {
+      users.forEach((u) => allMemberIds.add(u.user_id));
     }
   }
 
+  // 4. Collect all dynasty leagues across every member (deduplicated by league_id)
+  const allLeagueMap = new Map<string, { season: string; format: string; scoringFormat: string; teamCount: number }>();
+
+  for (const memberId of allMemberIds) {
+    const memberLeagues = await fetchDynastyLeaguesForUser(memberId);
+    for (const lg of memberLeagues) {
+      if (!allLeagueMap.has(lg.league_id)) {
+        allLeagueMap.set(lg.league_id, {
+          season: lg.season,
+          format: deriveFormat(lg.roster_positions || []),
+          scoringFormat: deriveScoringFormat(lg.scoring_settings || {}),
+          teamCount: lg.total_rosters || 12,
+        });
+      }
+    }
+  }
+
+  console.log(`[UserIngest] Discovered ${allLeagueMap.size} unique leagues across ${allMemberIds.size} members for ${username}`);
+
+  // 5. Filter out already-indexed leagues
+  const toProcess: Array<{ leagueId: string; season: string; format: string; scoringFormat: string; teamCount: number }> = [];
+  let alreadyIndexed = 0;
+
+  for (const [leagueId, info] of allLeagueMap) {
+    const existing = await d
+      .select({ id: crawledLeagues.id })
+      .from(crawledLeagues)
+      .where(eq(crawledLeagues.id, leagueId))
+      .limit(1);
+
+    if (existing.length > 0) {
+      alreadyIndexed++;
+      continue;
+    }
+    toProcess.push({ leagueId, ...info });
+  }
+
+  // 6. Background-process all new leagues with the 6-month timestamp filter
   if (toProcess.length > 0) {
     (async () => {
+      let done = 0;
       for (const params of toProcess) {
         try {
-          await ingestLeagueTrades(params);
-          console.log(`[UserIngest] Indexed league ${params.leagueId} (${params.season})`);
+          await ingestLeagueTrades({ ...params, sinceMs });
+          done++;
+          console.log(`[UserIngest] (${done}/${toProcess.length}) Indexed ${params.leagueId} (${params.season})`);
         } catch (err: any) {
-          console.error(`[UserIngest] Failed league ${params.leagueId}:`, err.message);
+          console.error(`[UserIngest] Failed ${params.leagueId}:`, err.message);
         }
       }
-      console.log(`[UserIngest] Done — indexed ${toProcess.length} leagues for ${username}`);
+      console.log(`[UserIngest] Complete — ${done} leagues indexed for ${username}`);
     })().catch(() => {});
   }
 
