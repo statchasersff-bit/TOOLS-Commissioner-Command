@@ -689,7 +689,7 @@ export function PortfolioSummary() {
             {seasons.length} season{seasons.length !== 1 ? "s" : ""}. Your portfolio includes{" "}
             <strong className="text-foreground">{sfCount}</strong> Superflex and{" "}
             <strong className="text-foreground">{oneQbCount}</strong> 1QB format league{oneQbCount !== 1 ? "s" : ""}.
-            Select a league from the <strong>My Leagues</strong> tab to dive into detailed analysis.
+            Connect your Sleeper account in the <strong>Connect</strong> tab to dive into detailed analysis.
           </p>
         </Card>
       )}

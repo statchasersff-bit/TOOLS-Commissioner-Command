@@ -524,7 +524,6 @@ export const NAV_CONFIG: MainTabConfig[] = [
     label: "Portfolio",
     subTabs: [
       { id: "connect", label: "Connect" },
-      { id: "my-leagues", label: "My Leagues" },
       { id: "portfolio-summary", label: "Portfolio Summary" },
     ],
   },

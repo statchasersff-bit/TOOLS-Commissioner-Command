@@ -18,7 +18,7 @@ import { Share2, Download, LayoutDashboard, Loader2, Lock, Check, User } from "l
 import logoDark from "@assets/statchasers_logo_transparent_dark_1772764844282.png";
 import logoLight from "@assets/statchasers_logo_transparent_light_1772764844283.png";
 
-import { PortfolioConnect, PortfolioMyLeagues, PortfolioSummary } from "./tabs/Portfolio";
+import { PortfolioConnect, PortfolioSummary } from "./tabs/Portfolio";
 import { DashboardOverview, DashboardSnapshot } from "./tabs/Dashboard";
 import { RosterComparison } from "./tabs/LeagueAnalyzer";
 import { RosterBreakdown } from "./tabs/TeamBreakdown";
@@ -163,11 +163,6 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
     setTimeout(() => setIsTransitioning(false), 180);
   }, []);
 
-  const handlePortfolioLeagueSelect = useCallback((leagueId: string) => {
-    setSelectedLeagueId(leagueId);
-    sleeper.setActiveLeague(leagueId);
-  }, [sleeper]);
-
   const renderLockedState = () => (
     <div className="flex items-center justify-center min-h-[50vh] md:min-h-[60vh] px-4">
       <Card className="p-6 md:p-10 text-center max-w-sm md:max-w-md w-full border-border/60 dark:border-[#1a2d4a]/80 bg-gradient-to-b from-background to-muted/20 dark:from-[#0c1929] dark:to-[#0a1628] shadow-xl shadow-black/5 dark:shadow-black/30" data-testid="locked-state-card">
@@ -216,10 +211,10 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
         <Button
           variant="outline"
           className="w-full md:w-auto h-11 md:h-10 text-sm font-semibold"
-          onClick={() => navigateToSubTab("portfolio", "my-leagues")}
+          onClick={() => navigateToSubTab("portfolio", "connect")}
           data-testid="button-go-to-leagues"
         >
-          Go to My Leagues
+          Connect Sleeper Account
         </Button>
       </Card>
     </div>
@@ -235,8 +230,6 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
       switch (key) {
         case "portfolio:connect":
           return <PortfolioConnect onNavigate={navigateToSubTab} />;
-        case "portfolio:my-leagues":
-          return <PortfolioMyLeagues onSelectLeague={handlePortfolioLeagueSelect} onNavigate={navigateToSubTab} />;
         case "portfolio:portfolio-summary":
           return <PortfolioSummary />;
         default:
