@@ -1747,6 +1747,15 @@ function TradeCard({
                   return (
                     <div key={pi} className="flex items-center justify-between py-1">
                       <div className="flex items-center gap-1.5">
+                        {p.sleeperId ? (
+                          <img
+                            src={`https://sleepercdn.com/content/nfl/players/thumb/${p.sleeperId}.jpg`}
+                            alt={p.name}
+                            className="w-7 h-7 rounded-full object-cover object-top flex-shrink-0 bg-muted"
+                            data-testid={`img-player-${p.sleeperId}`}
+                            onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                          />
+                        ) : null}
                         <Badge variant="outline" className={`text-[10px] w-7 justify-center ${getPositionColor(p.pos)}`}>
                           {p.pos}
                         </Badge>
