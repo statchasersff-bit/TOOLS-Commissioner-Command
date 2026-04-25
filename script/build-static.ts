@@ -1,3 +1,5 @@
+process.env.NODE_ENV = "production";
+
 import { build as viteBuild } from "vite";
 import { rm } from "fs/promises";
 
