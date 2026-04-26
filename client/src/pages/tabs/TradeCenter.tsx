@@ -138,9 +138,18 @@ export function TradeFinder({ league, userTeam }: TradeProps) {
 
   const columns = [
     { key: "name", header: "Team", sticky: true, sortable: true, sortAccessor: (row: any) => row.name, render: (row: any) => (
-      <div>
-        <span className="font-semibold">{row.name}</span>
-        <span className="text-xs text-muted-foreground ml-2">({row.owner})</span>
+      <div className="flex items-center gap-2.5">
+        <img
+          src={row.avatar || "https://sleepercdn.com/images/v2/icons/player_default.webp"}
+          alt={row.owner}
+          className="w-8 h-8 rounded-full object-cover flex-shrink-0 bg-muted"
+          onError={(e) => { e.currentTarget.src = "https://sleepercdn.com/images/v2/icons/player_default.webp"; }}
+          data-testid={`img-owner-avatar-${row.id}`}
+        />
+        <div>
+          <span className="font-semibold">{row.name}</span>
+          <span className="block text-xs text-muted-foreground">{row.owner}</span>
+        </div>
       </div>
     )},
     { key: "tier", header: "Tier", sortable: true, sortAccessor: (row: any) => row.metrics.overall, render: (row: any) => <Badge variant="outline" className={getTierColor(row.tier)}>{row.tier}</Badge> },
