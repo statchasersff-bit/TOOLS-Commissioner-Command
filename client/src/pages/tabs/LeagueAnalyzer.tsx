@@ -192,6 +192,17 @@ export function RosterComparison({ league }: AnalyzerProps) {
   const teamA = league.teams.find((t) => t.id === teamAId);
   const teamB = league.teams.find((t) => t.id === teamBId);
 
+  const teamTiers = useMemo(() => getLeagueTeamTiers(league), [league]);
+  const getTeamTier = (teamId: string): Tier | null => {
+    for (const [tier, teams] of Object.entries(teamTiers)) {
+      if ((teams as Team[]).some((t) => t.id === teamId)) return tier as Tier;
+    }
+    return null;
+  };
+
+  const tierA = teamA ? getTeamTier(teamA.id) : null;
+  const tierB = teamB ? getTeamTier(teamB.id) : null;
+
   const categories = [
     { key: "overall", label: "Overall" },
     { key: "starters", label: "Starters" },
@@ -204,32 +215,93 @@ export function RosterComparison({ league }: AnalyzerProps) {
     { key: "picks", label: "Draft Capital" },
   ];
 
+  const TeamCard = ({
+    team,
+    tier,
+    selectId,
+    onSelect,
+    side,
+  }: {
+    team: Team | undefined;
+    tier: Tier | null;
+    selectId: string;
+    onSelect: (id: string) => void;
+    side: "A" | "B";
+  }) => {
+    const isA = side === "A";
+    const ringColor = isA ? "ring-[#0b3a7a]/70 dark:ring-blue-400/70" : "ring-[#d4af37]/70";
+    const nameColor = isA ? "text-[#0b3a7a] dark:text-blue-400" : "text-[#d4af37]";
+    const scoreColor = isA ? "text-[#0b3a7a] dark:text-blue-400" : "text-[#d4af37]";
+    const glowBg = isA
+      ? "bg-[#0b3a7a]/10 dark:bg-blue-400/5"
+      : "bg-[#d4af37]/10 dark:bg-[#d4af37]/5";
+
+    return (
+      <div className={cn("flex flex-col items-center gap-3 p-4 sm:p-6 rounded-xl", glowBg)}>
+        <div className={cn("w-16 h-16 sm:w-20 sm:h-20 rounded-full ring-4 overflow-hidden flex-shrink-0", ringColor,
+          "bg-muted shadow-lg"
+        )}>
+          {team?.avatar ? (
+            <img src={team.avatar} alt={team.name} className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+          ) : (
+            <div className={cn("w-full h-full flex items-center justify-center text-2xl font-black", nameColor)}>
+              {(team?.owner || "?").charAt(0).toUpperCase()}
+            </div>
+          )}
+        </div>
+
+        <div className="text-center space-y-1 min-w-0 w-full">
+          <p className={cn("text-sm sm:text-base font-bold truncate", nameColor)} data-testid={`text-matchup-name-${side}`}>
+            {team?.name || `Team ${side}`}
+          </p>
+          {team?.owner && team.owner !== team.name && (
+            <p className="text-[10px] text-muted-foreground truncate">{team.owner}</p>
+          )}
+          {tier && (
+            <Badge variant="outline" className={cn("text-[9px] sm:text-[10px] border-current mt-0.5", getTierColor(tier))}>
+              {tier}
+            </Badge>
+          )}
+          <p className={cn("text-3xl sm:text-4xl font-black tabular-nums mt-1", scoreColor)} data-testid={`text-matchup-score-${side}`}>
+            {team?.metrics.overall ?? "—"}
+          </p>
+          <p className="text-[9px] text-muted-foreground uppercase tracking-widest">Overall Score</p>
+        </div>
+
+        <Select value={selectId} onValueChange={onSelect}>
+          <SelectTrigger className="w-full max-w-[160px] text-[11px] h-7" data-testid={`select-team-${side}`}>
+            <SelectValue placeholder={`Team ${side}`} />
+          </SelectTrigger>
+          <SelectContent>
+            {league.teams.map((t) => (
+              <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-8">
       <SectionHeader title="Roster Comparison" subtitle="Compare two teams head-to-head" />
 
-      <div className="flex items-center gap-2 sm:gap-4">
-        <Select value={teamAId} onValueChange={setTeamAId}>
-          <SelectTrigger className="min-w-0 flex-1 sm:w-[200px] sm:flex-none" data-testid="select-team-a">
-            <SelectValue placeholder="Team A" />
-          </SelectTrigger>
-          <SelectContent>
-            {league.teams.map((t) => (
-              <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <span className="text-sm font-bold text-muted-foreground shrink-0">VS</span>
-        <Select value={teamBId} onValueChange={setTeamBId}>
-          <SelectTrigger className="min-w-0 flex-1 sm:w-[200px] sm:flex-none" data-testid="select-team-b">
-            <SelectValue placeholder="Team B" />
-          </SelectTrigger>
-          <SelectContent>
-            {league.teams.map((t) => (
-              <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      <div className="relative rounded-2xl overflow-hidden border border-border/30 bg-card shadow-md">
+        <div className="absolute inset-0 bg-gradient-to-r from-[#0b3a7a]/10 via-transparent to-[#d4af37]/10 dark:from-[#0b3a7a]/20 dark:to-[#d4af37]/15 pointer-events-none" />
+        <div className="relative grid grid-cols-[1fr_auto_1fr]">
+          <TeamCard team={teamA} tier={tierA} selectId={teamAId} onSelect={setTeamAId} side="A" />
+
+          <div className="flex flex-col items-center justify-center px-2 sm:px-4 py-6 relative">
+            <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-gradient-to-b from-transparent via-border/60 to-transparent" />
+            <div className="relative z-10 flex flex-col items-center gap-1.5">
+              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-background border-2 border-[#d4af37] shadow-lg flex items-center justify-center">
+                <span className="text-[10px] sm:text-xs font-black text-[#d4af37] tracking-tighter">VS</span>
+              </div>
+            </div>
+          </div>
+
+          <TeamCard team={teamB} tier={tierB} selectId={teamBId} onSelect={setTeamBId} side="B" />
+        </div>
       </div>
 
       {teamA && teamB && (
