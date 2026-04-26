@@ -192,12 +192,9 @@ export function RosterComparison({ league }: AnalyzerProps) {
   const teamA = league.teams.find((t) => t.id === teamAId);
   const teamB = league.teams.find((t) => t.id === teamBId);
 
-  const teamTiers = useMemo(() => getLeagueTeamTiers(league), [league]);
+  const teamTiers = useMemo(() => getLeagueTeamTiers(league.teams), [league.teams]);
   const getTeamTier = (teamId: string): Tier | null => {
-    for (const [tier, teams] of Object.entries(teamTiers)) {
-      if ((teams as Team[]).some((t) => t.id === teamId)) return tier as Tier;
-    }
-    return null;
+    return teamTiers.get(teamId)?.tier ?? null;
   };
 
   const tierA = teamA ? getTeamTier(teamA.id) : null;
