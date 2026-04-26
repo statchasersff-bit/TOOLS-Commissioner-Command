@@ -264,20 +264,6 @@ export function RosterComparison({ league }: AnalyzerProps) {
               );
             })}
           </div>
-          <div className="flex justify-between mt-5 pt-4 border-t border-border/40">
-            <div className="text-center">
-              <p className="text-sm font-bold text-[#0b3a7a] dark:text-blue-400">{teamA.name}</p>
-              {teamA.owner && teamA.owner !== teamA.name && (
-                <p className="text-xs text-muted-foreground">{teamA.owner}</p>
-              )}
-            </div>
-            <div className="text-center">
-              <p className="text-sm font-bold text-[#d4af37]">{teamB.name}</p>
-              {teamB.owner && teamB.owner !== teamB.name && (
-                <p className="text-xs text-muted-foreground">{teamB.owner}</p>
-              )}
-            </div>
-          </div>
         </Card>
       )}
 
