@@ -632,7 +632,12 @@ export async function searchTrades(params: {
   const limit = Math.min(params.limit || 50, 100);
   const offset = (page - 1) * limit;
 
-  let conditions: any[] = [];
+  let conditions: any[] = [
+    sql`${trades.id} NOT IN (
+      SELECT ${tradeAssets.tradeId} FROM ${tradeAssets}
+      WHERE ${tradeAssets.assetType} = 'pick' AND ${tradeAssets.pickRound} > 5
+    )`,
+  ];
 
   if (params.format && params.format !== "all") {
     conditions.push(eq(trades.leagueFormat, params.format));
