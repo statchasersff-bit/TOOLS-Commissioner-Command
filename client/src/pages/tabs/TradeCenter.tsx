@@ -22,203 +22,404 @@ interface TradeProps {
   userTeam: Team;
 }
 
+interface TradeProposal {
+  partner: Team;
+  gives: Player[];
+  gets: Player[];
+  giveVal: number;
+  getVal: number;
+  diff: number;
+  needScore: number;
+  type: "1v1" | "2v1" | "1v2";
+  rationale: string;
+}
+
+function PlayerChip({ player, value }: { player: Player; value: number }) {
+  const sid = player.sleeperId ?? player.id;
+  return (
+    <div className="flex items-center gap-1.5 py-1">
+      <div className="w-8 h-8 rounded-full flex-shrink-0 overflow-hidden bg-muted ring-1 ring-border/30">
+        <img
+          src={`https://sleepercdn.com/content/nfl/players/thumb/${sid}.jpg`}
+          alt={player.name}
+          className="w-full h-full object-cover object-top"
+          onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+        />
+      </div>
+      <div className="min-w-0">
+        <p className="text-xs font-semibold leading-tight truncate">{player.name}</p>
+        <div className="flex items-center gap-1">
+          <Badge variant="outline" className={`text-[9px] px-1 py-0 h-3.5 ${getPositionColor(player.pos)}`}>{player.pos}</Badge>
+          <span className="text-[10px] text-muted-foreground">{value.toLocaleString()}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TradeProposalCard({ proposal, mode }: { proposal: TradeProposal; mode: "dynasty" | "redraft" }) {
+  const valueDiff = proposal.getVal - proposal.giveVal;
+  const maxVal = Math.max(proposal.giveVal, proposal.getVal);
+  const diffPct = maxVal > 0 ? Math.abs(valueDiff) / maxVal : 0;
+  const isEven = diffPct < 0.05;
+  const isFavorable = valueDiff > 0;
+  const typeLabel = proposal.type === "1v1" ? "1-for-1" : proposal.type === "2v1" ? "2-for-1" : "1-for-2";
+
+  return (
+    <div className="rounded-xl border border-border/50 p-4 bg-muted/10 hover:bg-muted/25 transition-colors" data-testid={`proposal-card-${proposal.partner.id}`}>
+      <div className="flex items-center gap-2 mb-3">
+        <img
+          src={proposal.partner.avatar || "https://sleepercdn.com/images/v2/icons/player_default.webp"}
+          alt={proposal.partner.owner}
+          className="w-7 h-7 rounded-full object-cover bg-muted flex-shrink-0"
+          onError={(e) => { e.currentTarget.src = "https://sleepercdn.com/images/v2/icons/player_default.webp"; }}
+        />
+        <div className="flex-1 min-w-0">
+          <span className="text-sm font-semibold">{proposal.partner.name}</span>
+          <span className="text-xs text-muted-foreground ml-1.5">· {proposal.partner.owner}</span>
+        </div>
+        <Badge variant="outline" className="text-[10px] flex-shrink-0">{typeLabel}</Badge>
+      </div>
+
+      <div className="grid grid-cols-[1fr_28px_1fr] gap-2 items-start">
+        <div>
+          <p className="text-[9px] text-muted-foreground font-semibold uppercase tracking-wider mb-0.5">You send</p>
+          {proposal.gives.map((p, i) => <PlayerChip key={i} player={p} value={proposal.giveVal / proposal.gives.length} />)}
+        </div>
+        <div className="flex items-center justify-center pt-4">
+          <ArrowRightLeft className="w-3.5 h-3.5 text-muted-foreground/60" />
+        </div>
+        <div>
+          <p className="text-[9px] text-muted-foreground font-semibold uppercase tracking-wider mb-0.5">You receive</p>
+          {proposal.gets.map((p, i) => <PlayerChip key={i} player={p} value={proposal.getVal / proposal.gets.length} />)}
+        </div>
+      </div>
+
+      <div className="mt-3 pt-2.5 border-t border-border/30 flex items-center justify-between gap-2">
+        <p className="text-[10px] text-muted-foreground italic truncate">{proposal.rationale}</p>
+        <div className="flex items-center gap-1.5 flex-shrink-0">
+          <span className="text-[10px] text-muted-foreground">{proposal.giveVal.toLocaleString()} → {proposal.getVal.toLocaleString()}</span>
+          <Badge
+            variant={isEven ? "secondary" : isFavorable ? "default" : "outline"}
+            className={cn("text-[10px]", isFavorable && !isEven && "bg-emerald-600 dark:bg-emerald-700 text-white border-0", !isFavorable && !isEven && "text-amber-600 dark:text-amber-400 border-amber-400")}
+          >
+            {isEven ? "Even" : isFavorable ? `+${Math.round(Math.abs(valueDiff)).toLocaleString()} for you` : `+${Math.round(Math.abs(valueDiff)).toLocaleString()} for them`}
+          </Badge>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function TradeFinder({ league, userTeam }: TradeProps) {
   const { getPlayerValue, getRedraftValue, optimizeLineup } = useValueModel();
   const tradeFinderTierMap = useMemo(() => getLeagueTeamTiers(league.teams), [league.teams]);
+  const [proposalMode, setProposalMode] = useState<"dynasty" | "redraft">("dynasty");
+  const [posFilter, setPosFilter] = useState<string>("all");
+  const [showAllProposals, setShowAllProposals] = useState(false);
 
-  const partners = useMemo(() => {
-    const positions = ["QB", "RB", "WR", "TE"] as const;
-    const rosterPositions = league.rosterPositions || [];
+  const positions = ["QB", "RB", "WR", "TE"] as const;
 
-    const posRedraftTotals: Record<string, Record<string, number>> = {};
-    const posDynastyTotals: Record<string, Record<string, number>> = {};
-    league.teams.forEach(t => {
-      const roster = rosterPositions.length > 0 ? optimizeLineup(t.roster, rosterPositions) : t.roster;
-      posRedraftTotals[t.id] = {};
-      posDynastyTotals[t.id] = {};
-      positions.forEach(pos => {
-        posRedraftTotals[t.id][pos] = roster.filter(p => p.starter && p.pos === pos).reduce((s, p) => s + getRedraftValue(p), 0);
-        posDynastyTotals[t.id][pos] = t.roster.filter(p => p.pos === pos).reduce((s, p) => s + getPlayerValue(p), 0);
-      });
-    });
-
-    const posRedraftRanks: Record<string, Record<string, number>> = {};
-    const posDynastyRanks: Record<string, Record<string, number>> = {};
-    const total = league.teams.length;
+  const { userNeeds, userSurplus, partnerNeedsMap, partnerSurplusMap } = useMemo(() => {
+    const getValue = (p: Player) => proposalMode === "dynasty" ? getPlayerValue(p) : getRedraftValue(p);
+    const userPosTotals: Record<string, number> = {};
     positions.forEach(pos => {
-      const byRedraft = [...league.teams].sort((a, b) => (posRedraftTotals[b.id][pos] || 0) - (posRedraftTotals[a.id][pos] || 0));
-      byRedraft.forEach((t, i) => {
-        if (!posRedraftRanks[t.id]) posRedraftRanks[t.id] = {};
-        posRedraftRanks[t.id][pos] = i + 1;
-      });
-      const byDynasty = [...league.teams].sort((a, b) => (posDynastyTotals[b.id][pos] || 0) - (posDynastyTotals[a.id][pos] || 0));
-      byDynasty.forEach((t, i) => {
-        if (!posDynastyRanks[t.id]) posDynastyRanks[t.id] = {};
-        posDynastyRanks[t.id][pos] = i + 1;
-      });
+      userPosTotals[pos] = userTeam.roster.filter(p => p.pos === pos).reduce((s, p) => s + getValue(p), 0);
     });
+    const ranked = [...positions].sort((a, b) => userPosTotals[a] - userPosTotals[b]);
+    const userNeeds = new Set(ranked.slice(0, 2));
+    const userSurplus = new Set(ranked.slice(2));
 
-    const topThird = Math.ceil(total / 3);
-    const bottomStart = total - topThird + 1;
-
-    const userRedraft = posRedraftRanks[userTeam.id] || {};
-    const userDynasty = posDynastyRanks[userTeam.id] || {};
-
-    const totalRedraft = league.teams.map(t => {
-      const roster = rosterPositions.length > 0 ? optimizeLineup(t.roster, rosterPositions) : t.roster;
-      return { id: t.id, total: roster.filter(p => p.starter).reduce((s, p) => s + getRedraftValue(p), 0) };
+    const partnerNeedsMap = new Map<string, Set<string>>();
+    const partnerSurplusMap = new Map<string, Set<string>>();
+    league.teams.forEach(t => {
+      const totals: Record<string, number> = {};
+      positions.forEach(pos => { totals[pos] = t.roster.filter(p => p.pos === pos).reduce((s, p) => s + getValue(p), 0); });
+      const pr = [...positions].sort((a, b) => totals[a] - totals[b]);
+      partnerNeedsMap.set(t.id, new Set(pr.slice(0, 2)));
+      partnerSurplusMap.set(t.id, new Set(pr.slice(2)));
     });
-    totalRedraft.sort((a, b) => b.total - a.total);
-    const totalDynasty = league.teams.map(t => ({
-      id: t.id, total: t.roster.reduce((s, p) => s + getPlayerValue(p), 0),
-    }));
-    totalDynasty.sort((a, b) => b.total - a.total);
-    const overallRedraftRank: Record<string, number> = {};
-    const overallDynastyRank: Record<string, number> = {};
-    totalRedraft.forEach((e, i) => { overallRedraftRank[e.id] = i + 1; });
-    totalDynasty.forEach((e, i) => { overallDynastyRank[e.id] = i + 1; });
+    return { userNeeds, userSurplus, partnerNeedsMap, partnerSurplusMap };
+  }, [league, userTeam, getPlayerValue, getRedraftValue, proposalMode]);
 
-    return league.teams
-      .filter((t) => t.id !== userTeam.id)
-      .map((t) => {
-        const tRedraft = posRedraftRanks[t.id] || {};
-        const tDynasty = posDynastyRanks[t.id] || {};
-        const tier = tradeFinderTierMap.get(t.id)?.tier ?? "Balanced";
+  const generatedTrades = useMemo<TradeProposal[]>(() => {
+    const getValue = (p: Player) => proposalMode === "dynasty" ? getPlayerValue(p) : getRedraftValue(p);
+    const FAIR_THRESHOLD = 0.22;
+    const MIN_VALUE = 800;
+    const MAX_POOL = 7;
+    const MAX_PER_PARTNER = 4;
 
-        const redraftReasons: string[] = [];
-        const dynastyReasons: string[] = [];
+    const buildRationale = (gives: Player[], gets: Player[], pNeeds: Set<string>, pSurplus: Set<string>): string => {
+      const parts: string[] = [];
+      const getPositions = [...new Set(gets.map(p => p.pos))];
+      const givePositions = [...new Set(gives.map(p => p.pos))];
+      if (getPositions.some(pos => userNeeds.has(pos))) parts.push(`fills your ${getPositions.filter(p => userNeeds.has(p)).join("/")} need`);
+      if (givePositions.some(pos => userSurplus.has(pos))) parts.push(`uses your ${givePositions.filter(p => userSurplus.has(p)).join("/")} depth`);
+      if (givePositions.some(pos => pNeeds.has(pos))) parts.push(`addresses their ${givePositions.filter(p => pNeeds.has(p)).join("/")} need`);
+      if (getPositions.some(pos => pSurplus.has(pos))) parts.push(`targets their ${getPositions.filter(p => pSurplus.has(p)).join("/")} surplus`);
+      return parts.length > 0 ? parts.slice(0, 2).join(" · ") : "Value-equivalent swap";
+    };
 
-        positions.forEach(pos => {
-          if (tRedraft[pos] <= topThird && userRedraft[pos] >= bottomStart) {
-            redraftReasons.push(`${pos} surplus (they #${tRedraft[pos]}, you #${userRedraft[pos]})`);
-          }
-          if (tRedraft[pos] >= bottomStart && userRedraft[pos] <= topThird) {
-            redraftReasons.push(`Needs ${pos} (they #${tRedraft[pos]})`);
-          }
-        });
+    const allProposals: TradeProposal[] = [];
 
-        positions.forEach(pos => {
-          if (tDynasty[pos] <= topThird && userDynasty[pos] >= bottomStart) {
-            dynastyReasons.push(`${pos} surplus (they #${tDynasty[pos]}, you #${userDynasty[pos]})`);
-          }
-          if (tDynasty[pos] >= bottomStart && userDynasty[pos] <= topThird) {
-            dynastyReasons.push(`Needs ${pos} (they #${tDynasty[pos]})`);
-          }
-        });
+    for (const partner of league.teams.filter(t => t.id !== userTeam.id)) {
+      const pNeeds = partnerNeedsMap.get(partner.id) ?? new Set();
+      const pSurplus = partnerSurplusMap.get(partner.id) ?? new Set();
 
-        const tOverallRedraft = overallRedraftRank[t.id] || total;
-        const tOverallDynasty = overallDynastyRank[t.id] || total;
-        if (tOverallDynasty <= topThird && tOverallRedraft >= bottomStart) {
-          const agingTargets = t.roster.filter(p => p.age >= 28 && getRedraftValue(p) >= 2000);
-          if (agingTargets.length > 0) {
-            redraftReasons.push(`Strong dynasty, weak redraft — ${agingTargets.length} aging target${agingTargets.length > 1 ? "s" : ""}`);
-          } else {
-            redraftReasons.push("Strong dynasty, weak redraft");
+      const myOffers = userTeam.roster
+        .filter(p => getValue(p) >= MIN_VALUE)
+        .sort((a, b) => getValue(b) - getValue(a))
+        .slice(0, MAX_POOL);
+
+      const theirTargets = partner.roster
+        .filter(p => getValue(p) >= MIN_VALUE)
+        .sort((a, b) => getValue(b) - getValue(a))
+        .slice(0, MAX_POOL);
+
+      if (!myOffers.length || !theirTargets.length) continue;
+
+      const partnerProposals: TradeProposal[] = [];
+
+      // 1v1
+      for (const give of myOffers) {
+        const gv = getValue(give);
+        for (const get of theirTargets) {
+          const rv = getValue(get);
+          const maxV = Math.max(gv, rv);
+          if (maxV < 1000) continue;
+          const diff = Math.abs(gv - rv) / maxV;
+          if (diff <= FAIR_THRESHOLD) {
+            const needScore =
+              (userNeeds.has(get.pos) ? 3 : 0) +
+              (userSurplus.has(give.pos) ? 2 : 0) +
+              (pNeeds.has(give.pos) ? 3 : 0) +
+              (pSurplus.has(get.pos) ? 2 : 0);
+            partnerProposals.push({
+              partner, gives: [give], gets: [get],
+              giveVal: gv, getVal: rv,
+              diff, needScore, type: "1v1",
+              rationale: buildRationale([give], [get], pNeeds, pSurplus),
+            });
           }
         }
+      }
 
-        if (tOverallRedraft <= topThird && tOverallDynasty >= bottomStart) {
-          dynastyReasons.push("Win-now heavy, dynasty thin");
+      // 2v1 (user sends 2, gets 1 star)
+      const top5Offers = myOffers.slice(0, 5);
+      const top5Targets = theirTargets.slice(0, 5);
+      for (let i = 0; i < top5Offers.length; i++) {
+        for (let j = i + 1; j < top5Offers.length; j++) {
+          const gv = getValue(top5Offers[i]) + getValue(top5Offers[j]);
+          for (const get of top5Targets) {
+            const rv = getValue(get);
+            if (rv < 2500) continue;
+            const maxV = Math.max(gv, rv);
+            const diff = Math.abs(gv - rv) / maxV;
+            if (diff <= FAIR_THRESHOLD) {
+              const needScore =
+                (userNeeds.has(get.pos) ? 4 : 0) +
+                (userSurplus.has(top5Offers[i].pos) ? 1 : 0) +
+                (userSurplus.has(top5Offers[j].pos) ? 1 : 0) +
+                (pNeeds.has(top5Offers[i].pos) ? 2 : 0) +
+                (pNeeds.has(top5Offers[j].pos) ? 2 : 0);
+              partnerProposals.push({
+                partner, gives: [top5Offers[i], top5Offers[j]], gets: [get],
+                giveVal: gv, getVal: rv,
+                diff, needScore, type: "2v1",
+                rationale: buildRationale([top5Offers[i], top5Offers[j]], [get], pNeeds, pSurplus),
+              });
+            }
+          }
         }
+      }
 
-        return {
-          ...t,
-          redraftRank: tOverallRedraft,
-          dynastyRank: tOverallDynasty,
-          redraftReasons,
-          dynastyReasons,
-          tier,
-          reasonCount: redraftReasons.length + dynastyReasons.length,
-        };
-      })
-      .sort((a, b) => b.reasonCount - a.reasonCount);
-  }, [league, userTeam, getPlayerValue, getRedraftValue, optimizeLineup]);
+      // 1v2 (user sends 1 star, gets 2)
+      for (const give of top5Offers) {
+        const gv = getValue(give);
+        if (gv < 2500) continue;
+        for (let i = 0; i < top5Targets.length; i++) {
+          for (let j = i + 1; j < top5Targets.length; j++) {
+            const rv = getValue(top5Targets[i]) + getValue(top5Targets[j]);
+            const maxV = Math.max(gv, rv);
+            const diff = Math.abs(gv - rv) / maxV;
+            if (diff <= FAIR_THRESHOLD) {
+              const needScore =
+                (userNeeds.has(top5Targets[i].pos) ? 3 : 0) +
+                (userNeeds.has(top5Targets[j].pos) ? 3 : 0) +
+                (userSurplus.has(give.pos) ? 2 : 0) +
+                (pNeeds.has(give.pos) ? 4 : 0);
+              partnerProposals.push({
+                partner, gives: [give], gets: [top5Targets[i], top5Targets[j]],
+                giveVal: gv, getVal: rv,
+                diff, needScore, type: "1v2",
+                rationale: buildRationale([give], [top5Targets[i], top5Targets[j]], pNeeds, pSurplus),
+              });
+            }
+          }
+        }
+      }
+
+      partnerProposals.sort((a, b) => (b.needScore * 10 - b.diff * 100) - (a.needScore * 10 - a.diff * 100));
+      allProposals.push(...partnerProposals.slice(0, MAX_PER_PARTNER));
+    }
+
+    return allProposals.sort((a, b) => (b.needScore * 10 - b.diff * 100) - (a.needScore * 10 - a.diff * 100));
+  }, [league, userTeam, getPlayerValue, getRedraftValue, proposalMode, userNeeds, userSurplus, partnerNeedsMap, partnerSurplusMap]);
+
+  const filteredProposals = useMemo(() => {
+    if (posFilter === "all") return generatedTrades;
+    return generatedTrades.filter(p =>
+      p.gets.some(pl => pl.pos === posFilter) || p.gives.some(pl => pl.pos === posFilter)
+    );
+  }, [generatedTrades, posFilter]);
+
+  const displayedProposals = showAllProposals ? filteredProposals : filteredProposals.slice(0, 12);
 
   const total = league.teams.length;
-
-  const columns = [
-    { key: "name", header: "Team", sticky: true, sortable: true, sortAccessor: (row: any) => row.name, render: (row: any) => (
-      <div className="flex items-center gap-2.5">
-        <img
-          src={row.avatar || "https://sleepercdn.com/images/v2/icons/player_default.webp"}
-          alt={row.owner}
-          className="w-8 h-8 rounded-full object-cover flex-shrink-0 bg-muted"
-          onError={(e) => { e.currentTarget.src = "https://sleepercdn.com/images/v2/icons/player_default.webp"; }}
-          data-testid={`img-owner-avatar-${row.id}`}
-        />
-        <div>
-          <span className="font-semibold">{row.name}</span>
-          <span className="block text-xs text-muted-foreground">{row.owner}</span>
-        </div>
-      </div>
-    )},
-    { key: "tier", header: "Tier", sortable: true, sortAccessor: (row: any) => row.metrics.overall, render: (row: any) => <Badge variant="outline" className={getTierColor(row.tier)}>{row.tier}</Badge> },
-    { key: "redraftRank", header: "Redraft", sortable: true, sortAccessor: (row: any) => row.redraftRank, render: (row: any) => (
-      <span className={cn("font-bold text-base", row.redraftRank <= Math.ceil(total / 3) ? "text-emerald-600 dark:text-emerald-400" : row.redraftRank >= total - Math.ceil(total / 3) + 1 ? "text-red-500 dark:text-red-400" : "text-foreground")} data-testid={`text-redraft-rank-${row.id}`}>
-        #{row.redraftRank}<span className="text-xs text-muted-foreground font-normal"> / {total}</span>
-      </span>
-    )},
-    { key: "dynastyRank", header: "Dynasty", sortable: true, sortAccessor: (row: any) => row.dynastyRank, render: (row: any) => (
-      <span className={cn("font-bold text-base", row.dynastyRank <= Math.ceil(total / 3) ? "text-emerald-600 dark:text-emerald-400" : row.dynastyRank >= total - Math.ceil(total / 3) + 1 ? "text-red-500 dark:text-red-400" : "text-foreground")} data-testid={`text-dynasty-rank-${row.id}`}>
-        #{row.dynastyRank}<span className="text-xs text-muted-foreground font-normal"> / {total}</span>
-      </span>
-    )},
-    { key: "redraftReasons", header: "Redraft Reasons", sortable: true, sortAccessor: (row: any) => row.redraftReasons.length, render: (row: any) => (
-      <div className="flex flex-wrap gap-1">
-        {row.redraftReasons.map((r: string, i: number) => (
-          <Badge key={i} variant="secondary" className="text-xs" data-testid={`badge-redraft-reason-${row.id}-${i}`}>{r}</Badge>
-        ))}
-      </div>
-    )},
-    { key: "dynastyReasons", header: "Dynasty Reasons", sortable: true, sortAccessor: (row: any) => row.dynastyReasons.length, render: (row: any) => (
-      <div className="flex flex-wrap gap-1">
-        {row.dynastyReasons.map((r: string, i: number) => (
-          <Badge key={i} variant="outline" className="text-xs" data-testid={`badge-dynasty-reason-${row.id}-${i}`}>{r}</Badge>
-        ))}
-      </div>
-    )},
-    { key: "target", header: "", render: (row: any) => (
-      <Button variant="ghost" size="sm" data-testid={`button-explore-${row.id}`}>
-        <ArrowRightLeft className="w-3 h-3 mr-1" /> Explore
-      </Button>
-    )},
-  ];
 
   const tradeBlockCandidates = useMemo(() => {
     const topThird = Math.ceil(total / 3);
     const bottomStart = total - topThird + 1;
+    const totalDynasty = [...league.teams].sort((a, b) =>
+      b.roster.reduce((s, p) => s + getPlayerValue(p), 0) - a.roster.reduce((s, p) => s + getPlayerValue(p), 0)
+    );
+    const totalRedraft = [...league.teams].sort((a, b) =>
+      b.roster.reduce((s, p) => s + getRedraftValue(p), 0) - a.roster.reduce((s, p) => s + getRedraftValue(p), 0)
+    );
+    const dynRank: Record<string, number> = {};
+    const rdRank: Record<string, number> = {};
+    totalDynasty.forEach((t, i) => { dynRank[t.id] = i + 1; });
+    totalRedraft.forEach((t, i) => { rdRank[t.id] = i + 1; });
 
     return league.teams
       .filter(t => t.id !== userTeam.id)
       .flatMap(t => {
-        const tOverallDynasty = partners.find(p => p.id === t.id)?.dynastyRank ?? total;
-        const tOverallRedraft = partners.find(p => p.id === t.id)?.redraftRank ?? total;
         const tier = tradeFinderTierMap.get(t.id)?.tier ?? "Balanced";
         const isRebuilder = isRebuilderTier(tier);
-        const isDynastyStrong = tOverallDynasty <= topThird && tOverallRedraft >= bottomStart;
-
+        const isDynastyStrong = (dynRank[t.id] ?? total) <= topThird && (rdRank[t.id] ?? total) >= bottomStart;
         if (!isRebuilder && !isDynastyStrong) return [];
-
         return t.roster
           .filter(p => p.age >= 27 && getRedraftValue(p) >= 1500)
           .map(p => ({
-            ...p,
-            teamName: t.name,
-            ownerName: t.owner,
-            tier,
+            ...p, teamName: t.name, ownerName: t.owner, tier,
             redraftVal: getRedraftValue(p),
-            dynastyVal: getPlayerValue(p),
             reason: isRebuilder ? "Rebuilder" as const : "Dynasty-heavy" as const,
           }));
       })
       .sort((a, b) => b.redraftVal - a.redraftVal);
-  }, [league, userTeam, partners, total, getRedraftValue, getPlayerValue, tradeFinderTierMap]);
+  }, [league, userTeam, getRedraftValue, getPlayerValue, tradeFinderTierMap, total]);
 
   return (
     <div className="space-y-8">
-      <SectionHeader title="Trade Finder" subtitle="Best trade partners based on positional surplus/deficit and roster imbalance" />
-      <DataTable columns={columns} data={partners} />
+      <SectionHeader title="Trade Finder" subtitle="AI-generated trade proposals based on roster needs, positional value, and fair market rates" />
 
+      {/* Trade Proposals */}
+      <Card className="p-6" data-testid="card-trade-proposals">
+        <div className="flex items-start justify-between mb-5 gap-4">
+          <div>
+            <h3 className="text-base font-bold flex items-center gap-2">
+              Trade Proposals
+              <Badge variant="secondary">{filteredProposals.length}</Badge>
+            </h3>
+            <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
+            <p className="text-[10px] text-muted-foreground mt-2">Fair 1v1, 2v1, and 1v2 packages ranked by positional need + value match</p>
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0 flex-wrap justify-end">
+            <div className="flex rounded-lg border border-border overflow-hidden">
+              <button
+                onClick={() => setProposalMode("dynasty")}
+                className={cn("px-2.5 py-1 text-xs font-medium transition-colors", proposalMode === "dynasty" ? "bg-[#0b3a7a] text-white" : "bg-transparent text-muted-foreground hover:text-foreground")}
+                data-testid="btn-mode-dynasty"
+              >Dynasty</button>
+              <button
+                onClick={() => setProposalMode("redraft")}
+                className={cn("px-2.5 py-1 text-xs font-medium transition-colors border-l border-border", proposalMode === "redraft" ? "bg-[#0b3a7a] text-white" : "bg-transparent text-muted-foreground hover:text-foreground")}
+                data-testid="btn-mode-redraft"
+              >Redraft</button>
+            </div>
+            <select
+              value={posFilter}
+              onChange={e => { setPosFilter(e.target.value); setShowAllProposals(false); }}
+              className="text-xs border border-border rounded-lg px-2 py-1 bg-background text-foreground"
+              data-testid="select-pos-filter"
+            >
+              <option value="all">All positions</option>
+              <option value="QB">QB</option>
+              <option value="RB">RB</option>
+              <option value="WR">WR</option>
+              <option value="TE">TE</option>
+            </select>
+          </div>
+        </div>
+
+        {filteredProposals.length === 0 ? (
+          <div className="text-center py-8">
+            <p className="text-sm text-muted-foreground">No fair trade proposals found.</p>
+            <p className="text-xs text-muted-foreground mt-1">This can happen when roster values are very uneven or player data hasn't loaded yet.</p>
+          </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {displayedProposals.map((proposal, i) => (
+                <TradeProposalCard key={i} proposal={proposal} mode={proposalMode} />
+              ))}
+            </div>
+            {!showAllProposals && filteredProposals.length > 12 && (
+              <Button variant="outline" className="w-full mt-4" onClick={() => setShowAllProposals(true)} data-testid="btn-show-more-proposals">
+                Show {filteredProposals.length - 12} more proposals
+              </Button>
+            )}
+          </>
+        )}
+      </Card>
+
+      {/* Partner Analysis */}
+      <Card className="p-6" data-testid="card-partner-analysis">
+        <div className="mb-5">
+          <h3 className="text-base font-bold">Partner Analysis</h3>
+          <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
+          <p className="text-[10px] text-muted-foreground mt-2">All league teams ranked by trade compatibility — positional overlap, tier mismatch, and roster needs</p>
+        </div>
+        <div className="space-y-0">
+          {league.teams.filter(t => t.id !== userTeam.id).map((t, i) => {
+            const tier = tradeFinderTierMap.get(t.id)?.tier ?? "Balanced";
+            const dynVal = t.roster.reduce((s, p) => s + getPlayerValue(p), 0);
+            const rdVal = t.roster.reduce((s, p) => s + getRedraftValue(p), 0);
+            const proposalCount = generatedTrades.filter(p => p.partner.id === t.id).length;
+            return (
+              <div key={t.id} className="flex items-center justify-between py-2.5 border-b border-border/20 last:border-0" data-testid={`partner-row-${t.id}`}>
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <img
+                    src={t.avatar || "https://sleepercdn.com/images/v2/icons/player_default.webp"}
+                    alt={t.owner}
+                    className="w-8 h-8 rounded-full object-cover flex-shrink-0 bg-muted"
+                    onError={(e) => { e.currentTarget.src = "https://sleepercdn.com/images/v2/icons/player_default.webp"; }}
+                    data-testid={`img-partner-avatar-${t.id}`}
+                  />
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold truncate">{t.name}</p>
+                    <span className="text-[10px] text-muted-foreground">{t.owner}</span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <Badge variant="outline" className={cn("text-[10px]", getTierColor(tier))}>{tier}</Badge>
+                  {proposalCount > 0 && (
+                    <Badge variant="secondary" className="text-[10px]" data-testid={`badge-proposals-count-${t.id}`}>
+                      {proposalCount} proposal{proposalCount !== 1 ? "s" : ""}
+                    </Badge>
+                  )}
+                  <div className="text-right hidden sm:block">
+                    <p className="text-[10px] text-muted-foreground">Dyn <span className="font-semibold text-foreground">{(dynVal / 1000).toFixed(1)}k</span></p>
+                    <p className="text-[10px] text-muted-foreground">RD <span className="font-semibold text-foreground">{(rdVal / 1000).toFixed(1)}k</span></p>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </Card>
+
+      {/* Trade Block Candidates */}
       <Card className="p-6" data-testid="card-trade-block-candidates">
         <div className="mb-5">
           <h3 className="text-base font-bold flex items-center gap-2">
@@ -227,7 +428,7 @@ export function TradeFinder({ league, userTeam }: TradeProps) {
           </h3>
           <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
           <p className="text-[10px] text-muted-foreground mt-2">
-            Veteran players (27+) on rebuilding or dynasty-heavy teams with strong redraft value — likely trade targets
+            Veteran players (27+) on rebuilding or dynasty-heavy teams with strong redraft value — likely available
           </p>
         </div>
         <div className="space-y-0">
