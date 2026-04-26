@@ -689,55 +689,6 @@ export function TradeBlockScanner({ league }: { league: League }) {
 
       <CrossLeagueTradeIntel league={league} />
 
-      <Card className="p-6">
-        <div className="mb-4">
-          <h3 className="text-base font-bold flex items-center gap-2">
-            Trade Block Candidates
-            <Badge variant="secondary">{tradeBlockCandidates.length}</Badge>
-          </h3>
-          <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
-        </div>
-        <div className="space-y-0">
-          {tradeBlockCandidates.map((p, i) => {
-            const sleeperId = p.sleeperId ?? p.id;
-            return (
-              <div key={i} className="flex items-center justify-between py-2.5 border-b border-border/20 last:border-0">
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className="text-xs text-muted-foreground w-5 text-right">{i + 1}.</span>
-                  <div className="w-9 h-9 rounded-full flex-shrink-0 overflow-hidden bg-muted ring-1 ring-border/40">
-                    <img
-                      src={`https://sleepercdn.com/content/nfl/players/thumb/${sleeperId}.jpg`}
-                      alt={p.name}
-                      className="w-full h-full object-cover object-top"
-                      onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-                    />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <p className="text-sm font-semibold">{p.name}</p>
-                      <Badge variant="outline" className={`text-[10px] px-1 py-0 h-4 flex-shrink-0 ${getPositionColor(p.pos)}`}>{p.pos}</Badge>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-[10px] text-muted-foreground">{p.teamName}</span>
-                      <span className="text-[10px] text-muted-foreground">· {p.ownerName}</span>
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  <span className="text-xs text-muted-foreground">Age {p.age}</span>
-                  <Badge variant="outline" className={cn("text-[10px]", p.reason === "Rebuilder" ? getTierColor("Future Powerhouse") : "text-amber-600 dark:text-amber-400 border-amber-300 dark:border-amber-700")}>{p.reason}</Badge>
-                  <div className="text-right">
-                    <p className="text-xs font-bold text-[#0b3a7a] dark:text-blue-400">{p.redraftVal.toLocaleString()}</p>
-                    <p className="text-[10px] text-muted-foreground">redraft</p>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-          {tradeBlockCandidates.length === 0 && <p className="text-xs text-muted-foreground">No trade block candidates found</p>}
-        </div>
-      </Card>
-
     </div>
   );
 }
