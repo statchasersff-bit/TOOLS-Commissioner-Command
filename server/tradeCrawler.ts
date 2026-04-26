@@ -634,8 +634,15 @@ export async function searchTrades(params: {
 
   let conditions: any[] = [
     sql`${trades.id} NOT IN (
-      SELECT ${tradeAssets.tradeId} FROM ${tradeAssets}
-      WHERE ${tradeAssets.assetType} = 'pick' AND ${tradeAssets.pickRound} > 5
+      SELECT ta.trade_id
+      FROM trade_assets ta
+      JOIN trades t_sub ON ta.trade_id = t_sub.id
+      JOIN crawled_leagues cl ON t_sub.league_id = cl.id
+      WHERE ta.asset_type = 'pick'
+        AND (
+          ta.pick_round > 5
+          OR (cl.previous_league_id IS NULL AND ta.pick_season = cl.season)
+        )
     )`,
   ];
 
