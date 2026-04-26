@@ -101,7 +101,9 @@ export function PowerRankings({ league }: AnalyzerProps) {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold truncate">{team.name}</p>
-                      <p className="text-xs text-muted-foreground truncate">{team.owner}</p>
+                      {team.owner && team.owner !== team.name && (
+                        <p className="text-xs text-muted-foreground truncate">{team.owner}</p>
+                      )}
                     </div>
                     <span className="text-lg font-bold text-foreground flex-shrink-0">{team.metrics.overall}</span>
                   </div>
@@ -290,7 +292,9 @@ export function RosterComparison({ league }: AnalyzerProps) {
               {teamConfig.map(({ team, color }) => (
                 <div key={team.id} className="px-1 sm:px-2">
                   <h3 className={`text-xs sm:text-sm font-bold ${color} truncate`}>{team.name}</h3>
-                  <p className="text-[10px] sm:text-xs text-muted-foreground truncate">{team.owner}</p>
+                  {team.owner && team.owner !== team.name && (
+                    <p className="text-[10px] sm:text-xs text-muted-foreground truncate">{team.owner}</p>
+                  )}
                   <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
                 </div>
               ))}
