@@ -1923,6 +1923,7 @@ function TradeCard({
   const sideValues = trade.sides.map((side) => {
     const playerValue = side.playersReceived.reduce((sum, p) => sum + getPlayerValue(p.sleeperId), 0);
     const pickValue = side.picksReceived.reduce((sum, p) => {
+      if (p.round > 5) return sum;
       return sum + getStaticPickValue(parseInt(p.season) || 2026, p.round, "mid", p.slot, trade.leagueTotalRosters);
     }, 0);
     return playerValue + pickValue;
@@ -2003,15 +2004,20 @@ function TradeCard({
                 })}
 
                 {side.picksReceived.map((p, pi) => {
-                  const val = getStaticPickValue(parseInt(p.season) || 2026, p.round, "mid", p.slot, trade.leagueTotalRosters);
-                  const pickLabel = p.slot != null
-                    ? `${p.season} ${p.round}.${String(p.slot).padStart(2, "0")}`
-                    : `${p.season} Round ${p.round}`;
+                  const isStartup = p.round > 5;
+                  const val = isStartup ? 0 : getStaticPickValue(parseInt(p.season) || 2026, p.round, "mid", p.slot, trade.leagueTotalRosters);
+                  const pickLabel = isStartup
+                    ? (p.slot != null
+                        ? `${p.season} Startup ${p.round}.${String(p.slot).padStart(2, "0")}`
+                        : `${p.season} Startup R${p.round}`)
+                    : (p.slot != null
+                        ? `${p.season} ${p.round}.${String(p.slot).padStart(2, "0")}`
+                        : `${p.season} Round ${p.round}`);
                   return (
                     <div key={`pick-${pi}`} className="flex items-center justify-between py-1">
                       <div className="flex items-center gap-1.5">
-                        <Badge variant="outline" className="text-[10px] w-7 justify-center bg-purple-50 text-purple-600 dark:bg-purple-950/30 dark:text-purple-400">
-                          PK
+                        <Badge variant="outline" className={`text-[10px] w-7 justify-center ${isStartup ? "bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400 border-amber-300 dark:border-amber-700" : "bg-purple-50 text-purple-600 dark:bg-purple-950/30 dark:text-purple-400"}`}>
+                          {isStartup ? "SP" : "PK"}
                         </Badge>
                         <span className="text-xs font-medium">
                           {pickLabel}
@@ -2020,7 +2026,7 @@ function TradeCard({
                           <span className="text-[10px] text-muted-foreground">({p.originalOwnerName}'s)</span>
                         )}
                       </div>
-                      <span className="text-[10px] text-muted-foreground">{val.toLocaleString()}</span>
+                      {!isStartup && val > 0 && <span className="text-[10px] text-muted-foreground">{val.toLocaleString()}</span>}
                     </div>
                   );
                 })}

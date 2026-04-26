@@ -1081,7 +1081,10 @@ export async function fetchCrossLeagueTrades(userId: string) {
 
       if (trade.draft_picks) {
         for (const pick of trade.draft_picks) {
-          const label = `${pick.season} Round ${pick.round}`;
+          const isStartup = pick.round > 5;
+          const label = isStartup
+            ? `${pick.season} Startup R${pick.round}`
+            : `${pick.season} Round ${pick.round}`;
           if (pick.previous_owner_id === userRosterId) {
             sentPicks.push(label);
           } else if (pick.owner_id === userRosterId) {
