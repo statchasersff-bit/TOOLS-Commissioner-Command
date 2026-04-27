@@ -89,6 +89,7 @@ function SleeperVerifyGate({ userId, username, onAuth }: { userId: string; usern
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [countdown, setCountdown] = useState(0);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState("");
   const [leagues, setLeagues] = useState<{ league_id: string; name: string }[]>([]);
@@ -156,6 +157,17 @@ function SleeperVerifyGate({ userId, username, onAuth }: { userId: string; usern
     if (password.length < 6) { setError("Password must be at least 6 characters."); return; }
     if (password !== confirmPassword) { setError("Passwords don't match."); return; }
     setSubmitting(true); setError("");
+
+    await new Promise<void>(resolve => {
+      let secs = 15;
+      setCountdown(secs);
+      const iv = setInterval(() => {
+        secs -= 1;
+        if (secs <= 0) { clearInterval(iv); setCountdown(0); resolve(); }
+        else setCountdown(secs);
+      }, 1000);
+    });
+
     try {
       const r = await fetch(`${API_BASE}/api/auth/finance-register`, {
         method: "POST",
@@ -313,7 +325,11 @@ function SleeperVerifyGate({ userId, username, onAuth }: { userId: string; usern
             )}
 
             <Button className="w-full" onClick={handleRegister} disabled={submitting || !password || !confirmPassword || !challengeCode || !selectedLeagueId} data-testid="button-finance-register">
-              {submitting ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />Verifying…</> : mode === "reset" ? "Verify & Reset Password" : "Verify & Create Password"}
+              {countdown > 0
+                ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />Waiting for Sleeper… ({countdown}s)</>
+                : submitting
+                  ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />Verifying…</>
+                  : mode === "reset" ? "Verify & Reset Password" : "Verify & Create Password"}
             </Button>
 
             {mode === "reset" && (
