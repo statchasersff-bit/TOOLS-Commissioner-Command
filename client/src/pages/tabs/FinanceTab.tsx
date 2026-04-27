@@ -82,7 +82,7 @@ function tokenKey(userId: string) { return `dc-finance-token-${userId}`; }
 type GateMode = "checking" | "login" | "register" | "reset";
 
 const SLEEPER_API_BASE = "https://api.sleeper.app/v1";
-const VERIFY_DELAY_MS = 5 * 60 * 1000; // 5 minutes
+const VERIFY_DELAY_MS = 2 * 60 * 1000; // 2 minutes
 
 // Module-level: persists while the page is open, survives tab navigation
 let _pending: { sleeperId: string; password: string; leagueId: string; endTime: number } | null = null;
@@ -96,6 +96,7 @@ function SleeperVerifyGate({ userId, username, onAuth }: { userId: string; usern
   const [countdown, setCountdown] = useState(0);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState("");
+  const [verifyFailed, setVerifyFailed] = useState(false);
   const [leagues, setLeagues] = useState<{ league_id: string; name: string }[]>([]);
   const [selectedLeagueId, setSelectedLeagueId] = useState<string>("");
 
@@ -157,7 +158,7 @@ function SleeperVerifyGate({ userId, username, onAuth }: { userId: string; usern
   }
 
   async function doVerify(pwd: string, leagueId: string) {
-    setSubmitting(true); setCountdown(0); setError("");
+    setSubmitting(true); setCountdown(0); setError(""); setVerifyFailed(false);
     try {
       const r = await fetch(`${API_BASE}/api/auth/finance-register`, {
         method: "POST",
@@ -165,11 +166,18 @@ function SleeperVerifyGate({ userId, username, onAuth }: { userId: string; usern
         body: JSON.stringify({ sleeperId: userId, password: pwd, leagueId }),
       });
       const data = await r.json();
-      if (!r.ok) { setError(data.error || "Verification failed. Make sure your Sleeper team name is saved correctly."); return; }
+      if (!r.ok) {
+        setError(data.error || "Verification failed. Make sure your Sleeper team name is saved correctly.");
+        setVerifyFailed(true);
+        return;
+      }
       _pending = null;
       localStorage.setItem(tokenKey(userId), data.token);
       onAuth(data.token);
-    } catch { setError("Network error. Please try again."); }
+    } catch {
+      setError("Network error. Please try again.");
+      setVerifyFailed(true);
+    }
     finally { setSubmitting(false); }
   }
 
@@ -203,7 +211,7 @@ function SleeperVerifyGate({ userId, username, onAuth }: { userId: string; usern
     if (!selectedLeagueId) { setError("Please select which league you changed your team name in."); return; }
     if (password.length < 6) { setError("Password must be at least 6 characters."); return; }
     if (password !== confirmPassword) { setError("Passwords don't match."); return; }
-    setError("");
+    setError(""); setVerifyFailed(false);
 
     const endTime = Date.now() + VERIFY_DELAY_MS;
     _pending = { sleeperId: userId, password, leagueId: selectedLeagueId, endTime };
@@ -355,13 +363,19 @@ function SleeperVerifyGate({ userId, username, onAuth }: { userId: string; usern
               </div>
             )}
 
-            <Button className="w-full" onClick={handleRegister} disabled={submitting || !password || !confirmPassword || !challengeCode || !selectedLeagueId} data-testid="button-finance-register">
-              {countdown > 0
-                ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />Waiting for Sleeper… ({countdown}s)</>
-                : submitting
-                  ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />Verifying…</>
-                  : mode === "reset" ? "Verify & Reset Password" : "Verify & Create Password"}
-            </Button>
+            {verifyFailed ? (
+              <Button className="w-full" onClick={handleRegister} data-testid="button-finance-retry">
+                Try Again
+              </Button>
+            ) : (
+              <Button className="w-full" onClick={handleRegister} disabled={submitting || !password || !confirmPassword || !challengeCode || !selectedLeagueId} data-testid="button-finance-register">
+                {countdown > 0
+                  ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />Waiting for Sleeper… ({countdown}s)</>
+                  : submitting
+                    ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />Verifying…</>
+                    : mode === "reset" ? "Verify & Reset Password" : "Verify & Create Password"}
+              </Button>
+            )}
 
             {mode === "reset" && (
               <button onClick={() => { setMode("login"); setError(""); }} className="w-full text-xs text-muted-foreground hover:text-foreground text-center transition-colors" data-testid="button-back-to-login">
