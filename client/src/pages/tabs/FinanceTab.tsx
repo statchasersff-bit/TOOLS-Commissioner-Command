@@ -885,6 +885,15 @@ export function FinanceTab() {
                         ~{playoffPct}% playoffs
                       </Badge>
                     )}
+                    {s && !s.loading && !s.error && s.rank > 0 && (() => {
+                      const p1 = Math.round((placementProbs(s, 1).get(1) ?? 0) * 1000) / 10;
+                      if (p1 <= 0) return null;
+                      return (
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 border-[#d4af37]/50 text-amber-600 dark:text-amber-400">
+                          ~{p1}% 1st
+                        </Badge>
+                      );
+                    })()}
                     {(() => {
                       const ps = paymentStatus(f);
                       const psc = PAYMENT_STATUS_CONFIG[ps];
