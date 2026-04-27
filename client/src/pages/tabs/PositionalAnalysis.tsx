@@ -9,8 +9,8 @@ import { getLeagueTeamTiers, getTierColor, getTierEmoji, getPositionColor, isCon
 import { cn } from "@/lib/utils";
 import type { League, Team, Player, Pick, Tier } from "@/types";
 import {
-  BarChart3, ArrowRightLeft, Target, Users, TrendingUp, TrendingDown,
-  ChevronRight, Zap, Shield, Scale
+  BarChart3, ArrowRightLeft, Target, TrendingUp, TrendingDown,
+  ChevronRight, Scale
 } from "lucide-react";
 
 interface PositionalAnalysisProps {
@@ -96,13 +96,12 @@ function adjustedTotal(values: number[]): number {
 }
 
 export function PositionalAnalysis({ league, userTeam, onNavigateToCalculator }: PositionalAnalysisProps) {
-  const [activeSubTab, setActiveSubTab] = useState<"overview" | "surplus" | "opportunities" | "targets">("overview");
+  const [activeSubTab, setActiveSubTab] = useState<"overview" | "surplus" | "opportunities">("overview");
 
   const subTabs = [
     { id: "overview" as const, label: "Overview", icon: BarChart3 },
     { id: "surplus" as const, label: "Surplus", icon: Scale },
     { id: "opportunities" as const, label: "Trades", icon: ArrowRightLeft },
-    { id: "targets" as const, label: "Targets", icon: Target },
   ];
 
   return (
@@ -142,7 +141,6 @@ export function PositionalAnalysis({ league, userTeam, onNavigateToCalculator }:
       {activeSubTab === "overview" && <PositionOverview league={league} userTeam={userTeam} />}
       {activeSubTab === "surplus" && <SurplusNeeds league={league} userTeam={userTeam} onSwitchTab={setActiveSubTab} />}
       {activeSubTab === "opportunities" && <TradeOpportunities league={league} userTeam={userTeam} />}
-      {activeSubTab === "targets" && <PlayerTargets league={league} userTeam={userTeam} />}
     </div>
   );
 }
@@ -1209,175 +1207,3 @@ function generateSuggestions(
   }).slice(0, 6);
 }
 
-function PlayerTargets({ league, userTeam }: { league: League; userTeam: Team }) {
-  const [selectedPos, setSelectedPos] = useState<PosLabel>("RB");
-  const { profiles } = usePositionalProfiles(league, userTeam);
-  const { getPlayerValue } = useValueModel();
-
-  const userProfile = useMemo(() => profiles.find(p => p.teamId === userTeam.id), [profiles, userTeam]);
-  const targetsTierMap = useMemo(() => getLeagueTeamTiers(league.teams), [league.teams]);
-  const userTier = targetsTierMap.get(userTeam.id)?.tier ?? "Balanced";
-
-  const buyTargets = useMemo(() => {
-    const surplusTeams = profiles.filter(p =>
-      p.teamId !== userTeam.id && p.positions[selectedPos].status === "Surplus"
-    );
-
-    return surplusTeams
-      .flatMap(profile => {
-        const posPlayers = [...profile.team.roster]
-          .filter(p => p.pos === selectedPos)
-          .map(p => ({ ...p, val: getPlayerValue(p) }))
-          .sort((a, b) => b.val - a.val);
-
-        return posPlayers.slice(1, 5).filter(p => p.val > 200).map(p => ({
-          ...p,
-          ownerName: profile.team.owner,
-          ownerTier: profile.tier,
-          teamName: profile.team.name,
-          posRank: profile.positions[selectedPos].rank,
-        }));
-      })
-      .sort((a, b) => b.val - a.val)
-      .slice(0, 15);
-  }, [profiles, selectedPos, userTeam, getPlayerValue]);
-
-  const sellCandidates = useMemo(() => {
-    if (!userProfile || userProfile.positions[selectedPos].status !== "Surplus") return [];
-
-    return [...userTeam.roster]
-      .filter(p => p.pos === selectedPos)
-      .map(p => ({ ...p, val: getPlayerValue(p) }))
-      .sort((a, b) => b.val - a.val)
-      .slice(2)
-      .filter(p => p.val > 100);
-  }, [userTeam, userProfile, selectedPos, getPlayerValue]);
-
-  const buyStrategy = isContenderTier(userTier) ? "Buy production (high redraft value)" : "Buy youth & upside";
-  const sellStrategy = isRebuilderTier(userTier) ? "Sell older players for picks & youth" : "Move depth for upgrades";
-
-  return (
-    <div className="space-y-5">
-      <div className="flex items-center gap-2" data-testid="targets-pos-chips">
-        {POSITIONS.map(pos => (
-          <button
-            key={pos}
-            onClick={() => setSelectedPos(pos)}
-            className={cn(
-              "px-3.5 py-1.5 rounded-full text-sm font-semibold transition-colors border",
-              selectedPos === pos
-                ? "bg-[#0b3a7a] text-white border-[#0b3a7a]"
-                : "bg-background text-muted-foreground border-border hover:bg-muted/50"
-            )}
-            data-testid={`targets-chip-${pos.toLowerCase()}`}
-          >
-            {pos}
-          </button>
-        ))}
-      </div>
-
-      {userProfile && (
-        <Card className="bg-muted/20">
-          <CardContent className="pt-4 pb-3">
-            <div className="flex items-center gap-3 text-xs">
-              <Badge variant="outline" className={cn("text-xs", getStatusColor(userProfile.positions[selectedPos].status))}>
-                Your {selectedPos}: {userProfile.positions[selectedPos].status} (#{userProfile.positions[selectedPos].rank})
-              </Badge>
-              <span className="text-muted-foreground">
-                Strategy: <span className="font-medium text-foreground">{userProfile.positions[selectedPos].status === "Need" ? buyStrategy : sellStrategy}</span>
-              </span>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Card>
-          <CardContent className="pt-5">
-            <div className="flex items-center gap-2 mb-1">
-              <Target className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-              <h3 className="font-semibold text-foreground">Buy Targets</h3>
-              <Badge variant="secondary" className="text-xs">{buyTargets.length}</Badge>
-            </div>
-            <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5 mb-4" />
-            <p className="text-[10px] text-muted-foreground mb-3">Players on surplus teams you could acquire</p>
-
-            {buyTargets.length === 0 && <p className="text-xs text-muted-foreground py-6 text-center">No {selectedPos} buy targets found</p>}
-            {buyTargets.map((p, i) => (
-              <div key={`${p.sleeperId || p.id}-${i}`} className="flex items-center justify-between py-2.5 border-b border-border/20 last:border-0" data-testid={`buy-target-${p.sleeperId || p.id}`}>
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className="text-xs text-muted-foreground w-5 text-right">{i + 1}.</span>
-                  <Badge variant="outline" className={cn("text-[10px] px-1 py-0 w-8 justify-center", getPositionColor(p.pos))}>{p.pos}</Badge>
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold truncate">{p.name}</p>
-                    <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-                      <span>{p.team}</span>
-                      <span>·</span>
-                      <span>Age {p.age}</span>
-                      <span>·</span>
-                      <span>{p.ownerName}</span>
-                      <Badge variant="outline" className={cn("text-[8px] px-0.5 py-0", getTierColor(p.ownerTier))}>{p.ownerTier}</Badge>
-                    </div>
-                  </div>
-                </div>
-                <div className="text-right flex-shrink-0">
-                  <p className="text-xs font-bold font-mono text-[#0b3a7a] dark:text-blue-400">{p.val.toLocaleString()}</p>
-                  <p className="text-[9px] text-muted-foreground">dynasty</p>
-                </div>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="pt-5">
-            <div className="flex items-center gap-2 mb-1">
-              <Zap className="w-4 h-4 text-amber-500" />
-              <h3 className="font-semibold text-foreground">Sell Candidates</h3>
-              <Badge variant="secondary" className="text-xs">{sellCandidates.length}</Badge>
-            </div>
-            <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5 mb-4" />
-            <p className="text-[10px] text-muted-foreground mb-3">
-              {userProfile?.positions[selectedPos].status === "Surplus"
-                ? `You have ${selectedPos} surplus — these are movable depth pieces`
-                : `You don't have ${selectedPos} surplus — selling is not recommended`
-              }
-            </p>
-
-            {sellCandidates.length === 0 && (
-              <div className="text-center py-6">
-                <Shield className="w-6 h-6 mx-auto mb-2 text-muted-foreground/40" />
-                <p className="text-xs text-muted-foreground">
-                  {userProfile?.positions[selectedPos].status === "Surplus"
-                    ? "No movable sell candidates"
-                    : `No ${selectedPos} surplus — hold your players`
-                  }
-                </p>
-              </div>
-            )}
-            {sellCandidates.map((p, i) => (
-              <div key={`${p.sleeperId || p.id}-${i}`} className="flex items-center justify-between py-2.5 border-b border-border/20 last:border-0" data-testid={`sell-candidate-${p.sleeperId || p.id}`}>
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className="text-xs text-muted-foreground w-5 text-right">{i + 1}.</span>
-                  <Badge variant="outline" className={cn("text-[10px] px-1 py-0 w-8 justify-center", getPositionColor(p.pos))}>{p.pos}</Badge>
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold truncate">{p.name}</p>
-                    <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-                      <span>{p.team}</span>
-                      <span>·</span>
-                      <span>Age {p.age}</span>
-                    </div>
-                  </div>
-                </div>
-                <div className="text-right flex-shrink-0">
-                  <p className="text-xs font-bold font-mono text-[#0b3a7a] dark:text-blue-400">{p.val.toLocaleString()}</p>
-                  <p className="text-[9px] text-muted-foreground">dynasty</p>
-                </div>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      </div>
-    </div>
-  );
-}
