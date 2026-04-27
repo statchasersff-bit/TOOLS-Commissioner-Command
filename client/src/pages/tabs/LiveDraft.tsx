@@ -236,7 +236,7 @@ function PickTimerView({ draftData, draftInfo, isLoading }: {
   draftInfo: DraftInfo | null;
   isLoading: boolean;
 }) {
-  const [viewMode, setViewMode] = useState<TimerViewMode>("by-pick");
+  const [viewMode, setViewMode] = useState<TimerViewMode>("by-manager");
   const [liveElapsedMs, setLiveElapsedMs] = useState<number | null>(null);
 
   const isLiveDraft = draftInfo?.status === "drafting";
@@ -337,7 +337,6 @@ function PickTimerView({ draftData, draftInfo, isLoading }: {
         className={`px-3 py-1 text-xs font-semibold rounded transition-colors ${viewMode === "by-manager" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
         onClick={() => setViewMode("by-manager")}
         data-testid="btn-view-by-manager"
-        disabled={!hasTimestamps || stats.length === 0}
       >
         By Manager
       </button>
