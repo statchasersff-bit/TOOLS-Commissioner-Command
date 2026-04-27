@@ -794,6 +794,7 @@ export async function detectLiveDrafts(userId: string) {
     draftId: string;
     status: string;
     type: string;
+    draftCategory: string;
     season: string;
     rounds: number;
     teams: number;
@@ -824,6 +825,7 @@ export async function detectLiveDrafts(userId: string) {
             draftId: d.draft_id,
             status: d.status,
             type: d.type || "snake",
+            draftCategory: d.metadata?.type || "",
             season: d.season,
             rounds,
             teams,
@@ -944,6 +946,7 @@ export async function fetchDraftBoard(leagueId: string) {
       draftId,
       status: draft.status,
       type: draft.type,
+      draftCategory: draft.metadata?.type || "",
       rounds,
       teams: numTeams,
       season: draft.season,

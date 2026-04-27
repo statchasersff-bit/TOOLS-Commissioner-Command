@@ -25,6 +25,7 @@ interface DraftInfo {
   draftId: string;
   status: string;
   type: string;
+  draftCategory: string;
   rounds: number;
   teams: number;
   season: string;
@@ -51,6 +52,7 @@ interface LiveDraftInfo {
   draftId: string;
   status: string;
   type: string;
+  draftCategory: string;
   season: string;
   rounds: number;
   teams: number;
@@ -534,7 +536,10 @@ export default function LiveDraft({ subTab = "draft-board" }: { subTab?: string 
                         </span>
                       </div>
                       <div className="flex items-center gap-3 mt-1 ml-5.5">
-                        <span className="text-[11px] text-muted-foreground">{ld.type} · {ld.teams} teams · {ld.rounds} rounds</span>
+                        <span className="text-[11px] text-muted-foreground">
+                          {ld.draftCategory === "rookie" ? "Rookie Draft" : ld.draftCategory === "startup" ? "Startup Draft" : ld.type}
+                          {" · "}{ld.teams} teams · {ld.rounds} rounds
+                        </span>
                         <span className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400" data-testid={`text-live-progress-${ld.leagueId}`}>
                           {ld.picksMade}/{ld.totalPicks} picks
                         </span>
@@ -624,6 +629,15 @@ export default function LiveDraft({ subTab = "draft-board" }: { subTab?: string 
                 {draftData?.draft && (
                   <Badge variant="outline" className="text-xs" data-testid="text-draft-status">
                     {draftData.draft.status === "drafting" ? "LIVE" : draftData.draft.status}
+                  </Badge>
+                )}
+                {draftData?.draft?.draftCategory && (
+                  <Badge
+                    variant="outline"
+                    className={`text-xs ${draftData.draft.draftCategory === "rookie" ? "border-emerald-500/40 text-emerald-600 dark:text-emerald-400" : "border-amber-500/40 text-amber-600 dark:text-amber-400"}`}
+                    data-testid="text-draft-category"
+                  >
+                    {draftData.draft.draftCategory === "rookie" ? "Rookie Draft" : draftData.draft.draftCategory === "startup" ? "Startup Draft" : draftData.draft.draftCategory}
                   </Badge>
                 )}
                 {draftData && stats.drafted > 0 && (
