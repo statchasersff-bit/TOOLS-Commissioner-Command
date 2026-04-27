@@ -3,7 +3,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Search, RefreshCw, Trophy, Target, Radio, Zap, Timer, ChevronUp, ChevronDown, Minus } from "lucide-react";
+import { Loader2, Search, RefreshCw, Trophy, Target, Radio, Zap, Timer } from "lucide-react";
 import { useValueModel } from "@/contexts/ValueModelContext";
 import { useSleeper } from "@/contexts/SleeperContext";
 import { detectLiveDrafts as detectLiveDraftsApi, fetchDraftBoard as fetchDraftBoardApi } from "@/lib/sleeperApi";
@@ -229,7 +229,6 @@ function durationColor(ms: number): string {
   return "text-red-500 dark:text-red-400";
 }
 
-type TimerSortKey = "avgMs" | "totalMs" | "pickCount" | "autoPickCount" | "longestMs";
 type TimerViewMode = "by-manager" | "by-pick";
 
 function PickTimerView({ draftData, draftInfo, isLoading }: {
@@ -237,8 +236,6 @@ function PickTimerView({ draftData, draftInfo, isLoading }: {
   draftInfo: DraftInfo | null;
   isLoading: boolean;
 }) {
-  const [sortKey, setSortKey] = useState<TimerSortKey>("avgMs");
-  const [sortDir, setSortDir] = useState<"desc" | "asc">("desc");
   const [viewMode, setViewMode] = useState<TimerViewMode>("by-pick");
   const [liveElapsedMs, setLiveElapsedMs] = useState<number | null>(null);
 
@@ -291,30 +288,16 @@ function PickTimerView({ draftData, draftInfo, isLoading }: {
     return buildPickTimeline(draftData.picks, draftData.draftSlots, draftInfo?.startTime ?? null);
   }, [draftData, draftInfo]);
 
-  const sorted = useMemo(() => {
-    return [...stats].sort((a, b) => {
-      const diff = a[sortKey] - b[sortKey];
-      return sortDir === "desc" ? -diff : diff;
-    });
-  }, [stats, sortKey, sortDir]);
-
-  const handleSort = (key: TimerSortKey) => {
-    if (sortKey === key) {
-      setSortDir(d => d === "desc" ? "asc" : "desc");
-    } else {
-      setSortKey(key);
-      setSortDir("desc");
-    }
-  };
-
-  const SortIcon = ({ k }: { k: TimerSortKey }) => {
-    if (sortKey !== k) return <Minus className="w-3 h-3 opacity-30" />;
-    return sortDir === "desc" ? <ChevronDown className="w-3 h-3" /> : <ChevronUp className="w-3 h-3" />;
-  };
+  // Fixed sort: longestMs DESC primary, avgMs DESC secondary
+  const sortedByManager = useMemo(() => {
+    return [...stats].sort((a, b) =>
+      b.longestMs !== a.longestMs ? b.longestMs - a.longestMs : b.avgMs - a.avgMs
+    );
+  }, [stats]);
 
   const slowest = stats.length > 0 ? [...stats].sort((a, b) => b.avgMs - a.avgMs)[0] : null;
   const fastest = stats.length > 0 ? [...stats].sort((a, b) => a.avgMs - b.avgMs)[0] : null;
-  const longestPick = stats.length > 0 ? [...stats].sort((a, b) => b.longestMs - a.longestMs)[0] : null;
+  const longestPick = sortedByManager.length > 0 ? sortedByManager[0] : null;
 
   const emptyState = (msg: string) => (
     <Card>
@@ -471,10 +454,10 @@ function PickTimerView({ draftData, draftInfo, isLoading }: {
   }
 
   // By Manager view
-  if (!hasTimestamps || stats.length === 0) return (
+  if (!hasTimestamps || sortedByManager.length === 0) return (
     <div className="space-y-4" data-testid="pick-timer-view">
       <ViewToggle />
-      {emptyState("Not enough timing data yet for manager aggregates. Switch to By Pick to see the full pick log.")}
+      {emptyState("Pick timing data will appear once multiple picks are made.")}
     </div>
   );
 
@@ -482,6 +465,7 @@ function PickTimerView({ draftData, draftInfo, isLoading }: {
     <div className="space-y-5" data-testid="pick-timer-view">
       <ViewToggle />
 
+      {/* Summary stat cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <Card className="p-4" data-testid="card-slowest-picker">
           <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Slowest Avg Picker</p>
@@ -498,50 +482,63 @@ function PickTimerView({ draftData, draftInfo, isLoading }: {
         <Card className="p-4" data-testid="card-longest-pick">
           <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Longest Single Pick</p>
           <p className="text-base font-bold text-foreground truncate">{longestPick?.managerName ?? "—"}</p>
-          <p className="text-2xl font-bold text-amber-500 dark:text-amber-400">{longestPick ? formatDuration(longestPick.longestMs) : "—"}</p>
+          <p className="text-2xl font-bold text-[#d4af37]">{longestPick ? formatDuration(longestPick.longestMs) : "—"}</p>
           <p className="text-[11px] text-muted-foreground">single pick time</p>
         </Card>
       </div>
 
+      {/* Manager table — sorted: longestMs DESC, then avgMs DESC */}
       <Card className="overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm" data-testid="pick-timer-table">
             <thead>
               <tr className="border-b border-border/40 bg-muted/30">
-                <th className="text-left px-3 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider w-10">#</th>
+                <th className="text-left px-3 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider w-8">#</th>
                 <th className="text-left px-3 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Manager</th>
-                {(["totalMs", "pickCount", "autoPickCount", "avgMs", "longestMs"] as TimerSortKey[]).map((k) => (
-                  <th
-                    key={k}
-                    className="text-right px-3 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider cursor-pointer hover:text-foreground transition-colors"
-                    onClick={() => handleSort(k)}
-                    data-testid={`th-sort-${k}`}
-                  >
-                    <span className="inline-flex items-center gap-1 justify-end">
-                      {k === "totalMs" ? "Total Time" : k === "pickCount" ? "# of Picks" : k === "autoPickCount" ? "Auto Picks" : k === "avgMs" ? "Avg / Pick" : "Longest"}
-                      <SortIcon k={k} />
-                    </span>
-                  </th>
-                ))}
+                <th className="text-right px-3 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Total Time</th>
+                <th className="text-right px-3 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider"># of Picks</th>
+                <th className="text-right px-3 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Avg / Pick</th>
+                <th className="text-right px-3 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Longest</th>
+                <th className="text-right px-3 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Autos</th>
               </tr>
             </thead>
             <tbody>
-              {sorted.map((s, i) => (
-                <tr key={s.managerId} className="border-b border-border/20 hover:bg-muted/20 transition-colors" data-testid={`row-timer-${s.managerId}`}>
-                  <td className="px-3 py-2.5 text-xs font-medium text-muted-foreground">{i + 1}</td>
-                  <td className="px-3 py-2.5 font-semibold text-foreground">{s.managerName}</td>
-                  <td className="px-3 py-2.5 text-right font-mono text-xs text-muted-foreground">{formatDuration(s.totalMs)}</td>
-                  <td className="px-3 py-2.5 text-right text-xs text-muted-foreground">{s.pickCount}</td>
-                  <td className="px-3 py-2.5 text-right text-xs" data-testid={`cell-auto-picks-${s.managerId}`}>
-                    {s.autoPickCount > 0
-                      ? <span className="inline-flex items-center justify-end gap-1 font-semibold text-amber-500 dark:text-amber-400">{s.autoPickCount}</span>
-                      : <span className="text-muted-foreground/60">0</span>
-                    }
-                  </td>
-                  <td className={`px-3 py-2.5 text-right font-bold font-mono text-sm ${sortKey === "avgMs" ? "text-foreground" : "text-muted-foreground"}`}>{formatDuration(s.avgMs)}</td>
-                  <td className={`px-3 py-2.5 text-right font-mono text-xs ${sortKey === "longestMs" ? "text-foreground" : "text-muted-foreground"}`}>{formatDuration(s.longestMs)}</td>
-                </tr>
-              ))}
+              {sortedByManager.map((s, i) => {
+                const isTop3 = i < 3;
+                const hasAutos = s.autoPickCount > 0;
+                return (
+                  <tr
+                    key={s.managerId}
+                    className={`border-b border-border/20 hover:bg-muted/20 transition-colors ${isTop3 ? "bg-[#d4af37]/5" : ""}`}
+                    data-testid={`row-timer-${s.managerId}`}
+                  >
+                    <td className="px-3 py-2.5 text-xs font-bold" style={isTop3 ? { color: "#d4af37" } : undefined}>
+                      {isTop3 ? <span style={{ color: "#d4af37" }}>{i + 1}</span> : <span className="text-muted-foreground">{i + 1}</span>}
+                    </td>
+                    <td className="px-3 py-2.5 font-semibold text-foreground max-w-[160px] truncate">
+                      {isTop3
+                        ? <span style={{ color: "#d4af37" }}>{s.managerName}</span>
+                        : s.managerName
+                      }
+                    </td>
+                    <td className="px-3 py-2.5 text-right font-mono text-xs text-muted-foreground">{formatDuration(s.totalMs)}</td>
+                    <td className="px-3 py-2.5 text-right text-xs text-muted-foreground">{s.pickCount}</td>
+                    <td className="px-3 py-2.5 text-right font-mono text-sm font-bold text-foreground">{formatDuration(s.avgMs)}</td>
+                    <td className="px-3 py-2.5 text-right font-mono text-sm font-bold">
+                      {isTop3
+                        ? <span style={{ color: "#d4af37" }}>{formatDuration(s.longestMs)}</span>
+                        : <span className="text-foreground">{formatDuration(s.longestMs)}</span>
+                      }
+                    </td>
+                    <td className="px-3 py-2.5 text-right text-xs" data-testid={`cell-auto-picks-${s.managerId}`}>
+                      {hasAutos
+                        ? <span className="font-bold text-orange-500 dark:text-orange-400">{s.autoPickCount}</span>
+                        : <span className="text-muted-foreground/50">0</span>
+                      }
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
