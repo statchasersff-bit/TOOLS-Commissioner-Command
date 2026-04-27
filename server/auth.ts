@@ -12,72 +12,25 @@ const SLEEPER_HEADERS = {
   "Accept": "application/json",
 };
 
-// ── Sleeper OTP (undocumented internal API) ───────────────────────────────────
+// ── Sleeper token confirmation (server-side only) ─────────────────────────────
+// The browser handles send_code + verify directly with Sleeper.
+// We only receive the resulting Sleeper token and confirm it here.
 
-function sleeperLoginPayload(login: string): Record<string, string> {
-  const trimmed = login.trim();
-  if (trimmed.includes("@")) return { email: trimmed };
-  const digits = trimmed.replace(/\D/g, "");
-  if (digits.length >= 10 && /^\+?[\d\s\-().]+$/.test(trimmed)) return { phone: trimmed };
-  return { username: trimmed };
-}
-
-export async function sendSleeperCode(login: string): Promise<{ ok: boolean; error?: string }> {
-  try {
-    const payload = sleeperLoginPayload(login);
-    const r = await fetch(`${SLEEPER_AUTH}/send_code`, {
-      method: "POST",
-      headers: SLEEPER_HEADERS,
-      body: JSON.stringify(payload),
-    });
-    if (!r.ok) {
-      const body = await r.json().catch(() => ({}));
-      return { ok: false, error: body?.error ?? `Sleeper returned ${r.status}. Check your username/email.` };
-    }
-    return { ok: true };
-  } catch {
-    return { ok: false, error: "Could not reach Sleeper. Please try again." };
-  }
-}
-
-export async function verifySleeperCode(
-  login: string,
-  code: string,
+export async function confirmSleeperToken(
+  sleeperToken: string,
   expectedSleeperId: string,
 ): Promise<{ ok: boolean; error?: string }> {
   try {
-    // Step 1: verify code with Sleeper → get their session token
-    const loginPayload = sleeperLoginPayload(login);
-    const r = await fetch(`${SLEEPER_AUTH}/verify`, {
-      method: "POST",
-      headers: SLEEPER_HEADERS,
-      body: JSON.stringify({ ...loginPayload, code }),
-    });
-    if (!r.ok) {
-      const body = await r.json().catch(() => ({}));
-      return { ok: false, error: body?.error ?? "Incorrect code. Please try again." };
-    }
-    const session = await r.json();
-    const sleeperToken: string = session?.token ?? session?.access_token ?? "";
-
-    if (!sleeperToken) {
-      return { ok: false, error: "Sleeper did not return a session token." };
-    }
-
-    // Step 2: fetch /user/me with that token to confirm the user ID
     const me = await fetch(`${SLEEPER_API}/user/me`, {
       headers: { ...SLEEPER_HEADERS, Authorization: `Bearer ${sleeperToken}` },
     });
-    if (!me.ok) {
-      return { ok: false, error: "Could not confirm your Sleeper identity." };
-    }
+    if (!me.ok) return { ok: false, error: "Could not verify your Sleeper session." };
     const meData = await me.json();
     const confirmedId: string = meData?.user_id ?? meData?.id ?? "";
-
+    if (!confirmedId) return { ok: false, error: "Sleeper did not return a user ID." };
     if (confirmedId !== expectedSleeperId) {
       return { ok: false, error: "The Sleeper account you verified doesn't match your connected account." };
     }
-
     return { ok: true };
   } catch {
     return { ok: false, error: "Network error. Please try again." };

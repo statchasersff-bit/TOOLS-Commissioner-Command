@@ -82,6 +82,16 @@ function plBg(pl: number) {
 const DEFAULT_FINANCE: LeagueFinanceData = { leagueId: "", buyIn: 0, prizes: [], notes: "" };
 function tokenKey(userId: string) { return `dc-finance-token-${userId}`; }
 
+const SLEEPER_AUTH_BASE = "https://api.sleeper.app/v1/auth";
+
+function sleeperLoginPayload(login: string): Record<string, string> {
+  const t = login.trim();
+  if (t.includes("@")) return { email: t };
+  const digits = t.replace(/\D/g, "");
+  if (digits.length >= 10 && /^\+?[\d\s\-().]+$/.test(t)) return { phone: t };
+  return { username: t };
+}
+
 // ─── Sleeper Login Gate ────────────────────────────────────────────────────────
 
 type GateMethod = "otp" | "challenge";
@@ -105,15 +115,19 @@ function SleeperVerifyGate({ userId, username, onAuth }: { userId: string; usern
     setSendingCode(true);
     setError("");
     try {
-      const r = await fetch(`${API_BASE}/api/auth/sleeper-send-code`, {
+      const payload = sleeperLoginPayload(login);
+      const r = await fetch(`${SLEEPER_AUTH_BASE}/send_code`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ login: login.trim() }),
+        body: JSON.stringify(payload),
       });
-      const data = await r.json();
-      if (!r.ok) { setError(data.error || "Could not send code. Check your username/email."); return; }
+      if (!r.ok) {
+        const data = await r.json().catch(() => ({}));
+        setError(data.error ?? data.message ?? `Sleeper returned ${r.status}. Try your email or phone instead.`);
+        return;
+      }
       setOtpStep("enter");
-    } catch { setError("Network error. Please try again."); }
+    } catch { setError("Could not reach Sleeper. Check your connection and try again."); }
     finally { setSendingCode(false); }
   }
 
@@ -122,15 +136,32 @@ function SleeperVerifyGate({ userId, username, onAuth }: { userId: string; usern
     setVerifying(true);
     setError("");
     try {
-      const r = await fetch(`${API_BASE}/api/auth/sleeper-verify-code`, {
+      // Step 1: verify code directly with Sleeper
+      const payload = sleeperLoginPayload(login);
+      const r = await fetch(`${SLEEPER_AUTH_BASE}/verify`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ login: login.trim(), code: otp, expectedSleeperId: userId }),
+        body: JSON.stringify({ ...payload, code: otp }),
       });
-      const data = await r.json();
-      if (!r.ok) { setError(data.error || "Incorrect code. Please try again."); return; }
-      localStorage.setItem(tokenKey(userId), data.token);
-      onAuth(data.token);
+      if (!r.ok) {
+        const data = await r.json().catch(() => ({}));
+        setError(data.error ?? data.message ?? "Incorrect code. Please try again.");
+        return;
+      }
+      const session = await r.json();
+      const sleeperToken: string = session?.token ?? session?.access_token ?? "";
+      if (!sleeperToken) { setError("Sleeper did not return a session token."); return; }
+
+      // Step 2: confirm with our server → get our JWT
+      const r2 = await fetch(`${API_BASE}/api/auth/sleeper-confirm-token`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sleeperToken, expectedSleeperId: userId }),
+      });
+      const data2 = await r2.json();
+      if (!r2.ok) { setError(data2.error || "Could not confirm your Sleeper identity."); return; }
+      localStorage.setItem(tokenKey(userId), data2.token);
+      onAuth(data2.token);
     } catch { setError("Network error. Please try again."); }
     finally { setVerifying(false); }
   }
