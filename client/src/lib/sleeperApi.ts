@@ -977,6 +977,7 @@ export async function fetchDraftBoard(leagueId: string) {
       teams: numTeams,
       season: draft.season,
       leagueName: draft.metadata?.name || "",
+      startTime: typeof draft.start_time === "number" ? draft.start_time : null,
     },
     picks,
     players: playerMap,
