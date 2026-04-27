@@ -159,7 +159,7 @@ function SleeperVerifyGate({ userId, username, onAuth }: { userId: string; usern
     setSubmitting(true); setError("");
 
     await new Promise<void>(resolve => {
-      let secs = 15;
+      let secs = 30;
       setCountdown(secs);
       const iv = setInterval(() => {
         secs -= 1;
