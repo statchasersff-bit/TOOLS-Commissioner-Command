@@ -82,6 +82,10 @@ function tokenKey(userId: string) { return `dc-finance-token-${userId}`; }
 type GateMode = "checking" | "login" | "register" | "reset";
 
 const SLEEPER_API_BASE = "https://api.sleeper.app/v1";
+const VERIFY_DELAY_MS = 5 * 60 * 1000; // 5 minutes
+
+// Module-level: persists while the page is open, survives tab navigation
+let _pending: { sleeperId: string; password: string; leagueId: string; endTime: number } | null = null;
 
 function SleeperVerifyGate({ userId, username, onAuth }: { userId: string; username: string; onAuth: (token: string) => void }) {
   const [mode, setMode] = useState<GateMode>("checking");
@@ -152,34 +156,61 @@ function SleeperVerifyGate({ userId, username, onAuth }: { userId: string; usern
     finally { setSubmitting(false); }
   }
 
-  async function handleRegister() {
-    if (!selectedLeagueId) { setError("Please select which league you changed your team name in."); return; }
-    if (password.length < 6) { setError("Password must be at least 6 characters."); return; }
-    if (password !== confirmPassword) { setError("Passwords don't match."); return; }
-    setSubmitting(true); setError("");
-
-    await new Promise<void>(resolve => {
-      let secs = 30;
-      setCountdown(secs);
-      const iv = setInterval(() => {
-        secs -= 1;
-        if (secs <= 0) { clearInterval(iv); setCountdown(0); resolve(); }
-        else setCountdown(secs);
-      }, 1000);
-    });
-
+  async function doVerify(pwd: string, leagueId: string) {
+    setSubmitting(true); setCountdown(0); setError("");
     try {
       const r = await fetch(`${API_BASE}/api/auth/finance-register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sleeperId: userId, password, leagueId: selectedLeagueId }),
+        body: JSON.stringify({ sleeperId: userId, password: pwd, leagueId }),
       });
       const data = await r.json();
-      if (!r.ok) { setError(data.error || "Verification failed. Make sure your Sleeper display name is set correctly."); return; }
+      if (!r.ok) { setError(data.error || "Verification failed. Make sure your Sleeper team name is saved correctly."); return; }
+      _pending = null;
       localStorage.setItem(tokenKey(userId), data.token);
       onAuth(data.token);
     } catch { setError("Network error. Please try again."); }
     finally { setSubmitting(false); }
+  }
+
+  function runCountdown(endTime: number, onDone: () => void) {
+    const tick = () => {
+      const rem = Math.ceil((endTime - Date.now()) / 1000);
+      if (rem <= 0) { setCountdown(0); onDone(); }
+      else { setCountdown(rem); setTimeout(tick, 1000); }
+    };
+    tick();
+  }
+
+  // Resume pending countdown when returning to this tab
+  useEffect(() => {
+    if (_pending && _pending.sleeperId === userId) {
+      const rem = _pending.endTime - Date.now();
+      if (rem <= 0) {
+        const { password: pwd, leagueId } = _pending;
+        doVerify(pwd, leagueId);
+      } else {
+        setSubmitting(true);
+        setCountdown(Math.ceil(rem / 1000));
+        runCountdown(_pending.endTime, () => {
+          if (_pending) doVerify(_pending.password, _pending.leagueId);
+        });
+      }
+    }
+  }, []);
+
+  async function handleRegister() {
+    if (!selectedLeagueId) { setError("Please select which league you changed your team name in."); return; }
+    if (password.length < 6) { setError("Password must be at least 6 characters."); return; }
+    if (password !== confirmPassword) { setError("Passwords don't match."); return; }
+    setError("");
+
+    const endTime = Date.now() + VERIFY_DELAY_MS;
+    _pending = { sleeperId: userId, password, leagueId: selectedLeagueId, endTime };
+    setSubmitting(true);
+    runCountdown(endTime, () => {
+      if (_pending) doVerify(_pending.password, _pending.leagueId);
+    });
   }
 
   function startReset() {
