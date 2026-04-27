@@ -508,7 +508,8 @@ export function FinanceTab() {
   const [saving, setSaving] = useState<Record<string, boolean>>({});
   const [saved, setSaved] = useState<Record<string, boolean>>({});
   const [loadingFinances, setLoadingFinances] = useState(false);
-  const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const [collapsedTiers, setCollapsedTiers] = useState<Set<string>>(() => new Set(["elite", "bubble", "rebuild"]));
+  const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({}); 
 
   const dynastyLeagues = leagues.filter(l => l.status !== "archived");
 
@@ -777,16 +778,30 @@ export function FinanceTab() {
         const mainGroups = ORDER.filter(t => (groups.get(t)?.length ?? 0) > 0).map(tier => {
           const cfg = tier !== "unknown" ? TIER_CONFIG[tier] : null;
           const Icon = tier === "elite" ? Flame : tier === "bubble" ? Target : Wrench;
+          const isCollapsed = showHeaders && tier !== "unknown" && collapsedTiers.has(tier);
+          const toggleTier = () => setCollapsedTiers(prev => {
+            const next = new Set(prev);
+            next.has(tier) ? next.delete(tier) : next.add(tier);
+            return next;
+          });
           return (
             <div key={`group-${tier}`} className="space-y-3">
               {showHeaders && tier !== "unknown" && cfg && (
-                <div className={`flex items-center gap-2 pt-1 ${cfg.headerCls}`} data-testid={`tier-header-${tier}`}>
+                <button
+                  onClick={toggleTier}
+                  className={`w-full flex items-center gap-2 pt-1 ${cfg.headerCls} hover:opacity-80 transition-opacity`}
+                  data-testid={`tier-header-${tier}`}
+                >
                   <Icon className="w-3.5 h-3.5" />
                   <span className="text-[11px] font-bold uppercase tracking-wide">{cfg.label}</span>
+                  <span className="text-[10px] opacity-60">({groups.get(tier)!.length})</span>
                   <div className="flex-1 h-px bg-current opacity-20" />
-                </div>
+                  {isCollapsed
+                    ? <ChevronRight className="w-3.5 h-3.5 opacity-60" />
+                    : <ChevronDown className="w-3.5 h-3.5 opacity-60" />}
+                </button>
               )}
-              {groups.get(tier)!.map(league => {
+              {!isCollapsed && groups.get(tier)!.map(league => {
                 const f = getFinance(league.leagueId);
                 const s = standings[league.leagueId];
                 const calc = calcPL(league.leagueId);
