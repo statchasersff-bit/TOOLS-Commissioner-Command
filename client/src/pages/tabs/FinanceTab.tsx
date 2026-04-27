@@ -130,6 +130,28 @@ function approxPlayoffPct(s: LeagueStanding): number {
   return Math.max(3, Math.round(35 - (spotsOut / maxOut) * 32));
 }
 
+// Truncated-normal placement probability model.
+// Models final finishing position as a Gaussian centered on current rank,
+// with σ shrinking as the season progresses (more certain late in season).
+function placementProbs(s: LeagueStanding, maxPlace: number): Map<number, number> {
+  const { rank, totalTeams, wins, losses, ties } = s;
+  const gamesPlayed = wins + losses + ties;
+  const seasonProgress = Math.min(1, gamesPlayed / 14);
+  // σ: ~totalTeams/3 at week 0, shrinks to 0.5 at week 14
+  const sigma = Math.max(0.5, (1 - seasonProgress) * totalTeams / 3);
+  const raw: number[] = [];
+  for (let k = 1; k <= totalTeams; k++) {
+    const z = (k - rank) / sigma;
+    raw.push(Math.exp(-0.5 * z * z));
+  }
+  const total = raw.reduce((a, b) => a + b, 0);
+  const probs = new Map<number, number>();
+  for (let k = 1; k <= Math.min(maxPlace, totalTeams); k++) {
+    probs.set(k, raw[k - 1] / total);
+  }
+  return probs;
+}
+
 const TIER_CONFIG: Record<Tier, {
   label: string; short: string; desc: string;
   headerCls: string; bgCls: string; badgeCls: string;
@@ -636,9 +658,16 @@ export function FinanceTab() {
     const f = getFinance(leagueId);
     const s = standings[leagueId];
     if (!s || s.loading || s.error || s.rank < 1 || f.prizes.length === 0) return null;
-    const matchingPrize = f.prizes.find(p => p.place === s.rank);
-    const projectedPrize = matchingPrize?.amount ?? 0;
-    return { projectedPrize, pl: projectedPrize - f.buyIn };
+    const prizes = [...f.prizes].sort((a, b) => a.place - b.place);
+    const maxPrizePlace = Math.max(...prizes.map(p => p.place));
+    const probs = placementProbs(s, maxPrizePlace);
+    let projectedPrize = 0;
+    const breakdown = prizes.map(prize => {
+      const prob = probs.get(prize.place) ?? 0;
+      projectedPrize += prob * prize.amount;
+      return { place: prize.place, amount: prize.amount, probability: prob };
+    });
+    return { projectedPrize, pl: projectedPrize - f.buyIn, breakdown };
   }
 
   const totals = visibleLeagues.reduce((acc, league) => {
@@ -940,12 +969,26 @@ export function FinanceTab() {
                   <div className="space-y-2">
                     {f.prizes.sort((a, b) => a.place - b.place).map(prize => {
                       const placeLabel = prize.place === 1 ? "🥇 1st" : prize.place === 2 ? "🥈 2nd" : prize.place === 3 ? "🥉 3rd" : `${prize.place}th`;
-                      const isUserPlace = s && !s.loading && s.rank === prize.place;
+                      const isCurrentRank = s && !s.loading && s.rank === prize.place;
+                      const prob = calc?.breakdown.find(b => b.place === prize.place)?.probability ?? 0;
+                      const probPct = Math.round(prob * 1000) / 10;
+                      const probBadgeCls = probPct >= 30
+                        ? "border-emerald-500/50 text-emerald-600 dark:text-emerald-400"
+                        : probPct >= 10
+                        ? "border-[#d4af37]/50 text-amber-600 dark:text-amber-400"
+                        : "border-border/40 text-muted-foreground";
                       return (
-                        <div key={prize.place} className={`flex items-center gap-3 p-2.5 rounded-lg border ${isUserPlace ? "border-[#d4af37]/40 bg-[#d4af37]/5" : "border-border/30 bg-muted/20"}`}
+                        <div key={prize.place} className={`flex items-center gap-3 p-2.5 rounded-lg border ${isCurrentRank ? "border-[#d4af37]/40 bg-[#d4af37]/5" : "border-border/30 bg-muted/20"}`}
                           data-testid={`prize-row-${league.leagueId}-${prize.place}`}>
                           <span className="text-sm font-semibold w-16 flex-shrink-0">{placeLabel}</span>
-                          {isUserPlace && <Badge variant="outline" className="text-[10px] px-1.5 h-4 border-[#d4af37]/50 text-amber-600 dark:text-amber-400 flex-shrink-0">Your Rank</Badge>}
+                          {probPct > 0 ? (
+                            <Badge variant="outline" className={`text-[10px] px-1.5 h-4 flex-shrink-0 ${probBadgeCls}`}
+                              data-testid={`badge-prob-${league.leagueId}-${prize.place}`}>
+                              ~{probPct}%
+                            </Badge>
+                          ) : isCurrentRank ? (
+                            <Badge variant="outline" className="text-[10px] px-1.5 h-4 border-[#d4af37]/50 text-amber-600 dark:text-amber-400 flex-shrink-0">Now</Badge>
+                          ) : null}
                           <div className="relative flex-1 max-w-[120px]">
                             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
                             <Input
@@ -966,27 +1009,36 @@ export function FinanceTab() {
 
                 {(f.buyIn > 0 || f.prizes.length > 0) && (
                   <div className={`rounded-xl p-4 border ${calc ? plBg(calc.pl) : "bg-muted/20 border-border/30"}`}>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-6">
-                        <div>
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="flex items-center gap-6 min-w-0">
+                        <div className="flex-shrink-0">
                           <p className="text-[10px] text-muted-foreground">Buy-in</p>
                           <p className="text-sm font-semibold">{fmtDollar(f.buyIn)}</p>
                         </div>
-                        <div>
-                          <p className="text-[10px] text-muted-foreground">Projected Prize</p>
-                          <p className="text-sm font-semibold">{calc ? fmtDollar(calc.projectedPrize) : "—"}</p>
+                        <div className="min-w-0">
+                          <p className="text-[10px] text-muted-foreground">Expected Prize</p>
+                          <p className="text-sm font-semibold">{calc ? fmtDollar(Math.round(calc.projectedPrize)) : "—"}</p>
+                          {calc && (
+                            <p className="text-[10px] text-muted-foreground truncate max-w-[160px]" title="Probability-weighted across all prize positions">
+                              {calc.breakdown.filter(b => b.probability >= 0.01).map(b => {
+                                const ord = b.place === 1 ? "1st" : b.place === 2 ? "2nd" : b.place === 3 ? "3rd" : `${b.place}th`;
+                                return `${ord} ~${Math.round(b.probability * 1000) / 10}%`;
+                              }).join(" · ")}
+                            </p>
+                          )}
                         </div>
                       </div>
                       {calc ? (
-                        <div className="text-right">
-                          <p className="text-[10px] text-muted-foreground mb-0.5">Net P&L</p>
-                          <p className={`text-2xl font-bold ${plColor(calc.pl)}`}>{calc.pl >= 0 ? "+" : ""}{fmtDollar(calc.pl)}</p>
-                          <p className="text-[10px] text-muted-foreground">current rank #{s?.rank}</p>
+                        <div className="text-right flex-shrink-0">
+                          <p className="text-[10px] text-muted-foreground mb-0.5">Expected P&L</p>
+                          <p className={`text-2xl font-bold ${plColor(calc.pl)}`}>{calc.pl >= 0 ? "+" : ""}{fmtDollar(Math.round(calc.pl))}</p>
+                          <p className="text-[10px] text-muted-foreground">rank #{s?.rank} · prob-weighted</p>
                         </div>
                       ) : f.prizes.length > 0 && s && !s.loading ? (
-                        <div className="text-right">
-                          <p className="text-xs text-muted-foreground">No prize at rank #{s?.rank}</p>
+                        <div className="text-right flex-shrink-0">
+                          <p className="text-[10px] text-muted-foreground mb-0.5">Expected P&L</p>
                           <p className={`text-2xl font-bold ${plColor(-f.buyIn)}`}>{fmtDollar(-f.buyIn)}</p>
+                          <p className="text-[10px] text-muted-foreground">standings loading…</p>
                         </div>
                       ) : null}
                     </div>
