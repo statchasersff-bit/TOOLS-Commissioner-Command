@@ -27,10 +27,29 @@ import {
   Flame,
   Target,
   Wrench,
+  EyeOff,
+  Eye,
+  Tag,
 } from "lucide-react";
 
 interface PrizeSlot { place: number; amount: number; }
-interface LeagueFinanceData { leagueId: string; buyIn: number; prizes: PrizeSlot[]; notes: string; }
+interface LeagueFinanceData { leagueId: string; buyIn: number; prizes: PrizeSlot[]; notes: string; isFree: boolean; ignored: boolean; }
+
+type PaymentStatus = "complete" | "partial" | "empty" | "free";
+function paymentStatus(f: LeagueFinanceData): PaymentStatus {
+  if (f.isFree) return "free";
+  const hasBuyIn = f.buyIn > 0;
+  const hasPrizes = f.prizes.length > 0;
+  if (hasBuyIn && hasPrizes) return "complete";
+  if (hasBuyIn || hasPrizes) return "partial";
+  return "empty";
+}
+const PAYMENT_STATUS_CONFIG: Record<PaymentStatus, { label: string; cls: string; dot: string }> = {
+  complete: { label: "Set up", cls: "border-emerald-500/40 text-emerald-600 dark:text-emerald-400", dot: "bg-emerald-500" },
+  partial:  { label: "Partial", cls: "border-amber-500/40 text-amber-600 dark:text-amber-400",   dot: "bg-amber-500"   },
+  empty:    { label: "Not set", cls: "border-border/50 text-muted-foreground",                     dot: "bg-muted-foreground/40" },
+  free:     { label: "Free",    cls: "border-sky-500/40 text-sky-600 dark:text-sky-400",           dot: "bg-sky-500"    },
+};
 interface LeagueStanding {
   leagueId: string; rank: number; totalTeams: number; wins: number; losses: number; ties: number;
   ptsFor: number; playoffSpots: number; inPlayoffs: boolean; loading: boolean; error: boolean;
@@ -77,7 +96,7 @@ function plBg(pl: number) {
   return "bg-muted/30 border-border/40";
 }
 
-const DEFAULT_FINANCE: LeagueFinanceData = { leagueId: "", buyIn: 0, prizes: [], notes: "" };
+const DEFAULT_FINANCE: LeagueFinanceData = { leagueId: "", buyIn: 0, prizes: [], notes: "", isFree: false, ignored: false };
 function tokenKey(userId: string) { return `dc-finance-token-${userId}`; }
 
 type Tier = "elite" | "bubble" | "rebuild";
@@ -523,7 +542,7 @@ export function FinanceTab() {
         if (!rows) return;
         const map: Record<string, LeagueFinanceData> = {};
         for (const row of rows) {
-          map[row.leagueId] = { leagueId: row.leagueId, buyIn: row.buyIn ?? 0, prizes: (row.prizes as PrizeSlot[]) ?? [], notes: row.notes ?? "" };
+          map[row.leagueId] = { leagueId: row.leagueId, buyIn: row.buyIn ?? 0, prizes: (row.prizes as PrizeSlot[]) ?? [], notes: row.notes ?? "", isFree: row.isFree ?? false, ignored: row.ignored ?? false };
         }
         setFinances(map);
       })
@@ -561,6 +580,7 @@ export function FinanceTab() {
             sleeperUserId: user.userId, leagueId,
             season: dynastyLeagues.find(l => l.leagueId === leagueId)?.season ?? "2026",
             buyIn: data.buyIn, prizes: data.prizes, notes: data.notes,
+            isFree: data.isFree, ignored: data.ignored,
           }),
         });
         if (r.status === 401) { handleLock(); return; }
@@ -607,6 +627,7 @@ export function FinanceTab() {
 
   const totals = dynastyLeagues.reduce((acc, league) => {
     const f = getFinance(league.leagueId);
+    if (f.ignored || f.isFree) return acc;
     const calc = calcPL(league.leagueId);
     acc.invested += f.buyIn;
     if (calc) { acc.expectedReturn += calc.projectedPrize; acc.netPL += calc.pl; acc.leaguesWithData++; }
@@ -744,11 +765,16 @@ export function FinanceTab() {
         const ORDER: (Tier | "unknown")[] = ["elite", "bubble", "rebuild", "unknown"];
         const groups = new Map<Tier | "unknown", typeof dynastyLeagues>();
         ORDER.forEach(t => groups.set(t, []));
-        dynastyLeagues.forEach(l => groups.get(classifyTeam(standings[l.leagueId]))!.push(l));
+        const ignoredLeagues: typeof dynastyLeagues = [];
+        dynastyLeagues.forEach(l => {
+          const f = getFinance(l.leagueId);
+          if (f.ignored) { ignoredLeagues.push(l); return; }
+          groups.get(classifyTeam(standings[l.leagueId]))!.push(l);
+        });
         const activeTiers = ORDER.filter(t => t !== "unknown" && (groups.get(t)?.length ?? 0) > 0) as Tier[];
         const showHeaders = dynastyLeagues.length > 1 && activeTiers.length > 1;
 
-        return ORDER.filter(t => (groups.get(t)?.length ?? 0) > 0).map(tier => {
+        const mainGroups = ORDER.filter(t => (groups.get(t)?.length ?? 0) > 0).map(tier => {
           const cfg = tier !== "unknown" ? TIER_CONFIG[tier] : null;
           const Icon = tier === "elite" ? Flame : tier === "bubble" ? Target : Wrench;
           return (
@@ -794,6 +820,16 @@ export function FinanceTab() {
                         ~{playoffPct}% playoffs
                       </Badge>
                     )}
+                    {(() => {
+                      const ps = paymentStatus(f);
+                      const psc = PAYMENT_STATUS_CONFIG[ps];
+                      return (
+                        <Badge variant="outline" className={`text-[10px] px-1.5 py-0 h-4 flex items-center gap-1 ${psc.cls}`} data-testid={`badge-payment-status-${league.leagueId}`}>
+                          <span className={`w-1.5 h-1.5 rounded-full inline-block ${psc.dot}`} />
+                          {psc.label}
+                        </Badge>
+                      );
+                    })()}
                     {s?.loading && <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />}
                   </div>
                 </div>
@@ -937,6 +973,34 @@ export function FinanceTab() {
                     data-testid={`input-notes-${league.leagueId}`}
                   />
                 </div>
+
+                {/* League flags */}
+                <div className="flex flex-wrap gap-2 pt-1 border-t border-border/30">
+                  <button
+                    onClick={() => updateFinance(league.leagueId, { isFree: !f.isFree, buyIn: !f.isFree ? 0 : f.buyIn, prizes: !f.isFree ? [] : f.prizes })}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+                      f.isFree
+                        ? "bg-sky-50 dark:bg-sky-950/30 border-sky-400/50 text-sky-600 dark:text-sky-400"
+                        : "border-border/50 text-muted-foreground hover:border-sky-400/50 hover:text-sky-600 dark:hover:text-sky-400"
+                    }`}
+                    data-testid={`button-toggle-free-${league.leagueId}`}
+                  >
+                    <Tag className="w-3 h-3" />
+                    {f.isFree ? "Free League ✓" : "Mark as Free League"}
+                  </button>
+                  <button
+                    onClick={() => updateFinance(league.leagueId, { ignored: !f.ignored })}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+                      f.ignored
+                        ? "bg-muted border-border text-muted-foreground"
+                        : "border-border/50 text-muted-foreground hover:border-border hover:text-foreground"
+                    }`}
+                    data-testid={`button-toggle-ignore-${league.leagueId}`}
+                  >
+                    {f.ignored ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
+                    {f.ignored ? "Unhide League" : "Hide from Summary"}
+                  </button>
+                </div>
               </div>
             )}
           </Card>
@@ -945,6 +1009,50 @@ export function FinanceTab() {
             </div>
           );
         });
+
+        return (
+          <>
+            {mainGroups}
+            {ignoredLeagues.length > 0 && (
+              <div className="space-y-2 pt-2">
+                <div className="flex items-center gap-2 text-muted-foreground/60">
+                  <EyeOff className="w-3.5 h-3.5" />
+                  <span className="text-[11px] font-semibold uppercase tracking-wide">Hidden Leagues ({ignoredLeagues.length})</span>
+                  <div className="flex-1 h-px bg-border/30" />
+                </div>
+                {ignoredLeagues.map(league => {
+                  const f = getFinance(league.leagueId);
+                  const isExpanded = expanded === league.leagueId;
+                  return (
+                    <Card key={league.leagueId} className="overflow-hidden opacity-50 hover:opacity-80 transition-opacity" data-testid={`finance-card-hidden-${league.leagueId}`}>
+                      <button
+                        className="w-full flex items-center justify-between p-3 hover:bg-muted/30 transition-colors text-left"
+                        onClick={() => setExpanded(isExpanded ? null : league.leagueId)}
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <EyeOff className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+                          <span className="text-sm text-muted-foreground truncate">{league.name}</span>
+                        </div>
+                        {isExpanded ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
+                      </button>
+                      {isExpanded && (
+                        <div className="border-t border-border/30 px-4 py-3">
+                          <button
+                            onClick={() => updateFinance(league.leagueId, { ignored: false })}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border/50 text-xs font-medium text-muted-foreground hover:text-foreground hover:border-border transition-colors"
+                            data-testid={`button-unhide-${league.leagueId}`}
+                          >
+                            <Eye className="w-3 h-3" /> Unhide League
+                          </button>
+                        </div>
+                      )}
+                    </Card>
+                  );
+                })}
+              </div>
+            )}
+          </>
+        );
       })()}
 
     </div>

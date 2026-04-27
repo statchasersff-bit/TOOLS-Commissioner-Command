@@ -323,9 +323,9 @@ export async function registerRoutes(
 
   app.post("/api/finances", requireFinanceAuth, async (req, res) => {
     try {
-      const { sleeperUserId, leagueId, season, buyIn, prizes, notes } = req.body;
+      const { sleeperUserId, leagueId, season, buyIn, prizes, notes, isFree, ignored } = req.body;
       if (!sleeperUserId || !leagueId) return res.status(400).json({ error: "sleeperUserId and leagueId required" });
-      const result = await upsertLeagueFinance({ sleeperUserId, leagueId, season: season || "2026", buyIn: buyIn ?? 0, prizes: prizes ?? [], notes });
+      const result = await upsertLeagueFinance({ sleeperUserId, leagueId, season: season || "2026", buyIn: buyIn ?? 0, prizes: prizes ?? [], notes, isFree: isFree ?? false, ignored: ignored ?? false });
       res.json(result);
     } catch (err: any) {
       res.status(500).json({ error: err.message || "Failed to save finances" });

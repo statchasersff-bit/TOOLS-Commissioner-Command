@@ -25,6 +25,8 @@ export async function upsertLeagueFinance(data: {
   buyIn: number;
   prizes: { place: number; amount: number }[];
   notes?: string;
+  isFree?: boolean;
+  ignored?: boolean;
 }) {
   const d = getDb();
   const existing = await d
@@ -41,6 +43,8 @@ export async function upsertLeagueFinance(data: {
         prizes: data.prizes as any,
         notes: data.notes ?? null,
         season: data.season,
+        isFree: data.isFree ?? false,
+        ignored: data.ignored ?? false,
         updatedAt: new Date(),
       })
       .where(and(eq(leagueFinances.sleeperUserId, data.sleeperUserId), eq(leagueFinances.leagueId, data.leagueId)));
@@ -52,6 +56,8 @@ export async function upsertLeagueFinance(data: {
       buyIn: data.buyIn,
       prizes: data.prizes as any,
       notes: data.notes ?? null,
+      isFree: data.isFree ?? false,
+      ignored: data.ignored ?? false,
     });
   }
   return { ok: true };

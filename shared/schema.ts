@@ -124,6 +124,8 @@ export const leagueFinances = pgTable("league_finances", {
   buyIn: integer("buy_in").notNull().default(0),
   prizes: jsonb("prizes").notNull().default([]),
   notes: text("notes"),
+  isFree: boolean("is_free").notNull().default(false),
+  ignored: boolean("ignored").notNull().default(false),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
