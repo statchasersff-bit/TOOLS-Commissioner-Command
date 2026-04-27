@@ -89,11 +89,12 @@ const POS_BADGE_SM: Record<string, string> = {
 interface PickTimerStat {
   managerId: string;
   managerName: string;
-  totalMs: number;
-  pickCount: number;
+  totalPicks: number;       // all picks made (including untimed)
   autoPickCount: number;
-  avgMs: number;
-  longestMs: number;
+  timedPickCount: number;   // picks with valid timing gaps
+  totalMs: number | null;   // null when no timing data
+  avgMs: number | null;
+  longestMs: number | null;
 }
 
 function formatDuration(ms: number): string {
@@ -117,22 +118,32 @@ function buildPickTimerStats(
     .filter(p => p.playerId)
     .sort((a, b) => a.pickNo - b.pickNo);
 
-  const hasTimestamps = sorted.some(p => p.pickedAt !== null);
-  if (!hasTimestamps) return { stats: [], hasTimestamps: false };
+  if (sorted.length === 0) return { stats: [], hasTimestamps: false };
 
-  const managerMap = new Map<number, { name: string; totalMs: number; pickCount: number; autoPickCount: number; longestMs: number }>();
+  const hasTimestamps = sorted.some(p => p.pickedAt !== null);
+
+  // Always track every manager who has made a pick
+  const managerMap = new Map<number, {
+    name: string;
+    totalPicks: number;
+    autoPickCount: number;
+    timedPickCount: number;
+    totalMs: number;
+    longestMs: number;
+  }>();
 
   for (const pick of sorted) {
     const rosterId = pick.rosterId;
     const name = slotMap.get(rosterId) || `Roster ${rosterId}`;
     if (!managerMap.has(rosterId)) {
-      managerMap.set(rosterId, { name, totalMs: 0, pickCount: 0, autoPickCount: 0, longestMs: 0 });
+      managerMap.set(rosterId, { name, totalPicks: 0, autoPickCount: 0, timedPickCount: 0, totalMs: 0, longestMs: 0 });
     }
-    if (pick.isAutoPick) {
-      managerMap.get(rosterId)!.autoPickCount += 1;
-    }
+    const entry = managerMap.get(rosterId)!;
+    entry.totalPicks += 1;
+    if (pick.isAutoPick) entry.autoPickCount += 1;
   }
 
+  // Compute timing gaps for picks where both consecutive timestamps exist
   for (let i = 1; i < sorted.length; i++) {
     const prev = sorted[i - 1];
     const curr = sorted[i];
@@ -140,31 +151,26 @@ function buildPickTimerStats(
     const diffMs = curr.pickedAt - prev.pickedAt;
     if (diffMs <= 0) continue;
 
-    const rosterId = curr.rosterId;
-    const name = slotMap.get(rosterId) || `Roster ${rosterId}`;
-    const existing = managerMap.get(rosterId);
-    if (existing) {
-      existing.totalMs += diffMs;
-      existing.pickCount += 1;
-      if (diffMs > existing.longestMs) existing.longestMs = diffMs;
-    } else {
-      managerMap.set(rosterId, { name, totalMs: diffMs, pickCount: 1, autoPickCount: 0, longestMs: diffMs });
+    const entry = managerMap.get(curr.rosterId);
+    if (entry) {
+      entry.totalMs += diffMs;
+      entry.timedPickCount += 1;
+      if (diffMs > entry.longestMs) entry.longestMs = diffMs;
     }
   }
 
-  const stats: PickTimerStat[] = Array.from(managerMap.entries())
-    .filter(([, v]) => v.pickCount > 0)
-    .map(([id, v]) => ({
-      managerId: String(id),
-      managerName: v.name,
-      totalMs: v.totalMs,
-      pickCount: v.pickCount,
-      autoPickCount: v.autoPickCount,
-      avgMs: Math.round(v.totalMs / v.pickCount),
-      longestMs: v.longestMs,
-    }));
+  const stats: PickTimerStat[] = Array.from(managerMap.entries()).map(([id, v]) => ({
+    managerId: String(id),
+    managerName: v.name,
+    totalPicks: v.totalPicks,
+    autoPickCount: v.autoPickCount,
+    timedPickCount: v.timedPickCount,
+    totalMs: v.timedPickCount > 0 ? v.totalMs : null,
+    avgMs: v.timedPickCount > 0 ? Math.round(v.totalMs / v.timedPickCount) : null,
+    longestMs: v.timedPickCount > 0 ? v.longestMs : null,
+  }));
 
-  return { stats, hasTimestamps: true };
+  return { stats, hasTimestamps };
 }
 
 interface PickTimelineEntry {
@@ -288,16 +294,22 @@ function PickTimerView({ draftData, draftInfo, isLoading }: {
     return buildPickTimeline(draftData.picks, draftData.draftSlots, draftInfo?.startTime ?? null);
   }, [draftData, draftInfo]);
 
-  // Fixed sort: longestMs DESC primary, avgMs DESC secondary
+  // Fixed sort: timed picks first, then longestMs DESC, avgMs DESC; untimed managers go to bottom
   const sortedByManager = useMemo(() => {
-    return [...stats].sort((a, b) =>
-      b.longestMs !== a.longestMs ? b.longestMs - a.longestMs : b.avgMs - a.avgMs
-    );
+    return [...stats].sort((a, b) => {
+      const aLongest = a.longestMs ?? -1;
+      const bLongest = b.longestMs ?? -1;
+      if (bLongest !== aLongest) return bLongest - aLongest;
+      const aAvg = a.avgMs ?? -1;
+      const bAvg = b.avgMs ?? -1;
+      return bAvg - aAvg;
+    });
   }, [stats]);
 
-  const slowest = stats.length > 0 ? [...stats].sort((a, b) => b.avgMs - a.avgMs)[0] : null;
-  const fastest = stats.length > 0 ? [...stats].sort((a, b) => a.avgMs - b.avgMs)[0] : null;
-  const longestPick = sortedByManager.length > 0 ? sortedByManager[0] : null;
+  const timedStats = stats.filter(s => s.avgMs !== null);
+  const slowest = timedStats.length > 0 ? [...timedStats].sort((a, b) => (b.avgMs ?? 0) - (a.avgMs ?? 0))[0] : null;
+  const fastest = timedStats.length > 0 ? [...timedStats].sort((a, b) => (a.avgMs ?? 0) - (b.avgMs ?? 0))[0] : null;
+  const longestPick = timedStats.length > 0 ? [...timedStats].sort((a, b) => (b.longestMs ?? 0) - (a.longestMs ?? 0))[0] : null;
 
   const emptyState = (msg: string) => (
     <Card>
@@ -452,13 +464,16 @@ function PickTimerView({ draftData, draftInfo, isLoading }: {
     );
   }
 
-  // By Manager view
-  if (!hasTimestamps || sortedByManager.length === 0) return (
+  // By Manager view — shows whenever picks exist; timing columns show "—" until timestamps arrive
+  if (sortedByManager.length === 0) return (
     <div className="space-y-4" data-testid="pick-timer-view">
       <ViewToggle />
-      {emptyState("Pick timing data will appear once multiple picks are made.")}
+      {emptyState("Load a draft above and picks will appear here.")}
     </div>
   );
+
+  // Top-3 gold only applies when timing data exists (otherwise everyone would be tied at null)
+  const top3GoldEnabled = timedStats.length > 0;
 
   return (
     <div className="space-y-5" data-testid="pick-timer-view">
@@ -469,22 +484,28 @@ function PickTimerView({ draftData, draftInfo, isLoading }: {
         <Card className="p-4" data-testid="card-slowest-picker">
           <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Slowest Avg Picker</p>
           <p className="text-base font-bold text-foreground truncate">{slowest?.managerName ?? "—"}</p>
-          <p className="text-2xl font-bold text-red-500 dark:text-red-400">{slowest ? formatDuration(slowest.avgMs) : "—"}</p>
+          <p className="text-2xl font-bold text-red-500 dark:text-red-400">{slowest?.avgMs != null ? formatDuration(slowest.avgMs) : "—"}</p>
           <p className="text-[11px] text-muted-foreground">avg per pick</p>
         </Card>
         <Card className="p-4" data-testid="card-fastest-picker">
           <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Fastest Avg Picker</p>
           <p className="text-base font-bold text-foreground truncate">{fastest?.managerName ?? "—"}</p>
-          <p className="text-2xl font-bold text-emerald-500 dark:text-emerald-400">{fastest ? formatDuration(fastest.avgMs) : "—"}</p>
+          <p className="text-2xl font-bold text-emerald-500 dark:text-emerald-400">{fastest?.avgMs != null ? formatDuration(fastest.avgMs) : "—"}</p>
           <p className="text-[11px] text-muted-foreground">avg per pick</p>
         </Card>
         <Card className="p-4" data-testid="card-longest-pick">
           <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Longest Single Pick</p>
           <p className="text-base font-bold text-foreground truncate">{longestPick?.managerName ?? "—"}</p>
-          <p className="text-2xl font-bold text-[#d4af37]">{longestPick ? formatDuration(longestPick.longestMs) : "—"}</p>
+          <p className="text-2xl font-bold text-[#d4af37]">{longestPick?.longestMs != null ? formatDuration(longestPick.longestMs) : "—"}</p>
           <p className="text-[11px] text-muted-foreground">single pick time</p>
         </Card>
       </div>
+
+      {!hasTimestamps && (
+        <p className="text-xs text-muted-foreground text-center">
+          Timing data will populate once Sleeper provides timestamps — keep Auto-Refresh on during your live draft.
+        </p>
+      )}
 
       {/* Manager table — sorted: longestMs DESC, then avgMs DESC */}
       <Card className="overflow-hidden">
@@ -503,7 +524,7 @@ function PickTimerView({ draftData, draftInfo, isLoading }: {
             </thead>
             <tbody>
               {sortedByManager.map((s, i) => {
-                const isTop3 = i < 3;
+                const isTop3 = top3GoldEnabled && i < 3 && s.longestMs !== null;
                 const hasAutos = s.autoPickCount > 0;
                 return (
                   <tr
@@ -511,22 +532,31 @@ function PickTimerView({ draftData, draftInfo, isLoading }: {
                     className={`border-b border-border/20 hover:bg-muted/20 transition-colors ${isTop3 ? "bg-[#d4af37]/5" : ""}`}
                     data-testid={`row-timer-${s.managerId}`}
                   >
-                    <td className="px-3 py-2.5 text-xs font-bold" style={isTop3 ? { color: "#d4af37" } : undefined}>
-                      {isTop3 ? <span style={{ color: "#d4af37" }}>{i + 1}</span> : <span className="text-muted-foreground">{i + 1}</span>}
-                    </td>
-                    <td className="px-3 py-2.5 font-semibold text-foreground max-w-[160px] truncate">
+                    <td className="px-3 py-2.5 text-xs font-bold">
                       {isTop3
-                        ? <span style={{ color: "#d4af37" }}>{s.managerName}</span>
-                        : s.managerName
+                        ? <span style={{ color: "#d4af37" }}>{i + 1}</span>
+                        : <span className="text-muted-foreground">{i + 1}</span>
                       }
                     </td>
-                    <td className="px-3 py-2.5 text-right font-mono text-xs text-muted-foreground">{formatDuration(s.totalMs)}</td>
-                    <td className="px-3 py-2.5 text-right text-xs text-muted-foreground">{s.pickCount}</td>
-                    <td className="px-3 py-2.5 text-right font-mono text-sm font-bold text-foreground">{formatDuration(s.avgMs)}</td>
-                    <td className="px-3 py-2.5 text-right font-mono text-sm font-bold">
+                    <td className="px-3 py-2.5 font-semibold max-w-[160px] truncate">
                       {isTop3
-                        ? <span style={{ color: "#d4af37" }}>{formatDuration(s.longestMs)}</span>
-                        : <span className="text-foreground">{formatDuration(s.longestMs)}</span>
+                        ? <span style={{ color: "#d4af37" }}>{s.managerName}</span>
+                        : <span className="text-foreground">{s.managerName}</span>
+                      }
+                    </td>
+                    <td className="px-3 py-2.5 text-right font-mono text-xs text-muted-foreground">
+                      {s.totalMs != null ? formatDuration(s.totalMs) : <span className="opacity-40">—</span>}
+                    </td>
+                    <td className="px-3 py-2.5 text-right text-xs text-muted-foreground">{s.totalPicks}</td>
+                    <td className="px-3 py-2.5 text-right font-mono text-sm font-bold text-foreground">
+                      {s.avgMs != null ? formatDuration(s.avgMs) : <span className="text-muted-foreground/40 font-normal text-xs">—</span>}
+                    </td>
+                    <td className="px-3 py-2.5 text-right font-mono text-sm font-bold">
+                      {s.longestMs != null
+                        ? isTop3
+                          ? <span style={{ color: "#d4af37" }}>{formatDuration(s.longestMs)}</span>
+                          : <span className="text-foreground">{formatDuration(s.longestMs)}</span>
+                        : <span className="text-muted-foreground/40 font-normal text-xs">—</span>
                       }
                     </td>
                     <td className="px-3 py-2.5 text-right text-xs" data-testid={`cell-auto-picks-${s.managerId}`}>
