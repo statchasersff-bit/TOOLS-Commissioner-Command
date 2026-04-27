@@ -1,40 +1,42 @@
 import jwt from "jsonwebtoken";
+import bcrypt from "bcryptjs";
+import { eq } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/node-postgres";
+import pg from "pg";
+import { financePasswords } from "@shared/schema";
 import type { Request, Response, NextFunction } from "express";
 
 const JWT_SECRET = process.env.SESSION_SECRET || "fallback-dev-secret";
-
-const SLEEPER_AUTH = "https://api.sleeper.app/v1/auth";
 const SLEEPER_API  = "https://api.sleeper.app/v1";
 
-const SLEEPER_HEADERS = {
-  "Content-Type": "application/json",
-  "User-Agent": "Sleeper/10.0.0 CFNetwork/1408.0.4 Darwin/22.5.0",
-  "Accept": "application/json",
-};
-
-// ── Sleeper token confirmation (server-side only) ─────────────────────────────
-// The browser handles send_code + verify directly with Sleeper.
-// We only receive the resulting Sleeper token and confirm it here.
-
-export async function confirmSleeperToken(
-  sleeperToken: string,
-  expectedSleeperId: string,
-): Promise<{ ok: boolean; error?: string }> {
-  try {
-    const me = await fetch(`${SLEEPER_API}/user/me`, {
-      headers: { ...SLEEPER_HEADERS, Authorization: `Bearer ${sleeperToken}` },
-    });
-    if (!me.ok) return { ok: false, error: "Could not verify your Sleeper session." };
-    const meData = await me.json();
-    const confirmedId: string = meData?.user_id ?? meData?.id ?? "";
-    if (!confirmedId) return { ok: false, error: "Sleeper did not return a user ID." };
-    if (confirmedId !== expectedSleeperId) {
-      return { ok: false, error: "The Sleeper account you verified doesn't match your connected account." };
-    }
-    return { ok: true };
-  } catch {
-    return { ok: false, error: "Network error. Please try again." };
+let _db: ReturnType<typeof drizzle> | null = null;
+function getDb() {
+  if (!_db) {
+    const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+    _db = drizzle(pool);
   }
+  return _db;
+}
+
+// ── Finance password management ───────────────────────────────────────────────
+
+export async function hasFinancePassword(sleeperId: string): Promise<boolean> {
+  const rows = await getDb().select().from(financePasswords).where(eq(financePasswords.sleeperUserId, sleeperId)).limit(1);
+  return rows.length > 0;
+}
+
+export async function setFinancePassword(sleeperId: string, password: string): Promise<void> {
+  const hash = await bcrypt.hash(password, 12);
+  await getDb()
+    .insert(financePasswords)
+    .values({ sleeperUserId: sleeperId, passwordHash: hash })
+    .onConflictDoUpdate({ target: financePasswords.sleeperUserId, set: { passwordHash: hash } });
+}
+
+export async function checkFinancePassword(sleeperId: string, password: string): Promise<boolean> {
+  const rows = await getDb().select().from(financePasswords).where(eq(financePasswords.sleeperUserId, sleeperId)).limit(1);
+  if (!rows.length) return false;
+  return bcrypt.compare(password, rows[0].passwordHash);
 }
 
 // ── Fallback: display-name challenge ─────────────────────────────────────────

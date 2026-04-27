@@ -36,6 +36,9 @@ import {
   verifyChallenge,
   signToken,
   requireFinanceAuth,
+  hasFinancePassword,
+  setFinancePassword,
+  checkFinancePassword,
 } from "./auth";
 
 export async function registerRoutes(
@@ -329,15 +332,38 @@ export async function registerRoutes(
     }
   });
 
-  // --- Sleeper OTP auth (browser calls Sleeper directly; we only confirm the token) ---
+  // --- Finance password auth ---
 
-  app.post("/api/auth/sleeper-confirm-token", async (req, res) => {
+  app.get("/api/auth/finance-has-password/:sleeperId", async (req, res) => {
     try {
-      const { sleeperToken, expectedSleeperId } = req.body;
-      if (!sleeperToken || !expectedSleeperId) return res.status(400).json({ error: "sleeperToken and expectedSleeperId required" });
-      const result = await confirmSleeperToken(sleeperToken, expectedSleeperId);
-      if (!result.ok) return res.status(401).json({ error: result.error });
-      res.json({ token: signToken(expectedSleeperId) });
+      const hasPw = await hasFinancePassword(req.params.sleeperId);
+      res.json({ hasPassword: hasPw });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/auth/finance-register", async (req, res) => {
+    try {
+      const { sleeperId, password } = req.body;
+      if (!sleeperId || !password) return res.status(400).json({ error: "sleeperId and password required" });
+      if (password.length < 6) return res.status(400).json({ error: "Password must be at least 6 characters" });
+      const challenge = await verifyChallenge(sleeperId);
+      if (!challenge.ok) return res.status(401).json({ error: challenge.error });
+      await setFinancePassword(sleeperId, password);
+      res.json({ token: signToken(sleeperId) });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/auth/finance-login", async (req, res) => {
+    try {
+      const { sleeperId, password } = req.body;
+      if (!sleeperId || !password) return res.status(400).json({ error: "sleeperId and password required" });
+      const valid = await checkFinancePassword(sleeperId, password);
+      if (!valid) return res.status(401).json({ error: "Incorrect password." });
+      res.json({ token: signToken(sleeperId) });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }

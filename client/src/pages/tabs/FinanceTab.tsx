@@ -78,16 +78,18 @@ function tokenKey(userId: string) { return `dc-finance-token-${userId}`; }
 
 // ─── Sleeper Login Gate ────────────────────────────────────────────────────────
 
+type GateMode = "checking" | "login" | "register" | "reset";
+
 function SleeperVerifyGate({ userId, username, onAuth }: { userId: string; username: string; onAuth: (token: string) => void }) {
+  const [mode, setMode] = useState<GateMode>("checking");
   const [challengeCode, setChallengeCode] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [verifying, setVerifying] = useState(false);
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [submitting, setSubmitting] = useState(false);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState("");
 
   async function loadChallenge() {
-    setLoading(true);
-    setError("");
     try {
       const r = await fetch(`${API_BASE}/api/auth/challenge-current/${userId}`);
       if (!r.ok) {
@@ -99,99 +101,185 @@ function SleeperVerifyGate({ userId, username, onAuth }: { userId: string; usern
         setChallengeCode(d.code);
       }
     } catch { setError("Could not reach server."); }
-    finally { setLoading(false); }
   }
 
-  useEffect(() => { loadChallenge(); }, [userId]);
+  useEffect(() => {
+    (async () => {
+      try {
+        const r = await fetch(`${API_BASE}/api/auth/finance-has-password/${userId}`);
+        const d = await r.json();
+        if (d.hasPassword) {
+          setMode("login");
+        } else {
+          await loadChallenge();
+          setMode("register");
+        }
+      } catch { setError("Could not reach server."); }
+    })();
+  }, [userId]);
 
-  async function handleVerify() {
-    setVerifying(true);
-    setError("");
+  async function handleLogin() {
+    if (!password) { setError("Please enter your password."); return; }
+    setSubmitting(true); setError("");
     try {
-      const r = await fetch(`${API_BASE}/api/auth/verify`, {
+      const r = await fetch(`${API_BASE}/api/auth/finance-login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sleeperId: userId }),
+        body: JSON.stringify({ sleeperId: userId, password }),
       });
       const data = await r.json();
-      if (!r.ok) { setError(data.error || "Display name didn't match. Make sure you saved it in Sleeper."); return; }
+      if (!r.ok) { setError(data.error || "Login failed."); return; }
       localStorage.setItem(tokenKey(userId), data.token);
       onAuth(data.token);
     } catch { setError("Network error. Please try again."); }
-    finally { setVerifying(false); }
+    finally { setSubmitting(false); }
   }
+
+  async function handleRegister() {
+    if (password.length < 6) { setError("Password must be at least 6 characters."); return; }
+    if (password !== confirmPassword) { setError("Passwords don't match."); return; }
+    setSubmitting(true); setError("");
+    try {
+      const r = await fetch(`${API_BASE}/api/auth/finance-register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sleeperId: userId, password }),
+      });
+      const data = await r.json();
+      if (!r.ok) { setError(data.error || "Verification failed. Make sure your Sleeper display name is set correctly."); return; }
+      localStorage.setItem(tokenKey(userId), data.token);
+      onAuth(data.token);
+    } catch { setError("Network error. Please try again."); }
+    finally { setSubmitting(false); }
+  }
+
+  function startReset() {
+    setMode("reset");
+    setPassword(""); setConfirmPassword(""); setError("");
+    if (!challengeCode) loadChallenge();
+  }
+
+  const isRegisterMode = mode === "register" || mode === "reset";
 
   return (
     <div className="flex items-center justify-center min-h-[60vh] px-4">
       <Card className="p-8 w-full max-w-md space-y-6">
+
         {/* Header */}
         <div className="text-center space-y-2">
           <div className="w-14 h-14 rounded-2xl bg-[#0b3a7a]/10 dark:bg-blue-400/10 flex items-center justify-center mx-auto">
             <ShieldCheck className="w-7 h-7 text-[#0b3a7a] dark:text-blue-400" />
           </div>
-          <h3 className="text-lg font-bold">Verify Your Identity</h3>
-          <p className="text-sm text-muted-foreground">
-            Finances are protected. Verify you own <span className="font-semibold text-foreground">@{username}</span> on Sleeper.
-          </p>
+          {mode === "checking" && <><h3 className="text-lg font-bold">Finance Account</h3><p className="text-sm text-muted-foreground">Loading…</p></>}
+          {mode === "login" && <><h3 className="text-lg font-bold">Sign In</h3><p className="text-sm text-muted-foreground">Welcome back, <span className="font-semibold text-foreground">@{username}</span></p></>}
+          {mode === "register" && <><h3 className="text-lg font-bold">Create Finance Password</h3><p className="text-sm text-muted-foreground">Set a password to protect your finances. First, verify you own <span className="font-semibold text-foreground">@{username}</span>.</p></>}
+          {mode === "reset" && <><h3 className="text-lg font-bold">Reset Password</h3><p className="text-sm text-muted-foreground">Verify your Sleeper identity to set a new password for <span className="font-semibold text-foreground">@{username}</span>.</p></>}
         </div>
 
-        {loading ? (
-          <div className="flex justify-center py-6"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
-        ) : challengeCode ? (
-          <div className="space-y-5">
-            {/* Code display */}
-            <div className="space-y-2">
-              <p className="text-[11px] text-muted-foreground text-center font-medium uppercase tracking-wide">Your one-time code</p>
-              <div className="flex items-center gap-2">
-                <div className="flex-1 bg-muted/50 rounded-xl border border-border/60 px-4 py-3 text-center">
-                  <span className="text-2xl font-mono font-bold tracking-widest text-[#0b3a7a] dark:text-blue-300" data-testid="text-challenge-code">{challengeCode}</span>
-                </div>
-                <button
-                  onClick={() => { navigator.clipboard.writeText(challengeCode!); setCopied(true); setTimeout(() => setCopied(false), 2000); }}
-                  className="p-3 rounded-xl border border-border/60 hover:bg-muted/50 transition-colors text-muted-foreground"
-                  data-testid="button-copy-code"
-                >
-                  {copied ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
-                </button>
-                <button
-                  onClick={() => { setChallengeCode(null); loadChallenge(); }}
-                  className="p-3 rounded-xl border border-border/60 hover:bg-muted/50 transition-colors text-muted-foreground"
-                  data-testid="button-refresh-code"
-                >
-                  <RefreshCw className="w-4 h-4" />
-                </button>
+        {/* Loading spinner */}
+        {mode === "checking" && (
+          <div className="flex justify-center py-4"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
+        )}
+
+        {/* Login form */}
+        {mode === "login" && (
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-foreground">Password</label>
+              <Input
+                type="password"
+                value={password}
+                onChange={e => { setPassword(e.target.value); setError(""); }}
+                placeholder="Enter your Finance password"
+                onKeyDown={e => e.key === "Enter" && handleLogin()}
+                data-testid="input-finance-password"
+              />
+            </div>
+            {error && (
+              <div className="flex items-start gap-2 text-sm text-red-500 bg-red-50 dark:bg-red-950/20 border border-red-200/50 dark:border-red-800/30 rounded-lg px-3 py-2.5" data-testid="text-login-error">
+                <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" /><span>{error}</span>
               </div>
+            )}
+            <Button className="w-full" onClick={handleLogin} disabled={submitting || !password} data-testid="button-finance-login">
+              {submitting ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />Signing in…</> : "Sign In"}
+            </Button>
+            <button onClick={startReset} className="w-full text-xs text-muted-foreground hover:text-foreground text-center transition-colors" data-testid="button-forgot-password">
+              Forgot password? Reset via Sleeper verification
+            </button>
+          </div>
+        )}
+
+        {/* Register / Reset form */}
+        {isRegisterMode && (
+          <div className="space-y-4">
+            {/* Challenge code */}
+            {challengeCode ? (
+              <div className="space-y-3">
+                <div className="space-y-2">
+                  <p className="text-[11px] text-muted-foreground text-center font-medium uppercase tracking-wide">Step 1 — Verify your Sleeper account</p>
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 bg-muted/50 rounded-xl border border-border/60 px-4 py-3 text-center">
+                      <span className="text-2xl font-mono font-bold tracking-widest text-[#0b3a7a] dark:text-blue-300" data-testid="text-challenge-code">{challengeCode}</span>
+                    </div>
+                    <button onClick={() => { navigator.clipboard.writeText(challengeCode!); setCopied(true); setTimeout(() => setCopied(false), 2000); }} className="p-3 rounded-xl border border-border/60 hover:bg-muted/50 transition-colors text-muted-foreground" data-testid="button-copy-code">
+                      {copied ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
+                    </button>
+                    <button onClick={() => { setChallengeCode(null); loadChallenge(); }} className="p-3 rounded-xl border border-border/60 hover:bg-muted/50 transition-colors text-muted-foreground" data-testid="button-refresh-code">
+                      <RefreshCw className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+                <ol className="space-y-1.5 text-sm">
+                  {[
+                    <>Open Sleeper → tap your <strong>avatar</strong> → <strong>Edit Profile</strong></>,
+                    <>Set your <strong>Display Name</strong> to: <code className="bg-muted px-1.5 py-0.5 rounded text-xs font-mono">{challengeCode}</code></>,
+                  ].map((step, i) => (
+                    <li key={i} className="flex gap-3">
+                      <span className="w-5 h-5 rounded-full bg-[#0b3a7a]/10 dark:bg-blue-400/10 text-[#0b3a7a] dark:text-blue-400 flex items-center justify-center text-[11px] font-bold flex-shrink-0 mt-0.5">{i + 1}</span>
+                      <span className="text-muted-foreground leading-snug">{step}</span>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            ) : (
+              <div className="flex justify-center py-2"><Loader2 className="w-4 h-4 animate-spin text-muted-foreground" /></div>
+            )}
+
+            {/* Password fields */}
+            <div className="space-y-2 pt-1">
+              <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide">Step 2 — {mode === "reset" ? "Set new password" : "Create a password"}</p>
+              <Input
+                type="password"
+                value={password}
+                onChange={e => { setPassword(e.target.value); setError(""); }}
+                placeholder="New password (min. 6 characters)"
+                data-testid="input-new-password"
+              />
+              <Input
+                type="password"
+                value={confirmPassword}
+                onChange={e => { setConfirmPassword(e.target.value); setError(""); }}
+                placeholder="Confirm password"
+                data-testid="input-confirm-password"
+              />
             </div>
 
-            {/* Steps */}
-            <ol className="space-y-2.5 text-sm">
-              {[
-                <>Open Sleeper → tap your <strong>avatar</strong> → <strong>Edit Profile</strong></>,
-                <>Set your <strong>Display Name</strong> to: <code className="bg-muted px-1.5 py-0.5 rounded text-xs font-mono">{challengeCode}</code></>,
-                <>Click <strong>Verify</strong> below. You can change your name back after.</>,
-              ].map((step, i) => (
-                <li key={i} className="flex gap-3">
-                  <span className="w-5 h-5 rounded-full bg-[#0b3a7a]/10 dark:bg-blue-400/10 text-[#0b3a7a] dark:text-blue-400 flex items-center justify-center text-[11px] font-bold flex-shrink-0 mt-0.5">{i + 1}</span>
-                  <span className="text-muted-foreground leading-snug">{step}</span>
-                </li>
-              ))}
-            </ol>
-
             {error && (
-              <div className="flex items-start gap-2 text-sm text-red-500 bg-red-50 dark:bg-red-950/20 border border-red-200/50 dark:border-red-800/30 rounded-lg px-3 py-2.5" data-testid="text-challenge-error">
-                <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                <span>{error}</span>
+              <div className="flex items-start gap-2 text-sm text-red-500 bg-red-50 dark:bg-red-950/20 border border-red-200/50 dark:border-red-800/30 rounded-lg px-3 py-2.5" data-testid="text-register-error">
+                <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" /><span>{error}</span>
               </div>
             )}
 
-            <Button className="w-full" onClick={handleVerify} disabled={verifying} data-testid="button-verify-challenge">
-              {verifying ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />Checking…</> : "Verify & Unlock Finances"}
+            <Button className="w-full" onClick={handleRegister} disabled={submitting || !password || !confirmPassword || !challengeCode} data-testid="button-finance-register">
+              {submitting ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />Verifying…</> : mode === "reset" ? "Verify & Reset Password" : "Verify & Create Password"}
             </Button>
+
+            {mode === "reset" && (
+              <button onClick={() => { setMode("login"); setError(""); }} className="w-full text-xs text-muted-foreground hover:text-foreground text-center transition-colors" data-testid="button-back-to-login">
+                ← Back to Sign In
+              </button>
+            )}
           </div>
-        ) : (
-          <Button variant="outline" className="w-full" onClick={loadChallenge} data-testid="button-generate-code">
-            Generate Code
-          </Button>
         )}
 
         <p className="text-[11px] text-muted-foreground text-center">Your session stays unlocked for 90 days</p>
