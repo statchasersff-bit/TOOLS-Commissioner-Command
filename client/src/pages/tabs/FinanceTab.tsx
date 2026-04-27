@@ -859,8 +859,17 @@ export function FinanceTab() {
               data-testid={`toggle-finance-${league.leagueId}`}
             >
               <div className="flex items-center gap-3 min-w-0">
-                <div className="w-9 h-9 rounded-xl bg-[#0b3a7a]/10 dark:bg-blue-400/10 flex items-center justify-center flex-shrink-0">
+                <div className="w-9 h-9 rounded-xl overflow-hidden flex-shrink-0 bg-[#0b3a7a]/10 dark:bg-blue-400/10 flex items-center justify-center relative">
                   <Trophy className="w-4 h-4 text-[#0b3a7a] dark:text-blue-400" />
+                  {league.avatar && (
+                    <img
+                      src={`https://sleepercdn.com/avatars/thumbs/${league.avatar}`}
+                      alt={league.name}
+                      className="absolute inset-0 w-full h-full object-cover"
+                      onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+                      data-testid={`img-league-avatar-${league.leagueId}`}
+                    />
+                  )}
                 </div>
                 <div className="min-w-0">
                   <p className="font-semibold text-sm truncate">{league.name}</p>
