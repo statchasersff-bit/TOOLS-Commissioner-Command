@@ -22,14 +22,8 @@ import {
   RefreshCw,
   Copy,
   Check,
-  SmartphoneNfc,
   ChevronRight,
 } from "lucide-react";
-import {
-  InputOTP,
-  InputOTPGroup,
-  InputOTPSlot,
-} from "@/components/ui/input-otp";
 
 interface PrizeSlot { place: number; amount: number; }
 interface LeagueFinanceData { leagueId: string; buyIn: number; prizes: PrizeSlot[]; notes: string; }
@@ -82,92 +76,17 @@ function plBg(pl: number) {
 const DEFAULT_FINANCE: LeagueFinanceData = { leagueId: "", buyIn: 0, prizes: [], notes: "" };
 function tokenKey(userId: string) { return `dc-finance-token-${userId}`; }
 
-const SLEEPER_AUTH_BASE = "https://api.sleeper.app/v1/auth";
-
-function sleeperLoginPayload(login: string): Record<string, string> {
-  const t = login.trim();
-  if (t.includes("@")) return { email: t };
-  const digits = t.replace(/\D/g, "");
-  if (digits.length >= 10 && /^\+?[\d\s\-().]+$/.test(t)) return { phone: t };
-  return { username: t };
-}
-
 // ─── Sleeper Login Gate ────────────────────────────────────────────────────────
 
-type GateMethod = "otp" | "challenge";
-type OtpStep = "send" | "enter";
-
 function SleeperVerifyGate({ userId, username, onAuth }: { userId: string; username: string; onAuth: (token: string) => void }) {
-  const [method, setMethod] = useState<GateMethod>("otp");
-  const [otpStep, setOtpStep] = useState<OtpStep>("send");
-  const [login, setLogin] = useState(username);
-  const [otp, setOtp] = useState("");
-  const [sendingCode, setSendingCode] = useState(false);
+  const [challengeCode, setChallengeCode] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
   const [verifying, setVerifying] = useState(false);
+  const [copied, setCopied] = useState(false);
   const [error, setError] = useState("");
 
-  // ── Challenge fallback state ──
-  const [challengeCode, setChallengeCode] = useState<string | null>(null);
-  const [loadingChallenge, setLoadingChallenge] = useState(false);
-  const [copied, setCopied] = useState(false);
-
-  async function handleSendCode() {
-    setSendingCode(true);
-    setError("");
-    try {
-      const payload = sleeperLoginPayload(login);
-      const r = await fetch(`${SLEEPER_AUTH_BASE}/send_code`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (!r.ok) {
-        const data = await r.json().catch(() => ({}));
-        setError(data.error ?? data.message ?? `Sleeper returned ${r.status}. Try your email or phone instead.`);
-        return;
-      }
-      setOtpStep("enter");
-    } catch { setError("Could not reach Sleeper. Check your connection and try again."); }
-    finally { setSendingCode(false); }
-  }
-
-  async function handleVerifyOtp() {
-    if (otp.length < 6) { setError("Please enter the full 6-digit code."); return; }
-    setVerifying(true);
-    setError("");
-    try {
-      // Step 1: verify code directly with Sleeper
-      const payload = sleeperLoginPayload(login);
-      const r = await fetch(`${SLEEPER_AUTH_BASE}/verify`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...payload, code: otp }),
-      });
-      if (!r.ok) {
-        const data = await r.json().catch(() => ({}));
-        setError(data.error ?? data.message ?? "Incorrect code. Please try again.");
-        return;
-      }
-      const session = await r.json();
-      const sleeperToken: string = session?.token ?? session?.access_token ?? "";
-      if (!sleeperToken) { setError("Sleeper did not return a session token."); return; }
-
-      // Step 2: confirm with our server → get our JWT
-      const r2 = await fetch(`${API_BASE}/api/auth/sleeper-confirm-token`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sleeperToken, expectedSleeperId: userId }),
-      });
-      const data2 = await r2.json();
-      if (!r2.ok) { setError(data2.error || "Could not confirm your Sleeper identity."); return; }
-      localStorage.setItem(tokenKey(userId), data2.token);
-      onAuth(data2.token);
-    } catch { setError("Network error. Please try again."); }
-    finally { setVerifying(false); }
-  }
-
   async function loadChallenge() {
-    setLoadingChallenge(true);
+    setLoading(true);
     setError("");
     try {
       const r = await fetch(`${API_BASE}/api/auth/challenge-current/${userId}`);
@@ -180,10 +99,12 @@ function SleeperVerifyGate({ userId, username, onAuth }: { userId: string; usern
         setChallengeCode(d.code);
       }
     } catch { setError("Could not reach server."); }
-    finally { setLoadingChallenge(false); }
+    finally { setLoading(false); }
   }
 
-  async function handleVerifyChallenge() {
+  useEffect(() => { loadChallenge(); }, [userId]);
+
+  async function handleVerify() {
     setVerifying(true);
     setError("");
     try {
@@ -193,19 +114,11 @@ function SleeperVerifyGate({ userId, username, onAuth }: { userId: string; usern
         body: JSON.stringify({ sleeperId: userId }),
       });
       const data = await r.json();
-      if (!r.ok) { setError(data.error || "Verification failed."); return; }
+      if (!r.ok) { setError(data.error || "Display name didn't match. Make sure you saved it in Sleeper."); return; }
       localStorage.setItem(tokenKey(userId), data.token);
       onAuth(data.token);
     } catch { setError("Network error. Please try again."); }
     finally { setVerifying(false); }
-  }
-
-  function switchMethod(m: GateMethod) {
-    setMethod(m);
-    setError("");
-    setOtp("");
-    setOtpStep("send");
-    if (m === "challenge" && !challengeCode) loadChallenge();
   }
 
   return (
@@ -218,146 +131,67 @@ function SleeperVerifyGate({ userId, username, onAuth }: { userId: string; usern
           </div>
           <h3 className="text-lg font-bold">Verify Your Identity</h3>
           <p className="text-sm text-muted-foreground">
-            Finances are protected. Verify your Sleeper account to continue as <span className="font-semibold text-foreground">@{username}</span>.
+            Finances are protected. Verify you own <span className="font-semibold text-foreground">@{username}</span> on Sleeper.
           </p>
         </div>
 
-        {/* Method toggle */}
-        <div className="flex rounded-xl border border-border/60 overflow-hidden text-sm font-medium">
-          <button
-            onClick={() => switchMethod("otp")}
-            className={`flex-1 py-2.5 transition-colors ${method === "otp" ? "bg-[#0b3a7a] dark:bg-blue-700 text-white" : "text-muted-foreground hover:bg-muted/40"}`}
-            data-testid="tab-otp"
-          >
-            SMS / Email Code
-          </button>
-          <button
-            onClick={() => switchMethod("challenge")}
-            className={`flex-1 py-2.5 transition-colors ${method === "challenge" ? "bg-[#0b3a7a] dark:bg-blue-700 text-white" : "text-muted-foreground hover:bg-muted/40"}`}
-            data-testid="tab-challenge"
-          >
-            Display Name
-          </button>
-        </div>
-
-        {/* ── OTP method ── */}
-        {method === "otp" && (
-          <div className="space-y-4">
-            {otpStep === "send" ? (
-              <>
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-foreground">Sleeper Username, Email, or Phone</label>
-                  <Input
-                    value={login}
-                    onChange={e => { setLogin(e.target.value); setError(""); }}
-                    placeholder="username, email@example.com, or +1..."
-                    data-testid="input-sleeper-login"
-                  />
-                  <p className="text-[11px] text-muted-foreground">Sleeper will send a 6-digit code to your registered phone or email.</p>
+        {loading ? (
+          <div className="flex justify-center py-6"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
+        ) : challengeCode ? (
+          <div className="space-y-5">
+            {/* Code display */}
+            <div className="space-y-2">
+              <p className="text-[11px] text-muted-foreground text-center font-medium uppercase tracking-wide">Your one-time code</p>
+              <div className="flex items-center gap-2">
+                <div className="flex-1 bg-muted/50 rounded-xl border border-border/60 px-4 py-3 text-center">
+                  <span className="text-2xl font-mono font-bold tracking-widest text-[#0b3a7a] dark:text-blue-300" data-testid="text-challenge-code">{challengeCode}</span>
                 </div>
-
-                {error && (
-                  <div className="flex items-start gap-2 text-sm text-red-500 bg-red-50 dark:bg-red-950/20 border border-red-200/50 dark:border-red-800/30 rounded-lg px-3 py-2.5" data-testid="text-otp-error">
-                    <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                    <span>{error}</span>
-                  </div>
-                )}
-
-                <Button className="w-full" onClick={handleSendCode} disabled={sendingCode || !login.trim()} data-testid="button-send-code">
-                  {sendingCode ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />Sending…</> : "Send Verification Code"}
-                </Button>
-              </>
-            ) : (
-              <>
-                <div className="space-y-2 text-center">
-                  <p className="text-sm text-muted-foreground">Enter the 6-digit code sent to your Sleeper-registered phone or email.</p>
-                  <div className="flex justify-center pt-1">
-                    <InputOTP
-                      maxLength={6}
-                      value={otp}
-                      onChange={v => { setOtp(v); setError(""); }}
-                      data-testid="input-otp-code"
-                    >
-                      <InputOTPGroup>
-                        {[0,1,2,3,4,5].map(i => <InputOTPSlot key={i} index={i} />)}
-                      </InputOTPGroup>
-                    </InputOTP>
-                  </div>
-                </div>
-
-                {error && (
-                  <div className="flex items-start gap-2 text-sm text-red-500 bg-red-50 dark:bg-red-950/20 border border-red-200/50 dark:border-red-800/30 rounded-lg px-3 py-2.5" data-testid="text-otp-error">
-                    <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                    <span>{error}</span>
-                  </div>
-                )}
-
-                <Button className="w-full" onClick={handleVerifyOtp} disabled={verifying || otp.length < 6} data-testid="button-verify-otp">
-                  {verifying ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />Verifying…</> : "Verify & Unlock Finances"}
-                </Button>
-
-                <button onClick={() => { setOtpStep("send"); setOtp(""); setError(""); }} className="w-full text-xs text-muted-foreground hover:text-foreground text-center transition-colors" data-testid="button-back-to-send">
-                  ← Didn't receive a code? Try again
+                <button
+                  onClick={() => { navigator.clipboard.writeText(challengeCode!); setCopied(true); setTimeout(() => setCopied(false), 2000); }}
+                  className="p-3 rounded-xl border border-border/60 hover:bg-muted/50 transition-colors text-muted-foreground"
+                  data-testid="button-copy-code"
+                >
+                  {copied ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
                 </button>
-              </>
+                <button
+                  onClick={() => { setChallengeCode(null); loadChallenge(); }}
+                  className="p-3 rounded-xl border border-border/60 hover:bg-muted/50 transition-colors text-muted-foreground"
+                  data-testid="button-refresh-code"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Steps */}
+            <ol className="space-y-2.5 text-sm">
+              {[
+                <>Open Sleeper → tap your <strong>avatar</strong> → <strong>Edit Profile</strong></>,
+                <>Set your <strong>Display Name</strong> to: <code className="bg-muted px-1.5 py-0.5 rounded text-xs font-mono">{challengeCode}</code></>,
+                <>Click <strong>Verify</strong> below. You can change your name back after.</>,
+              ].map((step, i) => (
+                <li key={i} className="flex gap-3">
+                  <span className="w-5 h-5 rounded-full bg-[#0b3a7a]/10 dark:bg-blue-400/10 text-[#0b3a7a] dark:text-blue-400 flex items-center justify-center text-[11px] font-bold flex-shrink-0 mt-0.5">{i + 1}</span>
+                  <span className="text-muted-foreground leading-snug">{step}</span>
+                </li>
+              ))}
+            </ol>
+
+            {error && (
+              <div className="flex items-start gap-2 text-sm text-red-500 bg-red-50 dark:bg-red-950/20 border border-red-200/50 dark:border-red-800/30 rounded-lg px-3 py-2.5" data-testid="text-challenge-error">
+                <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                <span>{error}</span>
+              </div>
             )}
+
+            <Button className="w-full" onClick={handleVerify} disabled={verifying} data-testid="button-verify-challenge">
+              {verifying ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />Checking…</> : "Verify & Unlock Finances"}
+            </Button>
           </div>
-        )}
-
-        {/* ── Display name challenge method ── */}
-        {method === "challenge" && (
-          <div className="space-y-4">
-            {loadingChallenge ? (
-              <div className="flex justify-center py-4"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
-            ) : challengeCode ? (
-              <>
-                <div className="space-y-2">
-                  <p className="text-[11px] text-muted-foreground text-center font-medium uppercase tracking-wide">Your verification code</p>
-                  <div className="flex items-center gap-2">
-                    <div className="flex-1 bg-muted/50 rounded-xl border border-border/60 px-4 py-3 text-center">
-                      <span className="text-2xl font-mono font-bold tracking-widest text-[#0b3a7a] dark:text-blue-300" data-testid="text-challenge-code">{challengeCode}</span>
-                    </div>
-                    <button
-                      onClick={() => { navigator.clipboard.writeText(challengeCode); setCopied(true); setTimeout(() => setCopied(false), 2000); }}
-                      className="p-3 rounded-xl border border-border/60 hover:bg-muted/50 transition-colors text-muted-foreground"
-                      data-testid="button-copy-code"
-                    >
-                      {copied ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
-                    </button>
-                    <button onClick={() => { setChallengeCode(null); loadChallenge(); }} className="p-3 rounded-xl border border-border/60 hover:bg-muted/50 transition-colors text-muted-foreground" data-testid="button-refresh-code">
-                      <RefreshCw className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-
-                <ol className="space-y-2 text-sm">
-                  {[
-                    <>Open Sleeper → tap your avatar → <strong>Edit Profile</strong></>,
-                    <>Set your <strong>Display Name</strong> to: <code className="bg-muted px-1.5 py-0.5 rounded text-xs font-mono">{challengeCode}</code></>,
-                    <>Click <strong>Verify</strong> below, then change your name back</>,
-                  ].map((step, i) => (
-                    <li key={i} className="flex gap-3">
-                      <span className="w-5 h-5 rounded-full bg-[#0b3a7a]/10 dark:bg-blue-400/10 text-[#0b3a7a] dark:text-blue-400 flex items-center justify-center text-[11px] font-bold flex-shrink-0 mt-0.5">{i + 1}</span>
-                      <span className="text-muted-foreground leading-snug">{step}</span>
-                    </li>
-                  ))}
-                </ol>
-
-                {error && (
-                  <div className="flex items-start gap-2 text-sm text-red-500 bg-red-50 dark:bg-red-950/20 border border-red-200/50 dark:border-red-800/30 rounded-lg px-3 py-2.5" data-testid="text-challenge-error">
-                    <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                    <span>{error}</span>
-                  </div>
-                )}
-
-                <Button className="w-full" onClick={handleVerifyChallenge} disabled={verifying} data-testid="button-verify-challenge">
-                  {verifying ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />Checking…</> : "Verify & Unlock Finances"}
-                </Button>
-              </>
-            ) : (
-              <Button variant="outline" className="w-full" onClick={loadChallenge}>Generate Code</Button>
-            )}
-          </div>
+        ) : (
+          <Button variant="outline" className="w-full" onClick={loadChallenge} data-testid="button-generate-code">
+            Generate Code
+          </Button>
         )}
 
         <p className="text-[11px] text-muted-foreground text-center">Your session stays unlocked for 90 days</p>
