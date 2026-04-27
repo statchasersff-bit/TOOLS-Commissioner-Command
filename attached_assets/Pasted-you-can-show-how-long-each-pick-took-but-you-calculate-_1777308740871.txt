@@ -1,0 +1,101 @@
+you can show how long each pick took — but you calculate it yourself.
+Sleeper gives you the timestamps, not the duration.
+
+🧠 What Sleeper API actually provides
+
+When you fetch draft picks (/drafts/{draft_id}/picks), each pick object includes:
+
+picked_at → timestamp (ms since epoch)
+draft_slot
+roster_id
+player info
+
+👉 There is NO built-in “time to pick” field
+👉 There is NO explicit “timer duration used” field
+
+⏱️ How you calculate pick time
+
+You compute it like this:
+
+pick_time = current_pick.picked_at - previous_pick.picked_at
+
+So yes — when a user clicks into a live draft, you can absolutely show:
+
+Time per pick
+Running timers
+Manager speed
+🧩 What this enables (this is where your tool gets powerful)
+1. Per-pick timing (what you asked)
+
+On click of a draft:
+
+Table:
+
+Pick #
+Player
+Manager
+Time to Pick (calculated)
+Timestamp
+2. Real-time timer (🔥 high value UX)
+
+If the draft is ongoing:
+
+Take Date.now() - last_pick.picked_at
+Show live ticking timer for current pick
+
+This is how Sleeper shows the countdown internally — you can replicate it.
+
+3. Historical draft pacing
+
+You can also compute:
+
+Avg pick time per round
+Slowest round
+Fastest drafter streaks
+⚠️ Important limitations
+
+Be aware of these edge cases:
+
+1. First pick
+No previous timestamp → either:
+skip it
+or use draft.start_time (if available)
+2. Pauses / draft delays
+If commissioner pauses draft, time still accumulates
+👉 Your data will show inflated pick times
+
+(You can optionally cap or flag long picks like “>10 min”)
+
+3. Auto picks
+Sleeper does NOT reliably expose a clean auto-pick flag
+You might see it in metadata, but it’s inconsistent
+
+👉 Don’t rely on it heavily (your earlier approach = correct)
+
+💡 Best UX recommendation (this is what I’d build)
+
+When clicking a draft:
+
+Tab 1: Draft Board (existing)
+Tab 2: Pick Timer (your new one)
+Tab 3: Pick Log (NEW 🔥)
+
+Pick Log Table:
+
+Pick #
+Manager
+Player
+Time to Pick
+Round
+(optional) “Slow Pick” badge if > X seconds
+🧠 Big opportunity (you’re onto something strong)
+
+No major tools surface this well.
+
+You could market this as:
+
+“See who’s tanking your draft clock”
+
+or
+
+“Identify the slow drafters in your league”

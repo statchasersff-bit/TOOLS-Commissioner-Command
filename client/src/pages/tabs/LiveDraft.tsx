@@ -166,7 +166,60 @@ function buildPickTimerStats(
   return { stats, hasTimestamps: true };
 }
 
+interface PickTimelineEntry {
+  pickNo: number;
+  round: number;
+  draftSlot: number;
+  playerName: string;
+  pos: string;
+  team: string;
+  managerName: string;
+  isAutoPick: boolean;
+  durationMs: number | null; // null = timing not available
+}
+
+function buildPickTimeline(
+  picks: DraftPick[],
+  draftSlots: { slot: number; rosterId: number; displayName: string }[]
+): PickTimelineEntry[] {
+  const slotMap = new Map<number, string>();
+  for (const s of draftSlots) slotMap.set(s.rosterId, s.displayName);
+
+  const sorted = [...picks]
+    .filter(p => p.playerId)
+    .sort((a, b) => a.pickNo - b.pickNo);
+
+  return sorted.map((pick, i) => {
+    const prev = sorted[i - 1];
+    let durationMs: number | null = null;
+    if (i > 0 && prev.pickedAt && pick.pickedAt) {
+      const diff = pick.pickedAt - prev.pickedAt;
+      if (diff > 0) durationMs = diff;
+    }
+    return {
+      pickNo: pick.pickNo,
+      round: pick.round,
+      draftSlot: pick.draftSlot,
+      playerName: pick.playerName,
+      pos: pick.pos,
+      team: pick.team,
+      managerName: slotMap.get(pick.rosterId) || `Roster ${pick.rosterId}`,
+      isAutoPick: pick.isAutoPick,
+      durationMs,
+    };
+  });
+}
+
+function durationColor(ms: number): string {
+  const s = ms / 1000;
+  if (s < 60) return "text-emerald-500 dark:text-emerald-400";
+  if (s < 180) return "text-yellow-500 dark:text-yellow-400";
+  if (s < 300) return "text-orange-500 dark:text-orange-400";
+  return "text-red-500 dark:text-red-400";
+}
+
 type TimerSortKey = "avgMs" | "totalMs" | "pickCount" | "autoPickCount" | "longestMs";
+type TimerViewMode = "by-manager" | "by-pick";
 
 function PickTimerView({ draftData, isLoading }: {
   draftData: { picks: DraftPick[]; draftSlots: { slot: number; rosterId: number; displayName: string }[] } | null;
@@ -174,10 +227,16 @@ function PickTimerView({ draftData, isLoading }: {
 }) {
   const [sortKey, setSortKey] = useState<TimerSortKey>("avgMs");
   const [sortDir, setSortDir] = useState<"desc" | "asc">("desc");
+  const [viewMode, setViewMode] = useState<TimerViewMode>("by-pick");
 
   const { stats, hasTimestamps } = useMemo(() => {
     if (!draftData) return { stats: [], hasTimestamps: false };
     return buildPickTimerStats(draftData.picks, draftData.draftSlots);
+  }, [draftData]);
+
+  const timeline = useMemo(() => {
+    if (!draftData) return [];
+    return buildPickTimeline(draftData.picks, draftData.draftSlots);
   }, [draftData]);
 
   const sorted = useMemo(() => {
@@ -223,14 +282,115 @@ function PickTimerView({ draftData, isLoading }: {
     </Card>
   );
 
-  if (!draftData) return emptyState("Load a draft above, then enable Auto-Refresh before picks begin. Timing is recorded as picks come in live.");
-  if (!hasTimestamps) return emptyState("Timing is tracked live as picks come in. Enable Auto-Refresh before your draft starts to capture pick times.");
-  if (draftData.picks.filter(p => p.playerId && p.pickedAt).length < 2)
-    return emptyState("At least two tracked picks are needed to calculate timing. Keep Auto-Refresh on as the draft progresses.");
-  if (stats.length === 0) return emptyState("Timing will appear as more picks are tracked live.");
+  if (!draftData) return emptyState("Load a draft above to view pick timing.");
+
+  const hasPicks = draftData.picks.filter(p => p.playerId).length > 0;
+  if (!hasPicks) return emptyState("No picks yet. Enable Auto-Refresh before your draft starts to capture pick times as they happen.");
+
+  const timedPickCount = timeline.filter(t => t.durationMs !== null).length;
+
+  const ViewToggle = () => (
+    <div className="flex items-center gap-1 bg-muted/40 rounded-md p-0.5 w-fit" data-testid="pick-timer-view-toggle">
+      <button
+        className={`px-3 py-1 text-xs font-semibold rounded transition-colors ${viewMode === "by-pick" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+        onClick={() => setViewMode("by-pick")}
+        data-testid="btn-view-by-pick"
+      >
+        By Pick
+      </button>
+      <button
+        className={`px-3 py-1 text-xs font-semibold rounded transition-colors ${viewMode === "by-manager" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+        onClick={() => setViewMode("by-manager")}
+        data-testid="btn-view-by-manager"
+        disabled={!hasTimestamps || stats.length === 0}
+      >
+        By Manager
+      </button>
+    </div>
+  );
+
+  if (viewMode === "by-pick") {
+    return (
+      <div className="space-y-4" data-testid="pick-timer-view">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <ViewToggle />
+          {timedPickCount === 0 && (
+            <p className="text-xs text-muted-foreground">
+              Timing requires Sleeper to provide timestamps — enable Auto-Refresh to capture times as picks come in live.
+            </p>
+          )}
+          {timedPickCount > 0 && (
+            <p className="text-xs text-muted-foreground">
+              {timedPickCount} of {timeline.length} picks have timing data
+            </p>
+          )}
+        </div>
+        <Card className="overflow-hidden">
+          <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
+            <table className="w-full text-sm" data-testid="pick-timeline-table">
+              <thead className="sticky top-0 z-10 bg-card border-b border-border/40">
+                <tr className="bg-muted/30">
+                  <th className="text-left px-3 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider w-14">Pick</th>
+                  <th className="text-left px-3 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Player</th>
+                  <th className="text-left px-3 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider hidden sm:table-cell">Manager</th>
+                  <th className="text-right px-3 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Time on Clock</th>
+                </tr>
+              </thead>
+              <tbody>
+                {timeline.map((entry, i) => (
+                  <tr
+                    key={entry.pickNo}
+                    className="border-b border-border/20 hover:bg-muted/20 transition-colors"
+                    data-testid={`row-timeline-${entry.pickNo}`}
+                  >
+                    <td className="px-3 py-2 text-xs text-muted-foreground font-mono whitespace-nowrap">
+                      <span className="font-semibold text-foreground">{entry.pickNo}</span>
+                      <span className="ml-1 opacity-60">R{entry.round}</span>
+                    </td>
+                    <td className="px-3 py-2 whitespace-nowrap">
+                      <div className="flex items-center gap-1.5">
+                        <span className={`text-[10px] font-bold w-6 text-center shrink-0 ${POS_BADGE_SM[entry.pos] || "text-muted-foreground"}`}>{entry.pos}</span>
+                        <span className="font-medium text-foreground text-sm">{entry.playerName}</span>
+                        {entry.isAutoPick && (
+                          <span className="text-[9px] font-bold uppercase tracking-wide text-amber-500 dark:text-amber-400 border border-amber-500/40 rounded px-1">Auto</span>
+                        )}
+                      </div>
+                      <div className="text-[10px] text-muted-foreground sm:hidden mt-0.5 pl-7">{entry.managerName}</div>
+                    </td>
+                    <td className="px-3 py-2 text-xs text-muted-foreground hidden sm:table-cell max-w-[140px] truncate">{entry.managerName}</td>
+                    <td className="px-3 py-2 text-right whitespace-nowrap">
+                      {i === 0 ? (
+                        <span className="text-xs text-muted-foreground/50">—</span>
+                      ) : entry.durationMs !== null ? (
+                        <span className={`font-mono font-bold text-sm ${durationColor(entry.durationMs)}`}>
+                          {formatDuration(entry.durationMs)}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground/50">—</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
+  // By Manager view
+  if (!hasTimestamps || stats.length === 0) return (
+    <div className="space-y-4" data-testid="pick-timer-view">
+      <ViewToggle />
+      {emptyState("Not enough timing data yet for manager aggregates. Switch to By Pick to see the full pick log.")}
+    </div>
+  );
 
   return (
     <div className="space-y-5" data-testid="pick-timer-view">
+      <ViewToggle />
+
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <Card className="p-4" data-testid="card-slowest-picker">
           <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Slowest Avg Picker</p>
