@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { MainTabs, MobileMenuButton } from "@/components/MainTabs";
 import { SubTabs } from "@/components/SubTabs";
 import { LeagueSelector } from "@/components/LeagueSelector";
-import { ValueSourceSelector, ValueAttribution } from "@/components/ValueSourceSelector";
+import { ValueAttribution } from "@/components/ValueSourceSelector";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useValueModel } from "@/contexts/ValueModelContext";
 import { useSleeper } from "@/contexts/SleeperContext";
@@ -14,7 +14,7 @@ import { NAV_CONFIG } from "@/data/mockData";
 import type { League, Team } from "@/types";
 import { fetchSleeperLeagueFull } from "@/lib/sleeperApi";
 import { DataDiagnostics } from "@/components/DataDiagnostics";
-import { Share2, Download, LayoutDashboard, Loader2, Lock, Check, User } from "lucide-react";
+import { Download, LayoutDashboard, Loader2, Lock, Check, User } from "lucide-react";
 import logoDark from "@assets/statchasers_logo_transparent_dark_1772764844282.png";
 import logoLight from "@assets/statchasers_logo_transparent_light_1772764844283.png";
 
@@ -339,15 +339,7 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
                 </div>
               )}
 
-              <div className="hidden md:flex items-center gap-1.5">
-                <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Value:</span>
-                <ValueSourceSelector />
-              </div>
-
               <div className="hidden md:flex items-center gap-1.5 border-l border-border/40 pl-3">
-                <Button variant="outline" size="sm" disabled data-testid="button-share">
-                  <Share2 className="w-3 h-3 mr-1" /> Share
-                </Button>
                 <Button variant="outline" size="sm" disabled data-testid="button-export">
                   <Download className="w-3 h-3 mr-1" /> Export
                 </Button>
@@ -360,16 +352,15 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
             </div>
           </div>
 
-          <div className="flex items-center justify-between gap-2 mt-1.5 md:hidden">
-            {sleeper.isConnected && (
+          {sleeper.isConnected && (
+            <div className="flex items-center gap-2 mt-1.5 md:hidden">
               <LeagueSelector
                 leagues={sleeperLeaguesAsLeagues}
                 selectedLeagueId={selectedLeagueId}
                 onSelect={handleLeagueSelect}
               />
-            )}
-            <ValueSourceSelector />
-          </div>
+            </div>
+          )}
 
           <div className="flex items-center justify-end gap-2 mt-1">
             <ValueAttribution />
