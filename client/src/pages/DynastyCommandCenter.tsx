@@ -32,6 +32,7 @@ import LiveDraft from "./tabs/LiveDraft";
 import { API_BASE } from "@/lib/apiBase";
 import Transactions from "./tabs/Transactions";
 import { LeagueRoast } from "./tabs/LeagueRoast";
+import { FinanceTab } from "./tabs/FinanceTab";
 
 const STORAGE_KEY = "sc-dynasty-state";
 
@@ -263,6 +264,10 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
         default:
           return <PortfolioConnect onNavigate={navigateToSubTab} />;
       }
+    }
+
+    if (activeMainTab === "finance") {
+      return <FinanceTab />;
     }
 
     if (!sleeper.isConnected) {

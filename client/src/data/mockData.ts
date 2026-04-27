@@ -528,6 +528,13 @@ export const NAV_CONFIG: MainTabConfig[] = [
     ],
   },
   {
+    id: "finance",
+    label: "Finance",
+    subTabs: [
+      { id: "league-roi", label: "League ROI" },
+    ],
+  },
+  {
     id: "dashboard",
     label: "My Team",
     subTabs: [

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { cn } from "@/lib/utils";
-import { Menu, X, BarChart2, Shield, SearchCheck, ArrowLeftRight, UserRound, Zap, Skull } from "lucide-react";
+import { Menu, X, BarChart2, Shield, SearchCheck, ArrowLeftRight, UserRound, Zap, Skull, DollarSign } from "lucide-react";
 import { SiDiscord } from "react-icons/si";
 import type { MainTabConfig } from "../types";
 import logoDark from "@assets/statchasers_logo_transparent_dark_1772764844282.png";
@@ -10,6 +10,7 @@ const DISCORD_URL = "https://discord.gg/34XkMXF6t3";
 
 const TAB_ICONS: Record<string, typeof BarChart2> = {
   portfolio: BarChart2,
+  finance: DollarSign,
   dashboard: Shield,
   "league-analyzer": SearchCheck,
   "trade-center": ArrowLeftRight,

@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, bigint, boolean, timestamp, serial } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, bigint, boolean, timestamp, serial, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -109,6 +109,21 @@ export const playerValueSnapshots = pgTable("player_value_snapshots", {
   snapshotDate: varchar("snapshot_date", { length: 10 }).notNull(),
   capturedAt: timestamp("captured_at").defaultNow(),
 });
+
+export const leagueFinances = pgTable("league_finances", {
+  id: serial("id").primaryKey(),
+  sleeperUserId: varchar("sleeper_user_id").notNull(),
+  leagueId: varchar("league_id").notNull(),
+  season: varchar("season", { length: 10 }).notNull().default("2026"),
+  buyIn: integer("buy_in").notNull().default(0),
+  prizes: jsonb("prizes").notNull().default([]),
+  notes: text("notes"),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertLeagueFinanceSchema = createInsertSchema(leagueFinances).omit({ id: true, updatedAt: true });
+export type InsertLeagueFinance = z.infer<typeof insertLeagueFinanceSchema>;
+export type LeagueFinance = typeof leagueFinances.$inferSelect;
 
 export type CrawledLeague = typeof crawledLeagues.$inferSelect;
 export type CrawledUser = typeof crawledUsers.$inferSelect;

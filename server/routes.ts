@@ -28,6 +28,7 @@ import {
   getAvailableSnapshotDates,
   startSnapshotScheduler,
 } from "./valueSnapshots";
+import { getFinancesForUser, upsertLeagueFinance } from "./finances";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -296,6 +297,27 @@ export async function registerRoutes(
       res.json(result);
     } catch (err: any) {
       res.status(500).json({ error: err.message || "Failed to backfill pick slots" });
+    }
+  });
+
+  // Finance / ROI routes
+  app.get("/api/finances/:sleeperUserId", async (req, res) => {
+    try {
+      const data = await getFinancesForUser(req.params.sleeperUserId);
+      res.json(data);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || "Failed to fetch finances" });
+    }
+  });
+
+  app.post("/api/finances", async (req, res) => {
+    try {
+      const { sleeperUserId, leagueId, season, buyIn, prizes, notes } = req.body;
+      if (!sleeperUserId || !leagueId) return res.status(400).json({ error: "sleeperUserId and leagueId required" });
+      const result = await upsertLeagueFinance({ sleeperUserId, leagueId, season: season || "2026", buyIn: buyIn ?? 0, prizes: prizes ?? [], notes });
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || "Failed to save finances" });
     }
   });
 
