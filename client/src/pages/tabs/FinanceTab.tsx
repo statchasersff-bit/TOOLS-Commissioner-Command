@@ -251,7 +251,7 @@ function SleeperVerifyGate({ userId, username, onAuth }: { userId: string; usern
                   {[
                     <>Open Sleeper → go to any of your leagues → tap <strong>Team Settings</strong></>,
                     <>Set your <strong>Team Name</strong> to: <code className="bg-muted px-1.5 py-0.5 rounded text-xs font-mono">{challengeCode}</code></>,
-                    <>Hit <strong>Save</strong>, then click Verify below. You can rename your team back after.</>,
+                    <>Hit <strong>Save</strong>. Sleeper's API may take <strong>1–2 minutes</strong> to update — if verify fails, wait and try again. You can rename back after.</>,
                   ].map((step, i) => (
                     <li key={i} className="flex gap-3">
                       <span className="w-5 h-5 rounded-full bg-[#0b3a7a]/10 dark:bg-blue-400/10 text-[#0b3a7a] dark:text-blue-400 flex items-center justify-center text-[11px] font-bold flex-shrink-0 mt-0.5">{i + 1}</span>
