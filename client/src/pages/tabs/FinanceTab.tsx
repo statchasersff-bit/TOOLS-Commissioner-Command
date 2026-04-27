@@ -513,6 +513,14 @@ export function FinanceTab() {
 
   const dynastyLeagues = leagues.filter(l => l.status !== "archived");
 
+  // Only show leagues where the user actually has a roster.
+  // fetchLeagueStanding returns rank === -1 when no roster found (commissioner / co-owner roles, etc.)
+  const visibleLeagues = dynastyLeagues.filter(l => {
+    const s = standings[l.leagueId];
+    if (s && !s.loading && !s.error && s.rank === -1) return false;
+    return true;
+  });
+
   useEffect(() => {
     if (!user?.userId) return;
     const stored = localStorage.getItem(tokenKey(user.userId));
@@ -626,7 +634,7 @@ export function FinanceTab() {
     return { projectedPrize, pl: projectedPrize - f.buyIn };
   }
 
-  const totals = dynastyLeagues.reduce((acc, league) => {
+  const totals = visibleLeagues.reduce((acc, league) => {
     const f = getFinance(league.leagueId);
     if (f.ignored || f.isFree) return acc;
     const calc = calcPL(league.leagueId);
@@ -692,8 +700,8 @@ export function FinanceTab() {
         <Card className="p-4 text-center">
           <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide mb-1">Expected Return</p>
           <p className="text-xl font-bold text-foreground" data-testid="text-expected-return">{fmtDollar(totals.expectedReturn)}</p>
-          {totals.leaguesWithData < dynastyLeagues.length && (
-            <p className="text-[10px] text-muted-foreground mt-0.5">{totals.leaguesWithData} of {dynastyLeagues.length} leagues</p>
+          {totals.leaguesWithData < visibleLeagues.length && (
+            <p className="text-[10px] text-muted-foreground mt-0.5">{totals.leaguesWithData} of {visibleLeagues.length} leagues</p>
           )}
         </Card>
         <Card className={`p-4 text-center border ${plBg(totals.netPL)}`}>
@@ -705,18 +713,18 @@ export function FinanceTab() {
         </Card>
       </div>
 
-      {dynastyLeagues.length === 0 && (
+      {visibleLeagues.length === 0 && !dynastyLeagues.some(l => { const s = standings[l.leagueId]; return !s || s.loading; }) && (
         <Card className="p-8 text-center">
-          <p className="text-muted-foreground text-sm">No dynasty leagues found for your account.</p>
+          <p className="text-muted-foreground text-sm">No dynasty leagues found where you have an active team.</p>
         </Card>
       )}
 
       {/* Focus Zones Summary */}
-      {dynastyLeagues.length > 1 && (() => {
+      {visibleLeagues.length > 1 && (() => {
         const ORDER: (Tier | "unknown")[] = ["elite", "bubble", "rebuild", "unknown"];
         const groups: Record<Tier | "unknown", string[]> = { elite: [], bubble: [], rebuild: [], unknown: [] };
-        dynastyLeagues.forEach(l => groups[classifyTeam(standings[l.leagueId])].push(l.name));
-        const readyCount = dynastyLeagues.length - groups.unknown.length;
+        visibleLeagues.forEach(l => groups[classifyTeam(standings[l.leagueId])].push(l.name));
+        const readyCount = visibleLeagues.length - groups.unknown.length;
         if (readyCount === 0) return null;
 
         return (
@@ -762,18 +770,18 @@ export function FinanceTab() {
       })()}
 
       {/* Per-League Cards (grouped by tier) */}
-      {dynastyLeagues.length > 0 && (() => {
+      {visibleLeagues.length > 0 && (() => {
         const ORDER: (Tier | "unknown")[] = ["elite", "bubble", "rebuild", "unknown"];
-        const groups = new Map<Tier | "unknown", typeof dynastyLeagues>();
+        const groups = new Map<Tier | "unknown", typeof visibleLeagues>();
         ORDER.forEach(t => groups.set(t, []));
-        const ignoredLeagues: typeof dynastyLeagues = [];
-        dynastyLeagues.forEach(l => {
+        const ignoredLeagues: typeof visibleLeagues = [];
+        visibleLeagues.forEach(l => {
           const f = getFinance(l.leagueId);
           if (f.ignored) { ignoredLeagues.push(l); return; }
           groups.get(classifyTeam(standings[l.leagueId]))!.push(l);
         });
         const activeTiers = ORDER.filter(t => t !== "unknown" && (groups.get(t)?.length ?? 0) > 0) as Tier[];
-        const showHeaders = dynastyLeagues.length > 1 && activeTiers.length > 1;
+        const showHeaders = visibleLeagues.length > 1 && activeTiers.length > 1;
 
         const mainGroups = ORDER.filter(t => (groups.get(t)?.length ?? 0) > 0).map(tier => {
           const cfg = tier !== "unknown" ? TIER_CONFIG[tier] : null;
