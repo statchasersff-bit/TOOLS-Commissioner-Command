@@ -14,7 +14,7 @@ import { NAV_CONFIG } from "@/data/mockData";
 import type { League, Team } from "@/types";
 import { fetchSleeperLeagueFull } from "@/lib/sleeperApi";
 import { DataDiagnostics } from "@/components/DataDiagnostics";
-import { Download, LayoutDashboard, Loader2, Lock, Check, User } from "lucide-react";
+import { Share2, LayoutDashboard, Loader2, Lock, Check, User } from "lucide-react";
 import logoDark from "@assets/statchasers_logo_transparent_dark_1772764844282.png";
 import logoLight from "@assets/statchasers_logo_transparent_light_1772764844283.png";
 
@@ -340,8 +340,8 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
               )}
 
               <div className="hidden md:flex items-center gap-1.5 border-l border-border/40 pl-3">
-                <Button variant="outline" size="sm" disabled data-testid="button-export">
-                  <Download className="w-3 h-3 mr-1" /> Export
+                <Button variant="outline" size="sm" disabled data-testid="button-share">
+                  <Share2 className="w-3 h-3 mr-1" /> Share
                 </Button>
               </div>
 
