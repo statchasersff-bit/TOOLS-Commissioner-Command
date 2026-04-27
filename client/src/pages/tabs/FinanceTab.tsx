@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useSleeper } from "@/contexts/SleeperContext";
+import { useValueModel } from "@/contexts/ValueModelContext";
 import { API_BASE } from "@/lib/apiBase";
 import {
   DollarSign,
@@ -52,12 +53,16 @@ const PAYMENT_STATUS_CONFIG: Record<PaymentStatus, { label: string; cls: string;
 };
 interface LeagueStanding {
   leagueId: string; rank: number; totalTeams: number; wins: number; losses: number; ties: number;
-  ptsFor: number; playoffSpots: number; inPlayoffs: boolean; loading: boolean; error: boolean;
+  ptsFor: number; playoffSpots: number; inPlayoffs: boolean; valueRank: number; loading: boolean; error: boolean;
 }
 
 const SLEEPER_API = "https://api.sleeper.app/v1";
 
-async function fetchLeagueStanding(leagueId: string, userId: string): Promise<Omit<LeagueStanding, "leagueId" | "loading" | "error">> {
+async function fetchLeagueStanding(
+  leagueId: string,
+  userId: string,
+  redraftValues: Record<string, number> = {},
+): Promise<Omit<LeagueStanding, "leagueId" | "loading" | "error">> {
   const [rostersRaw, leagueRaw] = await Promise.all([
     fetch(`${SLEEPER_API}/league/${leagueId}/rosters`).then(r => r.json()),
     fetch(`${SLEEPER_API}/league/${leagueId}`).then(r => r.json()),
@@ -73,15 +78,30 @@ async function fetchLeagueStanding(leagueId: string, userId: string): Promise<Om
   });
   const userRoster = rosters.find((r: any) => r.owner_id === userId);
   const userPlayers = userRoster?.players?.length ?? 0;
-  // Only treat this as a real team if the user has players on their roster.
-  // No players = no drafted team (pre-draft, orphan placeholder, etc.) → hide.
   const hasRealTeam = userRoster !== undefined && userPlayers > 0;
   const rank = hasRealTeam ? sorted.findIndex((r: any) => r.roster_id === userRoster!.roster_id) + 1 : -1;
+
+  // Value-based rank: use starters if populated, fall back to full roster.
+  // This provides meaningful talent ranking even in off-season / pre-season.
+  let valueRank = 0;
+  const hasValues = Object.keys(redraftValues).length > 0;
+  if (hasRealTeam && hasValues) {
+    const rosterValued = rosters.map((r: any) => {
+      const starters: string[] = (r.starters || []).filter((p: string) => p && p !== "0");
+      const players: string[] = starters.length > 0 ? starters : (r.players || []);
+      const val = players.reduce((sum: number, pid: string) => sum + (redraftValues[pid] || 0), 0);
+      return { rosterId: r.roster_id, val };
+    });
+    rosterValued.sort((a, b) => b.val - a.val);
+    valueRank = rosterValued.findIndex((r) => r.rosterId === userRoster!.roster_id) + 1 || 0;
+  }
+
   return {
     rank, totalTeams: rosters.length,
     wins: userRoster?.settings?.wins ?? 0, losses: userRoster?.settings?.losses ?? 0, ties: userRoster?.settings?.ties ?? 0,
     ptsFor: (userRoster?.settings?.fpts ?? 0) + (userRoster?.settings?.fpts_decimal ?? 0) / 100,
     playoffSpots: playoffTeams, inPlayoffs: rank > 0 && rank <= playoffTeams,
+    valueRank,
   };
 }
 
@@ -107,39 +127,75 @@ type Tier = "elite" | "bubble" | "rebuild";
 
 function classifyTeam(s: LeagueStanding | undefined): Tier | "unknown" {
   if (!s || s.loading || s.error || s.rank < 1 || s.totalTeams < 2) return "unknown";
-  if (s.wins + s.losses + s.ties === 0) return "unknown";
-  const { rank, playoffSpots, totalTeams } = s;
-  const rankPct = rank / totalTeams;
-  if (rank <= playoffSpots) {
+  const { playoffSpots, totalTeams } = s;
+  const gamesPlayed = s.wins + s.losses + s.ties;
+  // Pre-season: use value-based rank if available, otherwise unknown
+  const effectiveRank = gamesPlayed === 0
+    ? (s.valueRank > 0 ? s.valueRank : -1)
+    : s.rank;
+  if (effectiveRank < 1) return "unknown";
+  const rankPct = effectiveRank / totalTeams;
+  if (effectiveRank <= playoffSpots) {
     return rankPct <= 0.30 ? "elite" : "bubble";
   }
-  return rank - playoffSpots <= 2 ? "bubble" : "rebuild";
+  return effectiveRank - playoffSpots <= 2 ? "bubble" : "rebuild";
 }
 
+// Blended standing+talent model — mirrors the Portfolio tab algorithm exactly.
+// Early season (week 0): 85% talent-based. Late season (week 14+): 85% standing-based.
 function approxPlayoffPct(s: LeagueStanding): number {
   if (s.rank <= 0 || s.totalTeams < 2) return 0;
-  const { rank, playoffSpots, totalTeams } = s;
+  const { rank, playoffSpots, totalTeams, valueRank } = s;
+  const gamesPlayed = s.wins + s.losses + s.ties;
+  const regularSeasonGames = 14;
+  const seasonProgress = Math.min(gamesPlayed / regularSeasonGames, 1);
+
+  // Standing score (0.05–0.95 based on W/L rank vs playoff cutline)
+  let standingScore: number;
   if (rank <= playoffSpots) {
-    const posInPlayoffs = (rank - 1) / Math.max(playoffSpots - 1, 1);
-    return Math.round(95 - posInPlayoffs * 35);
+    const comfort = playoffSpots > 1 ? (playoffSpots - rank) / (playoffSpots - 1) : 1;
+    standingScore = 0.55 + comfort * 0.40;
+  } else {
+    const spotsBack = rank - playoffSpots;
+    const maxSpotsBack = Math.max(1, totalTeams - playoffSpots);
+    standingScore = 0.45 * (1 - spotsBack / maxSpotsBack);
   }
-  const spotsOut = rank - playoffSpots;
-  const maxOut = Math.max(totalTeams - playoffSpots, 1);
-  return Math.max(3, Math.round(35 - (spotsOut / maxOut) * 32));
+
+  // Talent score (0.05–0.95 based on value rank vs playoff cutline)
+  let talentScore: number;
+  const vRank = valueRank > 0 ? valueRank : 0;
+  if (vRank === 0 || totalTeams <= 1) {
+    talentScore = playoffSpots / totalTeams;
+  } else if (vRank <= playoffSpots) {
+    const comfort = playoffSpots > 1 ? (playoffSpots - vRank) / (playoffSpots - 1) : 1;
+    talentScore = 0.55 + comfort * 0.40;
+  } else {
+    const spotsBack = vRank - playoffSpots;
+    const maxSpotsBack = Math.max(1, totalTeams - playoffSpots);
+    talentScore = 0.45 * (1 - spotsBack / maxSpotsBack);
+  }
+
+  // Blend: standingWeight 0.15 (week 0) → 0.85 (week 14+)
+  const standingWeight = 0.15 + 0.70 * seasonProgress;
+  const rawOdds = standingWeight * standingScore + (1 - standingWeight) * talentScore;
+  return Math.min(99, Math.max(1, Math.round(rawOdds * 100)));
 }
 
 // Truncated-normal placement probability model.
 // Models final finishing position as a Gaussian centered on current rank,
 // with σ shrinking as the season progresses (more certain late in season).
+// Pre-season: centers on valueRank when available (talent-based).
 function placementProbs(s: LeagueStanding, maxPlace: number): Map<number, number> {
-  const { rank, totalTeams, wins, losses, ties } = s;
+  const { rank, totalTeams, wins, losses, ties, valueRank } = s;
   const gamesPlayed = wins + losses + ties;
   const seasonProgress = Math.min(1, gamesPlayed / 14);
+  // Pre-season with valid value rank: use talent-based center point
+  const centerRank = gamesPlayed === 0 && valueRank > 0 ? valueRank : rank;
   // σ: ~totalTeams/3 at week 0, shrinks to 0.5 at week 14
   const sigma = Math.max(0.5, (1 - seasonProgress) * totalTeams / 3);
   const raw: number[] = [];
   for (let k = 1; k <= totalTeams; k++) {
-    const z = (k - rank) / sigma;
+    const z = (k - centerRank) / sigma;
     raw.push(Math.exp(-0.5 * z * z));
   }
   const total = raw.reduce((a, b) => a + b, 0);
@@ -527,6 +583,7 @@ function SleeperVerifyGate({ userId, username, onAuth }: { userId: string; usern
 
 export function FinanceTab() {
   const { isConnected, user, leagues } = useSleeper();
+  const { redraftValuesBySleeperId } = useValueModel();
   const [token, setToken] = useState<string | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
   const [finances, setFinances] = useState<Record<string, LeagueFinanceData>>({});
@@ -586,18 +643,20 @@ export function FinanceTab() {
       .finally(() => setLoadingFinances(false));
   }, [isConnected, user?.userId, token]);
 
+  const redraftValuesLoaded = Object.keys(redraftValuesBySleeperId).length > 0;
+
   useEffect(() => {
     if (!isConnected || !user?.userId || dynastyLeagues.length === 0) return;
     dynastyLeagues.forEach(league => {
       setStandings(prev => ({
         ...prev,
-        [league.leagueId]: { leagueId: league.leagueId, rank: -1, totalTeams: 0, wins: 0, losses: 0, ties: 0, ptsFor: 0, playoffSpots: 0, inPlayoffs: false, loading: true, error: false },
+        [league.leagueId]: { leagueId: league.leagueId, rank: -1, totalTeams: 0, wins: 0, losses: 0, ties: 0, ptsFor: 0, playoffSpots: 0, inPlayoffs: false, valueRank: 0, loading: true, error: false },
       }));
-      fetchLeagueStanding(league.leagueId, user.userId)
+      fetchLeagueStanding(league.leagueId, user.userId, redraftValuesBySleeperId)
         .then(s => setStandings(prev => ({ ...prev, [league.leagueId]: { leagueId: league.leagueId, ...s, loading: false, error: false } })))
         .catch(() => setStandings(prev => ({ ...prev, [league.leagueId]: { ...prev[league.leagueId], loading: false, error: true } })));
     });
-  }, [isConnected, user?.userId, dynastyLeagues.length]);
+  }, [isConnected, user?.userId, dynastyLeagues.length, redraftValuesLoaded]);
 
   const getFinance = useCallback((leagueId: string): LeagueFinanceData =>
     finances[leagueId] ?? { ...DEFAULT_FINANCE, leagueId }, [finances]);
@@ -851,7 +910,9 @@ export function FinanceTab() {
                 const leagueTier = tier !== "unknown" ? tier : undefined;
                 const tierCfg = leagueTier ? TIER_CONFIG[leagueTier] : null;
                 const gamesPlayed = s ? s.wins + s.losses + s.ties : 0;
-                const playoffPct = s && !s.loading && !s.error && s.rank > 0 && gamesPlayed > 0 ? approxPlayoffPct(s) : null;
+                // Show playoff odds when we have either W/L data OR value rank (pre-season talent model)
+                const hasOddsData = s && !s.loading && !s.error && s.rank > 0 && (gamesPlayed > 0 || s.valueRank > 0);
+                const playoffPct = hasOddsData ? approxPlayoffPct(s) : null;
 
         return (
           <Card key={league.leagueId} className="overflow-hidden" data-testid={`finance-card-${league.leagueId}`}>
@@ -887,7 +948,7 @@ export function FinanceTab() {
                         ~{playoffPct}% playoffs
                       </Badge>
                     )}
-                    {s && !s.loading && !s.error && s.rank > 0 && gamesPlayed > 0 && (() => {
+                    {hasOddsData && (() => {
                       const p1 = Math.round((placementProbs(s, 1).get(1) ?? 0) * 1000) / 10;
                       if (p1 <= 0) return null;
                       return (
@@ -935,9 +996,9 @@ export function FinanceTab() {
                 {s && !s.loading && !s.error && s.rank > 0 && (
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                     {[
-                      { label: "Standing", value: `#${s.rank}/${s.totalTeams}` },
-                      { label: "Record", value: `${s.wins}-${s.losses}${s.ties > 0 ? `-${s.ties}` : ""}` },
-                      { label: "Pts For", value: s.ptsFor.toFixed(1) },
+                      { label: "Standing", value: gamesPlayed > 0 ? `#${s.rank}/${s.totalTeams}` : "—" },
+                      { label: "Record", value: gamesPlayed > 0 ? `${s.wins}-${s.losses}${s.ties > 0 ? `-${s.ties}` : ""}` : "Pre-season" },
+                      { label: "Pts For", value: gamesPlayed > 0 ? s.ptsFor.toFixed(1) : "—" },
                     ].map(item => (
                       <div key={item.label} className="bg-muted/30 rounded-lg p-3 text-center">
                         <p className="text-[10px] text-muted-foreground mb-0.5">{item.label}</p>
@@ -946,19 +1007,21 @@ export function FinanceTab() {
                     ))}
                     <div className="rounded-lg p-3 text-center border bg-muted/30 border-border/30">
                       <p className="text-[10px] text-muted-foreground mb-0.5">Playoff Odds</p>
-                      {gamesPlayed > 0 ? (
+                      {hasOddsData ? (
                         <>
-                          <p className={`text-base font-bold ${s.inPlayoffs ? "text-emerald-600 dark:text-emerald-400" : "text-red-500 dark:text-red-400"}`}>
+                          <p className={`text-base font-bold ${approxPlayoffPct(s) >= 50 ? "text-emerald-600 dark:text-emerald-400" : approxPlayoffPct(s) <= 20 ? "text-red-500 dark:text-red-400" : "text-amber-600 dark:text-amber-400"}`}>
                             ~{approxPlayoffPct(s)}%
                           </p>
-                          <p className={`text-[10px] mt-0.5 ${s.inPlayoffs ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground"}`}>
-                            {s.inPlayoffs ? "In ✓" : `${s.rank - s.playoffSpots} back`}
+                          <p className="text-[10px] mt-0.5 text-muted-foreground">
+                            {gamesPlayed > 0
+                              ? (s.inPlayoffs ? "In ✓" : `${s.rank - s.playoffSpots} back`)
+                              : "talent-based"}
                           </p>
                         </>
                       ) : (
                         <>
                           <p className="text-base font-bold text-muted-foreground">—</p>
-                          <p className="text-[10px] mt-0.5 text-muted-foreground">pre-season</p>
+                          <p className="text-[10px] mt-0.5 text-muted-foreground">loading…</p>
                         </>
                       )}
                     </div>
