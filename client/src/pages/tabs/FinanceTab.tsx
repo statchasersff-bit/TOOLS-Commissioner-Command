@@ -107,6 +107,7 @@ type Tier = "elite" | "bubble" | "rebuild";
 
 function classifyTeam(s: LeagueStanding | undefined): Tier | "unknown" {
   if (!s || s.loading || s.error || s.rank < 1 || s.totalTeams < 2) return "unknown";
+  if (s.wins + s.losses + s.ties === 0) return "unknown";
   const { rank, playoffSpots, totalTeams } = s;
   const rankPct = rank / totalTeams;
   if (rank <= playoffSpots) {
@@ -849,7 +850,8 @@ export function FinanceTab() {
                 const isExpanded = expanded === league.leagueId;
                 const leagueTier = tier !== "unknown" ? tier : undefined;
                 const tierCfg = leagueTier ? TIER_CONFIG[leagueTier] : null;
-                const playoffPct = s && !s.loading && !s.error && s.rank > 0 ? approxPlayoffPct(s) : null;
+                const gamesPlayed = s ? s.wins + s.losses + s.ties : 0;
+                const playoffPct = s && !s.loading && !s.error && s.rank > 0 && gamesPlayed > 0 ? approxPlayoffPct(s) : null;
 
         return (
           <Card key={league.leagueId} className="overflow-hidden" data-testid={`finance-card-${league.leagueId}`}>
@@ -875,7 +877,7 @@ export function FinanceTab() {
                   <p className="font-semibold text-sm truncate">{league.name}</p>
                   <div className="flex items-center gap-1.5 mt-0.5">
                     <span className="text-[10px] text-muted-foreground">{league.totalRosters} teams · {league.scoringFormat} {league.format} · {league.season}</span>
-                    {s && !s.loading && !s.error && s.rank > 0 && (
+                    {s && !s.loading && !s.error && s.rank > 0 && gamesPlayed > 0 && (
                       <Badge variant="outline" className={`text-[10px] px-1.5 py-0 h-4 ${s.inPlayoffs ? "border-emerald-500/40 text-emerald-600 dark:text-emerald-400" : "text-muted-foreground"}`}>
                         {s.inPlayoffs ? "🏆 " : ""}#{s.rank} of {s.totalTeams}
                       </Badge>
@@ -885,7 +887,7 @@ export function FinanceTab() {
                         ~{playoffPct}% playoffs
                       </Badge>
                     )}
-                    {s && !s.loading && !s.error && s.rank > 0 && (() => {
+                    {s && !s.loading && !s.error && s.rank > 0 && gamesPlayed > 0 && (() => {
                       const p1 = Math.round((placementProbs(s, 1).get(1) ?? 0) * 1000) / 10;
                       if (p1 <= 0) return null;
                       return (
@@ -942,14 +944,23 @@ export function FinanceTab() {
                         <p className="text-base font-bold">{item.value}</p>
                       </div>
                     ))}
-                    <div className={`rounded-lg p-3 text-center border ${s.inPlayoffs ? "bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200/50 dark:border-emerald-800/30" : "bg-muted/30 border-border/30"}`}>
+                    <div className="rounded-lg p-3 text-center border bg-muted/30 border-border/30">
                       <p className="text-[10px] text-muted-foreground mb-0.5">Playoff Odds</p>
-                      <p className={`text-base font-bold ${s.inPlayoffs ? "text-emerald-600 dark:text-emerald-400" : "text-red-500 dark:text-red-400"}`}>
-                        ~{approxPlayoffPct(s)}%
-                      </p>
-                      <p className={`text-[10px] mt-0.5 ${s.inPlayoffs ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground"}`}>
-                        {s.inPlayoffs ? "In ✓" : `${s.rank - s.playoffSpots} back`}
-                      </p>
+                      {gamesPlayed > 0 ? (
+                        <>
+                          <p className={`text-base font-bold ${s.inPlayoffs ? "text-emerald-600 dark:text-emerald-400" : "text-red-500 dark:text-red-400"}`}>
+                            ~{approxPlayoffPct(s)}%
+                          </p>
+                          <p className={`text-[10px] mt-0.5 ${s.inPlayoffs ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground"}`}>
+                            {s.inPlayoffs ? "In ✓" : `${s.rank - s.playoffSpots} back`}
+                          </p>
+                        </>
+                      ) : (
+                        <>
+                          <p className="text-base font-bold text-muted-foreground">—</p>
+                          <p className="text-[10px] mt-0.5 text-muted-foreground">pre-season</p>
+                        </>
+                      )}
                     </div>
                   </div>
                 )}
