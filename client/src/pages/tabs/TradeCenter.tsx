@@ -465,182 +465,181 @@ export function TradeFinder({ league, userTeam }: TradeProps) {
 }
 
 
+type UserScanState = { status: "loading" | "done" | "error"; trades: import("@/lib/sleeperApi").CrossLeagueTradeResult[]; leaguesScanned: number; error?: string };
+
 function CrossLeagueTradeIntel({ league }: { league: League }) {
-  const [selectedTeamId, setSelectedTeamId] = useState<string>("");
-  const [results, setResults] = useState<{ trades: import("@/lib/sleeperApi").CrossLeagueTradeResult[]; leaguesScanned: number } | null>(null);
+  const teamsWithOwner = useMemo(() => league.teams.filter(t => t.ownerId), [league.teams]);
+  const [scanResults, setScanResults] = useState<Map<string, UserScanState>>(new Map());
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const hasScannedRef = useRef(false);
 
-  const selectedTeam = league.teams.find(t => t.id === selectedTeamId);
+  useEffect(() => {
+    if (hasScannedRef.current || teamsWithOwner.length === 0) return;
+    hasScannedRef.current = true;
 
-  const [isScanning, setIsScanning] = useState(false);
-  const [scanError, setScanError] = useState<string | null>(null);
-  const [scanProgress, setScanProgress] = useState("");
+    setScanResults(new Map(teamsWithOwner.map(t => [t.id, { status: "loading", trades: [], leaguesScanned: 0 }])));
 
-  const canAnalyze = !!selectedTeam?.ownerId;
+    import("@/lib/sleeperApi").then(({ fetchCrossLeagueTrades }) => {
+      teamsWithOwner.forEach(async (team) => {
+        try {
+          const data = await fetchCrossLeagueTrades(team.ownerId!);
+          setScanResults(prev => {
+            const next = new Map(prev);
+            next.set(team.id, { status: "done", trades: data.trades, leaguesScanned: data.leaguesScanned });
+            return next;
+          });
+        } catch (err: any) {
+          setScanResults(prev => {
+            const next = new Map(prev);
+            next.set(team.id, { status: "error", trades: [], leaguesScanned: 0, error: err.message || "Failed" });
+            return next;
+          });
+        }
+      });
+    });
+  }, [teamsWithOwner]);
 
-  const handleAnalyze = async () => {
-    if (!selectedTeamId || !canAnalyze || !selectedTeam?.ownerId) return;
-    setResults(null);
-    setIsScanning(true);
-    setScanError(null);
-    setScanProgress("Fetching leagues...");
-    try {
-      const { fetchCrossLeagueTrades } = await import("@/lib/sleeperApi");
-      setScanProgress("Scanning trades across leagues...");
-      const data = await fetchCrossLeagueTrades(selectedTeam.ownerId);
-      setResults(data);
-    } catch (err: any) {
-      setScanError(err.message || "Failed to scan cross-league trades");
-    } finally {
-      setIsScanning(false);
-      setScanProgress("");
-    }
-  };
+  const loadingCount = useMemo(() => [...scanResults.values()].filter(r => r.status === "loading").length, [scanResults]);
+  const doneCount = useMemo(() => [...scanResults.values()].filter(r => r.status === "done").length, [scanResults]);
 
   const formatDate = (ts: number) => {
     if (!ts) return "";
-    const d = new Date(ts);
-    return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+    return new Date(ts).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
   };
 
   return (
     <Card className="p-6" data-testid="card-cross-league-intel">
       <div className="mb-5">
         <h3 className="text-base font-bold flex items-center gap-2">
-          <Search className="w-4 h-4 text-[#0b3a7a] dark:text-blue-400" />
+          <ArrowRightLeft className="w-4 h-4 text-[#0b3a7a] dark:text-blue-400" />
           Cross-League Trade Intel
+          {loadingCount > 0 && <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />}
         </h3>
         <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
         <p className="text-[10px] text-muted-foreground mt-2">
-          Scan a user's recent trades across all their dynasty leagues (last 3 months)
+          {loadingCount > 0
+            ? `Scanning ${loadingCount} remaining user${loadingCount !== 1 ? "s" : ""}...`
+            : `Scanned all ${doneCount} user${doneCount !== 1 ? "s" : ""} · recent trades across their dynasty leagues`}
         </p>
       </div>
 
-      <div className="flex items-center gap-3 mb-5">
-        <Select value={selectedTeamId} onValueChange={(v) => { setSelectedTeamId(v); setResults(null); }}>
-          <SelectTrigger className="w-[260px]" data-testid="select-cross-league-team">
-            <SelectValue placeholder="Select a team member..." />
-          </SelectTrigger>
-          <SelectContent>
-            {league.teams.filter(t => t.ownerId).map(t => (
-              <SelectItem key={t.id} value={t.id} data-testid={`option-team-${t.id}`}>
-                {t.owner} — {t.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Button
-          onClick={handleAnalyze}
-          disabled={!selectedTeamId || !canAnalyze || isScanning}
-          size="sm"
-          variant="default"
-          data-testid="button-analyze-cross-league"
-        >
-          {isScanning ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Search className="w-4 h-4 mr-1" />}
-          Scan
-        </Button>
-      </div>
-
-      {selectedTeam && !selectedTeam.ownerId && (
-        <p className="text-xs text-muted-foreground mb-3">This team has no linked Sleeper account — cross-league analysis unavailable.</p>
+      {teamsWithOwner.length === 0 && (
+        <p className="text-xs text-muted-foreground">No linked Sleeper accounts found in this league.</p>
       )}
 
-      {isScanning && (
-        <div className="text-center py-6">
-          <Loader2 className="w-6 h-6 animate-spin text-[#0b3a7a] mx-auto mb-2" />
-          <p className="text-xs text-muted-foreground">{scanProgress || "Scanning..."}</p>
-          <p className="text-[10px] text-muted-foreground mt-1">This may take a minute — scanning up to 15 leagues.</p>
-        </div>
-      )}
+      <div className="space-y-1" data-testid="cross-league-user-list">
+        {teamsWithOwner.map(team => {
+          const result = scanResults.get(team.id);
+          const isExpanded = expandedId === team.id;
+          const isLoading = result?.status === "loading" || !result;
+          const isDone = result?.status === "done";
+          const isError = result?.status === "error";
 
-      {scanError && (
-        <p className="text-xs text-red-500" data-testid="text-cross-league-error">{scanError}</p>
-      )}
-
-      {results && !isScanning && (
-        <div data-testid="cross-league-results">
-          <p className="text-[10px] text-muted-foreground mb-3">
-            Scanned {results.leaguesScanned} dynasty league{results.leaguesScanned !== 1 ? "s" : ""} · {results.trades.length} trade{results.trades.length !== 1 ? "s" : ""} in the last 3 months
-          </p>
-          {results.trades.length === 0 ? (
-            <div className="text-center py-4">
-              <p className="text-sm text-muted-foreground">No trades found for {selectedTeam?.owner} in the last 3 months.</p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {results.trades.map((trade, i) => (
-                <div key={`${trade.leagueId}-${trade.timestamp}-${i}`} className="border border-border/30 rounded-lg p-4" data-testid={`cross-league-trade-${i}`}>
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="min-w-0">
-                      <p className="text-xs font-bold text-foreground truncate">{trade.leagueName}</p>
-                      <p className="text-[10px] text-muted-foreground">with {trade.tradePartner} · {formatDate(trade.timestamp)}</p>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <p className="text-[10px] font-bold text-red-500 dark:text-red-400 uppercase tracking-wider mb-1.5">Sent</p>
-                      <div className="space-y-1">
-                        {trade.sent.map((p, j) => (
-                          <div key={`sent-${p.playerId}-${j}`} className="flex items-center gap-1.5">
-                            <div className="w-6 h-6 rounded-full flex-shrink-0 overflow-hidden bg-muted ring-1 ring-border/30">
-                              <img
-                                src={`https://sleepercdn.com/content/nfl/players/thumb/${p.playerId}.jpg`}
-                                alt={p.name}
-                                className="w-full h-full object-cover object-top"
-                                onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-                              />
-                            </div>
-                            <span className="text-xs truncate flex-1">{p.name}</span>
-                            <Badge variant="outline" className={`text-[9px] px-1 py-0 h-4 flex-shrink-0 ${getPositionColor(p.pos)}`}>{p.pos}</Badge>
-                          </div>
-                        ))}
-                        {trade.sentPicks.map((pick, j) => (
-                          <div key={`sent-pick-${j}`} className="flex items-center gap-1.5">
-                            <Badge variant="outline" className="text-[9px] px-1 py-0 w-7 justify-center flex-shrink-0 text-amber-600 dark:text-amber-400 border-amber-300 dark:border-amber-700">PK</Badge>
-                            <span className="text-xs truncate">{pick}</span>
-                          </div>
-                        ))}
-                        {trade.sent.length === 0 && trade.sentPicks.length === 0 && (
-                          <p className="text-[10px] text-muted-foreground italic">None</p>
-                        )}
-                      </div>
-                    </div>
-
-                    <div>
-                      <p className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-1.5">Received</p>
-                      <div className="space-y-1">
-                        {trade.received.map((p, j) => (
-                          <div key={`recv-${p.playerId}-${j}`} className="flex items-center gap-1.5">
-                            <div className="w-6 h-6 rounded-full flex-shrink-0 overflow-hidden bg-muted ring-1 ring-border/30">
-                              <img
-                                src={`https://sleepercdn.com/content/nfl/players/thumb/${p.playerId}.jpg`}
-                                alt={p.name}
-                                className="w-full h-full object-cover object-top"
-                                onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-                              />
-                            </div>
-                            <span className="text-xs truncate flex-1">{p.name}</span>
-                            <Badge variant="outline" className={`text-[9px] px-1 py-0 h-4 flex-shrink-0 ${getPositionColor(p.pos)}`}>{p.pos}</Badge>
-                          </div>
-                        ))}
-                        {trade.receivedPicks.map((pick, j) => (
-                          <div key={`recv-pick-${j}`} className="flex items-center gap-1.5">
-                            <Badge variant="outline" className="text-[9px] px-1 py-0 w-7 justify-center flex-shrink-0 text-amber-600 dark:text-amber-400 border-amber-300 dark:border-amber-700">PK</Badge>
-                            <span className="text-xs truncate">{pick}</span>
-                          </div>
-                        ))}
-                        {trade.received.length === 0 && trade.receivedPicks.length === 0 && (
-                          <p className="text-[10px] text-muted-foreground italic">None</p>
-                        )}
-                      </div>
-                    </div>
-                  </div>
+          return (
+            <div key={team.id} className="rounded-lg border border-border/30 overflow-hidden" data-testid={`cross-league-user-${team.id}`}>
+              <button
+                className="w-full flex items-center gap-2.5 px-3 py-2.5 hover:bg-muted/40 transition-colors text-left disabled:opacity-60 disabled:cursor-default"
+                onClick={() => isDone && setExpandedId(isExpanded ? null : team.id)}
+                disabled={isLoading || isError}
+                data-testid={`button-expand-user-${team.id}`}
+              >
+                <img
+                  src={team.avatar || "https://sleepercdn.com/images/v2/icons/player_default.webp"}
+                  alt={team.owner}
+                  className="w-8 h-8 rounded-full flex-shrink-0 object-cover bg-muted"
+                  onError={(e) => { e.currentTarget.src = "https://sleepercdn.com/images/v2/icons/player_default.webp"; }}
+                />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold truncate">{team.owner}</p>
+                  {team.owner !== team.name && (
+                    <p className="text-[10px] text-muted-foreground truncate">{team.name}</p>
+                  )}
                 </div>
-              ))}
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  {isLoading && <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />}
+                  {isDone && (
+                    <Badge variant="secondary" className="text-[10px]" data-testid={`badge-trade-count-${team.id}`}>
+                      {result.trades.length} trade{result.trades.length !== 1 ? "s" : ""}
+                    </Badge>
+                  )}
+                  {isError && (
+                    <Badge variant="outline" className="text-[10px] text-red-500 border-red-300">Error</Badge>
+                  )}
+                  {isDone && (
+                    <ChevronDown className={cn("w-4 h-4 text-muted-foreground transition-transform duration-200", isExpanded && "rotate-180")} />
+                  )}
+                </div>
+              </button>
+
+              {isExpanded && isDone && (
+                <div className="border-t border-border/20 bg-muted/10 px-3 py-3">
+                  <p className="text-[10px] text-muted-foreground mb-3">
+                    {result.leaguesScanned} league{result.leaguesScanned !== 1 ? "s" : ""} scanned · last 3 months
+                  </p>
+                  {result.trades.length === 0 ? (
+                    <p className="text-xs text-muted-foreground text-center py-3">No trades found for {team.owner} in the last 3 months.</p>
+                  ) : (
+                    <div className="space-y-2.5">
+                      {result.trades.map((trade, i) => (
+                        <div key={`${trade.leagueId}-${trade.timestamp}-${i}`} className="border border-border/20 rounded-lg p-3 bg-background" data-testid={`cross-league-trade-${team.id}-${i}`}>
+                          <div className="mb-2.5">
+                            <p className="text-xs font-bold text-foreground truncate">{trade.leagueName}</p>
+                            <p className="text-[10px] text-muted-foreground">with {trade.tradePartner} · {formatDate(trade.timestamp)}</p>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2.5">
+                            <div>
+                              <p className="text-[9px] font-bold text-red-500 dark:text-red-400 uppercase tracking-wider mb-1">Sent</p>
+                              <div className="space-y-1">
+                                {trade.sent.map((p, j) => (
+                                  <div key={`sent-${p.playerId}-${j}`} className="flex items-center gap-1.5">
+                                    <div className="w-5 h-5 rounded-full flex-shrink-0 overflow-hidden bg-muted ring-1 ring-border/30">
+                                      <img src={`https://sleepercdn.com/content/nfl/players/thumb/${p.playerId}.jpg`} alt={p.name} className="w-full h-full object-cover object-top" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                                    </div>
+                                    <span className="text-[11px] truncate flex-1">{p.name}</span>
+                                    <Badge variant="outline" className={`text-[8px] px-0.5 py-0 h-3.5 flex-shrink-0 ${getPositionColor(p.pos)}`}>{p.pos}</Badge>
+                                  </div>
+                                ))}
+                                {trade.sentPicks.map((pick, j) => (
+                                  <div key={`sent-pick-${j}`} className="flex items-center gap-1.5">
+                                    <Badge variant="outline" className="text-[8px] px-0.5 py-0 h-3.5 w-6 justify-center flex-shrink-0 text-amber-600 dark:text-amber-400 border-amber-300 dark:border-amber-700">PK</Badge>
+                                    <span className="text-[11px] truncate">{pick}</span>
+                                  </div>
+                                ))}
+                                {trade.sent.length === 0 && trade.sentPicks.length === 0 && <p className="text-[10px] text-muted-foreground italic">None</p>}
+                              </div>
+                            </div>
+                            <div>
+                              <p className="text-[9px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-1">Received</p>
+                              <div className="space-y-1">
+                                {trade.received.map((p, j) => (
+                                  <div key={`recv-${p.playerId}-${j}`} className="flex items-center gap-1.5">
+                                    <div className="w-5 h-5 rounded-full flex-shrink-0 overflow-hidden bg-muted ring-1 ring-border/30">
+                                      <img src={`https://sleepercdn.com/content/nfl/players/thumb/${p.playerId}.jpg`} alt={p.name} className="w-full h-full object-cover object-top" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                                    </div>
+                                    <span className="text-[11px] truncate flex-1">{p.name}</span>
+                                    <Badge variant="outline" className={`text-[8px] px-0.5 py-0 h-3.5 flex-shrink-0 ${getPositionColor(p.pos)}`}>{p.pos}</Badge>
+                                  </div>
+                                ))}
+                                {trade.receivedPicks.map((pick, j) => (
+                                  <div key={`recv-pick-${j}`} className="flex items-center gap-1.5">
+                                    <Badge variant="outline" className="text-[8px] px-0.5 py-0 h-3.5 w-6 justify-center flex-shrink-0 text-amber-600 dark:text-amber-400 border-amber-300 dark:border-amber-700">PK</Badge>
+                                    <span className="text-[11px] truncate">{pick}</span>
+                                  </div>
+                                ))}
+                                {trade.received.length === 0 && trade.receivedPicks.length === 0 && <p className="text-[10px] text-muted-foreground italic">None</p>}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
-          )}
-        </div>
-      )}
+          );
+        })}
+      </div>
     </Card>
   );
 }
