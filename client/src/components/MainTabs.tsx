@@ -1,9 +1,12 @@
 import { useState, useEffect, useCallback } from "react";
 import { cn } from "@/lib/utils";
 import { Menu, X, BarChart2, Shield, SearchCheck, ArrowLeftRight, UserRound, Zap, Skull } from "lucide-react";
+import { SiDiscord } from "react-icons/si";
 import type { MainTabConfig } from "../types";
 import logoDark from "@assets/statchasers_logo_transparent_dark_1772764844282.png";
 import logoLight from "@assets/statchasers_logo_transparent_light_1772764844283.png";
+
+const DISCORD_URL = "https://discord.gg/34XkMXF6t3";
 
 const TAB_ICONS: Record<string, typeof BarChart2> = {
   portfolio: BarChart2,
@@ -26,7 +29,7 @@ export function MainTabs({ tabs, activeTab, setActiveTab }: MainTabsProps) {
     <div className="border-b border-border/60 bg-background/80 backdrop-blur-sm sticky top-[53px] z-40 hidden md:block">
       <div className="max-w-7xl mx-auto">
         <nav
-          className="flex gap-1.5 overflow-x-auto px-4 md:px-6 py-2 scrollbar-hide"
+          className="flex items-center gap-1.5 overflow-x-auto px-4 md:px-6 py-2 scrollbar-hide"
           role="tablist"
           data-testid="main-tabs"
         >
@@ -50,6 +53,17 @@ export function MainTabs({ tabs, activeTab, setActiveTab }: MainTabsProps) {
               )}
             </button>
           ))}
+
+          <a
+            href={DISCORD_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            data-testid="button-discord"
+            className="ml-1 flex items-center gap-1.5 px-4 py-2 text-sm font-semibold whitespace-nowrap rounded-full transition-all duration-200 text-[#5865F2] bg-[#5865F2]/10 hover:bg-[#5865F2]/20 border border-[#5865F2]/25 hover:border-[#5865F2]/40 flex-shrink-0"
+          >
+            <SiDiscord className="w-4 h-4" />
+            Discord
+          </a>
         </nav>
       </div>
     </div>
@@ -162,6 +176,22 @@ export function MobileMenuButton({ tabs, activeTab, setActiveTab }: MobileMenuBu
                     </button>
                   );
                 })}
+
+                <a
+                  href={DISCORD_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  data-testid="mobile-tab-discord"
+                  onClick={() => setIsOpen(false)}
+                  className="relative flex flex-col items-center justify-center gap-3 py-5 px-3 rounded-2xl text-center transition-all duration-200 active:scale-[0.97] bg-[#5865F2]/15 border border-[#5865F2]/30 hover:bg-[#5865F2]/25"
+                >
+                  <div className="w-[52px] h-[52px] rounded-2xl flex items-center justify-center bg-[#5865F2]">
+                    <SiDiscord className="w-6 h-6 text-white" />
+                  </div>
+                  <span className="text-[13px] font-semibold leading-tight tracking-tight text-[#5865F2]">
+                    Discord
+                  </span>
+                </a>
               </div>
             </div>
           </div>
