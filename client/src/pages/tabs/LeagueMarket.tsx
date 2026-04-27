@@ -179,9 +179,24 @@ export function MarketValue({ league }: MarketProps) {
                   data-testid={`row-player-${row.sleeperId}`}
                 >
                   <td className="px-4 py-2.5">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium" data-testid={`text-player-name-${row.sleeperId}`}>{row.name}</span>
-                      <span className="text-[11px] text-muted-foreground">{row.team}</span>
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-full flex-shrink-0 overflow-hidden bg-muted ring-1 ring-border/40">
+                        <img
+                          src={`https://sleepercdn.com/content/nfl/players/thumb/${row.sleeperId}.jpg`}
+                          alt={row.name}
+                          className="w-full h-full object-cover object-top"
+                          onError={(e) => {
+                            const el = e.target as HTMLImageElement;
+                            el.style.display = "none";
+                            el.parentElement!.classList.add("flex", "items-center", "justify-center");
+                            el.parentElement!.innerHTML = `<span class="text-[10px] font-bold text-muted-foreground">${row.pos}</span>`;
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <span className="font-medium block" data-testid={`text-player-name-${row.sleeperId}`}>{row.name}</span>
+                        <span className="text-[11px] text-muted-foreground">{row.team}</span>
+                      </div>
                     </div>
                   </td>
                   <td className="px-4 py-2.5">
