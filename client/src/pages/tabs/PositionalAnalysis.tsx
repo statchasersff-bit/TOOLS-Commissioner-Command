@@ -331,135 +331,251 @@ function PositionOverview({ league, userTeam }: { league: League; userTeam: Team
 }
 
 function SurplusNeeds({ league, userTeam, onSwitchTab }: { league: League; userTeam: Team; onSwitchTab: (tab: "opportunities") => void }) {
-  const [selectedPos, setSelectedPos] = useState<PosLabel>("RB");
-  const { profiles, total } = usePositionalProfiles(league, userTeam);
+  const { profiles } = usePositionalProfiles(league, userTeam);
 
-  const { surplusTeams, needTeams } = useMemo(() => {
-    const surplus = profiles
-      .filter(p => p.positions[selectedPos].status === "Surplus")
-      .sort((a, b) => a.positions[selectedPos].rank - b.positions[selectedPos].rank);
-    const need = profiles
-      .filter(p => p.positions[selectedPos].status === "Need")
-      .sort((a, b) => a.positions[selectedPos].rank - b.positions[selectedPos].rank);
-    return { surplusTeams: surplus, needTeams: need };
-  }, [profiles, selectedPos]);
+  const userProfile = useMemo(() => profiles.find(p => p.teamId === userTeam.id), [profiles, userTeam]);
+
+  const userSurplusPositions = useMemo(() =>
+    POSITIONS.filter(pos => userProfile?.positions[pos].status === "Surplus"),
+    [userProfile]
+  );
+
+  const userNeedPositions = useMemo(() =>
+    POSITIONS.filter(pos => userProfile?.positions[pos].status === "Need"),
+    [userProfile]
+  );
+
+  const matchedPartners = useMemo(() => {
+    if (!userProfile) return [];
+    return profiles
+      .filter(p => p.teamId !== userTeam.id)
+      .map(partner => {
+        const theyHaveYourNeeds = userNeedPositions.filter(
+          pos => partner.positions[pos].status === "Surplus"
+        );
+        const youHaveTheirNeeds = userSurplusPositions.filter(
+          pos => partner.positions[pos].status === "Need"
+        );
+        const score = theyHaveYourNeeds.length + youHaveTheirNeeds.length;
+        return { partner, theyHaveYourNeeds, youHaveTheirNeeds, score };
+      })
+      .filter(m => m.score > 0)
+      .sort((a, b) => b.score - a.score);
+  }, [profiles, userTeam, userProfile, userNeedPositions, userSurplusPositions]);
+
+  if (!userProfile) return null;
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-center gap-2" data-testid="surplus-pos-chips">
-        {POSITIONS.map(pos => (
-          <button
-            key={pos}
-            onClick={() => setSelectedPos(pos)}
-            className={cn(
-              "px-3.5 py-1.5 rounded-full text-sm font-semibold transition-colors border",
-              selectedPos === pos
-                ? "bg-[#0b3a7a] text-white border-[#0b3a7a]"
-                : "bg-background text-muted-foreground border-border hover:bg-muted/50"
-            )}
-            data-testid={`chip-${pos.toLowerCase()}`}
-          >
-            {pos}
-          </button>
-        ))}
-      </div>
+    <div className="space-y-6">
+      {/* My Positional Profile */}
+      <Card data-testid="card-my-profile">
+        <CardContent className="pt-5">
+          <div className="mb-4">
+            <h3 className="text-base font-bold text-foreground">My Positional Profile</h3>
+            <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
+          </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Card>
-          <CardContent className="pt-5">
-            <div className="flex items-center gap-2 mb-4">
-              <TrendingUp className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-              <h3 className="font-semibold text-foreground">{selectedPos} Surplus Teams</h3>
-              <Badge variant="secondary" className="text-xs">{surplusTeams.length}</Badge>
-            </div>
-            <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mb-4" />
-            {surplusTeams.length === 0 && <p className="text-xs text-muted-foreground py-4 text-center">No teams with {selectedPos} surplus</p>}
-            {surplusTeams.map(profile => {
-              const p = profile.positions[selectedPos];
-              const isUser = profile.teamId === userTeam.id;
-              return (
-                <div
-                  key={profile.teamId}
-                  className={cn("flex items-center justify-between py-3 border-b border-border/20 last:border-0", isUser && "bg-blue-50/30 dark:bg-blue-950/10 -mx-2 px-2 rounded")}
-                  data-testid={`surplus-team-${profile.teamId}`}
-                >
-                  <div className="flex items-center gap-2 flex-1 min-w-0">
-                    {isUser && <div className="w-1.5 h-1.5 rounded-full bg-[#d4af37] flex-shrink-0" />}
-                    <div className="min-w-0">
-                      <span className="text-sm font-semibold text-foreground truncate block">{profile.team.owner}</span>
-                      <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                        <span className="text-xs text-muted-foreground">#{p.rank}</span>
-                        <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">+{p.surplusAmount.toLocaleString()}</span>
-                        <Badge variant="outline" className={cn("text-[9px] flex-shrink-0", getTierColor(profile.tier))}>{profile.tier}</Badge>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* Surpluses */}
+            <div>
+              <div className="flex items-center gap-1.5 mb-3">
+                <TrendingUp className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">
+                  {userSurplusPositions.length > 0 ? `Surplus: ${userSurplusPositions.join(", ")}` : "No clear surplus positions"}
+                </span>
+              </div>
+              <div className="space-y-2">
+                {userSurplusPositions.length === 0 && (
+                  <p className="text-xs text-muted-foreground">You are not in the top 25% at any position</p>
+                )}
+                {userSurplusPositions.map(pos => {
+                  const pd = userProfile.positions[pos];
+                  const allPlayers = [...pd.starterPlayers, ...pd.depthPlayers].slice(0, 4);
+                  return (
+                    <div key={pos} className="rounded-md bg-emerald-500/8 border border-emerald-500/20 p-2.5" data-testid={`my-surplus-${pos}`}>
+                      <div className="flex items-center gap-1.5 mb-1.5">
+                        <Badge variant="outline" className={`text-[10px] px-1 py-0 h-4 ${getPositionColor(pos)}`}>{pos}</Badge>
+                        <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">#{pd.rank} league · +{pd.surplusAmount.toLocaleString()}</span>
+                      </div>
+                      <div className="space-y-0.5">
+                        {allPlayers.map((pl, i) => (
+                          <div key={pl.id} className="flex items-center gap-1.5">
+                            <span className="text-[10px] text-muted-foreground w-3">{i + 1}.</span>
+                            <span className="text-[11px] font-medium text-foreground truncate">{pl.name}</span>
+                            {i < pd.starterPlayers.length && <span className="text-[9px] text-muted-foreground ml-auto flex-shrink-0">starter</span>}
+                          </div>
+                        ))}
                       </div>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-2 flex-shrink-0 ml-2">
-                    <div className="text-right">
-                      <p className="text-xs text-muted-foreground">Top players</p>
-                      <p className="text-[10px] text-foreground font-medium">
-                        {p.starterPlayers.slice(0, 2).map(pl => pl.name.split(" ").pop()).join(", ")}
-                      </p>
-                    </div>
-                    {!isUser && (
-                      <Button variant="outline" size="sm" className="text-xs flex-shrink-0" onClick={() => onSwitchTab("opportunities")} data-testid={`btn-find-deals-${profile.teamId}`}>
-                        Find Deals
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="pt-5">
-            <div className="flex items-center gap-2 mb-4">
-              <TrendingDown className="w-4 h-4 text-red-500 dark:text-red-400" />
-              <h3 className="font-semibold text-foreground">{selectedPos} Need Teams</h3>
-              <Badge variant="secondary" className="text-xs">{needTeams.length}</Badge>
+                  );
+                })}
+              </div>
             </div>
-            <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mb-4" />
-            {needTeams.length === 0 && <p className="text-xs text-muted-foreground py-4 text-center">No teams with {selectedPos} need</p>}
-            {needTeams.map(profile => {
-              const p = profile.positions[selectedPos];
-              const isUser = profile.teamId === userTeam.id;
-              return (
-                <div
-                  key={profile.teamId}
-                  className={cn("flex items-center justify-between py-3 border-b border-border/20 last:border-0", isUser && "bg-blue-50/30 dark:bg-blue-950/10 -mx-2 px-2 rounded")}
-                  data-testid={`need-team-${profile.teamId}`}
-                >
-                  <div className="flex items-center gap-2 flex-1 min-w-0">
-                    {isUser && <div className="w-1.5 h-1.5 rounded-full bg-[#d4af37] flex-shrink-0" />}
-                    <div className="min-w-0">
-                      <span className="text-sm font-semibold text-foreground truncate block">{profile.team.owner}</span>
-                      <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                        <span className="text-xs text-muted-foreground">#{p.rank}</span>
-                        <span className="text-xs text-red-500 dark:text-red-400 font-medium">{p.surplusAmount.toLocaleString()}</span>
-                        <Badge variant="outline" className={cn("text-[9px] flex-shrink-0", getTierColor(profile.tier))}>{profile.tier}</Badge>
+
+            {/* Needs */}
+            <div>
+              <div className="flex items-center gap-1.5 mb-3">
+                <TrendingDown className="w-3.5 h-3.5 text-red-500 dark:text-red-400" />
+                <span className="text-sm font-semibold text-red-600 dark:text-red-400">
+                  {userNeedPositions.length > 0 ? `Needs: ${userNeedPositions.join(", ")}` : "No critical needs"}
+                </span>
+              </div>
+              <div className="space-y-2">
+                {userNeedPositions.length === 0 && (
+                  <p className="text-xs text-muted-foreground">You are not in the bottom 25% at any position</p>
+                )}
+                {userNeedPositions.map(pos => {
+                  const pd = userProfile.positions[pos];
+                  const allPlayers = [...pd.starterPlayers, ...pd.depthPlayers].slice(0, 4);
+                  return (
+                    <div key={pos} className="rounded-md bg-red-500/8 border border-red-500/20 p-2.5" data-testid={`my-need-${pos}`}>
+                      <div className="flex items-center gap-1.5 mb-1.5">
+                        <Badge variant="outline" className={`text-[10px] px-1 py-0 h-4 ${getPositionColor(pos)}`}>{pos}</Badge>
+                        <span className="text-[10px] text-red-500 dark:text-red-400 font-medium">#{pd.rank} league · {pd.surplusAmount.toLocaleString()}</span>
+                      </div>
+                      {allPlayers.length === 0 ? (
+                        <p className="text-[11px] text-muted-foreground">No {pos}s on roster</p>
+                      ) : (
+                        <div className="space-y-0.5">
+                          {allPlayers.map((pl, i) => (
+                            <div key={pl.id} className="flex items-center gap-1.5">
+                              <span className="text-[10px] text-muted-foreground w-3">{i + 1}.</span>
+                              <span className="text-[11px] font-medium text-foreground truncate">{pl.name}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Trade Partner Matches */}
+      <div>
+        <div className="mb-4">
+          <h3 className="text-base font-bold text-foreground flex items-center gap-2">
+            <ArrowRightLeft className="w-4 h-4 text-[#0b3a7a] dark:text-blue-400" />
+            Matched Trade Partners
+            <Badge variant="secondary">{matchedPartners.length}</Badge>
+          </h3>
+          <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
+          <p className="text-[10px] text-muted-foreground mt-2">
+            Teams whose strengths address your needs — and vice versa. Higher match score = better fit.
+          </p>
+        </div>
+
+        {matchedPartners.length === 0 ? (
+          <Card>
+            <CardContent className="py-10 text-center">
+              <p className="text-sm text-muted-foreground">No strong positional matches found.</p>
+              <p className="text-xs text-muted-foreground mt-1">This usually means your roster is well-balanced with no clear surpluses or needs.</p>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="space-y-3" data-testid="matched-partners-list">
+            {matchedPartners.map(({ partner, theyHaveYourNeeds, youHaveTheirNeeds, score }) => (
+              <Card key={partner.teamId} className="overflow-hidden" data-testid={`partner-match-${partner.teamId}`}>
+                <CardContent className="p-0">
+                  {/* Partner header */}
+                  <div className="flex items-center gap-3 px-4 py-3 border-b border-border/20 bg-muted/20">
+                    <img
+                      src={partner.team.avatar || "https://sleepercdn.com/images/v2/icons/player_default.webp"}
+                      alt={partner.team.owner}
+                      className="w-9 h-9 rounded-full object-cover flex-shrink-0 bg-muted"
+                      onError={(e) => { e.currentTarget.src = "https://sleepercdn.com/images/v2/icons/player_default.webp"; }}
+                      data-testid={`img-partner-avatar-${partner.teamId}`}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-sm font-bold text-foreground">{partner.team.owner}</span>
+                        {partner.team.owner !== partner.team.name && (
+                          <span className="text-[10px] text-muted-foreground truncate">({partner.team.name})</span>
+                        )}
+                        <Badge variant="outline" className={cn("text-[9px] flex-shrink-0", getTierColor(partner.tier))}>{partner.tier}</Badge>
                       </div>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-2 flex-shrink-0 ml-2">
-                    <div className="text-right">
-                      <p className="text-xs text-muted-foreground">Top players</p>
-                      <p className="text-[10px] text-foreground font-medium">
-                        {p.starterPlayers.slice(0, 2).map(pl => pl.name.split(" ").pop()).join(", ")}
-                      </p>
+                    <div className="flex-shrink-0 text-right">
+                      <div className="flex items-center gap-1 justify-end">
+                        {Array.from({ length: score }).map((_, i) => (
+                          <div key={i} className="w-2 h-2 rounded-full bg-[#d4af37]" />
+                        ))}
+                        {Array.from({ length: Math.max(0, 4 - score) }).map((_, i) => (
+                          <div key={i} className="w-2 h-2 rounded-full bg-border" />
+                        ))}
+                      </div>
+                      <p className="text-[9px] text-muted-foreground mt-0.5">match score</p>
                     </div>
-                    {!isUser && (
-                      <Button variant="outline" size="sm" className="text-xs flex-shrink-0" onClick={() => onSwitchTab("opportunities")} data-testid={`btn-find-deals-need-${profile.teamId}`}>
-                        Find Deals
-                      </Button>
-                    )}
                   </div>
-                </div>
-              );
-            })}
-          </CardContent>
-        </Card>
+
+                  {/* Position matches */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 divide-y sm:divide-y-0 sm:divide-x divide-border/20">
+                    {/* They have your needs */}
+                    <div className="p-3">
+                      <p className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-400 mb-2 flex items-center gap-1">
+                        <TrendingUp className="w-3 h-3" />
+                        They can address your needs
+                      </p>
+                      {theyHaveYourNeeds.length === 0 ? (
+                        <p className="text-[10px] text-muted-foreground italic">No direct positional coverage</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {theyHaveYourNeeds.map(pos => {
+                            const pd = partner.positions[pos];
+                            const players = [...pd.starterPlayers, ...pd.depthPlayers].slice(0, 3);
+                            return (
+                              <div key={pos} data-testid={`they-have-${partner.teamId}-${pos}`}>
+                                <div className="flex items-center gap-1 mb-0.5">
+                                  <Badge variant="outline" className={`text-[9px] px-1 py-0 h-3.5 ${getPositionColor(pos)}`}>{pos}</Badge>
+                                  <span className="text-[9px] text-muted-foreground">surplus · #{pd.rank}</span>
+                                </div>
+                                {players.map(pl => (
+                                  <p key={pl.id} className="text-[11px] text-foreground font-medium pl-1 truncate">{pl.name}</p>
+                                ))}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* You have their needs */}
+                    <div className="p-3">
+                      <p className="text-[10px] font-semibold text-blue-700 dark:text-blue-400 mb-2 flex items-center gap-1">
+                        <Target className="w-3 h-3" />
+                        You can address their needs
+                      </p>
+                      {youHaveTheirNeeds.length === 0 ? (
+                        <p className="text-[10px] text-muted-foreground italic">No direct positional coverage</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {youHaveTheirNeeds.map(pos => {
+                            const pd = userProfile.positions[pos];
+                            const players = [...pd.starterPlayers, ...pd.depthPlayers].slice(0, 3);
+                            return (
+                              <div key={pos} data-testid={`you-have-${partner.teamId}-${pos}`}>
+                                <div className="flex items-center gap-1 mb-0.5">
+                                  <Badge variant="outline" className={`text-[9px] px-1 py-0 h-3.5 ${getPositionColor(pos)}`}>{pos}</Badge>
+                                  <span className="text-[9px] text-muted-foreground">your surplus · #{pd.rank}</span>
+                                </div>
+                                {players.map(pl => (
+                                  <p key={pl.id} className="text-[11px] text-foreground font-medium pl-1 truncate">{pl.name}</p>
+                                ))}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
