@@ -899,33 +899,88 @@ export async function fetchDraftBoard(leagueId: string) {
     draftSlots.push({ slot: s, rosterId, displayName });
   }
 
-  // Debug: log raw pick structure for first 3 picks to inspect all timestamp-like fields.
-  if (picksRaw && picksRaw.length > 0) {
-    const samples = picksRaw.slice(0, 3);
-    console.group(`[LiveDraft] Raw pick debug — draft ${draftId} (showing first ${samples.length} picks)`);
-    samples.forEach((sample: any) => {
-      const allKeys = Object.keys(sample);
-      const metaKeys = sample.metadata ? Object.keys(sample.metadata) : [];
-      console.log(`--- Pick #${sample.pick_no} (${sample.player_id}) ---`);
-      console.log("All top-level keys:", allKeys);
-      console.log("Timestamp-like fields:", {
-        picked_at: sample.picked_at,
-        created_at: sample.created_at,
-        updated_at: sample.updated_at,
-        timestamp: sample.timestamp,
-        "metadata.picked_at": sample.metadata?.picked_at,
-        "metadata.timestamp": sample.metadata?.timestamp,
-        "metadata.created_at": sample.metadata?.created_at,
-        is_autopick: sample.is_autopick ?? sample.metadata?.is_autopick,
-        is_auto: sample.is_auto,
-      });
-      console.log("All metadata keys:", metaKeys);
-      console.log("Full raw object:", sample);
+  // ── Generic timestamp extractor ──────────────────────────────────────────
+  // Checks every known and speculative timestamp field on a pick object.
+  // Returns the first valid millisecond-epoch number, or null.
+  function getPickTimestamp(p: any): number | null {
+    const candidates: any[] = [
+      p.picked_at,
+      p.created_at,
+      p.updated_at,
+      p.timestamp,
+      p.draft_time,
+      p.clock,
+      p.time,
+      p.metadata?.picked_at,
+      p.metadata?.timestamp,
+      p.metadata?.created_at,
+      p.metadata?.updated_at,
+      p.metadata?.clock,
+      p.metadata?.time,
+    ];
+    for (const c of candidates) {
+      if (c == null) continue;
+      if (typeof c === "number" && c > 1_000_000_000_000) return c; // ms epoch
+      if (typeof c === "number" && c > 1_000_000_000) return c * 1000; // s epoch → ms
+      if (typeof c === "string") {
+        const n = Number(c);
+        if (!isNaN(n) && n > 1_000_000_000_000) return n;
+        if (!isNaN(n) && n > 1_000_000_000) return n * 1000;
+        const d = Date.parse(c);
+        if (!isNaN(d)) return d;
+      }
+    }
+    return null;
+  }
+
+  // ── Debug: log the raw draft object (from /league/{id}/drafts) ───────────
+  console.group(`[LiveDraft] Draft object debug — draft ${draftId}`);
+  console.log("Draft status:", draft.status);
+  console.log("All draft keys:", Object.keys(draft));
+  console.log("Timestamp-like fields on draft:", {
+    start_time: draft.start_time,
+    created: draft.created,
+    updated: draft.updated,
+    last_picked: draft.last_picked,
+    last_message_time: draft.last_message_time,
+    "metadata.created": draft.metadata?.created,
+    "settings.pick_timer": draft.settings?.pick_timer,
+    "settings.pick_timer_seconds": draft.settings?.pick_timer_seconds,
+    "settings.nomination_timer": draft.settings?.nomination_timer,
+  });
+  console.log("Full raw draft object:", draft);
+  console.groupEnd();
+
+  // ── Debug: also call GET /draft/{id} directly for comparison ─────────────
+  try {
+    const directDraft = await fetchJson<any>(`${SLEEPER_API}/draft/${draftId}`);
+    console.group(`[LiveDraft] Direct GET /draft/${draftId}`);
+    console.log("All keys:", Object.keys(directDraft || {}));
+    console.log("Timestamp-like fields:", {
+      start_time: directDraft?.start_time,
+      created: directDraft?.created,
+      updated: directDraft?.updated,
+      last_picked: directDraft?.last_picked,
+      last_message_time: directDraft?.last_message_time,
     });
-    const hasAnyTimestamp = picksRaw.some((p: any) =>
-      p.picked_at != null || p.created_at != null || p.timestamp != null ||
-      p.metadata?.picked_at != null || p.metadata?.timestamp != null
-    );
+    console.log("Full object:", directDraft);
+    console.groupEnd();
+  } catch (e) {
+    console.warn("[LiveDraft] GET /draft/{id} failed:", e);
+  }
+
+  // ── Debug: log first 5 raw picks with all keys ───────────────────────────
+  if (picksRaw && picksRaw.length > 0) {
+    const samples = picksRaw.slice(0, 5);
+    console.group(`[LiveDraft] Raw picks debug — draft ${draftId} (first ${samples.length} of ${picksRaw.length})`);
+    samples.forEach((p: any) => {
+      const ts = getPickTimestamp(p);
+      console.log(`Pick #${p.pick_no} keys:`, Object.keys(p));
+      console.log(`Pick #${p.pick_no} metadata keys:`, p.metadata ? Object.keys(p.metadata) : []);
+      console.log(`Pick #${p.pick_no} all fields:`, p);
+      console.log(`Pick #${p.pick_no} getPickTimestamp() →`, ts, ts ? `(${new Date(ts).toISOString()})` : "(none)");
+    });
+    const hasAnyTimestamp = picksRaw.some((p: any) => getPickTimestamp(p) !== null);
     console.log("[LiveDraft] Sleeper provides timestamps:", hasAnyTimestamp);
     console.groupEnd();
   }
@@ -945,7 +1000,7 @@ export async function fetchDraftBoard(leagueId: string) {
     pos:
       p.metadata?.position || playersDb[p.player_id]?.position || "??",
     team: p.metadata?.team || playersDb[p.player_id]?.team || "FA",
-    pickedAt: typeof p.picked_at === "number" ? p.picked_at : null,
+    pickedAt: getPickTimestamp(p),
     // is_autopick (with k) is the most-reported community field — checked first.
     // Falls back through other variants Sleeper has used historically.
     isAutoPick: !!(
