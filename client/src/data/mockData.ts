@@ -570,7 +570,6 @@ export const NAV_CONFIG: MainTabConfig[] = [
     label: "Live Draft",
     subTabs: [
       { id: "draft-board", label: "Draft Board" },
-      { id: "pick-timer", label: "Pick Timer" },
     ],
   },
   {
