@@ -375,6 +375,17 @@ export default function LiveDraft({ subTab = "draft-board" }: { subTab?: string 
           if (!prevPickNosRef.current.has(pickNo)) {
             newTimes[pickNo] = now;
             hasNew = true;
+            // Debug: log new pick timing & auto-pick fields as they arrive live
+            const pick = data.picks.find(p => p.pickNo === pickNo);
+            if (pick) {
+              console.log(`[LiveDraft] New pick detected — #${pickNo} ${pick.playerName}`, {
+                pickedAt: pick.pickedAt,
+                pickedAt_human: pick.pickedAt ? new Date(pick.pickedAt).toISOString() : null,
+                localTimestamp: new Date(now).toISOString(),
+                isAutoPick: pick.isAutoPick,
+                pos: pick.pos,
+              });
+            }
           }
         });
         if (hasNew) setLocalPickTimes(prev => ({ ...prev, ...newTimes }));

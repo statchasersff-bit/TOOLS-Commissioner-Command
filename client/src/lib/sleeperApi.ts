@@ -899,6 +899,28 @@ export async function fetchDraftBoard(leagueId: string) {
     draftSlots.push({ slot: s, rosterId, displayName });
   }
 
+  // Debug: log raw pick structure once per draft fetch so we can inspect
+  // exactly what Sleeper sends (timing fields, auto-pick keys, metadata shape).
+  if (picksRaw && picksRaw.length > 0) {
+    const sample = picksRaw[picksRaw.length - 1]; // most recent pick is most interesting
+    console.group(`[LiveDraft] Raw pick sample — pick #${sample.pick_no} (${sample.player_id})`);
+    console.log("Top-level fields:", {
+      pick_no: sample.pick_no,
+      round: sample.round,
+      draft_slot: sample.draft_slot,
+      roster_id: sample.roster_id,
+      player_id: sample.player_id,
+      picked_at: sample.picked_at,
+      is_auto: sample.is_auto,
+      picked_by_auto: sample.picked_by_auto,
+      auto_pick: sample.auto_pick,
+      is_autopick: sample.is_autopick,
+    });
+    console.log("metadata:", sample.metadata);
+    console.log("Full raw object:", sample);
+    console.groupEnd();
+  }
+
   const picks = (picksRaw || []).map((p: any) => ({
     round: p.round,
     pickNo: p.pick_no,
@@ -915,12 +937,16 @@ export async function fetchDraftBoard(leagueId: string) {
       p.metadata?.position || playersDb[p.player_id]?.position || "??",
     team: p.metadata?.team || playersDb[p.player_id]?.team || "FA",
     pickedAt: typeof p.picked_at === "number" ? p.picked_at : null,
+    // is_autopick (with k) is the most-reported community field — checked first.
+    // Falls back through other variants Sleeper has used historically.
     isAutoPick: !!(
+      p.metadata?.is_autopick ||
+      p.is_autopick ||
+      p.metadata?.is_auto ||
       p.is_auto ||
       p.picked_by_auto ||
       p.auto_pick ||
-      p.metadata?.auto ||
-      p.metadata?.is_auto
+      p.metadata?.auto
     ),
   }));
 
