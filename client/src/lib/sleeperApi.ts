@@ -998,7 +998,7 @@ export async function fetchCrossLeagueTrades(userId: string) {
   const results: CrossLeagueTradeResult[] = [];
   let scanned = 0;
 
-  for (const lg of leagues.slice(0, 15)) {
+  for (const lg of leagues.slice(0, 25)) {
     scanned++;
     await sleep(RATE_MS);
 
@@ -1025,7 +1025,7 @@ export async function fetchCrossLeagueTrades(userId: string) {
     }
 
     const weekPromises = [];
-    for (let week = 1; week <= 18; week++) {
+    for (let week = 0; week <= 21; week++) {
       weekPromises.push(
         fetchJson<any[]>(`${SLEEPER_API}/league/${lg.league_id}/transactions/${week}`).catch(() => [])
       );
