@@ -1,29 +1,51 @@
-import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import type { Request, Response, NextFunction } from "express";
-import { drizzle } from "drizzle-orm/node-postgres";
-import pg from "pg";
-import { eq } from "drizzle-orm";
-import { financePasswords } from "@shared/schema";
 
 const JWT_SECRET = process.env.SESSION_SECRET || "fallback-dev-secret";
-const SALT_ROUNDS = 12;
 
-let db: ReturnType<typeof drizzle> | null = null;
-function getDb() {
-  if (!db) {
-    const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
-    db = drizzle(pool);
+// In-memory challenge store: sleeperId → { code, expiresAt }
+const challenges = new Map<string, { code: string; expiresAt: number }>();
+
+const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+function generateCode(): string {
+  const rand = Array.from({ length: 5 }, () => CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)]).join("");
+  return `SC-${rand}`;
+}
+
+export function createChallenge(sleeperId: string): string {
+  const code = generateCode();
+  challenges.set(sleeperId, { code, expiresAt: Date.now() + 15 * 60 * 1000 }); // 15-min TTL
+  return code;
+}
+
+export function getChallenge(sleeperId: string): string | null {
+  const entry = challenges.get(sleeperId);
+  if (!entry) return null;
+  if (Date.now() > entry.expiresAt) { challenges.delete(sleeperId); return null; }
+  return entry.code;
+}
+
+export async function verifyChallenge(sleeperId: string): Promise<{ ok: boolean; error?: string }> {
+  const entry = challenges.get(sleeperId);
+  if (!entry) return { ok: false, error: "No active challenge. Please refresh and try again." };
+  if (Date.now() > entry.expiresAt) {
+    challenges.delete(sleeperId);
+    return { ok: false, error: "Challenge expired. Please refresh to get a new code." };
   }
-  return db;
-}
 
-export async function hashPassword(password: string): Promise<string> {
-  return bcrypt.hash(password, SALT_ROUNDS);
-}
-
-export async function verifyPassword(password: string, hash: string): Promise<boolean> {
-  return bcrypt.compare(password, hash);
+  try {
+    const res = await fetch(`https://api.sleeper.app/v1/user/${sleeperId}`);
+    if (!res.ok) return { ok: false, error: "Could not reach Sleeper API." };
+    const user = await res.json();
+    const displayName: string = (user?.display_name ?? user?.username ?? "").toUpperCase();
+    if (displayName.includes(entry.code)) {
+      challenges.delete(sleeperId);
+      return { ok: true };
+    }
+    return { ok: false, error: "Code not found in your Sleeper display name. Make sure it matches exactly and try again." };
+  } catch {
+    return { ok: false, error: "Network error reaching Sleeper API." };
+  }
 }
 
 export function signToken(sleeperId: string): string {
@@ -38,44 +60,13 @@ export function verifyToken(token: string): { sleeperId: string } | null {
   }
 }
 
-export async function hasPassword(sleeperId: string): Promise<boolean> {
-  const d = getDb();
-  const rows = await d.select().from(financePasswords).where(eq(financePasswords.sleeperUserId, sleeperId)).limit(1);
-  return rows.length > 0;
-}
-
-export async function getPasswordHash(sleeperId: string): Promise<string | null> {
-  const d = getDb();
-  const rows = await d.select().from(financePasswords).where(eq(financePasswords.sleeperUserId, sleeperId)).limit(1);
-  return rows[0]?.passwordHash ?? null;
-}
-
-export async function setPasswordHash(sleeperId: string, hash: string): Promise<void> {
-  const d = getDb();
-  const existing = await d.select().from(financePasswords).where(eq(financePasswords.sleeperUserId, sleeperId)).limit(1);
-  if (existing.length > 0) {
-    await d.update(financePasswords).set({ passwordHash: hash }).where(eq(financePasswords.sleeperUserId, sleeperId));
-  } else {
-    await d.insert(financePasswords).values({ sleeperUserId: sleeperId, passwordHash: hash });
-  }
-}
-
 export function requireFinanceAuth(req: Request, res: Response, next: NextFunction) {
   const auth = req.headers.authorization;
-  if (!auth?.startsWith("Bearer ")) {
-    return res.status(401).json({ error: "Unauthorized" });
-  }
-  const token = auth.slice(7);
-  const payload = verifyToken(token);
-  if (!payload) {
-    return res.status(401).json({ error: "Invalid or expired token" });
-  }
-
+  if (!auth?.startsWith("Bearer ")) return res.status(401).json({ error: "Unauthorized" });
+  const payload = verifyToken(auth.slice(7));
+  if (!payload) return res.status(401).json({ error: "Invalid or expired token" });
   const userId = (req.params.userId || req.params.sleeperUserId || req.body?.sleeperUserId) as string | undefined;
-  if (userId && payload.sleeperId !== userId) {
-    return res.status(403).json({ error: "Forbidden" });
-  }
-
+  if (userId && payload.sleeperId !== userId) return res.status(403).json({ error: "Forbidden" });
   (req as any).sleeperId = payload.sleeperId;
   next();
 }

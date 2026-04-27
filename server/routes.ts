@@ -30,11 +30,9 @@ import {
 } from "./valueSnapshots";
 import { getFinancesForUser, upsertLeagueFinance } from "./finances";
 import {
-  hasPassword,
-  getPasswordHash,
-  setPasswordHash,
-  hashPassword,
-  verifyPassword,
+  createChallenge,
+  getChallenge,
+  verifyChallenge,
   signToken,
   requireFinanceAuth,
 } from "./auth";
@@ -330,57 +328,25 @@ export async function registerRoutes(
     }
   });
 
-  // --- Auth routes for Finance tab ---
+  // --- Sleeper identity challenge auth for Finance tab ---
 
-  app.get("/api/auth/has-password/:userId", async (req, res) => {
-    try {
-      const exists = await hasPassword(req.params.userId);
-      res.json({ hasPassword: exists });
-    } catch (err: any) {
-      res.status(500).json({ error: err.message });
-    }
+  app.get("/api/auth/challenge/:userId", (req, res) => {
+    const code = createChallenge(req.params.userId);
+    res.json({ code });
   });
 
-  app.post("/api/auth/login", async (req, res) => {
-    try {
-      const { sleeperId, password } = req.body;
-      if (!sleeperId || !password) return res.status(400).json({ error: "sleeperId and password required" });
-      const hash = await getPasswordHash(sleeperId);
-      if (!hash) return res.status(404).json({ error: "No password set for this account" });
-      const valid = await verifyPassword(password, hash);
-      if (!valid) return res.status(401).json({ error: "Incorrect password" });
-      res.json({ token: signToken(sleeperId) });
-    } catch (err: any) {
-      res.status(500).json({ error: err.message });
-    }
+  app.get("/api/auth/challenge-current/:userId", (req, res) => {
+    const code = getChallenge(req.params.userId);
+    if (!code) return res.status(404).json({ error: "No active challenge" });
+    res.json({ code });
   });
 
-  app.post("/api/auth/set-password", async (req, res) => {
+  app.post("/api/auth/verify", async (req, res) => {
     try {
-      const { sleeperId, password } = req.body;
-      if (!sleeperId || !password) return res.status(400).json({ error: "sleeperId and password required" });
-      if (password.length < 6) return res.status(400).json({ error: "Password must be at least 6 characters" });
-      const alreadySet = await hasPassword(sleeperId);
-      if (alreadySet) return res.status(409).json({ error: "Password already set. Use change-password instead." });
-      const hash = await hashPassword(password);
-      await setPasswordHash(sleeperId, hash);
-      res.json({ token: signToken(sleeperId) });
-    } catch (err: any) {
-      res.status(500).json({ error: err.message });
-    }
-  });
-
-  app.post("/api/auth/change-password", requireFinanceAuth, async (req, res) => {
-    try {
-      const { sleeperId, currentPassword, newPassword } = req.body;
-      if (!sleeperId || !currentPassword || !newPassword) return res.status(400).json({ error: "All fields required" });
-      if (newPassword.length < 6) return res.status(400).json({ error: "New password must be at least 6 characters" });
-      const hash = await getPasswordHash(sleeperId);
-      if (!hash) return res.status(404).json({ error: "No password set" });
-      const valid = await verifyPassword(currentPassword, hash);
-      if (!valid) return res.status(401).json({ error: "Current password is incorrect" });
-      const newHash = await hashPassword(newPassword);
-      await setPasswordHash(sleeperId, newHash);
+      const { sleeperId } = req.body;
+      if (!sleeperId) return res.status(400).json({ error: "sleeperId required" });
+      const result = await verifyChallenge(sleeperId);
+      if (!result.ok) return res.status(401).json({ error: result.error });
       res.json({ token: signToken(sleeperId) });
     } catch (err: any) {
       res.status(500).json({ error: err.message });

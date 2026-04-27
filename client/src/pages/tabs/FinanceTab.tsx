@@ -17,38 +17,18 @@ import {
   Loader2,
   AlertCircle,
   CheckCircle2,
-  Lock,
-  KeyRound,
-  Eye,
-  EyeOff,
-  ShieldCheck,
   LogOut,
+  ShieldCheck,
+  RefreshCw,
+  Copy,
+  Check,
 } from "lucide-react";
 
-interface PrizeSlot {
-  place: number;
-  amount: number;
-}
-
-interface LeagueFinanceData {
-  leagueId: string;
-  buyIn: number;
-  prizes: PrizeSlot[];
-  notes: string;
-}
-
+interface PrizeSlot { place: number; amount: number; }
+interface LeagueFinanceData { leagueId: string; buyIn: number; prizes: PrizeSlot[]; notes: string; }
 interface LeagueStanding {
-  leagueId: string;
-  rank: number;
-  totalTeams: number;
-  wins: number;
-  losses: number;
-  ties: number;
-  ptsFor: number;
-  playoffSpots: number;
-  inPlayoffs: boolean;
-  loading: boolean;
-  error: boolean;
+  leagueId: string; rank: number; totalTeams: number; wins: number; losses: number; ties: number;
+  ptsFor: number; playoffSpots: number; inPlayoffs: boolean; loading: boolean; error: boolean;
 }
 
 const SLEEPER_API = "https://api.sleeper.app/v1";
@@ -59,11 +39,10 @@ async function fetchLeagueStanding(leagueId: string, userId: string): Promise<Om
     fetch(`${SLEEPER_API}/league/${leagueId}`).then(r => r.json()),
   ]);
   const rosters: any[] = rostersRaw || [];
-  const playoffTeams: number = leagueRaw?.settings?.playoff_teams ?? Math.floor((leagueRaw?.total_rosters ?? 12) / 3);
+  const playoffTeams = leagueRaw?.settings?.playoff_teams ?? Math.floor((leagueRaw?.total_rosters ?? 12) / 3);
   const sorted = [...rosters].sort((a, b) => {
-    const wA = a.settings?.wins ?? 0;
-    const wB = b.settings?.wins ?? 0;
-    if (wB !== wA) return wB - wA;
+    const wDiff = (b.settings?.wins ?? 0) - (a.settings?.wins ?? 0);
+    if (wDiff !== 0) return wDiff;
     const pfA = (a.settings?.fpts ?? 0) + (a.settings?.fpts_decimal ?? 0) / 100;
     const pfB = (b.settings?.fpts ?? 0) + (b.settings?.fpts_decimal ?? 0) / 100;
     return pfB - pfA;
@@ -71,14 +50,10 @@ async function fetchLeagueStanding(leagueId: string, userId: string): Promise<Om
   const userRoster = rosters.find((r: any) => r.owner_id === userId);
   const rank = userRoster ? sorted.findIndex((r: any) => r.roster_id === userRoster.roster_id) + 1 : -1;
   return {
-    rank,
-    totalTeams: rosters.length,
-    wins: userRoster?.settings?.wins ?? 0,
-    losses: userRoster?.settings?.losses ?? 0,
-    ties: userRoster?.settings?.ties ?? 0,
+    rank, totalTeams: rosters.length,
+    wins: userRoster?.settings?.wins ?? 0, losses: userRoster?.settings?.losses ?? 0, ties: userRoster?.settings?.ties ?? 0,
     ptsFor: (userRoster?.settings?.fpts ?? 0) + (userRoster?.settings?.fpts_decimal ?? 0) / 100,
-    playoffSpots: playoffTeams,
-    inPlayoffs: rank > 0 && rank <= playoffTeams,
+    playoffSpots: playoffTeams, inPlayoffs: rank > 0 && rank <= playoffTeams,
   };
 }
 
@@ -98,145 +73,147 @@ function plBg(pl: number) {
 }
 
 const DEFAULT_FINANCE: LeagueFinanceData = { leagueId: "", buyIn: 0, prizes: [], notes: "" };
+function tokenKey(userId: string) { return `dc-finance-token-${userId}`; }
 
-function tokenKey(userId: string) {
-  return `dc-finance-token-${userId}`;
-}
+// ─── Sleeper Verify Gate ───────────────────────────────────────────────────────
 
-// ─── Auth Gate ────────────────────────────────────────────────────────────────
-
-type AuthMode = "checking" | "no-password" | "login" | "authed";
-
-function PasswordGate({ userId, onAuth }: { userId: string; onAuth: (token: string) => void }) {
-  const [mode, setMode] = useState<AuthMode>("checking");
-  const [password, setPassword] = useState("");
-  const [confirm, setConfirm] = useState("");
-  const [showPw, setShowPw] = useState(false);
+function SleeperVerifyGate({ userId, username, onAuth }: { userId: string; username: string; onAuth: (token: string) => void }) {
+  const [code, setCode] = useState<string | null>(null);
+  const [loadingCode, setLoadingCode] = useState(true);
+  const [verifying, setVerifying] = useState(false);
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [copied, setCopied] = useState(false);
 
-  useEffect(() => {
-    fetch(`${API_BASE}/api/auth/has-password/${userId}`)
-      .then(r => r.json())
-      .then(data => setMode(data.hasPassword ? "login" : "no-password"))
-      .catch(() => setMode("login"));
-  }, [userId]);
-
-  async function handleSetPassword(e: React.FormEvent) {
-    e.preventDefault();
+  async function fetchCode(refresh = false) {
+    setLoadingCode(true);
     setError("");
-    if (password.length < 6) { setError("Password must be at least 6 characters."); return; }
-    if (password !== confirm) { setError("Passwords don't match."); return; }
-    setLoading(true);
     try {
-      const r = await fetch(`${API_BASE}/api/auth/set-password`, {
+      const endpoint = refresh
+        ? `${API_BASE}/api/auth/challenge/${userId}`
+        : `${API_BASE}/api/auth/challenge-current/${userId}`;
+      const r = await fetch(endpoint);
+      if (!r.ok && !refresh) {
+        // No existing challenge — create one
+        const r2 = await fetch(`${API_BASE}/api/auth/challenge/${userId}`);
+        const d2 = await r2.json();
+        setCode(d2.code);
+      } else {
+        const d = await r.json();
+        setCode(d.code);
+      }
+    } catch { setError("Could not reach server."); }
+    finally { setLoadingCode(false); }
+  }
+
+  useEffect(() => { fetchCode(); }, [userId]);
+
+  async function handleVerify() {
+    setVerifying(true);
+    setError("");
+    try {
+      const r = await fetch(`${API_BASE}/api/auth/verify`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sleeperId: userId, password }),
+        body: JSON.stringify({ sleeperId: userId }),
       });
       const data = await r.json();
-      if (!r.ok) { setError(data.error || "Failed to set password."); return; }
+      if (!r.ok) { setError(data.error || "Verification failed."); return; }
       localStorage.setItem(tokenKey(userId), data.token);
       onAuth(data.token);
     } catch { setError("Network error. Please try again."); }
-    finally { setLoading(false); }
+    finally { setVerifying(false); }
   }
 
-  async function handleLogin(e: React.FormEvent) {
-    e.preventDefault();
-    setError("");
-    setLoading(true);
-    try {
-      const r = await fetch(`${API_BASE}/api/auth/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sleeperId: userId, password }),
-      });
-      const data = await r.json();
-      if (!r.ok) { setError(data.error || "Incorrect password."); return; }
-      localStorage.setItem(tokenKey(userId), data.token);
-      onAuth(data.token);
-    } catch { setError("Network error. Please try again."); }
-    finally { setLoading(false); }
-  }
-
-  if (mode === "checking") {
-    return (
-      <div className="flex items-center justify-center min-h-[40vh]">
-        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-      </div>
-    );
+  function copyCode() {
+    if (!code) return;
+    navigator.clipboard.writeText(code).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
   }
 
   return (
     <div className="flex items-center justify-center min-h-[60vh] px-4">
-      <Card className="p-8 w-full max-w-sm space-y-6">
+      <Card className="p-8 w-full max-w-md space-y-6">
         <div className="text-center space-y-2">
           <div className="w-14 h-14 rounded-2xl bg-[#0b3a7a]/10 dark:bg-blue-400/10 flex items-center justify-center mx-auto">
-            {mode === "no-password" ? (
-              <ShieldCheck className="w-7 h-7 text-[#0b3a7a] dark:text-blue-400" />
-            ) : (
-              <Lock className="w-7 h-7 text-[#0b3a7a] dark:text-blue-400" />
-            )}
+            <ShieldCheck className="w-7 h-7 text-[#0b3a7a] dark:text-blue-400" />
           </div>
-          <h3 className="text-lg font-bold">
-            {mode === "no-password" ? "Secure Your Finances" : "Finance Login"}
-          </h3>
+          <h3 className="text-lg font-bold">Verify Your Sleeper Identity</h3>
           <p className="text-sm text-muted-foreground">
-            {mode === "no-password"
-              ? "Create a password to protect your investment data. Only you can access it."
-              : "Enter your password to view and edit your financial data."}
+            To prove you own <span className="font-semibold text-foreground">@{username}</span>, temporarily set your Sleeper display name to the code below, then click Verify.
           </p>
         </div>
 
-        <form onSubmit={mode === "no-password" ? handleSetPassword : handleLogin} className="space-y-3">
-          <div className="relative">
-            <Input
-              type={showPw ? "text" : "password"}
-              placeholder={mode === "no-password" ? "Create a password (min 6 chars)" : "Enter password"}
-              value={password}
-              onChange={e => { setPassword(e.target.value); setError(""); }}
-              className="pr-10"
-              autoFocus
-              data-testid="input-finance-password"
-            />
-            <button
-              type="button"
-              onClick={() => setShowPw(v => !v)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-              tabIndex={-1}
-            >
-              {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-            </button>
-          </div>
-
-          {mode === "no-password" && (
-            <Input
-              type={showPw ? "text" : "password"}
-              placeholder="Confirm password"
-              value={confirm}
-              onChange={e => { setConfirm(e.target.value); setError(""); }}
-              data-testid="input-finance-confirm"
-            />
-          )}
-
-          {error && (
-            <div className="flex items-center gap-2 text-xs text-red-500" data-testid="text-auth-error">
-              <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
-              <span>{error}</span>
+        {/* Code display */}
+        <div className="space-y-2">
+          <p className="text-[11px] text-muted-foreground text-center font-medium uppercase tracking-wide">Your verification code</p>
+          {loadingCode ? (
+            <div className="flex justify-center py-3"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
+          ) : code ? (
+            <div className="flex items-center gap-2">
+              <div className="flex-1 bg-muted/50 rounded-xl border border-border/60 px-4 py-3 text-center">
+                <span className="text-2xl font-mono font-bold tracking-widest text-[#0b3a7a] dark:text-blue-300" data-testid="text-challenge-code">{code}</span>
+              </div>
+              <button
+                onClick={copyCode}
+                className="p-3 rounded-xl border border-border/60 hover:bg-muted/50 transition-colors text-muted-foreground"
+                data-testid="button-copy-code"
+                title="Copy code"
+              >
+                {copied ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
+              </button>
+              <button
+                onClick={() => fetchCode(true)}
+                className="p-3 rounded-xl border border-border/60 hover:bg-muted/50 transition-colors text-muted-foreground"
+                data-testid="button-refresh-code"
+                title="Get new code"
+              >
+                <RefreshCw className="w-4 h-4" />
+              </button>
             </div>
+          ) : (
+            <p className="text-sm text-red-500 text-center">Could not generate code. Try refreshing.</p>
           )}
+        </div>
 
-          <Button type="submit" className="w-full" disabled={loading} data-testid="button-finance-auth-submit">
-            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : mode === "no-password" ? "Set Password & Continue" : "Unlock Finances"}
-          </Button>
-        </form>
+        {/* Steps */}
+        <ol className="space-y-2.5 text-sm">
+          {[
+            <>Open the <strong>Sleeper app</strong> on your phone</>,
+            <>Tap your avatar → <strong>Edit Profile</strong></>,
+            <>Change your <strong>Display Name</strong> to exactly: <code className="bg-muted px-1.5 py-0.5 rounded text-xs font-mono">{code ?? "…"}</code></>,
+            <>Come back here and tap <strong>Verify</strong></>,
+            <>After verifying, change your display name back</>,
+          ].map((step, i) => (
+            <li key={i} className="flex gap-3">
+              <span className="w-5 h-5 rounded-full bg-[#0b3a7a]/10 dark:bg-blue-400/10 text-[#0b3a7a] dark:text-blue-400 flex items-center justify-center text-[11px] font-bold flex-shrink-0 mt-0.5">{i + 1}</span>
+              <span className="text-muted-foreground leading-snug">{step}</span>
+            </li>
+          ))}
+        </ol>
 
-        {mode === "no-password" && (
-          <p className="text-[11px] text-muted-foreground text-center">
-            Your password is stored securely (bcrypt hashed). It is not linked to Sleeper.
-          </p>
+        {error && (
+          <div className="flex items-start gap-2 text-sm text-red-500 bg-red-50 dark:bg-red-950/20 border border-red-200/50 dark:border-red-800/30 rounded-lg px-3 py-2.5" data-testid="text-verify-error">
+            <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+            <span>{error}</span>
+          </div>
         )}
+
+        <Button
+          className="w-full"
+          onClick={handleVerify}
+          disabled={verifying || !code || loadingCode}
+          data-testid="button-verify-sleeper"
+        >
+          {verifying ? (
+            <><Loader2 className="w-4 h-4 animate-spin mr-2" />Verifying…</>
+          ) : "Verify & Unlock Finances"}
+        </Button>
+
+        <p className="text-[11px] text-muted-foreground text-center">
+          Code expires in 15 minutes · Your session stays unlocked for 90 days
+        </p>
       </Card>
     </div>
   );
@@ -254,16 +231,10 @@ export function FinanceTab() {
   const [saving, setSaving] = useState<Record<string, boolean>>({});
   const [saved, setSaved] = useState<Record<string, boolean>>({});
   const [loadingFinances, setLoadingFinances] = useState(false);
-  const [showChangePw, setShowChangePw] = useState(false);
-  const [changePwFields, setChangePwFields] = useState({ current: "", next: "", confirm: "" });
-  const [changePwError, setChangePwError] = useState("");
-  const [changePwLoading, setChangePwLoading] = useState(false);
-  const [changePwOk, setChangePwOk] = useState(false);
   const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   const dynastyLeagues = leagues.filter(l => l.status !== "archived");
 
-  // Check localStorage token on mount
   useEffect(() => {
     if (!user?.userId) return;
     const stored = localStorage.getItem(tokenKey(user.userId));
@@ -271,10 +242,7 @@ export function FinanceTab() {
     setAuthChecked(true);
   }, [user?.userId]);
 
-  function handleAuth(t: string) {
-    setToken(t);
-    setAuthChecked(true);
-  }
+  function handleAuth(t: string) { setToken(t); setAuthChecked(true); }
 
   function handleLock() {
     if (!user?.userId) return;
@@ -283,22 +251,17 @@ export function FinanceTab() {
     setFinances({});
   }
 
-  // Auth headers helper
   const authHeaders = useCallback((): Record<string, string> => ({
     "Content-Type": "application/json",
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
   }), [token]);
 
-  // Load saved finance data from backend (only when authed)
   useEffect(() => {
     if (!isConnected || !user?.userId || !token) return;
     setLoadingFinances(true);
     fetch(`${API_BASE}/api/finances/${user.userId}`, { headers: { Authorization: `Bearer ${token}` } })
-      .then(r => {
-        if (r.status === 401) { handleLock(); return []; }
-        return r.json();
-      })
-      .then((rows: any[]) => {
+      .then(r => { if (r.status === 401) { handleLock(); return null; } return r.json(); })
+      .then((rows: any[] | null) => {
         if (!rows) return;
         const map: Record<string, LeagueFinanceData> = {};
         for (const row of rows) {
@@ -310,7 +273,6 @@ export function FinanceTab() {
       .finally(() => setLoadingFinances(false));
   }, [isConnected, user?.userId, token]);
 
-  // Load standings for all leagues
   useEffect(() => {
     if (!isConnected || !user?.userId || dynastyLeagues.length === 0) return;
     dynastyLeagues.forEach(league => {
@@ -338,12 +300,9 @@ export function FinanceTab() {
           method: "POST",
           headers: authHeaders(),
           body: JSON.stringify({
-            sleeperUserId: user.userId,
-            leagueId,
+            sleeperUserId: user.userId, leagueId,
             season: dynastyLeagues.find(l => l.leagueId === leagueId)?.season ?? "2026",
-            buyIn: data.buyIn,
-            prizes: data.prizes,
-            notes: data.notes,
+            buyIn: data.buyIn, prizes: data.prizes, notes: data.notes,
           }),
         });
         if (r.status === 401) { handleLock(); return; }
@@ -388,29 +347,6 @@ export function FinanceTab() {
     return { projectedPrize, pl: projectedPrize - f.buyIn };
   }
 
-  async function handleChangePassword(e: React.FormEvent) {
-    e.preventDefault();
-    setChangePwError("");
-    if (changePwFields.next.length < 6) { setChangePwError("New password must be at least 6 characters."); return; }
-    if (changePwFields.next !== changePwFields.confirm) { setChangePwError("Passwords don't match."); return; }
-    setChangePwLoading(true);
-    try {
-      const r = await fetch(`${API_BASE}/api/auth/change-password`, {
-        method: "POST",
-        headers: authHeaders(),
-        body: JSON.stringify({ sleeperId: user?.userId, currentPassword: changePwFields.current, newPassword: changePwFields.next }),
-      });
-      const data = await r.json();
-      if (!r.ok) { setChangePwError(data.error || "Failed to change password."); return; }
-      localStorage.setItem(tokenKey(user!.userId), data.token);
-      setToken(data.token);
-      setChangePwOk(true);
-      setShowChangePw(false);
-      setChangePwFields({ current: "", next: "", confirm: "" });
-    } catch { setChangePwError("Network error. Please try again."); }
-    finally { setChangePwLoading(false); }
-  }
-
   const totals = dynastyLeagues.reduce((acc, league) => {
     const f = getFinance(league.leagueId);
     const calc = calcPL(league.leagueId);
@@ -419,7 +355,6 @@ export function FinanceTab() {
     return acc;
   }, { invested: 0, expectedReturn: 0, netPL: 0, leaguesWithData: 0 });
 
-  // Not connected guard
   if (!isConnected || !user) {
     return (
       <div className="flex items-center justify-center min-h-[50vh] px-4">
@@ -434,26 +369,16 @@ export function FinanceTab() {
     );
   }
 
-  // Checking stored token
   if (!authChecked) {
-    return (
-      <div className="flex items-center justify-center min-h-[40vh]">
-        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-      </div>
-    );
+    return <div className="flex items-center justify-center min-h-[40vh]"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>;
   }
 
-  // Show password gate if no valid token
   if (!token) {
-    return <PasswordGate userId={user.userId} onAuth={handleAuth} />;
+    return <SleeperVerifyGate userId={user.userId} username={user.username} onAuth={handleAuth} />;
   }
 
   if (loadingFinances) {
-    return (
-      <div className="flex items-center justify-center min-h-[40vh]">
-        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-      </div>
-    );
+    return <div className="flex items-center justify-center min-h-[40vh]"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>;
   }
 
   const plSign = totals.netPL > 0 ? "+" : "";
@@ -461,82 +386,22 @@ export function FinanceTab() {
   return (
     <div className="max-w-4xl mx-auto px-4 md:px-6 py-6 space-y-6">
 
-      {/* Header with lock button */}
+      {/* Header bar */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <ShieldCheck className="w-4 h-4 text-emerald-500" />
-          <span className="text-xs text-muted-foreground font-medium">Finance data is protected</span>
+          <span className="text-xs text-muted-foreground font-medium">Verified as @{user.username}</span>
         </div>
-        <div className="flex items-center gap-2">
-          {changePwOk && (
-            <span className="text-xs text-emerald-500 flex items-center gap-1">
-              <CheckCircle2 className="w-3.5 h-3.5" /> Password updated
-            </span>
-          )}
-          <Button
-            size="sm"
-            variant="ghost"
-            className="h-7 text-xs gap-1.5 text-muted-foreground"
-            onClick={() => { setShowChangePw(v => !v); setChangePwError(""); setChangePwOk(false); }}
-            data-testid="button-change-password"
-          >
-            <KeyRound className="w-3.5 h-3.5" /> Change Password
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            className="h-7 text-xs gap-1.5 text-muted-foreground"
-            onClick={handleLock}
-            data-testid="button-lock-finances"
-          >
-            <LogOut className="w-3.5 h-3.5" /> Lock
-          </Button>
-        </div>
+        <Button
+          size="sm"
+          variant="ghost"
+          className="h-7 text-xs gap-1.5 text-muted-foreground"
+          onClick={handleLock}
+          data-testid="button-lock-finances"
+        >
+          <LogOut className="w-3.5 h-3.5" /> Lock
+        </Button>
       </div>
-
-      {/* Change password form */}
-      {showChangePw && (
-        <Card className="p-4">
-          <form onSubmit={handleChangePassword} className="space-y-3">
-            <p className="text-sm font-semibold mb-1">Change Finance Password</p>
-            <Input
-              type="password"
-              placeholder="Current password"
-              value={changePwFields.current}
-              onChange={e => setChangePwFields(f => ({ ...f, current: e.target.value }))}
-              data-testid="input-current-password"
-            />
-            <Input
-              type="password"
-              placeholder="New password (min 6 chars)"
-              value={changePwFields.next}
-              onChange={e => setChangePwFields(f => ({ ...f, next: e.target.value }))}
-              data-testid="input-new-password"
-            />
-            <Input
-              type="password"
-              placeholder="Confirm new password"
-              value={changePwFields.confirm}
-              onChange={e => setChangePwFields(f => ({ ...f, confirm: e.target.value }))}
-              data-testid="input-confirm-new-password"
-            />
-            {changePwError && (
-              <div className="flex items-center gap-2 text-xs text-red-500">
-                <AlertCircle className="w-3.5 h-3.5" />
-                <span>{changePwError}</span>
-              </div>
-            )}
-            <div className="flex gap-2">
-              <Button type="submit" size="sm" disabled={changePwLoading} data-testid="button-submit-change-password">
-                {changePwLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Update Password"}
-              </Button>
-              <Button type="button" size="sm" variant="ghost" onClick={() => { setShowChangePw(false); setChangePwError(""); }}>
-                Cancel
-              </Button>
-            </div>
-          </form>
-        </Card>
-      )}
 
       {/* Summary Header */}
       <div className="grid grid-cols-3 gap-3">
@@ -621,18 +486,16 @@ export function FinanceTab() {
               <div className="border-t border-border/40 p-4 space-y-5">
                 {s && !s.loading && !s.error && s.rank > 0 && (
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    <div className="bg-muted/30 rounded-lg p-3 text-center">
-                      <p className="text-[10px] text-muted-foreground mb-0.5">Standing</p>
-                      <p className="text-base font-bold">#{s.rank}<span className="text-xs font-normal text-muted-foreground">/{s.totalTeams}</span></p>
-                    </div>
-                    <div className="bg-muted/30 rounded-lg p-3 text-center">
-                      <p className="text-[10px] text-muted-foreground mb-0.5">Record</p>
-                      <p className="text-base font-bold">{s.wins}-{s.losses}{s.ties > 0 ? `-${s.ties}` : ""}</p>
-                    </div>
-                    <div className="bg-muted/30 rounded-lg p-3 text-center">
-                      <p className="text-[10px] text-muted-foreground mb-0.5">Pts For</p>
-                      <p className="text-base font-bold">{s.ptsFor.toFixed(1)}</p>
-                    </div>
+                    {[
+                      { label: "Standing", value: `#${s.rank}/${s.totalTeams}` },
+                      { label: "Record", value: `${s.wins}-${s.losses}${s.ties > 0 ? `-${s.ties}` : ""}` },
+                      { label: "Pts For", value: s.ptsFor.toFixed(1) },
+                    ].map(item => (
+                      <div key={item.label} className="bg-muted/30 rounded-lg p-3 text-center">
+                        <p className="text-[10px] text-muted-foreground mb-0.5">{item.label}</p>
+                        <p className="text-base font-bold">{item.value}</p>
+                      </div>
+                    ))}
                     <div className={`rounded-lg p-3 text-center border ${s.inPlayoffs ? "bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200/50 dark:border-emerald-800/30" : "bg-muted/30 border-border/30"}`}>
                       <p className="text-[10px] text-muted-foreground mb-0.5">Playoffs</p>
                       <p className={`text-base font-bold ${s.inPlayoffs ? "text-emerald-600 dark:text-emerald-400" : "text-red-500 dark:text-red-400"}`}>
@@ -653,11 +516,8 @@ export function FinanceTab() {
                   <div className="relative w-40">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
                     <Input
-                      type="number"
-                      min="0"
-                      className="pl-7"
-                      value={f.buyIn || ""}
-                      placeholder="0"
+                      type="number" min="0" className="pl-7"
+                      value={f.buyIn || ""} placeholder="0"
                       onChange={e => updateFinance(league.leagueId, { buyIn: parseFloat(e.target.value) || 0 })}
                       data-testid={`input-buyin-${league.leagueId}`}
                     />
@@ -667,19 +527,11 @@ export function FinanceTab() {
                 <div>
                   <div className="flex items-center justify-between mb-2">
                     <label className="text-xs font-semibold text-foreground">Prize Structure</label>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-7 text-xs gap-1"
-                      onClick={() => addPrize(league.leagueId)}
-                      data-testid={`button-add-prize-${league.leagueId}`}
-                    >
+                    <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => addPrize(league.leagueId)} data-testid={`button-add-prize-${league.leagueId}`}>
                       <Plus className="w-3 h-3" /> Add Place
                     </Button>
                   </div>
-                  {f.prizes.length === 0 && (
-                    <p className="text-xs text-muted-foreground italic">No prizes configured. Add prize positions above.</p>
-                  )}
+                  {f.prizes.length === 0 && <p className="text-xs text-muted-foreground italic">No prizes configured. Add prize positions above.</p>}
                   <div className="space-y-2">
                     {f.prizes.sort((a, b) => a.place - b.place).map(prize => {
                       const placeLabel = prize.place === 1 ? "🥇 1st" : prize.place === 2 ? "🥈 2nd" : prize.place === 3 ? "🥉 3rd" : `${prize.place}th`;
@@ -688,26 +540,17 @@ export function FinanceTab() {
                         <div key={prize.place} className={`flex items-center gap-3 p-2.5 rounded-lg border ${isUserPlace ? "border-[#d4af37]/40 bg-[#d4af37]/5" : "border-border/30 bg-muted/20"}`}
                           data-testid={`prize-row-${league.leagueId}-${prize.place}`}>
                           <span className="text-sm font-semibold w-16 flex-shrink-0">{placeLabel}</span>
-                          {isUserPlace && (
-                            <Badge variant="outline" className="text-[10px] px-1.5 h-4 border-[#d4af37]/50 text-amber-600 dark:text-amber-400 flex-shrink-0">Your Rank</Badge>
-                          )}
+                          {isUserPlace && <Badge variant="outline" className="text-[10px] px-1.5 h-4 border-[#d4af37]/50 text-amber-600 dark:text-amber-400 flex-shrink-0">Your Rank</Badge>}
                           <div className="relative flex-1 max-w-[120px]">
                             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
                             <Input
-                              type="number"
-                              min="0"
-                              className="pl-7 h-8 text-sm"
-                              value={prize.amount || ""}
-                              placeholder="0"
+                              type="number" min="0" className="pl-7 h-8 text-sm"
+                              value={prize.amount || ""} placeholder="0"
                               onChange={e => updatePrize(league.leagueId, prize.place, parseFloat(e.target.value) || 0)}
                               data-testid={`input-prize-${league.leagueId}-${prize.place}`}
                             />
                           </div>
-                          <button
-                            onClick={() => removePrize(league.leagueId, prize.place)}
-                            className="text-muted-foreground hover:text-red-500 transition-colors flex-shrink-0"
-                            data-testid={`button-remove-prize-${league.leagueId}-${prize.place}`}
-                          >
+                          <button onClick={() => removePrize(league.leagueId, prize.place)} className="text-muted-foreground hover:text-red-500 transition-colors flex-shrink-0" data-testid={`button-remove-prize-${league.leagueId}-${prize.place}`}>
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         </div>
@@ -719,33 +562,28 @@ export function FinanceTab() {
                 {(f.buyIn > 0 || f.prizes.length > 0) && (
                   <div className={`rounded-xl p-4 border ${calc ? plBg(calc.pl) : "bg-muted/20 border-border/30"}`}>
                     <div className="flex items-center justify-between">
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-6">
-                          <div>
-                            <p className="text-[10px] text-muted-foreground">Buy-in</p>
-                            <p className="text-sm font-semibold">{fmtDollar(f.buyIn)}</p>
-                          </div>
-                          <div>
-                            <p className="text-[10px] text-muted-foreground">Projected Prize</p>
-                            <p className="text-sm font-semibold">{calc ? fmtDollar(calc.projectedPrize) : "—"}</p>
-                          </div>
+                      <div className="flex items-center gap-6">
+                        <div>
+                          <p className="text-[10px] text-muted-foreground">Buy-in</p>
+                          <p className="text-sm font-semibold">{fmtDollar(f.buyIn)}</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-muted-foreground">Projected Prize</p>
+                          <p className="text-sm font-semibold">{calc ? fmtDollar(calc.projectedPrize) : "—"}</p>
                         </div>
                       </div>
-                      {calc && (
+                      {calc ? (
                         <div className="text-right">
                           <p className="text-[10px] text-muted-foreground mb-0.5">Net P&L</p>
-                          <p className={`text-2xl font-bold ${plColor(calc.pl)}`}>
-                            {calc.pl >= 0 ? "+" : ""}{fmtDollar(calc.pl)}
-                          </p>
-                          <p className="text-[10px] text-muted-foreground">based on current rank #{s?.rank}</p>
+                          <p className={`text-2xl font-bold ${plColor(calc.pl)}`}>{calc.pl >= 0 ? "+" : ""}{fmtDollar(calc.pl)}</p>
+                          <p className="text-[10px] text-muted-foreground">current rank #{s?.rank}</p>
                         </div>
-                      )}
-                      {!calc && f.prizes.length > 0 && s && !s.loading && (
+                      ) : f.prizes.length > 0 && s && !s.loading ? (
                         <div className="text-right">
                           <p className="text-xs text-muted-foreground">No prize at rank #{s?.rank}</p>
                           <p className={`text-2xl font-bold ${plColor(-f.buyIn)}`}>{fmtDollar(-f.buyIn)}</p>
                         </div>
-                      )}
+                      ) : null}
                     </div>
                   </div>
                 )}
@@ -753,7 +591,7 @@ export function FinanceTab() {
                 <div>
                   <label className="text-xs font-semibold text-foreground mb-1.5 block">Notes</label>
                   <Input
-                    placeholder="e.g. best ball rules, side bets..."
+                    placeholder="e.g. best ball rules, side bets…"
                     value={f.notes}
                     onChange={e => updateFinance(league.leagueId, { notes: e.target.value })}
                     className="text-sm"
