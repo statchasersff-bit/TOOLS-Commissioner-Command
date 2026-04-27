@@ -454,6 +454,8 @@ export function PortfolioSummary() {
 
   const [summaryData, setSummaryData] = useState<any>(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
+  const [exposureSortCol, setExposureSortCol] = useState<"name" | "pos" | "value" | "exposure" | "leagueCount">("exposure");
+  const [exposureSortDir, setExposureSortDir] = useState<"asc" | "desc">("desc");
 
   useEffect(() => {
     if (!isConnected || !user?.userId || leagues.length === 0) return;
@@ -569,56 +571,86 @@ export function PortfolioSummary() {
               {activeSourceLabel && <span className="ml-1">· Values from <span className="font-semibold">{activeSourceLabel}</span></span>}
             </p>
 
-            {summaryData.playerExposure.length > 0 ? (
-              <div className="space-y-2">
-                {summaryData.playerExposure.slice(0, 15).map((player: any) => {
-                  const isOverexposed = player.exposure >= 50;
-                  const dynastyValue = valuesBySleeperId[player.playerId] ?? 0;
-                  return (
-                    <div key={player.playerId} className="flex items-center justify-between py-2 border-b border-border/20 last:border-0" data-testid={`exposure-${player.playerId}`}>
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <div className="w-9 h-9 rounded-full flex-shrink-0 overflow-hidden bg-muted ring-1 ring-border/40">
-                          <img
-                            src={`https://sleepercdn.com/content/nfl/players/thumb/${player.playerId}.jpg`}
-                            alt={player.name}
-                            className="w-full h-full object-cover object-top"
-                            onError={(e) => {
-                              const el = e.target as HTMLImageElement;
-                              el.style.display = "none";
-                              el.parentElement!.classList.add("flex", "items-center", "justify-center");
-                              el.parentElement!.innerHTML = `<span class="text-[10px] font-bold text-muted-foreground">${player.pos}</span>`;
-                            }}
-                          />
-                        </div>
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="text-sm font-semibold">{player.name}</span>
-                            <Badge variant="outline" className={`text-[10px] px-1 py-0 h-4 flex-shrink-0 ${getPositionColor(player.pos)}`}>{player.pos}</Badge>
+            {summaryData.playerExposure.length > 0 ? (() => {
+              const handleExposureSort = (col: typeof exposureSortCol) => {
+                if (exposureSortCol === col) {
+                  setExposureSortDir(d => d === "desc" ? "asc" : "desc");
+                } else {
+                  setExposureSortCol(col);
+                  setExposureSortDir(col === "name" || col === "pos" ? "asc" : "desc");
+                }
+              };
+              const SortIcon = ({ col }: { col: typeof exposureSortCol }) => {
+                if (exposureSortCol !== col) return <ArrowUpDown className="w-3 h-3 opacity-40" />;
+                return exposureSortDir === "desc" ? <ArrowDown className="w-3 h-3 text-[#d4af37]" /> : <ArrowUp className="w-3 h-3 text-[#d4af37]" />;
+              };
+              const sorted = [...summaryData.playerExposure].sort((a: any, b: any) => {
+                const dir = exposureSortDir === "asc" ? 1 : -1;
+                if (exposureSortCol === "name") return dir * a.name.localeCompare(b.name);
+                if (exposureSortCol === "pos") return dir * a.pos.localeCompare(b.pos);
+                if (exposureSortCol === "value") return dir * ((valuesBySleeperId[a.playerId] ?? 0) - (valuesBySleeperId[b.playerId] ?? 0));
+                if (exposureSortCol === "leagueCount") return dir * (a.leagueCount - b.leagueCount);
+                return dir * (a.exposure - b.exposure);
+              });
+              return (
+                <div>
+                  <div className="grid grid-cols-[1fr_auto_auto_auto] gap-x-3 px-1 pb-1.5 mb-1 border-b border-border/30">
+                    <button onClick={() => handleExposureSort("name")} className="flex items-center gap-1 text-[11px] font-semibold text-muted-foreground hover:text-foreground transition-colors text-left" data-testid="sort-player">
+                      Player <SortIcon col="name" />
+                    </button>
+                    <button onClick={() => handleExposureSort("value")} className="flex items-center gap-1 text-[11px] font-semibold text-muted-foreground hover:text-foreground transition-colors w-14 justify-end" data-testid="sort-value">
+                      Value <SortIcon col="value" />
+                    </button>
+                    <button onClick={() => handleExposureSort("exposure")} className="flex items-center gap-1 text-[11px] font-semibold text-muted-foreground hover:text-foreground transition-colors w-10 justify-end" data-testid="sort-exposure">
+                      % <SortIcon col="exposure" />
+                    </button>
+                    <button onClick={() => handleExposureSort("leagueCount")} className="flex items-center gap-1 text-[11px] font-semibold text-muted-foreground hover:text-foreground transition-colors w-16 justify-end" data-testid="sort-leagues">
+                      Leagues <SortIcon col="leagueCount" />
+                    </button>
+                  </div>
+                  <div className="space-y-0">
+                    {sorted.slice(0, 20).map((player: any) => {
+                      const isOverexposed = player.exposure >= 50;
+                      const dynastyValue = valuesBySleeperId[player.playerId] ?? 0;
+                      return (
+                        <div key={player.playerId} className="grid grid-cols-[1fr_auto_auto_auto] gap-x-3 items-center py-2 border-b border-border/20 last:border-0" data-testid={`exposure-${player.playerId}`}>
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div className="w-8 h-8 rounded-full flex-shrink-0 overflow-hidden bg-muted ring-1 ring-border/40">
+                              <img
+                                src={`https://sleepercdn.com/content/nfl/players/thumb/${player.playerId}.jpg`}
+                                alt={player.name}
+                                className="w-full h-full object-cover object-top"
+                                onError={(e) => {
+                                  const el = e.target as HTMLImageElement;
+                                  el.style.display = "none";
+                                  el.parentElement!.classList.add("flex", "items-center", "justify-center");
+                                  el.parentElement!.innerHTML = `<span class="text-[10px] font-bold text-muted-foreground">${player.pos}</span>`;
+                                }}
+                              />
+                            </div>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="text-sm font-semibold truncate">{player.name}</span>
+                                <Badge variant="outline" className={`text-[10px] px-1 py-0 h-4 flex-shrink-0 ${getPositionColor(player.pos)}`}>{player.pos}</Badge>
+                              </div>
+                              <span className="text-[11px] text-muted-foreground">{player.team}</span>
+                            </div>
                           </div>
-                          <span className="text-xs text-muted-foreground">{player.team}</span>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-3 flex-shrink-0">
-                        <span className={`text-xs font-bold w-14 text-right ${dynastyValue > 0 ? "text-[#0b3a7a] dark:text-blue-400" : "text-muted-foreground"}`} data-testid={`value-${player.playerId}`}>
-                          {dynastyValue > 0 ? dynastyValue.toLocaleString() : "—"}
-                        </span>
-                        <div className="flex items-center gap-1.5">
-                          <div className="w-24 h-2 bg-muted rounded-full overflow-hidden">
-                            <div
-                              className={`h-full rounded-full ${isOverexposed ? "bg-amber-500" : "bg-[#0b3a7a] dark:bg-blue-500"}`}
-                              style={{ width: `${player.exposure}%` }}
-                            />
+                          <span className={`text-xs font-bold w-14 text-right ${dynastyValue > 0 ? "text-[#0b3a7a] dark:text-blue-400" : "text-muted-foreground"}`} data-testid={`value-${player.playerId}`}>
+                            {dynastyValue > 0 ? dynastyValue.toLocaleString() : "—"}
+                          </span>
+                          <div className="flex items-center gap-1 w-10 justify-end">
+                            {isOverexposed && <AlertTriangle className="w-3 h-3 text-amber-500 flex-shrink-0" />}
+                            <span className={`text-xs font-bold ${isOverexposed ? "text-amber-500" : ""}`}>{player.exposure}%</span>
                           </div>
-                          <span className="text-xs font-bold w-10 text-right">{player.exposure}%</span>
+                          <span className="text-xs text-muted-foreground w-16 text-right">{player.leagueCount} / {leagues.length}</span>
                         </div>
-                        <span className="text-xs text-muted-foreground w-16 text-right">{player.leagueCount} league{player.leagueCount !== 1 ? "s" : ""}</span>
-                        {isOverexposed && <AlertTriangle className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })() : (
               <p className="text-sm text-muted-foreground">No player data available.</p>
             )}
 
