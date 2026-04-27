@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "SJz41CVyfPYVh8n0VwV7R"
+uri = "file://statchasers-design-kit.zip"
+type = "unspecified"
+title = "StatChasers Design Kit"
