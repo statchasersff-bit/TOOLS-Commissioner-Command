@@ -215,11 +215,11 @@ function SleeperVerifyGate({ userId, username, onAuth }: { userId: string; usern
             {otpStep === "send" ? (
               <>
                 <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-foreground">Sleeper Username or Email</label>
+                  <label className="text-xs font-semibold text-foreground">Sleeper Username, Email, or Phone</label>
                   <Input
                     value={login}
                     onChange={e => { setLogin(e.target.value); setError(""); }}
-                    placeholder="Enter your Sleeper username or email"
+                    placeholder="username, email@example.com, or +1..."
                     data-testid="input-sleeper-login"
                   />
                   <p className="text-[11px] text-muted-foreground">Sleeper will send a 6-digit code to your registered phone or email.</p>

@@ -14,12 +14,21 @@ const SLEEPER_HEADERS = {
 
 // ── Sleeper OTP (undocumented internal API) ───────────────────────────────────
 
+function sleeperLoginPayload(login: string): Record<string, string> {
+  const trimmed = login.trim();
+  if (trimmed.includes("@")) return { email: trimmed };
+  const digits = trimmed.replace(/\D/g, "");
+  if (digits.length >= 10 && /^\+?[\d\s\-().]+$/.test(trimmed)) return { phone: trimmed };
+  return { username: trimmed };
+}
+
 export async function sendSleeperCode(login: string): Promise<{ ok: boolean; error?: string }> {
   try {
+    const payload = sleeperLoginPayload(login);
     const r = await fetch(`${SLEEPER_AUTH}/send_code`, {
       method: "POST",
       headers: SLEEPER_HEADERS,
-      body: JSON.stringify({ login }),
+      body: JSON.stringify(payload),
     });
     if (!r.ok) {
       const body = await r.json().catch(() => ({}));
@@ -38,10 +47,11 @@ export async function verifySleeperCode(
 ): Promise<{ ok: boolean; error?: string }> {
   try {
     // Step 1: verify code with Sleeper → get their session token
+    const loginPayload = sleeperLoginPayload(login);
     const r = await fetch(`${SLEEPER_AUTH}/verify`, {
       method: "POST",
       headers: SLEEPER_HEADERS,
-      body: JSON.stringify({ login, code }),
+      body: JSON.stringify({ ...loginPayload, code }),
     });
     if (!r.ok) {
       const body = await r.json().catch(() => ({}));
