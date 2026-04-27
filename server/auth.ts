@@ -69,12 +69,27 @@ export async function verifyChallenge(sleeperId: string): Promise<{ ok: boolean;
     return { ok: false, error: "Challenge expired. Please refresh to get a new code." };
   }
   try {
-    const res = await fetch(`${SLEEPER_API}/user/${sleeperId}`);
-    if (!res.ok) return { ok: false, error: "Could not reach Sleeper API." };
-    const user = await res.json();
-    const displayName: string = (user?.display_name ?? user?.username ?? "").toUpperCase();
-    if (displayName.includes(entry.code)) { challenges.delete(sleeperId); return { ok: true }; }
-    return { ok: false, error: "Code not found in your Sleeper display name." };
+    const season = new Date().getFullYear().toString();
+    const leaguesRes = await fetch(`${SLEEPER_API}/user/${sleeperId}/leagues/nfl/${season}`);
+    if (!leaguesRes.ok) return { ok: false, error: "Could not reach Sleeper API." };
+    const leagues: any[] = await leaguesRes.json();
+    if (!Array.isArray(leagues) || leagues.length === 0) {
+      return { ok: false, error: "No leagues found for your account." };
+    }
+    for (const league of leagues.slice(0, 12)) {
+      const rostersRes = await fetch(`${SLEEPER_API}/league/${league.league_id}/rosters`);
+      if (!rostersRes.ok) continue;
+      const rosters: any[] = await rostersRes.json();
+      const myRoster = rosters.find((r: any) => r.owner_id === sleeperId);
+      if (myRoster) {
+        const teamName: string = (myRoster?.metadata?.team_name ?? "").toUpperCase();
+        if (teamName.includes(entry.code)) {
+          challenges.delete(sleeperId);
+          return { ok: true };
+        }
+      }
+    }
+    return { ok: false, error: "Code not found in any of your team names. Make sure you saved it in Sleeper." };
   } catch {
     return { ok: false, error: "Network error reaching Sleeper API." };
   }
