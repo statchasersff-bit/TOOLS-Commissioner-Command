@@ -14,7 +14,8 @@ import { NAV_CONFIG } from "@/data/mockData";
 import type { League, Team } from "@/types";
 import { fetchSleeperLeagueFull } from "@/lib/sleeperApi";
 import { DataDiagnostics } from "@/components/DataDiagnostics";
-import { Share2, LayoutDashboard, Loader2, Lock, Check, User } from "lucide-react";
+import { LayoutDashboard, Loader2, Lock, Check, User } from "lucide-react";
+import { SiDiscord } from "react-icons/si";
 import logoDark from "@assets/statchasers_logo_transparent_dark_1772764844282.png";
 import logoLight from "@assets/statchasers_logo_transparent_light_1772764844283.png";
 
@@ -340,9 +341,16 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
               )}
 
               <div className="hidden md:flex items-center gap-1.5 border-l border-border/40 pl-3">
-                <Button variant="outline" size="sm" disabled data-testid="button-share">
-                  <Share2 className="w-3 h-3 mr-1" /> Share
-                </Button>
+                <a
+                  href="https://discord.gg/34XkMXF6t3"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  data-testid="button-discord"
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold rounded-md transition-all duration-200 text-[#5865F2] bg-[#5865F2]/10 hover:bg-[#5865F2]/20 border border-[#5865F2]/25 hover:border-[#5865F2]/40"
+                >
+                  <SiDiscord className="w-3.5 h-3.5" />
+                  Discord
+                </a>
               </div>
 
               <div className="flex items-center gap-2">
