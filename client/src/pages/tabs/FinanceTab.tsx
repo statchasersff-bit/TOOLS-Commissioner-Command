@@ -281,106 +281,135 @@ function SleeperVerifyGate({ userId, username, onAuth }: { userId: string; usern
         {/* Register / Reset form */}
         {isRegisterMode && (
           <div className="space-y-4">
-            {/* Challenge code */}
-            {challengeCode ? (
-              <div className="space-y-3">
-                <div className="space-y-2">
-                  <p className="text-[11px] text-muted-foreground text-center font-medium uppercase tracking-wide">Step 1 — Verify your Sleeper account</p>
-                  <div className="flex items-center gap-2">
-                    <div className="flex-1 bg-muted/50 rounded-xl border border-border/60 px-4 py-3 text-center">
-                      <span className="text-2xl font-mono font-bold tracking-widest text-[#0b3a7a] dark:text-blue-300" data-testid="text-challenge-code">{challengeCode}</span>
+
+            {/* ── Waiting state (countdown or verifying) ── */}
+            {submitting ? (
+              <div className="space-y-4">
+                <div className="rounded-xl border border-border/60 bg-muted/30 px-4 py-5 text-center space-y-3">
+                  {countdown > 0 ? (
+                    <>
+                      <Loader2 className="w-7 h-7 animate-spin text-[#0b3a7a] dark:text-blue-400 mx-auto" />
+                      <p className="text-sm font-semibold text-foreground">Giving Sleeper's API time to update…</p>
+                      <p className="text-3xl font-mono font-bold text-[#0b3a7a] dark:text-blue-300" data-testid="text-countdown">
+                        {Math.floor(countdown / 60)}:{String(countdown % 60).padStart(2, "0")}
+                      </p>
+                      <p className="text-xs text-muted-foreground">Feel free to browse other tabs — we'll check automatically when the timer ends.</p>
+                    </>
+                  ) : (
+                    <>
+                      <Loader2 className="w-7 h-7 animate-spin text-[#0b3a7a] dark:text-blue-400 mx-auto" />
+                      <p className="text-sm font-semibold text-foreground">Checking Sleeper now…</p>
+                    </>
+                  )}
+                </div>
+                {challengeCode && (
+                  <p className="text-[11px] text-muted-foreground text-center">
+                    Your code: <span className="font-mono font-bold text-foreground">{challengeCode}</span>
+                  </p>
+                )}
+              </div>
+            ) : (
+              <>
+                {/* ── Full form ── */}
+
+                {/* Challenge code */}
+                {challengeCode ? (
+                  <div className="space-y-3">
+                    <div className="space-y-2">
+                      <p className="text-[11px] text-muted-foreground text-center font-medium uppercase tracking-wide">Step 1 — Verify your Sleeper account</p>
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 bg-muted/50 rounded-xl border border-border/60 px-4 py-3 text-center">
+                          <span className="text-2xl font-mono font-bold tracking-widest text-[#0b3a7a] dark:text-blue-300" data-testid="text-challenge-code">{challengeCode}</span>
+                        </div>
+                        <button onClick={() => { navigator.clipboard.writeText(challengeCode!); setCopied(true); setTimeout(() => setCopied(false), 2000); }} className="p-3 rounded-xl border border-border/60 hover:bg-muted/50 transition-colors text-muted-foreground" data-testid="button-copy-code">
+                          {copied ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
+                        </button>
+                        <button onClick={() => { setChallengeCode(null); loadChallenge(); }} className="p-3 rounded-xl border border-border/60 hover:bg-muted/50 transition-colors text-muted-foreground" data-testid="button-refresh-code">
+                          <RefreshCw className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
-                    <button onClick={() => { navigator.clipboard.writeText(challengeCode!); setCopied(true); setTimeout(() => setCopied(false), 2000); }} className="p-3 rounded-xl border border-border/60 hover:bg-muted/50 transition-colors text-muted-foreground" data-testid="button-copy-code">
-                      {copied ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
-                    </button>
-                    <button onClick={() => { setChallengeCode(null); loadChallenge(); }} className="p-3 rounded-xl border border-border/60 hover:bg-muted/50 transition-colors text-muted-foreground" data-testid="button-refresh-code">
-                      <RefreshCw className="w-4 h-4" />
-                    </button>
+                    <ol className="space-y-1.5 text-sm">
+                      {[
+                        <>Open Sleeper → go to any of your leagues → tap <strong>Team Settings</strong></>,
+                        <>Set your <strong>Team Name</strong> to: <code className="bg-muted px-1.5 py-0.5 rounded text-xs font-mono">{challengeCode}</code></>,
+                        <>Hit <strong>Save</strong>. Sleeper's API may take <strong>1–2 minutes</strong> to update — if verify fails, wait and try again. You can rename back after.</>,
+                      ].map((step, i) => (
+                        <li key={i} className="flex gap-3">
+                          <span className="w-5 h-5 rounded-full bg-[#0b3a7a]/10 dark:bg-blue-400/10 text-[#0b3a7a] dark:text-blue-400 flex items-center justify-center text-[11px] font-bold flex-shrink-0 mt-0.5">{i + 1}</span>
+                          <span className="text-muted-foreground leading-snug">{step}</span>
+                        </li>
+                      ))}
+                    </ol>
                   </div>
+                ) : (
+                  <div className="flex justify-center py-2"><Loader2 className="w-4 h-4 animate-spin text-muted-foreground" /></div>
+                )}
+
+                {/* League picker */}
+                <div className="space-y-2 pt-1">
+                  <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide">Step 2 — Select the league you changed</p>
+                  {leagues.length > 0 ? (
+                    <Select value={selectedLeagueId} onValueChange={v => { setSelectedLeagueId(v); setError(""); }} data-testid="select-league">
+                      <SelectTrigger className="w-full" data-testid="trigger-league-picker">
+                        <SelectValue placeholder="Choose a league…" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {leagues.map(l => (
+                          <SelectItem key={l.league_id} value={l.league_id} data-testid={`option-league-${l.league_id}`}>
+                            {l.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" /><span>Loading your leagues…</span>
+                    </div>
+                  )}
                 </div>
-                <ol className="space-y-1.5 text-sm">
-                  {[
-                    <>Open Sleeper → go to any of your leagues → tap <strong>Team Settings</strong></>,
-                    <>Set your <strong>Team Name</strong> to: <code className="bg-muted px-1.5 py-0.5 rounded text-xs font-mono">{challengeCode}</code></>,
-                    <>Hit <strong>Save</strong>. Sleeper's API may take <strong>1–2 minutes</strong> to update — if verify fails, wait and try again. You can rename back after.</>,
-                  ].map((step, i) => (
-                    <li key={i} className="flex gap-3">
-                      <span className="w-5 h-5 rounded-full bg-[#0b3a7a]/10 dark:bg-blue-400/10 text-[#0b3a7a] dark:text-blue-400 flex items-center justify-center text-[11px] font-bold flex-shrink-0 mt-0.5">{i + 1}</span>
-                      <span className="text-muted-foreground leading-snug">{step}</span>
-                    </li>
-                  ))}
-                </ol>
-              </div>
-            ) : (
-              <div className="flex justify-center py-2"><Loader2 className="w-4 h-4 animate-spin text-muted-foreground" /></div>
-            )}
 
-            {/* League picker */}
-            <div className="space-y-2 pt-1">
-              <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide">Step 2 — Select the league you changed</p>
-              {leagues.length > 0 ? (
-                <Select value={selectedLeagueId} onValueChange={v => { setSelectedLeagueId(v); setError(""); }} data-testid="select-league">
-                  <SelectTrigger className="w-full" data-testid="trigger-league-picker">
-                    <SelectValue placeholder="Choose a league…" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {leagues.map(l => (
-                      <SelectItem key={l.league_id} value={l.league_id} data-testid={`option-league-${l.league_id}`}>
-                        {l.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              ) : (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" /><span>Loading your leagues…</span>
+                {/* Password fields */}
+                <div className="space-y-2 pt-1">
+                  <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide">Step 3 — {mode === "reset" ? "Set new password" : "Create a password"}</p>
+                  <Input
+                    type="password"
+                    value={password}
+                    onChange={e => { setPassword(e.target.value); setError(""); }}
+                    placeholder="New password (min. 6 characters)"
+                    data-testid="input-new-password"
+                  />
+                  <Input
+                    type="password"
+                    value={confirmPassword}
+                    onChange={e => { setConfirmPassword(e.target.value); setError(""); }}
+                    placeholder="Confirm password"
+                    data-testid="input-confirm-password"
+                  />
                 </div>
-              )}
-            </div>
 
-            {/* Password fields */}
-            <div className="space-y-2 pt-1">
-              <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide">Step 3 — {mode === "reset" ? "Set new password" : "Create a password"}</p>
-              <Input
-                type="password"
-                value={password}
-                onChange={e => { setPassword(e.target.value); setError(""); }}
-                placeholder="New password (min. 6 characters)"
-                data-testid="input-new-password"
-              />
-              <Input
-                type="password"
-                value={confirmPassword}
-                onChange={e => { setConfirmPassword(e.target.value); setError(""); }}
-                placeholder="Confirm password"
-                data-testid="input-confirm-password"
-              />
-            </div>
+                {error && (
+                  <div className="flex items-start gap-2 text-sm text-red-500 bg-red-50 dark:bg-red-950/20 border border-red-200/50 dark:border-red-800/30 rounded-lg px-3 py-2.5" data-testid="text-register-error">
+                    <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" /><span>{error}</span>
+                  </div>
+                )}
 
-            {error && (
-              <div className="flex items-start gap-2 text-sm text-red-500 bg-red-50 dark:bg-red-950/20 border border-red-200/50 dark:border-red-800/30 rounded-lg px-3 py-2.5" data-testid="text-register-error">
-                <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" /><span>{error}</span>
-              </div>
-            )}
+                {verifyFailed ? (
+                  <Button className="w-full" onClick={handleRegister} data-testid="button-finance-retry">
+                    Try Again
+                  </Button>
+                ) : (
+                  <Button className="w-full" onClick={handleRegister} disabled={!password || !confirmPassword || !challengeCode || !selectedLeagueId} data-testid="button-finance-register">
+                    {mode === "reset" ? "Verify & Reset Password" : "Verify & Create Password"}
+                  </Button>
+                )}
 
-            {verifyFailed ? (
-              <Button className="w-full" onClick={handleRegister} data-testid="button-finance-retry">
-                Try Again
-              </Button>
-            ) : (
-              <Button className="w-full" onClick={handleRegister} disabled={submitting || !password || !confirmPassword || !challengeCode || !selectedLeagueId} data-testid="button-finance-register">
-                {countdown > 0
-                  ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />Waiting for Sleeper… ({countdown}s)</>
-                  : submitting
-                    ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />Verifying…</>
-                    : mode === "reset" ? "Verify & Reset Password" : "Verify & Create Password"}
-              </Button>
-            )}
-
-            {mode === "reset" && (
-              <button onClick={() => { setMode("login"); setError(""); }} className="w-full text-xs text-muted-foreground hover:text-foreground text-center transition-colors" data-testid="button-back-to-login">
-                ← Back to Sign In
-              </button>
+                {mode === "reset" && (
+                  <button onClick={() => { setMode("login"); setError(""); }} className="w-full text-xs text-muted-foreground hover:text-foreground text-center transition-colors" data-testid="button-back-to-login">
+                    ← Back to Sign In
+                  </button>
+                )}
+              </>
             )}
           </div>
         )}
