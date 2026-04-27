@@ -261,13 +261,11 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
           return <PortfolioConnect onNavigate={navigateToSubTab} />;
         case "portfolio:portfolio-summary":
           return <PortfolioSummary />;
+        case "portfolio:league-roi":
+          return <FinanceTab />;
         default:
           return <PortfolioConnect onNavigate={navigateToSubTab} />;
       }
-    }
-
-    if (activeMainTab === "finance") {
-      return <FinanceTab />;
     }
 
     if (!sleeper.isConnected) {
