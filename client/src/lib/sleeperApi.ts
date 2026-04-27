@@ -899,25 +899,34 @@ export async function fetchDraftBoard(leagueId: string) {
     draftSlots.push({ slot: s, rosterId, displayName });
   }
 
-  // Debug: log raw pick structure once per draft fetch so we can inspect
-  // exactly what Sleeper sends (timing fields, auto-pick keys, metadata shape).
+  // Debug: log raw pick structure for first 3 picks to inspect all timestamp-like fields.
   if (picksRaw && picksRaw.length > 0) {
-    const sample = picksRaw[picksRaw.length - 1]; // most recent pick is most interesting
-    console.group(`[LiveDraft] Raw pick sample — pick #${sample.pick_no} (${sample.player_id})`);
-    console.log("Top-level fields:", {
-      pick_no: sample.pick_no,
-      round: sample.round,
-      draft_slot: sample.draft_slot,
-      roster_id: sample.roster_id,
-      player_id: sample.player_id,
-      picked_at: sample.picked_at,
-      is_auto: sample.is_auto,
-      picked_by_auto: sample.picked_by_auto,
-      auto_pick: sample.auto_pick,
-      is_autopick: sample.is_autopick,
+    const samples = picksRaw.slice(0, 3);
+    console.group(`[LiveDraft] Raw pick debug — draft ${draftId} (showing first ${samples.length} picks)`);
+    samples.forEach((sample: any) => {
+      const allKeys = Object.keys(sample);
+      const metaKeys = sample.metadata ? Object.keys(sample.metadata) : [];
+      console.log(`--- Pick #${sample.pick_no} (${sample.player_id}) ---`);
+      console.log("All top-level keys:", allKeys);
+      console.log("Timestamp-like fields:", {
+        picked_at: sample.picked_at,
+        created_at: sample.created_at,
+        updated_at: sample.updated_at,
+        timestamp: sample.timestamp,
+        "metadata.picked_at": sample.metadata?.picked_at,
+        "metadata.timestamp": sample.metadata?.timestamp,
+        "metadata.created_at": sample.metadata?.created_at,
+        is_autopick: sample.is_autopick ?? sample.metadata?.is_autopick,
+        is_auto: sample.is_auto,
+      });
+      console.log("All metadata keys:", metaKeys);
+      console.log("Full raw object:", sample);
     });
-    console.log("metadata:", sample.metadata);
-    console.log("Full raw object:", sample);
+    const hasAnyTimestamp = picksRaw.some((p: any) =>
+      p.picked_at != null || p.created_at != null || p.timestamp != null ||
+      p.metadata?.picked_at != null || p.metadata?.timestamp != null
+    );
+    console.log("[LiveDraft] Sleeper provides timestamps:", hasAnyTimestamp);
     console.groupEnd();
   }
 

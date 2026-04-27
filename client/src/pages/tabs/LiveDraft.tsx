@@ -464,7 +464,7 @@ function PickTimerView({ draftData, draftInfo, isLoading }: {
     );
   }
 
-  // By Manager view — shows whenever picks exist; timing columns show "—" until timestamps arrive
+  // By Manager view — no picks at all
   if (sortedByManager.length === 0) return (
     <div className="space-y-4" data-testid="pick-timer-view">
       <ViewToggle />
@@ -472,8 +472,72 @@ function PickTimerView({ draftData, draftInfo, isLoading }: {
     </div>
   );
 
-  // Top-3 gold only applies when timing data exists (otherwise everyone would be tied at null)
-  const top3GoldEnabled = timedStats.length > 0;
+  // ── NO TIMING DATA ── show "Tracking Ready" state with pick-count-only table
+  if (timedStats.length === 0) {
+    // Sort by auto-picks desc, then totalPicks desc — no fake timing rank
+    const sortedNoTiming = [...stats].sort((a, b) =>
+      b.autoPickCount !== a.autoPickCount
+        ? b.autoPickCount - a.autoPickCount
+        : b.totalPicks - a.totalPicks
+    );
+    return (
+      <div className="space-y-4" data-testid="pick-timer-view">
+        <ViewToggle />
+
+        {/* Tracking Ready banner */}
+        <Card className="border border-[#d4af37]/30 bg-[#d4af37]/5">
+          <CardContent className="py-4 px-5">
+            <div className="flex items-start gap-3">
+              <Timer className="w-5 h-5 mt-0.5 text-[#d4af37] shrink-0" />
+              <div>
+                <p className="text-sm font-semibold text-foreground mb-0.5">Tracking Ready</p>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Sleeper does not provide historical pick timestamps for this draft.
+                  Timing is tracked <span className="font-semibold text-foreground">only while this tool is open during a live draft</span> — keep Auto-Refresh on and pick durations will populate in real time.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Pick count table — no timing columns, no ranking */}
+        <Card className="overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm" data-testid="pick-timer-table">
+              <thead>
+                <tr className="border-b border-border/40 bg-muted/30">
+                  <th className="text-left px-3 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Manager</th>
+                  <th className="text-right px-3 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Picks Made</th>
+                  <th className="text-right px-3 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Autos</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sortedNoTiming.map((s) => (
+                  <tr
+                    key={s.managerId}
+                    className="border-b border-border/20 hover:bg-muted/20 transition-colors"
+                    data-testid={`row-timer-${s.managerId}`}
+                  >
+                    <td className="px-3 py-2.5 font-semibold text-foreground max-w-[200px] truncate">{s.managerName}</td>
+                    <td className="px-3 py-2.5 text-right text-xs text-muted-foreground">{s.totalPicks}</td>
+                    <td className="px-3 py-2.5 text-right text-xs" data-testid={`cell-auto-picks-${s.managerId}`}>
+                      {s.autoPickCount > 0
+                        ? <span className="font-bold text-orange-500 dark:text-orange-400">{s.autoPickCount}</span>
+                        : <span className="text-muted-foreground/50">0</span>
+                      }
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
+  // ── TIMING DATA AVAILABLE ── full ranked table
+  const top3GoldEnabled = timedStats.length >= 3;
 
   return (
     <div className="space-y-5" data-testid="pick-timer-view">
@@ -501,12 +565,6 @@ function PickTimerView({ draftData, draftInfo, isLoading }: {
         </Card>
       </div>
 
-      {!hasTimestamps && (
-        <p className="text-xs text-muted-foreground text-center">
-          Timing data will populate once Sleeper provides timestamps — keep Auto-Refresh on during your live draft.
-        </p>
-      )}
-
       {/* Manager table — sorted: longestMs DESC, then avgMs DESC */}
       <Card className="overflow-hidden">
         <div className="overflow-x-auto">
@@ -524,7 +582,7 @@ function PickTimerView({ draftData, draftInfo, isLoading }: {
             </thead>
             <tbody>
               {sortedByManager.map((s, i) => {
-                const isTop3 = top3GoldEnabled && i < 3 && s.longestMs !== null;
+                const isTop3 = top3GoldEnabled && i < 3;
                 const hasAutos = s.autoPickCount > 0;
                 return (
                   <tr
@@ -644,6 +702,20 @@ export default function LiveDraft({ subTab = "draft-board" }: { subTab?: string 
 
       // Track pick timestamps locally for picks that arrive after the initial load
       const completedPickNos = new Set(data.picks.filter(p => p.playerId).map(p => p.pickNo));
+      const draftId = data.draft?.draftId;
+      const lsKey = draftId ? `livePickTimes_${draftId}` : null;
+
+      if (isFirstFetchRef.current && lsKey) {
+        // On first fetch for this draft, restore any previously saved local times from localStorage
+        try {
+          const stored = localStorage.getItem(lsKey);
+          if (stored) {
+            const parsed: Record<number, number> = JSON.parse(stored);
+            setLocalPickTimes(parsed);
+          }
+        } catch { /* ignore parse errors */ }
+      }
+
       if (!isFirstFetchRef.current) {
         const now = Date.now();
         const newTimes: Record<number, number> = {};
@@ -652,12 +724,10 @@ export default function LiveDraft({ subTab = "draft-board" }: { subTab?: string 
           if (!prevPickNosRef.current.has(pickNo)) {
             newTimes[pickNo] = now;
             hasNew = true;
-            // Debug: log new pick timing & auto-pick fields as they arrive live
             const pick = data.picks.find(p => p.pickNo === pickNo);
             if (pick) {
               console.log(`[LiveDraft] New pick detected — #${pickNo} ${pick.playerName}`, {
                 pickedAt: pick.pickedAt,
-                pickedAt_human: pick.pickedAt ? new Date(pick.pickedAt).toISOString() : null,
                 localTimestamp: new Date(now).toISOString(),
                 isAutoPick: pick.isAutoPick,
                 pos: pick.pos,
@@ -665,7 +735,16 @@ export default function LiveDraft({ subTab = "draft-board" }: { subTab?: string 
             }
           }
         });
-        if (hasNew) setLocalPickTimes(prev => ({ ...prev, ...newTimes }));
+        if (hasNew) {
+          setLocalPickTimes(prev => {
+            const merged = { ...prev, ...newTimes };
+            // Persist to localStorage so a page refresh doesn't wipe the session's tracked times
+            if (lsKey) {
+              try { localStorage.setItem(lsKey, JSON.stringify(merged)); } catch { /* quota */ }
+            }
+            return merged;
+          });
+        }
       }
       prevPickNosRef.current = completedPickNos;
       isFirstFetchRef.current = false;

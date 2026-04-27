@@ -1,0 +1,47 @@
+The Pick Timer table is currently counting picks correctly, but all timing fields show “—”. This means the pick aggregation is working, but the code is not finding usable timestamps on the pick objects.
+
+Please debug the actual Sleeper pick payload being returned.
+
+Add a temporary developer/debug output for the first 3 pick objects from:
+GET https://api.sleeper.app/v1/draft/{draft_id}/picks
+
+Log:
+- full pick object
+- Object.keys(pick)
+- pick.metadata
+- any timestamp-like fields
+
+Specifically check whether any of these fields exist:
+- picked_at
+- created_at
+- updated_at
+- timestamp
+- metadata.picked_at
+- metadata.timestamp
+- metadata.created_at
+
+Then update the timing logic to use the actual timestamp field that exists in the returned payload.
+
+If no timestamp exists on the Sleeper pick object, then the public Sleeper API cannot support historical per-pick timing from the draft picks endpoint alone. In that case:
+
+1. Keep the Pick Timer tab UI.
+2. Add a clear message:
+   “Sleeper does not provide historical pick timestamps for this draft. Timing can only be tracked while this tool is open during a live draft.”
+3. Add client-side live tracking:
+   - When the tool is open during a live draft, store Date.now() when each new pick appears.
+   - Compare the current new pick time to the prior observed pick time.
+   - Save observed pick durations in local state/localStorage by draft_id.
+   - Use those observed timestamps to populate Total Time, Avg / Pick, Longest, and Autos.
+4. Persist observed pick timing locally so refreshing the page does not erase timing during the draft.
+
+Important:
+Do not display “Timing data will populate once Sleeper provides timestamps” unless the API actually includes timestamp fields. If Sleeper does not provide timestamps, change the message to explain that timing begins only once the user opens the live draft tracker.
+
+And add this specific fix:
+
+Do not show rows with “—” timing values as if timing is working.
+
+If no valid timing data exists, show the table only in “tracking ready” mode or show:
+“Open this tab during the live draft to begin tracking pick times.”
+
+The current table should not rank managers by blank values.
