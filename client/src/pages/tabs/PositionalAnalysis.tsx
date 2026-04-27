@@ -583,7 +583,7 @@ function TradeOpportunities({ league, userTeam }: { league: League; userTeam: Te
   const { getPlayerValue, getRedraftValue, getPickValue } = useValueModel();
   const { profiles } = usePositionalProfiles(league, userTeam);
   const [aggressiveness, setAggressiveness] = useState<"conservative" | "balanced" | "aggressive">("balanced");
-  const [includeStuds, setIncludeStuds] = useState(false);
+  const [includeStuds, setIncludeStuds] = useState(true);
   const [expandedPartner, setExpandedPartner] = useState<string | null>(null);
   const tradeBlockTierMap = useMemo(() => getLeagueTeamTiers(league.teams), [league.teams]);
 
@@ -920,13 +920,25 @@ function TradeOpportunities({ league, userTeam }: { league: League; userTeam: Te
         </div>
         <div className="space-y-0">
           {tradeBlockCandidates.length === 0 && <p className="text-xs text-muted-foreground">No trade block candidates found</p>}
-          {tradeBlockCandidates.slice(0, 20).map((p, i) => (
-            <div key={`${p.sleeperId || p.id}-${i}`} className="flex items-center justify-between py-2.5 border-b border-border/20 last:border-0" data-testid={`trade-block-candidate-${p.sleeperId || p.id}`}>
+          {tradeBlockCandidates.slice(0, 20).map((p, i) => {
+            const sleeperId = p.sleeperId ?? p.id;
+            return (
+            <div key={`${sleeperId}-${i}`} className="flex items-center justify-between py-2.5 border-b border-border/20 last:border-0" data-testid={`trade-block-candidate-${sleeperId}`}>
               <div className="flex items-center gap-2 min-w-0">
-                <span className="text-xs text-muted-foreground w-5 text-right">{i + 1}.</span>
-                <Badge variant="outline" className={`text-xs w-8 justify-center flex-shrink-0 ${getPositionColor(p.pos)}`}>{p.pos}</Badge>
+                <span className="text-xs text-muted-foreground w-5 text-right flex-shrink-0">{i + 1}.</span>
+                <div className="w-8 h-8 rounded-full flex-shrink-0 overflow-hidden bg-muted ring-1 ring-border/30">
+                  <img
+                    src={`https://sleepercdn.com/content/nfl/players/thumb/${sleeperId}.jpg`}
+                    alt={p.name}
+                    className="w-full h-full object-cover object-top"
+                    onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                  />
+                </div>
                 <div className="min-w-0">
-                  <p className="text-sm font-semibold truncate">{p.name}</p>
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-sm font-semibold truncate">{p.name}</p>
+                    <Badge variant="outline" className={`text-[10px] px-1 py-0 h-4 flex-shrink-0 ${getPositionColor(p.pos)}`}>{p.pos}</Badge>
+                  </div>
                   <div className="flex items-center gap-1.5">
                     <span className="text-[10px] text-muted-foreground">{p.teamName}</span>
                     <span className="text-[10px] text-muted-foreground">· {p.ownerName}</span>
@@ -944,7 +956,8 @@ function TradeOpportunities({ league, userTeam }: { league: League; userTeam: Te
                 </Badge>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       </Card>
     </div>
