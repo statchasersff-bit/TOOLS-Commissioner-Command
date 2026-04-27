@@ -74,11 +74,19 @@ async function fetchLeagueStanding(leagueId: string, userId: string): Promise<Om
     return pfB - pfA;
   });
   const userRoster = rosters.find((r: any) => r.owner_id === userId);
-  // For active (non-pre-draft) leagues a real dynasty team must have players.
-  // A 0-player roster with the user as owner usually means a commissioner
-  // placeholder in an orphan league — not an actual team.
-  const hasRealTeam = userRoster !== undefined &&
-    (isPreDraft || (userRoster.players?.length ?? 0) > 0);
+  const userPlayers = userRoster?.players?.length ?? 0;
+  const userIsCommissioner = leagueRaw?.owner_user_id === userId;
+  const hasOrphanedSlots = rosters.some((r: any) => r.owner_id === null);
+  // A commissioner with 0 players in a pre-draft league that still has unfilled
+  // roster slots is a placeholder in an "ORPHANS AVAILABLE" type league — not a
+  // real participant. All other cases (active leagues, real keepers, full rosters)
+  // use the player-count check as the signal of a real team.
+  const isCommissionerPlaceholder =
+    isPreDraft && userIsCommissioner && hasOrphanedSlots && userPlayers === 0;
+  const hasRealTeam =
+    userRoster !== undefined &&
+    !isCommissionerPlaceholder &&
+    (isPreDraft || userPlayers > 0);
   const rank = hasRealTeam ? sorted.findIndex((r: any) => r.roster_id === userRoster!.roster_id) + 1 : -1;
   return {
     rank, totalTeams: rosters.length,
