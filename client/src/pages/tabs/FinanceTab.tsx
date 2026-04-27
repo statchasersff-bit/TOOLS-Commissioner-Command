@@ -24,6 +24,9 @@ import {
   Copy,
   Check,
   ChevronRight,
+  Flame,
+  Target,
+  Wrench,
 } from "lucide-react";
 
 interface PrizeSlot { place: number; amount: number; }
@@ -76,6 +79,60 @@ function plBg(pl: number) {
 
 const DEFAULT_FINANCE: LeagueFinanceData = { leagueId: "", buyIn: 0, prizes: [], notes: "" };
 function tokenKey(userId: string) { return `dc-finance-token-${userId}`; }
+
+type Tier = "elite" | "bubble" | "rebuild";
+
+function classifyTeam(s: LeagueStanding | undefined): Tier | "unknown" {
+  if (!s || s.loading || s.error || s.rank < 1 || s.totalTeams < 2) return "unknown";
+  const { rank, playoffSpots, totalTeams } = s;
+  const rankPct = rank / totalTeams;
+  if (rank <= playoffSpots) {
+    return rankPct <= 0.30 ? "elite" : "bubble";
+  }
+  return rank - playoffSpots <= 2 ? "bubble" : "rebuild";
+}
+
+function approxPlayoffPct(s: LeagueStanding): number {
+  if (s.rank <= 0 || s.totalTeams < 2) return 0;
+  const { rank, playoffSpots, totalTeams } = s;
+  if (rank <= playoffSpots) {
+    const posInPlayoffs = (rank - 1) / Math.max(playoffSpots - 1, 1);
+    return Math.round(95 - posInPlayoffs * 35);
+  }
+  const spotsOut = rank - playoffSpots;
+  const maxOut = Math.max(totalTeams - playoffSpots, 1);
+  return Math.max(3, Math.round(35 - (spotsOut / maxOut) * 32));
+}
+
+const TIER_CONFIG: Record<Tier, {
+  label: string; short: string; desc: string;
+  headerCls: string; bgCls: string; badgeCls: string;
+}> = {
+  elite: {
+    label: "Elite Contenders",
+    short: "Elite",
+    desc: "Strong playoff position — maximize focus here",
+    headerCls: "text-emerald-600 dark:text-emerald-400",
+    bgCls: "bg-emerald-50/70 dark:bg-emerald-950/20 border-emerald-200/50 dark:border-emerald-800/30",
+    badgeCls: "border-emerald-500/50 text-emerald-600 dark:text-emerald-400",
+  },
+  bubble: {
+    label: "At-Risk & Bubble",
+    short: "Bubble",
+    desc: "On the playoff edge — needs your attention",
+    headerCls: "text-amber-600 dark:text-amber-400",
+    bgCls: "bg-amber-50/70 dark:bg-amber-950/20 border-amber-200/50 dark:border-amber-800/30",
+    badgeCls: "border-amber-500/50 text-amber-600 dark:text-amber-400",
+  },
+  rebuild: {
+    label: "Rebuilds / Longshots",
+    short: "Rebuild",
+    desc: "Low playoff odds — buy-in likely sunk cost",
+    headerCls: "text-slate-500 dark:text-slate-400",
+    bgCls: "bg-muted/30 border-border/40",
+    badgeCls: "border-border/50 text-slate-500 dark:text-slate-400",
+  },
+};
 
 // ─── Sleeper Login Gate ────────────────────────────────────────────────────────
 
@@ -632,12 +689,85 @@ export function FinanceTab() {
         </Card>
       )}
 
-      {/* Per-League Cards */}
-      {dynastyLeagues.map(league => {
-        const f = getFinance(league.leagueId);
-        const s = standings[league.leagueId];
-        const calc = calcPL(league.leagueId);
-        const isExpanded = expanded === league.leagueId;
+      {/* Focus Zones Summary */}
+      {dynastyLeagues.length > 1 && (() => {
+        const ORDER: (Tier | "unknown")[] = ["elite", "bubble", "rebuild", "unknown"];
+        const groups: Record<Tier | "unknown", string[]> = { elite: [], bubble: [], rebuild: [], unknown: [] };
+        dynastyLeagues.forEach(l => groups[classifyTeam(standings[l.leagueId])].push(l.name));
+        const readyCount = dynastyLeagues.length - groups.unknown.length;
+        if (readyCount === 0) return null;
+
+        return (
+          <Card className="p-4 space-y-3" data-testid="card-focus-zones">
+            <div className="flex items-center gap-2">
+              <Target className="w-4 h-4 text-[#0b3a7a] dark:text-blue-400" />
+              <h3 className="text-xs font-bold uppercase tracking-wide">Focus Zones</h3>
+              <span className="text-[10px] text-muted-foreground">— which leagues to prioritize this season</span>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              {(["elite", "bubble", "rebuild"] as Tier[]).map(tier => {
+                const cfg = TIER_CONFIG[tier];
+                const names = groups[tier];
+                const Icon = tier === "elite" ? Flame : tier === "bubble" ? Target : Wrench;
+                return (
+                  <div key={tier} className={`rounded-xl border p-3 space-y-2 ${cfg.bgCls}`}>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1">
+                        <Icon className={`w-3 h-3 ${cfg.headerCls}`} />
+                        <span className={`text-[11px] font-bold uppercase tracking-wide ${cfg.headerCls}`}>{cfg.short}</span>
+                      </div>
+                      <span className={`text-xl font-bold leading-none ${cfg.headerCls}`}>{names.length}</span>
+                    </div>
+                    <p className={`text-[10px] leading-snug ${cfg.headerCls} opacity-75`}>{cfg.desc}</p>
+                    {names.length > 0 && (
+                      <div className="border-t border-current/10 pt-1.5 space-y-0.5">
+                        {names.map(n => (
+                          <p key={n} className={`text-[10px] truncate ${cfg.headerCls} opacity-65`}>· {n}</p>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            {groups.unknown.length > 0 && (
+              <p className="text-[10px] text-muted-foreground text-center">
+                {groups.unknown.length} league{groups.unknown.length > 1 ? "s" : ""} still loading standings…
+              </p>
+            )}
+          </Card>
+        );
+      })()}
+
+      {/* Per-League Cards (grouped by tier) */}
+      {dynastyLeagues.length > 0 && (() => {
+        const ORDER: (Tier | "unknown")[] = ["elite", "bubble", "rebuild", "unknown"];
+        const groups = new Map<Tier | "unknown", typeof dynastyLeagues>();
+        ORDER.forEach(t => groups.set(t, []));
+        dynastyLeagues.forEach(l => groups.get(classifyTeam(standings[l.leagueId]))!.push(l));
+        const activeTiers = ORDER.filter(t => t !== "unknown" && (groups.get(t)?.length ?? 0) > 0) as Tier[];
+        const showHeaders = dynastyLeagues.length > 1 && activeTiers.length > 1;
+
+        return ORDER.filter(t => (groups.get(t)?.length ?? 0) > 0).map(tier => {
+          const cfg = tier !== "unknown" ? TIER_CONFIG[tier] : null;
+          const Icon = tier === "elite" ? Flame : tier === "bubble" ? Target : Wrench;
+          return (
+            <div key={`group-${tier}`} className="space-y-3">
+              {showHeaders && tier !== "unknown" && cfg && (
+                <div className={`flex items-center gap-2 pt-1 ${cfg.headerCls}`} data-testid={`tier-header-${tier}`}>
+                  <Icon className="w-3.5 h-3.5" />
+                  <span className="text-[11px] font-bold uppercase tracking-wide">{cfg.label}</span>
+                  <div className="flex-1 h-px bg-current opacity-20" />
+                </div>
+              )}
+              {groups.get(tier)!.map(league => {
+                const f = getFinance(league.leagueId);
+                const s = standings[league.leagueId];
+                const calc = calcPL(league.leagueId);
+                const isExpanded = expanded === league.leagueId;
+                const leagueTier = tier !== "unknown" ? tier : undefined;
+                const tierCfg = leagueTier ? TIER_CONFIG[leagueTier] : null;
+                const playoffPct = s && !s.loading && !s.error && s.rank > 0 ? approxPlayoffPct(s) : null;
 
         return (
           <Card key={league.leagueId} className="overflow-hidden" data-testid={`finance-card-${league.leagueId}`}>
@@ -657,6 +787,11 @@ export function FinanceTab() {
                     {s && !s.loading && !s.error && s.rank > 0 && (
                       <Badge variant="outline" className={`text-[10px] px-1.5 py-0 h-4 ${s.inPlayoffs ? "border-emerald-500/40 text-emerald-600 dark:text-emerald-400" : "text-muted-foreground"}`}>
                         {s.inPlayoffs ? "🏆 " : ""}#{s.rank} of {s.totalTeams}
+                      </Badge>
+                    )}
+                    {tierCfg && playoffPct !== null && (
+                      <Badge variant="outline" className={`text-[10px] px-1.5 py-0 h-4 ${tierCfg.badgeCls}`}>
+                        ~{playoffPct}% playoffs
                       </Badge>
                     )}
                     {s?.loading && <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />}
@@ -698,9 +833,12 @@ export function FinanceTab() {
                       </div>
                     ))}
                     <div className={`rounded-lg p-3 text-center border ${s.inPlayoffs ? "bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200/50 dark:border-emerald-800/30" : "bg-muted/30 border-border/30"}`}>
-                      <p className="text-[10px] text-muted-foreground mb-0.5">Playoffs</p>
+                      <p className="text-[10px] text-muted-foreground mb-0.5">Playoff Odds</p>
                       <p className={`text-base font-bold ${s.inPlayoffs ? "text-emerald-600 dark:text-emerald-400" : "text-red-500 dark:text-red-400"}`}>
-                        {s.inPlayoffs ? "In ✓" : "Out"}
+                        ~{approxPlayoffPct(s)}%
+                      </p>
+                      <p className={`text-[10px] mt-0.5 ${s.inPlayoffs ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground"}`}>
+                        {s.inPlayoffs ? "In ✓" : `${s.rank - s.playoffSpots} back`}
                       </p>
                     </div>
                   </div>
@@ -802,8 +940,13 @@ export function FinanceTab() {
               </div>
             )}
           </Card>
-        );
-      })}
+                );
+              })}
+            </div>
+          );
+        });
+      })()}
+
     </div>
   );
 }
