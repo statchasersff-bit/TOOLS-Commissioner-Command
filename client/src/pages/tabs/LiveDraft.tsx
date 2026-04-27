@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect, useRef } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef, Fragment } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -223,11 +223,11 @@ function PickTimerView({ draftData, isLoading }: {
     </Card>
   );
 
-  if (!draftData) return emptyState("Pick timing will appear once draft picks are made.");
-  if (!hasTimestamps) return emptyState("Pick timing data is unavailable for this draft.");
+  if (!draftData) return emptyState("Load a draft above, then enable Auto-Refresh before picks begin. Timing is recorded as picks come in live.");
+  if (!hasTimestamps) return emptyState("Timing is tracked live as picks come in. Enable Auto-Refresh before your draft starts to capture pick times.");
   if (draftData.picks.filter(p => p.playerId && p.pickedAt).length < 2)
-    return emptyState("At least two completed picks are needed to calculate pick timing.");
-  if (stats.length === 0) return emptyState("Pick timing will appear once draft picks are made.");
+    return emptyState("At least two tracked picks are needed to calculate timing. Keep Auto-Refresh on as the draft progresses.");
+  if (stats.length === 0) return emptyState("Timing will appear as more picks are tracked live.");
 
   return (
     <div className="space-y-5" data-testid="pick-timer-view">
@@ -313,6 +313,9 @@ export default function LiveDraft({ subTab = "draft-board" }: { subTab?: string 
   const [isDetecting, setIsDetecting] = useState(false);
   const [hasScanned, setHasScanned] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
+  const [localPickTimes, setLocalPickTimes] = useState<Record<number, number>>({});
+  const prevPickNosRef = useRef<Set<number>>(new Set());
+  const isFirstFetchRef = useRef(true);
 
   const { dynastyPlayerList, redraftValuesBySleeperId } = useValueModel();
   const [rankMode, setRankMode] = useState<"dynasty" | "redraft">("dynasty");
@@ -345,6 +348,9 @@ export default function LiveDraft({ subTab = "draft-board" }: { subTab?: string 
     setActiveLeagueId(leagueId);
     setTeamCount(teams);
     setAutoRefresh(false);
+    setLocalPickTimes({});
+    prevPickNosRef.current = new Set();
+    isFirstFetchRef.current = true;
   };
 
   const fetchDraft = useCallback(async (id?: string) => {
@@ -358,6 +364,24 @@ export default function LiveDraft({ subTab = "draft-board" }: { subTab?: string 
         setApiError(data.error);
         return;
       }
+
+      // Track pick timestamps locally for picks that arrive after the initial load
+      const completedPickNos = new Set(data.picks.filter(p => p.playerId).map(p => p.pickNo));
+      if (!isFirstFetchRef.current) {
+        const now = Date.now();
+        const newTimes: Record<number, number> = {};
+        let hasNew = false;
+        completedPickNos.forEach(pickNo => {
+          if (!prevPickNosRef.current.has(pickNo)) {
+            newTimes[pickNo] = now;
+            hasNew = true;
+          }
+        });
+        if (hasNew) setLocalPickTimes(prev => ({ ...prev, ...newTimes }));
+      }
+      prevPickNosRef.current = completedPickNos;
+      isFirstFetchRef.current = false;
+
       setDraftData(data);
       if (data.draft?.teams) setTeamCount(data.draft.teams);
     } catch (err: any) {
@@ -470,8 +494,23 @@ export default function LiveDraft({ subTab = "draft-board" }: { subTab?: string 
       setDraftData(null);
       setApiError(null);
       setActiveLeagueId(leagueIdInput.trim());
+      setLocalPickTimes({});
+      prevPickNosRef.current = new Set();
+      isFirstFetchRef.current = true;
     }
   };
+
+  const enrichedDraftData = useMemo(() => {
+    if (!draftData) return null;
+    if (Object.keys(localPickTimes).length === 0) return draftData;
+    return {
+      ...draftData,
+      picks: draftData.picks.map(p => ({
+        ...p,
+        pickedAt: p.pickedAt ?? localPickTimes[p.pickNo] ?? null,
+      })),
+    };
+  }, [draftData, localPickTimes]);
 
   return (
     <div className="space-y-6">
@@ -614,7 +653,7 @@ export default function LiveDraft({ subTab = "draft-board" }: { subTab?: string 
       )}
 
       {subTab === "pick-timer" && (
-        <PickTimerView draftData={draftData} isLoading={isLoading} />
+        <PickTimerView draftData={enrichedDraftData} isLoading={isLoading} />
       )}
 
       {subTab !== "pick-timer" && activeLeagueId && !isLoading && (
@@ -739,8 +778,8 @@ export default function LiveDraft({ subTab = "draft-board" }: { subTab?: string 
                       ))}
 
                       {boardGrid.map((row, roundIdx) => (
-                        <>
-                          <div key={`round-${roundIdx}`} className="bg-muted/30 dark:bg-muted/10 p-1.5 flex items-center justify-center border-t border-border/20">
+                        <Fragment key={`round-${roundIdx}`}>
+                          <div className="bg-muted/30 dark:bg-muted/10 p-1.5 flex items-center justify-center border-t border-border/20">
                             <span className="text-xs font-bold text-[#0b3a7a] dark:text-[#d4af37]">{roundIdx + 1}</span>
                           </div>
                           {row.map((cell, slotIdx) => {
@@ -782,7 +821,7 @@ export default function LiveDraft({ subTab = "draft-board" }: { subTab?: string 
                               </div>
                             );
                           })}
-                        </>
+                        </Fragment>
                       ))}
                     </div>
                   </div>
