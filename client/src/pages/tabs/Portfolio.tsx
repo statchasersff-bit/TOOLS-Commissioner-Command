@@ -594,9 +594,12 @@ export function PortfolioSummary() {
               });
               return (
                 <div>
-                  <div className="grid grid-cols-[1fr_auto_auto_auto] gap-x-3 px-1 pb-1.5 mb-1 border-b border-border/30">
+                  <div className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-x-3 px-1 pb-1.5 mb-1 border-b border-border/30">
                     <button onClick={() => handleExposureSort("name")} className="flex items-center gap-1 text-[11px] font-semibold text-muted-foreground hover:text-foreground transition-colors text-left" data-testid="sort-player">
                       Player <SortIcon col="name" />
+                    </button>
+                    <button onClick={() => handleExposureSort("pos")} className="flex items-center gap-1 text-[11px] font-semibold text-muted-foreground hover:text-foreground transition-colors w-10 justify-center" data-testid="sort-pos">
+                      Pos <SortIcon col="pos" />
                     </button>
                     <button onClick={() => handleExposureSort("value")} className="flex items-center gap-1 text-[11px] font-semibold text-muted-foreground hover:text-foreground transition-colors w-14 justify-end" data-testid="sort-value">
                       Value <SortIcon col="value" />
@@ -613,7 +616,7 @@ export function PortfolioSummary() {
                       const isOverexposed = player.exposure >= 50;
                       const dynastyValue = valuesBySleeperId[player.playerId] ?? 0;
                       return (
-                        <div key={player.playerId} className="grid grid-cols-[1fr_auto_auto_auto] gap-x-3 items-center py-2 border-b border-border/20 last:border-0" data-testid={`exposure-${player.playerId}`}>
+                        <div key={player.playerId} className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-x-3 items-center py-2 border-b border-border/20 last:border-0" data-testid={`exposure-${player.playerId}`}>
                           <div className="flex items-center gap-2.5 min-w-0">
                             <div className="w-8 h-8 rounded-full flex-shrink-0 overflow-hidden bg-muted ring-1 ring-border/40">
                               <img
@@ -629,12 +632,12 @@ export function PortfolioSummary() {
                               />
                             </div>
                             <div className="min-w-0">
-                              <div className="flex items-center gap-1.5 flex-wrap">
-                                <span className="text-sm font-semibold truncate">{player.name}</span>
-                                <Badge variant="outline" className={`text-[10px] px-1 py-0 h-4 flex-shrink-0 ${getPositionColor(player.pos)}`}>{player.pos}</Badge>
-                              </div>
+                              <span className="text-sm font-semibold truncate block">{player.name}</span>
                               <span className="text-[11px] text-muted-foreground">{player.team}</span>
                             </div>
+                          </div>
+                          <div className="w-10 flex justify-center">
+                            <Badge variant="outline" className={`text-[10px] px-1 py-0 h-4 ${getPositionColor(player.pos)}`} data-testid={`pos-${player.playerId}`}>{player.pos}</Badge>
                           </div>
                           <span className={`text-xs font-bold w-14 text-right ${dynastyValue > 0 ? "text-[#0b3a7a] dark:text-blue-400" : "text-muted-foreground"}`} data-testid={`value-${player.playerId}`}>
                             {dynastyValue > 0 ? dynastyValue.toLocaleString() : "—"}
