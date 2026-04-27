@@ -53,7 +53,10 @@ const PAYMENT_STATUS_CONFIG: Record<PaymentStatus, { label: string; cls: string;
 };
 interface LeagueStanding {
   leagueId: string; rank: number; totalTeams: number; wins: number; losses: number; ties: number;
-  ptsFor: number; playoffSpots: number; inPlayoffs: boolean; valueRank: number; loading: boolean; error: boolean;
+  ptsFor: number; playoffSpots: number; inPlayoffs: boolean;
+  valueRank: number;         // integer rank by roster redraft value (1=best)
+  valueCenterRank: number;   // continuous rank (e.g. 1.7) — preserves value score gaps
+  loading: boolean; error: boolean;
 }
 
 const SLEEPER_API = "https://api.sleeper.app/v1";
@@ -82,8 +85,10 @@ async function fetchLeagueStanding(
   const rank = hasRealTeam ? sorted.findIndex((r: any) => r.roster_id === userRoster!.roster_id) + 1 : -1;
 
   // Value-based rank: use starters if populated, fall back to full roster.
-  // This provides meaningful talent ranking even in off-season / pre-season.
+  // Computes both an integer rank and a continuous rank that preserves score gaps
+  // so each league gets a distinct probability (e.g. 1.7 vs 2.3 within "2nd place").
   let valueRank = 0;
+  let valueCenterRank = 0;
   const hasValues = Object.keys(redraftValues).length > 0;
   if (hasRealTeam && hasValues) {
     const rosterValued = rosters.map((r: any) => {
@@ -94,6 +99,15 @@ async function fetchLeagueStanding(
     });
     rosterValued.sort((a, b) => b.val - a.val);
     valueRank = rosterValued.findIndex((r) => r.rosterId === userRoster!.roster_id) + 1 || 0;
+
+    // Continuous rank: map actual value score linearly into [1, totalTeams].
+    // Best team → 1.0, worst team → n.0, everything else proportional.
+    const userVal = rosterValued.find((r) => r.rosterId === userRoster!.roster_id)?.val ?? 0;
+    const maxVal = rosterValued[0]?.val ?? 0;
+    const minVal = rosterValued[rosterValued.length - 1]?.val ?? 0;
+    valueCenterRank = maxVal > minVal
+      ? 1 + ((maxVal - userVal) / (maxVal - minVal)) * (rosters.length - 1)
+      : (rosters.length + 1) / 2;
   }
 
   return {
@@ -101,7 +115,7 @@ async function fetchLeagueStanding(
     wins: userRoster?.settings?.wins ?? 0, losses: userRoster?.settings?.losses ?? 0, ties: userRoster?.settings?.ties ?? 0,
     ptsFor: (userRoster?.settings?.fpts ?? 0) + (userRoster?.settings?.fpts_decimal ?? 0) / 100,
     playoffSpots: playoffTeams, inPlayoffs: rank > 0 && rank <= playoffTeams,
-    valueRank,
+    valueRank, valueCenterRank,
   };
 }
 
@@ -145,7 +159,7 @@ function classifyTeam(s: LeagueStanding | undefined): Tier | "unknown" {
 // Early season (week 0): 85% talent-based. Late season (week 14+): 85% standing-based.
 function approxPlayoffPct(s: LeagueStanding): number {
   if (s.rank <= 0 || s.totalTeams < 2) return 0;
-  const { rank, playoffSpots, totalTeams, valueRank } = s;
+  const { rank, playoffSpots, totalTeams, valueRank, valueCenterRank } = s;
   const gamesPlayed = s.wins + s.losses + s.ties;
   const regularSeasonGames = 14;
   const seasonProgress = Math.min(gamesPlayed / regularSeasonGames, 1);
@@ -161,9 +175,10 @@ function approxPlayoffPct(s: LeagueStanding): number {
     standingScore = 0.45 * (1 - spotsBack / maxSpotsBack);
   }
 
-  // Talent score (0.05–0.95 based on value rank vs playoff cutline)
+  // Talent score: uses continuous rank (1.7, 2.3…) so score gaps between teams
+  // produce distinct probabilities even when integer rank is the same.
   let talentScore: number;
-  const vRank = valueRank > 0 ? valueRank : 0;
+  const vRank = valueCenterRank > 0 ? valueCenterRank : (valueRank > 0 ? valueRank : 0);
   if (vRank === 0 || totalTeams <= 1) {
     talentScore = playoffSpots / totalTeams;
   } else if (vRank <= playoffSpots) {
@@ -186,11 +201,14 @@ function approxPlayoffPct(s: LeagueStanding): number {
 // with σ shrinking as the season progresses (more certain late in season).
 // Pre-season: centers on valueRank when available (talent-based).
 function placementProbs(s: LeagueStanding, maxPlace: number): Map<number, number> {
-  const { rank, totalTeams, wins, losses, ties, valueRank } = s;
+  const { rank, totalTeams, wins, losses, ties, valueRank, valueCenterRank } = s;
   const gamesPlayed = wins + losses + ties;
   const seasonProgress = Math.min(1, gamesPlayed / 14);
-  // Pre-season with valid value rank: use talent-based center point
-  const centerRank = gamesPlayed === 0 && valueRank > 0 ? valueRank : rank;
+  // Pre-season: use continuous value rank so each league gets a distinct probability.
+  // valueCenterRank is fractional (e.g. 1.7) based on actual score gaps, not integer rank.
+  const centerRank = gamesPlayed === 0 && valueCenterRank > 0
+    ? valueCenterRank
+    : gamesPlayed === 0 && valueRank > 0 ? valueRank : rank;
   // σ: ~totalTeams/3 at week 0, shrinks to 0.5 at week 14
   const sigma = Math.max(0.5, (1 - seasonProgress) * totalTeams / 3);
   const raw: number[] = [];
@@ -650,7 +668,7 @@ export function FinanceTab() {
     dynastyLeagues.forEach(league => {
       setStandings(prev => ({
         ...prev,
-        [league.leagueId]: { leagueId: league.leagueId, rank: -1, totalTeams: 0, wins: 0, losses: 0, ties: 0, ptsFor: 0, playoffSpots: 0, inPlayoffs: false, valueRank: 0, loading: true, error: false },
+        [league.leagueId]: { leagueId: league.leagueId, rank: -1, totalTeams: 0, wins: 0, losses: 0, ties: 0, ptsFor: 0, playoffSpots: 0, inPlayoffs: false, valueRank: 0, valueCenterRank: 0, loading: true, error: false },
       }));
       fetchLeagueStanding(league.leagueId, user.userId, redraftValuesBySleeperId)
         .then(s => setStandings(prev => ({ ...prev, [league.leagueId]: { leagueId: league.leagueId, ...s, loading: false, error: false } })))
