@@ -64,6 +64,8 @@ async function fetchLeagueStanding(leagueId: string, userId: string): Promise<Om
   ]);
   const rosters: any[] = rostersRaw || [];
   const playoffTeams = leagueRaw?.settings?.playoff_teams ?? Math.floor((leagueRaw?.total_rosters ?? 12) / 3);
+  const leagueStatus: string = leagueRaw?.status ?? "in_season";
+  const isPreDraft = leagueStatus === "pre_draft" || leagueStatus === "drafting";
   const sorted = [...rosters].sort((a, b) => {
     const wDiff = (b.settings?.wins ?? 0) - (a.settings?.wins ?? 0);
     if (wDiff !== 0) return wDiff;
@@ -72,7 +74,12 @@ async function fetchLeagueStanding(leagueId: string, userId: string): Promise<Om
     return pfB - pfA;
   });
   const userRoster = rosters.find((r: any) => r.owner_id === userId);
-  const rank = userRoster ? sorted.findIndex((r: any) => r.roster_id === userRoster.roster_id) + 1 : -1;
+  // For active (non-pre-draft) leagues a real dynasty team must have players.
+  // A 0-player roster with the user as owner usually means a commissioner
+  // placeholder in an orphan league — not an actual team.
+  const hasRealTeam = userRoster !== undefined &&
+    (isPreDraft || (userRoster.players?.length ?? 0) > 0);
+  const rank = hasRealTeam ? sorted.findIndex((r: any) => r.roster_id === userRoster!.roster_id) + 1 : -1;
   return {
     rank, totalTeams: rosters.length,
     wins: userRoster?.settings?.wins ?? 0, losses: userRoster?.settings?.losses ?? 0, ties: userRoster?.settings?.ties ?? 0,
