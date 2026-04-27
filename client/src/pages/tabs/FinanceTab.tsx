@@ -64,8 +64,6 @@ async function fetchLeagueStanding(leagueId: string, userId: string): Promise<Om
   ]);
   const rosters: any[] = rostersRaw || [];
   const playoffTeams = leagueRaw?.settings?.playoff_teams ?? Math.floor((leagueRaw?.total_rosters ?? 12) / 3);
-  const leagueStatus: string = leagueRaw?.status ?? "in_season";
-  const isPreDraft = leagueStatus === "pre_draft" || leagueStatus === "drafting";
   const sorted = [...rosters].sort((a, b) => {
     const wDiff = (b.settings?.wins ?? 0) - (a.settings?.wins ?? 0);
     if (wDiff !== 0) return wDiff;
@@ -75,18 +73,9 @@ async function fetchLeagueStanding(leagueId: string, userId: string): Promise<Om
   });
   const userRoster = rosters.find((r: any) => r.owner_id === userId);
   const userPlayers = userRoster?.players?.length ?? 0;
-  const userIsCommissioner = leagueRaw?.owner_user_id === userId;
-  const hasOrphanedSlots = rosters.some((r: any) => r.owner_id === null);
-  // A commissioner with 0 players in a pre-draft league that still has unfilled
-  // roster slots is a placeholder in an "ORPHANS AVAILABLE" type league — not a
-  // real participant. All other cases (active leagues, real keepers, full rosters)
-  // use the player-count check as the signal of a real team.
-  const isCommissionerPlaceholder =
-    isPreDraft && userIsCommissioner && hasOrphanedSlots && userPlayers === 0;
-  const hasRealTeam =
-    userRoster !== undefined &&
-    !isCommissionerPlaceholder &&
-    (isPreDraft || userPlayers > 0);
+  // Only treat this as a real team if the user has players on their roster.
+  // No players = no drafted team (pre-draft, orphan placeholder, etc.) → hide.
+  const hasRealTeam = userRoster !== undefined && userPlayers > 0;
   const rank = hasRealTeam ? sorted.findIndex((r: any) => r.roster_id === userRoster!.roster_id) + 1 : -1;
   return {
     rank, totalTeams: rosters.length,
