@@ -100,8 +100,8 @@ export function PositionalAnalysis({ league, userTeam, onNavigateToCalculator }:
 
   const subTabs = [
     { id: "overview" as const, label: "Overview", icon: BarChart3 },
-    { id: "surplus" as const, label: "Surplus", icon: Scale },
-    { id: "opportunities" as const, label: "Trades", icon: ArrowRightLeft },
+    { id: "surplus" as const, label: "Analysis", icon: Scale },
+    { id: "opportunities" as const, label: "Ideas", icon: ArrowRightLeft },
   ];
 
   return (
