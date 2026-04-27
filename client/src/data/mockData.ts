@@ -541,7 +541,7 @@ export const NAV_CONFIG: MainTabConfig[] = [
     label: "League Analyzer",
     subTabs: [
       { id: "power-rankings", label: "Rankings" },
-      { id: "roster-comparison", label: "Rosters" },
+      { id: "roster-comparison", label: "Compare" },
       { id: "league-intelligence", label: "Intel" },
       { id: "league-economy", label: "Economy" },
       { id: "transactions", label: "Transactions" },
