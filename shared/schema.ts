@@ -110,6 +110,12 @@ export const playerValueSnapshots = pgTable("player_value_snapshots", {
   capturedAt: timestamp("captured_at").defaultNow(),
 });
 
+export const financePasswords = pgTable("finance_passwords", {
+  sleeperUserId: varchar("sleeper_user_id").primaryKey(),
+  passwordHash: text("password_hash").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 export const leagueFinances = pgTable("league_finances", {
   id: serial("id").primaryKey(),
   sleeperUserId: varchar("sleeper_user_id").notNull(),

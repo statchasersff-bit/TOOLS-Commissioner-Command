@@ -15,12 +15,14 @@ import {
   ChevronDown,
   ChevronUp,
   Loader2,
-  Target,
-  Medal,
-  Percent,
   AlertCircle,
-  Save,
   CheckCircle2,
+  Lock,
+  KeyRound,
+  Eye,
+  EyeOff,
+  ShieldCheck,
+  LogOut,
 } from "lucide-react";
 
 interface PrizeSlot {
@@ -56,10 +58,8 @@ async function fetchLeagueStanding(leagueId: string, userId: string): Promise<Om
     fetch(`${SLEEPER_API}/league/${leagueId}/rosters`).then(r => r.json()),
     fetch(`${SLEEPER_API}/league/${leagueId}`).then(r => r.json()),
   ]);
-
   const rosters: any[] = rostersRaw || [];
   const playoffTeams: number = leagueRaw?.settings?.playoff_teams ?? Math.floor((leagueRaw?.total_rosters ?? 12) / 3);
-
   const sorted = [...rosters].sort((a, b) => {
     const wA = a.settings?.wins ?? 0;
     const wB = b.settings?.wins ?? 0;
@@ -68,10 +68,8 @@ async function fetchLeagueStanding(leagueId: string, userId: string): Promise<Om
     const pfB = (b.settings?.fpts ?? 0) + (b.settings?.fpts_decimal ?? 0) / 100;
     return pfB - pfA;
   });
-
   const userRoster = rosters.find((r: any) => r.owner_id === userId);
   const rank = userRoster ? sorted.findIndex((r: any) => r.roster_id === userRoster.roster_id) + 1 : -1;
-
   return {
     rank,
     totalTeams: rosters.length,
@@ -88,13 +86,11 @@ function fmtDollar(n: number) {
   if (n === 0) return "$0";
   return `${n < 0 ? "-" : ""}$${Math.abs(n).toLocaleString()}`;
 }
-
 function plColor(pl: number) {
   if (pl > 0) return "text-emerald-600 dark:text-emerald-400";
   if (pl < 0) return "text-red-500 dark:text-red-400";
   return "text-muted-foreground";
 }
-
 function plBg(pl: number) {
   if (pl > 0) return "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200/50 dark:border-emerald-800/30";
   if (pl < 0) return "bg-red-50 dark:bg-red-950/30 border-red-200/50 dark:border-red-800/30";
@@ -103,39 +99,216 @@ function plBg(pl: number) {
 
 const DEFAULT_FINANCE: LeagueFinanceData = { leagueId: "", buyIn: 0, prizes: [], notes: "" };
 
+function tokenKey(userId: string) {
+  return `dc-finance-token-${userId}`;
+}
+
+// ─── Auth Gate ────────────────────────────────────────────────────────────────
+
+type AuthMode = "checking" | "no-password" | "login" | "authed";
+
+function PasswordGate({ userId, onAuth }: { userId: string; onAuth: (token: string) => void }) {
+  const [mode, setMode] = useState<AuthMode>("checking");
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [showPw, setShowPw] = useState(false);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    fetch(`${API_BASE}/api/auth/has-password/${userId}`)
+      .then(r => r.json())
+      .then(data => setMode(data.hasPassword ? "login" : "no-password"))
+      .catch(() => setMode("login"));
+  }, [userId]);
+
+  async function handleSetPassword(e: React.FormEvent) {
+    e.preventDefault();
+    setError("");
+    if (password.length < 6) { setError("Password must be at least 6 characters."); return; }
+    if (password !== confirm) { setError("Passwords don't match."); return; }
+    setLoading(true);
+    try {
+      const r = await fetch(`${API_BASE}/api/auth/set-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sleeperId: userId, password }),
+      });
+      const data = await r.json();
+      if (!r.ok) { setError(data.error || "Failed to set password."); return; }
+      localStorage.setItem(tokenKey(userId), data.token);
+      onAuth(data.token);
+    } catch { setError("Network error. Please try again."); }
+    finally { setLoading(false); }
+  }
+
+  async function handleLogin(e: React.FormEvent) {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+    try {
+      const r = await fetch(`${API_BASE}/api/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sleeperId: userId, password }),
+      });
+      const data = await r.json();
+      if (!r.ok) { setError(data.error || "Incorrect password."); return; }
+      localStorage.setItem(tokenKey(userId), data.token);
+      onAuth(data.token);
+    } catch { setError("Network error. Please try again."); }
+    finally { setLoading(false); }
+  }
+
+  if (mode === "checking") {
+    return (
+      <div className="flex items-center justify-center min-h-[40vh]">
+        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center justify-center min-h-[60vh] px-4">
+      <Card className="p-8 w-full max-w-sm space-y-6">
+        <div className="text-center space-y-2">
+          <div className="w-14 h-14 rounded-2xl bg-[#0b3a7a]/10 dark:bg-blue-400/10 flex items-center justify-center mx-auto">
+            {mode === "no-password" ? (
+              <ShieldCheck className="w-7 h-7 text-[#0b3a7a] dark:text-blue-400" />
+            ) : (
+              <Lock className="w-7 h-7 text-[#0b3a7a] dark:text-blue-400" />
+            )}
+          </div>
+          <h3 className="text-lg font-bold">
+            {mode === "no-password" ? "Secure Your Finances" : "Finance Login"}
+          </h3>
+          <p className="text-sm text-muted-foreground">
+            {mode === "no-password"
+              ? "Create a password to protect your investment data. Only you can access it."
+              : "Enter your password to view and edit your financial data."}
+          </p>
+        </div>
+
+        <form onSubmit={mode === "no-password" ? handleSetPassword : handleLogin} className="space-y-3">
+          <div className="relative">
+            <Input
+              type={showPw ? "text" : "password"}
+              placeholder={mode === "no-password" ? "Create a password (min 6 chars)" : "Enter password"}
+              value={password}
+              onChange={e => { setPassword(e.target.value); setError(""); }}
+              className="pr-10"
+              autoFocus
+              data-testid="input-finance-password"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPw(v => !v)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              tabIndex={-1}
+            >
+              {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            </button>
+          </div>
+
+          {mode === "no-password" && (
+            <Input
+              type={showPw ? "text" : "password"}
+              placeholder="Confirm password"
+              value={confirm}
+              onChange={e => { setConfirm(e.target.value); setError(""); }}
+              data-testid="input-finance-confirm"
+            />
+          )}
+
+          {error && (
+            <div className="flex items-center gap-2 text-xs text-red-500" data-testid="text-auth-error">
+              <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+              <span>{error}</span>
+            </div>
+          )}
+
+          <Button type="submit" className="w-full" disabled={loading} data-testid="button-finance-auth-submit">
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : mode === "no-password" ? "Set Password & Continue" : "Unlock Finances"}
+          </Button>
+        </form>
+
+        {mode === "no-password" && (
+          <p className="text-[11px] text-muted-foreground text-center">
+            Your password is stored securely (bcrypt hashed). It is not linked to Sleeper.
+          </p>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+// ─── Main Finance Tab ─────────────────────────────────────────────────────────
+
 export function FinanceTab() {
   const { isConnected, user, leagues } = useSleeper();
+  const [token, setToken] = useState<string | null>(null);
+  const [authChecked, setAuthChecked] = useState(false);
   const [finances, setFinances] = useState<Record<string, LeagueFinanceData>>({});
   const [standings, setStandings] = useState<Record<string, LeagueStanding>>({});
   const [expanded, setExpanded] = useState<string | null>(null);
   const [saving, setSaving] = useState<Record<string, boolean>>({});
   const [saved, setSaved] = useState<Record<string, boolean>>({});
   const [loadingFinances, setLoadingFinances] = useState(false);
+  const [showChangePw, setShowChangePw] = useState(false);
+  const [changePwFields, setChangePwFields] = useState({ current: "", next: "", confirm: "" });
+  const [changePwError, setChangePwError] = useState("");
+  const [changePwLoading, setChangePwLoading] = useState(false);
+  const [changePwOk, setChangePwOk] = useState(false);
   const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   const dynastyLeagues = leagues.filter(l => l.status !== "archived");
 
-  // Load saved finance data from backend
+  // Check localStorage token on mount
   useEffect(() => {
-    if (!isConnected || !user?.userId) return;
+    if (!user?.userId) return;
+    const stored = localStorage.getItem(tokenKey(user.userId));
+    setToken(stored);
+    setAuthChecked(true);
+  }, [user?.userId]);
+
+  function handleAuth(t: string) {
+    setToken(t);
+    setAuthChecked(true);
+  }
+
+  function handleLock() {
+    if (!user?.userId) return;
+    localStorage.removeItem(tokenKey(user.userId));
+    setToken(null);
+    setFinances({});
+  }
+
+  // Auth headers helper
+  const authHeaders = useCallback((): Record<string, string> => ({
+    "Content-Type": "application/json",
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  }), [token]);
+
+  // Load saved finance data from backend (only when authed)
+  useEffect(() => {
+    if (!isConnected || !user?.userId || !token) return;
     setLoadingFinances(true);
-    fetch(`${API_BASE}/api/finances/${user.userId}`)
-      .then(r => r.json())
+    fetch(`${API_BASE}/api/finances/${user.userId}`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => {
+        if (r.status === 401) { handleLock(); return []; }
+        return r.json();
+      })
       .then((rows: any[]) => {
+        if (!rows) return;
         const map: Record<string, LeagueFinanceData> = {};
         for (const row of rows) {
-          map[row.leagueId] = {
-            leagueId: row.leagueId,
-            buyIn: row.buyIn ?? 0,
-            prizes: (row.prizes as PrizeSlot[]) ?? [],
-            notes: row.notes ?? "",
-          };
+          map[row.leagueId] = { leagueId: row.leagueId, buyIn: row.buyIn ?? 0, prizes: (row.prizes as PrizeSlot[]) ?? [], notes: row.notes ?? "" };
         }
         setFinances(map);
       })
       .catch(() => {})
       .finally(() => setLoadingFinances(false));
-  }, [isConnected, user?.userId]);
+  }, [isConnected, user?.userId, token]);
 
   // Load standings for all leagues
   useEffect(() => {
@@ -155,15 +328,15 @@ export function FinanceTab() {
     finances[leagueId] ?? { ...DEFAULT_FINANCE, leagueId }, [finances]);
 
   const saveFinance = useCallback((leagueId: string, data: LeagueFinanceData) => {
-    if (!user?.userId) return;
+    if (!user?.userId || !token) return;
     clearTimeout(saveTimers.current[leagueId]);
     setSaved(prev => ({ ...prev, [leagueId]: false }));
     saveTimers.current[leagueId] = setTimeout(async () => {
       setSaving(prev => ({ ...prev, [leagueId]: true }));
       try {
-        await fetch(`${API_BASE}/api/finances`, {
+        const r = await fetch(`${API_BASE}/api/finances`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: authHeaders(),
           body: JSON.stringify({
             sleeperUserId: user.userId,
             leagueId,
@@ -173,12 +346,13 @@ export function FinanceTab() {
             notes: data.notes,
           }),
         });
+        if (r.status === 401) { handleLock(); return; }
         setSaved(prev => ({ ...prev, [leagueId]: true }));
         setTimeout(() => setSaved(prev => ({ ...prev, [leagueId]: false })), 2000);
       } catch {}
       setSaving(prev => ({ ...prev, [leagueId]: false }));
     }, 800);
-  }, [user?.userId, dynastyLeagues]);
+  }, [user?.userId, token, dynastyLeagues, authHeaders]);
 
   const updateFinance = useCallback((leagueId: string, patch: Partial<LeagueFinanceData>) => {
     setFinances(prev => {
@@ -205,7 +379,6 @@ export function FinanceTab() {
     updateFinance(leagueId, { prizes: f.prizes.map(p => p.place === place ? { ...p, amount } : p) });
   }, [getFinance, updateFinance]);
 
-  // Calculate per-league P&L
   function calcPL(leagueId: string) {
     const f = getFinance(leagueId);
     const s = standings[leagueId];
@@ -215,19 +388,38 @@ export function FinanceTab() {
     return { projectedPrize, pl: projectedPrize - f.buyIn };
   }
 
-  // Summary totals
+  async function handleChangePassword(e: React.FormEvent) {
+    e.preventDefault();
+    setChangePwError("");
+    if (changePwFields.next.length < 6) { setChangePwError("New password must be at least 6 characters."); return; }
+    if (changePwFields.next !== changePwFields.confirm) { setChangePwError("Passwords don't match."); return; }
+    setChangePwLoading(true);
+    try {
+      const r = await fetch(`${API_BASE}/api/auth/change-password`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({ sleeperId: user?.userId, currentPassword: changePwFields.current, newPassword: changePwFields.next }),
+      });
+      const data = await r.json();
+      if (!r.ok) { setChangePwError(data.error || "Failed to change password."); return; }
+      localStorage.setItem(tokenKey(user!.userId), data.token);
+      setToken(data.token);
+      setChangePwOk(true);
+      setShowChangePw(false);
+      setChangePwFields({ current: "", next: "", confirm: "" });
+    } catch { setChangePwError("Network error. Please try again."); }
+    finally { setChangePwLoading(false); }
+  }
+
   const totals = dynastyLeagues.reduce((acc, league) => {
     const f = getFinance(league.leagueId);
     const calc = calcPL(league.leagueId);
     acc.invested += f.buyIn;
-    if (calc) {
-      acc.expectedReturn += calc.projectedPrize;
-      acc.netPL += calc.pl;
-      acc.leaguesWithData++;
-    }
+    if (calc) { acc.expectedReturn += calc.projectedPrize; acc.netPL += calc.pl; acc.leaguesWithData++; }
     return acc;
   }, { invested: 0, expectedReturn: 0, netPL: 0, leaguesWithData: 0 });
 
+  // Not connected guard
   if (!isConnected || !user) {
     return (
       <div className="flex items-center justify-center min-h-[50vh] px-4">
@@ -242,6 +434,20 @@ export function FinanceTab() {
     );
   }
 
+  // Checking stored token
+  if (!authChecked) {
+    return (
+      <div className="flex items-center justify-center min-h-[40vh]">
+        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  // Show password gate if no valid token
+  if (!token) {
+    return <PasswordGate userId={user.userId} onAuth={handleAuth} />;
+  }
+
   if (loadingFinances) {
     return (
       <div className="flex items-center justify-center min-h-[40vh]">
@@ -254,6 +460,83 @@ export function FinanceTab() {
 
   return (
     <div className="max-w-4xl mx-auto px-4 md:px-6 py-6 space-y-6">
+
+      {/* Header with lock button */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <ShieldCheck className="w-4 h-4 text-emerald-500" />
+          <span className="text-xs text-muted-foreground font-medium">Finance data is protected</span>
+        </div>
+        <div className="flex items-center gap-2">
+          {changePwOk && (
+            <span className="text-xs text-emerald-500 flex items-center gap-1">
+              <CheckCircle2 className="w-3.5 h-3.5" /> Password updated
+            </span>
+          )}
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 text-xs gap-1.5 text-muted-foreground"
+            onClick={() => { setShowChangePw(v => !v); setChangePwError(""); setChangePwOk(false); }}
+            data-testid="button-change-password"
+          >
+            <KeyRound className="w-3.5 h-3.5" /> Change Password
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 text-xs gap-1.5 text-muted-foreground"
+            onClick={handleLock}
+            data-testid="button-lock-finances"
+          >
+            <LogOut className="w-3.5 h-3.5" /> Lock
+          </Button>
+        </div>
+      </div>
+
+      {/* Change password form */}
+      {showChangePw && (
+        <Card className="p-4">
+          <form onSubmit={handleChangePassword} className="space-y-3">
+            <p className="text-sm font-semibold mb-1">Change Finance Password</p>
+            <Input
+              type="password"
+              placeholder="Current password"
+              value={changePwFields.current}
+              onChange={e => setChangePwFields(f => ({ ...f, current: e.target.value }))}
+              data-testid="input-current-password"
+            />
+            <Input
+              type="password"
+              placeholder="New password (min 6 chars)"
+              value={changePwFields.next}
+              onChange={e => setChangePwFields(f => ({ ...f, next: e.target.value }))}
+              data-testid="input-new-password"
+            />
+            <Input
+              type="password"
+              placeholder="Confirm new password"
+              value={changePwFields.confirm}
+              onChange={e => setChangePwFields(f => ({ ...f, confirm: e.target.value }))}
+              data-testid="input-confirm-new-password"
+            />
+            {changePwError && (
+              <div className="flex items-center gap-2 text-xs text-red-500">
+                <AlertCircle className="w-3.5 h-3.5" />
+                <span>{changePwError}</span>
+              </div>
+            )}
+            <div className="flex gap-2">
+              <Button type="submit" size="sm" disabled={changePwLoading} data-testid="button-submit-change-password">
+                {changePwLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Update Password"}
+              </Button>
+              <Button type="button" size="sm" variant="ghost" onClick={() => { setShowChangePw(false); setChangePwError(""); }}>
+                Cancel
+              </Button>
+            </div>
+          </form>
+        </Card>
+      )}
 
       {/* Summary Header */}
       <div className="grid grid-cols-3 gap-3">
@@ -292,7 +575,6 @@ export function FinanceTab() {
 
         return (
           <Card key={league.leagueId} className="overflow-hidden" data-testid={`finance-card-${league.leagueId}`}>
-            {/* Header row */}
             <button
               className="w-full flex items-center justify-between p-4 hover:bg-muted/30 transition-colors text-left"
               onClick={() => setExpanded(isExpanded ? null : league.leagueId)}
@@ -315,12 +597,9 @@ export function FinanceTab() {
                   </div>
                 </div>
               </div>
-
               <div className="flex items-center gap-3 flex-shrink-0 ml-3">
                 {saving[league.leagueId] && <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />}
                 {saved[league.leagueId] && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />}
-
-                {/* Mini P&L pill */}
                 <div className="hidden sm:flex items-center gap-3 text-right">
                   {f.buyIn > 0 && (
                     <div className="text-right">
@@ -334,16 +613,12 @@ export function FinanceTab() {
                     </div>
                   )}
                 </div>
-
                 {isExpanded ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
               </div>
             </button>
 
-            {/* Expanded content */}
             {isExpanded && (
               <div className="border-t border-border/40 p-4 space-y-5">
-
-                {/* Standing info */}
                 {s && !s.loading && !s.error && s.rank > 0 && (
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                     <div className="bg-muted/30 rounded-lg p-3 text-center">
@@ -359,7 +634,7 @@ export function FinanceTab() {
                       <p className="text-base font-bold">{s.ptsFor.toFixed(1)}</p>
                     </div>
                     <div className={`rounded-lg p-3 text-center border ${s.inPlayoffs ? "bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200/50 dark:border-emerald-800/30" : "bg-muted/30 border-border/30"}`}>
-                      <p className="text-[10px] text-muted-foreground mb-0.5">Playoff Odds</p>
+                      <p className="text-[10px] text-muted-foreground mb-0.5">Playoffs</p>
                       <p className={`text-base font-bold ${s.inPlayoffs ? "text-emerald-600 dark:text-emerald-400" : "text-red-500 dark:text-red-400"}`}>
                         {s.inPlayoffs ? "In ✓" : "Out"}
                       </p>
@@ -373,7 +648,6 @@ export function FinanceTab() {
                   </div>
                 )}
 
-                {/* Buy-in */}
                 <div>
                   <label className="text-xs font-semibold text-foreground mb-1.5 block">Buy-in Amount</label>
                   <div className="relative w-40">
@@ -390,7 +664,6 @@ export function FinanceTab() {
                   </div>
                 </div>
 
-                {/* Prize slots */}
                 <div>
                   <div className="flex items-center justify-between mb-2">
                     <label className="text-xs font-semibold text-foreground">Prize Structure</label>
@@ -404,11 +677,9 @@ export function FinanceTab() {
                       <Plus className="w-3 h-3" /> Add Place
                     </Button>
                   </div>
-
                   {f.prizes.length === 0 && (
                     <p className="text-xs text-muted-foreground italic">No prizes configured. Add prize positions above.</p>
                   )}
-
                   <div className="space-y-2">
                     {f.prizes.sort((a, b) => a.place - b.place).map(prize => {
                       const placeLabel = prize.place === 1 ? "🥇 1st" : prize.place === 2 ? "🥈 2nd" : prize.place === 3 ? "🥉 3rd" : `${prize.place}th`;
@@ -445,7 +716,6 @@ export function FinanceTab() {
                   </div>
                 </div>
 
-                {/* P&L Summary for this league */}
                 {(f.buyIn > 0 || f.prizes.length > 0) && (
                   <div className={`rounded-xl p-4 border ${calc ? plBg(calc.pl) : "bg-muted/20 border-border/30"}`}>
                     <div className="flex items-center justify-between">
@@ -480,7 +750,6 @@ export function FinanceTab() {
                   </div>
                 )}
 
-                {/* Notes */}
                 <div>
                   <label className="text-xs font-semibold text-foreground mb-1.5 block">Notes</label>
                   <Input
