@@ -3,6 +3,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useSleeper } from "@/contexts/SleeperContext";
 import { API_BASE } from "@/lib/apiBase";
 import {
@@ -80,6 +81,8 @@ function tokenKey(userId: string) { return `dc-finance-token-${userId}`; }
 
 type GateMode = "checking" | "login" | "register" | "reset";
 
+const SLEEPER_API_BASE = "https://api.sleeper.app/v1";
+
 function SleeperVerifyGate({ userId, username, onAuth }: { userId: string; username: string; onAuth: (token: string) => void }) {
   const [mode, setMode] = useState<GateMode>("checking");
   const [challengeCode, setChallengeCode] = useState<string | null>(null);
@@ -88,6 +91,8 @@ function SleeperVerifyGate({ userId, username, onAuth }: { userId: string; usern
   const [submitting, setSubmitting] = useState(false);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState("");
+  const [leagues, setLeagues] = useState<{ league_id: string; name: string }[]>([]);
+  const [selectedLeagueId, setSelectedLeagueId] = useState<string>("");
 
   async function loadChallenge() {
     try {
@@ -103,6 +108,17 @@ function SleeperVerifyGate({ userId, username, onAuth }: { userId: string; usern
     } catch { setError("Could not reach server."); }
   }
 
+  async function loadLeagues() {
+    try {
+      const season = new Date().getFullYear().toString();
+      const r = await fetch(`${SLEEPER_API_BASE}/user/${userId}/leagues/nfl/${season}`);
+      if (r.ok) {
+        const data = await r.json();
+        setLeagues((data as any[]).map(l => ({ league_id: l.league_id, name: l.name })));
+      }
+    } catch {}
+  }
+
   useEffect(() => {
     (async () => {
       try {
@@ -111,7 +127,7 @@ function SleeperVerifyGate({ userId, username, onAuth }: { userId: string; usern
         if (d.hasPassword) {
           setMode("login");
         } else {
-          await loadChallenge();
+          await Promise.all([loadChallenge(), loadLeagues()]);
           setMode("register");
         }
       } catch { setError("Could not reach server."); }
@@ -136,6 +152,7 @@ function SleeperVerifyGate({ userId, username, onAuth }: { userId: string; usern
   }
 
   async function handleRegister() {
+    if (!selectedLeagueId) { setError("Please select which league you changed your team name in."); return; }
     if (password.length < 6) { setError("Password must be at least 6 characters."); return; }
     if (password !== confirmPassword) { setError("Passwords don't match."); return; }
     setSubmitting(true); setError("");
@@ -143,7 +160,7 @@ function SleeperVerifyGate({ userId, username, onAuth }: { userId: string; usern
       const r = await fetch(`${API_BASE}/api/auth/finance-register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sleeperId: userId, password }),
+        body: JSON.stringify({ sleeperId: userId, password, leagueId: selectedLeagueId }),
       });
       const data = await r.json();
       if (!r.ok) { setError(data.error || "Verification failed. Make sure your Sleeper display name is set correctly."); return; }
@@ -155,8 +172,9 @@ function SleeperVerifyGate({ userId, username, onAuth }: { userId: string; usern
 
   function startReset() {
     setMode("reset");
-    setPassword(""); setConfirmPassword(""); setError("");
+    setPassword(""); setConfirmPassword(""); setError(""); setSelectedLeagueId("");
     if (!challengeCode) loadChallenge();
+    if (leagues.length === 0) loadLeagues();
   }
 
   const isRegisterMode = mode === "register" || mode === "reset";
@@ -246,9 +264,32 @@ function SleeperVerifyGate({ userId, username, onAuth }: { userId: string; usern
               <div className="flex justify-center py-2"><Loader2 className="w-4 h-4 animate-spin text-muted-foreground" /></div>
             )}
 
+            {/* League picker */}
+            <div className="space-y-2 pt-1">
+              <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide">Step 2 — Select the league you changed</p>
+              {leagues.length > 0 ? (
+                <Select value={selectedLeagueId} onValueChange={v => { setSelectedLeagueId(v); setError(""); }} data-testid="select-league">
+                  <SelectTrigger className="w-full" data-testid="trigger-league-picker">
+                    <SelectValue placeholder="Choose a league…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {leagues.map(l => (
+                      <SelectItem key={l.league_id} value={l.league_id} data-testid={`option-league-${l.league_id}`}>
+                        {l.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" /><span>Loading your leagues…</span>
+                </div>
+              )}
+            </div>
+
             {/* Password fields */}
             <div className="space-y-2 pt-1">
-              <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide">Step 2 — {mode === "reset" ? "Set new password" : "Create a password"}</p>
+              <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide">Step 3 — {mode === "reset" ? "Set new password" : "Create a password"}</p>
               <Input
                 type="password"
                 value={password}
@@ -271,7 +312,7 @@ function SleeperVerifyGate({ userId, username, onAuth }: { userId: string; usern
               </div>
             )}
 
-            <Button className="w-full" onClick={handleRegister} disabled={submitting || !password || !confirmPassword || !challengeCode} data-testid="button-finance-register">
+            <Button className="w-full" onClick={handleRegister} disabled={submitting || !password || !confirmPassword || !challengeCode || !selectedLeagueId} data-testid="button-finance-register">
               {submitting ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />Verifying…</> : mode === "reset" ? "Verify & Reset Password" : "Verify & Create Password"}
             </Button>
 

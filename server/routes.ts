@@ -345,10 +345,10 @@ export async function registerRoutes(
 
   app.post("/api/auth/finance-register", async (req, res) => {
     try {
-      const { sleeperId, password } = req.body;
+      const { sleeperId, password, leagueId } = req.body;
       if (!sleeperId || !password) return res.status(400).json({ error: "sleeperId and password required" });
       if (password.length < 6) return res.status(400).json({ error: "Password must be at least 6 characters" });
-      const challenge = await verifyChallenge(sleeperId);
+      const challenge = await verifyChallenge(sleeperId, leagueId ?? undefined);
       if (!challenge.ok) return res.status(401).json({ error: challenge.error });
       await setFinancePassword(sleeperId, password);
       res.json({ token: signToken(sleeperId) });

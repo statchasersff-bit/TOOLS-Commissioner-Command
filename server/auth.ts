@@ -61,7 +61,18 @@ export function getChallenge(sleeperId: string): string | null {
   return entry.code;
 }
 
-export async function verifyChallenge(sleeperId: string): Promise<{ ok: boolean; error?: string }> {
+async function checkLeagueForCode(sleeperId: string, leagueId: string, code: string): Promise<boolean> {
+  try {
+    const res = await fetch(`${SLEEPER_API}/league/${leagueId}/users`);
+    if (!res.ok) return false;
+    const users: any[] = await res.json();
+    const me = users.find((u: any) => u.user_id === sleeperId);
+    const teamName: string = (me?.metadata?.team_name ?? "").toUpperCase();
+    return teamName.includes(code);
+  } catch { return false; }
+}
+
+export async function verifyChallenge(sleeperId: string, leagueId?: string): Promise<{ ok: boolean; error?: string }> {
   const entry = challenges.get(sleeperId);
   if (!entry) return { ok: false, error: "No active challenge. Please refresh and try again." };
   if (Date.now() > entry.expiresAt) {
@@ -69,6 +80,13 @@ export async function verifyChallenge(sleeperId: string): Promise<{ ok: boolean;
     return { ok: false, error: "Challenge expired. Please refresh to get a new code." };
   }
   try {
+    if (leagueId) {
+      const found = await checkLeagueForCode(sleeperId, leagueId, entry.code);
+      if (found) { challenges.delete(sleeperId); return { ok: true }; }
+      return { ok: false, error: "Code not found in your team name for that league. Make sure you saved the change in Sleeper and try again." };
+    }
+
+    // No league specified — check all leagues in parallel batches of 15
     const season = new Date().getFullYear().toString();
     const leaguesRes = await fetch(`${SLEEPER_API}/user/${sleeperId}/leagues/nfl/${season}`);
     if (!leaguesRes.ok) return { ok: false, error: "Could not reach Sleeper API." };
@@ -76,20 +94,14 @@ export async function verifyChallenge(sleeperId: string): Promise<{ ok: boolean;
     if (!Array.isArray(leagues) || leagues.length === 0) {
       return { ok: false, error: "No leagues found for your account." };
     }
-    for (const league of leagues.slice(0, 12)) {
-      const rostersRes = await fetch(`${SLEEPER_API}/league/${league.league_id}/rosters`);
-      if (!rostersRes.ok) continue;
-      const rosters: any[] = await rostersRes.json();
-      const myRoster = rosters.find((r: any) => r.owner_id === sleeperId);
-      if (myRoster) {
-        const teamName: string = (myRoster?.metadata?.team_name ?? "").toUpperCase();
-        if (teamName.includes(entry.code)) {
-          challenges.delete(sleeperId);
-          return { ok: true };
-        }
-      }
+
+    const BATCH = 15;
+    for (let i = 0; i < leagues.length; i += BATCH) {
+      const batch = leagues.slice(i, i + BATCH);
+      const results = await Promise.all(batch.map((l: any) => checkLeagueForCode(sleeperId, l.league_id, entry.code)));
+      if (results.some(Boolean)) { challenges.delete(sleeperId); return { ok: true }; }
     }
-    return { ok: false, error: "Code not found in any of your team names. Make sure you saved it in Sleeper." };
+    return { ok: false, error: "Code not found in any of your team names. Make sure you saved the change in Sleeper and try again." };
   } catch {
     return { ok: false, error: "Network error reaching Sleeper API." };
   }
