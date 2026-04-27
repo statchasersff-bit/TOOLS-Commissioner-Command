@@ -320,8 +320,21 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
             <div className="flex items-center gap-2 md:gap-3">
               {sleeper.isConnected && sleeper.user && (
                 <div className="hidden md:flex items-center gap-1.5 border-r border-border/40 pr-3">
-                  <div className="w-6 h-6 rounded-full bg-[#0b3a7a]/10 dark:bg-blue-400/10 flex items-center justify-center flex-shrink-0">
-                    <User className="w-3 h-3 text-[#0b3a7a] dark:text-blue-400" />
+                  <div className="w-6 h-6 rounded-full overflow-hidden flex-shrink-0 ring-1 ring-border/40 bg-[#0b3a7a]/10 dark:bg-blue-400/10 flex items-center justify-center">
+                    {sleeper.user.avatar ? (
+                      <img
+                        src={`https://sleepercdn.com/avatars/thumbs/${sleeper.user.avatar}`}
+                        alt={sleeper.user.displayName}
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          const el = e.target as HTMLImageElement;
+                          el.style.display = "none";
+                        }}
+                        data-testid="img-user-avatar"
+                      />
+                    ) : (
+                      <User className="w-3 h-3 text-[#0b3a7a] dark:text-blue-400" />
+                    )}
                   </div>
                   <span className="text-xs font-medium text-foreground" data-testid="text-sleeper-user">
                     {sleeper.user.displayName}
