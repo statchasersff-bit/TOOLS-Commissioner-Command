@@ -30,6 +30,8 @@ import {
 } from "./valueSnapshots";
 import { getFinancesForUser, upsertLeagueFinance } from "./finances";
 import {
+  sendSleeperCode,
+  verifySleeperCode,
   createChallenge,
   getChallenge,
   verifyChallenge,
@@ -328,7 +330,33 @@ export async function registerRoutes(
     }
   });
 
-  // --- Sleeper identity challenge auth for Finance tab ---
+  // --- Sleeper OTP auth (primary) ---
+
+  app.post("/api/auth/sleeper-send-code", async (req, res) => {
+    try {
+      const { login } = req.body;
+      if (!login) return res.status(400).json({ error: "login required" });
+      const result = await sendSleeperCode(login.trim());
+      if (!result.ok) return res.status(400).json({ error: result.error });
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/auth/sleeper-verify-code", async (req, res) => {
+    try {
+      const { login, code, expectedSleeperId } = req.body;
+      if (!login || !code || !expectedSleeperId) return res.status(400).json({ error: "login, code, and expectedSleeperId required" });
+      const result = await verifySleeperCode(login.trim(), code.trim(), expectedSleeperId);
+      if (!result.ok) return res.status(401).json({ error: result.error });
+      res.json({ token: signToken(expectedSleeperId) });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // --- Sleeper identity challenge auth for Finance tab (fallback) ---
 
   app.get("/api/auth/challenge/:userId", (req, res) => {
     const code = createChallenge(req.params.userId);

@@ -3,18 +3,89 @@ import type { Request, Response, NextFunction } from "express";
 
 const JWT_SECRET = process.env.SESSION_SECRET || "fallback-dev-secret";
 
-// In-memory challenge store: sleeperId → { code, expiresAt }
+const SLEEPER_AUTH = "https://api.sleeper.app/v1/auth";
+const SLEEPER_API  = "https://api.sleeper.app/v1";
+
+const SLEEPER_HEADERS = {
+  "Content-Type": "application/json",
+  "User-Agent": "Sleeper/10.0.0 CFNetwork/1408.0.4 Darwin/22.5.0",
+  "Accept": "application/json",
+};
+
+// ── Sleeper OTP (undocumented internal API) ───────────────────────────────────
+
+export async function sendSleeperCode(login: string): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const r = await fetch(`${SLEEPER_AUTH}/send_code`, {
+      method: "POST",
+      headers: SLEEPER_HEADERS,
+      body: JSON.stringify({ login }),
+    });
+    if (!r.ok) {
+      const body = await r.json().catch(() => ({}));
+      return { ok: false, error: body?.error ?? `Sleeper returned ${r.status}. Check your username/email.` };
+    }
+    return { ok: true };
+  } catch {
+    return { ok: false, error: "Could not reach Sleeper. Please try again." };
+  }
+}
+
+export async function verifySleeperCode(
+  login: string,
+  code: string,
+  expectedSleeperId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    // Step 1: verify code with Sleeper → get their session token
+    const r = await fetch(`${SLEEPER_AUTH}/verify`, {
+      method: "POST",
+      headers: SLEEPER_HEADERS,
+      body: JSON.stringify({ login, code }),
+    });
+    if (!r.ok) {
+      const body = await r.json().catch(() => ({}));
+      return { ok: false, error: body?.error ?? "Incorrect code. Please try again." };
+    }
+    const session = await r.json();
+    const sleeperToken: string = session?.token ?? session?.access_token ?? "";
+
+    if (!sleeperToken) {
+      return { ok: false, error: "Sleeper did not return a session token." };
+    }
+
+    // Step 2: fetch /user/me with that token to confirm the user ID
+    const me = await fetch(`${SLEEPER_API}/user/me`, {
+      headers: { ...SLEEPER_HEADERS, Authorization: `Bearer ${sleeperToken}` },
+    });
+    if (!me.ok) {
+      return { ok: false, error: "Could not confirm your Sleeper identity." };
+    }
+    const meData = await me.json();
+    const confirmedId: string = meData?.user_id ?? meData?.id ?? "";
+
+    if (confirmedId !== expectedSleeperId) {
+      return { ok: false, error: "The Sleeper account you verified doesn't match your connected account." };
+    }
+
+    return { ok: true };
+  } catch {
+    return { ok: false, error: "Network error. Please try again." };
+  }
+}
+
+// ── Fallback: display-name challenge ─────────────────────────────────────────
+
 const challenges = new Map<string, { code: string; expiresAt: number }>();
 
 const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 function generateCode(): string {
-  const rand = Array.from({ length: 5 }, () => CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)]).join("");
-  return `SC-${rand}`;
+  return "SC-" + Array.from({ length: 5 }, () => CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)]).join("");
 }
 
 export function createChallenge(sleeperId: string): string {
   const code = generateCode();
-  challenges.set(sleeperId, { code, expiresAt: Date.now() + 15 * 60 * 1000 }); // 15-min TTL
+  challenges.set(sleeperId, { code, expiresAt: Date.now() + 15 * 60 * 1000 });
   return code;
 }
 
@@ -32,17 +103,13 @@ export async function verifyChallenge(sleeperId: string): Promise<{ ok: boolean;
     challenges.delete(sleeperId);
     return { ok: false, error: "Challenge expired. Please refresh to get a new code." };
   }
-
   try {
-    const res = await fetch(`https://api.sleeper.app/v1/user/${sleeperId}`);
+    const res = await fetch(`${SLEEPER_API}/user/${sleeperId}`);
     if (!res.ok) return { ok: false, error: "Could not reach Sleeper API." };
     const user = await res.json();
     const displayName: string = (user?.display_name ?? user?.username ?? "").toUpperCase();
-    if (displayName.includes(entry.code)) {
-      challenges.delete(sleeperId);
-      return { ok: true };
-    }
-    return { ok: false, error: "Code not found in your Sleeper display name. Make sure it matches exactly and try again." };
+    if (displayName.includes(entry.code)) { challenges.delete(sleeperId); return { ok: true }; }
+    return { ok: false, error: "Code not found in your Sleeper display name." };
   } catch {
     return { ok: false, error: "Network error reaching Sleeper API." };
   }
