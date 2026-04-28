@@ -21,6 +21,7 @@ import {
   ingestLeagueTrades,
   ingestUserLeagues,
   backfillPickSlots,
+  cleanupFuturePickSlots,
 } from "./tradeCrawler";
 import {
   captureValueSnapshot,
@@ -396,7 +397,9 @@ export async function registerRoutes(
 
   startSnapshotScheduler();
 
-  // Run pick-slot backfill in background on startup (non-blocking)
+  // Clean up any future-pick slots that were incorrectly stored with the
+  // current year's draft order, then run the per-season slot backfill.
+  cleanupFuturePickSlots().catch(() => {});
   backfillPickSlots().then((r) => {
     if (r.updated > 0) {
       console.log(`[PickSlots] Backfilled ${r.updated} pick assets across ${r.leagues} leagues.`);

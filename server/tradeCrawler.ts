@@ -372,7 +372,12 @@ async function processLeague(leagueId: string, degree: number) {
           if (!pick.owner_id || !pick.previous_owner_id) continue;
           const receiverInfo = rosterOwnerMap.get(pick.owner_id);
           const originalOwnerInfo = rosterOwnerMap.get(pick.roster_id);
-          const slot = draftSlots.get(pick.roster_id) ?? null;
+          // Only assign a known slot when the pick is for the current league season.
+          // Future-year picks (e.g. 2027 in a 2025 league) have no determined draft
+          // order yet — storing the current year's slot would be misleading.
+          const slot = pick.season === leagueInfo.season
+            ? (draftSlots.get(pick.roster_id) ?? null)
+            : null;
 
           assetRows.push({
             tradeId: trade.transaction_id,
@@ -876,7 +881,10 @@ export async function ingestLeagueTrades(params: {
     if (trade.draft_picks) {
       for (const pick of trade.draft_picks) {
         if (!pick.owner_id || !pick.previous_owner_id) continue;
-        const slot = draftSlots.get(pick.roster_id) ?? null;
+        // Only assign a known slot when the pick season matches this league's season.
+        const slot = pick.season === params.season
+          ? (draftSlots.get(pick.roster_id) ?? null)
+          : null;
 
         assetRows.push({
           tradeId: trade.transaction_id,
@@ -1055,6 +1063,31 @@ export async function getTradeStats() {
     scoringBreakdown: scoringBreakdown.map((r) => ({ scoring: r.scoring, count: r.count })),
     seasonBreakdown: seasonBreakdown.map((r) => ({ season: r.season, count: r.count })),
   };
+}
+
+/**
+ * One-time cleanup: null out pick_slot for any pick asset whose season is
+ * different from the league season it was traded in. These slots were written
+ * using the current year's draft order as a false stand-in for future picks.
+ */
+export async function cleanupFuturePickSlots(): Promise<{ cleared: number }> {
+  const d = getDb();
+  const result = await d.execute(sql`
+    UPDATE trade_assets ta
+    SET pick_slot = NULL
+    FROM trades t
+    JOIN crawled_leagues cl ON cl.id = t.league_id
+    WHERE ta.trade_id = t.id
+      AND ta.asset_type = 'pick'
+      AND ta.pick_slot IS NOT NULL
+      AND ta.pick_season IS NOT NULL
+      AND ta.pick_season != cl.season
+  `);
+  const cleared = (result as any).rowCount ?? 0;
+  if (cleared > 0) {
+    console.log(`[PickSlotCleanup] Cleared ${cleared} incorrect future-pick slots`);
+  }
+  return { cleared };
 }
 
 /**
