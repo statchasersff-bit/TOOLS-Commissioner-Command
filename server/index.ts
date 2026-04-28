@@ -6,11 +6,18 @@ import { createServer } from "http";
 const app = express();
 const httpServer = createServer(app);
 
-// CORS — allow the configured origins (comma-separated CORS_ORIGIN env var)
-// or fall back to same-origin when not set (dev / Replit full-stack mode).
-const CORS_ORIGINS = process.env.CORS_ORIGIN
-  ? process.env.CORS_ORIGIN.split(",").map((s) => s.trim())
-  : [];
+// CORS — always allow statchasers.com plus any additional origins from CORS_ORIGIN env var.
+const BUILTIN_ORIGINS = [
+  "https://statchasers.com",
+  "https://www.statchasers.com",
+  "https://dynasty-command.pages.dev",
+];
+const CORS_ORIGINS = [
+  ...BUILTIN_ORIGINS,
+  ...(process.env.CORS_ORIGIN
+    ? process.env.CORS_ORIGIN.split(",").map((s) => s.trim())
+    : []),
+];
 
 app.use((req, res, next) => {
   const origin = req.headers.origin;
@@ -18,6 +25,7 @@ app.use((req, res, next) => {
     res.setHeader("Access-Control-Allow-Origin", origin);
     res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
     res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    res.setHeader("Access-Control-Allow-Credentials", "true");
     res.setHeader("Access-Control-Max-Age", "86400");
   }
   if (req.method === "OPTIONS") {
