@@ -560,7 +560,7 @@ export const NAV_CONFIG: MainTabConfig[] = [
   },
   {
     id: "league-market",
-    label: "Players",
+    label: "Research",
     subTabs: [
       { id: "market-value", label: "Market Value" },
     ],
