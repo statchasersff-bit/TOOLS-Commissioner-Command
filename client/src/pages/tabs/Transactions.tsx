@@ -216,20 +216,26 @@ export default function Transactions({ leagueId }: { leagueId: string }) {
 }
 
 function TeamAvatar({ rosterId, teamName, avatar }: { rosterId: number; teamName: string; avatar?: string | null }) {
-  return avatar ? (
-    <img
-      src={avatar}
-      alt={teamName}
-      className="w-6 h-6 rounded-full object-cover flex-shrink-0"
-      onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-      data-testid={`img-avatar-txn-${rosterId}`}
-    />
-  ) : (
+  const [imgError, setImgError] = useState(false);
+  const initial = (teamName || "?").charAt(0).toUpperCase();
+
+  if (avatar && !imgError) {
+    return (
+      <img
+        src={avatar}
+        alt={teamName}
+        className="w-6 h-6 rounded-full object-cover flex-shrink-0"
+        onError={() => setImgError(true)}
+        data-testid={`img-avatar-txn-${rosterId}`}
+      />
+    );
+  }
+  return (
     <div
       className="w-6 h-6 rounded-full bg-[#0b3a7a]/20 dark:bg-blue-400/20 flex items-center justify-center text-[10px] font-bold text-[#0b3a7a] dark:text-blue-400 flex-shrink-0"
       data-testid={`img-avatar-txn-${rosterId}`}
     >
-      {(teamName || "?").charAt(0).toUpperCase()}
+      {initial}
     </div>
   );
 }
