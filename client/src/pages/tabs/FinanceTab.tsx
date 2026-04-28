@@ -613,6 +613,11 @@ export function FinanceTab() {
   const [collapsedTiers, setCollapsedTiers] = useState<Set<string>>(() => new Set(["elite", "bubble", "rebuild"]));
   const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({}); 
 
+  // Track whether Sleeper was already connected at the time this component mounted.
+  // If it was not connected at mount (i.e. the user actively connects during this session),
+  // we do NOT auto-restore the Finance token — they must enter their password manually.
+  const initiallyConnectedRef = useRef(isConnected);
+
   const dynastyLeagues = leagues.filter(l => l.status !== "archived");
 
   // Only show leagues where the user actually has a roster.
@@ -625,6 +630,13 @@ export function FinanceTab() {
 
   useEffect(() => {
     if (!user?.userId) return;
+    // Only auto-restore the Finance token when Sleeper was already connected at mount
+    // (page reload with cached session). If the user just connected Sleeper during this
+    // session, require them to enter their Finance password explicitly.
+    if (!initiallyConnectedRef.current) {
+      setAuthChecked(true);
+      return;
+    }
     const stored = localStorage.getItem(tokenKey(user.userId));
     setToken(stored);
     setAuthChecked(true);
