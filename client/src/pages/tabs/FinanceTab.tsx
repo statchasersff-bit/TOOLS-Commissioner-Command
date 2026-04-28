@@ -313,7 +313,10 @@ function SleeperVerifyGate({ userId, username, onAuth }: { userId: string; usern
           await Promise.all([loadChallenge(), loadLeagues()]);
           setMode("register");
         }
-      } catch { setError("Could not reach server."); }
+      } catch {
+        setError("Could not reach server.");
+        setMode("login");
+      }
     })();
   }, [userId]);
 
