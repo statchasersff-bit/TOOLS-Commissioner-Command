@@ -37,11 +37,12 @@ interface Transaction {
 
 type FilterType = "all" | "trade" | "waiver" | "free_agent";
 
-function PlayerHeadshot({ playerId, pos }: { playerId: string; pos: string }) {
+function PlayerHeadshot({ playerId, pos, size = "md" }: { playerId: string; pos: string; size?: "sm" | "md" }) {
   const [imgError, setImgError] = useState(false);
+  const dim = size === "sm" ? "w-8 h-8" : "w-10 h-10";
   if (playerId && !imgError) {
     return (
-      <div className="w-8 h-8 rounded-full flex-shrink-0 overflow-hidden bg-muted ring-1 ring-border/40">
+      <div className={cn(dim, "rounded-full flex-shrink-0 overflow-hidden bg-muted ring-1 ring-border/50")}>
         <img
           src={`https://sleepercdn.com/content/nfl/players/thumb/${playerId}.jpg`}
           alt=""
@@ -54,10 +55,35 @@ function PlayerHeadshot({ playerId, pos }: { playerId: string; pos: string }) {
   }
   return (
     <div
-      className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-[10px] font-bold bg-muted ring-1 ring-border/40 text-muted-foreground"
+      className={cn(dim, "rounded-full flex-shrink-0 flex items-center justify-center text-[10px] font-bold bg-muted ring-1 ring-border/50 text-muted-foreground")}
       data-testid={`img-player-txn-${playerId}`}
     >
       {(pos || "?").charAt(0)}
+    </div>
+  );
+}
+
+function TeamAvatar({ rosterId, teamName, avatar, size = "sm" }: { rosterId: number; teamName: string; avatar?: string | null; size?: "sm" | "md" }) {
+  const [imgError, setImgError] = useState(false);
+  const dim = size === "md" ? "w-7 h-7" : "w-5 h-5";
+  const initial = (teamName || "?").charAt(0).toUpperCase();
+  if (avatar && !imgError) {
+    return (
+      <img
+        src={avatar}
+        alt={teamName}
+        className={cn(dim, "rounded-full object-cover flex-shrink-0 ring-1 ring-border/50")}
+        onError={() => setImgError(true)}
+        data-testid={`img-avatar-txn-${rosterId}`}
+      />
+    );
+  }
+  return (
+    <div
+      className={cn(dim, "rounded-full bg-[#0b3a7a]/20 dark:bg-blue-400/20 flex items-center justify-center font-bold text-[#0b3a7a] dark:text-blue-400 flex-shrink-0", size === "md" ? "text-[11px]" : "text-[9px]")}
+      data-testid={`img-avatar-txn-${rosterId}`}
+    >
+      {initial}
     </div>
   );
 }
@@ -109,10 +135,10 @@ export default function Transactions({ leagueId }: { leagueId: string }) {
 
   const getTypeIcon = (type: string) => {
     switch (type) {
-      case "trade": return <ArrowRightLeft className="w-3.5 h-3.5" />;
-      case "waiver": return <UserPlus className="w-3.5 h-3.5" />;
-      case "free_agent": return <UserPlus className="w-3.5 h-3.5" />;
-      default: return <UserMinus className="w-3.5 h-3.5" />;
+      case "trade": return <ArrowRightLeft className="w-3 h-3" />;
+      case "waiver": return <UserPlus className="w-3 h-3" />;
+      case "free_agent": return <UserPlus className="w-3 h-3" />;
+      default: return <UserMinus className="w-3 h-3" />;
     }
   };
 
@@ -198,30 +224,44 @@ export default function Transactions({ leagueId }: { leagueId: string }) {
           )}
 
           <div className="space-y-2">
-            {visible.map((txn, idx) => (
-              <Card
-                key={`${txn.type}-${txn.timestamp}-${idx}`}
-                className="p-4 hover:border-[#d4af37]/30 transition-colors"
-                data-testid={`transaction-${idx}`}
-              >
-                <div className="flex items-center justify-between gap-2 mb-2.5">
-                  <div className="flex items-center gap-1.5 flex-wrap min-w-0">
-                    <Badge variant="outline" className={cn("text-[10px] flex items-center gap-1 shrink-0", getTypeBadgeStyle(txn.type))}>
-                      {getTypeIcon(txn.type)}
-                      {getTypeLabel(txn.type)}
-                    </Badge>
-                    <Badge variant="outline" className="text-[10px] shrink-0">Wk {txn.week}</Badge>
+            {visible.map((txn, idx) => {
+              const involved = txn.involvedTeams[0];
+              return (
+                <Card
+                  key={`${txn.type}-${txn.timestamp}-${idx}`}
+                  className="overflow-hidden hover:border-[#d4af37]/30 transition-colors"
+                  data-testid={`transaction-${idx}`}
+                >
+                  {/* Card header */}
+                  <div className="flex items-center justify-between gap-2 px-4 py-2.5 border-b border-border/40 bg-muted/20">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Badge variant="outline" className={cn("text-[10px] flex items-center gap-1 shrink-0 py-0.5", getTypeBadgeStyle(txn.type))}>
+                        {getTypeIcon(txn.type)}
+                        {getTypeLabel(txn.type)}
+                      </Badge>
+                      <span className="text-[10px] text-muted-foreground shrink-0">Wk {txn.week}</span>
+                      {txn.type !== "trade" && involved && (
+                        <div className="flex items-center gap-1.5 min-w-0" data-testid="transaction-team-name">
+                          <span className="text-border/60">·</span>
+                          <TeamAvatar rosterId={involved.rosterId} teamName={involved.teamName} avatar={involved.avatar} size="sm" />
+                          <span className="text-[11px] font-medium text-foreground truncate">{involved.teamName}</span>
+                        </div>
+                      )}
+                    </div>
+                    <span className="text-[10px] text-muted-foreground whitespace-nowrap shrink-0">{formatDate(txn.timestamp)}</span>
                   </div>
-                  <span className="text-[10px] text-muted-foreground whitespace-nowrap shrink-0">{formatDate(txn.timestamp)}</span>
-                </div>
 
-                {txn.type === "trade" ? (
-                  <TradeTransaction txn={txn} valuesBySleeperId={valuesBySleeperId} />
-                ) : (
-                  <AddDropTransaction txn={txn} valuesBySleeperId={valuesBySleeperId} />
-                )}
-              </Card>
-            ))}
+                  {/* Card body */}
+                  <div className="px-4 py-3">
+                    {txn.type === "trade" ? (
+                      <TradeTransaction txn={txn} valuesBySleeperId={valuesBySleeperId} />
+                    ) : (
+                      <AddDropTransaction txn={txn} valuesBySleeperId={valuesBySleeperId} />
+                    )}
+                  </div>
+                </Card>
+              );
+            })}
           </div>
 
           {hasMore && (
@@ -242,27 +282,48 @@ export default function Transactions({ leagueId }: { leagueId: string }) {
   );
 }
 
-function TeamAvatar({ rosterId, teamName, avatar }: { rosterId: number; teamName: string; avatar?: string | null }) {
-  const [imgError, setImgError] = useState(false);
-  const initial = (teamName || "?").charAt(0).toUpperCase();
+function PlayerRow({
+  player,
+  action,
+  dynVal,
+}: {
+  player: TransactionPlayer;
+  action: "add" | "drop" | "received";
+  dynVal: number;
+}) {
+  const actionCls =
+    action === "add"
+      ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30"
+      : action === "drop"
+      ? "bg-red-500/15 text-red-600 dark:text-red-400 border border-red-500/30"
+      : "";
 
-  if (avatar && !imgError) {
-    return (
-      <img
-        src={avatar}
-        alt={teamName}
-        className="w-6 h-6 rounded-full object-cover flex-shrink-0"
-        onError={() => setImgError(true)}
-        data-testid={`img-avatar-txn-${rosterId}`}
-      />
-    );
-  }
   return (
-    <div
-      className="w-6 h-6 rounded-full bg-[#0b3a7a]/20 dark:bg-blue-400/20 flex items-center justify-center text-[10px] font-bold text-[#0b3a7a] dark:text-blue-400 flex-shrink-0"
-      data-testid={`img-avatar-txn-${rosterId}`}
-    >
-      {initial}
+    <div className="flex items-center gap-3 py-1 min-w-0">
+      <PlayerHeadshot playerId={player.playerId} pos={player.pos} />
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1.5 min-w-0">
+          {action !== "received" && (
+            <span className={cn("text-[9px] font-bold px-1.5 py-0.5 rounded shrink-0", actionCls)}>
+              {action === "add" ? "ADD" : "DROP"}
+            </span>
+          )}
+          <Badge variant="outline" className={cn("text-[9px] px-1 py-0 h-4 justify-center shrink-0", getPositionColor(player.pos))}>
+            {player.pos}
+          </Badge>
+          <span className={cn("text-sm font-semibold truncate", action === "drop" && "text-muted-foreground")}>
+            {player.name}
+          </span>
+          {player.team && (
+            <span className="text-[10px] text-muted-foreground shrink-0">{player.team}</span>
+          )}
+        </div>
+        {dynVal > 0 && (
+          <p className="text-[10px] text-[#d4af37] font-semibold mt-0.5" data-testid={`text-dynasty-val-${player.playerId}`}>
+            {dynVal.toLocaleString()} dynasty
+          </p>
+        )}
+      </div>
     </div>
   );
 }
@@ -282,40 +343,38 @@ function TradeTransaction({ txn, valuesBySleeperId }: { txn: Transaction; values
   return (
     <div className={cn("grid gap-3", sides.length === 2 ? "grid-cols-1 md:grid-cols-2" : "grid-cols-1")}>
       {sides.map((side) => (
-        <div key={side.rosterId} className="p-3 rounded-lg border border-border/30 bg-muted/10">
-          <div className="flex items-center gap-1.5 mb-2">
-            <TeamAvatar rosterId={side.rosterId} teamName={side.teamName} avatar={side.avatar} />
-            <p className="text-xs font-semibold" data-testid={`trade-team-${side.rosterId}`}>{side.teamName} receives:</p>
+        <div key={side.rosterId} className="rounded-lg border border-border/40 bg-muted/10 overflow-hidden">
+          {/* Team header */}
+          <div className="flex items-center gap-2 px-3 py-2 border-b border-border/30 bg-muted/20">
+            <TeamAvatar rosterId={side.rosterId} teamName={side.teamName} avatar={side.avatar} size="md" />
+            <p className="text-xs font-semibold truncate" data-testid={`trade-team-${side.rosterId}`}>
+              {side.teamName}
+            </p>
+            <span className="ml-auto text-[10px] text-muted-foreground shrink-0">receives</span>
           </div>
-          <div className="space-y-1.5">
-            {side.received.map((p, i) => {
-              const dynVal = valuesBySleeperId[p.playerId] ?? 0;
-              return (
-                <div key={i} className="flex items-center gap-2 min-w-0">
-                  <PlayerHeadshot playerId={p.playerId} pos={p.pos} />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <Badge variant="outline" className={cn("text-[9px] w-6 justify-center shrink-0", getPositionColor(p.pos))}>{p.pos}</Badge>
-                      <span className="text-xs font-medium truncate">{p.name}</span>
-                      {p.team && <span className="text-[10px] text-muted-foreground shrink-0">{p.team}</span>}
-                    </div>
-                    {dynVal > 0 && (
-                      <span className="text-[10px] font-semibold text-[#d4af37]" data-testid={`text-dynasty-val-${p.playerId}`}>
-                        {dynVal.toLocaleString()} dynasty
-                      </span>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
+          {/* Assets received */}
+          <div className="px-3 py-2 space-y-0.5">
+            {side.received.map((p, i) => (
+              <PlayerRow
+                key={i}
+                player={p}
+                action="received"
+                dynVal={valuesBySleeperId[p.playerId] ?? 0}
+              />
+            ))}
             {side.picksReceived.map((dp, i) => (
-              <div key={`pk-${i}`} className="flex items-center gap-2 py-0.5">
-                <div className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-[9px] font-bold bg-purple-100 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400 ring-1 ring-border/40">PK</div>
-                <span className="text-xs font-medium">{dp.season} Round {dp.round}</span>
+              <div key={`pk-${i}`} className="flex items-center gap-3 py-1">
+                <div className="w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center text-[10px] font-bold bg-purple-100 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400 ring-1 ring-border/50">
+                  PK
+                </div>
+                <div>
+                  <p className="text-sm font-semibold">{dp.season} Round {dp.round}</p>
+                  <p className="text-[10px] text-muted-foreground">Draft pick</p>
+                </div>
               </div>
             ))}
             {side.received.length === 0 && side.picksReceived.length === 0 && (
-              <p className="text-[10px] text-muted-foreground italic">Picks only</p>
+              <p className="text-[10px] text-muted-foreground italic py-1">Picks only</p>
             )}
           </div>
         </div>
@@ -325,50 +384,23 @@ function TradeTransaction({ txn, valuesBySleeperId }: { txn: Transaction; values
 }
 
 function AddDropTransaction({ txn, valuesBySleeperId }: { txn: Transaction; valuesBySleeperId: Record<string, number> }) {
-  const involved = txn.involvedTeams[0];
-  const teamName = involved?.teamName || "Unknown";
-  const rosterId = involved?.rosterId ?? 0;
-  const avatar = involved?.avatar;
-
   return (
-    <div className="space-y-1.5">
-      <div className="flex items-center gap-1.5 mb-1" data-testid="transaction-team-name">
-        <TeamAvatar rosterId={rosterId} teamName={teamName} avatar={avatar} />
-        <p className="text-[11px] font-semibold text-muted-foreground">{teamName}</p>
-      </div>
-      {txn.adds.map((p, i) => {
-        const dynVal = valuesBySleeperId[p.playerId] ?? 0;
-        return (
-          <div key={`add-${i}`} className="flex items-center gap-2 min-w-0">
-            <PlayerHeadshot playerId={p.playerId} pos={p.pos} />
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-1.5 min-w-0">
-                <span className="text-emerald-500 text-[10px] font-bold shrink-0">ADD</span>
-                <Badge variant="outline" className={cn("text-[9px] w-6 justify-center shrink-0", getPositionColor(p.pos))}>{p.pos}</Badge>
-                <span className="text-xs font-medium truncate">{p.name}</span>
-                {p.team && <span className="text-[10px] text-muted-foreground shrink-0">{p.team}</span>}
-              </div>
-              {dynVal > 0 && (
-                <span className="text-[10px] font-semibold text-[#d4af37]" data-testid={`text-dynasty-val-${p.playerId}`}>
-                  {dynVal.toLocaleString()} dynasty
-                </span>
-              )}
-            </div>
-          </div>
-        );
-      })}
+    <div className="space-y-1">
+      {txn.adds.map((p, i) => (
+        <PlayerRow
+          key={`add-${i}`}
+          player={p}
+          action="add"
+          dynVal={valuesBySleeperId[p.playerId] ?? 0}
+        />
+      ))}
       {txn.drops.map((p, i) => (
-        <div key={`drop-${i}`} className="flex items-center gap-2 min-w-0">
-          <PlayerHeadshot playerId={p.playerId} pos={p.pos} />
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-1.5 min-w-0">
-              <span className="text-red-500 text-[10px] font-bold shrink-0">DROP</span>
-              <Badge variant="outline" className={cn("text-[9px] w-6 justify-center shrink-0", getPositionColor(p.pos))}>{p.pos}</Badge>
-              <span className="text-xs font-medium text-muted-foreground truncate">{p.name}</span>
-              {p.team && <span className="text-[10px] text-muted-foreground shrink-0">{p.team}</span>}
-            </div>
-          </div>
-        </div>
+        <PlayerRow
+          key={`drop-${i}`}
+          player={p}
+          action="drop"
+          dynVal={0}
+        />
       ))}
     </div>
   );
