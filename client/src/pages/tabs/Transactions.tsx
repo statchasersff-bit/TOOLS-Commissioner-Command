@@ -31,7 +31,7 @@ interface Transaction {
   adds: TransactionPlayer[];
   drops: TransactionPlayer[];
   draftPicks: TransactionPick[];
-  involvedTeams: Array<{ rosterId: number; teamName: string }>;
+  involvedTeams: Array<{ rosterId: number; teamName: string; avatar?: string | null }>;
 }
 
 type FilterType = "all" | "trade" | "waiver" | "free_agent";
@@ -215,6 +215,25 @@ export default function Transactions({ leagueId }: { leagueId: string }) {
   );
 }
 
+function TeamAvatar({ rosterId, teamName, avatar }: { rosterId: number; teamName: string; avatar?: string | null }) {
+  return avatar ? (
+    <img
+      src={avatar}
+      alt={teamName}
+      className="w-6 h-6 rounded-full object-cover flex-shrink-0"
+      onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+      data-testid={`img-avatar-txn-${rosterId}`}
+    />
+  ) : (
+    <div
+      className="w-6 h-6 rounded-full bg-[#0b3a7a]/20 dark:bg-blue-400/20 flex items-center justify-center text-[10px] font-bold text-[#0b3a7a] dark:text-blue-400 flex-shrink-0"
+      data-testid={`img-avatar-txn-${rosterId}`}
+    >
+      {(teamName || "?").charAt(0).toUpperCase()}
+    </div>
+  );
+}
+
 function TradeTransaction({ txn }: { txn: Transaction }) {
   const teamIds = [...new Set([...txn.adds.map(a => a.rosterId), ...txn.drops.map(d => d.rosterId)])];
   const sides = teamIds.map((rid) => {
@@ -224,14 +243,17 @@ function TradeTransaction({ txn }: { txn: Transaction }) {
       const toTeam = txn.involvedTeams.find(t => t.teamName === dp.toTeam);
       return toTeam?.rosterId === rid;
     });
-    return { rosterId: rid, teamName: team?.teamName || `Team ${rid}`, received, picksReceived };
+    return { rosterId: rid, teamName: team?.teamName || `Team ${rid}`, avatar: team?.avatar, received, picksReceived };
   });
 
   return (
     <div className={cn("grid gap-3", sides.length === 2 ? "grid-cols-1 md:grid-cols-2" : "grid-cols-1")}>
       {sides.map((side) => (
         <div key={side.rosterId} className="p-3 rounded-lg border border-border/30 bg-muted/10">
-          <p className="text-xs font-semibold mb-1.5" data-testid={`trade-team-${side.rosterId}`}>{side.teamName} receives:</p>
+          <div className="flex items-center gap-1.5 mb-1.5">
+            <TeamAvatar rosterId={side.rosterId} teamName={side.teamName} avatar={side.avatar} />
+            <p className="text-xs font-semibold" data-testid={`trade-team-${side.rosterId}`}>{side.teamName} receives:</p>
+          </div>
           <div className="space-y-0.5">
             {side.received.map((p, i) => (
               <div key={i} className="flex items-center gap-1.5 py-0.5 min-w-0">
@@ -257,11 +279,17 @@ function TradeTransaction({ txn }: { txn: Transaction }) {
 }
 
 function AddDropTransaction({ txn }: { txn: Transaction }) {
-  const teamName = txn.involvedTeams[0]?.teamName || "Unknown";
+  const involved = txn.involvedTeams[0];
+  const teamName = involved?.teamName || "Unknown";
+  const rosterId = involved?.rosterId ?? 0;
+  const avatar = involved?.avatar;
 
   return (
     <div className="space-y-1">
-      <p className="text-[11px] font-semibold text-muted-foreground mb-1" data-testid="transaction-team-name">{teamName}</p>
+      <div className="flex items-center gap-1.5 mb-1" data-testid="transaction-team-name">
+        <TeamAvatar rosterId={rosterId} teamName={teamName} avatar={avatar} />
+        <p className="text-[11px] font-semibold text-muted-foreground">{teamName}</p>
+      </div>
       {txn.adds.map((p, i) => (
         <div key={`add-${i}`} className="flex items-center gap-1.5 py-0.5 min-w-0">
           <span className="text-emerald-500 text-[10px] font-bold w-7 shrink-0">ADD</span>

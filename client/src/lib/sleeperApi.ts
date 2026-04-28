@@ -1220,16 +1220,26 @@ export async function fetchLeagueTransactions(leagueId: string) {
 
   const rosterOwnerMap = new Map<number, string>();
   const ownerNameMap = new Map<string, string>();
+  const ownerAvatarMap = new Map<string, string | null>();
   for (const u of usersRaw) {
     ownerNameMap.set(
       u.user_id,
       u.metadata?.team_name || u.display_name || u.user_id
     );
+    ownerAvatarMap.set(
+      u.user_id,
+      u.avatar ? `https://sleepercdn.com/avatars/thumbs/${u.avatar}` : null
+    );
   }
+  const rosterAvatarMap = new Map<number, string | null>();
   for (const r of rostersRaw) {
     rosterOwnerMap.set(
       r.roster_id,
       ownerNameMap.get(r.owner_id) || `Team ${r.roster_id}`
+    );
+    rosterAvatarMap.set(
+      r.roster_id,
+      ownerAvatarMap.get(r.owner_id) ?? null
     );
   }
 
@@ -1335,6 +1345,7 @@ export async function fetchLeagueTransactions(leagueId: string) {
       const involvedTeams = [...rosterIds].map((rid) => ({
         rosterId: rid,
         teamName: rosterOwnerMap.get(rid) || `Team ${rid}`,
+        avatar: rosterAvatarMap.get(rid) ?? null,
       }));
 
       return { type, timestamp, week, adds, drops, draftPicks, involvedTeams };
