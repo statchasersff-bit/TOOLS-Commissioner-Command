@@ -1208,7 +1208,7 @@ export async function fetchCrossLeagueTrades(userId: string) {
 
 export async function fetchLeagueTransactions(leagueId: string) {
   const players = await getSleeperPlayers();
-  const [leagueRaw, rostersRaw, usersRaw] = await Promise.all([
+  const [leagueRaw, rostersRaw, usersRaw, draftsRaw] = await Promise.all([
     fetchJson<SleeperLeagueRaw>(`${SLEEPER_API}/league/${leagueId}`),
     fetchJson<SleeperRosterRaw[]>(
       `${SLEEPER_API}/league/${leagueId}/rosters`
@@ -1216,7 +1216,32 @@ export async function fetchLeagueTransactions(leagueId: string) {
     fetchJson<SleeperLeagueUserRaw[]>(
       `${SLEEPER_API}/league/${leagueId}/users`
     ),
+    fetchJson<any[]>(`${SLEEPER_API}/league/${leagueId}/drafts`).catch(() => [] as any[]),
   ]);
+
+  // Build roster-id → 2026 draft slot map
+  const rosterIdToSlot2026 = new Map<number, number>();
+  if (draftsRaw && Array.isArray(draftsRaw)) {
+    const draft2026 = draftsRaw.find((d: any) => d.season === "2026");
+    if (draft2026) {
+      const slotToRoster: Record<string, number> = draft2026.slot_to_roster_id || {};
+      if (Object.keys(slotToRoster).length > 0) {
+        for (const [slotStr, rosterId] of Object.entries(slotToRoster)) {
+          rosterIdToSlot2026.set(rosterId as number, parseInt(slotStr, 10));
+        }
+      } else {
+        const draftOrder: Record<string, number> = draft2026.draft_order || {};
+        const rosterIdToOwner2026 = new Map<number, string>();
+        for (const r of rostersRaw) {
+          if (r.owner_id) rosterIdToOwner2026.set(r.roster_id, r.owner_id);
+        }
+        for (const [userId, slot] of Object.entries(draftOrder)) {
+          const rid = [...rosterIdToOwner2026.entries()].find(([, uid]) => uid === userId)?.[0];
+          if (rid !== undefined) rosterIdToSlot2026.set(rid, slot as number);
+        }
+      }
+    }
+  }
 
   const rosterOwnerMap = new Map<number, string>();
   const ownerNameMap = new Map<string, string>();
@@ -1293,6 +1318,8 @@ export async function fetchLeagueTransactions(leagueId: string) {
         round: number;
         fromTeam: string;
         toTeam: string;
+        originalRosterId?: number;
+        pickSlot?: number;
       }> = [];
 
       if (t.adds) {
@@ -1327,6 +1354,8 @@ export async function fetchLeagueTransactions(leagueId: string) {
 
       if (t.draft_picks && Array.isArray(t.draft_picks)) {
         for (const dp of t.draft_picks) {
+          const pickSlot =
+            dp.season === "2026" ? rosterIdToSlot2026.get(dp.roster_id) : undefined;
           draftPicks.push({
             season: dp.season,
             round: dp.round,
@@ -1335,6 +1364,8 @@ export async function fetchLeagueTransactions(leagueId: string) {
               `Team ${dp.previous_owner_id}`,
             toTeam:
               rosterOwnerMap.get(dp.owner_id) || `Team ${dp.owner_id}`,
+            originalRosterId: dp.roster_id,
+            pickSlot,
           });
         }
       }

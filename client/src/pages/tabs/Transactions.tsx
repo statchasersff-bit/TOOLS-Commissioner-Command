@@ -23,6 +23,8 @@ interface TransactionPick {
   round: number;
   fromTeam: string;
   toTeam: string;
+  originalRosterId?: number;
+  pickSlot?: number;
 }
 
 interface Transaction {
@@ -94,7 +96,7 @@ export default function Transactions({ leagueId }: { leagueId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<FilterType>("all");
   const [showCount, setShowCount] = useState(50);
-  const { valuesBySleeperId } = useValueModel();
+  const { valuesBySleeperId, getPickValue } = useValueModel();
 
   const fetchTransactions = async () => {
     setIsLoading(true);
@@ -254,7 +256,7 @@ export default function Transactions({ leagueId }: { leagueId: string }) {
                   {/* Card body */}
                   <div className="px-4 py-3">
                     {txn.type === "trade" ? (
-                      <TradeTransaction txn={txn} valuesBySleeperId={valuesBySleeperId} />
+                      <TradeTransaction txn={txn} valuesBySleeperId={valuesBySleeperId} getPickValue={getPickValue} />
                     ) : (
                       <AddDropTransaction txn={txn} valuesBySleeperId={valuesBySleeperId} />
                     )}
@@ -328,7 +330,16 @@ function PlayerRow({
   );
 }
 
-function TradeTransaction({ txn, valuesBySleeperId }: { txn: Transaction; valuesBySleeperId: Record<string, number> }) {
+function formatPickLabel(dp: TransactionPick): string {
+  const slot = dp.pickSlot;
+  if (slot != null && dp.season === "2026") {
+    const slotStr = slot.toString().padStart(2, "0");
+    return `${dp.season} ${dp.round}.${slotStr}`;
+  }
+  return `${dp.season} Round ${dp.round}`;
+}
+
+function TradeTransaction({ txn, valuesBySleeperId, getPickValue }: { txn: Transaction; valuesBySleeperId: Record<string, number>; getPickValue: (pick: any) => number }) {
   const teamIds = [...new Set([...txn.adds.map(a => a.rosterId), ...txn.drops.map(d => d.rosterId)])];
   const sides = teamIds.map((rid) => {
     const team = txn.involvedTeams.find(t => t.rosterId === rid);
@@ -362,17 +373,36 @@ function TradeTransaction({ txn, valuesBySleeperId }: { txn: Transaction; values
                 dynVal={valuesBySleeperId[p.playerId] ?? 0}
               />
             ))}
-            {side.picksReceived.map((dp, i) => (
-              <div key={`pk-${i}`} className="flex items-center gap-3 py-1">
-                <div className="w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center text-[10px] font-bold bg-purple-100 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400 ring-1 ring-border/50">
-                  PK
+            {side.picksReceived.map((dp, i) => {
+              const pickVal = getPickValue({
+                year: parseInt(dp.season, 10),
+                round: dp.round,
+                ownerTeamId: "",
+                originalRosterId: dp.originalRosterId,
+                pickSlot: dp.pickSlot,
+                projectedRange: dp.pickSlot != null
+                  ? (dp.pickSlot <= 4 ? "early" : dp.pickSlot <= 8 ? "mid" : "late")
+                  : "mid",
+              });
+              const label = formatPickLabel(dp);
+              return (
+                <div key={`pk-${i}`} className="flex items-center gap-3 py-1">
+                  <div className="w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center text-[10px] font-bold bg-purple-100 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400 ring-1 ring-border/50">
+                    PK
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold">{label}</p>
+                    {pickVal > 0 ? (
+                      <p className="text-[10px] text-[#d4af37] font-semibold" data-testid={`text-pick-val-${dp.season}-${dp.round}-${i}`}>
+                        {pickVal.toLocaleString()} dynasty
+                      </p>
+                    ) : (
+                      <p className="text-[10px] text-muted-foreground">Draft pick</p>
+                    )}
+                  </div>
                 </div>
-                <div>
-                  <p className="text-sm font-semibold">{dp.season} Round {dp.round}</p>
-                  <p className="text-[10px] text-muted-foreground">Draft pick</p>
-                </div>
-              </div>
-            ))}
+              );
+            })}
             {side.received.length === 0 && side.picksReceived.length === 0 && (
               <p className="text-[10px] text-muted-foreground italic py-1">Picks only</p>
             )}
