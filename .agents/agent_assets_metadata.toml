@@ -6,3 +6,9 @@ id = "SJz41CVyfPYVh8n0VwV7R"
 uri = "file://statchasers-design-kit.zip"
 type = "unspecified"
 title = "StatChasers Design Kit"
+
+[[outputs]]
+id = "NB-tHex3tqIZN0AphDZUr"
+uri = "file://dynasty-command-bluehost.zip"
+type = "unspecified"
+title = "dynasty-command-bluehost.zip"
