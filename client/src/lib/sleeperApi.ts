@@ -144,7 +144,24 @@ export async function fetchSleeperLeagues(
     if (lg.status === "pre_draft" && !lg.draft_id) return false;
     return true;
   });
-  return dynastyOnly.map((lg) => ({
+
+  // Keep only leagues where the user actually owns a roster
+  const rosterChecks = await Promise.all(
+    dynastyOnly.map(async (lg) => {
+      try {
+        const rosters = await fetchJson<SleeperRosterRaw[]>(
+          `${SLEEPER_API}/league/${lg.league_id}/rosters`
+        );
+        return rosters.some((r) => r.owner_id === userId) ? lg : null;
+      } catch {
+        return lg; // on error, keep the league rather than silently hide it
+      }
+    })
+  );
+
+  const withTeam = rosterChecks.filter((lg): lg is SleeperLeagueRaw => lg !== null);
+
+  return withTeam.map((lg) => ({
     leagueId: lg.league_id,
     name: lg.name,
     season: lg.season,
