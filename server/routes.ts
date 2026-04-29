@@ -22,6 +22,7 @@ import {
   ingestUserLeagues,
   backfillPickSlots,
   cleanupFuturePickSlots,
+  cleanupOneSidedTrades,
 } from "./tradeCrawler";
 import {
   captureValueSnapshot,
@@ -395,7 +396,31 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/admin/cleanup-one-sided-trades", async (req, res) => {
+    const secret = process.env.ADMIN_SECRET;
+    const provided = req.headers["x-admin-secret"];
+    if (!secret || provided !== secret) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+    try {
+      const result = await cleanupOneSidedTrades();
+      console.log(`[Admin] Cleaned up ${result.deleted} one-sided trades`);
+      res.json({ ok: true, deleted: result.deleted });
+    } catch (err: any) {
+      console.error("[Admin] cleanup-one-sided-trades error:", err);
+      res.status(500).json({ error: err.message || "Cleanup failed" });
+    }
+  });
+
   startSnapshotScheduler();
+
+  // One-time cleanup: remove one-sided trades stored before the UNNEST query fix.
+  // Disable by setting SKIP_ONESIDED_CLEANUP=true once production confirms remaining=0.
+  if (process.env.SKIP_ONESIDED_CLEANUP !== "true") {
+    cleanupOneSidedTrades().catch((err) => {
+      console.error("[Cleanup] cleanupOneSidedTrades error:", err);
+    });
+  }
 
   // Clean up any future-pick slots that were incorrectly stored with the
   // current year's draft order, then run the per-season slot backfill.

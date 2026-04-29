@@ -1160,3 +1160,50 @@ export async function backfillPickSlots(): Promise<{ updated: number; leagues: n
 
   return { updated: totalUpdated, leagues: leagues.length };
 }
+
+export async function cleanupOneSidedTrades(): Promise<{ deleted: number }> {
+  const d = getDb();
+
+  // Single atomic CTE: identifies one-sided trades, deletes their assets first
+  // (no FK cascade in schema), then deletes the parent rows, and returns count.
+  // All three CTEs run within a single implicit transaction in PostgreSQL.
+  const result = await d.execute<{ deleted: string }>(sql`
+    WITH one_sided AS (
+      SELECT DISTINCT t.id
+      FROM trades t
+      JOIN trade_assets ta ON ta.trade_id = t.id
+      GROUP BY t.id, t.roster_ids
+      HAVING COUNT(DISTINCT ta.roster_id) FILTER (WHERE ta.direction = 'received')
+           < array_length(t.roster_ids, 1)
+    ),
+    del_assets AS (
+      DELETE FROM trade_assets
+      WHERE trade_id IN (SELECT id FROM one_sided)
+    ),
+    del_trades AS (
+      DELETE FROM trades
+      WHERE id IN (SELECT id FROM one_sided)
+      RETURNING id
+    )
+    SELECT COUNT(*) AS deleted FROM del_trades
+  `);
+
+  const deleted = parseInt(result.rows[0]?.deleted ?? "0", 10);
+
+  // Verification: confirm 0 one-sided trades remain
+  const check = await d.execute<{ remaining: string }>(sql`
+    SELECT COUNT(*) AS remaining
+    FROM (
+      SELECT DISTINCT t.id
+      FROM trades t
+      JOIN trade_assets ta ON ta.trade_id = t.id
+      GROUP BY t.id, t.roster_ids
+      HAVING COUNT(DISTINCT ta.roster_id) FILTER (WHERE ta.direction = 'received')
+           < array_length(t.roster_ids, 1)
+    ) sub
+  `);
+  const remaining = parseInt(check.rows[0]?.remaining ?? "0", 10);
+  console.log(`[Cleanup] cleanupOneSidedTrades: deleted=${deleted}, remaining=${remaining}`);
+
+  return { deleted };
+}
