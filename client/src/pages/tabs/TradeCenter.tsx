@@ -1617,7 +1617,7 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
 const TRADE_DB_LIMIT = 50;
 
 export function TradeDatabase({ league }: { league: League }) {
-  const { valuesBySleeperId } = useValueModel();
+  const { valuesBySleeperId, dynastyPlayerList } = useValueModel();
 
   const [stats, setStats] = useState<{ totalTrades: number; totalLeagues: number } | null>(null);
   const [query, setQuery] = useState("");
@@ -1630,6 +1630,26 @@ export function TradeDatabase({ league }: { league: League }) {
   const [page, setPage] = useState(1);
   const [isSearching, setIsSearching] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const searchContainerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (searchContainerRef.current && !searchContainerRef.current.contains(e.target as Node)) {
+        setShowSuggestions(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const playerSuggestions = useMemo(() => {
+    if (!query.trim() || query.trim().length < 2) return [];
+    const q = query.trim().toLowerCase();
+    return dynastyPlayerList
+      .filter((p) => p.name.toLowerCase().includes(q))
+      .slice(0, 8);
+  }, [query, dynastyPlayerList]);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedQuery(query), 400);
@@ -1728,23 +1748,61 @@ export function TradeDatabase({ league }: { league: League }) {
       </div>
 
       <div className="space-y-3">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+        <div className="relative" ref={searchContainerRef}>
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none z-10" />
           <Input
             className="pl-9 pr-9"
             placeholder="Search by player name..."
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => { setQuery(e.target.value); setShowSuggestions(true); }}
+            onFocus={() => { if (query.trim().length >= 2) setShowSuggestions(true); }}
+            onKeyDown={(e) => { if (e.key === "Escape") setShowSuggestions(false); }}
             data-testid="input-trade-search"
           />
           {query && (
             <button
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-              onClick={() => setQuery("")}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors z-10"
+              onClick={() => { setQuery(""); setShowSuggestions(false); }}
               data-testid="button-clear-search"
             >
               <X className="w-4 h-4" />
             </button>
+          )}
+          {showSuggestions && playerSuggestions.length > 0 && (
+            <div
+              className="absolute top-full left-0 right-0 mt-1 z-50 rounded-lg border border-border bg-background shadow-lg overflow-hidden"
+              data-testid="player-suggestions-dropdown"
+            >
+              {playerSuggestions.map((p, i) => (
+                <button
+                  key={p.sleeperId}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-muted/50 transition-colors text-left border-b border-border/30 last:border-0"
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    setQuery(p.name);
+                    setShowSuggestions(false);
+                  }}
+                  data-testid={`suggestion-player-${i}`}
+                >
+                  <div className="w-7 h-7 rounded-full flex-shrink-0 overflow-hidden bg-muted">
+                    <img
+                      src={`https://sleepercdn.com/content/nfl/players/thumb/${p.sleeperId}.jpg`}
+                      alt={p.name}
+                      className="w-full h-full object-cover object-top"
+                      onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                    />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold truncate">{p.name}</p>
+                    <div className="flex items-center gap-1.5">
+                      <Badge variant="outline" className={`text-[9px] px-1 py-0 h-3.5 ${getPositionColor(p.pos)}`}>{p.pos}</Badge>
+                      {p.team && <span className="text-[10px] text-muted-foreground">{p.team}</span>}
+                    </div>
+                  </div>
+                  <span className="text-xs font-semibold text-muted-foreground tabular-nums flex-shrink-0">{p.value.toLocaleString()}</span>
+                </button>
+              ))}
+            </div>
           )}
         </div>
 
