@@ -212,6 +212,16 @@ export default function LiveDraft() {
     return map;
   }, [fullBoard]);
 
+  const posRankMap = useMemo(() => {
+    const map = new Map<string, number>();
+    const counters: Record<string, number> = {};
+    for (const p of fullBoard) {
+      counters[p.pos] = (counters[p.pos] || 0) + 1;
+      map.set(p.sleeperId, counters[p.pos]);
+    }
+    return map;
+  }, [fullBoard]);
+
   const pickedPlayerIds = useMemo(() => {
     if (!draftData) return new Set<string>();
     return new Set(draftData.picks.map(p => p.playerId).filter(Boolean));
@@ -241,21 +251,12 @@ export default function LiveDraft() {
 
         const draftPick = pickMap.get(`${r + 1}-${actualSlot + 1}`);
 
-        let draftedPlayer: typeof fullBoard[0] | null = null;
-        if (draftPick?.playerId && draftData?.players) {
-          const pInfo = draftData.players[draftPick.playerId];
-          if (pInfo) {
-            const found = fullBoard.find(p => p.sleeperId === draftPick.playerId);
-            draftedPlayer = found || { sleeperId: draftPick.playerId, name: pInfo.name, pos: pInfo.pos, team: pInfo.team, value: 0, age: 0 };
-          }
-        }
-
         row.push({
           rank: overallPick + 1,
-          player: draftedPlayer || player,
+          player,  // Always the board-ranked player — never replaced
           pick: draftPick || null,
           isSnake: isSnakeRound,
-          isDrafted: !!draftedPlayer,
+          isDrafted: !!(draftPick?.playerId),  // slot has been filled in Sleeper
         });
       }
       grid.push(row);
@@ -588,39 +589,67 @@ export default function LiveDraft() {
                           </div>
                           {row.map((cell, slotIdx) => {
                             const hasPlayer = !!cell.player;
-                            const pos = cell.player?.pos || cell.pick?.pos || "";
-                            const wasDrafted = hasPlayer && cell.isDrafted && !!draftData;
-                            const cellStyle = hasPlayer
-                              ? wasDrafted
-                                ? (POS_CELL_PROJECTION[pos] || "bg-muted/10 border-border/20 text-muted-foreground")
-                                : (POS_CELL_BG[pos] || "bg-muted/20 border-border/30 text-foreground")
+                            const pos = cell.player?.pos || "";
+                            const wasDrafted = cell.isDrafted && !!draftData;
+                            const pickLabel = `${roundIdx + 1}.${String(slotIdx + 1).padStart(2, "0")}`;
+                            const posRank = cell.player ? posRankMap.get(cell.player.sleeperId) : undefined;
+                            const posLabel = pos && posRank ? `${pos}${posRank}` : pos;
+                            const lastName = cell.player
+                              ? cell.player.name.split(" ").slice(1).join(" ") || cell.player.name
                               : "";
-                            const isEmpty = !hasPlayer;
+                            const sid = cell.player?.sleeperId || "";
+
+                            const posTextColor: Record<string, string> = {
+                              QB: "text-red-900 dark:text-red-100",
+                              RB: "text-emerald-900 dark:text-emerald-100",
+                              WR: "text-blue-900 dark:text-blue-100",
+                              TE: "text-orange-900 dark:text-orange-100",
+                            };
+                            const posBorderColor: Record<string, string> = {
+                              QB: "border-red-500/50",
+                              RB: "border-emerald-500/50",
+                              WR: "border-blue-500/50",
+                              TE: "border-orange-500/50",
+                            };
 
                             return (
                               <div
                                 key={`${roundIdx}-${slotIdx}`}
-                                className={`
-                                  p-1 md:p-1.5 border-t border-border/20 flex flex-col items-center justify-center min-h-[52px] md:min-h-[56px] transition-colors
-                                  ${hasPlayer ? `${cellStyle} border rounded-sm` : isEmpty ? "bg-background border border-dashed border-border/30 rounded-sm" : "bg-muted/10 rounded-sm"}
-                                `}
+                                className={`relative overflow-hidden rounded-sm border transition-all min-h-[68px] ${
+                                  hasPlayer
+                                    ? `${POS_CELL_BG[pos] || "bg-muted/20 border-border/30"} ${posBorderColor[pos] || ""}`
+                                    : "bg-background border-dashed border-border/30"
+                                } ${wasDrafted ? "opacity-30" : ""}`}
                                 data-testid={`cell-${roundIdx + 1}-${slotIdx + 1}`}
                               >
                                 {hasPlayer ? (
                                   <>
-                                    <span className={`text-[10px] md:text-[11px] leading-tight text-center truncate w-full px-0.5 ${wasDrafted ? "font-medium opacity-60" : "font-bold"}`}>
-                                      {cell.player!.name.split(" ").length > 1
-                                        ? `${cell.player!.name.split(" ")[0][0]}. ${cell.player!.name.split(" ").slice(1).join(" ")}`
-                                        : cell.player!.name}
-                                    </span>
-                                    <span className={`text-[9px] font-bold mt-0.5 ${wasDrafted ? "opacity-40 " : ""}${POS_BADGE_SM[pos] || "text-muted-foreground"}`}>
-                                      {pos}
-                                    </span>
+                                    {/* Player headshot — right side */}
+                                    <div className="absolute right-0 top-0 bottom-0 w-[42%] overflow-hidden pointer-events-none">
+                                      <img
+                                        src={`https://sleepercdn.com/content/nfl/players/thumb/${sid}.jpg`}
+                                        alt=""
+                                        className="h-full w-full object-cover object-top"
+                                        onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                                      />
+                                    </div>
+                                    {/* Left content */}
+                                    <div className={`relative z-10 p-1 flex flex-col justify-between min-h-[68px] w-[62%] ${posTextColor[pos] || "text-foreground"}`}>
+                                      <span className="text-[8.5px] font-extrabold leading-none opacity-90 tabular-nums">
+                                        {pickLabel} {posLabel}
+                                      </span>
+                                      <div>
+                                        <div className="text-[10.5px] font-bold leading-tight truncate">{lastName}</div>
+                                        <div className="text-[8px] opacity-70 font-medium">
+                                          ({(cell.player!.value || 0).toLocaleString()})
+                                        </div>
+                                      </div>
+                                    </div>
                                   </>
                                 ) : (
-                                  <span className="text-[10px] text-muted-foreground/40 font-mono">
-                                    {roundIdx + 1}.{String(slotIdx + 1).padStart(2, "0")}
-                                  </span>
+                                  <div className="flex items-center justify-center min-h-[68px]">
+                                    <span className="text-[10px] text-muted-foreground/40 font-mono">{pickLabel}</span>
+                                  </div>
                                 )}
                               </div>
                             );
