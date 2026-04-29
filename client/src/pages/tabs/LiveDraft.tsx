@@ -594,10 +594,12 @@ export default function LiveDraft() {
                             const pickLabel = `${roundIdx + 1}.${String(slotIdx + 1).padStart(2, "0")}`;
                             const posRank = cell.player ? posRankMap.get(cell.player.sleeperId) : undefined;
                             const posLabel = pos && posRank ? `${pos}${posRank}` : pos;
-                            const lastName = cell.player
-                              ? cell.player.name.split(" ").slice(1).join(" ") || cell.player.name
-                              : "";
+                            const fullName = cell.player?.name || "";
+                            const nameParts = fullName.split(" ");
+                            const firstName = nameParts[0] || "";
+                            const lastName = nameParts.slice(1).join(" ") || firstName;
                             const sid = cell.player?.sleeperId || "";
+                            const hasRealImage = sid && !sid.startsWith("rookie_");
 
                             const posTextColor: Record<string, string> = {
                               QB: "text-red-900 dark:text-red-100",
@@ -611,11 +613,17 @@ export default function LiveDraft() {
                               WR: "border-blue-500/50",
                               TE: "border-orange-500/50",
                             };
+                            const posGradient: Record<string, string> = {
+                              QB: "from-red-200 dark:from-red-950",
+                              RB: "from-emerald-200 dark:from-emerald-950",
+                              WR: "from-blue-200 dark:from-blue-950",
+                              TE: "from-orange-200 dark:from-orange-950",
+                            };
 
                             return (
                               <div
                                 key={`${roundIdx}-${slotIdx}`}
-                                className={`relative overflow-hidden rounded-sm border transition-all min-h-[68px] ${
+                                className={`relative overflow-hidden rounded-sm border transition-all min-h-[76px] ${
                                   hasPlayer
                                     ? `${POS_CELL_BG[pos] || "bg-muted/20 border-border/30"} ${posBorderColor[pos] || ""}`
                                     : "bg-background border-dashed border-border/30"
@@ -624,30 +632,39 @@ export default function LiveDraft() {
                               >
                                 {hasPlayer ? (
                                   <>
-                                    {/* Player headshot — right side */}
-                                    <div className="absolute right-0 top-0 bottom-0 w-[42%] overflow-hidden pointer-events-none">
-                                      <img
-                                        src={`https://sleepercdn.com/content/nfl/players/thumb/${sid}.jpg`}
-                                        alt=""
-                                        className="h-full w-full object-cover object-top"
-                                        onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-                                      />
-                                    </div>
+                                    {/* Player headshot — full height right side */}
+                                    {hasRealImage && (
+                                      <div className="absolute right-0 top-0 bottom-0 w-[52%] overflow-hidden pointer-events-none">
+                                        <img
+                                          src={`https://sleepercdn.com/content/nfl/players/${sid}.jpg`}
+                                          alt={fullName}
+                                          className="h-full w-full object-cover object-top"
+                                          onError={(e) => {
+                                            const img = e.target as HTMLImageElement;
+                                            img.src = `https://sleepercdn.com/content/nfl/players/thumb/${sid}.jpg`;
+                                            img.onerror = () => { img.style.display = "none"; };
+                                          }}
+                                        />
+                                        {/* gradient from bg colour → transparent so text is readable */}
+                                        <div className={`absolute inset-0 bg-gradient-to-r ${posGradient[pos] || "from-muted"} via-transparent to-transparent`} />
+                                      </div>
+                                    )}
                                     {/* Left content */}
-                                    <div className={`relative z-10 p-1 flex flex-col justify-between min-h-[68px] w-[62%] ${posTextColor[pos] || "text-foreground"}`}>
+                                    <div className={`relative z-10 p-1 flex flex-col justify-between min-h-[76px] ${hasRealImage ? "w-[54%]" : "w-full"} ${posTextColor[pos] || "text-foreground"}`}>
                                       <span className="text-[8.5px] font-extrabold leading-none opacity-90 tabular-nums">
                                         {pickLabel} {posLabel}
                                       </span>
                                       <div>
-                                        <div className="text-[10.5px] font-bold leading-tight truncate">{lastName}</div>
-                                        <div className="text-[8px] opacity-70 font-medium">
+                                        <div className="text-[8px] leading-none opacity-75 truncate">{firstName}</div>
+                                        <div className="text-[11px] font-bold leading-tight truncate">{lastName}</div>
+                                        <div className="text-[8px] opacity-70 font-medium mt-0.5">
                                           ({(cell.player!.value || 0).toLocaleString()})
                                         </div>
                                       </div>
                                     </div>
                                   </>
                                 ) : (
-                                  <div className="flex items-center justify-center min-h-[68px]">
+                                  <div className="flex items-center justify-center min-h-[76px]">
                                     <span className="text-[10px] text-muted-foreground/40 font-mono">{pickLabel}</span>
                                   </div>
                                 )}
