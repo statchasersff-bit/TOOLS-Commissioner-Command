@@ -171,7 +171,7 @@ function EconomyOverview({ league }: { league: League }) {
               tickLine={{ stroke: "#334155" }}
               axisLine={{ stroke: "#334155" }}
             >
-              <Label value="Future Strength →" angle={-90} position="insideLeft" offset={10} style={{ fill: "#94a3b8", fontSize: 11, fontWeight: 600, textAnchor: "middle" }} />
+              <Label value="Future Strength →" angle={-90} position="insideLeft" offset={-14} style={{ fill: "#94a3b8", fontSize: 11, fontWeight: 600, textAnchor: "middle" }} />
             </YAxis>
             <ReferenceArea x1={avgNow} x2={100} y1={avgFuture} y2={100} fill="#d4af37" fillOpacity={0.07} />
             <ReferenceArea x1={avgNow} x2={100} y1={0} y2={avgFuture} fill="#ef4444" fillOpacity={0.06} />
