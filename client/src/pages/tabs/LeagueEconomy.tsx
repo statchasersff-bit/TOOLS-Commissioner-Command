@@ -239,23 +239,21 @@ function EconomyOverview({ league }: { league: League }) {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Card className="p-5 rounded-2xl" data-testid="parity-score">
-          <div className="flex items-center justify-between mb-2">
-            <div>
-              <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">League Parity</p>
-              <p className="text-xs text-muted-foreground mt-0.5">{parity.description}</p>
-            </div>
-            <div className="text-right">
+          <div className="flex items-center justify-between mb-1.5">
+            <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">League Parity</p>
+            <div className="flex-shrink-0 ml-3">
               <span className="text-3xl font-black">{parity.score}</span>
               <span className="text-lg text-muted-foreground">/100</span>
             </div>
           </div>
-          <div className="w-full h-2 bg-muted rounded-full overflow-hidden mt-2">
+          <p className="text-xs text-muted-foreground mb-3 leading-relaxed">{parity.description}</p>
+          <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
             <div
               className={`h-full rounded-full transition-all ${parity.score >= 70 ? "bg-emerald-500" : parity.score >= 40 ? "bg-yellow-500" : "bg-red-500"}`}
               style={{ width: `${parity.score}%` }}
             />
           </div>
-          <Badge variant="outline" className={`mt-2 ${parity.score >= 70 ? "text-emerald-600 border-emerald-300" : parity.score >= 40 ? "text-yellow-600 border-yellow-300" : "text-red-600 border-red-300"}`}>
+          <Badge variant="outline" className={`mt-2.5 ${parity.score >= 70 ? "text-emerald-600 border-emerald-300" : parity.score >= 40 ? "text-yellow-600 border-yellow-300" : "text-red-600 border-red-300"}`}>
             {parity.label} Parity
           </Badge>
         </Card>
