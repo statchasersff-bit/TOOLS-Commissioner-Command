@@ -1031,12 +1031,26 @@ export async function fetchDraftBoard(leagueId: string) {
     };
   }
 
+  // Auto-detect rookie draft from picks if metadata.type isn't set
+  let draftCategory = draft.metadata?.type || "";
+  if (!draftCategory || draftCategory === "snake" || draftCategory === "linear") {
+    const picksWithPlayer = (picksRaw || []).filter((p: any) => p.player_id);
+    if (picksWithPlayer.length > 0) {
+      const rookieCount = picksWithPlayer.filter(
+        (p: any) => p.metadata?.years_exp === "0" || p.metadata?.years_exp === 0
+      ).length;
+      if (rookieCount / picksWithPlayer.length >= 0.6) {
+        draftCategory = "rookie";
+      }
+    }
+  }
+
   return {
     draft: {
       draftId,
       status: draft.status,
       type: draft.type,
-      draftCategory: draft.metadata?.type || "",
+      draftCategory,
       rounds,
       teams: numTeams,
       season: draft.season,

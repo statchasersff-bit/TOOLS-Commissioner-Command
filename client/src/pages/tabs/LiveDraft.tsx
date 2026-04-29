@@ -104,6 +104,7 @@ export default function LiveDraft() {
   const { dynastyPlayerList, redraftValuesBySleeperId } = useValueModel();
   const [rankMode, setRankMode] = useState<"dynasty" | "redraft">("dynasty");
   const [rookieFormat, setRookieFormat] = useState<"SF" | "1QB">("1QB");
+  const [manualRookieMode, setManualRookieMode] = useState(false);
   const { isConnected, user, leagues } = useSleeper();
 
   const scanForLiveDrafts = useCallback(async () => {
@@ -177,24 +178,30 @@ export default function LiveDraft() {
   }, [dynastyPlayerList, redraftValuesBySleeperId]);
 
   const isRookieDraft = draftData?.draft?.draftCategory === "rookie";
+  const effectiveRookieMode = isRookieDraft || manualRookieMode;
 
   // Auto-detect SF vs 1QB from the connected user's league list
   useEffect(() => {
-    if (!isRookieDraft || !activeLeagueId) return;
+    if (!effectiveRookieMode || !activeLeagueId) return;
     const league = leagues.find(l => l.leagueId === activeLeagueId);
     if (league) {
       const isSF = league.rosterPositions.includes("SUPER_FLEX");
       setRookieFormat(isSF ? "SF" : "1QB");
     }
-  }, [isRookieDraft, activeLeagueId, leagues]);
+  }, [effectiveRookieMode, activeLeagueId, leagues]);
+
+  // Sync manualRookieMode with auto-detected isRookieDraft when draft loads
+  useEffect(() => {
+    if (isRookieDraft) setManualRookieMode(true);
+  }, [isRookieDraft]);
 
   const fullBoard = useMemo(() => {
-    if (isRookieDraft) {
+    if (effectiveRookieMode) {
       return rookieFormat === "SF" ? ROOKIE_BOARD_2026_SF : ROOKIE_BOARD_2026_1QB;
     }
     const list = rankMode === "redraft" ? redraftPlayerList : dynastyPlayerList;
     return list.slice(0, 300);
-  }, [isRookieDraft, rookieFormat, rankMode, dynastyPlayerList, redraftPlayerList]);
+  }, [effectiveRookieMode, rookieFormat, rankMode, dynastyPlayerList, redraftPlayerList]);
 
   const globalRankMap = useMemo(() => {
     const map = new Map<string, number>();
@@ -450,10 +457,21 @@ export default function LiveDraft() {
                     {teamCount} teams
                   </span>
                 )}
-                {isRookieDraft ? (
+                {draftData && (
+                  <div className="flex items-center border border-border rounded-md overflow-hidden" data-testid="toggle-rookie-mode">
+                    <button
+                      className={`px-2.5 py-1 text-[11px] font-semibold transition-colors ${effectiveRookieMode ? "bg-emerald-600 text-white" : "bg-background text-muted-foreground hover:bg-muted/50"}`}
+                      onClick={() => setManualRookieMode(!effectiveRookieMode)}
+                      data-testid="button-rookie-mode"
+                    >
+                      Rookie Board
+                    </button>
+                  </div>
+                )}
+                {effectiveRookieMode ? (
                   <div className="flex items-center gap-2">
                     <Badge variant="outline" className="text-[11px] border-emerald-500/40 text-emerald-600 dark:text-emerald-400 bg-emerald-500/5" data-testid="badge-rookie-rankings">
-                      FantasyCalc 2026 Rookie (PPR)
+                      FantasyCalc 2026 (PPR)
                     </Badge>
                     <div className="flex items-center border border-border rounded-md overflow-hidden" data-testid="toggle-rookie-format">
                       <button
