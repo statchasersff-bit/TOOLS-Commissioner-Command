@@ -148,8 +148,9 @@ function EconomyOverview({ league }: { league: League }) {
       </div>
 
       <Card className="p-4 md:p-6 rounded-2xl bg-[#0a1628] border-[#1e3a5f]" data-testid="dynasty-window-chart">
-        <ResponsiveContainer width="100%" height={380}>
-          <ScatterChart margin={{ top: 20, right: 30, bottom: 30, left: 20 }}>
+        <div className="h-[300px] md:h-[380px]">
+        <ResponsiveContainer width="100%" height="100%">
+          <ScatterChart margin={{ top: 20, right: 20, bottom: 36, left: 10 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#1e3a5f" strokeOpacity={0.5} />
             <XAxis
               type="number"
@@ -159,17 +160,18 @@ function EconomyOverview({ league }: { league: League }) {
               tickLine={{ stroke: "#334155" }}
               axisLine={{ stroke: "#334155" }}
             >
-              <Label value="Current Power →" position="insideBottom" offset={-15} style={{ fill: "#94a3b8", fontSize: 12, fontWeight: 600 }} />
+              <Label value="Current Power →" position="insideBottom" offset={-18} style={{ fill: "#94a3b8", fontSize: 11, fontWeight: 600 }} />
             </XAxis>
             <YAxis
               type="number"
               dataKey="y"
               domain={[0, 100]}
+              width={36}
               tick={{ fill: "#94a3b8", fontSize: 11 }}
               tickLine={{ stroke: "#334155" }}
               axisLine={{ stroke: "#334155" }}
             >
-              <Label value="Future Strength →" angle={-90} position="insideLeft" dy={60} offset={-5} style={{ fill: "#94a3b8", fontSize: 12, fontWeight: 600 }} />
+              <Label value="Future Strength →" angle={-90} position="insideLeft" offset={15} style={{ fill: "#94a3b8", fontSize: 11, fontWeight: 600, textAnchor: "middle" }} />
             </YAxis>
             <ReferenceArea x1={avgNow} x2={100} y1={avgFuture} y2={100} fill="#d4af37" fillOpacity={0.07} />
             <ReferenceArea x1={avgNow} x2={100} y1={0} y2={avgFuture} fill="#ef4444" fillOpacity={0.06} />
@@ -218,6 +220,7 @@ function EconomyOverview({ league }: { league: League }) {
             />
           </ScatterChart>
         </ResponsiveContainer>
+        </div>
         <div className="grid grid-cols-2 gap-2 mt-3">
           <div className="text-center py-1.5 rounded-lg bg-[#10b981]/10 border border-[#10b981]/20">
             <span className="text-[10px] text-emerald-400 font-semibold">↑ Rebuild With Ammo</span>
