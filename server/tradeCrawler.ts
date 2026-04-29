@@ -383,6 +383,10 @@ async function processLeague(leagueId: string, degree: number) {
       if (trade.draft_picks) {
         for (const pick of trade.draft_picks) {
           if (!pick.owner_id || !pick.previous_owner_id) continue;
+          // Skip picks beyond round 5 (invalid/junk data)
+          if (pick.round > 5) continue;
+          // Skip startup-league picks: new leagues (no prior season) trading current-year picks
+          if (!leagueInfo.previous_league_id && pick.season === leagueInfo.season) continue;
           const receiverInfo = rosterOwnerMap.get(pick.owner_id);
           const originalOwnerInfo = rosterOwnerMap.get(pick.roster_id);
           // Only assign a known slot when the pick is for the current league season.
@@ -650,21 +654,8 @@ export async function searchTrades(params: {
   const limit = Math.min(params.limit || 50, 100);
   const offset = (page - 1) * limit;
 
-  let conditions: any[] = [
-    // Exclude trades whose pick lists contain startup/invalid picks
-    sql`${trades.id} NOT IN (
-      SELECT ta.trade_id
-      FROM trade_assets ta
-      JOIN trades t_sub ON ta.trade_id = t_sub.id
-      JOIN crawled_leagues cl ON t_sub.league_id = cl.id
-      WHERE ta.asset_type = 'pick'
-        AND (
-          ta.pick_round > 5
-          OR (cl.previous_league_id IS NULL AND ta.pick_season = cl.season)
-        )
-    )`,
-    // Zero-side trades are now filtered at ingestion time — no runtime UNNEST needed
-  ];
+  // All data quality filters (zero-side, invalid picks) are now applied at ingestion time.
+  let conditions: any[] = [];
 
   if (params.format && params.format !== "all") {
     conditions.push(eq(trades.leagueFormat, params.format));
@@ -912,6 +903,8 @@ export async function ingestLeagueTrades(params: {
     if (trade.draft_picks) {
       for (const pick of trade.draft_picks) {
         if (!pick.owner_id || !pick.previous_owner_id) continue;
+        // Skip picks beyond round 5 (invalid/junk data)
+        if (pick.round > 5) continue;
         // Only assign a known slot when the pick season matches this league's season.
         const slot = pick.season === params.season
           ? (draftSlots.get(pick.roster_id) ?? null)

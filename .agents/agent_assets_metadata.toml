@@ -18,3 +18,9 @@ id = "lSuDjuZFTRsRLhJxgx9Ep"
 uri = "file://dynasty-command-launch.zip"
 type = "unspecified"
 title = "dynasty-command-launch.zip (league roster ownership filter)"
+
+[[outputs]]
+id = "sazs3jvthYzTqyrlpFv4o"
+uri = "file://dist/dynasty-command.zip"
+type = "unspecified"
+title = "dynasty-command.zip — Trade Database fix + 50 per page"

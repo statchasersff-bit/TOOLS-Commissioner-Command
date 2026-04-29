@@ -1614,7 +1614,7 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
   );
 }
 
-const TRADE_DB_LIMIT = 20;
+const TRADE_DB_LIMIT = 50;
 
 export function TradeDatabase({ league }: { league: League }) {
   const { valuesBySleeperId } = useValueModel();
