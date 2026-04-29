@@ -1031,17 +1031,14 @@ export async function fetchDraftBoard(leagueId: string) {
     };
   }
 
-  // Auto-detect rookie draft from picks if metadata.type isn't set
+  // Detect draft category: use explicit metadata.type first, then fall back to rounds rule
+  // Rounds ≤ 6 → rookie draft; Rounds > 6 → startup draft
   let draftCategory = draft.metadata?.type || "";
   if (!draftCategory || draftCategory === "snake" || draftCategory === "linear") {
-    const picksWithPlayer = (picksRaw || []).filter((p: any) => p.player_id);
-    if (picksWithPlayer.length > 0) {
-      const rookieCount = picksWithPlayer.filter(
-        (p: any) => p.metadata?.years_exp === "0" || p.metadata?.years_exp === 0
-      ).length;
-      if (rookieCount / picksWithPlayer.length >= 0.6) {
-        draftCategory = "rookie";
-      }
+    if (rounds <= 6) {
+      draftCategory = "rookie";
+    } else {
+      draftCategory = "startup";
     }
   }
 

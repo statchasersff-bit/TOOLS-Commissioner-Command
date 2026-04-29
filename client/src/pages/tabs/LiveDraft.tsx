@@ -177,7 +177,10 @@ export default function LiveDraft() {
       .sort((a, b) => b.redraftValue - a.redraftValue);
   }, [dynastyPlayerList, redraftValuesBySleeperId]);
 
-  const isRookieDraft = draftData?.draft?.draftCategory === "rookie";
+  // Rounds ≤ 6 = rookie; > 6 = startup. Also honour explicit draftCategory.
+  const isRookieDraft =
+    draftData?.draft?.draftCategory === "rookie" ||
+    (!!draftData?.draft && draftData.draft.draftCategory !== "startup" && draftData.draft.rounds <= 6);
   const effectiveRookieMode = isRookieDraft || manualRookieMode;
 
   // Auto-detect SF vs 1QB from the connected user's league list
