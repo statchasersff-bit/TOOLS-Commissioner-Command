@@ -330,13 +330,15 @@ function PlayerRow({
   );
 }
 
+function ordinalRound(round: number): string {
+  if (round === 1) return "1st";
+  if (round === 2) return "2nd";
+  if (round === 3) return "3rd";
+  return `${round}th`;
+}
+
 function formatPickLabel(dp: TransactionPick): string {
-  const slot = dp.pickSlot;
-  if (slot != null && dp.season === "2026") {
-    const slotStr = slot.toString().padStart(2, "0");
-    return `${dp.season} ${dp.round}.${slotStr}`;
-  }
-  return `${dp.season} Round ${dp.round}`;
+  return `${dp.season} ${ordinalRound(dp.round)}`;
 }
 
 function TradeTransaction({ txn, valuesBySleeperId, getPickValue }: { txn: Transaction; valuesBySleeperId: Record<string, number>; getPickValue: (pick: any) => number }) {

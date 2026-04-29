@@ -152,9 +152,13 @@ export interface CrawlStatus {
   updatedAt: string | null;
 }
 
+function ordinalRound(round: number): string {
+  if (round === 1) return "1st";
+  if (round === 2) return "2nd";
+  if (round === 3) return "3rd";
+  return `${round}th`;
+}
+
 export function formatPickLabel(pick: Pick): string {
-  if (pick.pickSlot !== undefined && pick.pickSlot > 0) {
-    return `${pick.year} ${pick.round}.${String(pick.pickSlot).padStart(2, "0")}`;
-  }
-  return `${pick.year} Rd ${pick.round}`;
+  return `${pick.year} ${ordinalRound(pick.round)}`;
 }

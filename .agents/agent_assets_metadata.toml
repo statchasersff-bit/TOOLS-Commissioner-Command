@@ -12,3 +12,9 @@ id = "NB-tHex3tqIZN0AphDZUr"
 uri = "file://dynasty-command-bluehost.zip"
 type = "unspecified"
 title = "dynasty-command-bluehost.zip"
+
+[[outputs]]
+id = "lSuDjuZFTRsRLhJxgx9Ep"
+uri = "file://dynasty-command-launch.zip"
+type = "unspecified"
+title = "dynasty-command-launch.zip (updated pick labels)"

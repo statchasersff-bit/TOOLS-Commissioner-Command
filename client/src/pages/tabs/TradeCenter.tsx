@@ -1956,13 +1956,10 @@ function TradeCard({
                 {side.picksReceived.map((p, pi) => {
                   const isStartup = p.round > 5;
                   const val = isStartup ? 0 : getStaticPickValue(parseInt(p.season) || 2026, p.round, "mid", p.slot, trade.leagueTotalRosters);
+                  const ord = (r: number) => r === 1 ? "1st" : r === 2 ? "2nd" : r === 3 ? "3rd" : `${r}th`;
                   const pickLabel = isStartup
-                    ? (p.slot != null
-                        ? `${p.season} Startup ${p.round}.${String(p.slot).padStart(2, "0")}`
-                        : `${p.season} Startup R${p.round}`)
-                    : (p.slot != null
-                        ? `${p.season} ${p.round}.${String(p.slot).padStart(2, "0")}`
-                        : `${p.season} Round ${p.round}`);
+                    ? `${p.season} Startup ${ord(p.round)}`
+                    : `${p.season} ${ord(p.round)}`;
                   return (
                     <div key={`pick-${pi}`} className="flex items-center justify-between py-1">
                       <div className="flex items-center gap-1.5">
