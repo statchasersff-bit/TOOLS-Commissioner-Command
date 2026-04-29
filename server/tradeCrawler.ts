@@ -306,6 +306,19 @@ async function processLeague(leagueId: string, degree: number) {
     }).onConflictDoNothing();
 
     for (const trade of leagueTrades) {
+      // Skip trades where any roster received 0 assets (one-sided / junk data)
+      const rosterIds = trade.roster_ids || [];
+      const receivingRosters = new Set<number>();
+      if (trade.adds) {
+        for (const [, rosterId] of Object.entries(trade.adds)) receivingRosters.add(rosterId as number);
+      }
+      if (trade.draft_picks) {
+        for (const pick of trade.draft_picks) {
+          if (pick.owner_id) receivingRosters.add(pick.owner_id);
+        }
+      }
+      if (rosterIds.some((rid) => !receivingRosters.has(rid))) continue;
+
       const insertedTrade = await d.insert(trades).values({
         id: trade.transaction_id,
         leagueId: leagueInfo.league_id,
@@ -650,18 +663,7 @@ export async function searchTrades(params: {
           OR (cl.previous_league_id IS NULL AND ta.pick_season = cl.season)
         )
     )`,
-    // Exclude trades where any participating roster received 0 assets
-    sql`${trades.id} NOT IN (
-      SELECT t2.id
-      FROM trades t2
-      CROSS JOIN LATERAL UNNEST(t2.roster_ids) AS unnested_rid
-      WHERE NOT EXISTS (
-        SELECT 1 FROM trade_assets ta2
-        WHERE ta2.trade_id = t2.id
-          AND ta2.roster_id = unnested_rid
-          AND ta2.direction = 'received'
-      )
-    )`,
+    // Zero-side trades are now filtered at ingestion time — no runtime UNNEST needed
   ];
 
   if (params.format && params.format !== "all") {
@@ -828,6 +830,22 @@ export async function ingestLeagueTrades(params: {
   let skipped = 0;
 
   for (const trade of filteredTransactions) {
+    // Skip trades where any roster received 0 assets (one-sided / junk data)
+    const tradeRosterIds = trade.roster_ids || [];
+    const tradeReceivingRosters = new Set<number>();
+    if (trade.adds) {
+      for (const [, rosterId] of Object.entries(trade.adds)) tradeReceivingRosters.add(rosterId as number);
+    }
+    if (trade.draft_picks) {
+      for (const pick of trade.draft_picks) {
+        if (pick.owner_id) tradeReceivingRosters.add(pick.owner_id);
+      }
+    }
+    if (tradeRosterIds.some((rid) => !tradeReceivingRosters.has(rid))) {
+      skipped++;
+      continue;
+    }
+
     const insertedTrade = await d.insert(trades).values({
       id: trade.transaction_id,
       leagueId: params.leagueId,
