@@ -434,25 +434,28 @@ export function TradeFinder({ league, userTeam }: TradeProps) {
         <div className="space-y-0">
           {tradeBlockCandidates.length === 0 && <p className="text-xs text-muted-foreground">No trade block candidates found</p>}
           {tradeBlockCandidates.slice(0, 20).map((p, i) => (
-            <div key={`${p.sleeperId || p.id}-${i}`} className="flex items-center justify-between py-2.5 border-b border-border/20 last:border-0" data-testid={`trade-block-candidate-${p.sleeperId || p.id}`}>
-              <div className="flex items-center gap-2 min-w-0">
-                <span className="text-xs text-muted-foreground w-5 text-right">{i + 1}.</span>
-                <Badge variant="outline" className={`text-xs w-8 justify-center flex-shrink-0 ${getPositionColor(p.pos)}`}>{p.pos}</Badge>
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold truncate">{p.name}</p>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[10px] text-muted-foreground">{p.teamName}</span>
-                    <span className="text-[10px] text-muted-foreground">· {p.ownerName}</span>
-                  </div>
-                </div>
+            <div key={`${p.sleeperId || p.id}-${i}`} className="flex items-center gap-2 py-2.5 border-b border-border/20 last:border-0" data-testid={`trade-block-candidate-${p.sleeperId || p.id}`}>
+              <span className="text-xs text-muted-foreground w-5 text-right flex-shrink-0">{i + 1}.</span>
+              <div className="w-7 h-7 rounded-full flex-shrink-0 overflow-hidden bg-muted ring-1 ring-border/30">
+                <img
+                  src={`https://sleepercdn.com/content/nfl/players/thumb/${p.sleeperId || p.id}.jpg`}
+                  alt={p.name}
+                  className="w-full h-full object-cover object-top"
+                  onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                />
               </div>
-              <div className="flex items-center gap-2 flex-shrink-0">
-                <span className="text-xs text-muted-foreground">Age {p.age}</span>
-                <div className="text-right">
-                  <p className="text-xs font-bold text-[#0b3a7a] dark:text-blue-400">{p.redraftVal.toLocaleString()}</p>
-                  <p className="text-[10px] text-muted-foreground">redraft</p>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <p className="text-sm font-semibold leading-tight">{p.name}</p>
+                  <Badge variant="outline" className={`text-[10px] px-1 py-0 h-4 flex-shrink-0 ${getPositionColor(p.pos)}`}>{p.pos}</Badge>
                 </div>
-                <Badge variant="outline" className={cn("text-[10px]", p.reason === "Rebuilder" ? getTierColor("Future Powerhouse") : "text-amber-600 dark:text-amber-400 border-amber-300 dark:border-amber-700")} data-testid={`trade-block-reason-${p.sleeperId || p.id}`}>
+                <p className="text-[10px] text-muted-foreground mt-0.5 truncate">
+                  {p.ownerName} · Age {p.age}
+                </p>
+              </div>
+              <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                <span className="text-xs font-bold text-[#0b3a7a] dark:text-blue-400 tabular-nums">{p.redraftVal.toLocaleString()}</span>
+                <Badge variant="outline" className={cn("text-[9px] px-1.5 py-0 h-4", p.reason === "Rebuilder" ? getTierColor("Future Powerhouse") : "text-amber-600 dark:text-amber-400 border-amber-300 dark:border-amber-700")} data-testid={`trade-block-reason-${p.sleeperId || p.id}`}>
                   {p.reason}
                 </Badge>
               </div>
