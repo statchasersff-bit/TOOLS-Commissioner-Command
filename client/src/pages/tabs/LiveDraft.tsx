@@ -338,28 +338,30 @@ export default function LiveDraft() {
                 {liveDrafts.map((ld) => (
                   <div
                     key={ld.draftId}
-                    className="flex items-center justify-between gap-3 p-3 rounded-lg border border-emerald-500/20 bg-background"
+                    className="flex items-center justify-between gap-2 p-3 rounded-lg border border-emerald-500/20 bg-background"
                     data-testid={`live-draft-${ld.leagueId}`}
                   >
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5">
                         <Zap className="w-3.5 h-3.5 text-[#d4af37] flex-shrink-0" />
                         <span className="font-medium text-sm text-foreground truncate" data-testid={`text-live-league-name-${ld.leagueId}`}>
                           {ld.leagueName}
                         </span>
                       </div>
-                      <div className="flex items-center gap-3 mt-1 ml-5.5">
-                        <span className="text-[11px] text-muted-foreground">
-                          {ld.draftCategory === "rookie" ? "Rookie Draft" : ld.draftCategory === "startup" ? "Startup Draft" : ld.type}
-                          {" · "}{ld.teams} teams · {ld.rounds} rounds
+                      <div className="flex items-center gap-1.5 mt-0.5 ml-5">
+                        <span className="text-[11px] text-muted-foreground whitespace-nowrap">
+                          {ld.draftCategory === "rookie" ? "Rookie" : ld.draftCategory === "startup" ? "Startup" : ld.type}
+                          {" · "}{ld.teams}T · {ld.rounds}R
                         </span>
-                        <span className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400" data-testid={`text-live-progress-${ld.leagueId}`}>
+                        <span className="text-[11px] text-muted-foreground">·</span>
+                        <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 whitespace-nowrap" data-testid={`text-live-progress-${ld.leagueId}`}>
                           {ld.picksMade}/{ld.totalPicks} picks
                         </span>
                       </div>
                     </div>
                     <Button
                       size="sm"
+                      className="flex-shrink-0"
                       onClick={() => handleJoinLiveDraft(ld.leagueId, ld.teams)}
                       data-testid={`button-join-draft-${ld.leagueId}`}
                     >
