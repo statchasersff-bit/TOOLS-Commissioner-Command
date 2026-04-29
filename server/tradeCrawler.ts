@@ -638,6 +638,7 @@ export async function searchTrades(params: {
   const offset = (page - 1) * limit;
 
   let conditions: any[] = [
+    // Exclude trades whose pick lists contain startup/invalid picks
     sql`${trades.id} NOT IN (
       SELECT ta.trade_id
       FROM trade_assets ta
@@ -648,6 +649,18 @@ export async function searchTrades(params: {
           ta.pick_round > 5
           OR (cl.previous_league_id IS NULL AND ta.pick_season = cl.season)
         )
+    )`,
+    // Exclude trades where any participating roster received 0 assets
+    sql`${trades.id} NOT IN (
+      SELECT t2.id
+      FROM trades t2
+      CROSS JOIN LATERAL UNNEST(t2.roster_ids) AS unnested_rid
+      WHERE NOT EXISTS (
+        SELECT 1 FROM trade_assets ta2
+        WHERE ta2.trade_id = t2.id
+          AND ta2.roster_id = unnested_rid
+          AND ta2.direction = 'received'
+      )
     )`,
   ];
 
