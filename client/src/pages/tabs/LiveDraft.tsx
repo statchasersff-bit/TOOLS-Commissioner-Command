@@ -304,11 +304,11 @@ export default function LiveDraft() {
         <Card className={liveDrafts.length > 0 ? "border-emerald-500/40 bg-emerald-500/5" : ""}>
           <CardContent className="pt-5 pb-4">
             <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <Radio className={`w-4 h-4 ${liveDrafts.length > 0 ? "text-emerald-500 animate-pulse" : "text-muted-foreground"}`} />
-                <span className="text-sm font-semibold text-foreground" data-testid="text-live-detector-title">Live Draft Detector</span>
+              <div className="flex items-center gap-2 min-w-0">
+                <Radio className={`w-4 h-4 flex-shrink-0 ${liveDrafts.length > 0 ? "text-emerald-500 animate-pulse" : "text-muted-foreground"}`} />
+                <span className="text-sm font-semibold text-foreground whitespace-nowrap" data-testid="text-live-detector-title">Live Draft Detector</span>
                 {liveDrafts.length > 0 && (
-                  <Badge variant="secondary" className="text-[10px] bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30" data-testid="badge-live-count">
+                  <Badge variant="secondary" className="text-[10px] bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 flex-shrink-0" data-testid="badge-live-count">
                     {liveDrafts.length} LIVE
                   </Badge>
                 )}
@@ -316,12 +316,13 @@ export default function LiveDraft() {
               <Button
                 variant="outline"
                 size="sm"
+                className="flex-shrink-0 px-2.5"
                 onClick={scanForLiveDrafts}
                 disabled={isDetecting}
                 data-testid="button-scan-drafts"
               >
-                {isDetecting ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : <RefreshCw className="w-3.5 h-3.5 mr-1.5" />}
-                {hasScanned ? "Re-scan" : "Scan"}
+                {isDetecting ? <Loader2 className="w-3.5 h-3.5 animate-spin sm:mr-1.5" /> : <RefreshCw className="w-3.5 h-3.5 sm:mr-1.5" />}
+                <span className="hidden sm:inline">{hasScanned ? "Re-scan" : "Scan"}</span>
               </Button>
             </div>
             {isDetecting && !hasScanned && (
@@ -361,12 +362,13 @@ export default function LiveDraft() {
                     </div>
                     <Button
                       size="sm"
-                      className="flex-shrink-0"
+                      className="flex-shrink-0 px-3"
                       onClick={() => handleJoinLiveDraft(ld.leagueId, ld.teams)}
                       data-testid={`button-join-draft-${ld.leagueId}`}
                     >
                       <Target className="w-3.5 h-3.5 mr-1.5" />
-                      Track Draft
+                      <span className="hidden sm:inline">Track Draft</span>
+                      <span className="sm:hidden">Track</span>
                     </Button>
                   </div>
                 ))}
