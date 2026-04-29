@@ -130,7 +130,7 @@ export function MarketValue({ league }: MarketProps) {
       </div>
 
       <Card className="overflow-hidden">
-        <table className="w-full text-sm" data-testid="table-market-values">
+        <table className="w-full" data-testid="table-market-values">
           <thead>
             <tr className="border-b bg-muted/40">
               <th
@@ -141,21 +141,21 @@ export function MarketValue({ league }: MarketProps) {
                 Player{sortIndicator("name")}
               </th>
               <th
-                className="hidden md:table-cell text-left px-4 py-2.5 font-semibold text-xs uppercase tracking-wider cursor-pointer hover:text-[#d4af37] select-none w-20"
+                className="text-left px-2 md:px-4 py-2.5 font-semibold text-xs uppercase tracking-wider cursor-pointer hover:text-[#d4af37] select-none w-10 md:w-20"
                 onClick={() => toggleSort("pos")}
                 data-testid="th-pos"
               >
                 Pos{sortIndicator("pos")}
               </th>
               <th
-                className="text-right px-2 md:px-4 py-2.5 font-semibold text-xs uppercase tracking-wider cursor-pointer hover:text-[#d4af37] select-none w-16 md:w-32"
+                className="text-right px-2 md:px-4 py-2.5 font-semibold text-xs uppercase tracking-wider cursor-pointer hover:text-[#d4af37] select-none w-[60px] md:w-32"
                 onClick={() => toggleSort("redraftValue")}
                 data-testid="th-redraft"
               >
                 Redraft{sortIndicator("redraftValue")}
               </th>
               <th
-                className="text-right px-2 md:px-4 py-2.5 font-semibold text-xs uppercase tracking-wider cursor-pointer hover:text-[#d4af37] select-none w-16 md:w-32"
+                className="text-right px-2 md:px-4 py-2.5 font-semibold text-xs uppercase tracking-wider cursor-pointer hover:text-[#d4af37] select-none w-[60px] md:w-32"
                 onClick={() => toggleSort("dynastyValue")}
                 data-testid="th-dynasty"
               >
@@ -178,8 +178,8 @@ export function MarketValue({ league }: MarketProps) {
                 data-testid={`row-player-${row.sleeperId}`}
               >
                 <td className="px-2 md:px-4 py-2">
-                  <div className="flex items-center gap-1.5 md:gap-2.5">
-                    <div className="w-6 h-6 md:w-8 md:h-8 rounded-full flex-shrink-0 overflow-hidden bg-muted ring-1 ring-border/40">
+                  <div className="flex items-center gap-2">
+                    <div className="hidden md:block w-8 h-8 rounded-full flex-shrink-0 overflow-hidden bg-muted ring-1 ring-border/40">
                       <img
                         src={`https://sleepercdn.com/content/nfl/players/thumb/${row.sleeperId}.jpg`}
                         alt={row.name}
@@ -193,16 +193,13 @@ export function MarketValue({ league }: MarketProps) {
                       />
                     </div>
                     <div className="min-w-0">
-                      <div className="flex items-center gap-1">
-                        <span className="font-medium text-xs md:text-sm leading-tight" data-testid={`text-player-name-${row.sleeperId}`}>{row.name}</span>
-                        <Badge variant="outline" className={`md:hidden text-[9px] px-1 py-0 h-3.5 flex-shrink-0 ${getPositionColor(row.pos)}`}>{row.pos}</Badge>
-                      </div>
+                      <span className="font-medium text-xs md:text-sm block truncate" data-testid={`text-player-name-${row.sleeperId}`}>{row.name}</span>
                       <span className="text-[10px] text-muted-foreground">{row.team}</span>
                     </div>
                   </div>
                 </td>
-                <td className="hidden md:table-cell px-4 py-2.5">
-                  <Badge variant="outline" className={`text-[10px] w-8 justify-center ${getPositionColor(row.pos)}`}>
+                <td className="px-2 md:px-4 py-2">
+                  <Badge variant="outline" className={`text-[9px] md:text-[10px] px-1 md:px-2 h-4 md:h-5 md:w-8 justify-center ${getPositionColor(row.pos)}`}>
                     {row.pos}
                   </Badge>
                 </td>
