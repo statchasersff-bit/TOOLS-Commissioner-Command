@@ -394,40 +394,43 @@ function SortableLeagueRecords({ records }: { records: any[] }) {
         <tbody>
           {(showAll ? sorted : sorted.slice(0, 10)).map((rec: any, idx: number) => (
             <tr key={`${rec.leagueId}-${idx}`} className="border-b border-border/20 hover:bg-muted/10" data-testid={`league-record-${rec.leagueId}`}>
-              <td className="px-3 py-2">
-                <div className="flex items-center gap-2.5 min-w-0">
+              <td className="px-1.5 md:px-3 py-2">
+                <div className="flex items-center gap-1.5 md:gap-2.5 min-w-0">
                   {rec.avatar ? (
-                    <img src={rec.avatar} alt="" className="w-9 h-9 rounded-full flex-shrink-0 object-cover bg-muted ring-1 ring-border/40" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                    <img src={rec.avatar} alt="" className="w-6 h-6 md:w-9 md:h-9 rounded-full flex-shrink-0 object-cover bg-muted ring-1 ring-border/40" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
                   ) : (
-                    <div className="w-9 h-9 rounded-full flex-shrink-0 bg-[#0b3a7a]/20 dark:bg-blue-900/40 flex items-center justify-center ring-1 ring-border/40">
-                      <span className="text-xs font-bold text-[#0b3a7a] dark:text-blue-400 uppercase">{rec.leagueName?.[0] ?? "?"}</span>
+                    <div className="w-6 h-6 md:w-9 md:h-9 rounded-full flex-shrink-0 bg-[#0b3a7a]/20 dark:bg-blue-900/40 flex items-center justify-center ring-1 ring-border/40">
+                      <span className="text-[9px] md:text-xs font-bold text-[#0b3a7a] dark:text-blue-400 uppercase">{rec.leagueName?.[0] ?? "?"}</span>
                     </div>
                   )}
                   <div className="min-w-0">
-                    <div className="font-semibold text-sm text-foreground truncate" title={rec.leagueName}>{rec.leagueName}</div>
-                    <div className="flex items-center gap-1 mt-0.5 flex-wrap">
+                    <div className="font-semibold text-[10px] md:text-sm text-foreground truncate" title={rec.leagueName}>{rec.leagueName}</div>
+                    <div className="hidden md:flex items-center gap-1 mt-0.5 flex-wrap">
                       <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-muted/60 text-muted-foreground">{rec.scoringFormat === "Half" ? "Half-PPR" : rec.scoringFormat}</span>
                       <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-muted/60 text-muted-foreground">{rec.totalRosters} Teams</span>
                       <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-muted/60 text-muted-foreground">{rec.format}</span>
                     </div>
+                    <div className="flex md:hidden items-center gap-0.5 mt-0.5">
+                      <span className="text-[8px] text-muted-foreground">{rec.totalRosters}T · {rec.format}</span>
+                    </div>
                   </div>
                 </div>
               </td>
-              <td className="px-2 py-2 text-center font-semibold tabular-nums whitespace-nowrap">{rec.wins}-{rec.losses}{rec.ties > 0 ? `-${rec.ties}` : ""}</td>
-              <td className="px-2 py-2 text-center">{rankCell(rec.redraftRank, rec.totalRosters)}</td>
-              <td className="px-2 py-2 text-center">{rankCell(rec.dynastyRank, rec.totalRosters)}</td>
-              <td className="px-2 py-2 text-center" data-testid={`text-playoff-odds-${rec.leagueId}`}>
+              <td className="px-1 md:px-2 py-2 text-center font-semibold tabular-nums whitespace-nowrap">{rec.wins}-{rec.losses}{rec.ties > 0 ? `-${rec.ties}` : ""}</td>
+              <td className="px-1 md:px-2 py-2 text-center">{rankCell(rec.redraftRank, rec.totalRosters)}</td>
+              <td className="px-1 md:px-2 py-2 text-center">{rankCell(rec.dynastyRank, rec.totalRosters)}</td>
+              <td className="px-1 md:px-2 py-2 text-center" data-testid={`text-playoff-odds-${rec.leagueId}`}>
                 {rec.playoffOdds != null
                   ? <span className={`font-semibold tabular-nums ${rec.playoffOdds >= 70 ? "text-emerald-600 dark:text-emerald-400" : rec.playoffOdds >= 40 ? "text-foreground" : "text-red-500 dark:text-red-400"}`}>{rec.playoffOdds}%</span>
                   : <span className="text-muted-foreground text-[11px]">—</span>}
               </td>
-              <td className="px-2 py-2 text-center" data-testid={`text-pf-rank-${rec.leagueId}`}>{rankCell(rec.pfRank, rec.totalRosters)}</td>
-              <td className="px-2 py-2 text-center">
+              <td className="px-1 md:px-2 py-2 text-center" data-testid={`text-pf-rank-${rec.leagueId}`}>{rankCell(rec.pfRank, rec.totalRosters)}</td>
+              <td className="px-1 md:px-2 py-2 text-center">
                 {rec.maxPfRank > 0
                   ? <span className={`font-semibold tabular-nums ${rec.maxPfRank <= 3 ? "text-emerald-600 dark:text-emerald-400" : rec.maxPfRank <= Math.ceil(rec.totalRosters * 0.7) ? "text-foreground" : "text-red-500 dark:text-red-400"}`}>#{rec.maxPfRank}<span className="text-muted-foreground font-normal">/{rec.totalRosters}</span></span>
                   : <span className="text-muted-foreground text-[11px]">—</span>}
               </td>
-              <td className="px-2 py-2 text-center" data-testid={`text-standing-${rec.leagueId}`}>
+              <td className="px-1 md:px-2 py-2 text-center" data-testid={`text-standing-${rec.leagueId}`}>
                 {rec.totalGamesPlayed > 0 && rec.standing > 0 ? rankCell(rec.standing, rec.totalRosters) : <span className="text-muted-foreground text-[11px]">—</span>}
               </td>
             </tr>
