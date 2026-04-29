@@ -597,21 +597,21 @@ export function PortfolioSummary() {
               });
               return (
                 <div>
-                  <div className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-x-3 px-1 pb-1.5 mb-1 border-b border-border/30">
+                  <div className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-x-1 md:gap-x-3 px-1 pb-1.5 mb-1 border-b border-border/30">
                     <button onClick={() => handleExposureSort("name")} className="flex items-center gap-1 text-[11px] font-semibold text-muted-foreground hover:text-foreground transition-colors text-left" data-testid="sort-player">
                       Player <SortIcon col="name" />
                     </button>
-                    <button onClick={() => handleExposureSort("pos")} className="flex items-center gap-1 text-[11px] font-semibold text-muted-foreground hover:text-foreground transition-colors w-10 justify-center" data-testid="sort-pos">
+                    <button onClick={() => handleExposureSort("pos")} className="flex items-center gap-1 text-[11px] font-semibold text-muted-foreground hover:text-foreground transition-colors w-8 md:w-10 justify-center" data-testid="sort-pos">
                       Pos <SortIcon col="pos" />
                     </button>
-                    <button onClick={() => handleExposureSort("value")} className="flex items-center gap-1 text-[11px] font-semibold text-muted-foreground hover:text-foreground transition-colors w-14 justify-end" data-testid="sort-value">
-                      Value <SortIcon col="value" />
+                    <button onClick={() => handleExposureSort("value")} className="flex items-center gap-1 text-[11px] font-semibold text-muted-foreground hover:text-foreground transition-colors w-11 md:w-14 justify-end" data-testid="sort-value">
+                      Val <SortIcon col="value" />
                     </button>
-                    <button onClick={() => handleExposureSort("exposure")} className="flex items-center gap-1 text-[11px] font-semibold text-muted-foreground hover:text-foreground transition-colors w-10 justify-end" data-testid="sort-exposure">
+                    <button onClick={() => handleExposureSort("exposure")} className="flex items-center gap-1 text-[11px] font-semibold text-muted-foreground hover:text-foreground transition-colors w-8 md:w-10 justify-end" data-testid="sort-exposure">
                       % <SortIcon col="exposure" />
                     </button>
-                    <button onClick={() => handleExposureSort("leagueCount")} className="flex items-center gap-1 text-[11px] font-semibold text-muted-foreground hover:text-foreground transition-colors w-16 justify-end" data-testid="sort-leagues">
-                      Leagues <SortIcon col="leagueCount" />
+                    <button onClick={() => handleExposureSort("leagueCount")} className="flex items-center gap-1 text-[11px] font-semibold text-muted-foreground hover:text-foreground transition-colors w-10 md:w-16 justify-end" data-testid="sort-leagues">
+                      Lgs <SortIcon col="leagueCount" />
                     </button>
                   </div>
                   <div className="space-y-0">
@@ -619,9 +619,9 @@ export function PortfolioSummary() {
                       const isOverexposed = player.exposure >= 50;
                       const dynastyValue = valuesBySleeperId[player.playerId] ?? 0;
                       return (
-                        <div key={player.playerId} className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-x-3 items-center py-2 border-b border-border/20 last:border-0" data-testid={`exposure-${player.playerId}`}>
-                          <div className="flex items-center gap-2.5 min-w-0">
-                            <div className="w-8 h-8 rounded-full flex-shrink-0 overflow-hidden bg-muted ring-1 ring-border/40">
+                        <div key={player.playerId} className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-x-1 md:gap-x-3 items-center py-2 border-b border-border/20 last:border-0" data-testid={`exposure-${player.playerId}`}>
+                          <div className="flex items-center gap-1.5 md:gap-2.5 min-w-0">
+                            <div className="w-6 h-6 md:w-8 md:h-8 rounded-full flex-shrink-0 overflow-hidden bg-muted ring-1 ring-border/40">
                               <img
                                 src={`https://sleepercdn.com/content/nfl/players/thumb/${player.playerId}.jpg`}
                                 alt={player.name}
@@ -635,21 +635,21 @@ export function PortfolioSummary() {
                               />
                             </div>
                             <div className="min-w-0">
-                              <span className="text-sm font-semibold truncate block">{player.name}</span>
-                              <span className="text-[11px] text-muted-foreground">{player.team}</span>
+                              <span className="text-xs md:text-sm font-semibold truncate block">{player.name}</span>
+                              <span className="text-[10px] md:text-[11px] text-muted-foreground">{player.team}</span>
                             </div>
                           </div>
-                          <div className="w-10 flex justify-center">
-                            <Badge variant="outline" className={`text-[10px] px-1 py-0 h-4 ${getPositionColor(player.pos)}`} data-testid={`pos-${player.playerId}`}>{player.pos}</Badge>
+                          <div className="w-8 md:w-10 flex justify-center">
+                            <Badge variant="outline" className={`text-[9px] md:text-[10px] px-1 py-0 h-4 ${getPositionColor(player.pos)}`} data-testid={`pos-${player.playerId}`}>{player.pos}</Badge>
                           </div>
-                          <span className={`text-xs font-bold w-14 text-right ${dynastyValue > 0 ? "text-[#0b3a7a] dark:text-blue-400" : "text-muted-foreground"}`} data-testid={`value-${player.playerId}`}>
+                          <span className={`text-[11px] md:text-xs font-bold w-11 md:w-14 text-right ${dynastyValue > 0 ? "text-[#0b3a7a] dark:text-blue-400" : "text-muted-foreground"}`} data-testid={`value-${player.playerId}`}>
                             {dynastyValue > 0 ? dynastyValue.toLocaleString() : "—"}
                           </span>
-                          <div className="flex items-center gap-1 w-10 justify-end">
+                          <div className="flex items-center gap-0.5 md:gap-1 w-8 md:w-10 justify-end">
                             {isOverexposed && <AlertTriangle className="w-3 h-3 text-amber-500 flex-shrink-0" />}
-                            <span className={`text-xs font-bold ${isOverexposed ? "text-amber-500" : ""}`}>{player.exposure}%</span>
+                            <span className={`text-[11px] md:text-xs font-bold ${isOverexposed ? "text-amber-500" : ""}`}>{player.exposure}%</span>
                           </div>
-                          <span className="text-xs text-muted-foreground w-16 text-right">{player.leagueCount} / {leagues.length}</span>
+                          <span className="text-[11px] md:text-xs text-muted-foreground w-10 md:w-16 text-right">{player.leagueCount}/{leagues.length}</span>
                         </div>
                       );
                     })}
