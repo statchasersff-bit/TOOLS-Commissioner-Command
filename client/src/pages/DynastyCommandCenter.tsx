@@ -355,16 +355,16 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
                 </div>
               )}
 
-              <div className="hidden md:flex items-center gap-1.5 border-l border-border/40 pl-3">
+              <div className="flex items-center gap-1.5 border-l border-border/40 pl-3">
                 <a
                   href="https://discord.gg/34XkMXF6t3"
                   target="_blank"
                   rel="noopener noreferrer"
                   data-testid="button-discord"
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold rounded-md transition-all duration-200 text-[#5865F2] bg-[#5865F2]/10 hover:bg-[#5865F2]/20 border border-[#5865F2]/25 hover:border-[#5865F2]/40"
+                  className="flex items-center gap-1.5 px-2 md:px-3 py-1.5 text-sm font-semibold rounded-md transition-all duration-200 text-[#5865F2] bg-[#5865F2]/10 hover:bg-[#5865F2]/20 border border-[#5865F2]/25 hover:border-[#5865F2]/40"
                 >
                   <SiDiscord className="w-3.5 h-3.5" />
-                  Discord
+                  <span className="hidden md:inline">Discord</span>
                 </a>
               </div>
 
