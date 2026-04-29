@@ -1,0 +1,351 @@
+Name	Age	Value
+1	
+Jeremiyah Love
+RB1
+
+R
+
+20.9	7431
+2	
+Carnell Tate
+WR1
+
+R
+
+21.3	4337
+3	
+Jordyn Tyson
+WR2
+
+R
+
+21.7	3923
+4	
+Makai Lemon
+WR3
+
+R
+
+21.9	3775
+5	
+Jadarian Price
+RB2
+
+R
+
+22.6	3559
+6	
+KC Concepcion
+WR4
+
+R
+
+21.6	2972
+7	
+Kenyon Sadiq
+TE1
+
+R
+
+21.2	2814
+8	
+Omar Cooper
+WR5
+
+R
+
+22.4	2641
+9	
+Denzel Boston
+WR6
+
+R
+
+22.4	2389
+10	
+Eli Stowers
+TE2
+
+R
+
+23.1	2319
+11	
+Fernando Mendoza
+QB1
+
+R
+
+22.6	2312
+12	
+Jonah Coleman
+RB3
+
+R
+
+22.7	2272
+13	
+Nicholas Singleton
+RB4
+
+R
+
+22.3	2076
+14	
+Chris Bell
+WR7
+
+R
+
+21.9	2037
+15	
+Antonio Williams
+WR8
+
+R
+
+21.8	1833
+16	
+Germie Bernard
+WR9
+
+R
+
+22.4	1801
+17	
+Mike Washington
+RB5
+
+R
+
+22.8	1733
+18	
+Kaytron Allen
+RB6
+
+R
+
+23.3	1712
+19	
+Emmett Johnson
+RB7
+
+R
+
+22.6	1657
+20	
+Zachariah Branch
+WR10
+
+R
+
+22.1	1575
+21	
+Elijah Sarratt
+WR11
+
+R
+
+22.9	1573
+22	
+De'Zhaun Stribling
+WR12
+
+R
+
+23.4	1560
+23	
+Malachi Fields
+WR13
+
+R
+
+22.7	1542
+24	
+Chris Brazzell
+WR14
+
+R
+
+22.6	1491
+25	
+Skyler Bell
+WR15
+
+R
+
+23.8	1445
+26	
+Ty Simpson
+QB2
+
+R
+
+23.4	1393
+27	
+Ja'Kobi Lane
+WR16
+
+R
+
+22.0	1371
+28	
+Ted Hurst
+WR17
+
+R
+
+21.8	1355
+29	
+Max Klare
+TE3
+
+R
+
+22.8	1351
+30	
+Demond Claiborne
+RB8
+
+R
+
+22.6	1318
+31	
+Kaelon Black
+RB9
+
+R
+
+24.5	1055
+32	
+Adam Randall
+RB10
+
+R
+
+21.8	996
+33	
+Oscar Delp
+TE4
+
+R
+
+22.8	897
+34	
+Eli Raridon
+TE5
+
+R
+
+22.2	894
+35	
+Carson Beck
+QB3
+
+R
+
+23.5	884
+36	
+Kevin Coleman
+WR18
+
+R
+
+22.6	850
+37	
+Eli Heidenreich
+RB11
+
+R
+
+22.9	824
+38	
+Justin Joly
+TE6
+
+R
+
+21.8	779
+39	
+Brenen Thompson
+WR19
+
+R
+
+22.8	763
+40	
+Bryce Lance
+WR20
+
+R
+
+23.7	726
+41	
+Caleb Douglas
+WR21
+
+R
+
+22.7	665
+42	
+Drew Allar
+QB4
+
+R
+
+22.2	660
+43	
+Le'Veon Moss
+RB12
+
+R
+
+624
+44	
+Michael Trigg
+TE7
+
+R
+
+585
+45	
+J'Mari Taylor
+RB13
+
+R
+
+574
+46	
+Cade Klubnik
+QB5
+
+R
+
+22.6	566
+47	
+Garrett Nussmeier
+QB6
+
+R
+
+24.2	512
+48	
+Deion Burks
+WR22
+
+R
+
+23.3	487
+49	
+Zavion Thomas
+WR23
+
+R
+
+22.2	461
+50	
+Jack Endries
+TE8
+
+R
+
+22.1	407

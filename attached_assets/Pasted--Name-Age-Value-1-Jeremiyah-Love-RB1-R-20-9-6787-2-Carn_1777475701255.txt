@@ -1,0 +1,412 @@
+	Name	Age	Value
+1	
+Jeremiyah Love
+RB1
+
+R
+
+20.9	6787
+2	
+Carnell Tate
+WR1
+
+R
+
+21.3	4320
+3	
+Fernando Mendoza
+QB1
+
+R
+
+22.6	4306
+4	
+Jordyn Tyson
+WR2
+
+R
+
+21.7	3907
+5	
+Makai Lemon
+WR3
+
+R
+
+21.9	3760
+6	
+Jadarian Price
+RB2
+
+R
+
+22.6	3251
+7	
+Kenyon Sadiq
+TE1
+
+R
+
+21.2	3064
+8	
+KC Concepcion
+WR4
+
+R
+
+21.6	2960
+9	
+Omar Cooper
+WR5
+
+R
+
+22.4	2630
+10	
+Ty Simpson
+QB2
+
+R
+
+23.4	2594
+11	
+Eli Stowers
+TE2
+
+R
+
+23.1	2525
+12	
+Denzel Boston
+WR6
+
+R
+
+22.4	2379
+13	
+Jonah Coleman
+RB3
+
+R
+
+22.7	2075
+14	
+Chris Bell
+WR7
+
+R
+
+21.9	2029
+15	
+Nicholas Singleton
+RB4
+
+R
+
+22.3	1896
+16	
+Antonio Williams
+WR8
+
+R
+
+21.8	1826
+17	
+Germie Bernard
+WR9
+
+R
+
+22.4	1794
+18	
+Carson Beck
+QB3
+
+R
+
+23.5	1646
+19	
+Mike Washington
+RB5
+
+R
+
+22.8	1583
+20	
+Zachariah Branch
+WR10
+
+R
+
+22.1	1569
+21	
+Elijah Sarratt
+WR11
+
+R
+
+22.9	1567
+22	
+Kaytron Allen
+RB6
+
+R
+
+23.3	1564
+23	
+De'Zhaun Stribling
+WR12
+
+R
+
+23.4	1553
+24	
+Malachi Fields
+WR13
+
+R
+
+22.7	1536
+25	
+Emmett Johnson
+RB7
+
+R
+
+22.6	1513
+26	
+Chris Brazzell
+WR14
+
+R
+
+22.6	1486
+27	
+Max Klare
+TE3
+
+R
+
+22.8	1471
+28	
+Skyler Bell
+WR15
+
+R
+
+23.8	1439
+29	
+Ja'Kobi Lane
+WR16
+
+R
+
+22.0	1366
+30	
+Ted Hurst
+WR17
+
+R
+
+21.8	1350
+31	
+Drew Allar
+QB4
+
+R
+
+22.2	1229
+32	
+Demond Claiborne
+RB8
+
+R
+
+22.6	1204
+33	
+Cade Klubnik
+QB5
+
+R
+
+22.6	1055
+34	
+Oscar Delp
+TE4
+
+R
+
+22.8	976
+35	
+Eli Raridon
+TE5
+
+R
+
+22.2	974
+36	
+Kaelon Black
+RB9
+
+R
+
+24.5	964
+37	
+Garrett Nussmeier
+QB6
+
+R
+
+24.2	953
+38	
+Adam Randall
+RB10
+
+R
+
+21.8	910
+39	
+Justin Joly
+TE6
+
+R
+
+21.8	848
+40	
+Kevin Coleman
+WR18
+
+R
+
+22.6	847
+41	
+Brenen Thompson
+WR19
+
+R
+
+22.8	760
+42	
+Eli Heidenreich
+RB11
+
+R
+
+22.9	753
+43	
+Bryce Lance
+WR20
+
+R
+
+23.7	723
+44	
+Taylen Green
+QB7
+
+R
+
+23.5	715
+45	
+Caleb Douglas
+WR21
+
+R
+
+22.7	662
+46	
+Michael Trigg
+TE7
+
+R
+
+637
+47	
+Le'Veon Moss
+RB12
+
+R
+
+570
+48	
+J'Mari Taylor
+RB13
+
+R
+
+524
+49	
+Deion Burks
+WR22
+
+R
+
+23.3	485
+50	
+Zavion Thomas
+WR23
+
+R
+
+22.2	460
+←
+1 - 50 of 70
+→
+Trends
+Top Risers (Last 14)
+De'Zhaun Stribling
+
++1553
+
+Eli Raridon
+
++974
+
+Kaelon Black
+
++964
+
+Eli Heidenreich
+
++753
+
+Bryce Lance
+
++723
+
+Top Fallers (Last 14)
+Eric McAlister
+
+-1001
+
+CJ Donaldson
+
+-792
+
+Noah Thomas
+
+-646
+
+Jack Endries
+
+-641
+
+Dane Key
+
+-623
+
+Featured Content
+
+Jaxson Dart - Start Sit and Dynasty Price Check
+~Fantasy Football RPG (9/24)~
+
+Every Fantasy Football Storyline in One Monster Episode
+~Fantasy Football RPG (8/13)~
+
+Brian Robinson Dynasty Outlook
+~lastwordonsports.com (6/13)~
+
+How FantasyCalc Started! (Podcast)
+~Always Rebuilding (9/5)~
+
+W
