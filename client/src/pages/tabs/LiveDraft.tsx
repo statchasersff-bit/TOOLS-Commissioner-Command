@@ -7,7 +7,7 @@ import { Loader2, Search, RefreshCw, Trophy, Target, Radio, Zap } from "lucide-r
 import { useValueModel } from "@/contexts/ValueModelContext";
 import { useSleeper } from "@/contexts/SleeperContext";
 import { detectLiveDrafts as detectLiveDraftsApi, fetchDraftBoard as fetchDraftBoardApi } from "@/lib/sleeperApi";
-import { ROOKIE_BOARD_2026 } from "@/data/rookieBoard2026";
+import { ROOKIE_BOARD_2026_SF, ROOKIE_BOARD_2026_1QB } from "@/data/rookieBoard2026";
 
 interface DraftPick {
   round: number;
@@ -103,7 +103,8 @@ export default function LiveDraft() {
   const [scanError, setScanError] = useState<string | null>(null);
   const { dynastyPlayerList, redraftValuesBySleeperId } = useValueModel();
   const [rankMode, setRankMode] = useState<"dynasty" | "redraft">("dynasty");
-  const { isConnected, user } = useSleeper();
+  const [rookieFormat, setRookieFormat] = useState<"SF" | "1QB">("1QB");
+  const { isConnected, user, leagues } = useSleeper();
 
   const scanForLiveDrafts = useCallback(async () => {
     if (!user?.userId) return;
@@ -177,11 +178,23 @@ export default function LiveDraft() {
 
   const isRookieDraft = draftData?.draft?.draftCategory === "rookie";
 
+  // Auto-detect SF vs 1QB from the connected user's league list
+  useEffect(() => {
+    if (!isRookieDraft || !activeLeagueId) return;
+    const league = leagues.find(l => l.leagueId === activeLeagueId);
+    if (league) {
+      const isSF = league.rosterPositions.includes("SUPER_FLEX");
+      setRookieFormat(isSF ? "SF" : "1QB");
+    }
+  }, [isRookieDraft, activeLeagueId, leagues]);
+
   const fullBoard = useMemo(() => {
-    if (isRookieDraft) return ROOKIE_BOARD_2026;
+    if (isRookieDraft) {
+      return rookieFormat === "SF" ? ROOKIE_BOARD_2026_SF : ROOKIE_BOARD_2026_1QB;
+    }
     const list = rankMode === "redraft" ? redraftPlayerList : dynastyPlayerList;
     return list.slice(0, 300);
-  }, [isRookieDraft, rankMode, dynastyPlayerList, redraftPlayerList]);
+  }, [isRookieDraft, rookieFormat, rankMode, dynastyPlayerList, redraftPlayerList]);
 
   const globalRankMap = useMemo(() => {
     const map = new Map<string, number>();
@@ -438,9 +451,27 @@ export default function LiveDraft() {
                   </span>
                 )}
                 {isRookieDraft ? (
-                  <Badge variant="outline" className="text-[11px] border-emerald-500/40 text-emerald-600 dark:text-emerald-400 bg-emerald-500/5" data-testid="badge-rookie-rankings">
-                    FantasyCalc 2026 Rookie Rankings (PPR SF)
-                  </Badge>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="text-[11px] border-emerald-500/40 text-emerald-600 dark:text-emerald-400 bg-emerald-500/5" data-testid="badge-rookie-rankings">
+                      FantasyCalc 2026 Rookie (PPR)
+                    </Badge>
+                    <div className="flex items-center border border-border rounded-md overflow-hidden" data-testid="toggle-rookie-format">
+                      <button
+                        className={`px-2.5 py-1 text-[11px] font-semibold transition-colors ${rookieFormat === "1QB" ? "bg-[#0b3a7a] text-white" : "bg-background text-muted-foreground hover:bg-muted/50"}`}
+                        onClick={() => setRookieFormat("1QB")}
+                        data-testid="button-rookie-1qb"
+                      >
+                        1QB
+                      </button>
+                      <button
+                        className={`px-2.5 py-1 text-[11px] font-semibold transition-colors ${rookieFormat === "SF" ? "bg-[#0b3a7a] text-white" : "bg-background text-muted-foreground hover:bg-muted/50"}`}
+                        onClick={() => setRookieFormat("SF")}
+                        data-testid="button-rookie-sf"
+                      >
+                        SF
+                      </button>
+                    </div>
+                  </div>
                 ) : (
                   <div className="flex items-center border border-border rounded-md overflow-hidden" data-testid="toggle-rank-mode">
                     <button
