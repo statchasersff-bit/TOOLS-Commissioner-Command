@@ -130,91 +130,92 @@ export function MarketValue({ league }: MarketProps) {
       </div>
 
       <Card className="overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm" data-testid="table-market-values">
-            <thead>
-              <tr className="border-b bg-muted/40">
-                <th
-                  className="text-left px-4 py-3 font-semibold text-xs uppercase tracking-wider cursor-pointer hover:text-[#d4af37] select-none"
-                  onClick={() => toggleSort("name")}
-                  data-testid="th-name"
-                >
-                  Player{sortIndicator("name")}
-                </th>
-                <th
-                  className="text-left px-4 py-3 font-semibold text-xs uppercase tracking-wider cursor-pointer hover:text-[#d4af37] select-none w-20"
-                  onClick={() => toggleSort("pos")}
-                  data-testid="th-pos"
-                >
-                  Pos{sortIndicator("pos")}
-                </th>
-                <th
-                  className="text-right px-4 py-3 font-semibold text-xs uppercase tracking-wider cursor-pointer hover:text-[#d4af37] select-none w-32"
-                  onClick={() => toggleSort("redraftValue")}
-                  data-testid="th-redraft"
-                >
-                  Redraft{sortIndicator("redraftValue")}
-                </th>
-                <th
-                  className="text-right px-4 py-3 font-semibold text-xs uppercase tracking-wider cursor-pointer hover:text-[#d4af37] select-none w-32"
-                  onClick={() => toggleSort("dynastyValue")}
-                  data-testid="th-dynasty"
-                >
-                  Dynasty{sortIndicator("dynastyValue")}
-                </th>
+        <table className="w-full text-sm" data-testid="table-market-values">
+          <thead>
+            <tr className="border-b bg-muted/40">
+              <th
+                className="text-left px-2 md:px-4 py-2.5 font-semibold text-xs uppercase tracking-wider cursor-pointer hover:text-[#d4af37] select-none"
+                onClick={() => toggleSort("name")}
+                data-testid="th-name"
+              >
+                Player{sortIndicator("name")}
+              </th>
+              <th
+                className="hidden md:table-cell text-left px-4 py-2.5 font-semibold text-xs uppercase tracking-wider cursor-pointer hover:text-[#d4af37] select-none w-20"
+                onClick={() => toggleSort("pos")}
+                data-testid="th-pos"
+              >
+                Pos{sortIndicator("pos")}
+              </th>
+              <th
+                className="text-right px-2 md:px-4 py-2.5 font-semibold text-xs uppercase tracking-wider cursor-pointer hover:text-[#d4af37] select-none w-16 md:w-32"
+                onClick={() => toggleSort("redraftValue")}
+                data-testid="th-redraft"
+              >
+                Redraft{sortIndicator("redraftValue")}
+              </th>
+              <th
+                className="text-right px-2 md:px-4 py-2.5 font-semibold text-xs uppercase tracking-wider cursor-pointer hover:text-[#d4af37] select-none w-16 md:w-32"
+                onClick={() => toggleSort("dynastyValue")}
+                data-testid="th-dynasty"
+              >
+                Dynasty{sortIndicator("dynastyValue")}
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.length === 0 && (
+              <tr>
+                <td colSpan={4} className="text-center py-8 text-muted-foreground text-sm">
+                  No players found
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {filtered.length === 0 && (
-                <tr>
-                  <td colSpan={4} className="text-center py-8 text-muted-foreground text-sm">
-                    No players found
-                  </td>
-                </tr>
-              )}
-              {filtered.map((row) => (
-                <tr
-                  key={row.sleeperId}
-                  className="border-b border-border/30 hover:bg-muted/20 transition-colors"
-                  data-testid={`row-player-${row.sleeperId}`}
-                >
-                  <td className="px-4 py-2.5">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-8 h-8 rounded-full flex-shrink-0 overflow-hidden bg-muted ring-1 ring-border/40">
-                        <img
-                          src={`https://sleepercdn.com/content/nfl/players/thumb/${row.sleeperId}.jpg`}
-                          alt={row.name}
-                          className="w-full h-full object-cover object-top"
-                          onError={(e) => {
-                            const el = e.target as HTMLImageElement;
-                            el.style.display = "none";
-                            el.parentElement!.classList.add("flex", "items-center", "justify-center");
-                            el.parentElement!.innerHTML = `<span class="text-[10px] font-bold text-muted-foreground">${row.pos}</span>`;
-                          }}
-                        />
-                      </div>
-                      <div>
-                        <span className="font-medium block" data-testid={`text-player-name-${row.sleeperId}`}>{row.name}</span>
-                        <span className="text-[11px] text-muted-foreground">{row.team}</span>
-                      </div>
+            )}
+            {filtered.map((row) => (
+              <tr
+                key={row.sleeperId}
+                className="border-b border-border/30 hover:bg-muted/20 transition-colors"
+                data-testid={`row-player-${row.sleeperId}`}
+              >
+                <td className="px-2 md:px-4 py-2">
+                  <div className="flex items-center gap-1.5 md:gap-2.5">
+                    <div className="w-6 h-6 md:w-8 md:h-8 rounded-full flex-shrink-0 overflow-hidden bg-muted ring-1 ring-border/40">
+                      <img
+                        src={`https://sleepercdn.com/content/nfl/players/thumb/${row.sleeperId}.jpg`}
+                        alt={row.name}
+                        className="w-full h-full object-cover object-top"
+                        onError={(e) => {
+                          const el = e.target as HTMLImageElement;
+                          el.style.display = "none";
+                          el.parentElement!.classList.add("flex", "items-center", "justify-center");
+                          el.parentElement!.innerHTML = `<span class="text-[9px] font-bold text-muted-foreground">${row.pos}</span>`;
+                        }}
+                      />
                     </div>
-                  </td>
-                  <td className="px-4 py-2.5">
-                    <Badge variant="outline" className={`text-[10px] w-8 justify-center ${getPositionColor(row.pos)}`}>
-                      {row.pos}
-                    </Badge>
-                  </td>
-                  <td className="px-4 py-2.5 text-right font-mono text-sm" data-testid={`text-redraft-${row.sleeperId}`}>
-                    {row.redraftValue.toLocaleString()}
-                  </td>
-                  <td className="px-4 py-2.5 text-right font-mono text-sm font-semibold" data-testid={`text-dynasty-${row.sleeperId}`}>
-                    {row.dynastyValue.toLocaleString()}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1">
+                        <span className="font-medium text-xs md:text-sm leading-tight" data-testid={`text-player-name-${row.sleeperId}`}>{row.name}</span>
+                        <Badge variant="outline" className={`md:hidden text-[9px] px-1 py-0 h-3.5 flex-shrink-0 ${getPositionColor(row.pos)}`}>{row.pos}</Badge>
+                      </div>
+                      <span className="text-[10px] text-muted-foreground">{row.team}</span>
+                    </div>
+                  </div>
+                </td>
+                <td className="hidden md:table-cell px-4 py-2.5">
+                  <Badge variant="outline" className={`text-[10px] w-8 justify-center ${getPositionColor(row.pos)}`}>
+                    {row.pos}
+                  </Badge>
+                </td>
+                <td className="px-2 md:px-4 py-2 text-right font-mono text-xs md:text-sm" data-testid={`text-redraft-${row.sleeperId}`}>
+                  {row.redraftValue.toLocaleString()}
+                </td>
+                <td className="px-2 md:px-4 py-2 text-right font-mono text-xs md:text-sm font-semibold" data-testid={`text-dynasty-${row.sleeperId}`}>
+                  {row.dynastyValue.toLocaleString()}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </Card>
     </div>
   );
