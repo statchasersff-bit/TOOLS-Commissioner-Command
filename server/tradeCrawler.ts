@@ -48,6 +48,14 @@ interface SleeperDraftInfo {
   slot_to_roster_id?: Record<string, number>;
 }
 
+interface SleeperDraftPick {
+  pick_no: number;
+  round: number;
+  draft_slot: number;
+  roster_id: number;
+  player_id: string | null;
+}
+
 /**
  * Startup drafts have many rounds (one per roster slot, typically 14-20).
  * Rookie/supplemental drafts have few rounds (typically 3-5).
@@ -84,11 +92,26 @@ async function fetchLeagueDraftInfo(leagueId: string, season: string): Promise<{
     const rookieDraft = seasonDrafts.find((d) => !isStartupDraft(d)) ?? seasonDrafts[0];
     if (!rookieDraft) return { slotMap, seasonDraftType };
 
+    // Primary: slot_to_roster_id from the draft detail (populated when draft order is set)
     const detail = await fetchJson<SleeperDraftInfo>(`${SLEEPER_API}/draft/${rookieDraft.draft_id}`);
-    if (!detail?.slot_to_roster_id) return { slotMap, seasonDraftType };
+    if (detail?.slot_to_roster_id) {
+      for (const [slot, rosterId] of Object.entries(detail.slot_to_roster_id)) {
+        slotMap.set(rosterId, parseInt(slot, 10));
+      }
+    }
 
-    for (const [slot, rosterId] of Object.entries(detail.slot_to_roster_id)) {
-      slotMap.set(rosterId, parseInt(slot, 10));
+    // Fallback: /draft/{id}/picks endpoint — covers drafts in progress or complete
+    // where slot_to_roster_id might not be present but pick-level draft_slot is available.
+    if (slotMap.size === 0) {
+      const picks = await fetchJson<SleeperDraftPick[]>(`${SLEEPER_API}/draft/${rookieDraft.draft_id}/picks`);
+      if (picks?.length) {
+        for (const pick of picks) {
+          if (pick.roster_id && pick.draft_slot) {
+            // draft_slot is constant per roster_id in linear dynasty drafts
+            slotMap.set(pick.roster_id, pick.draft_slot);
+          }
+        }
+      }
     }
   } catch {
     // silently skip — pick will just show round without slot

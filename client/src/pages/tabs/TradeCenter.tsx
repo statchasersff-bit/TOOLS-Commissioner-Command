@@ -2017,14 +2017,22 @@ function TradeCard({
                 {side.picksReceived.map((p, pi) => {
                   // Use stored draftType when available; fall back to round > 5 for legacy picks
                   const isStartup = p.draftType === "startup" || (!p.draftType && p.round > 5);
-                  const isUnknown = !p.draftType && p.round <= 5;
+                  // Exact slot confidence: only show slot-level label when slot is known
+                  const exactSlot = !isStartup && p.slot != null && p.slot > 0;
+                  const slotStr = exactSlot
+                    ? `${p.round}.${String(p.slot).padStart(2, "0")}`
+                    : null;
                   const val = isStartup ? 0 : getStaticPickValue(parseInt(p.season) || 2026, p.round, "mid", p.slot, trade.leagueTotalRosters);
                   const ord = (r: number) => r === 1 ? "1st" : r === 2 ? "2nd" : r === 3 ? "3rd" : `${r}th`;
+                  // Label rules per spec:
+                  //   exact slot known  → "2026 Rookie 1.03"
+                  //   startup pick      → "2026 Startup 1st"
+                  //   fallback (no slot)→ "2026 1st"
                   const pickLabel = isStartup
                     ? `${p.season} Startup ${ord(p.round)}`
-                    : isUnknown
-                      ? `${p.season} ${ord(p.round)}`
-                      : `${p.season} Rookie ${ord(p.round)}`;
+                    : slotStr
+                      ? `${p.season} Rookie ${slotStr}`
+                      : `${p.season} ${ord(p.round)}`;
                   return (
                     <div key={`pick-${pi}`} className="flex items-center justify-between py-1">
                       <div className="flex items-center gap-1.5">

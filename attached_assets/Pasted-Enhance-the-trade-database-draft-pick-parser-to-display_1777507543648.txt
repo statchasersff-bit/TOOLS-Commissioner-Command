@@ -1,0 +1,84 @@
+Enhance the trade database draft-pick parser to display exact rookie pick slots when Sleeper data makes them knowable.
+
+Goal:
+If a 2026 rookie pick has already been assigned to a specific draft slot, show it as:
+2026 Rookie 1.01
+2026 Rookie 1.02
+2026 Rookie 2.05
+etc.
+
+If the exact slot cannot be determined, fall back to:
+2026 1st
+2026 2nd
+2026 3rd
+etc.
+
+Implementation:
+
+1. Fetch the active/completed rookie draft for the league:
+GET /league/{league_id}/drafts
+
+Identify the rookie/supplemental draft for the 2026 season.
+
+2. Fetch draft picks for that draft:
+GET /draft/{draft_id}/picks
+
+3. Build a map of rookie draft slots:
+For each pick, use:
+- round
+- draft_slot
+- pick_no
+- roster_id
+- picked_by
+- metadata
+- player_id, if already selected
+
+Create a display slot like:
+round.pick_number_within_round
+
+Example:
+12-team league:
+pick_no 1 = 1.01
+pick_no 2 = 1.02
+pick_no 13 = 2.01
+
+Formula:
+pick_in_round = ((pick_no - 1) % teams_count) + 1
+display = `${round}.${pick_in_round padded to 2 digits}`
+
+4. Match traded draft-pick assets to exact slots.
+
+For each traded pick asset, match using:
+- season
+- round
+- original_owner_id / roster_id
+- draft_id or classified rookie draft
+- current owner if available
+
+Preferred match:
+asset.previous_owner_id or original_owner_id === draft pick roster_id/original owner
+AND asset.round === draft_pick.round
+AND asset.season === draft season
+
+5. Display rules:
+If exact slot is resolved:
+- “2026 Rookie 1.01”
+- “2026 Rookie 2.08”
+
+If exact slot is not resolved:
+- “2026 1st”
+- “2026 2nd”
+
+6. Important:
+Do not guess exact pick slots from current standings unless the rookie draft order has already been created/finalized in Sleeper.
+
+Only show exact pick numbers when:
+- the rookie draft exists in Sleeper
+- the pick order is available from /draft/{draft_id}/picks
+- the pick can be confidently matched to the traded asset
+
+7. UI:
+Add a small fallback confidence field internally:
+- exact_slot_confidence: "exact" | "fallback"
+
+Use exact labels only when confidence is "exact".
