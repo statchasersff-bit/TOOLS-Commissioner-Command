@@ -69,6 +69,7 @@ export const tradeAssets = pgTable("trade_assets", {
   pickSlot: integer("pick_slot"),
   pickOriginalRosterId: integer("pick_original_roster_id"),
   pickOriginalOwnerName: text("pick_original_owner_name"),
+  pickDraftType: varchar("pick_draft_type", { length: 20 }),
   direction: varchar("direction", { length: 10 }).notNull(),
 });
 

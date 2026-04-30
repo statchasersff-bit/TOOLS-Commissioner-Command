@@ -44,24 +44,48 @@ interface SleeperDraftInfo {
   draft_id: string;
   season: string;
   type: string;
+  settings?: { rounds?: number; [key: string]: any };
   slot_to_roster_id?: Record<string, number>;
 }
 
 /**
- * Returns a Map<rosterId, slotNumber> for the rookie draft of `season` in `leagueId`.
- * Dynasty rookie drafts are linear, so round 1 slot 5 = "1.05" for any round.
+ * Startup drafts have many rounds (one per roster slot, typically 14-20).
+ * Rookie/supplemental drafts have few rounds (typically 3-5).
  */
-async function fetchLeagueDraftSlots(leagueId: string, season: string): Promise<Map<number, number>> {
+function isStartupDraft(draft: SleeperDraftInfo): boolean {
+  const rounds = draft.settings?.rounds ?? 0;
+  return rounds > 7;
+}
+
+/**
+ * Returns slot map and season draft classification for a league.
+ * "startup-only"  → only a startup draft exists for that season; skip those picks
+ * "has-rookie"    → rookie/supplemental draft exists; picks are meaningful trade assets
+ * "unknown"       → no drafts found or cannot determine
+ */
+async function fetchLeagueDraftInfo(leagueId: string, season: string): Promise<{
+  slotMap: Map<number, number>;
+  seasonDraftType: "startup-only" | "has-rookie" | "unknown";
+}> {
   const slotMap = new Map<number, number>();
+  let seasonDraftType: "startup-only" | "has-rookie" | "unknown" = "unknown";
   try {
     const drafts = await fetchJson<SleeperDraftInfo[]>(`${SLEEPER_API}/league/${leagueId}/drafts`);
-    if (!drafts?.length) return slotMap;
+    if (!drafts?.length) return { slotMap, seasonDraftType };
 
-    const rookieDraft = drafts.find((d) => d.season === season);
-    if (!rookieDraft) return slotMap;
+    const seasonDrafts = drafts.filter((d) => d.season === season);
+    const hasRookie = seasonDrafts.some((d) => !isStartupDraft(d));
+    const hasStartup = seasonDrafts.some((d) => isStartupDraft(d));
+
+    if (hasRookie) seasonDraftType = "has-rookie";
+    else if (hasStartup) seasonDraftType = "startup-only";
+
+    // Use the rookie draft for slot mapping; fall back to whichever draft exists
+    const rookieDraft = seasonDrafts.find((d) => !isStartupDraft(d)) ?? seasonDrafts[0];
+    if (!rookieDraft) return { slotMap, seasonDraftType };
 
     const detail = await fetchJson<SleeperDraftInfo>(`${SLEEPER_API}/draft/${rookieDraft.draft_id}`);
-    if (!detail?.slot_to_roster_id) return slotMap;
+    if (!detail?.slot_to_roster_id) return { slotMap, seasonDraftType };
 
     for (const [slot, rosterId] of Object.entries(detail.slot_to_roster_id)) {
       slotMap.set(rosterId, parseInt(slot, 10));
@@ -69,7 +93,7 @@ async function fetchLeagueDraftSlots(leagueId: string, season: string): Promise<
   } catch {
     // silently skip — pick will just show round without slot
   }
-  return slotMap;
+  return { slotMap, seasonDraftType };
 }
 
 interface SleeperTransactionRaw {
@@ -291,7 +315,7 @@ async function processLeague(leagueId: string, degree: number) {
     console.log(`[Crawler] Fetching trades for league ${leagueInfo.name} (${leagueInfo.season})`);
 
     const leagueTrades = await fetchLeagueTransactions(leagueInfo.league_id);
-    const draftSlots = await fetchLeagueDraftSlots(leagueInfo.league_id, leagueInfo.season);
+    const { slotMap: draftSlots, seasonDraftType } = await fetchLeagueDraftInfo(leagueInfo.league_id, leagueInfo.season);
 
     await d.insert(crawledLeagues).values({
       id: leagueInfo.league_id,
@@ -385,8 +409,8 @@ async function processLeague(leagueId: string, degree: number) {
           if (!pick.owner_id || !pick.previous_owner_id) continue;
           // Skip picks beyond round 5 (invalid/junk data)
           if (pick.round > 5) continue;
-          // Skip startup-league picks: new leagues (no prior season) trading current-year picks
-          if (!leagueInfo.previous_league_id && pick.season === leagueInfo.season) continue;
+          // Skip picks that belong to a startup-only draft context (no rookie draft exists)
+          if (pick.season === leagueInfo.season && seasonDraftType === "startup-only") continue;
           const receiverInfo = rosterOwnerMap.get(pick.owner_id);
           const originalOwnerInfo = rosterOwnerMap.get(pick.roster_id);
           // Only assign a known slot when the pick is for the current league season.
@@ -395,6 +419,11 @@ async function processLeague(leagueId: string, degree: number) {
           const slot = pick.season === leagueInfo.season
             ? (draftSlots.get(pick.roster_id) ?? null)
             : null;
+          // Classify the pick: current-season picks inherit league classification,
+          // future-year picks are always rookie picks.
+          const pickDraftType: string = pick.season === leagueInfo.season
+            ? (seasonDraftType === "has-rookie" ? "rookie" : "unknown")
+            : "rookie";
 
           assetRows.push({
             tradeId: trade.transaction_id,
@@ -407,6 +436,7 @@ async function processLeague(leagueId: string, degree: number) {
             pickSlot: slot,
             pickOriginalRosterId: pick.roster_id,
             pickOriginalOwnerName: originalOwnerInfo?.ownerName || null,
+            pickDraftType,
             direction: "received",
           });
 
@@ -421,6 +451,7 @@ async function processLeague(leagueId: string, degree: number) {
             pickSlot: slot,
             pickOriginalRosterId: pick.roster_id,
             pickOriginalOwnerName: originalOwnerInfo?.ownerName || null,
+            pickDraftType,
             direction: "sent",
           });
         }
@@ -753,6 +784,7 @@ export async function searchTrades(params: {
             round: a.pickRound || 0,
             slot: a.pickSlot ?? null,
             originalOwnerName: a.pickOriginalOwnerName || null,
+            draftType: a.pickDraftType || null,
           })),
       };
     });
@@ -800,7 +832,7 @@ export async function ingestLeagueTrades(params: {
   }
 
   const rawTransactions = await fetchLeagueTransactions(params.leagueId);
-  const draftSlots = await fetchLeagueDraftSlots(params.leagueId, params.season);
+  const { slotMap: draftSlots, seasonDraftType } = await fetchLeagueDraftInfo(params.leagueId, params.season);
 
   const filteredTransactions = params.sinceMs
     ? rawTransactions.filter((t) => (t.status_updated || 0) >= params.sinceMs!)
@@ -905,10 +937,15 @@ export async function ingestLeagueTrades(params: {
         if (!pick.owner_id || !pick.previous_owner_id) continue;
         // Skip picks beyond round 5 (invalid/junk data)
         if (pick.round > 5) continue;
+        // Skip picks from startup-only leagues (no rookie draft for this season)
+        if (pick.season === params.season && seasonDraftType === "startup-only") continue;
         // Only assign a known slot when the pick season matches this league's season.
         const slot = pick.season === params.season
           ? (draftSlots.get(pick.roster_id) ?? null)
           : null;
+        const pickDraftType: string = pick.season === params.season
+          ? (seasonDraftType === "has-rookie" ? "rookie" : "unknown")
+          : "rookie";
 
         assetRows.push({
           tradeId: trade.transaction_id,
@@ -921,6 +958,7 @@ export async function ingestLeagueTrades(params: {
           pickSlot: slot,
           pickOriginalRosterId: pick.roster_id,
           pickOriginalOwnerName: null,
+          pickDraftType,
           direction: "received",
         });
 
@@ -935,6 +973,7 @@ export async function ingestLeagueTrades(params: {
           pickSlot: slot,
           pickOriginalRosterId: pick.roster_id,
           pickOriginalOwnerName: null,
+          pickDraftType,
           direction: "sent",
         });
       }
@@ -1128,7 +1167,7 @@ export async function backfillPickSlots(): Promise<{ updated: number; leagues: n
   let totalUpdated = 0;
 
   for (const league of leagues) {
-    const slotMap = await fetchLeagueDraftSlots(league.id, league.season);
+    const { slotMap } = await fetchLeagueDraftInfo(league.id, league.season);
     if (slotMap.size === 0) continue;
 
     // Find all pick assets linked to this league that have no slot yet

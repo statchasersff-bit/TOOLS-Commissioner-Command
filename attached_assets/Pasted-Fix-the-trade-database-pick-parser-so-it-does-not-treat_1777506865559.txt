@@ -1,0 +1,57 @@
+Fix the trade database pick parser so it does not treat all 2026 draft picks the same.
+
+Problem:
+Sleeper leagues can have multiple drafts tied to the same league/season:
+1. Startup draft
+2. Rookie/supplemental draft
+
+Right now our trade database is pulling 2026 picks and confusing startup draft picks with the active 2026 rookie draft picks.
+
+Required fix:
+Use Sleeper draft metadata to distinguish draft types before saving/displaying traded picks.
+
+Implementation requirements:
+
+1. Fetch all drafts for the league:
+GET https://api.sleeper.app/v1/league/{league_id}/drafts
+
+2. For each draft, inspect:
+- draft_id
+- season
+- status
+- type
+- settings.type
+- metadata
+- created timestamp if available
+
+3. Classify drafts:
+- Startup draft = the original league startup draft
+- Rookie draft = supplemental/rookie draft for future rookie picks
+
+Do NOT classify only by season. A 2026 pick can belong to either startup or rookie context depending on the draft_id/type.
+
+4. When parsing traded draft picks, preserve the pick context:
+Each pick should store:
+- season
+- round
+- original_owner_id
+- current_owner_id
+- draft_id if available
+- draft_type/classification: startup, rookie, supplemental, unknown
+
+5. For the trade database UI:
+- Startup picks should be labeled as “Startup Pick”
+- Rookie picks should be labeled as “2026 Rookie Pick”
+- If uncertain, label as “2026 Draft Pick” and do not merge it with rookie picks
+
+6. Add a guardrail:
+If multiple drafts exist for the same league and season, never merge picks solely by season + round.
+Use draft_id or draft classification.
+
+7. For active rookie drafts:
+When the current draft is in progress, prioritize the active draft_id/status for live rookie draft pick movement.
+Startup draft picks should not appear in rookie-pick trade history unless they came from the rookie/supplemental draft context.
+
+Expected behavior:
+A startup 2026 pick and a 2026 rookie draft pick should appear as separate asset types in the trade database.
+The system should not display startup draft selections as traded rookie picks.

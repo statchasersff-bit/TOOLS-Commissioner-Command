@@ -117,6 +117,7 @@ export interface TradeAssetPick {
   round: number;
   slot?: number | null;
   originalOwnerName: string;
+  draftType?: string | null;
 }
 
 export interface TradeSide {

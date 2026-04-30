@@ -2015,12 +2015,16 @@ function TradeCard({
                 })}
 
                 {side.picksReceived.map((p, pi) => {
-                  const isStartup = p.round > 5;
+                  // Use stored draftType when available; fall back to round > 5 for legacy picks
+                  const isStartup = p.draftType === "startup" || (!p.draftType && p.round > 5);
+                  const isUnknown = !p.draftType && p.round <= 5;
                   const val = isStartup ? 0 : getStaticPickValue(parseInt(p.season) || 2026, p.round, "mid", p.slot, trade.leagueTotalRosters);
                   const ord = (r: number) => r === 1 ? "1st" : r === 2 ? "2nd" : r === 3 ? "3rd" : `${r}th`;
                   const pickLabel = isStartup
                     ? `${p.season} Startup ${ord(p.round)}`
-                    : `${p.season} ${ord(p.round)}`;
+                    : isUnknown
+                      ? `${p.season} ${ord(p.round)}`
+                      : `${p.season} Rookie ${ord(p.round)}`;
                   return (
                     <div key={`pick-${pi}`} className="flex items-center justify-between py-1">
                       <div className="flex items-center gap-1.5">
