@@ -510,8 +510,7 @@ export function PortfolioSummary() {
     );
   }
 
-  const sfCount = leagues.filter((l) => l.format === "SF").length;
-  const oneQbCount = leagues.filter((l) => l.format === "1QB").length;
+  const bestBallCount = leagues.filter((l) => l.isBestBall).length;
   const seasons = Array.from(new Set(leagues.map((l) => l.season)));
 
   return (
@@ -520,7 +519,7 @@ export function PortfolioSummary() {
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <KpiCard label="Total Leagues" value={leagues.length} icon={Trophy} />
-        <KpiCard label="SF Leagues" value={sfCount} icon={Shield} subtitle={`${oneQbCount} 1QB`} />
+        <KpiCard label="Best Ball" value={bestBallCount} icon={Shield} subtitle={`${leagues.length - bestBallCount} Regular`} />
         <KpiCard
           label="Win Rate"
           value={summaryLoading ? "..." : summaryData ? `${summaryData.winRate}%` : "--"}
@@ -744,8 +743,8 @@ export function PortfolioSummary() {
           <p className="text-sm text-muted-foreground leading-relaxed">
             You are managing <strong className="text-foreground">{leagues.length}</strong> dynasty league{leagues.length !== 1 ? "s" : ""} across{" "}
             {seasons.length} season{seasons.length !== 1 ? "s" : ""}. Your portfolio includes{" "}
-            <strong className="text-foreground">{sfCount}</strong> Superflex and{" "}
-            <strong className="text-foreground">{oneQbCount}</strong> 1QB format league{oneQbCount !== 1 ? "s" : ""}.
+            <strong className="text-foreground">{bestBallCount}</strong> Best Ball and{" "}
+            <strong className="text-foreground">{leagues.length - bestBallCount}</strong> regular dynasty league{leagues.length - bestBallCount !== 1 ? "s" : ""}.
             Connect your Sleeper account in the <strong>Connect</strong> tab to dive into detailed analysis.
           </p>
         </Card>
