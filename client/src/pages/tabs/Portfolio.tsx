@@ -292,6 +292,11 @@ export function PortfolioMyLeagues({ onSelectLeague, onNavigate }: PortfolioMyLe
                       <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4" data-testid={`badge-scoring-${league.leagueId}`}>
                         {league.scoringFormat}
                       </Badge>
+                      {league.isBestBall && (
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 bg-sky-50 text-sky-700 dark:bg-sky-950/30 dark:text-sky-400 border-sky-300 dark:border-sky-700" data-testid={`badge-bestball-${league.leagueId}`}>
+                          Best Ball
+                        </Badge>
+                      )}
                       <span className="text-[11px] text-muted-foreground flex items-center gap-1">
                         <Users className="w-3 h-3" />
                         {league.totalRosters}t · {league.season}
@@ -409,9 +414,12 @@ function SortableLeagueRecords({ records }: { records: any[] }) {
                       <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-muted/60 text-muted-foreground">{rec.scoringFormat === "Half" ? "Half-PPR" : rec.scoringFormat}</span>
                       <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-muted/60 text-muted-foreground">{rec.totalRosters} Teams</span>
                       <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-muted/60 text-muted-foreground">{rec.format}</span>
+                      {rec.isBestBall && (
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-sky-100 dark:bg-sky-950/40 text-sky-700 dark:text-sky-400">Best Ball</span>
+                      )}
                     </div>
                     <div className="flex md:hidden items-center gap-0.5 mt-0.5">
-                      <span className="text-[8px] text-muted-foreground">{rec.totalRosters}T · {rec.format}</span>
+                      <span className="text-[8px] text-muted-foreground">{rec.totalRosters}T · {rec.format}{rec.isBestBall ? " · BB" : ""}</span>
                     </div>
                   </div>
                 </div>

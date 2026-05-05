@@ -139,7 +139,6 @@ export async function fetchSleeperLeagues(
   }
   const dynastyOnly = raw.filter((lg) => {
     if (lg.settings?.type !== 2) return false;
-    if (lg.settings?.best_ball === 1) return false;
     if (lg.status === "inactive") return false;
     if (lg.status === "pre_draft" && !lg.draft_id) return false;
     return true;
@@ -172,6 +171,7 @@ export async function fetchSleeperLeagues(
     status: lg.status,
     draftId: lg.draft_id ?? null,
     avatar: (lg as any).avatar ?? null,
+    isBestBall: lg.settings?.best_ball === 1,
   }));
 }
 
@@ -422,6 +422,7 @@ export interface PortfolioSummaryData {
     pfRank: number;
     maxPfRank: number;
     playoffOdds: number;
+    isBestBall: boolean;
   }>;
   contenderCount: number;
   middleCount: number;
@@ -673,6 +674,7 @@ export async function fetchPortfolioSummary(
         pfRank,
         maxPfRank,
         playoffOdds,
+        isBestBall: ls.isBestBall ?? false,
       });
 
       totalWins += wins;
@@ -745,7 +747,8 @@ export async function fetchPortfolioSummary(
         }
       }
 
-      if (issues.length > 0) {
+      // Best ball leagues auto-optimize; no lineup alerts needed
+      if (issues.length > 0 && !ls.isBestBall) {
         lineupAlerts.push({
           leagueId: ls.leagueId,
           leagueName: ls.name,
@@ -1108,7 +1111,7 @@ export async function fetchCrossLeagueTrades(userId: string) {
   const leagues = allLeaguesRaw.filter((lg) => {
     if (seenIds.has(lg.league_id)) return false;
     seenIds.add(lg.league_id);
-    return lg.settings?.type === 2 && lg.settings?.best_ball !== 1;
+    return lg.settings?.type === 2;
   });
 
   if (leagues.length === 0) return { trades: [], leaguesScanned: 0 };

@@ -80,6 +80,11 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
     }));
   }, [sleeper.leagues]);
 
+  const selectedLeagueSummary = useMemo(() =>
+    sleeper.leagues.find((l) => l.leagueId === selectedLeagueId) ?? null,
+  [sleeper.leagues, selectedLeagueId]);
+  const isSelectedBestBall = selectedLeagueSummary?.isBestBall ?? false;
+
   useEffect(() => {
     if (!selectedLeagueId || !sleeper.isConnected || !sleeper.user) return;
     let cancelled = false;
@@ -352,6 +357,11 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
                     selectedLeagueId={selectedLeagueId}
                     onSelect={handleLeagueSelect}
                   />
+                  {isSelectedBestBall && (
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 bg-sky-50 text-sky-700 dark:bg-sky-950/30 dark:text-sky-400 border-sky-300 dark:border-sky-700" data-testid="badge-bestball-active">
+                      Best Ball
+                    </Badge>
+                  )}
                 </div>
               )}
 
