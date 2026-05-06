@@ -123,7 +123,7 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
       ...raw,
       teams: adjustedTeams.map((team) => ({
         ...team,
-        metrics: metricsMap.get(team.id) || { overall: 50, starters: 50, depth: 50, youth: 50, picks: 50, qb: 50, rb: 50, wr: 50, te: 50, contenderWindowYears: 2 },
+        metrics: metricsMap.get(team.id) || { overall: 50, starters: 50, depth: 50, youth: 50, picks: 50, qb: 50, rb: 50, wr: 50, te: 50, contenderWindowYears: 2, windowStartOffset: 0 },
       })),
     };
   }, [fetchedLeague, getPlayerValue, getPickValue, calculateAllTeamMetrics, optimizeLineup]);

@@ -338,6 +338,13 @@ export function ValueModelProvider({ children }: { children: React.ReactNode }) 
             ? 2
             : 1;
 
+      // How many years until the window opens — based on current roster strength.
+      // High-Now teams: window is open immediately (0). Rebuilders: window opens 2-3 years out.
+      const windowStartOffset = starterScore >= 55 ? 0
+        : starterScore >= 45 ? 1
+        : starterScore >= 35 ? 2
+        : 3;
+
       result.set(d.id, {
         overall,
         starters: starterScore,
@@ -349,6 +356,7 @@ export function ValueModelProvider({ children }: { children: React.ReactNode }) 
         wr: posRank("wrStrength", d.id),
         te: posRank("teStrength", d.id),
         contenderWindowYears,
+        windowStartOffset,
       });
     }
 

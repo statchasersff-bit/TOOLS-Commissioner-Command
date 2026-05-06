@@ -209,16 +209,26 @@ export function RosterBreakdown({ league, userTeam }: TeamProps) {
         </Card>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mt-5">
-          <KpiCard label="Contender Window" value={`${userTeam.metrics.contenderWindowYears} Years`} subtitle="Based on roster age and value" />
+          <KpiCard
+            label="Contender Window"
+            value={userTeam.metrics.windowStartOffset > 0
+              ? `~${new Date().getFullYear() + userTeam.metrics.windowStartOffset}`
+              : `${userTeam.metrics.contenderWindowYears} Yrs`}
+            subtitle={userTeam.metrics.windowStartOffset > 0
+              ? `Opens in ~${userTeam.metrics.windowStartOffset} yr${userTeam.metrics.windowStartOffset !== 1 ? "s" : ""} · ${userTeam.metrics.contenderWindowYears} yr window`
+              : "Based on roster age and value"}
+          />
           <KpiCard label="Youth Score" value={userTeam.metrics.youth} subtitle={userTeam.metrics.youth >= 60 ? "Above average" : "Below average"} trend={userTeam.metrics.youth >= 60 ? "up" : "down"} />
         </div>
 
         <Card className="p-6 mt-5">
           <p className="text-sm text-muted-foreground leading-relaxed">
             Your roster skews {buckets["21-24"] > buckets["29+"] ? "younger" : "older"} with {buckets["21-24"]} players under 25.
-            {userTeam.metrics.contenderWindowYears >= 3
-              ? " You have a strong multi-year window to compete. Consider making a push for championship-caliber talent."
-              : " Your window may be closing. Consider selling aging assets for younger players and draft picks."
+            {userTeam.metrics.windowStartOffset > 1
+              ? ` Your contender window is projected to open around ${new Date().getFullYear() + userTeam.metrics.windowStartOffset}. Focus on accumulating youth and draft capital now.`
+              : userTeam.metrics.contenderWindowYears >= 3
+                ? " You have a strong multi-year window to compete. Consider making a push for championship-caliber talent."
+                : " Your window may be closing. Consider selling aging assets for younger players and draft picks."
             }
           </p>
         </Card>

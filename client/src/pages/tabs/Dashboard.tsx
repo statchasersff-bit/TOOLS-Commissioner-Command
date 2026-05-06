@@ -416,22 +416,34 @@ export function DashboardOverview({ league, userTeam, onNavigate }: DashboardOve
               <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Contender Window</span>
             </div>
             <div className="flex items-baseline gap-2 mb-2">
-              <span className="text-2xl font-bold text-[#0b3a7a] dark:text-blue-400">{userTeam.metrics.contenderWindowYears}</span>
-              <span className="text-xs text-muted-foreground">years projected</span>
+              <span className="text-2xl font-bold text-[#0b3a7a] dark:text-blue-400">
+                {userTeam.metrics.windowStartOffset > 0
+                  ? `~${new Date().getFullYear() + userTeam.metrics.windowStartOffset}`
+                  : userTeam.metrics.contenderWindowYears}
+              </span>
+              <span className="text-xs text-muted-foreground">
+                {userTeam.metrics.windowStartOffset > 0 ? "opens" : "years projected"}
+              </span>
             </div>
             <div className="flex gap-1">
-              {[1, 2, 3, 4, 5].map((y) => (
-                <div
-                  key={y}
-                  className={`flex-1 h-7 rounded-md flex items-center justify-center text-[10px] font-semibold transition-colors ${
-                    y <= userTeam.metrics.contenderWindowYears
-                      ? "bg-[#0b3a7a] dark:bg-blue-600 text-white"
-                      : "bg-muted text-muted-foreground"
-                  }`}
-                >
-                  {2024 + y}
-                </div>
-              ))}
+              {[0, 1, 2, 3, 4].map((offset) => {
+                const year = new Date().getFullYear() + offset;
+                const isInWindow = offset >= userTeam.metrics.windowStartOffset &&
+                  offset < userTeam.metrics.windowStartOffset + userTeam.metrics.contenderWindowYears;
+                return (
+                  <div
+                    key={offset}
+                    className={`flex-1 h-7 rounded-md flex items-center justify-center text-[10px] font-semibold transition-colors ${
+                      isInWindow
+                        ? "bg-[#0b3a7a] dark:bg-blue-600 text-white"
+                        : "bg-muted text-muted-foreground"
+                    }`}
+                    data-testid={`contender-year-${year}`}
+                  >
+                    {year}
+                  </div>
+                );
+              })}
             </div>
           </Card>
         </div>

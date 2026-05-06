@@ -9,6 +9,7 @@ export interface TeamMetrics {
   wr: number;
   te: number;
   contenderWindowYears: number;
+  windowStartOffset: number;
 }
 
 export interface Player {

@@ -271,6 +271,7 @@ export async function fetchSleeperLeagueFull(leagueId: string, userId: string) {
     wr: 0,
     te: 0,
     contenderWindowYears: 0,
+    windowStartOffset: 0,
   };
 
   const pickYears = [2026, 2027, 2028];
