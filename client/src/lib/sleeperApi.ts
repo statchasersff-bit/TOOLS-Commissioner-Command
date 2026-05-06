@@ -385,6 +385,12 @@ export async function fetchSleeperLeagueFull(leagueId: string, userId: string) {
     (p: string) => p !== "BN" && p !== "IR"
   );
 
+  const playoffTeams: number = leagueRaw.settings?.playoff_teams
+    ?? Math.max(2, Math.round((rostersRaw?.length ?? 12) / 3));
+  const regularSeasonWeeks: number = leagueRaw.settings?.playoff_week_start
+    ? Math.max(1, leagueRaw.settings.playoff_week_start - 1)
+    : 14;
+
   return {
     league: {
       id: leagueRaw.league_id,
@@ -394,6 +400,8 @@ export async function fetchSleeperLeagueFull(leagueId: string, userId: string) {
       teams,
       rosterPositions: starterPositions,
       format,
+      playoffTeams,
+      regularSeasonWeeks,
     },
     userTeamId: userTeamIdStr,
     format,

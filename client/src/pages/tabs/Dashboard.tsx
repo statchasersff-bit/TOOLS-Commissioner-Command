@@ -229,16 +229,17 @@ export function DashboardOverview({ league, userTeam, onNavigate }: DashboardOve
   const future1sts = userTeam.picks.filter((p) => p.round === 1).length;
 
   // Compute playoff odds using the same blended formula as the Portfolio tab.
-  // Blend actual standing (weighted more as the season progresses) with dynasty rank talent.
-  const playoffSlots = Math.max(Math.floor(total / 2), 1);
+  // Use league's actual playoff_teams setting (not a guess of total/2).
+  const playoffSlots = league.playoffTeams ?? Math.max(2, Math.round(total / 3));
   const sortedByRecord = [...league.teams].sort((a, b) => {
     const aW = a.wins ?? 0, bW = b.wins ?? 0;
     if (bW !== aW) return bW - aW;
-    return (b.wins ?? 0) - (a.wins ?? 0);
+    // tiebreaker: more losses = fewer games played = worse, use losses ascending
+    return (a.losses ?? 0) - (b.losses ?? 0);
   });
   const standing = sortedByRecord.findIndex((t) => t.id === userTeam.id) + 1 || rank;
   const totalGamesPlayed = (userTeam.wins ?? 0) + (userTeam.losses ?? 0) + (userTeam.ties ?? 0);
-  const regularSeasonGames = 14;
+  const regularSeasonGames = league.regularSeasonWeeks ?? 14;
   const seasonProgress = Math.min(totalGamesPlayed / regularSeasonGames, 1);
 
   let standingScore: number;
@@ -252,12 +253,21 @@ export function DashboardOverview({ league, userTeam, onNavigate }: DashboardOve
     standingScore = 0.45 * (1 - spotsBack / Math.max(1, total - playoffSlots));
   }
 
+  // Use redraft starter rank for talent score — same as Portfolio tab.
+  // This is more predictive of current-year performance than dynasty overall rank.
+  const sortedByRedraft = [...league.teams].sort((a, b) => {
+    const aVal = a.roster.filter(p => p.starter).reduce((s, p) => s + getRedraftValue(p), 0);
+    const bVal = b.roster.filter(p => p.starter).reduce((s, p) => s + getRedraftValue(p), 0);
+    return bVal - aVal;
+  });
+  const redraftRank = sortedByRedraft.findIndex(t => t.id === userTeam.id) + 1 || rank;
+
   let talentScore: number;
-  if (rank <= playoffSlots) {
-    const comfortMargin = playoffSlots > 1 ? (playoffSlots - rank) / (playoffSlots - 1) : 1;
+  if (redraftRank <= playoffSlots) {
+    const comfortMargin = playoffSlots > 1 ? (playoffSlots - redraftRank) / (playoffSlots - 1) : 1;
     talentScore = 0.55 + comfortMargin * 0.40;
   } else {
-    const spotsBack = rank - playoffSlots;
+    const spotsBack = redraftRank - playoffSlots;
     talentScore = 0.45 * (1 - spotsBack / Math.max(1, total - playoffSlots));
   }
 
