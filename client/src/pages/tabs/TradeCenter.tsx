@@ -126,25 +126,15 @@ export function TradeFinder({ league, userTeam }: TradeProps) {
     const topThird = Math.ceil(leagueSize / 3);
     const bottomThird = leagueSize - topThird;
 
-    // Strict per-position starter slots — computed first so ranking uses starter value only
-    const rosterPos = league.rosterPositions ?? [];
-    const strictStarters: Record<string, number> = { QB: 0, RB: 0, WR: 0, TE: 0 };
-    for (const slot of rosterPos) {
-      if (slot in strictStarters) strictStarters[slot]++;
-    }
-    positions.forEach(pos => { strictStarters[pos] = Math.max(1, strictStarters[pos]); });
-
-    // Positional STARTER value for every team — rank by top-N players only, not total depth.
-    // Summing all roster players inflates ranks for teams that hoard bench depth over elite starters.
+    // Positional STARTER value for every team — use Sleeper's actual starter flag.
+    // This correctly handles FLEX slots: a player in a FLEX spot is marked starter: true
+    // by Sleeper, so they're counted here without needing to infer slot types.
     const teamPosTotals = new Map<string, Record<string, number>>();
     league.teams.forEach(t => {
       const totals: Record<string, number> = {};
       positions.forEach(pos => {
-        const n = strictStarters[pos];
         totals[pos] = t.roster
-          .filter(p => p.pos === pos)
-          .sort((a, b) => getValue(b) - getValue(a))
-          .slice(0, n)
+          .filter(p => p.pos === pos && p.starter)
           .reduce((s, p) => s + getValue(p), 0);
       });
       teamPosTotals.set(t.id, totals);
@@ -171,8 +161,9 @@ export function TradeFinder({ league, userTeam }: TradeProps) {
     ));
     const userSurplus = new Set(positions.filter(pos => {
       if ((userRanks[pos] ?? leagueSize) > topThird) return false; // must be top-33% in league
-      const qualityDepth = userTeam.roster.filter(p => p.pos === pos && getValue(p) >= MIN_SURPLUS_DEPTH).length;
-      return qualityDepth > strictStarters[pos]; // must have depth beyond required starters
+      // surplus = has at least one quality non-starter (bench depth) at this position
+      const qualityBench = userTeam.roster.filter(p => p.pos === pos && !p.starter && getValue(p) >= MIN_SURPLUS_DEPTH).length;
+      return qualityBench > 0;
     }));
 
     // Partners: league-relative ranks for both needs and surplus
@@ -194,26 +185,11 @@ export function TradeFinder({ league, userTeam }: TradeProps) {
     const MAX_POOL = 7;
     const MAX_PER_PARTNER = 4;
 
-    // Strict starter counts from league roster positions
-    const rosterPos = league.rosterPositions ?? [];
-    const strictStarters: Record<string, number> = { QB: 0, RB: 0, WR: 0, TE: 0 };
-    for (const slot of rosterPos) {
-      if (slot in strictStarters) strictStarters[slot]++;
-    }
-    (["QB", "RB", "WR", "TE"] as const).forEach(pos => {
-      strictStarters[pos] = Math.max(1, strictStarters[pos]);
-    });
-
-    // Core starters are the top-N players at each position (by current value mode).
-    // They are never included in the offer pool — trading them away would leave a positional hole.
-    const coreStarters = new Set<string>();
-    (["QB", "RB", "WR", "TE"] as const).forEach(pos => {
-      userTeam.roster
-        .filter(p => p.pos === pos)
-        .sort((a, b) => getValue(b) - getValue(a))
-        .slice(0, strictStarters[pos])
-        .forEach(p => coreStarters.add(p.id));
-    });
+    // Core starters: use Sleeper's actual starter flag (includes FLEX slots).
+    // This prevents offering any player who is actually starting, regardless of position slot type.
+    const coreStarters = new Set<string>(
+      userTeam.roster.filter(p => p.starter).map(p => p.id)
+    );
 
     const buildRationale = (gives: Player[], gets: Player[], pNeeds: Set<string>, pSurplus: Set<string>): string => {
       const parts: string[] = [];
