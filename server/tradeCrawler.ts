@@ -740,9 +740,16 @@ export async function searchTrades(params: {
 
   const allConditions = [...conditions];
 
-  // Always exclude trades that have no recorded assets (data quality guard)
+  // Exclude trades where ANY roster_id has no received assets (partial or empty trades).
+  // Uses EXCEPT to find roster_ids missing from received assets — if any exist, skip trade.
   allConditions.push(
-    sql`EXISTS (SELECT 1 FROM trade_assets WHERE trade_assets.trade_id = ${trades.id})`
+    sql`NOT EXISTS (
+      SELECT unnest(${trades.rosterIds})
+      EXCEPT
+      SELECT trade_assets.roster_id FROM trade_assets
+        WHERE trade_assets.trade_id = ${trades.id}
+        AND trade_assets.direction = 'received'
+    )`
   );
 
   if (tradeIds) {
@@ -826,7 +833,11 @@ export async function searchTrades(params: {
       leagueTotalRosters: trade.leagueTotalRosters || 0,
       sides,
     };
-  });
+  // Application-level safety net: drop any trade where a side still has no received assets
+  }).filter((t) =>
+    t.sides.length >= 2 &&
+    t.sides.every((s) => s.playersReceived.length + s.picksReceived.length > 0)
+  );
 
   return {
     trades: enrichedTrades,
@@ -1228,11 +1239,18 @@ export async function backfillPickSlots(): Promise<{ updated: number; leagues: n
 export async function cleanupOneSidedTrades(): Promise<{ deleted: number }> {
   const d = getDb();
 
-  // Single atomic CTE: identifies one-sided trades, deletes their assets first
-  // (no FK cascade in schema), then deletes the parent rows, and returns count.
-  // All three CTEs run within a single implicit transaction in PostgreSQL.
+  // Identify bad trades in two categories:
+  //   1) Zero-asset trades: no rows at all in trade_assets (JOIN misses these)
+  //   2) One-sided trades: some rosters have no received assets
+  // Deletes assets first (no FK cascade), then the trade rows, atomically.
   const result = await d.execute<{ deleted: string }>(sql`
-    WITH one_sided AS (
+    WITH bad_trades AS (
+      -- Category 1: trades with zero asset rows
+      SELECT t.id
+      FROM trades t
+      WHERE NOT EXISTS (SELECT 1 FROM trade_assets WHERE trade_id = t.id)
+      UNION
+      -- Category 2: trades where at least one roster_id has no received asset
       SELECT DISTINCT t.id
       FROM trades t
       JOIN trade_assets ta ON ta.trade_id = t.id
@@ -1242,11 +1260,11 @@ export async function cleanupOneSidedTrades(): Promise<{ deleted: number }> {
     ),
     del_assets AS (
       DELETE FROM trade_assets
-      WHERE trade_id IN (SELECT id FROM one_sided)
+      WHERE trade_id IN (SELECT id FROM bad_trades)
     ),
     del_trades AS (
       DELETE FROM trades
-      WHERE id IN (SELECT id FROM one_sided)
+      WHERE id IN (SELECT id FROM bad_trades)
       RETURNING id
     )
     SELECT COUNT(*) AS deleted FROM del_trades
