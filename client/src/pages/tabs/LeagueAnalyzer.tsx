@@ -209,7 +209,7 @@ export function RosterComparison({ league }: AnalyzerProps) {
     { key: "rb", label: "RB" },
     { key: "wr", label: "WR" },
     { key: "te", label: "TE" },
-    { key: "picks", label: "Draft Capital" },
+    { key: "picks", label: "Picks" },
   ];
 
   const TeamCard = ({
