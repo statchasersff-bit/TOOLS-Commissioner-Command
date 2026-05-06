@@ -126,12 +126,26 @@ export function TradeFinder({ league, userTeam }: TradeProps) {
     const topThird = Math.ceil(leagueSize / 3);
     const bottomThird = leagueSize - topThird;
 
-    // Positional total value for every team
+    // Strict per-position starter slots — computed first so ranking uses starter value only
+    const rosterPos = league.rosterPositions ?? [];
+    const strictStarters: Record<string, number> = { QB: 0, RB: 0, WR: 0, TE: 0 };
+    for (const slot of rosterPos) {
+      if (slot in strictStarters) strictStarters[slot]++;
+    }
+    positions.forEach(pos => { strictStarters[pos] = Math.max(1, strictStarters[pos]); });
+
+    // Positional STARTER value for every team — rank by top-N players only, not total depth.
+    // Summing all roster players inflates ranks for teams that hoard bench depth over elite starters.
     const teamPosTotals = new Map<string, Record<string, number>>();
     league.teams.forEach(t => {
       const totals: Record<string, number> = {};
       positions.forEach(pos => {
-        totals[pos] = t.roster.filter(p => p.pos === pos).reduce((s, p) => s + getValue(p), 0);
+        const n = strictStarters[pos];
+        totals[pos] = t.roster
+          .filter(p => p.pos === pos)
+          .sort((a, b) => getValue(b) - getValue(a))
+          .slice(0, n)
+          .reduce((s, p) => s + getValue(p), 0);
       });
       teamPosTotals.set(t.id, totals);
     });
@@ -147,14 +161,6 @@ export function TradeFinder({ league, userTeam }: TradeProps) {
         teamPosRanks.get(t.id)![pos] = i + 1;
       });
     }
-
-    // Strict per-position starter slots (QB/RB/WR/TE only — FLEX handled separately)
-    const rosterPos = league.rosterPositions ?? [];
-    const strictStarters: Record<string, number> = { QB: 0, RB: 0, WR: 0, TE: 0 };
-    for (const slot of rosterPos) {
-      if (slot in strictStarters) strictStarters[slot]++;
-    }
-    positions.forEach(pos => { strictStarters[pos] = Math.max(1, strictStarters[pos]); });
 
     // User surplus = top-33% league-wide AND has more quality depth than required starters
     // User need    = bottom-33% league-wide
