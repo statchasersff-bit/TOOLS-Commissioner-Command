@@ -353,18 +353,9 @@ async function processLeague(leagueId: string, degree: number) {
     }).onConflictDoNothing();
 
     for (const trade of leagueTrades) {
-      // Skip trades where any roster received 0 assets (one-sided / junk data)
       const rosterIds = trade.roster_ids || [];
-      const receivingRosters = new Set<number>();
-      if (trade.adds) {
-        for (const [, rosterId] of Object.entries(trade.adds)) receivingRosters.add(rosterId as number);
-      }
-      if (trade.draft_picks) {
-        for (const pick of trade.draft_picks) {
-          if (pick.owner_id) receivingRosters.add(pick.owner_id);
-        }
-      }
-      if (rosterIds.some((rid) => !receivingRosters.has(rid))) continue;
+      // Must have at least 2 parties — empty roster_ids slips past .some() checks
+      if (rosterIds.length < 2) continue;
 
       const insertedTrade = await d.insert(trades).values({
         id: trade.transaction_id,
@@ -480,10 +471,17 @@ async function processLeague(leagueId: string, degree: number) {
         }
       }
 
-      if (assetRows.length > 0) {
-        await d.insert(tradeAssets).values(assetRows);
+      // Final check: every roster must have received at least one asset.
+      // If any startup picks or junk got stripped, the trade could end up empty.
+      const receivedRosterIds = new Set(
+        assetRows.filter((a) => a.direction === "received").map((a) => a.rosterId)
+      );
+      if (assetRows.length === 0 || rosterIds.some((rid) => !receivedRosterIds.has(rid))) {
+        await d.delete(trades).where(eq(trades.id, trade.transaction_id));
+        continue;
       }
 
+      await d.insert(tradeAssets).values(assetRows);
       await incrementCrawlStats("tradesCollected");
     }
 
@@ -742,11 +740,16 @@ export async function searchTrades(params: {
 
   const allConditions = [...conditions];
 
+  // Always exclude trades that have no recorded assets (data quality guard)
+  allConditions.push(
+    sql`EXISTS (SELECT 1 FROM trade_assets WHERE trade_assets.trade_id = ${trades.id})`
+  );
+
   if (tradeIds) {
     allConditions.push(sql`${trades.id} IN (${sql.join(tradeIds.map(id => sql`${id}`), sql`, `)})`);
   }
 
-  const whereClause = allConditions.length > 0 ? and(...allConditions) : sql`1=1`;
+  const whereClause = and(...allConditions);
 
   const [countResult] = await d
     .select({ total: count() })
@@ -876,18 +879,9 @@ export async function ingestLeagueTrades(params: {
   let skipped = 0;
 
   for (const trade of filteredTransactions) {
-    // Skip trades where any roster received 0 assets (one-sided / junk data)
     const tradeRosterIds = trade.roster_ids || [];
-    const tradeReceivingRosters = new Set<number>();
-    if (trade.adds) {
-      for (const [, rosterId] of Object.entries(trade.adds)) tradeReceivingRosters.add(rosterId as number);
-    }
-    if (trade.draft_picks) {
-      for (const pick of trade.draft_picks) {
-        if (pick.owner_id) tradeReceivingRosters.add(pick.owner_id);
-      }
-    }
-    if (tradeRosterIds.some((rid) => !tradeReceivingRosters.has(rid))) {
+    // Must have at least 2 parties — empty roster_ids slips past .some() checks
+    if (tradeRosterIds.length < 2) {
       skipped++;
       continue;
     }
@@ -1002,10 +996,18 @@ export async function ingestLeagueTrades(params: {
       }
     }
 
-    if (assetRows.length > 0) {
-      await d.insert(tradeAssets).values(assetRows);
+    // Final check: every roster must have received at least one asset.
+    // If picks got stripped (startup draft, round > 5) the trade can end up empty.
+    const ingestReceivedRosterIds = new Set(
+      assetRows.filter((a) => a.direction === "received").map((a) => a.rosterId)
+    );
+    if (assetRows.length === 0 || tradeRosterIds.some((rid) => !ingestReceivedRosterIds.has(rid))) {
+      await d.delete(trades).where(eq(trades.id, trade.transaction_id));
+      skipped++;
+      continue;
     }
 
+    await d.insert(tradeAssets).values(assetRows);
     inserted++;
   }
 
