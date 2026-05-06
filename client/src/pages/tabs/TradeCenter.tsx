@@ -122,23 +122,62 @@ export function TradeFinder({ league, userTeam }: TradeProps) {
 
   const { userNeeds, userSurplus, partnerNeedsMap, partnerSurplusMap } = useMemo(() => {
     const getValue = (p: Player) => proposalMode === "dynasty" ? getPlayerValue(p) : getRedraftValue(p);
-    const userPosTotals: Record<string, number> = {};
-    positions.forEach(pos => {
-      userPosTotals[pos] = userTeam.roster.filter(p => p.pos === pos).reduce((s, p) => s + getValue(p), 0);
-    });
-    const ranked = [...positions].sort((a, b) => userPosTotals[a] - userPosTotals[b]);
-    const userNeeds = new Set(ranked.slice(0, 2));
-    const userSurplus = new Set(ranked.slice(2));
+    const leagueSize = league.teams.length;
+    const topThird = Math.ceil(leagueSize / 3);
+    const bottomThird = leagueSize - topThird;
 
+    // Positional total value for every team
+    const teamPosTotals = new Map<string, Record<string, number>>();
+    league.teams.forEach(t => {
+      const totals: Record<string, number> = {};
+      positions.forEach(pos => {
+        totals[pos] = t.roster.filter(p => p.pos === pos).reduce((s, p) => s + getValue(p), 0);
+      });
+      teamPosTotals.set(t.id, totals);
+    });
+
+    // League-relative rank for each team at each position (1 = best)
+    const teamPosRanks = new Map<string, Record<string, number>>();
+    for (const pos of positions) {
+      const sorted = [...league.teams].sort((a, b) =>
+        (teamPosTotals.get(b.id)?.[pos] ?? 0) - (teamPosTotals.get(a.id)?.[pos] ?? 0)
+      );
+      sorted.forEach((t, i) => {
+        if (!teamPosRanks.has(t.id)) teamPosRanks.set(t.id, {});
+        teamPosRanks.get(t.id)![pos] = i + 1;
+      });
+    }
+
+    // Strict per-position starter slots (QB/RB/WR/TE only — FLEX handled separately)
+    const rosterPos = league.rosterPositions ?? [];
+    const strictStarters: Record<string, number> = { QB: 0, RB: 0, WR: 0, TE: 0 };
+    for (const slot of rosterPos) {
+      if (slot in strictStarters) strictStarters[slot]++;
+    }
+    positions.forEach(pos => { strictStarters[pos] = Math.max(1, strictStarters[pos]); });
+
+    // User surplus = top-33% league-wide AND has more quality depth than required starters
+    // User need    = bottom-33% league-wide
+    const MIN_SURPLUS_DEPTH = 1000;
+    const userRanks = teamPosRanks.get(userTeam.id) ?? {};
+    const userNeeds = new Set(positions.filter(pos =>
+      (userRanks[pos] ?? leagueSize) > bottomThird
+    ));
+    const userSurplus = new Set(positions.filter(pos => {
+      if ((userRanks[pos] ?? leagueSize) > topThird) return false; // must be top-33% in league
+      const qualityDepth = userTeam.roster.filter(p => p.pos === pos && getValue(p) >= MIN_SURPLUS_DEPTH).length;
+      return qualityDepth > strictStarters[pos]; // must have depth beyond required starters
+    }));
+
+    // Partners: league-relative ranks for both needs and surplus
     const partnerNeedsMap = new Map<string, Set<string>>();
     const partnerSurplusMap = new Map<string, Set<string>>();
     league.teams.forEach(t => {
-      const totals: Record<string, number> = {};
-      positions.forEach(pos => { totals[pos] = t.roster.filter(p => p.pos === pos).reduce((s, p) => s + getValue(p), 0); });
-      const pr = [...positions].sort((a, b) => totals[a] - totals[b]);
-      partnerNeedsMap.set(t.id, new Set(pr.slice(0, 2)));
-      partnerSurplusMap.set(t.id, new Set(pr.slice(2)));
+      const ranks = teamPosRanks.get(t.id) ?? {};
+      partnerNeedsMap.set(t.id, new Set(positions.filter(pos => (ranks[pos] ?? leagueSize) > bottomThird)));
+      partnerSurplusMap.set(t.id, new Set(positions.filter(pos => (ranks[pos] ?? leagueSize) <= topThird)));
     });
+
     return { userNeeds, userSurplus, partnerNeedsMap, partnerSurplusMap };
   }, [league, userTeam, getPlayerValue, getRedraftValue, proposalMode]);
 
@@ -148,6 +187,27 @@ export function TradeFinder({ league, userTeam }: TradeProps) {
     const MIN_VALUE = 800;
     const MAX_POOL = 7;
     const MAX_PER_PARTNER = 4;
+
+    // Strict starter counts from league roster positions
+    const rosterPos = league.rosterPositions ?? [];
+    const strictStarters: Record<string, number> = { QB: 0, RB: 0, WR: 0, TE: 0 };
+    for (const slot of rosterPos) {
+      if (slot in strictStarters) strictStarters[slot]++;
+    }
+    (["QB", "RB", "WR", "TE"] as const).forEach(pos => {
+      strictStarters[pos] = Math.max(1, strictStarters[pos]);
+    });
+
+    // Core starters are the top-N players at each position (by current value mode).
+    // They are never included in the offer pool — trading them away would leave a positional hole.
+    const coreStarters = new Set<string>();
+    (["QB", "RB", "WR", "TE"] as const).forEach(pos => {
+      userTeam.roster
+        .filter(p => p.pos === pos)
+        .sort((a, b) => getValue(b) - getValue(a))
+        .slice(0, strictStarters[pos])
+        .forEach(p => coreStarters.add(p.id));
+    });
 
     const buildRationale = (gives: Player[], gets: Player[], pNeeds: Set<string>, pSurplus: Set<string>): string => {
       const parts: string[] = [];
@@ -167,7 +227,7 @@ export function TradeFinder({ league, userTeam }: TradeProps) {
       const pSurplus = partnerSurplusMap.get(partner.id) ?? new Set();
 
       const myOffers = userTeam.roster
-        .filter(p => getValue(p) >= MIN_VALUE)
+        .filter(p => getValue(p) >= MIN_VALUE && !coreStarters.has(p.id))
         .sort((a, b) => getValue(b) - getValue(a))
         .slice(0, MAX_POOL);
 
