@@ -7,7 +7,7 @@ import { InsightCallout } from "@/components/InsightCallout";
 import { SectionHeader } from "@/components/SectionHeader";
 import { getLeagueTeamTiers, getTierColor, getTierEmoji, getTierTooltip, isContenderTier, isRebuilderTier, generateInsights, computeNowScore, computeFutureScore, getDynastyWindowLabel, getDynastyWindowSubtitle, getDynastyWindowColor } from "@/data/mockData";
 import { useValueModel } from "@/contexts/ValueModelContext";
-import type { League, Team } from "@/types";
+import type { League, Team, Player } from "@/types";
 import { cn } from "@/lib/utils";
 import { Trophy, Zap, Target, Calendar, Users, Medal, ArrowRight, ArrowUp, ArrowDown, ArrowUpDown, Table, ArrowRightLeft, Compass, Flame, Sprout, Archive, ChevronDown, ChevronUp, MapPin } from "lucide-react";
 
@@ -107,7 +107,14 @@ function getDraftCapitalScore(team: Team, league: League): number {
   return Math.round(pct * 100) / 10;
 }
 
-function getSuggestedDirection(team: Team, tier: string): string {
+function getSuggestedDirection(
+  team: Team,
+  tier: string,
+  playoffOdds: number,
+  windowStartOffset: number,
+  getRedraftValue: (p: Player) => number,
+  getPlayerValue: (p: Player) => number,
+): string {
   const posScores = [
     { pos: "QB", score: team.metrics.qb },
     { pos: "RB", score: team.metrics.rb },
@@ -117,15 +124,64 @@ function getSuggestedDirection(team: Team, tier: string): string {
   const weakest = posScores.reduce((min, p) => p.score < min.score ? p : min, posScores[0]);
   const strongest = posScores.reduce((max, p) => p.score > max.score ? p : max, posScores[0]);
 
+  // Fixed tier-specific directions
   if (tier === "Taco") return "Sell everything for future picks and young players";
   if (tier === "Rebuilder") return "Target young upside players and stockpile future picks";
   if (tier === "Pick Hoarder") return "Package picks for an elite starter to accelerate the rebuild";
   if (tier === "Future Powerhouse") return "Hold and let the young core mature";
   if (tier === "Weak / Directionless") return "Choose a direction: sell aging assets or acquire picks";
-  if (tier === "Pretender") return `Upgrade ${weakest.pos} or pivot toward a retool`;
   if (tier === "Juggernaut") return "Consolidate depth into elite starters to maximize your title window";
   if (tier === "Win-Now") return "Convert future assets into immediate production";
 
+  // Low playoff odds — steer toward asset liquidation regardless of tier
+  if (playoffOdds < 35) {
+    // Starters aged 27+ with meaningful redraft value (peak & declining)
+    const agingStarters = team.roster
+      .filter(p => p.starter && p.age >= 27 && getRedraftValue(p) >= 1500)
+      .sort((a, b) => getRedraftValue(b) - getRedraftValue(a));
+
+    // Players whose redraft value meaningfully exceeds dynasty value (sell-high signals)
+    const peakRedraftAssets = team.roster
+      .filter(p => {
+        const rd = getRedraftValue(p);
+        const dyn = getPlayerValue(p);
+        return rd >= 1200 && dyn > 0 && rd / dyn > 1.3;
+      })
+      .sort((a, b) => getRedraftValue(b) - getRedraftValue(a));
+
+    if (windowStartOffset >= 2) {
+      if (agingStarters.length >= 2) {
+        const poses = [...new Set(agingStarters.slice(0, 2).map(p => p.pos))].join("/");
+        return `Sell aging ${poses} starters at peak redraft value for picks and young talent`;
+      }
+      if (agingStarters.length === 1 && peakRedraftAssets.length > 0) {
+        return `Move aging ${agingStarters[0].pos}s before their value drops — convert to picks`;
+      }
+      if (peakRedraftAssets.length > 0) {
+        const pos = peakRedraftAssets[0].pos;
+        return `Sell peak-redraft ${pos}s now — their dynasty value will fade before your window opens`;
+      }
+      if (strongest.score >= 70) {
+        return `Unlikely to contend this year — sell ${strongest.pos} depth for picks and young talent`;
+      }
+      return "Pivot to rebuild: sell aging and high-risk assets at peak value and stack draft capital";
+    }
+
+    // Low odds, near-term window
+    if (agingStarters.length > 0) {
+      return `Sell aging ${agingStarters[0].pos} starters and high-risk assets to sharpen your roster`;
+    }
+    return "On the fringes — sell high on peak-value players and retool toward your window";
+  }
+
+  // Bubble (35–60%): focus on shoring up weaknesses to make a playoff push
+  if (playoffOdds < 60) {
+    if (strongest.score >= 85 && weakest.score <= 40) return `Trade ${strongest.pos} depth to upgrade ${weakest.pos}`;
+    if (weakest.score < 40) return `Aggressively target ${weakest.pos} upgrades to push into playoff contention`;
+    return `Shore up ${weakest.pos} to secure a playoff spot`;
+  }
+
+  // Competitive (60%+): maximize the current window
   if (strongest.score >= 85 && weakest.score <= 40) return `Trade ${strongest.pos} depth to upgrade ${weakest.pos}`;
   if (weakest.score < 30) return `Aggressively buy ${weakest.pos} depth`;
   if (weakest.score < 50) return `Target ${weakest.pos} upgrades in trades`;
@@ -160,6 +216,7 @@ function ScoreBar({ value, max = 10, color }: { value: number; max?: number; col
 }
 
 export function DashboardOverview({ league, userTeam, onNavigate }: DashboardOverviewProps) {
+  const { getPlayerValue, getRedraftValue } = useValueModel();
   const sorted = [...league.teams].sort((a, b) => b.metrics.overall - a.metrics.overall);
   const rank = sorted.findIndex((t) => t.id === userTeam.id) + 1;
   const total = league.teams.length;
@@ -220,7 +277,7 @@ export function DashboardOverview({ league, userTeam, onNavigate }: DashboardOve
   const winNow = getWinNowScore(userTeam, league);
   const youth = getYouthScore(userTeam, league);
   const capital = getDraftCapitalScore(userTeam, league);
-  const suggestedDirection = getSuggestedDirection(userTeam, tier);
+  const suggestedDirection = getSuggestedDirection(userTeam, tier, clampedOdds, userTeam.metrics.windowStartOffset, getRedraftValue, getPlayerValue);
 
   const nowScore = useMemo(() => computeNowScore(league.teams, userTeam), [league.teams, userTeam]);
   const futureScore = useMemo(() => computeFutureScore(league.teams, userTeam), [league.teams, userTeam]);
