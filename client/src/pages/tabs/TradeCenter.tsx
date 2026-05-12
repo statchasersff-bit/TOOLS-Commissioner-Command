@@ -1052,18 +1052,17 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
     return clamped * 100;
   }, [finalA, finalB]);
 
-  const getVerdictLabel = (pct: number): string => {
-    const winner = winnerSide === "A" ? (sideATeam?.owner || "Side A") : (sideBTeam?.owner || "Side B");
+  const getVerdictLabel = (_pct: number): string => {
     if (diffPct <= 4) return "Dead Even";
-    if (diffPct <= 9) return `Slight Edge: ${winner}`;
-    if (diffPct <= 19) return `Clear Win for ${winner}`;
-    return `Major Win for ${winner}`;
+    if (diffPct <= 9) return "Slight Edge";
+    if (diffPct <= 19) return "Clear Advantage";
+    return "Major Overpay";
   };
 
   const getVerdictStyle = (pct: number): string => {
-    if (pct <= 4) return "bg-[#0b3a7a]/10 dark:bg-blue-400/15 text-[#0b3a7a] dark:text-blue-300 border-[#0b3a7a]/20 dark:border-blue-400/30";
-    if (pct <= 9) return "bg-[#d4af37]/10 dark:bg-[#d4af37]/15 text-[#d4af37] dark:text-[#e8c84a] border-[#d4af37]/30";
-    if (pct <= 19) return "bg-emerald-500/10 dark:bg-emerald-400/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30";
+    if (pct <= 4) return "bg-emerald-500/10 dark:bg-emerald-400/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30";
+    if (pct <= 9) return "bg-[#d4af37]/10 dark:bg-[#d4af37]/15 text-amber-700 dark:text-[#e8c84a] border-[#d4af37]/30";
+    if (pct <= 19) return "bg-[#0b3a7a]/10 dark:bg-blue-400/15 text-[#0b3a7a] dark:text-blue-300 border-[#0b3a7a]/20 dark:border-blue-400/30";
     return "bg-red-500/10 dark:bg-red-400/15 text-red-700 dark:text-red-400 border-red-500/30";
   };
 
@@ -1408,44 +1407,52 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
             <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
           </div>
 
-          <div className="space-y-5">
-            <div className="relative px-1">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">{sideBTeam?.owner || "Side B"} Wins</span>
-                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">{sideATeam?.owner || "Side A"} Wins</span>
+          <div className="space-y-6">
+
+            {/* 1. VERDICT FRONT AND CENTER */}
+            <div className="text-center space-y-2 py-1">
+              <p className="text-xl sm:text-2xl font-extrabold tracking-tight text-foreground uppercase leading-tight" data-testid="text-verdict-headline">
+                {diffPct <= 4 ? "Dead Even Trade" : `${winnerLabel} wins the trade`}
+              </p>
+              {diff > 0 && (
+                <p className="text-sm font-bold text-[#d4af37]" data-testid="text-verdict-diff">
+                  {signedDiff > 0 ? "+" : ""}{Math.round(signedDiff).toLocaleString()} Trade Value
+                </p>
+              )}
+              <div className="flex justify-center pt-1">
+                <Badge className={`text-xs px-4 py-1.5 font-bold border ${getVerdictStyle(diffPct)}`} data-testid="badge-verdict">
+                  {getVerdictLabel(diffPct)}
+                </Badge>
               </div>
+            </div>
 
-              <div className="relative h-3 rounded-full overflow-hidden" style={{ background: "linear-gradient(90deg, #dfe5ee 0%, #dfe5ee 100%)" }}>
-                <div className="absolute inset-0 dark:hidden" style={{ background: "linear-gradient(90deg, #dfe5ee 0%, #e8ecf2 50%, #dfe5ee 100%)" }} />
-                <div className="absolute inset-0 hidden dark:block" style={{ background: "linear-gradient(90deg, #12284a 0%, #1a3560 50%, #12284a 100%)" }} />
-
-                {[25, 50, 75].map(pct => (
-                  <div key={pct} className="absolute top-0 bottom-0 w-px bg-border/40 dark:bg-white/10" style={{ left: `${pct}%` }} />
-                ))}
-
-                <div className="absolute top-0 bottom-0 w-0.5 bg-[#d4af37]/60 z-10" style={{ left: "50%" }} />
-
+            {/* 2. ADVANTAGE METER */}
+            <div className="space-y-1.5 px-1">
+              <div className="flex items-center justify-between text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                <span>{sideBTeam?.owner || "Side B"}</span>
+                <span>{sideATeam?.owner || "Side A"}</span>
+              </div>
+              <div className="relative h-4 rounded-full overflow-hidden">
+                <div className="absolute inset-0" style={{ background: "linear-gradient(90deg, #12284a 0%, #1a3560 50%, #12284a 100%)" }} />
+                {diffPct > 4 && winnerSide === "B" && (
+                  <div className="absolute inset-y-0 left-0 rounded-l-full transition-all duration-700" style={{ width: `${100 - meterPosition}%`, background: "linear-gradient(90deg, #0b3a7a 0%, #1a5aad 100%)" }} />
+                )}
+                {diffPct > 4 && winnerSide === "A" && (
+                  <div className="absolute inset-y-0 right-0 rounded-r-full transition-all duration-700" style={{ width: `${meterPosition}%`, background: "linear-gradient(90deg, #b8932a 0%, #d4af37 100%)" }} />
+                )}
+                <div className="absolute top-0 bottom-0 w-0.5 bg-white/20 z-10" style={{ left: "50%" }} />
                 <div
-                  className="absolute top-1/2 -translate-y-1/2 w-4 h-4 rounded-full border-2 border-[#d4af37] shadow-lg shadow-[#d4af37]/30 z-20 transition-all duration-700 ease-out"
-                  style={{
-                    left: `clamp(8px, ${meterPosition}% - 8px, calc(100% - 8px))`,
-                    background: "linear-gradient(135deg, #0b3a7a 0%, #d4af37 100%)",
-                  }}
+                  className="absolute top-1/2 -translate-y-1/2 w-5 h-5 rounded-full border-2 border-white shadow-lg z-20 transition-all duration-700"
+                  style={{ left: `clamp(10px, ${meterPosition}% - 10px, calc(100% - 10px))`, background: "linear-gradient(135deg, #0b3a7a 0%, #d4af37 100%)" }}
                   data-testid="meter-indicator"
                 />
               </div>
-
-              <div className="flex items-center justify-center mt-1">
-                <span className="text-[9px] text-muted-foreground/50 font-medium">Fair Value</span>
+              <div className="flex justify-center">
+                <span className="text-[9px] text-muted-foreground/50 font-medium">Fair</span>
               </div>
             </div>
 
-            <div className="flex items-center justify-center">
-              <Badge className={`text-xs px-4 py-1.5 font-bold border ${getVerdictStyle(diffPct)}`} data-testid="badge-verdict">
-                {getVerdictLabel(diffPct)}
-              </Badge>
-            </div>
-
+            {/* 3. PLAYER STACKS */}
             {(() => {
               const playersA = sideA.filter(a => a.type === "player" && a.player?.sleeperId);
               const playersB = sideB.filter(a => a.type === "player" && a.player?.sleeperId);
@@ -1461,107 +1468,61 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
                 WR: "border-blue-500",
                 TE: "border-yellow-500",
               };
-
+              const renderStack = (players: typeof playersA, picks: number, team: typeof sideATeam, fallback: string) => (
+                <div className="flex flex-col items-center gap-2">
+                  <div className={`flex items-center ${overlap} flex-wrap justify-center`}>
+                    {players.map((a, i) => (
+                      <div
+                        key={a.id}
+                        className={`relative ${imgSize} rounded-full border-2 ${posBorder[a.player?.pos || ""] || "border-muted-foreground"} bg-muted/30 shadow-md`}
+                        style={{ zIndex: 20 - i }}
+                      >
+                        <div className="w-full h-full rounded-full overflow-hidden">
+                          <img
+                            src={`https://sleepercdn.com/content/nfl/players/${a.player!.sleeperId}.jpg`}
+                            alt={a.label}
+                            className="w-full h-full object-cover"
+                            onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                          />
+                        </div>
+                        {a.player?.team && a.player.team !== "FA" && (
+                          <img
+                            src={`https://sleepercdn.com/images/team_logos/nfl/${a.player.team.toLowerCase()}.jpg`}
+                            alt={a.player.team}
+                            className="absolute bottom-0 right-0 w-3.5 h-3.5 sm:w-4 sm:h-4 rounded-full border border-background bg-background object-contain shadow-sm"
+                            onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                          />
+                        )}
+                      </div>
+                    ))}
+                    {picks > 0 && (
+                      <div className={`relative ${imgSize} rounded-full border-2 border-[#d4af37]/60 bg-[#0b3a7a]/10 dark:bg-[#d4af37]/10 shadow-md flex items-center justify-center`} style={{ zIndex: 5 }}>
+                        <span className="text-[9px] sm:text-[10px] font-bold text-[#d4af37]">{picks} PK</span>
+                      </div>
+                    )}
+                  </div>
+                  <p className="text-[10px] font-bold text-muted-foreground truncate max-w-[120px]">{team?.owner || fallback}</p>
+                </div>
+              );
               return (
-                <div className="flex items-center justify-between gap-2 px-2">
-                  <div className="flex-1 flex flex-col items-center gap-2">
-                    <div className={`flex items-center ${overlap} flex-wrap justify-center`}>
-                      {playersA.map((a, i) => (
-                        <div
-                          key={a.id}
-                          className={`relative ${imgSize} rounded-full border-2 ${posBorder[a.player?.pos || ""] || "border-muted-foreground"} bg-muted/30 shadow-md`}
-                          style={{ zIndex: 20 - i }}
-                        >
-                          <div className="w-full h-full rounded-full overflow-hidden">
-                            <img
-                              src={`https://sleepercdn.com/content/nfl/players/${a.player!.sleeperId}.jpg`}
-                              alt={a.label}
-                              className="w-full h-full object-cover"
-                              onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-                            />
-                          </div>
-                          {a.player?.team && a.player.team !== "FA" && (
-                            <img
-                              src={`https://sleepercdn.com/images/team_logos/nfl/${a.player.team.toLowerCase()}.jpg`}
-                              alt={a.player.team}
-                              className="absolute bottom-0 right-0 w-3.5 h-3.5 sm:w-4 sm:h-4 rounded-full border border-background bg-background object-contain shadow-sm"
-                              onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-                            />
-                          )}
-                        </div>
-                      ))}
-                      {picksA > 0 && (
-                        <div className={`relative ${imgSize} rounded-full border-2 border-[#d4af37]/60 bg-[#0b3a7a]/10 dark:bg-[#d4af37]/10 shadow-md flex items-center justify-center`} style={{ zIndex: 5 }}>
-                          <span className="text-[9px] sm:text-[10px] font-bold text-[#d4af37]">{picksA} PK</span>
-                        </div>
-                      )}
-                    </div>
-                    <p className="text-[10px] font-bold text-muted-foreground truncate max-w-[120px]">{sideATeam?.owner || "Side A"}</p>
-                  </div>
-
-                  <div className="flex-shrink-0 px-2">
-                    <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-gradient-to-br from-[#0b3a7a] to-[#d4af37] flex items-center justify-center shadow-lg">
-                      <ArrowRightLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-white" />
-                    </div>
-                  </div>
-
-                  <div className="flex-1 flex flex-col items-center gap-2">
-                    <div className={`flex items-center ${overlap} flex-wrap justify-center`}>
-                      {playersB.map((a, i) => (
-                        <div
-                          key={a.id}
-                          className={`relative ${imgSize} rounded-full border-2 ${posBorder[a.player?.pos || ""] || "border-muted-foreground"} bg-muted/30 shadow-md`}
-                          style={{ zIndex: 20 - i }}
-                        >
-                          <div className="w-full h-full rounded-full overflow-hidden">
-                            <img
-                              src={`https://sleepercdn.com/content/nfl/players/${a.player!.sleeperId}.jpg`}
-                              alt={a.label}
-                              className="w-full h-full object-cover"
-                              onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-                            />
-                          </div>
-                          {a.player?.team && a.player.team !== "FA" && (
-                            <img
-                              src={`https://sleepercdn.com/images/team_logos/nfl/${a.player.team.toLowerCase()}.jpg`}
-                              alt={a.player.team}
-                              className="absolute bottom-0 right-0 w-3.5 h-3.5 sm:w-4 sm:h-4 rounded-full border border-background bg-background object-contain shadow-sm"
-                              onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-                            />
-                          )}
-                        </div>
-                      ))}
-                      {picksB > 0 && (
-                        <div className={`relative ${imgSize} rounded-full border-2 border-[#d4af37]/60 bg-[#0b3a7a]/10 dark:bg-[#d4af37]/10 shadow-md flex items-center justify-center`} style={{ zIndex: 5 }}>
-                          <span className="text-[9px] sm:text-[10px] font-bold text-[#d4af37]">{picksB} PK</span>
-                        </div>
-                      )}
-                    </div>
-                    <p className="text-[10px] font-bold text-muted-foreground truncate max-w-[120px]">{sideBTeam?.owner || "Side B"}</p>
-                  </div>
+                <div className="flex items-center justify-around gap-4 px-2">
+                  {renderStack(playersA, picksA, sideATeam, "Side A")}
+                  {renderStack(playersB, picksB, sideBTeam, "Side B")}
                 </div>
               );
             })()}
 
-            <div className="grid grid-cols-3 gap-3 text-center">
-              <div className="p-3 rounded-lg bg-muted/20 dark:bg-muted/10 border border-border/20">
-                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">{sideATeam?.owner || "Side A"}</p>
+            {/* 4. VALUE CARDS */}
+            <div className="grid grid-cols-2 gap-3 text-center">
+              <div className={`p-3 rounded-lg border ${winnerSide === "A" && diffPct > 4 ? "bg-[#d4af37]/10 border-[#d4af37]/40" : "bg-muted/20 dark:bg-muted/10 border-border/20"}`}>
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">{sideATeam?.owner || "Side A"} receives</p>
                 <p className="text-lg font-bold text-foreground" data-testid="text-analysis-final-a">{Math.round(finalA).toLocaleString()}</p>
                 {valueAdjustment && rawA !== finalA && (
                   <p className="text-[10px] text-muted-foreground/60 mt-0.5">raw {rawA.toLocaleString()}</p>
                 )}
               </div>
-              <div className="p-3 rounded-lg bg-muted/20 dark:bg-muted/10 border border-border/20">
-                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Difference</p>
-                <p className={`text-lg font-bold ${diff === 0 ? "text-muted-foreground" : "text-foreground"}`} data-testid="text-analysis-diff">
-                  {diff === 0 ? "Even" : `${signedDiff > 0 ? "+" : ""}${Math.round(signedDiff).toLocaleString()}`}
-                </p>
-                {diff > 0 && (
-                  <p className="text-[10px] text-muted-foreground/60 mt-0.5">{diffPct.toFixed(1)}%</p>
-                )}
-              </div>
-              <div className="p-3 rounded-lg bg-muted/20 dark:bg-muted/10 border border-border/20">
-                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">{sideBTeam?.owner || "Side B"}</p>
+              <div className={`p-3 rounded-lg border ${winnerSide === "B" && diffPct > 4 ? "bg-[#d4af37]/10 border-[#d4af37]/40" : "bg-muted/20 dark:bg-muted/10 border-border/20"}`}>
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">{sideBTeam?.owner || "Side B"} receives</p>
                 <p className="text-lg font-bold text-foreground" data-testid="text-analysis-final-b">{Math.round(finalB).toLocaleString()}</p>
                 {valueAdjustment && rawB !== finalB && (
                   <p className="text-[10px] text-muted-foreground/60 mt-0.5">raw {rawB.toLocaleString()}</p>
@@ -1569,11 +1530,22 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
               </div>
             </div>
 
-            {diffPct > 12 && (
-              <p className="text-xs text-center text-muted-foreground" data-testid="text-counter-suggestion">
-                {loserSide === "A" ? (sideATeam?.owner || "Side A") : (sideBTeam?.owner || "Side B")} needs to add ~{Math.round(diff).toLocaleString()} in value to make this fair
+            {diff > 0 && (
+              <p className="text-center text-xs text-muted-foreground" data-testid="text-analysis-diff">
+                Trade Difference: <span className="font-bold text-foreground">{signedDiff > 0 ? "+" : ""}{Math.round(signedDiff).toLocaleString()}</span>
+                <span className="ml-1 opacity-60">({diffPct.toFixed(1)}%)</span>
               </p>
             )}
+
+            {/* 5. HUMAN LANGUAGE */}
+            {diffPct > 12 && (
+              <p className="text-xs text-center text-muted-foreground" data-testid="text-counter-suggestion">
+                {diffPct > 25
+                  ? `${loserSide === "A" ? (sideATeam?.owner || "Side A") : (sideBTeam?.owner || "Side B")} would need significantly more value to even this out`
+                  : `${loserSide === "A" ? (sideATeam?.owner || "Side A") : (sideBTeam?.owner || "Side B")} is getting the short end of this deal`}
+              </p>
+            )}
+
           </div>
         </Card>
       )}
