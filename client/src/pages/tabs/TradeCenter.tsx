@@ -1469,15 +1469,25 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
                       {playersA.map((a, i) => (
                         <div
                           key={a.id}
-                          className={`relative ${imgSize} rounded-full border-2 ${posBorder[a.player?.pos || ""] || "border-muted-foreground"} overflow-hidden bg-muted/30 shadow-md`}
+                          className={`relative ${imgSize} rounded-full border-2 ${posBorder[a.player?.pos || ""] || "border-muted-foreground"} bg-muted/30 shadow-md`}
                           style={{ zIndex: 20 - i }}
                         >
-                          <img
-                            src={`https://sleepercdn.com/content/nfl/players/${a.player!.sleeperId}.jpg`}
-                            alt={a.label}
-                            className="w-full h-full object-cover"
-                            onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-                          />
+                          <div className="w-full h-full rounded-full overflow-hidden">
+                            <img
+                              src={`https://sleepercdn.com/content/nfl/players/${a.player!.sleeperId}.jpg`}
+                              alt={a.label}
+                              className="w-full h-full object-cover"
+                              onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                            />
+                          </div>
+                          {a.player?.team && a.player.team !== "FA" && (
+                            <img
+                              src={`https://sleepercdn.com/images/team_logos/nfl/${a.player.team.toLowerCase()}.jpg`}
+                              alt={a.player.team}
+                              className="absolute bottom-0 right-0 w-3.5 h-3.5 sm:w-4 sm:h-4 rounded-full border border-background bg-background object-contain shadow-sm"
+                              onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                            />
+                          )}
                         </div>
                       ))}
                       {picksA > 0 && (
@@ -1500,15 +1510,25 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
                       {playersB.map((a, i) => (
                         <div
                           key={a.id}
-                          className={`relative ${imgSize} rounded-full border-2 ${posBorder[a.player?.pos || ""] || "border-muted-foreground"} overflow-hidden bg-muted/30 shadow-md`}
+                          className={`relative ${imgSize} rounded-full border-2 ${posBorder[a.player?.pos || ""] || "border-muted-foreground"} bg-muted/30 shadow-md`}
                           style={{ zIndex: 20 - i }}
                         >
-                          <img
-                            src={`https://sleepercdn.com/content/nfl/players/${a.player!.sleeperId}.jpg`}
-                            alt={a.label}
-                            className="w-full h-full object-cover"
-                            onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-                          />
+                          <div className="w-full h-full rounded-full overflow-hidden">
+                            <img
+                              src={`https://sleepercdn.com/content/nfl/players/${a.player!.sleeperId}.jpg`}
+                              alt={a.label}
+                              className="w-full h-full object-cover"
+                              onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                            />
+                          </div>
+                          {a.player?.team && a.player.team !== "FA" && (
+                            <img
+                              src={`https://sleepercdn.com/images/team_logos/nfl/${a.player.team.toLowerCase()}.jpg`}
+                              alt={a.player.team}
+                              className="absolute bottom-0 right-0 w-3.5 h-3.5 sm:w-4 sm:h-4 rounded-full border border-background bg-background object-contain shadow-sm"
+                              onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                            />
+                          )}
                         </div>
                       ))}
                       {picksB > 0 && (
