@@ -930,7 +930,7 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
   const [sideA, setSideA] = useState<TradeAsset[]>([]);
   const [sideB, setSideB] = useState<TradeAsset[]>([]);
   const [valueAdjustment, setValueAdjustment] = useState(true);
-  const [overpayTax, setOverpayTax] = useState(false);
+  const [overpayTax, setOverpayTax] = useState(true);
   const [tradePartnerId, setTradePartnerId] = useState<string>("");
   const [sideARosterId, setSideARosterId] = useState<string>(userTeam.id);
   const [sideBRosterId, setSideBRosterId] = useState<string>("");
