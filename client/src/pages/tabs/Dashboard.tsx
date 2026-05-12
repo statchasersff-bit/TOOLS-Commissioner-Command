@@ -1054,25 +1054,42 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
                       Team {hmSortKey === "name" ? (hmSortDir === "asc" ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />) : <ArrowUpDown className="w-3 h-3 opacity-30" />}
                     </button>
                   </th>
-                  <th className={cn(thHeat, "border-l border-border/30")} colSpan={6}>Dynasty</th>
-                  <th className={cn(thHeat, "border-l border-border/30")} colSpan={5}>Win-Now (Redraft Starters)</th>
+                  <th
+                    className="px-2 py-2 text-center text-[10px] font-bold uppercase tracking-wider whitespace-nowrap border-l-2 border-blue-400/40 bg-blue-500/10 text-blue-700 dark:text-blue-300"
+                    colSpan={6}
+                  >
+                    Dynasty
+                  </th>
+                  <th
+                    className="px-2 py-2 text-center text-[10px] font-bold uppercase tracking-wider whitespace-nowrap border-l-2 border-[#d4af37]/50 bg-[#d4af37]/10 text-amber-700 dark:text-[#d4af37]"
+                    colSpan={5}
+                  >
+                    Win-Now (Redraft Starters)
+                  </th>
                 </tr>
                 <tr className="border-b border-border/40">
                   {([
-                    { key: "dynOverall" as HmSortKey, label: "Overall", borderLeft: true },
-                    { key: "dynQB"      as HmSortKey, label: "QB" },
-                    { key: "dynRB"      as HmSortKey, label: "RB" },
-                    { key: "dynWR"      as HmSortKey, label: "WR" },
-                    { key: "dynTE"      as HmSortKey, label: "TE" },
-                    { key: "picks"      as HmSortKey, label: "Picks" },
-                    { key: "redOverall" as HmSortKey, label: "Overall", borderLeft: true },
-                    { key: "redQB"      as HmSortKey, label: "QB" },
-                    { key: "redRB"      as HmSortKey, label: "RB" },
-                    { key: "redWR"      as HmSortKey, label: "WR" },
-                    { key: "redTE"      as HmSortKey, label: "TE" },
-                  ]).map(({ key, label, borderLeft }) => (
-                    <th key={key} className={cn(thHeat, borderLeft && "border-l border-border/30")}>
-                      <button onClick={() => handleHmSort(key)} className="inline-flex items-center gap-0.5 hover:text-foreground transition-colors" data-testid={`hm-sort-${key}`}>
+                    { key: "dynOverall" as HmSortKey, label: "Overall", group: "dyn" as const, divider: true },
+                    { key: "dynQB"      as HmSortKey, label: "QB",      group: "dyn" as const },
+                    { key: "dynRB"      as HmSortKey, label: "RB",      group: "dyn" as const },
+                    { key: "dynWR"      as HmSortKey, label: "WR",      group: "dyn" as const },
+                    { key: "dynTE"      as HmSortKey, label: "TE",      group: "dyn" as const },
+                    { key: "picks"      as HmSortKey, label: "Picks",   group: "dyn" as const },
+                    { key: "redOverall" as HmSortKey, label: "Overall", group: "red" as const, divider: true },
+                    { key: "redQB"      as HmSortKey, label: "QB",      group: "red" as const },
+                    { key: "redRB"      as HmSortKey, label: "RB",      group: "red" as const },
+                    { key: "redWR"      as HmSortKey, label: "WR",      group: "red" as const },
+                    { key: "redTE"      as HmSortKey, label: "TE",      group: "red" as const },
+                  ]).map(({ key, label, group, divider }) => (
+                    <th key={key} className={cn(
+                      "px-2 py-2 text-center text-[10px] font-semibold uppercase tracking-wider whitespace-nowrap",
+                      group === "dyn"
+                        ? "bg-blue-500/5 text-blue-700 dark:text-blue-300"
+                        : "bg-[#d4af37]/8 text-amber-700 dark:text-[#d4af37]",
+                      divider && group === "dyn" && "border-l-2 border-blue-400/40",
+                      divider && group === "red" && "border-l-2 border-[#d4af37]/50",
+                    )}>
+                      <button onClick={() => handleHmSort(key)} className="inline-flex items-center gap-0.5 hover:opacity-80 transition-opacity" data-testid={`hm-sort-${key}`}>
                         {label}
                         {hmSortKey === key ? (hmSortDir === "asc" ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />) : <ArrowUpDown className="w-3 h-3 opacity-30" />}
                       </button>
@@ -1096,8 +1113,14 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
                   const dRanks = strengthProfiles.dynastyRanks[team.id] || {};
                   const rRanks = strengthProfiles.redraftRanks[team.id] || {};
 
-                  const hc = (rank: number, borderLeft = false) => (
-                    <td className={cn("px-2 py-2.5 text-center font-bold whitespace-nowrap", hmBg(rank, total), borderLeft && "border-l border-border/20", rowBase)}>
+                  const hc = (rank: number, divider?: "dyn" | "red") => (
+                    <td className={cn(
+                      "px-2 py-2.5 text-center font-bold whitespace-nowrap",
+                      hmBg(rank, total),
+                      divider === "dyn" && "border-l-2 border-blue-400/30",
+                      divider === "red" && "border-l-2 border-[#d4af37]/40",
+                      rowBase,
+                    )}>
                       #{rank}
                     </td>
                   );
@@ -1119,13 +1142,13 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
                           {isUser && <div className="w-1.5 h-1.5 rounded-full bg-[#d4af37] flex-shrink-0" />}
                         </div>
                       </td>
-                      {hc(dynRank, true)}
+                      {hc(dynRank, "dyn")}
                       {hc(dRanks["QB"] ?? total)}
                       {hc(dRanks["RB"] ?? total)}
                       {hc(dRanks["WR"] ?? total)}
                       {hc(dRanks["TE"] ?? total)}
                       {hc(pksRank)}
-                      {hc(redRank, true)}
+                      {hc(redRank, "red")}
                       {hc(rRanks["QB"] ?? total)}
                       {hc(rRanks["RB"] ?? total)}
                       {hc(rRanks["WR"] ?? total)}
