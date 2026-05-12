@@ -9,7 +9,8 @@ import { getLeagueTeamTiers, getTierColor, getTierEmoji, getTierTooltip, isConte
 import { useValueModel } from "@/contexts/ValueModelContext";
 import type { League, Team, Player } from "@/types";
 import { cn } from "@/lib/utils";
-import { Trophy, Zap, Target, Calendar, Users, Medal, ArrowRight, ArrowUp, ArrowDown, ArrowUpDown, Table, ArrowRightLeft, Compass, Flame, Sprout, Archive, ChevronDown, ChevronUp, MapPin } from "lucide-react";
+import { Trophy, Zap, Target, Calendar, Users, Medal, ArrowRight, ArrowUp, ArrowDown, ArrowUpDown, Table, ArrowRightLeft, Compass, Flame, Sprout, Archive, ChevronDown, ChevronUp, MapPin, BarChart2, Grid3X3, List } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface DashboardProps {
   league: League;
@@ -540,6 +541,22 @@ function PowerBar({ value, max }: { value: number; max: number }) {
   );
 }
 
+const POS_COLORS: Record<string, string> = {
+  QB: "#f43f5e",
+  RB: "#10b981",
+  WR: "#3b82f6",
+  TE: "#f97316",
+};
+const POS_LABELS = ["QB", "RB", "WR", "TE"] as const;
+
+function hmBg(rank: number, total: number) {
+  const topCut = Math.ceil(total * 0.25);
+  const botCut = Math.floor(total * 0.75) + 1;
+  if (rank <= topCut) return "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400";
+  if (rank >= botCut) return "bg-red-500/15 text-red-600 dark:text-red-400";
+  return "text-muted-foreground";
+}
+
 function posRankColor(rank: number): string {
   if (rank <= 3) return "text-emerald-600 dark:text-emerald-400 bg-emerald-500/10";
   if (rank <= 7) return "text-amber-600 dark:text-amber-400 bg-amber-500/10";
@@ -584,6 +601,7 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
   const [sortKey, setSortKey] = useState<SortKey>("overall");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+  const [viewMode, setViewMode] = useState<"table" | "chart" | "heatmap">("table");
 
   const snapshotTierMap = useMemo(() => getLeagueTeamTiers(teams), [teams]);
 
@@ -706,195 +724,387 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
 
   const colCount = 7;
 
+  // ── Chart view data ──────────────────────────────────────────────
+  const chartTeams = useMemo(() => {
+    return [...teams].map(t => {
+      const vals = strengthProfiles.dynastyByTeam[t.id] || {};
+      const total = POS_LABELS.reduce((s, p) => s + (vals[p] ?? 0), 0);
+      return { team: t, vals, total };
+    }).sort((a, b) => b.total - a.total);
+  }, [teams, strengthProfiles.dynastyByTeam]);
+
+  const chartMax = useMemo(() => Math.max(...chartTeams.map(c => c.total), 1), [chartTeams]);
+
+  const heatmapTeams = useMemo(() =>
+    [...teams].sort((a, b) => (overallRanks[a.id] ?? 99) - (overallRanks[b.id] ?? 99)),
+  [teams, overallRanks]);
+
+  const thHeat = "px-2 py-2.5 text-center text-[10px] font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap bg-muted/30 dark:bg-muted/20";
+  const thHeatLeft = "px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap bg-muted/30 dark:bg-muted/20";
+
+  // ── View toggle ──────────────────────────────────────────────────
+  const viewToggle = (
+    <div className="flex items-center gap-0.5 bg-muted/50 rounded-lg p-0.5 flex-shrink-0">
+      {([
+        { id: "table", icon: List, label: "Table" },
+        { id: "chart", icon: BarChart2, label: "Position Chart" },
+        { id: "heatmap", icon: Grid3X3, label: "Heatmap" },
+      ] as const).map(({ id, icon: Icon, label }) => (
+        <button
+          key={id}
+          onClick={() => setViewMode(id)}
+          title={label}
+          data-testid={`view-toggle-${id}`}
+          className={cn(
+            "flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-all",
+            viewMode === id
+              ? "bg-background shadow text-foreground"
+              : "text-muted-foreground hover:text-foreground"
+          )}
+        >
+          <Icon className="w-3.5 h-3.5" />
+          <span className="hidden sm:inline">{label}</span>
+        </button>
+      ))}
+    </div>
+  );
+
   return (
     <div className="space-y-6">
-      <SectionHeader
-        title="League Power Rankings"
-        subtitle="League-wide roster rankings by redraft value, dynasty value, and draft capital."
-      />
+      <div className="flex items-start justify-between gap-4">
+        <SectionHeader
+          title="League Power Rankings"
+          subtitle="League-wide roster rankings by redraft value, dynasty value, and draft capital."
+        />
+        {viewToggle}
+      </div>
 
-      <div className="overflow-x-auto rounded-md border border-border/60" data-testid="power-rankings-table">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border/40">
-              <SortableHeader label="Rank" sortKey="overall" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-              <SortableHeader label="Team" sortKey="name" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-              <th className="px-2 sm:px-4 py-3 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap bg-muted/30 dark:bg-muted/20">Tier</th>
-              <SortableHeader label="Redraft" mobileLabel="Red" sortKey="redraftRank" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-              <SortableHeader label="Dynasty" mobileLabel="Dyn" sortKey="dynastyRank" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-              <SortableHeader label="Picks" mobileLabel="Pcks" sortKey="picks" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-              <th className="bg-muted/30 dark:bg-muted/20" />
-            </tr>
-          </thead>
-          <tbody>
-            {sortedTeams.map((team, idx) => {
-              const rank = overallRanks[team.id] ?? idx + 1;
-              const tier = snapshotTierMap.get(team.id)?.tier ?? "Balanced";
+      {/* ── VIEW 1: Table ─────────────────────────────────────────── */}
+      {viewMode === "table" && (
+        <div className="overflow-x-auto rounded-md border border-border/60" data-testid="power-rankings-table">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border/40">
+                <SortableHeader label="Rank" sortKey="overall" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+                <SortableHeader label="Team" sortKey="name" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+                <th className="px-2 sm:px-4 py-3 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap bg-muted/30 dark:bg-muted/20">Tier</th>
+                <SortableHeader label="Redraft" mobileLabel="Red" sortKey="redraftRank" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+                <SortableHeader label="Dynasty" mobileLabel="Dyn" sortKey="dynastyRank" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+                <SortableHeader label="Picks" mobileLabel="Pcks" sortKey="picks" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+                <th className="bg-muted/30 dark:bg-muted/20" />
+              </tr>
+            </thead>
+            <tbody>
+              {sortedTeams.map((team, idx) => {
+                const rank = overallRanks[team.id] ?? idx + 1;
+                const tier = snapshotTierMap.get(team.id)?.tier ?? "Balanced";
+                const isUser = team.id === userTeam.id;
+                const isEven = idx % 2 === 0;
+                const isExpanded = expandedRows.has(team.id);
+                const rowBg = isUser
+                  ? "bg-[#0b3a7a]/5 dark:bg-blue-400/8"
+                  : isEven ? "bg-background" : "bg-muted/10 dark:bg-muted/5";
+
+                return (
+                  <Fragment key={team.id}>
+                    <tr
+                      className={`border-b border-border/20 transition-colors hover:bg-muted/20 dark:hover:bg-muted/15 cursor-pointer ${rowBg}`}
+                      data-testid={`ranking-row-${team.id}`}
+                      onClick={() => toggleRow(team.id)}
+                    >
+                      <td className={`px-1.5 sm:px-3 py-3.5 whitespace-nowrap ${isUser ? "bg-[#0b3a7a]/5 dark:bg-blue-400/8" : ""}`}>
+                        <RankBadge rank={rank} />
+                      </td>
+                      <td className="px-2 sm:px-4 py-3.5 whitespace-nowrap">
+                        <div className="flex items-center gap-2">
+                          {team.avatar ? (
+                            <img src={team.avatar} alt={team.owner} className="w-6 h-6 rounded-full object-cover flex-shrink-0" data-testid={`img-avatar-ranking-${team.id}`} onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                          ) : (
+                            <div className="w-6 h-6 rounded-full bg-[#0b3a7a]/20 dark:bg-blue-400/20 flex items-center justify-center text-[10px] font-bold text-[#0b3a7a] dark:text-blue-400 flex-shrink-0" data-testid={`img-avatar-ranking-${team.id}`}>
+                              {(team.owner || "?").charAt(0).toUpperCase()}
+                            </div>
+                          )}
+                          <span className={`font-semibold text-foreground ${isUser ? "text-[#0b3a7a] dark:text-blue-400" : ""}`}>{team.owner}</span>
+                          {isUser && <Badge className="text-[10px] px-1.5 py-0 bg-[#0b3a7a] text-white dark:bg-blue-600" data-testid="your-team-badge">You</Badge>}
+                        </div>
+                      </td>
+                      <td className="px-2 sm:px-4 py-3.5 whitespace-nowrap">
+                        <Badge variant="outline" className={cn(getTierColor(tier), "cursor-default")} data-testid={`tier-badge-snapshot-${team.id}`}>
+                          <span>{getTierEmoji(tier)} {tier}</span>
+                        </Badge>
+                      </td>
+                      <td className="px-2 sm:px-4 py-3.5 whitespace-nowrap border-l border-border/15" data-testid={`redraft-rank-${team.id}`}>
+                        {(() => {
+                          const r = teamRanks.ranks[team.id]?.redraftRank ?? teamRanks.total;
+                          const topThird = Math.ceil(teamRanks.total / 3);
+                          const bottomStart = teamRanks.total - topThird + 1;
+                          return <span className={cn("font-bold", r <= topThird ? "text-emerald-600 dark:text-emerald-400" : r >= bottomStart ? "text-red-500 dark:text-red-400" : "text-foreground")}>#{r}</span>;
+                        })()}
+                      </td>
+                      <td className="px-2 sm:px-4 py-3.5 whitespace-nowrap" data-testid={`dynasty-rank-${team.id}`}>
+                        {(() => {
+                          const r = teamRanks.ranks[team.id]?.dynastyRank ?? teamRanks.total;
+                          const topThird = Math.ceil(teamRanks.total / 3);
+                          const bottomStart = teamRanks.total - topThird + 1;
+                          return <span className={cn("font-bold", r <= topThird ? "text-emerald-600 dark:text-emerald-400" : r >= bottomStart ? "text-red-500 dark:text-red-400" : "text-foreground")}>#{r}</span>;
+                        })()}
+                      </td>
+                      <td className="px-2 sm:px-4 py-3.5 whitespace-nowrap border-l border-border/15" data-testid={`picks-rank-${team.id}`}>
+                        {(() => {
+                          const r = teamRanks.ranks[team.id]?.picksRank ?? teamRanks.total;
+                          const topThird = Math.ceil(teamRanks.total / 3);
+                          const bottomStart = teamRanks.total - topThird + 1;
+                          return <span className={cn("font-bold", r <= topThird ? "text-emerald-600 dark:text-emerald-400" : r >= bottomStart ? "text-red-500 dark:text-red-400" : "text-foreground")}>#{r}</span>;
+                        })()}
+                      </td>
+                      <td className="px-4 py-3.5 whitespace-nowrap">
+                        {isExpanded ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
+                      </td>
+                    </tr>
+
+                    {isExpanded && (() => {
+                      const dynastyValues = strengthProfiles.dynastyByTeam[team.id] || {};
+                      const redraftValues = strengthProfiles.redraftByTeam[team.id] || {};
+                      const dRanks = strengthProfiles.dynastyRanks[team.id] || {};
+                      const rRanks = strengthProfiles.redraftRanks[team.id] || {};
+                      const maxDynasty = Math.max(...POS_LABELS.flatMap(p => teams.map(t => strengthProfiles.dynastyByTeam[t.id]?.[p] ?? 0)), 1);
+                      const maxRedraft = Math.max(...POS_LABELS.flatMap(p => teams.map(t => strengthProfiles.redraftByTeam[t.id]?.[p] ?? 0)), 1);
+                      return (
+                        <tr className={`border-b border-border/20 ${rowBg}`} data-testid={`expanded-${team.id}`}>
+                          <td colSpan={colCount} className="px-6 py-4">
+                            <div className="flex flex-col md:flex-row gap-6">
+                              <div className="flex-1">
+                                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-3">Dynasty Roster Strength</p>
+                                <p className="text-[10px] text-muted-foreground mb-3">Full roster dynasty value by position</p>
+                                <div className="space-y-2.5">
+                                  {POS_LABELS.map(pos => {
+                                    const value = dynastyValues[pos] ?? 0;
+                                    const pRank = dRanks[pos] ?? teams.length;
+                                    const pct = maxDynasty > 0 ? (value / maxDynasty) * 100 : 0;
+                                    return (
+                                      <div key={pos} className="flex items-center gap-3" data-testid={`dynasty-profile-${team.id}-${pos.toLowerCase()}`}>
+                                        <span className="text-xs font-bold w-6">{pos}</span>
+                                        <div className="flex-1 h-3 bg-muted rounded-full overflow-hidden max-w-[200px]">
+                                          <div className={`h-full rounded-full transition-all ${posBarColor(pRank)}`} style={{ width: `${Math.max(pct, 2)}%` }} />
+                                        </div>
+                                        <span className="text-xs font-mono font-semibold w-14 text-right text-muted-foreground">{value.toLocaleString()}</span>
+                                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${posRankColor(pRank)}`}>#{pRank}</span>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                              <div className="flex-1">
+                                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-3">Redraft Roster Strength</p>
+                                <p className="text-[10px] text-muted-foreground mb-3">Optimal starter redraft value by position</p>
+                                <div className="space-y-2.5">
+                                  {POS_LABELS.map(pos => {
+                                    const value = redraftValues[pos] ?? 0;
+                                    const pRank = rRanks[pos] ?? teams.length;
+                                    const pct = maxRedraft > 0 ? (value / maxRedraft) * 100 : 0;
+                                    return (
+                                      <div key={pos} className="flex items-center gap-3" data-testid={`redraft-profile-${team.id}-${pos.toLowerCase()}`}>
+                                        <span className="text-xs font-bold w-6">{pos}</span>
+                                        <div className="flex-1 h-3 bg-muted rounded-full overflow-hidden max-w-[200px]">
+                                          <div className={`h-full rounded-full transition-all ${posBarColor(pRank)}`} style={{ width: `${Math.max(pct, 2)}%` }} />
+                                        </div>
+                                        <span className="text-xs font-mono font-semibold w-14 text-right text-muted-foreground">{value.toLocaleString()}</span>
+                                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${posRankColor(pRank)}`}>#{pRank}</span>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })()}
+                  </Fragment>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* ── VIEW 2: Stacked Position Value Chart ──────────────────── */}
+      {viewMode === "chart" && (
+        <div className="rounded-md border border-border/60 bg-card p-4 sm:p-6" data-testid="power-rankings-chart">
+          {/* Legend */}
+          <div className="flex flex-wrap items-center gap-4 mb-5">
+            {POS_LABELS.map(pos => (
+              <div key={pos} className="flex items-center gap-1.5">
+                <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: POS_COLORS[pos] }} />
+                <span className="text-xs font-semibold text-muted-foreground">{pos}</span>
+              </div>
+            ))}
+            <span className="ml-auto text-[10px] text-muted-foreground">Dynasty Roster Value by Position</span>
+          </div>
+
+          {/* Bars */}
+          <div className="space-y-2">
+            {chartTeams.map(({ team, vals, total }, idx) => {
               const isUser = team.id === userTeam.id;
-              const isEven = idx % 2 === 0;
-              const isExpanded = expandedRows.has(team.id);
-              const rowBg = isUser
-                ? "bg-[#0b3a7a]/5 dark:bg-blue-400/8"
-                : isEven ? "bg-background" : "bg-muted/10 dark:bg-muted/5";
-
-              const teamPosRanks = posRanks[team.id] || {};
-              const topPositions = (["qb", "rb", "wr", "te"] as const)
-                .map(p => ({ pos: p.toUpperCase(), rank: teamPosRanks[p] || 0 }))
-                .filter(p => p.rank <= 3)
-                .sort((a, b) => a.rank - b.rank);
-
+              const barWidthPct = (total / chartMax) * 100;
               return (
-                <Fragment key={team.id}>
-                  <tr
-                    className={`border-b border-border/20 transition-colors hover:bg-muted/20 dark:hover:bg-muted/15 cursor-pointer ${rowBg}`}
-                    data-testid={`ranking-row-${team.id}`}
-                    onClick={() => toggleRow(team.id)}
-                  >
-                    <td className={`px-1.5 sm:px-3 py-3.5 whitespace-nowrap ${isUser ? "bg-[#0b3a7a]/5 dark:bg-blue-400/8" : ""}`}>
-                      <RankBadge rank={rank} />
-                    </td>
-                    <td className="px-2 sm:px-4 py-3.5 whitespace-nowrap">
-                      <div className="flex items-center gap-2">
-                        {team.avatar ? (
-                          <img
-                            src={team.avatar}
-                            alt={team.owner}
-                            className="w-6 h-6 rounded-full object-cover flex-shrink-0"
-                            data-testid={`img-avatar-ranking-${team.id}`}
-                            onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-                          />
-                        ) : (
-                          <div
-                            className="w-6 h-6 rounded-full bg-[#0b3a7a]/20 dark:bg-blue-400/20 flex items-center justify-center text-[10px] font-bold text-[#0b3a7a] dark:text-blue-400 flex-shrink-0"
-                            data-testid={`img-avatar-ranking-${team.id}`}
-                          >
-                            {(team.owner || "?").charAt(0).toUpperCase()}
-                          </div>
-                        )}
-                        <span className={`font-semibold text-foreground ${isUser ? "text-[#0b3a7a] dark:text-blue-400" : ""}`}>{team.owner}</span>
-                        {isUser && (
-                          <Badge className="text-[10px] px-1.5 py-0 bg-[#0b3a7a] text-white dark:bg-blue-600" data-testid="your-team-badge">You</Badge>
-                        )}
+                <div key={team.id} className="flex items-center gap-3" data-testid={`chart-row-${team.id}`}>
+                  {/* Rank + Team label */}
+                  <div className="flex items-center gap-2 w-36 sm:w-44 flex-shrink-0">
+                    <span className="text-[10px] font-bold text-muted-foreground w-5 text-right">#{idx + 1}</span>
+                    {team.avatar ? (
+                      <img src={team.avatar} alt={team.owner} className="w-5 h-5 rounded-full object-cover flex-shrink-0" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                    ) : (
+                      <div className={cn("w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold flex-shrink-0", isUser ? "bg-[#0b3a7a]/30 text-[#0b3a7a] dark:bg-blue-400/20 dark:text-blue-400" : "bg-muted text-muted-foreground")}>
+                        {(team.owner || "?").charAt(0).toUpperCase()}
                       </div>
-                    </td>
-                    <td className="px-2 sm:px-4 py-3.5 whitespace-nowrap">
-                      <Badge variant="outline" className={cn(getTierColor(tier), "cursor-default")} data-testid={`tier-badge-snapshot-${team.id}`}>
-                        <span>{getTierEmoji(tier)} {tier}</span>
-                      </Badge>
-                    </td>
-                    <td className="px-2 sm:px-4 py-3.5 whitespace-nowrap border-l border-border/15" data-testid={`redraft-rank-${team.id}`}>
-                      {(() => {
-                        const r = teamRanks.ranks[team.id]?.redraftRank ?? teamRanks.total;
-                        const topThird = Math.ceil(teamRanks.total / 3);
-                        const bottomStart = teamRanks.total - topThird + 1;
-                        return (
-                          <span className={cn("font-bold", r <= topThird ? "text-emerald-600 dark:text-emerald-400" : r >= bottomStart ? "text-red-500 dark:text-red-400" : "text-foreground")}>
-                            #{r}
-                          </span>
-                        );
-                      })()}
-                    </td>
-                    <td className="px-2 sm:px-4 py-3.5 whitespace-nowrap" data-testid={`dynasty-rank-${team.id}`}>
-                      {(() => {
-                        const r = teamRanks.ranks[team.id]?.dynastyRank ?? teamRanks.total;
-                        const topThird = Math.ceil(teamRanks.total / 3);
-                        const bottomStart = teamRanks.total - topThird + 1;
-                        return (
-                          <span className={cn("font-bold", r <= topThird ? "text-emerald-600 dark:text-emerald-400" : r >= bottomStart ? "text-red-500 dark:text-red-400" : "text-foreground")}>
-                            #{r}
-                          </span>
-                        );
-                      })()}
-                    </td>
-                    <td className="px-2 sm:px-4 py-3.5 whitespace-nowrap border-l border-border/15" data-testid={`picks-rank-${team.id}`}>
-                      {(() => {
-                        const r = teamRanks.ranks[team.id]?.picksRank ?? teamRanks.total;
-                        const topThird = Math.ceil(teamRanks.total / 3);
-                        const bottomStart = teamRanks.total - topThird + 1;
-                        return (
-                          <span className={cn("font-bold", r <= topThird ? "text-emerald-600 dark:text-emerald-400" : r >= bottomStart ? "text-red-500 dark:text-red-400" : "text-foreground")}>
-                            #{r}
-                          </span>
-                        );
-                      })()}
-                    </td>
-                    <td className="px-4 py-3.5 whitespace-nowrap">
-                      {isExpanded
-                        ? <ChevronUp className="w-4 h-4 text-muted-foreground" />
-                        : <ChevronDown className="w-4 h-4 text-muted-foreground" />
-                      }
-                    </td>
-                  </tr>
+                    )}
+                    <span className={cn("text-xs font-semibold truncate", isUser ? "text-[#0b3a7a] dark:text-blue-400" : "text-foreground")}>
+                      {team.owner}
+                    </span>
+                    {isUser && <div className="w-1.5 h-1.5 rounded-full bg-[#d4af37] flex-shrink-0" />}
+                  </div>
 
-                  {isExpanded && (() => {
-                    const dynastyValues = strengthProfiles.dynastyByTeam[team.id] || {};
-                    const redraftValues = strengthProfiles.redraftByTeam[team.id] || {};
-                    const dRanks = strengthProfiles.dynastyRanks[team.id] || {};
-                    const rRanks = strengthProfiles.redraftRanks[team.id] || {};
-                    const maxDynasty = Math.max(...(["QB", "RB", "WR", "TE"] as const).flatMap(p => teams.map(t => strengthProfiles.dynastyByTeam[t.id]?.[p] ?? 0)), 1);
-                    const maxRedraft = Math.max(...(["QB", "RB", "WR", "TE"] as const).flatMap(p => teams.map(t => strengthProfiles.redraftByTeam[t.id]?.[p] ?? 0)), 1);
-                    return (
-                      <tr className={`border-b border-border/20 ${rowBg}`} data-testid={`expanded-${team.id}`}>
-                        <td colSpan={colCount} className="px-6 py-4">
-                          <div className="flex flex-col md:flex-row gap-6">
-                            <div className="flex-1">
-                              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-3">Dynasty Roster Strength</p>
-                              <p className="text-[10px] text-muted-foreground mb-3">Full roster dynasty value by position</p>
-                              <div className="space-y-2.5">
-                                {(["QB", "RB", "WR", "TE"] as const).map(pos => {
-                                  const value = dynastyValues[pos] ?? 0;
-                                  const pRank = dRanks[pos] ?? teams.length;
-                                  const pct = maxDynasty > 0 ? (value / maxDynasty) * 100 : 0;
-                                  return (
-                                    <div key={pos} className="flex items-center gap-3" data-testid={`dynasty-profile-${team.id}-${pos.toLowerCase()}`}>
-                                      <span className="text-xs font-bold w-6">{pos}</span>
-                                      <div className="flex-1 h-3 bg-muted rounded-full overflow-hidden max-w-[200px]">
-                                        <div className={`h-full rounded-full transition-all ${posBarColor(pRank)}`} style={{ width: `${Math.max(pct, 2)}%` }} />
-                                      </div>
-                                      <span className="text-xs font-mono font-semibold w-14 text-right text-muted-foreground">{value.toLocaleString()}</span>
-                                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${posRankColor(pRank)}`}>
-                                        #{pRank}
-                                      </span>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            </div>
+                  {/* Stacked bar */}
+                  <div className="flex-1 h-6 bg-muted/40 rounded-md overflow-hidden relative">
+                    <div className="h-full flex rounded-md overflow-hidden" style={{ width: `${Math.max(barWidthPct, 1)}%` }}>
+                      {POS_LABELS.map(pos => {
+                        const val = vals[pos] ?? 0;
+                        const segPct = total > 0 ? (val / total) * 100 : 0;
+                        return (
+                          <Tooltip key={pos}>
+                            <TooltipTrigger asChild>
+                              <div
+                                className="h-full transition-all"
+                                style={{ width: `${segPct}%`, backgroundColor: POS_COLORS[pos] }}
+                              />
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="text-xs">
+                              <p className="font-semibold">{team.owner} — {pos}</p>
+                              <p>Dynasty value: {Math.round(val).toLocaleString()}</p>
+                              <p>League rank #{strengthProfiles.dynastyRanks[team.id]?.[pos] ?? "—"}</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        );
+                      })}
+                    </div>
+                  </div>
 
-                            <div className="flex-1">
-                              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-3">Redraft Roster Strength</p>
-                              <p className="text-[10px] text-muted-foreground mb-3">Optimal starter redraft value by position</p>
-                              <div className="space-y-2.5">
-                                {(["QB", "RB", "WR", "TE"] as const).map(pos => {
-                                  const value = redraftValues[pos] ?? 0;
-                                  const pRank = rRanks[pos] ?? teams.length;
-                                  const pct = maxRedraft > 0 ? (value / maxRedraft) * 100 : 0;
-                                  return (
-                                    <div key={pos} className="flex items-center gap-3" data-testid={`redraft-profile-${team.id}-${pos.toLowerCase()}`}>
-                                      <span className="text-xs font-bold w-6">{pos}</span>
-                                      <div className="flex-1 h-3 bg-muted rounded-full overflow-hidden max-w-[200px]">
-                                        <div className={`h-full rounded-full transition-all ${posBarColor(pRank)}`} style={{ width: `${Math.max(pct, 2)}%` }} />
-                                      </div>
-                                      <span className="text-xs font-mono font-semibold w-14 text-right text-muted-foreground">{value.toLocaleString()}</span>
-                                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${posRankColor(pRank)}`}>
-                                        #{pRank}
-                                      </span>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })()}
-                </Fragment>
+                  {/* Total label */}
+                  <span className="text-[11px] font-mono text-muted-foreground w-14 text-right flex-shrink-0">
+                    {total >= 1000 ? `${(total / 1000).toFixed(0)}k` : total.toLocaleString()}
+                  </span>
+                </div>
               );
             })}
-          </tbody>
-        </table>
-      </div>
+          </div>
+
+          {/* X-axis legend */}
+          <div className="mt-4 flex justify-between text-[10px] text-muted-foreground pl-[152px] sm:pl-[188px] pr-[60px]">
+            <span>0</span>
+            <span>{Math.round(chartMax / 2 / 1000)}k</span>
+            <span>{Math.round(chartMax / 1000)}k</span>
+          </div>
+        </div>
+      )}
+
+      {/* ── VIEW 3: Heatmap ───────────────────────────────────────── */}
+      {viewMode === "heatmap" && (
+        <div className="space-y-3" data-testid="power-rankings-heatmap">
+          <div className="overflow-x-auto rounded-md border border-border/60">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-border/50">
+                  <th className={thHeatLeft} rowSpan={2}>Team</th>
+                  <th className={cn(thHeat, "border-l border-border/30")} colSpan={6}>Dynasty</th>
+                  <th className={cn(thHeat, "border-l border-border/30")} colSpan={5}>Win-Now (Redraft)</th>
+                </tr>
+                <tr className="border-b border-border/40">
+                  <th className={cn(thHeat, "border-l border-border/30")}>Overall</th>
+                  <th className={thHeat}>QB</th>
+                  <th className={thHeat}>RB</th>
+                  <th className={thHeat}>WR</th>
+                  <th className={thHeat}>TE</th>
+                  <th className={thHeat}>Picks</th>
+                  <th className={cn(thHeat, "border-l border-border/30")}>Overall</th>
+                  <th className={thHeat}>QB</th>
+                  <th className={thHeat}>RB</th>
+                  <th className={thHeat}>WR</th>
+                  <th className={thHeat}>TE</th>
+                </tr>
+              </thead>
+              <tbody>
+                {heatmapTeams.map((team, idx) => {
+                  const isUser = team.id === userTeam.id;
+                  const total = heatmapTeams.length;
+                  const isEven = idx % 2 === 0;
+                  const rowBase = isUser
+                    ? "bg-[#0b3a7a]/5 dark:bg-blue-400/8"
+                    : isEven ? "bg-background" : "bg-muted/10 dark:bg-muted/5";
+
+                  const overallRank = overallRanks[team.id] ?? idx + 1;
+                  const dynRank = teamRanks.ranks[team.id]?.dynastyRank ?? total;
+                  const redRank = teamRanks.ranks[team.id]?.redraftRank ?? total;
+                  const pksRank = teamRanks.ranks[team.id]?.picksRank ?? total;
+                  const dRanks = strengthProfiles.dynastyRanks[team.id] || {};
+                  const rRanks = strengthProfiles.redraftRanks[team.id] || {};
+
+                  const hc = (rank: number, borderLeft = false) => (
+                    <td className={cn("px-2 py-2.5 text-center font-bold whitespace-nowrap", hmBg(rank, total), borderLeft && "border-l border-border/20", rowBase)}>
+                      #{rank}
+                    </td>
+                  );
+
+                  return (
+                    <tr key={team.id} className={cn("border-b border-border/20", rowBase)} data-testid={`heatmap-row-${team.id}`}>
+                      <td className={cn("px-3 py-2.5 whitespace-nowrap", rowBase)}>
+                        <div className="flex items-center gap-2">
+                          {team.avatar ? (
+                            <img src={team.avatar} alt={team.owner} className="w-5 h-5 rounded-full object-cover flex-shrink-0" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                          ) : (
+                            <div className={cn("w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold flex-shrink-0", isUser ? "bg-[#0b3a7a]/20 text-[#0b3a7a] dark:bg-blue-400/20 dark:text-blue-400" : "bg-muted text-muted-foreground")}>
+                              {(team.owner || "?").charAt(0).toUpperCase()}
+                            </div>
+                          )}
+                          <span className={cn("font-semibold truncate max-w-[80px] sm:max-w-none", isUser ? "text-[#0b3a7a] dark:text-blue-400" : "text-foreground")}>
+                            {team.owner}
+                          </span>
+                          {isUser && <div className="w-1.5 h-1.5 rounded-full bg-[#d4af37] flex-shrink-0" />}
+                        </div>
+                      </td>
+                      {hc(dynRank, true)}
+                      {hc(dRanks["QB"] ?? total)}
+                      {hc(dRanks["RB"] ?? total)}
+                      {hc(dRanks["WR"] ?? total)}
+                      {hc(dRanks["TE"] ?? total)}
+                      {hc(pksRank)}
+                      {hc(redRank, true)}
+                      {hc(rRanks["QB"] ?? total)}
+                      {hc(rRanks["RB"] ?? total)}
+                      {hc(rRanks["WR"] ?? total)}
+                      {hc(rRanks["TE"] ?? total)}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Legend */}
+          <div className="flex items-center gap-4 text-[10px] text-muted-foreground">
+            <span className="flex items-center gap-1.5">
+              <span className="inline-block w-3 h-3 rounded-sm bg-emerald-500/15 border border-emerald-500/30" /> Top 25%
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="inline-block w-3 h-3 rounded-sm bg-background border border-border/40" /> Middle 50%
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="inline-block w-3 h-3 rounded-sm bg-red-500/15 border border-red-500/30" /> Bottom 25%
+            </span>
+            <span className="ml-2 text-[10px]">Ranks sorted by overall dynasty score</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
