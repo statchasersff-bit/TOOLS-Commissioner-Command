@@ -6,6 +6,7 @@ import { DataTable } from "@/components/DataTable";
 import { SectionHeader } from "@/components/SectionHeader";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { getLeagueTeamTiers, getTierColor, getTierBg, getTierEmoji, getTierTooltip } from "@/data/mockData";
+import { useValueModel } from "@/contexts/ValueModelContext";
 import { formatPickLabel } from "@/types";
 import type { League, Team, Tier } from "@/types";
 import { cn } from "@/lib/utils";
@@ -188,11 +189,42 @@ export function TierBreakdown({ league }: AnalyzerProps) {
 export function RosterComparison({ league }: AnalyzerProps) {
   const [teamAId, setTeamAId] = useState(league.teams[0]?.id || "");
   const [teamBId, setTeamBId] = useState(league.teams[1]?.id || "");
+  const { getPlayerValue, getRedraftValue } = useValueModel();
 
   const teamA = league.teams.find((t) => t.id === teamAId);
   const teamB = league.teams.find((t) => t.id === teamBId);
 
   const teamTiers = useMemo(() => getLeagueTeamTiers(league.teams), [league.teams]);
+
+  const posStats = useMemo(() => {
+    const positions = ["QB", "RB", "WR", "TE"] as const;
+    const result: Record<string, {
+      dynTotals: Record<string, number>;
+      redTotals: Record<string, number>;
+      dynRanks: Record<string, number>;
+      redRanks: Record<string, number>;
+    }> = {};
+    positions.forEach(pos => {
+      const dynTotals: Record<string, number> = {};
+      const redTotals: Record<string, number> = {};
+      league.teams.forEach(team => {
+        dynTotals[team.id] = team.roster
+          .filter(p => p.pos === pos)
+          .reduce((s, p) => s + getPlayerValue(p), 0);
+        redTotals[team.id] = team.roster
+          .filter(p => p.pos === pos && p.starter)
+          .reduce((s, p) => s + getRedraftValue(p), 0);
+      });
+      const dynSorted = [...league.teams].sort((a, b) => (dynTotals[b.id] ?? 0) - (dynTotals[a.id] ?? 0));
+      const redSorted = [...league.teams].sort((a, b) => (redTotals[b.id] ?? 0) - (redTotals[a.id] ?? 0));
+      const dynRanks: Record<string, number> = {};
+      const redRanks: Record<string, number> = {};
+      dynSorted.forEach((t, i) => { dynRanks[t.id] = i + 1; });
+      redSorted.forEach((t, i) => { redRanks[t.id] = i + 1; });
+      result[pos] = { dynTotals, redTotals, dynRanks, redRanks };
+    });
+    return result;
+  }, [league.teams, getPlayerValue, getRedraftValue]);
   const getTeamTier = (teamId: string): Tier | null => {
     return teamTiers.get(teamId)?.tier ?? null;
   };
@@ -363,15 +395,49 @@ export function RosterComparison({ league }: AnalyzerProps) {
               const playersA = getPlayers(teamA, pos);
               const playersB = getPlayers(teamB, pos);
               const maxRows = Math.max(playersA.length, playersB.length, 1);
+              const ps = posStats[pos];
+              const teamsForPos = [teamA, teamB] as const;
+              const posColors = ["text-[#0b3a7a] dark:text-blue-400", "text-[#d4af37]"] as const;
 
               return (
                 <Card key={pos} className="p-2.5 sm:p-4">
-                  <div className="flex items-center gap-1.5 sm:gap-2 mb-2 sm:mb-3">
+                  <div className="flex items-center gap-1.5 sm:gap-2 mb-2">
                     <Badge variant="outline" className={`text-[9px] sm:text-[10px] w-6 sm:w-7 justify-center ${POS_COLORS[pos]}`}>{pos}</Badge>
                     <span className="text-[9px] sm:text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">
                       {playersA.length} vs {playersB.length}
                     </span>
                   </div>
+
+                  {ps && (
+                    <div className="grid grid-cols-2 gap-2 sm:gap-5 mb-2 sm:mb-3 pb-2 border-b border-border/25">
+                      {teamsForPos.map((team, ci) => {
+                        const dynVal = ps.dynTotals[team.id] ?? 0;
+                        const redVal = ps.redTotals[team.id] ?? 0;
+                        const dynRank = ps.dynRanks[team.id] ?? league.teams.length;
+                        const redRank = ps.redRanks[team.id] ?? league.teams.length;
+                        const col = posColors[ci];
+                        return (
+                          <div key={team.id} className="space-y-0.5">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[9px] text-muted-foreground">Dynasty</span>
+                              <span className={`text-[10px] font-bold tabular-nums ${col}`}>
+                                {Math.round(dynVal).toLocaleString()}
+                                <span className="text-muted-foreground font-normal ml-1">#{dynRank}</span>
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <span className="text-[9px] text-muted-foreground">Redraft</span>
+                              <span className={`text-[10px] font-bold tabular-nums ${col}`}>
+                                {Math.round(redVal).toLocaleString()}
+                                <span className="text-muted-foreground font-normal ml-1">#{redRank}</span>
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
                   <div className="grid grid-cols-2 gap-2 sm:gap-5">
                     {[playersA, playersB].map((players, colIdx) => (
                       <div key={colIdx} className="space-y-0.5">
