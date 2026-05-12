@@ -1171,7 +1171,6 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
             <span className="flex items-center gap-1.5">
               <span className="inline-block w-3 h-3 rounded-sm bg-red-500/15 border border-red-500/30" /> Bottom 25%
             </span>
-            <span className="ml-2 text-[10px]">Ranks sorted by overall dynasty score</span>
           </div>
         </div>
       )}
