@@ -232,27 +232,44 @@ export async function fetchSleeperLeagueFull(leagueId: string, userId: string) {
     }
   }
 
-  const rosterIdToSlot2026 = new Map<number, number>();
+  // Build a map of year -> draft status so we can skip years whose rookie draft is done
+  const draftStatusByYear = new Map<number, string>();
   if (draftsRaw && Array.isArray(draftsRaw)) {
-    const draft2026 = draftsRaw.find((d: any) => d.season === "2026");
-    if (draft2026) {
-      const slotToRoster: Record<string, number> = draft2026.slot_to_roster_id || {};
+    for (const d of draftsRaw) {
+      const yr = parseInt(d.season, 10);
+      if (!isNaN(yr)) draftStatusByYear.set(yr, d.status || "");
+    }
+  }
+
+  // Determine pick years dynamically: skip years whose draft is already complete
+  const leagueSeason = parseInt((leagueRaw as any).season || "2026", 10);
+  const pickYears: number[] = [];
+  for (let yr = leagueSeason; pickYears.length < 3; yr++) {
+    if (draftStatusByYear.get(yr) !== "complete") pickYears.push(yr);
+  }
+  const pickRounds = [1, 2, 3, 4];
+
+  // Build slot map for the earliest non-complete pick year (the upcoming rookie draft)
+  const slotPickYear = pickYears[0];
+  const rosterIdToSlotCurrent = new Map<number, number>();
+  if (draftsRaw && Array.isArray(draftsRaw)) {
+    const upcomingDraft = draftsRaw.find((d: any) => parseInt(d.season, 10) === slotPickYear);
+    if (upcomingDraft) {
+      const slotToRoster: Record<string, number> = upcomingDraft.slot_to_roster_id || {};
       if (Object.keys(slotToRoster).length > 0) {
         for (const [slotStr, rosterId] of Object.entries(slotToRoster)) {
-          rosterIdToSlot2026.set(rosterId, parseInt(slotStr, 10));
+          rosterIdToSlotCurrent.set(rosterId as number, parseInt(slotStr, 10));
         }
       } else {
-        const draftOrder: Record<string, number> = draft2026.draft_order || {};
+        const draftOrder: Record<string, number> = upcomingDraft.draft_order || {};
         if (Object.keys(draftOrder).length > 0) {
           const ownerToRoster = new Map<string, number>();
           for (const r of rostersRaw) {
             if (r.owner_id) ownerToRoster.set(r.owner_id, r.roster_id);
           }
-          for (const [userId, slot] of Object.entries(draftOrder)) {
-            const rosterId = ownerToRoster.get(userId);
-            if (rosterId !== undefined) {
-              rosterIdToSlot2026.set(rosterId, slot);
-            }
+          for (const [uid, slot] of Object.entries(draftOrder)) {
+            const rosterId = ownerToRoster.get(uid);
+            if (rosterId !== undefined) rosterIdToSlotCurrent.set(rosterId, slot as number);
           }
         }
       }
@@ -273,9 +290,6 @@ export async function fetchSleeperLeagueFull(leagueId: string, userId: string) {
     contenderWindowYears: 0,
     windowStartOffset: 0,
   };
-
-  const pickYears = [2026, 2027, 2028];
-  const pickRounds = [1, 2, 3, 4];
 
   const teams = rostersRaw.map((roster) => {
     const ownerUser = roster.owner_id ? usersMap.get(roster.owner_id) : null;
@@ -317,7 +331,7 @@ export async function fetchSleeperLeagueFull(leagueId: string, userId: string) {
 
     for (const year of pickYears) {
       for (const round of pickRounds) {
-        const slot = year === 2026 ? rosterIdToSlot2026.get(roster.roster_id) : undefined;
+        const slot = year === slotPickYear ? rosterIdToSlotCurrent.get(roster.roster_id) : undefined;
         ownedPicks.push({
           year,
           round,
@@ -346,7 +360,7 @@ export async function fetchSleeperLeagueFull(leagueId: string, userId: string) {
       }
 
       if (toTeamId === teamId) {
-        const slot = tpYear === 2026 ? rosterIdToSlot2026.get(tp.roster_id) : undefined;
+        const slot = tpYear === slotPickYear ? rosterIdToSlotCurrent.get(tp.roster_id) : undefined;
         ownedPicks.push({
           year: tpYear,
           round: tp.round,
