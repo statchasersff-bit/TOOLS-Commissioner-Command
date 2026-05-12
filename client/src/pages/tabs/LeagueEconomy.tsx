@@ -363,7 +363,7 @@ function PickConcentration({ league }: { league: League }) {
                   <td className="p-3 text-center">{d.pickCount}</td>
                   <td className="p-3 text-center font-mono text-xs">{d.totalValue.toLocaleString()}</td>
                   <td className="p-3 text-xs">
-                    {d.bestPick ? formatPickLabel(d.bestPick) : "—"}
+                    {d.bestPick ? formatPickLabel(d.bestPick) : "N/A"}
                   </td>
                   <td className="p-3 text-center">
                     <Badge variant="outline" className={`text-[10px] ${ammoColor(d.ammo)}`}>{d.ammo}</Badge>
@@ -497,7 +497,7 @@ export function LeagueEconomy({ league }: { league: League }) {
 
   return (
     <div className="space-y-8">
-      <SectionHeader title="League Economy" subtitle="League-wide economic dynamics — power distribution, draft capital, and trade market health" />
+      <SectionHeader title="League Economy" subtitle="League-wide economic dynamics: power distribution, draft capital, and trade market health" />
 
       <div className="flex items-center gap-2 flex-wrap" data-testid="economy-section-tabs">
         {SECTION_TABS.map(tab => {

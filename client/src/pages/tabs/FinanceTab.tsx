@@ -231,7 +231,7 @@ const TIER_CONFIG: Record<Tier, {
   elite: {
     label: "Elite Contenders",
     short: "Elite",
-    desc: "Strong playoff position — maximize focus here",
+    desc: "Strong playoff position. Maximize focus here.",
     headerCls: "text-emerald-600 dark:text-emerald-400",
     bgCls: "bg-emerald-50/70 dark:bg-emerald-950/20 border-emerald-200/50 dark:border-emerald-800/30",
     badgeCls: "border-emerald-500/50 text-emerald-600 dark:text-emerald-400",
@@ -239,7 +239,7 @@ const TIER_CONFIG: Record<Tier, {
   bubble: {
     label: "At-Risk & Bubble",
     short: "Bubble",
-    desc: "On the playoff edge — needs your attention",
+    desc: "On the playoff edge. Needs your attention.",
     headerCls: "text-amber-600 dark:text-amber-400",
     bgCls: "bg-amber-50/70 dark:bg-amber-950/20 border-amber-200/50 dark:border-amber-800/30",
     badgeCls: "border-amber-500/50 text-amber-600 dark:text-amber-400",
@@ -247,7 +247,7 @@ const TIER_CONFIG: Record<Tier, {
   rebuild: {
     label: "Rebuilds / Longshots",
     short: "Rebuild",
-    desc: "Low playoff odds — buy-in likely sunk cost",
+    desc: "Low playoff odds. Buy-in likely sunk cost.",
     headerCls: "text-slate-500 dark:text-slate-400",
     bgCls: "bg-muted/30 border-border/40",
     badgeCls: "border-border/50 text-slate-500 dark:text-slate-400",
@@ -473,7 +473,7 @@ function SleeperVerifyGate({ userId, username, onAuth }: { userId: string; usern
                       <p className="text-3xl font-mono font-bold text-[#0b3a7a] dark:text-blue-300" data-testid="text-countdown">
                         {Math.floor(countdown / 60)}:{String(countdown % 60).padStart(2, "0")}
                       </p>
-                      <p className="text-xs text-muted-foreground">Feel free to browse other tabs — we'll check automatically when the timer ends.</p>
+                      <p className="text-xs text-muted-foreground">Feel free to browse other tabs. We'll check automatically when the timer ends.</p>
                     </>
                   ) : (
                     <>
@@ -496,7 +496,7 @@ function SleeperVerifyGate({ userId, username, onAuth }: { userId: string; usern
                 {challengeCode ? (
                   <div className="space-y-3">
                     <div className="space-y-2">
-                      <p className="text-[11px] text-muted-foreground text-center font-medium uppercase tracking-wide">Step 1 — Verify your Sleeper account</p>
+                      <p className="text-[11px] text-muted-foreground text-center font-medium uppercase tracking-wide">Step 1: Verify your Sleeper account</p>
                       <div className="flex items-center gap-2">
                         <div className="flex-1 bg-muted/50 rounded-xl border border-border/60 px-4 py-3 text-center">
                           <span className="text-2xl font-mono font-bold tracking-widest text-[#0b3a7a] dark:text-blue-300" data-testid="text-challenge-code">{challengeCode}</span>
@@ -513,7 +513,7 @@ function SleeperVerifyGate({ userId, username, onAuth }: { userId: string; usern
                       {[
                         <>Open Sleeper → go to any of your leagues → tap <strong>Team Settings</strong></>,
                         <>Set your <strong>Team Name</strong> to: <code className="bg-muted px-1.5 py-0.5 rounded text-xs font-mono">{challengeCode}</code></>,
-                        <>Hit <strong>Save</strong>. Sleeper's API may take <strong>1–2 minutes</strong> to update — if verify fails, wait and try again. You can rename back after.</>,
+                        <>Hit <strong>Save</strong>. Sleeper's API may take <strong>1-2 minutes</strong> to update. If verify fails, wait and try again. You can rename back after.</>,
                       ].map((step, i) => (
                         <li key={i} className="flex gap-3">
                           <span className="w-5 h-5 rounded-full bg-[#0b3a7a]/10 dark:bg-blue-400/10 text-[#0b3a7a] dark:text-blue-400 flex items-center justify-center text-[11px] font-bold flex-shrink-0 mt-0.5">{i + 1}</span>
@@ -528,7 +528,7 @@ function SleeperVerifyGate({ userId, username, onAuth }: { userId: string; usern
 
                 {/* League picker */}
                 <div className="space-y-2 pt-1">
-                  <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide">Step 2 — Select the league you changed</p>
+                  <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide">Step 2: Select the league you changed</p>
                   {leagues.length > 0 ? (
                     <Select value={selectedLeagueId} onValueChange={v => { setSelectedLeagueId(v); setError(""); }} data-testid="select-league">
                       <SelectTrigger className="w-full" data-testid="trigger-league-picker">
@@ -551,7 +551,7 @@ function SleeperVerifyGate({ userId, username, onAuth }: { userId: string; usern
 
                 {/* Password fields */}
                 <div className="space-y-2 pt-1">
-                  <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide">Step 3 — {mode === "reset" ? "Set new password" : "Create a password"}</p>
+                  <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide">Step 3: {mode === "reset" ? "Set new password" : "Create a password"}</p>
                   <Input
                     type="password"
                     value={password}
@@ -858,7 +858,7 @@ export function FinanceTab() {
             <div className="flex items-center gap-2">
               <Target className="w-4 h-4 text-[#0b3a7a] dark:text-blue-400" />
               <h3 className="text-xs font-bold uppercase tracking-wide">Focus Zones</h3>
-              <span className="text-[10px] text-muted-foreground">— which leagues to prioritize this season</span>
+              <span className="text-[10px] text-muted-foreground">which leagues to prioritize this season</span>
             </div>
             <div className="grid grid-cols-3 gap-2">
               {(["elite", "bubble", "rebuild"] as Tier[]).map(tier => {
@@ -1029,9 +1029,9 @@ export function FinanceTab() {
                 {s && !s.loading && !s.error && s.rank > 0 && (
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                     {[
-                      { label: "Standing", value: gamesPlayed > 0 ? `#${s.rank}/${s.totalTeams}` : "—" },
+                      { label: "Standing", value: gamesPlayed > 0 ? `#${s.rank}/${s.totalTeams}` : "N/A" },
                       { label: "Record", value: gamesPlayed > 0 ? `${s.wins}-${s.losses}${s.ties > 0 ? `-${s.ties}` : ""}` : "Pre-season" },
-                      { label: "Pts For", value: gamesPlayed > 0 ? s.ptsFor.toFixed(1) : "—" },
+                      { label: "Pts For", value: gamesPlayed > 0 ? s.ptsFor.toFixed(1) : "N/A" },
                     ].map(item => (
                       <div key={item.label} className="bg-muted/30 rounded-lg p-3 text-center">
                         <p className="text-[10px] text-muted-foreground mb-0.5">{item.label}</p>
@@ -1053,7 +1053,7 @@ export function FinanceTab() {
                         </>
                       ) : (
                         <>
-                          <p className="text-base font-bold text-muted-foreground">—</p>
+                          <p className="text-base font-bold text-muted-foreground">N/A</p>
                           <p className="text-[10px] mt-0.5 text-muted-foreground">loading…</p>
                         </>
                       )}
@@ -1139,7 +1139,7 @@ export function FinanceTab() {
                         </div>
                         <div className="min-w-0">
                           <p className="text-[10px] text-muted-foreground">Expected Prize</p>
-                          <p className="text-sm font-semibold">{calc ? fmtDollar(Math.round(calc.projectedPrize)) : "—"}</p>
+                          <p className="text-sm font-semibold">{calc ? fmtDollar(Math.round(calc.projectedPrize)) : "N/A"}</p>
                           {calc && (
                             <p className="text-[10px] text-muted-foreground truncate max-w-[160px]" title="Probability-weighted across all prize positions">
                               {calc.breakdown.filter(b => b.probability >= 0.01).map(b => {

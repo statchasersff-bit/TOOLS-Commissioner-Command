@@ -156,14 +156,14 @@ function getSuggestedDirection(
         return `Sell aging ${poses} starters at peak redraft value for picks and young talent`;
       }
       if (agingStarters.length === 1 && peakRedraftAssets.length > 0) {
-        return `Move aging ${agingStarters[0].pos}s before their value drops — convert to picks`;
+        return `Move aging ${agingStarters[0].pos}s before their value drops. Convert to picks.`;
       }
       if (peakRedraftAssets.length > 0) {
         const pos = peakRedraftAssets[0].pos;
-        return `Sell peak-redraft ${pos}s now — their dynasty value will fade before your window opens`;
+        return `Sell peak-redraft ${pos}s now. Their dynasty value will fade before your window opens.`;
       }
       if (strongest.score >= 70) {
-        return `Unlikely to contend this year — sell ${strongest.pos} depth for picks and young talent`;
+        return `Unlikely to contend this year. Sell ${strongest.pos} depth for picks and young talent.`;
       }
       return "Pivot to rebuild: sell aging and high-risk assets at peak value and stack draft capital";
     }
@@ -172,7 +172,7 @@ function getSuggestedDirection(
     if (agingStarters.length > 0) {
       return `Sell aging ${agingStarters[0].pos} starters and high-risk assets to sharpen your roster`;
     }
-    return "On the fringes — sell high on peak-value players and retool toward your window";
+    return "On the fringes. Sell high on peak-value players and retool toward your window.";
   }
 
   // Bubble (35–60%): focus on shoring up weaknesses to make a playoff push
@@ -1014,9 +1014,9 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
                               />
                             </TooltipTrigger>
                             <TooltipContent side="top" className="text-xs">
-                              <p className="font-semibold">{team.owner} — {pos}</p>
+                              <p className="font-semibold">{team.owner}: {pos}</p>
                               <p>Dynasty value: {Math.round(val).toLocaleString()}</p>
-                              <p>League rank #{strengthProfiles.dynastyRanks[team.id]?.[pos] ?? "—"}</p>
+                              <p>League rank #{strengthProfiles.dynastyRanks[team.id]?.[pos] ?? "N/A"}</p>
                             </TooltipContent>
                           </Tooltip>
                         );

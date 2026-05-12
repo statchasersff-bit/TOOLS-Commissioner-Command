@@ -6,7 +6,7 @@ const TOOLS = [
   {
     id: "rookie-hit-rates",
     label: "Rookie Hit Rates",
-    description: "Analysis of NFL rookies from 2017–2025 — which draft slots actually produced dynasty-relevant players, broken down by position and round.",
+    description: "Analysis of NFL rookies from 2017-2025: which draft slots actually produced dynasty-relevant players, broken down by position and round.",
     url: "https://statchasers.com/rookie-hit-rates/",
     icon: TrendingUp,
     accent: "from-emerald-500/10 to-emerald-500/5 border-emerald-500/20 hover:border-emerald-500/40",
@@ -16,7 +16,7 @@ const TOOLS = [
   {
     id: "rookie-guide",
     label: "2026 Rookie Draft Guide",
-    description: "Comprehensive scouting guide for the 2026 rookie class — rankings, dynasty outlook, and value tiers for every key prospect entering the NFL.",
+    description: "Comprehensive scouting guide for the 2026 rookie class: rankings, dynasty outlook, and value tiers for every key prospect entering the NFL.",
     url: "https://statchasers.com/rookie-guide/",
     icon: BookOpen,
     accent: "from-[#0b3a7a]/10 to-[#0b3a7a]/5 border-[#0b3a7a]/30 hover:border-[#d4af37]/40",
@@ -26,7 +26,7 @@ const TOOLS = [
   {
     id: "performance-analytics",
     label: "Advanced Player Stats",
-    description: "Deep-dive performance analytics powered by advanced metrics — target share, air yards, opportunity rates, and efficiency scores across the league.",
+    description: "Deep-dive performance analytics powered by advanced metrics: target share, air yards, opportunity rates, and efficiency scores across the league.",
     url: "https://statchasers.com/performance-analytics/",
     icon: BarChart3,
     accent: "from-purple-500/10 to-purple-500/5 border-purple-500/20 hover:border-purple-500/40",

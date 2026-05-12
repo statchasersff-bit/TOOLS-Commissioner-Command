@@ -379,7 +379,7 @@ function SortableLeagueRecords({ records }: { records: any[] }) {
   const rankCell = (rank: number, total: number) =>
     rank > 0
       ? <span className={`font-semibold tabular-nums ${rank <= 3 ? "text-emerald-600 dark:text-emerald-400" : rank <= Math.ceil(total * 0.7) ? "text-foreground" : "text-red-500 dark:text-red-400"}`}>#{rank}</span>
-      : <span className="text-muted-foreground text-[11px]">—</span>;
+      : <span className="text-muted-foreground text-[11px]">N/A</span>;
 
   return (
     <div className="overflow-x-auto rounded-md border border-border/40">
@@ -430,16 +430,16 @@ function SortableLeagueRecords({ records }: { records: any[] }) {
               <td className="px-1 md:px-2 py-2 text-center" data-testid={`text-playoff-odds-${rec.leagueId}`}>
                 {rec.playoffOdds != null
                   ? <span className={`font-semibold tabular-nums ${rec.playoffOdds >= 70 ? "text-emerald-600 dark:text-emerald-400" : rec.playoffOdds >= 40 ? "text-foreground" : "text-red-500 dark:text-red-400"}`}>{rec.playoffOdds}%</span>
-                  : <span className="text-muted-foreground text-[11px]">—</span>}
+                  : <span className="text-muted-foreground text-[11px]">N/A</span>}
               </td>
               <td className="px-1 md:px-2 py-2 text-center" data-testid={`text-pf-rank-${rec.leagueId}`}>{rankCell(rec.pfRank, rec.totalRosters)}</td>
               <td className="px-1 md:px-2 py-2 text-center">
                 {rec.maxPfRank > 0
                   ? <span className={`font-semibold tabular-nums ${rec.maxPfRank <= 3 ? "text-emerald-600 dark:text-emerald-400" : rec.maxPfRank <= Math.ceil(rec.totalRosters * 0.7) ? "text-foreground" : "text-red-500 dark:text-red-400"}`}>#{rec.maxPfRank}<span className="text-muted-foreground font-normal">/{rec.totalRosters}</span></span>
-                  : <span className="text-muted-foreground text-[11px]">—</span>}
+                  : <span className="text-muted-foreground text-[11px]">N/A</span>}
               </td>
               <td className="px-1 md:px-2 py-2 text-center" data-testid={`text-standing-${rec.leagueId}`}>
-                {rec.totalGamesPlayed > 0 && rec.standing > 0 ? rankCell(rec.standing, rec.totalRosters) : <span className="text-muted-foreground text-[11px]">—</span>}
+                {rec.totalGamesPlayed > 0 && rec.standing > 0 ? rankCell(rec.standing, rec.totalRosters) : <span className="text-muted-foreground text-[11px]">N/A</span>}
               </td>
             </tr>
           ))}
@@ -650,7 +650,7 @@ export function PortfolioSummary() {
                             <Badge variant="outline" className={`text-[9px] md:text-[10px] px-1 py-0 h-4 ${getPositionColor(player.pos)}`} data-testid={`pos-${player.playerId}`}>{player.pos}</Badge>
                           </div>
                           <span className={`text-[11px] md:text-xs font-bold w-11 md:w-14 text-right ${dynastyValue > 0 ? "text-[#0b3a7a] dark:text-blue-400" : "text-muted-foreground"}`} data-testid={`value-${player.playerId}`}>
-                            {dynastyValue > 0 ? dynastyValue.toLocaleString() : "—"}
+                            {dynastyValue > 0 ? dynastyValue.toLocaleString() : "0"}
                           </span>
                           <div className="flex items-center gap-0.5 md:gap-1 w-8 md:w-10 justify-end">
                             {isOverexposed && <AlertTriangle className="w-3 h-3 text-amber-500 flex-shrink-0" />}
@@ -676,7 +676,7 @@ export function PortfolioSummary() {
                 <div className="space-y-0.5">
                   {summaryData.playerExposure.filter((p: any) => p.exposure >= 50).map((p: any) => (
                     <p key={p.playerId} className="text-xs text-amber-700 dark:text-amber-400">
-                      {p.name} — {p.exposure}% exposure across your portfolio
+                      {p.name}: {p.exposure}% exposure across your portfolio
                     </p>
                   ))}
                 </div>
@@ -722,7 +722,7 @@ export function PortfolioSummary() {
                               {issue.slot}: {issue.reason}
                             </Badge>
                           </td>
-                          <td className="px-4 py-2.5 text-muted-foreground">{issue.playerName || "—"}</td>
+                          <td className="px-4 py-2.5 text-muted-foreground">{issue.playerName || "N/A"}</td>
                         </tr>
                       ))
                     )}

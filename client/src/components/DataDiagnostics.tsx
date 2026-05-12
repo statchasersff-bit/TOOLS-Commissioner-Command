@@ -60,7 +60,7 @@ export function DataDiagnostics() {
               <span className="text-muted-foreground font-medium flex items-center gap-1">
                 <Clock className="w-3 h-3" /> Last Fetched
               </span>
-              <span className="font-mono text-[10px] text-foreground">{diagnostics.fetchedAt ? formatDate(diagnostics.fetchedAt) : "—"}</span>
+              <span className="font-mono text-[10px] text-foreground">{diagnostics.fetchedAt ? formatDate(diagnostics.fetchedAt) : "N/A"}</span>
             </div>
 
             <div className="h-px bg-border/60" />

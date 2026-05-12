@@ -450,7 +450,7 @@ export function generateInsights(league: League, userTeamId: string): Insight[] 
   insights.push({ text: `${bestRB.owner} has the strongest RB room (${bestRB.metrics.rb}).`, type: "positive", category: "league-leaders" });
 
   const youngestTeam = [...league.teams].sort((a, b) => b.metrics.youth - a.metrics.youth)[0];
-  insights.push({ text: `${youngestTeam.owner} has the youngest roster — positioned for the future.`, type: "neutral", category: "league-leaders" });
+  insights.push({ text: `${youngestTeam.owner} has the youngest roster, positioned for the future.`, type: "neutral", category: "league-leaders" });
 
   const mostPicks = [...league.teams].sort((a, b) => b.picks.filter((p) => p.round === 1).length - a.picks.filter((p) => p.round === 1).length)[0];
   const firstRoundCount = mostPicks.picks.filter((p) => p.round === 1).length;
@@ -461,7 +461,7 @@ export function generateInsights(league: League, userTeamId: string): Insight[] 
 
   const fewestPicks = [...league.teams].sort((a, b) => a.picks.length - b.picks.length)[0];
   if (fewestPicks.picks.length < league.teams[0]?.picks.length) {
-    insights.push({ text: `${fewestPicks.owner} has the fewest draft picks (${fewestPicks.picks.length}) — went all-in.`, type: "negative", category: "draft-capital" });
+    insights.push({ text: `${fewestPicks.owner} has the fewest draft picks (${fewestPicks.picks.length}), went all-in.`, type: "negative", category: "draft-capital" });
   }
 
   const oldestContender = sorted.filter((t) => t.metrics.overall >= 65).sort((a, b) => {
@@ -478,7 +478,7 @@ export function generateInsights(league: League, userTeamId: string): Insight[] 
   const tierMap = getLeagueTeamTiers(league.teams);
   const rebuildTeams = league.teams.filter((t) => { const ti = tierMap.get(t.id); return ti && isRebuilderTier(ti.tier); });
   if (rebuildTeams.length > 0) {
-    insights.push({ text: `${rebuildTeams.length} team(s) in rebuild mode — look for buy-low opportunities.`, type: "neutral", category: "contender-analysis" });
+    insights.push({ text: `${rebuildTeams.length} team(s) in rebuild mode. Look for buy-low opportunities.`, type: "neutral", category: "contender-analysis" });
   }
 
   const juggernauts = league.teams.filter((t) => tierMap.get(t.id)?.tier === "Juggernaut");
@@ -487,27 +487,27 @@ export function generateInsights(league: League, userTeamId: string): Insight[] 
   }
 
   const worstTE = [...league.teams].sort((a, b) => a.metrics.te - b.metrics.te)[0];
-  insights.push({ text: `${worstTE.owner} has the weakest TE room — a potential trade target.`, type: "negative", category: "trade-opportunities" });
+  insights.push({ text: `${worstTE.owner} has the weakest TE room, a potential trade target.`, type: "negative", category: "trade-opportunities" });
 
   const worstQB = [...league.teams].sort((a, b) => a.metrics.qb - b.metrics.qb)[0];
-  insights.push({ text: `${worstQB.owner} has the weakest QB room — may overpay for a signal-caller.`, type: "negative", category: "trade-opportunities" });
+  insights.push({ text: `${worstQB.owner} has the weakest QB room, may overpay for a signal-caller.`, type: "negative", category: "trade-opportunities" });
 
   const worstWR = [...league.teams].sort((a, b) => a.metrics.wr - b.metrics.wr)[0];
-  insights.push({ text: `${worstWR.owner} has the weakest WR corps — a buy-low candidate.`, type: "negative", category: "trade-opportunities" });
+  insights.push({ text: `${worstWR.owner} has the weakest WR corps, a buy-low candidate.`, type: "negative", category: "trade-opportunities" });
 
   if (userTeam.metrics.rb < 50) {
-    insights.push({ text: `Your RB room is below league average — consider targeting RB depth.`, type: "negative", category: "your-team" });
+    insights.push({ text: `Your RB room is below league average. Consider targeting RB depth.`, type: "negative", category: "your-team" });
   }
 
   const userTierInfo = tierMap.get(userTeam.id);
   if (userTierInfo && isContenderTier(userTierInfo.tier)) {
-    insights.push({ text: `Your team is a ${userTierInfo.tier} — push for a championship window move.`, type: "positive", category: "your-team" });
+    insights.push({ text: `Your team is a ${userTierInfo.tier}. Push for a championship window move.`, type: "positive", category: "your-team" });
   } else if (userTierInfo && isRebuilderTier(userTierInfo.tier)) {
-    insights.push({ text: `Your team is in ${userTierInfo.tier} mode — accumulate picks and young assets.`, type: "neutral", category: "your-team" });
+    insights.push({ text: `Your team is in ${userTierInfo.tier} mode. Accumulate picks and young assets.`, type: "neutral", category: "your-team" });
   }
 
   if (userTeam.metrics.qb >= 70) {
-    insights.push({ text: `Your QB room is a strength (${userTeam.metrics.qb}) — leverage this in trades.`, type: "positive", category: "your-team" });
+    insights.push({ text: `Your QB room is a strength (${userTeam.metrics.qb}). Leverage this in trades.`, type: "positive", category: "your-team" });
   }
 
   const userRank = sorted.findIndex(t => t.id === userTeamId) + 1;

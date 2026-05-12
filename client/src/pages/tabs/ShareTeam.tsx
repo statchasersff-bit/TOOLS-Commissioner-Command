@@ -165,7 +165,7 @@ export function ShareTeam({ league, userTeam }: Props) {
     const playersWithAge = userTeam.roster.filter((p) => p.age > 0);
     const avgAge = playersWithAge.length
       ? (playersWithAge.reduce((s, p) => s + p.age, 0) / playersWithAge.length).toFixed(1)
-      : "—";
+      : "N/A";
     const totalValue = Math.round(byDynValue(userTeam));
     const startersValue = Math.round(
       userTeam.roster.filter((p) => p.starter).reduce((s, p) => s + getPlayerValue(p), 0)
@@ -230,7 +230,7 @@ export function ShareTeam({ league, userTeam }: Props) {
     url.searchParams.set("teamId", userTeam.id);
     const blurb = [
       `${computed.total}-Team Dynasty ${computed.format} ${computed.scoring} team in ${leagueStr}.`,
-      `Ranked #${computed.overallRank} of ${computed.total} — ${computed.archetype}.`,
+      `Ranked #${computed.overallRank} of ${computed.total}: ${computed.archetype}.`,
       core ? `Core players: ${core}.` : "",
       strengths.length ? `Strengths: ${strengths.join(", ")}.` : "",
       needs.length ? `Needs: ${needs.join(", ")}.` : "",
@@ -375,8 +375,8 @@ export function ShareTeam({ league, userTeam }: Props) {
               <SnapshotRow icon={Users}       label="Avg Age"       value={`${computed.avgAge} yrs`} />
               {!hideValues && (
                 <>
-                  <SnapshotRow icon={TrendingUp}  label="Total Value"    value={computed.totalValue > 0 ? computed.totalValue.toLocaleString() : "—"} />
-                  <SnapshotRow icon={Trophy}      label="Starters Value" value={computed.startersValue > 0 ? computed.startersValue.toLocaleString() : "—"} />
+                  <SnapshotRow icon={TrendingUp}  label="Total Value"    value={computed.totalValue > 0 ? computed.totalValue.toLocaleString() : "0"} />
+                  <SnapshotRow icon={Trophy}      label="Starters Value" value={computed.startersValue > 0 ? computed.startersValue.toLocaleString() : "0"} />
                 </>
               )}
               <SnapshotRow icon={Star}        label="Future 1sts"   value={`${computed.future1sts} pick${computed.future1sts !== 1 ? "s" : ""}`} gold />

@@ -292,7 +292,7 @@ export function RosterComparison({ league }: AnalyzerProps) {
             </Badge>
           )}
           <p className={cn("text-3xl sm:text-4xl font-black tabular-nums mt-1", scoreColor)} data-testid={`text-matchup-score-${side}`}>
-            {team?.metrics.overall ?? "—"}
+            {team?.metrics.overall ?? 0}
           </p>
           <p className="text-[9px] text-muted-foreground uppercase tracking-widest">Overall Score</p>
         </div>
@@ -450,7 +450,7 @@ export function RosterComparison({ league }: AnalyzerProps) {
                                 {p.starter && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 flex-shrink-0" />}
                                 <span className={`text-[10px] sm:text-xs truncate ${p.starter ? "font-semibold text-foreground" : "text-muted-foreground"}`}>{p.name}</span>
                               </div>
-                              <span className="text-[10px] sm:text-xs font-mono font-semibold text-muted-foreground ml-1 flex-shrink-0">{p.value > 0 ? p.value.toLocaleString() : "—"}</span>
+                              <span className="text-[10px] sm:text-xs font-mono font-semibold text-muted-foreground ml-1 flex-shrink-0">{p.value > 0 ? p.value.toLocaleString() : "0"}</span>
                             </div>
                           );
                         })}
@@ -487,7 +487,7 @@ export function RosterComparison({ league }: AnalyzerProps) {
                           return (
                             <div key={`${pk.year}-${pk.round}-${rowIdx}`} className="flex items-center justify-between py-0.5 sm:py-1 px-1 sm:px-2 rounded-md hover:bg-muted/30 transition-colors">
                               <span className="text-[10px] sm:text-xs font-semibold text-foreground">{formatPickLabel(pk)}</span>
-                              <span className="text-[10px] sm:text-xs font-mono font-semibold text-muted-foreground ml-1 flex-shrink-0">{pk.value > 0 ? pk.value.toLocaleString() : "—"}</span>
+                              <span className="text-[10px] sm:text-xs font-mono font-semibold text-muted-foreground ml-1 flex-shrink-0">{pk.value > 0 ? pk.value.toLocaleString() : "0"}</span>
                             </div>
                           );
                         })}

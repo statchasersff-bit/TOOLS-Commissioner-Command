@@ -162,7 +162,7 @@ function getOutlookText(tier: Tier): string {
   switch (tier) {
     case "Juggernaut": return "Championship favorite. League problem.";
     case "Win-Now": return "Built to compete this year.";
-    case "Future Powerhouse": return "The future is bright — loaded with assets.";
+    case "Future Powerhouse": return "The future is bright. Loaded with assets.";
     case "Pick Hoarder": return "Stockpiling picks but roster needs work.";
     case "Taco": return "Bottom of the barrel across the board.";
     case "Contender": return "Strong team with enough dynasty value to stay competitive.";

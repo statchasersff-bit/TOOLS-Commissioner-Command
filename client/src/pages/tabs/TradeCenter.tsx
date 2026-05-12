@@ -420,7 +420,7 @@ export function TradeFinder({ league, userTeam }: TradeProps) {
         <div className="mb-5">
           <h3 className="text-base font-bold">Partner Analysis</h3>
           <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
-          <p className="text-[10px] text-muted-foreground mt-2">All league teams ranked by trade compatibility — positional overlap, tier mismatch, and roster needs</p>
+          <p className="text-[10px] text-muted-foreground mt-2">All league teams ranked by trade compatibility: positional overlap, tier mismatch, and roster needs</p>
         </div>
         <div className="space-y-0">
           {league.teams.filter(t => t.id !== userTeam.id).map((t, i) => {
@@ -470,7 +470,7 @@ export function TradeFinder({ league, userTeam }: TradeProps) {
           </h3>
           <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
           <p className="text-[10px] text-muted-foreground mt-2">
-            Veteran players (27+) on rebuilding or dynasty-heavy teams with strong redraft value — likely available
+            Veteran players (27+) on rebuilding or dynasty-heavy teams with strong redraft value. Likely available.
           </p>
         </div>
         <div className="space-y-0">
@@ -1199,7 +1199,7 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
                     );
                   })}
                   {posPlayers.length === 0 && (
-                    <p className="text-[9px] text-muted-foreground/50 text-center py-2">—</p>
+                    <p className="text-[9px] text-muted-foreground/50 text-center py-2">None</p>
                   )}
                 </div>
               );
@@ -1639,7 +1639,7 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
       <div className="flex justify-center">
         <div className="p-5 rounded-xl border border-[#d4af37]/30 bg-[#d4af37]/5 max-w-md text-center">
           <p className="text-sm font-bold text-foreground mb-1" data-testid="text-hit-rates-cta">Curious How Often Rookie Picks Hit?</p>
-          <p className="text-xs text-muted-foreground mb-4">See the data from 2017 — explore historical rookie hit rates by round and position.</p>
+          <p className="text-xs text-muted-foreground mb-4">See the data from 2017: explore historical rookie hit rates by round and position.</p>
           <a
             href="https://statchasers.com/rookie-hit-rates/"
             target="_blank"
@@ -1782,7 +1782,7 @@ export function TradeDatabase({ league }: { league: League }) {
             <span className="font-bold text-foreground" data-testid="text-total-trades">{stats.totalTrades.toLocaleString()}</span>
             <span className="text-muted-foreground"> trades indexed from </span>
             <span className="font-bold text-foreground" data-testid="text-total-leagues">{stats.totalLeagues.toLocaleString()}</span>
-            <span className="text-muted-foreground"> leagues — grows automatically as users analyze their leagues</span>
+            <span className="text-muted-foreground"> leagues, grows automatically as users analyze their leagues</span>
           </p>
         ) : (
           <p className="text-sm text-muted-foreground">Loading database stats...</p>

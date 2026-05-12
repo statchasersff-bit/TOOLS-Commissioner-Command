@@ -89,9 +89,9 @@ export function LeagueIntelligence({ league, userTeam }: Props) {
   const getOutlook = (team: Team): string => {
     const tier = insightTierMap.get(team.id)?.tier ?? "Balanced";
     switch (tier) {
-      case "Juggernaut": return "Championship contender — league problem";
+      case "Juggernaut": return "Championship contender, league problem";
       case "Win-Now": return "Built to win this year";
-      case "Future Powerhouse": return "The future is bright — loaded with assets";
+      case "Future Powerhouse": return "The future is bright. Loaded with assets.";
       case "Pick Hoarder": return "Stockpiling picks but roster needs work";
       case "Taco": return "Bottom of the barrel across the board";
       case "Contender": return "Strong team with enough dynasty value to stay competitive";
@@ -103,7 +103,7 @@ export function LeagueIntelligence({ league, userTeam }: Props) {
 
   return (
     <div className="space-y-10">
-      <SectionHeader title="League Intelligence" subtitle="Per-team scouting reports — strengths, weaknesses, and outlook" />
+      <SectionHeader title="League Intelligence" subtitle="Per-team scouting reports: strengths, weaknesses, and outlook" />
 
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3" data-testid="league-leaders-cards">
         {[

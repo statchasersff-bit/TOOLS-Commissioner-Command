@@ -286,7 +286,7 @@ function PositionOverview({ league, userTeam }: { league: League; userTeam: Team
                                 </div>
                               </TooltipTrigger>
                               <TooltipContent side="top" className="text-xs">
-                                <p className="font-semibold">{profile.team.owner} — {pos}</p>
+                                <p className="font-semibold">{profile.team.owner}: {pos}</p>
                                 <p>Rank: #{p.rank} / {total}</p>
                                 <p>Strength: {Math.round(p.totalStrength).toLocaleString()}</p>
                                 <p>vs Median: {p.surplusAmount > 0 ? "+" : ""}{p.surplusAmount.toLocaleString()}</p>
@@ -462,7 +462,7 @@ function SurplusNeeds({ league, userTeam, onSwitchTab }: { league: League; userT
           </h3>
           <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
           <p className="text-[10px] text-muted-foreground mt-2">
-            Teams whose strengths address your needs — and vice versa. Higher match score = better fit.
+            Teams whose strengths address your needs, and vice versa. Higher match score = better fit.
           </p>
         </div>
 
@@ -915,7 +915,7 @@ function TradeOpportunities({ league, userTeam }: { league: League; userTeam: Te
           </h3>
           <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
           <p className="text-[10px] text-muted-foreground mt-2">
-            Veteran players (27+) on rebuilding or dynasty-heavy teams with strong redraft value — likely trade targets
+            Veteran players (27+) on rebuilding or dynasty-heavy teams with strong redraft value. Likely trade targets.
           </p>
         </div>
         <div className="space-y-0">
@@ -1095,7 +1095,7 @@ function generateSuggestions(
             adjustedSide1: check.adjS1, adjustedSide2: check.adjS2,
             fairness: check.fairness,
             reasons: [
-              `They're ${partnerTier} — want depth`,
+              `They're ${partnerTier}, want depth`,
               `You consolidate for a starter`,
             ],
           });

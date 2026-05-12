@@ -382,7 +382,7 @@ export default function LiveDraft() {
         <CardContent className="pt-6">
           <form onSubmit={handleSubmit} className="flex gap-3 items-end" data-testid="draft-form">
             <div className="flex-1">
-              <label className="text-sm font-medium text-foreground mb-1.5 block" data-testid="label-league-id">Sleeper League ID (optional — to track drafted players)</label>
+              <label className="text-sm font-medium text-foreground mb-1.5 block" data-testid="label-league-id">Sleeper League ID (optional, to track drafted players)</label>
               <Input
                 data-testid="input-league-id"
                 placeholder="e.g. 1170877498498940928"

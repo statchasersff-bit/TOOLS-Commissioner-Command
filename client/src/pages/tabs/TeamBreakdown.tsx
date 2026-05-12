@@ -82,7 +82,7 @@ export function RosterBreakdown({ league, userTeam }: TeamProps) {
 
   return (
     <div className="space-y-10">
-      <SectionHeader title="Roster Breakdown" subtitle={`${userTeam.name} — strength, age, and depth analysis`} />
+      <SectionHeader title="Roster Breakdown" subtitle={`${userTeam.name}: strength, age, and depth analysis`} />
 
       <div>
         <div className="mb-5">
