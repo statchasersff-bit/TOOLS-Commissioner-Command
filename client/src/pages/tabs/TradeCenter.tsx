@@ -1363,7 +1363,7 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
                 onClick={() => setExpandedInfo(expandedInfo === "overpay" ? null : "overpay")}
                 data-testid="trigger-info-overpay-tax"
               >
-                <span className="text-xs sm:text-sm font-medium whitespace-nowrap">Overpay Tax</span>
+                <span className="text-xs sm:text-sm font-medium whitespace-nowrap">Top-Asset Premium</span>
                 <Info className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
               </button>
             </div>
