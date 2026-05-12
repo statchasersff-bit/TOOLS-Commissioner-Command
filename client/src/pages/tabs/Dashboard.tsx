@@ -570,6 +570,7 @@ function posBarColor(rank: number): string {
 }
 
 type SortKey = "name" | "overall" | "redraftRank" | "dynastyRank" | "picks";
+type HmSortKey = "name" | "dynOverall" | "dynQB" | "dynRB" | "dynWR" | "dynTE" | "picks" | "redOverall" | "redQB" | "redRB" | "redWR" | "redTE";
 
 function SortableHeader({ label, mobileLabel, sortKey, activeSortKey, sortDir, onSort, className, rowSpan }: {
   label: string; mobileLabel?: string; sortKey: SortKey; activeSortKey: SortKey; sortDir: "asc" | "desc";
@@ -602,6 +603,13 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [viewMode, setViewMode] = useState<"table" | "chart" | "heatmap">("table");
+  const [hmSortKey, setHmSortKey] = useState<HmSortKey>("dynOverall");
+  const [hmSortDir, setHmSortDir] = useState<"asc" | "desc">("asc");
+
+  function handleHmSort(key: HmSortKey) {
+    if (hmSortKey === key) setHmSortDir(d => d === "asc" ? "desc" : "asc");
+    else { setHmSortKey(key); setHmSortDir("asc"); }
+  }
 
   const snapshotTierMap = useMemo(() => getLeagueTeamTiers(teams), [teams]);
 
@@ -735,9 +743,35 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
 
   const chartMax = useMemo(() => Math.max(...chartTeams.map(c => c.total), 1), [chartTeams]);
 
-  const heatmapTeams = useMemo(() =>
-    [...teams].sort((a, b) => (overallRanks[a.id] ?? 99) - (overallRanks[b.id] ?? 99)),
-  [teams, overallRanks]);
+  const heatmapTeams = useMemo(() => {
+    const tr = teamRanks.ranks;
+    const dr = strengthProfiles.dynastyRanks;
+    const rr = strengthProfiles.redraftRanks;
+    const n = teams.length;
+    const accessor: Record<HmSortKey, (t: Team) => number | string> = {
+      name:       t => t.owner.toLowerCase(),
+      dynOverall: t => tr[t.id]?.dynastyRank ?? n,
+      dynQB:      t => dr[t.id]?.["QB"] ?? n,
+      dynRB:      t => dr[t.id]?.["RB"] ?? n,
+      dynWR:      t => dr[t.id]?.["WR"] ?? n,
+      dynTE:      t => dr[t.id]?.["TE"] ?? n,
+      picks:      t => tr[t.id]?.picksRank ?? n,
+      redOverall: t => tr[t.id]?.redraftRank ?? n,
+      redQB:      t => rr[t.id]?.["QB"] ?? n,
+      redRB:      t => rr[t.id]?.["RB"] ?? n,
+      redWR:      t => rr[t.id]?.["WR"] ?? n,
+      redTE:      t => rr[t.id]?.["TE"] ?? n,
+    };
+    return [...teams].sort((a, b) => {
+      const va = accessor[hmSortKey](a);
+      const vb = accessor[hmSortKey](b);
+      if (typeof va === "number" && typeof vb === "number")
+        return hmSortDir === "asc" ? va - vb : vb - va;
+      return hmSortDir === "asc"
+        ? String(va).localeCompare(String(vb))
+        : String(vb).localeCompare(String(va));
+    });
+  }, [teams, teamRanks, strengthProfiles, hmSortKey, hmSortDir]);
 
   const thHeat = "px-2 py-2.5 text-center text-[10px] font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap bg-muted/30 dark:bg-muted/20";
   const thHeatLeft = "px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap bg-muted/30 dark:bg-muted/20";
@@ -1015,22 +1049,35 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b border-border/50">
-                  <th className={thHeatLeft} rowSpan={2}>Team</th>
+                  <th className={thHeatLeft} rowSpan={2}>
+                    <button onClick={() => handleHmSort("name")} className="inline-flex items-center gap-1 hover:text-foreground transition-colors" data-testid="hm-sort-name">
+                      Team {hmSortKey === "name" ? (hmSortDir === "asc" ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />) : <ArrowUpDown className="w-3 h-3 opacity-30" />}
+                    </button>
+                  </th>
                   <th className={cn(thHeat, "border-l border-border/30")} colSpan={6}>Dynasty</th>
                   <th className={cn(thHeat, "border-l border-border/30")} colSpan={5}>Win-Now (Redraft Starters)</th>
                 </tr>
                 <tr className="border-b border-border/40">
-                  <th className={cn(thHeat, "border-l border-border/30")}>Overall</th>
-                  <th className={thHeat}>QB</th>
-                  <th className={thHeat}>RB</th>
-                  <th className={thHeat}>WR</th>
-                  <th className={thHeat}>TE</th>
-                  <th className={thHeat}>Picks</th>
-                  <th className={cn(thHeat, "border-l border-border/30")}>Overall</th>
-                  <th className={thHeat}>QB</th>
-                  <th className={thHeat}>RB</th>
-                  <th className={thHeat}>WR</th>
-                  <th className={thHeat}>TE</th>
+                  {([
+                    { key: "dynOverall" as HmSortKey, label: "Overall", borderLeft: true },
+                    { key: "dynQB"      as HmSortKey, label: "QB" },
+                    { key: "dynRB"      as HmSortKey, label: "RB" },
+                    { key: "dynWR"      as HmSortKey, label: "WR" },
+                    { key: "dynTE"      as HmSortKey, label: "TE" },
+                    { key: "picks"      as HmSortKey, label: "Picks" },
+                    { key: "redOverall" as HmSortKey, label: "Overall", borderLeft: true },
+                    { key: "redQB"      as HmSortKey, label: "QB" },
+                    { key: "redRB"      as HmSortKey, label: "RB" },
+                    { key: "redWR"      as HmSortKey, label: "WR" },
+                    { key: "redTE"      as HmSortKey, label: "TE" },
+                  ]).map(({ key, label, borderLeft }) => (
+                    <th key={key} className={cn(thHeat, borderLeft && "border-l border-border/30")}>
+                      <button onClick={() => handleHmSort(key)} className="inline-flex items-center gap-0.5 hover:text-foreground transition-colors" data-testid={`hm-sort-${key}`}>
+                        {label}
+                        {hmSortKey === key ? (hmSortDir === "asc" ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />) : <ArrowUpDown className="w-3 h-3 opacity-30" />}
+                      </button>
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
