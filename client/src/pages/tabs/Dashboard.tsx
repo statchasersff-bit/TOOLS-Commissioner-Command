@@ -1058,7 +1058,7 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
                     className="px-2 py-2 text-center text-[10px] font-bold uppercase tracking-wider whitespace-nowrap border-l-2 border-blue-400/40 bg-blue-500/10 text-blue-700 dark:text-blue-300"
                     colSpan={6}
                   >
-                    Dynasty
+                    Dynasty (Including Picks)
                   </th>
                   <th
                     className="px-2 py-2 text-center text-[10px] font-bold uppercase tracking-wider whitespace-nowrap border-l-2 border-[#d4af37]/50 bg-[#d4af37]/10 text-amber-700 dark:text-[#d4af37]"
