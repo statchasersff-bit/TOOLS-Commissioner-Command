@@ -1017,7 +1017,7 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
                 <tr className="border-b border-border/50">
                   <th className={thHeatLeft} rowSpan={2}>Team</th>
                   <th className={cn(thHeat, "border-l border-border/30")} colSpan={6}>Dynasty</th>
-                  <th className={cn(thHeat, "border-l border-border/30")} colSpan={5}>Win-Now (Redraft)</th>
+                  <th className={cn(thHeat, "border-l border-border/30")} colSpan={5}>Win-Now (Redraft Starters)</th>
                 </tr>
                 <tr className="border-b border-border/40">
                   <th className={cn(thHeat, "border-l border-border/30")}>Overall</th>
