@@ -487,7 +487,7 @@ export function FinanceTab() {
   const plSign = totals.netPL > 0 ? "+" : "";
 
   return (
-    <div className="max-w-4xl mx-auto px-4 md:px-6 py-6 space-y-6">
+    <div className="max-w-4xl mx-auto px-2 md:px-3 py-6 space-y-6">
 
       {/* Header bar */}
       <div className="flex items-center justify-between">
