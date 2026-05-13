@@ -378,8 +378,8 @@ export function ShareTeam({ league, userTeam }: Props) {
               <SnapshotRow icon={Users}       label="Avg Age"       value={`${computed.avgAge} yrs`} />
               {!hideValues && (
                 <>
-                  <SnapshotRow icon={TrendingUp}  label="Total Value"    value={computed.totalValue > 0 ? computed.totalValue.toLocaleString() : "0"} />
-                  <SnapshotRow icon={Trophy}      label="Starters Value" value={computed.startersValue > 0 ? computed.startersValue.toLocaleString() : "0"} />
+                  <SnapshotRow icon={TrendingUp}  label="Dynasty Value"  value={computed.totalValue > 0 ? `${computed.totalValue.toLocaleString()} (#${computed.dynastyRank}/${computed.total})` : "0"} />
+                  <SnapshotRow icon={Trophy}      label="Win-Now Value"  value={computed.startersValue > 0 ? `${computed.startersValue.toLocaleString()} (#${computed.competingRank}/${computed.total})` : "0"} />
                 </>
               )}
               <SnapshotRow icon={Star}        label="Future 1sts"   value={`${computed.future1sts} pick${computed.future1sts !== 1 ? "s" : ""}`} gold />
