@@ -101,11 +101,14 @@ export function SleeperAuthCard() {
   }, []);
 
   async function handleSendCode() {
-    if (!identifier.trim()) return;
+    if (!identifier.trim() || !captchaToken) return;
     setStep("loading");
     setErrorMsg("");
+    const tokenForSend = captchaToken;
+    setCaptchaToken(null);
+    hcaptchaRef.current?.resetCaptcha();
     try {
-      await requestSleeperCode(identifier.trim());
+      await requestSleeperCode(identifier.trim(), tokenForSend);
       setStep("code-sent");
     } catch (e: any) {
       setErrorMsg(e.message || "Failed to send verification code.");
@@ -302,17 +305,40 @@ export function SleeperAuthCard() {
                     placeholder="e.g. makitrain or user@email.com"
                     value={identifier}
                     onChange={(e) => setIdentifier(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && handleSendCode()}
+                    onKeyDown={(e) => e.key === "Enter" && captchaToken && handleSendCode()}
                     className="h-10 text-sm"
                     autoComplete="username"
                     data-testid="input-auth-identifier"
                   />
                 </div>
+                <div className="space-y-1.5">
+                  <label className="text-[12px] font-medium text-muted-foreground uppercase tracking-wide">
+                    Security check
+                  </label>
+                  <HCaptcha
+                    ref={hcaptchaRef}
+                    sitekey={SLEEPER_HCAPTCHA_SITE_KEY}
+                    onVerify={handleCaptchaToken}
+                    onExpire={handleCaptchaExpire}
+                    onError={handleCaptchaError}
+                    theme={document.documentElement.classList.contains("dark") ? "dark" : "light"}
+                  />
+                  {captchaToken && (
+                    <p className="flex items-center gap-1.5 text-[11px] text-emerald-600 dark:text-emerald-400">
+                      <CheckCircle2 className="w-3 h-3" /> Security check passed
+                    </p>
+                  )}
+                  {captchaError && !captchaToken && (
+                    <p className="flex items-center gap-1.5 text-[11px] text-destructive">
+                      <AlertCircle className="w-3 h-3" /> Complete the security check to continue.
+                    </p>
+                  )}
+                </div>
                 <div className="flex flex-col gap-2 pt-1">
                   <Button
                     className="w-full h-10 text-sm bg-[#0b3a7a] hover:bg-[#0b3a7a]/90 text-white gap-2"
                     onClick={handleSendCode}
-                    disabled={!identifier.trim()}
+                    disabled={!identifier.trim() || !captchaToken}
                     data-testid="button-auth-send-code"
                   >
                     <Smartphone className="w-4 h-4" />
