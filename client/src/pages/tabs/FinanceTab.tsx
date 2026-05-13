@@ -282,46 +282,25 @@ export function FinanceTab() {
     return true;
   });
 
-  // Auto-exchange: if a valid Sleeper OTP session exists for this user, trade it for a finance JWT.
+  // Auto-exchange: any connected Sleeper user gets a finance JWT automatically.
+  // The /api/auth/sleeper-exchange endpoint verifies identity via the public Sleeper API
+  // (confirms the user ID exists), so no separate OTP session is needed.
   useEffect(() => {
     if (!user?.userId) return;
-    const sess = getSleeperSession();
-    if (sess && !isSessionExpired(sess) && sess.user_id === user.userId) {
-      const cached = localStorage.getItem(tokenKey(user.userId));
-      if (cached) { setToken(cached); setAuthChecked(true); return; }
-      fetch(`${API_BASE}/api/auth/sleeper-exchange`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sleeperId: user.userId }),
-      })
-        .then(r => r.json())
-        .then(d => { if (d.token) { localStorage.setItem(tokenKey(user.userId!), d.token); setToken(d.token); } })
-        .catch(() => {})
-        .finally(() => setAuthChecked(true));
-    } else {
-      setAuthChecked(true);
-    }
+    // Use cached token if still valid
+    const cached = localStorage.getItem(tokenKey(user.userId));
+    if (cached) { setToken(cached); setAuthChecked(true); return; }
+    // Exchange Sleeper user ID for a finance JWT
+    fetch(`${API_BASE}/api/auth/sleeper-exchange`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sleeperId: user.userId }),
+    })
+      .then(r => r.json())
+      .then(d => { if (d.token) { localStorage.setItem(tokenKey(user.userId!), d.token); setToken(d.token); } })
+      .catch(() => {})
+      .finally(() => setAuthChecked(true));
   }, [user?.userId]);
-
-  // Poll for a new Sleeper session while the gate is showing (e.g. user just connected via OTP).
-  useEffect(() => {
-    if (token || !user?.userId) return;
-    const id = setInterval(() => {
-      const sess = getSleeperSession();
-      if (!sess || isSessionExpired(sess) || sess.user_id !== user.userId) return;
-      const cached = localStorage.getItem(tokenKey(user.userId!));
-      if (cached) { setToken(cached); clearInterval(id); return; }
-      fetch(`${API_BASE}/api/auth/sleeper-exchange`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sleeperId: user.userId }),
-      })
-        .then(r => r.json())
-        .then(d => { if (d.token) { localStorage.setItem(tokenKey(user.userId!), d.token); setToken(d.token); clearInterval(id); } })
-        .catch(() => {});
-    }, 1500);
-    return () => clearInterval(id);
-  }, [token, user?.userId]);
 
   function handleLock() {
     if (!user?.userId) return;
