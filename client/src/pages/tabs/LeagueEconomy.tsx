@@ -12,25 +12,6 @@ import {
   Tooltip as RechartsTooltip, ResponsiveContainer, ReferenceLine, ReferenceArea, Label
 } from "recharts";
 
-function computeParityScore(teams: Team[]): { score: number; label: string; description: string } {
-  const scores = teams.map(t => t.metrics.overall);
-  const mean = scores.reduce((a, b) => a + b, 0) / scores.length;
-  const variance = scores.reduce((sum, s) => sum + Math.pow(s - mean, 2), 0) / scores.length;
-  const stdDev = Math.sqrt(variance);
-  const maxStd = 30;
-  const minStd = 2;
-  const clamped = Math.max(minStd, Math.min(maxStd, stdDev));
-  const score = Math.round(100 - ((clamped - minStd) / (maxStd - minStd)) * 100);
-  const label = score >= 70 ? "High" : score >= 40 ? "Medium" : "Low";
-  const median = [...scores].sort((a, b) => a - b)[Math.floor(scores.length / 2)];
-  const maxDiff = Math.round(Math.max(...scores.map(s => Math.abs(s - median))));
-  const description = score >= 70
-    ? `Most teams are within ${maxDiff} points of the median.`
-    : score >= 40
-      ? `There's moderate spread between the top and bottom teams.`
-      : `Significant talent gap between the haves and have-nots.`;
-  return { score, label, description };
-}
 
 interface QuadrantTeam {
   team: Team;
@@ -87,23 +68,6 @@ function EconomyOverview({ league }: { league: League }) {
     }));
   }, [league.teams, tierMap]);
 
-  const parity = useMemo(() => computeParityScore(league.teams), [league.teams]);
-
-  const pickMonopoly = useMemo(() => {
-    const teamPickValues = league.teams.map(t => ({
-      team: t,
-      value: t.picks.reduce((sum, p) => sum + p.value, 0),
-    }));
-    const totalValue = teamPickValues.reduce((s, t) => s + t.value, 0);
-    if (totalValue === 0) return { top3: [], top3Pct: 0, total: 0 };
-    const sorted = [...teamPickValues].sort((a, b) => b.value - a.value);
-    const top3 = sorted.slice(0, 3).map(t => ({
-      owner: t.team.owner,
-      pct: Math.round((t.value / totalValue) * 100),
-    }));
-    const top3Pct = top3.reduce((s, t) => s + t.pct, 0);
-    return { top3, top3Pct, total: totalValue };
-  }, [league.teams]);
 
   const avgNow = useMemo(() => {
     const sum = quadrantTeams.reduce((s, t) => s + t.now, 0);
@@ -138,11 +102,13 @@ function EconomyOverview({ league }: { league: League }) {
       const bestPick = [...team.picks].sort((a, b) => (getPickValue(b) || b.value) - (getPickValue(a) || a.value))[0];
       return { team, firstCount: firstRounds.length, totalValue, bestPick, pickCount: team.picks.length };
     });
+    const leagueTotal = data.reduce((s, d) => s + d.totalValue, 0);
     const sorted = [...data].sort((a, b) => b.totalValue - a.totalValue);
     const q75 = sorted[Math.floor(sorted.length * 0.25)]?.totalValue ?? 0;
     const q25 = sorted[Math.floor(sorted.length * 0.75)]?.totalValue ?? 0;
     return sorted.map(d => ({
       ...d,
+      leaguePct: leagueTotal > 0 ? Math.round((d.totalValue / leagueTotal) * 100) : 0,
       ammo: d.totalValue >= q75 ? "Loaded" as const : d.totalValue <= q25 ? "Dry" as const : "Average" as const,
     }));
   }, [league.teams, getPickValue]);
@@ -253,48 +219,6 @@ function EconomyOverview({ league }: { league: League }) {
         </div>
       </Card>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Card className="p-5 rounded-2xl" data-testid="parity-score">
-          <div className="flex items-center justify-between mb-1.5">
-            <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">League Parity</p>
-            <div className="flex-shrink-0 ml-3">
-              <span className="text-3xl font-black">{parity.score}</span>
-              <span className="text-lg text-muted-foreground">/100</span>
-            </div>
-          </div>
-          <p className="text-xs text-muted-foreground mb-3 leading-relaxed">{parity.description}</p>
-          <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
-            <div
-              className={`h-full rounded-full transition-all ${parity.score >= 70 ? "bg-emerald-500" : parity.score >= 40 ? "bg-yellow-500" : "bg-red-500"}`}
-              style={{ width: `${parity.score}%` }}
-            />
-          </div>
-          <Badge variant="outline" className={`mt-2.5 ${parity.score >= 70 ? "text-emerald-600 border-emerald-300" : parity.score >= 40 ? "text-yellow-600 border-yellow-300" : "text-red-600 border-red-300"}`}>
-            {parity.label} Parity
-          </Badge>
-        </Card>
-
-        <Card className="p-5 rounded-2xl" data-testid="pick-monopoly">
-          <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider mb-3">Picks Monopoly</p>
-          <div className="space-y-2">
-            {pickMonopoly.top3.map((t, i) => (
-              <div key={i} className="flex items-center justify-between">
-                <span className="text-sm font-medium">{t.owner}</span>
-                <div className="flex items-center gap-2">
-                  <div className="w-24 h-1.5 bg-muted rounded-full overflow-hidden">
-                    <div className="h-full bg-[#d4af37] rounded-full" style={{ width: `${t.pct * 3}%` }} />
-                  </div>
-                  <span className="text-xs font-bold text-[#d4af37] w-8 text-right">{t.pct}%</span>
-                </div>
-              </div>
-            ))}
-          </div>
-          <p className="text-xs text-muted-foreground mt-3 pt-2 border-t border-border">
-            Top 3 control <span className="font-bold text-foreground">{pickMonopoly.top3Pct}%</span> of all pick value
-          </p>
-        </Card>
-      </div>
-
       <div>
         <h3 className="text-base font-bold text-foreground">Pick Inventory</h3>
         <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
@@ -310,6 +234,7 @@ function EconomyOverview({ league }: { league: League }) {
                 <th className="text-center p-3 text-[11px] font-bold text-muted-foreground uppercase tracking-wider">1sts (3yr)</th>
                 <th className="text-center p-3 text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Total Picks</th>
                 <th className="text-center p-3 text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Pick Value</th>
+                <th className="text-center p-3 text-[11px] font-bold text-muted-foreground uppercase tracking-wider">% of League</th>
                 <th className="text-left p-3 text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Best Pick</th>
                 <th className="text-center p-3 text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Ammo</th>
               </tr>
@@ -344,6 +269,14 @@ function EconomyOverview({ league }: { league: League }) {
                   <td className="p-3 text-center font-bold">{d.firstCount}</td>
                   <td className="p-3 text-center">{d.pickCount}</td>
                   <td className="p-3 text-center font-mono text-xs">{d.totalValue.toLocaleString()}</td>
+                  <td className="p-3">
+                    <div className="flex items-center justify-center gap-2">
+                      <div className="w-16 h-1.5 bg-muted rounded-full overflow-hidden">
+                        <div className="h-full bg-[#d4af37] rounded-full" style={{ width: `${d.leaguePct * 3}%` }} />
+                      </div>
+                      <span className="text-xs font-bold text-[#d4af37] w-7 text-right">{d.leaguePct}%</span>
+                    </div>
+                  </td>
                   <td className="p-3 text-xs">
                     {d.bestPick ? formatPickLabel(d.bestPick) : "N/A"}
                   </td>
