@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -11,23 +11,25 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import { useSleeper } from "@/contexts/SleeperContext";
 import { useValueModel } from "@/contexts/ValueModelContext";
+import type { RankedPlayer } from "@/contexts/ValueModelContext";
 import { getSleeperPlayers } from "@/lib/sleeperApi";
 import { submitWaiverClaim } from "@/services/sleeperAuthedApi";
 import { getSleeperSession, isSessionExpired, type SleeperSession } from "@/services/sleeperAuth";
 import {
   Waves, Zap, Users, DollarSign, Star, TrendingUp, TrendingDown,
   Minus, Lock, AlertCircle, RefreshCw, ChevronUp, ChevronDown,
-  Plus, CheckCircle2, ArrowLeft, Search, Trophy, Sprout, BarChart3, LayoutList,
+  Plus, CheckCircle2, ArrowLeft, Search, Trophy, Sprout, BarChart3, LayoutList, Layers, X,
 } from "lucide-react";
 
 const SLEEPER_API = "https://api.sleeper.app/v1";
 
 type TierFilter = "all" | "contender" | "bubble" | "rebuild";
 type SortKey = "tier" | "openSlots" | "faabPct" | "difference" | "leagueName";
-type WaiverView = "overview" | "league";
+type WaiverView = "overview" | "league" | "bulk";
 
 interface PlayerSummary {
   id: string;
@@ -538,6 +540,7 @@ export default function WaiverCommand() {
             {([
               { id: "overview" as const, icon: LayoutList, label: "Overview" },
               { id: "league"   as const, icon: BarChart3,  label: "League View" },
+              { id: "bulk"     as const, icon: Layers,     label: "Bulk Claims" },
             ]).map(({ id, icon: Icon, label }) => (
               <button
                 key={id}
@@ -742,6 +745,14 @@ export default function WaiverCommand() {
             </div>
           )}
         </div>
+      )}
+
+      {activeView === "bulk" && (
+        <BulkClaimsView
+          rows={rows}
+          dynastyPlayerList={dynastyPlayerList}
+          isFetching={isFetching}
+        />
       )}
 
       <ClaimPlayerModal row={claimRow} preAddId={claimPreAddId} onClose={() => { setClaimRow(null); setClaimPreAddId(null); }} />
@@ -1014,6 +1025,626 @@ function PositionBadge({ pos }: { pos: string }) {
     </span>
   );
 }
+
+// ─── Bulk Claims ───────────────────────────────────────────────────────────
+
+interface BulkScanRow {
+  leagueId: string;
+  leagueName: string;
+  leagueAvatar: string | null;
+  rosterId: number | null;
+  available: boolean;
+  openSlots: number;
+  rosterFull: boolean;
+  faabRemaining: number;
+  faabBudget: number;
+  waiverType: number;
+  suggestedDrop: PlayerSummary | null;
+  rosterPlayers: PlayerSummary[];
+  suggestedBid: number;
+  warnings: string[];
+}
+
+interface LeagueSel {
+  selected: boolean;
+  bid: number;
+  dropId: string;
+}
+
+function computeBulkScan(rows: WaiverRow[], player: RankedPlayer): BulkScanRow[] {
+  return rows
+    .filter(r => !r.loading && !r.error)
+    .map(r => {
+      const available = !r.rosteredPlayerIds.includes(player.sleeperId);
+      const rosterFull = r.openSlots === 0;
+      const isFaab = r.waiverType === 2;
+      const warnings: string[] = [];
+      if (!available) warnings.push("Already rostered");
+      else if (rosterFull) warnings.push("Roster full — must drop");
+      if (available && isFaab && r.faabRemaining === 0) warnings.push("$0 FAAB remaining");
+      const suggestedBid = isFaab
+        ? Math.min(Math.round(r.faabRemaining * 0.12), r.faabRemaining)
+        : 0;
+      return {
+        leagueId: r.leagueId,
+        leagueName: r.leagueName,
+        leagueAvatar: r.leagueAvatar,
+        rosterId: r.rosterId,
+        available,
+        openSlots: r.openSlots,
+        rosterFull,
+        faabRemaining: r.faabRemaining,
+        faabBudget: r.faabBudget,
+        waiverType: r.waiverType,
+        suggestedDrop: r.lowestOnTeam,
+        rosterPlayers: r.userRosterPlayers.slice().sort((a, b) => a.value - b.value),
+        suggestedBid,
+        warnings,
+      };
+    });
+}
+
+function BulkClaimsView({
+  rows,
+  dynastyPlayerList,
+  isFetching,
+}: {
+  rows: WaiverRow[];
+  dynastyPlayerList: RankedPlayer[];
+  isFetching: boolean;
+}) {
+  const [query, setQuery] = useState("");
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [targetPlayer, setTargetPlayer] = useState<RankedPlayer | null>(null);
+  const [scanResults, setScanResults] = useState<BulkScanRow[]>([]);
+  const [selections, setSelections] = useState<Record<string, LeagueSel>>({});
+  const [step, setStep] = useState<"search" | "review" | "confirm" | "results">("search");
+  const [submitting, setSubmitting] = useState(false);
+  const [submitResults, setSubmitResults] = useState<Record<string, { status: "pending" | "success" | "error"; message?: string }>>({});
+  const [session, setSession] = useState<SleeperSession | null>(() => getSleeperSession());
+  const searchRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => { setSession(getSleeperSession()); }, []);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
+        setShowSuggestions(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const suggestions = useMemo(() => {
+    if (!query.trim() || query.length < 2) return [];
+    const q = query.toLowerCase();
+    return dynastyPlayerList.filter(p => p.name.toLowerCase().includes(q)).slice(0, 8);
+  }, [query, dynastyPlayerList]);
+
+  const token = session && !isSessionExpired(session) ? session.token : null;
+
+  const handleSelectPlayer = (p: RankedPlayer) => {
+    setTargetPlayer(p);
+    setQuery(p.name);
+    setShowSuggestions(false);
+    const scan = computeBulkScan(rows, p);
+    setScanResults(scan);
+    const sel: Record<string, LeagueSel> = {};
+    for (const r of scan) {
+      const canClaim = r.available && !(r.waiverType === 2 && r.faabRemaining === 0);
+      sel[r.leagueId] = {
+        selected: canClaim,
+        bid: r.suggestedBid,
+        dropId: r.rosterFull && r.suggestedDrop ? r.suggestedDrop.id : "none",
+      };
+    }
+    setSelections(sel);
+    setStep("review");
+  };
+
+  const selectedLeagues = scanResults.filter(r => selections[r.leagueId]?.selected);
+  const totalFaab = selectedLeagues.reduce((s, r) => s + (r.waiverType === 2 ? (selections[r.leagueId]?.bid ?? 0) : 0), 0);
+  const highestBid = selectedLeagues.reduce((m, r) => Math.max(m, r.waiverType === 2 ? (selections[r.leagueId]?.bid ?? 0) : 0), 0);
+  const dropCount = selectedLeagues.filter(r => selections[r.leagueId]?.dropId !== "none").length;
+
+  const handleSubmit = async () => {
+    if (!token) return;
+    const initial: Record<string, { status: "pending" | "success" | "error" }> = {};
+    for (const r of selectedLeagues) initial[r.leagueId] = { status: "pending" };
+    setSubmitResults(initial);
+    setStep("results");
+    setSubmitting(true);
+    for (const r of selectedLeagues) {
+      const sel = selections[r.leagueId];
+      try {
+        await submitWaiverClaim(
+          r.leagueId,
+          r.rosterId!,
+          [targetPlayer!.sleeperId],
+          sel.dropId !== "none" ? [sel.dropId] : [],
+          r.waiverType === 2 ? sel.bid : 0
+        );
+        setSubmitResults(prev => ({ ...prev, [r.leagueId]: { status: "success" } }));
+      } catch (e: any) {
+        setSubmitResults(prev => ({ ...prev, [r.leagueId]: { status: "error", message: e.message ?? "Claim failed" } }));
+      }
+    }
+    setSubmitting(false);
+  };
+
+  const handleReset = () => {
+    setQuery(""); setTargetPlayer(null); setScanResults([]);
+    setSelections({}); setStep("search"); setSubmitResults({});
+  };
+
+  const posBadge: Record<string, string> = {
+    QB: "bg-rose-900/30 text-rose-400",
+    RB: "bg-emerald-900/30 text-emerald-400",
+    WR: "bg-sky-900/30 text-sky-400",
+    TE: "bg-yellow-900/30 text-yellow-400",
+  };
+  const posText: Record<string, string> = {
+    QB: "text-rose-400", RB: "text-emerald-400", WR: "text-sky-400", TE: "text-yellow-400",
+  };
+
+  // ── SEARCH ──
+  if (step === "search") {
+    return (
+      <div className="flex flex-col items-center gap-8 py-8 px-4 max-w-xl mx-auto">
+        <div className="text-center space-y-2">
+          <div className="mx-auto w-12 h-12 rounded-xl bg-[#d4af37]/10 ring-1 ring-[#d4af37]/25 flex items-center justify-center mb-3">
+            <Layers className="w-5 h-5 text-[#d4af37]" />
+          </div>
+          <h3 className="text-xl font-bold">Bulk Waiver Claims</h3>
+          <p className="text-sm text-muted-foreground leading-relaxed max-w-sm">
+            Search one player, scan every league, and submit waiver claims across your full dynasty portfolio.
+          </p>
+        </div>
+
+        {isFetching && (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#d4af37]" />
+            Still loading league data — you can search now, results will update.
+          </div>
+        )}
+
+        <div className="w-full relative" ref={searchRef}>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+            <Input
+              placeholder="Search player — e.g. Ty Chandler"
+              value={query}
+              onChange={e => { setQuery(e.target.value); setShowSuggestions(true); }}
+              onFocus={() => setShowSuggestions(true)}
+              className="pl-9 h-11 text-sm bg-[#0a1628] border-[#1a2d4a] focus:border-[#d4af37]/50"
+              data-testid="input-bulk-search"
+            />
+            {query && (
+              <button
+                onClick={() => { setQuery(""); setShowSuggestions(false); }}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+          {showSuggestions && suggestions.length > 0 && (
+            <div className="absolute top-full left-0 right-0 mt-1 z-50 bg-[#0c1929] border border-[#1a2d4a] rounded-lg shadow-xl overflow-hidden">
+              {suggestions.map(p => (
+                <button
+                  key={p.sleeperId}
+                  onClick={() => handleSelectPlayer(p)}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-white/[0.04] transition-colors text-left"
+                  data-testid={`suggestion-${p.sleeperId}`}
+                >
+                  <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded min-w-[26px] text-center", posBadge[p.pos] ?? "bg-muted text-muted-foreground")}>{p.pos}</span>
+                  <span className="flex-1 text-sm font-medium">{p.name}</span>
+                  <span className="text-xs text-muted-foreground">{p.team}</span>
+                  <span className="text-xs text-[#d4af37] font-semibold tabular-nums">{p.value.toLocaleString()}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          {showSuggestions && query.length >= 2 && suggestions.length === 0 && (
+            <div className="absolute top-full left-0 right-0 mt-1 z-50 bg-[#0c1929] border border-[#1a2d4a] rounded-lg shadow-xl px-4 py-3 text-sm text-muted-foreground">
+              No players found for "{query}"
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ── REVIEW ──
+  if (step === "review" && targetPlayer) {
+    const availableCount = scanResults.filter(r => r.available).length;
+    const eligibleCount = scanResults.filter(r => r.available && !r.warnings.some(w => w.includes("$0 FAAB"))).length;
+    const allEligibleSelected = eligibleCount > 0 && scanResults
+      .filter(r => r.available && !r.warnings.some(w => w.includes("$0 FAAB")))
+      .every(r => selections[r.leagueId]?.selected);
+
+    return (
+      <div className="space-y-4">
+        {/* Header */}
+        <div className="flex items-center gap-3 flex-wrap">
+          <button onClick={handleReset} className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
+            <ArrowLeft className="w-3.5 h-3.5" /> New Search
+          </button>
+          <div className="h-4 w-px bg-border/50" />
+          <div className="flex items-center gap-2">
+            <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded", posBadge[targetPlayer.pos] ?? "bg-muted text-muted-foreground")}>{targetPlayer.pos}</span>
+            <span className="font-bold text-foreground">{targetPlayer.name}</span>
+            <span className="text-xs text-muted-foreground">{targetPlayer.team} · {targetPlayer.value.toLocaleString()}</span>
+          </div>
+        </div>
+
+        {/* Summary pills */}
+        <div className="flex items-center gap-2 flex-wrap text-xs">
+          <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-semibold">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 flex-shrink-0" />
+            Available in {availableCount} of {scanResults.length} leagues
+          </span>
+          <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#d4af37]/10 text-[#d4af37] border border-[#d4af37]/20 font-semibold">
+            Eligible to claim: {eligibleCount}
+          </span>
+          <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-muted/50 text-muted-foreground border border-border/40 font-semibold">
+            Already rostered: {scanResults.length - availableCount}
+          </span>
+        </div>
+
+        {/* Auth warning */}
+        {!token && (
+          <div className="flex items-start gap-2.5 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
+            <AlertCircle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
+            <p className="text-xs text-amber-200/80">
+              <strong className="text-amber-300">Sleeper write access required</strong> — Go to{" "}
+              <strong>Connect</strong> → Sleeper Actions and sign in before submitting.
+            </p>
+          </div>
+        )}
+
+        {/* Results table */}
+        <Card className="overflow-hidden border-border/60 dark:border-[#1a2d4a]/80">
+          <div className="px-4 py-3 border-b border-border/40 dark:border-white/[0.06] flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <div className="w-[3px] h-4 rounded-full bg-[#d4af37]" />
+              <span className="text-sm font-bold">League Scan Results</span>
+              <span className="text-xs text-muted-foreground">{scanResults.length} leagues</span>
+            </div>
+            <button
+              onClick={() => {
+                const next = { ...selections };
+                scanResults.forEach(r => {
+                  const canClaim = r.available && !(r.waiverType === 2 && r.faabRemaining === 0);
+                  if (canClaim) next[r.leagueId] = { ...next[r.leagueId], selected: !allEligibleSelected };
+                });
+                setSelections(next);
+              }}
+              className="text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+            >
+              {allEligibleSelected ? "Deselect All" : "Select All Eligible"}
+            </button>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border/40 dark:border-white/[0.05] bg-muted/30 dark:bg-white/[0.02]">
+                  <th className="px-3 py-2 w-8" />
+                  <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground whitespace-nowrap">League</th>
+                  <th className="px-3 py-2 text-center text-[11px] font-semibold uppercase tracking-wider text-muted-foreground whitespace-nowrap">Status</th>
+                  <th className="px-3 py-2 text-center text-[11px] font-semibold uppercase tracking-wider text-muted-foreground whitespace-nowrap">Open Slots</th>
+                  <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground whitespace-nowrap">Suggested Drop</th>
+                  <th className="px-3 py-2 text-center text-[11px] font-semibold uppercase tracking-wider text-muted-foreground whitespace-nowrap">FAAB Left</th>
+                  <th className="px-3 py-2 text-center text-[11px] font-semibold uppercase tracking-wider text-muted-foreground whitespace-nowrap">Bid</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/30 dark:divide-white/[0.04]">
+                {scanResults.map(r => {
+                  const sel = selections[r.leagueId] ?? { selected: false, bid: 0, dropId: "none" };
+                  const isFaab = r.waiverType === 2;
+                  const canClaim = r.available && !(isFaab && r.faabRemaining === 0);
+                  return (
+                    <tr
+                      key={r.leagueId}
+                      className={cn(
+                        "transition-colors",
+                        sel.selected ? "bg-[#d4af37]/[0.03]" : "",
+                        !canClaim ? "opacity-55" : "hover:bg-white/[0.02]"
+                      )}
+                    >
+                      <td className="px-3 py-2.5">
+                        <Checkbox
+                          checked={sel.selected}
+                          disabled={!canClaim}
+                          onCheckedChange={v => setSelections(prev => ({ ...prev, [r.leagueId]: { ...prev[r.leagueId], selected: !!v } }))}
+                          data-testid={`check-${r.leagueId}`}
+                        />
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <div className="flex items-center gap-2 min-w-[140px]">
+                          {r.leagueAvatar ? (
+                            <img src={r.leagueAvatar} alt="" className="w-5 h-5 rounded-full flex-shrink-0" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                          ) : (
+                            <div className="w-5 h-5 rounded-full bg-[#0b3a7a]/30 flex items-center justify-center flex-shrink-0">
+                              <span className="text-[8px] font-bold text-blue-400">{r.leagueName[0]}</span>
+                            </div>
+                          )}
+                          <span className="text-xs font-medium truncate max-w-[130px]">{r.leagueName}</span>
+                        </div>
+                      </td>
+                      <td className="px-3 py-2.5 text-center">
+                        {!r.available ? (
+                          <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/20 whitespace-nowrap">Rostered</span>
+                        ) : isFaab && r.faabRemaining === 0 ? (
+                          <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold bg-muted/60 text-muted-foreground border border-border/40 whitespace-nowrap">$0 FAAB</span>
+                        ) : r.rosterFull ? (
+                          <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20 whitespace-nowrap">Must Drop</span>
+                        ) : (
+                          <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 whitespace-nowrap">Available</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2.5 text-center text-xs text-muted-foreground">{r.openSlots}</td>
+                      <td className="px-3 py-2.5">
+                        <Select
+                          value={sel.dropId}
+                          onValueChange={v => setSelections(prev => ({ ...prev, [r.leagueId]: { ...prev[r.leagueId], dropId: v } }))}
+                          disabled={!canClaim}
+                        >
+                          <SelectTrigger className="h-7 text-[11px] bg-[#0a1628] border-[#1a2d4a] min-w-[140px] focus:border-[#d4af37]/50">
+                            <SelectValue placeholder="No drop" />
+                          </SelectTrigger>
+                          <SelectContent className="bg-[#0c1929] border-[#1a2d4a]">
+                            <SelectItem value="none" className="text-xs text-muted-foreground">No drop</SelectItem>
+                            {r.rosterPlayers.map(p => (
+                              <SelectItem key={p.id} value={p.id} className="text-xs">
+                                <span className="flex items-center gap-1.5">
+                                  <span className={cn("text-[9px] font-bold", posText[p.position] ?? "text-muted-foreground")}>{p.position}</span>
+                                  {p.name}
+                                  <span className="text-muted-foreground text-[10px]">{p.value.toLocaleString()}</span>
+                                </span>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </td>
+                      <td className="px-3 py-2.5 text-center text-xs text-muted-foreground">
+                        {isFaab ? `$${r.faabRemaining}` : "—"}
+                      </td>
+                      <td className="px-3 py-2.5 text-center">
+                        {isFaab ? (
+                          <Input
+                            type="number"
+                            min={0}
+                            max={r.faabRemaining}
+                            value={sel.bid}
+                            disabled={!canClaim || !sel.selected}
+                            onChange={e => setSelections(prev => ({ ...prev, [r.leagueId]: { ...prev[r.leagueId], bid: Math.min(r.faabRemaining, Math.max(0, Number(e.target.value))) } }))}
+                            className="h-7 w-20 text-center text-xs bg-[#0a1628] border-[#1a2d4a] focus:border-[#d4af37]/50"
+                            data-testid={`input-bid-${r.leagueId}`}
+                          />
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+
+        {/* Footer */}
+        <div className="flex items-center justify-between gap-3 pt-1">
+          <span className="text-sm text-muted-foreground">
+            {selectedLeagues.length > 0 ? (
+              <><strong className="text-foreground">{selectedLeagues.length}</strong> league{selectedLeagues.length !== 1 ? "s" : ""} selected</>
+            ) : "No leagues selected"}
+          </span>
+          <Button
+            disabled={selectedLeagues.length === 0}
+            onClick={() => setStep("confirm")}
+            className="bg-[#d4af37] hover:bg-[#d4af37]/90 text-[#0a1628] font-semibold"
+            data-testid="btn-bulk-continue"
+          >
+            <Layers className="w-4 h-4 mr-2" />
+            Review {selectedLeagues.length} Claim{selectedLeagues.length !== 1 ? "s" : ""}
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── CONFIRM ──
+  if (step === "confirm" && targetPlayer) {
+    return (
+      <div className="max-w-2xl mx-auto space-y-5">
+        <button onClick={() => setStep("review")} className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
+          <ArrowLeft className="w-3.5 h-3.5" /> Back to Review
+        </button>
+
+        <Card className="p-5 border-border/60 dark:border-[#1a2d4a]/80 bg-gradient-to-b from-[#0c1929] to-[#0a1628]">
+          <div className="flex items-start gap-3 mb-5 pb-4 border-b border-white/[0.06]">
+            <div className="w-10 h-10 rounded-xl bg-[#d4af37]/10 ring-1 ring-[#d4af37]/25 flex items-center justify-center flex-shrink-0 mt-0.5">
+              <Layers className="w-5 h-5 text-[#d4af37]" />
+            </div>
+            <div>
+              <h3 className="font-bold text-foreground">Confirm Waiver Claims</h3>
+              <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                You are about to submit waiver claims for{" "}
+                <strong className="text-foreground">{targetPlayer.name}</strong>{" "}
+                (<span className={cn("font-semibold", posBadge[targetPlayer.pos] ? posText[targetPlayer.pos] : "")}>{targetPlayer.pos}</span>){" "}
+                in <strong className="text-foreground">{selectedLeagues.length}</strong> league{selectedLeagues.length !== 1 ? "s" : ""}.
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-3 mb-5">
+            {[
+              { label: "Total FAAB", value: `$${totalFaab}` },
+              { label: "Highest Bid",  value: `$${highestBid}` },
+              { label: "Requiring Drop", value: String(dropCount) },
+            ].map(({ label, value }) => (
+              <div key={label} className="p-3 rounded-lg bg-[#0b3a7a]/10 border border-[#0b3a7a]/20 text-center">
+                <div className="text-lg font-bold text-foreground tabular-nums">{value}</div>
+                <div className="text-[10px] text-muted-foreground mt-0.5">{label}</div>
+              </div>
+            ))}
+          </div>
+
+          <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
+            {selectedLeagues.map(r => {
+              const sel = selections[r.leagueId];
+              const drop = r.rosterPlayers.find(p => p.id === sel?.dropId);
+              const isFaab = r.waiverType === 2;
+              return (
+                <div key={r.leagueId} className="flex items-center gap-3 px-3 py-2 rounded-lg bg-white/[0.02] border border-white/[0.04]">
+                  {r.leagueAvatar ? (
+                    <img src={r.leagueAvatar} alt="" className="w-5 h-5 rounded-full flex-shrink-0" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                  ) : (
+                    <div className="w-5 h-5 rounded-full bg-[#0b3a7a]/30 flex items-center justify-center flex-shrink-0">
+                      <span className="text-[8px] font-bold text-blue-400">{r.leagueName[0]}</span>
+                    </div>
+                  )}
+                  <span className="text-xs font-medium flex-1 truncate">{r.leagueName}</span>
+                  <div className="flex items-center gap-3 text-xs flex-shrink-0">
+                    {isFaab && <span className="text-[#d4af37] font-semibold">Bid ${sel.bid}</span>}
+                    {drop && <span className="text-muted-foreground">Drop {drop.name}</span>}
+                    {!drop && <span className="text-muted-foreground/40">No drop</span>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+
+        {!token && (
+          <div className="flex items-start gap-2.5 p-3 rounded-lg bg-rose-500/10 border border-rose-500/20">
+            <AlertCircle className="w-4 h-4 text-rose-400 flex-shrink-0 mt-0.5" />
+            <p className="text-xs text-rose-200/80">
+              <strong className="text-rose-300">Cannot submit — Sleeper write access not connected.</strong>{" "}
+              Go to Connect and sign in via Sleeper Actions, then return here.
+            </p>
+          </div>
+        )}
+
+        <div className="flex items-center gap-3 justify-end">
+          <Button variant="outline" onClick={() => setStep("review")} className="border-[#1a2d4a]">
+            Back to Review
+          </Button>
+          <Button
+            disabled={!token || submitting}
+            onClick={handleSubmit}
+            className="bg-[#d4af37] hover:bg-[#d4af37]/90 text-[#0a1628] font-semibold"
+            data-testid="btn-bulk-submit"
+          >
+            <CheckCircle2 className="w-4 h-4 mr-2" />
+            Submit {selectedLeagues.length} Claim{selectedLeagues.length !== 1 ? "s" : ""}
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── RESULTS ──
+  if (step === "results" && targetPlayer) {
+    const successCount = Object.values(submitResults).filter(r => r.status === "success").length;
+    const errorCount = Object.values(submitResults).filter(r => r.status === "error").length;
+    const pendingCount = Object.values(submitResults).filter(r => r.status === "pending").length;
+
+    return (
+      <div className="max-w-2xl mx-auto space-y-5">
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-2">
+            <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded", posBadge[targetPlayer.pos] ?? "bg-muted text-muted-foreground")}>{targetPlayer.pos}</span>
+            <span className="font-bold text-foreground">{targetPlayer.name}</span>
+          </div>
+          <div className="ml-auto">
+            <button onClick={handleReset} className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
+              <Search className="w-3 h-3" /> New Search
+            </button>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 flex-wrap text-xs">
+          {successCount > 0 && (
+            <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-semibold">
+              <CheckCircle2 className="w-3 h-3" /> {successCount} submitted
+            </span>
+          )}
+          {errorCount > 0 && (
+            <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/20 font-semibold">
+              <AlertCircle className="w-3 h-3" /> {errorCount} failed
+            </span>
+          )}
+          {pendingCount > 0 && (
+            <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-muted/50 text-muted-foreground border border-border/40 font-semibold">
+              <RefreshCw className="w-3 h-3 animate-spin" /> {pendingCount} pending
+            </span>
+          )}
+        </div>
+
+        <Card className="overflow-hidden border-border/60 dark:border-[#1a2d4a]/80">
+          <div className="divide-y divide-border/30 dark:divide-white/[0.04]">
+            {selectedLeagues.map(r => {
+              const result = submitResults[r.leagueId];
+              const sel = selections[r.leagueId];
+              const drop = r.rosterPlayers.find(p => p.id === sel?.dropId);
+              const isFaab = r.waiverType === 2;
+              return (
+                <div key={r.leagueId} className="flex items-center gap-3 px-4 py-3">
+                  <div className="flex-shrink-0 w-5 flex items-center justify-center">
+                    {!result || result.status === "pending" ? (
+                      <RefreshCw className="w-4 h-4 text-muted-foreground animate-spin" />
+                    ) : result.status === "success" ? (
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                    ) : (
+                      <AlertCircle className="w-4 h-4 text-rose-400" />
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                    {r.leagueAvatar ? (
+                      <img src={r.leagueAvatar} alt="" className="w-5 h-5 rounded-full flex-shrink-0" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                    ) : (
+                      <div className="w-5 h-5 rounded-full bg-[#0b3a7a]/30 flex items-center justify-center flex-shrink-0">
+                        <span className="text-[8px] font-bold text-blue-400">{r.leagueName[0]}</span>
+                      </div>
+                    )}
+                    <span className="text-xs font-medium truncate">{r.leagueName}</span>
+                  </div>
+                  <div className="flex items-center gap-3 text-xs text-muted-foreground flex-shrink-0">
+                    {isFaab && sel?.bid > 0 && <span className="text-[#d4af37] font-semibold">Bid ${sel.bid}</span>}
+                    {drop && <span>Drop {drop.name}</span>}
+                  </div>
+                  <div className="text-xs font-semibold flex-shrink-0 w-20 text-right">
+                    {!result || result.status === "pending" ? (
+                      <span className="text-muted-foreground">Submitting…</span>
+                    ) : result.status === "success" ? (
+                      <span className="text-emerald-400">Submitted</span>
+                    ) : (
+                      <span className="text-rose-400" title={result.message}>Failed</span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+
+        {!submitting && (
+          <p className="text-xs text-muted-foreground text-center">
+            Check Sleeper to confirm transactions processed. Claims may still be pending waiver resolution.
+          </p>
+        )}
+      </div>
+    );
+  }
+
+  return null;
+}
+
+// ─── PlayerAvatar ───────────────────────────────────────────────────────────
 
 function PlayerAvatar({
   id,
