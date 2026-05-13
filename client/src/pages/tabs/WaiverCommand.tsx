@@ -20,13 +20,14 @@ import { getSleeperSession, isSessionExpired, type SleeperSession } from "@/serv
 import {
   Waves, Zap, Users, DollarSign, Star, TrendingUp, TrendingDown,
   Minus, Lock, AlertCircle, RefreshCw, ChevronUp, ChevronDown,
-  Plus, CheckCircle2, ArrowLeft, Search, Trophy, Sprout, BarChart3,
+  Plus, CheckCircle2, ArrowLeft, Search, Trophy, Sprout, BarChart3, LayoutList,
 } from "lucide-react";
 
 const SLEEPER_API = "https://api.sleeper.app/v1";
 
 type TierFilter = "all" | "contender" | "bubble" | "rebuild";
 type SortKey = "tier" | "openSlots" | "faabPct" | "difference" | "leagueName";
+type WaiverView = "overview" | "league";
 
 interface PlayerSummary {
   id: string;
@@ -266,6 +267,7 @@ export default function WaiverCommand() {
   const [claimRow, setClaimRow] = useState<WaiverRow | null>(null);
   const [claimPreAddId, setClaimPreAddId] = useState<string | null>(null);
   const [detailRow, setDetailRow] = useState<WaiverRow | null>(null);
+  const [activeView, setActiveView] = useState<WaiverView>("overview");
 
   const openClaim = useCallback((row: WaiverRow, preAddId?: string) => {
     setClaimRow(row);
@@ -490,18 +492,6 @@ export default function WaiverCommand() {
     return sortAsc ? <ChevronUp className="w-3 h-3 text-[#d4af37]" /> : <ChevronDown className="w-3 h-3 text-[#d4af37]" />;
   };
 
-  if (detailRow) {
-    return (
-      <LeagueWaiverDetail
-        row={detailRow}
-        allRows={rows}
-        onBack={() => setDetailRow(null)}
-        onClaim={(preAddId) => openClaim(detailRow, preAddId)}
-        claimModal={<ClaimPlayerModal row={claimRow} preAddId={claimPreAddId} onClose={() => { setClaimRow(null); setClaimPreAddId(null); }} />}
-      />
-    );
-  }
-
   if (!isConnected) {
     return (
       <div className="flex items-center justify-center min-h-[50vh] px-4">
@@ -532,7 +522,7 @@ export default function WaiverCommand() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
           {lastFetched && (
             <span className="text-[11px] text-muted-foreground/60">
               Updated {Math.round((Date.now() - lastFetched) / 1000)}s ago
@@ -544,9 +534,37 @@ export default function WaiverCommand() {
               <span>Fetching leagues…</span>
             </div>
           )}
+          <div className="flex items-center gap-0.5 bg-muted/50 dark:bg-white/[0.04] rounded-lg p-0.5 border border-border/40 dark:border-white/[0.06]">
+            {([
+              { id: "overview" as const, icon: LayoutList, label: "Overview" },
+              { id: "league"   as const, icon: BarChart3,  label: "League View" },
+            ]).map(({ id, icon: Icon, label }) => (
+              <button
+                key={id}
+                onClick={() => {
+                  setActiveView(id);
+                  if (id === "league" && !detailRow) {
+                    const first = rows.find(r => !r.loading && !r.error);
+                    if (first) setDetailRow(first);
+                  }
+                }}
+                data-testid={`view-toggle-${id}`}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all",
+                  activeView === id
+                    ? "bg-background shadow text-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <Icon className="w-3.5 h-3.5" />
+                <span>{label}</span>
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
+      {activeView === "overview" && (<>
       {/* Sticky filter bar */}
       <div className="flex items-center gap-1.5 p-1 bg-muted/40 dark:bg-white/[0.04] rounded-xl border border-border/40 dark:border-white/[0.06] w-fit" data-testid="waiver-filter-bar">
         {FILTER_TABS.map((tab) => (
@@ -655,7 +673,7 @@ export default function WaiverCommand() {
                 </tr>
               )}
               {sorted.map((row) => (
-                <WaiverTableRow key={row.leagueId} row={row} onClaim={() => openClaim(row)} onView={() => setDetailRow(row)} />
+                <WaiverTableRow key={row.leagueId} row={row} onClaim={() => openClaim(row)} onView={() => { setDetailRow(row); setActiveView("league"); }} />
               ))}
             </tbody>
           </table>
@@ -676,6 +694,55 @@ export default function WaiverCommand() {
         })}
         <span className="text-muted-foreground/60">· Tier = roster value rank within each league</span>
       </div>
+      </>)}
+
+      {activeView === "league" && (
+        <div className="space-y-4">
+          {/* League picker */}
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 [scrollbar-width:none]">
+            {rows.filter(r => !r.loading && !r.error).map(r => (
+              <button
+                key={r.leagueId}
+                onClick={() => setDetailRow(r)}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all border flex-shrink-0",
+                  detailRow?.leagueId === r.leagueId
+                    ? "bg-[#d4af37]/15 border-[#d4af37]/40 text-[#d4af37]"
+                    : "bg-muted/40 border-border/40 text-muted-foreground hover:text-foreground hover:bg-muted/70"
+                )}
+              >
+                {r.leagueAvatar ? (
+                  <img src={r.leagueAvatar} alt="" className="w-4 h-4 rounded-full flex-shrink-0" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                ) : (
+                  <div className="w-4 h-4 rounded-full bg-[#0b3a7a]/30 flex items-center justify-center flex-shrink-0">
+                    <span className="text-[8px] font-bold text-[#0b3a7a] dark:text-blue-400">{r.leagueName[0]}</span>
+                  </div>
+                )}
+                {r.leagueName}
+              </button>
+            ))}
+          </div>
+
+          {detailRow ? (
+            <LeagueWaiverDetail
+              row={detailRow}
+              allRows={rows}
+              onBack={() => setActiveView("overview")}
+              onClaim={(preAddId) => openClaim(detailRow, preAddId)}
+              claimModal={<ClaimPlayerModal row={claimRow} preAddId={claimPreAddId} onClose={() => { setClaimRow(null); setClaimPreAddId(null); }} />}
+            />
+          ) : isFetching ? (
+            <div className="flex items-center justify-center py-16 text-muted-foreground text-sm gap-2">
+              <RefreshCw className="w-4 h-4 animate-spin text-[#d4af37]" />
+              <span>Loading leagues…</span>
+            </div>
+          ) : (
+            <div className="flex items-center justify-center py-16 text-muted-foreground text-sm">
+              Select a league above to view its detail.
+            </div>
+          )}
+        </div>
+      )}
 
       <ClaimPlayerModal row={claimRow} preAddId={claimPreAddId} onClose={() => { setClaimRow(null); setClaimPreAddId(null); }} />
     </div>
