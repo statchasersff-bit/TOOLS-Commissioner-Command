@@ -1,8 +1,8 @@
-import { useState, useMemo, useCallback } from "react";
+import { useMemo } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { SectionHeader } from "@/components/SectionHeader";
-import { getLeagueTeamTiers, getTierColor, getTierEmoji, isContenderTier, isRebuilderTier, computeNowScore, computeFutureScore, getDynastyWindowLabel as getQuadrantLabel } from "@/data/mockData";
+import { getLeagueTeamTiers, getTierColor, getTierEmoji, computeNowScore, computeFutureScore, getDynastyWindowLabel as getQuadrantLabel } from "@/data/mockData";
 import { useValueModel } from "@/contexts/ValueModelContext";
 import type { League, Team, Tier } from "@/types";
 import { formatPickLabel } from "@/types";
@@ -11,15 +11,6 @@ import {
   ScatterChart, Scatter, XAxis, YAxis, CartesianGrid,
   Tooltip as RechartsTooltip, ResponsiveContainer, ReferenceLine, ReferenceArea, Label
 } from "recharts";
-import { Package, BarChart3, Activity, AlertTriangle } from "lucide-react";
-
-type EconomySection = "overview" | "picks" | "liquidity";
-
-const SECTION_TABS: { id: EconomySection; label: string; icon: typeof BarChart3 }[] = [
-  { id: "overview", label: "Economy Overview", icon: BarChart3 },
-  { id: "picks", label: "Pick Concentration", icon: Package },
-  { id: "liquidity", label: "Trade Liquidity", icon: Activity },
-];
 
 function computeParityScore(teams: Team[]): { score: number; label: string; description: string } {
   const scores = teams.map(t => t.metrics.overall);
@@ -78,6 +69,7 @@ function DynastyWindowTooltip({ active, payload }: any) {
 }
 
 function EconomyOverview({ league }: { league: League }) {
+  const { getPickValue } = useValueModel();
   const tierMap = useMemo(() => getLeagueTeamTiers(league.teams), [league.teams]);
 
   const quadrantTeams: QuadrantTeam[] = useMemo(() => {
@@ -138,6 +130,30 @@ function EconomyOverview({ league }: { league: League }) {
     })),
     [quadrantTeams, avgNow, avgFuture]
   );
+
+  const pickData = useMemo(() => {
+    const data = league.teams.map(team => {
+      const firstRounds = team.picks.filter(p => p.round === 1);
+      const totalValue = team.picks.reduce((sum, p) => sum + (getPickValue(p) || p.value), 0);
+      const bestPick = [...team.picks].sort((a, b) => (getPickValue(b) || b.value) - (getPickValue(a) || a.value))[0];
+      return { team, firstCount: firstRounds.length, totalValue, bestPick, pickCount: team.picks.length };
+    });
+    const sorted = [...data].sort((a, b) => b.totalValue - a.totalValue);
+    const q75 = sorted[Math.floor(sorted.length * 0.25)]?.totalValue ?? 0;
+    const q25 = sorted[Math.floor(sorted.length * 0.75)]?.totalValue ?? 0;
+    return sorted.map(d => ({
+      ...d,
+      ammo: d.totalValue >= q75 ? "Loaded" as const : d.totalValue <= q25 ? "Dry" as const : "Average" as const,
+    }));
+  }, [league.teams, getPickValue]);
+
+  const ammoColor = (ammo: "Loaded" | "Average" | "Dry") => {
+    switch (ammo) {
+      case "Loaded": return "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 border-emerald-300 dark:border-emerald-700";
+      case "Average": return "bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-400 border-yellow-300 dark:border-yellow-700";
+      case "Dry": return "bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-400 border-red-300 dark:border-red-700";
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -278,41 +294,7 @@ function EconomyOverview({ league }: { league: League }) {
           </p>
         </Card>
       </div>
-    </div>
-  );
-}
 
-function PickConcentration({ league }: { league: League }) {
-  const { getPickValue } = useValueModel();
-
-  const pickData = useMemo(() => {
-    const data = league.teams.map(team => {
-      const firstRounds = team.picks.filter(p => p.round === 1);
-      const totalValue = team.picks.reduce((sum, p) => sum + (getPickValue(p) || p.value), 0);
-      const bestPick = [...team.picks].sort((a, b) => (getPickValue(b) || b.value) - (getPickValue(a) || a.value))[0];
-      return { team, firstCount: firstRounds.length, totalValue, bestPick, pickCount: team.picks.length };
-    });
-
-    const sorted = [...data].sort((a, b) => b.totalValue - a.totalValue);
-    const q75 = sorted[Math.floor(sorted.length * 0.25)]?.totalValue ?? 0;
-    const q25 = sorted[Math.floor(sorted.length * 0.75)]?.totalValue ?? 0;
-
-    return sorted.map(d => ({
-      ...d,
-      ammo: d.totalValue >= q75 ? "Loaded" as const : d.totalValue <= q25 ? "Dry" as const : "Average" as const,
-    }));
-  }, [league.teams, getPickValue]);
-
-  const ammoColor = (ammo: "Loaded" | "Average" | "Dry") => {
-    switch (ammo) {
-      case "Loaded": return "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 border-emerald-300 dark:border-emerald-700";
-      case "Average": return "bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-400 border-yellow-300 dark:border-yellow-700";
-      case "Dry": return "bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-400 border-red-300 dark:border-red-700";
-    }
-  };
-
-  return (
-    <div className="space-y-5">
       <div>
         <h3 className="text-base font-bold text-foreground">Pick Inventory</h3>
         <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
@@ -378,151 +360,11 @@ function PickConcentration({ league }: { league: League }) {
   );
 }
 
-type PosKey = "QB" | "RB" | "WR" | "TE";
-const POSITIONS: PosKey[] = ["QB", "RB", "WR", "TE"];
-
-function TradeLiquidity({ league }: { league: League }) {
-  const tierMap = useMemo(() => getLeagueTeamTiers(league.teams), [league.teams]);
-
-  const liquidityData = useMemo(() => {
-    const totalTeams = league.teams.length;
-    const contenders = league.teams.filter(t => isContenderTier(tierMap.get(t.id)?.tier ?? "Balanced")).length;
-    const rebuilders = league.teams.filter(t => isRebuilderTier(tierMap.get(t.id)?.tier ?? "Balanced")).length;
-    const midTeams = totalTeams - contenders - rebuilders;
-
-    const hasBuyers = contenders >= 2;
-    const hasSellers = rebuilders >= 2;
-    const hasMiddle = midTeams >= 2;
-    const diversityScore = (hasBuyers ? 30 : 0) + (hasSellers ? 30 : 0) + (hasMiddle ? 20 : 10);
-
-    const pickActivity = league.teams.reduce((sum, t) => sum + t.picks.length, 0);
-    const avgPicks = pickActivity / totalTeams;
-    const pickMovement = Math.min(20, Math.round((avgPicks / 8) * 20));
-
-    const score = Math.min(100, diversityScore + pickMovement);
-    const label = score >= 70 ? "Active" : score >= 40 ? "Moderate" : "Stagnant";
-
-    return { score, label, contenders, rebuilders, midTeams, totalTeams };
-  }, [league.teams, tierMap]);
-
-  const buyerSeller = useMemo(() => {
-    return league.teams.map(team => {
-      const tier = tierMap.get(team.id)?.tier ?? "Balanced";
-      const role = isContenderTier(tier) ? "Buyer" as const : isRebuilderTier(tier) ? "Seller" as const : "Neutral" as const;
-      return { team, tier, role };
-    }).sort((a, b) => {
-      const order = { Buyer: 0, Neutral: 1, Seller: 2 };
-      return order[a.role] - order[b.role];
-    });
-  }, [league.teams, tierMap]);
-
-  const roleColor = (role: "Buyer" | "Seller" | "Neutral") => {
-    switch (role) {
-      case "Buyer": return "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 border-emerald-300 dark:border-emerald-700";
-      case "Seller": return "bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-400 border-red-300 dark:border-red-700";
-      case "Neutral": return "bg-muted text-muted-foreground";
-    }
-  };
-
-  return (
-    <div className="space-y-5">
-      <div>
-        <h3 className="text-base font-bold text-foreground">Trade Liquidity</h3>
-        <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
-        <p className="text-xs text-muted-foreground mt-2">How active and balanced the trade market is</p>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Card className="p-5 rounded-2xl" data-testid="liquidity-score">
-          <div className="flex items-center justify-between mb-3">
-            <div>
-              <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Liquidity Score</p>
-              <p className="text-xs text-muted-foreground mt-1">Based on team role diversity and market balance</p>
-            </div>
-            <div className="text-right">
-              <span className="text-3xl font-black">{liquidityData.score}</span>
-              <span className="text-lg text-muted-foreground">/100</span>
-            </div>
-          </div>
-          <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
-            <div
-              className={`h-full rounded-full transition-all ${liquidityData.score >= 70 ? "bg-emerald-500" : liquidityData.score >= 40 ? "bg-yellow-500" : "bg-red-500"}`}
-              style={{ width: `${liquidityData.score}%` }}
-            />
-          </div>
-          <Badge variant="outline" className={`mt-2 ${liquidityData.score >= 70 ? "text-emerald-600 border-emerald-300" : liquidityData.score >= 40 ? "text-yellow-600 border-yellow-300" : "text-red-600 border-red-300"}`}>
-            {liquidityData.label}
-          </Badge>
-
-          <div className="grid grid-cols-3 gap-3 mt-4 pt-3 border-t border-border">
-            <div className="text-center">
-              <p className="text-lg font-black text-emerald-600 dark:text-emerald-400">{liquidityData.contenders}</p>
-              <p className="text-[10px] text-muted-foreground uppercase">Buyers</p>
-            </div>
-            <div className="text-center">
-              <p className="text-lg font-black text-muted-foreground">{liquidityData.midTeams}</p>
-              <p className="text-[10px] text-muted-foreground uppercase">Neutral</p>
-            </div>
-            <div className="text-center">
-              <p className="text-lg font-black text-red-600 dark:text-red-400">{liquidityData.rebuilders}</p>
-              <p className="text-[10px] text-muted-foreground uppercase">Sellers</p>
-            </div>
-          </div>
-        </Card>
-
-        <Card className="p-5 rounded-2xl" data-testid="buyer-seller-list">
-          <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider mb-3">Buyers vs Sellers</p>
-          <div className="space-y-1.5 max-h-[280px] overflow-y-auto">
-            {buyerSeller.map(({ team, tier, role }) => (
-              <div key={team.id} className="flex items-center justify-between py-1.5 px-2 rounded-lg hover:bg-muted/30 transition-colors" data-testid={`bs-${team.id}`}>
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className="text-sm font-medium truncate">{team.owner}</span>
-                  <Badge variant="outline" className={`text-[9px] ${getTierColor(tier)}`}>{getTierEmoji(tier)} {tier}</Badge>
-                </div>
-                <Badge variant="outline" className={`text-[10px] shrink-0 ${roleColor(role)}`}>
-                  <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1 ${role === "Buyer" ? "bg-emerald-500" : role === "Seller" ? "bg-red-500" : "bg-gray-400"}`} />
-                  {role}
-                </Badge>
-              </div>
-            ))}
-          </div>
-        </Card>
-      </div>
-    </div>
-  );
-}
-
 export function LeagueEconomy({ league }: { league: League }) {
-  const [activeSection, setActiveSection] = useState<EconomySection>("overview");
-
   return (
     <div className="space-y-8">
       <SectionHeader title="League Economy" subtitle="League-wide economic dynamics: power distribution, draft capital, and trade market health" />
-
-      <div className="flex items-center gap-2 flex-wrap" data-testid="economy-section-tabs">
-        {SECTION_TABS.map(tab => {
-          const Icon = tab.icon;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setActiveSection(tab.id)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-                activeSection === tab.id
-                  ? "bg-[#0b3a7a] text-white shadow-sm"
-                  : "bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground"
-              }`}
-              data-testid={`tab-economy-${tab.id}`}
-            >
-              <Icon className="w-3.5 h-3.5" />
-              {tab.label}
-            </button>
-          );
-        })}
-      </div>
-
-      {activeSection === "overview" && <EconomyOverview league={league} />}
-      {activeSection === "picks" && <PickConcentration league={league} />}
-      {activeSection === "liquidity" && <TradeLiquidity league={league} />}
+      <EconomyOverview league={league} />
     </div>
   );
 }
