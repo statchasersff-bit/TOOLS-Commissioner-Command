@@ -144,10 +144,7 @@ const LOGIN_CONTEXT_QUERY = `
 
 const CREATE_VERIFICATION_CODE_MUTATION = `
   mutation create_verification_code($email_or_phone: String!) {
-    create_verification_code(email_or_phone: $email_or_phone) {
-      type
-      value
-    }
+    create_verification_code(email_or_phone: $email_or_phone)
   }
 `;
 
