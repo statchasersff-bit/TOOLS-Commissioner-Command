@@ -7,6 +7,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useSleeper } from "@/contexts/SleeperContext";
 import { useValueModel } from "@/contexts/ValueModelContext";
 import { API_BASE } from "@/lib/apiBase";
+import { getSleeperSession, isSessionExpired } from "@/services/sleeperAuth";
+import { SleeperAuthCard } from "@/components/SleeperAuthCard";
 import {
   DollarSign,
   TrendingUp,
@@ -22,8 +24,6 @@ import {
   LogOut,
   ShieldCheck,
   RefreshCw,
-  Copy,
-  Check,
   ChevronRight,
   Flame,
   Target,
@@ -254,351 +254,7 @@ const TIER_CONFIG: Record<Tier, {
   },
 };
 
-// ─── Sleeper Login Gate ────────────────────────────────────────────────────────
 
-type GateMode = "checking" | "login" | "register" | "reset";
-
-const SLEEPER_API_BASE = "https://api.sleeper.app/v1";
-const VERIFY_DELAY_MS = 2 * 60 * 1000; // 2 minutes
-
-// Module-level: persists while the page is open, survives tab navigation
-let _pending: { sleeperId: string; password: string; leagueId: string; endTime: number } | null = null;
-
-function SleeperVerifyGate({ userId, username, onAuth }: { userId: string; username: string; onAuth: (token: string) => void }) {
-  const [mode, setMode] = useState<GateMode>("checking");
-  const [challengeCode, setChallengeCode] = useState<string | null>(null);
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const [countdown, setCountdown] = useState(0);
-  const [copied, setCopied] = useState(false);
-  const [error, setError] = useState("");
-  const [verifyFailed, setVerifyFailed] = useState(false);
-  const [leagues, setLeagues] = useState<{ league_id: string; name: string }[]>([]);
-  const [selectedLeagueId, setSelectedLeagueId] = useState<string>("");
-
-  async function loadChallenge() {
-    try {
-      const r = await fetch(`${API_BASE}/api/auth/challenge-current/${userId}`);
-      if (!r.ok) {
-        const r2 = await fetch(`${API_BASE}/api/auth/challenge/${userId}`);
-        const d = await r2.json();
-        setChallengeCode(d.code);
-      } else {
-        const d = await r.json();
-        setChallengeCode(d.code);
-      }
-    } catch { setError("Could not reach server."); }
-  }
-
-  async function loadLeagues() {
-    try {
-      const season = new Date().getFullYear().toString();
-      const r = await fetch(`${SLEEPER_API_BASE}/user/${userId}/leagues/nfl/${season}`);
-      if (r.ok) {
-        const data = await r.json();
-        setLeagues((data as any[]).map(l => ({ league_id: l.league_id, name: l.name })));
-      }
-    } catch {}
-  }
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const r = await fetch(`${API_BASE}/api/auth/finance-has-password/${userId}`);
-        const d = await r.json();
-        if (d.hasPassword) {
-          setMode("login");
-        } else {
-          await Promise.all([loadChallenge(), loadLeagues()]);
-          setMode("register");
-        }
-      } catch {
-        setError("Could not reach server.");
-        setMode("login");
-      }
-    })();
-  }, [userId]);
-
-  async function handleLogin() {
-    if (!password) { setError("Please enter your password."); return; }
-    setSubmitting(true); setError("");
-    try {
-      const r = await fetch(`${API_BASE}/api/auth/finance-login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sleeperId: userId, password }),
-      });
-      const data = await r.json();
-      if (!r.ok) { setError(data.error || "Login failed."); return; }
-      localStorage.setItem(tokenKey(userId), data.token);
-      onAuth(data.token);
-    } catch { setError("Network error. Please try again."); }
-    finally { setSubmitting(false); }
-  }
-
-  async function doVerify(pwd: string, leagueId: string) {
-    setSubmitting(true); setCountdown(0); setError(""); setVerifyFailed(false);
-    try {
-      const r = await fetch(`${API_BASE}/api/auth/finance-register`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sleeperId: userId, password: pwd, leagueId }),
-      });
-      const data = await r.json();
-      if (!r.ok) {
-        setError(data.error || "Verification failed. Make sure your Sleeper team name is saved correctly.");
-        setVerifyFailed(true);
-        return;
-      }
-      _pending = null;
-      localStorage.setItem(tokenKey(userId), data.token);
-      onAuth(data.token);
-    } catch {
-      setError("Network error. Please try again.");
-      setVerifyFailed(true);
-    }
-    finally { setSubmitting(false); }
-  }
-
-  function runCountdown(endTime: number, onDone: () => void) {
-    const tick = () => {
-      const rem = Math.ceil((endTime - Date.now()) / 1000);
-      if (rem <= 0) { setCountdown(0); onDone(); }
-      else { setCountdown(rem); setTimeout(tick, 1000); }
-    };
-    tick();
-  }
-
-  // Resume pending countdown when returning to this tab
-  useEffect(() => {
-    if (_pending && _pending.sleeperId === userId) {
-      const rem = _pending.endTime - Date.now();
-      if (rem <= 0) {
-        const { password: pwd, leagueId } = _pending;
-        doVerify(pwd, leagueId);
-      } else {
-        setSubmitting(true);
-        setCountdown(Math.ceil(rem / 1000));
-        runCountdown(_pending.endTime, () => {
-          if (_pending) doVerify(_pending.password, _pending.leagueId);
-        });
-      }
-    }
-  }, []);
-
-  async function handleRegister() {
-    if (!selectedLeagueId) { setError("Please select which league you changed your team name in."); return; }
-    if (password.length < 6) { setError("Password must be at least 6 characters."); return; }
-    if (password !== confirmPassword) { setError("Passwords don't match."); return; }
-    setError(""); setVerifyFailed(false);
-
-    const endTime = Date.now() + VERIFY_DELAY_MS;
-    _pending = { sleeperId: userId, password, leagueId: selectedLeagueId, endTime };
-    setSubmitting(true);
-    runCountdown(endTime, () => {
-      if (_pending) doVerify(_pending.password, _pending.leagueId);
-    });
-  }
-
-  function startReset() {
-    setMode("reset");
-    setPassword(""); setConfirmPassword(""); setError(""); setSelectedLeagueId("");
-    if (!challengeCode) loadChallenge();
-    if (leagues.length === 0) loadLeagues();
-  }
-
-  const isRegisterMode = mode === "register" || mode === "reset";
-
-  return (
-    <div className="flex items-center justify-center min-h-[60vh] px-4">
-      <Card className="p-8 w-full max-w-md space-y-6">
-
-        {/* Header */}
-        <div className="text-center space-y-2">
-          <div className="w-14 h-14 rounded-2xl bg-[#0b3a7a]/10 dark:bg-blue-400/10 flex items-center justify-center mx-auto">
-            <ShieldCheck className="w-7 h-7 text-[#0b3a7a] dark:text-blue-400" />
-          </div>
-          {mode === "checking" && <><h3 className="text-lg font-bold">Finance Account</h3><p className="text-sm text-muted-foreground">Loading…</p></>}
-          {mode === "login" && <><h3 className="text-lg font-bold">Sign In</h3><p className="text-sm text-muted-foreground">Welcome back, <span className="font-semibold text-foreground">@{username}</span></p></>}
-          {mode === "register" && <><h3 className="text-lg font-bold">Create Finance Password</h3><p className="text-sm text-muted-foreground">Set a password to protect your finances. First, verify you own <span className="font-semibold text-foreground">@{username}</span>.</p></>}
-          {mode === "reset" && <><h3 className="text-lg font-bold">Reset Password</h3><p className="text-sm text-muted-foreground">Verify your Sleeper identity to set a new password for <span className="font-semibold text-foreground">@{username}</span>.</p></>}
-        </div>
-
-        {/* Loading spinner */}
-        {mode === "checking" && (
-          <div className="flex justify-center py-4"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
-        )}
-
-        {/* Login form */}
-        {mode === "login" && (
-          <div className="space-y-4">
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-foreground">Password</label>
-              <Input
-                type="password"
-                value={password}
-                onChange={e => { setPassword(e.target.value); setError(""); }}
-                placeholder="Enter your Finance password"
-                onKeyDown={e => e.key === "Enter" && handleLogin()}
-                data-testid="input-finance-password"
-              />
-            </div>
-            {error && (
-              <div className="flex items-start gap-2 text-sm text-red-500 bg-red-50 dark:bg-red-950/20 border border-red-200/50 dark:border-red-800/30 rounded-lg px-3 py-2.5" data-testid="text-login-error">
-                <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" /><span>{error}</span>
-              </div>
-            )}
-            <Button className="w-full" onClick={handleLogin} disabled={submitting || !password} data-testid="button-finance-login">
-              {submitting ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />Signing in…</> : "Sign In"}
-            </Button>
-            <button onClick={startReset} className="w-full text-xs text-muted-foreground hover:text-foreground text-center transition-colors" data-testid="button-forgot-password">
-              Forgot password? Reset via Sleeper verification
-            </button>
-          </div>
-        )}
-
-        {/* Register / Reset form */}
-        {isRegisterMode && (
-          <div className="space-y-4">
-
-            {/* ── Waiting state (countdown or verifying) ── */}
-            {submitting ? (
-              <div className="space-y-4">
-                <div className="rounded-xl border border-border/60 bg-muted/30 px-4 py-5 text-center space-y-3">
-                  {countdown > 0 ? (
-                    <>
-                      <Loader2 className="w-7 h-7 animate-spin text-[#0b3a7a] dark:text-blue-400 mx-auto" />
-                      <p className="text-sm font-semibold text-foreground">Giving Sleeper's API time to update…</p>
-                      <p className="text-3xl font-mono font-bold text-[#0b3a7a] dark:text-blue-300" data-testid="text-countdown">
-                        {Math.floor(countdown / 60)}:{String(countdown % 60).padStart(2, "0")}
-                      </p>
-                      <p className="text-xs text-muted-foreground">Feel free to browse other tabs. We'll check automatically when the timer ends.</p>
-                    </>
-                  ) : (
-                    <>
-                      <Loader2 className="w-7 h-7 animate-spin text-[#0b3a7a] dark:text-blue-400 mx-auto" />
-                      <p className="text-sm font-semibold text-foreground">Checking Sleeper now…</p>
-                    </>
-                  )}
-                </div>
-                {challengeCode && (
-                  <p className="text-[11px] text-muted-foreground text-center">
-                    Your code: <span className="font-mono font-bold text-foreground">{challengeCode}</span>
-                  </p>
-                )}
-              </div>
-            ) : (
-              <>
-                {/* ── Full form ── */}
-
-                {/* Challenge code */}
-                {challengeCode ? (
-                  <div className="space-y-3">
-                    <div className="space-y-2">
-                      <p className="text-[11px] text-muted-foreground text-center font-medium uppercase tracking-wide">Step 1: Verify your Sleeper account</p>
-                      <div className="flex items-center gap-2">
-                        <div className="flex-1 bg-muted/50 rounded-xl border border-border/60 px-4 py-3 text-center">
-                          <span className="text-2xl font-mono font-bold tracking-widest text-[#0b3a7a] dark:text-blue-300" data-testid="text-challenge-code">{challengeCode}</span>
-                        </div>
-                        <button onClick={() => { navigator.clipboard.writeText(challengeCode!); setCopied(true); setTimeout(() => setCopied(false), 2000); }} className="p-3 rounded-xl border border-border/60 hover:bg-muted/50 transition-colors text-muted-foreground" data-testid="button-copy-code">
-                          {copied ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
-                        </button>
-                        <button onClick={() => { setChallengeCode(null); loadChallenge(); }} className="p-3 rounded-xl border border-border/60 hover:bg-muted/50 transition-colors text-muted-foreground" data-testid="button-refresh-code">
-                          <RefreshCw className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-                    <ol className="space-y-1.5 text-sm">
-                      {[
-                        <>Open Sleeper → go to any of your leagues → tap <strong>Team Settings</strong></>,
-                        <>Set your <strong>Team Name</strong> to: <code className="bg-muted px-1.5 py-0.5 rounded text-xs font-mono">{challengeCode}</code></>,
-                        <>Hit <strong>Save</strong>. Sleeper's API may take <strong>1-2 minutes</strong> to update. If verify fails, wait and try again. You can rename back after.</>,
-                      ].map((step, i) => (
-                        <li key={i} className="flex gap-3">
-                          <span className="w-5 h-5 rounded-full bg-[#0b3a7a]/10 dark:bg-blue-400/10 text-[#0b3a7a] dark:text-blue-400 flex items-center justify-center text-[11px] font-bold flex-shrink-0 mt-0.5">{i + 1}</span>
-                          <span className="text-muted-foreground leading-snug">{step}</span>
-                        </li>
-                      ))}
-                    </ol>
-                  </div>
-                ) : (
-                  <div className="flex justify-center py-2"><Loader2 className="w-4 h-4 animate-spin text-muted-foreground" /></div>
-                )}
-
-                {/* League picker */}
-                <div className="space-y-2 pt-1">
-                  <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide">Step 2: Select the league you changed</p>
-                  {leagues.length > 0 ? (
-                    <Select value={selectedLeagueId} onValueChange={v => { setSelectedLeagueId(v); setError(""); }} data-testid="select-league">
-                      <SelectTrigger className="w-full" data-testid="trigger-league-picker">
-                        <SelectValue placeholder="Choose a league…" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {leagues.map(l => (
-                          <SelectItem key={l.league_id} value={l.league_id} data-testid={`option-league-${l.league_id}`}>
-                            {l.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  ) : (
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" /><span>Loading your leagues…</span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Password fields */}
-                <div className="space-y-2 pt-1">
-                  <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide">Step 3: {mode === "reset" ? "Set new password" : "Create a password"}</p>
-                  <Input
-                    type="password"
-                    value={password}
-                    onChange={e => { setPassword(e.target.value); setError(""); }}
-                    placeholder="New password (min. 6 characters)"
-                    data-testid="input-new-password"
-                  />
-                  <Input
-                    type="password"
-                    value={confirmPassword}
-                    onChange={e => { setConfirmPassword(e.target.value); setError(""); }}
-                    placeholder="Confirm password"
-                    data-testid="input-confirm-password"
-                  />
-                </div>
-
-                {error && (
-                  <div className="flex items-start gap-2 text-sm text-red-500 bg-red-50 dark:bg-red-950/20 border border-red-200/50 dark:border-red-800/30 rounded-lg px-3 py-2.5" data-testid="text-register-error">
-                    <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" /><span>{error}</span>
-                  </div>
-                )}
-
-                {verifyFailed ? (
-                  <Button className="w-full" onClick={handleRegister} data-testid="button-finance-retry">
-                    Try Again
-                  </Button>
-                ) : (
-                  <Button className="w-full" onClick={handleRegister} disabled={!password || !confirmPassword || !challengeCode || !selectedLeagueId} data-testid="button-finance-register">
-                    {mode === "reset" ? "Verify & Reset Password" : "Verify & Create Password"}
-                  </Button>
-                )}
-
-                {mode === "reset" && (
-                  <button onClick={() => { setMode("login"); setError(""); }} className="w-full text-xs text-muted-foreground hover:text-foreground text-center transition-colors" data-testid="button-back-to-login">
-                    ← Back to Sign In
-                  </button>
-                )}
-              </>
-            )}
-          </div>
-        )}
-
-        <p className="text-[11px] text-muted-foreground text-center">Your session stays unlocked for 90 days</p>
-      </Card>
-    </div>
-  );
-}
 
 // ─── Main Finance Tab ─────────────────────────────────────────────────────────
 
@@ -616,11 +272,6 @@ export function FinanceTab() {
   const [collapsedTiers, setCollapsedTiers] = useState<Set<string>>(() => new Set(["elite", "bubble", "rebuild"]));
   const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({}); 
 
-  // Track whether Sleeper was already connected at the time this component mounted.
-  // If it was not connected at mount (i.e. the user actively connects during this session),
-  // we do NOT auto-restore the Finance token — they must enter their password manually.
-  const initiallyConnectedRef = useRef(isConnected);
-
   const dynastyLeagues = leagues.filter(l => l.status !== "archived");
 
   // Only show leagues where the user actually has a roster.
@@ -631,21 +282,46 @@ export function FinanceTab() {
     return true;
   });
 
+  // Auto-exchange: if a valid Sleeper OTP session exists for this user, trade it for a finance JWT.
   useEffect(() => {
     if (!user?.userId) return;
-    // Only auto-restore the Finance token when Sleeper was already connected at mount
-    // (page reload with cached session). If the user just connected Sleeper during this
-    // session, require them to enter their Finance password explicitly.
-    if (!initiallyConnectedRef.current) {
+    const sess = getSleeperSession();
+    if (sess && !isSessionExpired(sess) && sess.userId === user.userId) {
+      const cached = localStorage.getItem(tokenKey(user.userId));
+      if (cached) { setToken(cached); setAuthChecked(true); return; }
+      fetch(`${API_BASE}/api/auth/sleeper-exchange`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sleeperId: user.userId }),
+      })
+        .then(r => r.json())
+        .then(d => { if (d.token) { localStorage.setItem(tokenKey(user.userId!), d.token); setToken(d.token); } })
+        .catch(() => {})
+        .finally(() => setAuthChecked(true));
+    } else {
       setAuthChecked(true);
-      return;
     }
-    const stored = localStorage.getItem(tokenKey(user.userId));
-    setToken(stored);
-    setAuthChecked(true);
   }, [user?.userId]);
 
-  function handleAuth(t: string) { setToken(t); setAuthChecked(true); }
+  // Poll for a new Sleeper session while the gate is showing (e.g. user just connected via OTP).
+  useEffect(() => {
+    if (token || !user?.userId) return;
+    const id = setInterval(() => {
+      const sess = getSleeperSession();
+      if (!sess || isSessionExpired(sess) || sess.userId !== user.userId) return;
+      const cached = localStorage.getItem(tokenKey(user.userId!));
+      if (cached) { setToken(cached); clearInterval(id); return; }
+      fetch(`${API_BASE}/api/auth/sleeper-exchange`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sleeperId: user.userId }),
+      })
+        .then(r => r.json())
+        .then(d => { if (d.token) { localStorage.setItem(tokenKey(user.userId!), d.token); setToken(d.token); clearInterval(id); } })
+        .catch(() => {});
+    }, 1500);
+    return () => clearInterval(id);
+  }, [token, user?.userId]);
 
   function handleLock() {
     if (!user?.userId) return;
@@ -788,7 +464,20 @@ export function FinanceTab() {
   }
 
   if (!token) {
-    return <SleeperVerifyGate userId={user.userId} username={user.username} onAuth={handleAuth} />;
+    return (
+      <div className="max-w-xl mx-auto px-4 py-12 space-y-6">
+        <div className="text-center space-y-2 mb-4">
+          <div className="w-12 h-12 rounded-2xl bg-[#d4af37]/10 flex items-center justify-center mx-auto ring-1 ring-[#d4af37]/20">
+            <DollarSign className="w-6 h-6 text-[#d4af37]" />
+          </div>
+          <h3 className="text-lg font-bold">Connect Sleeper to Access Finances</h3>
+          <p className="text-sm text-muted-foreground max-w-sm mx-auto">
+            Connect your Sleeper account via the form below to unlock the league finance tracker. Your session is saved automatically.
+          </p>
+        </div>
+        <SleeperAuthCard />
+      </div>
+    );
   }
 
   if (loadingFinances) {
@@ -804,7 +493,7 @@ export function FinanceTab() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <ShieldCheck className="w-4 h-4 text-emerald-500" />
-          <span className="text-xs text-muted-foreground font-medium">Verified as @{user.username}</span>
+          <span className="text-xs text-muted-foreground font-medium">Connected as @{user.username}</span>
         </div>
         <Button
           size="sm"

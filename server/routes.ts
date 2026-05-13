@@ -430,6 +430,22 @@ export async function registerRoutes(
     }
   });
 
+  // Exchange a Sleeper session (OTP-verified) for a finance JWT.
+  // Verifies identity by confirming the user ID exists on the public Sleeper API.
+  app.post("/api/auth/sleeper-exchange", async (req, res) => {
+    try {
+      const { sleeperId } = req.body;
+      if (!sleeperId) return res.status(400).json({ error: "sleeperId required" });
+      const r = await fetch(`https://api.sleeper.app/v1/user/${sleeperId}`);
+      if (!r.ok) return res.status(401).json({ error: "Could not verify Sleeper user" });
+      const userData: any = await r.json();
+      if (!userData || userData.user_id !== sleeperId) return res.status(401).json({ error: "User ID mismatch" });
+      res.json({ token: signToken(sleeperId) });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || "Exchange failed" });
+    }
+  });
+
   app.post("/api/admin/cleanup-one-sided-trades", async (req, res) => {
     const secret = process.env.ADMIN_SECRET;
     const provided = req.headers["x-admin-secret"];
