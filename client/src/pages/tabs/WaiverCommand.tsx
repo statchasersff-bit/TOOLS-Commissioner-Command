@@ -20,12 +20,14 @@ interface PlayerSummary {
   id: string;
   name: string;
   position: string;
+  team: string;
   value: number;
 }
 
 interface WaiverRow {
   leagueId: string;
   leagueName: string;
+  leagueAvatar: string | null;
   format: string;
   scoringFormat: string;
   tier: "Contender" | "Bubble" | "Rebuild";
@@ -108,6 +110,7 @@ export default function WaiverCommand() {
     const skeletons: WaiverRow[] = leagues.map((lg) => ({
       leagueId:     lg.leagueId,
       leagueName:   lg.name,
+      leagueAvatar: lg.avatar ? `https://sleepercdn.com/avatars/thumbs/${lg.avatar}` : null,
       format:       lg.format,
       scoringFormat: lg.scoringFormat,
       tier:         "Bubble",
@@ -134,6 +137,7 @@ export default function WaiverCommand() {
           const base: WaiverRow = {
             leagueId:     lg.leagueId,
             leagueName:   lg.name,
+            leagueAvatar: lg.avatar ? `https://sleepercdn.com/avatars/thumbs/${lg.avatar}` : null,
             format:       lg.format,
             scoringFormat: lg.scoringFormat,
             tier:         "Bubble",
@@ -173,7 +177,7 @@ export default function WaiverCommand() {
             (p) => !rosteredIds.has(p.sleeperId) && validPos.has(p.pos)
           );
           const bestAvailable: PlayerSummary | null = freeAgents[0]
-            ? { id: freeAgents[0].sleeperId, name: freeAgents[0].name, position: freeAgents[0].pos, value: freeAgents[0].value }
+            ? { id: freeAgents[0].sleeperId, name: freeAgents[0].name, position: freeAgents[0].pos, team: freeAgents[0].team || "FA", value: freeAgents[0].value }
             : null;
 
           const userPlayers: string[] = userRoster?.players ?? [];
@@ -186,7 +190,7 @@ export default function WaiverCommand() {
               const p = playersDb[pid];
               const pos = p.fantasy_positions?.[0] || p.position;
               const value = valuesBySleeperId[pid] ?? 0;
-              return { id: pid, name: p.full_name || "Unknown", position: pos, value };
+              return { id: pid, name: p.full_name || "Unknown", position: pos, team: p.team || "FA", value };
             })
             .sort((a, b) => a.value - b.value);
 
@@ -467,10 +471,26 @@ function WaiverTableRow({ row }: { row: WaiverRow }) {
     <tr className="hover:bg-muted/30 dark:hover:bg-white/[0.025] transition-colors" data-testid={`row-league-${row.leagueId}`}>
       {/* League name */}
       <td className="px-4 py-3">
-        <div className="font-semibold text-foreground text-[13px] truncate max-w-[180px]" title={row.leagueName}>
-          {row.leagueName}
+        <div className="flex items-center gap-2.5">
+          {row.leagueAvatar ? (
+            <img
+              src={row.leagueAvatar}
+              alt=""
+              className="w-8 h-8 rounded-full flex-shrink-0 object-cover bg-muted ring-1 ring-border/40"
+              onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+            />
+          ) : (
+            <div className="w-8 h-8 rounded-full flex-shrink-0 bg-[#0b3a7a]/20 dark:bg-blue-900/40 flex items-center justify-center ring-1 ring-border/40">
+              <span className="text-[11px] font-bold text-[#0b3a7a] dark:text-blue-400 uppercase">{row.leagueName[0] ?? "?"}</span>
+            </div>
+          )}
+          <div className="min-w-0">
+            <div className="font-semibold text-foreground text-[13px] truncate max-w-[160px]" title={row.leagueName}>
+              {row.leagueName}
+            </div>
+            <div className="text-[11px] text-muted-foreground mt-0.5">{row.format} · {row.scoringFormat}</div>
+          </div>
         </div>
-        <div className="text-[11px] text-muted-foreground mt-0.5">{row.format} · {row.scoringFormat}</div>
       </td>
 
       {/* Tier */}
@@ -543,7 +563,10 @@ function WaiverTableRow({ row }: { row: WaiverRow }) {
             <div className="text-[13px] font-semibold text-foreground truncate max-w-[150px]">
               {row.bestAvailable.name}
             </div>
-            <PositionBadge pos={row.bestAvailable.position} />
+            <div className="flex items-center gap-1 mt-0.5">
+              <PositionBadge pos={row.bestAvailable.position} />
+              <span className="text-[11px] text-muted-foreground font-medium">{row.bestAvailable.team}</span>
+            </div>
           </div>
         ) : (
           <span className="text-xs text-muted-foreground">—</span>
@@ -570,7 +593,8 @@ function WaiverTableRow({ row }: { row: WaiverRow }) {
             </div>
             <div className="flex items-center gap-1 mt-0.5">
               <PositionBadge pos={row.lowestOnTeam.position} />
-              <span className="text-[10px] text-muted-foreground">{row.lowestOnTeam.value.toLocaleString()}</span>
+              <span className="text-[11px] text-muted-foreground font-medium">{row.lowestOnTeam.team}</span>
+              <span className="text-[10px] text-muted-foreground/60">· {row.lowestOnTeam.value.toLocaleString()}</span>
             </div>
           </div>
         ) : (
@@ -654,7 +678,7 @@ function PositionBadge({ pos }: { pos: string }) {
     QB: "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400",
     RB: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400",
     WR: "bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400",
-    TE: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400",
+    TE: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400",
   };
   return (
     <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded", colors[pos] ?? "bg-muted text-muted-foreground")}>
