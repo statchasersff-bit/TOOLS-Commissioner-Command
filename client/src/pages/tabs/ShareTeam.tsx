@@ -269,6 +269,7 @@ export function ShareTeam({ league, userTeam }: Props) {
         <Button size="sm" variant="outline" onClick={copyBlurb} data-testid="button-copy-blurb">
           <Share2 className="w-3.5 h-3.5 mr-1.5" /> Copy Blurb
         </Button>
+        <ToggleSwitch id="hide-values" label="Hide Values" checked={hideValues} onCheckedChange={setHideValues} />
       </div>
 
 
