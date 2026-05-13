@@ -384,8 +384,6 @@ export default function WaiverCommand() {
               <tr className="border-b border-border/40 dark:border-white/[0.05] bg-muted/30 dark:bg-white/[0.02]">
                 {[
                   { key: "leagueName" as SortKey, label: "League",          align: "left"   },
-                  { key: "tier"       as SortKey, label: "Tier",            align: "left"   },
-                  { key: null,                    label: "Playoff Odds",    align: "center" },
                   { key: "openSlots"  as SortKey, label: "Open Slots",      align: "center" },
                   { key: "faabPct"    as SortKey, label: "FAAB Remaining",  align: "center" },
                   { key: null,                    label: "Best Available",  align: "left"   },
@@ -413,7 +411,7 @@ export default function WaiverCommand() {
             <tbody className="divide-y divide-border/30 dark:divide-white/[0.04]">
               {sorted.length === 0 && !isFetching && (
                 <tr>
-                  <td colSpan={9} className="px-4 py-10 text-center text-sm text-muted-foreground">
+                  <td colSpan={7} className="px-4 py-10 text-center text-sm text-muted-foreground">
                     No leagues match this filter.
                   </td>
                 </tr>
@@ -445,7 +443,6 @@ export default function WaiverCommand() {
 }
 
 function WaiverTableRow({ row }: { row: WaiverRow }) {
-  const tierStyle = getTierAccent(row.tier);
   const diffColor = row.difference > 300
     ? "text-emerald-600 dark:text-emerald-400"
     : row.difference > 0
@@ -455,7 +452,7 @@ function WaiverTableRow({ row }: { row: WaiverRow }) {
   if (row.loading) {
     return (
       <tr className="animate-pulse">
-        {Array.from({ length: 9 }).map((_, i) => (
+        {Array.from({ length: 7 }).map((_, i) => (
           <td key={i} className="px-4 py-3">
             <Skeleton className="h-4 w-full rounded" />
           </td>
@@ -468,7 +465,7 @@ function WaiverTableRow({ row }: { row: WaiverRow }) {
     return (
       <tr className="opacity-60">
         <td className="px-4 py-3 font-medium text-foreground">{row.leagueName}</td>
-        <td colSpan={8} className="px-4 py-3">
+        <td colSpan={6} className="px-4 py-3">
           <span className="flex items-center gap-1.5 text-xs text-destructive">
             <AlertCircle className="w-3.5 h-3.5" />
             Failed to load league data
@@ -477,10 +474,6 @@ function WaiverTableRow({ row }: { row: WaiverRow }) {
       </tr>
     );
   }
-
-  const playoffOdds = row.tierRank > 0 && row.totalTeams > 0
-    ? Math.max(5, Math.round((1 - (row.tierRank - 1) / row.totalTeams) * 85))
-    : null;
 
   return (
     <tr className="hover:bg-muted/30 dark:hover:bg-white/[0.025] transition-colors" data-testid={`row-league-${row.leagueId}`}>
@@ -506,33 +499,6 @@ function WaiverTableRow({ row }: { row: WaiverRow }) {
             <div className="text-[11px] text-muted-foreground mt-0.5">{row.format} · {row.scoringFormat}</div>
           </div>
         </div>
-      </td>
-
-      {/* Tier */}
-      <td className="px-4 py-3">
-        <span className={cn(
-          "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold border",
-          tierStyle.bg, tierStyle.text, tierStyle.border
-        )}>
-          <span className={cn("w-1.5 h-1.5 rounded-full", tierStyle.dot)} />
-          {row.tier}
-        </span>
-      </td>
-
-      {/* Playoff odds */}
-      <td className="px-4 py-3 text-center">
-        {playoffOdds !== null ? (
-          <span className={cn(
-            "text-[13px] font-semibold",
-            playoffOdds >= 65 ? "text-emerald-600 dark:text-emerald-400" :
-            playoffOdds >= 40 ? "text-amber-600 dark:text-amber-400" :
-            "text-rose-600 dark:text-rose-400"
-          )}>
-            {playoffOdds}%
-          </span>
-        ) : (
-          <span className="text-muted-foreground text-xs">—</span>
-        )}
       </td>
 
       {/* Open slots */}
