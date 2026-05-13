@@ -794,15 +794,13 @@ function WaiverTableRow({ row, onClaim, onView }: { row: WaiverRow; onClaim: () 
       {/* Best available */}
       <td className="px-4 py-3">
         {row.bestAvailable ? (
-          <div>
-            <div className="text-[13px] font-semibold text-foreground truncate max-w-[150px]">
-              {row.bestAvailable.name}
-            </div>
-            <div className="flex items-center gap-1 mt-0.5">
-              <PositionBadge pos={row.bestAvailable.position} />
-              <span className="text-[11px] text-muted-foreground font-medium">{row.bestAvailable.team}</span>
-            </div>
-          </div>
+          <PlayerAvatar
+            id={row.bestAvailable.id}
+            name={row.bestAvailable.name}
+            pos={row.bestAvailable.position}
+            team={row.bestAvailable.team}
+            size="sm"
+          />
         ) : (
           <span className="text-xs text-muted-foreground">—</span>
         )}
@@ -822,16 +820,13 @@ function WaiverTableRow({ row, onClaim, onView }: { row: WaiverRow; onClaim: () 
       {/* Lowest on team */}
       <td className="px-4 py-3">
         {row.lowestOnTeam ? (
-          <div>
-            <div className="text-[13px] font-semibold text-muted-foreground truncate max-w-[150px]">
-              {row.lowestOnTeam.name}
-            </div>
-            <div className="flex items-center gap-1 mt-0.5">
-              <PositionBadge pos={row.lowestOnTeam.position} />
-              <span className="text-[11px] text-muted-foreground font-medium">{row.lowestOnTeam.team}</span>
-              <span className="text-[10px] text-muted-foreground/60">· {row.lowestOnTeam.value.toLocaleString()}</span>
-            </div>
-          </div>
+          <PlayerAvatar
+            id={row.lowestOnTeam.id}
+            name={row.lowestOnTeam.name}
+            pos={row.lowestOnTeam.position}
+            team={row.lowestOnTeam.team}
+            size="sm"
+          />
         ) : (
           <span className="text-xs text-muted-foreground">—</span>
         )}
@@ -949,6 +944,64 @@ function PositionBadge({ pos }: { pos: string }) {
     <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded", colors[pos] ?? "bg-muted text-muted-foreground")}>
       {pos}
     </span>
+  );
+}
+
+function PlayerAvatar({
+  id,
+  name,
+  pos,
+  team,
+  size = "sm",
+}: {
+  id: string;
+  name: string;
+  pos: string;
+  team: string;
+  size?: "sm" | "md";
+}) {
+  const posColors: Record<string, string> = {
+    QB: "text-rose-400",
+    RB: "text-emerald-400",
+    WR: "text-sky-400",
+    TE: "text-yellow-400",
+  };
+  const posColor = posColors[pos] ?? "text-muted-foreground";
+  const avatarSize = size === "md" ? "w-11 h-11" : "w-9 h-9";
+  const badgeSize  = size === "md" ? "w-[18px] h-[18px]" : "w-[14px] h-[14px]";
+  const nameSize   = size === "md" ? "text-[15px]" : "text-[13px]";
+  const metaSize   = size === "md" ? "text-[13px]" : "text-[11px]";
+
+  return (
+    <div className="flex items-center gap-2.5">
+      <div className="relative flex-shrink-0">
+        <div className={cn(avatarSize, "rounded-full overflow-hidden bg-[#0b3a7a]/40 ring-1 ring-white/10")}>
+          <img
+            src={`https://sleepercdn.com/content/nfl/players/thumb/${id}.jpg`}
+            alt={name}
+            className="w-full h-full object-cover object-top"
+            onError={(e) => { (e.target as HTMLImageElement).src = "https://sleepercdn.com/images/v2/icons/player_default.webp"; }}
+          />
+        </div>
+        {team && team !== "FA" && (
+          <div className={cn("absolute -bottom-0.5 -right-0.5 rounded-full overflow-hidden ring-[1.5px] ring-background bg-white flex items-center justify-center", badgeSize)}>
+            <img
+              src={`https://sleepercdn.com/images/team_logos/nfl/${team.toLowerCase()}.jpg`}
+              alt={team}
+              className="w-full h-full object-contain"
+              onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+            />
+          </div>
+        )}
+      </div>
+      <div className="min-w-0">
+        <div className={cn("font-bold text-foreground leading-tight truncate", nameSize)}>{name}</div>
+        <div className={cn("flex items-center gap-1.5 mt-0.5", metaSize)}>
+          <span className={cn("font-bold", posColor)}>{pos}</span>
+          <span className="text-muted-foreground font-medium">{team || "FA"}</span>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -1188,11 +1241,13 @@ function TopAddCard({
       </div>
       {player ? (
         <>
-          <div className="flex items-center gap-2 min-w-0">
-            <PositionBadge pos={player.pos} />
-            <span className="font-bold text-[14px] text-foreground truncate">{player.name}</span>
-            <span className="text-[11px] text-muted-foreground flex-shrink-0">{player.team}</span>
-          </div>
+          <PlayerAvatar
+            id={player.sleeperId}
+            name={player.name}
+            pos={player.pos}
+            team={player.team}
+            size="md"
+          />
           <div className="text-[11px] text-muted-foreground">{sub}</div>
           <button
             onClick={onClaim}
@@ -1465,11 +1520,13 @@ function LeagueWaiverDetail({
               {filtered.map((p) => (
                 <tr key={p.sleeperId} className="hover:bg-muted/30 dark:hover:bg-white/[0.025] transition-colors" data-testid={`row-player-${p.sleeperId}`}>
                   <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <PositionBadge pos={p.pos} />
-                      <span className="font-semibold text-[13px] text-foreground">{p.name}</span>
-                      <span className="text-[11px] text-muted-foreground">{p.team}</span>
-                    </div>
+                    <PlayerAvatar
+                      id={p.sleeperId}
+                      name={p.name}
+                      pos={p.pos}
+                      team={p.team}
+                      size="sm"
+                    />
                   </td>
                   <td className="px-4 py-3 text-center">
                     <span className="text-[13px] font-bold text-foreground">{p.dynastyValue > 0 ? p.dynastyValue.toLocaleString() : "—"}</span>
