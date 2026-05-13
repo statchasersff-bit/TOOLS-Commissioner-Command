@@ -2041,7 +2041,16 @@ function LeagueWaiverDetail({
       const ownedCount = row.rosterCountByPlayerId[ps.id] ?? 0;
       const ownershipPct = row.totalTeams > 0 ? Math.round((ownedCount / row.totalTeams) * 100) : 0;
 
-      const sleeperRosterPct = ps.ownedPct != null ? Math.round(ps.ownedPct) : -1;
+      let totalTeamsWithPlayer = 0;
+      let totalTeamsAcrossLeagues = 0;
+      allRows.forEach((r) => {
+        if (r.loading || r.error) return;
+        totalTeamsAcrossLeagues += r.totalTeams;
+        totalTeamsWithPlayer += (r.rosterCountByPlayerId[ps.id] ?? 0);
+      });
+      const sleeperRosterPct = totalTeamsAcrossLeagues > 0
+        ? Math.round((totalTeamsWithPlayer / totalTeamsAcrossLeagues) * 100)
+        : -1;
       return { sleeperId: ps.id, name: ps.name, pos: ps.position, team: ps.team, age, dynastyValue, winNowValue, userRosterPct, crossLeaguePct: ownershipPct, sleeperRosterPct };
     });
   }, [row, dynastyPlayerList, valuesBySleeperId, redraftValuesBySleeperId, allRows, totalLeaguesLoaded, allLeagueTeamCount]);
@@ -2211,7 +2220,7 @@ function LeagueWaiverDetail({
                   { key: "winNowValue"   as DetailSortKey, label: "Win-Now Val", align: "center" },
                   { key: "age"           as DetailSortKey, label: "Age",         align: "center" },
                   { key: "userRosterPct"     as DetailSortKey, label: "Your Leagues %",    align: "center" },
-                  { key: "sleeperRosterPct" as DetailSortKey, label: "Roster% on Sleeper", align: "center" },
+                  { key: "sleeperRosterPct" as DetailSortKey, label: "Portfolio Own%", align: "center" },
                   { key: null,                                label: "Claim",               align: "center" },
                 ] as { key: DetailSortKey | null; label: string; align: string }[]).map((col, i) => (
                   <th
