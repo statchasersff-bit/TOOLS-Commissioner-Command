@@ -4,7 +4,7 @@ import {
   BarChart2, Link2, DollarSign, LayoutDashboard, Users, Share2,
   Trophy, GitCompare, Coins, ArrowLeftRight, Database, Search,
   Calculator, Eye, LineChart, TrendingUp, Zap, Skull, ChevronDown,
-  LucideIcon,
+  LucideIcon, Waves,
 } from "lucide-react";
 import type { MainTabConfig } from "../types";
 import logoDark from "@assets/statchasers_logo_transparent_dark_1772764844282.png";
@@ -32,6 +32,7 @@ const MEGA_DATA: Record<string, MegaSection[]> = {
       items: [
         { subId: "connect",          label: "Connect Sleeper",  description: "Link your Sleeper account to sync leagues",    icon: Link2     },
         { subId: "portfolio-summary",label: "My Portfolio",      description: "Cross-league player exposure & metrics",       icon: BarChart2 },
+        { subId: "waiver-command",   label: "WaiverCommand",    description: "Cross-league waiver wire & FAAB dashboard",    icon: Waves     },
         { subId: "league-roi",       label: "Finances",          description: "League fees, dues & ROI tracking",             icon: DollarSign},
       ],
     },

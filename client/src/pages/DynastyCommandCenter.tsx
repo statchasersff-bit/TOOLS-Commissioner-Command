@@ -20,6 +20,7 @@ import logoDark from "@assets/statchasers_logo_transparent_dark_1772764844282.pn
 import logoLight from "@assets/statchasers_logo_transparent_light_1772764844283.png";
 
 import { PortfolioConnect, PortfolioSummary } from "./tabs/Portfolio";
+import WaiverCommand from "./tabs/WaiverCommand";
 import { DashboardOverview, DashboardSnapshot } from "./tabs/Dashboard";
 import { RosterComparison } from "./tabs/LeagueAnalyzer";
 import { RosterBreakdown } from "./tabs/TeamBreakdown";
@@ -267,6 +268,8 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
           return <PortfolioConnect onNavigate={navigateToSubTab} />;
         case "portfolio:portfolio-summary":
           return <PortfolioSummary />;
+        case "portfolio:waiver-command":
+          return <WaiverCommand />;
         case "portfolio:league-roi":
           return <FinanceTab />;
         default:
