@@ -594,8 +594,9 @@ export function FieldView({ league, userTeam }: { league: League; userTeam: Team
         </div>
       </div>
 
-      {/* ── Football Field ─────────────────────────────────────────────── */}
-      <div ref={fieldRef} className="relative rounded-2xl overflow-hidden border border-white/6 shadow-2xl">
+      {/* ── Football Field + Bench (captured together for export) ──────── */}
+      <div ref={fieldRef} className="space-y-4">
+      <div className="relative rounded-2xl overflow-hidden border border-white/6 shadow-2xl">
         <FieldBackground />
 
         {/* ── GM card — overlaid top-left on the field ─────────────────── */}
@@ -709,6 +710,7 @@ export function FieldView({ league, userTeam }: { league: League; userTeam: Team
           </div>
         </div>
       )}
+      </div>{/* ── end export capture wrapper ───────────────────────────────── */}
 
       {/* ── Legend ─────────────────────────────────────────────────────── */}
       <div className="pt-1 px-0.5">
