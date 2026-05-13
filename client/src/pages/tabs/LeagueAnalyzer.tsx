@@ -67,7 +67,7 @@ export function PowerRankings({ league }: AnalyzerProps) {
         </Tooltip>
       );
     }},
-    { key: "starters", header: "Starters", sortable: true, sortAccessor: (row: any) => row.metrics.starters, render: (row: any) => row.metrics.starters },
+    { key: "starters", header: "Win-Now", sortable: true, sortAccessor: (row: any) => row.metrics.starters, render: (row: any) => row.metrics.starters },
     { key: "depth", header: "Dynasty", sortable: true, sortAccessor: (row: any) => row.metrics.depth, render: (row: any) => row.metrics.depth },
     { key: "youth", header: "Youth", sortable: true, sortAccessor: (row: any) => row.metrics.youth, render: (row: any) => row.metrics.youth },
   ];
@@ -234,7 +234,7 @@ export function RosterComparison({ league }: AnalyzerProps) {
 
   const categories = [
     { key: "overall", label: "Overall" },
-    { key: "starters", label: "Starters" },
+    { key: "starters", label: "Win-Now" },
     { key: "depth", label: "Dynasty" },
     { key: "youth", label: "Youth" },
     { key: "qb", label: "QB" },
@@ -426,7 +426,7 @@ export function RosterComparison({ league }: AnalyzerProps) {
                               </span>
                             </div>
                             <div className="flex items-center justify-between">
-                              <span className="text-[9px] text-muted-foreground">Redraft</span>
+                              <span className="text-[9px] text-muted-foreground">Win-Now</span>
                               <span className={`text-[10px] font-bold tabular-nums ${col}`}>
                                 {Math.round(redVal).toLocaleString()}
                                 <span className="text-muted-foreground font-normal ml-1">#{redRank}</span>
