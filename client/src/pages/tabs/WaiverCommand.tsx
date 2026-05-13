@@ -15,10 +15,11 @@ import { cn } from "@/lib/utils";
 import { useSleeper } from "@/contexts/SleeperContext";
 import { useValueModel } from "@/contexts/ValueModelContext";
 import { getSleeperPlayers, claimPlayerOnSleeper } from "@/lib/sleeperApi";
+import { getSleeperSession, isSessionExpired, type SleeperSession } from "@/services/sleeperAuth";
 import {
   Waves, Zap, Users, DollarSign, Star, TrendingUp, TrendingDown,
   Minus, Lock, AlertCircle, RefreshCw, ChevronUp, ChevronDown,
-  Plus, CheckCircle2, Eye, EyeOff, KeyRound,
+  Plus, CheckCircle2,
 } from "lucide-react";
 
 const SLEEPER_API = "https://api.sleeper.app/v1";
@@ -754,12 +755,7 @@ function PositionBadge({ pos }: { pos: string }) {
 }
 
 function ClaimPlayerModal({ row, onClose }: { row: WaiverRow | null; onClose: () => void }) {
-  const { sleeperToken, loginWithPassword, clearToken } = useSleeper();
-
-  const [password, setPassword] = useState("");
-  const [showPw, setShowPw] = useState(false);
-  const [authLoading, setAuthLoading] = useState(false);
-  const [authError, setAuthError] = useState<string | null>(null);
+  const [session, setSession] = useState<SleeperSession | null>(() => getSleeperSession());
 
   const [selectedAddId, setSelectedAddId] = useState<string>("");
   const [selectedDropId, setSelectedDropId] = useState<string>("none");
@@ -771,35 +767,23 @@ function ClaimPlayerModal({ row, onClose }: { row: WaiverRow | null; onClose: ()
 
   useEffect(() => {
     if (!row) return;
+    setSession(getSleeperSession());
     setSelectedAddId(row.bestAvailable?.id ?? row.topAvailable[0]?.id ?? "");
     setSelectedDropId("none");
     setFaabBid(Math.min(10, row.faabRemaining));
-    setPassword("");
-    setAuthError(null);
     setSubmitError(null);
     setSuccess(false);
   }, [row]);
 
   if (!row) return null;
 
+  const token = session && !isSessionExpired(session) ? session.token : null;
   const isFaab = row.waiverType === 2;
   const selectedAdd = row.topAvailable.find((p) => p.id === selectedAddId) ?? row.bestAvailable ?? null;
   const selectedDrop = selectedDropId !== "none" ? row.userRosterPlayers.find((p) => p.id === selectedDropId) ?? null : null;
 
-  const handleLogin = async () => {
-    setAuthLoading(true);
-    setAuthError(null);
-    try {
-      await loginWithPassword(password);
-    } catch (e: any) {
-      setAuthError(e.message || "Login failed");
-    } finally {
-      setAuthLoading(false);
-    }
-  };
-
   const handleClaim = async () => {
-    if (!sleeperToken || !selectedAdd || !row.rosterId) return;
+    if (!token || !selectedAdd || !row.rosterId) return;
     setSubmitting(true);
     setSubmitError(null);
     try {
@@ -810,7 +794,7 @@ function ClaimPlayerModal({ row, onClose }: { row: WaiverRow | null; onClose: ()
         selectedDrop?.id ?? null,
         isFaab ? faabBid : null,
         row.waiverType,
-        sleeperToken
+        token
       );
       setSuccess(true);
     } catch (e: any) {
@@ -848,66 +832,66 @@ function ClaimPlayerModal({ row, onClose }: { row: WaiverRow | null; onClose: ()
             <p className="text-xs text-muted-foreground">Check Sleeper to confirm the transaction processed.</p>
             <Button variant="outline" size="sm" className="mt-2 border-[#1a2d4a]" onClick={onClose}>Close</Button>
           </div>
+        ) : !token ? (
+          <div className="space-y-4 py-2">
+            <div className="flex items-start gap-2.5 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
+              <AlertCircle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-xs font-semibold text-foreground">Sleeper write access required</p>
+                <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">
+                  Go to <strong className="text-foreground">Connect</strong> in the top nav and complete the{" "}
+                  <strong className="text-foreground">Sleeper Actions (write access)</strong> sign-in, then come back to claim.
+                </p>
+              </div>
+            </div>
+            <Button variant="outline" size="sm" className="w-full border-[#1a2d4a]" onClick={onClose}>Got it</Button>
+          </div>
         ) : (
           <>
-            {!sleeperToken ? (
-              <div className="space-y-4 py-2">
-                <div className="flex items-start gap-2.5 p-3 rounded-lg bg-[#0b3a7a]/15 border border-[#0b3a7a]/30">
-                  <KeyRound className="w-4 h-4 text-blue-400 flex-shrink-0 mt-0.5" />
-                  <div>
-                    <p className="text-xs font-semibold text-foreground">Sleeper login required</p>
-                    <p className="text-[11px] text-muted-foreground mt-0.5">Your password is used once to get a session token — it's never stored.</p>
-                  </div>
+            <div className="space-y-4 py-2">
+              <div className="flex items-center p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+                <div className="flex items-center gap-1.5 text-xs text-emerald-400 font-semibold">
+                  <CheckCircle2 className="w-3.5 h-3.5" /> Signed in as @{session!.display_name}
                 </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Password</Label>
-                  <div className="relative">
-                    <Input
-                      type={showPw ? "text" : "password"}
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      onKeyDown={(e) => e.key === "Enter" && password && handleLogin()}
-                      placeholder="Sleeper password"
-                      className="pr-9 bg-[#0a1628] border-[#1a2d4a] focus:border-[#d4af37]/50"
-                      data-testid="input-sleeper-password"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPw(!showPw)}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                    >
-                      {showPw ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                    </button>
-                  </div>
-                  {authError && <p className="text-xs text-destructive flex items-center gap-1"><AlertCircle className="w-3 h-3" />{authError}</p>}
-                </div>
-                <Button
-                  onClick={handleLogin}
-                  disabled={!password || authLoading}
-                  className="w-full bg-[#d4af37] hover:bg-[#d4af37]/90 text-[#0a1628] font-semibold"
-                  data-testid="btn-sleeper-login"
-                >
-                  {authLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin mr-1.5" /> : <KeyRound className="w-3.5 h-3.5 mr-1.5" />}
-                  {authLoading ? "Signing in…" : "Sign in to Sleeper"}
-                </Button>
               </div>
-            ) : (
-              <div className="space-y-4 py-2">
-                <div className="flex items-center justify-between p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
-                  <div className="flex items-center gap-1.5 text-xs text-emerald-400 font-semibold">
-                    <CheckCircle2 className="w-3.5 h-3.5" /> Signed in to Sleeper
-                  </div>
-                  <button onClick={clearToken} className="text-[11px] text-muted-foreground hover:text-foreground underline underline-offset-2">Sign out</button>
-                </div>
 
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Player to Add</Label>
-                  <Select value={selectedAddId} onValueChange={setSelectedAddId}>
-                    <SelectTrigger className="bg-[#0a1628] border-[#1a2d4a] focus:border-[#d4af37]/50 text-sm" data-testid="select-add-player">
-                      <SelectValue placeholder="Select player" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-[#0c1929] border-[#1a2d4a]">
-                      {row.topAvailable.map((p) => (
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Player to Add</Label>
+                <Select value={selectedAddId} onValueChange={setSelectedAddId}>
+                  <SelectTrigger className="bg-[#0a1628] border-[#1a2d4a] focus:border-[#d4af37]/50 text-sm" data-testid="select-add-player">
+                    <SelectValue placeholder="Select player" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-[#0c1929] border-[#1a2d4a]">
+                    {row.topAvailable.map((p) => (
+                      <SelectItem key={p.id} value={p.id} className="text-sm">
+                        <span className="flex items-center gap-2">
+                          <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded", {
+                            "bg-rose-900/30 text-rose-400": p.position === "QB",
+                            "bg-emerald-900/30 text-emerald-400": p.position === "RB",
+                            "bg-sky-900/30 text-sky-400": p.position === "WR",
+                            "bg-yellow-900/30 text-yellow-400": p.position === "TE",
+                          })}>{p.position}</span>
+                          {p.name}
+                          <span className="text-muted-foreground text-[11px]">{p.team} · {p.value.toLocaleString()}</span>
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Drop Player <span className="text-muted-foreground/50 normal-case font-normal">(optional)</span></Label>
+                <Select value={selectedDropId} onValueChange={setSelectedDropId}>
+                  <SelectTrigger className="bg-[#0a1628] border-[#1a2d4a] focus:border-[#d4af37]/50 text-sm" data-testid="select-drop-player">
+                    <SelectValue placeholder="No drop" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-[#0c1929] border-[#1a2d4a]">
+                    <SelectItem value="none" className="text-sm text-muted-foreground">No drop</SelectItem>
+                    {row.userRosterPlayers
+                      .slice()
+                      .sort((a, b) => a.value - b.value)
+                      .map((p) => (
                         <SelectItem key={p.id} value={p.id} className="text-sm">
                           <span className="flex items-center gap-2">
                             <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded", {
@@ -921,84 +905,52 @@ function ClaimPlayerModal({ row, onClose }: { row: WaiverRow | null; onClose: ()
                           </span>
                         </SelectItem>
                       ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Drop Player <span className="text-muted-foreground/50 normal-case font-normal">(optional)</span></Label>
-                  <Select value={selectedDropId} onValueChange={setSelectedDropId}>
-                    <SelectTrigger className="bg-[#0a1628] border-[#1a2d4a] focus:border-[#d4af37]/50 text-sm" data-testid="select-drop-player">
-                      <SelectValue placeholder="No drop" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-[#0c1929] border-[#1a2d4a]">
-                      <SelectItem value="none" className="text-sm text-muted-foreground">No drop</SelectItem>
-                      {row.userRosterPlayers
-                        .slice()
-                        .sort((a, b) => a.value - b.value)
-                        .map((p) => (
-                          <SelectItem key={p.id} value={p.id} className="text-sm">
-                            <span className="flex items-center gap-2">
-                              <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded", {
-                                "bg-rose-900/30 text-rose-400": p.position === "QB",
-                                "bg-emerald-900/30 text-emerald-400": p.position === "RB",
-                                "bg-sky-900/30 text-sky-400": p.position === "WR",
-                                "bg-yellow-900/30 text-yellow-400": p.position === "TE",
-                              })}>{p.position}</span>
-                              {p.name}
-                              <span className="text-muted-foreground text-[11px]">{p.team} · {p.value.toLocaleString()}</span>
-                            </span>
-                          </SelectItem>
-                        ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {isFaab && (
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                      FAAB Bid
-                      <span className="text-muted-foreground/60 normal-case font-normal ml-1">(${row.faabRemaining} remaining)</span>
-                    </Label>
-                    <div className="flex items-center gap-2">
-                      <Input
-                        type="number"
-                        min={0}
-                        max={row.faabRemaining}
-                        value={faabBid}
-                        onChange={(e) => setFaabBid(Math.min(row.faabRemaining, Math.max(0, Number(e.target.value))))}
-                        className="bg-[#0a1628] border-[#1a2d4a] focus:border-[#d4af37]/50 w-28"
-                        data-testid="input-faab-bid"
-                      />
-                      <span className="text-xs text-muted-foreground">/ ${row.faabBudget} budget</span>
-                    </div>
-                  </div>
-                )}
-
-                {submitError && (
-                  <div className="flex items-start gap-2 p-3 rounded-lg bg-destructive/10 border border-destructive/25 text-xs text-destructive">
-                    <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
-                    {submitError}
-                  </div>
-                )}
+                  </SelectContent>
+                </Select>
               </div>
-            )}
 
-            {sleeperToken && (
-              <DialogFooter className="gap-2 pt-2">
-                <Button variant="outline" size="sm" className="border-[#1a2d4a]" onClick={onClose}>Cancel</Button>
-                <Button
-                  size="sm"
-                  onClick={handleClaim}
-                  disabled={submitting || !selectedAddId || !row.rosterId}
-                  className="bg-[#d4af37] hover:bg-[#d4af37]/90 text-[#0a1628] font-semibold"
-                  data-testid="btn-submit-claim"
-                >
-                  {submitting ? <RefreshCw className="w-3.5 h-3.5 animate-spin mr-1.5" /> : <Plus className="w-3.5 h-3.5 mr-1.5" />}
-                  {submitting ? "Submitting…" : isFaab ? `Bid $${faabBid}` : "Add Player"}
-                </Button>
-              </DialogFooter>
-            )}
+              {isFaab && (
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                    FAAB Bid
+                    <span className="text-muted-foreground/60 normal-case font-normal ml-1">(${row.faabRemaining} remaining)</span>
+                  </Label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="number"
+                      min={0}
+                      max={row.faabRemaining}
+                      value={faabBid}
+                      onChange={(e) => setFaabBid(Math.min(row.faabRemaining, Math.max(0, Number(e.target.value))))}
+                      className="bg-[#0a1628] border-[#1a2d4a] focus:border-[#d4af37]/50 w-28"
+                      data-testid="input-faab-bid"
+                    />
+                    <span className="text-xs text-muted-foreground">/ ${row.faabBudget} budget</span>
+                  </div>
+                </div>
+              )}
+
+              {submitError && (
+                <div className="flex items-start gap-2 p-3 rounded-lg bg-destructive/10 border border-destructive/25 text-xs text-destructive">
+                  <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                  {submitError}
+                </div>
+              )}
+            </div>
+
+            <DialogFooter className="gap-2 pt-2">
+              <Button variant="outline" size="sm" className="border-[#1a2d4a]" onClick={onClose}>Cancel</Button>
+              <Button
+                size="sm"
+                onClick={handleClaim}
+                disabled={submitting || !selectedAddId || !row.rosterId}
+                className="bg-[#d4af37] hover:bg-[#d4af37]/90 text-[#0a1628] font-semibold"
+                data-testid="btn-submit-claim"
+              >
+                {submitting ? <RefreshCw className="w-3.5 h-3.5 animate-spin mr-1.5" /> : <Plus className="w-3.5 h-3.5 mr-1.5" />}
+                {submitting ? "Submitting…" : isFaab ? `Bid $${faabBid}` : "Add Player"}
+              </Button>
+            </DialogFooter>
           </>
         )}
       </DialogContent>

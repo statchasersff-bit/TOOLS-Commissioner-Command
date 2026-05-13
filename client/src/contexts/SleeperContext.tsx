@@ -1,9 +1,8 @@
 import { createContext, useContext, useState, useCallback, useEffect } from "react";
 import type { SleeperUser, SleeperLeagueSummary } from "../types";
-import { fetchSleeperUser, fetchSleeperLeagues, sleeperLogin } from "@/lib/sleeperApi";
+import { fetchSleeperUser, fetchSleeperLeagues } from "@/lib/sleeperApi";
 
 const STORAGE_KEY = "sc-sleeper-connection";
-const TOKEN_KEY   = "sc-sleeper-token";
 
 interface SleeperState {
   isConnected: boolean;
@@ -13,13 +12,10 @@ interface SleeperState {
   isLoading: boolean;
   error: string | null;
   lastSyncTime: string | null;
-  sleeperToken: string | null;
   connect: (username: string) => Promise<void>;
   disconnect: () => void;
   setActiveLeague: (leagueId: string) => void;
   refresh: () => Promise<void>;
-  loginWithPassword: (password: string) => Promise<void>;
-  clearToken: () => void;
 }
 
 const SleeperContext = createContext<SleeperState | null>(null);
@@ -31,9 +27,6 @@ export function SleeperProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
-  const [sleeperToken, setSleeperToken] = useState<string | null>(
-    () => localStorage.getItem(TOKEN_KEY)
-  );
 
   const isConnected = user !== null;
 
@@ -70,9 +63,7 @@ export function SleeperProvider({ children }: { children: React.ReactNode }) {
     setActiveLeagueId(null);
     setError(null);
     setLastSyncTime(null);
-    setSleeperToken(null);
     localStorage.removeItem(STORAGE_KEY);
-    localStorage.removeItem(TOKEN_KEY);
   }, []);
 
   const setActiveLeague = useCallback((leagueId: string) => {
@@ -83,18 +74,6 @@ export function SleeperProvider({ children }: { children: React.ReactNode }) {
     if (!user) return;
     await fetchUserAndLeagues(user.username);
   }, [user, fetchUserAndLeagues]);
-
-  const loginWithPassword = useCallback(async (password: string) => {
-    if (!user) throw new Error("Not connected to a Sleeper account");
-    const token = await sleeperLogin(user.username, password);
-    setSleeperToken(token);
-    localStorage.setItem(TOKEN_KEY, token);
-  }, [user]);
-
-  const clearToken = useCallback(() => {
-    setSleeperToken(null);
-    localStorage.removeItem(TOKEN_KEY);
-  }, []);
 
   useEffect(() => {
     const stored = localStorage.getItem(STORAGE_KEY);
@@ -113,13 +92,10 @@ export function SleeperProvider({ children }: { children: React.ReactNode }) {
         isLoading,
         error,
         lastSyncTime,
-        sleeperToken,
         connect,
         disconnect,
         setActiveLeague,
         refresh,
-        loginWithPassword,
-        clearToken,
       }}
     >
       {children}
