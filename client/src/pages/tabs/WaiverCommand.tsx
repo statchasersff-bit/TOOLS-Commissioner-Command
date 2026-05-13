@@ -2032,7 +2032,7 @@ function LeagueWaiverDetail({
   const topByDynasty  = availablePlayers.slice().sort((a, b) => b.dynastyValue - a.dynastyValue)[0] ?? null;
   const topByWinNow   = availablePlayers.slice().sort((a, b) => b.winNowValue - a.winNowValue)[0] ?? null;
   const youngest      = availablePlayers.filter((p) => p.age > 0).slice().sort((a, b) => a.age - b.age)[0] ?? null;
-  const mostOwned     = availablePlayers.slice().sort((a, b) => b.crossLeaguePct - a.crossLeaguePct)[0] ?? null;
+  const mostOwned     = availablePlayers.slice().sort((a, b) => b.userRosterPct - a.userRosterPct)[0] ?? null;
 
   const filtered = useMemo(() => {
     let list = availablePlayers;
@@ -2138,7 +2138,7 @@ function LeagueWaiverDetail({
             icon={<BarChart3 className="w-4 h-4" />}
             label="Most Owned"
             player={mostOwned}
-            sub={mostOwned ? `${mostOwned.crossLeaguePct}% ownership in this league` : ""}
+            sub={mostOwned ? `${mostOwned.userRosterPct}% of your leagues` : ""}
             accent="purple"
             onClaim={() => mostOwned && onClaim(mostOwned.sleeperId)}
           />
@@ -2193,7 +2193,7 @@ function LeagueWaiverDetail({
                   { key: "dynastyValue"  as DetailSortKey, label: "Dynasty Val", align: "center" },
                   { key: "winNowValue"   as DetailSortKey, label: "Win-Now Val", align: "center" },
                   { key: "age"           as DetailSortKey, label: "Age",         align: "center" },
-                  { key: "crossLeaguePct" as DetailSortKey, label: "Ownership %", align: "center" },
+                  { key: "userRosterPct" as DetailSortKey, label: "Your Leagues %", align: "center" },
                   { key: null,               label: "Claim",           align: "center" },
                 ] as { key: DetailSortKey | null; label: string; align: string }[]).map((col, i) => (
                   <th
@@ -2242,7 +2242,7 @@ function LeagueWaiverDetail({
                     </span>
                   </td>
                   <td className="px-4 py-3 text-center">
-                    <span className="text-[13px] font-bold text-foreground">{p.crossLeaguePct}%</span>
+                    <span className="text-[13px] font-bold text-foreground">{p.userRosterPct}%</span>
                   </td>
                   <td className="px-4 py-3 text-center">
                     <button
