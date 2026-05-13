@@ -33,7 +33,6 @@ import { LeagueEconomy } from "./tabs/LeagueEconomy";
 import LiveDraft from "./tabs/LiveDraft";
 import { API_BASE } from "@/lib/apiBase";
 import Transactions from "./tabs/Transactions";
-import { LeagueRoast } from "./tabs/LeagueRoast";
 import { FinanceTab } from "./tabs/FinanceTab";
 import { LineupCommand } from "./tabs/LineupCommand";
 
@@ -297,7 +296,6 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
       case "league-analyzer:league-economy": return <LeagueEconomy league={league} />;
       case "league-analyzer:roster-comparison": return <RosterComparison league={league} />;
       case "league-analyzer:transactions": return <Transactions leagueId={selectedLeagueId!} />;
-      case "dont-click:league-roast": return <LeagueRoast league={league} userTeam={userTeam} />;
       case "trade-center:trade-database": return <TradeDatabase league={league} />;
       case "trade-center:trade-calculator": return <TradeCalculator league={league} userTeam={userTeam} />;
       case "trade-center:positional-analysis": return <PositionalAnalysis league={league} userTeam={userTeam} />;

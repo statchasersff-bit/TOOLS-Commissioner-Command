@@ -574,11 +574,4 @@ export const NAV_CONFIG: MainTabConfig[] = [
       { id: "draft-board", label: "Draft Board" },
     ],
   },
-  {
-    id: "dont-click",
-    label: "\u{1F6AB} Don't Click This",
-    subTabs: [
-      { id: "league-roast", label: "Report Card" },
-    ],
-  },
 ];
