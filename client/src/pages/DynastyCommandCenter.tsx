@@ -51,7 +51,7 @@ function getInitialState(pathTab?: string, pathSub?: string) {
 
   return {
     tab: pathTab || saved?.tab || "portfolio",
-    sub: pathSub || saved?.sub || "connect",
+    sub: pathSub || saved?.sub || "portfolio-summary",
     leagueId: saved?.leagueId || null,
   };
 }
@@ -365,6 +365,18 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
                     </Badge>
                   )}
                 </div>
+              )}
+
+              {!sleeper.isConnected && (
+                <button
+                  onClick={() => { handleMainTabChange("portfolio"); handleSubTabChange("connect"); }}
+                  data-testid="button-header-connect"
+                  className="flex items-center gap-1.5 px-2 md:px-3 py-1.5 text-sm font-semibold rounded-md transition-all duration-200 text-[#d4af37] bg-[#d4af37]/10 hover:bg-[#d4af37]/20 border border-[#d4af37]/30 hover:border-[#d4af37]/50"
+                >
+                  <Wifi className="w-3.5 h-3.5" />
+                  <span className="hidden md:inline">Connect Sleeper</span>
+                  <span className="md:hidden">Connect</span>
+                </button>
               )}
 
               <div className="flex items-center gap-1.5 border-l border-border/40 pl-3">

@@ -523,7 +523,6 @@ export const NAV_CONFIG: MainTabConfig[] = [
     id: "portfolio",
     label: "Command Center",
     subTabs: [
-      { id: "connect", label: "Connect" },
       { id: "lineup-command", label: "Lineup Command" },
       { id: "portfolio-summary", label: "My Portfolio" },
       { id: "league-roi", label: "Finances" },
