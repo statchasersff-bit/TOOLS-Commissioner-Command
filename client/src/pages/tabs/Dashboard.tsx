@@ -1,4 +1,5 @@
-import { useState, useMemo, Fragment } from "react";
+import { useState, useMemo, Fragment, lazy, Suspense } from "react";
+const LeagueEconomyLazy = lazy(() => import("./LeagueEconomy").then(m => ({ default: m.LeagueEconomy })));
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -9,7 +10,7 @@ import { getLeagueTeamTiers, getTierColor, getTierEmoji, getTierTooltip, isConte
 import { useValueModel } from "@/contexts/ValueModelContext";
 import type { League, Team, Player } from "@/types";
 import { cn } from "@/lib/utils";
-import { Trophy, Zap, Target, Calendar, Users, Medal, ArrowRight, ArrowUp, ArrowDown, ArrowUpDown, Table, ArrowRightLeft, Compass, Flame, Sprout, Archive, ChevronDown, ChevronUp, ChevronRight, TrendingUp, TrendingDown, MapPin, BarChart2, Grid3X3, List, LayoutDashboard, Calculator, Activity, Waves, CheckCircle2, AlertTriangle } from "lucide-react";
+import { Trophy, Zap, Target, Calendar, Users, Medal, ArrowRight, ArrowUp, ArrowDown, ArrowUpDown, Table, ArrowRightLeft, Compass, Flame, Sprout, Archive, ChevronDown, ChevronUp, ChevronRight, TrendingUp, TrendingDown, MapPin, BarChart2, Grid3X3, List, LayoutDashboard, Calculator, Activity, Waves, CheckCircle2, AlertTriangle, Coins } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 
@@ -645,7 +646,7 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
   const [sortKey, setSortKey] = useState<SortKey>("overall");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
-  const [viewMode, setViewMode] = useState<"table" | "chart" | "heatmap">("table");
+  const [viewMode, setViewMode] = useState<"table" | "economy" | "chart" | "heatmap">("table");
   const [hmSortKey, setHmSortKey] = useState<HmSortKey>("dynOverall");
   const [hmSortDir, setHmSortDir] = useState<"asc" | "desc">("asc");
 
@@ -823,9 +824,10 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
   const viewToggle = (
     <div className="flex items-center gap-0.5 bg-muted/50 rounded-lg p-0.5 flex-shrink-0">
       {([
-        { id: "table", icon: List, label: "Table" },
-        { id: "chart", icon: BarChart2, label: "Position Chart" },
-        { id: "heatmap", icon: Grid3X3, label: "Heatmap" },
+        { id: "table",   icon: List,      label: "Table"          },
+        { id: "economy", icon: Coins,      label: "Economy"        },
+        { id: "chart",   icon: BarChart2,  label: "Position Chart" },
+        { id: "heatmap", icon: Grid3X3,    label: "Heatmap"        },
       ] as const).map(({ id, icon: Icon, label }) => (
         <button
           key={id}
@@ -1044,6 +1046,13 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
             </tbody>
           </table>
         </div>
+      )}
+
+      {/* ── VIEW 1.5: Economy ─────────────────────────────────────── */}
+      {viewMode === "economy" && (
+        <Suspense fallback={<div className="flex items-center justify-center py-16"><span className="text-sm text-muted-foreground">Loading…</span></div>}>
+          <LeagueEconomyLazy league={league} />
+        </Suspense>
       )}
 
       {/* ── VIEW 2: Stacked Position Value Chart ──────────────────── */}

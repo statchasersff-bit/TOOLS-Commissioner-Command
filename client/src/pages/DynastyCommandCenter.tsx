@@ -290,7 +290,6 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
       case "dashboard:field-view": return <FieldView league={league} userTeam={userTeam} />;
       case "dashboard:share-team": return <ShareTeam league={league} userTeam={userTeam} />;
       case "league-analyzer:power-rankings": return <DashboardSnapshot league={league} userTeam={userTeam} />;
-      case "league-analyzer:league-economy": return <LeagueEconomy league={league} />;
       case "league-analyzer:roster-comparison": return <RosterComparison league={league} />;
       case "league-analyzer:transactions": return <Transactions leagueId={selectedLeagueId!} />;
       case "trade-center:trade-database": return <TradeDatabase league={league} />;

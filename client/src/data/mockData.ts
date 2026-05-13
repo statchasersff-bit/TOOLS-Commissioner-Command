@@ -543,7 +543,6 @@ export const NAV_CONFIG: MainTabConfig[] = [
     subTabs: [
       { id: "power-rankings", label: "Rankings" },
       { id: "roster-comparison", label: "Compare" },
-      { id: "league-economy", label: "Economy" },
       { id: "transactions", label: "Transactions" },
     ],
   },

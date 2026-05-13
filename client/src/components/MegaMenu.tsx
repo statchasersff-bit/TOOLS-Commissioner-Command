@@ -52,7 +52,6 @@ const MEGA_DATA: Record<string, MegaSection[]> = {
       items: [
         { subId: "power-rankings",    label: "Rankings",     description: "Power rankings, tiers & scouting reports",   icon: Trophy         },
         { subId: "roster-comparison", label: "Compare",      description: "Head-to-head roster comparison",             icon: GitCompare     },
-        { subId: "league-economy",    label: "Economy",      description: "Pick capital, trade flow & market health",   icon: Coins          },
         { subId: "transactions",      label: "Transactions", description: "Recent adds, drops & trades league-wide",    icon: ArrowLeftRight },
       ],
     },
