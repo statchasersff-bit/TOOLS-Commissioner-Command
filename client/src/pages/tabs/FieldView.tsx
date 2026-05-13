@@ -333,7 +333,7 @@ function FieldLegend() {
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 export function FieldView({ league, userTeam }: { league: League; userTeam: Team }) {
-  const { getRedraftValue } = useValueModel();
+  const { getPlayerValue } = useValueModel();
 
   const [projections, setProjections] = useState<Record<string, number>>({});
   const [opponentName, setOpponentName] = useState<string | null>(null);
@@ -416,7 +416,7 @@ export function FieldView({ league, userTeam }: { league: League; userTeam: Team
   // ── Assign players to slots ──────────────────────────────────────────────
   const { starterSlots, benchPlayers } = useMemo(() => {
     const roster = [...userTeam.roster]
-      .map(p => ({ ...p, _rv: getRedraftValue(p) }))
+      .map(p => ({ ...p, _rv: getPlayerValue(p) }))
       .sort((a, b) => b._rv - a._rv);
 
     const used = new Set<string>();
@@ -466,22 +466,27 @@ export function FieldView({ league, userTeam }: { league: League; userTeam: Team
       });
 
     return { starterSlots: assignments, benchPlayers: bench };
-  }, [userTeam.roster, rosterPositions, projections, playersDb, getRedraftValue]);
+  }, [userTeam.roster, rosterPositions, projections, playersDb, getPlayerValue]);
 
   // ── Group into field rows ─────────────────────────────────────────────────
-  const { wideRow, lineRow, backfieldRow, specialRow } = useMemo(() => {
-    const wide = starterSlots.filter(s => s.slot === "WR");
-    const line = starterSlots.filter(s => ["TE", "FLEX", "REC_FLEX", "WRRB_FLEX"].includes(s.slot));
-    const backfield = (() => {
-      const qbs = starterSlots.filter(s => s.slot === "QB");
-      const sflx = starterSlots.filter(s => s.slot === "SUPER_FLEX");
-      const rbs = starterSlots.filter(s => s.slot === "RB");
-      // Visual arrangement: [RBs left] [QBs + SFLX center] [RBs right]
-      const half = Math.ceil(rbs.length / 2);
-      return [...rbs.slice(0, half), ...qbs, ...sflx, ...rbs.slice(half)];
-    })();
-    const special = starterSlots.filter(s => ["K", "DEF", "IDP_FLEX"].includes(s.slot));
-    return { wideRow: wide, lineRow: line, backfieldRow: backfield, specialRow: special };
+  const { qbRow, rbTeRow, wrRow, flexRow, specialRow } = useMemo(() => {
+    // Row 1 — QBs. In SF, SUPER_FLEX filled by a QB also lands here.
+    const qbRow = starterSlots.filter(s =>
+      s.slot === "QB" ||
+      (s.slot === "SUPER_FLEX" && s.player?.pos === "QB")
+    );
+    // Row 2 — RBs + TEs
+    const rbTeRow = starterSlots.filter(s => s.slot === "RB" || s.slot === "TE");
+    // Row 3 — WRs
+    const wrRow = starterSlots.filter(s => s.slot === "WR");
+    // Row 4 — all flex slots (SUPER_FLEX only if NOT used as QB above)
+    const flexRow = starterSlots.filter(s =>
+      ["FLEX", "REC_FLEX", "WRRB_FLEX"].includes(s.slot) ||
+      (s.slot === "SUPER_FLEX" && s.player?.pos !== "QB")
+    );
+    // Special teams
+    const specialRow = starterSlots.filter(s => ["K", "DEF", "IDP_FLEX"].includes(s.slot));
+    return { qbRow, rbTeRow, wrRow, flexRow, specialRow };
   }, [starterSlots]);
 
   const projTotal = useMemo(() =>
@@ -532,10 +537,11 @@ export function FieldView({ league, userTeam }: { league: League; userTeam: Team
 
         {/* ── Starter rows ─────────────────────────────────────────────── */}
         <div className="relative z-10 px-3 md:px-6 py-3 md:py-4 space-y-3 md:space-y-4">
-          <FieldRow slots={wideRow} spread label="WR" />
-          <FieldRow slots={lineRow} label="TE/FL" />
-          <FieldRow slots={backfieldRow} label="QB/RB" />
-          <FieldRow slots={specialRow} label="K/D" />
+          <FieldRow slots={qbRow}      label="QB"    />
+          <FieldRow slots={rbTeRow}    label="RB·TE" />
+          <FieldRow slots={wrRow}      label="WR"    spread />
+          <FieldRow slots={flexRow}    label="FLEX"  />
+          <FieldRow slots={specialRow} label="K/D"   />
         </div>
 
         {/* Your end zone */}
