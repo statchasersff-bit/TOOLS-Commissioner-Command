@@ -18,7 +18,7 @@ export const SLEEPER_WEB_GQL_URL = "https://sleeper.com/graphql";
 // ─── hCaptcha (required by Sleeper login mutation) ────────────────────────────
 // Fill in after discovering Sleeper's hCaptcha site key from their web app.
 
-export const SLEEPER_HCAPTCHA_SITE_KEY = "";
+export const SLEEPER_HCAPTCHA_SITE_KEY = "3bb6d565-5eb0-425f-acf8-64374f8bbc7b";
 
 // ─── REST action endpoints (still pending discovery) ─────────────────────────
 // Every authenticated write call must reference this object.
