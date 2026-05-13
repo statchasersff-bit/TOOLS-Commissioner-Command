@@ -14,6 +14,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import HCaptcha from "@hcaptcha/react-hcaptcha";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -48,96 +49,6 @@ import {
 } from "@/services/sleeperAuth";
 import { SLEEPER_HCAPTCHA_SITE_KEY } from "@/config/sleeperAuthEndpoints";
 
-// ─── hCaptcha widget ──────────────────────────────────────────────────────────
-
-declare global {
-  interface Window {
-    hcaptcha?: {
-      render: (el: HTMLElement, opts: {
-        sitekey: string;
-        callback: (token: string) => void;
-        "expired-callback": () => void;
-        "error-callback": () => void;
-        theme?: "dark" | "light";
-        size?: "normal" | "compact" | "invisible";
-      }) => number;
-      reset: (id?: number) => void;
-      remove: (id?: number) => void;
-    };
-  }
-}
-
-let hcaptchaScriptPromise: Promise<void> | null = null;
-
-function loadHCaptchaScript(): Promise<void> {
-  if (hcaptchaScriptPromise) return hcaptchaScriptPromise;
-  hcaptchaScriptPromise = new Promise((resolve, reject) => {
-    if (document.getElementById("hcaptcha-script")) { resolve(); return; }
-    const s = document.createElement("script");
-    s.id = "hcaptcha-script";
-    s.src = "https://js.hcaptcha.com/1/api.js?render=explicit&onload=_hcaptchaReady";
-    s.async = true;
-    s.defer = true;
-    (window as any)._hcaptchaReady = resolve;
-    s.onerror = () => { hcaptchaScriptPromise = null; reject(new Error("Failed to load hCaptcha")); };
-    document.head.appendChild(s);
-  });
-  return hcaptchaScriptPromise;
-}
-
-interface HCaptchaWidgetProps {
-  onToken: (token: string) => void;
-  onExpire: () => void;
-  onError: () => void;
-  siteKey: string;
-}
-
-function HCaptchaWidget({ onToken, onExpire, onError, siteKey }: HCaptchaWidgetProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const widgetId = useRef<number | undefined>(undefined);
-  const [ready, setReady] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    loadHCaptchaScript()
-      .then(() => { if (!cancelled) setReady(true); })
-      .catch(() => { if (!cancelled) onError(); });
-    return () => { cancelled = true; };
-  }, [onError]);
-
-  useEffect(() => {
-    if (!ready || !containerRef.current || !window.hcaptcha) return;
-    // Remove any prior widget
-    if (widgetId.current !== undefined) {
-      try { window.hcaptcha.remove(widgetId.current); } catch {}
-    }
-    widgetId.current = window.hcaptcha.render(containerRef.current, {
-      sitekey: siteKey,
-      callback: onToken,
-      "expired-callback": onExpire,
-      "error-callback": onError,
-      theme: document.documentElement.classList.contains("dark") ? "dark" : "light",
-      size: "normal",
-    });
-    return () => {
-      if (widgetId.current !== undefined && window.hcaptcha) {
-        try { window.hcaptcha.remove(widgetId.current); } catch {}
-        widgetId.current = undefined;
-      }
-    };
-  }, [ready, siteKey, onToken, onExpire, onError]);
-
-  if (!ready) {
-    return (
-      <div className="flex items-center gap-2 text-[12px] text-muted-foreground py-2">
-        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-        Loading security check…
-      </div>
-    );
-  }
-
-  return <div ref={containerRef} className="rounded-lg overflow-hidden" />;
-}
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
@@ -160,7 +71,7 @@ export function SleeperAuthCard() {
   const [captchaError, setCaptchaError] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
-  const captchaConfigured = !!SLEEPER_HCAPTCHA_SITE_KEY;
+  const hcaptchaRef = useRef<HCaptcha>(null);
 
   useEffect(() => {
     setSession(getSleeperSession());
@@ -222,7 +133,8 @@ export function SleeperAuthCard() {
     } catch (e: any) {
       setErrorMsg(e.message || "Authentication failed. Check your code and try again.");
       setStep("error");
-      setCaptchaToken(null); // force re-solve on retry
+      setCaptchaToken(null);
+      hcaptchaRef.current?.resetCaptcha();
     }
   }
 
@@ -453,35 +365,26 @@ export function SleeperAuthCard() {
                   <label className="text-[12px] font-medium text-muted-foreground uppercase tracking-wide">
                     Security check
                   </label>
-                  {captchaConfigured ? (
-                    <>
-                      <HCaptchaWidget
-                        siteKey={SLEEPER_HCAPTCHA_SITE_KEY}
-                        onToken={handleCaptchaToken}
-                        onExpire={handleCaptchaExpire}
-                        onError={handleCaptchaError}
-                      />
-                      {captchaToken && (
-                        <p className="flex items-center gap-1.5 text-[11px] text-emerald-600 dark:text-emerald-400 mt-1">
-                          <CheckCircle2 className="w-3 h-3" /> Security check passed
-                        </p>
-                      )}
-                      {captchaError && !captchaToken && (
-                        <p className="flex items-center gap-1.5 text-[11px] text-destructive mt-1">
-                          <AlertCircle className="w-3 h-3" /> Complete the security check to continue.
-                        </p>
-                      )}
-                    </>
-                  ) : (
-                    <div className="p-3 rounded-lg bg-destructive/8 border border-destructive/20 text-[12px] text-destructive leading-snug space-y-1">
-                      <p className="font-semibold">hCaptcha site key not configured.</p>
-                      <p>
-                        Set <code className="font-mono text-[11px]">SLEEPER_HCAPTCHA_SITE_KEY</code> in{" "}
-                        <code className="font-mono text-[11px]">sleeperAuthEndpoints.ts</code> to enable login.
-                        Sleeper requires captcha — connecting without it will always fail.
+                  <>
+                    <HCaptcha
+                      ref={hcaptchaRef}
+                      sitekey={SLEEPER_HCAPTCHA_SITE_KEY}
+                      onVerify={handleCaptchaToken}
+                      onExpire={handleCaptchaExpire}
+                      onError={handleCaptchaError}
+                      theme={document.documentElement.classList.contains("dark") ? "dark" : "light"}
+                    />
+                    {captchaToken && (
+                      <p className="flex items-center gap-1.5 text-[11px] text-emerald-600 dark:text-emerald-400 mt-1">
+                        <CheckCircle2 className="w-3 h-3" /> Security check passed
                       </p>
-                    </div>
-                  )}
+                    )}
+                    {captchaError && !captchaToken && (
+                      <p className="flex items-center gap-1.5 text-[11px] text-destructive mt-1">
+                        <AlertCircle className="w-3 h-3" /> Complete the security check to continue.
+                      </p>
+                    )}
+                  </>
                 </div>
 
                 <Button
