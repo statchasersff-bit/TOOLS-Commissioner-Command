@@ -1764,47 +1764,19 @@ export function MyTeam({ league, userTeam, onNavigate }: DashboardOverviewProps)
                     {players.length === 0 ? (
                       <p className="text-sm text-muted-foreground italic py-2">No {pos}s on roster</p>
                     ) : (
-                      <div className="space-y-1">
-                        {/* Starters */}
-                        {starters.length > 0 && (
-                          <div className="mb-3">
-                            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-2">Starters</p>
-                            {starters.map(p => (
-                              <div key={p.id} className="flex items-center justify-between py-2 border-b border-border/20 last:border-0" data-testid={`group-player-${p.id}`}>
-                                <div className="flex items-center gap-2.5">
-                                  <PlayerAvatar id={p.sleeperId ?? p.id} name={p.name} pos={p.pos} team={p.team ?? ""} size="sm" />
-                                  <div>
-                                    <p className="text-sm font-semibold text-foreground leading-tight">{p.name}</p>
-                                    <p className="text-[11px] text-muted-foreground">{p.team} · Age {p.age}</p>
-                                  </div>
-                                </div>
-                                <div className="flex items-center gap-3">
-                                  <span className="text-xs font-bold text-[#0b3a7a] dark:text-blue-400 tabular-nums">{p.value}</span>
-                                </div>
+                      <div>
+                        {players.map(p => (
+                          <div key={p.id} className="flex items-center justify-between py-2 border-b border-border/20 last:border-0" data-testid={`group-player-${p.id}`}>
+                            <div className="flex items-center gap-2.5">
+                              <PlayerAvatar id={p.sleeperId ?? p.id} name={p.name} pos={p.pos} team={p.team ?? ""} size="sm" />
+                              <div>
+                                <p className="text-sm font-semibold text-foreground leading-tight">{p.name}</p>
+                                <p className="text-[11px] text-muted-foreground">{p.team} · Age {p.age}</p>
                               </div>
-                            ))}
+                            </div>
+                            <span className="text-xs font-bold text-[#0b3a7a] dark:text-blue-400 tabular-nums">{p.value}</span>
                           </div>
-                        )}
-                        {/* Bench */}
-                        {bench.length > 0 && (
-                          <div>
-                            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-2">Bench</p>
-                            {bench.map(p => (
-                              <div key={p.id} className="flex items-center justify-between py-2 border-b border-border/20 last:border-0 opacity-80" data-testid={`group-bench-${p.id}`}>
-                                <div className="flex items-center gap-2.5">
-                                  <PlayerAvatar id={p.sleeperId ?? p.id} name={p.name} pos={p.pos} team={p.team ?? ""} size="sm" />
-                                  <div>
-                                    <p className="text-sm font-medium text-foreground leading-tight">{p.name}</p>
-                                    <p className="text-[11px] text-muted-foreground">{p.team} · Age {p.age}</p>
-                                  </div>
-                                </div>
-                                <div className="flex items-center gap-3">
-                                  <span className="text-xs font-medium text-muted-foreground tabular-nums">{p.value}</span>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
+                        ))}
                       </div>
                     )}
                   </div>
