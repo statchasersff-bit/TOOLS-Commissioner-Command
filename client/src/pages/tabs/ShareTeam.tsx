@@ -638,11 +638,6 @@ function PlayerRow({ player, value, hideValues, showAge }: {
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1 flex-wrap">
           <span className="text-xs font-semibold truncate">{player.name}</span>
-          {player.starter ? (
-            <span className="text-[9px] font-bold px-1 py-0 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 flex-shrink-0">START</span>
-          ) : (
-            <span className="text-[9px] font-bold px-1 py-0 rounded bg-muted/60 text-muted-foreground border border-border/30 flex-shrink-0">BN</span>
-          )}
         </div>
         <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
           <span>{player.team || "FA"}</span>
