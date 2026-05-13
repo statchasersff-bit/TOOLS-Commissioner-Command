@@ -133,8 +133,7 @@ function MegaMenuPanel({ tabId, isOpen, onNavigate, activeSub, onMouseEnter, onM
   const sections = MEGA_DATA[tabId];
   if (!sections) return null;
 
-  const allItems = sections.flatMap(s => s.items);
-  const cols = allItems.length <= 2 ? allItems.length : allItems.length <= 3 ? 3 : 4;
+  const sections_data = sections;
 
   return (
     <div
@@ -159,22 +158,19 @@ function MegaMenuPanel({ tabId, isOpen, onNavigate, activeSub, onMouseEnter, onM
           background: "rgba(8,11,20,0.97)",
           backdropFilter: "blur(20px)",
           WebkitBackdropFilter: "blur(20px)",
-          minWidth: cols <= 2 ? "480px" : cols === 3 ? "680px" : "860px",
+          width: "280px",
         }}
       >
-        {sections.map((section, sIdx) => (
+        {sections_data.map((section, sIdx) => (
           <div key={sIdx}>
-            {sections.length > 1 && sIdx > 0 && (
+            {sections_data.length > 1 && sIdx > 0 && (
               <div className="h-px bg-white/[0.05] mx-5" />
             )}
-            <div className="px-4 pt-4 pb-1">
+            <div className="px-3 pt-4 pb-1">
               <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#d4af37]/70 px-2 mb-2">
                 {section.title}
               </p>
-              <div
-                className="grid gap-1.5"
-                style={{ gridTemplateColumns: `repeat(${Math.min(cols, section.items.length)}, 1fr)` }}
-              >
+              <div className="flex flex-col gap-0.5">
                 {section.items.map((item) => {
                   const Icon = item.icon;
                   const isActive = activeSub === item.subId;
