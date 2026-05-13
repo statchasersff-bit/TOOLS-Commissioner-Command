@@ -43,6 +43,24 @@ import {
   checkFinancePassword,
 } from "./auth";
 
+// ── Simple in-memory TTL cache ────────────────────────────────────────────────
+interface CacheEntry<T> { data: T; expiresAt: number; }
+function makeCache<T>(ttlMs: number) {
+  const store = new Map<string, CacheEntry<T>>();
+  return {
+    get(key: string): T | null {
+      const e = store.get(key);
+      if (!e || Date.now() > e.expiresAt) { store.delete(key); return null; }
+      return e.data;
+    },
+    set(key: string, data: T) { store.set(key, { data, expiresAt: Date.now() + ttlMs }); },
+    invalidate(key: string) { store.delete(key); },
+  };
+}
+
+const statsCache   = makeCache<any>(5 * 60 * 1000);   // 5-min TTL
+const searchCache  = makeCache<any>(2 * 60 * 1000);   // 2-min TTL
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
@@ -217,7 +235,7 @@ export async function registerRoutes(
 
   app.get("/api/trades/search", async (req, res) => {
     try {
-      const result = await searchTrades({
+      const params = {
         q: req.query.q as string,
         format: req.query.format as string,
         scoring: req.query.scoring as string,
@@ -225,7 +243,16 @@ export async function registerRoutes(
         season: req.query.season as string,
         page: req.query.page ? parseInt(req.query.page as string) : 1,
         limit: req.query.limit ? parseInt(req.query.limit as string) : 50,
-      });
+      };
+      const cacheKey = JSON.stringify(params);
+      const cached = searchCache.get(cacheKey);
+      if (cached) {
+        res.setHeader("Cache-Control", "public, max-age=120");
+        return res.json(cached);
+      }
+      const result = await searchTrades(params);
+      searchCache.set(cacheKey, result);
+      res.setHeader("Cache-Control", "public, max-age=120");
       res.json(result);
     } catch (err: any) {
       console.error("Trade search error:", err);
@@ -267,7 +294,14 @@ export async function registerRoutes(
 
   app.get("/api/trades/stats", async (_req, res) => {
     try {
+      const cached = statsCache.get("stats");
+      if (cached) {
+        res.setHeader("Cache-Control", "public, max-age=300");
+        return res.json(cached);
+      }
       const stats = await getTradeStats();
+      statsCache.set("stats", stats);
+      res.setHeader("Cache-Control", "public, max-age=300");
       res.json(stats);
     } catch (err: any) {
       res.status(500).json({ error: err.message || "Failed to get trade stats" });

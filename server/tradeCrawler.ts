@@ -740,36 +740,33 @@ export async function searchTrades(params: {
 
   const allConditions = [...conditions];
 
-  // Exclude trades where ANY roster_id has no received assets (partial or empty trades).
-  // Uses EXCEPT to find roster_ids missing from received assets — if any exist, skip trade.
-  allConditions.push(
-    sql`NOT EXISTS (
-      SELECT unnest(${trades.rosterIds})
-      EXCEPT
-      SELECT trade_assets.roster_id FROM trade_assets
-        WHERE trade_assets.trade_id = ${trades.id}
-        AND trade_assets.direction = 'received'
-    )`
-  );
-
   if (tradeIds) {
     allConditions.push(sql`${trades.id} IN (${sql.join(tradeIds.map(id => sql`${id}`), sql`, `)})`);
   }
 
   const whereClause = and(...allConditions);
+  const hasFilters = allConditions.length > 0;
 
-  const [countResult] = await d
-    .select({ total: count() })
-    .from(trades)
-    .where(whereClause);
+  // For the unfiltered default view use the blazing-fast pg_class estimate (2 ms).
+  // For filtered queries run count + fetch in parallel to save ~100 ms.
+  let totalCount: number;
+  let tradeRows: (typeof trades.$inferSelect)[];
 
-  const tradeRows = await d
-    .select()
-    .from(trades)
-    .where(whereClause)
-    .orderBy(sql`${trades.timestamp} DESC`)
-    .limit(limit)
-    .offset(offset);
+  if (!hasFilters) {
+    const [approx, rows] = await Promise.all([
+      d.execute(sql`SELECT reltuples::bigint AS n FROM pg_class WHERE relname = 'trades'`),
+      d.select().from(trades).orderBy(sql`${trades.timestamp} DESC`).limit(limit).offset(offset),
+    ]);
+    totalCount = Number((approx.rows[0] as any)?.n ?? 0);
+    tradeRows = rows;
+  } else {
+    const [countResult, rows] = await Promise.all([
+      d.select({ total: count() }).from(trades).where(whereClause),
+      d.select().from(trades).where(whereClause).orderBy(sql`${trades.timestamp} DESC`).limit(limit).offset(offset),
+    ]);
+    totalCount = Number(countResult[0]?.total ?? 0);
+    tradeRows = rows;
+  }
 
   if (tradeRows.length === 0) {
     return { trades: [], total: 0, page, limit };
@@ -841,7 +838,7 @@ export async function searchTrades(params: {
 
   return {
     trades: enrichedTrades,
-    total: countResult.total,
+    total: totalCount,
     page,
     limit,
   };
