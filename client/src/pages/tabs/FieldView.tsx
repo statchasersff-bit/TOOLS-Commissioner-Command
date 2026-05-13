@@ -529,6 +529,41 @@ export function FieldView({ league, userTeam }: { league: League; userTeam: Team
         </div>
       </div>
 
+      {/* ── General Manager card ───────────────────────────────────────── */}
+      <div className="flex items-center gap-3 bg-white/[0.03] border border-white/8 rounded-xl px-4 py-3">
+        <div className="relative flex-shrink-0">
+          <div className="w-10 h-10 rounded-full overflow-hidden bg-[#0b3a7a]/40 ring-2 ring-[#d4af37]/30">
+            {userTeam.avatar ? (
+              <img
+                src={userTeam.avatar}
+                alt={userTeam.owner}
+                className="w-full h-full object-cover"
+                onError={(e) => { (e.target as HTMLImageElement).src = "https://sleepercdn.com/images/v2/icons/player_default.webp"; }}
+              />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center text-sm font-bold text-[#d4af37]">
+                {(userTeam.owner || "?").charAt(0).toUpperCase()}
+              </div>
+            )}
+          </div>
+          <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-[#d4af37]/20 border border-[#d4af37]/50 flex items-center justify-center">
+            <span className="text-[7px] font-black text-[#d4af37]">GM</span>
+          </div>
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-bold text-foreground leading-tight truncate">{userTeam.owner || "Manager"}</p>
+          <p className="text-[11px] text-muted-foreground truncate">{userTeam.name}</p>
+        </div>
+        {(userTeam.wins !== undefined || userTeam.losses !== undefined) && (
+          <div className="text-right flex-shrink-0">
+            <p className="text-sm font-bold text-foreground tabular-nums">
+              {userTeam.wins ?? 0}–{userTeam.losses ?? 0}{userTeam.ties ? `–${userTeam.ties}` : ""}
+            </p>
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Record</p>
+          </div>
+        )}
+      </div>
+
       {/* ── Football Field ─────────────────────────────────────────────── */}
       <div className="relative rounded-2xl overflow-hidden border border-white/6 shadow-2xl">
         <FieldBackground />
