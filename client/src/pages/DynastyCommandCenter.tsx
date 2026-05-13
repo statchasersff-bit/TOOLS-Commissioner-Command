@@ -28,7 +28,6 @@ import { TradeBlockScanner, TradeCalculator, TradeDatabase } from "./tabs/TradeC
 import { PositionalAnalysis } from "./tabs/PositionalAnalysis";
 import { MarketValue } from "./tabs/LeagueMarket";
 import Analysis from "./tabs/Analysis";
-import { LeagueIntelligence } from "./tabs/Insights";
 import { LeagueEconomy } from "./tabs/LeagueEconomy";
 import LiveDraft from "./tabs/LiveDraft";
 import { API_BASE } from "@/lib/apiBase";
@@ -289,7 +288,6 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
       case "dashboard:roster-breakdown": return <RosterBreakdown league={league} userTeam={userTeam} />;
       case "dashboard:share-team": return <ShareTeam league={league} userTeam={userTeam} />;
       case "league-analyzer:power-rankings": return <DashboardSnapshot league={league} userTeam={userTeam} />;
-      case "league-analyzer:league-intelligence": return <LeagueIntelligence league={league} userTeam={userTeam} />;
       case "league-analyzer:league-economy": return <LeagueEconomy league={league} />;
       case "league-analyzer:roster-comparison": return <RosterComparison league={league} />;
       case "league-analyzer:transactions": return <Transactions leagueId={selectedLeagueId!} />;
