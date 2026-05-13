@@ -272,7 +272,7 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
           return <PortfolioSummary />;
         case "portfolio:waiver-command":
           return <WaiverCommand />;
-        case "dashboard:league-roi":
+        case "portfolio:league-roi":
           return <FinanceTab />;
         default:
           return <PortfolioConnect onNavigate={navigateToSubTab} />;

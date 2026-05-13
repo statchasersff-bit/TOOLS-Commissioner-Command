@@ -526,6 +526,7 @@ export const NAV_CONFIG: MainTabConfig[] = [
       { id: "connect", label: "Connect" },
       { id: "lineup-command", label: "Lineup Command" },
       { id: "portfolio-summary", label: "My Portfolio" },
+      { id: "league-roi", label: "Finances" },
       { id: "waiver-command", label: "Waiver Command" },
     ],
   },
@@ -536,7 +537,6 @@ export const NAV_CONFIG: MainTabConfig[] = [
       { id: "my-team", label: "My Team" },
       { id: "field-view", label: "Field View" },
       { id: "share-team", label: "Share My Team" },
-      { id: "league-roi", label: "Finances" },
     ],
   },
   {
