@@ -695,61 +695,6 @@ export function PortfolioSummary() {
             )}
           </Card>
 
-          {summaryData.lineupAlerts.length > 0 && (
-            <Card className="p-6 border-amber-200/50 dark:border-amber-800/30" data-testid="lineup-alerts">
-              <div className="mb-5">
-                <div className="flex items-center gap-2">
-                  <h3 className="text-base font-bold text-foreground">Lineup Alerts</h3>
-                  <Badge className="bg-amber-500 text-white text-[10px] px-1.5">
-                    {summaryData.lineupAlerts.reduce((sum: number, la: any) => sum + la.issues.length, 0)} issues
-                  </Badge>
-                </div>
-                <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
-              </div>
-              <p className="text-xs text-muted-foreground mb-4">
-                {summaryData.lineupAlerts.length} league{summaryData.lineupAlerts.length !== 1 ? "s" : ""} need attention
-              </p>
-
-              <div className="overflow-x-auto rounded-md border border-border/40">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-border bg-muted/30">
-                      <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">League</th>
-                      <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Issue</th>
-                      <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Player</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {summaryData.lineupAlerts.map((la: any) => {
-                      const first = la.issues[0];
-                      const extra = la.issues.length - 1;
-                      const badgeClass = first.reason === "OUT" || first.reason === "IR"
-                        ? "bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800"
-                        : first.reason === "Empty"
-                        ? "bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800"
-                        : "bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800";
-                      return (
-                        <tr key={la.leagueId} className="border-b border-border/20 hover:bg-muted/10">
-                          <td className="px-4 py-2.5 font-medium">{la.leagueName}</td>
-                          <td className="px-4 py-2.5">
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              <Badge variant="outline" className={`text-[10px] ${badgeClass}`}>
-                                {first.slot}: {first.reason}
-                              </Badge>
-                              {extra > 0 && (
-                                <span className="text-[10px] text-muted-foreground">+{extra} more</span>
-                              )}
-                            </div>
-                          </td>
-                          <td className="px-4 py-2.5 text-muted-foreground">{first.playerName || "N/A"}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </Card>
-          )}
         </>
       )}
 
