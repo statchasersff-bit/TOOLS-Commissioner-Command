@@ -820,18 +820,14 @@ function WaiverTableRow({ row, onClaim, onView }: { row: WaiverRow; onClaim: () 
       {/* Lowest on team */}
       <td className="px-4 py-3">
         {row.lowestOnTeam ? (
-          <div>
-            <PlayerAvatar
-              id={row.lowestOnTeam.id}
-              name={row.lowestOnTeam.name}
-              pos={row.lowestOnTeam.position}
-              team={row.lowestOnTeam.team}
-              size="sm"
-            />
-            <span className="text-[10px] text-muted-foreground/60 ml-[46px] mt-0.5 block">
-              {row.lowestOnTeam.value.toLocaleString()}
-            </span>
-          </div>
+          <PlayerAvatar
+            id={row.lowestOnTeam.id}
+            name={row.lowestOnTeam.name}
+            pos={row.lowestOnTeam.position}
+            team={row.lowestOnTeam.team}
+            size="sm"
+            sub={row.lowestOnTeam.value.toLocaleString()}
+          />
         ) : (
           <span className="text-xs text-muted-foreground">—</span>
         )}
@@ -958,12 +954,14 @@ function PlayerAvatar({
   pos,
   team,
   size = "sm",
+  sub,
 }: {
   id: string;
   name: string;
   pos: string;
   team: string;
   size?: "sm" | "md";
+  sub?: string;
 }) {
   const posColors: Record<string, string> = {
     QB: "text-rose-400",
@@ -1004,6 +1002,7 @@ function PlayerAvatar({
         <div className={cn("flex items-center gap-1.5 mt-0.5", metaSize)}>
           <span className={cn("font-bold", posColor)}>{pos}</span>
           <span className="text-muted-foreground font-medium">{team || "FA"}</span>
+          {sub && <span className="text-muted-foreground/60">· {sub}</span>}
         </div>
       </div>
     </div>
