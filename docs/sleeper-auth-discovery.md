@@ -1,143 +1,247 @@
-# Sleeper Auth Endpoint Discovery Guide
+# Sleeper Auth & GraphQL Discovery Notes
 
-Use this guide to discover the exact endpoint URLs, request shapes, and response shapes for Sleeper's authenticated API. Once discovered, fill in the empty strings in `client/src/config/sleeperAuthEndpoints.ts`.
-
----
-
-## Setup
-
-1. Open Chrome (or Edge) and navigate to the Sleeper web app: https://sleeper.com
-2. Open DevTools: `F12` → **Network** tab
-3. Check **Preserve log**
-4. Filter by **Fetch/XHR**
+Confirmed endpoints, request shapes, and response shapes discovered from the Sleeper web app.  
+Fill in any remaining blanks in `client/src/config/sleeperAuthEndpoints.ts`.
 
 ---
 
-## Discovery Workflow
+## Status
 
-### Step 1 — Authentication endpoints
-
-Log in via the Sleeper web or mobile app while watching the network tab.
-
-Filter by these terms one at a time:
-- `auth`
-- `login`
-- `token`
-- `code`
-- `user`
-- `session`
-- `verify`
-
-For each request, record:
-
-| Field | Value |
+| Endpoint | Status |
 |---|---|
-| Method | GET / POST / PUT |
-| Full URL | `https://api.sleeper.app/...` |
-| Request body shape | `{ identifier: "", code: "" }` etc. |
-| Auth header format | `Bearer <token>`, cookie, etc. |
-| Response body shape | `{ token: "", user_id: "", username: "" }` etc. |
-| Token expiration behavior | Does `expires_at` appear in the response? |
-| CORS behavior | Does the browser block it? Preflight? |
+| `login_context_by_email_or_phone_or_username` | Confirmed |
+| `create_verification_code` | Confirmed |
+| `login` (OTP / password) | Confirmed |
+| `league_transactions_filtered` | Confirmed |
+| hCaptcha site key | **Pending** — see discovery steps below |
 
 ---
 
-### Step 2 — Action / write endpoints
+## GraphQL Endpoints
 
-Once logged in, perform common actions in the Sleeper app:
-
-| Action | Filter term | Expected method |
-|---|---|---|
-| Set a starting lineup | `lineup`, `roster`, `transaction` | PUT / PATCH |
-| Submit a waiver claim | `waiver`, `transaction` | POST |
-| Propose a trade | `trade`, `transaction` | POST |
-| Accept / reject a trade | `trade`, `transaction` | POST / PATCH |
-| Make a draft pick | `draft`, `pick` | POST |
-| Send league chat message | `chat`, `message`, `comment` | POST |
-
-For each action endpoint, record the same fields as Step 1.
+| Purpose | URL |
+|---|---|
+| Auth operations (login context, send code, login) | `https://api.sleeper.app/graphql` |
+| Authenticated read/action operations | `https://sleeper.com/graphql` |
 
 ---
 
-## Recording Template
+## 1. Login Context
 
-Copy this block for each discovered endpoint:
+**Endpoint:** `https://api.sleeper.app/graphql`  
+**Method:** POST  
+**Auth required:** No  
 
-```
-Endpoint: <auth|action>.<key>
-Method:   POST
-URL:      /v1/...
-Headers:
-  Content-Type: application/json
-  Authorization: Bearer <token>   (or none for code request)
-Request body:
-  {
-    "field": "<placeholder>",
-    ...
+**Query:**
+```graphql
+query login_context($email_or_phone_or_username: String!) {
+  login_context_by_email_or_phone_or_username(
+    email_or_phone_or_username: $email_or_phone_or_username
+  ) {
+    display
+    has_password
   }
-Response body:
-  {
-    "token": "<placeholder>",
-    "user_id": "<placeholder>",
-    ...
-  }
-Expiration: <yes/no> — field name if yes
-CORS: <preflight required / open / blocked>
-Notes: <any quirks>
+}
 ```
+
+**Variables:**
+```json
+{ "email_or_phone_or_username": "<identifier>" }
+```
+
+**Response shape:**
+```json
+{
+  "data": {
+    "login_context_by_email_or_phone_or_username": {
+      "display": "...",
+      "has_password": true
+    }
+  }
+}
+```
+
+---
+
+## 2. Create Verification Code (OTP)
+
+**Endpoint:** `https://api.sleeper.app/graphql`  
+**Method:** POST  
+**Auth required:** No  
+
+**Mutation:**
+```graphql
+mutation create_verification_code($email_or_phone_or_username: String!) {
+  create_verification_code(
+    email_or_phone_or_username: $email_or_phone_or_username
+  )
+}
+```
+
+**Variables:**
+```json
+{ "email_or_phone_or_username": "<identifier>" }
+```
+
+**Response:** Returns `true` on success.
+
+---
+
+## 3. Login (OTP or password + hCaptcha)
+
+**Endpoint:** `https://api.sleeper.app/graphql`  
+**Method:** POST  
+**Auth required:** No (returns a token on success)  
+
+**Query:**
+```graphql
+query login(
+  $email_or_phone_or_username: String!
+  $password: String!
+  $captcha: String
+) {
+  login(
+    email_or_phone_or_username: $email_or_phone_or_username
+    password: $password
+    captcha: $captcha
+  ) {
+    token
+  }
+}
+```
+
+**Variables:**
+```json
+{
+  "email_or_phone_or_username": "<identifier>",
+  "password": "<otp_code_or_password>",
+  "captcha": "<hcaptcha_token>"
+}
+```
+
+> `password` accepts either the user's account password or the OTP code sent via `create_verification_code`.  
+> `captcha` is required — this is an hCaptcha token. See "Finding the hCaptcha Site Key" below.
+
+**Response shape:**
+```json
+{
+  "data": {
+    "login": {
+      "token": "<jwt>"
+    }
+  }
+}
+```
+
+The JWT is decoded client-side (`atob`) to extract `user_id`, `username`, `avatar`, and `exp`.  
+**Never log the token, password, captcha token, or OTP.**
+
+---
+
+## 4. League Transactions Filtered
+
+**Endpoint:** `https://sleeper.com/graphql`  
+**Method:** POST  
+**Auth required:** Yes — `Authorization: Bearer <token>` header  
+
+**Query:**
+```graphql
+query league_transactions_filtered(
+  $league_id: String!
+  $type_filters: [String]
+  $leg_filters: [Int]
+  $status_filters: [String]
+) {
+  league_transactions_filtered(
+    league_id: $league_id
+    type_filters: $type_filters
+    leg_filters: $leg_filters
+    status_filters: $status_filters
+  ) {
+    transaction_id
+    type
+    status
+    leg
+    roster_ids
+    adds
+    drops
+    waiver_bid
+    settings
+    metadata
+    consenter_ids
+    created
+    updated
+    draft_picks {
+      season
+      round
+      roster_id
+      previous_owner_id
+      owner_id
+    }
+  }
+}
+```
+
+**Variables:**
+```json
+{
+  "league_id": "<league_id>",
+  "type_filters": ["trade"],
+  "leg_filters": null,
+  "status_filters": ["complete"]
+}
+```
+
+**Filter values (known):**
+- `type_filters`: `"trade"`, `"waiver"`, `"free_agent"` (pass `null` for all)
+- `leg_filters`: array of week integers, e.g. `[1, 2, 3]` (pass `null` for all weeks)
+- `status_filters`: `"complete"`, `"failed"` (pass `null` for all statuses)
+
+**Response shape:**
+```json
+{
+  "data": {
+    "league_transactions_filtered": [
+      {
+        "transaction_id": "...",
+        "type": "trade",
+        "status": "complete",
+        "leg": 5,
+        "roster_ids": [1, 3],
+        "adds": { "<player_id>": 1, "<player_id>": 3 },
+        "drops": { "<player_id>": 3, "<player_id>": 1 },
+        "draft_picks": [],
+        "waiver_bid": null,
+        "consenter_ids": [1, 3],
+        "created": 1700000000000,
+        "updated": 1700000000000
+      }
+    ]
+  }
+}
+```
+
+**Implemented in:** `fetchLeagueTransactionsFiltered()` in `client/src/services/sleeperAuthedApi.ts`
+
+---
+
+## Finding the hCaptcha Site Key
+
+The `SLEEPER_HCAPTCHA_SITE_KEY` in `client/src/config/sleeperAuthEndpoints.ts` is currently blank.
+
+**To discover it:**
+
+1. Open Chrome DevTools on `https://sleeper.com`
+2. Go to **Sources** → Search (Ctrl+Shift+F) for `sitekey` or `hcaptcha`
+3. Or in the **Network** tab during login, look for a request to `hcaptcha.com` — the `sitekey` query param in that URL is the site key
+4. It will be a UUID-style string like `a1b2c3d4-e5f6-...`
+5. Paste it into `SLEEPER_HCAPTCHA_SITE_KEY` in the config file
 
 ---
 
 ## Security Rules
 
-- **NEVER** paste real tokens or credentials into this document.
+- **NEVER** paste real tokens, OTP codes, or credentials into this document.
 - Replace all sensitive values with `<placeholder>` or `"..."`.
 - Do not commit real tokens to version control.
 - Treat discovered endpoints as internal — do not publish them publicly.
-
----
-
-## Filling in the Config
-
-Once you have verified an endpoint, update the corresponding key in:
-
-```
-client/src/config/sleeperAuthEndpoints.ts
-```
-
-Example (do not fill in until verified):
-
-```ts
-export const SLEEPER_AUTH_ENDPOINTS = {
-  requestCode: "/v1/auth/request_code",   // ← fill in after discovery
-  verifyCode:  "/v1/auth/verify_code",
-  login:       "/v1/auth/login",
-  ...
-};
-```
-
-After updating the config, the `Send Code` button and all write-action helpers in `sleeperAuthedApi.ts` will automatically become active — no other code changes required.
-
----
-
-## Testing Authentication
-
-After configuring at least `login` or `verifyCode`:
-
-1. Go to the Portfolio → Connect tab in Dynasty Command
-2. Use **Send Code** or **Use token manually** to authenticate
-3. Verify the "Authenticated" badge appears in the Connect Sleeper card
-4. Check `localStorage` key `statchasers_sleeper_auth` in DevTools → Application → Local Storage
-
----
-
-## Mobile App Token Extraction (alternative)
-
-If the web app uses HTTPS cert pinning or obfuscates the auth flow:
-
-1. Use an Android emulator with a proxy (e.g. Charles Proxy) or a rooted device
-2. Install the Sleeper APK
-3. Log in and inspect the HTTP traffic
-4. The auth token will appear in an `Authorization` header on API requests
-
-Again, never save real tokens to this file.

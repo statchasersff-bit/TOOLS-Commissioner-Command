@@ -2,6 +2,7 @@
  * Sleeper Authenticated API Wrapper
  *
  * All write / action calls go through sleeperAuthedFetch().
+ * Authenticated GraphQL calls go through sleeperAuthedGQL().
  * If the endpoint URL is blank in sleeperAuthEndpoints.ts the call fails fast
  * with a clear "not configured yet" message — no silent no-ops.
  */
@@ -9,9 +10,10 @@
 import {
   SLEEPER_AUTH_ENDPOINTS,
   SLEEPER_ACTION_ENDPOINTS,
+  SLEEPER_WEB_GQL_URL,
   type ActionEndpointKey,
 } from "@/config/sleeperAuthEndpoints";
-import { getSleeperSession } from "@/services/sleeperAuth";
+import { getSleeperSession, sleeperGQL } from "@/services/sleeperAuth";
 
 const SLEEPER_BASE = "https://api.sleeper.app";
 
@@ -57,6 +59,19 @@ export async function sleeperAuthedFetch<T = unknown>(
 }
 
 /**
+ * Make an authenticated GraphQL call to sleeper.com/graphql.
+ * Used for read/action operations that require a session token.
+ */
+async function sleeperAuthedGQL<T = unknown>(
+  query: string,
+  variables: Record<string, unknown>
+): Promise<T> {
+  const session = requireSleeperAuth();
+  const data = await sleeperGQL(SLEEPER_WEB_GQL_URL, query, variables, session.token);
+  return data as T;
+}
+
+/**
  * Throws if no valid session exists.
  * Always call this before any write operation.
  */
@@ -68,6 +83,95 @@ export function requireSleeperAuth() {
     );
   }
   return session;
+}
+
+// ─── league_transactions_filtered ────────────────────────────────────────────
+
+const LEAGUE_TRANSACTIONS_FILTERED_QUERY = `
+  query league_transactions_filtered(
+    $league_id: String!
+    $type_filters: [String]
+    $leg_filters: [Int]
+    $status_filters: [String]
+  ) {
+    league_transactions_filtered(
+      league_id: $league_id
+      type_filters: $type_filters
+      leg_filters: $leg_filters
+      status_filters: $status_filters
+    ) {
+      transaction_id
+      type
+      status
+      leg
+      roster_ids
+      adds
+      drops
+      waiver_bid
+      settings
+      metadata
+      consenter_ids
+      created
+      updated
+      draft_picks {
+        season
+        round
+        roster_id
+        previous_owner_id
+        owner_id
+      }
+    }
+  }
+`;
+
+export interface SleeperTransactionPick {
+  season: string;
+  round: number;
+  roster_id: number;
+  previous_owner_id: number;
+  owner_id: number;
+}
+
+export interface SleeperTransaction {
+  transaction_id: string;
+  type: string;
+  status: string;
+  leg: number;
+  roster_ids: number[];
+  adds: Record<string, number> | null;
+  drops: Record<string, number> | null;
+  waiver_bid: number | null;
+  settings: Record<string, unknown> | null;
+  metadata: Record<string, unknown> | null;
+  consenter_ids: number[];
+  created: number;
+  updated: number;
+  draft_picks: SleeperTransactionPick[];
+}
+
+/**
+ * Fetch filtered league transactions via the authenticated sleeper.com/graphql endpoint.
+ *
+ * @param leagueId      - Sleeper league ID
+ * @param typeFilters   - e.g. ["trade"] | ["waiver"] | ["free_agent"] | undefined (all)
+ * @param legFilters    - Week numbers to filter to, e.g. [1, 2, 3] | undefined (all)
+ * @param statusFilters - e.g. ["complete"] | ["failed"] | undefined (all)
+ */
+export async function fetchLeagueTransactionsFiltered(
+  leagueId: string,
+  typeFilters?: string[],
+  legFilters?: number[],
+  statusFilters?: string[]
+): Promise<SleeperTransaction[]> {
+  const data = await sleeperAuthedGQL<{
+    league_transactions_filtered: SleeperTransaction[];
+  }>(LEAGUE_TRANSACTIONS_FILTERED_QUERY, {
+    league_id: leagueId,
+    type_filters: typeFilters ?? null,
+    leg_filters: legFilters ?? null,
+    status_filters: statusFilters ?? null,
+  });
+  return data.league_transactions_filtered ?? [];
 }
 
 // ─── Action helpers ───────────────────────────────────────────────────────────

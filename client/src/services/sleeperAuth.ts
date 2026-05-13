@@ -83,7 +83,13 @@ export function clearSleeperSession(): void {
 
 // ─── GraphQL transport ────────────────────────────────────────────────────────
 
-async function sleeperGQL(
+/**
+ * Low-level GraphQL transport for any Sleeper GQL endpoint.
+ * Pass `authToken` for authenticated operations.
+ * Exported so sleeperAuthedApi can reuse the same transport.
+ */
+export async function sleeperGQL(
+  url: string,
   query: string,
   variables: Record<string, unknown>,
   authToken?: string
@@ -91,7 +97,7 @@ async function sleeperGQL(
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (authToken) headers["Authorization"] = `Bearer ${authToken}`;
 
-  const res = await fetch(SLEEPER_GQL_URL, {
+  const res = await fetch(url, {
     method: "POST",
     headers,
     body: JSON.stringify({ query, variables }),
@@ -153,7 +159,7 @@ export async function getLoginContext(identifier: string): Promise<{
   display: string | null;
   has_password: boolean;
 }> {
-  const data = await sleeperGQL(LOGIN_CONTEXT_QUERY, {
+  const data = await sleeperGQL(SLEEPER_GQL_URL, LOGIN_CONTEXT_QUERY, {
     email_or_phone_or_username: identifier,
   });
   const ctx = (data.login_context_by_email_or_phone_or_username as any) ?? {};
@@ -168,7 +174,7 @@ export async function getLoginContext(identifier: string): Promise<{
  * Returns true on success.
  */
 export async function requestSleeperCode(identifier: string): Promise<boolean> {
-  await sleeperGQL(CREATE_VERIFICATION_CODE_MUTATION, {
+  await sleeperGQL(SLEEPER_GQL_URL, CREATE_VERIFICATION_CODE_MUTATION, {
     email_or_phone_or_username: identifier,
   });
   return true;
@@ -184,7 +190,7 @@ export async function loginWithCredentials(
   password: string,
   captchaToken: string
 ): Promise<SleeperSession> {
-  const data = await sleeperGQL(LOGIN_MUTATION, {
+  const data = await sleeperGQL(SLEEPER_GQL_URL, LOGIN_MUTATION, {
     email_or_phone_or_username: identifier,
     password,
     captcha: captchaToken,

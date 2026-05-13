@@ -7,9 +7,13 @@
  * NEVER scatter endpoint URLs or credentials throughout the app.
  */
 
-// ─── GraphQL endpoint (discovered) ───────────────────────────────────────────
+// ─── GraphQL endpoints (discovered) ──────────────────────────────────────────
 
+/** Auth operations: login_context, create_verification_code, login */
 export const SLEEPER_GQL_URL = "https://api.sleeper.app/graphql";
+
+/** Read/action operations requiring auth: league_transactions_filtered, etc. */
+export const SLEEPER_WEB_GQL_URL = "https://sleeper.com/graphql";
 
 // ─── hCaptcha (required by Sleeper login mutation) ────────────────────────────
 // Fill in after discovering Sleeper's hCaptcha site key from their web app.
