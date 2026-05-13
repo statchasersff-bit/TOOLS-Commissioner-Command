@@ -271,16 +271,6 @@ export function ShareTeam({ league, userTeam }: Props) {
         </Button>
       </div>
 
-      {/* Privacy toggles */}
-      <Card className="p-3 border-border/40 bg-card/50">
-        <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
-          <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Privacy</span>
-          <ToggleSwitch id="hide-name"   label="Hide Name"        checked={hideManagerName} onCheckedChange={setHideManagerName} />
-          <ToggleSwitch id="hide-league" label="Hide League Name" checked={hideLeagueName}  onCheckedChange={setHideLeagueName} />
-          <ToggleSwitch id="hide-values" label="Hide Values"      checked={hideValues}      onCheckedChange={setHideValues} />
-          <ToggleSwitch id="show-ages"   label="Show Ages"        checked={showAges}        onCheckedChange={setShowAges} />
-        </div>
-      </Card>
 
       {/* Two-column layout */}
       <div className="grid grid-cols-1 lg:grid-cols-[38%_62%] gap-6">
