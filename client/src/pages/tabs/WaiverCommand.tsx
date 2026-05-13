@@ -78,6 +78,137 @@ interface AvailablePlayer {
 
 type DetailSortKey = "dynastyValue" | "winNowValue" | "age" | "userRosterPct" | "crossLeaguePct";
 
+interface WaiverTransaction {
+  transaction_id: string;
+  type: string;
+  status: string;
+  roster_ids: number[];
+  settings: { waiver_bid?: number } | null;
+  adds: Record<string, number> | null;
+  drops: Record<string, number> | null;
+  created: number;
+}
+
+interface ManagerTendency {
+  rosterId: number;
+  displayName: string;
+  avgBid: number;
+  claimCount: number;
+  activity: "High" | "Medium" | "Low";
+  style: "Aggressive" | "Patient" | "Hype Chaser" | "Balanced";
+  notes: string;
+}
+
+interface TendencyData {
+  loading: boolean;
+  transactions: WaiverTransaction[];
+  rosterIdToName: Record<number, string>;
+}
+
+async function fetchTendencyData(leagueId: string, faabBudget: number): Promise<{ transactions: WaiverTransaction[]; rosterIdToName: Record<number, string> }> {
+  const weeks = Array.from({ length: 18 }, (_, i) => i + 1);
+  const [txResults, usersRaw, rostersRaw] = await Promise.all([
+    Promise.allSettled(
+      weeks.map((w) =>
+        fetch(`${SLEEPER_API}/league/${leagueId}/transactions/${w}`)
+          .then((r) => r.json())
+          .then((d) => (Array.isArray(d) ? d : []) as WaiverTransaction[])
+      )
+    ),
+    fetch(`${SLEEPER_API}/league/${leagueId}/users`).then((r) => r.json()).catch(() => []),
+    fetch(`${SLEEPER_API}/league/${leagueId}/rosters`).then((r) => r.json()).catch(() => []),
+  ]);
+
+  const allTx: WaiverTransaction[] = txResults.flatMap((r) =>
+    r.status === "fulfilled" ? r.value : []
+  );
+  const waiverTx = allTx.filter((t) => t.type === "waiver" && t.status === "complete");
+
+  const ownerIdToName: Record<string, string> = {};
+  (usersRaw as any[]).forEach((u: any) => {
+    ownerIdToName[u.user_id] = u.display_name || u.username || `Team ${u.user_id.slice(-4)}`;
+  });
+
+  const rosterIdToName: Record<number, string> = {};
+  (rostersRaw as any[]).forEach((r: any) => {
+    const name = ownerIdToName[r.owner_id] ?? `Team ${r.roster_id}`;
+    rosterIdToName[r.roster_id] = name;
+  });
+
+  return { transactions: waiverTx, rosterIdToName };
+}
+
+function computeTendencies(
+  transactions: WaiverTransaction[],
+  rosterIdToName: Record<number, string>,
+  faabBudget: number
+): { summaryMetrics: { aggressionScore: number; avgWinningBidPct: number; activeBidders: number; claimsPerWeek: number; highestBidPct: number }; managerTendencies: ManagerTendency[] } {
+  if (transactions.length === 0) {
+    return { summaryMetrics: { aggressionScore: 0, avgWinningBidPct: 0, activeBidders: 0, claimsPerWeek: 0, highestBidPct: 0 }, managerTendencies: [] };
+  }
+
+  const budget = faabBudget > 0 ? faabBudget : 100;
+  const bids = transactions.map((t) => t.settings?.waiver_bid ?? 0);
+  const bidPcts = bids.map((b) => (b / budget) * 100);
+  const avgWinningBidPct = bidPcts.length > 0 ? Math.round(bidPcts.reduce((s, v) => s + v, 0) / bidPcts.length) : 0;
+  const highestBidPct = bidPcts.length > 0 ? Math.round(Math.max(...bidPcts)) : 0;
+  const activeBidders = new Set(transactions.map((t) => t.roster_ids[0])).size;
+
+  const weekSet = new Set<number>();
+  transactions.forEach((t) => {
+    const weekApprox = Math.floor(t.created / (1000 * 60 * 60 * 24 * 7));
+    weekSet.add(weekApprox);
+  });
+  const weeksActive = Math.max(1, weekSet.size);
+  const claimsPerWeek = Math.round((transactions.length / weeksActive) * 10) / 10;
+
+  const aggressionScore = Math.min(100, Math.round(
+    (avgWinningBidPct / 25) * 60 + (claimsPerWeek / 15) * 25 + (activeBidders / 12) * 15
+  ));
+
+  const byRoster: Record<number, { bids: number[]; adds: Record<string, number> }> = {};
+  transactions.forEach((t) => {
+    const rid = t.roster_ids[0];
+    if (!rid) return;
+    if (!byRoster[rid]) byRoster[rid] = { bids: [], adds: {} };
+    byRoster[rid].bids.push(t.settings?.waiver_bid ?? 0);
+    Object.keys(t.adds ?? {}).forEach((pid) => {
+      byRoster[rid].adds[pid] = (byRoster[rid].adds[pid] ?? 0) + 1;
+    });
+  });
+
+  const managerTendencies: ManagerTendency[] = Object.entries(byRoster)
+    .map(([ridStr, data]) => {
+      const rid = Number(ridStr);
+      const displayName = rosterIdToName[rid] ?? `Team ${rid}`;
+      const bidPctArr = data.bids.map((b) => (b / budget) * 100);
+      const avgBid = bidPctArr.length > 0 ? Math.round(bidPctArr.reduce((s, v) => s + v, 0) / bidPctArr.length) : 0;
+      const claimCount = data.bids.length;
+      const activity: "High" | "Medium" | "Low" = claimCount >= 6 ? "High" : claimCount >= 3 ? "Medium" : "Low";
+      const maxBid = bidPctArr.length > 0 ? Math.max(...bidPctArr) : 0;
+      const variance = bidPctArr.length > 1 ? Math.sqrt(bidPctArr.reduce((s, v) => s + (v - avgBid) ** 2, 0) / bidPctArr.length) : 0;
+
+      let style: ManagerTendency["style"];
+      if (avgBid >= 16) style = "Aggressive";
+      else if (avgBid <= 5 && activity !== "High") style = "Patient";
+      else if (variance >= 10 && maxBid >= 20) style = "Hype Chaser";
+      else style = "Balanced";
+
+      const notes: string[] = [];
+      if (style === "Aggressive") notes.push("Frequently outbids competition");
+      else if (style === "Patient") notes.push("Conserves FAAB budget");
+      else if (style === "Hype Chaser") notes.push("Spikes on high-value targets");
+      if (claimCount >= 8) notes.push("Very active on wire");
+      else if (claimCount === 0) notes.push("Rarely uses waivers");
+      if (maxBid >= 30) notes.push(`Peak bid ${Math.round(maxBid)}%`);
+
+      return { rosterId: rid, displayName, avgBid, claimCount, activity, style, notes: notes.join(" · ") || "—" };
+    })
+    .sort((a, b) => b.claimCount - a.claimCount);
+
+  return { summaryMetrics: { aggressionScore, avgWinningBidPct, activeBidders, claimsPerWeek, highestBidPct }, managerTendencies };
+}
+
 async function fetchLeagueWaiverSnapshot(leagueId: string, userId: string) {
   const [leagueRaw, rostersRaw] = await Promise.all([
     fetch(`${SLEEPER_API}/league/${leagueId}`).then((r) => r.json()),
@@ -1096,6 +1227,19 @@ function LeagueWaiverDetail({
   const [posFilter, setPosFilter] = useState<string>("ALL");
   const [sortKey, setSortKey] = useState<DetailSortKey>("dynastyValue");
   const [sortAsc, setSortAsc] = useState(false);
+  const [tendency, setTendency] = useState<TendencyData>({ loading: true, transactions: [], rosterIdToName: {} });
+
+  useEffect(() => {
+    setTendency({ loading: true, transactions: [], rosterIdToName: {} });
+    fetchTendencyData(row.leagueId, row.faabBudget)
+      .then(({ transactions, rosterIdToName }) => setTendency({ loading: false, transactions, rosterIdToName }))
+      .catch(() => setTendency({ loading: false, transactions: [], rosterIdToName: {} }));
+  }, [row.leagueId, row.faabBudget]);
+
+  const { summaryMetrics, managerTendencies } = useMemo(
+    () => computeTendencies(tendency.transactions, tendency.rosterIdToName, row.faabBudget),
+    [tendency.transactions, tendency.rosterIdToName, row.faabBudget]
+  );
 
   const allLeagueTeamCount = allRows.reduce((s, r) => s + r.totalTeams, 0);
   const totalLeaguesLoaded = allRows.filter((r) => !r.loading && !r.error).length;
@@ -1358,7 +1502,155 @@ function LeagueWaiverDetail({
         </div>
       </Card>
 
+      {/* League Tendency Analysis */}
+      <div>
+        <div className="flex items-center gap-2 mb-3">
+          <div className="w-[3px] h-4 rounded-full bg-[#d4af37]" />
+          <h3 className="text-sm font-bold text-foreground">League Tendency Analysis</h3>
+          {tendency.loading && <Skeleton className="h-3 w-20 rounded" />}
+        </div>
+
+        {/* Summary KPI cards */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 mb-4">
+          {tendency.loading ? (
+            Array.from({ length: 5 }).map((_, i) => (
+              <Card key={i} className="p-4 border-border/60 dark:border-[#1a2d4a]/80 animate-pulse">
+                <Skeleton className="h-3 w-20 mb-2 rounded" />
+                <Skeleton className="h-6 w-14 rounded" />
+              </Card>
+            ))
+          ) : (
+            <>
+              <TendencyKpi
+                label="Aggression Score"
+                value={`${summaryMetrics.aggressionScore}/100`}
+                accent={summaryMetrics.aggressionScore >= 70 ? "red" : summaryMetrics.aggressionScore >= 40 ? "amber" : "green"}
+                tip="Composite league aggression based on bid %, claim volume, and active bidder count"
+              />
+              <TendencyKpi
+                label="Avg Winning Bid"
+                value={`${summaryMetrics.avgWinningBidPct}%`}
+                accent="gold"
+                tip="Average FAAB bid % on completed waiver claims this season"
+              />
+              <TendencyKpi
+                label="Active Bidders"
+                value={`${summaryMetrics.activeBidders}/${row.totalTeams}`}
+                accent="blue"
+                tip="Number of distinct managers who have submitted at least one waiver claim"
+              />
+              <TendencyKpi
+                label="Claims / Week"
+                value={summaryMetrics.claimsPerWeek.toString()}
+                accent="purple"
+                tip="Average number of completed waiver claims per active week"
+              />
+              <TendencyKpi
+                label="Highest Bid"
+                value={`${summaryMetrics.highestBidPct}%`}
+                accent={summaryMetrics.highestBidPct >= 30 ? "red" : "amber"}
+                tip="Highest single FAAB bid percentage recorded this season"
+              />
+            </>
+          )}
+        </div>
+
+        {/* Manager Tendencies table */}
+        <Card className="overflow-hidden border-border/60 dark:border-[#1a2d4a]/80">
+          <div className="px-5 py-3.5 border-b border-border/40 dark:border-white/[0.06]">
+            <h4 className="text-sm font-bold text-foreground">Manager Tendencies</h4>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Based on completed waiver transactions this season</p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm" data-testid="manager-tendency-table">
+              <thead>
+                <tr className="border-b border-border/40 dark:border-white/[0.05] bg-muted/30 dark:bg-white/[0.02]">
+                  {["Manager", "Style", "Avg Bid", "Activity", "Claims", "Notes"].map((h) => (
+                    <th key={h} className={cn("px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground whitespace-nowrap", h === "Manager" || h === "Notes" ? "text-left" : "text-center")}>
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/30 dark:divide-white/[0.04]">
+                {tendency.loading ? (
+                  Array.from({ length: 4 }).map((_, i) => (
+                    <tr key={i} className="animate-pulse">
+                      {Array.from({ length: 6 }).map((__, j) => (
+                        <td key={j} className="px-4 py-3"><Skeleton className="h-4 w-full rounded" /></td>
+                      ))}
+                    </tr>
+                  ))
+                ) : managerTendencies.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="px-4 py-10 text-center text-sm text-muted-foreground">
+                      No waiver transaction history found for this league yet.
+                    </td>
+                  </tr>
+                ) : (
+                  managerTendencies.map((m) => {
+                    const styleColors: Record<ManagerTendency["style"], string> = {
+                      Aggressive:    "bg-rose-500/10 text-rose-500 border-rose-500/20",
+                      Patient:       "bg-emerald-500/10 text-emerald-500 border-emerald-500/20",
+                      "Hype Chaser": "bg-violet-500/10 text-violet-500 border-violet-500/20",
+                      Balanced:      "bg-sky-500/10 text-sky-500 border-sky-500/20",
+                    };
+                    const activityColors: Record<ManagerTendency["activity"], string> = {
+                      High:   "text-emerald-500",
+                      Medium: "text-amber-500",
+                      Low:    "text-muted-foreground",
+                    };
+                    return (
+                      <tr key={m.rosterId} className="hover:bg-muted/30 dark:hover:bg-white/[0.025] transition-colors" data-testid={`row-manager-${m.rosterId}`}>
+                        <td className="px-4 py-3">
+                          <span className="font-semibold text-[13px] text-foreground">{m.displayName}</span>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <span className={cn("text-[11px] font-bold px-2 py-0.5 rounded-full border", styleColors[m.style])}>
+                            {m.style}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <span className="text-[13px] font-bold text-foreground">{m.avgBid}%</span>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <span className={cn("text-[12px] font-semibold", activityColors[m.activity])}>{m.activity}</span>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <span className="text-[13px] font-bold text-foreground">{m.claimCount}</span>
+                        </td>
+                        <td className="px-4 py-3 text-left">
+                          <span className="text-[11px] text-muted-foreground">{m.notes}</span>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      </div>
+
       {claimModal}
     </div>
+  );
+}
+
+function TendencyKpi({ label, value, accent, tip }: { label: string; value: string; accent: "gold" | "blue" | "green" | "amber" | "red" | "purple"; tip: string }) {
+  const accentMap = {
+    gold:   { val: "text-[#d4af37]",   bg: "bg-[#d4af37]/10",   ring: "ring-[#d4af37]/20"   },
+    blue:   { val: "text-blue-400",    bg: "bg-blue-400/10",    ring: "ring-blue-400/20"    },
+    green:  { val: "text-emerald-400", bg: "bg-emerald-400/10", ring: "ring-emerald-400/20" },
+    amber:  { val: "text-amber-400",   bg: "bg-amber-400/10",   ring: "ring-amber-400/20"   },
+    red:    { val: "text-rose-400",    bg: "bg-rose-400/10",    ring: "ring-rose-400/20"    },
+    purple: { val: "text-violet-400",  bg: "bg-violet-400/10",  ring: "ring-violet-400/20"  },
+  };
+  const c = accentMap[accent];
+  return (
+    <Card className={cn("p-4 border-border/60 dark:border-[#1a2d4a]/80 ring-1", c.bg, c.ring)} title={tip} data-testid={`kpi-tendency-${label.replace(/\s+/g, "-").toLowerCase()}`}>
+      <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1 truncate">{label}</div>
+      <div className={cn("text-xl font-black tracking-tight", c.val)}>{value}</div>
+    </Card>
   );
 }
