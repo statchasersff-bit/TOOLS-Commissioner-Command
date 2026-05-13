@@ -9,8 +9,9 @@ import { getLeagueTeamTiers, getTierColor, getTierEmoji, getTierTooltip, isConte
 import { useValueModel } from "@/contexts/ValueModelContext";
 import type { League, Team, Player } from "@/types";
 import { cn } from "@/lib/utils";
-import { Trophy, Zap, Target, Calendar, Users, Medal, ArrowRight, ArrowUp, ArrowDown, ArrowUpDown, Table, ArrowRightLeft, Compass, Flame, Sprout, Archive, ChevronDown, ChevronUp, ChevronRight, TrendingUp, TrendingDown, MapPin, BarChart2, Grid3X3, List } from "lucide-react";
+import { Trophy, Zap, Target, Calendar, Users, Medal, ArrowRight, ArrowUp, ArrowDown, ArrowUpDown, Table, ArrowRightLeft, Compass, Flame, Sprout, Archive, ChevronDown, ChevronUp, ChevronRight, TrendingUp, TrendingDown, MapPin, BarChart2, Grid3X3, List, LayoutDashboard, Calculator, Activity, Waves, CheckCircle2, AlertTriangle } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { PlayerAvatar } from "@/components/PlayerAvatar";
 
 interface DashboardProps {
   league: League;
@@ -1300,6 +1301,520 @@ export function DashboardKeyInsights({ league, userTeam }: DashboardProps) {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+// ─── MyTeam: unified Overview + Roster Breakdown ────────────────────────────
+
+function rankBg(rank: number, total: number) {
+  const pct = rank / total;
+  if (pct <= 0.33) return { bar: "bg-emerald-500", badge: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20" };
+  if (pct <= 0.66) return { bar: "bg-amber-500",   badge: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20" };
+  return { bar: "bg-red-400", badge: "bg-red-500/10 text-red-500 dark:text-red-400 border-red-500/20" };
+}
+
+function percentileLabel(rank: number, total: number): string {
+  const pct = Math.round((rank / total) * 100);
+  if (pct <= 25) return `Top ${pct}%`;
+  if (pct <= 50) return `Top ${pct}%`;
+  return `Bot ${100 - pct}%`;
+}
+
+export function MyTeam({ league, userTeam, onNavigate }: DashboardOverviewProps) {
+  const { getPlayerValue, getRedraftValue, optimizeLineup } = useValueModel();
+  const [expandedPos, setExpandedPos] = useState<Set<string>>(new Set(["QB"]));
+
+  const total = league.teams.length;
+
+  // ── Rank + odds (same as DashboardOverview) ───────────────────────────────
+  const sorted = useMemo(() => [...league.teams].sort((a, b) => b.metrics.overall - a.metrics.overall), [league.teams]);
+  const rank = sorted.findIndex((t) => t.id === userTeam.id) + 1;
+
+  const tierMap = useMemo(() => getLeagueTeamTiers(league.teams), [league.teams]);
+  const tierInfo = tierMap.get(userTeam.id);
+  const tier = tierInfo?.tier ?? "Balanced";
+  const tierDescription = tierInfo?.tierDescription ?? "";
+
+  const starterAges = userTeam.roster.filter((p) => p.starter);
+  const avgAge = starterAges.length > 0
+    ? (starterAges.reduce((s, p) => s + p.age, 0) / starterAges.length).toFixed(1)
+    : "N/A";
+  const future1sts = userTeam.picks.filter((p) => p.round === 1).length;
+
+  const leagueAvg1sts = Math.round(league.teams.reduce((s, t) => s + t.picks.filter(p => p.round === 1).length, 0) / total * 10) / 10;
+  const leagueAvgAge = (league.teams.reduce((s, t) => {
+    const st = t.roster.filter(p => p.starter);
+    return s + (st.length > 0 ? st.reduce((a, p) => a + p.age, 0) / st.length : 0);
+  }, 0) / total).toFixed(1);
+
+  const playoffSlots = league.playoffTeams ?? Math.max(2, Math.round(total / 3));
+  const sortedByRecord = [...league.teams].sort((a, b) => {
+    const aW = a.wins ?? 0, bW = b.wins ?? 0;
+    if (bW !== aW) return bW - aW;
+    return (a.losses ?? 0) - (b.losses ?? 0);
+  });
+  const standing = sortedByRecord.findIndex((t) => t.id === userTeam.id) + 1 || rank;
+  const totalGamesPlayed = (userTeam.wins ?? 0) + (userTeam.losses ?? 0) + (userTeam.ties ?? 0);
+  const regularSeasonGames = league.regularSeasonWeeks ?? 14;
+  const seasonProgress = Math.min(totalGamesPlayed / regularSeasonGames, 1);
+
+  let standingScore: number;
+  if (total <= 1) {
+    standingScore = 1;
+  } else if (standing <= playoffSlots) {
+    const comfortMargin = playoffSlots > 1 ? (playoffSlots - standing) / (playoffSlots - 1) : 1;
+    standingScore = 0.55 + comfortMargin * 0.40;
+  } else {
+    const spotsBack = standing - playoffSlots;
+    standingScore = 0.45 * (1 - spotsBack / Math.max(1, total - playoffSlots));
+  }
+
+  const sortedByRedraft = [...league.teams].sort((a, b) => {
+    const aVal = a.roster.filter(p => p.starter).reduce((s, p) => s + getRedraftValue(p), 0);
+    const bVal = b.roster.filter(p => p.starter).reduce((s, p) => s + getRedraftValue(p), 0);
+    return bVal - aVal;
+  });
+  const redraftRank = sortedByRedraft.findIndex(t => t.id === userTeam.id) + 1 || rank;
+
+  let talentScore: number;
+  if (redraftRank <= playoffSlots) {
+    const comfortMargin = playoffSlots > 1 ? (playoffSlots - redraftRank) / (playoffSlots - 1) : 1;
+    talentScore = 0.55 + comfortMargin * 0.40;
+  } else {
+    const spotsBack = redraftRank - playoffSlots;
+    talentScore = 0.45 * (1 - spotsBack / Math.max(1, total - playoffSlots));
+  }
+
+  const standingWeight = 0.15 + 0.70 * seasonProgress;
+  const talentWeight = 1 - standingWeight;
+  const clampedOdds = Math.min(99, Math.max(1, Math.round((standingWeight * standingScore + talentWeight * talentScore) * 100)));
+  const oddsColor = clampedOdds >= 60 ? "text-emerald-600 dark:text-emerald-400" : clampedOdds >= 40 ? "text-amber-600 dark:text-amber-400" : "text-red-500 dark:text-red-400";
+
+  const winNow = getWinNowScore(userTeam, league);
+  const youth = getYouthScore(userTeam, league);
+  const capital = getDraftCapitalScore(userTeam, league);
+  const suggestedDirection = getSuggestedDirection(userTeam, tier, clampedOdds, userTeam.metrics.windowStartOffset, getRedraftValue, getPlayerValue);
+
+  const nowScore = useMemo(() => computeNowScore(league.teams, userTeam), [league.teams, userTeam]);
+  const futureScore = useMemo(() => computeFutureScore(league.teams, userTeam), [league.teams, userTeam]);
+  const avgNow = useMemo(() => { const s = league.teams.map(t => computeNowScore(league.teams, t)); return s.reduce((a, b) => a + b, 0) / s.length; }, [league.teams]);
+  const avgFuture = useMemo(() => { const s = league.teams.map(t => computeFutureScore(league.teams, t)); return s.reduce((a, b) => a + b, 0) / s.length; }, [league.teams]);
+  const dynastyWindowLabel = getDynastyWindowLabel(nowScore, futureScore, avgNow, avgFuture);
+  const dynastyWindowColor = getDynastyWindowColor(dynastyWindowLabel);
+
+  const strengths = useMemo(() => getScoutingStrengths(userTeam, league.teams), [userTeam, league.teams]);
+  const weaknesses = useMemo(() => getScoutingWeaknesses(userTeam, league.teams), [userTeam, league.teams]);
+
+  // ── Positional ranks (from RosterBreakdown) ───────────────────────────────
+  const posRanks = useMemo(() => {
+    const positions = ["QB", "RB", "WR", "TE"] as const;
+    const rosterPositions = league.rosterPositions || [];
+    const redraftRanks: Record<string, Record<string, number>> = {};
+    const dynastyRanks: Record<string, Record<string, number>> = {};
+
+    positions.forEach(pos => {
+      const redraftTotals = league.teams.map(t => {
+        const roster = rosterPositions.length > 0 ? optimizeLineup(t.roster, rosterPositions) : t.roster;
+        const starters = roster.filter(p => p.starter && p.pos === pos);
+        return { id: t.id, total: starters.reduce((s, p) => s + getRedraftValue(p), 0) };
+      });
+      redraftTotals.sort((a, b) => b.total - a.total);
+      redraftTotals.forEach((entry, i) => {
+        if (!redraftRanks[entry.id]) redraftRanks[entry.id] = {};
+        redraftRanks[entry.id][pos] = i + 1;
+      });
+
+      const dynastyTotals = league.teams.map(t => {
+        const allAtPos = t.roster.filter(p => p.pos === pos);
+        return { id: t.id, total: allAtPos.reduce((s, p) => s + getPlayerValue(p), 0) };
+      });
+      dynastyTotals.sort((a, b) => b.total - a.total);
+      dynastyTotals.forEach((entry, i) => {
+        if (!dynastyRanks[entry.id]) dynastyRanks[entry.id] = {};
+        dynastyRanks[entry.id][pos] = i + 1;
+      });
+    });
+
+    return { redraftRanks, dynastyRanks };
+  }, [league, getRedraftValue, getPlayerValue, optimizeLineup]);
+
+  const positionData = (["QB", "RB", "WR", "TE"] as const).map(pos => ({
+    pos,
+    redraftRank: posRanks.redraftRanks[userTeam.id]?.[pos] ?? total,
+    dynastyRank: posRanks.dynastyRanks[userTeam.id]?.[pos] ?? total,
+    players: [...userTeam.roster.filter(p => p.pos === pos)]
+      .sort((a, b) => (b.starter ? 1 : 0) - (a.starter ? 1 : 0) || b.value - a.value),
+  }));
+
+  const togglePos = (pos: string) => {
+    setExpandedPos(prev => {
+      const next = new Set(prev);
+      if (next.has(pos)) next.delete(pos); else next.add(pos);
+      return next;
+    });
+  };
+
+  // League meta string for hero
+  const leagueMeta = [
+    `${total} Teams`,
+    league.format,
+    league.scoringFormat,
+  ].filter(Boolean).join(" · ");
+
+  return (
+    <div className="space-y-8">
+
+      {/* ── 1. HERO HEADER ─────────────────────────────────────────────────── */}
+      <div className="rounded-2xl border border-border/60 dark:border-[#1a2d4a]/80 bg-gradient-to-br from-[#0b3a7a]/5 via-background to-[#d4af37]/5 dark:from-[#0b3a7a]/10 dark:via-[#0c1929] dark:to-[#d4af37]/5 p-6" data-testid="myteam-hero">
+        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="w-14 h-14 rounded-2xl bg-[#0b3a7a]/15 dark:bg-blue-400/10 flex items-center justify-center ring-2 ring-[#0b3a7a]/20 dark:ring-blue-400/20 flex-shrink-0">
+              <span className="text-xl font-black text-[#0b3a7a] dark:text-blue-400 uppercase">
+                {userTeam.name?.[0] ?? "T"}
+              </span>
+            </div>
+            <div>
+              <h2 className="text-xl font-black text-foreground leading-tight" data-testid="hero-team-name">
+                {userTeam.name}
+              </h2>
+              <p className="text-sm text-muted-foreground mt-0.5">
+                Managed by <span className="font-semibold text-foreground">{userTeam.owner}</span>
+              </p>
+              <p className="text-xs text-muted-foreground/70 mt-1 font-medium">{leagueMeta}</p>
+            </div>
+          </div>
+          <Badge className={`text-sm font-bold px-3 py-1 border self-start ${getTierBadgeClasses(tier)}`} data-testid="hero-tier-badge">
+            {tier}
+          </Badge>
+        </div>
+
+        {onNavigate && (
+          <div className="flex flex-wrap gap-2 mt-5 pt-5 border-t border-border/40">
+            <Button variant="outline" size="sm" className="text-xs h-8 gap-1.5 border-[#0b3a7a]/25 hover:border-[#0b3a7a]/50 hover:bg-[#0b3a7a]/5" onClick={() => onNavigate("trade-center", "trade-calculator")} data-testid="hero-btn-trade-calc">
+              <Calculator className="w-3.5 h-3.5" /> Trade Calculator
+            </Button>
+            <Button variant="outline" size="sm" className="text-xs h-8 gap-1.5 border-[#0b3a7a]/25 hover:border-[#0b3a7a]/50 hover:bg-[#0b3a7a]/5" onClick={() => onNavigate("league-analyzer", "power-rankings")} data-testid="hero-btn-league-analyzer">
+              <BarChart2 className="w-3.5 h-3.5" /> League Analyzer
+            </Button>
+            <Button variant="outline" size="sm" className="text-xs h-8 gap-1.5 border-[#0b3a7a]/25 hover:border-[#0b3a7a]/50 hover:bg-[#0b3a7a]/5" onClick={() => onNavigate("dashboard", "field-view")} data-testid="hero-btn-field-view">
+              <Grid3X3 className="w-3.5 h-3.5" /> Field View
+            </Button>
+            <Button variant="outline" size="sm" className="text-xs h-8 gap-1.5 border-[#0b3a7a]/25 hover:border-[#0b3a7a]/50 hover:bg-[#0b3a7a]/5" onClick={() => onNavigate("portfolio", "waiver-command")} data-testid="hero-btn-waiver">
+              <Waves className="w-3.5 h-3.5" /> Waiver Command
+            </Button>
+          </div>
+        )}
+      </div>
+
+      {/* ── 2. KPI STRIP ───────────────────────────────────────────────────── */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3" data-testid="myteam-kpi-strip">
+        {[
+          {
+            label: "Power Rank",
+            value: `#${rank}`,
+            sub: `of ${total}`,
+            ctx: percentileLabel(rank, total),
+            ctxColor: rankBg(rank, total).badge.split(" ").filter(c => c.startsWith("text-")).join(" "),
+            icon: Trophy,
+            testId: "kpi-power-rank",
+          },
+          {
+            label: "Playoff Odds",
+            value: `${clampedOdds}%`,
+            sub: null,
+            ctx: clampedOdds >= 70 ? "Strong outlook" : clampedOdds >= 50 ? "Favorable" : clampedOdds >= 35 ? "On the bubble" : "Long shot",
+            ctxColor: oddsColor,
+            icon: Target,
+            testId: "kpi-playoff-odds",
+          },
+          {
+            label: "Avg Starter Age",
+            value: avgAge,
+            sub: null,
+            ctx: `Lg avg: ${leagueAvgAge}`,
+            ctxColor: Number(avgAge) < Number(leagueAvgAge) ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400",
+            icon: Calendar,
+            testId: "kpi-starter-age",
+          },
+          {
+            label: "Future 1sts",
+            value: future1sts,
+            sub: null,
+            ctx: `Lg avg: ${leagueAvg1sts}`,
+            ctxColor: future1sts >= leagueAvg1sts ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400",
+            icon: Users,
+            testId: "kpi-future-1sts",
+          },
+        ].map(({ label, value, sub, ctx, ctxColor, icon: Icon, testId }) => (
+          <Card key={label} className="p-4 flex items-center gap-3 hover-elevate" data-testid={testId}>
+            <div className="p-2 rounded-lg bg-[#0b3a7a]/8 dark:bg-blue-400/10 flex-shrink-0">
+              <Icon className="w-4 h-4 text-[#0b3a7a] dark:text-blue-400" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider leading-none">{label}</p>
+              <p className="text-xl font-black text-foreground leading-tight mt-0.5">
+                {value}<span className="text-xs font-normal text-muted-foreground ml-0.5">{sub}</span>
+              </p>
+              <p className={cn("text-[11px] font-medium mt-0.5", ctxColor)}>{ctx}</p>
+            </div>
+          </Card>
+        ))}
+      </div>
+
+      {/* ── 3. TEAM DNA ────────────────────────────────────────────────────── */}
+      <div data-testid="myteam-dna">
+        <div className="mb-4">
+          <h3 className="text-base font-bold text-foreground">Team DNA</h3>
+          <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+
+          {/* Identity bars */}
+          <Card className="p-5" data-testid="dna-identity">
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-4">Team Identity</p>
+            <div className="space-y-4">
+              {[
+                { label: "Win-Now", icon: Flame, value: winNow, color: "bg-orange-500", iconColor: "text-orange-500" },
+                { label: "Long-Term", icon: Sprout, value: youth, color: "bg-emerald-500", iconColor: "text-emerald-500" },
+                { label: "Draft Capital", icon: Archive, value: capital, color: "bg-[#0b3a7a] dark:bg-blue-500", iconColor: "text-[#0b3a7a] dark:text-blue-400" },
+              ].map(({ label, icon: Icon, value, color, iconColor }) => (
+                <div key={label}>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <div className="flex items-center gap-2">
+                      <Icon className={cn("w-4 h-4", iconColor)} />
+                      <span className="text-sm font-semibold text-foreground">{label}</span>
+                    </div>
+                    <span className="text-sm font-bold text-foreground">{value}<span className="text-xs text-muted-foreground font-normal"> / 10</span></span>
+                  </div>
+                  <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
+                    <div className={cn("h-full rounded-full transition-all", color)} style={{ width: `${value * 10}%` }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Card>
+
+          {/* Strengths & Weaknesses */}
+          <Card className="p-5" data-testid="dna-strengths-weaknesses">
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-4">Strengths & Needs</p>
+            <div className="space-y-4">
+              <div>
+                <div className="flex items-center gap-1.5 mb-2">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                  <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Strengths</span>
+                </div>
+                {strengths.length > 0 ? (
+                  <ul className="space-y-1.5">
+                    {strengths.slice(0, 4).map((s, i) => (
+                      <li key={i} className="flex items-start gap-1.5 text-sm text-foreground">
+                        <span className="text-emerald-500 mt-0.5 flex-shrink-0">•</span>{s}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-xs text-muted-foreground italic">No standout strengths detected</p>
+                )}
+              </div>
+              <div className="border-t border-border/40 pt-4">
+                <div className="flex items-center gap-1.5 mb-2">
+                  <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
+                  <span className="text-xs font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider">Weaknesses</span>
+                </div>
+                {weaknesses.length > 0 ? (
+                  <ul className="space-y-1.5">
+                    {weaknesses.slice(0, 4).map((w, i) => (
+                      <li key={i} className="flex items-start gap-1.5 text-sm text-foreground">
+                        <span className="text-amber-500 mt-0.5 flex-shrink-0">•</span>{w}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-xs text-muted-foreground italic">No major weaknesses detected</p>
+                )}
+              </div>
+            </div>
+          </Card>
+
+          {/* Strategy */}
+          <Card className="p-5 flex flex-col gap-4" data-testid="dna-strategy">
+            <div>
+              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-3">Strategy</p>
+              <div className="flex items-start gap-2 mb-3">
+                <Compass className="w-4 h-4 text-[#d4af37] flex-shrink-0 mt-0.5" />
+                <p className="text-sm font-semibold text-foreground leading-relaxed">"{suggestedDirection}"</p>
+              </div>
+            </div>
+            <div className="border-t border-border/40 pt-4">
+              <div className="flex items-center gap-2 mb-2">
+                <MapPin className="w-3.5 h-3.5 text-[#d4af37]" />
+                <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Dynasty Window</span>
+              </div>
+              <p className={cn("text-lg font-bold leading-tight", dynastyWindowColor)} data-testid="dna-window-label">{dynastyWindowLabel}</p>
+              <div className="flex gap-1 mt-3">
+                {[0, 1, 2, 3, 4].map((offset) => {
+                  const year = new Date().getFullYear() + offset;
+                  const isInWindow = offset >= userTeam.metrics.windowStartOffset &&
+                    offset < userTeam.metrics.windowStartOffset + userTeam.metrics.contenderWindowYears;
+                  return (
+                    <div key={offset} className={cn(
+                      "flex-1 h-7 rounded-md flex items-center justify-center text-[10px] font-semibold",
+                      isInWindow ? "bg-[#0b3a7a] dark:bg-blue-600 text-white" : "bg-muted text-muted-foreground"
+                    )}>
+                      {year}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </Card>
+        </div>
+      </div>
+
+      {/* ── 4. POSITIONAL STRENGTH OVERVIEW ────────────────────────────────── */}
+      <div data-testid="myteam-positional-overview">
+        <div className="mb-4">
+          <h3 className="text-base font-bold text-foreground">Positional Strength</h3>
+          <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {positionData.map(({ pos, redraftRank, dynastyRank }) => {
+            const rStyle = rankBg(redraftRank, total);
+            const dStyle = rankBg(dynastyRank, total);
+            return (
+              <Card key={pos} className="p-4 hover-elevate" data-testid={`pos-strength-${pos.toLowerCase()}`}>
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-xs font-black uppercase tracking-widest text-foreground">{pos}</span>
+                  <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded border", dStyle.badge)}>
+                    {percentileLabel(dynastyRank, total)}
+                  </span>
+                </div>
+                <div className="space-y-3">
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[10px] font-semibold text-muted-foreground uppercase">Redraft</span>
+                      <span className={cn("text-xs font-bold", rStyle.badge.split(" ").filter(c => c.startsWith("text-")).join(" "))}>
+                        #{redraftRank}<span className="text-muted-foreground font-normal">/{total}</span>
+                      </span>
+                    </div>
+                    <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
+                      <div className={cn("h-full rounded-full", rStyle.bar)} style={{ width: `${Math.round(((total - redraftRank) / (total - 1)) * 100)}%` }} />
+                    </div>
+                  </div>
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[10px] font-semibold text-muted-foreground uppercase">Dynasty</span>
+                      <span className={cn("text-xs font-bold", dStyle.badge.split(" ").filter(c => c.startsWith("text-")).join(" "))}>
+                        #{dynastyRank}<span className="text-muted-foreground font-normal">/{total}</span>
+                      </span>
+                    </div>
+                    <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
+                      <div className={cn("h-full rounded-full", dStyle.bar)} style={{ width: `${Math.round(((total - dynastyRank) / (total - 1)) * 100)}%` }} />
+                    </div>
+                  </div>
+                </div>
+              </Card>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ── 5. POSITION GROUP BREAKDOWNS (Accordions) ──────────────────────── */}
+      <div data-testid="myteam-position-groups">
+        <div className="mb-4">
+          <h3 className="text-base font-bold text-foreground">Position Groups</h3>
+          <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
+        </div>
+        <div className="space-y-2">
+          {positionData.map(({ pos, redraftRank, dynastyRank, players }) => {
+            const isOpen = expandedPos.has(pos);
+            const rStyle = rankBg(redraftRank, total);
+            const dStyle = rankBg(dynastyRank, total);
+            const starters = players.filter(p => p.starter);
+            const bench = players.filter(p => !p.starter);
+            return (
+              <Card key={pos} className="overflow-hidden" data-testid={`group-${pos.toLowerCase()}`}>
+                <button
+                  className="w-full flex items-center justify-between px-5 py-4 hover:bg-muted/30 transition-colors"
+                  onClick={() => togglePos(pos)}
+                  data-testid={`group-toggle-${pos.toLowerCase()}`}
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm font-black uppercase tracking-widest text-foreground w-8">{pos}</span>
+                    <Badge variant="secondary" className="text-xs">{players.length}</Badge>
+                    <span className="text-xs text-muted-foreground hidden sm:block">
+                      {starters.length} starter{starters.length !== 1 ? "s" : ""} · {bench.length} bench
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className={cn("text-[10px] font-bold px-2 py-0.5 rounded border hidden sm:inline", rStyle.badge)}>
+                      RED #{redraftRank}
+                    </span>
+                    <span className={cn("text-[10px] font-bold px-2 py-0.5 rounded border hidden sm:inline", dStyle.badge)}>
+                      DYN #{dynastyRank}
+                    </span>
+                    {isOpen
+                      ? <ChevronUp className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                      : <ChevronDown className="w-4 h-4 text-muted-foreground flex-shrink-0" />}
+                  </div>
+                </button>
+
+                {isOpen && (
+                  <div className="border-t border-border/40 px-5 pb-4 pt-3">
+                    {players.length === 0 ? (
+                      <p className="text-sm text-muted-foreground italic py-2">No {pos}s on roster</p>
+                    ) : (
+                      <div className="space-y-1">
+                        {/* Starters */}
+                        {starters.length > 0 && (
+                          <div className="mb-3">
+                            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-2">Starters</p>
+                            {starters.map(p => (
+                              <div key={p.id} className="flex items-center justify-between py-2 border-b border-border/20 last:border-0" data-testid={`group-player-${p.id}`}>
+                                <div className="flex items-center gap-2.5">
+                                  <PlayerAvatar id={p.sleeperId ?? p.id} name={p.name} pos={p.pos} team={p.team ?? ""} size="sm" />
+                                  <div>
+                                    <p className="text-sm font-semibold text-foreground leading-tight">{p.name}</p>
+                                    <p className="text-[11px] text-muted-foreground">{p.team} · Age {p.age}</p>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                  <span className="text-xs font-bold text-[#0b3a7a] dark:text-blue-400 tabular-nums">{p.value}</span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {/* Bench */}
+                        {bench.length > 0 && (
+                          <div>
+                            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-2">Bench</p>
+                            {bench.map(p => (
+                              <div key={p.id} className="flex items-center justify-between py-2 border-b border-border/20 last:border-0 opacity-80" data-testid={`group-bench-${p.id}`}>
+                                <div className="flex items-center gap-2.5">
+                                  <PlayerAvatar id={p.sleeperId ?? p.id} name={p.name} pos={p.pos} team={p.team ?? ""} size="sm" />
+                                  <div>
+                                    <p className="text-sm font-medium text-foreground leading-tight">{p.name}</p>
+                                    <p className="text-[11px] text-muted-foreground">{p.team} · Age {p.age}</p>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                  <span className="text-xs font-medium text-muted-foreground tabular-nums">{p.value}</span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </Card>
+            );
+          })}
+        </div>
+      </div>
+
     </div>
   );
 }

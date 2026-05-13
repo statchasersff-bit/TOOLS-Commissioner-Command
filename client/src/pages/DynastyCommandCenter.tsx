@@ -21,9 +21,8 @@ import logoLight from "@assets/statchasers_logo_transparent_light_1772764844283.
 
 import { PortfolioConnect, PortfolioSummary } from "./tabs/Portfolio";
 import WaiverCommand from "./tabs/WaiverCommand";
-import { DashboardOverview, DashboardSnapshot } from "./tabs/Dashboard";
+import { DashboardOverview, DashboardSnapshot, MyTeam } from "./tabs/Dashboard";
 import { RosterComparison } from "./tabs/LeagueAnalyzer";
-import { RosterBreakdown } from "./tabs/TeamBreakdown";
 import { FieldView } from "./tabs/FieldView";
 import { ShareTeam } from "./tabs/ShareTeam";
 import { TradeBlockScanner, TradeCalculator, TradeDatabase } from "./tabs/TradeCenter";
@@ -288,9 +287,8 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
 
     const key = `${activeMainTab}:${activeSubTab}`;
     switch (key) {
-      case "dashboard:overview": return <DashboardOverview league={league} userTeam={userTeam} onNavigate={navigateToSubTab} />;
+      case "dashboard:my-team": return <MyTeam league={league} userTeam={userTeam} onNavigate={navigateToSubTab} />;
       case "dashboard:field-view": return <FieldView league={league} userTeam={userTeam} />;
-      case "dashboard:roster-breakdown": return <RosterBreakdown league={league} userTeam={userTeam} />;
       case "dashboard:share-team": return <ShareTeam league={league} userTeam={userTeam} />;
       case "league-analyzer:power-rankings": return <DashboardSnapshot league={league} userTeam={userTeam} />;
       case "league-analyzer:league-economy": return <LeagueEconomy league={league} />;
