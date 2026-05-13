@@ -2053,12 +2053,6 @@ function LeagueWaiverDetail({
             )}
             <div>
               <h2 className="text-lg font-bold text-foreground leading-tight">{row.leagueName}</h2>
-              <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                <span className={cn("text-[10px] font-bold px-2 py-0.5 rounded-full border", tierAccent.bg, tierAccent.text, tierAccent.border)}>{row.tier}</span>
-                <span className="text-[11px] text-muted-foreground">#{row.tierRank} of {row.totalTeams}</span>
-                {row.scoringFormat && <span className="text-[10px] text-muted-foreground/70">{row.scoringFormat}</span>}
-                <span className="text-[10px] text-muted-foreground/70">{row.format}</span>
-              </div>
             </div>
           </div>
         </div>
