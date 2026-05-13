@@ -1469,10 +1469,24 @@ export function MyTeam({ league, userTeam, onNavigate }: DashboardOverviewProps)
       <div className="rounded-2xl border border-border/60 dark:border-[#1a2d4a]/80 bg-gradient-to-br from-[#0b3a7a]/5 via-background to-[#d4af37]/5 dark:from-[#0b3a7a]/10 dark:via-[#0c1929] dark:to-[#d4af37]/5 p-6" data-testid="myteam-hero">
         <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
           <div className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-2xl bg-[#0b3a7a]/15 dark:bg-blue-400/10 flex items-center justify-center ring-2 ring-[#0b3a7a]/20 dark:ring-blue-400/20 flex-shrink-0">
-              <span className="text-xl font-black text-[#0b3a7a] dark:text-blue-400 uppercase">
-                {userTeam.name?.[0] ?? "T"}
-              </span>
+            <div className="w-14 h-14 rounded-2xl bg-[#0b3a7a]/15 dark:bg-blue-400/10 flex items-center justify-center ring-2 ring-[#0b3a7a]/20 dark:ring-blue-400/20 flex-shrink-0 overflow-hidden">
+              {userTeam.avatar ? (
+                <img
+                  src={userTeam.avatar}
+                  alt={userTeam.owner}
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    const img = e.target as HTMLImageElement;
+                    img.onerror = null;
+                    img.style.display = "none";
+                    img.parentElement!.innerHTML = `<span class="text-xl font-black text-[#0b3a7a] dark:text-blue-400 uppercase">${userTeam.name?.[0] ?? "T"}</span>`;
+                  }}
+                />
+              ) : (
+                <span className="text-xl font-black text-[#0b3a7a] dark:text-blue-400 uppercase">
+                  {userTeam.name?.[0] ?? "T"}
+                </span>
+              )}
             </div>
             <div>
               <h2 className="text-xl font-black text-foreground leading-tight" data-testid="hero-team-name">
