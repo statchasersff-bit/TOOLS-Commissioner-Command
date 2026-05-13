@@ -66,6 +66,7 @@ interface SleeperPlayerRaw {
   fantasy_positions: string[] | null;
   active?: boolean;
   injury_status?: string;
+  ownership?: { owned_pct?: number; waiver_pickup_pct?: number };
 }
 
 export interface SleeperUser {

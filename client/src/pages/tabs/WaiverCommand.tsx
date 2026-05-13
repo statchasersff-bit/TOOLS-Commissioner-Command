@@ -37,6 +37,7 @@ interface PlayerSummary {
   position: string;
   team: string;
   value: number;
+  ownedPct?: number;
 }
 
 interface WaiverRow {
@@ -77,9 +78,10 @@ interface AvailablePlayer {
   winNowValue: number;
   userRosterPct: number;
   crossLeaguePct: number;
+  sleeperRosterPct: number;
 }
 
-type DetailSortKey = "dynastyValue" | "winNowValue" | "age" | "userRosterPct" | "crossLeaguePct";
+type DetailSortKey = "dynastyValue" | "winNowValue" | "age" | "userRosterPct" | "crossLeaguePct" | "sleeperRosterPct";
 
 interface WaiverTransaction {
   transaction_id: string;
@@ -423,7 +425,7 @@ export default function WaiverCommand() {
             .map(([pid, val]) => {
               const p = playersDb[pid];
               const pos = p.fantasy_positions?.[0] || p.position;
-              return { id: pid, name: p.full_name || "Unknown", position: pos, team: p.team || "FA", value: val };
+              return { id: pid, name: p.full_name || "Unknown", position: pos, team: p.team || "FA", value: val, ownedPct: p.ownership?.owned_pct };
             })
             .sort((a, b) => b.value - a.value)
             .slice(0, 50);
@@ -2039,7 +2041,8 @@ function LeagueWaiverDetail({
       const ownedCount = row.rosterCountByPlayerId[ps.id] ?? 0;
       const ownershipPct = row.totalTeams > 0 ? Math.round((ownedCount / row.totalTeams) * 100) : 0;
 
-      return { sleeperId: ps.id, name: ps.name, pos: ps.position, team: ps.team, age, dynastyValue, winNowValue, userRosterPct, crossLeaguePct: ownershipPct };
+      const sleeperRosterPct = ps.ownedPct != null ? Math.round(ps.ownedPct) : -1;
+      return { sleeperId: ps.id, name: ps.name, pos: ps.position, team: ps.team, age, dynastyValue, winNowValue, userRosterPct, crossLeaguePct: ownershipPct, sleeperRosterPct };
     });
   }, [row, dynastyPlayerList, valuesBySleeperId, redraftValuesBySleeperId, allRows, totalLeaguesLoaded, allLeagueTeamCount]);
 
@@ -2207,8 +2210,9 @@ function LeagueWaiverDetail({
                   { key: "dynastyValue"  as DetailSortKey, label: "Dynasty Val", align: "center" },
                   { key: "winNowValue"   as DetailSortKey, label: "Win-Now Val", align: "center" },
                   { key: "age"           as DetailSortKey, label: "Age",         align: "center" },
-                  { key: "userRosterPct" as DetailSortKey, label: "Your Leagues %", align: "center" },
-                  { key: null,               label: "Claim",           align: "center" },
+                  { key: "userRosterPct"     as DetailSortKey, label: "Your Leagues %",    align: "center" },
+                  { key: "sleeperRosterPct" as DetailSortKey, label: "Roster% on Sleeper", align: "center" },
+                  { key: null,                                label: "Claim",               align: "center" },
                 ] as { key: DetailSortKey | null; label: string; align: string }[]).map((col, i) => (
                   <th
                     key={i}
@@ -2230,7 +2234,7 @@ function LeagueWaiverDetail({
             <tbody className="divide-y divide-border/30 dark:divide-white/[0.04]">
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-10 text-center text-sm text-muted-foreground">No players match your filters.</td>
+                  <td colSpan={7} className="px-4 py-10 text-center text-sm text-muted-foreground">No players match your filters.</td>
                 </tr>
               )}
               {filtered.map((p) => (
@@ -2257,6 +2261,20 @@ function LeagueWaiverDetail({
                   </td>
                   <td className="px-4 py-3 text-center">
                     <span className="text-[13px] font-bold text-foreground">{p.userRosterPct}%</span>
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    {p.sleeperRosterPct >= 0 ? (
+                      <span className={cn(
+                        "text-[13px] font-bold",
+                        p.sleeperRosterPct >= 67 ? "text-rose-400" :
+                        p.sleeperRosterPct >= 33 ? "text-amber-400" :
+                        "text-muted-foreground"
+                      )}>
+                        {p.sleeperRosterPct}%
+                      </span>
+                    ) : (
+                      <span className="text-[13px] text-muted-foreground/40">—</span>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-center">
                     <button
