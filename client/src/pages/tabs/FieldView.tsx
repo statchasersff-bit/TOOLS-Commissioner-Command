@@ -415,9 +415,13 @@ export function FieldView({ league, userTeam }: { league: League; userTeam: Team
 
   // ── Assign players to slots ──────────────────────────────────────────────
   const { starterSlots, benchPlayers } = useMemo(() => {
-    const roster = [...userTeam.roster]
+    // Use Sleeper's actual starter flags — sorted by value for slot-filling priority
+    const starters = [...userTeam.roster]
+      .filter(p => p.starter)
       .map(p => ({ ...p, _rv: getPlayerValue(p) }))
       .sort((a, b) => b._rv - a._rv);
+
+    const nonStarters = userTeam.roster.filter(p => !p.starter);
 
     const used = new Set<string>();
     const assignments: SlotAssignment[] = [];
@@ -437,7 +441,7 @@ export function FieldView({ league, userTeam }: { league: League; userTeam: Team
 
     for (const slot of [...positional, ...flex]) {
       const eligible = SLOT_ELIGIBILITY[slot] ?? [];
-      const best = roster.find(p => eligible.includes(p.pos) && !used.has(p.id));
+      const best = starters.find(p => eligible.includes(p.pos) && !used.has(p.id));
       const idx = slotTypeIdx[slot] ?? 0;
       slotTypeIdx[slot] = idx + 1;
       const label = slotTypeCounts[slot] > 1 ? `${slot}${idx + 1}` : slot;
@@ -457,13 +461,10 @@ export function FieldView({ league, userTeam }: { league: League; userTeam: Team
       }
     }
 
-    const starterIds = new Set(assignments.map(a => a.player?.id).filter(Boolean));
-    const bench: BenchPlayer[] = roster
-      .filter(p => !starterIds.has(p.id))
-      .map(p => {
-        const sid = p.sleeperId ?? p.id;
-        return { ...p, projection: projections[sid], injuryStatus: playersDb[sid]?.injury_status };
-      });
+    const bench: BenchPlayer[] = nonStarters.map(p => {
+      const sid = p.sleeperId ?? p.id;
+      return { ...p, projection: projections[sid], injuryStatus: playersDb[sid]?.injury_status };
+    });
 
     return { starterSlots: assignments, benchPlayers: bench };
   }, [userTeam.roster, rosterPositions, projections, playersDb, getPlayerValue]);
