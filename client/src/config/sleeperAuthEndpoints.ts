@@ -1,25 +1,32 @@
 /**
- * Sleeper Authenticated Endpoint Configuration
+ * Sleeper Auth Endpoint Configuration
  *
- * All endpoint URLs are intentionally blank until discovered and verified.
- * See docs/sleeper-auth-discovery.md for the discovery process.
+ * All Sleeper authenticated calls go through the single GraphQL endpoint.
+ * Action endpoints remain blank until discovered — see docs/sleeper-auth-discovery.md.
  *
- * NEVER scatter raw Sleeper URLs throughout the app.
- * Every authenticated call must route through sleeperAuthedFetch() which reads this file.
+ * NEVER scatter endpoint URLs or credentials throughout the app.
  */
 
+// ─── GraphQL endpoint (discovered) ───────────────────────────────────────────
+
+export const SLEEPER_GQL_URL = "https://api.sleeper.app/graphql";
+
+// ─── hCaptcha (required by Sleeper login mutation) ────────────────────────────
+// Fill in after discovering Sleeper's hCaptcha site key from their web app.
+
+export const SLEEPER_HCAPTCHA_SITE_KEY = "";
+
+// ─── REST action endpoints (still pending discovery) ─────────────────────────
+// Every authenticated write call must reference this object.
+// Leave blank until verified — sleeperAuthedFetch() will fail fast with a clear message.
+
 export const SLEEPER_AUTH_ENDPOINTS = {
-  /** POST — request a one-time code sent to the user's identifier */
+  /** GraphQL — handled via SLEEPER_GQL_URL, kept for backward compat */
   requestCode: "",
-  /** POST — verify the code and receive a session token */
   verifyCode: "",
-  /** POST — log in directly with a known token/password */
   login: "",
-  /** GET  — validate a stored token is still active */
   validateToken: "",
-  /** POST — refresh an expiring token */
   refreshToken: "",
-  /** POST — invalidate the current session token */
   logout: "",
 } as const;
 
