@@ -140,7 +140,7 @@ export function LeagueIntelligence({ league, userTeam }: Props) {
 
       <div>
         <div className="mb-5">
-          <h3 className="text-base font-bold text-foreground">Team Narratives</h3>
+          <h3 className="text-base font-bold text-foreground">Scouting Report</h3>
           <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
         </div>
         <p className="text-xs text-muted-foreground mb-4">Expandable per-team scouting report</p>
