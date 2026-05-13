@@ -820,13 +820,18 @@ function WaiverTableRow({ row, onClaim, onView }: { row: WaiverRow; onClaim: () 
       {/* Lowest on team */}
       <td className="px-4 py-3">
         {row.lowestOnTeam ? (
-          <PlayerAvatar
-            id={row.lowestOnTeam.id}
-            name={row.lowestOnTeam.name}
-            pos={row.lowestOnTeam.position}
-            team={row.lowestOnTeam.team}
-            size="sm"
-          />
+          <div>
+            <PlayerAvatar
+              id={row.lowestOnTeam.id}
+              name={row.lowestOnTeam.name}
+              pos={row.lowestOnTeam.position}
+              team={row.lowestOnTeam.team}
+              size="sm"
+            />
+            <span className="text-[10px] text-muted-foreground/60 ml-[46px] mt-0.5 block">
+              {row.lowestOnTeam.value.toLocaleString()}
+            </span>
+          </div>
         ) : (
           <span className="text-xs text-muted-foreground">—</span>
         )}
