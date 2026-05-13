@@ -204,7 +204,7 @@ export function SleeperAuthCard() {
 
   async function handleConnect() {
     if (!code.trim()) return;
-    if (captchaConfigured && !captchaToken) {
+    if (!captchaToken) {
       setCaptchaError(true);
       return;
     }
@@ -214,7 +214,7 @@ export function SleeperAuthCard() {
       const sess = await loginWithCredentials(
         identifier.trim(),
         code.trim(),
-        captchaToken ?? ""
+        captchaToken
       );
       setSession(sess);
       setOpen(false);
@@ -466,11 +466,20 @@ export function SleeperAuthCard() {
                           <CheckCircle2 className="w-3 h-3" /> Security check passed
                         </p>
                       )}
+                      {captchaError && !captchaToken && (
+                        <p className="flex items-center gap-1.5 text-[11px] text-destructive mt-1">
+                          <AlertCircle className="w-3 h-3" /> Complete the security check to continue.
+                        </p>
+                      )}
                     </>
                   ) : (
-                    <div className="p-3 rounded-lg bg-amber-500/8 border border-amber-500/20 text-[12px] text-amber-700 dark:text-amber-400 leading-snug">
-                      hCaptcha site key not configured. Set <code className="font-mono text-[11px]">SLEEPER_HCAPTCHA_SITE_KEY</code> in <code className="font-mono text-[11px]">sleeperAuthEndpoints.ts</code>.
-                      Connecting without captcha — Sleeper may reject the request.
+                    <div className="p-3 rounded-lg bg-destructive/8 border border-destructive/20 text-[12px] text-destructive leading-snug space-y-1">
+                      <p className="font-semibold">hCaptcha site key not configured.</p>
+                      <p>
+                        Set <code className="font-mono text-[11px]">SLEEPER_HCAPTCHA_SITE_KEY</code> in{" "}
+                        <code className="font-mono text-[11px]">sleeperAuthEndpoints.ts</code> to enable login.
+                        Sleeper requires captcha — connecting without it will always fail.
+                      </p>
                     </div>
                   )}
                 </div>
@@ -478,7 +487,7 @@ export function SleeperAuthCard() {
                 <Button
                   className="w-full h-10 text-sm bg-[#0b3a7a] hover:bg-[#0b3a7a]/90 text-white"
                   onClick={handleConnect}
-                  disabled={!code.trim() || (captchaConfigured && !captchaToken)}
+                  disabled={!code.trim() || !captchaToken}
                   data-testid="button-auth-connect-verify"
                 >
                   Connect
