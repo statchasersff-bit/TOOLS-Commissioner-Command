@@ -1768,7 +1768,7 @@ export function MyTeam({ league, userTeam, onNavigate }: DashboardOverviewProps)
                         {players.map(p => (
                           <div key={p.id} className="flex items-center justify-between py-2 border-b border-border/20 last:border-0" data-testid={`group-player-${p.id}`}>
                             <div className="flex items-center gap-2.5">
-                              <PlayerAvatar id={p.sleeperId ?? p.id} name={p.name} pos={p.pos} team={p.team ?? ""} size="sm" />
+                              <PlayerAvatar id={p.sleeperId ?? p.id} name={p.name} pos={p.pos} team={p.team ?? ""} size="sm" compact />
                               <div>
                                 <p className="text-sm font-semibold text-foreground leading-tight">{p.name}</p>
                                 <p className="text-[11px] text-muted-foreground">{p.team} · Age {p.age}</p>
