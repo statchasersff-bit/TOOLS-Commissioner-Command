@@ -1,10 +1,10 @@
 import { useState, useRef, useCallback } from "react";
 import { cn } from "@/lib/utils";
 import {
-  BarChart2, Link2, DollarSign, LayoutDashboard, Users, Share2,
+  BarChart2, LayoutDashboard, Users, Share2,
   Trophy, GitCompare, Coins, ArrowLeftRight, Database, Search,
-  Calculator, Eye, LineChart, TrendingUp, Zap, Skull, ChevronDown,
-  LucideIcon, Waves,
+  Calculator, Eye, LineChart, TrendingUp, Zap, ChevronDown,
+  LucideIcon, Waves, Crosshair, LayoutGrid,
 } from "lucide-react";
 import type { MainTabConfig } from "../types";
 import logoDark from "@assets/statchasers_logo_transparent_dark_1772764844282.png";
@@ -28,12 +28,11 @@ interface MegaSection {
 const MEGA_DATA: Record<string, MegaSection[]> = {
   portfolio: [
     {
-      title: "Account",
+      title: "Command Center",
       items: [
-        { subId: "connect",          label: "Connect Sleeper",  description: "Link your Sleeper account to sync leagues",    icon: Link2     },
-        { subId: "portfolio-summary",label: "My Portfolio",      description: "Cross-league player exposure & metrics",       icon: BarChart2 },
-        { subId: "waiver-command",   label: "WaiverCommand",    description: "Cross-league waiver wire & FAAB dashboard",    icon: Waves     },
-        { subId: "league-roi",       label: "Finances",          description: "League fees, dues & ROI tracking",             icon: DollarSign},
+        { subId: "portfolio-summary", label: "My Portfolio",     description: "Cross-league exposure, finances & metrics",    icon: BarChart2  },
+        { subId: "lineup-command",    label: "Lineup Command",   description: "Cross-league lineup war room & swap finder",   icon: Crosshair  },
+        { subId: "waiver-command",    label: "Waiver Command",   description: "Cross-league waiver wire & FAAB dashboard",    icon: Waves      },
       ],
     },
   ],
@@ -41,9 +40,9 @@ const MEGA_DATA: Record<string, MegaSection[]> = {
     {
       title: "My Team",
       items: [
-        { subId: "overview",         label: "Overview",          description: "Team snapshot, KPIs & age curve",              icon: LayoutDashboard },
-        { subId: "roster-breakdown", label: "Roster Breakdown",  description: "Depth chart & positional strength",            icon: Users           },
-        { subId: "share-team",       label: "Share My Team",     description: "Export & share your roster report",            icon: Share2          },
+        { subId: "my-team",    label: "My Team",       description: "Team snapshot, KPIs & roster strength",          icon: Users          },
+        { subId: "field-view", label: "Field View",    description: "Visual depth chart & positional breakdown",       icon: LayoutGrid     },
+        { subId: "share-team", label: "Share My Team", description: "Export & share your roster report",               icon: Share2         },
       ],
     },
   ],
@@ -51,10 +50,10 @@ const MEGA_DATA: Record<string, MegaSection[]> = {
     {
       title: "League Analysis",
       items: [
-        { subId: "power-rankings",   label: "Rankings",          description: "Power rankings, tiers & scouting reports",     icon: Trophy        },
-        { subId: "roster-comparison",label: "Compare",           description: "Head-to-head roster comparison",               icon: GitCompare    },
-        { subId: "league-economy",   label: "Economy",           description: "Pick capital, trade flow & market health",     icon: Coins         },
-        { subId: "transactions",     label: "Transactions",      description: "Recent adds, drops & trades league-wide",      icon: ArrowLeftRight},
+        { subId: "power-rankings",    label: "Rankings",     description: "Power rankings, tiers & scouting reports",   icon: Trophy         },
+        { subId: "roster-comparison", label: "Compare",      description: "Head-to-head roster comparison",             icon: GitCompare     },
+        { subId: "league-economy",    label: "Economy",      description: "Pick capital, trade flow & market health",   icon: Coins          },
+        { subId: "transactions",      label: "Transactions", description: "Recent adds, drops & trades league-wide",    icon: ArrowLeftRight },
       ],
     },
   ],
@@ -62,10 +61,10 @@ const MEGA_DATA: Record<string, MegaSection[]> = {
     {
       title: "Trade Tools",
       items: [
-        { subId: "trade-database",       label: "Database",     description: "Search real dynasty trades by player",         icon: Database   },
-        { subId: "positional-analysis",  label: "Finder",       description: "Find trade targets by position & value",       icon: Search     },
-        { subId: "trade-calculator",     label: "Calculator",   description: "Value-based trade evaluator",                  icon: Calculator },
-        { subId: "trade-block",          label: "Intel",        description: "Trade block activity & hot markets",           icon: Eye        },
+        { subId: "trade-database",      label: "Database",   description: "Search real dynasty trades by player",       icon: Database   },
+        { subId: "positional-analysis", label: "Finder",     description: "Find trade targets by position & value",     icon: Search     },
+        { subId: "trade-calculator",    label: "Calculator", description: "Value-based trade evaluator",                icon: Calculator },
+        { subId: "trade-block",         label: "Intel",      description: "Trade block activity & hot markets",         icon: Eye        },
       ],
     },
   ],
@@ -73,8 +72,8 @@ const MEGA_DATA: Record<string, MegaSection[]> = {
     {
       title: "Research",
       items: [
-        { subId: "analysis",     label: "Analysis",      description: "League trends & positional insights",              icon: LineChart  },
-        { subId: "market-value", label: "Market Value",  description: "Player market values across formats",              icon: TrendingUp },
+        { subId: "analysis",     label: "Analysis",     description: "League trends & positional insights",            icon: LineChart  },
+        { subId: "market-value", label: "Market Value", description: "Player market values across formats",            icon: TrendingUp },
       ],
     },
   ],
@@ -82,15 +81,7 @@ const MEGA_DATA: Record<string, MegaSection[]> = {
     {
       title: "Draft Tools",
       items: [
-        { subId: "draft-board", label: "Draft Board", description: "Dynasty rankings board & live draft integration", icon: Zap },
-      ],
-    },
-  ],
-  "dont-click": [
-    {
-      title: "????",
-      items: [
-        { subId: "league-roast", label: "Report Card", description: "A surprise for the truly curious", icon: Skull },
+        { subId: "draft-board", label: "Draft Board", description: "Dynasty rankings board & live draft integration",  icon: Zap },
       ],
     },
   ],
@@ -352,7 +343,6 @@ const TAB_ICONS: Record<string, typeof BarChart2> = {
   "trade-center": ArrowLeftRight,
   "league-market": LineChart,
   "live-draft": Zap,
-  "dont-click": Skull,
 };
 
 interface MobileMenuButtonProps {
