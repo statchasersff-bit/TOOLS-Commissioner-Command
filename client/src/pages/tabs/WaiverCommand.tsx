@@ -173,12 +173,20 @@ export default function WaiverCommand() {
           const rosteredIds = new Set<string>(rostersRaw.flatMap((r: any) => r.players ?? []));
 
           const validPos = new Set(["QB", "RB", "WR", "TE"]);
-          const freeAgents = dynastyPlayerList.filter(
-            (p) => !rosteredIds.has(p.sleeperId) && validPos.has(p.pos)
-          );
-          const bestAvailable: PlayerSummary | null = freeAgents[0]
-            ? { id: freeAgents[0].sleeperId, name: freeAgents[0].name, position: freeAgents[0].pos, team: freeAgents[0].team || "FA", value: freeAgents[0].value }
-            : null;
+          const bestAvailable: PlayerSummary | null = Object.entries(valuesBySleeperId)
+            .filter(([pid]) => {
+              if (rosteredIds.has(pid)) return false;
+              const p = playersDb[pid];
+              if (!p) return false;
+              const pos = p.fantasy_positions?.[0] || p.position;
+              return validPos.has(pos);
+            })
+            .map(([pid, val]) => {
+              const p = playersDb[pid];
+              const pos = p.fantasy_positions?.[0] || p.position;
+              return { id: pid, name: p.full_name || "Unknown", position: pos, team: p.team || "FA", value: val };
+            })
+            .sort((a, b) => b.value - a.value)[0] ?? null;
 
           const userPlayers: string[] = userRoster?.players ?? [];
           const userRatedPlayers = userPlayers
