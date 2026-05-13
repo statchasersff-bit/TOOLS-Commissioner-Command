@@ -503,7 +503,7 @@ export function FieldView({ league, userTeam }: { league: League; userTeam: Team
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div>
           <div className="flex items-center gap-2">
-            <h2 className="text-sm font-bold text-foreground">Field View</h2>
+            <h2 className="text-sm font-bold text-foreground">Field View <span className="font-normal text-muted-foreground">(Current Lineup)</span></h2>
             {isLoading && <RefreshCw className="w-3.5 h-3.5 text-muted-foreground animate-spin" />}
           </div>
           <p className="text-xs text-muted-foreground mt-0.5">
