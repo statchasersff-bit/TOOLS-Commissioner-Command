@@ -3,7 +3,7 @@ import { useRoute, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { MainTabs, MobileMenuButton } from "@/components/MainTabs";
+import { MegaMenuNav, MobileMenuButton } from "@/components/MegaMenu";
 import { SubTabs } from "@/components/SubTabs";
 import { LeagueSelector } from "@/components/LeagueSelector";
 import { ValueAttribution } from "@/components/ValueSourceSelector";
@@ -457,7 +457,13 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
         </div>
       </header>
 
-      <MainTabs tabs={NAV_CONFIG} activeTab={activeMainTab} setActiveTab={handleMainTabChange} />
+      <MegaMenuNav
+        tabs={NAV_CONFIG}
+        activeTab={activeMainTab}
+        activeSub={activeSubTab}
+        setActiveTab={handleMainTabChange}
+        onNavigate={(tab, sub) => { handleMainTabChange(tab); handleSubTabChange(sub); }}
+      />
 
       {currentMainConfig && (
         <SubTabs tabs={currentMainConfig.subTabs} activeTab={activeSubTab} setActiveTab={handleSubTabChange} />
