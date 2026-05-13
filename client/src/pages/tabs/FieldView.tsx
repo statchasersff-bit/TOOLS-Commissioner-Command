@@ -6,6 +6,34 @@ import { useValueModel } from "@/contexts/ValueModelContext";
 import type { League, Team, Player } from "@/types";
 import { cn } from "@/lib/utils";
 import { Zap, RefreshCw, Users, AlertCircle } from "lucide-react";
+import { getLeagueTeamTiers, getTierEmoji, type Tier } from "@/data/mockData";
+
+// Raw glow colors per tier for box-shadow
+const TIER_GLOW: Record<string, string> = {
+  "Juggernaut":          "212,175,55",
+  "Win-Now":             "96,165,250",
+  "Future Powerhouse":   "52,211,153",
+  "Pick Hoarder":        "192,132,252",
+  "Taco":                "248,113,113",
+  "Contender":           "251,191,36",
+  "Pretender":           "56,189,248",
+  "Rebuilder":           "251,146,60",
+  "Weak / Directionless":"251,113,133",
+  "Balanced":            "148,163,184",
+};
+
+const TIER_BORDER: Record<string, string> = {
+  "Juggernaut":          "#d4af37",
+  "Win-Now":             "#60a5fa",
+  "Future Powerhouse":   "#34d399",
+  "Pick Hoarder":        "#c084fc",
+  "Taco":                "#f87171",
+  "Contender":           "#fbbf24",
+  "Pretender":           "#38bdf8",
+  "Rebuilder":           "#fb923c",
+  "Weak / Directionless":"#fb7185",
+  "Balanced":            "#94a3b8",
+};
 
 const SLEEPER_API = "https://api.sleeper.app/v1";
 
@@ -346,6 +374,11 @@ export function FieldView({ league, userTeam }: { league: League; userTeam: Team
   const rosterPositions = useMemo(() => league.rosterPositions ?? [], [league.rosterPositions]);
   const scoringFormat = league.scoringFormat ?? "PPR";
 
+  const userTier = useMemo<Tier | null>(() => {
+    const tiers = getLeagueTeamTiers(league.teams);
+    return tiers.get(userTeam.id)?.tier ?? null;
+  }, [league.teams, userTeam.id]);
+
   const userRosterId = useMemo(() => {
     const m = userTeam.id.match(/^roster_(\d+)$/);
     return m ? parseInt(m[1], 10) : null;
@@ -534,33 +567,77 @@ export function FieldView({ league, userTeam }: { league: League; userTeam: Team
         <FieldBackground />
 
         {/* ── GM card — overlaid top-left on the field ─────────────────── */}
-        <div className="absolute top-12 left-3 z-20 flex flex-col items-center gap-1.5 rounded-xl border border-[#d4af37]/30 bg-[#040d1a]/80 backdrop-blur-md p-2.5 md:p-3 [box-shadow:0_0_18px_rgba(212,175,55,0.18)]" style={{ minWidth: 100 }}>
-          <Badge variant="outline" className="text-[8px] md:text-[9px] px-1.5 py-0 h-4 bg-[#d4af37]/15 text-[#d4af37] border-[#d4af37]/40">
-            GM
-          </Badge>
-          <div className="w-11 h-11 md:w-13 md:h-13 rounded-full overflow-hidden ring-2 ring-[#d4af37]/40 bg-[#0b3a7a]/40 flex-shrink-0">
-            {userTeam.avatar ? (
-              <img
-                src={userTeam.avatar}
-                alt={userTeam.owner}
-                className="w-full h-full object-cover"
-                onError={(e) => { (e.target as HTMLImageElement).src = "https://sleepercdn.com/images/v2/icons/player_default.webp"; }}
-              />
-            ) : (
-              <div className="w-full h-full flex items-center justify-center text-base font-bold text-[#d4af37]">
-                {(userTeam.owner || "?").charAt(0).toUpperCase()}
+        {(() => {
+          const glowRgb   = userTier ? (TIER_GLOW[userTier]   ?? "212,175,55") : "212,175,55";
+          const borderHex = userTier ? (TIER_BORDER[userTier] ?? "#d4af37")    : "#d4af37";
+          const emoji     = userTier ? getTierEmoji(userTier) : null;
+          return (
+            <div
+              className="absolute top-12 left-2 z-20 flex flex-col items-center gap-1.5 rounded-2xl bg-[#03080f]/80 backdrop-blur-xl p-3 transition-all duration-300 hover:scale-[1.03]"
+              style={{
+                minWidth: 112,
+                border: `1.5px solid ${borderHex}55`,
+                boxShadow: `0 0 18px rgba(${glowRgb},0.25), 0 0 6px rgba(${glowRgb},0.15), inset 0 1px 0 rgba(255,255,255,0.04)`,
+              }}
+            >
+              {/* GM pill */}
+              <span
+                className="text-[8px] font-black tracking-widest uppercase px-2 py-0.5 rounded-full"
+                style={{ background: `rgba(${glowRgb},0.15)`, color: borderHex, border: `1px solid ${borderHex}55` }}
+              >
+                GM
+              </span>
+
+              {/* Avatar */}
+              <div
+                className="w-14 h-14 rounded-full overflow-hidden flex-shrink-0"
+                style={{
+                  boxShadow: `0 0 0 2px ${borderHex}66, 0 0 16px rgba(${glowRgb},0.4)`,
+                }}
+              >
+                {userTeam.avatar ? (
+                  <img
+                    src={userTeam.avatar}
+                    alt={userTeam.owner}
+                    className="w-full h-full object-cover"
+                    onError={(e) => { (e.target as HTMLImageElement).src = "https://sleepercdn.com/images/v2/icons/player_default.webp"; }}
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-xl font-black bg-[#0b3a7a]/60" style={{ color: borderHex }}>
+                    {(userTeam.owner || "?").charAt(0).toUpperCase()}
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-          <span className="text-[11px] md:text-[12px] font-bold text-white/90 text-center leading-tight line-clamp-1 max-w-[88px]">
-            {userTeam.owner || "Manager"}
-          </span>
-          {(userTeam.wins !== undefined || userTeam.losses !== undefined) && (
-            <span className="text-[10px] font-bold text-[#d4af37] tabular-nums">
-              {userTeam.wins ?? 0}–{userTeam.losses ?? 0}{userTeam.ties ? `–${userTeam.ties}` : ""}
-            </span>
-          )}
-        </div>
+
+              {/* Team name */}
+              <span className="text-[11px] font-bold text-white/90 text-center leading-tight line-clamp-2 max-w-[104px]">
+                {userTeam.name || "My Team"}
+              </span>
+
+              {/* managed by */}
+              <span className="text-[9px] text-white/40 text-center -mt-0.5 truncate max-w-[104px]">
+                by {userTeam.owner || "Manager"}
+              </span>
+
+              {/* Tier badge */}
+              {userTier && (
+                <span
+                  className="text-[8px] font-bold px-1.5 py-0.5 rounded-full mt-0.5 text-center leading-tight"
+                  style={{ background: `rgba(${glowRgb},0.18)`, color: borderHex, border: `1px solid ${borderHex}44` }}
+                >
+                  {emoji} {userTier}
+                </span>
+              )}
+
+              {/* Record */}
+              {(userTeam.wins !== undefined || userTeam.losses !== undefined) && (
+                <span className="text-[11px] font-black tabular-nums mt-0.5" style={{ color: borderHex }}>
+                  {userTeam.wins ?? 0}–{userTeam.losses ?? 0}{userTeam.ties ? `–${userTeam.ties}` : ""}
+                </span>
+              )}
+            </div>
+          );
+        })()}
 
         {/* Opponent end zone */}
         <EndZone label={opponentName ? `${opponentName}'s End Zone` : "Opponent"} variant="top" />
