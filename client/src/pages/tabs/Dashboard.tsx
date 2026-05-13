@@ -1765,18 +1765,40 @@ export function MyTeam({ league, userTeam, onNavigate }: DashboardOverviewProps)
                       <p className="text-sm text-muted-foreground italic py-2">No {pos}s on roster</p>
                     ) : (
                       <div>
-                        {players.map(p => (
-                          <div key={p.id} className="flex items-center justify-between py-2 border-b border-border/20 last:border-0" data-testid={`group-player-${p.id}`}>
-                            <div className="flex items-center gap-2.5">
-                              <PlayerAvatar id={p.sleeperId ?? p.id} name={p.name} pos={p.pos} team={p.team ?? ""} size="sm" compact />
-                              <div>
-                                <p className="text-sm font-semibold text-foreground leading-tight">{p.name}</p>
-                                <p className="text-[11px] text-muted-foreground">{p.team} · Age {p.age}</p>
+                        {starters.length > 0 && (
+                          <>
+                            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1.5 mt-1">Current Starters</p>
+                            {starters.map(p => (
+                              <div key={p.id} className="flex items-center justify-between py-2 border-b border-border/20 last:border-0" data-testid={`group-player-${p.id}`}>
+                                <div className="flex items-center gap-2.5">
+                                  <PlayerAvatar id={p.sleeperId ?? p.id} name={p.name} pos={p.pos} team={p.team ?? ""} size="sm" compact />
+                                  <div>
+                                    <p className="text-sm font-semibold text-foreground leading-tight">{p.name}</p>
+                                    <p className="text-[11px] text-muted-foreground">{p.team} · Age {p.age}</p>
+                                  </div>
+                                </div>
+                                <span className="text-xs font-bold text-[#0b3a7a] dark:text-blue-400 tabular-nums">{p.value}</span>
                               </div>
-                            </div>
-                            <span className="text-xs font-bold text-[#0b3a7a] dark:text-blue-400 tabular-nums">{p.value}</span>
-                          </div>
-                        ))}
+                            ))}
+                          </>
+                        )}
+                        {bench.length > 0 && (
+                          <>
+                            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1.5 mt-4">Current Bench</p>
+                            {bench.map(p => (
+                              <div key={p.id} className="flex items-center justify-between py-2 border-b border-border/20 last:border-0" data-testid={`group-bench-${p.id}`}>
+                                <div className="flex items-center gap-2.5">
+                                  <PlayerAvatar id={p.sleeperId ?? p.id} name={p.name} pos={p.pos} team={p.team ?? ""} size="sm" compact />
+                                  <div>
+                                    <p className="text-sm font-medium text-foreground leading-tight">{p.name}</p>
+                                    <p className="text-[11px] text-muted-foreground">{p.team} · Age {p.age}</p>
+                                  </div>
+                                </div>
+                                <span className="text-xs font-medium text-muted-foreground tabular-nums">{p.value}</span>
+                              </div>
+                            ))}
+                          </>
+                        )}
                       </div>
                     )}
                   </div>
