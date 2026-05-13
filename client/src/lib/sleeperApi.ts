@@ -1442,3 +1442,47 @@ export async function fetchLeagueTransactions(leagueId: string) {
     totalRosters: leagueRaw.total_rosters,
   };
 }
+
+export async function sleeperLogin(login: string, password: string): Promise<string> {
+  const res = await fetch(`${SLEEPER_API}/user/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ login, password }),
+  });
+  if (!res.ok) throw new Error("Invalid username or password");
+  const data = await res.json();
+  if (!data.token) throw new Error("Authentication failed — no token returned");
+  return data.token as string;
+}
+
+export async function claimPlayerOnSleeper(
+  leagueId: string,
+  rosterId: number,
+  addPlayerId: string,
+  dropPlayerId: string | null,
+  faabBid: number | null,
+  waiverType: number,
+  token: string
+): Promise<void> {
+  const isFaab = waiverType === 2;
+  const body: any = {
+    type: isFaab ? "waiver" : "free_agent",
+    status: "complete",
+    roster_ids: [rosterId],
+    adds: { [addPlayerId]: rosterId },
+    drops: dropPlayerId ? { [dropPlayerId]: rosterId } : {},
+    draft_picks: [],
+  };
+  if (isFaab) {
+    body.settings = { waiver_bid: faabBid ?? 0, seq: 1 };
+  }
+  const res = await fetch(`${SLEEPER_API}/league/${leagueId}/transaction`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Authorization": token },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `Transaction failed (${res.status})`);
+  }
+}

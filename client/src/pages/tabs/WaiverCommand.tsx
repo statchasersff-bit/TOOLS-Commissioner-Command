@@ -2,13 +2,23 @@ import { useState, useEffect, useMemo } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { useSleeper } from "@/contexts/SleeperContext";
 import { useValueModel } from "@/contexts/ValueModelContext";
-import { getSleeperPlayers } from "@/lib/sleeperApi";
+import { getSleeperPlayers, claimPlayerOnSleeper } from "@/lib/sleeperApi";
 import {
   Waves, Zap, Users, DollarSign, Star, TrendingUp, TrendingDown,
   Minus, Lock, AlertCircle, RefreshCw, ChevronUp, ChevronDown,
+  Plus, CheckCircle2, Eye, EyeOff, KeyRound,
 } from "lucide-react";
 
 const SLEEPER_API = "https://api.sleeper.app/v1";
@@ -43,6 +53,10 @@ interface WaiverRow {
   loading: boolean;
   error: boolean;
   isEmpty: boolean;
+  rosterId: number | null;
+  waiverType: number;
+  userRosterPlayers: PlayerSummary[];
+  topAvailable: PlayerSummary[];
 }
 
 async function fetchLeagueWaiverSnapshot(leagueId: string, userId: string) {
@@ -99,6 +113,7 @@ export default function WaiverCommand() {
   const [sortKey, setSortKey] = useState<SortKey>("tier");
   const [sortAsc, setSortAsc] = useState(true);
   const [lastFetched, setLastFetched] = useState<number | null>(null);
+  const [claimRow, setClaimRow] = useState<WaiverRow | null>(null);
 
   const userId = user?.userId ?? "";
 
@@ -127,6 +142,10 @@ export default function WaiverCommand() {
       loading:      true,
       error:        false,
       isEmpty:      false,
+      rosterId:     null,
+      waiverType:   0,
+      userRosterPlayers: [],
+      topAvailable: [],
     }));
     setRows(skeletons);
 
@@ -155,6 +174,10 @@ export default function WaiverCommand() {
             loading:      false,
             error:        result.status === "rejected",
             isEmpty:      false,
+            rosterId:     null,
+            waiverType:   0,
+            userRosterPlayers: [],
+            topAvailable: [],
           };
 
           if (result.status === "rejected") return base;
@@ -211,9 +234,36 @@ export default function WaiverCommand() {
           const lowestOnTeam: PlayerSummary | null = userRatedPlayers[0] ?? null;
           const difference = (bestAvailable?.value ?? 0) - (lowestOnTeam?.value ?? 0);
 
+          const waiverType: number = leagueRaw?.settings?.waiver_type ?? 0;
+
+          const userRosterPlayers: PlayerSummary[] = (userRoster?.players ?? [])
+            .map((pid: string) => {
+              const p = playersDb[pid];
+              if (!p) return null;
+              const pos = p.fantasy_positions?.[0] || p.position;
+              return { id: pid, name: p.full_name || "Unknown", position: pos, team: p.team || "FA", value: valuesBySleeperId[pid] ?? 0 };
+            })
+            .filter(Boolean) as PlayerSummary[];
+
+          const topAvailable: PlayerSummary[] = Object.entries(valuesBySleeperId)
+            .filter(([pid]) => {
+              if (rosteredIds.has(pid)) return false;
+              const p = playersDb[pid];
+              if (!p) return false;
+              const pos = p.fantasy_positions?.[0] || p.position;
+              return validPos.has(pos);
+            })
+            .map(([pid, val]) => {
+              const p = playersDb[pid];
+              const pos = p.fantasy_positions?.[0] || p.position;
+              return { id: pid, name: p.full_name || "Unknown", position: pos, team: p.team || "FA", value: val };
+            })
+            .sort((a, b) => b.value - a.value)
+            .slice(0, 20);
+
           const { tier, rank, total } = deriveLeagueTier(userRosterId, rostersRaw, valuesBySleeperId);
 
-          return { ...base, tier, tierRank: rank, totalTeams: total, openSlots, faabRemaining, faabBudget, faabPct, bestAvailable, lowestOnTeam, difference };
+          return { ...base, tier, tierRank: rank, totalTeams: total, openSlots, faabRemaining, faabBudget, faabPct, bestAvailable, lowestOnTeam, difference, rosterId: userRosterId, waiverType, userRosterPlayers, topAvailable };
         });
 
         setRows(computed);
@@ -390,6 +440,7 @@ export default function WaiverCommand() {
                   { key: null,                    label: "Dynasty Value",   align: "center" },
                   { key: null,                    label: "Lowest On Team",  align: "left"   },
                   { key: "difference" as SortKey, label: "Difference",      align: "center" },
+                  { key: null,                    label: "Claim",           align: "center" },
                 ].map((col, i) => (
                   <th
                     key={i}
@@ -411,13 +462,13 @@ export default function WaiverCommand() {
             <tbody className="divide-y divide-border/30 dark:divide-white/[0.04]">
               {sorted.length === 0 && !isFetching && (
                 <tr>
-                  <td colSpan={7} className="px-4 py-10 text-center text-sm text-muted-foreground">
+                  <td colSpan={8} className="px-4 py-10 text-center text-sm text-muted-foreground">
                     No leagues match this filter.
                   </td>
                 </tr>
               )}
               {sorted.map((row) => (
-                <WaiverTableRow key={row.leagueId} row={row} />
+                <WaiverTableRow key={row.leagueId} row={row} onClaim={() => setClaimRow(row)} />
               ))}
             </tbody>
           </table>
@@ -438,11 +489,13 @@ export default function WaiverCommand() {
         })}
         <span className="text-muted-foreground/60">· Tier = roster value rank within each league</span>
       </div>
+
+      <ClaimPlayerModal row={claimRow} onClose={() => setClaimRow(null)} />
     </div>
   );
 }
 
-function WaiverTableRow({ row }: { row: WaiverRow }) {
+function WaiverTableRow({ row, onClaim }: { row: WaiverRow; onClaim: () => void }) {
   const diffColor = row.difference > 300
     ? "text-emerald-600 dark:text-emerald-400"
     : row.difference > 0
@@ -452,7 +505,7 @@ function WaiverTableRow({ row }: { row: WaiverRow }) {
   if (row.loading) {
     return (
       <tr className="animate-pulse">
-        {Array.from({ length: 7 }).map((_, i) => (
+        {Array.from({ length: 8 }).map((_, i) => (
           <td key={i} className="px-4 py-3">
             <Skeleton className="h-4 w-full rounded" />
           </td>
@@ -465,7 +518,7 @@ function WaiverTableRow({ row }: { row: WaiverRow }) {
     return (
       <tr className="opacity-60">
         <td className="px-4 py-3 font-medium text-foreground">{row.leagueName}</td>
-        <td colSpan={6} className="px-4 py-3">
+        <td colSpan={7} className="px-4 py-3">
           <span className="flex items-center gap-1.5 text-xs text-destructive">
             <AlertCircle className="w-3.5 h-3.5" />
             Failed to load league data
@@ -604,6 +657,24 @@ function WaiverTableRow({ row }: { row: WaiverRow }) {
           )}
         </div>
       </td>
+
+      {/* Claim action */}
+      <td className="px-4 py-3 text-center">
+        <button
+          onClick={onClaim}
+          disabled={!row.bestAvailable || !row.rosterId}
+          data-testid={`btn-claim-${row.leagueId}`}
+          className={cn(
+            "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-semibold transition-all duration-150",
+            row.bestAvailable && row.rosterId
+              ? "bg-[#d4af37]/15 text-[#d4af37] hover:bg-[#d4af37]/25 border border-[#d4af37]/30 hover:border-[#d4af37]/50"
+              : "bg-muted/30 text-muted-foreground/40 border border-border/20 cursor-not-allowed"
+          )}
+        >
+          <Plus className="w-3.5 h-3.5" />
+          Claim
+        </button>
+      </td>
     </tr>
   );
 }
@@ -665,5 +736,258 @@ function PositionBadge({ pos }: { pos: string }) {
     <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded", colors[pos] ?? "bg-muted text-muted-foreground")}>
       {pos}
     </span>
+  );
+}
+
+function ClaimPlayerModal({ row, onClose }: { row: WaiverRow | null; onClose: () => void }) {
+  const { sleeperToken, loginWithPassword, clearToken } = useSleeper();
+
+  const [password, setPassword] = useState("");
+  const [showPw, setShowPw] = useState(false);
+  const [authLoading, setAuthLoading] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+
+  const [selectedAddId, setSelectedAddId] = useState<string>("");
+  const [selectedDropId, setSelectedDropId] = useState<string>("none");
+  const [faabBid, setFaabBid] = useState<number>(0);
+
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
+
+  useEffect(() => {
+    if (!row) return;
+    setSelectedAddId(row.bestAvailable?.id ?? row.topAvailable[0]?.id ?? "");
+    setSelectedDropId("none");
+    setFaabBid(Math.min(10, row.faabRemaining));
+    setPassword("");
+    setAuthError(null);
+    setSubmitError(null);
+    setSuccess(false);
+  }, [row]);
+
+  if (!row) return null;
+
+  const isFaab = row.waiverType === 2;
+  const selectedAdd = row.topAvailable.find((p) => p.id === selectedAddId) ?? row.bestAvailable ?? null;
+  const selectedDrop = selectedDropId !== "none" ? row.userRosterPlayers.find((p) => p.id === selectedDropId) ?? null : null;
+
+  const handleLogin = async () => {
+    setAuthLoading(true);
+    setAuthError(null);
+    try {
+      await loginWithPassword(password);
+    } catch (e: any) {
+      setAuthError(e.message || "Login failed");
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleClaim = async () => {
+    if (!sleeperToken || !selectedAdd || !row.rosterId) return;
+    setSubmitting(true);
+    setSubmitError(null);
+    try {
+      await claimPlayerOnSleeper(
+        row.leagueId,
+        row.rosterId,
+        selectedAdd.id,
+        selectedDrop?.id ?? null,
+        isFaab ? faabBid : null,
+        row.waiverType,
+        sleeperToken
+      );
+      setSuccess(true);
+    } catch (e: any) {
+      setSubmitError(e.message || "Claim failed — check Sleeper for details");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Dialog open={!!row} onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent className="max-w-md bg-gradient-to-b from-[#0c1929] to-[#0a1628] border-[#1a2d4a] text-foreground">
+        <DialogHeader>
+          <div className="flex items-center gap-2.5 mb-1">
+            {row.leagueAvatar ? (
+              <img src={row.leagueAvatar} alt="" className="w-8 h-8 rounded-full object-cover ring-1 ring-white/10" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+            ) : (
+              <div className="w-8 h-8 rounded-full bg-[#0b3a7a]/30 flex items-center justify-center ring-1 ring-white/10">
+                <span className="text-[11px] font-bold text-blue-400 uppercase">{row.leagueName[0]}</span>
+              </div>
+            )}
+            <div>
+              <DialogTitle className="text-base leading-tight">Claim Player</DialogTitle>
+              <DialogDescription className="text-[11px] mt-0">{row.leagueName}</DialogDescription>
+            </div>
+          </div>
+        </DialogHeader>
+
+        {success ? (
+          <div className="py-6 flex flex-col items-center gap-3 text-center">
+            <div className="w-12 h-12 rounded-full bg-emerald-500/15 flex items-center justify-center ring-1 ring-emerald-500/30">
+              <CheckCircle2 className="w-6 h-6 text-emerald-400" />
+            </div>
+            <p className="font-semibold text-foreground">Claim submitted!</p>
+            <p className="text-xs text-muted-foreground">Check Sleeper to confirm the transaction processed.</p>
+            <Button variant="outline" size="sm" className="mt-2 border-[#1a2d4a]" onClick={onClose}>Close</Button>
+          </div>
+        ) : (
+          <>
+            {!sleeperToken ? (
+              <div className="space-y-4 py-2">
+                <div className="flex items-start gap-2.5 p-3 rounded-lg bg-[#0b3a7a]/15 border border-[#0b3a7a]/30">
+                  <KeyRound className="w-4 h-4 text-blue-400 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-xs font-semibold text-foreground">Sleeper login required</p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">Your password is used once to get a session token — it's never stored.</p>
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Password</Label>
+                  <div className="relative">
+                    <Input
+                      type={showPw ? "text" : "password"}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && password && handleLogin()}
+                      placeholder="Sleeper password"
+                      className="pr-9 bg-[#0a1628] border-[#1a2d4a] focus:border-[#d4af37]/50"
+                      data-testid="input-sleeper-password"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPw(!showPw)}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    >
+                      {showPw ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
+                  {authError && <p className="text-xs text-destructive flex items-center gap-1"><AlertCircle className="w-3 h-3" />{authError}</p>}
+                </div>
+                <Button
+                  onClick={handleLogin}
+                  disabled={!password || authLoading}
+                  className="w-full bg-[#d4af37] hover:bg-[#d4af37]/90 text-[#0a1628] font-semibold"
+                  data-testid="btn-sleeper-login"
+                >
+                  {authLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin mr-1.5" /> : <KeyRound className="w-3.5 h-3.5 mr-1.5" />}
+                  {authLoading ? "Signing in…" : "Sign in to Sleeper"}
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-4 py-2">
+                <div className="flex items-center justify-between p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+                  <div className="flex items-center gap-1.5 text-xs text-emerald-400 font-semibold">
+                    <CheckCircle2 className="w-3.5 h-3.5" /> Signed in to Sleeper
+                  </div>
+                  <button onClick={clearToken} className="text-[11px] text-muted-foreground hover:text-foreground underline underline-offset-2">Sign out</button>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Player to Add</Label>
+                  <Select value={selectedAddId} onValueChange={setSelectedAddId}>
+                    <SelectTrigger className="bg-[#0a1628] border-[#1a2d4a] focus:border-[#d4af37]/50 text-sm" data-testid="select-add-player">
+                      <SelectValue placeholder="Select player" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-[#0c1929] border-[#1a2d4a]">
+                      {row.topAvailable.map((p) => (
+                        <SelectItem key={p.id} value={p.id} className="text-sm">
+                          <span className="flex items-center gap-2">
+                            <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded", {
+                              "bg-rose-900/30 text-rose-400": p.position === "QB",
+                              "bg-emerald-900/30 text-emerald-400": p.position === "RB",
+                              "bg-sky-900/30 text-sky-400": p.position === "WR",
+                              "bg-yellow-900/30 text-yellow-400": p.position === "TE",
+                            })}>{p.position}</span>
+                            {p.name}
+                            <span className="text-muted-foreground text-[11px]">{p.team} · {p.value.toLocaleString()}</span>
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Drop Player <span className="text-muted-foreground/50 normal-case font-normal">(optional)</span></Label>
+                  <Select value={selectedDropId} onValueChange={setSelectedDropId}>
+                    <SelectTrigger className="bg-[#0a1628] border-[#1a2d4a] focus:border-[#d4af37]/50 text-sm" data-testid="select-drop-player">
+                      <SelectValue placeholder="No drop" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-[#0c1929] border-[#1a2d4a]">
+                      <SelectItem value="none" className="text-sm text-muted-foreground">No drop</SelectItem>
+                      {row.userRosterPlayers
+                        .slice()
+                        .sort((a, b) => a.value - b.value)
+                        .map((p) => (
+                          <SelectItem key={p.id} value={p.id} className="text-sm">
+                            <span className="flex items-center gap-2">
+                              <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded", {
+                                "bg-rose-900/30 text-rose-400": p.position === "QB",
+                                "bg-emerald-900/30 text-emerald-400": p.position === "RB",
+                                "bg-sky-900/30 text-sky-400": p.position === "WR",
+                                "bg-yellow-900/30 text-yellow-400": p.position === "TE",
+                              })}>{p.position}</span>
+                              {p.name}
+                              <span className="text-muted-foreground text-[11px]">{p.team} · {p.value.toLocaleString()}</span>
+                            </span>
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {isFaab && (
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                      FAAB Bid
+                      <span className="text-muted-foreground/60 normal-case font-normal ml-1">(${row.faabRemaining} remaining)</span>
+                    </Label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="number"
+                        min={0}
+                        max={row.faabRemaining}
+                        value={faabBid}
+                        onChange={(e) => setFaabBid(Math.min(row.faabRemaining, Math.max(0, Number(e.target.value))))}
+                        className="bg-[#0a1628] border-[#1a2d4a] focus:border-[#d4af37]/50 w-28"
+                        data-testid="input-faab-bid"
+                      />
+                      <span className="text-xs text-muted-foreground">/ ${row.faabBudget} budget</span>
+                    </div>
+                  </div>
+                )}
+
+                {submitError && (
+                  <div className="flex items-start gap-2 p-3 rounded-lg bg-destructive/10 border border-destructive/25 text-xs text-destructive">
+                    <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                    {submitError}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {sleeperToken && (
+              <DialogFooter className="gap-2 pt-2">
+                <Button variant="outline" size="sm" className="border-[#1a2d4a]" onClick={onClose}>Cancel</Button>
+                <Button
+                  size="sm"
+                  onClick={handleClaim}
+                  disabled={submitting || !selectedAddId || !row.rosterId}
+                  className="bg-[#d4af37] hover:bg-[#d4af37]/90 text-[#0a1628] font-semibold"
+                  data-testid="btn-submit-claim"
+                >
+                  {submitting ? <RefreshCw className="w-3.5 h-3.5 animate-spin mr-1.5" /> : <Plus className="w-3.5 h-3.5 mr-1.5" />}
+                  {submitting ? "Submitting…" : isFaab ? `Bid $${faabBid}` : "Add Player"}
+                </Button>
+              </DialogFooter>
+            )}
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
