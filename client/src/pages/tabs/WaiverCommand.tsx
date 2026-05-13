@@ -42,6 +42,7 @@ interface WaiverRow {
   difference: number;
   loading: boolean;
   error: boolean;
+  isEmpty: boolean;
 }
 
 async function fetchLeagueWaiverSnapshot(leagueId: string, userId: string) {
@@ -125,6 +126,7 @@ export default function WaiverCommand() {
       difference:   0,
       loading:      true,
       error:        false,
+      isEmpty:      false,
     }));
     setRows(skeletons);
 
@@ -152,11 +154,15 @@ export default function WaiverCommand() {
             difference:   0,
             loading:      false,
             error:        result.status === "rejected",
+            isEmpty:      false,
           };
 
           if (result.status === "rejected") return base;
 
           const { leagueRaw, rostersRaw } = result.value;
+
+          const totalRosteredPlayers = rostersRaw.reduce((sum: number, r: any) => sum + (r.players?.length ?? 0), 0);
+          if (totalRosteredPlayers === 0) return { ...base, isEmpty: true };
 
           const userRoster = rostersRaw.find((r: any) => r.owner_id === userId) ?? null;
           const userRosterId: number | null = userRoster?.roster_id ?? null;
@@ -218,6 +224,7 @@ export default function WaiverCommand() {
 
   const filtered = useMemo(() => {
     return rows.filter((r) => {
+      if (r.isEmpty || r.error) return false;
       if (activeFilter === "all") return true;
       if (activeFilter === "contender") return r.tier === "Contender";
       if (activeFilter === "bubble")    return r.tier === "Bubble";
