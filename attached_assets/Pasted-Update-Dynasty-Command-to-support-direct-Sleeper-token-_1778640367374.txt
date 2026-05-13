@@ -1,0 +1,165 @@
+Update Dynasty Command to support direct Sleeper token authentication, but build it with an endpoint adapter so we can safely configure the exact Sleeper auth/action endpoints after discovery.
+
+Context:
+Sleeper has approved us to obtain/use tokens from their API, but they did not provide exact endpoint documentation. Their public docs say the public API is read-only, so authenticated write endpoints must be discovered/tested and isolated in one config layer.
+
+Build:
+
+1. Sleeper Auth UI
+Add a “Connect Sleeper” card inside Dynasty Command.
+
+Disconnected state:
+- Title: Connect Sleeper
+- Text: Connect your Sleeper account to sync leagues and unlock Dynasty Command actions.
+- Button: Connect Sleeper
+
+Modal copy:
+- “Authentication Required”
+- “To make changes on Sleeper, you need to connect your Sleeper account.”
+- “Your credentials are sent directly to Sleeper. Auth tokens are stored locally in your browser.”
+- Inputs:
+  - Sleeper username, email, or phone
+  - Code/password/token field depending on selected method
+- Buttons:
+  - Send Code
+  - Use token manually
+  - Connect
+  - Cancel
+
+Connected state:
+- Connected as @username
+- Sync My Leagues
+- Disconnect
+
+2. Create endpoint config file
+
+Create:
+src/config/sleeperAuthEndpoints.ts
+
+Use placeholders like:
+
+export const SLEEPER_AUTH_ENDPOINTS = {
+  requestCode: "",
+  verifyCode: "",
+  login: "",
+  validateToken: "",
+  refreshToken: "",
+  logout: "",
+};
+
+export const SLEEPER_ACTION_ENDPOINTS = {
+  setLineup: "",
+  submitWaiver: "",
+  proposeTrade: "",
+  acceptTrade: "",
+  rejectTrade: "",
+  draftPick: "",
+  sendChatMessage: "",
+};
+
+Do not scatter endpoint URLs throughout the app. Every authenticated Sleeper call must go through this config file.
+
+3. Create auth service
+
+Create:
+src/services/sleeperAuth.ts
+
+Functions:
+- requestSleeperCode(identifier)
+- verifySleeperCode(identifier, code)
+- loginWithToken(token)
+- validateSleeperToken(token)
+- getSleeperSession()
+- saveSleeperSession()
+- clearSleeperSession()
+- logoutSleeper()
+
+Token storage:
+- localStorage key: statchasers_sleeper_auth
+- Store:
+  - token
+  - user_id
+  - username
+  - avatar
+  - connected_at
+  - expires_at if available
+
+Security:
+- Never console.log credentials
+- Never console.log tokens
+- Never send Sleeper credentials through our backend
+- All token actions must be client-side unless explicitly changed later
+- Add clear disconnect behavior
+
+4. Create authenticated API wrapper
+
+Create:
+src/services/sleeperAuthedApi.ts
+
+Functions:
+- sleeperAuthedFetch(endpointKey, payload)
+- requireSleeperAuth()
+- setLineup()
+- submitWaiverClaim()
+- proposeTrade()
+- acceptTrade()
+- rejectTrade()
+- draftPlayer()
+- sendLeagueChatMessage()
+
+For now, if an endpoint URL is empty, return a helpful error:
+“Sleeper authenticated endpoint is not configured yet.”
+
+5. Add endpoint discovery notes
+
+Create:
+docs/sleeper-auth-discovery.md
+
+Include:
+- Use Chrome DevTools Network tab
+- Log into OTCFFB/Sleeper-approved flow
+- Filter requests by:
+  - auth
+  - login
+  - token
+  - code
+  - user
+  - transaction
+  - lineup
+  - waiver
+  - trade
+  - draft
+  - message
+- Record:
+  - method
+  - endpoint URL
+  - request body shape
+  - auth header format
+  - response body shape
+  - token expiration behavior
+  - CORS behavior
+- Do not copy or expose real user tokens in docs
+- Replace all sensitive values with placeholders
+
+6. Dynasty Command integration
+
+At the top of Dynasty Command, add:
+- Sleeper connection status
+- Sync My Leagues button
+- Last synced timestamp
+- Connected league count
+- Error states
+
+If connected:
+- use normal public Sleeper API to sync leagues, rosters, users, drafts, picks, transactions, and matchups
+- authenticated token is only required for actions/write operations
+
+7. Styling
+
+Use StatChasers styling:
+- dark navy background
+- gold accent border/underline
+- white cards
+- rounded corners
+- clean premium dashboard look
+- mobile responsive

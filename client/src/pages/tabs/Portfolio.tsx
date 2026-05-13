@@ -8,6 +8,7 @@ import { SectionHeader } from "@/components/SectionHeader";
 import { useSleeper } from "@/contexts/SleeperContext";
 import { useValueModel } from "@/contexts/ValueModelContext";
 import { getPositionColor } from "@/data/mockData";
+import { SleeperAuthCard } from "@/components/SleeperAuthCard";
 import {
   Link,
   CheckCircle,
@@ -57,134 +58,153 @@ export function PortfolioConnect({ onNavigate }: { onNavigate?: (mainTab: string
   if (isConnected && user) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
-        <Card className="p-8 max-w-md w-full" data-testid="portfolio-connected-card">
-          <div className="flex flex-col items-center text-center space-y-5">
-            <div className="p-3 rounded-full bg-emerald-100 dark:bg-emerald-900/30">
-              <CheckCircle className="w-8 h-8 text-emerald-600 dark:text-emerald-400" />
-            </div>
-            <div>
-              <h3 className="text-lg font-bold text-foreground" data-testid="text-connected-username">
-                {user.displayName || user.username}
-              </h3>
-              <p className="text-sm text-muted-foreground mt-1" data-testid="text-connected-id">
-                @{user.username}
-              </p>
-            </div>
-            {lastSyncTime && (
-              <p className="text-xs text-muted-foreground" data-testid="text-last-sync">
-                Last synced: {formatSyncTime(lastSyncTime)}
-              </p>
-            )}
-            {onNavigate && (
-              <div className="w-full grid grid-cols-2 gap-3 pt-2">
+        <div className="max-w-md w-full space-y-4">
+          <Card className="p-8" data-testid="portfolio-connected-card">
+            <div className="flex flex-col items-center text-center space-y-5">
+              <div className="p-3 rounded-full bg-emerald-100 dark:bg-emerald-900/30">
+                <CheckCircle className="w-8 h-8 text-emerald-600 dark:text-emerald-400" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-foreground" data-testid="text-connected-username">
+                  {user.displayName || user.username}
+                </h3>
+                <p className="text-sm text-muted-foreground mt-1" data-testid="text-connected-id">
+                  @{user.username}
+                </p>
+              </div>
+              {lastSyncTime && (
+                <p className="text-xs text-muted-foreground" data-testid="text-last-sync">
+                  Last synced: {formatSyncTime(lastSyncTime)}
+                </p>
+              )}
+              {onNavigate && (
+                <div className="w-full grid grid-cols-2 gap-3 pt-2">
+                  <Button
+                    variant="outline"
+                    className="h-auto py-4 flex flex-col items-center gap-2 border-[#0b3a7a]/30 dark:border-blue-400/30 hover:bg-[#0b3a7a]/5 dark:hover:bg-blue-400/10"
+                    onClick={() => onNavigate("league-analyzer", "power-rankings")}
+                    data-testid="button-go-power-rankings"
+                  >
+                    <Trophy className="w-5 h-5 text-[#0b3a7a] dark:text-blue-400" />
+                    <span className="text-xs font-bold">Power Rankings</span>
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="h-auto py-4 flex flex-col items-center gap-2 border-[#d4af37]/40 hover:bg-[#d4af37]/5"
+                    onClick={() => onNavigate("trade-center", "trade-calculator")}
+                    data-testid="button-go-trade-center"
+                  >
+                    <ArrowRightLeft className="w-5 h-5 text-[#d4af37]" />
+                    <span className="text-xs font-bold">Trade Center</span>
+                  </Button>
+                </div>
+              )}
+              <div className="flex items-center gap-2 pt-2">
                 <Button
                   variant="outline"
-                  className="h-auto py-4 flex flex-col items-center gap-2 border-[#0b3a7a]/30 dark:border-blue-400/30 hover:bg-[#0b3a7a]/5 dark:hover:bg-blue-400/10"
-                  onClick={() => onNavigate("league-analyzer", "power-rankings")}
-                  data-testid="button-go-power-rankings"
+                  onClick={() => refresh()}
+                  disabled={isLoading}
+                  data-testid="button-refresh"
                 >
-                  <Trophy className="w-5 h-5 text-[#0b3a7a] dark:text-blue-400" />
-                  <span className="text-xs font-bold">Power Rankings</span>
+                  {isLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
+                  Sync My Leagues
                 </Button>
                 <Button
                   variant="outline"
-                  className="h-auto py-4 flex flex-col items-center gap-2 border-[#d4af37]/40 hover:bg-[#d4af37]/5"
-                  onClick={() => onNavigate("trade-center", "trade-calculator")}
-                  data-testid="button-go-trade-center"
+                  className="text-destructive border-destructive/30"
+                  onClick={disconnect}
+                  data-testid="button-disconnect"
                 >
-                  <ArrowRightLeft className="w-5 h-5 text-[#d4af37]" />
-                  <span className="text-xs font-bold">Trade Center</span>
+                  <LogOut className="w-4 h-4 mr-2" />
+                  Disconnect
                 </Button>
               </div>
-            )}
-
-            <div className="flex items-center gap-2 pt-2">
-              <Button
-                variant="outline"
-                onClick={() => refresh()}
-                disabled={isLoading}
-                data-testid="button-refresh"
-              >
-                {isLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
-                Refresh
-              </Button>
-              <Button
-                variant="outline"
-                className="text-destructive border-destructive/30"
-                onClick={disconnect}
-                data-testid="button-disconnect"
-              >
-                <LogOut className="w-4 h-4 mr-2" />
-                Disconnect
-              </Button>
             </div>
+          </Card>
+
+          {/* Sleeper Auth — token-based connection for write operations */}
+          <div>
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-0.5">
+              Sleeper Actions (write access)
+            </p>
+            <SleeperAuthCard />
           </div>
-        </Card>
+        </div>
       </div>
     );
   }
 
   return (
     <div className="flex items-center justify-center min-h-[60vh]">
-      <Card className="p-8 max-w-md w-full" data-testid="portfolio-connect-card">
-        <div className="flex flex-col items-center text-center space-y-5">
-          <div className="p-3.5 rounded-full bg-[#0b3a7a]/10 dark:bg-blue-400/10">
-            <Link className="w-8 h-8 text-[#0b3a7a] dark:text-blue-400" />
-          </div>
-          <div>
-            <h3 className="text-lg font-bold text-foreground">Connect Your Sleeper Account</h3>
-            <p className="text-sm text-muted-foreground mt-1.5">
-              Enter your Sleeper username to unlock your dynasty command center
-            </p>
-          </div>
-
-          <div className="w-full space-y-3">
-            <Input
-              placeholder="Enter Sleeper username..."
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              onKeyDown={handleKeyDown}
-              disabled={isLoading}
-              data-testid="input-sleeper-username"
-            />
-            <Button
-              className="w-full bg-[#0b3a7a] hover:bg-[#0b3a7a] text-white border-[#0b3a7a]"
-              onClick={handleConnect}
-              disabled={isLoading || !username.trim()}
-              data-testid="button-connect"
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Connecting...
-                </>
-              ) : (
-                "Connect"
-              )}
-            </Button>
-          </div>
-
-          {error && (
-            <div className="flex items-center gap-2 text-sm text-destructive" data-testid="text-connect-error">
-              <AlertCircle className="w-4 h-4 flex-shrink-0" />
-              <span>{error}</span>
+      <div className="max-w-md w-full space-y-4">
+        <Card className="p-8" data-testid="portfolio-connect-card">
+          <div className="flex flex-col items-center text-center space-y-5">
+            <div className="p-3.5 rounded-full bg-[#0b3a7a]/10 dark:bg-blue-400/10">
+              <Link className="w-8 h-8 text-[#0b3a7a] dark:text-blue-400" />
             </div>
-          )}
+            <div>
+              <h3 className="text-lg font-bold text-foreground">Connect Your Sleeper Account</h3>
+              <p className="text-sm text-muted-foreground mt-1.5">
+                Enter your Sleeper username to unlock your dynasty command center
+              </p>
+            </div>
 
-          <div className="w-full pt-2 space-y-2.5 text-left">
-            {[
-              "Read-only access to your leagues",
-              "No password required",
-              "Disconnect anytime",
-            ].map((text) => (
-              <div key={text} className="flex items-center gap-2.5">
-                <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
-                <span className="text-xs text-muted-foreground">{text}</span>
+            <div className="w-full space-y-3">
+              <Input
+                placeholder="Enter Sleeper username..."
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                onKeyDown={handleKeyDown}
+                disabled={isLoading}
+                data-testid="input-sleeper-username"
+              />
+              <Button
+                className="w-full bg-[#0b3a7a] hover:bg-[#0b3a7a] text-white border-[#0b3a7a]"
+                onClick={handleConnect}
+                disabled={isLoading || !username.trim()}
+                data-testid="button-connect"
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Connecting...
+                  </>
+                ) : (
+                  "Connect"
+                )}
+              </Button>
+            </div>
+
+            {error && (
+              <div className="flex items-center gap-2 text-sm text-destructive" data-testid="text-connect-error">
+                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                <span>{error}</span>
               </div>
-            ))}
+            )}
+
+            <div className="w-full pt-2 space-y-2.5 text-left">
+              {[
+                "Read-only access to your leagues",
+                "No password required",
+                "Disconnect anytime",
+              ].map((text) => (
+                <div key={text} className="flex items-center gap-2.5">
+                  <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
+                  <span className="text-xs text-muted-foreground">{text}</span>
+                </div>
+              ))}
+            </div>
           </div>
+        </Card>
+
+        {/* Sleeper Auth — also available before public API connection */}
+        <div>
+          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-0.5">
+            Sleeper Actions (write access)
+          </p>
+          <SleeperAuthCard />
         </div>
-      </Card>
+      </div>
     </div>
   );
 }

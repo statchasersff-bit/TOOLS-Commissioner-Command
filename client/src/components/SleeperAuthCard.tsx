@@ -1,0 +1,379 @@
+/**
+ * SleeperAuthCard
+ *
+ * Handles token-based Sleeper authentication for write operations.
+ * Separate from the public-API username connection in SleeperContext.
+ *
+ * Disconnected → modal → Connected state.
+ */
+
+import { useState, useEffect } from "react";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import {
+  Shield,
+  ShieldCheck,
+  Loader2,
+  LogOut,
+  AlertCircle,
+  KeyRound,
+  Smartphone,
+  User,
+  CheckCircle2,
+} from "lucide-react";
+import {
+  getSleeperSession,
+  requestSleeperCode,
+  verifySleeperCode,
+  loginWithToken,
+  logoutSleeper,
+  type SleeperSession,
+} from "@/services/sleeperAuth";
+import { SLEEPER_AUTH_ENDPOINTS } from "@/config/sleeperAuthEndpoints";
+
+type AuthStep = "idle" | "code-sent" | "manual-token" | "loading" | "error";
+
+export function SleeperAuthCard() {
+  const [session, setSession] = useState<SleeperSession | null>(null);
+  const [open, setOpen] = useState(false);
+  const [step, setStep] = useState<AuthStep>("idle");
+  const [identifier, setIdentifier] = useState("");
+  const [code, setCode] = useState("");
+  const [manualToken, setManualToken] = useState("");
+  const [manualUsername, setManualUsername] = useState("");
+  const [errorMsg, setErrorMsg] = useState("");
+
+  const endpointsConfigured = !!SLEEPER_AUTH_ENDPOINTS.login || !!SLEEPER_AUTH_ENDPOINTS.verifyCode;
+
+  useEffect(() => {
+    setSession(getSleeperSession());
+  }, []);
+
+  function reset() {
+    setStep("idle");
+    setIdentifier("");
+    setCode("");
+    setManualToken("");
+    setManualUsername("");
+    setErrorMsg("");
+  }
+
+  function handleOpen() {
+    reset();
+    setOpen(true);
+  }
+
+  function handleClose() {
+    setOpen(false);
+    reset();
+  }
+
+  async function handleSendCode() {
+    if (!identifier.trim()) return;
+    setStep("loading");
+    setErrorMsg("");
+    try {
+      await requestSleeperCode(identifier.trim());
+      setStep("code-sent");
+    } catch (e: any) {
+      setErrorMsg(e.message || "Failed to send code.");
+      setStep("error");
+    }
+  }
+
+  async function handleVerifyCode() {
+    if (!code.trim()) return;
+    setStep("loading");
+    setErrorMsg("");
+    try {
+      const sess = await verifySleeperCode(identifier.trim(), code.trim());
+      setSession(sess);
+      setOpen(false);
+      reset();
+    } catch (e: any) {
+      setErrorMsg(e.message || "Invalid code.");
+      setStep("error");
+    }
+  }
+
+  async function handleManualToken() {
+    if (!manualToken.trim()) return;
+    setStep("loading");
+    setErrorMsg("");
+    try {
+      const sess = await loginWithToken(manualToken.trim(), manualUsername.trim() || "unknown");
+      setSession(sess);
+      setOpen(false);
+      reset();
+    } catch (e: any) {
+      setErrorMsg(e.message || "Token validation failed.");
+      setStep("error");
+    }
+  }
+
+  async function handleDisconnect() {
+    await logoutSleeper();
+    setSession(null);
+  }
+
+  // ── Connected state ──────────────────────────────────────────────────────
+  if (session) {
+    return (
+      <Card className="p-4 md:p-5 border-[#d4af37]/30 bg-gradient-to-br from-[#0b3a7a]/5 to-transparent dark:from-[#0b3a7a]/20 dark:to-transparent"
+        data-testid="sleeper-auth-connected-card">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-9 h-9 rounded-full bg-emerald-500/10 dark:bg-emerald-400/10 flex items-center justify-center flex-shrink-0 ring-1 ring-emerald-500/20 dark:ring-emerald-400/20">
+              {session.avatar ? (
+                <img
+                  src={`https://sleepercdn.com/avatars/thumbs/${session.avatar}`}
+                  alt={session.username}
+                  className="w-9 h-9 rounded-full object-cover"
+                  onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                />
+              ) : (
+                <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+              )}
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5">
+                <span className="text-sm font-semibold text-foreground truncate" data-testid="text-auth-username">
+                  @{session.username}
+                </span>
+                <Badge className="text-[10px] px-1.5 py-0 h-4 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20 font-semibold">
+                  Authenticated
+                </Badge>
+              </div>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                Actions enabled · Connected {new Date(session.connected_at).toLocaleDateString()}
+              </p>
+            </div>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleDisconnect}
+            className="flex-shrink-0 h-8 text-xs gap-1.5 text-muted-foreground hover:text-destructive hover:border-destructive/40"
+            data-testid="button-auth-disconnect"
+          >
+            <LogOut className="w-3 h-3" />
+            Disconnect
+          </Button>
+        </div>
+      </Card>
+    );
+  }
+
+  // ── Disconnected state ───────────────────────────────────────────────────
+  return (
+    <>
+      <Card
+        className="p-4 md:p-5 border-dashed border-[#0b3a7a]/30 dark:border-[#1a3a6a]/60 bg-gradient-to-br from-[#0b3a7a]/3 to-transparent dark:from-[#0b3a7a]/10 dark:to-transparent"
+        data-testid="sleeper-auth-disconnected-card"
+      >
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-9 h-9 rounded-full bg-[#0b3a7a]/10 dark:bg-blue-400/10 flex items-center justify-center flex-shrink-0 ring-1 ring-[#0b3a7a]/15 dark:ring-blue-400/15">
+              <Shield className="w-4 h-4 text-[#0b3a7a] dark:text-blue-400" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-foreground">Connect Sleeper</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug">
+                Connect your account to sync leagues and unlock Dynasty Command actions.
+              </p>
+            </div>
+          </div>
+          <Button
+            size="sm"
+            className="flex-shrink-0 h-8 text-xs bg-[#0b3a7a] hover:bg-[#0b3a7a]/90 text-white shadow-sm"
+            onClick={handleOpen}
+            data-testid="button-auth-connect"
+          >
+            Connect Sleeper
+          </Button>
+        </div>
+      </Card>
+
+      <Dialog open={open} onOpenChange={(v) => { if (!v) handleClose(); }}>
+        <DialogContent className="sm:max-w-[420px] bg-background border-border/60 dark:bg-[#0c1929] dark:border-[#1a2d4a]">
+          <DialogHeader>
+            <div className="flex items-center gap-2.5 mb-1">
+              <div className="w-8 h-8 rounded-lg bg-[#0b3a7a]/10 dark:bg-blue-400/10 flex items-center justify-center">
+                <Shield className="w-4 h-4 text-[#0b3a7a] dark:text-blue-400" />
+              </div>
+              <DialogTitle className="text-base font-bold">Authentication Required</DialogTitle>
+            </div>
+            <DialogDescription className="text-[13px] leading-relaxed">
+              To make changes on Sleeper, you need to connect your Sleeper account.
+              Your credentials are sent directly to Sleeper. Auth tokens are stored locally in your browser.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="mt-2 space-y-4">
+            {/* Error state */}
+            {step === "error" && errorMsg && (
+              <div className="flex items-start gap-2 p-3 rounded-lg bg-destructive/8 border border-destructive/20 text-[13px] text-destructive" data-testid="text-auth-error">
+                <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                <span>{errorMsg}</span>
+              </div>
+            )}
+
+            {/* Idle / initial form */}
+            {(step === "idle" || step === "error") && (
+              <div className="space-y-3">
+                <div className="space-y-1.5">
+                  <label className="text-[12px] font-medium text-muted-foreground uppercase tracking-wide">
+                    Sleeper username, email, or phone
+                  </label>
+                  <Input
+                    placeholder="e.g. makitrain or user@email.com"
+                    value={identifier}
+                    onChange={(e) => setIdentifier(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleSendCode()}
+                    className="h-10 text-sm"
+                    data-testid="input-auth-identifier"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-2 pt-1">
+                  <Button
+                    className="w-full h-10 text-sm bg-[#0b3a7a] hover:bg-[#0b3a7a]/90 text-white gap-2"
+                    onClick={handleSendCode}
+                    disabled={!identifier.trim() || !endpointsConfigured}
+                    data-testid="button-auth-send-code"
+                  >
+                    <Smartphone className="w-4 h-4" />
+                    Send Code
+                    {!endpointsConfigured && (
+                      <span className="text-[10px] opacity-60">(endpoint pending)</span>
+                    )}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="w-full h-10 text-sm gap-2"
+                    onClick={() => setStep("manual-token")}
+                    data-testid="button-auth-use-token"
+                  >
+                    <KeyRound className="w-4 h-4" />
+                    Use token manually
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* Code verification */}
+            {step === "code-sent" && (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 p-3 rounded-lg bg-emerald-500/8 border border-emerald-500/20 text-[13px] text-emerald-700 dark:text-emerald-400">
+                  <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
+                  <span>Code sent to <strong>{identifier}</strong></span>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[12px] font-medium text-muted-foreground uppercase tracking-wide">
+                    Enter code
+                  </label>
+                  <Input
+                    placeholder="6-digit code"
+                    value={code}
+                    onChange={(e) => setCode(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleVerifyCode()}
+                    className="h-10 text-sm font-mono tracking-widest"
+                    maxLength={10}
+                    data-testid="input-auth-code"
+                  />
+                </div>
+                <Button
+                  className="w-full h-10 text-sm bg-[#0b3a7a] hover:bg-[#0b3a7a]/90 text-white"
+                  onClick={handleVerifyCode}
+                  disabled={!code.trim()}
+                  data-testid="button-auth-connect-verify"
+                >
+                  Connect
+                </Button>
+                <Button variant="ghost" className="w-full h-9 text-sm text-muted-foreground" onClick={() => setStep("idle")} data-testid="button-auth-back">
+                  ← Back
+                </Button>
+              </div>
+            )}
+
+            {/* Manual token entry */}
+            {step === "manual-token" && (
+              <div className="space-y-3">
+                <div className="space-y-1.5">
+                  <label className="text-[12px] font-medium text-muted-foreground uppercase tracking-wide">
+                    Sleeper username
+                  </label>
+                  <div className="relative">
+                    <User className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                    <Input
+                      placeholder="Your Sleeper username"
+                      value={manualUsername}
+                      onChange={(e) => setManualUsername(e.target.value)}
+                      className="h-10 text-sm pl-8"
+                      data-testid="input-auth-manual-username"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[12px] font-medium text-muted-foreground uppercase tracking-wide">
+                    Auth token
+                  </label>
+                  <div className="relative">
+                    <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                    <Input
+                      type="password"
+                      placeholder="Paste your Sleeper auth token"
+                      value={manualToken}
+                      onChange={(e) => setManualToken(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && handleManualToken()}
+                      className="h-10 text-sm pl-8 font-mono"
+                      data-testid="input-auth-token"
+                    />
+                  </div>
+                  <p className="text-[11px] text-muted-foreground leading-snug">
+                    Extract your token from Sleeper's app using Chrome DevTools. See the discovery guide for instructions.
+                  </p>
+                </div>
+                <Button
+                  className="w-full h-10 text-sm bg-[#0b3a7a] hover:bg-[#0b3a7a]/90 text-white"
+                  onClick={handleManualToken}
+                  disabled={!manualToken.trim()}
+                  data-testid="button-auth-connect-token"
+                >
+                  Connect
+                </Button>
+                <Button variant="ghost" className="w-full h-9 text-sm text-muted-foreground" onClick={() => setStep("idle")} data-testid="button-auth-back-token">
+                  ← Back
+                </Button>
+              </div>
+            )}
+
+            {/* Loading */}
+            {step === "loading" && (
+              <div className="flex flex-col items-center gap-3 py-6">
+                <Loader2 className="w-7 h-7 text-[#0b3a7a] dark:text-blue-400 animate-spin" />
+                <p className="text-sm text-muted-foreground">Connecting to Sleeper…</p>
+              </div>
+            )}
+
+            {/* Cancel button (shown in most states) */}
+            {step !== "loading" && step !== "code-sent" && step !== "manual-token" && (
+              <Button variant="ghost" className="w-full h-9 text-sm text-muted-foreground" onClick={handleClose} data-testid="button-auth-cancel">
+                Cancel
+              </Button>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}

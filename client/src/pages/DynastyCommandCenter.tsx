@@ -14,7 +14,7 @@ import { NAV_CONFIG } from "@/data/mockData";
 import type { League, Team } from "@/types";
 import { fetchSleeperLeagueFull } from "@/lib/sleeperApi";
 import { DataDiagnostics } from "@/components/DataDiagnostics";
-import { LayoutDashboard, Loader2, Lock, Check, User } from "lucide-react";
+import { LayoutDashboard, Loader2, Lock, Check, User, RefreshCw, AlertCircle, Wifi, WifiOff } from "lucide-react";
 import { SiDiscord } from "react-icons/si";
 import logoDark from "@assets/statchasers_logo_transparent_dark_1772764844282.png";
 import logoLight from "@assets/statchasers_logo_transparent_light_1772764844283.png";
@@ -395,8 +395,66 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
             </div>
           )}
 
-          <div className="flex items-center justify-end gap-2 mt-1">
-            <ValueAttribution />
+          {/* Sync status strip */}
+          <div className="flex items-center justify-between gap-2 mt-1.5 flex-wrap">
+            <div className="flex items-center gap-2 flex-wrap">
+              {sleeper.isConnected && sleeper.user ? (
+                <>
+                  <div className="flex items-center gap-1.5" data-testid="status-sleeper-connected">
+                    <Wifi className="w-3 h-3 text-emerald-500 dark:text-emerald-400" />
+                    <span className="text-[11px] font-medium text-emerald-700 dark:text-emerald-400">
+                      Connected as @{sleeper.user.username}
+                    </span>
+                  </div>
+                  <span className="text-border/60 text-[10px]">·</span>
+                  <span className="text-[11px] text-muted-foreground" data-testid="text-league-count">
+                    {sleeper.leagues.length} league{sleeper.leagues.length !== 1 ? "s" : ""}
+                  </span>
+                  {sleeper.lastSyncTime && (
+                    <>
+                      <span className="text-border/60 text-[10px]">·</span>
+                      <span className="text-[11px] text-muted-foreground" data-testid="text-last-synced">
+                        Synced {(() => {
+                          const diff = Date.now() - new Date(sleeper.lastSyncTime).getTime();
+                          const mins = Math.floor(diff / 60000);
+                          if (mins < 1) return "just now";
+                          if (mins < 60) return `${mins}m ago`;
+                          return `${Math.floor(mins / 60)}h ago`;
+                        })()}
+                      </span>
+                    </>
+                  )}
+                  {sleeper.error && (
+                    <>
+                      <span className="text-border/60 text-[10px]">·</span>
+                      <span className="flex items-center gap-1 text-[11px] text-destructive" data-testid="text-sync-error">
+                        <AlertCircle className="w-3 h-3" />
+                        {sleeper.error}
+                      </span>
+                    </>
+                  )}
+                </>
+              ) : (
+                <div className="flex items-center gap-1.5" data-testid="status-sleeper-disconnected">
+                  <WifiOff className="w-3 h-3 text-muted-foreground/60" />
+                  <span className="text-[11px] text-muted-foreground/70">Not connected</span>
+                </div>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              {sleeper.isConnected && (
+                <button
+                  onClick={() => sleeper.refresh()}
+                  disabled={sleeper.isLoading}
+                  className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+                  data-testid="button-sync-leagues"
+                >
+                  <RefreshCw className={`w-3 h-3 ${sleeper.isLoading ? "animate-spin" : ""}`} />
+                  <span>Sync My Leagues</span>
+                </button>
+              )}
+              <ValueAttribution />
+            </div>
           </div>
         </div>
       </header>
