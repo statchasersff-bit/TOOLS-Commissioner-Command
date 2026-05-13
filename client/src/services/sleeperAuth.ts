@@ -143,10 +143,11 @@ const LOGIN_CONTEXT_QUERY = `
 `;
 
 const CREATE_VERIFICATION_CODE_MUTATION = `
-  mutation create_verification_code($email_or_phone_or_username: String!) {
-    create_verification_code(
-      email_or_phone_or_username: $email_or_phone_or_username
-    )
+  mutation create_verification_code($email_or_phone: String!) {
+    create_verification_code(email_or_phone: $email_or_phone) {
+      type
+      value
+    }
   }
 `;
 
@@ -191,8 +192,12 @@ export async function getLoginContext(identifier: string): Promise<{
  * Returns true on success.
  */
 export async function requestSleeperCode(identifier: string): Promise<boolean> {
+  const trimmed = identifier.trim();
+  if (!trimmed) {
+    throw new Error("Enter your Sleeper username, email, or phone.");
+  }
   await sleeperGQL(SLEEPER_GQL_URL, CREATE_VERIFICATION_CODE_MUTATION, {
-    email_or_phone_or_username: identifier,
+    email_or_phone: trimmed,
   });
   return true;
 }
