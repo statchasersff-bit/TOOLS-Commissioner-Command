@@ -1,12 +1,15 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { getSleeperPlayers } from "@/lib/sleeperApi";
 import { useValueModel } from "@/contexts/ValueModelContext";
+import { useToast } from "@/hooks/use-toast";
 import type { League, Team, Player } from "@/types";
 import { cn } from "@/lib/utils";
-import { Zap, RefreshCw, Users, AlertCircle } from "lucide-react";
+import { Zap, RefreshCw, Users, AlertCircle, Download, Loader2 } from "lucide-react";
 import { getLeagueTeamTiers, getTierEmoji, type Tier } from "@/data/mockData";
+import { toPng } from "html-to-image";
 
 // Raw glow colors per tier for box-shadow
 const TIER_GLOW: Record<string, string> = {
@@ -362,6 +365,7 @@ function FieldLegend() {
 // ─── Main Component ───────────────────────────────────────────────────────────
 export function FieldView({ league, userTeam }: { league: League; userTeam: Team }) {
   const { getPlayerValue } = useValueModel();
+  const { toast } = useToast();
 
   const [projections, setProjections] = useState<Record<string, number>>({});
   const [opponentName, setOpponentName] = useState<string | null>(null);
@@ -370,6 +374,30 @@ export function FieldView({ league, userTeam }: { league: League; userTeam: Team
   const [isLoading, setIsLoading] = useState(true);
   const [playersDb, setPlayersDb] = useState<Record<string, any>>({});
   const [error, setError] = useState<string | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
+  const fieldRef = useRef<HTMLDivElement>(null);
+
+  const doExport = useCallback(async () => {
+    if (!fieldRef.current) return;
+    setIsExporting(true);
+    await new Promise(r => setTimeout(r, 80));
+    try {
+      const dataUrl = await toPng(fieldRef.current, {
+        cacheBust: true,
+        backgroundColor: "#080f1e",
+        pixelRatio: 2,
+      });
+      const link = document.createElement("a");
+      link.download = `field-view-${userTeam.owner || "team"}.png`;
+      link.href = dataUrl;
+      link.click();
+      toast({ title: "Field exported!", description: "Saved as PNG." });
+    } catch {
+      toast({ title: "Export failed", description: "Try again or check browser permissions.", variant: "destructive" });
+    } finally {
+      setIsExporting(false);
+    }
+  }, [userTeam.owner, toast]);
 
   const rosterPositions = useMemo(() => league.rosterPositions ?? [], [league.rosterPositions]);
   const scoringFormat = league.scoringFormat ?? "PPR";
@@ -559,11 +587,15 @@ export function FieldView({ league, userTeam }: { league: League; userTeam: Team
               <span className="hidden md:inline">{error}</span>
             </div>
           )}
+          <Button size="sm" variant="outline" onClick={doExport} disabled={isExporting} data-testid="button-export-field">
+            {isExporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+            <span className="hidden sm:inline ml-1.5">Export</span>
+          </Button>
         </div>
       </div>
 
       {/* ── Football Field ─────────────────────────────────────────────── */}
-      <div className="relative rounded-2xl overflow-hidden border border-white/6 shadow-2xl">
+      <div ref={fieldRef} className="relative rounded-2xl overflow-hidden border border-white/6 shadow-2xl">
         <FieldBackground />
 
         {/* ── GM card — overlaid top-left on the field ─────────────────── */}
