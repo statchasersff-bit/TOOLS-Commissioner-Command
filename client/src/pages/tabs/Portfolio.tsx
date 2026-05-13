@@ -709,23 +709,31 @@ export function PortfolioSummary() {
                     </tr>
                   </thead>
                   <tbody>
-                    {summaryData.lineupAlerts.flatMap((la: any) =>
-                      la.issues.map((issue: any, i: number) => (
-                        <tr key={`${la.leagueId}-${i}`} className="border-b border-border/20 hover:bg-muted/10">
-                          <td className="px-4 py-2.5 font-medium">{i === 0 ? la.leagueName : ""}</td>
+                    {summaryData.lineupAlerts.map((la: any) => {
+                      const first = la.issues[0];
+                      const extra = la.issues.length - 1;
+                      const badgeClass = first.reason === "OUT" || first.reason === "IR"
+                        ? "bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800"
+                        : first.reason === "Empty"
+                        ? "bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800"
+                        : "bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800";
+                      return (
+                        <tr key={la.leagueId} className="border-b border-border/20 hover:bg-muted/10">
+                          <td className="px-4 py-2.5 font-medium">{la.leagueName}</td>
                           <td className="px-4 py-2.5">
-                            <Badge variant="outline" className={`text-[10px] ${
-                              issue.reason === "OUT" || issue.reason === "IR" ? "bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800" :
-                              issue.reason === "Empty" ? "bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800" :
-                              "bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800"
-                            }`}>
-                              {issue.slot}: {issue.reason}
-                            </Badge>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <Badge variant="outline" className={`text-[10px] ${badgeClass}`}>
+                                {first.slot}: {first.reason}
+                              </Badge>
+                              {extra > 0 && (
+                                <span className="text-[10px] text-muted-foreground">+{extra} more</span>
+                              )}
+                            </div>
                           </td>
-                          <td className="px-4 py-2.5 text-muted-foreground">{issue.playerName || "N/A"}</td>
+                          <td className="px-4 py-2.5 text-muted-foreground">{first.playerName || "N/A"}</td>
                         </tr>
-                      ))
-                    )}
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
