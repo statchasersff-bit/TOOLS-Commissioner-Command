@@ -14,7 +14,8 @@ import {
 import { cn } from "@/lib/utils";
 import { useSleeper } from "@/contexts/SleeperContext";
 import { useValueModel } from "@/contexts/ValueModelContext";
-import { getSleeperPlayers, claimPlayerOnSleeper } from "@/lib/sleeperApi";
+import { getSleeperPlayers } from "@/lib/sleeperApi";
+import { submitWaiverClaim } from "@/services/sleeperAuthedApi";
 import { getSleeperSession, isSessionExpired, type SleeperSession } from "@/services/sleeperAuth";
 import {
   Waves, Zap, Users, DollarSign, Star, TrendingUp, TrendingDown,
@@ -787,14 +788,12 @@ function ClaimPlayerModal({ row, onClose }: { row: WaiverRow | null; onClose: ()
     setSubmitting(true);
     setSubmitError(null);
     try {
-      await claimPlayerOnSleeper(
+      await submitWaiverClaim(
         row.leagueId,
         row.rosterId,
-        selectedAdd.id,
-        selectedDrop?.id ?? null,
-        isFaab ? faabBid : null,
-        row.waiverType,
-        token
+        [selectedAdd.id],
+        selectedDrop ? [selectedDrop.id] : [],
+        isFaab ? faabBid : 0
       );
       setSuccess(true);
     } catch (e: any) {
