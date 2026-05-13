@@ -286,7 +286,7 @@ export function FinanceTab() {
   useEffect(() => {
     if (!user?.userId) return;
     const sess = getSleeperSession();
-    if (sess && !isSessionExpired(sess) && sess.userId === user.userId) {
+    if (sess && !isSessionExpired(sess) && sess.user_id === user.userId) {
       const cached = localStorage.getItem(tokenKey(user.userId));
       if (cached) { setToken(cached); setAuthChecked(true); return; }
       fetch(`${API_BASE}/api/auth/sleeper-exchange`, {
@@ -308,7 +308,7 @@ export function FinanceTab() {
     if (token || !user?.userId) return;
     const id = setInterval(() => {
       const sess = getSleeperSession();
-      if (!sess || isSessionExpired(sess) || sess.userId !== user.userId) return;
+      if (!sess || isSessionExpired(sess) || sess.user_id !== user.userId) return;
       const cached = localStorage.getItem(tokenKey(user.userId!));
       if (cached) { setToken(cached); clearInterval(id); return; }
       fetch(`${API_BASE}/api/auth/sleeper-exchange`, {
