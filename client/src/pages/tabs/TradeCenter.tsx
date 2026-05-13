@@ -15,6 +15,7 @@ import { getStaticPickValue } from "@/data/pickValues";
 import { API_BASE } from "@/lib/apiBase";
 import type { League, Team, Tier, Player, Pick, TradeRecord, TradeSide, CrawlStatus } from "@/types";
 import { cn } from "@/lib/utils";
+import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { ArrowRightLeft, TrendingUp, TrendingDown, Target, X, Plus, Search, Info, Scale, RotateCcw, Database, Play, Pause, Loader2, ChevronLeft, ChevronRight, ChevronDown } from "lucide-react";
 
 interface TradeProps {
@@ -38,21 +39,14 @@ function PlayerChip({ player, value }: { player: Player; value: number }) {
   const sid = player.sleeperId ?? player.id;
   return (
     <div className="flex items-center gap-1.5 py-1">
-      <div className="w-8 h-8 rounded-full flex-shrink-0 overflow-hidden bg-muted ring-1 ring-border/30">
-        <img
-          src={`https://sleepercdn.com/content/nfl/players/thumb/${sid}.jpg`}
-          alt={player.name}
-          className="w-full h-full object-cover object-top"
-          onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-        />
-      </div>
-      <div className="min-w-0">
-        <p className="text-xs font-semibold leading-tight truncate">{player.name}</p>
-        <div className="flex items-center gap-1">
-          <Badge variant="outline" className={`text-[9px] px-1 py-0 h-3.5 ${getPositionColor(player.pos)}`}>{player.pos}</Badge>
-          <span className="text-[10px] text-muted-foreground">{value.toLocaleString()}</span>
-        </div>
-      </div>
+      <PlayerAvatar
+        id={sid}
+        name={player.name}
+        pos={player.pos}
+        team={player.team ?? ""}
+        size="sm"
+        sub={value.toLocaleString()}
+      />
     </div>
   );
 }
@@ -478,23 +472,14 @@ export function TradeFinder({ league, userTeam }: TradeProps) {
           {tradeBlockCandidates.slice(0, 20).map((p, i) => (
             <div key={`${p.sleeperId || p.id}-${i}`} className="flex items-center gap-2 py-2.5 border-b border-border/20 last:border-0" data-testid={`trade-block-candidate-${p.sleeperId || p.id}`}>
               <span className="text-xs text-muted-foreground w-5 text-right flex-shrink-0">{i + 1}.</span>
-              <div className="w-7 h-7 rounded-full flex-shrink-0 overflow-hidden bg-muted ring-1 ring-border/30">
-                <img
-                  src={`https://sleepercdn.com/content/nfl/players/thumb/${p.sleeperId || p.id}.jpg`}
-                  alt={p.name}
-                  className="w-full h-full object-cover object-top"
-                  onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-                />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1.5">
-                  <p className="text-sm font-semibold leading-tight">{p.name}</p>
-                  <Badge variant="outline" className={`text-[10px] px-1 py-0 h-4 flex-shrink-0 ${getPositionColor(p.pos)}`}>{p.pos}</Badge>
-                </div>
-                <p className="text-[10px] text-muted-foreground mt-0.5 truncate">
-                  {p.ownerName} · Age {p.age}
-                </p>
-              </div>
+              <PlayerAvatar
+                id={p.sleeperId || p.id}
+                name={p.name}
+                pos={p.pos}
+                team={p.team ?? ""}
+                size="sm"
+                sub={`${p.ownerName} · Age ${p.age}`}
+              />
               <div className="flex flex-col items-end gap-1 flex-shrink-0">
                 <span className="text-xs font-bold text-[#0b3a7a] dark:text-blue-400 tabular-nums">{p.redraftVal.toLocaleString()}</span>
                 <Badge variant="outline" className={cn("text-[9px] px-1.5 py-0 h-4", p.reason === "Rebuilder" ? getTierColor("Future Powerhouse") : "text-amber-600 dark:text-amber-400 border-amber-300 dark:border-amber-700")} data-testid={`trade-block-reason-${p.sleeperId || p.id}`}>
@@ -637,9 +622,7 @@ function CrossLeagueTradeIntel({ league }: { league: League }) {
                               <div className="space-y-1">
                                 {trade.sent.map((p, j) => (
                                   <div key={`sent-${p.playerId}-${j}`} className="flex items-center gap-1.5">
-                                    <div className="w-5 h-5 rounded-full flex-shrink-0 overflow-hidden bg-muted ring-1 ring-border/30">
-                                      <img src={`https://sleepercdn.com/content/nfl/players/thumb/${p.playerId}.jpg`} alt={p.name} className="w-full h-full object-cover object-top" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
-                                    </div>
+                                    <PlayerAvatar id={p.playerId} name={p.name} pos={p.pos} team={(p as any).team ?? ""} size="xs" compact />
                                     <span className="text-[11px] truncate flex-1">{p.name}</span>
                                     <Badge variant="outline" className={`text-[8px] px-0.5 py-0 h-3.5 flex-shrink-0 ${getPositionColor(p.pos)}`}>{p.pos}</Badge>
                                   </div>
@@ -658,9 +641,7 @@ function CrossLeagueTradeIntel({ league }: { league: League }) {
                               <div className="space-y-1">
                                 {trade.received.map((p, j) => (
                                   <div key={`recv-${p.playerId}-${j}`} className="flex items-center gap-1.5">
-                                    <div className="w-5 h-5 rounded-full flex-shrink-0 overflow-hidden bg-muted ring-1 ring-border/30">
-                                      <img src={`https://sleepercdn.com/content/nfl/players/thumb/${p.playerId}.jpg`} alt={p.name} className="w-full h-full object-cover object-top" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
-                                    </div>
+                                    <PlayerAvatar id={p.playerId} name={p.name} pos={p.pos} team={(p as any).team ?? ""} size="xs" compact />
                                     <span className="text-[11px] truncate flex-1">{p.name}</span>
                                     <Badge variant="outline" className={`text-[8px] px-0.5 py-0 h-3.5 flex-shrink-0 ${getPositionColor(p.pos)}`}>{p.pos}</Badge>
                                   </div>
@@ -1818,22 +1799,14 @@ export function TradeDatabase({ league }: { league: League }) {
                   }}
                   data-testid={`suggestion-player-${i}`}
                 >
-                  <div className="w-7 h-7 rounded-full flex-shrink-0 overflow-hidden bg-muted">
-                    <img
-                      src={`https://sleepercdn.com/content/nfl/players/thumb/${p.sleeperId}.jpg`}
-                      alt={p.name}
-                      className="w-full h-full object-cover object-top"
-                      onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-                    />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold truncate">{p.name}</p>
-                    <div className="flex items-center gap-1.5">
-                      <Badge variant="outline" className={`text-[9px] px-1 py-0 h-3.5 ${getPositionColor(p.pos)}`}>{p.pos}</Badge>
-                      {p.team && <span className="text-[10px] text-muted-foreground">{p.team}</span>}
-                    </div>
-                  </div>
-                  <span className="text-xs font-semibold text-muted-foreground tabular-nums flex-shrink-0">{p.value.toLocaleString()}</span>
+                  <PlayerAvatar
+                    id={p.sleeperId}
+                    name={p.name}
+                    pos={p.pos}
+                    team={p.team ?? ""}
+                    size="sm"
+                    sub={p.value.toLocaleString()}
+                  />
                 </button>
               ))}
             </div>
@@ -2028,15 +2001,9 @@ function TradeCard({
                   return (
                     <div key={pi} className="flex items-center justify-between py-1">
                       <div className="flex items-center gap-1.5">
-                        {p.sleeperId ? (
-                          <img
-                            src={`https://sleepercdn.com/content/nfl/players/thumb/${p.sleeperId}.jpg`}
-                            alt={p.name}
-                            className="w-7 h-7 rounded-full object-cover object-top flex-shrink-0 bg-muted"
-                            data-testid={`img-player-${p.sleeperId}`}
-                            onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-                          />
-                        ) : null}
+                        {p.sleeperId && (
+                          <PlayerAvatar id={p.sleeperId} name={p.name} pos={p.pos} team={p.team ?? ""} size="xs" compact />
+                        )}
                         <Badge variant="outline" className={`text-[10px] w-7 justify-center ${getPositionColor(p.pos)}`}>
                           {p.pos}
                         </Badge>

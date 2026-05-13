@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
+import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { useSleeper } from "@/contexts/SleeperContext";
 import { useValueModel } from "@/contexts/ValueModelContext";
 import type { RankedPlayer } from "@/contexts/ValueModelContext";
@@ -1660,68 +1661,7 @@ function BulkClaimsView({
   return null;
 }
 
-// ─── PlayerAvatar ───────────────────────────────────────────────────────────
-
-function PlayerAvatar({
-  id,
-  name,
-  pos,
-  team,
-  size = "sm",
-  sub,
-}: {
-  id: string;
-  name: string;
-  pos: string;
-  team: string;
-  size?: "sm" | "md";
-  sub?: string;
-}) {
-  const posColors: Record<string, string> = {
-    QB: "text-rose-400",
-    RB: "text-emerald-400",
-    WR: "text-sky-400",
-    TE: "text-yellow-400",
-  };
-  const posColor = posColors[pos] ?? "text-muted-foreground";
-  const avatarSize = size === "md" ? "w-11 h-11" : "w-9 h-9";
-  const badgeSize  = size === "md" ? "w-[18px] h-[18px]" : "w-[14px] h-[14px]";
-  const nameSize   = size === "md" ? "text-[15px]" : "text-[13px]";
-  const metaSize   = size === "md" ? "text-[13px]" : "text-[11px]";
-
-  return (
-    <div className="flex items-center gap-2.5">
-      <div className="relative flex-shrink-0">
-        <div className={cn(avatarSize, "rounded-full overflow-hidden bg-[#0b3a7a]/40 ring-1 ring-white/10")}>
-          <img
-            src={`https://sleepercdn.com/content/nfl/players/thumb/${id}.jpg`}
-            alt={name}
-            className="w-full h-full object-cover object-top"
-            onError={(e) => { (e.target as HTMLImageElement).src = "https://sleepercdn.com/images/v2/icons/player_default.webp"; }}
-          />
-        </div>
-        {team && team !== "FA" && (
-          <div className={cn("absolute -bottom-0.5 -right-0.5 rounded-full overflow-hidden ring-[1.5px] ring-background bg-[#0a1628] flex items-center justify-center", badgeSize)}>
-            <img
-              src={`https://sleepercdn.com/images/team_logos/nfl/${team.toLowerCase()}.png`}
-              alt={team}
-              className="w-full h-full object-contain"
-              onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-            />
-          </div>
-        )}
-      </div>
-      <div className="min-w-0">
-        <div className={cn("font-bold text-foreground leading-tight truncate", nameSize)}>{name}</div>
-        <div className={cn("flex items-center gap-1.5 mt-0.5", metaSize)}>
-          <span className={cn("font-bold", posColor)}>{pos}</span>
-          <span className="text-muted-foreground font-medium">{team || "FA"}</span>
-          {sub && <span className="text-muted-foreground/60">· {sub}</span>}
-        </div>
-      </div>
-    </div>
-  );
-}
+// PlayerAvatar is imported from @/components/PlayerAvatar
 
 function ClaimPlayerModal({ row, preAddId, onClose }: { row: WaiverRow | null; preAddId?: string | null; onClose: () => void }) {
   const [session, setSession] = useState<SleeperSession | null>(() => getSleeperSession());

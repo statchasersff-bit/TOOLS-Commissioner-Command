@@ -10,6 +10,7 @@ import { useValueModel } from "@/contexts/ValueModelContext";
 import { getPositionColor } from "@/data/mockData";
 import type { League, Team, Player, Pick } from "@/types";
 import { cn } from "@/lib/utils";
+import { PlayerAvatar } from "@/components/PlayerAvatar";
 import {
   Copy, Image, Share2, EyeOff, Loader2,
   Shield, Star, TrendingDown, Zap, Target, ChevronRight,
@@ -626,14 +627,14 @@ function PlayerRow({ player, value, hideValues, showAge }: {
       className="flex items-center gap-2 px-2.5 py-1.5 transition-colors hover:bg-muted/30 group"
       data-testid={`player-row-${player.id}`}
     >
-      <div className="w-7 h-7 rounded-full bg-muted overflow-hidden ring-1 ring-border/30 flex-shrink-0">
-        <img
-          src={`https://sleepercdn.com/content/nfl/players/thumb/${sleeperId}.jpg`}
-          alt={player.name}
-          className="w-full h-full object-cover object-top"
-          onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-        />
-      </div>
+      <PlayerAvatar
+        id={sleeperId}
+        name={player.name}
+        pos={player.pos ?? ""}
+        team={player.team ?? ""}
+        size="xs"
+        compact
+      />
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1 flex-wrap">
           <span className="text-xs font-semibold truncate">{player.name}</span>

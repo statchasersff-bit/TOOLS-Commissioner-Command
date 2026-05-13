@@ -9,6 +9,7 @@ import { useValueModel } from "@/contexts/ValueModelContext";
 import { getPositionColor } from "@/data/mockData";
 import type { League } from "@/types";
 import { cn } from "@/lib/utils";
+import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { Search } from "lucide-react";
 
 interface MarketProps {
@@ -178,25 +179,13 @@ export function MarketValue({ league }: MarketProps) {
                 data-testid={`row-player-${row.sleeperId}`}
               >
                 <td className="px-2 md:px-4 py-2">
-                  <div className="flex items-center gap-2">
-                    <div className="hidden md:block w-8 h-8 rounded-full flex-shrink-0 overflow-hidden bg-muted ring-1 ring-border/40">
-                      <img
-                        src={`https://sleepercdn.com/content/nfl/players/thumb/${row.sleeperId}.jpg`}
-                        alt={row.name}
-                        className="w-full h-full object-cover object-top"
-                        onError={(e) => {
-                          const el = e.target as HTMLImageElement;
-                          el.style.display = "none";
-                          el.parentElement!.classList.add("flex", "items-center", "justify-center");
-                          el.parentElement!.innerHTML = `<span class="text-[9px] font-bold text-muted-foreground">${row.pos}</span>`;
-                        }}
-                      />
-                    </div>
-                    <div className="min-w-0">
-                      <span className="font-medium text-xs md:text-sm block truncate" data-testid={`text-player-name-${row.sleeperId}`}>{row.name}</span>
-                      <span className="text-[10px] text-muted-foreground">{row.team}</span>
-                    </div>
-                  </div>
+                  <PlayerAvatar
+                    id={row.sleeperId}
+                    name={row.name}
+                    pos={row.pos}
+                    team={row.team}
+                    size="sm"
+                  />
                 </td>
                 <td className="px-2 md:px-4 py-2">
                   <Badge variant="outline" className={`text-[9px] md:text-[10px] px-1 md:px-2 h-4 md:h-5 md:w-8 justify-center ${getPositionColor(row.pos)}`}>

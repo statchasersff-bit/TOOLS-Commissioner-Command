@@ -7,6 +7,7 @@ import { fetchLeagueTransactions as fetchLeagueTransactionsApi } from "@/lib/sle
 import { getPositionColor } from "@/data/mockData";
 import { useValueModel } from "@/contexts/ValueModelContext";
 import { cn } from "@/lib/utils";
+import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { ArrowRightLeft, UserPlus, UserMinus, Loader2, RefreshCw, ChevronDown } from "lucide-react";
 
 interface TransactionPlayer {
@@ -39,29 +40,16 @@ interface Transaction {
 
 type FilterType = "all" | "trade" | "waiver" | "free_agent";
 
-function PlayerHeadshot({ playerId, pos, size = "md" }: { playerId: string; pos: string; size?: "sm" | "md" }) {
-  const [imgError, setImgError] = useState(false);
-  const dim = size === "sm" ? "w-8 h-8" : "w-10 h-10";
-  if (playerId && !imgError) {
-    return (
-      <div className={cn(dim, "rounded-full flex-shrink-0 overflow-hidden bg-muted ring-1 ring-border/50")}>
-        <img
-          src={`https://sleepercdn.com/content/nfl/players/thumb/${playerId}.jpg`}
-          alt=""
-          className="w-full h-full object-cover object-top"
-          onError={() => setImgError(true)}
-          data-testid={`img-player-txn-${playerId}`}
-        />
-      </div>
-    );
-  }
+function PlayerHeadshot({ playerId, pos, team = "", size = "md" }: { playerId: string; pos: string; team?: string; size?: "sm" | "md" }) {
   return (
-    <div
-      className={cn(dim, "rounded-full flex-shrink-0 flex items-center justify-center text-[10px] font-bold bg-muted ring-1 ring-border/50 text-muted-foreground")}
-      data-testid={`img-player-txn-${playerId}`}
-    >
-      {(pos || "?").charAt(0)}
-    </div>
+    <PlayerAvatar
+      id={playerId}
+      name=""
+      pos={pos}
+      team={team}
+      size={size === "sm" ? "xs" : "sm"}
+      compact
+    />
   );
 }
 
@@ -302,7 +290,7 @@ function PlayerRow({
 
   return (
     <div className="flex items-center gap-3 py-1 min-w-0">
-      <PlayerHeadshot playerId={player.playerId} pos={player.pos} />
+      <PlayerHeadshot playerId={player.playerId} pos={player.pos} team={player.team ?? ""} />
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5 min-w-0">
           {action !== "received" && (

@@ -9,6 +9,7 @@ import { getPositionColor } from "@/data/mockData";
 import { useValueModel } from "@/contexts/ValueModelContext";
 import type { League, Team, Player } from "@/types";
 import { cn } from "@/lib/utils";
+import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { Search } from "lucide-react";
 
 interface TeamProps {
@@ -158,6 +159,14 @@ export function RosterBreakdown({ league, userTeam }: TeamProps) {
                   {players.sort((a, b) => (b.starter ? 1 : 0) - (a.starter ? 1 : 0) || b.value - a.value).map((p) => (
                     <div key={p.id} className="flex items-center justify-between py-2.5 border-b border-border/20 last:border-0" data-testid={`depth-player-${p.id}`}>
                       <div className="flex items-center gap-2">
+                        <PlayerAvatar
+                          id={p.sleeperId ?? p.id}
+                          name={p.name}
+                          pos={p.pos}
+                          team={p.team ?? ""}
+                          size="xs"
+                          compact
+                        />
                         <Badge variant={p.starter ? "default" : "outline"} className="text-xs">
                           {p.starter ? "Starter" : "Bench"}
                         </Badge>
