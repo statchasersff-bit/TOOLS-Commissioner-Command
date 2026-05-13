@@ -642,14 +642,6 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
   const teams = league.teams;
   const { getPlayerValue, getRedraftValue, optimizeLineup } = useValueModel();
   const [sortKey, setSortKey] = useState<SortKey>("overall");
-  const [expandedScoutingTeams, setExpandedScoutingTeams] = useState<Set<string>>(new Set());
-  const toggleScoutingTeam = (teamId: string) => {
-    setExpandedScoutingTeams(prev => {
-      const next = new Set(prev);
-      if (next.has(teamId)) next.delete(teamId); else next.add(teamId);
-      return next;
-    });
-  };
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [viewMode, setViewMode] = useState<"table" | "chart" | "heatmap">("table");
@@ -999,6 +991,47 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
                                   })}
                                 </div>
                               </div>
+
+                              <div className="flex-1 min-w-[160px]">
+                                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-3">Scouting Report</p>
+                                {(() => {
+                                  const strengths = getScoutingStrengths(team, teams);
+                                  const weaknesses = getScoutingWeaknesses(team, teams);
+                                  const outlook = getScoutingOutlook(team, snapshotTierMap);
+                                  return (
+                                    <div className="space-y-3">
+                                      {strengths.length > 0 && (
+                                        <div>
+                                          <p className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-1 flex items-center gap-1">
+                                            <TrendingUp className="w-3 h-3" /> Strengths
+                                          </p>
+                                          <ul className="space-y-0.5 pl-4">
+                                            {strengths.map((s, i) => (
+                                              <li key={i} className="text-xs text-muted-foreground list-disc">{s}</li>
+                                            ))}
+                                          </ul>
+                                        </div>
+                                      )}
+                                      {weaknesses.length > 0 && (
+                                        <div>
+                                          <p className="text-[10px] font-bold text-red-500 dark:text-red-400 uppercase tracking-wider mb-1 flex items-center gap-1">
+                                            <TrendingDown className="w-3 h-3" /> Weaknesses
+                                          </p>
+                                          <ul className="space-y-0.5 pl-4">
+                                            {weaknesses.map((w, i) => (
+                                              <li key={i} className="text-xs text-muted-foreground list-disc">{w}</li>
+                                            ))}
+                                          </ul>
+                                        </div>
+                                      )}
+                                      <div>
+                                        <p className="text-[10px] font-bold text-[#0b3a7a] dark:text-blue-400 uppercase tracking-wider mb-1">Outlook</p>
+                                        <p className="text-xs text-muted-foreground">{outlook}</p>
+                                      </div>
+                                    </div>
+                                  );
+                                })()}
+                              </div>
                             </div>
                           </td>
                         </tr>
@@ -1225,79 +1258,6 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
         </div>
       )}
 
-      <div>
-        <h3 className="text-base font-bold text-foreground">Scouting Report</h3>
-        <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
-        <p className="text-xs text-muted-foreground mt-2 mb-4">Expandable per-team scouting report</p>
-
-        <div className="space-y-3" data-testid="team-narratives">
-          {[...teams].sort((a, b) => b.metrics.overall - a.metrics.overall).map((team) => {
-            const tierInfo = snapshotTierMap.get(team.id);
-            const tier = tierInfo?.tier ?? "Balanced";
-            const isExpanded = expandedScoutingTeams.has(team.id);
-            const strengths = getScoutingStrengths(team, teams);
-            const weaknesses = getScoutingWeaknesses(team, teams);
-            const outlook = getScoutingOutlook(team, snapshotTierMap);
-
-            return (
-              <Card key={team.id} className="overflow-hidden" data-testid={`narrative-${team.id}`}>
-                <button
-                  onClick={() => toggleScoutingTeam(team.id)}
-                  className="w-full flex items-center justify-between p-4 hover:bg-muted/20 transition-colors text-left"
-                  data-testid={`button-expand-scouting-${team.id}`}
-                >
-                  <div className="flex items-center gap-3">
-                    {isExpanded ? <ChevronDown className="w-4 h-4 text-muted-foreground flex-shrink-0" /> : <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0" />}
-                    {team.avatar ? (
-                      <img src={team.avatar} alt={team.owner} className="w-8 h-8 rounded-full object-cover flex-shrink-0 ring-1 ring-border/40" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
-                    ) : (
-                      <div className="w-8 h-8 rounded-full bg-muted flex-shrink-0 ring-1 ring-border/40 flex items-center justify-center">
-                        <span className="text-xs font-bold text-muted-foreground">{team.owner.charAt(0).toUpperCase()}</span>
-                      </div>
-                    )}
-                    <span className="text-sm font-bold">{team.owner}</span>
-                    <Badge variant="outline" className={getTierColor(tier)}>{getTierEmoji(tier)} {tier}</Badge>
-                  </div>
-                  <span className="text-xl font-bold">{team.metrics.overall}</span>
-                </button>
-
-                {isExpanded && (
-                  <div className="px-4 pb-5 pt-1 border-t border-border/30 space-y-4">
-                    {strengths.length > 0 && (
-                      <div>
-                        <p className="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
-                          <TrendingUp className="w-3 h-3" /> Strengths
-                        </p>
-                        <ul className="space-y-1 pl-5">
-                          {strengths.map((s, i) => (
-                            <li key={i} className="text-sm text-muted-foreground list-disc">{s}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                    {weaknesses.length > 0 && (
-                      <div>
-                        <p className="text-xs font-bold text-red-500 dark:text-red-400 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
-                          <TrendingDown className="w-3 h-3" /> Weaknesses
-                        </p>
-                        <ul className="space-y-1 pl-5">
-                          {weaknesses.map((w, i) => (
-                            <li key={i} className="text-sm text-muted-foreground list-disc">{w}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                    <div>
-                      <p className="text-xs font-bold text-[#0b3a7a] dark:text-blue-400 uppercase tracking-wider mb-1.5">Outlook</p>
-                      <p className="text-sm text-muted-foreground">{outlook}</p>
-                    </div>
-                  </div>
-                )}
-              </Card>
-            );
-          })}
-        </div>
-      </div>
     </div>
   );
 }
