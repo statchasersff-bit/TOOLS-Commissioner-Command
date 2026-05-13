@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -20,7 +20,7 @@ import { getSleeperSession, isSessionExpired, type SleeperSession } from "@/serv
 import {
   Waves, Zap, Users, DollarSign, Star, TrendingUp, TrendingDown,
   Minus, Lock, AlertCircle, RefreshCw, ChevronUp, ChevronDown,
-  Plus, CheckCircle2,
+  Plus, CheckCircle2, ArrowLeft, Search, Trophy, Sprout, BarChart3,
 } from "lucide-react";
 
 const SLEEPER_API = "https://api.sleeper.app/v1";
@@ -59,7 +59,24 @@ interface WaiverRow {
   waiverType: number;
   userRosterPlayers: PlayerSummary[];
   topAvailable: PlayerSummary[];
+  rosteredPlayerIds: string[];
+  rosterCountByPlayerId: Record<string, number>;
+  starterCount: number;
 }
+
+interface AvailablePlayer {
+  sleeperId: string;
+  name: string;
+  pos: string;
+  team: string;
+  age: number;
+  dynastyValue: number;
+  winNowValue: number;
+  userRosterPct: number;
+  crossLeaguePct: number;
+}
+
+type DetailSortKey = "dynastyValue" | "winNowValue" | "age" | "userRosterPct" | "crossLeaguePct";
 
 async function fetchLeagueWaiverSnapshot(leagueId: string, userId: string) {
   const [leagueRaw, rostersRaw] = await Promise.all([
@@ -116,6 +133,13 @@ export default function WaiverCommand() {
   const [sortAsc, setSortAsc] = useState(true);
   const [lastFetched, setLastFetched] = useState<number | null>(null);
   const [claimRow, setClaimRow] = useState<WaiverRow | null>(null);
+  const [claimPreAddId, setClaimPreAddId] = useState<string | null>(null);
+  const [detailRow, setDetailRow] = useState<WaiverRow | null>(null);
+
+  const openClaim = useCallback((row: WaiverRow, preAddId?: string) => {
+    setClaimRow(row);
+    setClaimPreAddId(preAddId ?? null);
+  }, []);
 
   const userId = user?.userId ?? "";
 
@@ -148,6 +172,9 @@ export default function WaiverCommand() {
       waiverType:   0,
       userRosterPlayers: [],
       topAvailable: [],
+      rosteredPlayerIds: [],
+      rosterCountByPlayerId: {},
+      starterCount: 0,
     }));
     setRows(skeletons);
 
@@ -180,6 +207,9 @@ export default function WaiverCommand() {
             waiverType:   0,
             userRosterPlayers: [],
             topAvailable: [],
+            rosteredPlayerIds: [],
+            rosterCountByPlayerId: {},
+            starterCount: 0,
           };
 
           if (result.status === "rejected") return base;
@@ -261,11 +291,22 @@ export default function WaiverCommand() {
               return { id: pid, name: p.full_name || "Unknown", position: pos, team: p.team || "FA", value: val };
             })
             .sort((a, b) => b.value - a.value)
-            .slice(0, 20);
+            .slice(0, 50);
+
+          const rosterCountByPlayerId: Record<string, number> = {};
+          rostersRaw.forEach((r: any) => {
+            (r.players ?? []).forEach((pid: string) => {
+              rosterCountByPlayerId[pid] = (rosterCountByPlayerId[pid] ?? 0) + 1;
+            });
+          });
+          const rosteredPlayerIds = Object.keys(rosterCountByPlayerId);
+
+          const nonBench = new Set(["BN", "TAXI", "IR"]);
+          const starterCount = (leagueRaw?.roster_positions ?? []).filter((p: string) => !nonBench.has(p)).length;
 
           const { tier, rank, total } = deriveLeagueTier(userRosterId, rostersRaw, valuesBySleeperId);
 
-          return { ...base, tier, tierRank: rank, totalTeams: total, openSlots, faabRemaining, faabBudget, faabPct, bestAvailable, lowestOnTeam, difference, rosterId: userRosterId, waiverType, userRosterPlayers, topAvailable };
+          return { ...base, tier, tierRank: rank, totalTeams: total, openSlots, faabRemaining, faabBudget, faabPct, bestAvailable, lowestOnTeam, difference, rosterId: userRosterId, waiverType, userRosterPlayers, topAvailable, rosteredPlayerIds, rosterCountByPlayerId, starterCount };
         });
 
         setRows(computed);
@@ -317,6 +358,18 @@ export default function WaiverCommand() {
     if (sortKey !== col) return <Minus className="w-3 h-3 opacity-30" />;
     return sortAsc ? <ChevronUp className="w-3 h-3 text-[#d4af37]" /> : <ChevronDown className="w-3 h-3 text-[#d4af37]" />;
   };
+
+  if (detailRow) {
+    return (
+      <LeagueWaiverDetail
+        row={detailRow}
+        allRows={rows}
+        onBack={() => setDetailRow(null)}
+        onClaim={(preAddId) => openClaim(detailRow, preAddId)}
+        claimModal={<ClaimPlayerModal row={claimRow} preAddId={claimPreAddId} onClose={() => { setClaimRow(null); setClaimPreAddId(null); }} />}
+      />
+    );
+  }
 
   if (!isConnected) {
     return (
@@ -443,6 +496,7 @@ export default function WaiverCommand() {
                   { key: null,                    label: "Lowest On Team",  align: "left"   },
                   { key: "difference" as SortKey, label: "Difference",      align: "center" },
                   { key: null,                    label: "Claim",           align: "center" },
+                  { key: null,                    label: "Detail",          align: "center" },
                 ].map((col, i) => (
                   <th
                     key={i}
@@ -464,13 +518,13 @@ export default function WaiverCommand() {
             <tbody className="divide-y divide-border/30 dark:divide-white/[0.04]">
               {sorted.length === 0 && !isFetching && (
                 <tr>
-                  <td colSpan={8} className="px-4 py-10 text-center text-sm text-muted-foreground">
+                  <td colSpan={9} className="px-4 py-10 text-center text-sm text-muted-foreground">
                     No leagues match this filter.
                   </td>
                 </tr>
               )}
               {sorted.map((row) => (
-                <WaiverTableRow key={row.leagueId} row={row} onClaim={() => setClaimRow(row)} />
+                <WaiverTableRow key={row.leagueId} row={row} onClaim={() => openClaim(row)} onView={() => setDetailRow(row)} />
               ))}
             </tbody>
           </table>
@@ -492,12 +546,12 @@ export default function WaiverCommand() {
         <span className="text-muted-foreground/60">· Tier = roster value rank within each league</span>
       </div>
 
-      <ClaimPlayerModal row={claimRow} onClose={() => setClaimRow(null)} />
+      <ClaimPlayerModal row={claimRow} preAddId={claimPreAddId} onClose={() => { setClaimRow(null); setClaimPreAddId(null); }} />
     </div>
   );
 }
 
-function WaiverTableRow({ row, onClaim }: { row: WaiverRow; onClaim: () => void }) {
+function WaiverTableRow({ row, onClaim, onView }: { row: WaiverRow; onClaim: () => void; onView: () => void }) {
   const diffColor = row.difference > 300
     ? "text-emerald-600 dark:text-emerald-400"
     : row.difference > 0
@@ -507,7 +561,7 @@ function WaiverTableRow({ row, onClaim }: { row: WaiverRow; onClaim: () => void 
   if (row.loading) {
     return (
       <tr className="animate-pulse">
-        {Array.from({ length: 8 }).map((_, i) => (
+        {Array.from({ length: 9 }).map((_, i) => (
           <td key={i} className="px-4 py-3">
             <Skeleton className="h-4 w-full rounded" />
           </td>
@@ -520,7 +574,7 @@ function WaiverTableRow({ row, onClaim }: { row: WaiverRow; onClaim: () => void 
     return (
       <tr className="opacity-60">
         <td className="px-4 py-3 font-medium text-foreground">{row.leagueName}</td>
-        <td colSpan={7} className="px-4 py-3">
+        <td colSpan={8} className="px-4 py-3">
           <span className="flex items-center gap-1.5 text-xs text-destructive">
             <AlertCircle className="w-3.5 h-3.5" />
             Failed to load league data
@@ -691,6 +745,18 @@ function WaiverTableRow({ row, onClaim }: { row: WaiverRow; onClaim: () => void 
           Claim
         </button>
       </td>
+
+      {/* View detail */}
+      <td className="px-4 py-3 text-center">
+        <button
+          onClick={onView}
+          data-testid={`btn-view-${row.leagueId}`}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-semibold transition-all duration-150 bg-[#0b3a7a]/10 text-[#0b3a7a] dark:bg-blue-400/10 dark:text-blue-400 hover:bg-[#0b3a7a]/20 dark:hover:bg-blue-400/20 border border-[#0b3a7a]/20 dark:border-blue-400/20"
+        >
+          <BarChart3 className="w-3.5 h-3.5" />
+          Detail
+        </button>
+      </td>
     </tr>
   );
 }
@@ -755,7 +821,7 @@ function PositionBadge({ pos }: { pos: string }) {
   );
 }
 
-function ClaimPlayerModal({ row, onClose }: { row: WaiverRow | null; onClose: () => void }) {
+function ClaimPlayerModal({ row, preAddId, onClose }: { row: WaiverRow | null; preAddId?: string | null; onClose: () => void }) {
   const [session, setSession] = useState<SleeperSession | null>(() => getSleeperSession());
 
   const [selectedAddId, setSelectedAddId] = useState<string>("");
@@ -769,12 +835,13 @@ function ClaimPlayerModal({ row, onClose }: { row: WaiverRow | null; onClose: ()
   useEffect(() => {
     if (!row) return;
     setSession(getSleeperSession());
-    setSelectedAddId(row.bestAvailable?.id ?? row.topAvailable[0]?.id ?? "");
+    const defaultAdd = preAddId ?? row.bestAvailable?.id ?? row.topAvailable[0]?.id ?? "";
+    setSelectedAddId(defaultAdd);
     setSelectedDropId("none");
     setFaabBid(Math.min(10, row.faabRemaining));
     setSubmitError(null);
     setSuccess(false);
-  }, [row]);
+  }, [row, preAddId]);
 
   if (!row) return null;
 
@@ -954,5 +1021,344 @@ function ClaimPlayerModal({ row, onClose }: { row: WaiverRow | null; onClose: ()
         )}
       </DialogContent>
     </Dialog>
+  );
+}
+
+function TopAddCard({
+  icon,
+  label,
+  player,
+  sub,
+  accent,
+  onClaim,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  player: AvailablePlayer | null;
+  sub: string;
+  accent: "gold" | "blue" | "green" | "purple";
+  onClaim: () => void;
+}) {
+  const accentMap = {
+    gold:   { icon: "text-[#d4af37]",  bg: "bg-[#d4af37]/10",   ring: "ring-[#d4af37]/20",  btn: "bg-[#d4af37]/15 text-[#d4af37] border-[#d4af37]/30 hover:bg-[#d4af37]/25" },
+    blue:   { icon: "text-blue-400",   bg: "bg-blue-400/10",    ring: "ring-blue-400/20",    btn: "bg-blue-400/10 text-blue-400 border-blue-400/20 hover:bg-blue-400/20" },
+    green:  { icon: "text-emerald-400",bg: "bg-emerald-400/10", ring: "ring-emerald-400/20", btn: "bg-emerald-400/10 text-emerald-400 border-emerald-400/20 hover:bg-emerald-400/20" },
+    purple: { icon: "text-violet-400", bg: "bg-violet-400/10",  ring: "ring-violet-400/20",  btn: "bg-violet-400/10 text-violet-400 border-violet-400/20 hover:bg-violet-400/20" },
+  };
+  const c = accentMap[accent];
+
+  return (
+    <Card className="p-4 border-border/60 dark:border-[#1a2d4a]/80 bg-gradient-to-br from-background to-muted/20 dark:from-[#0c1929] dark:to-[#0a1628] flex flex-col gap-3">
+      <div className="flex items-center gap-2">
+        <div className={cn("w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ring-1", c.bg, c.ring)}>
+          <span className={c.icon}>{icon}</span>
+        </div>
+        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</span>
+      </div>
+      {player ? (
+        <>
+          <div className="flex items-center gap-2 min-w-0">
+            <PositionBadge pos={player.pos} />
+            <span className="font-bold text-[14px] text-foreground truncate">{player.name}</span>
+            <span className="text-[11px] text-muted-foreground flex-shrink-0">{player.team}</span>
+          </div>
+          <div className="text-[11px] text-muted-foreground">{sub}</div>
+          <button
+            onClick={onClaim}
+            className={cn("mt-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-semibold transition-all duration-150 border", c.btn)}
+          >
+            <Plus className="w-3.5 h-3.5" />
+            Claim
+          </button>
+        </>
+      ) : (
+        <div className="text-sm text-muted-foreground">No data</div>
+      )}
+    </Card>
+  );
+}
+
+function LeagueWaiverDetail({
+  row,
+  allRows,
+  onBack,
+  onClaim,
+  claimModal,
+}: {
+  row: WaiverRow;
+  allRows: WaiverRow[];
+  onBack: () => void;
+  onClaim: (preAddId: string) => void;
+  claimModal: React.ReactNode;
+}) {
+  const { dynastyPlayerList, valuesBySleeperId, redraftValuesBySleeperId } = useValueModel();
+  const [search, setSearch] = useState("");
+  const [posFilter, setPosFilter] = useState<string>("ALL");
+  const [sortKey, setSortKey] = useState<DetailSortKey>("dynastyValue");
+  const [sortAsc, setSortAsc] = useState(false);
+
+  const allLeagueTeamCount = allRows.reduce((s, r) => s + r.totalTeams, 0);
+  const totalLeaguesLoaded = allRows.filter((r) => !r.loading && !r.error).length;
+
+  const availablePlayers: AvailablePlayer[] = useMemo(() => {
+    const rosteredSet = new Set(row.rosteredPlayerIds);
+    return row.topAvailable.map((ps) => {
+      const dp = dynastyPlayerList.find((p) => p.sleeperId === ps.id);
+      const age = dp?.age ?? 0;
+      const winNowValue = redraftValuesBySleeperId[ps.id] ?? 0;
+      const dynastyValue = valuesBySleeperId[ps.id] ?? ps.value;
+
+      let userRosterCount = 0;
+      let crossLeagueRostered = 0;
+      allRows.forEach((r) => {
+        if (r.loading || r.error) return;
+        if ((r.rosterCountByPlayerId[ps.id] ?? 0) > 0) crossLeagueRostered++;
+        const userTeams = allRows.filter((rr) => !rr.loading && !rr.error).length;
+        if (r.rosterCountByPlayerId[ps.id] ?? 0) userRosterCount++;
+      });
+      const userRosterPct = totalLeaguesLoaded > 0 ? Math.round((userRosterCount / totalLeaguesLoaded) * 100) : 0;
+      const crossLeaguePct = allLeagueTeamCount > 0
+        ? Math.round((Object.values(row.rosterCountByPlayerId).reduce((s, v) => s + (row.rosterCountByPlayerId[ps.id] ?? 0 > 0 ? 1 : 0), 0) / row.totalTeams) * 100)
+        : 0;
+
+      const ownedCount = row.rosterCountByPlayerId[ps.id] ?? 0;
+      const ownershipPct = row.totalTeams > 0 ? Math.round((ownedCount / row.totalTeams) * 100) : 0;
+
+      return { sleeperId: ps.id, name: ps.name, pos: ps.position, team: ps.team, age, dynastyValue, winNowValue, userRosterPct, crossLeaguePct: ownershipPct };
+    });
+  }, [row, dynastyPlayerList, valuesBySleeperId, redraftValuesBySleeperId, allRows, totalLeaguesLoaded, allLeagueTeamCount]);
+
+  const topByDynasty  = availablePlayers.slice().sort((a, b) => b.dynastyValue - a.dynastyValue)[0] ?? null;
+  const topByWinNow   = availablePlayers.slice().sort((a, b) => b.winNowValue - a.winNowValue)[0] ?? null;
+  const youngest      = availablePlayers.filter((p) => p.age > 0).slice().sort((a, b) => a.age - b.age)[0] ?? null;
+  const mostOwned     = availablePlayers.slice().sort((a, b) => b.crossLeaguePct - a.crossLeaguePct)[0] ?? null;
+
+  const filtered = useMemo(() => {
+    let list = availablePlayers;
+    if (posFilter !== "ALL") list = list.filter((p) => p.pos === posFilter);
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      list = list.filter((p) => p.name.toLowerCase().includes(q));
+    }
+    list = list.slice().sort((a, b) => {
+      const aVal = a[sortKey];
+      const bVal = b[sortKey];
+      if (typeof aVal === "number" && typeof bVal === "number") {
+        return sortAsc ? aVal - bVal : bVal - aVal;
+      }
+      return 0;
+    });
+    return list;
+  }, [availablePlayers, posFilter, search, sortKey, sortAsc]);
+
+  const handleSort = (col: DetailSortKey) => {
+    if (sortKey === col) setSortAsc((a) => !a);
+    else { setSortKey(col); setSortAsc(false); }
+  };
+
+  const DetailSortIcon = ({ col }: { col: DetailSortKey }) => {
+    if (sortKey !== col) return <Minus className="w-3 h-3 opacity-30" />;
+    return sortAsc ? <ChevronUp className="w-3 h-3 text-[#d4af37]" /> : <ChevronDown className="w-3 h-3 text-[#d4af37]" />;
+  };
+
+  const tierAccent = getTierAccent(row.tier);
+
+  return (
+    <div className="space-y-5">
+      {/* Back nav + header */}
+      <div className="flex items-start justify-between flex-wrap gap-3">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={onBack}
+            data-testid="btn-back-detail"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-semibold bg-muted/40 hover:bg-muted/70 text-muted-foreground hover:text-foreground transition-all border border-border/40"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            All Leagues
+          </button>
+          <div className="flex items-center gap-2.5">
+            {row.leagueAvatar ? (
+              <img src={row.leagueAvatar} alt="" className="w-9 h-9 rounded-full object-cover ring-1 ring-border/40" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+            ) : (
+              <div className="w-9 h-9 rounded-full bg-[#0b3a7a]/20 dark:bg-blue-900/40 flex items-center justify-center ring-1 ring-border/40">
+                <span className="text-[12px] font-bold text-[#0b3a7a] dark:text-blue-400 uppercase">{row.leagueName[0] ?? "?"}</span>
+              </div>
+            )}
+            <div>
+              <h2 className="text-lg font-bold text-foreground leading-tight">{row.leagueName}</h2>
+              <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                <span className={cn("text-[10px] font-bold px-2 py-0.5 rounded-full border", tierAccent.bg, tierAccent.text, tierAccent.border)}>{row.tier}</span>
+                <span className="text-[11px] text-muted-foreground">#{row.tierRank} of {row.totalTeams}</span>
+                {row.scoringFormat && <span className="text-[10px] text-muted-foreground/70">{row.scoringFormat}</span>}
+                <span className="text-[10px] text-muted-foreground/70">{row.format}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <span className="font-semibold text-foreground">${row.faabRemaining}</span> FAAB remaining
+          <span className="text-muted-foreground/40">·</span>
+          <span className="font-semibold text-foreground">{row.openSlots}</span> open slot{row.openSlots !== 1 ? "s" : ""}
+        </div>
+      </div>
+
+      {/* Top Add cards */}
+      <div>
+        <div className="flex items-center gap-2 mb-3">
+          <div className="w-[3px] h-4 rounded-full bg-[#d4af37]" />
+          <h3 className="text-sm font-bold text-foreground">Top Recommended Adds</h3>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <TopAddCard
+            icon={<Trophy className="w-4 h-4" />}
+            label="Best Dynasty"
+            player={topByDynasty}
+            sub={topByDynasty ? `Dynasty value: ${topByDynasty.dynastyValue.toLocaleString()}` : ""}
+            accent="gold"
+            onClaim={() => topByDynasty && onClaim(topByDynasty.sleeperId)}
+          />
+          <TopAddCard
+            icon={<TrendingUp className="w-4 h-4" />}
+            label="Win-Now"
+            player={topByWinNow}
+            sub={topByWinNow ? `Redraft value: ${topByWinNow.winNowValue.toLocaleString()}` : ""}
+            accent="blue"
+            onClaim={() => topByWinNow && onClaim(topByWinNow.sleeperId)}
+          />
+          <TopAddCard
+            icon={<Sprout className="w-4 h-4" />}
+            label="Youngest"
+            player={youngest}
+            sub={youngest ? `Age: ${youngest.age}` : ""}
+            accent="green"
+            onClaim={() => youngest && onClaim(youngest.sleeperId)}
+          />
+          <TopAddCard
+            icon={<BarChart3 className="w-4 h-4" />}
+            label="Most Owned"
+            player={mostOwned}
+            sub={mostOwned ? `${mostOwned.crossLeaguePct}% ownership in this league` : ""}
+            accent="purple"
+            onClaim={() => mostOwned && onClaim(mostOwned.sleeperId)}
+          />
+        </div>
+      </div>
+
+      {/* Available players table */}
+      <Card className="overflow-hidden border-border/60 dark:border-[#1a2d4a]/80">
+        <div className="px-5 py-3.5 border-b border-border/40 dark:border-white/[0.06] flex items-center justify-between flex-wrap gap-3">
+          <div className="flex items-center gap-2">
+            <div className="w-[3px] h-4 rounded-full bg-[#d4af37]" />
+            <h3 className="text-sm font-bold text-foreground">Available Players</h3>
+            <span className="text-xs text-muted-foreground">{filtered.length} shown</span>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Position filter */}
+            {["ALL","QB","RB","WR","TE"].map((pos) => (
+              <button
+                key={pos}
+                onClick={() => setPosFilter(pos)}
+                data-testid={`filter-pos-${pos}`}
+                className={cn(
+                  "px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all",
+                  posFilter === pos
+                    ? "bg-[#d4af37] text-[#0a1628]"
+                    : "bg-muted/40 text-muted-foreground hover:bg-muted/70"
+                )}
+              >
+                {pos}
+              </button>
+            ))}
+            {/* Search */}
+            <div className="relative">
+              <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground/60 pointer-events-none" />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search player…"
+                data-testid="input-player-search"
+                className="pl-7 pr-3 py-1.5 text-[12px] bg-muted/30 border border-border/40 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#d4af37]/40 text-foreground placeholder:text-muted-foreground/50 w-36"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm" data-testid="detail-player-table">
+            <thead>
+              <tr className="border-b border-border/40 dark:border-white/[0.05] bg-muted/30 dark:bg-white/[0.02]">
+                {([
+                  { key: null,               label: "Player",          align: "left"   },
+                  { key: "dynastyValue"  as DetailSortKey, label: "Dynasty Val", align: "center" },
+                  { key: "winNowValue"   as DetailSortKey, label: "Win-Now Val", align: "center" },
+                  { key: "age"           as DetailSortKey, label: "Age",         align: "center" },
+                  { key: "crossLeaguePct" as DetailSortKey, label: "Ownership %", align: "center" },
+                  { key: null,               label: "Claim",           align: "center" },
+                ] as { key: DetailSortKey | null; label: string; align: string }[]).map((col, i) => (
+                  <th
+                    key={i}
+                    onClick={() => col.key && handleSort(col.key)}
+                    className={cn(
+                      "px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground whitespace-nowrap",
+                      col.align === "center" ? "text-center" : "text-left",
+                      col.key && "cursor-pointer hover:text-foreground transition-colors select-none"
+                    )}
+                  >
+                    <span className="inline-flex items-center gap-1">
+                      {col.label}
+                      {col.key && <DetailSortIcon col={col.key} />}
+                    </span>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border/30 dark:divide-white/[0.04]">
+              {filtered.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="px-4 py-10 text-center text-sm text-muted-foreground">No players match your filters.</td>
+                </tr>
+              )}
+              {filtered.map((p) => (
+                <tr key={p.sleeperId} className="hover:bg-muted/30 dark:hover:bg-white/[0.025] transition-colors" data-testid={`row-player-${p.sleeperId}`}>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <PositionBadge pos={p.pos} />
+                      <span className="font-semibold text-[13px] text-foreground">{p.name}</span>
+                      <span className="text-[11px] text-muted-foreground">{p.team}</span>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    <span className="text-[13px] font-bold text-foreground">{p.dynastyValue > 0 ? p.dynastyValue.toLocaleString() : "—"}</span>
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    <span className="text-[13px] font-bold text-foreground">{p.winNowValue > 0 ? p.winNowValue.toLocaleString() : "—"}</span>
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    <span className={cn("text-[13px] font-bold", p.age > 0 && p.age <= 24 ? "text-emerald-500" : p.age <= 27 ? "text-amber-500" : "text-muted-foreground")}>
+                      {p.age > 0 ? p.age : "—"}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    <span className="text-[13px] font-bold text-foreground">{p.crossLeaguePct}%</span>
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    <button
+                      onClick={() => onClaim(p.sleeperId)}
+                      data-testid={`btn-claim-player-${p.sleeperId}`}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-semibold transition-all duration-150 bg-[#d4af37]/15 text-[#d4af37] hover:bg-[#d4af37]/25 border border-[#d4af37]/30 hover:border-[#d4af37]/50"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      Claim
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      {claimModal}
+    </div>
   );
 }
