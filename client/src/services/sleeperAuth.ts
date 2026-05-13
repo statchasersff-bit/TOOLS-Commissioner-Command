@@ -10,14 +10,18 @@ import { SLEEPER_GQL_URL } from "@/config/sleeperAuthEndpoints";
 
 const STORAGE_KEY = "statchasers_sleeper_auth";
 
+// ─── Session shape ────────────────────────────────────────────────────────────
+// Matches the JWT payload fields exactly. Do NOT add server-derived fields here.
+
 export interface SleeperSession {
   token: string;
   user_id: string;
-  username: string;
+  display_name: string;
   avatar: string | null;
-  connected_at: string;
-  /** ISO string derived from JWT exp claim, or null if unavailable */
-  expires_at: string | null;
+  /** Raw JWT exp claim (seconds since epoch). Use isSessionExpired() to check. */
+  exp: number | null;
+  /** Raw JWT iat claim (seconds since epoch). */
+  iat: number | null;
 }
 
 // ─── JWT helpers (client-side only, no library) ───────────────────────────────
@@ -25,6 +29,7 @@ export interface SleeperSession {
 interface JWTPayload {
   user_id?: string;
   sub?: string;
+  display_name?: string;
   username?: string;
   avatar?: string;
   exp?: number;
@@ -32,7 +37,12 @@ interface JWTPayload {
   [key: string]: unknown;
 }
 
-function decodeJWT(token: string): JWTPayload | null {
+/**
+ * Decode a Sleeper JWT client-side using base64/atob.
+ * Never log the token or return value.
+ * Returns null if the token is malformed.
+ */
+export function decodeSleeperJWT(token: string): JWTPayload | null {
   try {
     const parts = token.split(".");
     if (parts.length !== 3) return null;
@@ -45,20 +55,20 @@ function decodeJWT(token: string): JWTPayload | null {
 }
 
 function sessionFromJWT(token: string, fallbackIdentifier: string): SleeperSession {
-  const payload = decodeJWT(token);
+  const payload = decodeSleeperJWT(token);
   return {
     token,
     user_id: payload?.user_id ?? payload?.sub ?? "",
-    username: payload?.username ?? fallbackIdentifier,
+    display_name: payload?.display_name ?? payload?.username ?? fallbackIdentifier,
     avatar: payload?.avatar ?? null,
-    connected_at: new Date().toISOString(),
-    expires_at: payload?.exp ? new Date(payload.exp * 1000).toISOString() : null,
+    exp: payload?.exp ?? null,
+    iat: payload?.iat ?? null,
   };
 }
 
 export function isSessionExpired(session: SleeperSession): boolean {
-  if (!session.expires_at) return false;
-  return Date.now() >= new Date(session.expires_at).getTime();
+  if (!session.exp) return false;
+  return Date.now() >= session.exp * 1000;
 }
 
 // ─── Storage ─────────────────────────────────────────────────────────────────
@@ -73,6 +83,15 @@ export function getSleeperSession(): SleeperSession | null {
   }
 }
 
+/**
+ * Read only the token string from localStorage without parsing the full object.
+ * Never log the return value.
+ */
+export function getSleeperToken(): string | null {
+  const session = getSleeperSession();
+  return session?.token ?? null;
+}
+
 export function saveSleeperSession(session: SleeperSession): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
 }
@@ -81,13 +100,11 @@ export function clearSleeperSession(): void {
   localStorage.removeItem(STORAGE_KEY);
 }
 
-// ─── GraphQL transport ────────────────────────────────────────────────────────
+// ─── GraphQL transport (api.sleeper.app — auth operations only) ───────────────
+//
+// The auth endpoint (api.sleeper.app/graphql) uses standard Bearer format.
+// Do NOT use this for sleeper.com/graphql — see sleeperAuthedApi.ts.
 
-/**
- * Low-level GraphQL transport for any Sleeper GQL endpoint.
- * Pass `authToken` for authenticated operations.
- * Exported so sleeperAuthedApi can reuse the same transport.
- */
 export async function sleeperGQL(
   url: string,
   query: string,

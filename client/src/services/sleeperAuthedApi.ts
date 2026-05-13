@@ -1,79 +1,78 @@
 /**
- * Sleeper Authenticated API Wrapper
+ * Sleeper Authenticated API — sleeper.com/graphql
  *
- * All write / action calls go through sleeperAuthedFetch().
- * Authenticated GraphQL calls go through sleeperAuthedGQL().
- * If the endpoint URL is blank in sleeperAuthEndpoints.ts the call fails fast
- * with a clear "not configured yet" message — no silent no-ops.
+ * All authenticated operations use the exact header format discovered from Sleeper's web app:
+ *   authorization: <JWT>           (no "Bearer" prefix)
+ *   x-sleeper-graphql-op: <operationName>
+ *
+ * The request body always includes { operationName, query, variables }.
+ *
+ * JWT is read from localStorage["statchasers_sleeper_auth"].token.
+ * JWT is NEVER logged, exposed in UI, or sent to our backend.
  */
 
-import {
-  SLEEPER_AUTH_ENDPOINTS,
-  SLEEPER_ACTION_ENDPOINTS,
-  SLEEPER_WEB_GQL_URL,
-  type ActionEndpointKey,
-} from "@/config/sleeperAuthEndpoints";
-import { getSleeperSession, sleeperGQL } from "@/services/sleeperAuth";
+import { SLEEPER_WEB_GQL_URL } from "@/config/sleeperAuthEndpoints";
+import { getSleeperSession, getSleeperToken } from "@/services/sleeperAuth";
 
-const SLEEPER_BASE = "https://api.sleeper.app";
+// ─── Core transport ───────────────────────────────────────────────────────────
 
-// ─── Core fetch wrapper ───────────────────────────────────────────────────────
+interface GQLRequest {
+  operationName: string;
+  query: string;
+  variables?: Record<string, unknown>;
+}
 
 /**
- * Make an authenticated request to a Sleeper action endpoint.
- * @param endpointKey - Key from SLEEPER_ACTION_ENDPOINTS
- * @param payload     - Request body (will be JSON-serialised)
- * @param method      - HTTP method (default "POST")
+ * Authenticated GraphQL request to sleeper.com/graphql.
+ *
+ * Header format (discovered):
+ *   authorization: <JWT>                    ← no "Bearer" prefix
+ *   x-sleeper-graphql-op: <operationName>   ← required by Sleeper
+ *
+ * Throws if no session token exists or if Sleeper returns errors.
  */
-export async function sleeperAuthedFetch<T = unknown>(
-  endpointKey: ActionEndpointKey,
-  payload?: Record<string, unknown>,
-  method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE" = "POST"
+export async function sleeperGraphQLRequest<T = unknown>(
+  req: GQLRequest
 ): Promise<T> {
-  const url = SLEEPER_ACTION_ENDPOINTS[endpointKey];
-  if (!url) {
+  const token = getSleeperToken();
+  if (!token) {
     throw new Error(
-      `Sleeper authenticated endpoint "${endpointKey}" is not configured yet.`
+      "You must connect your Sleeper account to perform this action."
     );
   }
 
-  const session = requireSleeperAuth();
-
-  const res = await fetch(`${SLEEPER_BASE}${url}`, {
-    method,
+  const res = await fetch(SLEEPER_WEB_GQL_URL, {
+    method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${session.token}`,
+      "authorization": token,
+      "x-sleeper-graphql-op": req.operationName,
     },
-    ...(payload ? { body: JSON.stringify(payload) } : {}),
+    body: JSON.stringify({
+      operationName: req.operationName,
+      query: req.query,
+      variables: req.variables ?? {},
+    }),
   });
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     throw new Error(
-      (body as any)?.error || `Sleeper action failed (${res.status})`
+      (body as any)?.errors?.[0]?.message ||
+        `Sleeper request failed (${res.status})`
     );
   }
 
-  return res.json() as Promise<T>;
-}
-
-/**
- * Make an authenticated GraphQL call to sleeper.com/graphql.
- * Used for read/action operations that require a session token.
- */
-async function sleeperAuthedGQL<T = unknown>(
-  query: string,
-  variables: Record<string, unknown>
-): Promise<T> {
-  const session = requireSleeperAuth();
-  const data = await sleeperGQL(SLEEPER_WEB_GQL_URL, query, variables, session.token);
-  return data as T;
+  const json = await res.json();
+  if (json.errors?.length) {
+    throw new Error(json.errors[0]?.message || "Sleeper operation failed.");
+  }
+  return (json.data ?? {}) as T;
 }
 
 /**
  * Throws if no valid session exists.
- * Always call this before any write operation.
+ * Call before any write operation as an early guard.
  */
 export function requireSleeperAuth() {
   const session = getSleeperSession();
@@ -150,12 +149,12 @@ export interface SleeperTransaction {
 }
 
 /**
- * Fetch filtered league transactions via the authenticated sleeper.com/graphql endpoint.
+ * Fetch filtered league transactions.
  *
  * @param leagueId      - Sleeper league ID
  * @param typeFilters   - e.g. ["trade"] | ["waiver"] | ["free_agent"] | undefined (all)
- * @param legFilters    - Week numbers to filter to, e.g. [1, 2, 3] | undefined (all)
- * @param statusFilters - e.g. ["complete"] | ["failed"] | undefined (all)
+ * @param legFilters    - Week numbers, e.g. [1, 2, 3] | undefined (all)
+ * @param statusFilters - e.g. ["complete"] | ["pending"] | ["failed"] | undefined (all)
  */
 export async function fetchLeagueTransactionsFiltered(
   leagueId: string,
@@ -163,23 +162,26 @@ export async function fetchLeagueTransactionsFiltered(
   legFilters?: number[],
   statusFilters?: string[]
 ): Promise<SleeperTransaction[]> {
-  const data = await sleeperAuthedGQL<{
+  const data = await sleeperGraphQLRequest<{
     league_transactions_filtered: SleeperTransaction[];
-  }>(LEAGUE_TRANSACTIONS_FILTERED_QUERY, {
-    league_id: leagueId,
-    type_filters: typeFilters ?? null,
-    leg_filters: legFilters ?? null,
-    status_filters: statusFilters ?? null,
+  }>({
+    operationName: "league_transactions_filtered",
+    query: LEAGUE_TRANSACTIONS_FILTERED_QUERY,
+    variables: {
+      league_id: leagueId,
+      type_filters: typeFilters ?? null,
+      leg_filters: legFilters ?? null,
+      status_filters: statusFilters ?? null,
+    },
   });
   return data.league_transactions_filtered ?? [];
 }
 
 // ─── submit_waiver_claim ──────────────────────────────────────────────────────
+//
+// league_id is embedded as a string literal in the mutation body (not a GQL variable)
+// because that is how Sleeper's endpoint expects it.
 
-/**
- * Sleeper uses leagueId as a string literal inside the mutation body (not a GQL variable).
- * Build the mutation string with leagueId interpolated at call time.
- */
 function buildWaiverClaimMutation(leagueId: string): string {
   return `
     mutation submit_waiver_claim(
@@ -242,16 +244,16 @@ export interface SleeperWaiverClaimResult {
 }
 
 /**
- * Submit a waiver claim via the authenticated sleeper.com/graphql endpoint.
+ * Submit a waiver claim via sleeper.com/graphql.
  *
- * Requires a connected Sleeper session (JWT). Do NOT call without displaying
- * a review modal to the user first — use WaiverClaimModal for that.
+ * Requires a connected Sleeper session. Always show WaiverClaimModal for
+ * user review before calling this function — never call silently.
  *
  * @param leagueId      - Active league ID
  * @param rosterId      - Caller's roster ID in that league
  * @param addPlayerIds  - Player IDs to add (usually 1)
  * @param dropPlayerIds - Player IDs to drop (0 or 1)
- * @param waiverBid     - FAAB bid amount (0 for waiver-order leagues)
+ * @param waiverBid     - FAAB bid amount; pass 0 for waiver-order leagues
  */
 export async function submitWaiverClaim(
   leagueId: string,
@@ -267,10 +269,13 @@ export async function submitWaiverClaim(
   const k_settings = waiverBid > 0 ? ["waiver_bid"] : [];
   const v_settings = waiverBid > 0 ? [waiverBid] : [];
 
-  const data = await sleeperAuthedGQL<{ submit_waiver_claim: SleeperWaiverClaimResult }>(
-    buildWaiverClaimMutation(leagueId),
-    { k_adds, v_adds, k_drops, v_drops, k_settings, v_settings }
-  );
+  const data = await sleeperGraphQLRequest<{
+    submit_waiver_claim: SleeperWaiverClaimResult;
+  }>({
+    operationName: "submit_waiver_claim",
+    query: buildWaiverClaimMutation(leagueId),
+    variables: { k_adds, v_adds, k_drops, v_drops, k_settings, v_settings },
+  });
 
   if (!data.submit_waiver_claim) {
     throw new Error("Waiver claim submission failed — no response from Sleeper.");
@@ -278,57 +283,82 @@ export async function submitWaiverClaim(
   return data.submit_waiver_claim;
 }
 
-// ─── Action helpers ───────────────────────────────────────────────────────────
+// ─── Future operation stubs ───────────────────────────────────────────────────
+//
+// These will be implemented once their exact mutation shapes are discovered.
+// Each uses sleeperGraphQLRequest with operationName matching the Sleeper op.
 
-export async function setLineup(leagueId: string, rosterId: number, starters: string[]) {
-  return sleeperAuthedFetch("setLineup", { league_id: leagueId, roster_id: rosterId, starters });
+/** @todo Discover submit_lineup mutation shape from sleeper.com/graphql */
+export async function submitLineup(
+  _leagueId: string,
+  _rosterId: number,
+  _starters: string[]
+): Promise<never> {
+  throw new Error(
+    "submit_lineup: mutation shape not yet discovered. " +
+      "Capture from sleeper.com/graphql with x-sleeper-graphql-op: submit_lineup."
+  );
 }
 
+/** @todo Discover propose_trade mutation shape from sleeper.com/graphql */
 export async function proposeTrade(
-  leagueId: string,
-  fromRosterId: number,
-  toRosterId: number,
-  offeredPlayerIds: string[],
-  requestedPlayerIds: string[],
-  offeredPickIds?: string[],
-  requestedPickIds?: string[]
-) {
-  return sleeperAuthedFetch("proposeTrade", {
-    league_id: leagueId,
-    from_roster_id: fromRosterId,
-    to_roster_id: toRosterId,
-    offered_player_ids: offeredPlayerIds,
-    requested_player_ids: requestedPlayerIds,
-    offered_pick_ids: offeredPickIds ?? [],
-    requested_pick_ids: requestedPickIds ?? [],
-  });
+  _leagueId: string,
+  _fromRosterId: number,
+  _toRosterId: number,
+  _offeredPlayerIds: string[],
+  _requestedPlayerIds: string[],
+  _offeredPickIds?: string[],
+  _requestedPickIds?: string[]
+): Promise<never> {
+  throw new Error(
+    "propose_trade: mutation shape not yet discovered. " +
+      "Capture from sleeper.com/graphql with x-sleeper-graphql-op: propose_trade."
+  );
 }
 
-export async function acceptTrade(leagueId: string, tradeId: string) {
-  return sleeperAuthedFetch("acceptTrade", { league_id: leagueId, trade_id: tradeId });
+/** @todo Discover accept_trade mutation shape from sleeper.com/graphql */
+export async function acceptTrade(
+  _leagueId: string,
+  _tradeId: string
+): Promise<never> {
+  throw new Error(
+    "accept_trade: mutation shape not yet discovered. " +
+      "Capture from sleeper.com/graphql with x-sleeper-graphql-op: accept_trade."
+  );
 }
 
-export async function rejectTrade(leagueId: string, tradeId: string) {
-  return sleeperAuthedFetch("rejectTrade", { league_id: leagueId, trade_id: tradeId });
+/** @todo Discover reject_trade mutation shape from sleeper.com/graphql */
+export async function rejectTrade(
+  _leagueId: string,
+  _tradeId: string
+): Promise<never> {
+  throw new Error(
+    "reject_trade: mutation shape not yet discovered. " +
+      "Capture from sleeper.com/graphql with x-sleeper-graphql-op: reject_trade."
+  );
 }
 
-export async function draftPlayer(draftId: string, playerId: string, rosterId: number, round: number, pickNumber: number) {
-  return sleeperAuthedFetch("draftPick", {
-    draft_id: draftId,
-    player_id: playerId,
-    roster_id: rosterId,
-    round,
-    pick_number: pickNumber,
-  });
+/** @todo Discover send_message mutation shape from sleeper.com/graphql */
+export async function sendLeagueChatMessage(
+  _leagueId: string,
+  _message: string
+): Promise<never> {
+  throw new Error(
+    "send_message: mutation shape not yet discovered. " +
+      "Capture from sleeper.com/graphql with x-sleeper-graphql-op: send_message."
+  );
 }
 
-export async function sendLeagueChatMessage(leagueId: string, message: string) {
-  return sleeperAuthedFetch("sendChatMessage", {
-    league_id: leagueId,
-    message,
-  });
+/** @todo Discover draft_pick mutation shape from sleeper.com/graphql */
+export async function draftPlayer(
+  _draftId: string,
+  _playerId: string,
+  _rosterId: number,
+  _round: number,
+  _pickNumber: number
+): Promise<never> {
+  throw new Error(
+    "draft_pick: mutation shape not yet discovered. " +
+      "Capture from sleeper.com/graphql with x-sleeper-graphql-op: draft_pick."
+  );
 }
-
-// ─── Auth endpoint helpers (re-exported for convenience) ─────────────────────
-
-export { SLEEPER_AUTH_ENDPOINTS, SLEEPER_ACTION_ENDPOINTS };

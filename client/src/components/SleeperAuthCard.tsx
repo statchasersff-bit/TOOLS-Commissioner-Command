@@ -144,8 +144,8 @@ function HCaptchaWidget({ onToken, onExpire, onError, siteKey }: HCaptchaWidgetP
 type AuthStep = "idle" | "code-sent" | "manual-token" | "loading" | "error";
 
 function formatExpiry(session: SleeperSession): string {
-  if (!session.expires_at) return "";
-  const d = new Date(session.expires_at);
+  if (!session.exp) return "";
+  const d = new Date(session.exp * 1000);
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
@@ -266,7 +266,7 @@ export function SleeperAuthCard() {
               {session.avatar ? (
                 <img
                   src={`https://sleepercdn.com/avatars/thumbs/${session.avatar}`}
-                  alt={session.username}
+                  alt={session.display_name}
                   className="w-9 h-9 rounded-full object-cover"
                   onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
                 />
@@ -279,7 +279,7 @@ export function SleeperAuthCard() {
             <div className="min-w-0">
               <div className="flex items-center gap-1.5 flex-wrap">
                 <span className="text-sm font-semibold text-foreground truncate" data-testid="text-auth-username">
-                  @{session.username}
+                  @{session.display_name}
                 </span>
                 {expired ? (
                   <Badge className="text-[10px] px-1.5 py-0 h-4 bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20 font-semibold">
@@ -294,7 +294,7 @@ export function SleeperAuthCard() {
               <p className="text-[11px] text-muted-foreground mt-0.5">
                 {expired
                   ? "Token expired — reconnect to restore write access"
-                  : `Actions enabled${session.expires_at ? ` · Expires ${formatExpiry(session)}` : ""}`}
+                  : `Actions enabled${session.exp ? ` · Expires ${formatExpiry(session)}` : ""}`}
               </p>
             </div>
           </div>
