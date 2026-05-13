@@ -702,28 +702,42 @@ export default function WaiverCommand() {
       {activeView === "league" && (
         <div className="space-y-4">
           {/* League picker */}
-          <div className="flex items-center gap-2 overflow-x-auto pb-1 [scrollbar-width:none]">
-            {rows.filter(r => !r.loading && !r.error).map(r => (
-              <button
-                key={r.leagueId}
-                onClick={() => setDetailRow(r)}
-                className={cn(
-                  "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all border flex-shrink-0",
-                  detailRow?.leagueId === r.leagueId
-                    ? "bg-[#d4af37]/15 border-[#d4af37]/40 text-[#d4af37]"
-                    : "bg-muted/40 border-border/40 text-muted-foreground hover:text-foreground hover:bg-muted/70"
-                )}
+          <div className="flex items-center gap-2">
+            <Select
+              value={detailRow?.leagueId ?? ""}
+              onValueChange={id => {
+                const found = rows.find(r => r.leagueId === id);
+                if (found) setDetailRow(found);
+              }}
+            >
+              <SelectTrigger
+                className="w-72 bg-[#0a1628] border-[#1a2d4a] focus:border-[#d4af37]/50 text-sm"
+                data-testid="select-league-view"
               >
-                {r.leagueAvatar ? (
-                  <img src={r.leagueAvatar} alt="" className="w-4 h-4 rounded-full flex-shrink-0" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
-                ) : (
-                  <div className="w-4 h-4 rounded-full bg-[#0b3a7a]/30 flex items-center justify-center flex-shrink-0">
-                    <span className="text-[8px] font-bold text-[#0b3a7a] dark:text-blue-400">{r.leagueName[0]}</span>
-                  </div>
-                )}
-                {r.leagueName}
-              </button>
-            ))}
+                <SelectValue placeholder="Select a league…" />
+              </SelectTrigger>
+              <SelectContent className="bg-[#0c1929] border-[#1a2d4a]">
+                {rows.filter(r => !r.loading && !r.error).map(r => (
+                  <SelectItem key={r.leagueId} value={r.leagueId} className="text-sm">
+                    <span className="flex items-center gap-2">
+                      {r.leagueAvatar ? (
+                        <img src={r.leagueAvatar} alt="" className="w-4 h-4 rounded-full flex-shrink-0" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                      ) : (
+                        <div className="w-4 h-4 rounded-full bg-[#0b3a7a]/30 flex items-center justify-center flex-shrink-0">
+                          <span className="text-[8px] font-bold text-blue-400">{r.leagueName[0]}</span>
+                        </div>
+                      )}
+                      {r.leagueName}
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {detailRow && (
+              <span className="text-xs text-muted-foreground">
+                {rows.filter(r => !r.loading && !r.error).length} leagues loaded
+              </span>
+            )}
           </div>
 
           {detailRow ? (
