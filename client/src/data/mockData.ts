@@ -534,7 +534,7 @@ export const NAV_CONFIG: MainTabConfig[] = [
     label: "My Team",
     subTabs: [
       { id: "my-team", label: "My Team" },
-      { id: "field-view", label: "Field View" },
+      { id: "field-view", label: "Field View (Current Lineup)" },
       { id: "share-team", label: "Share My Team" },
     ],
   },
