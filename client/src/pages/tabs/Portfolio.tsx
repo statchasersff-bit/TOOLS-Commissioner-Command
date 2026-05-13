@@ -1,4 +1,5 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, lazy, Suspense } from "react";
+const FinanceTab = lazy(() => import("./FinanceTab").then(m => ({ default: m.FinanceTab })));
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -484,6 +485,7 @@ export function PortfolioSummary() {
   const { valuesBySleeperId, sourceId, sources } = useValueModel();
   const activeSourceLabel = sources.find(s => s.id === sourceId)?.label ?? sourceId;
 
+  const [innerTab, setInnerTab] = useState<"overview" | "finances">("overview");
   const [summaryData, setSummaryData] = useState<any>(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [exposureSortCol, setExposureSortCol] = useState<"name" | "pos" | "value" | "exposure" | "leagueCount">("exposure");
@@ -534,9 +536,53 @@ export function PortfolioSummary() {
   const bestBallCount = leagues.filter((l) => l.isBestBall).length;
   const seasons = Array.from(new Set(leagues.map((l) => l.season)));
 
+  if (innerTab === "finances") {
+    return (
+      <div className="space-y-6">
+        <div className="flex gap-1 p-1 rounded-full bg-muted/40 border border-border/40 w-fit">
+          {(["overview", "finances"] as const).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setInnerTab(tab)}
+              data-testid={`inner-tab-${tab}`}
+              className={`px-4 py-1.5 rounded-full text-xs font-semibold capitalize transition-all duration-200 ${
+                innerTab === tab
+                  ? "bg-background text-foreground shadow-sm border border-border/60"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {tab === "overview" ? "Overview" : "Finances"}
+            </button>
+          ))}
+        </div>
+        <Suspense fallback={<div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>}>
+          <FinanceTab />
+        </Suspense>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8">
-      <SectionHeader title="My Portfolio" subtitle="Overview of your dynasty portfolio across all leagues" />
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <SectionHeader title="My Portfolio" subtitle="Overview of your dynasty portfolio across all leagues" />
+        <div className="flex gap-1 p-1 rounded-full bg-muted/40 border border-border/40">
+          {(["overview", "finances"] as const).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setInnerTab(tab)}
+              data-testid={`inner-tab-${tab}`}
+              className={`px-4 py-1.5 rounded-full text-xs font-semibold capitalize transition-all duration-200 ${
+                innerTab === tab
+                  ? "bg-background text-foreground shadow-sm border border-border/60"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {tab === "overview" ? "Overview" : "Finances"}
+            </button>
+          ))}
+        </div>
+      </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <KpiCard label="Total Leagues" value={leagues.length} icon={Trophy} />

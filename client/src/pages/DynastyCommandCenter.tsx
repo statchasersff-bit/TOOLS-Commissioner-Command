@@ -33,7 +33,6 @@ import { LeagueEconomy } from "./tabs/LeagueEconomy";
 import LiveDraft from "./tabs/LiveDraft";
 import { API_BASE } from "@/lib/apiBase";
 import Transactions from "./tabs/Transactions";
-import { FinanceTab } from "./tabs/FinanceTab";
 import { LineupCommand } from "./tabs/LineupCommand";
 
 const STORAGE_KEY = "sc-dynasty-state";
@@ -272,8 +271,6 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
           return <PortfolioSummary />;
         case "portfolio:waiver-command":
           return <WaiverCommand />;
-        case "portfolio:league-roi":
-          return <FinanceTab />;
         default:
           return <PortfolioConnect onNavigate={navigateToSubTab} />;
       }
