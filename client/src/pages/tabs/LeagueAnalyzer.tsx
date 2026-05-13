@@ -10,7 +10,7 @@ import { useValueModel } from "@/contexts/ValueModelContext";
 import { formatPickLabel } from "@/types";
 import type { League, Team, Tier } from "@/types";
 import { cn } from "@/lib/utils";
-import { Info } from "lucide-react";
+import { Info, ChevronDown, ChevronRight, TrendingUp, TrendingDown } from "lucide-react";
 
 interface AnalyzerProps {
   league: League;
@@ -29,7 +29,58 @@ const TIER_BAR_COLOR: Record<Tier, string> = {
   "Balanced": "bg-slate-500",
 };
 
+function getStrengths(team: Team, leagueTeams: Team[]): string[] {
+  const strengths: string[] = [];
+  const leagueAvg = (key: "qb" | "rb" | "wr" | "te") =>
+    Math.round(leagueTeams.reduce((s, t) => s + t.metrics[key], 0) / leagueTeams.length);
+  if (team.metrics.qb >= leagueAvg("qb") + 10) strengths.push("Elite QB room");
+  if (team.metrics.rb >= leagueAvg("rb") + 10) strengths.push("Strong RB room");
+  if (team.metrics.wr >= leagueAvg("wr") + 10) strengths.push("Elite WR corps");
+  if (team.metrics.te >= leagueAvg("te") + 10) strengths.push("Strong TE room");
+  if (team.metrics.youth >= 70) strengths.push("Strong youth profile");
+  if (team.metrics.depth >= 70) strengths.push("Deep roster");
+  if (team.picks.filter(p => p.round === 1).length >= 3) strengths.push("Loaded with 1st round picks");
+  return strengths;
+}
+
+function getWeaknesses(team: Team, leagueTeams: Team[]): string[] {
+  const weaknesses: string[] = [];
+  const leagueAvg = (key: "qb" | "rb" | "wr" | "te") =>
+    Math.round(leagueTeams.reduce((s, t) => s + t.metrics[key], 0) / leagueTeams.length);
+  if (team.metrics.qb < leagueAvg("qb") - 10) weaknesses.push("QB depth");
+  if (team.metrics.rb < leagueAvg("rb") - 10) weaknesses.push("RB depth");
+  if (team.metrics.wr < leagueAvg("wr") - 10) weaknesses.push("WR depth");
+  if (team.metrics.te < leagueAvg("te") - 10) weaknesses.push("TE depth");
+  if (team.metrics.youth < 40) weaknesses.push("Aging roster");
+  if (team.picks.length <= 4) weaknesses.push("Limited draft capital");
+  return weaknesses;
+}
+
+function getOutlook(team: Team, tierMap: Map<string, { tier: Tier }>): string {
+  const tier = tierMap.get(team.id)?.tier ?? "Balanced";
+  switch (tier) {
+    case "Juggernaut": return "Championship contender, league problem";
+    case "Win-Now": return "Built to win this year";
+    case "Future Powerhouse": return "The future is bright. Loaded with assets.";
+    case "Pick Hoarder": return "Stockpiling picks but roster needs work";
+    case "Taco": return "Bottom of the barrel across the board";
+    case "Contender": return "Strong team with enough dynasty value to stay competitive";
+    case "Rebuilder": return "Not built to win now, but positioned to improve";
+    case "Weak / Directionless": return "Lacking current strength and a clear long-term plan";
+    case "Balanced": return "Middle-of-the-pack without an extreme archetype";
+  }
+}
+
 export function PowerRankings({ league }: AnalyzerProps) {
+  const [expandedTeams, setExpandedTeams] = useState<Set<string>>(new Set());
+  const toggleTeam = (teamId: string) => {
+    setExpandedTeams(prev => {
+      const next = new Set(prev);
+      if (next.has(teamId)) next.delete(teamId); else next.add(teamId);
+      return next;
+    });
+  };
+
   const sorted = [...league.teams].sort((a, b) => b.metrics.overall - a.metrics.overall);
   const tierMap = useMemo(() => getLeagueTeamTiers(league.teams), [league.teams]);
 
@@ -116,6 +167,80 @@ export function PowerRankings({ league }: AnalyzerProps) {
       </div>
 
       <DataTable columns={columns} data={sorted} defaultSortKey="overall" defaultSortDir="desc" />
+
+      <div>
+        <h3 className="text-base font-bold text-foreground">Scouting Report</h3>
+        <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
+        <p className="text-xs text-muted-foreground mt-2 mb-4">Expandable per-team scouting report</p>
+
+        <div className="space-y-3" data-testid="team-narratives">
+          {sorted.map((team) => {
+            const tierInfo = tierMap.get(team.id);
+            const tier = tierInfo?.tier ?? "Balanced";
+            const isExpanded = expandedTeams.has(team.id);
+            const strengths = getStrengths(team, league.teams);
+            const weaknesses = getWeaknesses(team, league.teams);
+            const outlook = getOutlook(team, tierMap);
+
+            return (
+              <Card key={team.id} className="overflow-hidden" data-testid={`narrative-${team.id}`}>
+                <button
+                  onClick={() => toggleTeam(team.id)}
+                  className="w-full flex items-center justify-between p-4 hover:bg-muted/20 transition-colors text-left"
+                  data-testid={`button-expand-${team.id}`}
+                >
+                  <div className="flex items-center gap-3">
+                    {isExpanded ? <ChevronDown className="w-4 h-4 text-muted-foreground flex-shrink-0" /> : <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0" />}
+                    {team.avatar ? (
+                      <img src={team.avatar} alt={team.owner} className="w-8 h-8 rounded-full object-cover flex-shrink-0 ring-1 ring-border/40" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                    ) : (
+                      <div className="w-8 h-8 rounded-full bg-muted flex-shrink-0 ring-1 ring-border/40 flex items-center justify-center">
+                        <span className="text-xs font-bold text-muted-foreground">{team.owner.charAt(0).toUpperCase()}</span>
+                      </div>
+                    )}
+                    <span className="text-sm font-bold">{team.owner}</span>
+                    <Badge variant="outline" className={getTierColor(tier)}>{getTierEmoji(tier)} {tier}</Badge>
+                  </div>
+                  <span className="text-xl font-bold">{team.metrics.overall}</span>
+                </button>
+
+                {isExpanded && (
+                  <div className="px-4 pb-5 pt-1 border-t border-border/30 space-y-4">
+                    {strengths.length > 0 && (
+                      <div>
+                        <p className="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                          <TrendingUp className="w-3 h-3" /> Strengths
+                        </p>
+                        <ul className="space-y-1 pl-5">
+                          {strengths.map((s, i) => (
+                            <li key={i} className="text-sm text-muted-foreground list-disc">{s}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {weaknesses.length > 0 && (
+                      <div>
+                        <p className="text-xs font-bold text-red-500 dark:text-red-400 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                          <TrendingDown className="w-3 h-3" /> Weaknesses
+                        </p>
+                        <ul className="space-y-1 pl-5">
+                          {weaknesses.map((w, i) => (
+                            <li key={i} className="text-sm text-muted-foreground list-disc">{w}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    <div>
+                      <p className="text-xs font-bold text-[#0b3a7a] dark:text-blue-400 uppercase tracking-wider mb-1.5">Outlook</p>
+                      <p className="text-sm text-muted-foreground">{outlook}</p>
+                    </div>
+                  </div>
+                )}
+              </Card>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 }
