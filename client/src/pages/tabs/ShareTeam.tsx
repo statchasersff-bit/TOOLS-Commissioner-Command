@@ -330,13 +330,15 @@ export function ShareTeam({ league, userTeam }: Props) {
 
             {/* Archetype badge + league format pills */}
             <div className="flex items-center gap-2 flex-wrap">
-              <div
-                className={cn("inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-bold", archBg, archColor)}
-                data-testid="text-share-archetype"
-              >
-                <ArchIcon className="w-3 h-3" />
-                {computed.archetype}
-              </div>
+              {computed.archetype !== "Orphan Target" && (
+                <div
+                  className={cn("inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-bold", archBg, archColor)}
+                  data-testid="text-share-archetype"
+                >
+                  <ArchIcon className="w-3 h-3" />
+                  {computed.archetype}
+                </div>
+              )}
               <span className="text-[10px] font-semibold px-2 py-0.5 rounded" style={{ background: "rgba(30,48,80,0.8)", color: "#7a9bbf", border: "1px solid #1e3050" }}>
                 {computed.total}T {computed.format}
               </span>
