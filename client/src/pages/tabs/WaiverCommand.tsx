@@ -546,10 +546,24 @@ function WaiverTableRow({ row, onClaim }: { row: WaiverRow; onClaim: () => void 
             </div>
           )}
           <div className="min-w-0">
-            <div className="font-semibold text-foreground text-[13px] truncate max-w-[160px]" title={row.leagueName}>
+            <div className="font-semibold text-foreground text-[13px] truncate max-w-[180px]" title={row.leagueName}>
               {row.leagueName}
             </div>
-            <div className="text-[11px] text-muted-foreground mt-0.5">{row.format} · {row.scoringFormat}</div>
+            <div className="flex items-center gap-1 mt-1.5 flex-wrap">
+              {row.scoringFormat && (
+                <span className="inline-block text-[10px] font-medium px-1.5 py-[2px] rounded bg-white/[0.07] dark:bg-white/[0.06] text-slate-400 leading-none">
+                  {row.scoringFormat}
+                </span>
+              )}
+              <span className="inline-block text-[10px] font-medium px-1.5 py-[2px] rounded bg-white/[0.07] dark:bg-white/[0.06] text-slate-400 leading-none">
+                {row.totalTeams} Teams
+              </span>
+              {row.format.split(" ").map((part, i) => (
+                <span key={i} className="inline-block text-[10px] font-medium px-1.5 py-[2px] rounded bg-white/[0.07] dark:bg-white/[0.06] text-slate-400 leading-none">
+                  {part}
+                </span>
+              ))}
+            </div>
           </div>
         </div>
       </td>
