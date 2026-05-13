@@ -174,26 +174,114 @@ export async function fetchLeagueTransactionsFiltered(
   return data.league_transactions_filtered ?? [];
 }
 
+// ─── submit_waiver_claim ──────────────────────────────────────────────────────
+
+/**
+ * Sleeper uses leagueId as a string literal inside the mutation body (not a GQL variable).
+ * Build the mutation string with leagueId interpolated at call time.
+ */
+function buildWaiverClaimMutation(leagueId: string): string {
+  return `
+    mutation submit_waiver_claim(
+      $k_adds: [String]
+      $v_adds: [Int]
+      $k_drops: [String]
+      $v_drops: [Int]
+      $k_settings: [String]
+      $v_settings: [Int]
+    ) {
+      submit_waiver_claim(
+        league_id: "${leagueId}"
+        k_adds: $k_adds
+        v_adds: $v_adds
+        k_drops: $k_drops
+        v_drops: $v_drops
+        k_settings: $k_settings
+        v_settings: $v_settings
+      ) {
+        adds
+        consenter_ids
+        created
+        creator
+        draft_picks
+        drops
+        league_id
+        leg
+        metadata
+        roster_ids
+        settings
+        status
+        status_updated
+        transaction_id
+        type
+        player_map
+        waiver_budget
+      }
+    }
+  `;
+}
+
+export interface SleeperWaiverClaimResult {
+  adds: Record<string, number> | null;
+  consenter_ids: number[];
+  created: number;
+  creator: string;
+  draft_picks: unknown[];
+  drops: Record<string, number> | null;
+  league_id: string;
+  leg: number;
+  metadata: Record<string, unknown> | null;
+  roster_ids: number[];
+  settings: Record<string, unknown> | null;
+  status: string;
+  status_updated: number;
+  transaction_id: string;
+  type: string;
+  player_map: Record<string, unknown> | null;
+  waiver_budget: unknown[];
+}
+
+/**
+ * Submit a waiver claim via the authenticated sleeper.com/graphql endpoint.
+ *
+ * Requires a connected Sleeper session (JWT). Do NOT call without displaying
+ * a review modal to the user first — use WaiverClaimModal for that.
+ *
+ * @param leagueId      - Active league ID
+ * @param rosterId      - Caller's roster ID in that league
+ * @param addPlayerIds  - Player IDs to add (usually 1)
+ * @param dropPlayerIds - Player IDs to drop (0 or 1)
+ * @param waiverBid     - FAAB bid amount (0 for waiver-order leagues)
+ */
+export async function submitWaiverClaim(
+  leagueId: string,
+  rosterId: number,
+  addPlayerIds: string[],
+  dropPlayerIds: string[],
+  waiverBid: number
+): Promise<SleeperWaiverClaimResult> {
+  const k_adds = addPlayerIds;
+  const v_adds = addPlayerIds.map(() => rosterId);
+  const k_drops = dropPlayerIds;
+  const v_drops = dropPlayerIds.map(() => rosterId);
+  const k_settings = waiverBid > 0 ? ["waiver_bid"] : [];
+  const v_settings = waiverBid > 0 ? [waiverBid] : [];
+
+  const data = await sleeperAuthedGQL<{ submit_waiver_claim: SleeperWaiverClaimResult }>(
+    buildWaiverClaimMutation(leagueId),
+    { k_adds, v_adds, k_drops, v_drops, k_settings, v_settings }
+  );
+
+  if (!data.submit_waiver_claim) {
+    throw new Error("Waiver claim submission failed — no response from Sleeper.");
+  }
+  return data.submit_waiver_claim;
+}
+
 // ─── Action helpers ───────────────────────────────────────────────────────────
 
 export async function setLineup(leagueId: string, rosterId: number, starters: string[]) {
   return sleeperAuthedFetch("setLineup", { league_id: leagueId, roster_id: rosterId, starters });
-}
-
-export async function submitWaiverClaim(
-  leagueId: string,
-  rosterId: number,
-  playerId: string,
-  dropPlayerId?: string,
-  bidAmount?: number
-) {
-  return sleeperAuthedFetch("submitWaiver", {
-    league_id: leagueId,
-    roster_id: rosterId,
-    player_id: playerId,
-    drop_player_id: dropPlayerId ?? null,
-    bid_amount: bidAmount ?? 0,
-  });
 }
 
 export async function proposeTrade(
