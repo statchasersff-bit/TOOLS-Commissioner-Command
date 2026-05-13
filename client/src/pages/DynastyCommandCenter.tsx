@@ -35,6 +35,7 @@ import { API_BASE } from "@/lib/apiBase";
 import Transactions from "./tabs/Transactions";
 import { LeagueRoast } from "./tabs/LeagueRoast";
 import { FinanceTab } from "./tabs/FinanceTab";
+import { LineupCommand } from "./tabs/LineupCommand";
 
 const STORAGE_KEY = "sc-dynasty-state";
 
@@ -266,6 +267,8 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
       switch (key) {
         case "portfolio:connect":
           return <PortfolioConnect onNavigate={navigateToSubTab} />;
+        case "portfolio:lineup-command":
+          return <LineupCommand />;
         case "portfolio:portfolio-summary":
           return <PortfolioSummary />;
         case "portfolio:waiver-command":
