@@ -986,7 +986,7 @@ function PlayerAvatar({
         {team && team !== "FA" && (
           <div className={cn("absolute -bottom-0.5 -right-0.5 rounded-full overflow-hidden ring-[1.5px] ring-background bg-white flex items-center justify-center", badgeSize)}>
             <img
-              src={`https://sleepercdn.com/images/team_logos/nfl/${team.toLowerCase()}.jpg`}
+              src={`https://sleepercdn.com/images/team_logos/nfl/${team.toLowerCase()}.png`}
               alt={team}
               className="w-full h-full object-contain"
               onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
