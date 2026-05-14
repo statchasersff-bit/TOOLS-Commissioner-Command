@@ -254,13 +254,36 @@ function normalizeTrade(
   const iGivePicks: AssetPick[] = [];
   const iGetPicks: AssetPick[] = [];
 
-  for (const dp of t.draft_picks || []) {
-    const label = formatPickAssetLabel(dp.season, dp.round);
-    const value = approxPickValue(dp.season, dp.round);
-    if (dp.previous_owner_id === userRosterId) {
-      iGivePicks.push({ season: dp.season, round: dp.round, originalRosterId: dp.roster_id, label, value });
-    } else if (dp.owner_id === userRosterId) {
-      iGetPicks.push({ season: dp.season, round: dp.round, originalRosterId: dp.roster_id, label, value });
+  // draft_picks may arrive as a JSON-encoded string (Sleeper GraphQL JSON scalar),
+  // a plain array, or null — normalise to an array before iterating.
+  const rawDraftPicks = (t as any).draft_picks;
+  const draftPicks: SleeperTransactionPick[] = Array.isArray(rawDraftPicks)
+    ? rawDraftPicks
+    : typeof rawDraftPicks === "string"
+    ? (() => { try { return JSON.parse(rawDraftPicks); } catch { return []; } })()
+    : [];
+
+  for (const dp of draftPicks) {
+    const round = Number(dp.round);
+    const prevOwner = Number(dp.previous_owner_id);
+    const nextOwner = Number(dp.owner_id);
+    const origOwner = Number(dp.roster_id);
+    const label = formatPickAssetLabel(String(dp.season), round);
+    const value = approxPickValue(String(dp.season), round);
+
+    if (prevOwner === userRosterId) {
+      // user is sending this pick
+      iGivePicks.push({ season: String(dp.season), round, originalRosterId: origOwner, label, value });
+    } else if (nextOwner === userRosterId) {
+      // user is receiving this pick
+      iGetPicks.push({ season: String(dp.season), round, originalRosterId: origOwner, label, value });
+    } else if (prevOwner === partnerRosterId || (prevOwner === 0 && origOwner !== userRosterId)) {
+      // partner is sending → user receives; also handles proposed trades where
+      // previous_owner_id/owner_id may be 0 but roster_id reveals original owner
+      iGetPicks.push({ season: String(dp.season), round, originalRosterId: origOwner, label, value });
+    } else if (nextOwner === partnerRosterId || (nextOwner === 0 && origOwner === userRosterId)) {
+      // user is sending (original owner = user, going to partner)
+      iGivePicks.push({ season: String(dp.season), round, originalRosterId: origOwner, label, value });
     }
   }
 
