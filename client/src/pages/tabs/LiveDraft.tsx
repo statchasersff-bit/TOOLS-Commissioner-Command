@@ -3,7 +3,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Search, RefreshCw, Trophy, Target, Radio, Zap, MessageSquare, Key, AlertTriangle, ChevronDown, ChevronUp } from "lucide-react";
+import { Loader2, Search, RefreshCw, Trophy, Target, Radio, Zap, MessageSquare, Key, AlertTriangle, ChevronDown, ChevronUp, ArrowUp, ArrowDown, X, Plus } from "lucide-react";
 import { useValueModel } from "@/contexts/ValueModelContext";
 import { useSleeper } from "@/contexts/SleeperContext";
 import { detectLiveDrafts as detectLiveDraftsApi, fetchDraftBoard as fetchDraftBoardApi } from "@/lib/sleeperApi";
@@ -131,6 +131,23 @@ async function fetchDraftQueue(draftId: string, jwt: string): Promise<string[]> 
   return (json?.data?.draft_queue as string[]) || [];
 }
 
+async function updateDraftQueue(draftId: string, playerIds: string[], jwt: string): Promise<string[]> {
+  const res = await fetch("https://sleeper.com/graphql", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "authorization": jwt,
+      "x-sleeper-graphql-op": "update_draft_queue",
+    },
+    body: JSON.stringify({
+      query: `mutation update_draft_queue { update_draft_queue(player_ids: ${JSON.stringify(playerIds)}, draft_id: "${draftId}") }`,
+    }),
+  });
+  if (!res.ok) throw new Error(`GraphQL ${res.status}`);
+  const json = await res.json();
+  return (json?.data?.update_draft_queue as string[]) || [];
+}
+
 const POS_CELL_BG: Record<string, string> = {
   QB: "bg-red-500/25 dark:bg-red-500/30 border-red-500/40 text-red-900 dark:text-red-200",
   RB: "bg-emerald-500/25 dark:bg-emerald-500/30 border-emerald-500/40 text-emerald-900 dark:text-emerald-200",
@@ -188,6 +205,7 @@ export default function LiveDraft() {
   const [draftQueue, setDraftQueue] = useState<string[]>([]);
   const [queueLoading, setQueueLoading] = useState(false);
   const [queueError, setQueueError] = useState<string | null>(null);
+  const [isUpdatingQueue, setIsUpdatingQueue] = useState(false);
 
   useEffect(() => {
     const saved = localStorage.getItem(SLEEPER_JWT_KEY);
@@ -223,6 +241,24 @@ export default function LiveDraft() {
       setQueueLoading(false);
     }
   }, []);
+
+  const queueMutate = useCallback(async (newIds: string[]) => {
+    if (!sleeperJwt) { setShowJwtInput(true); return; }
+    if (!activeDraftId) return;
+    const prev = draftQueue;
+    setDraftQueue(newIds);
+    setIsUpdatingQueue(true);
+    setQueueError(null);
+    try {
+      const result = await updateDraftQueue(activeDraftId, newIds, sleeperJwt);
+      setDraftQueue(result);
+    } catch (e: any) {
+      setDraftQueue(prev);
+      setQueueError(e.message || "Failed to update queue");
+    } finally {
+      setIsUpdatingQueue(false);
+    }
+  }, [sleeperJwt, activeDraftId, draftQueue]);
 
   useEffect(() => {
     if (activeDraftId && sleeperJwt) {
@@ -790,10 +826,13 @@ export default function LiveDraft() {
                               TE: "from-orange-200 dark:from-orange-950",
                             };
 
+                            const inQueue = !!sid && draftQueue.includes(sid);
+                            const canQueue = !!sleeperJwt && !!sid && !wasDrafted && hasPlayer;
+
                             return (
                               <div
                                 key={`${roundIdx}-${slotIdx}`}
-                                className={`relative overflow-hidden rounded-sm border transition-all min-h-[76px] ${
+                                className={`relative overflow-hidden rounded-sm border transition-all min-h-[76px] group/cell ${
                                   hasPlayer
                                     ? `${POS_CELL_BG[pos] || "bg-muted/20 border-border/30"} ${posBorderColor[pos] || ""}`
                                     : "bg-background border-dashed border-border/30"
@@ -832,6 +871,28 @@ export default function LiveDraft() {
                                         </div>
                                       </div>
                                     </div>
+                                    {/* Queue toggle button — appears on hover when JWT is set */}
+                                    {canQueue && (
+                                      <button
+                                        onClick={() => inQueue
+                                          ? queueMutate(draftQueue.filter(id => id !== sid))
+                                          : queueMutate([...draftQueue, sid])
+                                        }
+                                        disabled={isUpdatingQueue}
+                                        className={`absolute top-1 right-1 z-20 rounded-full w-5 h-5 flex items-center justify-center transition-all disabled:opacity-40
+                                          ${inQueue
+                                            ? "bg-[#d4af37] text-black opacity-100"
+                                            : "bg-black/40 text-white opacity-0 group-hover/cell:opacity-100"
+                                          }`}
+                                        data-testid={`button-cell-queue-${sid}`}
+                                        title={inQueue ? "Remove from queue" : "Add to queue"}
+                                      >
+                                        {inQueue
+                                          ? <X className="w-2.5 h-2.5" />
+                                          : <Plus className="w-2.5 h-2.5" />
+                                        }
+                                      </button>
+                                    )}
                                   </>
                                 ) : (
                                   <div className="flex items-center justify-center min-h-[76px]">
@@ -903,15 +964,43 @@ export default function LiveDraft() {
                         WR: "border-blue-500/30",
                         TE: "border-orange-500/30",
                       };
+                      const moveUp = () => {
+                        if (idx === 0) return;
+                        const next = [...draftQueue];
+                        [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
+                        queueMutate(next);
+                      };
+                      const moveDown = () => {
+                        if (idx === draftQueue.length - 1) return;
+                        const next = [...draftQueue];
+                        [next[idx], next[idx + 1]] = [next[idx + 1], next[idx]];
+                        queueMutate(next);
+                      };
+                      const remove = () => queueMutate(draftQueue.filter(id => id !== playerId));
                       return (
                         <div key={playerId}
-                          className={`flex items-center gap-2.5 px-3 py-2 rounded-lg border text-xs transition-colors ${
+                          className={`flex items-center gap-2 px-2 py-1.5 rounded-lg border text-xs transition-colors group ${
                             isDrafted
-                              ? "opacity-40 border-border/20 bg-muted/10 line-through"
+                              ? "opacity-40 border-border/20 bg-muted/10"
                               : `border-border/30 bg-muted/20 ${pos ? posBorderColors[pos] || "" : ""}`
                           }`}
                           data-testid={`queue-player-${playerId}`}>
-                          <span className="text-[10px] font-mono text-muted-foreground tabular-nums w-5 flex-shrink-0">
+                          {/* Reorder buttons */}
+                          {!isDrafted && (
+                            <div className="flex flex-col gap-0 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button onClick={moveUp} disabled={idx === 0 || isUpdatingQueue}
+                                className="p-0.5 rounded hover:bg-muted/60 disabled:opacity-30 transition-colors"
+                                data-testid={`button-queue-up-${playerId}`}>
+                                <ArrowUp className="w-2.5 h-2.5 text-muted-foreground" />
+                              </button>
+                              <button onClick={moveDown} disabled={idx === draftQueue.length - 1 || isUpdatingQueue}
+                                className="p-0.5 rounded hover:bg-muted/60 disabled:opacity-30 transition-colors"
+                                data-testid={`button-queue-down-${playerId}`}>
+                                <ArrowDown className="w-2.5 h-2.5 text-muted-foreground" />
+                              </button>
+                            </div>
+                          )}
+                          <span className="text-[10px] font-mono text-muted-foreground tabular-nums w-4 flex-shrink-0 text-right">
                             {idx + 1}
                           </span>
                           {pos && (
@@ -919,17 +1008,23 @@ export default function LiveDraft() {
                               {pos}
                             </span>
                           )}
-                          <span className={`font-semibold truncate flex-1 ${isDrafted ? "text-muted-foreground" : "text-foreground"}`}>
+                          <span className={`font-semibold truncate flex-1 ${isDrafted ? "text-muted-foreground line-through" : "text-foreground"}`}>
                             {name}
                           </span>
                           {team && <span className="text-[10px] text-muted-foreground flex-shrink-0">{team}</span>}
                           {rank && !isDrafted && (
                             <span className="text-[10px] text-muted-foreground flex-shrink-0">#{rank}</span>
                           )}
-                          {isDrafted && (
+                          {isDrafted ? (
                             <Badge variant="outline" className="text-[9px] px-1 h-4 border-border/40 text-muted-foreground flex-shrink-0">
                               Drafted
                             </Badge>
+                          ) : (
+                            <button onClick={remove} disabled={isUpdatingQueue}
+                              className="flex-shrink-0 p-1 rounded hover:bg-red-500/10 text-muted-foreground hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100 disabled:opacity-30"
+                              data-testid={`button-queue-remove-${playerId}`}>
+                              <X className="w-3 h-3" />
+                            </button>
                           )}
                         </div>
                       );
