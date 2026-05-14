@@ -490,6 +490,7 @@ export function PortfolioSummary() {
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [exposureSortCol, setExposureSortCol] = useState<"name" | "pos" | "value" | "exposure" | "leagueCount">("exposure");
   const [exposureSortDir, setExposureSortDir] = useState<"asc" | "desc">("desc");
+  const [leagueFilter, setLeagueFilter] = useState<"all" | "contender" | "middle" | "rebuild">("all");
   const [pendingTradeCount, setPendingTradeCount] = useState<number | null>(null);
   const [pendingTradeLoading, setPendingTradeLoading] = useState(false);
 
@@ -652,24 +653,38 @@ export function PortfolioSummary() {
               <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
             </div>
 
-            <div className="flex items-center gap-3 mb-4">
-              <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200/50 dark:border-emerald-800/30">
-                <Crown className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-400">Contenders (Top 3): {summaryData.contenderCount}</span>
-              </div>
-              <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200/50 dark:border-blue-800/30">
-                <BarChart3 className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-                <span className="text-xs font-semibold text-blue-700 dark:text-blue-400">Middle: {summaryData.middleCount}</span>
-              </div>
-              <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-red-50 dark:bg-red-950/30 border border-red-200/50 dark:border-red-800/30">
-                <Target className="w-3.5 h-3.5 text-red-600 dark:text-red-400" />
-                <span className="text-xs font-semibold text-red-700 dark:text-red-400">Rebuilding: {summaryData.rebuildCount}</span>
-              </div>
+            <div className="flex flex-wrap items-center gap-2 mb-4">
+              {([
+                { key: "all",       label: "All",                count: summaryData.leagueRecords.length, icon: null,                                  inactive: "bg-muted/40 text-muted-foreground border-border hover:border-[#0b3a7a]/40" },
+                { key: "contender", label: "Contenders (Top 3)", count: summaryData.contenderCount,       icon: <Crown className="w-3.5 h-3.5" />,     inactive: "bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 border-emerald-200/50 dark:border-emerald-800/30 hover:border-emerald-500" },
+                { key: "middle",    label: "Middle",             count: summaryData.middleCount,          icon: <BarChart3 className="w-3.5 h-3.5" />, inactive: "bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-400 border-blue-200/50 dark:border-blue-800/30 hover:border-blue-500" },
+                { key: "rebuild",   label: "Rebuilding",         count: summaryData.rebuildCount,         icon: <Target className="w-3.5 h-3.5" />,    inactive: "bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-400 border-red-200/50 dark:border-red-800/30 hover:border-red-500" },
+              ] as const).map(({ key, label, count, icon, inactive }) => {
+                const isActive = leagueFilter === key;
+                const activeClass = key === "all" ? "bg-[#0b3a7a] text-white border-[#0b3a7a]" : key === "contender" ? "bg-emerald-600 text-white border-emerald-600" : key === "middle" ? "bg-blue-600 text-white border-blue-600" : "bg-red-600 text-white border-red-600";
+                return (
+                  <button
+                    key={key}
+                    onClick={() => setLeagueFilter(key)}
+                    className={cn("flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-semibold transition-all", isActive ? activeClass : inactive)}
+                    data-testid={`filter-league-${key}`}
+                  >
+                    {icon}{label}: {count}
+                  </button>
+                );
+              })}
             </div>
 
-            {summaryData.leagueRecords.length > 0 && (
-              <SortableLeagueRecords records={summaryData.leagueRecords} />
-            )}
+            {summaryData.leagueRecords.length > 0 && (() => {
+              const filtered = leagueFilter === "all"
+                ? summaryData.leagueRecords
+                : summaryData.leagueRecords.filter((r: any) => {
+                    if (leagueFilter === "contender") return r.standing <= 3;
+                    if (leagueFilter === "middle")    return r.standing > 3 && r.standing <= Math.ceil(r.totalRosters * 0.7);
+                    return r.standing > Math.ceil(r.totalRosters * 0.7);
+                  });
+              return <SortableLeagueRecords records={filtered} />;
+            })()}
           </Card>
 
           <Card className="p-6" data-testid="player-exposure">
