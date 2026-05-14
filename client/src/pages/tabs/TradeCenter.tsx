@@ -1205,7 +1205,7 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
           <div className="flex items-center gap-2.5" data-testid={`text-side-${side}-header`}>
             {rosterTeam ? (
               <img
-                src={rosterTeam.avatar ? `https://sleepercdn.com/avatars/thumbs/${rosterTeam.avatar}` : "https://sleepercdn.com/images/v2/icons/player_default.webp"}
+                src={rosterTeam.avatar || "https://sleepercdn.com/images/v2/icons/player_default.webp"}
                 alt={rosterTeam.owner || rosterTeam.name}
                 className="w-8 h-8 rounded-full object-cover border border-border/40 flex-shrink-0"
                 onError={(e) => { (e.target as HTMLImageElement).src = "https://sleepercdn.com/images/v2/icons/player_default.webp"; }}
