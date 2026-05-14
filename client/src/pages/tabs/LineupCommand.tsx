@@ -281,7 +281,7 @@ function LeagueRow({ analysis }: { analysis: LeagueAnalysis }) {
           {loading ? (
             <div className="h-4 w-6 bg-white/8 rounded animate-pulse" />
           ) : hardIssues.length === 0 ? (
-            <span className="text-[9px] text-white/15">—</span>
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500/60" />
           ) : (
             <span className="text-[13px] md:text-sm font-black tabular-nums text-red-400">
               {hardIssues.length}
@@ -294,7 +294,7 @@ function LeagueRow({ analysis }: { analysis: LeagueAnalysis }) {
           {loading ? (
             <div className="h-4 w-6 bg-white/8 rounded animate-pulse" />
           ) : softIssues.length === 0 ? (
-            <span className="text-[9px] text-white/15">—</span>
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500/60" />
           ) : (
             <span className="text-[13px] md:text-sm font-black tabular-nums text-yellow-400">
               {softIssues.length}
