@@ -1033,18 +1033,20 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
     return clamped * 100;
   }, [finalA, finalB]);
 
-  const getVerdictLabel = (_pct: number): string => {
-    if (diffPct <= 4) return "Dead Even";
-    if (diffPct <= 9) return "Slight Edge";
-    if (diffPct <= 19) return "Clear Advantage";
-    return "Major Overpay";
+  const getVerdictLabel = (): string => {
+    if (diffPct <= 6) return "Fair Deal";
+    if (winnerSide === "B") return diffPct <= 20 ? "Overpaying" : "Getting Robbed";
+    return diffPct <= 20 ? "Slight Win" : "Robbing Them";
   };
 
-  const getVerdictStyle = (pct: number): string => {
-    if (pct <= 4) return "bg-emerald-500/10 dark:bg-emerald-400/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30";
-    if (pct <= 9) return "bg-[#d4af37]/10 dark:bg-[#d4af37]/15 text-amber-700 dark:text-[#e8c84a] border-[#d4af37]/30";
-    if (pct <= 19) return "bg-[#0b3a7a]/10 dark:bg-blue-400/15 text-[#0b3a7a] dark:text-blue-300 border-[#0b3a7a]/20 dark:border-blue-400/30";
-    return "bg-red-500/10 dark:bg-red-400/15 text-red-700 dark:text-red-400 border-red-500/30";
+  const getVerdictStyle = (): string => {
+    if (diffPct <= 6) return "bg-[#d4af37]/10 dark:bg-[#d4af37]/15 text-amber-700 dark:text-[#e8c84a] border-[#d4af37]/30";
+    if (winnerSide === "B") return diffPct <= 20
+      ? "bg-orange-500/10 dark:bg-orange-400/15 text-orange-700 dark:text-orange-400 border-orange-500/30"
+      : "bg-red-500/10 dark:bg-red-400/15 text-red-700 dark:text-red-400 border-red-500/30";
+    return diffPct <= 20
+      ? "bg-emerald-500/10 dark:bg-emerald-400/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30"
+      : "bg-blue-500/10 dark:bg-blue-400/15 text-blue-700 dark:text-blue-400 border-blue-500/30";
   };
 
   const positionImpact = useMemo(() => {
@@ -1332,8 +1334,8 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
                 {diffPct <= 4 ? "Dead Even Trade" : `${winnerLabel} wins the trade`}
               </p>
               <div className="flex justify-center pt-1">
-                <Badge className={`text-xs px-4 py-1.5 font-bold border ${getVerdictStyle(diffPct)}`} data-testid="badge-verdict">
-                  {getVerdictLabel(diffPct)}
+                <Badge className={`text-xs px-4 py-1.5 font-bold border ${getVerdictStyle()}`} data-testid="badge-verdict">
+                  {getVerdictLabel()}
                 </Badge>
               </div>
             </div>
