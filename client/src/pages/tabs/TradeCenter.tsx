@@ -1331,25 +1331,34 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
             </div>
 
             {/* 2. ADVANTAGE METER */}
-            <div className="space-y-1.5 px-1">
-              <div className="flex items-center justify-between text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-                <span>{sideATeam?.owner || "Side A"}</span>
-                <span>{sideBTeam?.owner || "Side B"}</span>
-              </div>
-              <div className="relative h-4 rounded-full overflow-hidden">
-                <div className="absolute inset-0" style={{ background: "linear-gradient(90deg, #12284a 0%, #1a3560 50%, #12284a 100%)" }} />
-                {diffPct > 4 && winnerSide === "B" && (
-                  <div className="absolute inset-y-0 left-0 rounded-l-full transition-all duration-700" style={{ width: `${100 - meterPosition}%`, background: "linear-gradient(90deg, #0b3a7a 0%, #1a5aad 100%)" }} />
-                )}
-                {diffPct > 4 && winnerSide === "A" && (
-                  <div className="absolute inset-y-0 right-0 rounded-r-full transition-all duration-700" style={{ width: `${meterPosition}%`, background: "linear-gradient(90deg, #b8932a 0%, #d4af37 100%)" }} />
-                )}
-                <div className="absolute top-0 bottom-0 w-0.5 bg-white/20 z-10" style={{ left: "50%" }} />
-              </div>
-              <div className="flex justify-center">
-                <span className="text-[9px] text-muted-foreground/50 font-medium">Fair</span>
-              </div>
-            </div>
+            {(() => {
+              const fillPct = Math.max(10, Math.min(90, 100 - meterPosition));
+              const isEven = diffPct <= 4;
+              const iLose = !isEven && fillPct > 50;
+              const barColor = isEven
+                ? "linear-gradient(90deg, #b8932a 0%, #d4af37 100%)"
+                : iLose
+                  ? "linear-gradient(90deg, #dc2626 0%, #ef4444 100%)"
+                  : "linear-gradient(90deg, #059669 0%, #10b981 100%)";
+              return (
+                <div className="space-y-1.5 px-1">
+                  <div className="flex items-center justify-between text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                    <span>{sideATeam?.owner || "Side A"}</span>
+                    <span>{sideBTeam?.owner || "Side B"}</span>
+                  </div>
+                  <div className="relative h-4 rounded-full overflow-hidden" style={{ background: "#12284a" }}>
+                    <div
+                      className="absolute inset-y-0 left-0 rounded-l-full transition-all duration-700"
+                      style={{ width: `${fillPct}%`, background: barColor }}
+                    />
+                    <div className="absolute top-0 bottom-0 w-0.5 bg-white/30 z-10" style={{ left: "50%" }} />
+                  </div>
+                  <div className="flex justify-center">
+                    <span className="text-[9px] text-muted-foreground/50 font-medium">Fair</span>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* 3. PLAYER CARDS */}
             {(() => {
