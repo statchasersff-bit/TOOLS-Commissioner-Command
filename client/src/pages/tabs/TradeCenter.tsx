@@ -1271,57 +1271,54 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
             getPlayerValue={getPlayerValue}
           />
 
-          <div className="space-y-2 min-h-[80px]">
+          <div className="min-h-[80px]">
             {assets.length === 0 && (
               <p className="text-xs text-muted-foreground py-4 text-center" data-testid={`text-empty-side-${side}`}>
                 Search for players above to add them
               </p>
             )}
-            {assets.map((asset) => (
-              <div
-                key={asset.id}
-                className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-muted/20 border border-border/30"
-                data-testid={`asset-${side}-${asset.id}`}
-              >
-                {asset.type === "player" && asset.player ? (
-                  <PlayerAvatar
-                    id={asset.player.sleeperId || asset.player.id}
-                    name={asset.player.name}
-                    pos={asset.player.pos}
-                    team={(asset.player as any).team ?? ""}
-                    size="md"
-                    compact
-                  />
-                ) : (
-                  <div className="w-11 h-11 rounded-full bg-purple-900/40 border border-purple-700/40 flex items-center justify-center flex-shrink-0">
-                    <span className="text-[11px] font-bold text-purple-400">PK</span>
-                  </div>
-                )}
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-bold text-foreground truncate leading-tight">
-                    {asset.type === "player" && asset.player ? asset.player.name : asset.label}
-                  </p>
-                  <div className="flex items-center gap-1.5 mt-0.5">
-                    {asset.type === "player" && asset.pos && (
-                      <span className={`text-[11px] font-semibold ${getPositionColor(asset.pos)}`}>{asset.pos}</span>
+            <div className="flex flex-wrap gap-3">
+              {assets.map((asset) => {
+                const lastName = asset.type === "player" && asset.player
+                  ? asset.player.name.split(" ").slice(1).join(" ") || asset.player.name
+                  : asset.label;
+                const team = (asset.player as any)?.team ?? "";
+                return (
+                  <div
+                    key={asset.id}
+                    className="relative flex flex-col items-center gap-1 pt-2 pb-2 px-2 rounded-xl bg-muted/20 border border-border/30 min-w-[72px]"
+                    data-testid={`asset-${side}-${asset.id}`}
+                  >
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-background border border-border/60 text-muted-foreground hover:text-foreground p-0"
+                      onClick={() => removeAsset(side, asset.id)}
+                      data-testid={`button-remove-${side}-${asset.id}`}
+                    >
+                      <X className="w-3 h-3" />
+                    </Button>
+                    {asset.type === "player" && asset.player ? (
+                      <PlayerAvatar
+                        id={asset.player.sleeperId || asset.player.id}
+                        name={asset.player.name}
+                        pos={asset.player.pos}
+                        team={team}
+                        size="md"
+                        compact
+                      />
+                    ) : (
+                      <div className="w-11 h-11 rounded-full bg-purple-900/40 border border-purple-700/40 flex items-center justify-center flex-shrink-0">
+                        <span className="text-[11px] font-bold text-purple-400">PK</span>
+                      </div>
                     )}
-                    {asset.type === "player" && (asset.player as any)?.team && (
-                      <span className="text-[11px] text-muted-foreground">{(asset.player as any).team}</span>
-                    )}
-                    <span className="text-[11px] text-muted-foreground">{asset.value.toLocaleString()} <span className="opacity-60">dyn</span></span>
+                    <p className="text-[11px] font-bold text-foreground text-center leading-tight max-w-[72px] truncate">{lastName}</p>
+                    {team && <p className="text-[10px] text-muted-foreground text-center leading-none">{team}</p>}
+                    {!team && asset.type === "pick" && <p className="text-[10px] text-muted-foreground text-center leading-none">{asset.value.toLocaleString()}</p>}
                   </div>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 flex-shrink-0 text-muted-foreground hover:text-foreground"
-                  onClick={() => removeAsset(side, asset.id)}
-                  data-testid={`button-remove-${side}-${asset.id}`}
-                >
-                  <X className="w-3.5 h-3.5" />
-                </Button>
-              </div>
-            ))}
+                );
+              })}
+            </div>
           </div>
 
           <div className="flex items-center justify-between pt-2 border-t border-border/40">
