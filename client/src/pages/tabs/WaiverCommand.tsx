@@ -97,6 +97,7 @@ interface WaiverTransaction {
 interface ManagerTendency {
   rosterId: number;
   displayName: string;
+  avatar: string | null;
   avgBid: number;
   claimCount: number;
   activity: "High" | "Medium" | "Low";
@@ -108,9 +109,10 @@ interface TendencyData {
   loading: boolean;
   transactions: WaiverTransaction[];
   rosterIdToName: Record<number, string>;
+  rosterIdToAvatar: Record<number, string | null>;
 }
 
-async function fetchTendencyData(leagueId: string, faabBudget: number): Promise<{ transactions: WaiverTransaction[]; rosterIdToName: Record<number, string> }> {
+async function fetchTendencyData(leagueId: string, faabBudget: number): Promise<{ transactions: WaiverTransaction[]; rosterIdToName: Record<number, string>; rosterIdToAvatar: Record<number, string | null> }> {
   const weeks = Array.from({ length: 18 }, (_, i) => i + 1);
   const [txResults, usersRaw, rostersRaw] = await Promise.all([
     Promise.allSettled(
@@ -130,22 +132,27 @@ async function fetchTendencyData(leagueId: string, faabBudget: number): Promise<
   const waiverTx = allTx.filter((t) => t.type === "waiver" && t.status === "complete");
 
   const ownerIdToName: Record<string, string> = {};
+  const ownerIdToAvatar: Record<string, string | null> = {};
   (usersRaw as any[]).forEach((u: any) => {
     ownerIdToName[u.user_id] = u.display_name || u.username || `Team ${u.user_id.slice(-4)}`;
+    ownerIdToAvatar[u.user_id] = u.avatar ? `https://sleepercdn.com/avatars/thumbs/${u.avatar}` : null;
   });
 
   const rosterIdToName: Record<number, string> = {};
+  const rosterIdToAvatar: Record<number, string | null> = {};
   (rostersRaw as any[]).forEach((r: any) => {
     const name = ownerIdToName[r.owner_id] ?? `Team ${r.roster_id}`;
     rosterIdToName[r.roster_id] = name;
+    rosterIdToAvatar[r.roster_id] = ownerIdToAvatar[r.owner_id] ?? null;
   });
 
-  return { transactions: waiverTx, rosterIdToName };
+  return { transactions: waiverTx, rosterIdToName, rosterIdToAvatar };
 }
 
 function computeTendencies(
   transactions: WaiverTransaction[],
   rosterIdToName: Record<number, string>,
+  rosterIdToAvatar: Record<number, string | null>,
   faabBudget: number
 ): { summaryMetrics: { aggressionScore: number; avgWinningBidPct: number; activeBidders: number; claimsPerWeek: number; highestBidPct: number }; managerTendencies: ManagerTendency[] } {
   if (transactions.length === 0) {
@@ -186,6 +193,7 @@ function computeTendencies(
     .map(([ridStr, data]) => {
       const rid = Number(ridStr);
       const displayName = rosterIdToName[rid] ?? `Team ${rid}`;
+      const avatar = rosterIdToAvatar[rid] ?? null;
       const bidPctArr = data.bids.map((b) => (b / budget) * 100);
       const avgBid = bidPctArr.length > 0 ? Math.round(bidPctArr.reduce((s, v) => s + v, 0) / bidPctArr.length) : 0;
       const claimCount = data.bids.length;
@@ -207,7 +215,7 @@ function computeTendencies(
       else if (claimCount === 0) notes.push("Rarely uses waivers");
       if (maxBid >= 30) notes.push(`Peak bid ${Math.round(maxBid)}%`);
 
-      return { rosterId: rid, displayName, avgBid, claimCount, activity, style, notes: notes.join(" · ") || "—" };
+      return { rosterId: rid, displayName, avatar, avgBid, claimCount, activity, style, notes: notes.join(" · ") || "—" };
     })
     .sort((a, b) => b.claimCount - a.claimCount);
 
@@ -1885,18 +1893,18 @@ function LeagueWaiverDetail({
   const [posFilter, setPosFilter] = useState<string>("ALL");
   const [sortKey, setSortKey] = useState<DetailSortKey>("dynastyValue");
   const [sortAsc, setSortAsc] = useState(false);
-  const [tendency, setTendency] = useState<TendencyData>({ loading: true, transactions: [], rosterIdToName: {} });
+  const [tendency, setTendency] = useState<TendencyData>({ loading: true, transactions: [], rosterIdToName: {}, rosterIdToAvatar: {} });
 
   useEffect(() => {
-    setTendency({ loading: true, transactions: [], rosterIdToName: {} });
+    setTendency({ loading: true, transactions: [], rosterIdToName: {}, rosterIdToAvatar: {} });
     fetchTendencyData(row.leagueId, row.faabBudget)
-      .then(({ transactions, rosterIdToName }) => setTendency({ loading: false, transactions, rosterIdToName }))
-      .catch(() => setTendency({ loading: false, transactions: [], rosterIdToName: {} }));
+      .then(({ transactions, rosterIdToName, rosterIdToAvatar }) => setTendency({ loading: false, transactions, rosterIdToName, rosterIdToAvatar }))
+      .catch(() => setTendency({ loading: false, transactions: [], rosterIdToName: {}, rosterIdToAvatar: {} }));
   }, [row.leagueId, row.faabBudget]);
 
   const { summaryMetrics, managerTendencies } = useMemo(
-    () => computeTendencies(tendency.transactions, tendency.rosterIdToName, row.faabBudget),
-    [tendency.transactions, tendency.rosterIdToName, row.faabBudget]
+    () => computeTendencies(tendency.transactions, tendency.rosterIdToName, tendency.rosterIdToAvatar, row.faabBudget),
+    [tendency.transactions, tendency.rosterIdToName, tendency.rosterIdToAvatar, row.faabBudget]
   );
 
   const allLeagueTeamCount = allRows.reduce((s, r) => s + r.totalTeams, 0);
@@ -2282,7 +2290,21 @@ function LeagueWaiverDetail({
                     return (
                       <tr key={m.rosterId} className="hover:bg-muted/30 dark:hover:bg-white/[0.025] transition-colors" data-testid={`row-manager-${m.rosterId}`}>
                         <td className="px-4 py-3">
-                          <span className="font-semibold text-[13px] text-foreground">{m.displayName}</span>
+                          <div className="flex items-center gap-2">
+                            {m.avatar ? (
+                              <img
+                                src={m.avatar}
+                                alt=""
+                                className="w-7 h-7 rounded-full flex-shrink-0 object-cover bg-muted ring-1 ring-border/40"
+                                onError={e => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+                              />
+                            ) : (
+                              <div className="w-7 h-7 rounded-full flex-shrink-0 bg-[#0b3a7a]/20 dark:bg-blue-900/40 flex items-center justify-center ring-1 ring-border/40">
+                                <span className="text-[10px] font-bold text-[#0b3a7a] dark:text-blue-400 uppercase">{m.displayName[0] ?? "?"}</span>
+                              </div>
+                            )}
+                            <span className="font-semibold text-[13px] text-foreground">{m.displayName}</span>
+                          </div>
                         </td>
                         <td className="px-4 py-3 text-center">
                           <span className={cn("text-[11px] font-bold px-2 py-0.5 rounded-full border", styleColors[m.style])}>
