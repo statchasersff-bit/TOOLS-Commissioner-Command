@@ -103,6 +103,7 @@ const LEAGUE_TRANSACTIONS_FILTERED_QUERY = `
       type
       status
       leg
+      creator
       roster_ids
       adds
       drops
@@ -112,6 +113,8 @@ const LEAGUE_TRANSACTIONS_FILTERED_QUERY = `
       consenter_ids
       created
       updated
+      status_updated
+      player_map
       draft_picks {
         season
         round
@@ -136,15 +139,18 @@ export interface SleeperTransaction {
   type: string;
   status: string;
   leg: number;
+  creator: string | null;
   roster_ids: number[];
   adds: Record<string, number> | null;
   drops: Record<string, number> | null;
   waiver_bid: number | null;
-  settings: Record<string, unknown> | null;
+  settings: { expires_at?: number | null; [key: string]: unknown } | null;
   metadata: Record<string, unknown> | null;
   consenter_ids: number[];
   created: number;
   updated: number;
+  status_updated: number | null;
+  player_map: Record<string, { full_name?: string; position?: string; team?: string }> | null;
   draft_picks: SleeperTransactionPick[];
 }
 
@@ -316,26 +322,63 @@ export async function proposeTrade(
   );
 }
 
-/** @todo Discover accept_trade mutation shape from sleeper.com/graphql */
-export async function acceptTrade(
-  _leagueId: string,
-  _tradeId: string
-): Promise<never> {
-  throw new Error(
-    "accept_trade: mutation shape not yet discovered. " +
-      "Capture from sleeper.com/graphql with x-sleeper-graphql-op: accept_trade."
-  );
+function buildAcceptTradeMutation(leagueId: string): string {
+  return `
+    mutation accept_trade($transaction_id: String!) {
+      accept_trade(league_id: "${leagueId}", transaction_id: $transaction_id) {
+        transaction_id
+        status
+        consenter_ids
+        roster_ids
+      }
+    }
+  `;
 }
 
-/** @todo Discover reject_trade mutation shape from sleeper.com/graphql */
+function buildRejectTradeMutation(leagueId: string): string {
+  return `
+    mutation reject_trade($transaction_id: String!) {
+      reject_trade(league_id: "${leagueId}", transaction_id: $transaction_id) {
+        transaction_id
+        status
+      }
+    }
+  `;
+}
+
+export interface TradeActionResult {
+  transaction_id: string;
+  status: string;
+}
+
+export async function acceptTrade(
+  leagueId: string,
+  transactionId: string
+): Promise<TradeActionResult> {
+  const data = await sleeperGraphQLRequest<{ accept_trade: TradeActionResult }>({
+    operationName: "accept_trade",
+    query: buildAcceptTradeMutation(leagueId),
+    variables: { transaction_id: transactionId },
+  });
+  if (!data.accept_trade) {
+    throw new Error("Trade acceptance failed — no response from Sleeper.");
+  }
+  return data.accept_trade;
+}
+
 export async function rejectTrade(
-  _leagueId: string,
-  _tradeId: string
-): Promise<never> {
-  throw new Error(
-    "reject_trade: mutation shape not yet discovered. " +
-      "Capture from sleeper.com/graphql with x-sleeper-graphql-op: reject_trade."
-  );
+  leagueId: string,
+  transactionId: string
+): Promise<TradeActionResult> {
+  const data = await sleeperGraphQLRequest<{ reject_trade: TradeActionResult }>({
+    operationName: "reject_trade",
+    query: buildRejectTradeMutation(leagueId),
+    variables: { transaction_id: transactionId },
+  });
+  if (!data.reject_trade) {
+    throw new Error("Trade rejection failed — no response from Sleeper.");
+  }
+  return data.reject_trade;
 }
 
 /** @todo Discover send_message mutation shape from sleeper.com/graphql */

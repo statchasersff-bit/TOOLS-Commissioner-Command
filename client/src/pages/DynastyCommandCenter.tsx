@@ -34,6 +34,7 @@ import LiveDraft from "./tabs/LiveDraft";
 import { API_BASE } from "@/lib/apiBase";
 import Transactions from "./tabs/Transactions";
 import { LineupCommand } from "./tabs/LineupCommand";
+import TradeSync from "./tabs/TradeSync";
 
 const STORAGE_KEY = "sc-dynasty-state";
 
@@ -278,6 +279,10 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
 
     if (!sleeper.isConnected) {
       return renderLockedState();
+    }
+
+    if (activeMainTab === "trade-center" && activeSubTab === "trade-sync") {
+      return <TradeSync />;
     }
 
     if (!league || !userTeam) {

@@ -1,0 +1,71 @@
+Add reject trade functionality to Trade Sync.
+
+Context:
+We already fetch trades using Sleeper GraphQL `league_transactions_filtered`. Pending trades have status `proposed`.
+
+Goal:
+Allow users to reject a pending trade from the Trade Sync dashboard or trade detail drawer.
+
+Mutation:
+Use Sleeper GraphQL mutation:
+
+mutation RejectTrade($leagueId: String!, $transactionId: String!, $leg: Int!) {
+  reject_trade(
+    league_id: $leagueId,
+    transaction_id: $transactionId,
+    leg: $leg
+  ) {
+    adds
+    consenter_ids
+    created
+    creator
+    draft_picks
+    drops
+    league_id
+    leg
+    metadata
+    roster_ids
+    settings
+    status
+    status_updated
+    transaction_id
+    type
+    player_map
+    waiver_budget
+  }
+}
+
+Variables:
+{
+  "leagueId": trade.league_id,
+  "transactionId": trade.transaction_id,
+  "leg": trade.leg || 1
+}
+
+Requirements:
+1. Add a “Reject” button to each pending trade row/card.
+2. Add a “Reject Trade” button inside the trade detail drawer.
+3. Require a confirmation modal before submitting:
+   Title: “Reject Trade?”
+   Body: “This will reject the trade in Sleeper. This action cannot be undone.”
+   Buttons:
+   - Cancel
+   - Reject Trade
+4. On confirm, call the reject_trade GraphQL mutation using the user’s Sleeper auth token.
+5. On success:
+   - Update the trade status locally to `rejected`
+   - Move it out of Pending/Incoming
+   - Add it to Rejected / Expired
+   - Show toast: “Trade rejected successfully.”
+6. On failure:
+   - Do not update local state
+   - Show error toast with the failure reason
+7. Disable the button and show loading state while the mutation is running.
+8. Only show Reject for trades with status `proposed`.
+9. If the returned response includes `metadata.rejecter_id`, store it on the trade object.
+10. After successful rejection, optionally re-fetch trades for that league to ensure state matches Sleeper.
+
+Important:
+- Do not reject trades automatically.
+- Never batch reject without user confirmation.
+- Keep the UI consistent with Dynasty Command dark premium styling.
