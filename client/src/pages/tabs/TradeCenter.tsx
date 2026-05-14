@@ -1205,7 +1205,7 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-bold flex items-center gap-2" data-testid={`text-side-${side}-header`}>
               <Scale className="w-4 h-4 text-[#0b3a7a] dark:text-blue-400" />
-              Side {sideLabel} Sends...
+              {rosterTeam ? `${rosterTeam.owner || rosterTeam.name} Sends...` : `Side ${sideLabel} Sends...`}
             </h3>
             {rosterTeam && (
               <Badge variant="secondary" className="text-[10px]" data-testid={`badge-side-${side}-team`}>
