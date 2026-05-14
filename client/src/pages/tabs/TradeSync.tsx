@@ -276,15 +276,15 @@ function normalizeTrade(
     return (rawDraftPicks as any[]).map((dp) => {
       if (typeof dp === "string") {
         // Sleeper GraphQL CSV format:
-        //   5 fields: "roster_id,season,round,owner_id,previous_owner_id"
-        //   6 fields: "roster_id,season,round,owner_id,previous_owner_id,pick_no" (assigned/exact picks)
+        //   5 fields: "roster_id,season,round,previous_owner_id,owner_id"
+        //   6 fields: "roster_id,season,round,previous_owner_id,owner_id,pick_no" (assigned/exact picks)
         const parts = dp.split(",");
         return {
           roster_id: Number(parts[0]),
           season: parts[1],
           round: Number(parts[2]),
-          owner_id: Number(parts[3]),
-          previous_owner_id: Number(parts[4]),
+          previous_owner_id: Number(parts[3]),
+          owner_id: Number(parts[4]),
           pick_no: parts.length >= 6 && parts[5] ? Number(parts[5]) : undefined,
         } as SleeperTransactionPick;
       }
