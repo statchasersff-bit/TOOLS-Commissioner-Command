@@ -576,8 +576,27 @@ export function RosterComparison({ league }: AnalyzerProps) {
                     </span>
                   </div>
 
+                  <div className="grid grid-cols-2 gap-2 sm:gap-5">
+                    {[playersA, playersB].map((players, colIdx) => (
+                      <div key={colIdx} className="space-y-0.5">
+                        {Array.from({ length: maxRows }).map((_, rowIdx) => {
+                          const p = players[rowIdx];
+                          if (!p) return <div key={rowIdx} className="py-0.5 sm:py-1 px-1 sm:px-2 h-[22px] sm:h-[28px]" />;
+                          return (
+                            <div key={p.id} className="flex items-center justify-between py-0.5 sm:py-1 px-1 sm:px-2 rounded-md hover:bg-muted/30 transition-colors" data-testid={`roster-player-${p.id}`}>
+                              <div className="flex items-center gap-1 sm:gap-2 min-w-0">
+                                <span className="text-[10px] sm:text-xs truncate text-foreground">{p.name}</span>
+                              </div>
+                              <span className="text-[10px] sm:text-xs font-mono font-semibold text-muted-foreground ml-1 flex-shrink-0">{p.value > 0 ? p.value.toLocaleString() : "0"}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ))}
+                  </div>
+
                   {ps && (
-                    <div className="grid grid-cols-2 gap-2 sm:gap-5 mb-2 sm:mb-3 pb-2 border-b border-border/25">
+                    <div className="grid grid-cols-2 gap-2 sm:gap-5 mt-2 sm:mt-3 pt-2 border-t border-border/25">
                       {teamsForPos.map((team, ci) => {
                         const dynVal = ps.dynTotals[team.id] ?? 0;
                         const redVal = ps.redTotals[team.id] ?? 0;
@@ -605,25 +624,6 @@ export function RosterComparison({ league }: AnalyzerProps) {
                       })}
                     </div>
                   )}
-
-                  <div className="grid grid-cols-2 gap-2 sm:gap-5">
-                    {[playersA, playersB].map((players, colIdx) => (
-                      <div key={colIdx} className="space-y-0.5">
-                        {Array.from({ length: maxRows }).map((_, rowIdx) => {
-                          const p = players[rowIdx];
-                          if (!p) return <div key={rowIdx} className="py-0.5 sm:py-1 px-1 sm:px-2 h-[22px] sm:h-[28px]" />;
-                          return (
-                            <div key={p.id} className="flex items-center justify-between py-0.5 sm:py-1 px-1 sm:px-2 rounded-md hover:bg-muted/30 transition-colors" data-testid={`roster-player-${p.id}`}>
-                              <div className="flex items-center gap-1 sm:gap-2 min-w-0">
-                                <span className="text-[10px] sm:text-xs truncate text-foreground">{p.name}</span>
-                              </div>
-                              <span className="text-[10px] sm:text-xs font-mono font-semibold text-muted-foreground ml-1 flex-shrink-0">{p.value > 0 ? p.value.toLocaleString() : "0"}</span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    ))}
-                  </div>
                 </Card>
               );
             })}
