@@ -622,7 +622,7 @@ export function PortfolioSummary() {
           value={pendingTradeLoading ? "..." : pendingTradeCount !== null ? pendingTradeCount : "—"}
           icon={ArrowRightLeft}
           loading={pendingTradeLoading}
-          subtitle="Pending proposals"
+          subtitle="Pending response"
         />
         <KpiCard
           label="Win Rate"
