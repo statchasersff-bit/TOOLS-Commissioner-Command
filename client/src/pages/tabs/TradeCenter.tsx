@@ -1773,7 +1773,7 @@ export function TradeDatabase({ league }: { league: League }) {
           )}
         </div>
 
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <div className="flex gap-1">
             {(["all", "SF", "1QB"] as const).map((f) => (
               <button
@@ -1792,6 +1792,8 @@ export function TradeDatabase({ league }: { league: League }) {
             ))}
           </div>
 
+          <div className="w-px h-5 bg-border/60 flex-shrink-0" />
+
           <div className="flex gap-1">
             {(["all", "PPR", "Half", "Standard"] as const).map((s) => (
               <button
@@ -1809,6 +1811,8 @@ export function TradeDatabase({ league }: { league: League }) {
               </button>
             ))}
           </div>
+
+          <div className="w-px h-5 bg-border/60 flex-shrink-0" />
 
           <div className="flex gap-1">
             {(["all", "10", "12", "14"] as const).map((size) => (
