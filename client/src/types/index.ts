@@ -57,6 +57,11 @@ export interface League {
   format?: "SF" | "1QB";
   playoffTeams?: number;
   regularSeasonWeeks?: number;
+  totalRosters?: number;
+  benchSlots?: number;
+  taxiSlots?: number;
+  irSlots?: number;
+  tePremium?: number;
 }
 
 export type Tier = "Juggernaut" | "Win-Now" | "Future Powerhouse" | "Pick Hoarder" | "Taco" | "Contender" | "Pretender" | "Rebuilder" | "Weak / Directionless" | "Balanced";

@@ -401,9 +401,14 @@ export async function fetchSleeperLeagueFull(leagueId: string, userId: string) {
   const userTeamId = rostersRaw.find((r) => r.owner_id === userId);
   const userTeamIdStr = userTeamId ? `roster_${userTeamId.roster_id}` : null;
 
-  const starterPositions = (leagueRaw.roster_positions || []).filter(
-    (p: string) => p !== "BN" && p !== "IR"
+  const rawPositions: string[] = leagueRaw.roster_positions || [];
+  const starterPositions = rawPositions.filter(
+    (p: string) => p !== "BN" && p !== "IR" && p !== "TAXI"
   );
+  const benchSlots = rawPositions.filter((p: string) => p === "BN").length;
+  const taxiSlots = rawPositions.filter((p: string) => p === "TAXI").length;
+  const irSlots   = rawPositions.filter((p: string) => p === "IR").length;
+  const tePremium: number = leagueRaw.scoring_settings?.bonus_rec_te ?? 0;
 
   const playoffTeams: number = leagueRaw.settings?.playoff_teams
     ?? Math.max(2, Math.round((rostersRaw?.length ?? 12) / 3));
@@ -422,6 +427,11 @@ export async function fetchSleeperLeagueFull(leagueId: string, userId: string) {
       format,
       playoffTeams,
       regularSeasonWeeks,
+      totalRosters: leagueRaw.total_rosters,
+      benchSlots,
+      taxiSlots,
+      irSlots,
+      tePremium,
     },
     userTeamId: userTeamIdStr,
     format,

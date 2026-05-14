@@ -123,9 +123,52 @@ export function PowerRankings({ league }: AnalyzerProps) {
     { key: "youth", header: "Youth", sortable: true, sortAccessor: (row: any) => row.metrics.youth, render: (row: any) => row.metrics.youth },
   ];
 
+  // ── League info pills ──────────────────────────────────────────────────────
+  const numTeams   = league.totalRosters ?? league.teams.length;
+  const starters   = league.rosterPositions?.length ?? 0;
+  const bench      = league.benchSlots ?? 0;
+  const taxi       = league.taxiSlots  ?? 0;
+  const ir         = league.irSlots    ?? 0;
+  const tep        = league.tePremium  ?? 0;
+  const isSf       = league.format === "SF";
+  const rosterSize = starters + bench;
+
+  const scoringLabel = (() => {
+    const s = league.scoringFormat ?? "";
+    if (s.toLowerCase().includes("half")) return "Half PPR";
+    if (s.toLowerCase().includes("ppr"))  return "PPR";
+    return "Standard";
+  })();
+
+  const infoPills: Array<{ label: string; title?: string }> = [
+    { label: "Dynasty" },
+    { label: `${numTeams} Teams` },
+    ...(starters > 0 ? [{ label: `Start ${starters}`, title: "Starting roster slots" }] : []),
+    ...(rosterSize > 0 ? [{ label: `${rosterSize} Roster (${bench} Bench)`, title: "Total roster size including bench" }] : []),
+    ...(taxi > 0        ? [{ label: `${taxi} Taxi` }] : []),
+    ...(ir   > 0        ? [{ label: `${ir} IR` }]   : []),
+    ...(isSf            ? [{ label: "Superflex" }]   : []),
+    { label: scoringLabel },
+    ...(tep  > 0        ? [{ label: `${tep} TEP`, title: `+${tep} per TE reception` }] : []),
+  ];
+
   return (
     <div className="space-y-8">
       <SectionHeader title="Power Rankings" subtitle="Teams ranked and grouped by archetype" />
+
+      {/* League format pills */}
+      <div className="flex flex-wrap gap-1.5" data-testid="league-info-pills">
+        {infoPills.map((pill) => (
+          <span
+            key={pill.label}
+            title={pill.title}
+            className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold bg-[#0b3a7a]/10 dark:bg-blue-500/10 border border-[#0b3a7a]/20 dark:border-blue-400/20 text-[#0b3a7a] dark:text-blue-300 select-none"
+            data-testid={`pill-${pill.label.replace(/\s+/g, "-").toLowerCase()}`}
+          >
+            {pill.label}
+          </span>
+        ))}
+      </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
         {TIER_ORDER.filter(tier => tiers[tier].length > 0).map((tier) => (
