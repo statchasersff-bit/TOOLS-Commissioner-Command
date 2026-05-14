@@ -665,40 +665,6 @@ export default function WaiverCommand() {
 
       {activeView === "league" && (
         <div className="space-y-4">
-          {/* League picker */}
-          <div className="flex items-center gap-2">
-            <Select
-              value={detailRow?.leagueId ?? ""}
-              onValueChange={id => {
-                const found = rows.find(r => r.leagueId === id);
-                if (found) setDetailRow(found);
-              }}
-            >
-              <SelectTrigger
-                className="w-72 bg-[#0a1628] border-[#1a2d4a] focus:border-[#d4af37]/50 text-sm"
-                data-testid="select-league-view"
-              >
-                <SelectValue placeholder="Select a league…" />
-              </SelectTrigger>
-              <SelectContent className="bg-[#0c1929] border-[#1a2d4a]">
-                {rows.filter(r => !r.loading && !r.error).map(r => (
-                  <SelectItem key={r.leagueId} value={r.leagueId} className="text-sm">
-                    <span className="flex items-center gap-2">
-                      {r.leagueAvatar ? (
-                        <img src={r.leagueAvatar} alt="" className="w-4 h-4 rounded-full flex-shrink-0" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
-                      ) : (
-                        <div className="w-4 h-4 rounded-full bg-[#0b3a7a]/30 flex items-center justify-center flex-shrink-0">
-                          <span className="text-[8px] font-bold text-blue-400">{r.leagueName[0]}</span>
-                        </div>
-                      )}
-                      {r.leagueName}
-                    </span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
           {detailRow ? (
             <LeagueWaiverDetail
               row={detailRow}
