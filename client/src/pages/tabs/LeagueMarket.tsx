@@ -111,7 +111,7 @@ export function MarketValue({ league }: MarketProps) {
     <div className="space-y-6">
       <SectionHeader
         title="Market Value"
-        subtitle={`Trade values from ${activeSource?.label || "selected source"} · ${league.teams.length}-team · ${league.format ?? ""} · ${league.scoringFormat ?? ""}`}
+        subtitle={`${league.teams.length}-team · ${(league.scoringFormat ?? "").replace(league.format ?? "", "").trim() || (league.scoringFormat ?? "")} · ${league.format ?? ""}`}
       />
 
       <div className="flex flex-wrap items-center gap-3">
