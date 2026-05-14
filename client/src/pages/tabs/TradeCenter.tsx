@@ -628,7 +628,7 @@ function CrossLeagueTradeIntel({ league }: { league: League }) {
                                 ))}
                                 {trade.sentPicks.map((pick, j) => (
                                   <div key={`sent-pick-${j}`} className="flex items-center gap-1.5">
-                                    <Badge variant="outline" className="text-[8px] px-0.5 py-0 h-3.5 w-6 justify-center flex-shrink-0 text-amber-600 dark:text-amber-400 border-amber-300 dark:border-amber-700">PK</Badge>
+                                    <Badge variant="outline" className="text-[8px] px-0.5 py-0 h-3.5 w-6 justify-center flex-shrink-0 bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-400 border-purple-200 dark:border-purple-800">PK</Badge>
                                     <span className="text-[11px] truncate">{pick}</span>
                                   </div>
                                 ))}
@@ -647,7 +647,7 @@ function CrossLeagueTradeIntel({ league }: { league: League }) {
                                 ))}
                                 {trade.receivedPicks.map((pick, j) => (
                                   <div key={`recv-pick-${j}`} className="flex items-center gap-1.5">
-                                    <Badge variant="outline" className="text-[8px] px-0.5 py-0 h-3.5 w-6 justify-center flex-shrink-0 text-amber-600 dark:text-amber-400 border-amber-300 dark:border-amber-700">PK</Badge>
+                                    <Badge variant="outline" className="text-[8px] px-0.5 py-0 h-3.5 w-6 justify-center flex-shrink-0 bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-400 border-purple-200 dark:border-purple-800">PK</Badge>
                                     <span className="text-[11px] truncate">{pick}</span>
                                   </div>
                                 ))}

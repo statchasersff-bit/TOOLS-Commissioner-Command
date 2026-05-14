@@ -1173,9 +1173,9 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
                               })}
 
                               {/* Picks column */}
-                              <div className="rounded-lg border border-violet-500/25 bg-violet-500/5 p-2.5" data-testid={`pos-col-${team.id}-picks`}>
+                              <div className="rounded-lg border border-purple-500/25 bg-purple-500/5 p-2.5" data-testid={`pos-col-${team.id}-picks`}>
                                 <div className="flex items-center justify-between mb-2">
-                                  <span className="text-xs font-black text-violet-500 dark:text-violet-400">Picks</span>
+                                  <span className="text-xs font-black text-purple-500 dark:text-purple-400">Picks</span>
                                   <div className="flex items-center gap-1">
                                     <span className="text-[9px] text-muted-foreground/60 font-medium">RANK</span>
                                     {rankBadge(picksRank)}

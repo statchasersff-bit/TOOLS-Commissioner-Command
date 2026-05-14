@@ -487,8 +487,8 @@ function PlayerCardRow({ player, showValue }: { player: AssetPlayer; showValue?:
 function PickCardRow({ pick, showValue }: { pick: AssetPick; showValue?: boolean }) {
   return (
     <div className="flex items-center gap-2.5 py-0.5">
-      <div className="w-8 h-8 rounded-full bg-amber-500/15 dark:bg-amber-400/15 flex items-center justify-center flex-shrink-0">
-        <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400">{pick.round}</span>
+      <div className="w-8 h-8 rounded-full bg-purple-500/15 dark:bg-purple-400/15 flex items-center justify-center flex-shrink-0">
+        <span className="text-[10px] font-bold text-purple-700 dark:text-purple-400">{pick.round}</span>
       </div>
       <span className="text-sm font-medium text-foreground truncate">{pick.label}</span>
       {showValue && <span className="ml-auto text-sm font-semibold tabular-nums text-muted-foreground flex-shrink-0">{pick.value.toFixed(1)}</span>}
