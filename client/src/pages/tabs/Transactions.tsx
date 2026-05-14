@@ -123,11 +123,11 @@ export default function Transactions({ leagueId }: { leagueId: string }) {
     return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
   };
 
-  const getTypeIcon = (type: string) => {
+  const getTypeIcon = (type: string, dropOnly = false) => {
     switch (type) {
       case "trade": return <ArrowRightLeft className="w-3 h-3" />;
       case "waiver": return <UserPlus className="w-3 h-3" />;
-      case "free_agent": return <UserPlus className="w-3 h-3" />;
+      case "free_agent": return dropOnly ? <UserMinus className="w-3 h-3" /> : <UserPlus className="w-3 h-3" />;
       default: return <UserMinus className="w-3 h-3" />;
     }
   };
@@ -142,11 +142,13 @@ export default function Transactions({ leagueId }: { leagueId: string }) {
     }
   };
 
-  const getTypeBadgeStyle = (type: string) => {
+  const getTypeBadgeStyle = (type: string, dropOnly = false) => {
     switch (type) {
       case "trade": return "bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/30";
       case "waiver": return "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30";
-      case "free_agent": return "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30";
+      case "free_agent": return dropOnly
+        ? "bg-red-500/15 text-red-700 dark:text-red-400 border-red-500/30"
+        : "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30";
       default: return "bg-muted text-muted-foreground";
     }
   };
@@ -216,6 +218,7 @@ export default function Transactions({ leagueId }: { leagueId: string }) {
           <div className="space-y-2">
             {visible.map((txn, idx) => {
               const involved = txn.involvedTeams[0];
+              const dropOnly = txn.type === "free_agent" && txn.adds.length === 0 && txn.drops.length > 0;
               return (
                 <Card
                   key={`${txn.type}-${txn.timestamp}-${idx}`}
@@ -225,8 +228,8 @@ export default function Transactions({ leagueId }: { leagueId: string }) {
                   {/* Card header */}
                   <div className="flex items-center justify-between gap-2 px-4 py-2.5 border-b border-border/40 bg-muted/20">
                     <div className="flex items-center gap-2 min-w-0">
-                      <Badge variant="outline" className={cn("text-[10px] flex items-center gap-1 shrink-0 py-0.5", getTypeBadgeStyle(txn.type))}>
-                        {getTypeIcon(txn.type)}
+                      <Badge variant="outline" className={cn("text-[10px] flex items-center gap-1 shrink-0 py-0.5", getTypeBadgeStyle(txn.type, dropOnly))}>
+                        {getTypeIcon(txn.type, dropOnly)}
                         {getTypeLabel(txn.type)}
                       </Badge>
                       <span className="text-[10px] text-muted-foreground shrink-0">Wk {txn.week}</span>
