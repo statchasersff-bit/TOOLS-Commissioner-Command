@@ -61,6 +61,7 @@ interface WaiverRow {
   isEmpty: boolean;
   rosterId: number | null;
   waiverType: number;
+  isBestBall: boolean;
   userRosterPlayers: PlayerSummary[];
   topAvailable: PlayerSummary[];
   rosteredPlayerIds: string[];
@@ -308,6 +309,7 @@ export default function WaiverCommand() {
       isEmpty:      false,
       rosterId:     null,
       waiverType:   0,
+      isBestBall:   lg.isBestBall ?? false,
       userRosterPlayers: [],
       topAvailable: [],
       rosteredPlayerIds: [],
@@ -795,6 +797,11 @@ function WaiverTableRow({ row, onClaim, onView }: { row: WaiverRow; onClaim: () 
               {row.leagueName}
             </div>
             <div className="flex items-center gap-0.5 mt-0.5">
+              {row.isBestBall && (
+                <span className="text-[9px] font-bold px-1 py-[1px] rounded bg-[#d4af37]/15 text-[#d4af37] border border-[#d4af37]/30 leading-none">
+                  Best Ball
+                </span>
+              )}
               {row.scoringFormat && (
                 <span className="text-[9px] font-medium px-1 py-[1px] rounded bg-white/[0.07] dark:bg-white/[0.06] text-slate-400 leading-none">
                   {row.scoringFormat}
