@@ -507,7 +507,7 @@ export function RosterComparison({ league }: AnalyzerProps) {
             {categories.map((cat) => {
               const valA = teamA.metrics[cat.key as keyof typeof teamA.metrics] as number;
               const valB = teamB.metrics[cat.key as keyof typeof teamB.metrics] as number;
-              const maxVal = Math.max(valA, valB, 1);
+              const maxVal = 100;
               return (
                 <div key={cat.key} className="space-y-1.5">
                   <div className="flex items-center justify-between text-xs">
