@@ -1904,7 +1904,7 @@ export function MyTeam({ league, userTeam, onNavigate }: DashboardOverviewProps)
       {/* ── 5. POSITION GROUPS (single collapsible, columns per position) ──── */}
       <div data-testid="myteam-position-groups">
         <div className="mb-4">
-          <h3 className="text-base font-bold text-foreground">Position Groups</h3>
+          <h3 className="text-base font-bold text-foreground">My Roster</h3>
           <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
         </div>
         <Card className="overflow-hidden">
@@ -1934,13 +1934,25 @@ export function MyTeam({ league, userTeam, onNavigate }: DashboardOverviewProps)
                   const bench    = players.filter(p => !p.starter);
                   const rStyle   = rankBg(redraftRank, total);
                   const dStyle   = rankBg(dynastyRank, total);
+                  const posTextColor: Record<string, string> = {
+                    QB: "text-rose-500 dark:text-rose-400",
+                    RB: "text-emerald-500 dark:text-emerald-400",
+                    WR: "text-sky-500 dark:text-sky-400",
+                    TE: "text-orange-500 dark:text-orange-400",
+                  };
+                  const posBgColor: Record<string, string> = {
+                    QB: "bg-rose-500/10 border-rose-500/20 text-rose-600 dark:text-rose-400",
+                    RB: "bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400",
+                    WR: "bg-sky-500/10 border-sky-500/20 text-sky-600 dark:text-sky-400",
+                    TE: "bg-orange-500/10 border-orange-500/20 text-orange-600 dark:text-orange-400",
+                  };
                   return (
                     <div key={pos} className="flex flex-col" data-testid={`group-${pos.toLowerCase()}`}>
                       {/* Position header */}
                       <div className="px-3 pt-3 pb-2 border-b border-border/20">
                         <div className="flex items-center gap-1.5">
-                          <span className="text-xs font-black uppercase tracking-widest text-foreground">{pos}</span>
-                          <Badge variant="secondary" className="text-[10px] px-1 h-4">{players.length}</Badge>
+                          <span className={cn("text-xs font-black uppercase tracking-widest", posTextColor[pos] ?? "text-foreground")}>{pos}</span>
+                          <Badge variant="outline" className={cn("text-[10px] px-1 h-4 border", posBgColor[pos])}>{players.length}</Badge>
                         </div>
                       </div>
 
