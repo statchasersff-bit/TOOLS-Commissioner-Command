@@ -462,7 +462,7 @@ export function LineupCommand() {
 
   // ── 2. Per-league roster fetch + analysis ────────────────────────────────
   useEffect(() => {
-    if (!nflWeek || !user?.userId || activeLeagues.length === 0) return;
+    if (nflWeek == null || !user?.userId || activeLeagues.length === 0) return;
 
     // Initialise loading skeletons
     setAnalyses(prev => {
@@ -539,12 +539,10 @@ export function LineupCommand() {
   const refresh = useCallback(() => {
     setBaseLoading(true);
     setAnalyses({});
-    // Re-trigger by bumping a key (handled via useEffect deps on baseLoading change won't work;
-    // instead reset nflWeek to re-trigger)
     setNflWeek(null);
     setRawProj({});
     setPlayerDb({});
-    setBaseLoading(false); // will be set back by the effect
+    setBaseLoading(false);
   }, []);
 
   // ── Aggregate KPIs ───────────────────────────────────────────────────────
