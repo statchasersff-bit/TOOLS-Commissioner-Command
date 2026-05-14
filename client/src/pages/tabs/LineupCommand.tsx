@@ -279,7 +279,7 @@ function LeagueRow({ analysis }: { analysis: LeagueAnalysis }) {
         </div>
 
         {/* Improvement */}
-        <div className="text-right w-14 md:w-16 flex-shrink-0">
+        <div className="text-right w-24 md:w-28 flex-shrink-0">
           {loading ? (
             <div className="h-3.5 bg-white/8 rounded animate-pulse" />
           ) : error ? (
@@ -716,7 +716,7 @@ export function LineupCommand() {
               <>
                 <SortBtn col="league"      label="League"      className="flex-1 min-w-0 justify-start" />
                 <SortBtn col="current"     label="Current"     className="w-14 md:w-16 justify-end" />
-                <SortBtn col="improvement" label="Improvement" className="w-14 md:w-16 justify-end" />
+                <SortBtn col="improvement" label="Improvement" className="w-24 md:w-28 justify-end" />
                 <SortBtn col="hard"        label="Out/IR/Bye"  className="w-[72px] md:w-24 justify-center" />
                 <SortBtn col="soft"        label="Ques/Doub"   className="w-[64px] md:w-20 justify-center hidden sm:flex" />
                 <SortBtn col="status"      label="Status"      className="w-[96px] md:w-[108px] justify-end" />
