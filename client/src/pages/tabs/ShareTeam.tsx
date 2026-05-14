@@ -11,10 +11,11 @@ import { getPositionColor } from "@/data/mockData";
 import type { League, Team, Player, Pick } from "@/types";
 import { cn } from "@/lib/utils";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
+import { FieldView } from "./FieldView";
 import {
   Copy, Image, Share2, EyeOff, Loader2,
   Shield, Star, TrendingDown, Zap, Target, ChevronRight,
-  Users, TrendingUp, Trophy,
+  Users, TrendingUp, Trophy, LayoutGrid,
 } from "lucide-react";
 import logoDark from "@assets/statchasers_logo_transparent_dark_1772764844282.png";
 
@@ -77,6 +78,8 @@ export function ShareTeam({ league, userTeam }: Props) {
   const { toast } = useToast();
   const { getPlayerValue, getRedraftValue } = useValueModel();
   const cardRef = useRef<HTMLDivElement>(null);
+
+  const [innerTab, setInnerTab] = useState<"share" | "field-view">("share");
 
   const [hideManagerName, setHideManagerName] = useState(false);
   const [hideLeagueName, setHideLeagueName] = useState(false);
@@ -246,13 +249,42 @@ export function ShareTeam({ league, userTeam }: Props) {
 
   return (
     <div className="space-y-4">
-      {/* Page header */}
-      <div>
-        <h2 className="text-lg font-bold text-foreground">Share My Team</h2>
-        <p className="text-sm text-muted-foreground mt-0.5">
-          Create a clean, shareable snapshot of your dynasty roster.
-        </p>
+      {/* Inner tab toggle */}
+      <div className="flex gap-1 p-1 rounded-full bg-muted/40 border border-border/40 w-fit">
+        <button
+          onClick={() => setInnerTab("share")}
+          data-testid="tab-inner-share"
+          className={cn(
+            "flex items-center gap-1.5 px-4 py-1.5 rounded-full text-sm font-semibold transition-all",
+            innerTab === "share"
+              ? "bg-background text-foreground shadow-sm"
+              : "text-muted-foreground hover:text-foreground"
+          )}
+        >
+          <Share2 className="w-3.5 h-3.5" />
+          Share My Team
+        </button>
+        <button
+          onClick={() => setInnerTab("field-view")}
+          data-testid="tab-inner-field-view"
+          className={cn(
+            "flex items-center gap-1.5 px-4 py-1.5 rounded-full text-sm font-semibold transition-all",
+            innerTab === "field-view"
+              ? "bg-background text-foreground shadow-sm"
+              : "text-muted-foreground hover:text-foreground"
+          )}
+        >
+          <LayoutGrid className="w-3.5 h-3.5" />
+          Field View
+        </button>
       </div>
+
+      {innerTab === "field-view" && (
+        <FieldView league={league} userTeam={userTeam} />
+      )}
+
+      {innerTab === "share" && (
+      <div className="space-y-4">
 
       {/* Controls bar */}
       <div className="flex flex-wrap items-center gap-2">
@@ -554,6 +586,8 @@ export function ShareTeam({ league, userTeam }: Props) {
           )}
         </div>
       </div>
+      </div>
+      )}
     </div>
   );
 }

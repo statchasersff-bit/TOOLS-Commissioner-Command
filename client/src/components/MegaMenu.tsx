@@ -41,8 +41,7 @@ const MEGA_DATA: Record<string, MegaSection[]> = {
       title: "My Team",
       items: [
         { subId: "my-team",    label: "My Team",       description: "Team snapshot, KPIs & roster strength",          icon: Users          },
-        { subId: "field-view", label: "Field View",    description: "Visual depth chart & positional breakdown",       icon: LayoutGrid     },
-        { subId: "share-team", label: "Share My Team", description: "Export & share your roster report",               icon: Share2         },
+        { subId: "share-team", label: "Share My Team", description: "Export & share your roster report & field view",  icon: Share2         },
       ],
     },
   ],

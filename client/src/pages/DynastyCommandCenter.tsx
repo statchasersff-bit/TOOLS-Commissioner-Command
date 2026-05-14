@@ -305,7 +305,6 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
     const key = `${activeMainTab}:${activeSubTab}`;
     switch (key) {
       case "dashboard:my-team": return <MyTeam league={league} userTeam={userTeam} onNavigate={navigateToSubTab} />;
-      case "dashboard:field-view": return <FieldView league={league} userTeam={userTeam} />;
       case "dashboard:share-team": return <ShareTeam league={league} userTeam={userTeam} />;
       case "league-analyzer:power-rankings": return <DashboardSnapshot league={league} userTeam={userTeam} />;
       case "league-analyzer:roster-comparison": return <RosterComparison league={league} />;
