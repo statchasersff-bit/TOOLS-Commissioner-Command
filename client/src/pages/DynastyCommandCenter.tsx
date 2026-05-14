@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useRoute, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -14,7 +14,7 @@ import { NAV_CONFIG } from "@/data/mockData";
 import type { League, Team } from "@/types";
 import { fetchSleeperLeagueFull } from "@/lib/sleeperApi";
 import { DataDiagnostics } from "@/components/DataDiagnostics";
-import { LayoutDashboard, Loader2, Lock, Check, User, RefreshCw, AlertCircle, Wifi, WifiOff } from "lucide-react";
+import { LayoutDashboard, Loader2, Lock, Check, User, RefreshCw, AlertCircle, Wifi, WifiOff, ChevronDown } from "lucide-react";
 import { SiDiscord } from "react-icons/si";
 import logoDark from "@assets/statchasers_logo_transparent_dark_1772764844282.png";
 import logoLight from "@assets/statchasers_logo_transparent_light_1772764844283.png";
@@ -66,6 +66,8 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [fetchedLeague, setFetchedLeague] = useState<{ league: League; userTeamId: string | null } | null>(null);
   const [isLeagueLoading, setIsLeagueLoading] = useState(false);
+  const [userDropdownOpen, setUserDropdownOpen] = useState(false);
+  const userDropdownRef = useRef<HTMLDivElement>(null);
 
   const { isRecalculating, isLoading, getPlayerValue, getPickValue, calculateAllTeamMetrics, optimizeLineup } = useValueModel();
   const sleeper = useSleeper();
@@ -172,6 +174,17 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
       }));
     } catch {}
   }, [activeMainTab, activeSubTab, selectedLeagueId, setLocation]);
+
+  useEffect(() => {
+    if (!userDropdownOpen) return;
+    function handleOutside(e: MouseEvent) {
+      if (userDropdownRef.current && !userDropdownRef.current.contains(e.target as Node)) {
+        setUserDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleOutside);
+    return () => document.removeEventListener("mousedown", handleOutside);
+  }, [userDropdownOpen]);
 
   const handleLeagueSelect = useCallback((id: string) => {
     setSelectedLeagueId(id);
@@ -314,6 +327,8 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
       <header className="border-b border-border/60 bg-background/95 backdrop-blur-sm sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-1.5 md:px-3 py-2.5 md:py-3">
           <div className="flex items-center justify-between gap-3">
+
+            {/* ── Logo ── */}
             <div className="flex items-center gap-2.5 flex-shrink-0">
               <div className="w-8 h-8 md:w-9 md:h-9 rounded-lg flex items-center justify-center flex-shrink-0">
                 <img src={logoDark} alt="StatChasers" className="w-8 h-8 md:w-9 md:h-9 hidden dark:block" />
@@ -327,31 +342,10 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
               </div>
             </div>
 
+            {/* ── Right side ── */}
             <div className="flex items-center gap-2 md:gap-3">
-              {sleeper.isConnected && sleeper.user && (
-                <div className="hidden md:flex items-center gap-1.5 border-r border-border/40 pr-3">
-                  <div className="w-6 h-6 rounded-full overflow-hidden flex-shrink-0 ring-1 ring-border/40 bg-[#0b3a7a]/10 dark:bg-blue-400/10 flex items-center justify-center">
-                    {sleeper.user.avatar ? (
-                      <img
-                        src={`https://sleepercdn.com/avatars/thumbs/${sleeper.user.avatar}`}
-                        alt={sleeper.user.displayName}
-                        className="w-full h-full object-cover"
-                        onError={(e) => {
-                          const el = e.target as HTMLImageElement;
-                          el.style.display = "none";
-                        }}
-                        data-testid="img-user-avatar"
-                      />
-                    ) : (
-                      <User className="w-3 h-3 text-[#0b3a7a] dark:text-blue-400" />
-                    )}
-                  </div>
-                  <span className="text-xs font-medium text-foreground" data-testid="text-sleeper-user">
-                    {sleeper.user.displayName}
-                  </span>
-                </div>
-              )}
 
+              {/* League selector (desktop) */}
               {sleeper.isConnected && (
                 <div className="hidden md:flex items-center gap-1.5">
                   <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">League:</span>
@@ -368,6 +362,7 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
                 </div>
               )}
 
+              {/* Connect button (when not connected) */}
               {!sleeper.isConnected && (
                 <button
                   onClick={() => { handleMainTabChange("portfolio"); handleSubTabChange("connect"); }}
@@ -380,26 +375,80 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
                 </button>
               )}
 
-              <div className="flex items-center gap-1.5 border-l border-border/40 pl-3">
-                <a
-                  href="https://discord.gg/34XkMXF6t3"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  data-testid="button-discord"
-                  className="flex items-center gap-1.5 px-2 md:px-3 py-1.5 text-sm font-semibold rounded-md transition-all duration-200 text-[#5865F2] bg-[#5865F2]/10 hover:bg-[#5865F2]/20 border border-[#5865F2]/25 hover:border-[#5865F2]/40"
-                >
-                  <SiDiscord className="w-3.5 h-3.5" />
-                  <span className="hidden md:inline">Discord</span>
-                </a>
-              </div>
+              {/* Mobile menu button */}
+              <MobileMenuButton tabs={NAV_CONFIG} activeTab={activeMainTab} setActiveTab={handleMainTabChange} />
 
-              <div className="flex items-center gap-2">
-                <MobileMenuButton tabs={NAV_CONFIG} activeTab={activeMainTab} setActiveTab={handleMainTabChange} />
-                <ThemeToggle />
-              </div>
+              {/* User dropdown (when connected) — contains Discord + ThemeToggle */}
+              {sleeper.isConnected && sleeper.user ? (
+                <div className="relative" ref={userDropdownRef}>
+                  <button
+                    onClick={() => setUserDropdownOpen(v => !v)}
+                    data-testid="button-user-menu"
+                    className="flex items-center gap-1.5 px-2 py-1.5 rounded-md hover:bg-muted/60 transition-colors border border-transparent hover:border-border/40"
+                  >
+                    <div className="w-6 h-6 rounded-full overflow-hidden flex-shrink-0 ring-1 ring-border/40 bg-[#0b3a7a]/10 dark:bg-blue-400/10 flex items-center justify-center">
+                      {sleeper.user.avatar ? (
+                        <img
+                          src={`https://sleepercdn.com/avatars/thumbs/${sleeper.user.avatar}`}
+                          alt={sleeper.user.displayName}
+                          className="w-full h-full object-cover"
+                          onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                          data-testid="img-user-avatar"
+                        />
+                      ) : (
+                        <User className="w-3 h-3 text-[#0b3a7a] dark:text-blue-400" />
+                      )}
+                    </div>
+                    <span className="text-xs font-medium text-foreground hidden md:block" data-testid="text-sleeper-user">
+                      {sleeper.user.displayName}
+                    </span>
+                    <ChevronDown className={`w-3 h-3 text-muted-foreground transition-transform duration-150 ${userDropdownOpen ? "rotate-180" : ""}`} />
+                  </button>
+
+                  {userDropdownOpen && (
+                    <div className="absolute right-0 top-full mt-1.5 w-48 rounded-xl border border-border/60 bg-background shadow-lg shadow-black/10 dark:shadow-black/30 z-50 overflow-hidden">
+                      <div className="px-3 py-2 border-b border-border/40">
+                        <p className="text-[11px] text-muted-foreground">Signed in as</p>
+                        <p className="text-xs font-semibold text-foreground truncate">@{sleeper.user.username}</p>
+                      </div>
+                      <a
+                        href="https://discord.gg/34XkMXF6t3"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        data-testid="button-discord"
+                        onClick={() => setUserDropdownOpen(false)}
+                        className="flex items-center gap-2.5 px-3 py-2.5 text-xs font-medium text-[#5865F2] hover:bg-[#5865F2]/8 transition-colors"
+                      >
+                        <SiDiscord className="w-3.5 h-3.5 flex-shrink-0" />
+                        Join Discord
+                      </a>
+                      <div className="flex items-center justify-between px-3 py-2.5 border-t border-border/30">
+                        <span className="text-xs text-muted-foreground">Theme</span>
+                        <ThemeToggle />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                /* Discord + ThemeToggle inline when not connected */
+                <div className="flex items-center gap-1.5 border-l border-border/40 pl-2">
+                  <a
+                    href="https://discord.gg/34XkMXF6t3"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    data-testid="button-discord"
+                    className="flex items-center gap-1.5 px-2 py-1.5 text-sm font-semibold rounded-md transition-all duration-200 text-[#5865F2] bg-[#5865F2]/10 hover:bg-[#5865F2]/20 border border-[#5865F2]/25 hover:border-[#5865F2]/40"
+                  >
+                    <SiDiscord className="w-3.5 h-3.5" />
+                    <span className="hidden md:inline">Discord</span>
+                  </a>
+                  <ThemeToggle />
+                </div>
+              )}
             </div>
           </div>
 
+          {/* League selector (mobile) */}
           {sleeper.isConnected && (
             <div className="flex items-center gap-2 mt-1.5 md:hidden">
               <LeagueSelector
@@ -410,50 +459,14 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
             </div>
           )}
 
-          {/* Sync status strip */}
-          <div className="flex items-center justify-between gap-2 mt-1.5 flex-wrap">
-            <div className="flex items-center gap-2 flex-wrap">
-              {sleeper.isConnected && sleeper.user ? (
-                <>
-                  <div className="flex items-center gap-1.5" data-testid="status-sleeper-connected">
-                    <Wifi className="w-3 h-3 text-emerald-500 dark:text-emerald-400" />
-                    <span className="text-[11px] font-medium text-emerald-700 dark:text-emerald-400">
-                      Connected as @{sleeper.user.username}
-                    </span>
-                  </div>
-                  <span className="text-border/60 text-[10px]">·</span>
-                  <span className="text-[11px] text-muted-foreground" data-testid="text-league-count">
-                    {sleeper.leagues.length} league{sleeper.leagues.length !== 1 ? "s" : ""}
-                  </span>
-                  {sleeper.lastSyncTime && (
-                    <>
-                      <span className="text-border/60 text-[10px]">·</span>
-                      <span className="text-[11px] text-muted-foreground" data-testid="text-last-synced">
-                        Synced {(() => {
-                          const diff = Date.now() - new Date(sleeper.lastSyncTime).getTime();
-                          const mins = Math.floor(diff / 60000);
-                          if (mins < 1) return "just now";
-                          if (mins < 60) return `${mins}m ago`;
-                          return `${Math.floor(mins / 60)}h ago`;
-                        })()}
-                      </span>
-                    </>
-                  )}
-                  {sleeper.error && (
-                    <>
-                      <span className="text-border/60 text-[10px]">·</span>
-                      <span className="flex items-center gap-1 text-[11px] text-destructive" data-testid="text-sync-error">
-                        <AlertCircle className="w-3 h-3" />
-                        {sleeper.error}
-                      </span>
-                    </>
-                  )}
-                </>
-              ) : (
-                <div className="flex items-center gap-1.5" data-testid="status-sleeper-disconnected">
-                  <WifiOff className="w-3 h-3 text-muted-foreground/60" />
-                  <span className="text-[11px] text-muted-foreground/70">Not connected</span>
-                </div>
+          {/* Bottom strip: sync + attribution */}
+          <div className="flex items-center justify-between gap-2 mt-1 flex-wrap">
+            <div className="flex items-center gap-1.5">
+              {sleeper.error && (
+                <span className="flex items-center gap-1 text-[11px] text-destructive" data-testid="text-sync-error">
+                  <AlertCircle className="w-3 h-3" />
+                  {sleeper.error}
+                </span>
               )}
             </div>
             <div className="flex items-center gap-2">
