@@ -529,7 +529,7 @@ export function PortfolioSummary() {
       let count = 0;
       for (const r of results) {
         if (r.status === "fulfilled") {
-          count += r.value.filter((t: any) => t.status === "proposed").length;
+          count += r.value.filter((t: any) => t.status === "proposed" && t.creator !== user?.userId).length;
         }
       }
       setPendingTradeCount(count);
