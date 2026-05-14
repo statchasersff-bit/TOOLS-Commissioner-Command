@@ -354,7 +354,12 @@ function TradeTransaction({ txn, valuesBySleeperId, getPickValue }: { txn: Trans
             <span className="ml-auto text-[10px] text-muted-foreground shrink-0">receives</span>
           </div>
           {/* Assets received */}
-          <div className="px-3 py-2 space-y-0.5">
+          <div className={cn(
+            "px-3 py-2",
+            side.received.length + side.picksReceived.length > 3
+              ? "grid grid-cols-2 gap-x-2 gap-y-0.5"
+              : "space-y-0.5"
+          )}>
             {side.received.map((p, i) => (
               <PlayerRow
                 key={i}
