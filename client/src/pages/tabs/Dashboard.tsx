@@ -1853,54 +1853,6 @@ export function MyTeam({ league, userTeam, onNavigate }: DashboardOverviewProps)
         </div>
       </div>
 
-      {/* ── 4. POSITIONAL STRENGTH OVERVIEW ────────────────────────────────── */}
-      <div data-testid="myteam-positional-overview">
-        <div className="mb-4">
-          <h3 className="text-base font-bold text-foreground">Positional Strength</h3>
-          <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
-        </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {positionData.map(({ pos, redraftRank, dynastyRank }) => {
-            const rStyle = rankBg(redraftRank, total);
-            const dStyle = rankBg(dynastyRank, total);
-            return (
-              <Card key={pos} className="p-4 hover-elevate" data-testid={`pos-strength-${pos.toLowerCase()}`}>
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-xs font-black uppercase tracking-widest text-foreground">{pos}</span>
-                  <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded border", dStyle.badge)}>
-                    {percentileLabel(dynastyRank, total)}
-                  </span>
-                </div>
-                <div className="space-y-3">
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-[10px] font-semibold text-muted-foreground uppercase">Redraft</span>
-                      <span className={cn("text-xs font-bold", rStyle.badge.split(" ").filter(c => c.startsWith("text-")).join(" "))}>
-                        #{redraftRank}<span className="text-muted-foreground font-normal">/{total}</span>
-                      </span>
-                    </div>
-                    <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
-                      <div className={cn("h-full rounded-full", rStyle.bar)} style={{ width: `${Math.round(((total - redraftRank) / (total - 1)) * 100)}%` }} />
-                    </div>
-                  </div>
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-[10px] font-semibold text-muted-foreground uppercase">Dynasty</span>
-                      <span className={cn("text-xs font-bold", dStyle.badge.split(" ").filter(c => c.startsWith("text-")).join(" "))}>
-                        #{dynastyRank}<span className="text-muted-foreground font-normal">/{total}</span>
-                      </span>
-                    </div>
-                    <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
-                      <div className={cn("h-full rounded-full", dStyle.bar)} style={{ width: `${Math.round(((total - dynastyRank) / (total - 1)) * 100)}%` }} />
-                    </div>
-                  </div>
-                </div>
-              </Card>
-            );
-          })}
-        </div>
-      </div>
-
       {/* ── 5. POSITION GROUPS (single collapsible, columns per position) ──── */}
       <div data-testid="myteam-position-groups">
         <div className="mb-4">
