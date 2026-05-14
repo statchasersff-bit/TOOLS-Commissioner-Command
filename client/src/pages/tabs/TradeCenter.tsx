@@ -866,6 +866,11 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
     setSideB([]);
   }, []);
 
+  const handleSideATeamChange = useCallback((teamId: string) => {
+    setSideARosterId(teamId);
+    setSideA([]);
+  }, []);
+
   const addPlayer = useCallback((side: "a" | "b", player: Player) => {
     const setter = side === "a" ? setSideA : setSideB;
     const val = getPlayerValue(player);
@@ -1176,6 +1181,23 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
             <h3 className="text-sm font-bold">
               {rosterTeam ? `${rosterTeam.owner || rosterTeam.name} Sends...` : `Side ${sideLabel} Sends...`}
             </h3>
+            {side === "a" && (
+              <Select value={sideARosterId} onValueChange={handleSideATeamChange}>
+                <SelectTrigger className="ml-auto h-7 text-xs px-2 w-36" data-testid="select-side-a-team">
+                  <SelectValue placeholder="Select team..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {league.teams
+                    .filter((t) => t.id !== tradePartnerId)
+                    .sort((a, b) => (a.owner || a.name).localeCompare(b.owner || b.name))
+                    .map((t) => (
+                      <SelectItem key={t.id} value={t.id}>
+                        {t.owner || t.name}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            )}
             {side === "b" && (
               <Select value={tradePartnerId || "none"} onValueChange={(v) => handleTradePartnerChange(v === "none" ? "" : v)}>
                 <SelectTrigger className="ml-auto h-7 text-xs px-2 w-36" data-testid="select-trade-partner">
@@ -1184,7 +1206,7 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
                 <SelectContent>
                   <SelectItem value="none">Select team...</SelectItem>
                   {league.teams
-                    .filter((t) => t.id !== userTeam.id)
+                    .filter((t) => t.id !== sideARosterId)
                     .sort((a, b) => (a.owner || a.name).localeCompare(b.owner || b.name))
                     .map((t) => (
                       <SelectItem key={t.id} value={t.id}>
