@@ -292,18 +292,10 @@ function PlayerRow({
       : "";
 
   return (
-    <div className="flex items-center gap-3 py-1 min-w-0">
+    <div className="flex items-center gap-2 py-1 min-w-0">
       <PlayerHeadshot playerId={player.playerId} pos={player.pos} team={player.team ?? ""} />
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1.5 min-w-0">
-          {action !== "received" && (
-            <span className={cn("text-[9px] font-bold px-1.5 py-0.5 rounded shrink-0", actionCls)}>
-              {action === "add" ? "ADD" : "DROP"}
-            </span>
-          )}
-          <Badge variant="outline" className={cn("text-[9px] px-1 py-0 h-4 justify-center shrink-0", getPositionColor(player.pos))}>
-            {player.pos}
-          </Badge>
+        <div className="flex items-center gap-1 min-w-0">
           <span className={cn("text-sm font-semibold truncate", action === "drop" && "text-muted-foreground")}>
             {player.name}
           </span>
@@ -312,11 +304,16 @@ function PlayerRow({
           )}
         </div>
         {dynVal > 0 && (
-          <p className="text-[10px] text-[#d4af37] font-semibold mt-0.5" data-testid={`text-dynasty-val-${player.playerId}`}>
+          <p className="text-[10px] text-[#d4af37] font-semibold" data-testid={`text-dynasty-val-${player.playerId}`}>
             {dynVal.toLocaleString()} dynasty
           </p>
         )}
       </div>
+      {action !== "received" && (
+        <span className={cn("text-[9px] font-bold px-1.5 py-0.5 rounded shrink-0", actionCls)}>
+          {action === "add" ? "ADD" : "DROP"}
+        </span>
+      )}
     </div>
   );
 }
