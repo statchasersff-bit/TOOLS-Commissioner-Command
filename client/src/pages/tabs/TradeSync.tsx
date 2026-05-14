@@ -16,6 +16,7 @@ import { fetchLeagueTransactionsFiltered, acceptTrade, rejectTrade } from "@/ser
 import type { SleeperTransaction } from "@/services/sleeperAuthedApi";
 import { getSleeperPlayers } from "@/lib/sleeperApi";
 import { getPositionColor } from "@/data/mockData";
+import { PlayerAvatar } from "@/components/PlayerAvatar";
 import {
   ArrowRightLeft, TrendingUp, TrendingDown, RefreshCw, Loader2,
   Clock, AlertTriangle, X, ExternalLink, CheckCircle2,
@@ -465,13 +466,20 @@ function PlayerHeadshot({ playerId, name }: { playerId: string; name: string }) 
 // ─── Player row for card layout ───────────────────────────────────────────────
 
 function PlayerCardRow({ player, showValue }: { player: AssetPlayer; showValue?: boolean }) {
-  const posColor = getPositionColor(player.pos);
   return (
-    <div className="flex items-center gap-2.5 py-0.5">
-      <PlayerHeadshot playerId={player.playerId} name={player.name} />
-      <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded border flex-shrink-0", posColor)}>{player.pos}</span>
-      <span className="text-sm font-medium text-foreground leading-tight truncate">{player.name}</span>
-      {showValue && <span className="ml-auto text-sm font-semibold tabular-nums text-muted-foreground flex-shrink-0">{player.value.toFixed(1)}</span>}
+    <div className="flex items-center gap-2 py-0.5">
+      <PlayerAvatar
+        id={player.playerId}
+        name={player.name}
+        pos={player.pos}
+        team={player.team}
+        size="sm"
+      />
+      {showValue && (
+        <span className="ml-auto text-sm font-semibold tabular-nums text-muted-foreground flex-shrink-0">
+          {player.value.toFixed(1)}
+        </span>
+      )}
     </div>
   );
 }
