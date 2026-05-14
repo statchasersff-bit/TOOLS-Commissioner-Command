@@ -969,7 +969,7 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
     <div className="flex items-center gap-0.5 bg-muted/50 rounded-lg p-0.5 flex-shrink-0">
       {([
         { id: "table",   icon: List,      label: "Table"          },
-        { id: "economy", icon: Coins,      label: "Economy"        },
+        { id: "economy", icon: Coins,      label: "Dynasty Window" },
         { id: "chart",   icon: BarChart2,  label: "Position Chart" },
         { id: "heatmap", icon: Grid3X3,    label: "Heatmap"        },
       ] as const).map(({ id, icon: Icon, label }) => (

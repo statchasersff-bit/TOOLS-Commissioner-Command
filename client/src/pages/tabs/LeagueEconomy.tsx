@@ -123,12 +123,6 @@ function EconomyOverview({ league }: { league: League }) {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h3 className="text-base font-bold text-foreground">Dynasty Window</h3>
-        <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
-        <p className="text-xs text-muted-foreground mt-2">Where each team sits in the win-now vs future value spectrum</p>
-      </div>
-
       <Card className="p-4 md:p-6 rounded-2xl bg-[#0a1628] border-[#1e3a5f]" data-testid="dynasty-window-chart">
         <div className="h-[300px] md:h-[380px]">
         <ResponsiveContainer width="100%" height="100%">
@@ -226,7 +220,6 @@ function EconomyOverview({ league }: { league: League }) {
 export function LeagueEconomy({ league }: { league: League }) {
   return (
     <div className="space-y-8">
-      <SectionHeader title="League Economy" subtitle="League-wide economic dynamics: power distribution, draft capital, and trade market health" />
       <EconomyOverview league={league} />
     </div>
   );
