@@ -606,6 +606,19 @@ export function FieldView({ league, userTeam }: { league: League; userTeam: Team
               <span className="hidden md:inline">{error}</span>
             </div>
           )}
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={doExport}
+            disabled={isExporting || isLoading}
+            data-testid="button-export-field-image"
+          >
+            {isExporting
+              ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+              : <Download className="w-3.5 h-3.5 mr-1.5" />
+            }
+            Export Image
+          </Button>
         </div>
       </div>
 
