@@ -615,8 +615,7 @@ export function RosterComparison({ league }: AnalyzerProps) {
                           return (
                             <div key={p.id} className="flex items-center justify-between py-0.5 sm:py-1 px-1 sm:px-2 rounded-md hover:bg-muted/30 transition-colors" data-testid={`roster-player-${p.id}`}>
                               <div className="flex items-center gap-1 sm:gap-2 min-w-0">
-                                {p.starter && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 flex-shrink-0" />}
-                                <span className={`text-[10px] sm:text-xs truncate ${p.starter ? "font-semibold text-foreground" : "text-muted-foreground"}`}>{p.name}</span>
+                                <span className="text-[10px] sm:text-xs truncate text-foreground">{p.name}</span>
                               </div>
                               <span className="text-[10px] sm:text-xs font-mono font-semibold text-muted-foreground ml-1 flex-shrink-0">{p.value > 0 ? p.value.toLocaleString() : "0"}</span>
                             </div>
