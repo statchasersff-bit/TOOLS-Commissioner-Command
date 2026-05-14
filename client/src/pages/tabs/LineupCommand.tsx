@@ -185,13 +185,13 @@ function IssueBadge({ type }: { type: IssueType }) {
 // ─── Skeleton row ─────────────────────────────────────────────────────────────
 function SkeletonRow() {
   return (
-    <div className="flex items-center gap-3 px-4 py-3 border-b border-white/5 animate-pulse">
+    <div className="flex items-center gap-2 md:gap-3 px-3 md:px-5 py-3 border-b border-white/5 animate-pulse">
       <div className="flex-1 h-3.5 bg-white/8 rounded" />
-      <div className="w-14 h-3.5 bg-white/8 rounded" />
-      <div className="w-14 h-3.5 bg-white/8 rounded" />
-      <div className="w-10 h-3.5 bg-white/8 rounded" />
-      <div className="w-24 h-3.5 bg-white/8 rounded" />
-      <div className="flex-1 h-3.5 bg-white/8 rounded" />
+      <div className="w-14 md:w-16 h-3.5 bg-white/8 rounded" />
+      <div className="w-14 md:w-16 h-3.5 bg-white/8 rounded" />
+      <div className="w-[72px] md:w-24 h-4 bg-white/8 rounded" />
+      <div className="w-[64px] md:w-20 h-4 bg-white/8 rounded hidden sm:block" />
+      <div className="w-[96px] md:w-[108px] h-7 bg-white/8 rounded-lg" />
     </div>
   );
 }
@@ -227,26 +227,25 @@ function KpiCard({
 // ─── League row ───────────────────────────────────────────────────────────────
 function LeagueRow({ analysis }: { analysis: LeagueAnalysis }) {
   const [expanded, setExpanded] = useState(false);
-  const { leagueName, format, scoringFormat, currentProj, optimalProj, gain, issues, swaps, loading, error } = analysis;
+  const { leagueName, format, scoringFormat, currentProj, gain, issues, swaps, loading, error } = analysis;
 
-  const gainColor = gain >= 10 ? "text-emerald-400" : gain >= 3 ? "text-emerald-500/80" : gain > 0.5 ? "text-emerald-600" : "text-white/25";
-  const criticalIssues = issues.filter(i => i.type === "out" || i.type === "ir" || i.type === "doubtful" || i.type === "bye");
-  const topSwap = swaps[0];
-  const hasAction = swaps.length > 0 || criticalIssues.length > 0;
+  const improvColor = gain >= 10 ? "text-emerald-400" : gain >= 3 ? "text-emerald-500/80" : gain > 0.5 ? "text-emerald-600" : "text-white/25";
+  const hardIssues = issues.filter(i => i.type === "out" || i.type === "ir" || i.type === "bye");
+  const softIssues = issues.filter(i => i.type === "questionable" || i.type === "doubtful");
+  const isOptimized = !loading && !error && swaps.length === 0;
 
   return (
     <div className={cn(
       "border-b border-white/5 last:border-0 transition-colors",
-      hasAction ? "hover:bg-white/[0.02]" : "hover:bg-white/[0.01]"
+      swaps.length > 0 ? "hover:bg-white/[0.02]" : "hover:bg-white/[0.01]"
     )}>
       {/* Main row */}
       <div
-        className="flex items-center gap-2 md:gap-3 px-3 md:px-5 py-3 cursor-pointer select-none"
-        onClick={() => (swaps.length > 0 || issues.length > 0) && setExpanded(v => !v)}
+        className="flex items-center gap-2 md:gap-3 px-3 md:px-5 py-3 select-none"
         data-testid={`row-lineup-${analysis.leagueId}`}
       >
         {/* League name + format */}
-        <div className="flex-1 min-w-0">
+        <div className="flex-1 min-w-0 cursor-pointer" onClick={() => swaps.length > 0 && setExpanded(v => !v)}>
           <p className="text-[12px] md:text-sm font-bold text-white/90 truncate leading-tight">{leagueName}</p>
           <div className="flex items-center gap-1 mt-0.5">
             <span className="text-[8px] md:text-[9px] text-white/30 font-medium">{format} · {scoringFormat}</span>
@@ -260,88 +259,77 @@ function LeagueRow({ analysis }: { analysis: LeagueAnalysis }) {
           ) : error ? (
             <span className="text-[10px] text-white/20">—</span>
           ) : (
-            <>
-              <p className="text-[11px] md:text-xs font-bold text-white/55 tabular-nums">{fmt1(currentProj)}</p>
-              <p className="text-[8px] text-white/25">current</p>
-            </>
+            <p className="text-[12px] md:text-[13px] font-bold text-white/60 tabular-nums">{fmt1(currentProj)}</p>
           )}
         </div>
 
-        {/* Optimal proj */}
-        <div className="text-right w-14 md:w-16 flex-shrink-0 hidden sm:block">
+        {/* Improvement */}
+        <div className="text-right w-14 md:w-16 flex-shrink-0">
           {loading ? (
             <div className="h-3.5 bg-white/8 rounded animate-pulse" />
           ) : error ? (
             <span className="text-[10px] text-white/20">—</span>
           ) : (
-            <>
-              <p className="text-[11px] md:text-xs font-bold text-white/85 tabular-nums">{fmt1(optimalProj)}</p>
-              <p className="text-[8px] text-white/25">optimal</p>
-            </>
-          )}
-        </div>
-
-        {/* Gain */}
-        <div className="text-right w-12 md:w-14 flex-shrink-0">
-          {loading ? (
-            <div className="h-3.5 bg-white/8 rounded animate-pulse" />
-          ) : error ? (
-            <span className="text-[10px] text-white/20">—</span>
-          ) : (
-            <p className={cn("text-[12px] md:text-sm font-black tabular-nums", gainColor)}>
+            <p className={cn("text-[12px] md:text-[13px] font-black tabular-nums", improvColor)}>
               {gain > 0.1 ? `+${fmt1(gain)}` : "—"}
             </p>
           )}
         </div>
 
-        {/* Issues */}
-        <div className="flex items-center gap-1 w-20 md:w-24 flex-shrink-0 justify-end">
+        {/* OUT / IR / BYE */}
+        <div className="flex items-center gap-0.5 w-[72px] md:w-24 flex-shrink-0 justify-center">
           {loading ? (
-            <div className="h-4 w-16 bg-white/8 rounded animate-pulse" />
+            <div className="h-4 w-14 bg-white/8 rounded animate-pulse" />
+          ) : hardIssues.length === 0 ? (
+            <span className="text-[9px] text-white/15">—</span>
           ) : (
             <>
-              {issues.slice(0, 3).map((iss, i) => <IssueBadge key={i} type={iss.type} />)}
-              {issues.length > 3 && (
-                <span className="text-[8px] text-white/30">+{issues.length - 3}</span>
-              )}
-              {issues.length === 0 && !loading && !error && (
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500/50" />
+              {hardIssues.slice(0, 3).map((iss, i) => <IssueBadge key={i} type={iss.type} />)}
+              {hardIssues.length > 3 && (
+                <span className="text-[8px] text-white/30">+{hardIssues.length - 3}</span>
               )}
             </>
           )}
         </div>
 
-        {/* Recommendation */}
-        <div className="flex-1 min-w-0 hidden md:block">
+        {/* QUES / DOUB */}
+        <div className="flex items-center gap-0.5 w-[64px] md:w-20 flex-shrink-0 justify-center hidden sm:flex">
           {loading ? (
-            <div className="h-3.5 bg-white/8 rounded animate-pulse w-3/4" />
-          ) : error ? (
-            <span className="text-[10px] text-white/20">—</span>
-          ) : topSwap ? (
-            <div className="flex items-center gap-1">
-              <span className="text-[10px] text-white/40">Start</span>
-              <span className="text-[10px] font-bold text-emerald-400">{topSwap.inName}</span>
-              <ArrowRight className="w-2.5 h-2.5 text-white/20 flex-shrink-0" />
-              <span className="text-[10px] font-medium text-white/50">{topSwap.outName}</span>
-              {topSwap.projGain > 0 && (
-                <span className="text-[9px] text-emerald-500/70 ml-0.5">(+{fmt1(topSwap.projGain)})</span>
-              )}
-            </div>
+            <div className="h-4 w-12 bg-white/8 rounded animate-pulse" />
+          ) : softIssues.length === 0 ? (
+            <span className="text-[9px] text-white/15">—</span>
           ) : (
-            <span className="text-[10px] text-emerald-500/50 font-medium">✓ Optimal</span>
+            <>
+              {softIssues.slice(0, 3).map((iss, i) => <IssueBadge key={i} type={iss.type} />)}
+              {softIssues.length > 3 && (
+                <span className="text-[8px] text-white/30">+{softIssues.length - 3}</span>
+              )}
+            </>
           )}
         </div>
 
-        {/* Expand toggle */}
-        {(swaps.length > 0 || issues.length > 0) && !loading && !error && (
-          <button
-            className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded text-white/25 hover:text-white/60 transition-colors"
-            onClick={e => { e.stopPropagation(); setExpanded(v => !v); }}
-            data-testid={`button-expand-${analysis.leagueId}`}
-          >
-            {expanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-          </button>
-        )}
+        {/* Status */}
+        <div className="w-[96px] md:w-[108px] flex-shrink-0 flex justify-end">
+          {loading ? (
+            <div className="h-7 w-20 bg-white/8 rounded-lg animate-pulse" />
+          ) : error ? (
+            <span className="text-[10px] text-white/20">—</span>
+          ) : isOptimized ? (
+            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-full px-2.5 py-1">
+              <CheckCircle2 className="w-3 h-3" /> Optimized
+            </span>
+          ) : (
+            <button
+              className="inline-flex items-center gap-1 text-[10px] font-bold bg-[#d4af37]/15 hover:bg-[#d4af37]/25 border border-[#d4af37]/35 hover:border-[#d4af37]/55 text-[#d4af37] rounded-full px-2.5 py-1 transition-colors"
+              onClick={() => setExpanded(v => !v)}
+              data-testid={`button-optimize-${analysis.leagueId}`}
+            >
+              <Zap className="w-3 h-3" />
+              Optimize
+              {expanded ? <ChevronUp className="w-2.5 h-2.5 ml-0.5" /> : <ChevronDown className="w-2.5 h-2.5 ml-0.5" />}
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Expanded detail panel */}
@@ -679,11 +667,10 @@ export function LineupCommand() {
         <div className="flex items-center gap-2 md:gap-3 px-3 md:px-5 py-2.5 border-b border-white/6 bg-white/[0.02]">
           <div className="flex-1 min-w-0 text-[9px] font-bold uppercase tracking-widest text-white/30">League</div>
           <div className="w-14 md:w-16 text-right text-[9px] font-bold uppercase tracking-widest text-white/30 flex-shrink-0">Current</div>
-          <div className="w-14 md:w-16 text-right text-[9px] font-bold uppercase tracking-widest text-white/30 flex-shrink-0 hidden sm:block">Optimal</div>
-          <div className="w-12 md:w-14 text-right text-[9px] font-bold uppercase tracking-widest text-white/30 flex-shrink-0">Gain</div>
-          <div className="w-20 md:w-24 text-right text-[9px] font-bold uppercase tracking-widest text-white/30 flex-shrink-0">Issues</div>
-          <div className="flex-1 text-[9px] font-bold uppercase tracking-widest text-white/30 hidden md:block">Recommendation</div>
-          <div className="w-6 flex-shrink-0" />
+          <div className="w-14 md:w-16 text-right text-[9px] font-bold uppercase tracking-widest text-white/30 flex-shrink-0">Improvement</div>
+          <div className="w-[72px] md:w-24 text-center text-[9px] font-bold uppercase tracking-widest text-white/30 flex-shrink-0">Out/IR/Bye</div>
+          <div className="w-[64px] md:w-20 text-center text-[9px] font-bold uppercase tracking-widest text-white/30 flex-shrink-0 hidden sm:block">Ques/Doub</div>
+          <div className="w-[96px] md:w-[108px] text-right text-[9px] font-bold uppercase tracking-widest text-white/30 flex-shrink-0">Status</div>
         </div>
 
         {/* Rows */}
