@@ -84,7 +84,7 @@ async function fetchLeagueTradesForSync(leagueId: string, hasAuth: boolean): Pro
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type TradeView = "pending" | "incoming" | "outgoing" | "counters" | "waiting" | "completed" | "rejected" | "cancelled" | "activity";
+type TradeView = "pending" | "incoming" | "outgoing" | "waiting" | "completed" | "rejected" | "cancelled" | "activity";
 // Sleeper's actual status strings (proposed = open offer, not yet accepted)
 type TradeStatus = "proposed" | "complete" | "rejected" | "failed" | "cancelled" | "counter_offered";
 
@@ -111,7 +111,7 @@ interface NormalizedTrade {
   leagueFormat: string;
   leagueAvatar: string | null;
   status: TradeStatus;
-  direction: "incoming" | "outgoing" | "waiting" | "counter";
+  direction: "incoming" | "outgoing" | "waiting";
   partnerName: string;
   partnerAvatar: string | null;
   partnerRosterId: number;
@@ -215,17 +215,15 @@ function normalizeTrade(
   const iCreated        = t.creator === myUserId;
   const iHaveConsented  = (t.consenter_ids || []).includes(userRosterId);
 
-  let direction: "incoming" | "outgoing" | "waiting" | "counter";
-  if (isCounter) {
-    direction = "counter";
-  } else if (!isProposed) {
-    // For non-open trades use creator to assign direction (history context)
+  let direction: "incoming" | "outgoing" | "waiting";
+  if (!isProposed) {
+    // For completed/rejected/cancelled trades, use creator for history context
     direction = iCreated ? "outgoing" : "incoming";
   } else if (iCreated) {
-    // I sent this offer
+    // I sent this offer (including counter-offers I initiated)
     direction = "outgoing";
   } else if (!iHaveConsented) {
-    // I haven't responded yet — needs my action
+    // I haven't responded yet — needs my action (including counter-offers from partner)
     direction = "incoming";
   } else {
     // I already consented, waiting on the other party
@@ -436,8 +434,6 @@ function DirectionPill({ direction, status }: { direction: NormalizedTrade["dire
     return <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-emerald-500 text-white">Incoming</span>;
   if (direction === "outgoing")
     return <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-blue-500 text-white">Outgoing</span>;
-  if (direction === "counter")
-    return <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-purple-500 text-white">Counter</span>;
   if (direction === "waiting")
     return <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-amber-500 text-white">Waiting</span>;
   return null;
@@ -471,7 +467,7 @@ function TradeCard({ trade, myUsername, myAvatar, onView, onAccept, onReject, ac
 
   const sentByLabel = trade.direction === "outgoing"
     ? "Sent by You"
-    : trade.direction === "incoming" || trade.direction === "counter"
+    : trade.direction === "incoming"
       ? `Sent by ${trade.partnerName}`
       : "Awaiting response";
 
@@ -595,7 +591,7 @@ function TradeCard({ trade, myUsername, myAvatar, onView, onAccept, onReject, ac
                   <X className="w-3.5 h-3.5" /> Cancel Offer
                 </Button>
               )}
-              {isProposed && (trade.direction === "waiting" || trade.direction === "counter") && (
+              {isProposed && trade.direction === "waiting" && (
                 <Button variant="outline" size="sm" className="h-7 px-3 text-xs gap-1.5" onClick={onView} data-testid={`btn-view-detail-${trade.transactionId}`}>
                   <Eye className="w-3.5 h-3.5" /> View Details
                 </Button>
@@ -903,15 +899,14 @@ function ConfirmDialog({ trade, action, onConfirm, onCancel, loading, result }: 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 const VIEWS: Array<{ id: TradeView; label: string; icon: React.ElementType }> = [
-  { id: "pending",   label: "All Open",   icon: Clock          },
-  { id: "incoming",  label: "Incoming",   icon: Inbox          },
-  { id: "outgoing",  label: "Outgoing",   icon: Send           },
-  { id: "counters",  label: "Counters",   icon: ArrowRightLeft  },
-  { id: "waiting",   label: "Waiting",    icon: Clock          },
-  { id: "completed", label: "Completed",  icon: CheckCircle2   },
-  { id: "rejected",  label: "Rejected",   icon: XCircle        },
-  { id: "cancelled", label: "Cancelled",  icon: XCircle        },
-  { id: "activity",  label: "All Trades", icon: Activity       },
+  { id: "pending",   label: "All Open",   icon: Clock        },
+  { id: "incoming",  label: "Incoming",   icon: Inbox        },
+  { id: "outgoing",  label: "Outgoing",   icon: Send         },
+  { id: "waiting",   label: "Waiting",    icon: Clock        },
+  { id: "completed", label: "Completed",  icon: CheckCircle2 },
+  { id: "rejected",  label: "Rejected",   icon: XCircle      },
+  { id: "cancelled", label: "Cancelled",  icon: XCircle      },
+  { id: "activity",  label: "All Trades", icon: Activity     },
 ];
 
 export default function TradeSync() {
@@ -1049,7 +1044,6 @@ export default function TradeSync() {
       case "pending":   return result.filter(isOpen);
       case "incoming":  return result.filter((t) => isOpen(t) && t.direction === "incoming");
       case "outgoing":  return result.filter((t) => isOpen(t) && t.direction === "outgoing");
-      case "counters":  return result.filter((t) => isOpen(t) && t.direction === "counter");
       case "waiting":   return result.filter((t) => isOpen(t) && t.direction === "waiting");
       case "completed": return result.filter((t) => t.status === "complete");
       case "rejected":  return result.filter((t) => t.status === "rejected");
@@ -1063,7 +1057,6 @@ export default function TradeSync() {
     const open          = trades.filter(isOpen);
     const incoming      = open.filter((t) => t.direction === "incoming");
     const outgoing      = open.filter((t) => t.direction === "outgoing");
-    const counters      = open.filter((t) => t.direction === "counter");
     const waiting       = open.filter((t) => t.direction === "waiting");
     const expiring      = open.filter((t) => isExpiringSoon(t.expiresAt));
     const positiveValue = open.filter((t) => t.valueEdge > 50);
@@ -1071,10 +1064,9 @@ export default function TradeSync() {
       totalPending: open.length,
       incoming: incoming.length,
       outgoing: outgoing.length,
-      counters: counters.length,
       waiting: waiting.length,
       expiringSoon: expiring.length,
-      needsResponse: incoming.length + counters.length,
+      needsResponse: incoming.length,
       positiveValue: positiveValue.length,
     };
   }, [trades]);
@@ -1201,12 +1193,12 @@ export default function TradeSync() {
 
       {/* KPI Row */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-        <KPICard label="Total Open"      value={kpis.totalPending}   icon={ArrowRightLeft} color="bg-blue-500/10 text-blue-600 dark:text-blue-400"       loading={loading} />
+        <KPICard label="Total Open"      value={kpis.totalPending}   icon={ArrowRightLeft} color="bg-blue-500/10 text-blue-600 dark:text-blue-400"        loading={loading} />
         <KPICard label="Incoming"        value={kpis.incoming}       icon={Inbox}          color="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" loading={loading} />
-        <KPICard label="Outgoing"        value={kpis.outgoing}       icon={Send}           color="bg-purple-500/10 text-purple-600 dark:text-purple-400"  loading={loading} />
-        <KPICard label="Counters"        value={kpis.counters}       icon={ArrowRightLeft} color="bg-orange-500/10 text-orange-600 dark:text-orange-400"  loading={loading} />
-        <KPICard label="Needs Response"  value={kpis.needsResponse}  icon={AlertTriangle}  color="bg-red-500/10 text-red-600 dark:text-red-400"           loading={loading} />
-        <KPICard label="Win-Value Deals" value={kpis.positiveValue}  icon={TrendingUp}     color="bg-[#d4af37]/15 text-[#b8920f]"                          loading={loading} />
+        <KPICard label="Outgoing"        value={kpis.outgoing}       icon={Send}           color="bg-purple-500/10 text-purple-600 dark:text-purple-400"   loading={loading} />
+        <KPICard label="Waiting"         value={kpis.waiting}        icon={Clock}          color="bg-amber-500/10 text-amber-600 dark:text-amber-400"       loading={loading} />
+        <KPICard label="Needs Response"  value={kpis.needsResponse}  icon={AlertTriangle}  color="bg-red-500/10 text-red-600 dark:text-red-400"            loading={loading} />
+        <KPICard label="Win-Value Deals" value={kpis.positiveValue}  icon={TrendingUp}     color="bg-[#d4af37]/15 text-[#b8920f]"                           loading={loading} />
       </div>
 
       {/* Auth banner — public REST fallback only shows completed history */}
@@ -1241,7 +1233,6 @@ export default function TradeSync() {
             const count = id === "pending"   ? kpis.totalPending
                        : id === "incoming"  ? kpis.incoming
                        : id === "outgoing"  ? kpis.outgoing
-                       : id === "counters"  ? kpis.counters
                        : id === "waiting"   ? kpis.waiting
                        : undefined;
             return (
