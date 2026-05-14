@@ -106,11 +106,8 @@ export function PlayerAvatar({
         </div>
         <div className={cn("flex items-center gap-1.5 mt-0.5", metaSize)}>
           <span className={cn("font-bold", posColor)}>{pos}</span>
-          {sub ? (
-            <span className="text-muted-foreground">{sub}</span>
-          ) : (
-            team && team !== "FA" && <span className="text-muted-foreground font-medium">{team}</span>
-          )}
+          {team && team !== "FA" && <span className="text-muted-foreground font-medium">{team}</span>}
+          {sub && <span className="text-muted-foreground">{sub}</span>}
         </div>
       </div>
     </div>
