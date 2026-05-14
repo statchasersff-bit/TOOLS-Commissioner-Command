@@ -123,7 +123,7 @@ export function ShareTeam({ league, userTeam }: Props) {
 
     const corePlayers = [...userTeam.roster]
       .sort((a, b) => getPlayerValue(b) - getPlayerValue(a))
-      .slice(0, 6);
+      .slice(0, 5);
 
     const posStrengths: Record<string, { rank: number; label: StrengthLabel }> = {
       QB:    { rank: qbRank,    label: strengthLabel(qbRank,    total) },
@@ -442,26 +442,43 @@ export function ShareTeam({ league, userTeam }: Props) {
             </div>
           </div>
 
-          {/* Core players — pinned at top */}
+          {/* Core players — image cards */}
           {computed.corePlayers.length > 0 && (
             <Card className="border-[#d4af37]/25 bg-[#d4af37]/5 px-3 py-2.5">
-              <div className="text-[10px] font-bold text-[#d4af37] uppercase tracking-wider mb-1.5">Core Players</div>
-              <div className="flex flex-wrap gap-1.5">
-                {computed.corePlayers.map((p) => (
-                  <div
-                    key={p.id}
-                    className="flex items-center gap-1 bg-background/60 border border-border/30 rounded px-1.5 py-0.5"
-                    data-testid={`core-player-${p.id}`}
-                  >
-                    <Badge variant="outline" className={cn("text-[9px] px-1 py-0 h-3.5 border-0", getPositionColor(p.pos))}>
-                      {p.pos}
-                    </Badge>
-                    <span className="text-[11px] font-semibold">{p.name}</span>
-                    {!hideValues && getPlayerValue(p) > 0 && (
-                      <span className="text-[10px] text-muted-foreground">{getPlayerValue(p).toLocaleString()}</span>
-                    )}
-                  </div>
-                ))}
+              <div className="text-[10px] font-bold text-[#d4af37] uppercase tracking-wider mb-2.5">Core Players</div>
+              <div className="flex gap-2 justify-between">
+                {computed.corePlayers.map((p) => {
+                  const lastName = p.name.split(" ").slice(1).join(" ") || p.name;
+                  const sleeperId = (p as any).sleeperId ?? p.id;
+                  return (
+                    <div key={p.id} className="flex flex-col items-center gap-1.5 flex-1 min-w-0" data-testid={`core-player-${p.id}`}>
+                      <div className="relative flex-shrink-0">
+                        <div className="w-12 h-12 rounded-full overflow-hidden bg-[#0b3a7a]/40 ring-1 ring-white/10">
+                          <img
+                            src={`https://sleepercdn.com/content/nfl/players/thumb/${sleeperId}.jpg`}
+                            alt={p.name}
+                            className="w-full h-full object-cover object-top"
+                            onError={(e) => { (e.target as HTMLImageElement).src = "https://sleepercdn.com/images/v2/icons/player_default.webp"; }}
+                          />
+                        </div>
+                        {p.team && p.team !== "FA" && (
+                          <div className="absolute -bottom-0.5 -right-0.5 w-[18px] h-[18px] rounded-full overflow-hidden ring-[1.5px] ring-background bg-[#0a1628] flex items-center justify-center">
+                            <img
+                              src={`https://sleepercdn.com/images/team_logos/nfl/${p.team.toLowerCase()}.png`}
+                              alt={p.team}
+                              className="w-full h-full object-contain"
+                              onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                            />
+                          </div>
+                        )}
+                      </div>
+                      <div className="text-center min-w-0 w-full">
+                        <p className="text-[11px] font-bold text-foreground leading-tight truncate">{lastName}</p>
+                        <p className="text-[10px] text-muted-foreground leading-tight">{p.team || "FA"}</p>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </Card>
           )}
