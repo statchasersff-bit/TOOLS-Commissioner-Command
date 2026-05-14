@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 import {
   AlertTriangle, TrendingUp, Zap, Users, CalendarX,
   ChevronDown, ChevronUp, RefreshCw, Lock, CheckCircle2,
-  ArrowRight, Activity,
+  ArrowRight, Activity, ArrowUpDown,
 } from "lucide-react";
 import type { SleeperLeagueSummary } from "@/types";
 
@@ -51,6 +51,7 @@ interface LeagueAnalysis {
   leagueName: string;
   format: string;
   scoringFormat: string;
+  avatar?: string | null;
   currentProj: number;
   optimalProj: number;
   gain: number;
@@ -227,7 +228,7 @@ function KpiCard({
 // ─── League row ───────────────────────────────────────────────────────────────
 function LeagueRow({ analysis }: { analysis: LeagueAnalysis }) {
   const [expanded, setExpanded] = useState(false);
-  const { leagueName, format, scoringFormat, currentProj, gain, issues, swaps, loading, error } = analysis;
+  const { leagueName, format, scoringFormat, avatar, currentProj, gain, issues, swaps, loading, error } = analysis;
 
   const improvColor = gain >= 10 ? "text-emerald-400" : gain >= 3 ? "text-emerald-500/80" : gain > 0.5 ? "text-emerald-600" : "text-white/25";
   const hardIssues = issues.filter(i => i.type === "out" || i.type === "ir" || i.type === "bye");
@@ -244,11 +245,25 @@ function LeagueRow({ analysis }: { analysis: LeagueAnalysis }) {
         className="flex items-center gap-2 md:gap-3 px-3 md:px-5 py-3 select-none"
         data-testid={`row-lineup-${analysis.leagueId}`}
       >
-        {/* League name + format */}
-        <div className="flex-1 min-w-0 cursor-pointer" onClick={() => swaps.length > 0 && setExpanded(v => !v)}>
-          <p className="text-[12px] md:text-sm font-bold text-white/90 truncate leading-tight">{leagueName}</p>
-          <div className="flex items-center gap-1 mt-0.5">
-            <span className="text-[8px] md:text-[9px] text-white/30 font-medium">{format} · {scoringFormat}</span>
+        {/* League avatar + name + format */}
+        <div className="flex-1 min-w-0 flex items-center gap-2 cursor-pointer" onClick={() => swaps.length > 0 && setExpanded(v => !v)}>
+          {avatar ? (
+            <img
+              src={avatar}
+              alt=""
+              className="w-7 h-7 rounded-lg flex-shrink-0 object-cover bg-white/10"
+              onError={e => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+            />
+          ) : (
+            <div className="w-7 h-7 rounded-lg flex-shrink-0 bg-[#0b3a7a]/40 flex items-center justify-center">
+              <Users className="w-3.5 h-3.5 text-blue-400/60" />
+            </div>
+          )}
+          <div className="min-w-0">
+            <p className="text-[12px] md:text-sm font-bold text-white/90 truncate leading-tight">{leagueName}</p>
+            <div className="flex items-center gap-1 mt-0.5">
+              <span className="text-[8px] md:text-[9px] text-white/30 font-medium">{format} · {scoringFormat}</span>
+            </div>
           </div>
         </div>
 
@@ -402,6 +417,8 @@ export function LineupCommand() {
   const [baseLoading, setBaseLoading] = useState(true);
   const [baseError, setBaseError]   = useState<string | null>(null);
   const [analyses, setAnalyses]   = useState<Record<string, LeagueAnalysis>>({});
+  const [sortKey, setSortKey]     = useState<"league" | "current" | "improvement" | "hard" | "soft" | "status">("improvement");
+  const [sortDir, setSortDir]     = useState<"asc" | "desc">("desc");
 
   const activeLeagues = leagues.filter(l => l.status !== "archived");
 
@@ -456,6 +473,7 @@ export function LineupCommand() {
             leagueName:   l.name,
             format:       l.format || "1QB",
             scoringFormat: l.scoringFormat,
+            avatar:       l.avatar ? `https://sleepercdn.com/avatars/thumbs/${l.avatar}` : null,
             currentProj:  0,
             optimalProj:  0,
             gain:         0,
@@ -538,15 +556,30 @@ export function LineupCommand() {
     return { totalIssues, totalSwaps, totalGain, questionable, byeConflicts };
   }, [analyses]);
 
-  // Sort analyses: most gain first, then most issues
-  const sortedAnalyses = useMemo(() =>
-    Object.values(analyses).sort((a, b) => {
+  function handleSort(key: typeof sortKey) {
+    if (sortKey === key) setSortDir(d => d === "asc" ? "desc" : "asc");
+    else { setSortKey(key); setSortDir("desc"); }
+  }
+
+  const sortedAnalyses = useMemo(() => {
+    const list = Object.values(analyses);
+    const dir = sortDir === "desc" ? -1 : 1;
+    return [...list].sort((a, b) => {
       if (a.loading !== b.loading) return a.loading ? 1 : -1;
-      const scoreA = a.gain * 2 + a.issues.length;
-      const scoreB = b.gain * 2 + b.issues.length;
-      return scoreB - scoreA;
-    }),
-  [analyses]);
+      let cmp = 0;
+      switch (sortKey) {
+        case "league":      cmp = a.leagueName.localeCompare(b.leagueName); break;
+        case "current":     cmp = a.currentProj - b.currentProj; break;
+        case "improvement": cmp = a.gain - b.gain; break;
+        case "hard":        cmp = (a.issues.filter(i => i.type === "out" || i.type === "ir" || i.type === "bye").length)
+                                - (b.issues.filter(i => i.type === "out" || i.type === "ir" || i.type === "bye").length); break;
+        case "soft":        cmp = (a.issues.filter(i => i.type === "questionable" || i.type === "doubtful").length)
+                                - (b.issues.filter(i => i.type === "questionable" || i.type === "doubtful").length); break;
+        case "status":      cmp = a.swaps.length - b.swaps.length; break;
+      }
+      return cmp * dir;
+    });
+  }, [analyses, sortKey, sortDir]);
 
   const allLoading = Object.values(analyses).every(a => a.loading);
   const hasAnyData = Object.values(analyses).some(a => !a.loading && !a.error);
@@ -658,13 +691,38 @@ export function LineupCommand() {
         style={{ background: "linear-gradient(180deg, rgba(4,13,26,0.9) 0%, rgba(4,10,20,0.95) 100%)" }}
       >
         {/* Table header */}
-        <div className="flex items-center gap-2 md:gap-3 px-3 md:px-5 py-2.5 border-b border-white/6 bg-white/[0.02]">
-          <div className="flex-1 min-w-0 text-[9px] font-bold uppercase tracking-widest text-white/30">League</div>
-          <div className="w-14 md:w-16 text-right text-[9px] font-bold uppercase tracking-widest text-white/30 flex-shrink-0">Current</div>
-          <div className="w-14 md:w-16 text-right text-[9px] font-bold uppercase tracking-widest text-white/30 flex-shrink-0">Improvement</div>
-          <div className="w-[72px] md:w-24 text-center text-[9px] font-bold uppercase tracking-widest text-white/30 flex-shrink-0">Out/IR/Bye</div>
-          <div className="w-[64px] md:w-20 text-center text-[9px] font-bold uppercase tracking-widest text-white/30 flex-shrink-0 hidden sm:block">Ques/Doub</div>
-          <div className="w-[96px] md:w-[108px] text-right text-[9px] font-bold uppercase tracking-widest text-white/30 flex-shrink-0">Status</div>
+        <div className="flex items-center gap-2 md:gap-3 px-3 md:px-5 py-2 border-b border-white/6 bg-white/[0.02]">
+          {(() => {
+            function SortBtn({ col, label, className }: { col: typeof sortKey; label: string; className?: string }) {
+              const active = sortKey === col;
+              return (
+                <button
+                  onClick={() => handleSort(col)}
+                  className={cn(
+                    "flex items-center gap-0.5 text-[9px] font-bold uppercase tracking-widest transition-colors cursor-pointer select-none",
+                    active ? "text-[#d4af37]" : "text-white/30 hover:text-white/55",
+                    className
+                  )}
+                >
+                  {label}
+                  {active
+                    ? (sortDir === "desc" ? <ChevronDown className="w-2.5 h-2.5 flex-shrink-0" /> : <ChevronUp className="w-2.5 h-2.5 flex-shrink-0" />)
+                    : <ArrowUpDown className="w-2.5 h-2.5 flex-shrink-0 opacity-40" />
+                  }
+                </button>
+              );
+            }
+            return (
+              <>
+                <SortBtn col="league"      label="League"      className="flex-1 min-w-0 justify-start" />
+                <SortBtn col="current"     label="Current"     className="w-14 md:w-16 justify-end" />
+                <SortBtn col="improvement" label="Improvement" className="w-14 md:w-16 justify-end" />
+                <SortBtn col="hard"        label="Out/IR/Bye"  className="w-[72px] md:w-24 justify-center" />
+                <SortBtn col="soft"        label="Ques/Doub"   className="w-[64px] md:w-20 justify-center hidden sm:flex" />
+                <SortBtn col="status"      label="Status"      className="w-[96px] md:w-[108px] justify-end" />
+              </>
+            );
+          })()}
         </div>
 
         {/* Rows */}

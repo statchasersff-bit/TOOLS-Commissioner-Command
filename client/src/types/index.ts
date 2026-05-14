@@ -112,6 +112,7 @@ export interface SleeperLeagueSummary {
   format: string;
   status: string;
   isBestBall?: boolean;
+  avatar?: string | null;
 }
 
 export interface TradeAssetPlayer {
