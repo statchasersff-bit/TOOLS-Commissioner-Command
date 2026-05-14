@@ -233,25 +233,32 @@ function BenchCard({ player }: { player: BenchPlayer }) {
 
   return (
     <div className={cn(
-      "flex flex-col items-center gap-1 rounded-xl border bg-[#040d1a]/60 backdrop-blur-sm",
-      "p-2 md:p-2.5 min-w-[82px] md:min-w-[96px] flex-shrink-0 ring-1 transition-all",
+      "flex flex-col items-center gap-1 rounded-xl border bg-[#040d1a]/70 backdrop-blur-md",
+      "p-2 md:p-2.5 min-w-[92px] md:min-w-[112px] flex-shrink-0 ring-1 transition-all duration-300 cursor-default select-none",
       ring, glow,
       state === "out" || state === "ir" ? "border-red-500/30" :
-      state === "questionable"          ? "border-yellow-400/25" : "border-white/6"
+      state === "doubtful"              ? "border-red-400/25" :
+      state === "questionable"          ? "border-yellow-400/30" :
+      state === "upside"                ? "border-blue-400/30" : "border-white/8"
     )}>
-      <PlayerAvatar id={player.sleeperId ?? player.id} name={player.name} pos={player.pos} team={player.team ?? ""} size="xs" compact />
-      <span className="text-[9px] md:text-[10px] font-semibold text-white/80 text-center leading-tight line-clamp-1 mt-0.5 max-w-[74px]">{lastName}</span>
-      <Badge variant="outline" className={cn("text-[7px] px-1 py-0 h-3.5", SLOT_BADGE_COLORS[player.pos] ?? "bg-white/10 text-white/50 border-white/15")}>
+      <Badge variant="outline" className={cn("text-[8px] md:text-[9px] px-1.5 py-0 h-4 mb-0.5", SLOT_BADGE_COLORS[player.pos] ?? "bg-white/10 text-white/60 border-white/15")}>
         {player.pos}
       </Badge>
+      <PlayerAvatar id={player.sleeperId ?? player.id} name={player.name} pos={player.pos} team={player.team ?? ""} size="sm" compact />
+      <span className="text-[10px] md:text-[11px] font-bold text-white/90 text-center leading-tight line-clamp-1 mt-0.5 max-w-[80px] md:max-w-[100px]">
+        {lastName}
+      </span>
+      <span className="text-[8px] md:text-[9px] text-white/40 -mt-0.5 font-medium">{player.team || "FA"}</span>
       {typeof player.projection === "number" && (
         <div className="flex items-center gap-0.5 mt-0.5">
-          <Zap className="w-2 h-2 text-[#d4af37]" />
-          <span className="text-[9px] font-bold text-[#d4af37]/80 tabular-nums">{player.projection.toFixed(1)}</span>
+          <Zap className="w-2.5 h-2.5 text-[#d4af37] flex-shrink-0" />
+          <span className="text-[10px] md:text-[11px] font-bold text-[#d4af37] tabular-nums">{player.projection.toFixed(1)}</span>
         </div>
       )}
       {player.injuryStatus && badge && (
-        <Badge variant="outline" className={cn("text-[7px] px-1 py-0 h-3 mt-0.5 uppercase", badge)}>{player.injuryStatus}</Badge>
+        <Badge variant="outline" className={cn("text-[7px] md:text-[8px] px-1 py-0 h-3.5 mt-0.5 uppercase tracking-wide", badge)}>
+          {player.injuryStatus}
+        </Badge>
       )}
     </div>
   );
@@ -262,20 +269,32 @@ function MobileBenchCard({ player }: { player: BenchPlayer }) {
   const state = getPlayerState(player.injuryStatus, player.projection);
   const { dot } = STATE_STYLES[state];
   const lastName = player.name.split(" ").slice(1).join(" ") || player.name;
-  const posColor = SLOT_BADGE_COLORS[player.pos] ?? "bg-white/10 text-white/50 border-white/15";
+  const posColor = SLOT_BADGE_COLORS[player.pos] ?? "bg-white/10 text-white/60 border-white/15";
+  const borderCol = state === "out" || state === "ir" ? "border-red-500/40"
+                  : state === "questionable"           ? "border-yellow-400/35"
+                  : state === "upside"                 ? "border-blue-400/30"
+                  :                                      "border-white/10";
 
   return (
     <div className={cn(
-      "flex flex-col items-center gap-0.5 w-[58px] flex-shrink-0 rounded-lg border border-white/8 bg-[#040d1a]/50 py-1.5 px-1",
-      state === "out" || state === "ir" ? "border-red-500/30" :
-      state === "questionable"          ? "border-yellow-400/25" : ""
+      "flex flex-col items-center gap-0.5 w-[62px] flex-shrink-0 rounded-lg border bg-[#040d1a]/60 py-1.5 px-1",
+      borderCol
     )}>
-      <div className="relative">
+      <span className={cn("text-[7px] font-bold px-1.5 py-0 rounded-full border leading-snug", posColor)}>{player.pos}</span>
+      <div className="relative mt-0.5">
         <PlayerAvatar id={player.sleeperId ?? player.id} name={player.name} pos={player.pos} team={player.team ?? ""} size="xs" compact />
-        {dot && <span className={cn("absolute -bottom-0.5 -right-0.5 w-1.5 h-1.5 rounded-full border border-[#040d1a]", dot)} />}
+        {dot && <span className={cn("absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-[#040d1a]", dot)} />}
       </div>
-      <span className="text-[8px] font-semibold text-white/75 text-center leading-tight line-clamp-1 w-full px-0.5">{lastName}</span>
-      <span className={cn("text-[6px] font-bold px-1 rounded-full border", posColor)}>{player.pos}</span>
+      <span className="text-[8px] font-bold text-white/90 text-center leading-tight line-clamp-1 w-full px-0.5 mt-0.5">
+        {lastName}
+      </span>
+      <span className="text-[7px] text-white/35 font-medium">{player.team || "FA"}</span>
+      {typeof player.projection === "number" && (
+        <div className="flex items-center gap-0.5">
+          <Zap className="w-1.5 h-1.5 text-[#d4af37]" />
+          <span className="text-[7px] font-bold text-[#d4af37] tabular-nums">{player.projection.toFixed(1)}</span>
+        </div>
+      )}
     </div>
   );
 }
