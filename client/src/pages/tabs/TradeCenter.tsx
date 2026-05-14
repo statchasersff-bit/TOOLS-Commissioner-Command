@@ -1126,12 +1126,14 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
   const [rosterOpenA, setRosterOpenA] = useState(false);
   const [rosterOpenB, setRosterOpenB] = useState(false);
 
-  const RosterCollapsible = ({ rosterTeam, rosterPlayers, addedPlayerIds, side, onTogglePlayer, getPlayerValue }: {
+  const RosterCollapsible = ({ rosterTeam, rosterPlayers, addedPlayerIds, addedPickKeys, side, onTogglePlayer, onTogglePick, getPlayerValue }: {
     rosterTeam: Team;
     rosterPlayers: Player[];
     addedPlayerIds: Set<string>;
+    addedPickKeys: Set<string>;
     side: "a" | "b";
     onTogglePlayer: (p: Player, isAdded: boolean) => void;
+    onTogglePick: (pick: { year: number; round: number; projectedRange?: string }, isAdded: boolean, assetId: string | undefined) => void;
     getPlayerValue: (p: Player) => number;
   }) => {
     const isOpen = side === "a" ? rosterOpenA : rosterOpenB;
@@ -1195,14 +1197,21 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
                 .sort((a, b) => String(a.year).localeCompare(String(b.year)) || a.round - b.round)
                 .map((pick, i) => {
                   const rd = pick.round === 1 ? "1st" : pick.round === 2 ? "2nd" : pick.round === 3 ? "3rd" : `${pick.round}th`;
+                  const pickKey = `${pick.year}-${pick.round}`;
+                  const isPickAdded = addedPickKeys.has(pickKey);
                   return (
                     <button
                       key={i}
-                      className="w-full flex flex-col px-1.5 py-1 rounded text-left transition-colors hover:bg-muted/40 cursor-pointer"
-                      onClick={() => addPick(side, String(pick.year), pick.round, pick.projectedRange || "Mid")}
+                      className={cn(
+                        "w-full flex flex-col px-1.5 py-1 rounded text-left transition-colors",
+                        isPickAdded
+                          ? "bg-[#d4af37]/15 border border-[#d4af37]/40 cursor-pointer hover:bg-red-500/10 hover:border-red-500/40"
+                          : "hover:bg-muted/40 cursor-pointer"
+                      )}
+                      onClick={() => onTogglePick(pick, isPickAdded, isPickAdded ? undefined : undefined)}
                       data-testid={`button-roster-pick-${side}-${i}`}
                     >
-                      <span className="truncate text-[11px] font-medium">{pick.year} {rd}</span>
+                      <span className={cn("truncate text-[11px] font-medium", isPickAdded && "text-[#d4af37]")}>{pick.year} {rd}</span>
                     </button>
                   );
                 })}
@@ -1221,6 +1230,7 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
     const rosterTeam = side === "a" ? sideATeam : sideBTeam;
     const rosterPlayers = side === "a" ? sideAPlayers : sideBPlayers;
     const addedPlayerIds = new Set(assets.filter((a) => a.type === "player" && a.player).map((a) => a.player!.sleeperId || a.player!.id));
+    const addedPickKeys = new Set(assets.filter((a) => a.type === "pick").map((a) => `${a.pickYear}-${a.pickRound}`));
 
     return (
       <Card className="p-5 flex-1">
@@ -1279,6 +1289,7 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
               rosterTeam={rosterTeam}
               rosterPlayers={rosterPlayers}
               addedPlayerIds={addedPlayerIds}
+              addedPickKeys={addedPickKeys}
               side={side}
               onTogglePlayer={(p, isAdded) => {
                 if (isAdded) {
@@ -1288,6 +1299,15 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
                   if (asset) removeAsset(side, asset.id);
                 } else {
                   addPlayer(side, p);
+                }
+              }}
+              onTogglePick={(pick, isAdded) => {
+                if (isAdded) {
+                  const currentAssets = side === "a" ? sideA : sideB;
+                  const asset = currentAssets.find(a => a.type === "pick" && a.pickYear === pick.year && a.pickRound === pick.round);
+                  if (asset) removeAsset(side, asset.id);
+                } else {
+                  addPick(side, String(pick.year), pick.round, pick.projectedRange || "Mid");
                 }
               }}
               getPlayerValue={getPlayerValue}
