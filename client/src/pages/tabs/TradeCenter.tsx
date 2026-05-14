@@ -1428,7 +1428,9 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
                           />
                         ) : (
                           <div className="w-11 h-11 rounded-full bg-purple-900/40 border border-purple-700/40 flex items-center justify-center flex-shrink-0">
-                            <span className="text-[11px] font-bold text-purple-400">PK</span>
+                            <span className="text-[11px] font-bold text-purple-400">
+                              {asset.pickRound === 1 ? "1st" : asset.pickRound === 2 ? "2nd" : asset.pickRound === 3 ? "3rd" : `${asset.pickRound}th`}
+                            </span>
                           </div>
                         )}
                         <p className="text-[11px] font-bold text-foreground text-center leading-tight max-w-[68px] truncate">{lastName}</p>
