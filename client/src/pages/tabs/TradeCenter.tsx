@@ -1124,12 +1124,12 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
   const [rosterOpenA, setRosterOpenA] = useState(false);
   const [rosterOpenB, setRosterOpenB] = useState(false);
 
-  const RosterCollapsible = ({ rosterTeam, rosterPlayers, addedPlayerIds, side, addPlayer, getPlayerValue }: {
+  const RosterCollapsible = ({ rosterTeam, rosterPlayers, addedPlayerIds, side, onTogglePlayer, getPlayerValue }: {
     rosterTeam: Team;
     rosterPlayers: Player[];
     addedPlayerIds: Set<string>;
     side: "a" | "b";
-    addPlayer: (side: "a" | "b", p: Player) => void;
+    onTogglePlayer: (p: Player, isAdded: boolean) => void;
     getPlayerValue: (p: Player) => number;
   }) => {
     const isOpen = side === "a" ? rosterOpenA : rosterOpenB;
@@ -1167,14 +1167,13 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
                         className={cn(
                           "w-full flex flex-col px-1.5 py-1 rounded text-left text-xs transition-colors",
                           isAdded
-                            ? "bg-[#d4af37]/10 opacity-50 cursor-default"
+                            ? "bg-[#d4af37]/15 border border-[#d4af37]/40 cursor-pointer hover:bg-red-500/10 hover:border-red-500/40"
                             : "hover:bg-muted/40 cursor-pointer"
                         )}
-                        onClick={() => !isAdded && addPlayer(side, p)}
-                        disabled={isAdded}
+                        onClick={() => onTogglePlayer(p, isAdded)}
                         data-testid={`button-roster-player-${side}-${pid}`}
                       >
-                        <span className={cn("truncate text-[11px] font-medium", isAdded && "line-through")}>{p.name}</span>
+                        <span className={cn("truncate text-[11px] font-medium", isAdded && "text-[#d4af37]")}>{p.name}</span>
                       </button>
                     );
                   })}
@@ -1279,7 +1278,16 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
               rosterPlayers={rosterPlayers}
               addedPlayerIds={addedPlayerIds}
               side={side}
-              addPlayer={addPlayer}
+              onTogglePlayer={(p, isAdded) => {
+                if (isAdded) {
+                  const currentAssets = side === "a" ? sideA : sideB;
+                  const pid = p.sleeperId || p.id;
+                  const asset = currentAssets.find(a => a.type === "player" && a.player && (a.player.sleeperId === pid || a.player.id === pid));
+                  if (asset) removeAsset(side, asset.id);
+                } else {
+                  addPlayer(side, p);
+                }
+              }}
               getPlayerValue={getPlayerValue}
             />
           )}
