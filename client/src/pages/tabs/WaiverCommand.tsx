@@ -650,20 +650,6 @@ export default function WaiverCommand() {
         </div>
       </Card>
 
-      {/* Tier legend */}
-      <div className="flex items-center gap-4 text-xs text-muted-foreground flex-wrap">
-        <span className="font-semibold">Tier Key:</span>
-        {(["Contender","Bubble","Rebuild"] as const).map((t) => {
-          const c = getTierAccent(t);
-          return (
-            <span key={t} className="flex items-center gap-1.5">
-              <span className={cn("w-2 h-2 rounded-full", c.dot)} />
-              <span>{t}</span>
-            </span>
-          );
-        })}
-        <span className="text-muted-foreground/60">· Tier = roster value rank within each league</span>
-      </div>
       </>)}
 
       {activeView === "league" && (
