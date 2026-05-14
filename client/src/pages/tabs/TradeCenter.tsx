@@ -1487,17 +1487,11 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
               <div className={`p-3 rounded-lg border ${winnerSide === "B" && diffPct > 4 ? "bg-[#d4af37]/10 border-[#d4af37]/40" : "bg-muted/20 dark:bg-muted/10 border-border/20"}`}>
                 <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">{sideBTeam?.owner || "Side B"} receives</p>
                 <p className="text-lg font-bold text-foreground" data-testid="text-analysis-final-a">{Math.round(finalA).toLocaleString()}</p>
-                {valueAdjustment && rawA !== finalA && (
-                  <p className="text-[10px] text-muted-foreground/60 mt-0.5">{rawA.toLocaleString()} <span className="italic">−3% star overpay adj.</span></p>
-                )}
               </div>
               {/* sideB sends → sideATeam receives finalB */}
               <div className={`p-3 rounded-lg border ${winnerSide === "A" && diffPct > 4 ? "bg-[#d4af37]/10 border-[#d4af37]/40" : "bg-muted/20 dark:bg-muted/10 border-border/20"}`}>
                 <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">{sideATeam?.owner || "Side A"} receives</p>
                 <p className="text-lg font-bold text-foreground" data-testid="text-analysis-final-b">{Math.round(finalB).toLocaleString()}</p>
-                {valueAdjustment && rawB !== finalB && (
-                  <p className="text-[10px] text-muted-foreground/60 mt-0.5">{rawB.toLocaleString()} <span className="italic">−3% star overpay adj.</span></p>
-                )}
               </div>
             </div>
 
