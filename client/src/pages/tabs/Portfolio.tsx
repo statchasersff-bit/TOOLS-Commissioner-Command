@@ -515,22 +515,38 @@ export function PortfolioSummary() {
   }, [isConnected, user?.userId, leagues]);
 
   useEffect(() => {
-    if (!isConnected || leagues.length === 0) return;
+    if (!isConnected || !user?.userId || leagues.length === 0) return;
     let cancelled = false;
     setPendingTradeLoading(true);
+    const userId = user.userId;
+    const eligible = leagues.filter(l => !l.isBestBall);
+
     import("@/services/sleeperAuthedApi").then(({ fetchLeagueTransactionsFiltered }) =>
       Promise.allSettled(
-        leagues.filter(l => !l.isBestBall).map(l =>
-          fetchLeagueTransactionsFiltered(l.leagueId, ["trade"], [], [])
-        )
+        eligible.map(async (l) => {
+          // Fetch rosters and transactions in parallel per league
+          const [rosters, txns] = await Promise.all([
+            fetch(`https://api.sleeper.app/v1/league/${l.leagueId}/rosters`).then(r => r.json()),
+            fetchLeagueTransactionsFiltered(l.leagueId, ["trade"], [], []),
+          ]);
+          const userRoster = (rosters as any[]).find((r: any) => r.owner_id === userId);
+          if (!userRoster) return 0;
+          const userRosterId: number = userRoster.roster_id;
+          // Mirror TradeSync's "incoming" definition exactly:
+          // proposed + user is a party + user didn't create it + user hasn't consented yet
+          return (txns as any[]).filter((t: any) =>
+            t.status === "proposed" &&
+            Array.isArray(t.roster_ids) && t.roster_ids.includes(userRosterId) &&
+            t.creator !== userId &&
+            !(t.consenter_ids ?? []).includes(userRosterId)
+          ).length;
+        })
       )
     ).then((results) => {
       if (cancelled) return;
       let count = 0;
       for (const r of results) {
-        if (r.status === "fulfilled") {
-          count += r.value.filter((t: any) => t.status === "proposed" && t.creator !== user?.userId).length;
-        }
+        if (r.status === "fulfilled") count += r.value;
       }
       setPendingTradeCount(count);
       setPendingTradeLoading(false);
@@ -538,7 +554,7 @@ export function PortfolioSummary() {
       if (!cancelled) { setPendingTradeCount(null); setPendingTradeLoading(false); }
     });
     return () => { cancelled = true; };
-  }, [isConnected, leagues]);
+  }, [isConnected, user?.userId, leagues]);
 
   if (!isConnected) {
     return (
