@@ -23,7 +23,7 @@ import {
   ArrowRightLeft, TrendingUp, TrendingDown, RefreshCw, Loader2,
   Clock, AlertTriangle, ChevronRight, X, ExternalLink, CheckCircle2,
   XCircle, Eye, ArrowRight, ArrowLeft, Inbox, Send, BarChart2,
-  Lock, Activity, Zap, Calendar, Users,
+  Lock, Activity, Zap, Calendar, Users, Share2,
 } from "lucide-react";
 
 const SLEEPER_API = "https://api.sleeper.app/v1";
@@ -369,30 +369,78 @@ function PickChip({ pick }: { pick: AssetPick }) {
   );
 }
 
-function StatusBadge({ status }: { status: TradeStatus }) {
-  const styles: Record<TradeStatus, string> = {
-    pending: "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30",
-    complete: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30",
-    rejected: "bg-red-500/15 text-red-700 dark:text-red-400 border-red-500/30",
-    failed: "bg-red-500/15 text-red-700 dark:text-red-400 border-red-500/30",
-  };
-  const labels: Record<TradeStatus, string> = { pending: "Pending", complete: "Complete", rejected: "Rejected", failed: "Failed" };
-  return <Badge variant="outline" className={cn("text-[10px] font-semibold", styles[status])}>{labels[status]}</Badge>;
+// ─── Date helper ──────────────────────────────────────────────────────────────
+
+function formatTradeDate(ts: number): string {
+  const d = new Date(ts);
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
-function DirectionBadge({ direction }: { direction: "incoming" | "outgoing" }) {
-  if (direction === "incoming") {
+// ─── Player headshot (Sleeper CDN) ────────────────────────────────────────────
+
+function PlayerHeadshot({ playerId, name }: { playerId: string; name: string }) {
+  const [err, setErr] = useState(false);
+  if (!err) {
     return (
-      <div className="flex items-center gap-1 text-[10px] font-bold text-emerald-700 dark:text-emerald-400">
-        <ArrowLeft className="w-3 h-3" /> Incoming
-      </div>
+      <img
+        src={`https://sleepercdn.com/content/nfl/players/thumb/${playerId}.jpg`}
+        alt={name}
+        className="w-8 h-8 rounded-full object-cover object-top flex-shrink-0 bg-muted ring-1 ring-border/30"
+        onError={() => setErr(true)}
+      />
     );
   }
   return (
-    <div className="flex items-center gap-1 text-[10px] font-bold text-blue-700 dark:text-blue-400">
-      <ArrowRight className="w-3 h-3" /> Outgoing
+    <div className="w-8 h-8 rounded-full bg-[#0b3a7a]/15 dark:bg-blue-400/15 flex items-center justify-center text-[11px] font-bold text-[#0b3a7a] dark:text-blue-400 flex-shrink-0">
+      {(name || "?").charAt(0)}
     </div>
   );
+}
+
+// ─── Player row for card layout ───────────────────────────────────────────────
+
+function PlayerCardRow({ player }: { player: AssetPlayer }) {
+  const posColor = getPositionColor(player.pos);
+  return (
+    <div className="flex items-center gap-2.5 py-0.5">
+      <PlayerHeadshot playerId={player.playerId} name={player.name} />
+      <span className="text-sm font-medium text-foreground leading-tight">{player.name}</span>
+      <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded border flex-shrink-0 ml-1", posColor)}>{player.pos}</span>
+    </div>
+  );
+}
+
+function PickCardRow({ pick }: { pick: AssetPick }) {
+  return (
+    <div className="flex items-center gap-2.5 py-0.5">
+      <div className="w-8 h-8 rounded-full bg-amber-500/15 dark:bg-amber-400/15 flex items-center justify-center flex-shrink-0">
+        <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400">RD{pick.round}</span>
+      </div>
+      <span className="text-sm font-medium text-foreground">{pick.label}</span>
+      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded border bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30 flex-shrink-0 ml-1">PICK</span>
+    </div>
+  );
+}
+
+// ─── Direction pill badge ─────────────────────────────────────────────────────
+
+function DirectionPill({ direction, status }: { direction: NormalizedTrade["direction"]; status: TradeStatus }) {
+  if (status === "complete")
+    return <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-emerald-500 text-white">Completed</span>;
+  if (status === "rejected")
+    return <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-red-500 text-white">Rejected</span>;
+  if (status === "failed" || status === "cancelled")
+    return <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-zinc-500 text-white">Cancelled</span>;
+  // proposed
+  if (direction === "incoming")
+    return <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-emerald-500 text-white">Incoming</span>;
+  if (direction === "outgoing")
+    return <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-blue-500 text-white">Outgoing</span>;
+  if (direction === "counter")
+    return <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-purple-500 text-white">Counter</span>;
+  if (direction === "waiting")
+    return <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-amber-500 text-white">Waiting</span>;
+  return null;
 }
 
 function ValueEdgeCell({ edge }: { edge: number }) {
@@ -401,15 +449,17 @@ function ValueEdgeCell({ edge }: { edge: number }) {
   return (
     <div className={cn("flex items-center gap-0.5 text-xs font-bold", isGood ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400")}>
       {isGood ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-      {isGood ? "+" : ""}{edge > 0 ? Math.round(edge).toLocaleString() : Math.round(edge).toLocaleString()}
+      {isGood ? "+" : ""}{Math.round(edge).toLocaleString()}
     </div>
   );
 }
 
-// ─── Trade Row ────────────────────────────────────────────────────────────────
+// ─── Trade Card ───────────────────────────────────────────────────────────────
 
-function TradeRow({ trade, onView, onAccept, onReject, actionLoading, actionResult }: {
+function TradeCard({ trade, myUsername, myAvatar, onView, onAccept, onReject, actionLoading, actionResult }: {
   trade: NormalizedTrade;
+  myUsername: string;
+  myAvatar: string | null;
   onView: () => void;
   onAccept: () => void;
   onReject: () => void;
@@ -417,133 +467,143 @@ function TradeRow({ trade, onView, onAccept, onReject, actionLoading, actionResu
   actionResult: { success: boolean; message: string } | undefined;
 }) {
   const expiring = isExpiringSoon(trade.expiresAt);
+  const isProposed = trade.status === "proposed";
+
+  const sentByLabel = trade.direction === "outgoing"
+    ? "Sent by You"
+    : trade.direction === "incoming" || trade.direction === "counter"
+      ? `Sent by ${trade.partnerName}`
+      : "Awaiting response";
+
+  // User receives = iGet; Partner receives = iGive
+  const myReceives = { players: trade.iGet.players, picks: trade.iGet.picks };
+  const theyReceive = { players: trade.iGive.players, picks: trade.iGive.picks };
 
   return (
     <div
       className={cn(
-        "group relative border border-border/60 rounded-xl p-4 bg-card hover:border-[#0b3a7a]/30 hover:shadow-md hover:shadow-[#0b3a7a]/5 transition-all cursor-pointer",
-        expiring && trade.status === "pending" && "border-amber-500/40 bg-amber-500/5"
+        "border border-border/50 rounded-xl bg-card hover:border-[#0b3a7a]/30 hover:shadow-md hover:shadow-[#0b3a7a]/5 transition-all",
+        expiring && isProposed && "border-amber-500/40"
       )}
-      onClick={onView}
       data-testid={`trade-row-${trade.transactionId}`}
     >
-      {expiring && trade.status === "pending" && (
-        <div className="absolute top-2 right-2 flex items-center gap-1 text-[10px] font-bold text-amber-600 dark:text-amber-400">
-          <AlertTriangle className="w-3 h-3" /> Expiring soon
+      {/* ── Header ── */}
+      <div className="flex items-center gap-2.5 px-4 pt-3.5 pb-2.5 flex-wrap">
+        <DirectionPill direction={trade.direction} status={trade.status} />
+
+        <span className="flex items-center gap-1.5 text-sm font-semibold text-foreground truncate">
+          {trade.leagueName}
+        </span>
+
+        <span className="text-muted-foreground text-xs">·</span>
+        <span className="text-xs text-muted-foreground">{formatTradeDate(trade.created)}</span>
+        <span className="text-muted-foreground text-xs">·</span>
+        <span className="text-xs text-muted-foreground">{sentByLabel}</span>
+
+        {expiring && isProposed && (
+          <>
+            <span className="text-muted-foreground text-xs">·</span>
+            <span className="flex items-center gap-1 text-[11px] font-semibold text-amber-600 dark:text-amber-400">
+              <AlertTriangle className="w-3 h-3" /> Expires {formatExpiryLabel(trade.expiresAt)}
+            </span>
+          </>
+        )}
+
+        <div className="ml-auto flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+          {/* Value edge badge */}
+          {Math.abs(trade.valueEdge) >= 10 && (
+            <div className="hidden sm:flex items-center">
+              <ValueEdgeCell edge={trade.valueEdge} />
+            </div>
+          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 text-[11px] gap-1 text-muted-foreground hover:text-foreground"
+            onClick={onView}
+            data-testid={`btn-view-${trade.transactionId}`}
+          >
+            <Share2 className="w-3.5 h-3.5" /> Share
+          </Button>
         </div>
-      )}
+      </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr_auto_1fr_auto_auto_auto] gap-3 items-center">
+      {/* ── Body: two-column receives layout ── */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 divide-y sm:divide-y-0 sm:divide-x divide-border/40 px-4 pb-3.5">
 
-        {/* League */}
-        <div className="flex items-center gap-2 min-w-0">
-          <TeamAvatar name={trade.leagueName} avatar={trade.leagueAvatar} />
-          <div className="min-w-0">
-            <p className="text-xs font-semibold text-foreground truncate">{trade.leagueName}</p>
-            <p className="text-[10px] text-muted-foreground">{trade.leagueFormat}</p>
+        {/* My side: I receive */}
+        <div className="pb-3 sm:pb-0 sm:pr-6 pt-1">
+          <div className="flex items-center gap-2 mb-2.5">
+            <TeamAvatar name={myUsername} avatar={myAvatar} size="md" />
+            <span className="text-sm font-bold text-foreground">{myUsername}</span>
+            <span className="text-sm text-muted-foreground">receives</span>
           </div>
-        </div>
-
-        {/* Direction */}
-        <div className="hidden md:flex flex-col items-center gap-1 px-2">
-          <StatusBadge status={trade.status} />
-          {trade.status === "pending" && <DirectionBadge direction={trade.direction} />}
-        </div>
-
-        {/* Partner */}
-        <div className="flex items-center gap-2 min-w-0">
-          <TeamAvatar name={trade.partnerName} avatar={trade.partnerAvatar} />
-          <div className="min-w-0">
-            <p className="text-[10px] text-muted-foreground">Partner</p>
-            <p className="text-xs font-semibold text-foreground truncate">{trade.partnerName}</p>
-          </div>
-        </div>
-
-        {/* You Give */}
-        <div className="hidden lg:block min-w-0 max-w-[180px]">
-          <p className="text-[10px] text-muted-foreground mb-1 font-medium">You Give</p>
-          <div className="space-y-0.5">
-            {trade.iGive.players.slice(0, 2).map((p) => (
-              <AssetChip key={p.playerId} player={p} />
-            ))}
-            {trade.iGive.picks.slice(0, 1).map((p) => (
-              <PickChip key={p.label} pick={p} />
-            ))}
-            {(trade.iGive.players.length + trade.iGive.picks.length) > 3 && (
-              <span className="text-[10px] text-muted-foreground">+{(trade.iGive.players.length + trade.iGive.picks.length) - 3} more</span>
-            )}
-            {trade.iGive.players.length === 0 && trade.iGive.picks.length === 0 && (
-              <span className="text-[10px] text-muted-foreground italic">Nothing</span>
-            )}
-          </div>
-        </div>
-
-        {/* You Get */}
-        <div className="hidden lg:block min-w-0 max-w-[180px]">
-          <p className="text-[10px] text-muted-foreground mb-1 font-medium">You Get</p>
-          <div className="space-y-0.5">
-            {trade.iGet.players.slice(0, 2).map((p) => (
-              <AssetChip key={p.playerId} player={p} />
-            ))}
-            {trade.iGet.picks.slice(0, 1).map((p) => (
-              <PickChip key={p.label} pick={p} />
-            ))}
-            {(trade.iGet.players.length + trade.iGet.picks.length) > 3 && (
-              <span className="text-[10px] text-muted-foreground">+{(trade.iGet.players.length + trade.iGet.picks.length) - 3} more</span>
-            )}
-            {trade.iGet.players.length === 0 && trade.iGet.picks.length === 0 && (
-              <span className="text-[10px] text-muted-foreground italic">Nothing</span>
+          <div className="space-y-0.5 pl-1">
+            {myReceives.players.map((p) => <PlayerCardRow key={p.playerId} player={p} />)}
+            {myReceives.picks.map((p) => <PickCardRow key={p.label} pick={p} />)}
+            {myReceives.players.length === 0 && myReceives.picks.length === 0 && (
+              <p className="text-sm text-muted-foreground italic pl-1">Nothing</p>
             )}
           </div>
         </div>
 
-        {/* Value Edge */}
-        <div className="hidden md:block text-center px-2">
-          <p className="text-[10px] text-muted-foreground mb-0.5">Edge</p>
-          <ValueEdgeCell edge={trade.valueEdge} />
+        {/* Partner side: they receive */}
+        <div className="pt-3 sm:pt-1 sm:pl-6">
+          <div className="flex items-center gap-2 mb-2.5">
+            <TeamAvatar name={trade.partnerName} avatar={trade.partnerAvatar} size="md" />
+            <span className="text-sm font-bold text-foreground">{trade.partnerName}</span>
+            <span className="text-sm text-muted-foreground">receives</span>
+          </div>
+          <div className="space-y-0.5 pl-1">
+            {theyReceive.players.map((p) => <PlayerCardRow key={p.playerId} player={p} />)}
+            {theyReceive.picks.map((p) => <PickCardRow key={p.label} pick={p} />)}
+            {theyReceive.players.length === 0 && theyReceive.picks.length === 0 && (
+              <p className="text-sm text-muted-foreground italic pl-1">Nothing</p>
+            )}
+          </div>
         </div>
+      </div>
 
-        {/* Expiration */}
-        <div className="hidden md:block text-center px-2">
-          <p className="text-[10px] text-muted-foreground mb-0.5">Expires</p>
-          <p className={cn("text-xs font-medium", expiring ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground")}>
-            {formatExpiryLabel(trade.expiresAt)}
-          </p>
-        </div>
-
-        {/* Actions */}
-        <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+      {/* ── Footer: actions ── */}
+      {(isProposed || actionResult) && (
+        <div
+          className="flex items-center gap-2 px-4 py-2.5 border-t border-border/40"
+          onClick={(e) => e.stopPropagation()}
+        >
           {actionResult && (
-            <span className={cn("text-[10px] font-semibold", actionResult.success ? "text-emerald-600 dark:text-emerald-400" : "text-red-500")}>
-              {actionResult.success ? <CheckCircle2 className="w-3.5 h-3.5 inline" /> : <XCircle className="w-3.5 h-3.5 inline" />}
+            <span className={cn("flex items-center gap-1 text-xs font-semibold", actionResult.success ? "text-emerald-600 dark:text-emerald-400" : "text-red-500")}>
+              {actionResult.success ? <CheckCircle2 className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5" />}
+              {actionResult.message}
             </span>
           )}
           {actionLoading ? (
             <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
           ) : (
             <>
-              <Button variant="outline" size="sm" className="h-7 px-2 text-[11px] gap-1 hover:border-[#0b3a7a]/40" onClick={onView} data-testid={`btn-view-${trade.transactionId}`}>
-                <Eye className="w-3 h-3" /> View
-              </Button>
-              {trade.status === "pending" && trade.direction === "incoming" && (
+              {isProposed && trade.direction === "incoming" && (
                 <>
-                  <Button size="sm" className="h-7 px-2 text-[11px] gap-1 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={onAccept} data-testid={`btn-accept-${trade.transactionId}`}>
-                    <CheckCircle2 className="w-3 h-3" /> Accept
+                  <Button size="sm" className="h-7 px-3 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={onAccept} data-testid={`btn-accept-${trade.transactionId}`}>
+                    <CheckCircle2 className="w-3.5 h-3.5" /> Accept Trade
                   </Button>
-                  <Button variant="outline" size="sm" className="h-7 px-2 text-[11px] gap-1 hover:border-red-400/50 hover:text-red-500" onClick={onReject} data-testid={`btn-reject-${trade.transactionId}`}>
-                    <XCircle className="w-3 h-3" /> Reject
+                  <Button variant="outline" size="sm" className="h-7 px-3 text-xs gap-1.5 hover:border-red-400/50 hover:text-red-500" onClick={onReject} data-testid={`btn-reject-${trade.transactionId}`}>
+                    <XCircle className="w-3.5 h-3.5" /> Reject
                   </Button>
                 </>
               )}
-              {trade.status === "pending" && trade.direction === "outgoing" && (
-                <Button variant="outline" size="sm" className="h-7 px-2 text-[11px] gap-1 hover:border-red-400/50 hover:text-red-500" onClick={onReject} data-testid={`btn-cancel-${trade.transactionId}`}>
-                  <X className="w-3 h-3" /> Cancel
+              {isProposed && trade.direction === "outgoing" && (
+                <Button variant="outline" size="sm" className="h-7 px-3 text-xs gap-1.5 hover:border-red-400/50 hover:text-red-500" onClick={onReject} data-testid={`btn-cancel-${trade.transactionId}`}>
+                  <X className="w-3.5 h-3.5" /> Cancel Offer
+                </Button>
+              )}
+              {isProposed && (trade.direction === "waiting" || trade.direction === "counter") && (
+                <Button variant="outline" size="sm" className="h-7 px-3 text-xs gap-1.5" onClick={onView} data-testid={`btn-view-detail-${trade.transactionId}`}>
+                  <Eye className="w-3.5 h-3.5" /> View Details
                 </Button>
               )}
             </>
           )}
         </div>
-      </div>
+      )}
     </div>
   );
 }
@@ -575,8 +635,7 @@ function TradeDrawer({ trade, open, onClose, onAccept, onReject, actionLoading }
               <div className="flex items-center gap-2 flex-wrap">
                 <ArrowRightLeft className="w-4 h-4 text-[#0b3a7a] dark:text-blue-400 flex-shrink-0" />
                 <span className="text-base font-bold">Trade Details</span>
-                <StatusBadge status={trade.status} />
-                {trade.status === "pending" && <DirectionBadge direction={trade.direction} />}
+                <DirectionPill direction={trade.direction} status={trade.status} />
               </div>
               <p className="text-xs text-muted-foreground mt-1 font-normal">{trade.leagueName}</p>
             </div>
@@ -586,7 +645,7 @@ function TradeDrawer({ trade, open, onClose, onAccept, onReject, actionLoading }
         <div className="space-y-5 pt-5">
 
           {/* Expiry Banner */}
-          {trade.expiresAt && trade.status === "pending" && (
+          {trade.expiresAt && trade.status === "proposed" && (
             <div className={cn(
               "flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium",
               expiring
@@ -727,7 +786,7 @@ function TradeDrawer({ trade, open, onClose, onAccept, onReject, actionLoading }
           </div>
 
           {/* Action Buttons */}
-          {trade.status === "pending" && (
+          {trade.status === "proposed" && (
             <div className="space-y-2 pt-2 border-t border-border/40">
               <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Actions</p>
               <div className="grid grid-cols-2 gap-2">
@@ -1258,11 +1317,13 @@ export default function TradeSync() {
           </p>
         </Card>
       ) : (
-        <div className="space-y-2.5">
+        <div className="space-y-3">
           {filteredTrades.map((trade) => (
-            <TradeRow
+            <TradeCard
               key={trade.transactionId}
               trade={trade}
+              myUsername={sleeper.user?.username ?? sleeper.user?.displayName ?? "Me"}
+              myAvatar={sleeper.user?.avatar ? `https://sleepercdn.com/avatars/thumbs/${sleeper.user.avatar}` : null}
               onView={() => handleView(trade)}
               onAccept={() => handleAcceptClick(trade)}
               onReject={() => handleRejectClick(trade)}
