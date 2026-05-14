@@ -257,11 +257,31 @@ function normalizeTrade(
   // draft_picks may arrive as a JSON-encoded string (Sleeper GraphQL JSON scalar),
   // a plain array, or null — normalise to an array before iterating.
   const rawDraftPicks = (t as any).draft_picks;
-  const draftPicks: SleeperTransactionPick[] = Array.isArray(rawDraftPicks)
-    ? rawDraftPicks
-    : typeof rawDraftPicks === "string"
-    ? (() => { try { return JSON.parse(rawDraftPicks); } catch { return []; } })()
-    : [];
+  // Sleeper's GraphQL API returns draft_picks as an array of CSV strings:
+  //   "{roster_id},{season},{round},{previous_owner_id},{owner_id}"
+  // The public REST API returns them as proper JSON objects.
+  // Normalise both into SleeperTransactionPick objects before iterating.
+  const draftPicks: SleeperTransactionPick[] = (() => {
+    if (!rawDraftPicks) return [];
+    if (typeof rawDraftPicks === "string") {
+      try { return JSON.parse(rawDraftPicks) as SleeperTransactionPick[]; } catch { return []; }
+    }
+    if (!Array.isArray(rawDraftPicks)) return [];
+    return (rawDraftPicks as any[]).map((dp) => {
+      if (typeof dp === "string") {
+        // CSV format from GraphQL: "roster_id,season,round,previous_owner_id,owner_id"
+        const parts = dp.split(",");
+        return {
+          roster_id: Number(parts[0]),
+          season: parts[1],
+          round: Number(parts[2]),
+          previous_owner_id: Number(parts[3]),
+          owner_id: Number(parts[4]),
+        } as SleeperTransactionPick;
+      }
+      return dp as SleeperTransactionPick;
+    });
+  })();
 
   for (const dp of draftPicks) {
     const round = Number(dp.round);
@@ -557,7 +577,7 @@ function TradeCard({ trade, myUsername, myAvatar, onView }: {
           </div>
           <div className="space-y-0.5 pl-1">
             {myReceives.players.map((p) => <PlayerCardRow key={p.playerId} player={p} />)}
-            {myReceives.picks.map((p) => <PickCardRow key={p.label} pick={p} />)}
+            {myReceives.picks.map((p, i) => <PickCardRow key={`${i}-${p.originalRosterId}-${p.label}`} pick={p} />)}
             {myReceives.players.length === 0 && myReceives.picks.length === 0 && (
               <p className="text-sm text-muted-foreground italic pl-1">Nothing</p>
             )}
@@ -573,7 +593,7 @@ function TradeCard({ trade, myUsername, myAvatar, onView }: {
           </div>
           <div className="space-y-0.5 pl-1">
             {theyReceive.players.map((p) => <PlayerCardRow key={p.playerId} player={p} />)}
-            {theyReceive.picks.map((p) => <PickCardRow key={p.label} pick={p} />)}
+            {theyReceive.picks.map((p, i) => <PickCardRow key={`${i}-${p.originalRosterId}-${p.label}`} pick={p} />)}
             {theyReceive.players.length === 0 && theyReceive.picks.length === 0 && (
               <p className="text-sm text-muted-foreground italic pl-1">Nothing</p>
             )}
@@ -637,7 +657,7 @@ function TradeDialog({ trade, open, onClose, onAccept, onReject, actionLoading, 
               </div>
               <div className="space-y-1">
                 {trade.iGet.players.map((p) => <PlayerCardRow key={p.playerId} player={p} showValue />)}
-                {trade.iGet.picks.map((p)   => <PickCardRow   key={p.label}    pick={p}   showValue />)}
+                {trade.iGet.picks.map((p, i)   => <PickCardRow key={`${i}-${p.originalRosterId}-${p.label}`} pick={p} showValue />)}
                 {trade.iGet.players.length === 0 && trade.iGet.picks.length === 0 && (
                   <p className="text-sm text-muted-foreground italic pl-1">Nothing</p>
                 )}
@@ -656,7 +676,7 @@ function TradeDialog({ trade, open, onClose, onAccept, onReject, actionLoading, 
               </div>
               <div className="space-y-1">
                 {trade.iGive.players.map((p) => <PlayerCardRow key={p.playerId} player={p} showValue />)}
-                {trade.iGive.picks.map((p)   => <PickCardRow   key={p.label}    pick={p}   showValue />)}
+                {trade.iGive.picks.map((p, i)   => <PickCardRow key={`${i}-${p.originalRosterId}-${p.label}`} pick={p} showValue />)}
                 {trade.iGive.players.length === 0 && trade.iGive.picks.length === 0 && (
                   <p className="text-sm text-muted-foreground italic pl-1">Nothing</p>
                 )}
