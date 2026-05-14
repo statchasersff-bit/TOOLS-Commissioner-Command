@@ -251,23 +251,23 @@ export function ShareTeam({ league, userTeam }: Props) {
     <div className="space-y-4">
       {/* Combined controls + tab toggle row */}
       <div className="flex flex-wrap items-center gap-2">
+        <Button size="sm" variant="outline" onClick={copyLink} data-testid="button-copy-link">
+          <Copy className="w-3.5 h-3.5 mr-1.5" /> Copy Link
+        </Button>
+        <Button size="sm" variant="outline" onClick={() => doExport(false)} disabled={isExporting} data-testid="button-export-image">
+          {isExporting ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <Image className="w-3.5 h-3.5 mr-1.5" />}
+          Export Image
+        </Button>
         {innerTab === "share" && (
-          <>
-            <Button size="sm" variant="outline" onClick={copyLink} data-testid="button-copy-link">
-              <Copy className="w-3.5 h-3.5 mr-1.5" /> Copy Link
-            </Button>
-            <Button size="sm" variant="outline" onClick={() => doExport(false)} disabled={isExporting} data-testid="button-export-image">
-              {isExporting ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <Image className="w-3.5 h-3.5 mr-1.5" />}
-              Export Image
-            </Button>
-            <Button size="sm" variant="outline" onClick={() => doExport(true)} disabled={isExporting} data-testid="button-export-anonymous">
-              <EyeOff className="w-3.5 h-3.5 mr-1.5" /> Export Anonymous
-            </Button>
-            <Button size="sm" variant="outline" onClick={copyBlurb} data-testid="button-copy-blurb">
-              <Share2 className="w-3.5 h-3.5 mr-1.5" /> Copy Blurb
-            </Button>
-            <ToggleSwitch id="hide-values" label="Hide Values" checked={hideValues} onCheckedChange={setHideValues} />
-          </>
+          <Button size="sm" variant="outline" onClick={() => doExport(true)} disabled={isExporting} data-testid="button-export-anonymous">
+            <EyeOff className="w-3.5 h-3.5 mr-1.5" /> Export Anonymous
+          </Button>
+        )}
+        <Button size="sm" variant="outline" onClick={copyBlurb} data-testid="button-copy-blurb">
+          <Share2 className="w-3.5 h-3.5 mr-1.5" /> Copy Blurb
+        </Button>
+        {innerTab === "share" && (
+          <ToggleSwitch id="hide-values" label="Hide Values" checked={hideValues} onCheckedChange={setHideValues} />
         )}
         <div className="ml-auto flex gap-1 p-1 rounded-full bg-muted/40 border border-border/40">
           <button
