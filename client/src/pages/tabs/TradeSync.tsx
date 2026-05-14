@@ -303,12 +303,20 @@ function normalizeTrade(
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-function KPICard({ label, value, sub, icon: Icon, color, loading }: {
+function KPICard({ label, value, sub, icon: Icon, color, loading, onClick, active }: {
   label: string; value: number | string; sub?: string;
   icon: React.ElementType; color: string; loading?: boolean;
+  onClick?: () => void; active?: boolean;
 }) {
   return (
-    <Card className="p-4 flex items-start gap-3 min-w-0">
+    <Card
+      className={cn(
+        "p-4 flex items-start gap-3 min-w-0 transition-all",
+        onClick && "cursor-pointer hover:border-[#0b3a7a]/40 hover:shadow-md hover:shadow-[#0b3a7a]/5",
+        active && "border-[#d4af37]/50 shadow-sm"
+      )}
+      onClick={onClick}
+    >
       <div className={cn("w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5", color)}>
         <Icon className="w-4 h-4" />
       </div>
@@ -321,7 +329,7 @@ function KPICard({ label, value, sub, icon: Icon, color, loading }: {
         ) : (
           <>
             <p className="text-xl font-bold leading-tight text-foreground">{value}</p>
-            <p className="text-[11px] font-medium text-muted-foreground leading-tight mt-0.5">{label}</p>
+            <p className={cn("text-[11px] font-medium leading-tight mt-0.5", active ? "text-[#d4af37]" : "text-muted-foreground")}>{label}</p>
             {sub && <p className="text-[10px] text-muted-foreground/70 mt-0.5">{sub}</p>}
           </>
         )}
@@ -1142,13 +1150,13 @@ export default function TradeSync() {
 
       {/* KPI Row */}
       <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
-        <KPICard label="Total Open"  value={kpis.totalPending} icon={ArrowRightLeft} color="bg-blue-500/10 text-blue-600 dark:text-blue-400"         loading={loading} />
-        <KPICard label="Incoming"    value={kpis.incoming}     icon={Inbox}          color="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"  loading={loading} />
-        <KPICard label="Outgoing"    value={kpis.outgoing}     icon={Send}           color="bg-blue-500/10 text-blue-500 dark:text-blue-400"           loading={loading} />
-        <KPICard label="Completed"   value={kpis.completed}    icon={CheckCircle2}   color="bg-[#d4af37]/10 text-[#d4af37]"                            loading={loading} />
-        <KPICard label="Rejected"    value={kpis.rejected}     icon={XCircle}        color="bg-red-500/10 text-red-500 dark:text-red-400"              loading={loading} />
-        <KPICard label="Cancelled"   value={kpis.cancelled}    icon={XCircle}        color="bg-slate-500/10 text-slate-400"                            loading={loading} />
-        <KPICard label="All Trades"  value={kpis.allTrades}    icon={Activity}       color="bg-muted text-muted-foreground"                            loading={loading} />
+        <KPICard label="Total Open"  value={kpis.totalPending} icon={ArrowRightLeft} color="bg-blue-500/10 text-blue-600 dark:text-blue-400"         loading={loading} onClick={() => setView("pending")}   active={view === "pending"}   />
+        <KPICard label="Incoming"    value={kpis.incoming}     icon={Inbox}          color="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"  loading={loading} onClick={() => setView("incoming")}  active={view === "incoming"}  />
+        <KPICard label="Outgoing"    value={kpis.outgoing}     icon={Send}           color="bg-blue-500/10 text-blue-500 dark:text-blue-400"           loading={loading} onClick={() => setView("outgoing")}  active={view === "outgoing"}  />
+        <KPICard label="Completed"   value={kpis.completed}    icon={CheckCircle2}   color="bg-[#d4af37]/10 text-[#d4af37]"                            loading={loading} onClick={() => setView("completed")} active={view === "completed"} />
+        <KPICard label="Rejected"    value={kpis.rejected}     icon={XCircle}        color="bg-red-500/10 text-red-500 dark:text-red-400"              loading={loading} onClick={() => setView("rejected")}  active={view === "rejected"}  />
+        <KPICard label="Cancelled"   value={kpis.cancelled}    icon={XCircle}        color="bg-slate-500/10 text-slate-400"                            loading={loading} onClick={() => setView("cancelled")} active={view === "cancelled"} />
+        <KPICard label="All Trades"  value={kpis.allTrades}    icon={Activity}       color="bg-muted text-muted-foreground"                            loading={loading} onClick={() => setView("activity")}  active={view === "activity"}  />
       </div>
 
       {/* Auth banner — public REST fallback only shows completed history */}
@@ -1176,36 +1184,8 @@ export default function TradeSync() {
         </Card>
       )}
 
-      {/* View + League Filters */}
+      {/* League Filter */}
       <div className="flex items-center gap-3 flex-wrap">
-        <div className="flex items-center gap-0.5 bg-muted/50 rounded-lg p-0.5 flex-wrap">
-          {VIEWS.map(({ id, label, icon: Icon }) => {
-            const count = id === "pending"   ? kpis.totalPending
-                       : id === "incoming"  ? kpis.incoming
-                       : id === "outgoing"  ? kpis.outgoing
-                       : undefined;
-            return (
-              <button
-                key={id}
-                onClick={() => setView(id)}
-                data-testid={`view-tab-${id}`}
-                className={cn(
-                  "flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-all",
-                  view === id ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                <Icon className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">{label}</span>
-                {count !== undefined && count > 0 && (
-                  <span className={cn("text-[10px] font-bold rounded-full px-1.5 py-0.5 min-w-[18px] text-center leading-none", view === id ? "bg-[#d4af37]/20 text-[#b8920f]" : "bg-muted text-muted-foreground")}>
-                    {count}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </div>
-
         {rawData.length > 1 && (
           <select
             className="text-xs bg-muted/50 border border-border/50 rounded-lg px-2.5 py-1.5 text-foreground focus:outline-none focus:ring-1 focus:ring-[#0b3a7a]/30"
