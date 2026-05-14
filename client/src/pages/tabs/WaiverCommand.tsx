@@ -643,26 +643,26 @@ export default function WaiverCommand() {
             <thead>
               <tr className="border-b border-border/40 dark:border-white/[0.05] bg-muted/30 dark:bg-white/[0.02]">
                 {[
-                  { key: "leagueName" as SortKey, label: "League",          align: "left"   },
-                  { key: "openSlots"  as SortKey, label: "Open Slots",      align: "center" },
-                  { key: "faabPct"    as SortKey, label: "FAAB Remaining",  align: "center" },
-                  { key: null,                    label: "Best Available",  align: "left"   },
-                  { key: null,                    label: "Dynasty Value",   align: "center" },
-                  { key: null,                    label: "Lowest On Team",  align: "left"   },
-                  { key: "difference" as SortKey, label: "Difference",      align: "center" },
-                  { key: null,                    label: "Claim",           align: "center" },
-                  { key: null,                    label: "Detail",          align: "center" },
+                  { key: "leagueName" as SortKey, label: "League",       align: "left"   },
+                  { key: "openSlots"  as SortKey, label: "Open",         align: "center" },
+                  { key: "faabPct"    as SortKey, label: "FAAB",         align: "center" },
+                  { key: null,                    label: "Best Avail",   align: "left"   },
+                  { key: null,                    label: "Dyn Val",      align: "center" },
+                  { key: null,                    label: "Lowest",       align: "left"   },
+                  { key: "difference" as SortKey, label: "Diff",         align: "center" },
+                  { key: null,                    label: "Claim",        align: "center" },
+                  { key: null,                    label: "Detail",       align: "center" },
                 ].map((col, i) => (
                   <th
                     key={i}
                     onClick={() => col.key && handleSort(col.key)}
                     className={cn(
-                      "px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground whitespace-nowrap",
+                      "px-2 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground whitespace-nowrap",
                       col.align === "center" ? "text-center" : "text-left",
                       col.key && "cursor-pointer hover:text-foreground transition-colors select-none"
                     )}
                   >
-                    <span className="inline-flex items-center gap-1">
+                    <span className="inline-flex items-center gap-0.5">
                       {col.label}
                       {col.key && <SortIcon col={col.key} />}
                     </span>
@@ -788,7 +788,7 @@ function WaiverTableRow({ row, onClaim, onView }: { row: WaiverRow; onClaim: () 
     return (
       <tr className="animate-pulse">
         {Array.from({ length: 9 }).map((_, i) => (
-          <td key={i} className="px-4 py-3">
+          <td key={i} className="px-2 py-2">
             <Skeleton className="h-4 w-full rounded" />
           </td>
         ))}
@@ -799,8 +799,8 @@ function WaiverTableRow({ row, onClaim, onView }: { row: WaiverRow; onClaim: () 
   if (row.error) {
     return (
       <tr className="opacity-60">
-        <td className="px-4 py-3 font-medium text-foreground">{row.leagueName}</td>
-        <td colSpan={8} className="px-4 py-3">
+        <td className="px-2 py-2 font-medium text-foreground">{row.leagueName}</td>
+        <td colSpan={8} className="px-2 py-2">
           <span className="flex items-center gap-1.5 text-xs text-destructive">
             <AlertCircle className="w-3.5 h-3.5" />
             Failed to load league data
@@ -813,45 +813,43 @@ function WaiverTableRow({ row, onClaim, onView }: { row: WaiverRow; onClaim: () 
   return (
     <tr className="hover:bg-muted/30 dark:hover:bg-white/[0.025] transition-colors" data-testid={`row-league-${row.leagueId}`}>
       {/* League name */}
-      <td className="px-4 py-3">
-        <div className="flex items-center gap-2.5">
+      <td className="px-2 py-2">
+        <div className="flex items-center gap-1.5">
           {row.leagueAvatar ? (
             <img
               src={row.leagueAvatar}
               alt=""
-              className="w-8 h-8 rounded-full flex-shrink-0 object-cover bg-muted ring-1 ring-border/40"
+              className="w-6 h-6 rounded-full flex-shrink-0 object-cover bg-muted ring-1 ring-border/40"
               onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
             />
           ) : (
-            <div className="w-8 h-8 rounded-full flex-shrink-0 bg-[#0b3a7a]/20 dark:bg-blue-900/40 flex items-center justify-center ring-1 ring-border/40">
-              <span className="text-[11px] font-bold text-[#0b3a7a] dark:text-blue-400 uppercase">{row.leagueName[0] ?? "?"}</span>
+            <div className="w-6 h-6 rounded-full flex-shrink-0 bg-[#0b3a7a]/20 dark:bg-blue-900/40 flex items-center justify-center ring-1 ring-border/40">
+              <span className="text-[9px] font-bold text-[#0b3a7a] dark:text-blue-400 uppercase">{row.leagueName[0] ?? "?"}</span>
             </div>
           )}
           <div className="min-w-0">
-            <div className="font-semibold text-foreground text-[13px] truncate max-w-[180px]" title={row.leagueName}>
+            <div className="font-semibold text-foreground text-[12px] truncate max-w-[130px]" title={row.leagueName}>
               {row.leagueName}
             </div>
-            <div className="flex items-center gap-1 mt-1.5 flex-wrap">
+            <div className="flex items-center gap-0.5 mt-0.5">
               {row.scoringFormat && (
-                <span className="inline-block text-[10px] font-medium px-1.5 py-[2px] rounded bg-white/[0.07] dark:bg-white/[0.06] text-slate-400 leading-none">
+                <span className="text-[9px] font-medium px-1 py-[1px] rounded bg-white/[0.07] dark:bg-white/[0.06] text-slate-400 leading-none">
                   {row.scoringFormat}
                 </span>
               )}
-              <span className="inline-block text-[10px] font-medium px-1.5 py-[2px] rounded bg-white/[0.07] dark:bg-white/[0.06] text-slate-400 leading-none">
-                {row.totalTeams} Teams
+              <span className="text-[9px] font-medium px-1 py-[1px] rounded bg-white/[0.07] dark:bg-white/[0.06] text-slate-400 leading-none">
+                {row.totalTeams}T
               </span>
-              {row.format.split(" ").map((part, i) => (
-                <span key={i} className="inline-block text-[10px] font-medium px-1.5 py-[2px] rounded bg-white/[0.07] dark:bg-white/[0.06] text-slate-400 leading-none">
-                  {part}
-                </span>
-              ))}
+              <span className="text-[9px] font-medium px-1 py-[1px] rounded bg-white/[0.07] dark:bg-white/[0.06] text-slate-400 leading-none">
+                {row.format}
+              </span>
             </div>
           </div>
         </div>
       </td>
 
       {/* Open slots */}
-      <td className="px-4 py-3 text-center">
+      <td className="px-2 py-2 text-center">
         <span className={cn(
           "text-[13px] font-bold",
           row.openSlots > 2 ? "text-emerald-600 dark:text-emerald-400" :
@@ -863,8 +861,8 @@ function WaiverTableRow({ row, onClaim, onView }: { row: WaiverRow; onClaim: () 
       </td>
 
       {/* FAAB */}
-      <td className="px-4 py-3 text-center">
-        <div className="flex flex-col items-center gap-1">
+      <td className="px-2 py-2 text-center">
+        <div className="flex flex-col items-center gap-0.5">
           <span className={cn(
             "text-[13px] font-bold",
             row.faabPct < 20 ? "text-rose-600 dark:text-rose-400" :
@@ -873,7 +871,7 @@ function WaiverTableRow({ row, onClaim, onView }: { row: WaiverRow; onClaim: () 
           )}>
             {row.faabPct}%
           </span>
-          <div className="w-16 h-1 rounded-full bg-muted/60 overflow-hidden">
+          <div className="w-10 h-1 rounded-full bg-muted/60 overflow-hidden">
             <div
               className={cn(
                 "h-full rounded-full transition-all",
@@ -882,12 +880,11 @@ function WaiverTableRow({ row, onClaim, onView }: { row: WaiverRow; onClaim: () 
               style={{ width: `${row.faabPct}%` }}
             />
           </div>
-          <span className="text-[10px] text-muted-foreground">${row.faabRemaining}/${row.faabBudget}</span>
         </div>
       </td>
 
       {/* Best available */}
-      <td className="px-4 py-3">
+      <td className="px-2 py-2">
         {row.bestAvailable ? (
           <PlayerAvatar
             id={row.bestAvailable.id}
@@ -902,7 +899,7 @@ function WaiverTableRow({ row, onClaim, onView }: { row: WaiverRow; onClaim: () 
       </td>
 
       {/* Dynasty value of best available */}
-      <td className="px-4 py-3 text-center">
+      <td className="px-2 py-2 text-center">
         {row.bestAvailable ? (
           <span className="text-[13px] font-semibold text-foreground">
             {row.bestAvailable.value.toLocaleString()}
@@ -913,7 +910,7 @@ function WaiverTableRow({ row, onClaim, onView }: { row: WaiverRow; onClaim: () 
       </td>
 
       {/* Lowest on team */}
-      <td className="px-4 py-3">
+      <td className="px-2 py-2">
         {row.lowestOnTeam ? (
           <PlayerAvatar
             id={row.lowestOnTeam.id}
@@ -929,53 +926,47 @@ function WaiverTableRow({ row, onClaim, onView }: { row: WaiverRow; onClaim: () 
       </td>
 
       {/* Difference */}
-      <td className="px-4 py-3 text-center">
+      <td className="px-2 py-2 text-center">
         <span className={cn("text-[13px] font-bold", diffColor)}>
           {row.difference > 0 ? "+" : ""}{row.difference.toLocaleString()}
         </span>
         <div className="mt-0.5">
           {row.difference > 300 ? (
-            <span className="text-[10px] text-emerald-600 dark:text-emerald-400 flex items-center justify-center gap-0.5">
-              <TrendingUp className="w-3 h-3" /> Add now
-            </span>
+            <TrendingUp className="w-3 h-3 text-emerald-500 mx-auto" />
           ) : row.difference > 0 ? (
-            <span className="text-[10px] text-amber-600 dark:text-amber-400 flex items-center justify-center gap-0.5">
-              <TrendingUp className="w-3 h-3" /> Consider
-            </span>
+            <TrendingUp className="w-3 h-3 text-amber-500 mx-auto" />
           ) : (
-            <span className="text-[10px] text-muted-foreground flex items-center justify-center gap-0.5">
-              <TrendingDown className="w-3 h-3" /> Hold
-            </span>
+            <TrendingDown className="w-3 h-3 text-muted-foreground/50 mx-auto" />
           )}
         </div>
       </td>
 
       {/* Claim action */}
-      <td className="px-4 py-3 text-center">
+      <td className="px-2 py-2 text-center">
         <button
           onClick={onClaim}
           disabled={!row.bestAvailable || !row.rosterId}
           data-testid={`btn-claim-${row.leagueId}`}
           className={cn(
-            "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-semibold transition-all duration-150",
+            "inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-semibold transition-all duration-150",
             row.bestAvailable && row.rosterId
               ? "bg-[#d4af37]/15 text-[#d4af37] hover:bg-[#d4af37]/25 border border-[#d4af37]/30 hover:border-[#d4af37]/50"
               : "bg-muted/30 text-muted-foreground/40 border border-border/20 cursor-not-allowed"
           )}
         >
-          <Plus className="w-3.5 h-3.5" />
+          <Plus className="w-3 h-3" />
           Claim
         </button>
       </td>
 
       {/* View detail */}
-      <td className="px-4 py-3 text-center">
+      <td className="px-2 py-2 text-center">
         <button
           onClick={onView}
           data-testid={`btn-view-${row.leagueId}`}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-semibold transition-all duration-150 bg-[#0b3a7a]/10 text-[#0b3a7a] dark:bg-blue-400/10 dark:text-blue-400 hover:bg-[#0b3a7a]/20 dark:hover:bg-blue-400/20 border border-[#0b3a7a]/20 dark:border-blue-400/20"
+          className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-semibold transition-all duration-150 bg-[#0b3a7a]/10 text-[#0b3a7a] dark:bg-blue-400/10 dark:text-blue-400 hover:bg-[#0b3a7a]/20 dark:hover:bg-blue-400/20 border border-[#0b3a7a]/20 dark:border-blue-400/20"
         >
-          <BarChart3 className="w-3.5 h-3.5" />
+          <BarChart3 className="w-3 h-3" />
           Detail
         </button>
       </td>
