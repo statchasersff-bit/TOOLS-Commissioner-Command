@@ -3,11 +3,9 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useSleeper } from "@/contexts/SleeperContext";
 import { useValueModel } from "@/contexts/ValueModelContext";
 import { API_BASE } from "@/lib/apiBase";
-import { getSleeperSession, isSessionExpired } from "@/services/sleeperAuth";
 import { SleeperAuthCard } from "@/components/SleeperAuthCard";
 import {
   DollarSign,
@@ -21,12 +19,8 @@ import {
   Loader2,
   AlertCircle,
   CheckCircle2,
-  LogOut,
-  ShieldCheck,
-  RefreshCw,
-  ChevronRight,
-  Flame,
   Target,
+  Flame,
   Wrench,
   EyeOff,
   Eye,
@@ -55,8 +49,8 @@ const PAYMENT_STATUS_CONFIG: Record<PaymentStatus, { label: string; cls: string;
 interface LeagueStanding {
   leagueId: string; rank: number; totalTeams: number; wins: number; losses: number; ties: number;
   ptsFor: number; playoffSpots: number; inPlayoffs: boolean;
-  valueRank: number;         // integer rank by roster redraft value (1=best)
-  valueCenterRank: number;   // continuous rank (e.g. 1.7) — preserves value score gaps
+  valueRank: number;
+  valueCenterRank: number;
   loading: boolean; error: boolean;
 }
 
@@ -85,9 +79,6 @@ async function fetchLeagueStanding(
   const hasRealTeam = userRoster !== undefined && userPlayers > 0;
   const rank = hasRealTeam ? sorted.findIndex((r: any) => r.roster_id === userRoster!.roster_id) + 1 : -1;
 
-  // Value-based rank: use starters if populated, fall back to full roster.
-  // Computes both an integer rank and a continuous rank that preserves score gaps
-  // so each league gets a distinct probability (e.g. 1.7 vs 2.3 within "2nd place").
   let valueRank = 0;
   let valueCenterRank = 0;
   const hasValues = Object.keys(redraftValues).length > 0;
@@ -101,8 +92,6 @@ async function fetchLeagueStanding(
     rosterValued.sort((a, b) => b.val - a.val);
     valueRank = rosterValued.findIndex((r) => r.rosterId === userRoster!.roster_id) + 1 || 0;
 
-    // Continuous rank: map actual value score linearly into [1, totalTeams].
-    // Best team → 1.0, worst team → n.0, everything else proportional.
     const userVal = rosterValued.find((r) => r.rosterId === userRoster!.roster_id)?.val ?? 0;
     const maxVal = rosterValued[0]?.val ?? 0;
     const minVal = rosterValued[rosterValued.length - 1]?.val ?? 0;
@@ -144,7 +133,6 @@ function classifyTeam(s: LeagueStanding | undefined): Tier | "unknown" {
   if (!s || s.loading || s.error || s.rank < 1 || s.totalTeams < 2) return "unknown";
   const { playoffSpots, totalTeams } = s;
   const gamesPlayed = s.wins + s.losses + s.ties;
-  // Pre-season: use value-based rank if available, otherwise unknown
   const effectiveRank = gamesPlayed === 0
     ? (s.valueRank > 0 ? s.valueRank : -1)
     : s.rank;
@@ -156,8 +144,6 @@ function classifyTeam(s: LeagueStanding | undefined): Tier | "unknown" {
   return effectiveRank - playoffSpots <= 2 ? "bubble" : "rebuild";
 }
 
-// Blended standing+talent model — mirrors the Portfolio tab algorithm exactly.
-// Early season (week 0): 85% talent-based. Late season (week 14+): 85% standing-based.
 function approxPlayoffPct(s: LeagueStanding): number {
   if (s.rank <= 0 || s.totalTeams < 2) return 0;
   const { rank, playoffSpots, totalTeams, valueRank, valueCenterRank } = s;
@@ -165,7 +151,6 @@ function approxPlayoffPct(s: LeagueStanding): number {
   const regularSeasonGames = 14;
   const seasonProgress = Math.min(gamesPlayed / regularSeasonGames, 1);
 
-  // Standing score (0.05–0.95 based on W/L rank vs playoff cutline)
   let standingScore: number;
   if (rank <= playoffSpots) {
     const comfort = playoffSpots > 1 ? (playoffSpots - rank) / (playoffSpots - 1) : 1;
@@ -176,8 +161,6 @@ function approxPlayoffPct(s: LeagueStanding): number {
     standingScore = 0.45 * (1 - spotsBack / maxSpotsBack);
   }
 
-  // Talent score: uses continuous rank (1.7, 2.3…) so score gaps between teams
-  // produce distinct probabilities even when integer rank is the same.
   let talentScore: number;
   const vRank = valueCenterRank > 0 ? valueCenterRank : (valueRank > 0 ? valueRank : 0);
   if (vRank === 0 || totalTeams <= 1) {
@@ -191,26 +174,18 @@ function approxPlayoffPct(s: LeagueStanding): number {
     talentScore = 0.45 * (1 - spotsBack / maxSpotsBack);
   }
 
-  // Blend: standingWeight 0.15 (week 0) → 0.85 (week 14+)
   const standingWeight = 0.15 + 0.70 * seasonProgress;
   const rawOdds = standingWeight * standingScore + (1 - standingWeight) * talentScore;
   return Math.min(99, Math.max(1, Math.round(rawOdds * 100)));
 }
 
-// Truncated-normal placement probability model.
-// Models final finishing position as a Gaussian centered on current rank,
-// with σ shrinking as the season progresses (more certain late in season).
-// Pre-season: centers on valueRank when available (talent-based).
 function placementProbs(s: LeagueStanding, maxPlace: number): Map<number, number> {
   const { rank, totalTeams, wins, losses, ties, valueRank, valueCenterRank } = s;
   const gamesPlayed = wins + losses + ties;
   const seasonProgress = Math.min(1, gamesPlayed / 14);
-  // Pre-season: use continuous value rank so each league gets a distinct probability.
-  // valueCenterRank is fractional (e.g. 1.7) based on actual score gaps, not integer rank.
   const centerRank = gamesPlayed === 0 && valueCenterRank > 0
     ? valueCenterRank
     : gamesPlayed === 0 && valueRank > 0 ? valueRank : rank;
-  // σ: ~totalTeams/3 at week 0, shrinks to 0.5 at week 14
   const sigma = Math.max(0.5, (1 - seasonProgress) * totalTeams / 3);
   const raw: number[] = [];
   for (let k = 1; k <= totalTeams; k++) {
@@ -256,7 +231,6 @@ const TIER_CONFIG: Record<Tier, {
 };
 
 
-
 // ─── Main Finance Tab ─────────────────────────────────────────────────────────
 
 export function FinanceTab() {
@@ -270,28 +244,20 @@ export function FinanceTab() {
   const [saving, setSaving] = useState<Record<string, boolean>>({});
   const [saved, setSaved] = useState<Record<string, boolean>>({});
   const [loadingFinances, setLoadingFinances] = useState(false);
-  const [collapsedTiers, setCollapsedTiers] = useState<Set<string>>(() => new Set(["elite", "bubble", "rebuild"]));
-  const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({}); 
+  const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   const dynastyLeagues = leagues.filter(l => l.status !== "archived");
 
-  // Only show leagues where the user actually has a roster.
-  // fetchLeagueStanding returns rank === -1 when no roster found (commissioner / co-owner roles, etc.)
   const visibleLeagues = dynastyLeagues.filter(l => {
     const s = standings[l.leagueId];
     if (s && !s.loading && !s.error && s.rank === -1) return false;
     return true;
   });
 
-  // Auto-exchange: any connected Sleeper user gets a finance JWT automatically.
-  // The /api/auth/sleeper-exchange endpoint verifies identity via the public Sleeper API
-  // (confirms the user ID exists), so no separate OTP session is needed.
   useEffect(() => {
     if (!user?.userId) return;
-    // Use cached token if still valid
     const cached = localStorage.getItem(tokenKey(user.userId));
     if (cached) { setToken(cached); setAuthChecked(true); return; }
-    // Exchange Sleeper user ID for a finance JWT
     fetch(`${API_BASE}/api/auth/sleeper-exchange`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -547,350 +513,336 @@ export function FinanceTab() {
         );
       })()}
 
-      {/* Per-League Cards (grouped by tier) */}
+      {/* Per-League Table */}
       {visibleLeagues.length > 0 && (() => {
         const ORDER: (Tier | "unknown")[] = ["elite", "bubble", "rebuild", "unknown"];
-        const groups = new Map<Tier | "unknown", typeof visibleLeagues>();
-        ORDER.forEach(t => groups.set(t, []));
         const ignoredLeagues: typeof visibleLeagues = [];
-        visibleLeagues.forEach(l => {
+        const activeLeagues = visibleLeagues.filter(l => {
           const f = getFinance(l.leagueId);
-          if (f.ignored) { ignoredLeagues.push(l); return; }
-          groups.get(classifyTeam(standings[l.leagueId]))!.push(l);
+          if (f.ignored) { ignoredLeagues.push(l); return false; }
+          return true;
         });
-        const activeTiers = ORDER.filter(t => t !== "unknown" && (groups.get(t)?.length ?? 0) > 0) as Tier[];
-        const showHeaders = visibleLeagues.length > 1 && activeTiers.length > 1;
+        const sortedLeagues = [...activeLeagues].sort((a, b) => {
+          const ta = ORDER.indexOf(classifyTeam(standings[a.leagueId]));
+          const tb = ORDER.indexOf(classifyTeam(standings[b.leagueId]));
+          return ta - tb;
+        });
 
-        const mainGroups = ORDER.filter(t => (groups.get(t)?.length ?? 0) > 0).map(tier => {
-          const cfg = tier !== "unknown" ? TIER_CONFIG[tier] : null;
-          const Icon = tier === "elite" ? Flame : tier === "bubble" ? Target : Wrench;
-          const isCollapsed = showHeaders && tier !== "unknown" && collapsedTiers.has(tier);
-          const toggleTier = () => setCollapsedTiers(prev => {
-            const next = new Set(prev);
-            next.has(tier) ? next.delete(tier) : next.add(tier);
-            return next;
-          });
+        const COL = "grid grid-cols-[minmax(160px,1fr)_72px_60px_72px_56px_68px_60px_52px_52px_52px_88px_28px]";
+
+        const ExpandedRow = ({ league }: { league: typeof visibleLeagues[0] }) => {
+          const f = getFinance(league.leagueId);
+          const s = standings[league.leagueId];
+          const calc = calcPL(league.leagueId);
+          const gamesPlayed = s ? s.wins + s.losses + s.ties : 0;
+          const hasOddsData = s && !s.loading && !s.error && s.rank > 0 && (gamesPlayed > 0 || s.valueRank > 0);
           return (
-            <div key={`group-${tier}`} className="space-y-3">
-              {showHeaders && tier !== "unknown" && cfg && (
-                <button
-                  onClick={toggleTier}
-                  className={`w-full flex items-center gap-2 pt-1 ${cfg.headerCls} hover:opacity-80 transition-opacity`}
-                  data-testid={`tier-header-${tier}`}
-                >
-                  <Icon className="w-3.5 h-3.5" />
-                  <span className="text-[11px] font-bold uppercase tracking-wide">{cfg.label}</span>
-                  <span className="text-[10px] opacity-60">({groups.get(tier)!.length})</span>
-                  <div className="flex-1 h-px bg-current opacity-20" />
-                  {isCollapsed
-                    ? <ChevronRight className="w-3.5 h-3.5 opacity-60" />
-                    : <ChevronDown className="w-3.5 h-3.5 opacity-60" />}
-                </button>
+            <div className="border-t border-border/30 bg-muted/10 px-6 py-5 space-y-5">
+              {s && !s.loading && !s.error && s.rank > 0 && (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {[
+                    { label: "Standing", value: gamesPlayed > 0 ? `#${s.rank}/${s.totalTeams}` : "N/A" },
+                    { label: "Record", value: gamesPlayed > 0 ? `${s.wins}-${s.losses}${s.ties > 0 ? `-${s.ties}` : ""}` : "Pre-season" },
+                    { label: "Pts For", value: gamesPlayed > 0 ? s.ptsFor.toFixed(1) : "N/A" },
+                  ].map(item => (
+                    <div key={item.label} className="bg-muted/30 rounded-lg p-3 text-center">
+                      <p className="text-[10px] text-muted-foreground mb-0.5">{item.label}</p>
+                      <p className="text-base font-bold">{item.value}</p>
+                    </div>
+                  ))}
+                  <div className="rounded-lg p-3 text-center border bg-muted/30 border-border/30">
+                    <p className="text-[10px] text-muted-foreground mb-0.5">Playoff Odds</p>
+                    {hasOddsData ? (
+                      <>
+                        <p className={`text-base font-bold ${approxPlayoffPct(s) >= 50 ? "text-emerald-600 dark:text-emerald-400" : approxPlayoffPct(s) <= 20 ? "text-red-500 dark:text-red-400" : "text-amber-600 dark:text-amber-400"}`}>~{approxPlayoffPct(s)}%</p>
+                        <p className="text-[10px] mt-0.5 text-muted-foreground">{gamesPlayed > 0 ? (s.inPlayoffs ? "In ✓" : `${s.rank - s.playoffSpots} back`) : "talent-based"}</p>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-base font-bold text-muted-foreground">N/A</p>
+                        <p className="text-[10px] mt-0.5 text-muted-foreground">loading…</p>
+                      </>
+                    )}
+                  </div>
+                </div>
               )}
-              {!isCollapsed && groups.get(tier)!.map(league => {
+              {s?.error && (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <AlertCircle className="w-3.5 h-3.5" /><span>Could not load standings for this league.</span>
+                </div>
+              )}
+
+              <div className="flex flex-wrap gap-4">
+                <div>
+                  <label className="text-xs font-semibold text-foreground mb-1.5 block">Buy-in Amount</label>
+                  <div className="relative w-40">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
+                    <Input type="number" min="0" className="pl-7" value={f.buyIn || ""} placeholder="0"
+                      onChange={e => updateFinance(league.leagueId, { buyIn: parseFloat(e.target.value) || 0 })}
+                      data-testid={`input-buyin-${league.leagueId}`} />
+                  </div>
+                </div>
+                <div className="flex-1 min-w-[220px]">
+                  <label className="text-xs font-semibold text-foreground mb-1.5 flex items-center gap-1.5 block">
+                    LeagueSafe Link
+                    {f.leagueSafeUrl && (
+                      <a href={f.leagueSafeUrl} target="_blank" rel="noopener noreferrer"
+                        className="text-[#0b3a7a] dark:text-blue-400 hover:opacity-70 transition-opacity"
+                        data-testid={`link-leaguesafe-${league.leagueId}`} onClick={e => e.stopPropagation()}>
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    )}
+                  </label>
+                  <Input type="url" placeholder="https://leaguesafe.com/join/..."
+                    value={f.leagueSafeUrl}
+                    onChange={e => updateFinance(league.leagueId, { leagueSafeUrl: e.target.value })}
+                    data-testid={`input-leaguesafe-${league.leagueId}`} />
+                </div>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs font-semibold text-foreground">Prize Structure</label>
+                  <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => addPrize(league.leagueId)} data-testid={`button-add-prize-${league.leagueId}`}>
+                    <Plus className="w-3 h-3" /> Add Place
+                  </Button>
+                </div>
+                {f.prizes.length === 0 && <p className="text-xs text-muted-foreground italic">No prizes configured. Add prize positions above.</p>}
+                <div className="space-y-2">
+                  {f.prizes.sort((a, b) => a.place - b.place).map(prize => {
+                    const placeLabel = prize.place === 1 ? "🥇 1st" : prize.place === 2 ? "🥈 2nd" : prize.place === 3 ? "🥉 3rd" : `${prize.place}th`;
+                    const isCurrentRank = s && !s.loading && s.rank === prize.place;
+                    const prob = calc?.breakdown.find(b => b.place === prize.place)?.probability ?? 0;
+                    const probPct = Math.round(prob * 1000) / 10;
+                    const probBadgeCls = probPct >= 30 ? "border-emerald-500/50 text-emerald-600 dark:text-emerald-400" : probPct >= 10 ? "border-[#d4af37]/50 text-amber-600 dark:text-amber-400" : "border-border/40 text-muted-foreground";
+                    return (
+                      <div key={prize.place} className={`flex items-center gap-3 p-2.5 rounded-lg border ${isCurrentRank ? "border-[#d4af37]/40 bg-[#d4af37]/5" : "border-border/30 bg-muted/20"}`} data-testid={`prize-row-${league.leagueId}-${prize.place}`}>
+                        <span className="text-sm font-semibold w-16 flex-shrink-0">{placeLabel}</span>
+                        {probPct > 0 ? (
+                          <Badge variant="outline" className={`text-[10px] px-1.5 h-4 flex-shrink-0 ${probBadgeCls}`} data-testid={`badge-prob-${league.leagueId}-${prize.place}`}>~{probPct}%</Badge>
+                        ) : isCurrentRank ? (
+                          <Badge variant="outline" className="text-[10px] px-1.5 h-4 border-[#d4af37]/50 text-amber-600 dark:text-amber-400 flex-shrink-0">Now</Badge>
+                        ) : null}
+                        <div className="relative flex-1 max-w-[120px]">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
+                          <Input type="number" min="0" className="pl-7 h-8 text-sm" value={prize.amount || ""} placeholder="0"
+                            onChange={e => updatePrize(league.leagueId, prize.place, parseFloat(e.target.value) || 0)}
+                            data-testid={`input-prize-${league.leagueId}-${prize.place}`} />
+                        </div>
+                        <button onClick={() => removePrize(league.leagueId, prize.place)} className="text-muted-foreground hover:text-red-500 transition-colors flex-shrink-0" data-testid={`button-remove-prize-${league.leagueId}-${prize.place}`}>
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {(f.buyIn > 0 || f.prizes.length > 0) && (
+                <div className={`rounded-xl p-4 border ${calc ? plBg(calc.pl) : "bg-muted/20 border-border/30"}`}>
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-6 min-w-0">
+                      <div className="flex-shrink-0">
+                        <p className="text-[10px] text-muted-foreground">Buy-in</p>
+                        <p className="text-sm font-semibold">{fmtDollar(f.buyIn)}</p>
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-[10px] text-muted-foreground">Expected Prize</p>
+                        <p className="text-sm font-semibold">{calc ? fmtDollar(Math.round(calc.projectedPrize)) : "N/A"}</p>
+                        {calc && (
+                          <p className="text-[10px] text-muted-foreground truncate max-w-[160px]" title="Probability-weighted across all prize positions">
+                            {calc.breakdown.filter(b => b.probability >= 0.01).map(b => {
+                              const ord = b.place === 1 ? "1st" : b.place === 2 ? "2nd" : b.place === 3 ? "3rd" : `${b.place}th`;
+                              return `${ord} ~${Math.round(b.probability * 1000) / 10}%`;
+                            }).join(" · ")}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    {calc ? (
+                      <div className="text-right flex-shrink-0">
+                        <p className="text-[10px] text-muted-foreground mb-0.5">Expected P&L</p>
+                        <p className={`text-2xl font-bold ${plColor(calc.pl)}`}>{calc.pl >= 0 ? "+" : ""}{fmtDollar(Math.round(calc.pl))}</p>
+                        <p className="text-[10px] text-muted-foreground">rank #{s?.rank} · prob-weighted</p>
+                      </div>
+                    ) : f.prizes.length > 0 && s && !s.loading ? (
+                      <div className="text-right flex-shrink-0">
+                        <p className="text-[10px] text-muted-foreground mb-0.5">Expected P&L</p>
+                        <p className={`text-2xl font-bold ${plColor(-f.buyIn)}`}>{fmtDollar(-f.buyIn)}</p>
+                        <p className="text-[10px] text-muted-foreground">standings loading…</p>
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <label className="text-xs font-semibold text-foreground mb-1.5 block">Notes</label>
+                <Input placeholder="e.g. best ball rules, side bets…" value={f.notes}
+                  onChange={e => updateFinance(league.leagueId, { notes: e.target.value })}
+                  className="text-sm" data-testid={`input-notes-${league.leagueId}`} />
+              </div>
+
+              <div className="flex flex-wrap gap-2 pt-1 border-t border-border/30">
+                <button
+                  onClick={() => updateFinance(league.leagueId, { isFree: !f.isFree, buyIn: !f.isFree ? 0 : f.buyIn, prizes: !f.isFree ? [] : f.prizes })}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${f.isFree ? "bg-sky-50 dark:bg-sky-950/30 border-sky-400/50 text-sky-600 dark:text-sky-400" : "border-border/50 text-muted-foreground hover:border-sky-400/50 hover:text-sky-600 dark:hover:text-sky-400"}`}
+                  data-testid={`button-toggle-free-${league.leagueId}`}>
+                  <Tag className="w-3 h-3" />{f.isFree ? "Free League ✓" : "Mark as Free League"}
+                </button>
+                <button
+                  onClick={() => updateFinance(league.leagueId, { ignored: !f.ignored })}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${f.ignored ? "bg-muted border-border text-muted-foreground" : "border-border/50 text-muted-foreground hover:border-border hover:text-foreground"}`}
+                  data-testid={`button-toggle-ignore-${league.leagueId}`}>
+                  {f.ignored ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
+                  {f.ignored ? "Unhide League" : "Hide from Summary"}
+                </button>
+              </div>
+            </div>
+          );
+        };
+
+        return (
+          <>
+            <Card className="overflow-hidden">
+              {/* Table header */}
+              <div className={`${COL} gap-x-2 px-4 py-2.5 border-b border-border/50 bg-muted/30 items-center`}>
+                <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">League</span>
+                <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Tier</span>
+                <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground text-center">Standing</span>
+                <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground text-center">Record</span>
+                <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground text-center">Pts For</span>
+                <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground text-center">Playoffs</span>
+                <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground text-right">Buy-in</span>
+                <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground text-right">🥇</span>
+                <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground text-right">🥈</span>
+                <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground text-right">🥉</span>
+                <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground text-right">Exp. P&L</span>
+                <span />
+              </div>
+
+              {/* League rows */}
+              {sortedLeagues.map(league => {
                 const f = getFinance(league.leagueId);
                 const s = standings[league.leagueId];
                 const calc = calcPL(league.leagueId);
                 const isExpanded = expanded === league.leagueId;
-                const leagueTier = tier !== "unknown" ? tier : undefined;
-                const tierCfg = leagueTier ? TIER_CONFIG[leagueTier] : null;
+                const tier = classifyTeam(s);
+                const tierCfg = tier !== "unknown" ? TIER_CONFIG[tier] : null;
                 const gamesPlayed = s ? s.wins + s.losses + s.ties : 0;
-                // Show playoff odds when we have either W/L data OR value rank (pre-season talent model)
                 const hasOddsData = s && !s.loading && !s.error && s.rank > 0 && (gamesPlayed > 0 || s.valueRank > 0);
                 const playoffPct = hasOddsData ? approxPlayoffPct(s) : null;
-
-        return (
-          <Card key={league.leagueId} className="overflow-hidden" data-testid={`finance-card-${league.leagueId}`}>
-            <button
-              className="w-full flex items-center justify-between p-4 hover:bg-muted/30 transition-colors text-left"
-              onClick={() => setExpanded(isExpanded ? null : league.leagueId)}
-              data-testid={`toggle-finance-${league.leagueId}`}
-            >
-              <div className="flex items-center gap-3 min-w-0">
-                <div className="w-9 h-9 rounded-xl overflow-hidden flex-shrink-0 bg-[#0b3a7a]/10 dark:bg-blue-400/10 flex items-center justify-center relative">
-                  <Trophy className="w-4 h-4 text-[#0b3a7a] dark:text-blue-400" />
-                  {league.avatar && (
-                    <img
-                      src={`https://sleepercdn.com/avatars/thumbs/${league.avatar}`}
-                      alt={league.name}
-                      className="absolute inset-0 w-full h-full object-cover"
-                      onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
-                      data-testid={`img-league-avatar-${league.leagueId}`}
-                    />
-                  )}
-                </div>
-                <div className="min-w-0">
-                  <p className="font-semibold text-sm truncate">{league.name}</p>
-                  <div className="flex items-center gap-1.5 mt-0.5">
-                    <span className="text-[10px] text-muted-foreground">{league.totalRosters} teams · {league.scoringFormat} {league.format} · {league.season}</span>
-                    {s && !s.loading && !s.error && s.rank > 0 && gamesPlayed > 0 && (
-                      <Badge variant="outline" className={`text-[10px] px-1.5 py-0 h-4 ${s.inPlayoffs ? "border-emerald-500/40 text-emerald-600 dark:text-emerald-400" : "text-muted-foreground"}`}>
-                        {s.inPlayoffs ? "🏆 " : ""}#{s.rank} of {s.totalTeams}
-                      </Badge>
-                    )}
-                    {tierCfg && playoffPct !== null && (
-                      <Badge variant="outline" className={`text-[10px] px-1.5 py-0 h-4 ${tierCfg.badgeCls}`}>
-                        ~{playoffPct}% playoffs
-                      </Badge>
-                    )}
-                    {hasOddsData && (() => {
-                      const p1 = Math.round((placementProbs(s, 1).get(1) ?? 0) * 1000) / 10;
-                      if (p1 <= 0) return null;
-                      return (
-                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 border-[#d4af37]/50 text-amber-600 dark:text-amber-400">
-                          ~{p1}% 1st
-                        </Badge>
-                      );
-                    })()}
-                    {(() => {
-                      const ps = paymentStatus(f);
-                      const psc = PAYMENT_STATUS_CONFIG[ps];
-                      return (
-                        <Badge variant="outline" className={`text-[10px] px-1.5 py-0 h-4 flex items-center gap-1 ${psc.cls}`} data-testid={`badge-payment-status-${league.leagueId}`}>
-                          <span className={`w-1.5 h-1.5 rounded-full inline-block ${psc.dot}`} />
-                          {psc.label}
-                        </Badge>
-                      );
-                    })()}
-                    {s?.loading && <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />}
-                  </div>
-                </div>
-              </div>
-              <div className="flex items-center gap-3 flex-shrink-0 ml-3">
-                {saving[league.leagueId] && <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />}
-                {saved[league.leagueId] && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />}
-                <div className="hidden sm:flex items-center gap-3 text-right">
-                  {f.buyIn > 0 && (
-                    <div className="text-right">
-                      <p className="text-[10px] text-muted-foreground">Buy-in</p>
-                      <p className="text-xs font-semibold">{fmtDollar(f.buyIn)}</p>
-                    </div>
-                  )}
-                  {calc && (
-                    <div className={`px-2.5 py-1 rounded-lg border text-xs font-bold ${plBg(calc.pl)} ${plColor(calc.pl)}`} data-testid={`pl-${league.leagueId}`}>
-                      {calc.pl >= 0 ? "+" : ""}{fmtDollar(calc.pl)}
-                    </div>
-                  )}
-                </div>
-                {isExpanded ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
-              </div>
-            </button>
-
-            {isExpanded && (
-              <div className="border-t border-border/40 p-4 space-y-5">
-                {s && !s.loading && !s.error && s.rank > 0 && (
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    {[
-                      { label: "Standing", value: gamesPlayed > 0 ? `#${s.rank}/${s.totalTeams}` : "N/A" },
-                      { label: "Record", value: gamesPlayed > 0 ? `${s.wins}-${s.losses}${s.ties > 0 ? `-${s.ties}` : ""}` : "Pre-season" },
-                      { label: "Pts For", value: gamesPlayed > 0 ? s.ptsFor.toFixed(1) : "N/A" },
-                    ].map(item => (
-                      <div key={item.label} className="bg-muted/30 rounded-lg p-3 text-center">
-                        <p className="text-[10px] text-muted-foreground mb-0.5">{item.label}</p>
-                        <p className="text-base font-bold">{item.value}</p>
-                      </div>
-                    ))}
-                    <div className="rounded-lg p-3 text-center border bg-muted/30 border-border/30">
-                      <p className="text-[10px] text-muted-foreground mb-0.5">Playoff Odds</p>
-                      {hasOddsData ? (
-                        <>
-                          <p className={`text-base font-bold ${approxPlayoffPct(s) >= 50 ? "text-emerald-600 dark:text-emerald-400" : approxPlayoffPct(s) <= 20 ? "text-red-500 dark:text-red-400" : "text-amber-600 dark:text-amber-400"}`}>
-                            ~{approxPlayoffPct(s)}%
-                          </p>
-                          <p className="text-[10px] mt-0.5 text-muted-foreground">
-                            {gamesPlayed > 0
-                              ? (s.inPlayoffs ? "In ✓" : `${s.rank - s.playoffSpots} back`)
-                              : "talent-based"}
-                          </p>
-                        </>
-                      ) : (
-                        <>
-                          <p className="text-base font-bold text-muted-foreground">N/A</p>
-                          <p className="text-[10px] mt-0.5 text-muted-foreground">loading…</p>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                )}
-                {s?.error && (
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <AlertCircle className="w-3.5 h-3.5" />
-                    <span>Could not load standings for this league.</span>
-                  </div>
-                )}
-
-                <div className="flex flex-wrap gap-4">
-                  <div>
-                    <label className="text-xs font-semibold text-foreground mb-1.5 block">Buy-in Amount</label>
-                    <div className="relative w-40">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
-                      <Input
-                        type="number" min="0" className="pl-7"
-                        value={f.buyIn || ""} placeholder="0"
-                        onChange={e => updateFinance(league.leagueId, { buyIn: parseFloat(e.target.value) || 0 })}
-                        data-testid={`input-buyin-${league.leagueId}`}
-                      />
-                    </div>
-                  </div>
-                  <div className="flex-1 min-w-[220px]">
-                    <label className="text-xs font-semibold text-foreground mb-1.5 flex items-center gap-1.5 block">
-                      LeagueSafe Link
-                      {f.leagueSafeUrl && (
-                        <a href={f.leagueSafeUrl} target="_blank" rel="noopener noreferrer"
-                          className="text-[#0b3a7a] dark:text-blue-400 hover:opacity-70 transition-opacity"
-                          data-testid={`link-leaguesafe-${league.leagueId}`}
-                          onClick={e => e.stopPropagation()}>
-                          <ExternalLink className="w-3 h-3" />
-                        </a>
-                      )}
-                    </label>
-                    <Input
-                      type="url"
-                      placeholder="https://leaguesafe.com/join/..."
-                      value={f.leagueSafeUrl}
-                      onChange={e => updateFinance(league.leagueId, { leagueSafeUrl: e.target.value })}
-                      data-testid={`input-leaguesafe-${league.leagueId}`}
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="text-xs font-semibold text-foreground">Prize Structure</label>
-                    <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => addPrize(league.leagueId)} data-testid={`button-add-prize-${league.leagueId}`}>
-                      <Plus className="w-3 h-3" /> Add Place
-                    </Button>
-                  </div>
-                  {f.prizes.length === 0 && <p className="text-xs text-muted-foreground italic">No prizes configured. Add prize positions above.</p>}
-                  <div className="space-y-2">
-                    {f.prizes.sort((a, b) => a.place - b.place).map(prize => {
-                      const placeLabel = prize.place === 1 ? "🥇 1st" : prize.place === 2 ? "🥈 2nd" : prize.place === 3 ? "🥉 3rd" : `${prize.place}th`;
-                      const isCurrentRank = s && !s.loading && s.rank === prize.place;
-                      const prob = calc?.breakdown.find(b => b.place === prize.place)?.probability ?? 0;
-                      const probPct = Math.round(prob * 1000) / 10;
-                      const probBadgeCls = probPct >= 30
-                        ? "border-emerald-500/50 text-emerald-600 dark:text-emerald-400"
-                        : probPct >= 10
-                        ? "border-[#d4af37]/50 text-amber-600 dark:text-amber-400"
-                        : "border-border/40 text-muted-foreground";
-                      return (
-                        <div key={prize.place} className={`flex items-center gap-3 p-2.5 rounded-lg border ${isCurrentRank ? "border-[#d4af37]/40 bg-[#d4af37]/5" : "border-border/30 bg-muted/20"}`}
-                          data-testid={`prize-row-${league.leagueId}-${prize.place}`}>
-                          <span className="text-sm font-semibold w-16 flex-shrink-0">{placeLabel}</span>
-                          {probPct > 0 ? (
-                            <Badge variant="outline" className={`text-[10px] px-1.5 h-4 flex-shrink-0 ${probBadgeCls}`}
-                              data-testid={`badge-prob-${league.leagueId}-${prize.place}`}>
-                              ~{probPct}%
-                            </Badge>
-                          ) : isCurrentRank ? (
-                            <Badge variant="outline" className="text-[10px] px-1.5 h-4 border-[#d4af37]/50 text-amber-600 dark:text-amber-400 flex-shrink-0">Now</Badge>
-                          ) : null}
-                          <div className="relative flex-1 max-w-[120px]">
-                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
-                            <Input
-                              type="number" min="0" className="pl-7 h-8 text-sm"
-                              value={prize.amount || ""} placeholder="0"
-                              onChange={e => updatePrize(league.leagueId, prize.place, parseFloat(e.target.value) || 0)}
-                              data-testid={`input-prize-${league.leagueId}-${prize.place}`}
-                            />
-                          </div>
-                          <button onClick={() => removePrize(league.leagueId, prize.place)} className="text-muted-foreground hover:text-red-500 transition-colors flex-shrink-0" data-testid={`button-remove-prize-${league.leagueId}-${prize.place}`}>
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {(f.buyIn > 0 || f.prizes.length > 0) && (
-                  <div className={`rounded-xl p-4 border ${calc ? plBg(calc.pl) : "bg-muted/20 border-border/30"}`}>
-                    <div className="flex items-center justify-between gap-4">
-                      <div className="flex items-center gap-6 min-w-0">
-                        <div className="flex-shrink-0">
-                          <p className="text-[10px] text-muted-foreground">Buy-in</p>
-                          <p className="text-sm font-semibold">{fmtDollar(f.buyIn)}</p>
-                        </div>
-                        <div className="min-w-0">
-                          <p className="text-[10px] text-muted-foreground">Expected Prize</p>
-                          <p className="text-sm font-semibold">{calc ? fmtDollar(Math.round(calc.projectedPrize)) : "N/A"}</p>
-                          {calc && (
-                            <p className="text-[10px] text-muted-foreground truncate max-w-[160px]" title="Probability-weighted across all prize positions">
-                              {calc.breakdown.filter(b => b.probability >= 0.01).map(b => {
-                                const ord = b.place === 1 ? "1st" : b.place === 2 ? "2nd" : b.place === 3 ? "3rd" : `${b.place}th`;
-                                return `${ord} ~${Math.round(b.probability * 1000) / 10}%`;
-                              }).join(" · ")}
-                            </p>
+                const prize1 = f.prizes.find(p => p.place === 1)?.amount;
+                const prize2 = f.prizes.find(p => p.place === 2)?.amount;
+                const prize3 = f.prizes.find(p => p.place === 3)?.amount;
+                return (
+                  <div key={league.leagueId} className={`border-b border-border/20 last:border-b-0 ${isExpanded ? "bg-muted/10" : ""}`} data-testid={`finance-card-${league.leagueId}`}>
+                    <button
+                      className={`w-full ${COL} gap-x-2 px-4 py-3 hover:bg-muted/30 transition-colors text-left items-center`}
+                      onClick={() => setExpanded(isExpanded ? null : league.leagueId)}
+                      data-testid={`toggle-finance-${league.leagueId}`}
+                    >
+                      {/* League name + settings */}
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="w-7 h-7 rounded-lg overflow-hidden flex-shrink-0 bg-[#0b3a7a]/10 dark:bg-blue-400/10 flex items-center justify-center relative">
+                          <Trophy className="w-3.5 h-3.5 text-[#0b3a7a] dark:text-blue-400" />
+                          {league.avatar && (
+                            <img src={`https://sleepercdn.com/avatars/thumbs/${league.avatar}`} alt={league.name}
+                              className="absolute inset-0 w-full h-full object-cover"
+                              onError={e => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+                              data-testid={`img-league-avatar-${league.leagueId}`} />
                           )}
                         </div>
+                        <div className="min-w-0">
+                          <p className="font-semibold text-sm truncate leading-tight">{league.name}</p>
+                          <p className="text-[10px] text-muted-foreground truncate">{league.totalRosters}T · {league.scoringFormat} {league.format} · {league.season}</p>
+                        </div>
                       </div>
-                      {calc ? (
-                        <div className="text-right flex-shrink-0">
-                          <p className="text-[10px] text-muted-foreground mb-0.5">Expected P&L</p>
-                          <p className={`text-2xl font-bold ${plColor(calc.pl)}`}>{calc.pl >= 0 ? "+" : ""}{fmtDollar(Math.round(calc.pl))}</p>
-                          <p className="text-[10px] text-muted-foreground">rank #{s?.rank} · prob-weighted</p>
-                        </div>
-                      ) : f.prizes.length > 0 && s && !s.loading ? (
-                        <div className="text-right flex-shrink-0">
-                          <p className="text-[10px] text-muted-foreground mb-0.5">Expected P&L</p>
-                          <p className={`text-2xl font-bold ${plColor(-f.buyIn)}`}>{fmtDollar(-f.buyIn)}</p>
-                          <p className="text-[10px] text-muted-foreground">standings loading…</p>
-                        </div>
-                      ) : null}
-                    </div>
+
+                      {/* Tier */}
+                      <div>
+                        {tierCfg ? (
+                          <span className={`text-[10px] font-bold ${tierCfg.headerCls}`}>{tierCfg.short}</span>
+                        ) : s?.loading ? (
+                          <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />
+                        ) : (
+                          <span className="text-[10px] text-muted-foreground">—</span>
+                        )}
+                      </div>
+
+                      {/* Standing */}
+                      <div className="text-center">
+                        {s && !s.loading && !s.error && s.rank > 0 && gamesPlayed > 0 ? (
+                          <span className={`text-xs font-semibold ${s.inPlayoffs ? "text-emerald-500 dark:text-emerald-400" : ""}`}>#{s.rank}/{s.totalTeams}</span>
+                        ) : s?.loading ? <span className="text-[10px] text-muted-foreground">…</span>
+                          : <span className="text-[10px] text-muted-foreground">—</span>}
+                      </div>
+
+                      {/* Record */}
+                      <div className="text-center">
+                        {s && !s.loading && !s.error && gamesPlayed > 0 ? (
+                          <span className="text-xs font-medium">{s.wins}-{s.losses}{s.ties > 0 ? `-${s.ties}` : ""}</span>
+                        ) : <span className="text-[10px] text-muted-foreground">—</span>}
+                      </div>
+
+                      {/* Pts For */}
+                      <div className="text-center">
+                        {s && !s.loading && !s.error && s.ptsFor > 0 ? (
+                          <span className="text-xs font-medium">{s.ptsFor.toFixed(0)}</span>
+                        ) : <span className="text-[10px] text-muted-foreground">—</span>}
+                      </div>
+
+                      {/* Playoff Odds */}
+                      <div className="text-center">
+                        {playoffPct !== null ? (
+                          <span className={`text-xs font-bold ${playoffPct >= 50 ? "text-emerald-500 dark:text-emerald-400" : playoffPct <= 20 ? "text-red-500 dark:text-red-400" : "text-amber-500 dark:text-amber-400"}`}>~{playoffPct}%</span>
+                        ) : <span className="text-[10px] text-muted-foreground">—</span>}
+                      </div>
+
+                      {/* Buy-in */}
+                      <div className="text-right">
+                        {f.isFree ? <span className="text-[10px] text-sky-500 font-semibold">Free</span>
+                          : f.buyIn > 0 ? <span className="text-xs font-medium">{fmtDollar(f.buyIn)}</span>
+                          : <span className="text-[10px] text-muted-foreground">—</span>}
+                      </div>
+
+                      {/* 1st */}
+                      <div className="text-right">
+                        {prize1 ? <span className="text-xs font-medium">{fmtDollar(prize1)}</span> : <span className="text-[10px] text-muted-foreground">—</span>}
+                      </div>
+
+                      {/* 2nd */}
+                      <div className="text-right">
+                        {prize2 ? <span className="text-xs font-medium">{fmtDollar(prize2)}</span> : <span className="text-[10px] text-muted-foreground">—</span>}
+                      </div>
+
+                      {/* 3rd */}
+                      <div className="text-right">
+                        {prize3 ? <span className="text-xs font-medium">{fmtDollar(prize3)}</span> : <span className="text-[10px] text-muted-foreground">—</span>}
+                      </div>
+
+                      {/* Exp. P&L */}
+                      <div className="text-right flex items-center justify-end gap-1">
+                        {saving[league.leagueId] && <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />}
+                        {saved[league.leagueId] && <CheckCircle2 className="w-3 h-3 text-emerald-500" />}
+                        {calc ? (
+                          <span className={`text-xs font-bold ${plColor(calc.pl)}`}>{calc.pl >= 0 ? "+" : ""}{fmtDollar(Math.round(calc.pl))}</span>
+                        ) : <span className="text-[10px] text-muted-foreground">—</span>}
+                      </div>
+
+                      {/* Chevron */}
+                      <div className="flex justify-end">
+                        {isExpanded ? <ChevronUp className="w-3.5 h-3.5 text-muted-foreground" /> : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />}
+                      </div>
+                    </button>
+
+                    {isExpanded && <ExpandedRow league={league} />}
                   </div>
-                )}
-
-                <div>
-                  <label className="text-xs font-semibold text-foreground mb-1.5 block">Notes</label>
-                  <Input
-                    placeholder="e.g. best ball rules, side bets…"
-                    value={f.notes}
-                    onChange={e => updateFinance(league.leagueId, { notes: e.target.value })}
-                    className="text-sm"
-                    data-testid={`input-notes-${league.leagueId}`}
-                  />
-                </div>
-
-                {/* League flags */}
-                <div className="flex flex-wrap gap-2 pt-1 border-t border-border/30">
-                  <button
-                    onClick={() => updateFinance(league.leagueId, { isFree: !f.isFree, buyIn: !f.isFree ? 0 : f.buyIn, prizes: !f.isFree ? [] : f.prizes })}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
-                      f.isFree
-                        ? "bg-sky-50 dark:bg-sky-950/30 border-sky-400/50 text-sky-600 dark:text-sky-400"
-                        : "border-border/50 text-muted-foreground hover:border-sky-400/50 hover:text-sky-600 dark:hover:text-sky-400"
-                    }`}
-                    data-testid={`button-toggle-free-${league.leagueId}`}
-                  >
-                    <Tag className="w-3 h-3" />
-                    {f.isFree ? "Free League ✓" : "Mark as Free League"}
-                  </button>
-                  <button
-                    onClick={() => updateFinance(league.leagueId, { ignored: !f.ignored })}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
-                      f.ignored
-                        ? "bg-muted border-border text-muted-foreground"
-                        : "border-border/50 text-muted-foreground hover:border-border hover:text-foreground"
-                    }`}
-                    data-testid={`button-toggle-ignore-${league.leagueId}`}
-                  >
-                    {f.ignored ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
-                    {f.ignored ? "Unhide League" : "Hide from Summary"}
-                  </button>
-                </div>
-              </div>
-            )}
-          </Card>
                 );
               })}
-            </div>
-          );
-        });
+            </Card>
 
-        return (
-          <>
-            {mainGroups}
+            {/* Hidden leagues */}
             {ignoredLeagues.length > 0 && (
               <div className="space-y-2 pt-2">
                 <div className="flex items-center gap-2 text-muted-foreground/60">
@@ -903,10 +855,7 @@ export function FinanceTab() {
                   const isExpanded = expanded === league.leagueId;
                   return (
                     <Card key={league.leagueId} className="overflow-hidden opacity-50 hover:opacity-80 transition-opacity" data-testid={`finance-card-hidden-${league.leagueId}`}>
-                      <button
-                        className="w-full flex items-center justify-between p-3 hover:bg-muted/30 transition-colors text-left"
-                        onClick={() => setExpanded(isExpanded ? null : league.leagueId)}
-                      >
+                      <button className="w-full flex items-center justify-between p-3 hover:bg-muted/30 transition-colors text-left" onClick={() => setExpanded(isExpanded ? null : league.leagueId)}>
                         <div className="flex items-center gap-2 min-w-0">
                           <EyeOff className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
                           <span className="text-sm text-muted-foreground truncate">{league.name}</span>
@@ -915,11 +864,9 @@ export function FinanceTab() {
                       </button>
                       {isExpanded && (
                         <div className="border-t border-border/30 px-4 py-3">
-                          <button
-                            onClick={() => updateFinance(league.leagueId, { ignored: false })}
+                          <button onClick={() => updateFinance(league.leagueId, { ignored: false })}
                             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border/50 text-xs font-medium text-muted-foreground hover:text-foreground hover:border-border transition-colors"
-                            data-testid={`button-unhide-${league.leagueId}`}
-                          >
+                            data-testid={`button-unhide-${league.leagueId}`}>
                             <Eye className="w-3 h-3" /> Unhide League
                           </button>
                         </div>
