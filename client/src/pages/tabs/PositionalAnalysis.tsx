@@ -9,7 +9,7 @@ import { getLeagueTeamTiers, getTierColor, getTierEmoji, getPositionColor, isCon
 import { cn } from "@/lib/utils";
 import type { League, Team, Player, Pick, Tier } from "@/types";
 import {
-  BarChart3, ArrowRightLeft, Target, TrendingUp, TrendingDown,
+  ArrowRightLeft, Target, TrendingUp, TrendingDown,
   ChevronRight, Scale
 } from "lucide-react";
 
@@ -96,10 +96,9 @@ function adjustedTotal(values: number[]): number {
 }
 
 export function PositionalAnalysis({ league, userTeam, onNavigateToCalculator }: PositionalAnalysisProps) {
-  const [activeSubTab, setActiveSubTab] = useState<"overview" | "surplus" | "opportunities">("overview");
+  const [activeSubTab, setActiveSubTab] = useState<"surplus" | "opportunities">("surplus");
 
   const subTabs = [
-    { id: "overview" as const, label: "Overview", icon: BarChart3 },
     { id: "surplus" as const, label: "Analysis", icon: Scale },
     { id: "opportunities" as const, label: "Ideas", icon: ArrowRightLeft },
   ];
@@ -138,7 +137,6 @@ export function PositionalAnalysis({ league, userTeam, onNavigateToCalculator }:
         })}
       </div>
 
-      {activeSubTab === "overview" && <PositionOverview league={league} userTeam={userTeam} />}
       {activeSubTab === "surplus" && <SurplusNeeds league={league} userTeam={userTeam} onSwitchTab={setActiveSubTab} />}
       {activeSubTab === "opportunities" && <TradeOpportunities league={league} userTeam={userTeam} />}
     </div>
@@ -229,103 +227,6 @@ function usePositionalProfiles(league: League, userTeam: Team) {
 
     return { profiles, total };
   }, [league, userTeam, getPlayerValue, getPickValue, profileTierMap]);
-}
-
-function PositionOverview({ league, userTeam }: { league: League; userTeam: Team }) {
-  const { profiles, total } = usePositionalProfiles(league, userTeam);
-
-  const sorted = useMemo(() =>
-    [...profiles].sort((a, b) => b.team.metrics.overall - a.team.metrics.overall),
-  [profiles]);
-
-  return (
-    <div className="space-y-4">
-      <Card>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm" data-testid="position-overview-table">
-              <thead>
-                <tr className="border-b border-border/50 bg-muted/30">
-                  <th className="px-1.5 sm:px-4 py-2.5 sm:py-3 text-left text-xs sm:text-sm font-semibold text-muted-foreground">Team</th>
-                  {POSITIONS.map(pos => (
-                    <th key={pos} className="px-1 sm:px-3 py-2.5 sm:py-3 text-center text-xs sm:text-sm font-semibold text-muted-foreground">{pos}</th>
-                  ))}
-                  <th className="px-1 sm:px-3 py-2.5 sm:py-3 text-center text-xs sm:text-sm font-semibold text-muted-foreground">PKS</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sorted.map((profile) => {
-                  const isUser = profile.teamId === userTeam.id;
-                  return (
-                    <tr
-                      key={profile.teamId}
-                      className={cn(
-                        "border-b border-border/20 hover:bg-muted/20",
-                        isUser && "bg-blue-50/50 dark:bg-blue-950/20"
-                      )}
-                      data-testid={`overview-row-${profile.teamId}`}
-                    >
-                      <td className={cn("px-1.5 sm:px-4 py-2", isUser ? "bg-blue-50/50 dark:bg-blue-950/20" : "")}>
-                        <div className="flex items-center gap-1 sm:gap-2">
-                          {isUser && <div className="w-1.5 h-1.5 rounded-full bg-[#d4af37]" />}
-                          <span className={cn("font-semibold text-[11px] sm:text-sm text-foreground truncate max-w-[60px] sm:max-w-none", isUser && "text-[#0b3a7a] dark:text-blue-400")}>
-                            {profile.team.owner}
-                          </span>
-                        </div>
-                      </td>
-                      {POSITIONS.map(pos => {
-                        const p = profile.positions[pos];
-                        return (
-                          <td key={pos} className={cn("px-1 sm:px-3 py-2 text-center", getStatusCellBg(p.status))}>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <div className="inline-block">
-                                  <Badge variant="outline" className={cn("text-[8px] sm:text-[10px] px-1 sm:px-1.5 font-semibold", getStatusColor(p.status))} data-testid={`status-${profile.teamId}-${pos}`}>
-                                    {p.status}
-                                  </Badge>
-                                </div>
-                              </TooltipTrigger>
-                              <TooltipContent side="top" className="text-xs">
-                                <p className="font-semibold">{profile.team.owner}: {pos}</p>
-                                <p>Rank: #{p.rank} / {total}</p>
-                                <p>Strength: {Math.round(p.totalStrength).toLocaleString()}</p>
-                                <p>vs Median: {p.surplusAmount > 0 ? "+" : ""}{p.surplusAmount.toLocaleString()}</p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </td>
-                        );
-                      })}
-                      <td className="px-1 sm:px-3 py-2 text-center">
-                        <Badge variant="outline" className={cn("text-[8px] sm:text-[10px] px-1 sm:px-1.5 font-semibold",
-                          profile.pickStrength === "High" ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30" :
-                          profile.pickStrength === "Low" ? "bg-red-500/15 text-red-700 dark:text-red-400 border-red-500/30" :
-                          "bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20"
-                        )} data-testid={`picks-${profile.teamId}`}>
-                          {profile.pickStrength}
-                        </Badge>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
-
-      <div className="flex items-center gap-4 text-xs text-muted-foreground">
-        <span className="flex items-center gap-1.5">
-          <span className="inline-block w-3 h-3 rounded-sm bg-emerald-500/20 border border-emerald-500/30" /> Surplus (top 25%)
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="inline-block w-3 h-3 rounded-sm bg-slate-500/10 border border-slate-500/20" /> Neutral (middle 50%)
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="inline-block w-3 h-3 rounded-sm bg-red-500/20 border border-red-500/30" /> Need (bottom 25%)
-        </span>
-      </div>
-    </div>
-  );
 }
 
 function SurplusNeeds({ league, userTeam, onSwitchTab }: { league: League; userTeam: Team; onSwitchTab: (tab: "opportunities") => void }) {
