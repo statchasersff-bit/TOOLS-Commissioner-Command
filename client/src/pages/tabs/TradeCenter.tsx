@@ -1372,11 +1372,6 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
               <p className="text-xl sm:text-2xl font-extrabold tracking-tight text-foreground uppercase leading-tight" data-testid="text-verdict-headline">
                 {diffPct <= 4 ? "Dead Even Trade" : `${winnerLabel} wins the trade`}
               </p>
-              {diff > 0 && (
-                <p className="text-sm font-bold text-[#d4af37]" data-testid="text-verdict-diff">
-                  +{Math.round(diff).toLocaleString()} Trade Value
-                </p>
-              )}
               <div className="flex justify-center pt-1">
                 <Badge className={`text-xs px-4 py-1.5 font-bold border ${getVerdictStyle(diffPct)}`} data-testid="badge-verdict">
                   {getVerdictLabel(diffPct)}
