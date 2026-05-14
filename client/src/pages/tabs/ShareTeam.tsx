@@ -79,7 +79,7 @@ export function ShareTeam({ league, userTeam }: Props) {
   const { getPlayerValue, getRedraftValue } = useValueModel();
   const cardRef = useRef<HTMLDivElement>(null);
 
-  const [innerTab, setInnerTab] = useState<"share" | "field-view">("share");
+  const [innerTab, setInnerTab] = useState<"share" | "field-view">("field-view");
 
   const [hideManagerName, setHideManagerName] = useState(false);
   const [hideLeagueName, setHideLeagueName] = useState(false);
