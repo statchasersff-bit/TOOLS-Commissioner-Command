@@ -345,7 +345,6 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
             {/* ── League selector (centered) ── */}
             {sleeper.isConnected && (
               <div className="hidden md:flex items-center gap-1.5 flex-shrink-0">
-                <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">League:</span>
                 <LeagueSelector
                   leagues={sleeperLeaguesAsLeagues}
                   selectedLeagueId={selectedLeagueId}
