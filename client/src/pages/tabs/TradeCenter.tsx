@@ -1047,8 +1047,8 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
     return players;
   }, [league]);
 
-  const [rosterOpenA, setRosterOpenA] = useState(false);
-  const [rosterOpenB, setRosterOpenB] = useState(false);
+  const [rosterOpenA, setRosterOpenA] = useState(true);
+  const [rosterOpenB, setRosterOpenB] = useState(true);
 
   const RosterCollapsible = ({ rosterTeam, rosterPlayers, addedPlayerIds, addedPickKeys, side, onTogglePlayer, onTogglePick, getPlayerValue }: {
     rosterTeam: Team;
