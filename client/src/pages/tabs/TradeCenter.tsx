@@ -744,82 +744,6 @@ function calculateRawTotal(assets: TradeAsset[]): number {
   return assets.reduce((sum, a) => sum + a.value, 0);
 }
 
-interface PlayerSearchProps {
-  allPlayers: Player[];
-  onAdd: (player: Player) => void;
-  side: "a" | "b";
-  getPlayerValue: (player: Player) => number;
-}
-
-function PlayerSearchInput({ allPlayers, onAdd, side, getPlayerValue }: PlayerSearchProps) {
-  const [query, setQuery] = useState("");
-  const [showResults, setShowResults] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  const results = useMemo(() => {
-    if (query.length < 2) return [];
-    const q = query.toLowerCase();
-    return allPlayers
-      .filter((p) => p.name.toLowerCase().includes(q))
-      .sort((a, b) => getPlayerValue(b) - getPlayerValue(a))
-      .slice(0, 10);
-  }, [query, allPlayers, getPlayerValue]);
-
-  useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setShowResults(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  return (
-    <div ref={containerRef} className="relative">
-      <div className="relative">
-        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-        <Input
-          placeholder="Search players..."
-          value={query}
-          onChange={(e) => {
-            setQuery(e.target.value);
-            setShowResults(true);
-          }}
-          onFocus={() => query.length >= 2 && setShowResults(true)}
-          className="pl-8"
-          data-testid={`input-player-search-${side}`}
-        />
-      </div>
-      {showResults && results.length > 0 && (
-        <div className="absolute z-20 top-full mt-1 w-full bg-background border border-border rounded-md shadow-lg max-h-64 overflow-y-auto">
-          {results.map((p) => {
-            const val = getPlayerValue(p);
-            return (
-              <button
-                key={p.id}
-                className="w-full flex items-center gap-2 px-3 py-2 text-left hover-elevate"
-                onClick={() => {
-                  onAdd(p);
-                  setQuery("");
-                  setShowResults(false);
-                }}
-                data-testid={`button-add-player-${side}-${p.id}`}
-              >
-                <Badge variant="outline" className={`text-[10px] w-7 justify-center ${getPositionColor(p.pos)}`}>{p.pos}</Badge>
-                <div className="flex-1 min-w-0">
-                  <span className="text-sm font-medium truncate block">{p.name}</span>
-                  <span className="text-[10px] text-muted-foreground">{p.team} | Age {p.age}</span>
-                </div>
-                <span className="text-xs font-semibold text-muted-foreground">{val.toLocaleString()}</span>
-              </button>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
 
 interface PickAdderProps {
   onAdd: (year: number, round: number, range: "Early" | "Mid" | "Late") => void;
@@ -1275,23 +1199,6 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
         </div>
 
         <div className="space-y-3">
-          {side === "b" && !tradePartnerId ? (
-            <div className="relative">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground/40" />
-              <input
-                disabled
-                placeholder="Select a trade partner first..."
-                className="w-full pl-8 pr-3 py-1.5 text-xs rounded-md border border-border/30 bg-muted/20 text-muted-foreground/40 cursor-not-allowed placeholder:text-muted-foreground/40"
-              />
-            </div>
-          ) : (
-          <PlayerSearchInput
-            allPlayers={rosterPlayers.length > 0 ? rosterPlayers : allPlayers}
-            onAdd={(p) => addPlayer(side, p)}
-            side={side}
-            getPlayerValue={getPlayerValue}
-          />
-          )}
 
 
 
