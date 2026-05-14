@@ -326,10 +326,10 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
     <div className="min-h-screen bg-background blueprint-bg">
       <header className="border-b border-border/60 bg-background/95 backdrop-blur-sm sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-1.5 md:px-3 py-2.5 md:py-3">
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
 
             {/* ── Logo ── */}
-            <div className="flex items-center gap-2.5 flex-shrink-0">
+            <div className="flex items-center gap-2.5 flex-shrink-0 flex-1">
               <div className="w-8 h-8 md:w-9 md:h-9 rounded-lg flex items-center justify-center flex-shrink-0">
                 <img src={logoDark} alt="StatChasers" className="w-8 h-8 md:w-9 md:h-9 hidden dark:block" />
                 <img src={logoLight} alt="StatChasers" className="w-8 h-8 md:w-9 md:h-9 block dark:hidden" />
@@ -342,25 +342,25 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
               </div>
             </div>
 
-            {/* ── Right side ── */}
-            <div className="flex items-center gap-2 md:gap-3">
+            {/* ── League selector (centered) ── */}
+            {sleeper.isConnected && (
+              <div className="hidden md:flex items-center gap-1.5 flex-shrink-0">
+                <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">League:</span>
+                <LeagueSelector
+                  leagues={sleeperLeaguesAsLeagues}
+                  selectedLeagueId={selectedLeagueId}
+                  onSelect={handleLeagueSelect}
+                />
+                {isSelectedBestBall && (
+                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 bg-sky-50 text-sky-700 dark:bg-sky-950/30 dark:text-sky-400 border-sky-300 dark:border-sky-700" data-testid="badge-bestball-active">
+                    Best Ball
+                  </Badge>
+                )}
+              </div>
+            )}
 
-              {/* League selector (desktop) */}
-              {sleeper.isConnected && (
-                <div className="hidden md:flex items-center gap-1.5">
-                  <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">League:</span>
-                  <LeagueSelector
-                    leagues={sleeperLeaguesAsLeagues}
-                    selectedLeagueId={selectedLeagueId}
-                    onSelect={handleLeagueSelect}
-                  />
-                  {isSelectedBestBall && (
-                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 bg-sky-50 text-sky-700 dark:bg-sky-950/30 dark:text-sky-400 border-sky-300 dark:border-sky-700" data-testid="badge-bestball-active">
-                      Best Ball
-                    </Badge>
-                  )}
-                </div>
-              )}
+            {/* ── Right side ── */}
+            <div className="flex items-center gap-2 md:gap-3 flex-1 justify-end">
 
               {/* Connect button (when not connected) */}
               {!sleeper.isConnected && (
