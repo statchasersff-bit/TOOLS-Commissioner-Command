@@ -197,6 +197,55 @@ export function PowerRankings({ league }: AnalyzerProps) {
 
       <DataTable columns={columns} data={sorted} defaultSortKey="overall" defaultSortDir="desc" />
 
+      {/* League Scoring Settings */}
+      {league.scoringSettings && Object.keys(league.scoringSettings).length > 0 && (() => {
+        const s = league.scoringSettings!;
+        const SCORING_LABELS: Array<{ key: string; label: string; format?: (v: number) => string }> = [
+          { key: "pass_yd",      label: "Pass Yds",       format: v => `${v} / yd` },
+          { key: "pass_td",      label: "Pass TD",        format: v => `+${v}` },
+          { key: "pass_int",     label: "Interception",   format: v => `${v}` },
+          { key: "pass_2pt",     label: "Pass 2PT",       format: v => `+${v}` },
+          { key: "rush_yd",      label: "Rush Yds",       format: v => `${v} / yd` },
+          { key: "rush_td",      label: "Rush TD",        format: v => `+${v}` },
+          { key: "rush_2pt",     label: "Rush 2PT",       format: v => `+${v}` },
+          { key: "rec",          label: "Reception",      format: v => `+${v}` },
+          { key: "rec_yd",       label: "Rec Yds",        format: v => `${v} / yd` },
+          { key: "rec_td",       label: "Rec TD",         format: v => `+${v}` },
+          { key: "rec_2pt",      label: "Rec 2PT",        format: v => `+${v}` },
+          { key: "bonus_rec_te", label: "TE Premium",     format: v => `+${v}` },
+          { key: "bonus_rec_wr", label: "WR Premium",     format: v => `+${v}` },
+          { key: "bonus_rec_rb", label: "RB Premium",     format: v => `+${v}` },
+          { key: "fum_lost",     label: "Fumble Lost",    format: v => `${v}` },
+          { key: "st_td",        label: "ST TD",          format: v => `+${v}` },
+          { key: "sack",         label: "Sack",           format: v => `+${v}` },
+          { key: "safe",         label: "Safety",         format: v => `+${v}` },
+          { key: "blk_kick",     label: "Block Kick",     format: v => `+${v}` },
+        ];
+        const rows = SCORING_LABELS.filter(({ key }) => s[key] !== undefined && s[key] !== 0);
+        if (rows.length === 0) return null;
+        return (
+          <div>
+            <h3 className="text-base font-bold text-foreground">League Scoring Settings</h3>
+            <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5 mb-3" />
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-x-4 gap-y-1">
+              {rows.map(({ key, label, format }) => {
+                const val = s[key];
+                const display = format ? format(val) : `${val}`;
+                const isNegative = val < 0;
+                return (
+                  <div key={key} className="flex items-center justify-between py-1 border-b border-border/20">
+                    <span className="text-[11px] text-muted-foreground">{label}</span>
+                    <span className={cn("text-[11px] font-semibold tabular-nums", isNegative ? "text-rose-400" : "text-foreground")}>
+                      {display}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
+
       {/* League format pills */}
       <div className="flex flex-wrap gap-1.5" data-testid="league-info-pills">
         {infoPills.map((pill) => (
