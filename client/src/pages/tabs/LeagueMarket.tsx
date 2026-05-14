@@ -7,6 +7,7 @@ import { InsightCallout } from "@/components/InsightCallout";
 import { SectionHeader } from "@/components/SectionHeader";
 import { useValueModel } from "@/contexts/ValueModelContext";
 import { getPositionColor } from "@/data/mockData";
+import { ROOKIE_BOARD_2026_SF } from "@/data/rookieBoard2026";
 import type { League } from "@/types";
 import { cn } from "@/lib/utils";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
@@ -60,15 +61,26 @@ export function MarketValue({ league }: MarketProps) {
     return rows;
   }, [league, valuesBySleeperId, redraftValuesBySleeperId]);
 
+  const rookieRows = useMemo<PlayerRow[]>(() =>
+    ROOKIE_BOARD_2026_SF.map((r) => ({
+      name: r.name,
+      pos: r.pos,
+      team: r.team || "FA",
+      sleeperId: r.sleeperId,
+      dynastyValue: r.value,
+      redraftValue: 0,
+    })),
+  []);
+
   const filtered = useMemo(() => {
-    let rows = allPlayers;
+    let rows = posFilter === "rookies" ? rookieRows : allPlayers;
 
     if (search.trim()) {
       const q = search.toLowerCase().trim();
       rows = rows.filter((r) => r.name.toLowerCase().includes(q));
     }
 
-    if (posFilter !== "all") {
+    if (posFilter !== "all" && posFilter !== "rookies") {
       rows = rows.filter((r) => r.pos === posFilter);
     }
 
@@ -81,7 +93,7 @@ export function MarketValue({ league }: MarketProps) {
     });
 
     return rows;
-  }, [allPlayers, search, posFilter, sortKey, sortDir]);
+  }, [allPlayers, rookieRows, search, posFilter, sortKey, sortDir]);
 
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -114,7 +126,7 @@ export function MarketValue({ league }: MarketProps) {
           />
         </div>
         <Select value={posFilter} onValueChange={setPosFilter}>
-          <SelectTrigger className="w-[100px] h-9 text-xs" data-testid="select-market-pos">
+          <SelectTrigger className="w-[115px] h-9 text-xs" data-testid="select-market-pos">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -123,6 +135,7 @@ export function MarketValue({ league }: MarketProps) {
             <SelectItem value="RB">RB</SelectItem>
             <SelectItem value="WR">WR</SelectItem>
             <SelectItem value="TE">TE</SelectItem>
+            <SelectItem value="rookies">Rookies '26</SelectItem>
           </SelectContent>
         </Select>
         <Badge variant="secondary" className="text-xs" data-testid="badge-player-count">
