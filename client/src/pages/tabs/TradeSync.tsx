@@ -440,11 +440,11 @@ function PickChip({ pick }: { pick: AssetPick }) {
       "flex items-center gap-1.5 rounded-md px-2 py-1",
       pick.isStartup
         ? "bg-violet-500/10 dark:bg-violet-400/10"
-        : "bg-amber-500/10 dark:bg-amber-400/10"
+        : "bg-purple-500/10 dark:bg-purple-400/10"
     )}>
       <span className={cn(
         "text-[10px] font-bold",
-        pick.isStartup ? "text-violet-700 dark:text-violet-400" : "text-amber-700 dark:text-amber-400"
+        pick.isStartup ? "text-violet-700 dark:text-violet-400" : "text-purple-700 dark:text-purple-400"
       )}>{pick.isStartup ? "STUP" : "ROOK"}</span>
       <span className="text-[11px] font-medium text-foreground">{pick.label}</span>
       {pick.value > 0 && <span className="text-[10px] text-muted-foreground ml-auto">{pick.value.toLocaleString()}</span>}
@@ -509,11 +509,11 @@ function PickCardRow({ pick, showValue }: { pick: AssetPick; showValue?: boolean
         "w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0",
         isStartup
           ? "bg-violet-500/15 dark:bg-violet-400/15"
-          : "bg-amber-500/15 dark:bg-amber-400/15"
+          : "bg-purple-500/15 dark:bg-purple-400/15"
       )}>
         <span className={cn(
           "text-[9px] font-bold",
-          isStartup ? "text-violet-700 dark:text-violet-400" : "text-amber-700 dark:text-amber-400"
+          isStartup ? "text-violet-700 dark:text-violet-400" : "text-purple-700 dark:text-purple-400"
         )}>{isStartup ? "SU" : `R${pick.round}`}</span>
       </div>
       <span className="text-sm font-medium text-foreground truncate">{pick.label}</span>
