@@ -519,7 +519,7 @@ export function PortfolioSummary() {
     let cancelled = false;
     setPendingTradeLoading(true);
     const userId = user.userId;
-    const eligible = leagues.filter(l => !l.isBestBall);
+    const eligible = leagues;
 
     import("@/services/sleeperAuthedApi").then(({ fetchLeagueTransactionsFiltered }) =>
       Promise.allSettled(
