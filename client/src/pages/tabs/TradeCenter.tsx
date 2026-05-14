@@ -1148,7 +1148,7 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
           </p>
         </button>
         {isOpen && (
-          <div className="grid grid-cols-4 gap-2 max-h-64 overflow-y-auto mt-2">
+          <div className="grid grid-cols-5 gap-2 max-h-64 overflow-y-auto mt-2">
             {(["QB", "RB", "WR", "TE"] as const).map((pos) => {
               const posPlayers = [...rosterPlayers]
                 .filter((p) => p.pos === pos)
@@ -1184,6 +1184,31 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
                 </div>
               );
             })}
+
+            {/* Picks column */}
+            <div className="space-y-0.5">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-center pb-1 border-b border-border/30 bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-400">
+                Picks
+              </p>
+              {[...rosterTeam.picks]
+                .sort((a, b) => String(a.year).localeCompare(String(b.year)) || a.round - b.round)
+                .map((pick, i) => {
+                  const rd = pick.round === 1 ? "1st" : pick.round === 2 ? "2nd" : pick.round === 3 ? "3rd" : `${pick.round}th`;
+                  return (
+                    <button
+                      key={i}
+                      className="w-full flex flex-col px-1.5 py-1 rounded text-left transition-colors hover:bg-muted/40 cursor-pointer"
+                      onClick={() => addPick(side, String(pick.year), pick.round, pick.projectedRange || "Mid")}
+                      data-testid={`button-roster-pick-${side}-${i}`}
+                    >
+                      <span className="truncate text-[11px] font-medium">{pick.year} {rd}</span>
+                    </button>
+                  );
+                })}
+              {rosterTeam.picks.length === 0 && (
+                <p className="text-[9px] text-muted-foreground/50 text-center py-2">None</p>
+              )}
+            </div>
           </div>
         )}
       </div>
