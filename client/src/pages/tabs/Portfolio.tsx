@@ -587,7 +587,7 @@ export function PortfolioSummary() {
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-between gap-4 flex-wrap">
-          <SectionHeader title="My Portfolio" subtitle="Overview of your dynasty portfolio across all leagues" />
+          <SectionHeader title="League Finances" subtitle="Track buy-ins, prizes, and ROI across your leagues" />
           <div className="flex gap-1 p-1 rounded-full bg-muted/40 border border-border/40">
             {(["overview", "finances"] as const).map((tab) => (
               <button
