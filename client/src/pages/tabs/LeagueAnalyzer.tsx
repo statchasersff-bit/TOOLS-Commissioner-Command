@@ -156,20 +156,6 @@ export function PowerRankings({ league }: AnalyzerProps) {
     <div className="space-y-8">
       <SectionHeader title="Power Rankings" subtitle="Teams ranked and grouped by archetype" />
 
-      {/* League format pills */}
-      <div className="flex flex-wrap gap-1.5" data-testid="league-info-pills">
-        {infoPills.map((pill) => (
-          <span
-            key={pill.label}
-            title={pill.title}
-            className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold bg-[#0b3a7a]/10 dark:bg-blue-500/10 border border-[#0b3a7a]/20 dark:border-blue-400/20 text-[#0b3a7a] dark:text-blue-300 select-none"
-            data-testid={`pill-${pill.label.replace(/\s+/g, "-").toLowerCase()}`}
-          >
-            {pill.label}
-          </span>
-        ))}
-      </div>
-
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
         {TIER_ORDER.filter(tier => tiers[tier].length > 0).map((tier) => (
           <div key={tier} className={cn("rounded-md p-4 border border-border/40", getTierBg(tier))}>
@@ -210,6 +196,20 @@ export function PowerRankings({ league }: AnalyzerProps) {
       </div>
 
       <DataTable columns={columns} data={sorted} defaultSortKey="overall" defaultSortDir="desc" />
+
+      {/* League format pills */}
+      <div className="flex flex-wrap gap-1.5" data-testid="league-info-pills">
+        {infoPills.map((pill) => (
+          <span
+            key={pill.label}
+            title={pill.title}
+            className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold bg-[#0b3a7a]/10 dark:bg-blue-500/10 border border-[#0b3a7a]/20 dark:border-blue-400/20 text-[#0b3a7a] dark:text-blue-300 select-none"
+            data-testid={`pill-${pill.label.replace(/\s+/g, "-").toLowerCase()}`}
+          >
+            {pill.label}
+          </span>
+        ))}
+      </div>
 
       <div>
         <h3 className="text-base font-bold text-foreground">Scouting Report</h3>
