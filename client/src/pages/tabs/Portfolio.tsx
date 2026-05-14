@@ -703,7 +703,6 @@ export function PortfolioSummary() {
                   setExposureSortCol(col);
                   setExposureSortDir(col === "name" || col === "pos" ? "asc" : "desc");
                 }
-                setExposureVisible(25);
               };
               const SortIcon = ({ col }: { col: typeof exposureSortCol }) => {
                 if (exposureSortCol !== col) return <ArrowUpDown className="w-3 h-3 opacity-40" />;
