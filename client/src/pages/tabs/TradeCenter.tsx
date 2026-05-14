@@ -1199,8 +1199,13 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
         </div>
 
         <div className="space-y-3">
-
-
+          {side === "b" && !tradePartnerId && (
+            <div className="flex flex-col items-center justify-center py-10 gap-2 text-center">
+              <Scale className="w-8 h-8 text-muted-foreground/30" />
+              <p className="text-sm font-semibold text-muted-foreground/60">No trade partner selected</p>
+              <p className="text-xs text-muted-foreground/40">Use the dropdown above to choose a team</p>
+            </div>
+          )}
 
           {rosterTeam && rosterPlayers.length > 0 && (
             <RosterCollapsible
