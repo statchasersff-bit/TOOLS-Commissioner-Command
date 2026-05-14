@@ -1366,11 +1366,6 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        {renderSide("a", sideA, rawA)}
-        {renderSide("b", sideB, rawB)}
-      </div>
-
       {(sideA.length > 0 || sideB.length > 0) && (
         <Card className="p-5 border-border/60 dark:border-[#1a2d4a]/80 bg-gradient-to-b from-background to-muted/10 dark:from-[#0c1929] dark:to-[#0a1628]">
           <div className="mb-5">
@@ -1514,6 +1509,11 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
           </div>
         </Card>
       )}
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+        {renderSide("a", sideA, rawA)}
+        {renderSide("b", sideB, rawB)}
+      </div>
 
       <Card className="p-5">
         <div className="mb-4">
