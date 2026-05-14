@@ -1366,8 +1366,9 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
         </Button>
       </div>
 
-      {(sideA.length > 0 || sideB.length > 0) && (
-        <Card className="p-5">
+      <Card className="p-5">
+        {(sideA.length > 0 || sideB.length > 0) && (
+          <>
           <div className="mb-5">
             <h3 className="text-sm font-bold flex items-center gap-2">
               <ArrowRightLeft className="w-4 h-4 text-[#0b3a7a] dark:text-blue-400" />
@@ -1507,13 +1508,14 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
             )}
 
           </div>
-        </Card>
-      )}
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        {renderSide("a", sideA, rawA)}
-        {renderSide("b", sideB, rawB)}
-      </div>
+          <hr className="border-border/40 my-5" />
+          </>
+        )}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          {renderSide("a", sideA, rawA)}
+          {renderSide("b", sideB, rawB)}
+        </div>
+      </Card>
 
       <Card className="p-5">
         <div className="mb-4">
