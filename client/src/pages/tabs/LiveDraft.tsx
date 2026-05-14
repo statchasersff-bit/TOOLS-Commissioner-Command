@@ -114,6 +114,23 @@ async function fetchDraftMessages(draftId: string, jwt: string): Promise<DraftMe
   return (json?.data?.messages as DraftMessage[]) || [];
 }
 
+async function fetchDraftQueue(draftId: string, jwt: string): Promise<string[]> {
+  const res = await fetch("https://sleeper.com/graphql", {
+    method: "POST",
+    headers: {
+      "authorization": jwt,
+      "x-sleeper-graphql-op": "draft_queue",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      query: `query draft_queue { draft_queue(draft_id: "${draftId}") }`,
+    }),
+  });
+  if (!res.ok) throw new Error(`GraphQL ${res.status}`);
+  const json = await res.json();
+  return (json?.data?.draft_queue as string[]) || [];
+}
+
 const POS_CELL_BG: Record<string, string> = {
   QB: "bg-red-500/25 dark:bg-red-500/30 border-red-500/40 text-red-900 dark:text-red-200",
   RB: "bg-emerald-500/25 dark:bg-emerald-500/30 border-emerald-500/40 text-emerald-900 dark:text-emerald-200",
@@ -168,6 +185,9 @@ export default function LiveDraft() {
   const [messagesError, setMessagesError] = useState<string | null>(null);
   const [draftStarted, setDraftStarted] = useState(false);
   const [showFullLog, setShowFullLog] = useState(false);
+  const [draftQueue, setDraftQueue] = useState<string[]>([]);
+  const [queueLoading, setQueueLoading] = useState(false);
+  const [queueError, setQueueError] = useState<string | null>(null);
 
   useEffect(() => {
     const saved = localStorage.getItem(SLEEPER_JWT_KEY);
@@ -191,18 +211,35 @@ export default function LiveDraft() {
     }
   }, []);
 
+  const refreshQueue = useCallback(async (draftId: string, jwt: string) => {
+    setQueueLoading(true);
+    setQueueError(null);
+    try {
+      const ids = await fetchDraftQueue(draftId, jwt);
+      setDraftQueue(ids);
+    } catch (e: any) {
+      setQueueError(e.message || "Failed to load queue");
+    } finally {
+      setQueueLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (activeDraftId && sleeperJwt) {
       setDraftMessages([]);
+      setDraftQueue([]);
       refreshMessages(activeDraftId, sleeperJwt);
+      refreshQueue(activeDraftId, sleeperJwt);
     }
-  }, [activeDraftId, sleeperJwt, refreshMessages]);
+  }, [activeDraftId, sleeperJwt, refreshMessages, refreshQueue]);
 
-  // Clear messages when draft changes
+  // Clear messages + queue when draft changes
   useEffect(() => {
     setDraftMessages([]);
     setDraftStarted(false);
     setMessagesError(null);
+    setDraftQueue([]);
+    setQueueError(null);
   }, [activeLeagueId]);
 
   const scanForLiveDrafts = useCallback(async () => {
@@ -263,13 +300,16 @@ export default function LiveDraft() {
     if (autoRefresh && activeLeagueId) {
       intervalRef.current = setInterval(() => {
         fetchDraft();
-        if (activeDraftId && sleeperJwt) refreshMessages(activeDraftId, sleeperJwt);
+        if (activeDraftId && sleeperJwt) {
+          refreshMessages(activeDraftId, sleeperJwt);
+          refreshQueue(activeDraftId, sleeperJwt);
+        }
       }, 45000);
     }
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [autoRefresh, activeLeagueId, activeDraftId, sleeperJwt, fetchDraft, refreshMessages]);
+  }, [autoRefresh, activeLeagueId, activeDraftId, sleeperJwt, fetchDraft, refreshMessages, refreshQueue]);
 
   const redraftPlayerList = useMemo(() => {
     if (!redraftValuesBySleeperId || Object.keys(redraftValuesBySleeperId).length === 0) return dynastyPlayerList;
@@ -391,7 +431,10 @@ export default function LiveDraft() {
     setSleeperJwt(val);
     setJwtInput("");
     setShowJwtInput(false);
-    if (activeDraftId) refreshMessages(activeDraftId, val);
+    if (activeDraftId) {
+      refreshMessages(activeDraftId, val);
+      refreshQueue(activeDraftId, val);
+    }
   };
 
   const handleClearJwt = () => {
@@ -399,6 +442,7 @@ export default function LiveDraft() {
     setSleeperJwt(null);
     setDraftMessages([]);
     setDraftStarted(false);
+    setDraftQueue([]);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -802,6 +846,96 @@ export default function LiveDraft() {
                     </div>
                   </div>
                 </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* ── My Queue ─────────────────────────────────────────────────── */}
+          {sleeperJwt && (
+            <Card data-testid="card-my-queue">
+              <CardContent className="pt-5 pb-4 space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <Target className="w-4 h-4 text-[#0b3a7a] dark:text-blue-400" />
+                    <span className="text-sm font-semibold">My Queue</span>
+                    {draftQueue.length > 0 && (
+                      <Badge variant="outline" className="text-[10px]">{draftQueue.length}</Badge>
+                    )}
+                    {queueLoading && <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />}
+                  </div>
+                  {activeDraftId && (
+                    <Button variant="outline" size="sm" className="h-7 px-2.5 text-xs"
+                      onClick={() => refreshQueue(activeDraftId, sleeperJwt!)}
+                      disabled={queueLoading} data-testid="button-refresh-queue">
+                      <RefreshCw className="w-3 h-3 mr-1" /> Refresh
+                    </Button>
+                  )}
+                </div>
+
+                {queueError && (
+                  <p className="text-xs text-red-500" data-testid="text-queue-error">{queueError}</p>
+                )}
+
+                {!queueLoading && draftQueue.length === 0 && !queueError && (
+                  <p className="text-xs text-muted-foreground text-center py-3" data-testid="text-queue-empty">
+                    No queued players yet
+                  </p>
+                )}
+
+                {draftQueue.length > 0 && (
+                  <div className="space-y-1" data-testid="list-queue-players">
+                    {draftQueue.map((playerId, idx) => {
+                      const p = draftData?.players?.[playerId];
+                      const name = p?.name ?? playerId;
+                      const pos = p?.pos ?? "";
+                      const team = p?.team ?? "";
+                      const rank = globalRankMap.get(playerId);
+                      const isDrafted = pickedPlayerIds.has(playerId);
+                      const posColors: Record<string, string> = {
+                        QB: "text-red-600 dark:text-red-400",
+                        RB: "text-emerald-600 dark:text-emerald-400",
+                        WR: "text-blue-600 dark:text-blue-400",
+                        TE: "text-orange-500 dark:text-orange-400",
+                      };
+                      const posBorderColors: Record<string, string> = {
+                        QB: "border-red-500/30",
+                        RB: "border-emerald-500/30",
+                        WR: "border-blue-500/30",
+                        TE: "border-orange-500/30",
+                      };
+                      return (
+                        <div key={playerId}
+                          className={`flex items-center gap-2.5 px-3 py-2 rounded-lg border text-xs transition-colors ${
+                            isDrafted
+                              ? "opacity-40 border-border/20 bg-muted/10 line-through"
+                              : `border-border/30 bg-muted/20 ${pos ? posBorderColors[pos] || "" : ""}`
+                          }`}
+                          data-testid={`queue-player-${playerId}`}>
+                          <span className="text-[10px] font-mono text-muted-foreground tabular-nums w-5 flex-shrink-0">
+                            {idx + 1}
+                          </span>
+                          {pos && (
+                            <span className={`text-[10px] font-bold flex-shrink-0 w-6 ${posColors[pos] || "text-muted-foreground"}`}>
+                              {pos}
+                            </span>
+                          )}
+                          <span className={`font-semibold truncate flex-1 ${isDrafted ? "text-muted-foreground" : "text-foreground"}`}>
+                            {name}
+                          </span>
+                          {team && <span className="text-[10px] text-muted-foreground flex-shrink-0">{team}</span>}
+                          {rank && !isDrafted && (
+                            <span className="text-[10px] text-muted-foreground flex-shrink-0">#{rank}</span>
+                          )}
+                          {isDrafted && (
+                            <Badge variant="outline" className="text-[9px] px-1 h-4 border-border/40 text-muted-foreground flex-shrink-0">
+                              Drafted
+                            </Badge>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </CardContent>
             </Card>
           )}
