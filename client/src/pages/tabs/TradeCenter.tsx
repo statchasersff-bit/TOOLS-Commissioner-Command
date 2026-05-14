@@ -1398,11 +1398,9 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
               return (
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2 text-center">{sideBTeam?.owner || "Side B"} sends</p>
                     {sideA.length > 0 ? renderCards(sideA, "a") : <p className="text-[10px] text-muted-foreground text-center py-2">Nothing yet</p>}
                   </div>
                   <div>
-                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2 text-center">{sideATeam?.owner || "Side A"} sends</p>
                     {sideB.length > 0 ? renderCards(sideB, "b") : <p className="text-[10px] text-muted-foreground text-center py-2">Nothing yet</p>}
                   </div>
                 </div>
