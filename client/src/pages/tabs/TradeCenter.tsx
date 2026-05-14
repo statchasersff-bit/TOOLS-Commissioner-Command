@@ -1333,8 +1333,8 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
             {/* 2. ADVANTAGE METER */}
             <div className="space-y-1.5 px-1">
               <div className="flex items-center justify-between text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-                <span>{sideBTeam?.owner || "Side B"}</span>
                 <span>{sideATeam?.owner || "Side A"}</span>
+                <span>{sideBTeam?.owner || "Side B"}</span>
               </div>
               <div className="relative h-4 rounded-full overflow-hidden">
                 <div className="absolute inset-0" style={{ background: "linear-gradient(90deg, #12284a 0%, #1a3560 50%, #12284a 100%)" }} />
