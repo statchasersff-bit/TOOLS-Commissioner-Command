@@ -434,39 +434,39 @@ export function RosterComparison({ league }: AnalyzerProps) {
       : "bg-[#d4af37]/10 dark:bg-[#d4af37]/5";
 
     return (
-      <div className={cn("flex flex-col items-center gap-3 p-4 sm:p-6 rounded-xl", glowBg)}>
-        <div className={cn("w-16 h-16 sm:w-20 sm:h-20 rounded-full ring-4 overflow-hidden flex-shrink-0", ringColor,
-          "bg-muted shadow-lg"
-        )}>
+      <div className={cn("flex flex-col items-center gap-2 p-3 sm:p-4 rounded-xl", glowBg)}>
+        <div className={cn("w-12 h-12 rounded-full ring-2 overflow-hidden flex-shrink-0", ringColor, "bg-muted shadow-md")}>
           {team?.avatar ? (
             <img src={team.avatar} alt={team.name} className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
           ) : (
-            <div className={cn("w-full h-full flex items-center justify-center text-2xl font-black", nameColor)}>
+            <div className={cn("w-full h-full flex items-center justify-center text-lg font-black", nameColor)}>
               {(team?.owner || "?").charAt(0).toUpperCase()}
             </div>
           )}
         </div>
 
-        <div className="text-center space-y-1 min-w-0 w-full">
-          <p className={cn("text-sm sm:text-base font-bold truncate", nameColor)} data-testid={`text-matchup-name-${side}`}>
+        <div className="text-center min-w-0 w-full">
+          <p className={cn("text-sm font-bold truncate leading-tight", nameColor)} data-testid={`text-matchup-name-${side}`}>
             {team?.name || `Team ${side}`}
           </p>
           {team?.owner && team.owner !== team.name && (
             <p className="text-[10px] text-muted-foreground truncate">{team.owner}</p>
           )}
           {tier && (
-            <Badge variant="outline" className={cn("text-[9px] sm:text-[10px] border-current mt-0.5", getTierColor(tier))}>
+            <Badge variant="outline" className={cn("text-[9px] border-current mt-0.5", getTierColor(tier))}>
               {tier}
             </Badge>
           )}
-          <p className={cn("text-3xl sm:text-4xl font-black tabular-nums mt-1", scoreColor)} data-testid={`text-matchup-score-${side}`}>
-            {team?.metrics.overall ?? 0}
-          </p>
-          <p className="text-[9px] text-muted-foreground uppercase tracking-widest">Overall Score</p>
+          <div className="flex items-baseline justify-center gap-1 mt-1">
+            <p className={cn("text-2xl font-black tabular-nums", scoreColor)} data-testid={`text-matchup-score-${side}`}>
+              {team?.metrics.overall ?? 0}
+            </p>
+            <p className="text-[9px] text-muted-foreground uppercase tracking-widest">pts</p>
+          </div>
         </div>
 
         <Select value={selectId} onValueChange={onSelect}>
-          <SelectTrigger className="w-full max-w-[160px] text-[11px] h-7" data-testid={`select-team-${side}`}>
+          <SelectTrigger className="w-full max-w-[150px] text-[11px] h-6" data-testid={`select-team-${side}`}>
             <SelectValue placeholder={`Team ${side}`} />
           </SelectTrigger>
           <SelectContent>
