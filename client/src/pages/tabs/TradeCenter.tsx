@@ -1547,7 +1547,7 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
                     <thead>
                       <tr className="border-b border-border bg-muted/20">
                         <th className="px-2 py-2 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Pos</th>
-                        <th className="px-1 py-2 text-center text-[10px] font-semibold text-muted-foreground uppercase tracking-wider" colSpan={2}>Redraft</th>
+                        <th className="px-1 py-2 text-center text-[10px] font-semibold text-muted-foreground uppercase tracking-wider" colSpan={2}>Win-Now</th>
                         <th className="px-1 py-2 text-center text-[10px] font-semibold text-muted-foreground uppercase tracking-wider border-l border-border/30" colSpan={2}>Dynasty</th>
                       </tr>
                     </thead>
