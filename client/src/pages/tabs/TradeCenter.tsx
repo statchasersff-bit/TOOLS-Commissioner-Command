@@ -1985,17 +1985,8 @@ function TradeCard({
                   const val = getPlayerValue(p.sleeperId);
                   return (
                     <div key={pi} className="flex items-center justify-between py-1">
-                      <div className="flex items-center gap-1.5">
-                        {p.sleeperId && (
-                          <PlayerAvatar id={p.sleeperId} name={p.name} pos={p.pos} team={p.team ?? ""} size="xs" compact />
-                        )}
-                        <Badge variant="outline" className={`text-[10px] w-7 justify-center ${getPositionColor(p.pos)}`}>
-                          {p.pos}
-                        </Badge>
-                        <span className="text-xs font-medium" data-testid={`text-player-name-${p.sleeperId}`}>{p.name}</span>
-                        {p.team && <span className="text-[10px] text-muted-foreground">{p.team}</span>}
-                      </div>
-                      {val > 0 && <span className="text-[10px] text-muted-foreground" data-testid={`text-player-value-${p.sleeperId}`}>{val.toLocaleString()}</span>}
+                      <PlayerAvatar id={p.sleeperId ?? ""} name={p.name} pos={p.pos} team={p.team ?? ""} size="sm" />
+                      {val > 0 && <span className="text-[10px] text-muted-foreground ml-2 flex-shrink-0" data-testid={`text-player-value-${p.sleeperId}`}>{val.toLocaleString()}</span>}
                     </div>
                   );
                 })}
