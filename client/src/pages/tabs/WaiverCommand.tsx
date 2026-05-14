@@ -619,7 +619,6 @@ export default function WaiverCommand() {
                   { key: "openSlots"  as SortKey, label: "Open",         align: "center" },
                   { key: "faabPct"    as SortKey, label: "FAAB",         align: "center" },
                   { key: null,                    label: "Best Avail",   align: "left"   },
-                  { key: null,                    label: "Dyn Val",      align: "center" },
                   { key: null,                    label: "Lowest",       align: "left"   },
                   { key: "difference" as SortKey, label: "Diff",         align: "center" },
                   { key: null,                    label: "Claim",        align: "center" },
@@ -854,20 +853,10 @@ function WaiverTableRow({ row, onClaim, onView }: { row: WaiverRow; onClaim: () 
             pos={row.bestAvailable.position}
             team={row.bestAvailable.team}
             size="sm"
+            sub={row.bestAvailable.value.toLocaleString()}
           />
         ) : (
           <span className="text-xs text-muted-foreground">—</span>
-        )}
-      </td>
-
-      {/* Dynasty value of best available */}
-      <td className="px-2 py-2 text-center">
-        {row.bestAvailable ? (
-          <span className="text-[13px] font-semibold text-foreground">
-            {row.bestAvailable.value.toLocaleString()}
-          </span>
-        ) : (
-          <span className="text-muted-foreground text-xs">—</span>
         )}
       </td>
 
