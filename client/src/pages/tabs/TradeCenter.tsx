@@ -1367,7 +1367,7 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
       </div>
 
       {(sideA.length > 0 || sideB.length > 0) && (
-        <Card className="p-5 border-border/60 dark:border-[#1a2d4a]/80 bg-gradient-to-b from-background to-muted/10 dark:from-[#0c1929] dark:to-[#0a1628]">
+        <Card className="p-5">
           <div className="mb-5">
             <h3 className="text-sm font-bold flex items-center gap-2">
               <ArrowRightLeft className="w-4 h-4 text-[#0b3a7a] dark:text-blue-400" />
