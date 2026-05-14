@@ -137,7 +137,7 @@ export interface SleeperTransaction {
   roster_ids: number[];
   adds: Record<string, number> | null;
   drops: Record<string, number> | null;
-  waiver_budget: number | null;
+  waiver_budget: Array<{ sender: number; receiver: number; amount: number } | string> | string | null;
   settings: { expires_at?: number | null; [key: string]: unknown } | null;
   metadata: Record<string, unknown> | null;
   consenter_ids: number[];

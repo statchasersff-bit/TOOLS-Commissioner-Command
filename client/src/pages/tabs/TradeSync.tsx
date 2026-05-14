@@ -310,11 +310,15 @@ function normalizeTrade(
   }
 
   // ── FAAB (waiver_budget) ───────────────────────────────────────────────────
-  // Sleeper returns waiver_budget as an array of {sender, receiver, amount}
-  // objects (REST) or CSV strings "sender,receiver,amount" (GraphQL).
+  // Sleeper REST  → array of {sender, receiver, amount} objects
+  // Sleeper GQL   → JSON-encoded string (same scalar treatment as draft_picks)
+  //                 or array of "sender,receiver,amount" CSV strings
   let iGiveFaab = 0;
   let iGetFaab = 0;
-  const rawWB = (t as any).waiver_budget;
+  let rawWB: any = (t as any).waiver_budget;
+  if (typeof rawWB === "string") {
+    try { rawWB = JSON.parse(rawWB); } catch { rawWB = null; }
+  }
   if (Array.isArray(rawWB)) {
     for (const entry of rawWB) {
       let sender: number, receiver: number, amount: number;
