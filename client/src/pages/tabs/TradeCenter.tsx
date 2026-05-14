@@ -1202,16 +1202,23 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
     return (
       <Card className="p-5 flex-1">
         <div className="mb-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-bold flex items-center gap-2" data-testid={`text-side-${side}-header`}>
-              <Scale className="w-4 h-4 text-[#0b3a7a] dark:text-blue-400" />
+          <div className="flex items-center gap-2.5" data-testid={`text-side-${side}-header`}>
+            {rosterTeam ? (
+              <img
+                src={rosterTeam.avatar ? `https://sleepercdn.com/avatars/thumbs/${rosterTeam.avatar}` : "https://sleepercdn.com/images/v2/icons/player_default.webp"}
+                alt={rosterTeam.owner || rosterTeam.name}
+                className="w-8 h-8 rounded-full object-cover border border-border/40 flex-shrink-0"
+                onError={(e) => { (e.target as HTMLImageElement).src = "https://sleepercdn.com/images/v2/icons/player_default.webp"; }}
+                data-testid={`img-side-${side}-avatar`}
+              />
+            ) : (
+              <div className="w-8 h-8 rounded-full bg-muted/40 border border-border/40 flex items-center justify-center flex-shrink-0">
+                <Scale className="w-4 h-4 text-muted-foreground" />
+              </div>
+            )}
+            <h3 className="text-sm font-bold">
               {rosterTeam ? `${rosterTeam.owner || rosterTeam.name} Sends...` : `Side ${sideLabel} Sends...`}
             </h3>
-            {rosterTeam && (
-              <Badge variant="secondary" className="text-[10px]" data-testid={`badge-side-${side}-team`}>
-                {rosterTeam.owner || rosterTeam.name}
-              </Badge>
-            )}
           </div>
           <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
         </div>
