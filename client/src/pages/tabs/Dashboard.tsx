@@ -1477,7 +1477,7 @@ function percentileLabel(rank: number, total: number): string {
 
 export function MyTeam({ league, userTeam, onNavigate }: DashboardOverviewProps) {
   const { getPlayerValue, getRedraftValue, optimizeLineup } = useValueModel();
-  const [expandedPos, setExpandedPos] = useState<Set<string>>(new Set(["QB"]));
+  const [posGroupOpen, setPosGroupOpen] = useState(true);
 
   const total = league.teams.length;
 
@@ -1601,13 +1601,6 @@ export function MyTeam({ league, userTeam, onNavigate }: DashboardOverviewProps)
       .sort((a, b) => (b.starter ? 1 : 0) - (a.starter ? 1 : 0) || b.value - a.value),
   }));
 
-  const togglePos = (pos: string) => {
-    setExpandedPos(prev => {
-      const next = new Set(prev);
-      if (next.has(pos)) next.delete(pos); else next.add(pos);
-      return next;
-    });
-  };
 
   // League meta string for hero
   const leagueMeta = [
@@ -1887,94 +1880,115 @@ export function MyTeam({ league, userTeam, onNavigate }: DashboardOverviewProps)
         </div>
       </div>
 
-      {/* ── 5. POSITION GROUP BREAKDOWNS (Accordions) ──────────────────────── */}
+      {/* ── 5. POSITION GROUPS (single collapsible, columns per position) ──── */}
       <div data-testid="myteam-position-groups">
         <div className="mb-4">
           <h3 className="text-base font-bold text-foreground">Position Groups</h3>
           <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
         </div>
-        <div className="space-y-2">
-          {positionData.map(({ pos, redraftRank, dynastyRank, players }) => {
-            const isOpen = expandedPos.has(pos);
-            const rStyle = rankBg(redraftRank, total);
-            const dStyle = rankBg(dynastyRank, total);
-            const starters = players.filter(p => p.starter);
-            const bench = players.filter(p => !p.starter);
-            return (
-              <Card key={pos} className="overflow-hidden" data-testid={`group-${pos.toLowerCase()}`}>
-                <button
-                  className="w-full flex items-center justify-between px-5 py-4 hover:bg-muted/30 transition-colors"
-                  onClick={() => togglePos(pos)}
-                  data-testid={`group-toggle-${pos.toLowerCase()}`}
-                >
-                  <div className="flex items-center gap-3">
-                    <span className="text-sm font-black uppercase tracking-widest text-foreground w-8">{pos}</span>
-                    <Badge variant="secondary" className="text-xs">{players.length}</Badge>
-                    <span className="text-xs text-muted-foreground hidden sm:block">
-                      {starters.length} starter{starters.length !== 1 ? "s" : ""} · {bench.length} bench
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className={cn("text-[10px] font-bold px-2 py-0.5 rounded border hidden sm:inline", rStyle.badge)}>
-                      RED #{redraftRank}
-                    </span>
-                    <span className={cn("text-[10px] font-bold px-2 py-0.5 rounded border hidden sm:inline", dStyle.badge)}>
-                      DYN #{dynastyRank}
-                    </span>
-                    {isOpen
-                      ? <ChevronUp className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                      : <ChevronDown className="w-4 h-4 text-muted-foreground flex-shrink-0" />}
-                  </div>
-                </button>
+        <Card className="overflow-hidden">
+          {/* Header toggle */}
+          <button
+            className="w-full flex items-center justify-between px-5 py-4 hover:bg-muted/30 transition-colors"
+            onClick={() => setPosGroupOpen(v => !v)}
+            data-testid="group-toggle-all"
+          >
+            <div className="flex items-center gap-3">
+              <span className="text-sm font-bold text-foreground">QB · RB · WR · TE</span>
+              <Badge variant="secondary" className="text-xs">
+                {positionData.reduce((s, d) => s + d.players.length, 0)} players
+              </Badge>
+            </div>
+            {posGroupOpen
+              ? <ChevronUp className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+              : <ChevronDown className="w-4 h-4 text-muted-foreground flex-shrink-0" />}
+          </button>
 
-                {isOpen && (
-                  <div className="border-t border-border/40 px-5 pb-4 pt-3">
-                    {players.length === 0 ? (
-                      <p className="text-sm text-muted-foreground italic py-2">No {pos}s on roster</p>
-                    ) : (
-                      <div>
-                        {starters.length > 0 && (
+          {posGroupOpen && (
+            <div className="border-t border-border/40">
+              {/* 4-column grid, one per position */}
+              <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-border/30">
+                {positionData.map(({ pos, redraftRank, dynastyRank, players }) => {
+                  const starters = players.filter(p => p.starter);
+                  const bench    = players.filter(p => !p.starter);
+                  const rStyle   = rankBg(redraftRank, total);
+                  const dStyle   = rankBg(dynastyRank, total);
+                  return (
+                    <div key={pos} className="flex flex-col" data-testid={`group-${pos.toLowerCase()}`}>
+                      {/* Position header */}
+                      <div className="px-3 pt-3 pb-2 border-b border-border/20">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-black uppercase tracking-widest text-foreground">{pos}</span>
+                          <Badge variant="secondary" className="text-[10px] px-1 h-4">{players.length}</Badge>
+                        </div>
+                      </div>
+
+                      {/* Players */}
+                      <div className="flex-1 px-3 py-2 space-y-0">
+                        {players.length === 0 ? (
+                          <p className="text-[11px] text-muted-foreground italic py-1">None</p>
+                        ) : (
                           <>
-                            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1.5 mt-1">Current Starters</p>
-                            {starters.map(p => (
-                              <div key={p.id} className="flex items-center justify-between py-2 border-b border-border/20 last:border-0" data-testid={`group-player-${p.id}`}>
-                                <div className="flex items-center gap-2.5">
-                                  <PlayerAvatar id={p.sleeperId ?? p.id} name={p.name} pos={p.pos} team={p.team ?? ""} size="sm" compact />
-                                  <div>
-                                    <p className="text-sm font-semibold text-foreground leading-tight">{p.name}</p>
-                                    <p className="text-[11px] text-muted-foreground">{p.team} · Age {p.age}</p>
+                            {starters.length > 0 && (
+                              <>
+                                <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider pt-1 pb-1">Starters</p>
+                                {starters.map(p => (
+                                  <div key={p.id} className="flex items-center justify-between py-1.5 border-b border-border/10 last:border-0" data-testid={`group-player-${p.id}`}>
+                                    <div className="flex items-center gap-1.5 min-w-0">
+                                      <PlayerAvatar id={p.sleeperId ?? p.id} name={p.name} pos={p.pos} team={p.team ?? ""} size="sm" compact />
+                                      <div className="min-w-0">
+                                        <p className="text-[11px] font-semibold text-foreground leading-tight truncate">{p.name}</p>
+                                        <p className="text-[10px] text-muted-foreground leading-tight">{p.team} · {p.age}y</p>
+                                      </div>
+                                    </div>
+                                    <span className="text-[10px] font-bold text-[#0b3a7a] dark:text-blue-400 tabular-nums ml-1 flex-shrink-0">{p.value}</span>
                                   </div>
-                                </div>
-                                <span className="text-xs font-bold text-[#0b3a7a] dark:text-blue-400 tabular-nums">{p.value}</span>
-                              </div>
-                            ))}
-                          </>
-                        )}
-                        {bench.length > 0 && (
-                          <>
-                            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1.5 mt-4">Current Bench</p>
-                            {bench.map(p => (
-                              <div key={p.id} className="flex items-center justify-between py-2 border-b border-border/20 last:border-0" data-testid={`group-bench-${p.id}`}>
-                                <div className="flex items-center gap-2.5">
-                                  <PlayerAvatar id={p.sleeperId ?? p.id} name={p.name} pos={p.pos} team={p.team ?? ""} size="sm" compact />
-                                  <div>
-                                    <p className="text-sm font-medium text-foreground leading-tight">{p.name}</p>
-                                    <p className="text-[11px] text-muted-foreground">{p.team} · Age {p.age}</p>
+                                ))}
+                              </>
+                            )}
+                            {bench.length > 0 && (
+                              <>
+                                <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider pt-2 pb-1">Bench</p>
+                                {bench.map(p => (
+                                  <div key={p.id} className="flex items-center justify-between py-1.5 border-b border-border/10 last:border-0" data-testid={`group-bench-${p.id}`}>
+                                    <div className="flex items-center gap-1.5 min-w-0">
+                                      <PlayerAvatar id={p.sleeperId ?? p.id} name={p.name} pos={p.pos} team={p.team ?? ""} size="sm" compact />
+                                      <div className="min-w-0">
+                                        <p className="text-[11px] font-medium text-muted-foreground leading-tight truncate">{p.name}</p>
+                                        <p className="text-[10px] text-muted-foreground/60 leading-tight">{p.team} · {p.age}y</p>
+                                      </div>
+                                    </div>
+                                    <span className="text-[10px] text-muted-foreground tabular-nums ml-1 flex-shrink-0">{p.value}</span>
                                   </div>
-                                </div>
-                                <span className="text-xs font-medium text-muted-foreground tabular-nums">{p.value}</span>
-                              </div>
-                            ))}
+                                ))}
+                              </>
+                            )}
                           </>
                         )}
                       </div>
-                    )}
-                  </div>
-                )}
-              </Card>
-            );
-          })}
-        </div>
+
+                      {/* Rank footer */}
+                      <div className="px-3 py-2.5 border-t border-border/20 bg-muted/20 space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider">Win-Now</span>
+                          <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded border", rStyle.badge)}>
+                            #{redraftRank}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider">Dynasty</span>
+                          <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded border", dStyle.badge)}>
+                            #{dynastyRank}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </Card>
       </div>
 
     </div>
