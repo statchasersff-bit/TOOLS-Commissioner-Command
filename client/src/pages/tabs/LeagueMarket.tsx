@@ -30,7 +30,7 @@ type SortKey = "name" | "pos" | "dynastyValue" | "redraftValue";
 type SortDir = "asc" | "desc";
 
 export function MarketValue({ league }: MarketProps) {
-  const { sourceId, sources, valuesBySleeperId, redraftValuesBySleeperId } = useValueModel();
+  const { sourceId, sources, valuesBySleeperId, redraftValuesBySleeperId, dynastyPlayerList } = useValueModel();
   const [search, setSearch] = useState("");
   const [posFilter, setPosFilter] = useState("all");
   const [sortKey, setSortKey] = useState<SortKey>("dynastyValue");
@@ -61,16 +61,30 @@ export function MarketValue({ league }: MarketProps) {
     return rows;
   }, [league, valuesBySleeperId, redraftValuesBySleeperId]);
 
-  const rookieRows = useMemo<PlayerRow[]>(() =>
-    ROOKIE_BOARD_2026_SF.map((r) => ({
-      name: r.name,
-      pos: r.pos,
-      team: r.team || "FA",
-      sleeperId: r.sleeperId,
-      dynastyValue: r.value,
-      redraftValue: 0,
-    })),
-  []);
+  const rookieRows = useMemo<PlayerRow[]>(() => {
+    // Build a name|pos → RankedPlayer lookup from the live FantasyCalc data so we
+    // can resolve real Sleeper IDs (for photos), real NFL teams, and redraft values.
+    const nameMap = new Map<string, { sleeperId: string; team: string }>();
+    for (const p of dynastyPlayerList) {
+      nameMap.set(`${p.name.toLowerCase().trim()}|${p.pos}`, { sleeperId: p.sleeperId, team: p.team });
+    }
+
+    return ROOKIE_BOARD_2026_SF.map((r) => {
+      const key = `${r.name.toLowerCase().trim()}|${r.pos}`;
+      const matched = nameMap.get(key);
+      const realId = matched?.sleeperId || r.sleeperId;
+      const team = matched?.team || r.team || "FA";
+      const redraftValue = matched ? (redraftValuesBySleeperId[matched.sleeperId] ?? 0) : 0;
+      return {
+        name: r.name,
+        pos: r.pos,
+        team,
+        sleeperId: realId,
+        dynastyValue: r.value,
+        redraftValue,
+      };
+    });
+  }, [dynastyPlayerList, redraftValuesBySleeperId]);
 
   const filtered = useMemo(() => {
     let rows = posFilter === "rookies" ? rookieRows : allPlayers;
