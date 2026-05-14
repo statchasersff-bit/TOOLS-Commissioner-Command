@@ -1280,7 +1280,7 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
             {assets.map((asset) => (
               <div
                 key={asset.id}
-                className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-[#0a1628] border border-[#1a2d4a]/60"
+                className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-muted/20 border border-border/30"
                 data-testid={`asset-${side}-${asset.id}`}
               >
                 {asset.type === "player" && asset.player ? (
