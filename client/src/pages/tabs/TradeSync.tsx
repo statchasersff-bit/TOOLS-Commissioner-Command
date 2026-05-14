@@ -101,6 +101,7 @@ interface AssetPick {
   label: string;
   value: number;
   pickNo?: number;
+  isStartup?: boolean;
 }
 
 interface NormalizedTrade {
@@ -136,6 +137,7 @@ interface RawLeagueData {
   leagueFormat: string;
   leagueAvatar: string | null;
   userRosterId: number;
+  rookieDraftRounds: number;
   rosterMap: Map<number, { name: string; avatar: string | null; ownerId: string }>;
   transactions: SleeperTransaction[];
 }
@@ -199,7 +201,8 @@ function normalizeTrade(
   myUserId: string,
   rosterMap: Map<number, { name: string; avatar: string | null; ownerId: string }>,
   playersDb: Record<string, any>,
-  valuesBySleeperId: Record<string, number>
+  valuesBySleeperId: Record<string, number>,
+  rookieDraftRounds: number = 5
 ): NormalizedTrade | null {
   if (!t.roster_ids || !t.roster_ids.includes(userRosterId)) return null;
 
@@ -295,17 +298,19 @@ function normalizeTrade(
     const nextOwner = Number(dp.owner_id);
     const origOwner = Number(dp.roster_id);
     const pickNo = dp.pick_no ?? undefined;
-    const label = formatPickAssetLabel(String(dp.season), round, pickNo);
+    const isStartup = round > rookieDraftRounds;
+    const baseLabel = formatPickAssetLabel(String(dp.season), round, pickNo);
+    const label = isStartup ? `Startup ${baseLabel}` : `Rookie ${baseLabel}`;
     const value = approxPickValue(String(dp.season), round);
 
     if (prevOwner === userRosterId) {
-      iGivePicks.push({ season: String(dp.season), round, originalRosterId: origOwner, label, value, pickNo });
+      iGivePicks.push({ season: String(dp.season), round, originalRosterId: origOwner, label, value, pickNo, isStartup });
     } else if (nextOwner === userRosterId) {
-      iGetPicks.push({ season: String(dp.season), round, originalRosterId: origOwner, label, value, pickNo });
+      iGetPicks.push({ season: String(dp.season), round, originalRosterId: origOwner, label, value, pickNo, isStartup });
     } else if (prevOwner === partnerRosterId || (prevOwner === 0 && origOwner !== userRosterId)) {
-      iGetPicks.push({ season: String(dp.season), round, originalRosterId: origOwner, label, value, pickNo });
+      iGetPicks.push({ season: String(dp.season), round, originalRosterId: origOwner, label, value, pickNo, isStartup });
     } else if (nextOwner === partnerRosterId || (nextOwner === 0 && origOwner === userRosterId)) {
-      iGivePicks.push({ season: String(dp.season), round, originalRosterId: origOwner, label, value, pickNo });
+      iGivePicks.push({ season: String(dp.season), round, originalRosterId: origOwner, label, value, pickNo, isStartup });
     }
   }
 
@@ -431,8 +436,16 @@ function AssetChip({ player }: { player: AssetPlayer }) {
 
 function PickChip({ pick }: { pick: AssetPick }) {
   return (
-    <div className="flex items-center gap-1.5 bg-amber-500/10 dark:bg-amber-400/10 rounded-md px-2 py-1">
-      <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400">PICK</span>
+    <div className={cn(
+      "flex items-center gap-1.5 rounded-md px-2 py-1",
+      pick.isStartup
+        ? "bg-violet-500/10 dark:bg-violet-400/10"
+        : "bg-amber-500/10 dark:bg-amber-400/10"
+    )}>
+      <span className={cn(
+        "text-[10px] font-bold",
+        pick.isStartup ? "text-violet-700 dark:text-violet-400" : "text-amber-700 dark:text-amber-400"
+      )}>{pick.isStartup ? "STUP" : "ROOK"}</span>
       <span className="text-[11px] font-medium text-foreground">{pick.label}</span>
       {pick.value > 0 && <span className="text-[10px] text-muted-foreground ml-auto">{pick.value.toLocaleString()}</span>}
     </div>
@@ -489,10 +502,19 @@ function PlayerCardRow({ player, showValue }: { player: AssetPlayer; showValue?:
 }
 
 function PickCardRow({ pick, showValue }: { pick: AssetPick; showValue?: boolean }) {
+  const isStartup = pick.isStartup;
   return (
     <div className="flex items-center gap-2.5 py-0.5">
-      <div className="w-8 h-8 rounded-full bg-purple-500/15 dark:bg-purple-400/15 flex items-center justify-center flex-shrink-0">
-        <span className="text-[10px] font-bold text-purple-700 dark:text-purple-400">{pick.round}</span>
+      <div className={cn(
+        "w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0",
+        isStartup
+          ? "bg-violet-500/15 dark:bg-violet-400/15"
+          : "bg-amber-500/15 dark:bg-amber-400/15"
+      )}>
+        <span className={cn(
+          "text-[9px] font-bold",
+          isStartup ? "text-violet-700 dark:text-violet-400" : "text-amber-700 dark:text-amber-400"
+        )}>{isStartup ? "SU" : `R${pick.round}`}</span>
       </div>
       <span className="text-sm font-medium text-foreground truncate">{pick.label}</span>
       {showValue && <span className="ml-auto text-sm font-semibold tabular-nums text-muted-foreground flex-shrink-0">{pick.value.toFixed(1)}</span>}
@@ -922,11 +944,25 @@ export default function TradeSync() {
 
     const leagueResults = await Promise.allSettled(
       sleeper.leagues.map(async (ls) => {
-        const [{ txns, usedAuth }, rostersRaw, usersRaw] = await Promise.all([
+        const [{ txns, usedAuth }, rostersRaw, usersRaw, draftsRaw] = await Promise.all([
           fetchLeagueTradesForSync(ls.leagueId, hasSession),
           fetchJson<any[]>(`${SLEEPER_API}/league/${ls.leagueId}/rosters`),
           fetchJson<any[]>(`${SLEEPER_API}/league/${ls.leagueId}/users`),
+          fetchJson<any[]>(`${SLEEPER_API}/league/${ls.leagueId}/drafts`).catch(() => [] as any[]),
         ]);
+
+        // Determine rookie draft round count from the league's non-startup drafts.
+        // Picks with round > rookieDraftRounds are labelled as Startup picks.
+        let rookieDraftRounds = 5; // safe default
+        if (Array.isArray(draftsRaw) && draftsRaw.length > 0) {
+          const rookieDrafts = draftsRaw.filter((d: any) => {
+            const type = (d.metadata?.type || d.type || "").toLowerCase();
+            return type === "rookie" || (type !== "startup" && (d.settings?.rounds ?? 99) <= 6);
+          });
+          if (rookieDrafts.length > 0) {
+            rookieDraftRounds = Math.max(...rookieDrafts.map((d: any) => d.settings?.rounds || 3));
+          }
+        }
 
         const ownerMap = new Map<string, { name: string; avatar: string | null }>();
         for (const u of usersRaw) {
@@ -951,6 +987,7 @@ export default function TradeSync() {
           leagueFormat: `${ls.scoringFormat} ${ls.format}`,
           leagueAvatar,
           userRosterId,
+          rookieDraftRounds,
           rosterMap,
           transactions: txns,
           _usedAuth: usedAuth,
@@ -999,7 +1036,8 @@ export default function TradeSync() {
           sleeper.user!.userId,
           ld.rosterMap,
           {},
-          valuesBySleeperId
+          valuesBySleeperId,
+          ld.rookieDraftRounds
         );
         if (norm) all.push(norm);
       }
