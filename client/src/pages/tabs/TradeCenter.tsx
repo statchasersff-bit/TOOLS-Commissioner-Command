@@ -1035,8 +1035,8 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
 
   const getVerdictLabel = (): string => {
     if (diffPct <= 6) return "Fair Deal";
-    if (winnerSide === "B") return diffPct <= 20 ? "Overpaying" : "Getting Robbed";
-    return diffPct <= 20 ? "Slight Win" : "Robbing Them";
+    if (winnerSide === "B") return diffPct <= 20 ? "You Are Overpaying" : "You Are Getting Robbed";
+    return diffPct <= 20 ? "You Are Slightly Winning" : "You Are Robbing Them";
   };
 
   const getVerdictStyle = (): string => {
