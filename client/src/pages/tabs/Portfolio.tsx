@@ -9,6 +9,7 @@ import { SectionHeader } from "@/components/SectionHeader";
 import { useSleeper } from "@/contexts/SleeperContext";
 import { useValueModel } from "@/contexts/ValueModelContext";
 import { getPositionColor } from "@/data/mockData";
+import { cn } from "@/lib/utils";
 import { SleeperAuthCard } from "@/components/SleeperAuthCard";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import {
