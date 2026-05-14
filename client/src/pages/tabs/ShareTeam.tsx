@@ -281,7 +281,7 @@ export function ShareTeam({ league, userTeam }: Props) {
             )}
           >
             <Share2 className="w-3.5 h-3.5" />
-            Share My Team
+            List View
           </button>
           <button
             onClick={() => setInnerTab("field-view")}
