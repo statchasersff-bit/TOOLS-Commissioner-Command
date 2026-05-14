@@ -145,14 +145,19 @@ export async function fetchSleeperLeagues(
     return true;
   });
 
-  // Keep only leagues where the user actually owns a roster
+  // Keep only leagues where the user owns a roster AND has players on it
+  // (excludes pre-draft leagues where the startup draft hasn't happened yet)
   const rosterChecks = await Promise.all(
     dynastyOnly.map(async (lg) => {
       try {
         const rosters = await fetchJson<SleeperRosterRaw[]>(
           `${SLEEPER_API}/league/${lg.league_id}/rosters`
         );
-        return rosters.some((r) => r.owner_id === userId) ? lg : null;
+        const userRoster = rosters.find((r) => r.owner_id === userId);
+        if (!userRoster) return null;
+        // Skip undrafted leagues — user has a roster slot but no players yet
+        if (!userRoster.players || userRoster.players.length === 0) return null;
+        return lg;
       } catch {
         return lg; // on error, keep the league rather than silently hide it
       }
