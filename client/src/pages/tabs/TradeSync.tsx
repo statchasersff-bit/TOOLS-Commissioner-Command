@@ -452,15 +452,11 @@ function ValueEdgeCell({ edge }: { edge: number }) {
 
 // ─── Trade Card ───────────────────────────────────────────────────────────────
 
-function TradeCard({ trade, myUsername, myAvatar, onView, onAccept, onReject, actionLoading, actionResult }: {
+function TradeCard({ trade, myUsername, myAvatar, onView }: {
   trade: NormalizedTrade;
   myUsername: string;
   myAvatar: string | null;
   onView: () => void;
-  onAccept: () => void;
-  onReject: () => void;
-  actionLoading: boolean;
-  actionResult: { success: boolean; message: string } | undefined;
 }) {
   const expiring = isExpiringSoon(trade.expiresAt);
   const isProposed = trade.status === "proposed";
@@ -560,46 +556,6 @@ function TradeCard({ trade, myUsername, myAvatar, onView, onAccept, onReject, ac
         </div>
       </div>
 
-      {/* ── Footer: actions ── */}
-      {(isProposed || actionResult) && (
-        <div
-          className="flex items-center gap-2 px-4 py-2.5 border-t border-border/40"
-          onClick={(e) => e.stopPropagation()}
-        >
-          {actionResult && (
-            <span className={cn("flex items-center gap-1 text-xs font-semibold", actionResult.success ? "text-emerald-600 dark:text-emerald-400" : "text-red-500")}>
-              {actionResult.success ? <CheckCircle2 className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5" />}
-              {actionResult.message}
-            </span>
-          )}
-          {actionLoading ? (
-            <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
-          ) : (
-            <>
-              {isProposed && trade.direction === "incoming" && (
-                <>
-                  <Button size="sm" className="h-7 px-3 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={onAccept} data-testid={`btn-accept-${trade.transactionId}`}>
-                    <CheckCircle2 className="w-3.5 h-3.5" /> Accept Trade
-                  </Button>
-                  <Button variant="outline" size="sm" className="h-7 px-3 text-xs gap-1.5 hover:border-red-400/50 hover:text-red-500" onClick={onReject} data-testid={`btn-reject-${trade.transactionId}`}>
-                    <XCircle className="w-3.5 h-3.5" /> Reject
-                  </Button>
-                </>
-              )}
-              {isProposed && trade.direction === "outgoing" && (
-                <Button variant="outline" size="sm" className="h-7 px-3 text-xs gap-1.5 hover:border-red-400/50 hover:text-red-500" onClick={onReject} data-testid={`btn-cancel-${trade.transactionId}`}>
-                  <X className="w-3.5 h-3.5" /> Cancel Offer
-                </Button>
-              )}
-              {isProposed && trade.direction === "waiting" && (
-                <Button variant="outline" size="sm" className="h-7 px-3 text-xs gap-1.5" onClick={onView} data-testid={`btn-view-detail-${trade.transactionId}`}>
-                  <Eye className="w-3.5 h-3.5" /> View Details
-                </Button>
-              )}
-            </>
-          )}
-        </div>
-      )}
     </div>
   );
 }
@@ -1316,10 +1272,6 @@ export default function TradeSync() {
               myUsername={sleeper.user?.username ?? sleeper.user?.displayName ?? "Me"}
               myAvatar={sleeper.user?.avatar ? `https://sleepercdn.com/avatars/thumbs/${sleeper.user.avatar}` : null}
               onView={() => handleView(trade)}
-              onAccept={() => handleAcceptClick(trade)}
-              onReject={() => handleRejectClick(trade)}
-              actionLoading={actionLoading === trade.transactionId}
-              actionResult={actionResults.get(trade.transactionId)}
             />
           ))}
         </div>
