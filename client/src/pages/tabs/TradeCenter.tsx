@@ -1477,35 +1477,6 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
               );
             })()}
 
-            {/* 4. VALUE CARDS */}
-            <div className="grid grid-cols-2 gap-3 text-center">
-              {/* sideA sends → sideBTeam receives finalA */}
-              <div className={`p-3 rounded-lg border ${winnerSide === "B" && diffPct > 4 ? "bg-[#d4af37]/10 border-[#d4af37]/40" : "bg-muted/20 dark:bg-muted/10 border-border/20"}`}>
-                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">{sideBTeam?.owner || "Side B"} receives</p>
-                <p className="text-lg font-bold text-foreground" data-testid="text-analysis-final-a">{Math.round(finalA).toLocaleString()}</p>
-              </div>
-              {/* sideB sends → sideATeam receives finalB */}
-              <div className={`p-3 rounded-lg border ${winnerSide === "A" && diffPct > 4 ? "bg-[#d4af37]/10 border-[#d4af37]/40" : "bg-muted/20 dark:bg-muted/10 border-border/20"}`}>
-                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">{sideATeam?.owner || "Side A"} receives</p>
-                <p className="text-lg font-bold text-foreground" data-testid="text-analysis-final-b">{Math.round(finalB).toLocaleString()}</p>
-              </div>
-            </div>
-
-            {diff > 0 && (
-              <p className="text-center text-xs text-muted-foreground" data-testid="text-analysis-diff">
-                Trade Difference: <span className="font-bold text-foreground">+{Math.round(diff).toLocaleString()}</span>
-                <span className="ml-1 opacity-60">({diffPct.toFixed(1)}%)</span>
-              </p>
-            )}
-
-            {/* 5. HUMAN LANGUAGE */}
-            {diffPct > 12 && (
-              <p className="text-xs text-center text-muted-foreground" data-testid="text-counter-suggestion">
-                {diffPct > 25
-                  ? `${loserSide === "A" ? (sideATeam?.owner || "Side A") : (sideBTeam?.owner || "Side B")} would need significantly more value to even this out`
-                  : `${loserSide === "A" ? (sideATeam?.owner || "Side A") : (sideBTeam?.owner || "Side B")} is getting the short end of this deal`}
-              </p>
-            )}
 
           </div>
           <hr className="border-border/40 my-5" />
