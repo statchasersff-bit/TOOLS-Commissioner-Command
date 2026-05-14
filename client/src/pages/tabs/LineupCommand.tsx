@@ -277,34 +277,28 @@ function LeagueRow({ analysis }: { analysis: LeagueAnalysis }) {
         </div>
 
         {/* OUT / IR / BYE */}
-        <div className="flex items-center gap-0.5 w-[72px] md:w-24 flex-shrink-0 justify-center">
+        <div className="w-[72px] md:w-24 flex-shrink-0 flex justify-center">
           {loading ? (
-            <div className="h-4 w-14 bg-white/8 rounded animate-pulse" />
+            <div className="h-4 w-6 bg-white/8 rounded animate-pulse" />
           ) : hardIssues.length === 0 ? (
             <span className="text-[9px] text-white/15">—</span>
           ) : (
-            <>
-              {hardIssues.slice(0, 3).map((iss, i) => <IssueBadge key={i} type={iss.type} />)}
-              {hardIssues.length > 3 && (
-                <span className="text-[8px] text-white/30">+{hardIssues.length - 3}</span>
-              )}
-            </>
+            <span className="text-[13px] md:text-sm font-black tabular-nums text-red-400">
+              {hardIssues.length}
+            </span>
           )}
         </div>
 
         {/* QUES / DOUB */}
-        <div className="flex items-center gap-0.5 w-[64px] md:w-20 flex-shrink-0 justify-center hidden sm:flex">
+        <div className="w-[64px] md:w-20 flex-shrink-0 justify-center hidden sm:flex">
           {loading ? (
-            <div className="h-4 w-12 bg-white/8 rounded animate-pulse" />
+            <div className="h-4 w-6 bg-white/8 rounded animate-pulse" />
           ) : softIssues.length === 0 ? (
             <span className="text-[9px] text-white/15">—</span>
           ) : (
-            <>
-              {softIssues.slice(0, 3).map((iss, i) => <IssueBadge key={i} type={iss.type} />)}
-              {softIssues.length > 3 && (
-                <span className="text-[8px] text-white/30">+{softIssues.length - 3}</span>
-              )}
-            </>
+            <span className="text-[13px] md:text-sm font-black tabular-nums text-yellow-400">
+              {softIssues.length}
+            </span>
           )}
         </div>
 
