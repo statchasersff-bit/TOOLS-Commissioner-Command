@@ -952,6 +952,13 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
   const winnerSide = signedDiff >= 0 ? "A" : "B";
   const loserSide  = signedDiff >= 0 ? "B" : "A";
   const winnerLabel = winnerSide === "A" ? (sideATeam?.owner || sideATeam?.name || "Side A") : (sideBTeam?.owner || sideBTeam?.name || "Side B");
+  const loserLabel  = winnerSide === "A" ? (sideBTeam?.owner || sideBTeam?.name || "Side B") : (sideATeam?.owner || sideATeam?.name || "Side A");
+
+  const userIsSideA = sideARosterId === userTeam.id;
+  const userIsSideB = sideBRosterId === userTeam.id;
+  const userIsInTrade = userIsSideA || userIsSideB;
+  // From the user's perspective: are they winning?
+  const userIsWinning = (userIsSideA && winnerSide === "A") || (userIsSideB && winnerSide === "B");
 
   const meterPosition = useMemo(() => {
     if (finalA === 0 && finalB === 0) return 50;
@@ -964,8 +971,14 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
 
   const getVerdictLabel = (): string => {
     if (diffPct <= 6) return "Fair Deal";
-    if (winnerSide === "B") return diffPct <= 20 ? "You Are Overpaying" : "You Are Getting Robbed";
-    return diffPct <= 20 ? "You Are Slightly Winning" : "You Are Robbing Them";
+    if (userIsInTrade) {
+      if (userIsWinning) return diffPct <= 20 ? "You Are Slightly Winning" : "You Are Robbing Them";
+      return diffPct <= 20 ? "You Are Overpaying" : "You Are Getting Robbed";
+    }
+    // Neither side is the logged-in user
+    const winner = winnerLabel;
+    const loser  = loserLabel;
+    return diffPct <= 20 ? `${winner} Is Winning` : `${winner} Is Robbing ${loser}`;
   };
 
   const getVerdictStyle = (): string => {
@@ -1296,7 +1309,9 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
             {/* 1. VERDICT FRONT AND CENTER */}
             <div className="text-center space-y-1.5 py-0">
               <p className="text-sm sm:text-base font-extrabold tracking-tight text-foreground uppercase leading-tight" data-testid="text-verdict-headline">
-                {diffPct <= 4 ? "Dead Even Trade" : `${winnerLabel} wins the trade`}
+                {diffPct <= 6 ? "Dead Even Trade" : userIsInTrade
+                  ? (userIsWinning ? "You Win The Trade" : `${winnerLabel} Wins The Trade`)
+                  : `${winnerLabel} Wins The Trade`}
               </p>
               <div className="flex justify-center pt-1">
                 <Badge className={`text-xs px-4 py-1.5 font-bold border ${getVerdictStyle()}`} data-testid="badge-verdict">
