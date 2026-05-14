@@ -1222,10 +1222,10 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
               onTogglePick={(pick, isAdded) => {
                 if (isAdded) {
                   const currentAssets = side === "a" ? sideA : sideB;
-                  const asset = currentAssets.find(a => a.type === "pick" && a.pickYear === pick.year && a.pickRound === pick.round);
+                  const asset = currentAssets.find(a => a.type === "pick" && Number(a.pickYear) === Number(pick.year) && a.pickRound === pick.round);
                   if (asset) removeAsset(side, asset.id);
                 } else {
-                  addPick(side, String(pick.year), pick.round, pick.projectedRange || "Mid");
+                  addPick(side, pick.year, pick.round, pick.projectedRange || "Mid");
                 }
               }}
               getPlayerValue={getPlayerValue}
