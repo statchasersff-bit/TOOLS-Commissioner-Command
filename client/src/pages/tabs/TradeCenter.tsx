@@ -15,7 +15,7 @@ import { API_BASE } from "@/lib/apiBase";
 import type { League, Team, Tier, Player, Pick, TradeRecord, TradeSide, CrawlStatus } from "@/types";
 import { cn } from "@/lib/utils";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
-import { ArrowRightLeft, TrendingUp, TrendingDown, Target, X, Plus, Search, Scale, RotateCcw, Database, Play, Pause, Loader2, ChevronLeft, ChevronRight, ChevronDown } from "lucide-react";
+import { ArrowRightLeft, TrendingUp, TrendingDown, Target, X, Plus, Search, Scale, RotateCcw, Database, Play, Pause, Loader2, ChevronLeft, ChevronRight, ChevronDown, Download } from "lucide-react";
 
 interface TradeProps {
   league: League;
@@ -838,6 +838,28 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
   const [tradePartnerId, setTradePartnerId] = useState<string>("");
   const [sideARosterId, setSideARosterId] = useState<string>(userTeam.id);
   const [sideBRosterId, setSideBRosterId] = useState<string>("");
+  const [savingPng, setSavingPng] = useState(false);
+  const verdictCardRef = useRef<HTMLDivElement>(null);
+
+  const saveVerdictPng = async () => {
+    if (!verdictCardRef.current) return;
+    setSavingPng(true);
+    try {
+      const html2canvas = (await import("html2canvas")).default;
+      const canvas = await html2canvas(verdictCardRef.current, {
+        backgroundColor: null,
+        scale: 2,
+        useCORS: true,
+        logging: false,
+      });
+      const link = document.createElement("a");
+      link.download = "trade-verdict.png";
+      link.href = canvas.toDataURL("image/png");
+      link.click();
+    } finally {
+      setSavingPng(false);
+    }
+  };
 
   const leagueFormat = useMemo(() => {
     const sf = league.scoringFormat?.toLowerCase() || "";
@@ -1293,14 +1315,29 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
         </Button>
       </div>
 
-      <Card className="p-5">
+      <Card className="p-5" ref={verdictCardRef}>
         {(sideA.length > 0 && sideB.length > 0) && (
           <>
           <div className="mb-5">
-            <h3 className="text-sm font-bold flex items-center gap-2">
-              <ArrowRightLeft className="w-4 h-4 text-[#0b3a7a] dark:text-blue-400" />
-              Trade Verdict
-            </h3>
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold flex items-center gap-2">
+                <ArrowRightLeft className="w-4 h-4 text-[#0b3a7a] dark:text-blue-400" />
+                Trade Verdict
+              </h3>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={saveVerdictPng}
+                disabled={savingPng}
+                className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground gap-1.5"
+                data-testid="button-save-verdict-png"
+              >
+                {savingPng
+                  ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  : <Download className="w-3.5 h-3.5" />}
+                Save PNG
+              </Button>
+            </div>
             <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
           </div>
 
