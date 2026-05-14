@@ -1003,18 +1003,20 @@ export default function TradeSync() {
   }, [trades, view, leagueFilter]);
 
   const kpis = useMemo(() => {
-    const open          = trades.filter(isOpen);
-    const incoming      = open.filter((t) => t.direction === "incoming");
-    const outgoing      = open.filter((t) => t.direction === "outgoing");
-    const expiring      = open.filter((t) => isExpiringSoon(t.expiresAt));
-    const positiveValue = open.filter((t) => t.valueEdge > 50);
+    const open      = trades.filter(isOpen);
+    const incoming  = open.filter((t) => t.direction === "incoming");
+    const outgoing  = open.filter((t) => t.direction === "outgoing");
+    const completed = trades.filter((t) => t.status === "complete");
+    const rejected  = trades.filter((t) => t.status === "rejected");
+    const cancelled = trades.filter(isCancelled);
     return {
       totalPending: open.length,
       incoming: incoming.length,
       outgoing: outgoing.length,
-      expiringSoon: expiring.length,
-      needsResponse: incoming.length,
-      positiveValue: positiveValue.length,
+      completed: completed.length,
+      rejected: rejected.length,
+      cancelled: cancelled.length,
+      allTrades: trades.length,
     };
   }, [trades]);
 
@@ -1139,12 +1141,14 @@ export default function TradeSync() {
       </div>
 
       {/* KPI Row */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-        <KPICard label="Total Open"      value={kpis.totalPending}   icon={ArrowRightLeft} color="bg-blue-500/10 text-blue-600 dark:text-blue-400"        loading={loading} />
-        <KPICard label="Incoming"        value={kpis.incoming}       icon={Inbox}          color="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" loading={loading} />
-        <KPICard label="Outgoing"        value={kpis.outgoing}       icon={Send}           color="bg-purple-500/10 text-purple-600 dark:text-purple-400"   loading={loading} />
-        <KPICard label="Needs Response"  value={kpis.needsResponse}  icon={AlertTriangle}  color="bg-red-500/10 text-red-600 dark:text-red-400"            loading={loading} />
-        <KPICard label="Win-Value Deals" value={kpis.positiveValue}  icon={TrendingUp}     color="bg-[#d4af37]/15 text-[#b8920f]"                           loading={loading} />
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
+        <KPICard label="Total Open"  value={kpis.totalPending} icon={ArrowRightLeft} color="bg-blue-500/10 text-blue-600 dark:text-blue-400"         loading={loading} />
+        <KPICard label="Incoming"    value={kpis.incoming}     icon={Inbox}          color="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"  loading={loading} />
+        <KPICard label="Outgoing"    value={kpis.outgoing}     icon={Send}           color="bg-blue-500/10 text-blue-500 dark:text-blue-400"           loading={loading} />
+        <KPICard label="Completed"   value={kpis.completed}    icon={CheckCircle2}   color="bg-[#d4af37]/10 text-[#d4af37]"                            loading={loading} />
+        <KPICard label="Rejected"    value={kpis.rejected}     icon={XCircle}        color="bg-red-500/10 text-red-500 dark:text-red-400"              loading={loading} />
+        <KPICard label="Cancelled"   value={kpis.cancelled}    icon={XCircle}        color="bg-slate-500/10 text-slate-400"                            loading={loading} />
+        <KPICard label="All Trades"  value={kpis.allTrades}    icon={Activity}       color="bg-muted text-muted-foreground"                            loading={loading} />
       </div>
 
       {/* Auth banner — public REST fallback only shows completed history */}
