@@ -491,6 +491,7 @@ export function PortfolioSummary() {
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [exposureSortCol, setExposureSortCol] = useState<"name" | "pos" | "value" | "exposure" | "leagueCount">("exposure");
   const [exposureSortDir, setExposureSortDir] = useState<"asc" | "desc">("desc");
+  const [exposureVisible, setExposureVisible] = useState(25);
   const [leagueFilter, setLeagueFilter] = useState<"all" | "contender" | "middle" | "rebuild">("all");
   const [pendingTradeCount, setPendingTradeCount] = useState<number | null>(null);
   const [pendingTradeLoading, setPendingTradeLoading] = useState(false);
@@ -690,7 +691,7 @@ export function PortfolioSummary() {
 
           <Card className="p-6" data-testid="player-exposure">
             <div className="mb-5">
-              <h3 className="text-base font-bold text-foreground">Most Rostered Players (Top 100)</h3>
+              <h3 className="text-base font-bold text-foreground">Most Rostered Players</h3>
               <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
             </div>
 
@@ -702,6 +703,7 @@ export function PortfolioSummary() {
                   setExposureSortCol(col);
                   setExposureSortDir(col === "name" || col === "pos" ? "asc" : "desc");
                 }
+                setExposureVisible(25);
               };
               const SortIcon = ({ col }: { col: typeof exposureSortCol }) => {
                 if (exposureSortCol !== col) return <ArrowUpDown className="w-3 h-3 opacity-40" />;
@@ -738,7 +740,7 @@ export function PortfolioSummary() {
                     </button>
                   </div>
                   <div className="space-y-0">
-                    {sorted.map((player: any) => {
+                    {sorted.slice(0, exposureVisible).map((player: any) => {
                       const isOverexposed = player.exposure >= 50;
                       const dynastyValue = valuesBySleeperId[player.playerId] ?? 0;
                       return (
@@ -767,6 +769,15 @@ export function PortfolioSummary() {
                       );
                     })}
                   </div>
+                  {exposureVisible < sorted.length && (
+                    <button
+                      onClick={() => setExposureVisible(v => v + 25)}
+                      className="mt-3 w-full text-xs font-semibold text-muted-foreground hover:text-foreground py-2 rounded-md border border-border/30 hover:border-border/60 hover:bg-muted/20 transition-all"
+                      data-testid="btn-show-more-exposure"
+                    >
+                      Show 25 more ({sorted.length - exposureVisible} remaining)
+                    </button>
+                  )}
                 </div>
               );
             })() : (
