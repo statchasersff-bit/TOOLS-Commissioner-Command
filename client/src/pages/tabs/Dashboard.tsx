@@ -1661,9 +1661,11 @@ export function MyTeam({ league, userTeam, onNavigate }: DashboardOverviewProps)
               <h2 className="text-xl font-black text-foreground leading-tight" data-testid="hero-team-name">
                 {userTeam.name}
               </h2>
-              <p className="text-sm text-muted-foreground mt-0.5">
-                Managed by <span className="font-semibold text-foreground">{userTeam.owner}</span>
-              </p>
+              {userTeam.owner && userTeam.owner !== userTeam.name && (
+                <p className="text-sm text-muted-foreground mt-0.5">
+                  Managed by <span className="font-semibold text-foreground">{userTeam.owner}</span>
+                </p>
+              )}
               <p className="text-xs text-muted-foreground/70 mt-1 font-medium">{leagueMeta}</p>
             </div>
           </div>
