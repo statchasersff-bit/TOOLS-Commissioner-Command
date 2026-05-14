@@ -1333,13 +1333,16 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
             {/* 2. ADVANTAGE METER */}
             {(() => {
               const fillPct = Math.max(10, Math.min(90, 100 - meterPosition));
-              const isEven = diffPct <= 4;
-              const iLose = !isEven && fillPct > 50;
-              const barColor = isEven
+              const iLose = fillPct > 50;
+              const barColor = diffPct <= 6
                 ? "linear-gradient(90deg, #b8932a 0%, #d4af37 100%)"
                 : iLose
-                  ? "linear-gradient(90deg, #dc2626 0%, #ef4444 100%)"
-                  : "linear-gradient(90deg, #059669 0%, #10b981 100%)";
+                  ? diffPct <= 20
+                    ? "linear-gradient(90deg, #c2410c 0%, #f97316 100%)"
+                    : "linear-gradient(90deg, #dc2626 0%, #ef4444 100%)"
+                  : diffPct <= 20
+                    ? "linear-gradient(90deg, #059669 0%, #10b981 100%)"
+                    : "linear-gradient(90deg, #1d4ed8 0%, #3b82f6 100%)";
               return (
                 <div className="space-y-1.5 px-1">
                   <div className="flex items-center justify-between text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
