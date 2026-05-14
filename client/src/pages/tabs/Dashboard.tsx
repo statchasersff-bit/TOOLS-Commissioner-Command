@@ -1108,99 +1108,101 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
                     </tr>
 
                     {isExpanded && (() => {
-                      const dynastyValues = strengthProfiles.dynastyByTeam[team.id] || {};
-                      const redraftValues = strengthProfiles.redraftByTeam[team.id] || {};
                       const dRanks = strengthProfiles.dynastyRanks[team.id] || {};
                       const rRanks = strengthProfiles.redraftRanks[team.id] || {};
-                      const maxDynasty = Math.max(...POS_LABELS.flatMap(p => teams.map(t => strengthProfiles.dynastyByTeam[t.id]?.[p] ?? 0)), 1);
-                      const maxRedraft = Math.max(...POS_LABELS.flatMap(p => teams.map(t => strengthProfiles.redraftByTeam[t.id]?.[p] ?? 0)), 1);
+                      const total = teams.length;
+                      const picksRank = teamRanks.ranks[team.id]?.picksRank ?? total;
+
+                      const POS_CONFIG = [
+                        { pos: "QB", textColor: "text-rose-500 dark:text-rose-400",    border: "border-rose-500/25",    bg: "bg-rose-500/5"    },
+                        { pos: "RB", textColor: "text-emerald-500 dark:text-emerald-400", border: "border-emerald-500/25", bg: "bg-emerald-500/5" },
+                        { pos: "WR", textColor: "text-sky-500 dark:text-sky-400",      border: "border-sky-500/25",     bg: "bg-sky-500/5"     },
+                        { pos: "TE", textColor: "text-orange-500 dark:text-orange-400", border: "border-orange-500/25",  bg: "bg-orange-500/5"  },
+                      ] as const;
+
+                      function rankBadge(rank: number) {
+                        const top = Math.ceil(total * 0.33);
+                        const bot = Math.floor(total * 0.67) + 1;
+                        const cls = rank <= top
+                          ? "text-emerald-600 dark:text-emerald-400 bg-emerald-500/10"
+                          : rank >= bot
+                          ? "text-red-500 dark:text-red-400 bg-red-500/10"
+                          : "text-amber-600 dark:text-amber-400 bg-amber-500/10";
+                        return <span className={`text-[9px] font-bold px-1 py-0.5 rounded ${cls}`}>#{rank}</span>;
+                      }
+
                       return (
                         <tr className={`border-b border-border/20 ${rowBg}`} data-testid={`expanded-${team.id}`}>
-                          <td colSpan={colCount} className="px-6 py-4">
-                            <div className="flex flex-col md:flex-row gap-6">
-                              <div className="flex-1">
-                                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-3">Dynasty Roster Strength</p>
-                                <p className="text-[10px] text-muted-foreground mb-3">Full roster dynasty value by position</p>
-                                <div className="space-y-2.5">
-                                  {POS_LABELS.map(pos => {
-                                    const value = dynastyValues[pos] ?? 0;
-                                    const pRank = dRanks[pos] ?? teams.length;
-                                    const pct = maxDynasty > 0 ? (value / maxDynasty) * 100 : 0;
-                                    return (
-                                      <div key={pos} className="flex items-center gap-3" data-testid={`dynasty-profile-${team.id}-${pos.toLowerCase()}`}>
-                                        <span className="text-xs font-bold w-6">{pos}</span>
-                                        <div className="flex-1 h-3 bg-muted rounded-full overflow-hidden max-w-[200px]">
-                                          <div className={`h-full rounded-full transition-all ${posBarColor(pRank)}`} style={{ width: `${Math.max(pct, 2)}%` }} />
-                                        </div>
-                                        <span className="text-xs font-mono font-semibold w-14 text-right text-muted-foreground">{value.toLocaleString()}</span>
-                                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${posRankColor(pRank)}`}>#{pRank}</span>
+                          <td colSpan={colCount} className="px-3 sm:px-5 py-4">
+                            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
+
+                              {POS_CONFIG.map(({ pos, textColor, border, bg }) => {
+                                const dynRank = dRanks[pos] ?? total;
+                                const wnRank  = rRanks[pos]  ?? total;
+                                const players = [...team.roster]
+                                  .filter(p => p.position === pos)
+                                  .sort((a, b) => getPlayerValue(b) - getPlayerValue(a))
+                                  .slice(0, 5);
+                                return (
+                                  <div key={pos} className={`rounded-lg border ${border} ${bg} p-2.5`} data-testid={`pos-col-${team.id}-${pos.toLowerCase()}`}>
+                                    {/* Position header */}
+                                    <div className="flex items-center justify-between mb-2">
+                                      <span className={`text-xs font-black ${textColor}`}>{pos}</span>
+                                      <div className="flex items-center gap-1">
+                                        <span className="text-[9px] text-muted-foreground/60 font-medium">WN</span>
+                                        {rankBadge(wnRank)}
+                                        <span className="text-[9px] text-muted-foreground/60 font-medium ml-0.5">DYN</span>
+                                        {rankBadge(dynRank)}
                                       </div>
-                                    );
-                                  })}
+                                    </div>
+                                    {/* Player list */}
+                                    <div className="space-y-1">
+                                      {players.map((p, i) => (
+                                        <div key={p.sleeperId ?? i} className="flex items-center gap-1.5 min-w-0">
+                                          <span className="text-[10px] text-muted-foreground/40 w-3 flex-shrink-0">{i + 1}</span>
+                                          <span className="text-[11px] text-foreground truncate flex-1 font-medium">{p.name}</span>
+                                          <span className="text-[10px] font-mono text-muted-foreground/70 flex-shrink-0">{(getPlayerValue(p) / 1000).toFixed(1)}k</span>
+                                        </div>
+                                      ))}
+                                      {players.length === 0 && (
+                                        <p className="text-[10px] text-muted-foreground/50 italic">None rostered</p>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+
+                              {/* Picks column */}
+                              <div className="rounded-lg border border-violet-500/25 bg-violet-500/5 p-2.5" data-testid={`pos-col-${team.id}-picks`}>
+                                <div className="flex items-center justify-between mb-2">
+                                  <span className="text-xs font-black text-violet-500 dark:text-violet-400">Picks</span>
+                                  <div className="flex items-center gap-1">
+                                    <span className="text-[9px] text-muted-foreground/60 font-medium">RANK</span>
+                                    {rankBadge(picksRank)}
+                                  </div>
                                 </div>
-                              </div>
-                              <div className="flex-1">
-                                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-3">Redraft Roster Strength</p>
-                                <p className="text-[10px] text-muted-foreground mb-3">Optimal starter redraft value by position</p>
-                                <div className="space-y-2.5">
-                                  {POS_LABELS.map(pos => {
-                                    const value = redraftValues[pos] ?? 0;
-                                    const pRank = rRanks[pos] ?? teams.length;
-                                    const pct = maxRedraft > 0 ? (value / maxRedraft) * 100 : 0;
+                                <div className="space-y-1">
+                                  {team.picks.slice(0, 8).map((pick, i) => {
+                                    const rd = pick.round === 1 ? "1st" : pick.round === 2 ? "2nd" : pick.round === 3 ? "3rd" : `${pick.round}th`;
                                     return (
-                                      <div key={pos} className="flex items-center gap-3" data-testid={`redraft-profile-${team.id}-${pos.toLowerCase()}`}>
-                                        <span className="text-xs font-bold w-6">{pos}</span>
-                                        <div className="flex-1 h-3 bg-muted rounded-full overflow-hidden max-w-[200px]">
-                                          <div className={`h-full rounded-full transition-all ${posBarColor(pRank)}`} style={{ width: `${Math.max(pct, 2)}%` }} />
-                                        </div>
-                                        <span className="text-xs font-mono font-semibold w-14 text-right text-muted-foreground">{value.toLocaleString()}</span>
-                                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${posRankColor(pRank)}`}>#{pRank}</span>
+                                      <div key={i} className="flex items-center gap-1.5 min-w-0">
+                                        <span className="text-[11px] text-foreground font-medium flex-shrink-0">{pick.year}</span>
+                                        <span className="text-[11px] text-muted-foreground font-medium flex-shrink-0">{rd}</span>
+                                        {pick.projectedRange && (
+                                          <span className="text-[10px] text-muted-foreground/60 truncate ml-auto">{pick.projectedRange}</span>
+                                        )}
                                       </div>
                                     );
                                   })}
+                                  {team.picks.length > 8 && (
+                                    <p className="text-[10px] text-muted-foreground/60">+{team.picks.length - 8} more</p>
+                                  )}
+                                  {team.picks.length === 0 && (
+                                    <p className="text-[10px] text-muted-foreground/50 italic">No picks</p>
+                                  )}
                                 </div>
                               </div>
 
-                              <div className="flex-1 min-w-[160px]">
-                                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-3">Scouting Report</p>
-                                {(() => {
-                                  const strengths = getScoutingStrengths(team, teams);
-                                  const weaknesses = getScoutingWeaknesses(team, teams);
-                                  const outlook = getScoutingOutlook(team, snapshotTierMap);
-                                  return (
-                                    <div className="space-y-3">
-                                      {strengths.length > 0 && (
-                                        <div>
-                                          <p className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-1 flex items-center gap-1">
-                                            <TrendingUp className="w-3 h-3" /> Strengths
-                                          </p>
-                                          <ul className="space-y-0.5 pl-4">
-                                            {strengths.map((s, i) => (
-                                              <li key={i} className="text-xs text-muted-foreground list-disc">{s}</li>
-                                            ))}
-                                          </ul>
-                                        </div>
-                                      )}
-                                      {weaknesses.length > 0 && (
-                                        <div>
-                                          <p className="text-[10px] font-bold text-red-500 dark:text-red-400 uppercase tracking-wider mb-1 flex items-center gap-1">
-                                            <TrendingDown className="w-3 h-3" /> Weaknesses
-                                          </p>
-                                          <ul className="space-y-0.5 pl-4">
-                                            {weaknesses.map((w, i) => (
-                                              <li key={i} className="text-xs text-muted-foreground list-disc">{w}</li>
-                                            ))}
-                                          </ul>
-                                        </div>
-                                      )}
-                                      <div>
-                                        <p className="text-[10px] font-bold text-[#0b3a7a] dark:text-blue-400 uppercase tracking-wider mb-1">Outlook</p>
-                                        <p className="text-xs text-muted-foreground">{outlook}</p>
-                                      </div>
-                                    </div>
-                                  );
-                                })()}
-                              </div>
                             </div>
                           </td>
                         </tr>
