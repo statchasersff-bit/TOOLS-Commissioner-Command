@@ -460,6 +460,43 @@ export default function LiveDraft() {
     return draftMessages.map(parsePickMessage).filter((p): p is ParsedPick => p !== null);
   }, [draftMessages]);
 
+  // message_id → { timeMs, timeLabel } — duration since previous relevant bot message
+  const pickTimings = useMemo<Map<string, { timeMs: number; timeLabel: string }>>(() => {
+    const map = new Map<string, { timeMs: number; timeLabel: string }>();
+    const relevant = draftMessages
+      .filter(m => m.author_is_bot && (m.text.includes("This draft has begun!") || m.text.includes("Pick ")))
+      .sort((a, b) => a.created - b.created);
+    let prevCreated: number | null = null;
+    for (const msg of relevant) {
+      if (msg.text.includes("This draft has begun!")) {
+        prevCreated = msg.created;
+        continue;
+      }
+      if (prevCreated === null) continue;
+      const timeMs = msg.created - prevCreated;
+      const totalSecs = Math.floor(timeMs / 1000);
+      const mins = Math.floor(totalSecs / 60);
+      const secs = totalSecs % 60;
+      const timeLabel = mins > 0 ? `${mins}m ${secs}s` : `${totalSecs}s`;
+      map.set(msg.message_id, { timeMs, timeLabel });
+      prevCreated = msg.created;
+    }
+    return map;
+  }, [draftMessages]);
+
+  // playerName → fantasy team display name (from draftData picks + slots)
+  const pickOwnerMap = useMemo<Map<string, string>>(() => {
+    const map = new Map<string, string>();
+    if (!draftData?.picks || !draftData?.draftSlots) return map;
+    const slotMap = new Map(draftData.draftSlots.map(s => [s.rosterId, s.displayName]));
+    for (const p of draftData.picks) {
+      if (p.playerName && p.rosterId) {
+        map.set(p.playerName, slotMap.get(p.rosterId) ?? "");
+      }
+    }
+    return map;
+  }, [draftData]);
+
   const handleSaveJwt = () => {
     const val = jwtInput.trim();
     if (!val) return;
@@ -1145,27 +1182,53 @@ export default function LiveDraft() {
                         WR: "text-blue-600 dark:text-blue-400",
                         TE: "text-orange-500 dark:text-orange-400",
                       };
+                      const timing = pickTimings.get(pick.message_id);
+                      const rosterName = pickOwnerMap.get(pick.playerName) ?? "";
                       return (
                         <div key={pick.message_id}
-                          className={`flex items-center gap-2.5 px-3 py-2 rounded-lg border text-xs transition-colors ${
+                          className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-xs transition-colors ${
                             pick.forced
                               ? "border-amber-500/30 bg-amber-50/50 dark:bg-amber-950/20"
                               : "border-border/30 bg-muted/20"
                           }`}
                           data-testid={`pick-row-${pick.message_id}`}>
+                          {/* Pick label */}
                           <span className="text-[10px] font-mono text-muted-foreground tabular-nums flex-shrink-0 w-8">
                             {pick.round}.{String(pick.pickInRound).padStart(2, "0")}
                           </span>
+                          {/* Position */}
                           <span className={`text-[10px] font-bold flex-shrink-0 w-6 ${posColors[pick.position] || "text-muted-foreground"}`}>
                             {pick.position}
                           </span>
-                          <span className="font-semibold text-foreground truncate flex-1">{pick.playerName}</span>
-                          <span className="text-[10px] text-muted-foreground flex-shrink-0">{pick.team}</span>
-                          {pick.forced && (
-                            <Badge variant="outline" className="text-[9px] px-1 h-4 border-amber-500/50 text-amber-600 dark:text-amber-400 flex-shrink-0">
-                              Forced
-                            </Badge>
+                          {/* Player name */}
+                          <span className="font-semibold text-foreground truncate flex-1 min-w-0">{pick.playerName}</span>
+                          {/* NFL team */}
+                          <span className="text-[10px] text-muted-foreground flex-shrink-0 hidden sm:inline">{pick.team}</span>
+                          {/* Fantasy roster */}
+                          {rosterName && (
+                            <span className="text-[10px] text-muted-foreground/70 flex-shrink-0 truncate max-w-[80px]" title={rosterName}>
+                              {rosterName}
+                            </span>
                           )}
+                          {/* Time used */}
+                          {timing ? (
+                            <span className={`text-[10px] tabular-nums flex-shrink-0 font-mono ${
+                              timing.timeMs > 5 * 60 * 1000
+                                ? "text-red-500 dark:text-red-400"
+                                : timing.timeMs > 2 * 60 * 1000
+                                  ? "text-amber-500 dark:text-amber-400"
+                                  : "text-emerald-600 dark:text-emerald-400"
+                            }`} data-testid={`pick-time-${pick.message_id}`}>
+                              {timing.timeLabel}
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-muted-foreground/30 flex-shrink-0 font-mono tabular-nums">—</span>
+                          )}
+                          {/* Forced */}
+                          <span className={`text-[10px] flex-shrink-0 font-medium ${pick.forced ? "text-amber-500 dark:text-amber-400" : "text-muted-foreground/30"}`}
+                            data-testid={`pick-forced-${pick.message_id}`}>
+                            {pick.forced ? "Forced" : "—"}
+                          </span>
                         </div>
                       );
                     })}
