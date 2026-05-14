@@ -36,11 +36,12 @@ async function fetchJson<T>(url: string): Promise<T> {
 
 /**
  * Fetch all trade transactions for a league using the public REST API.
- * Queries legs 0–5 in parallel (covers offseason + early-season pending trades)
+ * Queries leg 0 + weeks 1–18 in parallel (full season coverage + offseason pending)
  * and deduplicates by transaction_id.
  */
 async function fetchLeagueTradesPublic(leagueId: string): Promise<SleeperTransaction[]> {
-  const legs = [0, 1, 2, 3, 4, 5];
+  // Fetch leg 0 (offseason/pending) + all 18 regular-season weeks
+  const legs = [0, ...Array.from({ length: 18 }, (_, i) => i + 1)];
   const results = await Promise.allSettled(
     legs.map((leg) =>
       fetchJson<SleeperTransaction[]>(`${SLEEPER_API}/league/${leagueId}/transactions/${leg}`)
