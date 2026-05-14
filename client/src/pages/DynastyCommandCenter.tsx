@@ -79,6 +79,7 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
       platform: "sleeper" as string,
       scoringFormat: `${sl.scoringFormat} ${sl.format}`,
       teams: [] as Team[],
+      avatar: sl.avatar ? `https://sleepercdn.com/avatars/thumbs/${sl.avatar}` : null,
     }));
   }, [sleeper.leagues]);
 

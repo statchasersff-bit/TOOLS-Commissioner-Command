@@ -58,6 +58,7 @@ export interface League {
   playoffTeams?: number;
   regularSeasonWeeks?: number;
   totalRosters?: number;
+  avatar?: string | null;
   benchSlots?: number;
   taxiSlots?: number;
   irSlots?: number;
