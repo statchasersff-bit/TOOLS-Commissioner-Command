@@ -337,10 +337,29 @@ function buildAcceptTradeMutation(leagueId: string): string {
 
 function buildRejectTradeMutation(leagueId: string): string {
   return `
-    mutation reject_trade($transaction_id: String!) {
-      reject_trade(league_id: "${leagueId}", transaction_id: $transaction_id) {
-        transaction_id
+    mutation RejectTrade($transactionId: String!, $leg: Int!) {
+      reject_trade(
+        league_id: "${leagueId}"
+        transaction_id: $transactionId
+        leg: $leg
+      ) {
+        adds
+        consenter_ids
+        created
+        creator
+        draft_picks
+        drops
+        league_id
+        leg
+        metadata
+        roster_ids
+        settings
         status
+        status_updated
+        transaction_id
+        type
+        player_map
+        waiver_budget
       }
     }
   `;
@@ -349,6 +368,9 @@ function buildRejectTradeMutation(leagueId: string): string {
 export interface TradeActionResult {
   transaction_id: string;
   status: string;
+  consenter_ids?: number[];
+  roster_ids?: number[];
+  metadata?: Record<string, unknown> | null;
 }
 
 export async function acceptTrade(
@@ -368,12 +390,13 @@ export async function acceptTrade(
 
 export async function rejectTrade(
   leagueId: string,
-  transactionId: string
+  transactionId: string,
+  leg: number = 1
 ): Promise<TradeActionResult> {
   const data = await sleeperGraphQLRequest<{ reject_trade: TradeActionResult }>({
-    operationName: "reject_trade",
+    operationName: "RejectTrade",
     query: buildRejectTradeMutation(leagueId),
-    variables: { transaction_id: transactionId },
+    variables: { transactionId, leg },
   });
   if (!data.reject_trade) {
     throw new Error("Trade rejection failed — no response from Sleeper.");

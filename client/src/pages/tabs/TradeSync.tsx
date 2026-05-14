@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { SectionHeader } from "@/components/SectionHeader";
 import { cn } from "@/lib/utils";
+import { useToast } from "@/hooks/use-toast";
 import { useSleeper } from "@/contexts/SleeperContext";
 import { useValueModel } from "@/contexts/ValueModelContext";
 import { getSleeperSession } from "@/services/sleeperAuth";
@@ -77,6 +78,8 @@ interface NormalizedTrade {
   rawConsenterIds: number[];
   rawRosterIds: number[];
   creatorUserId: string | null;
+  leg: number;
+  rejecterId?: string;
 }
 
 interface RawLeagueData {
@@ -229,6 +232,7 @@ function normalizeTrade(
     rawConsenterIds: t.consenter_ids || [],
     rawRosterIds: t.roster_ids || [],
     creatorUserId,
+    leg: t.leg ?? 1,
   };
 }
 
@@ -730,7 +734,7 @@ function ConfirmDialog({ trade, action, onConfirm, onCancel, loading, result }: 
               <>
                 {isAccept
                   ? "Are you sure you want to accept this trade? This action cannot be undone."
-                  : `Are you sure you want to ${trade?.direction === "outgoing" ? "cancel" : "reject"} this trade offer?`
+                  : "This will reject the trade in Sleeper. This action cannot be undone."
                 }
                 {trade && (
                   <div className="mt-3 p-3 bg-muted/40 rounded-lg text-xs space-y-1">
@@ -781,6 +785,7 @@ const VIEWS: Array<{ id: TradeView; label: string; icon: React.ElementType }> = 
 export default function TradeSync() {
   const sleeper = useSleeper();
   const { valuesBySleeperId } = useValueModel();
+  const { toast } = useToast();
 
   const [hasSession, setHasSession] = useState(() => {
     const s = getSleeperSession();
@@ -945,22 +950,65 @@ export default function TradeSync() {
     try {
       if (action === "accept") {
         await acceptTrade(trade.leagueId, trade.transactionId);
-        setConfirmResult({ success: true, message: "Trade accepted! Check Sleeper to confirm the update." });
+        const msg = "Trade accepted! Check Sleeper to confirm the update.";
+        setConfirmResult({ success: true, message: msg });
         setActionResults((prev) => new Map(prev).set(trade.transactionId, { success: true, message: "Accepted" }));
+        toast({ title: "Trade accepted", description: msg });
+        setRawData((prev) =>
+          prev.map((ld) =>
+            ld.leagueId !== trade.leagueId
+              ? ld
+              : {
+                  ...ld,
+                  transactions: ld.transactions.map((t) =>
+                    t.transaction_id === trade.transactionId
+                      ? { ...t, status: "complete" }
+                      : t
+                  ),
+                }
+          )
+        );
       } else {
-        await rejectTrade(trade.leagueId, trade.transactionId);
-        setConfirmResult({ success: true, message: `Trade ${trade.direction === "outgoing" ? "cancelled" : "rejected"} successfully.` });
+        const result = await rejectTrade(trade.leagueId, trade.transactionId, trade.leg);
+        const rejecterId = result.metadata
+          ? (result.metadata["rejecter_id"] as string | undefined)
+          : undefined;
+        const msg = "Trade rejected successfully.";
+        setConfirmResult({ success: true, message: msg });
         setActionResults((prev) => new Map(prev).set(trade.transactionId, { success: true, message: "Rejected" }));
+        toast({ title: "Trade rejected", description: msg });
+        setRawData((prev) =>
+          prev.map((ld) =>
+            ld.leagueId !== trade.leagueId
+              ? ld
+              : {
+                  ...ld,
+                  transactions: ld.transactions.map((t) =>
+                    t.transaction_id === trade.transactionId
+                      ? {
+                          ...t,
+                          status: "rejected",
+                          metadata: rejecterId
+                            ? { ...(t.metadata ?? {}), rejecter_id: rejecterId }
+                            : t.metadata,
+                        }
+                      : t
+                  ),
+                }
+          )
+        );
       }
       setTimeout(() => fetchAllData(), 1500);
     } catch (err: any) {
       const msg = err?.message || "Action failed";
-      setConfirmResult({ success: false, message: `${msg}. You can also act directly on Sleeper.com.` });
+      const errorMsg = `${msg}. You can also act directly on Sleeper.com.`;
+      setConfirmResult({ success: false, message: errorMsg });
       setActionResults((prev) => new Map(prev).set(trade.transactionId, { success: false, message: "Failed" }));
+      toast({ title: action === "accept" ? "Accept failed" : "Reject failed", description: errorMsg, variant: "destructive" });
     } finally {
       setActionLoading(null);
     }
-  }, [confirmState, fetchAllData]);
+  }, [confirmState, fetchAllData, toast]);
 
   const handleConfirmCancel = useCallback(() => {
     setConfirmState(null);
