@@ -27,6 +27,7 @@ export async function upsertLeagueFinance(data: {
   notes?: string;
   isFree?: boolean;
   ignored?: boolean;
+  leagueSafeUrl?: string;
 }) {
   const d = getDb();
   const existing = await d
@@ -45,6 +46,7 @@ export async function upsertLeagueFinance(data: {
         season: data.season,
         isFree: data.isFree ?? false,
         ignored: data.ignored ?? false,
+        leagueSafeUrl: data.leagueSafeUrl ?? null,
         updatedAt: new Date(),
       })
       .where(and(eq(leagueFinances.sleeperUserId, data.sleeperUserId), eq(leagueFinances.leagueId, data.leagueId)));
@@ -58,6 +60,7 @@ export async function upsertLeagueFinance(data: {
       notes: data.notes ?? null,
       isFree: data.isFree ?? false,
       ignored: data.ignored ?? false,
+      leagueSafeUrl: data.leagueSafeUrl ?? null,
     });
   }
   return { ok: true };

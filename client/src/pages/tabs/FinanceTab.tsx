@@ -31,10 +31,11 @@ import {
   EyeOff,
   Eye,
   Tag,
+  ExternalLink,
 } from "lucide-react";
 
 interface PrizeSlot { place: number; amount: number; }
-interface LeagueFinanceData { leagueId: string; buyIn: number; prizes: PrizeSlot[]; notes: string; isFree: boolean; ignored: boolean; }
+interface LeagueFinanceData { leagueId: string; buyIn: number; prizes: PrizeSlot[]; notes: string; isFree: boolean; ignored: boolean; leagueSafeUrl: string; }
 
 type PaymentStatus = "complete" | "partial" | "empty" | "free";
 function paymentStatus(f: LeagueFinanceData): PaymentStatus {
@@ -134,7 +135,7 @@ function plBg(pl: number) {
   return "bg-muted/30 border-border/40";
 }
 
-const DEFAULT_FINANCE: LeagueFinanceData = { leagueId: "", buyIn: 0, prizes: [], notes: "", isFree: false, ignored: false };
+const DEFAULT_FINANCE: LeagueFinanceData = { leagueId: "", buyIn: 0, prizes: [], notes: "", isFree: false, ignored: false, leagueSafeUrl: "" };
 function tokenKey(userId: string) { return `dc-finance-token-${userId}`; }
 
 type Tier = "elite" | "bubble" | "rebuild";
@@ -323,7 +324,7 @@ export function FinanceTab() {
         if (!rows) return;
         const map: Record<string, LeagueFinanceData> = {};
         for (const row of rows) {
-          map[row.leagueId] = { leagueId: row.leagueId, buyIn: row.buyIn ?? 0, prizes: (row.prizes as PrizeSlot[]) ?? [], notes: row.notes ?? "", isFree: row.isFree ?? false, ignored: row.ignored ?? false };
+          map[row.leagueId] = { leagueId: row.leagueId, buyIn: row.buyIn ?? 0, prizes: (row.prizes as PrizeSlot[]) ?? [], notes: row.notes ?? "", isFree: row.isFree ?? false, ignored: row.ignored ?? false, leagueSafeUrl: row.leagueSafeUrl ?? "" };
         }
         setFinances(map);
       })
@@ -363,7 +364,7 @@ export function FinanceTab() {
             sleeperUserId: user.userId, leagueId,
             season: dynastyLeagues.find(l => l.leagueId === leagueId)?.season ?? "2026",
             buyIn: data.buyIn, prizes: data.prizes, notes: data.notes,
-            isFree: data.isFree, ignored: data.ignored,
+            isFree: data.isFree, ignored: data.ignored, leagueSafeUrl: data.leagueSafeUrl || null,
           }),
         });
         if (r.status === 401) { handleLock(); return; }
@@ -718,15 +719,37 @@ export function FinanceTab() {
                   </div>
                 )}
 
-                <div>
-                  <label className="text-xs font-semibold text-foreground mb-1.5 block">Buy-in Amount</label>
-                  <div className="relative w-40">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
+                <div className="flex flex-wrap gap-4">
+                  <div>
+                    <label className="text-xs font-semibold text-foreground mb-1.5 block">Buy-in Amount</label>
+                    <div className="relative w-40">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
+                      <Input
+                        type="number" min="0" className="pl-7"
+                        value={f.buyIn || ""} placeholder="0"
+                        onChange={e => updateFinance(league.leagueId, { buyIn: parseFloat(e.target.value) || 0 })}
+                        data-testid={`input-buyin-${league.leagueId}`}
+                      />
+                    </div>
+                  </div>
+                  <div className="flex-1 min-w-[220px]">
+                    <label className="text-xs font-semibold text-foreground mb-1.5 flex items-center gap-1.5 block">
+                      LeagueSafe Link
+                      {f.leagueSafeUrl && (
+                        <a href={f.leagueSafeUrl} target="_blank" rel="noopener noreferrer"
+                          className="text-[#0b3a7a] dark:text-blue-400 hover:opacity-70 transition-opacity"
+                          data-testid={`link-leaguesafe-${league.leagueId}`}
+                          onClick={e => e.stopPropagation()}>
+                          <ExternalLink className="w-3 h-3" />
+                        </a>
+                      )}
+                    </label>
                     <Input
-                      type="number" min="0" className="pl-7"
-                      value={f.buyIn || ""} placeholder="0"
-                      onChange={e => updateFinance(league.leagueId, { buyIn: parseFloat(e.target.value) || 0 })}
-                      data-testid={`input-buyin-${league.leagueId}`}
+                      type="url"
+                      placeholder="https://leaguesafe.com/join/..."
+                      value={f.leagueSafeUrl}
+                      onChange={e => updateFinance(league.leagueId, { leagueSafeUrl: e.target.value })}
+                      data-testid={`input-leaguesafe-${league.leagueId}`}
                     />
                   </div>
                 </div>

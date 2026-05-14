@@ -127,6 +127,7 @@ export const leagueFinances = pgTable("league_finances", {
   notes: text("notes"),
   isFree: boolean("is_free").notNull().default(false),
   ignored: boolean("ignored").notNull().default(false),
+  leagueSafeUrl: text("league_safe_url"),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
