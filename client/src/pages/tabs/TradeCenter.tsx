@@ -1332,7 +1332,7 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
 
             {/* 2. ADVANTAGE METER */}
             {(() => {
-              const fillPct = Math.max(10, Math.min(90, 100 - meterPosition));
+              const fillPct = finalA === 0 && finalB === 0 ? 50 : finalB === 0 ? 100 : finalA === 0 ? 0 : Math.max(5, Math.min(95, 100 - meterPosition));
               const iLose = fillPct > 50;
               const barColor = diffPct <= 6
                 ? "linear-gradient(90deg, #b8932a 0%, #d4af37 100%)"
