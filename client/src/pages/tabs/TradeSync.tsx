@@ -276,15 +276,16 @@ function normalizeTrade(
     return (rawDraftPicks as any[]).map((dp) => {
       if (typeof dp === "string") {
         // Sleeper GraphQL CSV format:
-        //   5 fields: "roster_id,season,round,previous_owner_id,owner_id"
-        //   6 fields: "roster_id,season,round,previous_owner_id,owner_id,pick_no" (assigned/exact picks)
+        //   5 fields: "roster_id,season,round,owner_id,previous_owner_id"
+        //   6 fields: "roster_id,season,round,owner_id,previous_owner_id,pick_no" (assigned/exact picks)
+        // owner_id = new/receiving roster; previous_owner_id = old/giving roster
         const parts = dp.split(",");
         return {
           roster_id: Number(parts[0]),
           season: parts[1],
           round: Number(parts[2]),
-          previous_owner_id: Number(parts[3]),
-          owner_id: Number(parts[4]),
+          owner_id: Number(parts[3]),
+          previous_owner_id: Number(parts[4]),
           pick_no: parts.length >= 6 && parts[5] ? Number(parts[5]) : undefined,
         } as SleeperTransactionPick;
       }
@@ -304,14 +305,13 @@ function normalizeTrade(
     const value = approxPickValue(String(dp.season), round);
 
     if (prevOwner === userRosterId) {
+      // User is giving this pick away
       iGivePicks.push({ season: String(dp.season), round, originalRosterId: origOwner, label, value, pickNo, isStartup });
     } else if (nextOwner === userRosterId) {
+      // User is receiving this pick
       iGetPicks.push({ season: String(dp.season), round, originalRosterId: origOwner, label, value, pickNo, isStartup });
-    } else if (prevOwner === partnerRosterId || (prevOwner === 0 && origOwner !== userRosterId)) {
-      iGetPicks.push({ season: String(dp.season), round, originalRosterId: origOwner, label, value, pickNo, isStartup });
-    } else if (nextOwner === partnerRosterId || (nextOwner === 0 && origOwner === userRosterId)) {
-      iGivePicks.push({ season: String(dp.season), round, originalRosterId: origOwner, label, value, pickNo, isStartup });
     }
+    // Picks between two other parties (3-way trades) are intentionally ignored
   }
 
   // ── FAAB (waiver_budget) ───────────────────────────────────────────────────
