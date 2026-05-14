@@ -107,21 +107,14 @@ const LEAGUE_TRANSACTIONS_FILTERED_QUERY = `
       roster_ids
       adds
       drops
-      waiver_bid
+      waiver_budget
       settings
       metadata
       consenter_ids
       created
-      updated
       status_updated
       player_map
-      draft_picks {
-        season
-        round
-        roster_id
-        previous_owner_id
-        owner_id
-      }
+      draft_picks
     }
   }
 `;
@@ -143,12 +136,11 @@ export interface SleeperTransaction {
   roster_ids: number[];
   adds: Record<string, number> | null;
   drops: Record<string, number> | null;
-  waiver_bid: number | null;
+  waiver_budget: number | null;
   settings: { expires_at?: number | null; [key: string]: unknown } | null;
   metadata: Record<string, unknown> | null;
   consenter_ids: number[];
   created: number;
-  updated: number;
   status_updated: number | null;
   player_map: Record<string, { full_name?: string; position?: string; team?: string }> | null;
   draft_picks: SleeperTransactionPick[];

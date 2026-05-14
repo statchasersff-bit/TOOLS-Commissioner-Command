@@ -15,7 +15,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useSleeper } from "@/contexts/SleeperContext";
 import { useValueModel } from "@/contexts/ValueModelContext";
 import { getSleeperSession } from "@/services/sleeperAuth";
-import { acceptTrade, rejectTrade } from "@/services/sleeperAuthedApi";
+import { fetchLeagueTransactionsFiltered, acceptTrade, rejectTrade } from "@/services/sleeperAuthedApi";
 import type { SleeperTransaction } from "@/services/sleeperAuthedApi";
 import { getSleeperPlayers } from "@/lib/sleeperApi";
 import { getPositionColor } from "@/data/mockData";
@@ -35,12 +35,12 @@ async function fetchJson<T>(url: string): Promise<T> {
 }
 
 /**
- * Fetch all trade transactions for a league using the public REST API.
- * Queries leg 0 + weeks 1–18 in parallel (full season coverage + offseason pending)
- * and deduplicates by transaction_id.
+ * Fetch trade transactions via the public REST API (no auth required).
+ * NOTE: Sleeper's public API only returns status="complete" transactions —
+ * pending trades are NOT visible without authentication.
+ * Queries leg 0 + weeks 1–18 and deduplicates by transaction_id.
  */
-async function fetchLeagueTradesPublic(leagueId: string): Promise<SleeperTransaction[]> {
-  // Fetch leg 0 (offseason/pending) + all 18 regular-season weeks
+async function fetchLeagueTradesPublicOnly(leagueId: string): Promise<SleeperTransaction[]> {
   const legs = [0, ...Array.from({ length: 18 }, (_, i) => i + 1)];
   const results = await Promise.allSettled(
     legs.map((leg) =>
@@ -58,6 +58,26 @@ async function fetchLeagueTradesPublic(leagueId: string): Promise<SleeperTransac
     }
   }
   return Array.from(seen.values());
+}
+
+/**
+ * Fetch all trade transactions for a league.
+ * Strategy:
+ *   1. If authenticated: use Sleeper GraphQL (returns ALL statuses including pending).
+ *   2. If GraphQL fails or no session: fall back to public REST API
+ *      (completed trades only — pending trades won't appear without auth).
+ */
+async function fetchLeagueTradesForSync(leagueId: string, hasAuth: boolean): Promise<{ txns: SleeperTransaction[]; usedAuth: boolean }> {
+  if (hasAuth) {
+    try {
+      const txns = await fetchLeagueTransactionsFiltered(leagueId, ["trade"]);
+      return { txns, usedAuth: true };
+    } catch (err: any) {
+      console.warn("[TradeSync] GraphQL failed for", leagueId, "→", err?.message);
+    }
+  }
+  const txns = await fetchLeagueTradesPublicOnly(leagueId);
+  return { txns, usedAuth: false };
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -821,6 +841,7 @@ export default function TradeSync() {
   const [loading, setLoading] = useState(false);
   const [rawData, setRawData] = useState<RawLeagueData[]>([]);
   const [errors, setErrors] = useState<FetchError[]>([]);
+  const [pendingTradesAvailable, setPendingTradesAvailable] = useState(false);
   const [view, setView] = useState<TradeView>("pending");
   const [leagueFilter, setLeagueFilter] = useState<string>("all");
   const [selectedTrade, setSelectedTrade] = useState<NormalizedTrade | null>(null);
@@ -834,14 +855,13 @@ export default function TradeSync() {
     if (!sleeper.isConnected || !sleeper.user) return;
     setLoading(true);
     setErrors([]);
-
     let playersDb: Record<string, any> = {};
     try { playersDb = await getSleeperPlayers(); } catch {}
 
     const leagueResults = await Promise.allSettled(
       sleeper.leagues.map(async (ls) => {
-        const [txns, rostersRaw, usersRaw] = await Promise.all([
-          fetchLeagueTradesPublic(ls.leagueId),
+        const [{ txns, usedAuth }, rostersRaw, usersRaw] = await Promise.all([
+          fetchLeagueTradesForSync(ls.leagueId, hasSession),
           fetchJson<any[]>(`${SLEEPER_API}/league/${ls.leagueId}/rosters`),
           fetchJson<any[]>(`${SLEEPER_API}/league/${ls.leagueId}/users`),
         ]);
@@ -871,32 +891,33 @@ export default function TradeSync() {
           userRosterId,
           rosterMap,
           transactions: txns,
-        } as RawLeagueData;
+          _usedAuth: usedAuth,
+        } as RawLeagueData & { _usedAuth: boolean };
       })
     );
 
     const successData: RawLeagueData[] = [];
     const newErrors: FetchError[] = [];
+    let anyAuthSucceeded = false;
 
     for (let i = 0; i < leagueResults.length; i++) {
       const r = leagueResults[i];
       const ls = sleeper.leagues[i];
       if (r.status === "fulfilled") {
-        successData.push(r.value);
+        const { _usedAuth, ...data } = r.value as RawLeagueData & { _usedAuth: boolean };
+        if (_usedAuth) anyAuthSucceeded = true;
+        successData.push(data);
       } else {
         const msg = (r.reason as any)?.message || "Failed to load";
-        if (!msg.includes("connect your Sleeper account")) {
-          newErrors.push({ leagueId: ls.leagueId, leagueName: ls.name, message: msg });
-        } else {
-          setHasSession(false);
-        }
+        newErrors.push({ leagueId: ls.leagueId, leagueName: ls.name, message: msg });
       }
     }
 
+    setPendingTradesAvailable(anyAuthSucceeded);
     setRawData(successData);
     setErrors(newErrors);
     setLoading(false);
-  }, [sleeper.isConnected, sleeper.user, sleeper.leagues]);
+  }, [sleeper.isConnected, sleeper.user, sleeper.leagues, hasSession]);
 
   useEffect(() => {
     fetchAllData();
@@ -1084,13 +1105,13 @@ export default function TradeSync() {
         <KPICard label="Win-Value Deals" value={kpis.positiveValue}  icon={TrendingUp}     color="bg-[#d4af37]/15 text-[#b8920f]"                         loading={loading} />
       </div>
 
-      {/* No-session soft banner — viewing works, accept/reject requires auth */}
-      {!hasSession && (
-        <Card className="p-3 border-[#0b3a7a]/30 bg-[#0b3a7a]/5">
+      {/* Auth banner — shown when pending trades couldn't be loaded */}
+      {!pendingTradesAvailable && (
+        <Card className="p-3 border-amber-500/30 bg-amber-500/5">
           <div className="flex items-center gap-2">
-            <Lock className="w-4 h-4 text-[#0b3a7a] dark:text-blue-400 flex-shrink-0" />
+            <Lock className="w-4 h-4 text-amber-500 flex-shrink-0" />
             <p className="text-xs text-muted-foreground">
-              <span className="font-semibold text-foreground">Sign in via Waiver Command</span> to accept or reject trades directly. Viewing is available without sign-in.
+              <span className="font-semibold text-foreground">Pending trades require Sleeper sign-in.</span> Sign in via <span className="font-semibold text-foreground">Waiver Command</span> to see incoming/outgoing offers. Completed trade history is shown below.
             </p>
           </div>
         </Card>
