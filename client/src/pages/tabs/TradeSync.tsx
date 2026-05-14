@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,8 +12,11 @@ import { useToast } from "@/hooks/use-toast";
 import { useSleeper } from "@/contexts/SleeperContext";
 import { useValueModel } from "@/contexts/ValueModelContext";
 import { getSleeperSession } from "@/services/sleeperAuth";
-import { fetchLeagueTransactionsFiltered, acceptTrade, rejectTrade } from "@/services/sleeperAuthedApi";
-import type { SleeperTransaction } from "@/services/sleeperAuthedApi";
+import {
+  fetchLeagueTransactionsFiltered, acceptTrade, rejectTrade,
+  fetchDmMessages, sendDmMessage,
+} from "@/services/sleeperAuthedApi";
+import type { SleeperTransaction, SleeperDmMessage } from "@/services/sleeperAuthedApi";
 import { getSleeperPlayers } from "@/lib/sleeperApi";
 import { getPositionColor } from "@/data/mockData";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
@@ -127,6 +130,7 @@ interface NormalizedTrade {
   rawConsenterIds: number[];
   rawRosterIds: number[];
   creatorUserId: string | null;
+  partnerUserId: string | null;
   leg: number;
   rejecterId?: string;
 }
@@ -357,6 +361,7 @@ function normalizeTrade(
     partnerName,
     partnerAvatar,
     partnerRosterId,
+    partnerUserId: partnerInfo?.ownerId ?? null,
     userRosterId,
     iGive: { players: iGivePlayers, picks: iGivePicks, faab: iGiveFaab },
     iGet: { players: iGetPlayers, picks: iGetPicks, faab: iGetFaab },
@@ -676,9 +681,229 @@ function TradeCard({ trade, myUsername, myAvatar, onView }: {
   );
 }
 
+// ─── Trade DM Attachment Card ─────────────────────────────────────────────────
+
+function TradeDmAttachmentCard({ attachment }: { attachment: Record<string, unknown> }) {
+  const adds = (attachment.adds as string[] | undefined) ?? [];
+  const drops = (attachment.drops as string[] | undefined) ?? [];
+  return (
+    <div className="mt-1.5 rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-xs space-y-1">
+      <div className="flex items-center gap-1 font-semibold opacity-80">
+        <ArrowRightLeft className="w-3 h-3" /> Trade Offer
+      </div>
+      {adds.length > 0 && <div><span className="font-medium">Gets:</span> {adds.join(", ")}</div>}
+      {drops.length > 0 && <div><span className="font-medium">Gives:</span> {drops.join(", ")}</div>}
+    </div>
+  );
+}
+
+// ─── Negotiation Thread ───────────────────────────────────────────────────────
+
+function NegotiationThread({
+  partnerUserId,
+  myUserId,
+  partnerName,
+}: {
+  partnerUserId: string;
+  myUserId: string;
+  partnerName: string;
+}) {
+  const [dmId, setDmId] = useState<string | null>(null);
+  const [messages, setMessages] = useState<SleeperDmMessage[]>([]);
+  const [loadingThread, setLoadingThread] = useState(true);
+  const [threadError, setThreadError] = useState<string | null>(null);
+  const [text, setText] = useState("");
+  const [sending, setSending] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [messages.length]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoadingThread(true);
+    setThreadError(null);
+    setMessages([]);
+    setDmId(null);
+
+    (async () => {
+      try {
+        const { getDmByMembers } = await import("@/services/sleeperAuthedApi");
+        const id = await getDmByMembers(partnerUserId);
+        if (cancelled) return;
+        if (!id) {
+          setThreadError("No DM thread found with this manager.");
+          setLoadingThread(false);
+          return;
+        }
+        setDmId(id);
+        const msgs = await fetchDmMessages(id);
+        if (cancelled) return;
+        setMessages([...msgs].sort((a, b) => a.created - b.created));
+      } catch (err: any) {
+        if (!cancelled) setThreadError(err.message || "Failed to load messages.");
+      } finally {
+        if (!cancelled) setLoadingThread(false);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [partnerUserId]);
+
+  const handleSend = async () => {
+    const msgText = text.trim();
+    if (!msgText || !dmId || sending) return;
+    setText("");
+    setSending(true);
+    const optimisticClientId = `opt-${Date.now()}`;
+    const optimistic: SleeperDmMessage = {
+      message_id: optimisticClientId,
+      parent_id: dmId,
+      parent_type: "dm",
+      author_id: myUserId,
+      author_display_name: "You",
+      author_avatar: null,
+      author_real_name: null,
+      author_is_bot: false,
+      author_role_id: null,
+      text: msgText,
+      text_map: null,
+      attachment: null,
+      created: Date.now(),
+      edited: null,
+      pinned: false,
+      reactions: null,
+      user_reactions: null,
+      client_id: optimisticClientId,
+      _optimistic: true,
+    };
+    setMessages((prev) => [...prev, optimistic]);
+    try {
+      const sent = await sendDmMessage(dmId, msgText);
+      setMessages((prev) =>
+        prev.map((m) => (m.client_id === optimisticClientId ? { ...sent, _optimistic: false } : m))
+      );
+    } catch {
+      setMessages((prev) => prev.filter((m) => m.client_id !== optimisticClientId));
+      setText(msgText);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const formatMsgTime = (ts: number) =>
+    new Date(ts).toLocaleString("en-US", {
+      month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
+    });
+
+  return (
+    <div className="border-t border-border/40 pt-4 space-y-3" data-testid="negotiation-thread">
+      <h4 className="text-sm font-bold flex items-center gap-2">
+        <MessageSquare className="w-4 h-4 text-[#d4af37]" />
+        Negotiation Thread
+      </h4>
+
+      {loadingThread ? (
+        <div className="space-y-2 py-1">
+          <Skeleton className="h-10 w-3/4" />
+          <Skeleton className="h-10 w-1/2 ml-auto" />
+          <Skeleton className="h-10 w-2/3" />
+        </div>
+      ) : threadError ? (
+        <p className="text-xs text-muted-foreground italic py-2">{threadError}</p>
+      ) : (
+        <>
+          <div
+            ref={scrollRef}
+            className="max-h-56 overflow-y-auto space-y-3 pr-0.5"
+            data-testid="thread-messages"
+          >
+            {messages.length === 0 ? (
+              <p className="text-xs text-muted-foreground italic text-center py-4">
+                No messages yet — start the conversation below.
+              </p>
+            ) : (
+              messages.map((msg) => {
+                const isMe = msg.author_id === myUserId;
+                return (
+                  <div
+                    key={msg.message_id}
+                    className={cn(
+                      "flex flex-col gap-0.5 max-w-[82%]",
+                      isMe ? "ml-auto items-end" : "items-start"
+                    )}
+                  >
+                    {!isMe && (
+                      <span className="text-[10px] text-muted-foreground font-medium px-1">
+                        {msg.author_display_name || partnerName}
+                      </span>
+                    )}
+                    <div
+                      className={cn(
+                        "rounded-2xl px-3 py-2 text-sm leading-snug break-words",
+                        isMe
+                          ? "bg-[#0b3a7a] text-white rounded-br-sm"
+                          : "bg-muted text-foreground rounded-bl-sm",
+                        msg._optimistic && "opacity-60"
+                      )}
+                    >
+                      {msg.text && <p>{msg.text}</p>}
+                      {msg.attachment?.type === "trade_dm" && (
+                        <TradeDmAttachmentCard
+                          attachment={msg.attachment as Record<string, unknown>}
+                        />
+                      )}
+                    </div>
+                    <span className="text-[9px] text-muted-foreground/60 px-1">
+                      {formatMsgTime(msg.created)}
+                    </span>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          <div className="flex gap-2 pt-1" data-testid="thread-compose">
+            <textarea
+              className="flex-1 resize-none rounded-lg border border-border/60 bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-[#d4af37]/50 focus:border-[#d4af37]/60 min-h-[38px] max-h-[100px]"
+              placeholder={`Message ${partnerName}…`}
+              value={text}
+              rows={1}
+              disabled={sending}
+              onChange={(e) => setText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSend();
+                }
+              }}
+              data-testid="input-negotiation-message"
+            />
+            <Button
+              size="sm"
+              className="h-9 w-9 p-0 bg-[#0b3a7a] hover:bg-[#0b3a7a]/80 text-white flex-shrink-0 self-end"
+              onClick={handleSend}
+              disabled={!text.trim() || sending}
+              data-testid="btn-send-negotiation-message"
+            >
+              {sending
+                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                : <Send className="w-3.5 h-3.5" />
+              }
+            </Button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 // ─── Trade Dialog (centered modal) ────────────────────────────────────────────
 
-function TradeDialog({ trade, open, onClose, onAccept, onReject, actionLoading, myUsername, myAvatar }: {
+function TradeDialog({ trade, open, onClose, onAccept, onReject, actionLoading, myUsername, myAvatar, myUserId }: {
   trade: NormalizedTrade | null;
   open: boolean;
   onClose: () => void;
@@ -687,6 +912,7 @@ function TradeDialog({ trade, open, onClose, onAccept, onReject, actionLoading, 
   actionLoading: boolean;
   myUsername: string;
   myAvatar: string | null;
+  myUserId: string;
 }) {
   if (!trade) return null;
 
@@ -812,11 +1038,6 @@ function TradeDialog({ trade, open, onClose, onAccept, onReject, actionLoading, 
                 {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <XCircle className="w-4 h-4" />}
                 {trade.direction === "incoming" ? "Reject" : "Cancel Offer"}
               </Button>
-              <a href={`https://sleeper.com/leagues/${trade.leagueId}`} target="_blank" rel="noopener noreferrer" className="block">
-                <Button variant="outline" className="w-full h-10 gap-2 text-sm text-muted-foreground hover:text-foreground">
-                  <MessageSquare className="w-4 h-4" /> Message {trade.partnerName}
-                </Button>
-              </a>
             </div>
           ) : (
             <a href={`https://sleeper.com/leagues/${trade.leagueId}`} target="_blank" rel="noopener noreferrer" className="block">
@@ -824,6 +1045,15 @@ function TradeDialog({ trade, open, onClose, onAccept, onReject, actionLoading, 
                 <ExternalLink className="w-3.5 h-3.5" /> Open in Sleeper
               </Button>
             </a>
+          )}
+
+          {/* Negotiation Thread */}
+          {trade.partnerUserId && myUserId && (
+            <NegotiationThread
+              partnerUserId={trade.partnerUserId}
+              myUserId={myUserId}
+              partnerName={trade.partnerName}
+            />
           )}
         </div>
       </DialogContent>
@@ -1300,6 +1530,7 @@ export default function TradeSync() {
         actionLoading={actionLoading === selectedTrade?.transactionId}
         myUsername={sleeper.user?.username ?? sleeper.user?.displayName ?? "Me"}
         myAvatar={sleeper.user?.avatar ? `https://sleepercdn.com/avatars/thumbs/${sleeper.user.avatar}` : null}
+        myUserId={sleeper.user?.userId ?? ""}
       />
 
       {/* Confirm Dialog */}

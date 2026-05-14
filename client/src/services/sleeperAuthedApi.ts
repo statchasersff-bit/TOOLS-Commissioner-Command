@@ -627,6 +627,62 @@ export async function sendTradeMessage(
   return data.create_message;
 }
 
+// ─── DM messaging ─────────────────────────────────────────────────────────────
+
+export interface SleeperDmMessage {
+  message_id: string;
+  parent_id: string;
+  parent_type: string;
+  author_id: string;
+  author_display_name: string;
+  author_avatar: string | null;
+  author_real_name: string | null;
+  author_is_bot: boolean;
+  author_role_id: string | null;
+  text: string | null;
+  text_map: Record<string, unknown> | null;
+  attachment: { type: string; [key: string]: unknown } | null;
+  created: number;
+  edited: number | null;
+  pinned: boolean;
+  reactions: Record<string, unknown> | null;
+  user_reactions: Record<string, unknown> | null;
+  client_id?: string;
+  _optimistic?: boolean;
+}
+
+export async function fetchDmMessages(dmId: string): Promise<SleeperDmMessage[]> {
+  const data = await sleeperGraphQLRequest<{ messages: SleeperDmMessage[] }>({
+    operationName: "messages",
+    query: `query messages { messages(parent_id: "${dmId}") { attachment author_avatar author_display_name author_real_name author_id author_is_bot author_role_id created edited message_id parent_id parent_type pinned reactions user_reactions text text_map } }`,
+  });
+  return data.messages ?? [];
+}
+
+export async function sendDmMessage(dmId: string, text: string): Promise<SleeperDmMessage> {
+  const clientId = crypto.randomUUID();
+  const data = await sleeperGraphQLRequest<{ create_message: SleeperDmMessage }>({
+    operationName: "create_message",
+    query: `
+      mutation create_message($text: String) {
+        create_message(
+          parent_id: "${dmId}",
+          client_id: "${clientId}",
+          parent_type: "dm",
+          text: $text
+        ) {
+          attachment author_avatar author_display_name author_real_name
+          author_id author_is_bot author_role_id created edited
+          message_id parent_id parent_type pinned reactions
+          user_reactions text text_map client_id
+        }
+      }
+    `,
+    variables: { text },
+  });
+  return data.create_message;
+}
+
 /** @todo Discover send_message mutation shape from sleeper.com/graphql */
 export async function sendLeagueChatMessage(
   _leagueId: string,
