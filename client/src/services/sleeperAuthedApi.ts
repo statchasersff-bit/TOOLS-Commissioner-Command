@@ -167,9 +167,9 @@ export async function fetchLeagueTransactionsFiltered(
     query: LEAGUE_TRANSACTIONS_FILTERED_QUERY,
     variables: {
       league_id: leagueId,
-      type_filters: typeFilters ?? null,
-      leg_filters: legFilters ?? null,
-      status_filters: statusFilters ?? null,
+      type_filters: typeFilters ?? [],
+      leg_filters: legFilters ?? [],
+      status_filters: statusFilters ?? [],
     },
   });
   return data.league_transactions_filtered ?? [];

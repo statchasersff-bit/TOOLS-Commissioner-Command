@@ -84,8 +84,9 @@ async function fetchLeagueTradesForSync(leagueId: string, hasAuth: boolean): Pro
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type TradeView = "pending" | "incoming" | "outgoing" | "counters" | "completed" | "rejected" | "cancelled" | "activity";
-type TradeStatus = "pending" | "complete" | "rejected" | "failed" | "cancelled" | "counter_offered";
+type TradeView = "pending" | "incoming" | "outgoing" | "counters" | "waiting" | "completed" | "rejected" | "cancelled" | "activity";
+// Sleeper's actual status strings (proposed = open offer, not yet accepted)
+type TradeStatus = "proposed" | "complete" | "rejected" | "failed" | "cancelled" | "counter_offered";
 
 interface AssetPlayer {
   playerId: string;
@@ -110,7 +111,7 @@ interface NormalizedTrade {
   leagueFormat: string;
   leagueAvatar: string | null;
   status: TradeStatus;
-  direction: "incoming" | "outgoing";
+  direction: "incoming" | "outgoing" | "waiting" | "counter";
   partnerName: string;
   partnerAvatar: string | null;
   partnerRosterId: number;
@@ -195,7 +196,7 @@ function normalizeTrade(
   leagueFormat: string,
   leagueAvatar: string | null,
   userRosterId: number,
-  creatorUserId: string | null,
+  myUserId: string,
   rosterMap: Map<number, { name: string; avatar: string | null; ownerId: string }>,
   playersDb: Record<string, any>,
   valuesBySleeperId: Record<string, number>
@@ -207,8 +208,29 @@ function normalizeTrade(
   const partnerName = partnerInfo?.name ?? `Team ${partnerRosterId}`;
   const partnerAvatar = partnerInfo?.avatar ?? null;
 
-  const isIncoming = !(t.consenter_ids || []).includes(userRosterId);
-  const direction: "incoming" | "outgoing" = isIncoming ? "incoming" : "outgoing";
+  // ── Direction classification per Sleeper spec ─────────────────────────────
+  // creator is a user_id (string); consenter_ids are roster_ids (numbers).
+  const isProposed      = t.status === "proposed";
+  const isCounter       = (t.settings as any)?.is_counter === 1;
+  const iCreated        = t.creator === myUserId;
+  const iHaveConsented  = (t.consenter_ids || []).includes(userRosterId);
+
+  let direction: "incoming" | "outgoing" | "waiting" | "counter";
+  if (isCounter) {
+    direction = "counter";
+  } else if (!isProposed) {
+    // For non-open trades use creator to assign direction (history context)
+    direction = iCreated ? "outgoing" : "incoming";
+  } else if (iCreated) {
+    // I sent this offer
+    direction = "outgoing";
+  } else if (!iHaveConsented) {
+    // I haven't responded yet — needs my action
+    direction = "incoming";
+  } else {
+    // I already consented, waiting on the other party
+    direction = "waiting";
+  }
 
   const iGivePlayers: AssetPlayer[] = [];
   const iGetPlayers: AssetPlayer[] = [];
@@ -255,7 +277,7 @@ function normalizeTrade(
   const valueEdge = iGetValue - iGiveValue;
 
   const expiresAt = t.settings?.expires_at ? (t.settings.expires_at > 1e12 ? t.settings.expires_at : t.settings.expires_at * 1000) : null;
-  const statusUpdated = t.status_updated || t.updated || t.created;
+  const statusUpdated = t.status_updated || t.created;
 
   return {
     transactionId: t.transaction_id,
@@ -263,7 +285,7 @@ function normalizeTrade(
     leagueName,
     leagueFormat,
     leagueAvatar,
-    status: (t.status || "pending") as TradeStatus,
+    status: (t.status || "proposed") as TradeStatus,
     direction,
     partnerName,
     partnerAvatar,
@@ -279,7 +301,7 @@ function normalizeTrade(
     statusUpdated,
     rawConsenterIds: t.consenter_ids || [],
     rawRosterIds: t.roster_ids || [],
-    creatorUserId,
+    creatorUserId: t.creator ?? null,
     leg: t.leg ?? 1,
   };
 }
@@ -822,14 +844,15 @@ function ConfirmDialog({ trade, action, onConfirm, onCancel, loading, result }: 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 const VIEWS: Array<{ id: TradeView; label: string; icon: React.ElementType }> = [
-  { id: "pending",   label: "Pending",   icon: Clock          },
-  { id: "incoming",  label: "Incoming",  icon: Inbox          },
-  { id: "outgoing",  label: "Outgoing",  icon: Send           },
-  { id: "counters",  label: "Counters",  icon: ArrowRightLeft  },
-  { id: "completed", label: "Completed", icon: CheckCircle2   },
-  { id: "rejected",  label: "Rejected",  icon: XCircle        },
-  { id: "cancelled", label: "Cancelled", icon: XCircle        },
-  { id: "activity",  label: "Activity",  icon: Activity       },
+  { id: "pending",   label: "All Open",   icon: Clock          },
+  { id: "incoming",  label: "Incoming",   icon: Inbox          },
+  { id: "outgoing",  label: "Outgoing",   icon: Send           },
+  { id: "counters",  label: "Counters",   icon: ArrowRightLeft  },
+  { id: "waiting",   label: "Waiting",    icon: Clock          },
+  { id: "completed", label: "Completed",  icon: CheckCircle2   },
+  { id: "rejected",  label: "Rejected",   icon: XCircle        },
+  { id: "cancelled", label: "Cancelled",  icon: XCircle        },
+  { id: "activity",  label: "All Trades", icon: Activity       },
 ];
 
 export default function TradeSync() {
@@ -938,7 +961,7 @@ export default function TradeSync() {
           ld.leagueFormat,
           ld.leagueAvatar,
           ld.userRosterId,
-          t.creator ?? null,
+          sleeper.user!.userId,
           ld.rosterMap,
           {},
           valuesBySleeperId
@@ -949,26 +972,26 @@ export default function TradeSync() {
     return all.sort((a, b) => (b.statusUpdated || b.created) - (a.statusUpdated || a.created));
   }, [rawData, valuesBySleeperId]);
 
-  // ── Client-side status helpers ────────────────────────────────────────────
-  // All statuses come from GraphQL unfiltered; we classify here.
-  // "pending"         — open offer, awaiting response
-  // "counter_offered" — a counter-offer is pending
-  // "complete"        — trade was accepted and processed
-  // "rejected"        — other party declined
-  // "failed"          — system-level failure (treated as cancelled)
-  // "cancelled"       — proposer withdrew the offer
-  const isOpen       = (t: NormalizedTrade) => t.status === "pending" || t.status === "counter_offered";
-  const isCounter    = (t: NormalizedTrade) => t.status === "counter_offered";
-  const isCancelled  = (t: NormalizedTrade) => t.status === "failed" || t.status === "cancelled";
+  // ── Client-side status/direction helpers ─────────────────────────────────
+  // Sleeper status strings (as returned by GraphQL with no status_filters):
+  // "proposed"   — open offer awaiting response
+  // "complete"   — accepted and processed
+  // "rejected"   — declined by other party
+  // "failed"     — system-level failure (treat as cancelled)
+  // "cancelled"  — proposer withdrew the offer
+  // direction is pre-classified in normalizeTrade using creator + consenter_ids
+  const isOpen      = (t: NormalizedTrade) => t.status === "proposed";
+  const isCancelled = (t: NormalizedTrade) => t.status === "failed" || t.status === "cancelled";
 
   const filteredTrades = useMemo(() => {
     let result = trades;
     if (leagueFilter !== "all") result = result.filter((t) => t.leagueId === leagueFilter);
     switch (view) {
       case "pending":   return result.filter(isOpen);
-      case "incoming":  return result.filter((t) => isOpen(t) && !isCounter(t) && t.direction === "incoming");
-      case "outgoing":  return result.filter((t) => isOpen(t) && !isCounter(t) && t.direction === "outgoing");
-      case "counters":  return result.filter(isCounter);
+      case "incoming":  return result.filter((t) => isOpen(t) && t.direction === "incoming");
+      case "outgoing":  return result.filter((t) => isOpen(t) && t.direction === "outgoing");
+      case "counters":  return result.filter((t) => isOpen(t) && t.direction === "counter");
+      case "waiting":   return result.filter((t) => isOpen(t) && t.direction === "waiting");
       case "completed": return result.filter((t) => t.status === "complete");
       case "rejected":  return result.filter((t) => t.status === "rejected");
       case "cancelled": return result.filter(isCancelled);
@@ -978,17 +1001,19 @@ export default function TradeSync() {
   }, [trades, view, leagueFilter]);
 
   const kpis = useMemo(() => {
-    const open      = trades.filter(isOpen);
-    const incoming  = open.filter((t) => !isCounter(t) && t.direction === "incoming");
-    const outgoing  = open.filter((t) => !isCounter(t) && t.direction === "outgoing");
-    const counters  = open.filter(isCounter);
-    const expiring  = open.filter((t) => isExpiringSoon(t.expiresAt));
+    const open          = trades.filter(isOpen);
+    const incoming      = open.filter((t) => t.direction === "incoming");
+    const outgoing      = open.filter((t) => t.direction === "outgoing");
+    const counters      = open.filter((t) => t.direction === "counter");
+    const waiting       = open.filter((t) => t.direction === "waiting");
+    const expiring      = open.filter((t) => isExpiringSoon(t.expiresAt));
     const positiveValue = open.filter((t) => t.valueEdge > 50);
     return {
       totalPending: open.length,
       incoming: incoming.length,
       outgoing: outgoing.length,
       counters: counters.length,
+      waiting: waiting.length,
       expiringSoon: expiring.length,
       needsResponse: incoming.length + counters.length,
       positiveValue: positiveValue.length,
@@ -1125,13 +1150,13 @@ export default function TradeSync() {
         <KPICard label="Win-Value Deals" value={kpis.positiveValue}  icon={TrendingUp}     color="bg-[#d4af37]/15 text-[#b8920f]"                          loading={loading} />
       </div>
 
-      {/* Auth banner — shown when pending trades couldn't be loaded */}
+      {/* Auth banner — public REST fallback only shows completed history */}
       {!pendingTradesAvailable && (
         <Card className="p-3 border-amber-500/30 bg-amber-500/5">
           <div className="flex items-center gap-2">
             <Lock className="w-4 h-4 text-amber-500 flex-shrink-0" />
             <p className="text-xs text-muted-foreground">
-              <span className="font-semibold text-foreground">Pending trades require Sleeper sign-in.</span> Sign in via <span className="font-semibold text-foreground">Waiver Command</span> to see incoming/outgoing offers. Completed trade history is shown below.
+              <span className="font-semibold text-foreground">Connected Sleeper session required</span> to view pending incoming/outgoing trade offers. Sign in via <span className="font-semibold text-foreground">Waiver Command</span> to unlock. Completed trade history is shown below.
             </p>
           </div>
         </Card>
@@ -1158,6 +1183,7 @@ export default function TradeSync() {
                        : id === "incoming"  ? kpis.incoming
                        : id === "outgoing"  ? kpis.outgoing
                        : id === "counters"  ? kpis.counters
+                       : id === "waiting"   ? kpis.waiting
                        : undefined;
             return (
               <button
