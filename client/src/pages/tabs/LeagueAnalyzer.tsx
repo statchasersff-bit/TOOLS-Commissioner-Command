@@ -10,7 +10,158 @@ import { useValueModel } from "@/contexts/ValueModelContext";
 import { formatPickLabel } from "@/types";
 import type { League, Team, Tier } from "@/types";
 import { cn } from "@/lib/utils";
-import { Info, ChevronDown, ChevronRight, TrendingUp, TrendingDown } from "lucide-react";
+import { Info, ChevronDown, ChevronRight, TrendingUp, TrendingDown, Settings2 } from "lucide-react";
+
+// ─── Scoring Settings Table ───────────────────────────────────────────────────
+
+interface ScoringKeyDef {
+  label: string;
+  defaultVal: number | null;
+  isYards?: boolean;
+}
+
+const SCORING_CONFIG: Record<string, ScoringKeyDef> = {
+  // Passing
+  pass_td:          { label: "Passing TD",           defaultVal: 4 },
+  pass_yd:          { label: "Passing Yards",         defaultVal: 0.04, isYards: true },
+  pass_int:         { label: "Interception",          defaultVal: -1 },
+  pass_2pt:         { label: "Pass 2PT",              defaultVal: 2 },
+  // Rushing
+  rush_td:          { label: "Rushing TD",            defaultVal: 6 },
+  rush_yd:          { label: "Rushing Yards",         defaultVal: 0.1,  isYards: true },
+  rush_2pt:         { label: "Rush 2PT",              defaultVal: 2 },
+  // Receiving
+  rec_td:           { label: "Receiving TD",          defaultVal: 6 },
+  rec_yd:           { label: "Receiving Yards",       defaultVal: 0.1,  isYards: true },
+  rec:              { label: "Reception (PPR)",        defaultVal: 1 },
+  rec_2pt:          { label: "Rec 2PT",               defaultVal: 2 },
+  bonus_rec_te:     { label: "TE Premium",            defaultVal: null },
+  // Fumbles
+  fum:              { label: "Fumble",                defaultVal: 0 },
+  fum_lost:         { label: "Fumble Lost",           defaultVal: -2 },
+  fum_rec:          { label: "Fumble Recovery",       defaultVal: 2 },
+  fum_rec_td:       { label: "Fumble Rec TD",         defaultVal: 6 },
+  // DEF individual
+  def_int:          { label: "Interception (DEF)",    defaultVal: 2 },
+  def_td:           { label: "Defensive TD",          defaultVal: 6 },
+  sack:             { label: "Sack (DEF)",            defaultVal: 1 },
+  safe:             { label: "Safety",                defaultVal: 2 },
+  ff:               { label: "Forced Fumble",         defaultVal: 1 },
+  blk_kick:         { label: "Blocked Kick",          defaultVal: 2 },
+  // Points allowed
+  pts_allow_0:      { label: "PA 0",                  defaultVal: 10 },
+  pts_allow_1_6:    { label: "PA 1–6",                defaultVal: 7 },
+  pts_allow_7_13:   { label: "PA 7–13",               defaultVal: 4 },
+  pts_allow_14_20:  { label: "PA 14–20",              defaultVal: 1 },
+  pts_allow_21_27:  { label: "PA 21–27",              defaultVal: 0 },
+  pts_allow_28_34:  { label: "PA 28–34",              defaultVal: -1 },
+  pts_allow_35p:    { label: "PA 35+",                defaultVal: -4 },
+  // DEF/ST unit
+  def_st_td:        { label: "DEF ST TD",             defaultVal: 6 },
+  def_st_ff:        { label: "DEF ST Forced Fumble",  defaultVal: 1 },
+  def_st_fum_rec:   { label: "DEF ST Fumble Rec",     defaultVal: 1 },
+  // ST
+  st_td:            { label: "ST TD",                 defaultVal: 6 },
+  st_ff:            { label: "ST Forced Fumble",      defaultVal: 1 },
+  st_fum_rec:       { label: "ST Fumble Rec",         defaultVal: 1 },
+};
+
+function fmtScoringVal(val: number, isYards?: boolean): string {
+  if (isYards) {
+    if (val === 0) return "0";
+    const per = Math.round(1 / val);
+    return `1 per ${per} yds`;
+  }
+  return String(val);
+}
+
+function ScoringSettingsTable({ settings }: { settings: Record<string, number> }) {
+  const [open, setOpen] = useState(false);
+
+  const rows = useMemo(() => {
+    return Object.entries(SCORING_CONFIG)
+      .map(([key, def]) => {
+        const leagueVal = settings[key] ?? null;
+        const displayVal = leagueVal !== null ? fmtScoringVal(leagueVal, def.isYards) : "0";
+        const defaultDisplay = def.defaultVal !== null ? fmtScoringVal(def.defaultVal, def.isYards) : "—";
+        const isDifferent = def.defaultVal !== null
+          ? leagueVal !== null
+            ? leagueVal !== def.defaultVal
+            : def.defaultVal !== 0
+          : leagueVal !== null && leagueVal !== 0;
+        return { key, label: def.label, displayVal, defaultDisplay, isDifferent, leagueVal };
+      })
+      .filter(r => r.leagueVal !== null || r.isDifferent)
+      .sort((a, b) => {
+        if (a.isDifferent && !b.isDifferent) return -1;
+        if (!a.isDifferent && b.isDifferent) return 1;
+        return a.label.localeCompare(b.label);
+      });
+  }, [settings]);
+
+  return (
+    <div className="border border-border/50 rounded-xl overflow-hidden">
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="w-full flex items-center gap-2 px-4 py-3 bg-muted/30 hover:bg-muted/50 transition-colors text-left"
+        data-testid="button-scoring-settings-toggle"
+      >
+        <Settings2 className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+        <span className="text-xs font-semibold text-foreground flex-grow">Scoring Settings</span>
+        <span className="text-[10px] text-muted-foreground mr-1">
+          {rows.filter(r => r.isDifferent).length > 0
+            ? `${rows.filter(r => r.isDifferent).length} custom`
+            : "standard"}
+        </span>
+        {open ? <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" /> : <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />}
+      </button>
+
+      {open && (
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="border-b border-border/40 bg-muted/10">
+                <th className="text-left px-4 py-2 font-semibold text-muted-foreground w-full">Setting</th>
+                <th className="text-right px-4 py-2 font-semibold text-muted-foreground whitespace-nowrap">Value</th>
+                <th className="text-right px-4 py-2 font-semibold text-muted-foreground whitespace-nowrap">Default</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row, i) => (
+                <tr
+                  key={row.key}
+                  className={cn(
+                    "border-b border-border/20 last:border-0",
+                    row.isDifferent
+                      ? "bg-[#d4af37]/5"
+                      : i % 2 === 0 ? "bg-transparent" : "bg-muted/10"
+                  )}
+                  data-testid={`scoring-row-${row.key}`}
+                >
+                  <td className="px-4 py-2 text-foreground/80 flex items-center gap-1.5">
+                    {row.isDifferent && (
+                      <span className="inline-block w-1.5 h-1.5 rounded-full bg-[#d4af37] flex-shrink-0" />
+                    )}
+                    {row.label}
+                  </td>
+                  <td className={cn(
+                    "px-4 py-2 text-right font-semibold tabular-nums whitespace-nowrap",
+                    row.isDifferent ? "text-[#d4af37]" : "text-foreground"
+                  )}>
+                    {row.displayVal}
+                  </td>
+                  <td className="px-4 py-2 text-right text-muted-foreground tabular-nums whitespace-nowrap">
+                    {row.defaultDisplay}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
 
 interface AnalyzerProps {
   league: League;
@@ -210,6 +361,10 @@ export function PowerRankings({ league }: AnalyzerProps) {
       </div>
 
       <DataTable columns={columns} data={sorted} defaultSortKey="overall" defaultSortDir="desc" />
+
+      {league.scoringSettings && (
+        <ScoringSettingsTable settings={league.scoringSettings} />
+      )}
 
       <div>
         <h3 className="text-base font-bold text-foreground">Scouting Report</h3>

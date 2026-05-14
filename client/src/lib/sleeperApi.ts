@@ -432,6 +432,7 @@ export async function fetchSleeperLeagueFull(leagueId: string, userId: string) {
       taxiSlots,
       irSlots,
       tePremium,
+      scoringSettings: (leagueRaw.scoring_settings ?? {}) as Record<string, number>,
     },
     userTeamId: userTeamIdStr,
     format,

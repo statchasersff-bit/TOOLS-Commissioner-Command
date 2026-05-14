@@ -62,6 +62,7 @@ export interface League {
   taxiSlots?: number;
   irSlots?: number;
   tePremium?: number;
+  scoringSettings?: Record<string, number>;
 }
 
 export type Tier = "Juggernaut" | "Win-Now" | "Future Powerhouse" | "Pick Hoarder" | "Taco" | "Contender" | "Pretender" | "Rebuilder" | "Weak / Directionless" | "Balanced";
