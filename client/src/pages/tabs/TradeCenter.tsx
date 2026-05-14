@@ -1275,12 +1275,23 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
         </div>
 
         <div className="space-y-3">
+          {side === "b" && !tradePartnerId ? (
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground/40" />
+              <input
+                disabled
+                placeholder="Select a trade partner first..."
+                className="w-full pl-8 pr-3 py-1.5 text-xs rounded-md border border-border/30 bg-muted/20 text-muted-foreground/40 cursor-not-allowed placeholder:text-muted-foreground/40"
+              />
+            </div>
+          ) : (
           <PlayerSearchInput
             allPlayers={rosterPlayers.length > 0 ? rosterPlayers : allPlayers}
             onAdd={(p) => addPlayer(side, p)}
             side={side}
             getPlayerValue={getPlayerValue}
           />
+          )}
 
 
 
