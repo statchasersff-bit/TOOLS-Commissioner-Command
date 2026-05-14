@@ -811,7 +811,11 @@ function WaiverTableRow({ row, onClaim, onView }: { row: WaiverRow; onClaim: () 
   }
 
   return (
-    <tr className="hover:bg-muted/30 dark:hover:bg-white/[0.025] transition-colors" data-testid={`row-league-${row.leagueId}`}>
+    <tr
+      className="hover:bg-muted/30 dark:hover:bg-white/[0.025] transition-colors cursor-pointer"
+      data-testid={`row-league-${row.leagueId}`}
+      onClick={onView}
+    >
       {/* League name */}
       <td className="px-2 py-2">
         <div className="flex items-center gap-1.5">
@@ -942,7 +946,7 @@ function WaiverTableRow({ row, onClaim, onView }: { row: WaiverRow; onClaim: () 
       </td>
 
       {/* Claim action */}
-      <td className="px-2 py-2 text-center">
+      <td className="px-2 py-2 text-center" onClick={e => e.stopPropagation()}>
         <button
           onClick={onClaim}
           disabled={!row.bestAvailable || !row.rosterId}
@@ -960,7 +964,7 @@ function WaiverTableRow({ row, onClaim, onView }: { row: WaiverRow; onClaim: () 
       </td>
 
       {/* View detail */}
-      <td className="px-2 py-2 text-center">
+      <td className="px-2 py-2 text-center" onClick={e => e.stopPropagation()}>
         <button
           onClick={onView}
           data-testid={`btn-view-${row.leagueId}`}
