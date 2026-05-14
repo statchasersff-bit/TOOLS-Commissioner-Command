@@ -28,7 +28,6 @@ import {
 
 const SLEEPER_API = "https://api.sleeper.app/v1";
 
-type TierFilter = "all" | "contender" | "bubble" | "rebuild";
 type SortKey = "tier" | "openSlots" | "faabPct" | "difference" | "leagueName";
 type WaiverView = "overview" | "league" | "bulk";
 
@@ -251,12 +250,6 @@ function getTierAccent(tier: "Contender" | "Bubble" | "Rebuild") {
   return                           { bg: "bg-rose-500/10 dark:bg-rose-500/15",     text: "text-rose-600 dark:text-rose-400",     border: "border-rose-500/25 dark:border-rose-500/30",     dot: "bg-rose-500"    };
 }
 
-const FILTER_TABS: { id: TierFilter; label: string }[] = [
-  { id: "all",       label: "All Leagues"  },
-  { id: "contender", label: "Contenders"   },
-  { id: "bubble",    label: "Bubble Teams" },
-  { id: "rebuild",   label: "Rebuilds"     },
-];
 
 export default function WaiverCommand() {
   const { isConnected, user, leagues } = useSleeper();
@@ -265,7 +258,6 @@ export default function WaiverCommand() {
   const [rows, setRows] = useState<WaiverRow[]>([]);
   const [isFetching, setIsFetching] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
-  const [activeFilter, setActiveFilter] = useState<TierFilter>("all");
   const [sortKey, setSortKey] = useState<SortKey>("tier");
   const [sortAsc, setSortAsc] = useState(true);
   const [lastFetched, setLastFetched] = useState<number | null>(null);
@@ -453,16 +445,7 @@ export default function WaiverCommand() {
       });
   }, [isConnected, userId, leagues, valuesLoading, dynastyPlayerList, valuesBySleeperId]);
 
-  const filtered = useMemo(() => {
-    return rows.filter((r) => {
-      if (r.isEmpty || r.error) return false;
-      if (activeFilter === "all") return true;
-      if (activeFilter === "contender") return r.tier === "Contender";
-      if (activeFilter === "bubble")    return r.tier === "Bubble";
-      if (activeFilter === "rebuild")   return r.tier === "Rebuild";
-      return true;
-    });
-  }, [rows, activeFilter]);
+  const filtered = useMemo(() => rows.filter(r => !r.isEmpty && !r.error), [rows]);
 
   const sorted = useMemo(() => {
     const arr = [...filtered];
@@ -571,25 +554,6 @@ export default function WaiverCommand() {
       </div>
 
       {activeView === "overview" && (<>
-      {/* Sticky filter bar */}
-      <div className="flex items-center gap-1.5 p-1 bg-muted/40 dark:bg-white/[0.04] rounded-xl border border-border/40 dark:border-white/[0.06] w-fit" data-testid="waiver-filter-bar">
-        {FILTER_TABS.map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveFilter(tab.id)}
-            data-testid={`filter-${tab.id}`}
-            className={cn(
-              "px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all duration-150",
-              activeFilter === tab.id
-                ? "bg-[#0b3a7a] text-white shadow-sm shadow-[#0b3a7a]/30"
-                : "text-muted-foreground hover:text-foreground hover:bg-background/60"
-            )}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
-
       {/* Hero metrics */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <HeroKpi
