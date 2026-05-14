@@ -468,17 +468,6 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
               )}
             </div>
             <div className="flex items-center gap-2">
-              {sleeper.isConnected && (
-                <button
-                  onClick={() => sleeper.refresh()}
-                  disabled={sleeper.isLoading}
-                  className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
-                  data-testid="button-sync-leagues"
-                >
-                  <RefreshCw className={`w-3 h-3 ${sleeper.isLoading ? "animate-spin" : ""}`} />
-                  <span>Sync My Leagues</span>
-                </button>
-              )}
               <ValueAttribution />
             </div>
           </div>
