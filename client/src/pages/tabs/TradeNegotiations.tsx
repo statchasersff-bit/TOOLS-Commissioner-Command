@@ -3,6 +3,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Textarea } from "@/components/ui/textarea";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
@@ -16,7 +17,7 @@ import { useValueModel } from "@/contexts/ValueModelContext";
 import { getSleeperSession } from "@/services/sleeperAuth";
 import {
   fetchLeagueTransactionsFiltered, acceptTrade, rejectTrade,
-  proposeTrade, getDmByMembers,
+  proposeTrade, getDmByMembers, sendTradeMessage,
 } from "@/services/sleeperAuthedApi";
 import type { SleeperTransaction } from "@/services/sleeperAuthedApi";
 import { getPositionColor } from "@/data/mockData";
@@ -25,16 +26,16 @@ import {
   ArrowRightLeft, TrendingUp, TrendingDown, RefreshCw, Loader2,
   Clock, AlertTriangle, ExternalLink, CheckCircle2, XCircle, Eye,
   ArrowRight, ArrowLeft, MessageCircle, CornerUpRight, Lock, Zap,
-  GitBranch,
+  GitBranch, Send, Paperclip,
 } from "lucide-react";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const PICK_VALUES: Record<string, Record<number, number>> = {
   "2026": { 1: 900, 2: 500, 3: 260, 4: 110 },
-  "2027": { 1: 700, 2: 420, 3: 210, 4: 85 },
-  "2028": { 1: 580, 2: 360, 3: 180, 4: 72 },
-  "2029": { 1: 500, 2: 320, 3: 160, 4: 60 },
+  "2027": { 1: 700, 2: 420, 3: 210, 4: 85  },
+  "2028": { 1: 580, 2: 360, 3: 180, 4: 72  },
+  "2029": { 1: 500, 2: 320, 3: 160, 4: 60  },
 };
 
 function pickVal(season: string, round: number): number {
@@ -62,6 +63,27 @@ function expiringSoon(ms: number | null): boolean {
 
 function parseRosterId(teamId: string): number {
   return parseInt(teamId.replace("roster_", ""), 10);
+}
+
+function buildTransactionsByRoster(raw: SleeperTransaction): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  for (const rosterId of raw.roster_ids ?? []) {
+    const adds  = Object.entries(raw.adds  ?? {}).filter(([, rid]) => rid === rosterId).map(([pid]) => pid);
+    const drops = Object.entries(raw.drops ?? {}).filter(([, rid]) => rid === rosterId).map(([pid]) => pid);
+    const picks = (raw.draft_picks ?? []).filter(
+      dp => dp.owner_id === rosterId || dp.previous_owner_id === rosterId
+    );
+    result[String(rosterId)] = { adds, drops, draft_picks: picks };
+  }
+  return result;
+}
+
+function buildUsersInLeagueMap(teams: Team[]): Record<string, unknown> {
+  const r: Record<string, unknown> = {};
+  for (const t of teams) {
+    if (t.ownerId) r[t.ownerId] = { display_name: t.owner, avatar: t.avatar ?? null };
+  }
+  return r;
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -107,18 +129,21 @@ function normalizeNegTrade(
   if (!t.roster_ids?.includes(userRosterId)) return null;
 
   const partnerRosterId = (t.roster_ids ?? []).find(id => id !== userRosterId) ?? -1;
-  const partnerInfo = rosterMap.get(partnerRosterId);
-  const isIncoming = !(t.consenter_ids ?? []).includes(userRosterId);
-
-  const givePlayers: NegPlayer[] = [];
-  const getPlayers:  NegPlayer[] = [];
+  const partnerInfo     = rosterMap.get(partnerRosterId);
+  const isIncoming      = !(t.consenter_ids ?? []).includes(userRosterId);
 
   const resolvePlayer = (pid: string): { name: string; pos: string; team: string } => {
     const info = t.player_map?.[pid] as any;
     if (!info) return { name: pid, pos: "?", team: "FA" };
-    const name = info.full_name || `${info.first_name ?? ""} ${info.last_name ?? ""}`.trim() || pid;
-    return { name, pos: info.position || "?", team: info.team || "FA" };
+    return {
+      name: info.full_name || `${info.first_name ?? ""} ${info.last_name ?? ""}`.trim() || pid,
+      pos:  info.position || "?",
+      team: info.team     || "FA",
+    };
   };
+
+  const givePlayers: NegPlayer[] = [];
+  const getPlayers:  NegPlayer[] = [];
 
   for (const [pid, rosterId] of Object.entries(t.drops ?? {})) {
     if (rosterId === userRosterId) {
@@ -137,18 +162,17 @@ function normalizeNegTrade(
   const getPicks:  NegPick[] = [];
   for (const dp of t.draft_picks ?? []) {
     const label = `${dp.season} ${ordinal(dp.round)}`;
-    const value = pickVal(dp.season, dp.round);
-    if (dp.previous_owner_id === userRosterId) givePicks.push({ season: dp.season, round: dp.round, label, value });
-    else if (dp.owner_id === userRosterId)     getPicks.push({ season: dp.season, round: dp.round, label, value });
+    const value  = pickVal(dp.season, dp.round);
+    if      (dp.previous_owner_id === userRosterId) givePicks.push({ season: dp.season, round: dp.round, label, value });
+    else if (dp.owner_id          === userRosterId) getPicks.push({ season: dp.season, round: dp.round, label, value });
   }
 
   const userGivesValue = givePlayers.reduce((s, p) => s + p.value, 0) + givePicks.reduce((s, p) => s + p.value, 0);
-  const userGetsValue  = getPlayers.reduce((s, p) => s + p.value, 0)  + getPicks.reduce((s, p) => s + p.value, 0);
+  const userGetsValue  = getPlayers.reduce((s, p)  => s + p.value, 0) + getPicks.reduce((s, p)  => s + p.value, 0);
 
-  const rawExp = t.settings?.expires_at;
+  const rawExp    = t.settings?.expires_at;
   const expiresAt = rawExp ? (rawExp > 1e12 ? rawExp : rawExp * 1000) : null;
   const isCounter = !!(t.settings as any)?.is_counter;
-  const statusUpdated = t.status_updated ?? t.updated ?? t.created;
 
   return {
     transactionId: t.transaction_id,
@@ -159,9 +183,9 @@ function normalizeNegTrade(
     direction: isIncoming ? "incoming" : "outgoing",
     userRosterId,
     partnerRosterId,
-    partnerName:   partnerInfo?.name    ?? `Team ${partnerRosterId}`,
-    partnerAvatar: partnerInfo?.avatar  ?? null,
-    partnerOwnerId:partnerInfo?.ownerId ?? null,
+    partnerName:    partnerInfo?.name    ?? `Team ${partnerRosterId}`,
+    partnerAvatar:  partnerInfo?.avatar  ?? null,
+    partnerOwnerId: partnerInfo?.ownerId ?? null,
     userGives: { players: givePlayers, picks: givePicks },
     userGets:  { players: getPlayers,  picks: getPicks  },
     userGivesValue,
@@ -169,7 +193,7 @@ function normalizeNegTrade(
     valueEdge: userGetsValue - userGivesValue,
     expiresAt,
     created: t.created,
-    statusUpdated,
+    statusUpdated: t.status_updated ?? t.updated ?? t.created,
     rawTransaction: t,
   };
 }
@@ -242,20 +266,19 @@ function ValueEdge({ edge }: { edge: number }) {
 // ─── Trade Neg Card ───────────────────────────────────────────────────────────
 
 function TradeNegCard({
-  trade, actionLoading, dmLoading, dmId,
-  onView, onCounter, onAccept, onReject, onOpenDm,
+  trade, actionLoading, dmLoading,
+  onView, onCounter, onAccept, onReject, onMessage,
 }: {
   trade: NegTrade;
   actionLoading: boolean;
   dmLoading: boolean;
-  dmId: string | null | undefined;
   onView: () => void;
   onCounter: () => void;
   onAccept: () => void;
   onReject: () => void;
-  onOpenDm: () => void;
+  onMessage: () => void;
 }) {
-  const expiring = expiringSoon(trade.expiresAt);
+  const expiring  = expiringSoon(trade.expiresAt);
   const isPending = trade.status === "proposed";
 
   return (
@@ -337,18 +360,11 @@ function TradeNegCard({
               <Button variant="outline" size="sm" className="h-7 px-2 text-[11px] gap-1 hover:border-[#0b3a7a]/40" onClick={onView} data-testid={`btn-view-neg-${trade.transactionId}`}>
                 <Eye className="w-3 h-3"/>View
               </Button>
-              {/* DM Button */}
               {trade.partnerOwnerId && (
-                dmId
-                  ? <a href={`https://sleeper.com/dms/${dmId}`} target="_blank" rel="noopener noreferrer">
-                      <Button variant="outline" size="sm" className="h-7 px-2 text-[11px] gap-1 hover:border-[#0b3a7a]/40" data-testid={`btn-dm-${trade.transactionId}`}>
-                        <MessageCircle className="w-3 h-3"/>DM
-                      </Button>
-                    </a>
-                  : <Button variant="outline" size="sm" className="h-7 px-2 text-[11px] gap-1" onClick={onOpenDm} disabled={dmLoading} data-testid={`btn-open-dm-${trade.transactionId}`}>
-                      {dmLoading ? <Loader2 className="w-3 h-3 animate-spin"/> : <MessageCircle className="w-3 h-3"/>}
-                      {dmLoading ? "" : "Open DM"}
-                    </Button>
+                <Button variant="outline" size="sm" className="h-7 px-2 text-[11px] gap-1 hover:border-blue-400/40 hover:text-blue-500" onClick={onMessage} disabled={dmLoading} data-testid={`btn-message-${trade.transactionId}`}>
+                  {dmLoading ? <Loader2 className="w-3 h-3 animate-spin"/> : <MessageCircle className="w-3 h-3"/>}
+                  {dmLoading ? "" : "Message"}
+                </Button>
               )}
               {isPending && (
                 <>
@@ -375,9 +391,9 @@ function TradeNegCard({
 
 // ─── Details Sheet ────────────────────────────────────────────────────────────
 
-function DetailsSheet({ trade, open, onClose, onAccept, onCounter, onReject, actionLoading, leagueName }: {
+function DetailsSheet({ trade, open, onClose, onAccept, onCounter, onReject, onMessage, actionLoading, leagueName }: {
   trade: NegTrade | null; open: boolean; onClose: () => void;
-  onAccept: () => void; onCounter: () => void; onReject: () => void;
+  onAccept: () => void; onCounter: () => void; onReject: () => void; onMessage: () => void;
   actionLoading: boolean; leagueName: string;
 }) {
   if (!trade) return null;
@@ -412,11 +428,10 @@ function DetailsSheet({ trade, open, onClose, onAccept, onCounter, onReject, act
                 : "bg-muted/50 text-muted-foreground border border-border/40"
             )}>
               <Clock className="w-4 h-4 flex-shrink-0"/>
-              <span>{expiring ? "⚠ Expiring " : "Expires in "}<strong>{expiryLabel(trade.expiresAt)}</strong></span>
+              {expiring ? "⚠ Expiring " : "Expires in "}<strong>{expiryLabel(trade.expiresAt)}</strong>
             </div>
           )}
 
-          {/* Counter badge */}
           {trade.isCounter && (
             <div className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium bg-purple-500/10 border border-purple-500/20 text-purple-700 dark:text-purple-400">
               <GitBranch className="w-4 h-4 flex-shrink-0"/>
@@ -439,10 +454,10 @@ function DetailsSheet({ trade, open, onClose, onAccept, onCounter, onReject, act
 
           {/* Assets */}
           <div className="grid grid-cols-2 gap-3">
-            {[
+            {([
               { label: "You Give", icon: <ArrowRight className="w-3.5 h-3.5 text-red-500"/>, assets: trade.userGives, total: totalGive },
-              { label: "You Get",  icon: <ArrowLeft className="w-3.5 h-3.5 text-emerald-500"/>, assets: trade.userGets, total: totalGet },
-            ].map(({ label, icon, assets, total }) => (
+              { label: "You Get",  icon: <ArrowLeft  className="w-3.5 h-3.5 text-emerald-500"/>, assets: trade.userGets,  total: totalGet  },
+            ] as const).map(({ label, icon, assets, total }) => (
               <div key={label}>
                 <div className="flex items-center gap-1.5 mb-2">
                   {icon}
@@ -523,6 +538,11 @@ function DetailsSheet({ trade, open, onClose, onAccept, onCounter, onReject, act
                   {actionLoading ? <Loader2 className="w-4 h-4 animate-spin"/> : <XCircle className="w-4 h-4"/>}
                   {trade.direction === "outgoing" ? "Cancel Offer" : "Reject Trade"}
                 </Button>
+                {trade.partnerOwnerId && (
+                  <Button variant="outline" className="col-span-2 gap-1.5 h-9 text-xs hover:border-blue-400/40 hover:text-blue-500" onClick={onMessage} data-testid={`drawer-message-${trade.transactionId}`}>
+                    <MessageCircle className="w-3.5 h-3.5"/>Message {trade.partnerName}
+                  </Button>
+                )}
                 <a href={`https://sleeper.com/leagues/${trade.leagueId}`} target="_blank" rel="noopener noreferrer" className="col-span-2">
                   <Button variant="outline" className="w-full gap-1.5 h-9 text-xs"><ExternalLink className="w-3.5 h-3.5"/>Open in Sleeper App</Button>
                 </a>
@@ -554,7 +574,6 @@ function CounterSheet({ trade, open, onClose, onConfirm, loading, leagueName }: 
         </SheetHeader>
 
         <div className="space-y-5 pt-5">
-          {/* Warning banner */}
           <div className="flex items-start gap-2 rounded-lg px-3 py-2.5 bg-purple-500/10 border border-purple-500/20 text-purple-700 dark:text-purple-400 text-sm">
             <GitBranch className="w-4 h-4 mt-0.5 flex-shrink-0"/>
             <div>
@@ -563,7 +582,6 @@ function CounterSheet({ trade, open, onClose, onConfirm, loading, leagueName }: 
             </div>
           </div>
 
-          {/* Assets being countered with */}
           <div className="space-y-2">
             <p className="text-[11px] font-bold text-foreground uppercase tracking-wider">Counter Terms (same as original)</p>
             <div className="grid grid-cols-2 gap-2">
@@ -586,7 +604,6 @@ function CounterSheet({ trade, open, onClose, onConfirm, loading, leagueName }: 
             </div>
           </div>
 
-          {/* Trade detail summary */}
           <div className="bg-muted/30 rounded-lg p-3 text-xs space-y-1 text-muted-foreground">
             <p><span className="font-semibold text-foreground">League:</span> {leagueName}</p>
             <p><span className="font-semibold text-foreground">Partner:</span> {trade.partnerName}</p>
@@ -594,7 +611,6 @@ function CounterSheet({ trade, open, onClose, onConfirm, loading, leagueName }: 
             <p><span className="font-semibold text-foreground">Expires:</span> 72 hours from now</p>
           </div>
 
-          {/* Pick caveat */}
           {(trade.userGives.picks.length > 0 || trade.userGets.picks.length > 0) && (
             <div className="flex items-start gap-2 rounded-lg px-3 py-2.5 bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-400 text-xs">
               <AlertTriangle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0"/>
@@ -678,6 +694,186 @@ function ConfirmDialog({ trade, action, onConfirm, onCancel, loading, result }: 
   );
 }
 
+// ─── Post-counter DM prompt ───────────────────────────────────────────────────
+
+function PostCounterDmPrompt({ trade, onSendDm, onDismiss }: {
+  trade: NegTrade | null;
+  onSendDm: () => void;
+  onDismiss: () => void;
+}) {
+  return (
+    <Dialog open={!!trade} onOpenChange={v => { if (!v) onDismiss(); }}>
+      <DialogContent data-testid="post-counter-dm-prompt">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <MessageCircle className="w-5 h-5 text-blue-500"/>
+            Send Sleeper DM to trade partner?
+          </DialogTitle>
+          <DialogDescription>
+            Counter offer sent to <strong>{trade?.partnerName}</strong>. Would you like to follow up with a message in Sleeper?
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter className="gap-2">
+          <Button variant="outline" onClick={onDismiss} data-testid="post-counter-dm-skip">No thanks</Button>
+          <Button className="gap-1.5 bg-blue-600 hover:bg-blue-700 text-white" onClick={onSendDm} data-testid="post-counter-dm-yes">
+            <MessageCircle className="w-4 h-4"/>Message {trade?.partnerName}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Send DM modal ────────────────────────────────────────────────────────────
+
+function SendDmModal({ trade, dmId, open, onClose, onSend, sending, leagueName, currentDisplayName }: {
+  trade: NegTrade | null;
+  dmId: string | null | undefined;
+  open: boolean;
+  onClose: () => void;
+  onSend: (text: string, attachTradeCard: boolean) => Promise<void>;
+  sending: boolean;
+  leagueName: string;
+  currentDisplayName: string;
+}) {
+  const defaultMsg = (t: NegTrade | null) =>
+    `${currentDisplayName} proposed a trade in ${leagueName} via StatChasers Dynasty Command`;
+
+  const [text, setText]           = useState(() => defaultMsg(trade));
+  const [attachCard, setAttachCard] = useState(true);
+
+  useEffect(() => {
+    if (trade) setText(defaultMsg(trade));
+    setAttachCard(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trade?.transactionId]);
+
+  if (!trade) return null;
+
+  const charLimit = 500;
+  const overLimit = text.length > charLimit;
+
+  return (
+    <Dialog open={open} onOpenChange={v => { if (!v) onClose(); }}>
+      <DialogContent className="sm:max-w-md" data-testid="send-dm-modal">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <MessageCircle className="w-5 h-5 text-blue-500"/>
+            Message {trade.partnerName}
+          </DialogTitle>
+          <DialogDescription>
+            Send a Sleeper DM to your trade partner. You can edit the message before sending.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          {/* DM unavailable fallback */}
+          {dmId === null && (
+            <div className="flex items-start gap-2 rounded-lg px-3 py-3 bg-red-500/10 border border-red-500/20 text-red-700 dark:text-red-400 text-sm">
+              <XCircle className="w-4 h-4 mt-0.5 flex-shrink-0"/>
+              <div>
+                <p className="font-semibold">Could not open DM channel.</p>
+                <p className="text-xs opacity-80 mt-0.5">You may not have an existing DM with this manager. Open Sleeper directly to start a conversation.</p>
+                <a href="https://sleeper.com/chat" target="_blank" rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 mt-2 text-xs underline underline-offset-2 hover:opacity-80">
+                  <ExternalLink className="w-3 h-3"/>Open Sleeper Chat
+                </a>
+              </div>
+            </div>
+          )}
+
+          {/* DM loading */}
+          {dmId === undefined && (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
+              <Loader2 className="w-4 h-4 animate-spin"/>
+              Opening DM channel…
+            </div>
+          )}
+
+          {/* Message composer — only shown when dmId is known */}
+          {dmId && (
+            <>
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Message</label>
+                <Textarea
+                  value={text}
+                  onChange={e => setText(e.target.value)}
+                  rows={4}
+                  maxLength={600}
+                  placeholder="Type your message…"
+                  className={cn("resize-none text-sm", overLimit && "border-red-500/50 focus-visible:ring-red-500/30")}
+                  data-testid="dm-message-input"
+                />
+                <div className="flex justify-between text-[10px] text-muted-foreground">
+                  <span>{text.trim().length === 0 ? "Message cannot be empty" : ""}</span>
+                  <span className={overLimit ? "text-red-500 font-bold" : ""}>{text.length}/{charLimit}</span>
+                </div>
+              </div>
+
+              {/* Attach trade card toggle */}
+              <div className="flex items-center justify-between gap-3 p-3 bg-muted/30 rounded-xl border border-border/40">
+                <div className="flex items-center gap-2 min-w-0">
+                  <Paperclip className="w-4 h-4 text-muted-foreground flex-shrink-0"/>
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold truncate">Attach trade card</p>
+                    <p className="text-[10px] text-muted-foreground">Sends trade details inline in Sleeper</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={attachCard}
+                  onClick={() => setAttachCard(v => !v)}
+                  data-testid="dm-attach-toggle"
+                  className={cn(
+                    "relative inline-flex h-5 w-9 flex-shrink-0 items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1",
+                    attachCard ? "bg-blue-600" : "bg-input"
+                  )}
+                >
+                  <span className={cn(
+                    "pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-sm ring-0 transition-transform",
+                    attachCard ? "translate-x-4" : "translate-x-0"
+                  )}/>
+                </button>
+              </div>
+
+              {/* Trade summary preview */}
+              <div className="bg-muted/20 border border-border/40 rounded-lg p-3 text-xs space-y-1.5 text-muted-foreground">
+                <p className="font-semibold text-foreground text-[11px] uppercase tracking-wider">Trade summary</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <span className="text-[10px] font-medium flex items-center gap-0.5"><ArrowRight className="w-3 h-3 text-red-400"/>Give</span>
+                    <p>{[...trade.userGives.players.map(p => p.name), ...trade.userGives.picks.map(p => p.label)].join(", ") || "—"}</p>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-medium flex items-center gap-0.5"><ArrowLeft className="w-3 h-3 text-emerald-400"/>Get</span>
+                    <p>{[...trade.userGets.players.map(p => p.name), ...trade.userGets.picks.map(p => p.label)].join(", ") || "—"}</p>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+
+        <DialogFooter className="gap-2 pt-2">
+          <Button variant="outline" onClick={onClose} disabled={sending} data-testid="dm-cancel">Cancel</Button>
+          {dmId && (
+            <Button
+              className="gap-1.5 bg-blue-600 hover:bg-blue-700 text-white"
+              onClick={() => onSend(text, attachCard)}
+              disabled={sending || text.trim().length === 0 || overLimit}
+              data-testid="dm-send"
+            >
+              {sending ? <Loader2 className="w-4 h-4 animate-spin"/> : <Send className="w-4 h-4"/>}
+              {sending ? "Sending…" : "Send DM"}
+            </Button>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 const SECTIONS: Array<{ id: Section; label: string; icon: React.ElementType }> = [
@@ -687,23 +883,33 @@ const SECTIONS: Array<{ id: Section; label: string; icon: React.ElementType }> =
 ];
 
 export default function TradeNegotiations({ league, userTeam }: { league: League; userTeam: Team }) {
-  const { valuesBySleeperId } = useValueModel();
-  const { toast } = useToast();
-  useSleeper();
+  const { valuesBySleeperId }    = useValueModel();
+  const { toast }                = useToast();
+  const sleeper                  = useSleeper();
+  const currentDisplayName       = sleeper.user?.displayName || sleeper.user?.username || "Your manager";
 
   const [hasSession] = useState(() => !!getSleeperSession()?.token);
-  const [loading, setLoading]     = useState(false);
-  const [rawTxns, setRawTxns]     = useState<SleeperTransaction[]>([]);
-  const [section, setSection]     = useState<Section>("active");
-  const [selectedTrade, setSelectedTrade] = useState<NegTrade | null>(null);
-  const [detailsOpen, setDetailsOpen]     = useState(false);
-  const [counterOpen, setCounterOpen]     = useState(false);
-  const [confirmState, setConfirmState]   = useState<{ trade: NegTrade; action: "accept" | "reject" } | null>(null);
-  const [confirmResult, setConfirmResult] = useState<{ success: boolean; message: string } | null>(null);
-  const [actionLoading, setActionLoading] = useState<string | null>(null);
+
+  // ── list state ──
+  const [loading, setLoading]   = useState(false);
+  const [rawTxns, setRawTxns]   = useState<SleeperTransaction[]>([]);
+  const [section, setSection]   = useState<Section>("active");
+
+  // ── panel / dialog state ──
+  const [selectedTrade,  setSelectedTrade]  = useState<NegTrade | null>(null);
+  const [detailsOpen,    setDetailsOpen]    = useState(false);
+  const [counterOpen,    setCounterOpen]    = useState(false);
+  const [confirmState,   setConfirmState]   = useState<{ trade: NegTrade; action: "accept" | "reject" } | null>(null);
+  const [confirmResult,  setConfirmResult]  = useState<{ success: boolean; message: string } | null>(null);
+  const [actionLoading,  setActionLoading]  = useState<string | null>(null);
   const [counterLoading, setCounterLoading] = useState(false);
-  const [dmCache,   setDmCache]   = useState<Map<string, string | null>>(new Map());
-  const [dmLoading, setDmLoading] = useState<Set<string>>(new Set());
+
+  // ── DM state ──
+  const [dmCache,        setDmCache]        = useState<Map<string, string | null>>(new Map());
+  const [dmLoading,      setDmLoading]      = useState<Set<string>>(new Set());
+  const [pendingDmTrade, setPendingDmTrade] = useState<NegTrade | null>(null); // triggers post-counter prompt
+  const [dmModalState,   setDmModalState]   = useState<{ trade: NegTrade; dmId: string | null | undefined } | null>(null);
+  const [dmSending,      setDmSending]      = useState(false);
 
   const userRosterId = parseRosterId(userTeam.id);
 
@@ -712,8 +918,8 @@ export default function TradeNegotiations({ league, userTeam }: { league: League
     for (const t of league.teams) {
       m.set(parseRosterId(t.id), {
         name:    t.name,
-        avatar:  t.avatar ?? null,
-        ownerId: t.ownerId ?? null,
+        avatar:  t.avatar    ?? null,
+        ownerId: t.ownerId   ?? null,
       });
     }
     return m;
@@ -751,19 +957,77 @@ export default function TradeNegotiations({ league, userTeam }: { league: League
     history:  trades.filter(t => t.status === "complete" || t.status === "rejected" || t.status === "failed"),
   }), [trades]);
 
-  const handleOpenDm = useCallback(async (ownerId: string) => {
-    if (dmCache.has(ownerId)) return;
+  // ── DM helpers ──
+
+  /** Fetch the DM channel id for an owner (cached). Returns null if no DM exists. */
+  const fetchDmId = useCallback(async (ownerId: string): Promise<string | null> => {
+    if (dmCache.has(ownerId)) return dmCache.get(ownerId) ?? null;
     setDmLoading(prev => new Set(prev).add(ownerId));
     try {
       const dmId = await getDmByMembers(ownerId);
       setDmCache(prev => new Map(prev).set(ownerId, dmId));
+      return dmId;
     } catch {
       setDmCache(prev => new Map(prev).set(ownerId, null));
-      toast({ title: "Could not open DM", description: "You can message this manager directly in Sleeper.", variant: "destructive" });
+      return null;
     } finally {
       setDmLoading(prev => { const s = new Set(prev); s.delete(ownerId); return s; });
     }
-  }, [dmCache, toast]);
+  }, [dmCache]);
+
+  /** Opens the SendDmModal — fetches dmId first if not cached. */
+  const handleMessageClick = useCallback(async (trade: NegTrade) => {
+    const ownerId = trade.partnerOwnerId;
+    if (!ownerId) return;
+    const cachedDmId = dmCache.has(ownerId) ? (dmCache.get(ownerId) ?? null) : undefined;
+    // Optimistically open the modal — it will show a loading state while dmId resolves
+    setDmModalState({ trade, dmId: cachedDmId });
+    if (cachedDmId === undefined) {
+      // Still need to fetch — update dmId in the modal once resolved
+      const resolved = await fetchDmId(ownerId);
+      setDmModalState(prev => prev?.trade.transactionId === trade.transactionId
+        ? { trade, dmId: resolved }
+        : prev
+      );
+    }
+  }, [dmCache, fetchDmId]);
+
+  /** Called from PostCounterDmPrompt "Yes" — fetches dmId then opens modal */
+  const handlePostCounterDm = useCallback(async () => {
+    if (!pendingDmTrade) return;
+    setPendingDmTrade(null);
+    await handleMessageClick(pendingDmTrade);
+  }, [pendingDmTrade, handleMessageClick]);
+
+  const handleSendDm = useCallback(async (text: string, attachTradeCard: boolean) => {
+    if (!dmModalState?.dmId) return;
+    const { trade, dmId } = dmModalState;
+    setDmSending(true);
+    try {
+      await sendTradeMessage({
+        dmId: dmId!,
+        text,
+        transactionId: trade.transactionId,
+        leagueId: trade.leagueId,
+        status: trade.status,
+        transactionsByRoster: buildTransactionsByRoster(trade.rawTransaction),
+        usersInLeagueMap: buildUsersInLeagueMap(league.teams),
+        attachTradeCard,
+      });
+      toast({ title: "DM sent!", description: `Message delivered to ${trade.partnerName}.` });
+      setDmModalState(null);
+    } catch (err: any) {
+      toast({
+        title: "DM failed",
+        description: err?.message || "Could not send message. Try in the Sleeper app.",
+        variant: "destructive",
+      });
+    } finally {
+      setDmSending(false);
+    }
+  }, [dmModalState, league.teams, toast]);
+
+  // ── Trade actions ──
 
   const openDetails = useCallback((t: NegTrade) => { setSelectedTrade(t); setDetailsOpen(true); }, []);
   const openCounter = useCallback((t: NegTrade) => { setSelectedTrade(t); setCounterOpen(true); }, []);
@@ -778,14 +1042,12 @@ export default function TradeNegotiations({ league, userTeam }: { league: League
     try {
       if (action === "accept") {
         await acceptTrade(trade.leagueId, trade.transactionId);
-        const msg = "Trade accepted! Check Sleeper to confirm.";
-        setConfirmResult({ success: true, message: msg });
-        toast({ title: "Trade accepted", description: msg });
+        setConfirmResult({ success: true, message: "Trade accepted! Check Sleeper to confirm." });
+        toast({ title: "Trade accepted", description: "Check Sleeper to confirm." });
       } else {
         await rejectTrade(trade.leagueId, trade.transactionId, trade.leg);
-        const msg = "Trade rejected successfully.";
-        setConfirmResult({ success: true, message: msg });
-        toast({ title: "Trade rejected", description: msg });
+        setConfirmResult({ success: true, message: "Trade rejected successfully." });
+        toast({ title: "Trade rejected" });
       }
       setRawTxns(prev => prev.map(t =>
         t.transaction_id === trade.transactionId
@@ -817,8 +1079,10 @@ export default function TradeNegotiations({ league, userTeam }: { league: League
         rejectTransactionLeg: selectedTrade.leg,
       });
       toast({ title: "Counter sent", description: `Counter offer sent to ${selectedTrade.partnerName}. The original offer has been rejected.` });
+      const tradeForDm = selectedTrade;
       setCounterOpen(false);
       setDetailsOpen(false);
+      setPendingDmTrade(tradeForDm); // prompts post-counter DM dialog
       setTimeout(() => fetchTrades(), 1500);
     } catch (err: any) {
       toast({ title: "Counter failed", description: err?.message || "Failed to send counter. Try in the Sleeper app.", variant: "destructive" });
@@ -826,6 +1090,8 @@ export default function TradeNegotiations({ league, userTeam }: { league: League
       setCounterLoading(false);
     }
   }, [selectedTrade, fetchTrades, toast]);
+
+  // ── Auth gate ──
 
   if (!hasSession) {
     return (
@@ -912,12 +1178,11 @@ export default function TradeNegotiations({ league, userTeam }: { league: League
               trade={trade}
               actionLoading={actionLoading === trade.transactionId}
               dmLoading={!!(trade.partnerOwnerId && dmLoading.has(trade.partnerOwnerId))}
-              dmId={trade.partnerOwnerId ? dmCache.get(trade.partnerOwnerId) : undefined}
               onView={() => openDetails(trade)}
               onCounter={() => openCounter(trade)}
               onAccept={() => handleAcceptClick(trade)}
               onReject={() => handleRejectClick(trade)}
-              onOpenDm={() => trade.partnerOwnerId && handleOpenDm(trade.partnerOwnerId)}
+              onMessage={() => handleMessageClick(trade)}
             />
           ))}
         </div>
@@ -929,6 +1194,7 @@ export default function TradeNegotiations({ league, userTeam }: { league: League
         onAccept={() => { setDetailsOpen(false); selectedTrade && handleAcceptClick(selectedTrade); }}
         onCounter={() => { setDetailsOpen(false); selectedTrade && openCounter(selectedTrade); }}
         onReject={() => { setDetailsOpen(false); selectedTrade && handleRejectClick(selectedTrade); }}
+        onMessage={() => { setDetailsOpen(false); selectedTrade && handleMessageClick(selectedTrade); }}
         actionLoading={!!(selectedTrade && actionLoading === selectedTrade.transactionId)}
         leagueName={league.name}
       />
@@ -941,6 +1207,21 @@ export default function TradeNegotiations({ league, userTeam }: { league: League
         onConfirm={handleConfirm} onCancel={() => { setConfirmState(null); setConfirmResult(null); }}
         loading={!!(confirmState?.trade && actionLoading === confirmState.trade.transactionId)}
         result={confirmResult}
+      />
+      <PostCounterDmPrompt
+        trade={pendingDmTrade}
+        onSendDm={handlePostCounterDm}
+        onDismiss={() => setPendingDmTrade(null)}
+      />
+      <SendDmModal
+        trade={dmModalState?.trade ?? null}
+        dmId={dmModalState?.dmId}
+        open={!!dmModalState}
+        onClose={() => setDmModalState(null)}
+        onSend={handleSendDm}
+        sending={dmSending}
+        leagueName={league.name}
+        currentDisplayName={currentDisplayName}
       />
     </div>
   );

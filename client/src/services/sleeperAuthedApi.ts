@@ -546,6 +546,94 @@ export async function getDmByMembers(otherUserId: string): Promise<string | null
   return data.get_dm_by_members?.dm_id ?? null;
 }
 
+// ─── create_message (trade DM) ───────────────────────────────────────────────
+
+export interface SendTradeMessageParams {
+  dmId: string;
+  text: string;
+  transactionId: string;
+  leagueId: string;
+  status: string;
+  transactionsByRoster: Record<string, unknown>;
+  usersInLeagueMap: Record<string, unknown>;
+  attachTradeCard: boolean;
+}
+
+export interface SendTradeMessageResult {
+  message_id: string;
+  text: string;
+}
+
+/**
+ * Send a DM to a trade partner via Sleeper's create_message mutation.
+ *
+ * Generates a fresh client_id via crypto.randomUUID() on every call to
+ * prevent duplicate messages on retry.
+ *
+ * When attachTradeCard=true the trade metadata is sent as attachment_data so
+ * Sleeper can render an inline trade card inside the DM thread.
+ * When false, a plain text message is sent with empty attachment arrays.
+ *
+ * NEVER log the JWT or the raw message text.
+ */
+export async function sendTradeMessage(
+  params: SendTradeMessageParams
+): Promise<SendTradeMessageResult> {
+  const {
+    dmId, text, transactionId, leagueId, status,
+    transactionsByRoster, usersInLeagueMap, attachTradeCard,
+  } = params;
+
+  const clientId = crypto.randomUUID();
+
+  const kData = attachTradeCard
+    ? ["status", "transactions_by_roster", "transaction_id", "league_id", "users_in_league_map"]
+    : [];
+  const vData = attachTradeCard
+    ? [
+        status,
+        JSON.stringify(transactionsByRoster),
+        transactionId,
+        leagueId,
+        JSON.stringify(usersInLeagueMap),
+      ]
+    : [];
+
+  const data = await sleeperGraphQLRequest<{
+    create_message: SendTradeMessageResult;
+  }>({
+    operationName: "create_message",
+    query: `
+      mutation create_message(
+        $text: String,
+        $k_attachment_data: [String],
+        $v_attachment_data: [String]
+      ) {
+        create_message(
+          parent_id: "${dmId}",
+          client_id: "${clientId}",
+          parent_type: "dm",
+          text: $text,
+          shard_min: null,
+          shard_max: null,
+          attachment_type: "trade_dm",
+          k_attachment_data: $k_attachment_data,
+          v_attachment_data: $v_attachment_data
+        ) {
+          message_id
+          text
+        }
+      }
+    `,
+    variables: {
+      text,
+      k_attachment_data: kData,
+      v_attachment_data: vData,
+    },
+  });
+  return data.create_message;
+}
+
 /** @todo Discover send_message mutation shape from sleeper.com/graphql */
 export async function sendLeagueChatMessage(
   _leagueId: string,
