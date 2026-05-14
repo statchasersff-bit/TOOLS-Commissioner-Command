@@ -3,7 +3,6 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { DataTable } from "@/components/DataTable";
@@ -16,7 +15,7 @@ import { API_BASE } from "@/lib/apiBase";
 import type { League, Team, Tier, Player, Pick, TradeRecord, TradeSide, CrawlStatus } from "@/types";
 import { cn } from "@/lib/utils";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
-import { ArrowRightLeft, TrendingUp, TrendingDown, Target, X, Plus, Search, Info, Scale, RotateCcw, Database, Play, Pause, Loader2, ChevronLeft, ChevronRight, ChevronDown } from "lucide-react";
+import { ArrowRightLeft, TrendingUp, TrendingDown, Target, X, Plus, Search, Scale, RotateCcw, Database, Play, Pause, Loader2, ChevronLeft, ChevronRight, ChevronDown } from "lucide-react";
 
 interface TradeProps {
   league: League;
@@ -910,13 +909,11 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
   const { getPlayerValue, getRedraftValue, optimizeLineup, valuesBySleeperId } = useValueModel();
   const [sideA, setSideA] = useState<TradeAsset[]>([]);
   const [sideB, setSideB] = useState<TradeAsset[]>([]);
-  const [valueAdjustment, setValueAdjustment] = useState(true);
-  const [overpayTax, setOverpayTax] = useState(true);
+  const valueAdjustment = true;
+  const overpayTax = true;
   const [tradePartnerId, setTradePartnerId] = useState<string>("");
   const [sideARosterId, setSideARosterId] = useState<string>(userTeam.id);
   const [sideBRosterId, setSideBRosterId] = useState<string>("");
-
-  const [expandedInfo, setExpandedInfo] = useState<string | null>(null);
 
   const leagueFormat = useMemo(() => {
     const sf = league.scoringFormat?.toLowerCase() || "";
@@ -1321,67 +1318,18 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
     <div className="space-y-6">
       <SectionHeader title="Trade Calculator" subtitle="Evaluate trades with dynasty values and diminishing returns" />
 
-      <Card className="p-3 sm:p-4">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3 sm:gap-4 flex-wrap">
-            <div className="flex items-center gap-1.5">
-              <Switch
-                checked={valueAdjustment}
-                onCheckedChange={setValueAdjustment}
-                data-testid="switch-value-adjustment"
-              />
-              <button
-                type="button"
-                className="flex items-center gap-1 cursor-help"
-                onClick={() => setExpandedInfo(expandedInfo === "value-adj" ? null : "value-adj")}
-                data-testid="trigger-info-value-adjustment"
-              >
-                <span className="text-xs sm:text-sm font-medium whitespace-nowrap">Value Adj.</span>
-                <Info className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
-              </button>
-            </div>
-
-            <div className="flex items-center gap-1.5">
-              <Switch
-                checked={overpayTax}
-                onCheckedChange={setOverpayTax}
-                data-testid="switch-overpay-tax"
-              />
-              <button
-                type="button"
-                className="flex items-center gap-1 cursor-help"
-                onClick={() => setExpandedInfo(expandedInfo === "overpay" ? null : "overpay")}
-                data-testid="trigger-info-overpay-tax"
-              >
-                <span className="text-xs sm:text-sm font-medium whitespace-nowrap">Top-Asset Premium</span>
-                <Info className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
-              </button>
-            </div>
-          </div>
-
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={clearAll}
-            className="flex-shrink-0 h-8 px-2.5 sm:px-3"
-            data-testid="button-clear-trade"
-          >
-            <RotateCcw className="w-3 h-3 sm:mr-1" />
-            <span className="hidden sm:inline">Clear</span>
-          </Button>
-        </div>
-
-        {expandedInfo === "value-adj" && (
-          <p className="text-xs text-muted-foreground mt-3 px-1" data-testid="text-info-value-adjustment">
-            Diminishing returns on extra pieces; emphasizes the key asset in the deal. Assets are sorted by value and weighted: 100%, 85%, 72%, 60%, 50%, 42%, 36%, 31%.
-          </p>
-        )}
-        {expandedInfo === "overpay" && (
-          <p className="text-xs text-muted-foreground mt-3 px-1" data-testid="text-info-overpay-tax">
-            Penalizes consolidation deals. If the top asset is more than 35% of that side's raw total, a 3% penalty is applied to the adjusted total.
-          </p>
-        )}
-      </Card>
+      <div className="flex justify-end">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={clearAll}
+          className="flex-shrink-0 h-8 px-2.5 sm:px-3"
+          data-testid="button-clear-trade"
+        >
+          <RotateCcw className="w-3 h-3 sm:mr-1" />
+          <span className="hidden sm:inline">Clear</span>
+        </Button>
+      </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
         {renderSide("a", sideA, rawA)}
