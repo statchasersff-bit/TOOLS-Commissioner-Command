@@ -1394,16 +1394,9 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
                     return (
                       <div
                         key={asset.id}
-                        className={`relative flex flex-col items-center gap-1 pt-2 pb-2 px-2 rounded-xl bg-muted/20 border min-w-[68px] ${borderColor}`}
+                        className={`relative flex flex-col items-center gap-1 pt-2 pb-2 px-2 rounded-xl bg-muted/20 border min-w-[68px] cursor-pointer hover:bg-red-500/10 hover:border-red-500/40 transition-colors ${borderColor}`}
+                        onClick={() => removeAsset(side, asset.id)}
                       >
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-background border border-border/60 text-muted-foreground hover:text-foreground p-0"
-                          onClick={() => removeAsset(side, asset.id)}
-                        >
-                          <X className="w-3 h-3" />
-                        </Button>
                         {asset.type === "player" && asset.player ? (
                           <PlayerAvatar
                             id={asset.player.sleeperId || asset.player.id}
