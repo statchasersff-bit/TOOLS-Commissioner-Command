@@ -9,6 +9,7 @@ import { SectionHeader } from "@/components/SectionHeader";
 import { getLeagueTeamTiers, getTierColor, getTierEmoji, getTierTooltip, isContenderTier, isRebuilderTier, generateInsights, computeNowScore, computeFutureScore, getDynastyWindowLabel, getDynastyWindowSubtitle, getDynastyWindowColor } from "@/data/mockData";
 import { useValueModel } from "@/contexts/ValueModelContext";
 import type { League, Team, Player } from "@/types";
+import { formatPickLabel } from "@/types";
 import { cn } from "@/lib/utils";
 import { Trophy, Zap, Target, Calendar, Users, Medal, ArrowRight, ArrowUp, ArrowDown, ArrowUpDown, Table, ArrowRightLeft, Compass, Flame, Sprout, Archive, ChevronDown, ChevronUp, ChevronRight, TrendingUp, TrendingDown, MapPin, BarChart2, Grid3X3, List, LayoutDashboard, Calculator, Activity, Waves, CheckCircle2, AlertTriangle, Coins, Settings2 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -1867,9 +1868,9 @@ export function MyTeam({ league, userTeam, onNavigate }: DashboardOverviewProps)
             data-testid="group-toggle-all"
           >
             <div className="flex items-center gap-3">
-              <span className="text-sm font-bold text-foreground">QB · RB · WR · TE</span>
+              <span className="text-sm font-bold text-foreground">QB · RB · WR · TE · Picks</span>
               <Badge variant="secondary" className="text-xs">
-                {positionData.reduce((s, d) => s + d.players.length, 0)} players
+                {positionData.reduce((s, d) => s + d.players.length, 0)} players · {userTeam.picks.length} picks
               </Badge>
             </div>
             {posGroupOpen
@@ -1879,8 +1880,8 @@ export function MyTeam({ league, userTeam, onNavigate }: DashboardOverviewProps)
 
           {posGroupOpen && (
             <div className="border-t border-border/40">
-              {/* 4-column grid, one per position */}
-              <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-border/30">
+              {/* 5-column grid: 4 positions + picks */}
+              <div className="grid grid-cols-2 md:grid-cols-5 divide-x divide-border/30">
                 {positionData.map(({ pos, redraftRank, dynastyRank, players }) => {
                   const starters = players.filter(p => p.starter);
                   const bench    = players.filter(p => !p.starter);
@@ -1970,6 +1971,58 @@ export function MyTeam({ league, userTeam, onNavigate }: DashboardOverviewProps)
                     </div>
                   );
                 })}
+
+                {/* ── Picks column ── */}
+                {(() => {
+                  const picks = [...userTeam.picks].sort((a, b) =>
+                    a.year !== b.year ? a.year - b.year : a.round - b.round
+                  );
+                  const rankedTeams = [...league.teams].sort(
+                    (a, b) => (b.metrics?.picks ?? 0) - (a.metrics?.picks ?? 0)
+                  );
+                  const picksRank = rankedTeams.findIndex(t => t.id === userTeam.id) + 1 || total;
+                  const pStyle = rankBg(picksRank, total);
+                  return (
+                    <div className="flex flex-col" data-testid="group-picks">
+                      {/* Header */}
+                      <div className="px-3 pt-3 pb-2 border-b border-border/20">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-black uppercase tracking-widest text-violet-500 dark:text-violet-400">Picks</span>
+                          <Badge variant="outline" className="text-[10px] px-1 h-4 border bg-violet-500/10 border-violet-500/20 text-violet-600 dark:text-violet-400">
+                            {picks.length}
+                          </Badge>
+                        </div>
+                      </div>
+
+                      {/* Pick list */}
+                      <div className="flex-1 px-3 py-2 space-y-0">
+                        {picks.length === 0 ? (
+                          <p className="text-[11px] text-muted-foreground italic py-1">None</p>
+                        ) : picks.map((pk, i) => (
+                          <div key={i} className="flex items-center justify-between py-1.5 border-b border-border/10 last:border-0">
+                            <div className="min-w-0">
+                              <p className="text-[11px] font-semibold text-foreground leading-tight truncate">{formatPickLabel(pk)}</p>
+                              {pk.projectedRange && (
+                                <p className="text-[10px] text-muted-foreground leading-tight">{pk.projectedRange}</p>
+                              )}
+                            </div>
+                            <span className="text-[10px] font-bold text-violet-500 dark:text-violet-400 tabular-nums ml-1 flex-shrink-0">{pk.value}</span>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Rank footer */}
+                      <div className="px-3 py-2.5 border-t border-border/20 bg-muted/20 space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider">Pick Capital</span>
+                          <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded border", pStyle.badge)}>
+                            #{picksRank}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           )}
