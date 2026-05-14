@@ -1140,7 +1140,7 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
                                 const dynRank = dRanks[pos] ?? total;
                                 const wnRank  = rRanks[pos]  ?? total;
                                 const players = [...team.roster]
-                                  .filter(p => p.position === pos)
+                                  .filter(p => p.pos === pos)
                                   .sort((a, b) => getPlayerValue(b) - getPlayerValue(a))
                                   .slice(0, 5);
                                 return (
