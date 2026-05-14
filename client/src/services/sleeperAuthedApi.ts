@@ -521,6 +521,31 @@ export async function rejectTrade(
   return data.reject_trade;
 }
 
+// ─── get_dm_by_members ────────────────────────────────────────────────────────
+
+/**
+ * Look up the DM channel ID for a given Sleeper user.
+ *
+ * Returns the dm_id string on success, or null if no DM exists yet.
+ * Use the dm_id to link to https://sleeper.com/dms/<dm_id>.
+ * Never display DM contents — only store/use the dm_id as a link target.
+ */
+export async function getDmByMembers(otherUserId: string): Promise<string | null> {
+  const data = await sleeperGraphQLRequest<{
+    get_dm_by_members: { dm_id: string } | null;
+  }>({
+    operationName: "get_dm_by_members",
+    query: `
+      query get_dm_by_members {
+        get_dm_by_members(members: ["${otherUserId}"]) {
+          dm_id
+        }
+      }
+    `,
+  });
+  return data.get_dm_by_members?.dm_id ?? null;
+}
+
 /** @todo Discover send_message mutation shape from sleeper.com/graphql */
 export async function sendLeagueChatMessage(
   _leagueId: string,

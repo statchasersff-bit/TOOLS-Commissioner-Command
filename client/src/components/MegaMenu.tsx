@@ -4,7 +4,7 @@ import {
   BarChart2, LayoutDashboard, Users, Share2,
   Trophy, GitCompare, Coins, ArrowLeftRight, Database, Search,
   Calculator, Eye, LineChart, TrendingUp, Zap, ChevronDown,
-  LucideIcon, Waves, Crosshair, LayoutGrid, Inbox,
+  LucideIcon, Waves, Crosshair, LayoutGrid, Inbox, MessageCircle,
 } from "lucide-react";
 import type { MainTabConfig } from "../types";
 import logoDark from "@assets/statchasers_logo_transparent_dark_1772764844282.png";
@@ -60,8 +60,9 @@ const MEGA_DATA: Record<string, MegaSection[]> = {
     {
       title: "Trade Tools",
       items: [
-        { subId: "trade-sync",          label: "Trade Sync", description: "Pending trade inbox across all your leagues", icon: Inbox      },
-        { subId: "trade-database",      label: "Database",   description: "Search real dynasty trades by player",        icon: Database   },
+        { subId: "trade-sync",           label: "Trade Sync",    description: "Pending trade inbox across all your leagues",    icon: Inbox          },
+        { subId: "trade-negotiations",  label: "Negotiations",  description: "Active offers, counters and DM per league",      icon: MessageCircle  },
+        { subId: "trade-database",      label: "Database",      description: "Search real dynasty trades by player",           icon: Database       },
         { subId: "positional-analysis", label: "Finder",     description: "Find trade targets by position & value",      icon: Search     },
         { subId: "trade-calculator",    label: "Calculator", description: "Value-based trade evaluator",                 icon: Calculator },
         { subId: "trade-block",         label: "Intel",      description: "Trade block activity & hot markets",          icon: Eye        },
