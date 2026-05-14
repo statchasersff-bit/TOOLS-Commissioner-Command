@@ -490,6 +490,8 @@ export function PortfolioSummary() {
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [exposureSortCol, setExposureSortCol] = useState<"name" | "pos" | "value" | "exposure" | "leagueCount">("exposure");
   const [exposureSortDir, setExposureSortDir] = useState<"asc" | "desc">("desc");
+  const [pendingTradeCount, setPendingTradeCount] = useState<number | null>(null);
+  const [pendingTradeLoading, setPendingTradeLoading] = useState(false);
 
   useEffect(() => {
     if (!isConnected || !user?.userId || leagues.length === 0) return;
@@ -508,6 +510,32 @@ export function PortfolioSummary() {
     });
     return () => { cancelled = true; };
   }, [isConnected, user?.userId, leagues]);
+
+  useEffect(() => {
+    if (!isConnected || leagues.length === 0) return;
+    let cancelled = false;
+    setPendingTradeLoading(true);
+    import("@/services/sleeperAuthedApi").then(({ fetchLeagueTransactionsFiltered }) =>
+      Promise.allSettled(
+        leagues.filter(l => !l.isBestBall).map(l =>
+          fetchLeagueTransactionsFiltered(l.leagueId, ["trade"], [], [])
+        )
+      )
+    ).then((results) => {
+      if (cancelled) return;
+      let count = 0;
+      for (const r of results) {
+        if (r.status === "fulfilled") {
+          count += r.value.filter((t: any) => t.status === "proposed").length;
+        }
+      }
+      setPendingTradeCount(count);
+      setPendingTradeLoading(false);
+    }).catch(() => {
+      if (!cancelled) { setPendingTradeCount(null); setPendingTradeLoading(false); }
+    });
+    return () => { cancelled = true; };
+  }, [isConnected, leagues]);
 
   if (!isConnected) {
     return (
@@ -585,8 +613,14 @@ export function PortfolioSummary() {
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <KpiCard label="Total Leagues" value={leagues.length} icon={Trophy} />
-        <KpiCard label="Best Ball" value={bestBallCount} icon={Shield} subtitle={`${leagues.length - bestBallCount} Regular`} />
+        <KpiCard label="Total Leagues" value={leagues.length} icon={Trophy} subtitle={`${bestBallCount} Best Ball · ${leagues.length - bestBallCount} Regular`} />
+        <KpiCard
+          label="Trades in Inbox"
+          value={pendingTradeLoading ? "..." : pendingTradeCount !== null ? pendingTradeCount : "—"}
+          icon={ArrowRightLeft}
+          loading={pendingTradeLoading}
+          subtitle="Pending proposals"
+        />
         <KpiCard
           label="Win Rate"
           value={summaryLoading ? "..." : summaryData ? `${summaryData.winRate}%` : "--"}
