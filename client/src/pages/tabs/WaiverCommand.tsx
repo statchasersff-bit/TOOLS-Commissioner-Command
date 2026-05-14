@@ -28,7 +28,7 @@ import {
 
 const SLEEPER_API = "https://api.sleeper.app/v1";
 
-type SortKey = "tier" | "openSlots" | "faabPct" | "difference" | "leagueName";
+type SortKey = "tier" | "openSlots" | "faabPct" | "difference" | "leagueName" | "bestAvailValue" | "lowestValue";
 type WaiverView = "overview" | "league" | "bulk";
 
 interface PlayerSummary {
@@ -464,6 +464,8 @@ export default function WaiverCommand() {
       else if (sortKey === "openSlots") cmp = b.openSlots - a.openSlots;
       else if (sortKey === "faabPct")   cmp = b.faabPct - a.faabPct;
       else if (sortKey === "difference") cmp = b.difference - a.difference;
+      else if (sortKey === "bestAvailValue") cmp = (b.bestAvailable?.value ?? 0) - (a.bestAvailable?.value ?? 0);
+      else if (sortKey === "lowestValue")    cmp = (b.lowestOnTeam?.value ?? 0) - (a.lowestOnTeam?.value ?? 0);
       return sortAsc ? cmp : -cmp;
     });
     return arr;
@@ -618,8 +620,8 @@ export default function WaiverCommand() {
                   { key: "leagueName" as SortKey, label: "League",       align: "left"   },
                   { key: "openSlots"  as SortKey, label: "Open",         align: "center" },
                   { key: "faabPct"    as SortKey, label: "FAAB",         align: "center" },
-                  { key: null,                    label: "Best Avail",   align: "left"   },
-                  { key: null,                    label: "Lowest",       align: "left"   },
+                  { key: "bestAvailValue" as SortKey, label: "Best Avail",   align: "left"   },
+                  { key: "lowestValue"    as SortKey, label: "Lowest",       align: "left"   },
                   { key: "difference" as SortKey, label: "Diff",         align: "center" },
                   { key: null,                    label: "Claim",        align: "center" },
                   { key: null,                    label: "Detail",       align: "center" },
