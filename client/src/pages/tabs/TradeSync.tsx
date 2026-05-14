@@ -1200,9 +1200,7 @@ export default function TradeSync() {
           </select>
         )}
 
-        <span className="text-xs text-muted-foreground ml-auto">
-          {filteredTrades.length} trade{filteredTrades.length !== 1 ? "s" : ""}
-        </span>
+
       </div>
 
       {/* Trade List */}
