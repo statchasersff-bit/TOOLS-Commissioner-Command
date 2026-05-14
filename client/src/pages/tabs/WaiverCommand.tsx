@@ -697,11 +697,6 @@ export default function WaiverCommand() {
                 ))}
               </SelectContent>
             </Select>
-            {detailRow && (
-              <span className="text-xs text-muted-foreground">
-                {rows.filter(r => !r.loading && !r.error).length} leagues loaded
-              </span>
-            )}
           </div>
 
           {detailRow ? (
@@ -1994,18 +1989,6 @@ function LeagueWaiverDetail({
             <ArrowLeft className="w-3.5 h-3.5" />
             All Leagues
           </button>
-          <div className="flex items-center gap-2.5">
-            {row.leagueAvatar ? (
-              <img src={row.leagueAvatar} alt="" className="w-9 h-9 rounded-full object-cover ring-1 ring-border/40" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
-            ) : (
-              <div className="w-9 h-9 rounded-full bg-[#0b3a7a]/20 dark:bg-blue-900/40 flex items-center justify-center ring-1 ring-border/40">
-                <span className="text-[12px] font-bold text-[#0b3a7a] dark:text-blue-400 uppercase">{row.leagueName[0] ?? "?"}</span>
-              </div>
-            )}
-            <div>
-              <h2 className="text-lg font-bold text-foreground leading-tight">{row.leagueName}</h2>
-            </div>
-          </div>
         </div>
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <span className="font-semibold text-foreground">${row.faabRemaining}</span> FAAB remaining
