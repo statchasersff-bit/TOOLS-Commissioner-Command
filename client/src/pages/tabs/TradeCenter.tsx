@@ -1271,55 +1271,6 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
             getPlayerValue={getPlayerValue}
           />
 
-          <div className="min-h-[80px]">
-            {assets.length === 0 && (
-              <p className="text-xs text-muted-foreground py-4 text-center" data-testid={`text-empty-side-${side}`}>
-                Search for players above to add them
-              </p>
-            )}
-            <div className="flex flex-wrap gap-3">
-              {assets.map((asset) => {
-                const lastName = asset.type === "player" && asset.player
-                  ? asset.player.name.split(" ").slice(1).join(" ") || asset.player.name
-                  : asset.label;
-                const team = (asset.player as any)?.team ?? "";
-                return (
-                  <div
-                    key={asset.id}
-                    className="relative flex flex-col items-center gap-1 pt-2 pb-2 px-2 rounded-xl bg-muted/20 border border-border/30 min-w-[72px]"
-                    data-testid={`asset-${side}-${asset.id}`}
-                  >
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-background border border-border/60 text-muted-foreground hover:text-foreground p-0"
-                      onClick={() => removeAsset(side, asset.id)}
-                      data-testid={`button-remove-${side}-${asset.id}`}
-                    >
-                      <X className="w-3 h-3" />
-                    </Button>
-                    {asset.type === "player" && asset.player ? (
-                      <PlayerAvatar
-                        id={asset.player.sleeperId || asset.player.id}
-                        name={asset.player.name}
-                        pos={asset.player.pos}
-                        team={team}
-                        size="md"
-                        compact
-                      />
-                    ) : (
-                      <div className="w-11 h-11 rounded-full bg-purple-900/40 border border-purple-700/40 flex items-center justify-center flex-shrink-0">
-                        <span className="text-[11px] font-bold text-purple-400">PK</span>
-                      </div>
-                    )}
-                    <p className="text-[11px] font-bold text-foreground text-center leading-tight max-w-[72px] truncate">{lastName}</p>
-                    {team && <p className="text-[10px] text-muted-foreground text-center leading-none">{team}</p>}
-                    {!team && asset.type === "pick" && <p className="text-[10px] text-muted-foreground text-center leading-none">{asset.value.toLocaleString()}</p>}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
 
 
           {rosterTeam && rosterPlayers.length > 0 && (
@@ -1400,61 +1351,60 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
               </div>
             </div>
 
-            {/* 3. PLAYER STACKS */}
+            {/* 3. PLAYER CARDS */}
             {(() => {
-              const playersA = sideA.filter(a => a.type === "player" && a.player?.sleeperId);
-              const playersB = sideB.filter(a => a.type === "player" && a.player?.sleeperId);
-              const picksA = sideA.filter(a => a.type === "pick").length;
-              const picksB = sideB.filter(a => a.type === "pick").length;
-              const maxCount = Math.max(playersA.length + (picksA > 0 ? 1 : 0), playersB.length + (picksB > 0 ? 1 : 0));
-              const compact = maxCount > 4;
-              const imgSize = compact ? "w-9 h-9 sm:w-11 sm:h-11" : "w-11 h-11 sm:w-14 sm:h-14";
-              const overlap = compact ? "-space-x-2.5" : "-space-x-3";
-              const posBorder: Record<string, string> = {
-                QB: "border-red-500",
-                RB: "border-emerald-500",
-                WR: "border-blue-500",
-                TE: "border-yellow-500",
-              };
-              const renderStack = (players: typeof playersA, picks: number, team: typeof sideATeam, fallback: string) => (
-                <div className="flex flex-col items-center gap-2">
-                  <div className={`flex items-center ${overlap} flex-wrap justify-center`}>
-                    {players.map((a, i) => (
+              const renderCards = (assets: TradeAsset[], side: "a" | "b") => (
+                <div className="flex flex-wrap gap-2 justify-center">
+                  {assets.map((asset) => {
+                    const lastName = asset.type === "player" && asset.player
+                      ? asset.player.name.split(" ").slice(1).join(" ") || asset.player.name
+                      : asset.label;
+                    const team = (asset.player as any)?.team ?? "";
+                    return (
                       <div
-                        key={a.id}
-                        className={`relative ${imgSize} rounded-full border-2 ${posBorder[a.player?.pos || ""] || "border-muted-foreground"} bg-muted/30 shadow-md`}
-                        style={{ zIndex: 20 - i }}
+                        key={asset.id}
+                        className="relative flex flex-col items-center gap-1 pt-2 pb-2 px-2 rounded-xl bg-muted/20 border border-border/30 min-w-[68px]"
                       >
-                        <div className="w-full h-full rounded-full overflow-hidden">
-                          <img
-                            src={`https://sleepercdn.com/content/nfl/players/${a.player!.sleeperId}.jpg`}
-                            alt={a.label}
-                            className="w-full h-full object-cover"
-                            onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-background border border-border/60 text-muted-foreground hover:text-foreground p-0"
+                          onClick={() => removeAsset(side, asset.id)}
+                        >
+                          <X className="w-3 h-3" />
+                        </Button>
+                        {asset.type === "player" && asset.player ? (
+                          <PlayerAvatar
+                            id={asset.player.sleeperId || asset.player.id}
+                            name={asset.player.name}
+                            pos={asset.player.pos}
+                            team={team}
+                            size="md"
+                            compact
                           />
-                        </div>
-                        {a.player?.team && a.player.team !== "FA" && (
-                          <img
-                            src={`https://sleepercdn.com/images/team_logos/nfl/${a.player.team.toLowerCase()}.jpg`}
-                            alt={a.player.team}
-                            className="absolute bottom-0 right-0 w-3.5 h-3.5 sm:w-4 sm:h-4 rounded-full border border-background bg-background object-contain shadow-sm"
-                            onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-                          />
+                        ) : (
+                          <div className="w-11 h-11 rounded-full bg-purple-900/40 border border-purple-700/40 flex items-center justify-center flex-shrink-0">
+                            <span className="text-[11px] font-bold text-purple-400">PK</span>
+                          </div>
                         )}
+                        <p className="text-[11px] font-bold text-foreground text-center leading-tight max-w-[68px] truncate">{lastName}</p>
+                        {team && <p className="text-[10px] text-muted-foreground text-center leading-none">{team}</p>}
+                        {!team && asset.type === "pick" && <p className="text-[10px] text-muted-foreground text-center leading-none">{asset.value.toLocaleString()}</p>}
                       </div>
-                    ))}
-                    {picks > 0 && (
-                      <div className={`relative ${imgSize} rounded-full border-2 border-[#d4af37]/60 bg-[#0b3a7a]/10 dark:bg-[#d4af37]/10 shadow-md flex items-center justify-center`} style={{ zIndex: 5 }}>
-                        <span className="text-[9px] sm:text-[10px] font-bold text-[#d4af37]">{picks} PK</span>
-                      </div>
-                    )}
-                  </div>
+                    );
+                  })}
                 </div>
               );
               return (
-                <div className="flex items-center justify-around gap-4 px-2">
-                  {renderStack(playersA, picksA, sideBTeam, "Side B")}
-                  {renderStack(playersB, picksB, sideATeam, "Side A")}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2 text-center">{sideBTeam?.owner || "Side B"} sends</p>
+                    {sideA.length > 0 ? renderCards(sideA, "a") : <p className="text-[10px] text-muted-foreground text-center py-2">Nothing yet</p>}
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2 text-center">{sideATeam?.owner || "Side A"} sends</p>
+                    {sideB.length > 0 ? renderCards(sideB, "b") : <p className="text-[10px] text-muted-foreground text-center py-2">Nothing yet</p>}
+                  </div>
                 </div>
               );
             })()}
