@@ -824,7 +824,7 @@ export async function fetchPortfolioSummary(
       exposure: Math.round((data.count / totalLeagues) * 100),
     }))
     .sort((a, b) => b.leagueCount - a.leagueCount)
-    .slice(0, 20);
+    .slice(0, 100);
 
   return {
     totalWins,
