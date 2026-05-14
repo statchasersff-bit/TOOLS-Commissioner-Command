@@ -433,7 +433,7 @@ export function LineupCommand() {
     (async () => {
       try {
         const state = await fetch(`${SLEEPER_API}/state/nfl`).then(r => r.json());
-        const w: number = state.week ?? 1;
+        const w: number = state.week || 1;
         const s: string = state.season ?? "2025";
         if (cancelled) return;
         setNflWeek(w);
