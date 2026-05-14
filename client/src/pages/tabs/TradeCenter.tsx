@@ -1308,7 +1308,7 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
                     {asset.type === "player" && (asset.player as any)?.team && (
                       <span className="text-[11px] text-muted-foreground">{(asset.player as any).team}</span>
                     )}
-                    <span className="text-[11px] text-muted-foreground">{asset.value.toLocaleString()}</span>
+                    <span className="text-[11px] text-muted-foreground">{asset.value.toLocaleString()} <span className="opacity-60">dyn</span></span>
                   </div>
                 </div>
                 <Button
@@ -1326,9 +1326,12 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
 
           <div className="flex items-center justify-between pt-2 border-t border-border/40">
             <span className="text-xs text-muted-foreground">{assets.length} piece{assets.length !== 1 ? "s" : ""}</span>
-            <span className="text-sm font-bold" data-testid={`text-raw-total-${side}`}>
-              {rawTotal.toLocaleString()}
-            </span>
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] text-muted-foreground/60 uppercase tracking-wide">Dynasty</span>
+              <span className="text-sm font-bold" data-testid={`text-raw-total-${side}`}>
+                {rawTotal.toLocaleString()}
+              </span>
+            </div>
           </div>
 
           {rosterTeam && rosterPlayers.length > 0 && (
