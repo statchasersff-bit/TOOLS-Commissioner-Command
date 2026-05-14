@@ -1353,6 +1353,12 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
 
             {/* 3. PLAYER CARDS */}
             {(() => {
+              const posBorder: Record<string, string> = {
+                QB: "border-rose-500",
+                RB: "border-emerald-500",
+                WR: "border-sky-500",
+                TE: "border-yellow-500",
+              };
               const renderCards = (assets: TradeAsset[], side: "a" | "b") => (
                 <div className="flex flex-wrap gap-2 justify-center">
                   {assets.map((asset) => {
@@ -1360,10 +1366,13 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
                       ? asset.player.name.split(" ").slice(1).join(" ") || asset.player.name
                       : asset.label;
                     const team = (asset.player as any)?.team ?? "";
+                    const borderColor = asset.type === "pick"
+                      ? "border-purple-500"
+                      : posBorder[asset.pos || ""] || "border-border/30";
                     return (
                       <div
                         key={asset.id}
-                        className="relative flex flex-col items-center gap-1 pt-2 pb-2 px-2 rounded-xl bg-muted/20 border border-border/30 min-w-[68px]"
+                        className={`relative flex flex-col items-center gap-1 pt-2 pb-2 px-2 rounded-xl bg-muted/20 border min-w-[68px] ${borderColor}`}
                       >
                         <Button
                           variant="ghost"
