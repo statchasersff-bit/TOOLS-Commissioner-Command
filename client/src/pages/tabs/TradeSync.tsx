@@ -84,7 +84,7 @@ async function fetchLeagueTradesForSync(leagueId: string, hasAuth: boolean): Pro
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type TradeView = "pending" | "incoming" | "outgoing" | "waiting" | "completed" | "rejected" | "cancelled" | "activity";
+type TradeView = "pending" | "incoming" | "outgoing" | "completed" | "rejected" | "cancelled" | "activity";
 // Sleeper's actual status strings (proposed = open offer, not yet accepted)
 type TradeStatus = "proposed" | "complete" | "rejected" | "failed" | "cancelled" | "counter_offered";
 
@@ -111,7 +111,7 @@ interface NormalizedTrade {
   leagueFormat: string;
   leagueAvatar: string | null;
   status: TradeStatus;
-  direction: "incoming" | "outgoing" | "waiting";
+  direction: "incoming" | "outgoing";
   partnerName: string;
   partnerAvatar: string | null;
   partnerRosterId: number;
@@ -215,19 +215,16 @@ function normalizeTrade(
   const iCreated        = t.creator === myUserId;
   const iHaveConsented  = (t.consenter_ids || []).includes(userRosterId);
 
-  let direction: "incoming" | "outgoing" | "waiting";
+  let direction: "incoming" | "outgoing";
   if (!isProposed) {
     // For completed/rejected/cancelled trades, use creator for history context
     direction = iCreated ? "outgoing" : "incoming";
-  } else if (iCreated) {
-    // I sent this offer (including counter-offers I initiated)
+  } else if (iCreated || iHaveConsented) {
+    // I sent this offer, or I already consented — waiting on them
     direction = "outgoing";
-  } else if (!iHaveConsented) {
-    // I haven't responded yet — needs my action (including counter-offers from partner)
-    direction = "incoming";
   } else {
-    // I already consented, waiting on the other party
-    direction = "waiting";
+    // I haven't responded yet — needs my action
+    direction = "incoming";
   }
 
   const iGivePlayers: AssetPlayer[] = [];
@@ -434,8 +431,6 @@ function DirectionPill({ direction, status }: { direction: NormalizedTrade["dire
     return <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-emerald-500 text-white">Incoming</span>;
   if (direction === "outgoing")
     return <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-blue-500 text-white">Outgoing</span>;
-  if (direction === "waiting")
-    return <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-amber-500 text-white">Waiting</span>;
   return null;
 }
 
@@ -465,7 +460,7 @@ function TradeCard({ trade, myUsername, myAvatar, onView }: {
     ? "Sent by You"
     : trade.direction === "incoming"
       ? `Sent by ${trade.partnerName}`
-      : "Awaiting response";
+      : `Sent by ${trade.partnerName}`;
 
   // User receives = iGet; Partner receives = iGive
   const myReceives = { players: trade.iGet.players, picks: trade.iGet.picks };
@@ -858,7 +853,6 @@ const VIEWS: Array<{ id: TradeView; label: string; icon: React.ElementType }> = 
   { id: "pending",   label: "All Open",   icon: Clock        },
   { id: "incoming",  label: "Incoming",   icon: Inbox        },
   { id: "outgoing",  label: "Outgoing",   icon: Send         },
-  { id: "waiting",   label: "Waiting",    icon: Clock        },
   { id: "completed", label: "Completed",  icon: CheckCircle2 },
   { id: "rejected",  label: "Rejected",   icon: XCircle      },
   { id: "cancelled", label: "Cancelled",  icon: XCircle      },
@@ -1000,7 +994,6 @@ export default function TradeSync() {
       case "pending":   return result.filter(isOpen);
       case "incoming":  return result.filter((t) => isOpen(t) && t.direction === "incoming");
       case "outgoing":  return result.filter((t) => isOpen(t) && t.direction === "outgoing");
-      case "waiting":   return result.filter((t) => isOpen(t) && t.direction === "waiting");
       case "completed": return result.filter((t) => t.status === "complete");
       case "rejected":  return result.filter((t) => t.status === "rejected");
       case "cancelled": return result.filter(isCancelled);
@@ -1013,14 +1006,12 @@ export default function TradeSync() {
     const open          = trades.filter(isOpen);
     const incoming      = open.filter((t) => t.direction === "incoming");
     const outgoing      = open.filter((t) => t.direction === "outgoing");
-    const waiting       = open.filter((t) => t.direction === "waiting");
     const expiring      = open.filter((t) => isExpiringSoon(t.expiresAt));
     const positiveValue = open.filter((t) => t.valueEdge > 50);
     return {
       totalPending: open.length,
       incoming: incoming.length,
       outgoing: outgoing.length,
-      waiting: waiting.length,
       expiringSoon: expiring.length,
       needsResponse: incoming.length,
       positiveValue: positiveValue.length,
@@ -1152,7 +1143,6 @@ export default function TradeSync() {
         <KPICard label="Total Open"      value={kpis.totalPending}   icon={ArrowRightLeft} color="bg-blue-500/10 text-blue-600 dark:text-blue-400"        loading={loading} />
         <KPICard label="Incoming"        value={kpis.incoming}       icon={Inbox}          color="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" loading={loading} />
         <KPICard label="Outgoing"        value={kpis.outgoing}       icon={Send}           color="bg-purple-500/10 text-purple-600 dark:text-purple-400"   loading={loading} />
-        <KPICard label="Waiting"         value={kpis.waiting}        icon={Clock}          color="bg-amber-500/10 text-amber-600 dark:text-amber-400"       loading={loading} />
         <KPICard label="Needs Response"  value={kpis.needsResponse}  icon={AlertTriangle}  color="bg-red-500/10 text-red-600 dark:text-red-400"            loading={loading} />
         <KPICard label="Win-Value Deals" value={kpis.positiveValue}  icon={TrendingUp}     color="bg-[#d4af37]/15 text-[#b8920f]"                           loading={loading} />
       </div>
@@ -1189,7 +1179,6 @@ export default function TradeSync() {
             const count = id === "pending"   ? kpis.totalPending
                        : id === "incoming"  ? kpis.incoming
                        : id === "outgoing"  ? kpis.outgoing
-                       : id === "waiting"   ? kpis.waiting
                        : undefined;
             return (
               <button
