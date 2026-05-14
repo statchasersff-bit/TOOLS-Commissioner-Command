@@ -677,10 +677,6 @@ export function PortfolioSummary() {
               <h3 className="text-base font-bold text-foreground">Most Rostered Players (Top 100)</h3>
               <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
             </div>
-            <p className="text-xs text-muted-foreground mb-4">
-              Player exposure across your {leagues.length} dynasty leagues
-              {activeSourceLabel && <span className="ml-1">· Values from <span className="font-semibold">{activeSourceLabel}</span></span>}
-            </p>
 
             {summaryData.playerExposure.length > 0 ? (() => {
               const handleExposureSort = (col: typeof exposureSortCol) => {
