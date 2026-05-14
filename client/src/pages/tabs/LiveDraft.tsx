@@ -3,7 +3,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Search, RefreshCw, Trophy, Target, Radio, Zap } from "lucide-react";
+import { Loader2, Search, RefreshCw, Trophy, Target, Radio, Zap, MessageSquare, Key, AlertTriangle, ChevronDown, ChevronUp } from "lucide-react";
 import { useValueModel } from "@/contexts/ValueModelContext";
 import { useSleeper } from "@/contexts/SleeperContext";
 import { detectLiveDrafts as detectLiveDraftsApi, fetchDraftBoard as fetchDraftBoardApi } from "@/lib/sleeperApi";
@@ -62,6 +62,58 @@ interface LiveDraftInfo {
   totalPicks: number;
 }
 
+interface DraftMessage {
+  message_id: string;
+  author_is_bot: boolean;
+  created: number;
+  text: string;
+}
+
+interface ParsedPick {
+  message_id: string;
+  round: number;
+  pickInRound: number;
+  playerName: string;
+  position: string;
+  team: string;
+  forced: boolean;
+  created: number;
+}
+
+const SLEEPER_JWT_KEY = "dc-sleeper-draft-jwt";
+
+const PICK_RE = /^Pick (\d+)\.(\d+) - Pick: (.+?) \((\w+) - (\w+)\)$/;
+const FORCED_RE = /^Pick (\d+)\.(\d+) - Commish forced pick: (.+?) \((\w+) - (\w+)\)$/;
+
+function parsePickMessage(msg: DraftMessage): ParsedPick | null {
+  const forced = FORCED_RE.exec(msg.text);
+  if (forced) {
+    return { message_id: msg.message_id, round: +forced[1], pickInRound: +forced[2], playerName: forced[3], position: forced[4], team: forced[5], forced: true, created: msg.created };
+  }
+  const normal = PICK_RE.exec(msg.text);
+  if (normal) {
+    return { message_id: msg.message_id, round: +normal[1], pickInRound: +normal[2], playerName: normal[3], position: normal[4], team: normal[5], forced: false, created: msg.created };
+  }
+  return null;
+}
+
+async function fetchDraftMessages(draftId: string, jwt: string): Promise<DraftMessage[]> {
+  const res = await fetch("https://sleeper.com/graphql", {
+    method: "POST",
+    headers: {
+      "authorization": jwt,
+      "x-sleeper-graphql-op": "messages",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      query: `query messages { messages(parent_id: "${draftId}") { message_id author_is_bot created text } }`,
+    }),
+  });
+  if (!res.ok) throw new Error(`GraphQL ${res.status}`);
+  const json = await res.json();
+  return (json?.data?.messages as DraftMessage[]) || [];
+}
+
 const POS_CELL_BG: Record<string, string> = {
   QB: "bg-red-500/25 dark:bg-red-500/30 border-red-500/40 text-red-900 dark:text-red-200",
   RB: "bg-emerald-500/25 dark:bg-emerald-500/30 border-emerald-500/40 text-emerald-900 dark:text-emerald-200",
@@ -106,6 +158,52 @@ export default function LiveDraft() {
   const [rookieFormat, setRookieFormat] = useState<"SF" | "1QB">("1QB");
   const [manualRookieMode, setManualRookieMode] = useState(false);
   const { isConnected, user, leagues } = useSleeper();
+
+  // ── Draft log / message history ──────────────────────────────────────────
+  const [sleeperJwt, setSleeperJwt] = useState<string | null>(null);
+  const [jwtInput, setJwtInput] = useState("");
+  const [showJwtInput, setShowJwtInput] = useState(false);
+  const [draftMessages, setDraftMessages] = useState<DraftMessage[]>([]);
+  const [messagesLoading, setMessagesLoading] = useState(false);
+  const [messagesError, setMessagesError] = useState<string | null>(null);
+  const [draftStarted, setDraftStarted] = useState(false);
+  const [showFullLog, setShowFullLog] = useState(false);
+
+  useEffect(() => {
+    const saved = localStorage.getItem(SLEEPER_JWT_KEY);
+    if (saved) setSleeperJwt(saved);
+  }, []);
+
+  const activeDraftId = draftData?.draft?.draftId ?? null;
+
+  const refreshMessages = useCallback(async (draftId: string, jwt: string) => {
+    setMessagesLoading(true);
+    setMessagesError(null);
+    try {
+      const msgs = await fetchDraftMessages(draftId, jwt);
+      const sorted = [...msgs].sort((a, b) => a.created - b.created);
+      setDraftMessages(sorted);
+      setDraftStarted(sorted.some(m => m.text === "This draft has begun!"));
+    } catch (e: any) {
+      setMessagesError(e.message || "Failed to load draft log");
+    } finally {
+      setMessagesLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeDraftId && sleeperJwt) {
+      setDraftMessages([]);
+      refreshMessages(activeDraftId, sleeperJwt);
+    }
+  }, [activeDraftId, sleeperJwt, refreshMessages]);
+
+  // Clear messages when draft changes
+  useEffect(() => {
+    setDraftMessages([]);
+    setDraftStarted(false);
+    setMessagesError(null);
+  }, [activeLeagueId]);
 
   const scanForLiveDrafts = useCallback(async () => {
     if (!user?.userId) return;
@@ -163,12 +261,15 @@ export default function LiveDraft() {
 
   useEffect(() => {
     if (autoRefresh && activeLeagueId) {
-      intervalRef.current = setInterval(() => fetchDraft(), 45000);
+      intervalRef.current = setInterval(() => {
+        fetchDraft();
+        if (activeDraftId && sleeperJwt) refreshMessages(activeDraftId, sleeperJwt);
+      }, 45000);
     }
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [autoRefresh, activeLeagueId, fetchDraft]);
+  }, [autoRefresh, activeLeagueId, activeDraftId, sleeperJwt, fetchDraft, refreshMessages]);
 
   const redraftPlayerList = useMemo(() => {
     if (!redraftValuesBySleeperId || Object.keys(redraftValuesBySleeperId).length === 0) return dynastyPlayerList;
@@ -278,6 +379,27 @@ export default function LiveDraft() {
     const totalPicks = (draftData?.draft?.rounds || 0) * teamCount;
     return { drafted: totalDrafted, total: totalPicks };
   }, [draftData, teamCount]);
+
+  const parsedPicks = useMemo<ParsedPick[]>(() => {
+    return draftMessages.map(parsePickMessage).filter((p): p is ParsedPick => p !== null);
+  }, [draftMessages]);
+
+  const handleSaveJwt = () => {
+    const val = jwtInput.trim();
+    if (!val) return;
+    localStorage.setItem(SLEEPER_JWT_KEY, val);
+    setSleeperJwt(val);
+    setJwtInput("");
+    setShowJwtInput(false);
+    if (activeDraftId) refreshMessages(activeDraftId, val);
+  };
+
+  const handleClearJwt = () => {
+    localStorage.removeItem(SLEEPER_JWT_KEY);
+    setSleeperJwt(null);
+    setDraftMessages([]);
+    setDraftStarted(false);
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -683,6 +805,155 @@ export default function LiveDraft() {
               </CardContent>
             </Card>
           )}
+
+          {/* ── Draft Log ─────────────────────────────────────────────────── */}
+          <Card data-testid="card-draft-log">
+            <CardContent className="pt-5 pb-4 space-y-4">
+
+              {/* Header row */}
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <MessageSquare className="w-4 h-4 text-[#0b3a7a] dark:text-blue-400" />
+                  <span className="text-sm font-semibold">Draft Log</span>
+                  {draftStarted && (
+                    <Badge variant="outline" className="text-[10px] border-emerald-500/40 text-emerald-600 dark:text-emerald-400 bg-emerald-500/5">
+                      Draft Started
+                    </Badge>
+                  )}
+                  {parsedPicks.some(p => p.forced) && (
+                    <Badge variant="outline" className="text-[10px] border-amber-500/40 text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                      <AlertTriangle className="w-2.5 h-2.5" /> Forced Pick
+                    </Badge>
+                  )}
+                  {messagesLoading && <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />}
+                </div>
+                <div className="flex items-center gap-2">
+                  {sleeperJwt && activeDraftId && (
+                    <Button variant="outline" size="sm" className="h-7 px-2.5 text-xs"
+                      onClick={() => refreshMessages(activeDraftId, sleeperJwt)}
+                      disabled={messagesLoading} data-testid="button-refresh-messages">
+                      <RefreshCw className="w-3 h-3 mr-1" /> Refresh
+                    </Button>
+                  )}
+                  <Button variant="outline" size="sm" className={`h-7 px-2.5 text-xs gap-1.5 ${sleeperJwt ? "border-emerald-500/40 text-emerald-600 dark:text-emerald-400" : ""}`}
+                    onClick={() => setShowJwtInput(v => !v)} data-testid="button-jwt-toggle">
+                    <Key className="w-3 h-3" />
+                    {sleeperJwt ? "Token Set" : "Set Token"}
+                  </Button>
+                </div>
+              </div>
+
+              {/* JWT input panel */}
+              {showJwtInput && (
+                <div className="rounded-xl border border-border/50 bg-muted/20 p-4 space-y-3" data-testid="panel-jwt-input">
+                  <div className="space-y-1">
+                    <p className="text-xs font-semibold text-foreground">Sleeper Auth Token</p>
+                    <p className="text-[11px] text-muted-foreground leading-relaxed">
+                      Paste your Sleeper JWT to enable draft message history. Find it in browser DevTools → Application → Local Storage → <code className="font-mono bg-muted px-1 rounded text-[10px]">sleeper-auth</code>, or from network request headers on sleeper.com.
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Input
+                      type="password"
+                      placeholder="eyJhbGci…"
+                      value={jwtInput}
+                      onChange={e => setJwtInput(e.target.value)}
+                      className="font-mono text-xs flex-1"
+                      onKeyDown={e => e.key === "Enter" && handleSaveJwt()}
+                      data-testid="input-sleeper-jwt"
+                    />
+                    <Button size="sm" onClick={handleSaveJwt} disabled={!jwtInput.trim()} data-testid="button-save-jwt">Save</Button>
+                  </div>
+                  {sleeperJwt && (
+                    <button onClick={handleClearJwt} className="text-[11px] text-red-500 hover:text-red-600 transition-colors" data-testid="button-clear-jwt">
+                      Clear saved token
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {/* No token state */}
+              {!sleeperJwt && !showJwtInput && (
+                <p className="text-xs text-muted-foreground" data-testid="text-log-no-token">
+                  Set your Sleeper auth token above to see real-time pick history, forced picks, and draft log.
+                </p>
+              )}
+
+              {/* Error */}
+              {messagesError && (
+                <div className="flex items-center gap-2 text-xs text-red-500" data-testid="text-messages-error">
+                  <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+                  <span>{messagesError}</span>
+                </div>
+              )}
+
+              {/* Pick history */}
+              {parsedPicks.length > 0 && (
+                <div className="space-y-2" data-testid="section-pick-history">
+                  {/* Recent picks header */}
+                  <div className="flex items-center justify-between">
+                    <p className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
+                      Recent Picks ({parsedPicks.length} total)
+                    </p>
+                    {parsedPicks.length > 5 && (
+                      <button onClick={() => setShowFullLog(v => !v)}
+                        className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+                        data-testid="button-toggle-full-log">
+                        {showFullLog ? <><ChevronUp className="w-3 h-3" />Less</> : <><ChevronDown className="w-3 h-3" />Full Log</>}
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Pick rows — recent 5 descending, or full log ascending */}
+                  <div className="space-y-1" data-testid="list-pick-rows">
+                    {(showFullLog
+                      ? [...parsedPicks]                              // ascending (already sorted)
+                      : [...parsedPicks].reverse().slice(0, 5)        // most recent first
+                    ).map(pick => {
+                      const posColors: Record<string, string> = {
+                        QB: "text-red-600 dark:text-red-400",
+                        RB: "text-emerald-600 dark:text-emerald-400",
+                        WR: "text-blue-600 dark:text-blue-400",
+                        TE: "text-orange-500 dark:text-orange-400",
+                      };
+                      return (
+                        <div key={pick.message_id}
+                          className={`flex items-center gap-2.5 px-3 py-2 rounded-lg border text-xs transition-colors ${
+                            pick.forced
+                              ? "border-amber-500/30 bg-amber-50/50 dark:bg-amber-950/20"
+                              : "border-border/30 bg-muted/20"
+                          }`}
+                          data-testid={`pick-row-${pick.message_id}`}>
+                          <span className="text-[10px] font-mono text-muted-foreground tabular-nums flex-shrink-0 w-8">
+                            {pick.round}.{String(pick.pickInRound).padStart(2, "0")}
+                          </span>
+                          <span className={`text-[10px] font-bold flex-shrink-0 w-6 ${posColors[pick.position] || "text-muted-foreground"}`}>
+                            {pick.position}
+                          </span>
+                          <span className="font-semibold text-foreground truncate flex-1">{pick.playerName}</span>
+                          <span className="text-[10px] text-muted-foreground flex-shrink-0">{pick.team}</span>
+                          {pick.forced && (
+                            <Badge variant="outline" className="text-[9px] px-1 h-4 border-amber-500/50 text-amber-600 dark:text-amber-400 flex-shrink-0">
+                              Forced
+                            </Badge>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Empty state when token is set but no picks yet */}
+              {sleeperJwt && !messagesLoading && parsedPicks.length === 0 && !messagesError && (
+                <p className="text-xs text-muted-foreground text-center py-3" data-testid="text-no-picks-yet">
+                  {draftStarted ? "Draft has started — no picks logged yet." : "Waiting for draft picks…"}
+                </p>
+              )}
+
+            </CardContent>
+          </Card>
+
         </>
       )}
     </div>
