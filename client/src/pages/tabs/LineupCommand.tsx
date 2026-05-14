@@ -600,7 +600,7 @@ export function LineupCommand() {
   }
 
   return (
-    <div className="space-y-5 max-w-5xl mx-auto">
+    <div className="space-y-5">
 
       {/* ── Page header ──────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between flex-wrap gap-2">

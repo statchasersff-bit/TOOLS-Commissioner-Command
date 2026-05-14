@@ -592,9 +592,9 @@ function TradeDialog({ trade, open, onClose, onAccept, onReject, actionLoading, 
         {/* Header */}
         <DialogHeader className="px-5 pt-5 pb-4 border-b border-border/40 space-y-0.5">
           <DialogTitle className="text-lg font-bold leading-tight">Trade Offer</DialogTitle>
-          <p className="text-sm text-muted-foreground">
+          <DialogDescription className="text-sm text-muted-foreground">
             {formatTradeDate(trade.created)} · {trade.leagueName}
-          </p>
+          </DialogDescription>
         </DialogHeader>
 
         <div className="px-5 py-5 space-y-5 overflow-y-auto max-h-[70vh]">
