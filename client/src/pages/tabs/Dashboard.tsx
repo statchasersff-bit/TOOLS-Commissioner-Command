@@ -1433,7 +1433,6 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
         </div>
       )}
 
-      <ScoringSettingsTable settings={league.scoringSettings ?? {}} />
 
     </div>
   );
