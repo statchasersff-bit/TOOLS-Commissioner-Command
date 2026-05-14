@@ -15,7 +15,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useSleeper } from "@/contexts/SleeperContext";
 import { useValueModel } from "@/contexts/ValueModelContext";
 import { getSleeperSession } from "@/services/sleeperAuth";
-import { fetchLeagueTransactionsFiltered, acceptTrade, rejectTrade } from "@/services/sleeperAuthedApi";
+import { acceptTrade, rejectTrade } from "@/services/sleeperAuthedApi";
 import type { SleeperTransaction } from "@/services/sleeperAuthedApi";
 import { getSleeperPlayers } from "@/lib/sleeperApi";
 import { getPositionColor } from "@/data/mockData";
@@ -32,6 +32,31 @@ async function fetchJson<T>(url: string): Promise<T> {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json() as Promise<T>;
+}
+
+/**
+ * Fetch all trade transactions for a league using the public REST API.
+ * Queries legs 0–5 in parallel (covers offseason + early-season pending trades)
+ * and deduplicates by transaction_id.
+ */
+async function fetchLeagueTradesPublic(leagueId: string): Promise<SleeperTransaction[]> {
+  const legs = [0, 1, 2, 3, 4, 5];
+  const results = await Promise.allSettled(
+    legs.map((leg) =>
+      fetchJson<SleeperTransaction[]>(`${SLEEPER_API}/league/${leagueId}/transactions/${leg}`)
+    )
+  );
+  const seen = new Map<string, SleeperTransaction>();
+  for (const r of results) {
+    if (r.status === "fulfilled" && Array.isArray(r.value)) {
+      for (const tx of r.value) {
+        if (tx.type === "trade" && !seen.has(tx.transaction_id)) {
+          seen.set(tx.transaction_id, tx);
+        }
+      }
+    }
+  }
+  return Array.from(seen.values());
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -805,7 +830,7 @@ export default function TradeSync() {
   const [confirmResult, setConfirmResult] = useState<{ success: boolean; message: string } | null>(null);
 
   const fetchAllData = useCallback(async () => {
-    if (!sleeper.isConnected || !sleeper.user || !hasSession) return;
+    if (!sleeper.isConnected || !sleeper.user) return;
     setLoading(true);
     setErrors([]);
 
@@ -815,7 +840,7 @@ export default function TradeSync() {
     const leagueResults = await Promise.allSettled(
       sleeper.leagues.map(async (ls) => {
         const [txns, rostersRaw, usersRaw] = await Promise.all([
-          fetchLeagueTransactionsFiltered(ls.leagueId, ["trade"]),
+          fetchLeagueTradesPublic(ls.leagueId),
           fetchJson<any[]>(`${SLEEPER_API}/league/${ls.leagueId}/rosters`),
           fetchJson<any[]>(`${SLEEPER_API}/league/${ls.leagueId}/users`),
         ]);
@@ -870,11 +895,11 @@ export default function TradeSync() {
     setRawData(successData);
     setErrors(newErrors);
     setLoading(false);
-  }, [sleeper.isConnected, sleeper.user, sleeper.leagues, hasSession]);
+  }, [sleeper.isConnected, sleeper.user, sleeper.leagues]);
 
   useEffect(() => {
-    if (hasSession) fetchAllData();
-  }, [fetchAllData, hasSession]);
+    fetchAllData();
+  }, [fetchAllData]);
 
   const trades: NormalizedTrade[] = useMemo(() => {
     const all: NormalizedTrade[] = [];
@@ -1027,27 +1052,6 @@ export default function TradeSync() {
     );
   }
 
-  if (!hasSession) {
-    return (
-      <div className="space-y-6">
-        <SectionHeader title="Trade Sync" subtitle="Cross-league trade inbox — all pending offers in one dashboard" />
-        <Card className="p-8 text-center max-w-md mx-auto">
-          <div className="w-12 h-12 rounded-xl bg-[#0b3a7a]/10 flex items-center justify-center mx-auto mb-4">
-            <Lock className="w-6 h-6 text-[#0b3a7a] dark:text-blue-400" />
-          </div>
-          <h3 className="text-base font-bold mb-2">Sleeper Authentication Required</h3>
-          <p className="text-sm text-muted-foreground leading-relaxed mb-4">
-            Trade Sync reads your pending trade offers directly from Sleeper, which requires authentication.
-            Sign in via <strong>Waiver Command</strong> to enable this feature.
-          </p>
-          <div className="flex items-center justify-center gap-2 text-[11px] text-muted-foreground bg-muted/40 rounded-lg px-3 py-2">
-            <Zap className="w-3 h-3 text-[#d4af37]" />
-            Your session is stored locally — never sent to our servers.
-          </div>
-        </Card>
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-6">
@@ -1078,6 +1082,18 @@ export default function TradeSync() {
         <KPICard label="Needs Response"  value={kpis.needsResponse}  icon={AlertTriangle}  color="bg-red-500/10 text-red-600 dark:text-red-400"          loading={loading} />
         <KPICard label="Win-Value Deals" value={kpis.positiveValue}  icon={TrendingUp}     color="bg-[#d4af37]/15 text-[#b8920f]"                         loading={loading} />
       </div>
+
+      {/* No-session soft banner — viewing works, accept/reject requires auth */}
+      {!hasSession && (
+        <Card className="p-3 border-[#0b3a7a]/30 bg-[#0b3a7a]/5">
+          <div className="flex items-center gap-2">
+            <Lock className="w-4 h-4 text-[#0b3a7a] dark:text-blue-400 flex-shrink-0" />
+            <p className="text-xs text-muted-foreground">
+              <span className="font-semibold text-foreground">Sign in via Waiver Command</span> to accept or reject trades directly. Viewing is available without sign-in.
+            </p>
+          </div>
+        </Card>
+      )}
 
       {/* Errors */}
       {errors.length > 0 && (
