@@ -70,7 +70,9 @@ async function fetchLeagueTradesPublicOnly(leagueId: string): Promise<SleeperTra
 async function fetchLeagueTradesForSync(leagueId: string, hasAuth: boolean): Promise<{ txns: SleeperTransaction[]; usedAuth: boolean }> {
   if (hasAuth) {
     try {
-      const txns = await fetchLeagueTransactionsFiltered(leagueId, ["trade"]);
+      // No status_filters — return ALL statuses (pending, complete, rejected,
+      // failed, cancelled, counter_offered, etc.) and filter client-side.
+      const txns = await fetchLeagueTransactionsFiltered(leagueId, ["trade"], undefined, undefined);
       return { txns, usedAuth: true };
     } catch (err: any) {
       console.warn("[TradeSync] GraphQL failed for", leagueId, "→", err?.message);
@@ -82,8 +84,8 @@ async function fetchLeagueTradesForSync(leagueId: string, hasAuth: boolean): Pro
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type TradeView = "pending" | "incoming" | "outgoing" | "completed" | "rejected" | "activity";
-type TradeStatus = "pending" | "complete" | "rejected" | "failed";
+type TradeView = "pending" | "incoming" | "outgoing" | "counters" | "completed" | "rejected" | "cancelled" | "activity";
+type TradeStatus = "pending" | "complete" | "rejected" | "failed" | "cancelled" | "counter_offered";
 
 interface AssetPlayer {
   playerId: string;
@@ -823,8 +825,10 @@ const VIEWS: Array<{ id: TradeView; label: string; icon: React.ElementType }> = 
   { id: "pending",   label: "Pending",   icon: Clock          },
   { id: "incoming",  label: "Incoming",  icon: Inbox          },
   { id: "outgoing",  label: "Outgoing",  icon: Send           },
+  { id: "counters",  label: "Counters",  icon: ArrowRightLeft  },
   { id: "completed", label: "Completed", icon: CheckCircle2   },
   { id: "rejected",  label: "Rejected",  icon: XCircle        },
+  { id: "cancelled", label: "Cancelled", icon: XCircle        },
   { id: "activity",  label: "Activity",  icon: Activity       },
 ];
 
@@ -945,32 +949,48 @@ export default function TradeSync() {
     return all.sort((a, b) => (b.statusUpdated || b.created) - (a.statusUpdated || a.created));
   }, [rawData, valuesBySleeperId]);
 
+  // ── Client-side status helpers ────────────────────────────────────────────
+  // All statuses come from GraphQL unfiltered; we classify here.
+  // "pending"         — open offer, awaiting response
+  // "counter_offered" — a counter-offer is pending
+  // "complete"        — trade was accepted and processed
+  // "rejected"        — other party declined
+  // "failed"          — system-level failure (treated as cancelled)
+  // "cancelled"       — proposer withdrew the offer
+  const isOpen       = (t: NormalizedTrade) => t.status === "pending" || t.status === "counter_offered";
+  const isCounter    = (t: NormalizedTrade) => t.status === "counter_offered";
+  const isCancelled  = (t: NormalizedTrade) => t.status === "failed" || t.status === "cancelled";
+
   const filteredTrades = useMemo(() => {
     let result = trades;
     if (leagueFilter !== "all") result = result.filter((t) => t.leagueId === leagueFilter);
     switch (view) {
-      case "pending":   return result.filter((t) => t.status === "pending");
-      case "incoming":  return result.filter((t) => t.status === "pending" && t.direction === "incoming");
-      case "outgoing":  return result.filter((t) => t.status === "pending" && t.direction === "outgoing");
+      case "pending":   return result.filter(isOpen);
+      case "incoming":  return result.filter((t) => isOpen(t) && !isCounter(t) && t.direction === "incoming");
+      case "outgoing":  return result.filter((t) => isOpen(t) && !isCounter(t) && t.direction === "outgoing");
+      case "counters":  return result.filter(isCounter);
       case "completed": return result.filter((t) => t.status === "complete");
-      case "rejected":  return result.filter((t) => t.status === "rejected" || t.status === "failed");
+      case "rejected":  return result.filter((t) => t.status === "rejected");
+      case "cancelled": return result.filter(isCancelled);
       case "activity":  return result;
       default:          return result;
     }
   }, [trades, view, leagueFilter]);
 
   const kpis = useMemo(() => {
-    const pending = trades.filter((t) => t.status === "pending");
-    const incoming = pending.filter((t) => t.direction === "incoming");
-    const outgoing = pending.filter((t) => t.direction === "outgoing");
-    const expiring = pending.filter((t) => isExpiringSoon(t.expiresAt));
-    const positiveValue = pending.filter((t) => t.valueEdge > 50);
+    const open      = trades.filter(isOpen);
+    const incoming  = open.filter((t) => !isCounter(t) && t.direction === "incoming");
+    const outgoing  = open.filter((t) => !isCounter(t) && t.direction === "outgoing");
+    const counters  = open.filter(isCounter);
+    const expiring  = open.filter((t) => isExpiringSoon(t.expiresAt));
+    const positiveValue = open.filter((t) => t.valueEdge > 50);
     return {
-      totalPending: pending.length,
+      totalPending: open.length,
       incoming: incoming.length,
       outgoing: outgoing.length,
+      counters: counters.length,
       expiringSoon: expiring.length,
-      needsResponse: incoming.length,
+      needsResponse: incoming.length + counters.length,
       positiveValue: positiveValue.length,
     };
   }, [trades]);
@@ -1097,12 +1117,12 @@ export default function TradeSync() {
 
       {/* KPI Row */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-        <KPICard label="Total Pending"   value={kpis.totalPending}   icon={ArrowRightLeft} color="bg-blue-500/10 text-blue-600 dark:text-blue-400"    loading={loading} />
+        <KPICard label="Total Open"      value={kpis.totalPending}   icon={ArrowRightLeft} color="bg-blue-500/10 text-blue-600 dark:text-blue-400"       loading={loading} />
         <KPICard label="Incoming"        value={kpis.incoming}       icon={Inbox}          color="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" loading={loading} />
-        <KPICard label="Outgoing"        value={kpis.outgoing}       icon={Send}           color="bg-purple-500/10 text-purple-600 dark:text-purple-400" loading={loading} />
-        <KPICard label="Expiring Soon"   value={kpis.expiringSoon}   icon={Clock}          color="bg-amber-500/10 text-amber-600 dark:text-amber-400"    loading={loading} />
-        <KPICard label="Needs Response"  value={kpis.needsResponse}  icon={AlertTriangle}  color="bg-red-500/10 text-red-600 dark:text-red-400"          loading={loading} />
-        <KPICard label="Win-Value Deals" value={kpis.positiveValue}  icon={TrendingUp}     color="bg-[#d4af37]/15 text-[#b8920f]"                         loading={loading} />
+        <KPICard label="Outgoing"        value={kpis.outgoing}       icon={Send}           color="bg-purple-500/10 text-purple-600 dark:text-purple-400"  loading={loading} />
+        <KPICard label="Counters"        value={kpis.counters}       icon={ArrowRightLeft} color="bg-orange-500/10 text-orange-600 dark:text-orange-400"  loading={loading} />
+        <KPICard label="Needs Response"  value={kpis.needsResponse}  icon={AlertTriangle}  color="bg-red-500/10 text-red-600 dark:text-red-400"           loading={loading} />
+        <KPICard label="Win-Value Deals" value={kpis.positiveValue}  icon={TrendingUp}     color="bg-[#d4af37]/15 text-[#b8920f]"                          loading={loading} />
       </div>
 
       {/* Auth banner — shown when pending trades couldn't be loaded */}
@@ -1137,6 +1157,7 @@ export default function TradeSync() {
             const count = id === "pending"   ? kpis.totalPending
                        : id === "incoming"  ? kpis.incoming
                        : id === "outgoing"  ? kpis.outgoing
+                       : id === "counters"  ? kpis.counters
                        : undefined;
             return (
               <button
