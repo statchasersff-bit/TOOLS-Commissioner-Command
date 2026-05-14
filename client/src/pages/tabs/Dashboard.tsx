@@ -1638,7 +1638,7 @@ export function MyTeam({ league, userTeam, onNavigate }: DashboardOverviewProps)
 
       {/* ── 1. HERO HEADER ─────────────────────────────────────────────────── */}
       <div className="rounded-2xl border border-border/60 dark:border-[#1a2d4a]/80 bg-gradient-to-br from-[#0b3a7a]/5 via-background to-[#d4af37]/5 dark:from-[#0b3a7a]/10 dark:via-[#0c1929] dark:to-[#d4af37]/5 p-6" data-testid="myteam-hero">
-        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center gap-4 flex-1 min-w-0">
             <div className="w-14 h-14 rounded-2xl bg-[#0b3a7a]/15 dark:bg-blue-400/10 flex items-center justify-center ring-2 ring-[#0b3a7a]/20 dark:ring-blue-400/20 flex-shrink-0 overflow-hidden">
               {userTeam.avatar ? (
@@ -1671,33 +1671,28 @@ export function MyTeam({ league, userTeam, onNavigate }: DashboardOverviewProps)
               <p className="text-xs text-muted-foreground/70 mt-1 font-medium">{leagueMeta}</p>
             </div>
           </div>
-          <div className="flex flex-col items-end gap-2 flex-shrink-0">
-            <Badge className={`text-sm font-bold px-3 py-1 border self-start ${getTierBadgeClasses(tier)}`} data-testid="hero-tier-badge">
+          <div className="flex flex-wrap items-center gap-2 flex-shrink-0">
+            <Badge className={`text-sm font-bold px-3 py-1 border ${getTierBadgeClasses(tier)}`} data-testid="hero-tier-badge">
               {tier}
             </Badge>
             {onNavigate && (
-              <div className="flex flex-col gap-1.5">
-                <Button variant="outline" size="sm" className="text-xs h-8 gap-1.5 border-[#0b3a7a]/25 hover:border-[#0b3a7a]/50 hover:bg-[#0b3a7a]/5 justify-start" onClick={() => onNavigate("trade-center", "trade-calculator")} data-testid="hero-btn-trade-calc">
+              <>
+                <Button variant="outline" size="sm" className="text-xs h-8 gap-1.5 border-[#0b3a7a]/25 hover:border-[#0b3a7a]/50 hover:bg-[#0b3a7a]/5" onClick={() => onNavigate("trade-center", "trade-calculator")} data-testid="hero-btn-trade-calc">
                   <Calculator className="w-3.5 h-3.5" /> Trade Calculator
                 </Button>
-                <Button variant="outline" size="sm" className="text-xs h-8 gap-1.5 border-[#0b3a7a]/25 hover:border-[#0b3a7a]/50 hover:bg-[#0b3a7a]/5 justify-start" onClick={() => onNavigate("league-analyzer", "power-rankings")} data-testid="hero-btn-league-analyzer">
+                <Button variant="outline" size="sm" className="text-xs h-8 gap-1.5 border-[#0b3a7a]/25 hover:border-[#0b3a7a]/50 hover:bg-[#0b3a7a]/5" onClick={() => onNavigate("league-analyzer", "power-rankings")} data-testid="hero-btn-league-analyzer">
                   <BarChart2 className="w-3.5 h-3.5" /> League Analyzer
                 </Button>
-                <Button variant="outline" size="sm" className="text-xs h-8 gap-1.5 border-[#0b3a7a]/25 hover:border-[#0b3a7a]/50 hover:bg-[#0b3a7a]/5 justify-start" onClick={() => onNavigate("dashboard", "share-team")} data-testid="hero-btn-field-view">
+                <Button variant="outline" size="sm" className="text-xs h-8 gap-1.5 border-[#0b3a7a]/25 hover:border-[#0b3a7a]/50 hover:bg-[#0b3a7a]/5" onClick={() => onNavigate("dashboard", "share-team")} data-testid="hero-btn-field-view">
                   <Grid3X3 className="w-3.5 h-3.5" /> Field View
                 </Button>
-              </div>
+                <Button variant="outline" size="sm" className="text-xs h-8 gap-1.5 border-[#0b3a7a]/25 hover:border-[#0b3a7a]/50 hover:bg-[#0b3a7a]/5" onClick={() => onNavigate("portfolio", "waiver-command")} data-testid="hero-btn-waiver">
+                  <Waves className="w-3.5 h-3.5" /> Waiver Command
+                </Button>
+              </>
             )}
           </div>
         </div>
-
-        {onNavigate && (
-          <div className="flex flex-wrap gap-2 mt-5 pt-5 border-t border-border/40">
-            <Button variant="outline" size="sm" className="text-xs h-8 gap-1.5 border-[#0b3a7a]/25 hover:border-[#0b3a7a]/50 hover:bg-[#0b3a7a]/5" onClick={() => onNavigate("portfolio", "waiver-command")} data-testid="hero-btn-waiver">
-              <Waves className="w-3.5 h-3.5" /> Waiver Command
-            </Button>
-          </div>
-        )}
       </div>
 
       {/* ── 2. KPI STRIP ───────────────────────────────────────────────────── */}
