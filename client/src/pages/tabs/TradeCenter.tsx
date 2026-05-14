@@ -1415,11 +1415,6 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
                   <div className="absolute inset-y-0 right-0 rounded-r-full transition-all duration-700" style={{ width: `${meterPosition}%`, background: "linear-gradient(90deg, #b8932a 0%, #d4af37 100%)" }} />
                 )}
                 <div className="absolute top-0 bottom-0 w-0.5 bg-white/20 z-10" style={{ left: "50%" }} />
-                <div
-                  className="absolute top-1/2 -translate-y-1/2 w-5 h-5 rounded-full border-2 border-white shadow-lg z-20 transition-all duration-700"
-                  style={{ left: `clamp(10px, ${meterPosition}% - 10px, calc(100% - 10px))`, background: "linear-gradient(135deg, #0b3a7a 0%, #d4af37 100%)" }}
-                  data-testid="meter-indicator"
-                />
               </div>
               <div className="flex justify-center">
                 <span className="text-[9px] text-muted-foreground/50 font-medium">Fair</span>
