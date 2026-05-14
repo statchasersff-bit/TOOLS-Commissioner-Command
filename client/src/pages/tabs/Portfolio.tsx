@@ -691,7 +691,10 @@ export function PortfolioSummary() {
                 if (exposureSortCol !== col) return <ArrowUpDown className="w-3 h-3 opacity-40" />;
                 return exposureSortDir === "desc" ? <ArrowDown className="w-3 h-3 text-[#d4af37]" /> : <ArrowUp className="w-3 h-3 text-[#d4af37]" />;
               };
-              const sorted = [...summaryData.playerExposure].sort((a: any, b: any) => {
+              const top100 = [...summaryData.playerExposure]
+                .sort((a: any, b: any) => b.leagueCount - a.leagueCount || b.exposure - a.exposure)
+                .slice(0, 100);
+              const sorted = [...top100].sort((a: any, b: any) => {
                 const dir = exposureSortDir === "asc" ? 1 : -1;
                 if (exposureSortCol === "name") return dir * a.name.localeCompare(b.name);
                 if (exposureSortCol === "pos") return dir * a.pos.localeCompare(b.pos);
@@ -719,7 +722,7 @@ export function PortfolioSummary() {
                     </button>
                   </div>
                   <div className="space-y-0">
-                    {sorted.slice(0, 100).map((player: any) => {
+                    {sorted.map((player: any) => {
                       const isOverexposed = player.exposure >= 50;
                       const dynastyValue = valuesBySleeperId[player.playerId] ?? 0;
                       return (
