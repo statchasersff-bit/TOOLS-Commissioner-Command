@@ -674,7 +674,7 @@ export function PortfolioSummary() {
 
           <Card className="p-6" data-testid="player-exposure">
             <div className="mb-5">
-              <h3 className="text-base font-bold text-foreground">All Rostered Players</h3>
+              <h3 className="text-base font-bold text-foreground">Most Rostered Players (Top 100)</h3>
               <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
             </div>
             <p className="text-xs text-muted-foreground mb-4">
@@ -723,7 +723,7 @@ export function PortfolioSummary() {
                     </button>
                   </div>
                   <div className="space-y-0">
-                    {sorted.map((player: any) => {
+                    {sorted.slice(0, 100).map((player: any) => {
                       const isOverexposed = player.exposure >= 50;
                       const dynastyValue = valuesBySleeperId[player.playerId] ?? 0;
                       return (
