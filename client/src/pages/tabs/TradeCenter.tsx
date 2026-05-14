@@ -1788,7 +1788,7 @@ export function TradeDatabase({ league }: { league: League }) {
             ))}
           </div>
 
-          <div className="w-px h-5 bg-border/60 flex-shrink-0" />
+          <div className="w-px h-5 bg-[#d4af37]/50 flex-shrink-0" />
 
           <div className="flex gap-1">
             {(["all", "PPR", "Half", "Standard"] as const).map((s) => (
@@ -1808,7 +1808,7 @@ export function TradeDatabase({ league }: { league: League }) {
             ))}
           </div>
 
-          <div className="w-px h-5 bg-border/60 flex-shrink-0" />
+          <div className="w-px h-5 bg-[#d4af37]/50 flex-shrink-0" />
 
           <div className="flex gap-1">
             {(["all", "10", "12", "14"] as const).map((size) => (
