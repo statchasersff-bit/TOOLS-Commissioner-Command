@@ -540,13 +540,13 @@ function FaabRow({ amount, showValue }: { amount: number; showValue?: boolean })
 function DirectionPill({ direction, status }: { direction: NormalizedTrade["direction"]; status: TradeStatus }) {
   const base = "text-[11px] font-bold px-2.5 py-1 rounded-full border";
   if (status === "complete")
-    return <span className={base} style={{ background: "rgba(212,175,55,.14)", color: "#facc15", borderColor: "rgba(250,204,21,.28)" }}>Completed</span>;
+    return <span className={base} style={{ background: "rgba(34,197,94,.18)", color: "#4ade80", borderColor: "rgba(74,222,128,.35)" }}>Completed</span>;
   if (status === "rejected")
     return <span className={base} style={{ background: "rgba(239,68,68,.16)", color: "#f87171", borderColor: "rgba(248,113,113,.32)" }}>Rejected</span>;
   if (status === "failed" || status === "cancelled")
     return <span className={base} style={{ background: "rgba(148,163,184,.12)", color: "#94a3b8", borderColor: "rgba(148,163,184,.22)" }}>Cancelled</span>;
   if (direction === "incoming")
-    return <span className={base} style={{ background: "rgba(34,197,94,.18)", color: "#4ade80", borderColor: "rgba(74,222,128,.35)" }}>Incoming</span>;
+    return <span className={base} style={{ background: "rgba(212,175,55,.14)", color: "#facc15", borderColor: "rgba(250,204,21,.28)" }}>Incoming</span>;
   if (direction === "outgoing")
     return <span className={base} style={{ background: "rgba(59,130,246,.18)", color: "#60a5fa", borderColor: "rgba(96,165,250,.35)" }}>Outgoing</span>;
   return null;
@@ -1211,9 +1211,9 @@ export default function TradeSync() {
       {/* KPI Row */}
       <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
         <KPICard label="Total Open"  value={kpis.totalPending} icon={ArrowRightLeft} color="bg-blue-500/10 text-blue-600 dark:text-blue-400"         loading={loading} onClick={() => setView("pending")}   active={view === "pending"}   />
-        <KPICard label="Incoming"    value={kpis.incoming}     icon={Inbox}          color="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"  loading={loading} onClick={() => setView("incoming")}  active={view === "incoming"}  />
+        <KPICard label="Incoming"    value={kpis.incoming}     icon={Inbox}          color="bg-[#d4af37]/10 text-[#d4af37]"                            loading={loading} onClick={() => setView("incoming")}  active={view === "incoming"}  />
         <KPICard label="Outgoing"    value={kpis.outgoing}     icon={Send}           color="bg-blue-500/10 text-blue-500 dark:text-blue-400"           loading={loading} onClick={() => setView("outgoing")}  active={view === "outgoing"}  />
-        <KPICard label="Completed"   value={kpis.completed}    icon={CheckCircle2}   color="bg-[#d4af37]/10 text-[#d4af37]"                            loading={loading} onClick={() => setView("completed")} active={view === "completed"} />
+        <KPICard label="Completed"   value={kpis.completed}    icon={CheckCircle2}   color="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"  loading={loading} onClick={() => setView("completed")} active={view === "completed"} />
         <KPICard label="Rejected"    value={kpis.rejected}     icon={XCircle}        color="bg-red-500/10 text-red-500 dark:text-red-400"              loading={loading} onClick={() => setView("rejected")}  active={view === "rejected"}  />
         <KPICard label="Cancelled"   value={kpis.cancelled}    icon={XCircle}        color="bg-slate-500/10 text-slate-400"                            loading={loading} onClick={() => setView("cancelled")} active={view === "cancelled"} />
         <KPICard label="All Trades"  value={kpis.allTrades}    icon={Activity}       color="bg-muted text-muted-foreground"                            loading={loading} onClick={() => setView("activity")}  active={view === "activity"}  />
