@@ -295,10 +295,20 @@ function PlayerRow({
     <div className="flex items-center gap-2 py-1 min-w-0">
       <PlayerHeadshot playerId={player.playerId} pos={player.pos} team={player.team ?? ""} />
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1 min-w-0">
+        <div className="flex items-center gap-1.5 min-w-0">
           <span className={cn("text-sm font-semibold truncate", action === "drop" && "text-muted-foreground")}>
             {player.name}
           </span>
+          {player.pos && (
+            <span className={cn(
+              "text-[10px] font-bold shrink-0",
+              player.pos === "QB" ? "text-rose-400" :
+              player.pos === "RB" ? "text-emerald-400" :
+              player.pos === "WR" ? "text-sky-400" :
+              player.pos === "TE" ? "text-yellow-400" :
+              "text-muted-foreground"
+            )}>{player.pos}</span>
+          )}
           {player.team && (
             <span className="text-[10px] text-muted-foreground shrink-0">{player.team}</span>
           )}
