@@ -99,6 +99,7 @@ interface AssetPick {
   originalRosterId: number;
   label: string;
   value: number;
+  pickNo?: number;
 }
 
 interface NormalizedTrade {
@@ -113,8 +114,8 @@ interface NormalizedTrade {
   partnerAvatar: string | null;
   partnerRosterId: number;
   userRosterId: number;
-  iGive: { players: AssetPlayer[]; picks: AssetPick[] };
-  iGet: { players: AssetPlayer[]; picks: AssetPick[] };
+  iGive: { players: AssetPlayer[]; picks: AssetPick[]; faab: number };
+  iGet: { players: AssetPlayer[]; picks: AssetPick[]; faab: number };
   iGiveValue: number;
   iGetValue: number;
   valueEdge: number;
@@ -165,8 +166,9 @@ function ordinalRound(round: number): string {
   return `${round}th`;
 }
 
-function formatPickAssetLabel(season: string, round: number): string {
-  return `${season} ${ordinalRound(round)}`;
+function formatPickAssetLabel(season: string, round: number, pickNo?: number): string {
+  const base = `${season} ${ordinalRound(round)}`;
+  return pickNo ? `${base} (Pick ${pickNo})` : base;
 }
 
 function formatExpiryLabel(expiresAt: number | null): string {
@@ -269,8 +271,9 @@ function normalizeTrade(
     if (!Array.isArray(rawDraftPicks)) return [];
     return (rawDraftPicks as any[]).map((dp) => {
       if (typeof dp === "string") {
-        // Sleeper GraphQL CSV format: "roster_id,season,round,owner_id,previous_owner_id"
-        // (receiver/owner is parts[3], giver/previous_owner is parts[4])
+        // Sleeper GraphQL CSV format:
+        //   5 fields: "roster_id,season,round,owner_id,previous_owner_id"
+        //   6 fields: "roster_id,season,round,owner_id,previous_owner_id,pick_no" (assigned/exact picks)
         const parts = dp.split(",");
         return {
           roster_id: Number(parts[0]),
@@ -278,6 +281,7 @@ function normalizeTrade(
           round: Number(parts[2]),
           owner_id: Number(parts[3]),
           previous_owner_id: Number(parts[4]),
+          pick_no: parts.length >= 6 && parts[5] ? Number(parts[5]) : undefined,
         } as SleeperTransactionPick;
       }
       return dp as SleeperTransactionPick;
@@ -289,22 +293,39 @@ function normalizeTrade(
     const prevOwner = Number(dp.previous_owner_id);
     const nextOwner = Number(dp.owner_id);
     const origOwner = Number(dp.roster_id);
-    const label = formatPickAssetLabel(String(dp.season), round);
+    const pickNo = dp.pick_no ?? undefined;
+    const label = formatPickAssetLabel(String(dp.season), round, pickNo);
     const value = approxPickValue(String(dp.season), round);
 
     if (prevOwner === userRosterId) {
-      // user is sending this pick
-      iGivePicks.push({ season: String(dp.season), round, originalRosterId: origOwner, label, value });
+      iGivePicks.push({ season: String(dp.season), round, originalRosterId: origOwner, label, value, pickNo });
     } else if (nextOwner === userRosterId) {
-      // user is receiving this pick
-      iGetPicks.push({ season: String(dp.season), round, originalRosterId: origOwner, label, value });
+      iGetPicks.push({ season: String(dp.season), round, originalRosterId: origOwner, label, value, pickNo });
     } else if (prevOwner === partnerRosterId || (prevOwner === 0 && origOwner !== userRosterId)) {
-      // partner is sending → user receives; also handles proposed trades where
-      // previous_owner_id/owner_id may be 0 but roster_id reveals original owner
-      iGetPicks.push({ season: String(dp.season), round, originalRosterId: origOwner, label, value });
+      iGetPicks.push({ season: String(dp.season), round, originalRosterId: origOwner, label, value, pickNo });
     } else if (nextOwner === partnerRosterId || (nextOwner === 0 && origOwner === userRosterId)) {
-      // user is sending (original owner = user, going to partner)
-      iGivePicks.push({ season: String(dp.season), round, originalRosterId: origOwner, label, value });
+      iGivePicks.push({ season: String(dp.season), round, originalRosterId: origOwner, label, value, pickNo });
+    }
+  }
+
+  // ── FAAB (waiver_budget) ───────────────────────────────────────────────────
+  // Sleeper returns waiver_budget as an array of {sender, receiver, amount}
+  // objects (REST) or CSV strings "sender,receiver,amount" (GraphQL).
+  let iGiveFaab = 0;
+  let iGetFaab = 0;
+  const rawWB = (t as any).waiver_budget;
+  if (Array.isArray(rawWB)) {
+    for (const entry of rawWB) {
+      let sender: number, receiver: number, amount: number;
+      if (typeof entry === "string") {
+        const parts = entry.split(",");
+        sender = Number(parts[0]); receiver = Number(parts[1]); amount = Number(parts[2]);
+      } else if (entry && typeof entry === "object") {
+        sender = Number(entry.sender); receiver = Number(entry.receiver); amount = Number(entry.amount);
+      } else continue;
+      if (!amount || isNaN(amount)) continue;
+      if (sender === userRosterId) iGiveFaab += amount;
+      else if (receiver === userRosterId) iGetFaab += amount;
     }
   }
 
@@ -327,8 +348,8 @@ function normalizeTrade(
     partnerAvatar,
     partnerRosterId,
     userRosterId,
-    iGive: { players: iGivePlayers, picks: iGivePicks },
-    iGet: { players: iGetPlayers, picks: iGetPicks },
+    iGive: { players: iGivePlayers, picks: iGivePicks, faab: iGiveFaab },
+    iGet: { players: iGetPlayers, picks: iGetPicks, faab: iGetFaab },
     iGiveValue,
     iGetValue,
     valueEdge,
@@ -467,6 +488,19 @@ function PickCardRow({ pick, showValue }: { pick: AssetPick; showValue?: boolean
   );
 }
 
+function FaabRow({ amount, showValue }: { amount: number; showValue?: boolean }) {
+  if (!amount) return null;
+  return (
+    <div className="flex items-center gap-2.5 py-0.5">
+      <div className="w-8 h-8 rounded-full bg-emerald-500/15 dark:bg-emerald-400/15 flex items-center justify-center flex-shrink-0">
+        <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400">$</span>
+      </div>
+      <span className="text-sm font-medium text-foreground truncate">${amount} FAAB</span>
+      {showValue && <span className="ml-auto text-sm font-semibold tabular-nums text-muted-foreground flex-shrink-0">—</span>}
+    </div>
+  );
+}
+
 // ─── Direction pill badge ─────────────────────────────────────────────────────
 
 function DirectionPill({ direction, status }: { direction: NormalizedTrade["direction"]; status: TradeStatus }) {
@@ -513,8 +547,8 @@ function TradeCard({ trade, myUsername, myAvatar, onView }: {
       : `Sent by ${trade.partnerName}`;
 
   // User receives = iGet; Partner receives = iGive
-  const myReceives = { players: trade.iGet.players, picks: trade.iGet.picks };
-  const theyReceive = { players: trade.iGive.players, picks: trade.iGive.picks };
+  const myReceives = { players: trade.iGet.players, picks: trade.iGet.picks, faab: trade.iGet.faab };
+  const theyReceive = { players: trade.iGive.players, picks: trade.iGive.picks, faab: trade.iGive.faab };
 
   return (
     <div
@@ -579,7 +613,8 @@ function TradeCard({ trade, myUsername, myAvatar, onView }: {
           <div className="space-y-0.5 pl-1">
             {myReceives.players.map((p) => <PlayerCardRow key={p.playerId} player={p} />)}
             {myReceives.picks.map((p, i) => <PickCardRow key={`${i}-${p.originalRosterId}-${p.label}`} pick={p} />)}
-            {myReceives.players.length === 0 && myReceives.picks.length === 0 && (
+            <FaabRow amount={myReceives.faab} />
+            {myReceives.players.length === 0 && myReceives.picks.length === 0 && !myReceives.faab && (
               <p className="text-sm text-muted-foreground italic pl-1">Nothing</p>
             )}
           </div>
@@ -595,7 +630,8 @@ function TradeCard({ trade, myUsername, myAvatar, onView }: {
           <div className="space-y-0.5 pl-1">
             {theyReceive.players.map((p) => <PlayerCardRow key={p.playerId} player={p} />)}
             {theyReceive.picks.map((p, i) => <PickCardRow key={`${i}-${p.originalRosterId}-${p.label}`} pick={p} />)}
-            {theyReceive.players.length === 0 && theyReceive.picks.length === 0 && (
+            <FaabRow amount={theyReceive.faab} />
+            {theyReceive.players.length === 0 && theyReceive.picks.length === 0 && !theyReceive.faab && (
               <p className="text-sm text-muted-foreground italic pl-1">Nothing</p>
             )}
           </div>
@@ -659,7 +695,8 @@ function TradeDialog({ trade, open, onClose, onAccept, onReject, actionLoading, 
               <div className="space-y-1">
                 {trade.iGet.players.map((p) => <PlayerCardRow key={p.playerId} player={p} showValue />)}
                 {trade.iGet.picks.map((p, i)   => <PickCardRow key={`${i}-${p.originalRosterId}-${p.label}`} pick={p} showValue />)}
-                {trade.iGet.players.length === 0 && trade.iGet.picks.length === 0 && (
+                <FaabRow amount={trade.iGet.faab} showValue />
+                {trade.iGet.players.length === 0 && trade.iGet.picks.length === 0 && !trade.iGet.faab && (
                   <p className="text-sm text-muted-foreground italic pl-1">Nothing</p>
                 )}
               </div>
@@ -678,7 +715,8 @@ function TradeDialog({ trade, open, onClose, onAccept, onReject, actionLoading, 
               <div className="space-y-1">
                 {trade.iGive.players.map((p) => <PlayerCardRow key={p.playerId} player={p} showValue />)}
                 {trade.iGive.picks.map((p, i)   => <PickCardRow key={`${i}-${p.originalRosterId}-${p.label}`} pick={p} showValue />)}
-                {trade.iGive.players.length === 0 && trade.iGive.picks.length === 0 && (
+                <FaabRow amount={trade.iGive.faab} showValue />
+                {trade.iGive.players.length === 0 && trade.iGive.picks.length === 0 && !trade.iGive.faab && (
                   <p className="text-sm text-muted-foreground italic pl-1">Nothing</p>
                 )}
               </div>
@@ -798,8 +836,8 @@ function ConfirmDialog({ trade, action, onConfirm, onCancel, loading, result }: 
                   <div className="mt-3 p-3 bg-muted/40 rounded-lg text-xs space-y-1">
                     <p><span className="font-semibold">League:</span> {trade.leagueName}</p>
                     <p><span className="font-semibold">Partner:</span> {trade.partnerName}</p>
-                    <p><span className="font-semibold">You give:</span> {[...trade.iGive.players.map(p => p.name), ...trade.iGive.picks.map(p => p.label)].join(", ") || "Nothing"}</p>
-                    <p><span className="font-semibold">You get:</span> {[...trade.iGet.players.map(p => p.name), ...trade.iGet.picks.map(p => p.label)].join(", ") || "Nothing"}</p>
+                    <p><span className="font-semibold">You give:</span> {[...trade.iGive.players.map(p => p.name), ...trade.iGive.picks.map(p => p.label), ...(trade.iGive.faab ? [`$${trade.iGive.faab} FAAB`] : [])].join(", ") || "Nothing"}</p>
+                    <p><span className="font-semibold">You get:</span> {[...trade.iGet.players.map(p => p.name), ...trade.iGet.picks.map(p => p.label), ...(trade.iGet.faab ? [`$${trade.iGet.faab} FAAB`] : [])].join(", ") || "Nothing"}</p>
                   </div>
                 )}
               </>

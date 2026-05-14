@@ -125,6 +125,7 @@ export interface SleeperTransactionPick {
   roster_id: number;
   previous_owner_id: number;
   owner_id: number;
+  pick_no?: number;
 }
 
 export interface SleeperTransaction {
