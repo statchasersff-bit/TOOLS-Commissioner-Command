@@ -1684,7 +1684,7 @@ export function MyTeam({ league, userTeam, onNavigate }: DashboardOverviewProps)
             <Button variant="outline" size="sm" className="text-xs h-8 gap-1.5 border-[#0b3a7a]/25 hover:border-[#0b3a7a]/50 hover:bg-[#0b3a7a]/5" onClick={() => onNavigate("league-analyzer", "power-rankings")} data-testid="hero-btn-league-analyzer">
               <BarChart2 className="w-3.5 h-3.5" /> League Analyzer
             </Button>
-            <Button variant="outline" size="sm" className="text-xs h-8 gap-1.5 border-[#0b3a7a]/25 hover:border-[#0b3a7a]/50 hover:bg-[#0b3a7a]/5" onClick={() => onNavigate("dashboard", "field-view")} data-testid="hero-btn-field-view">
+            <Button variant="outline" size="sm" className="text-xs h-8 gap-1.5 border-[#0b3a7a]/25 hover:border-[#0b3a7a]/50 hover:bg-[#0b3a7a]/5" onClick={() => onNavigate("dashboard", "share-team")} data-testid="hero-btn-field-view">
               <Grid3X3 className="w-3.5 h-3.5" /> Field View
             </Button>
             <Button variant="outline" size="sm" className="text-xs h-8 gap-1.5 border-[#0b3a7a]/25 hover:border-[#0b3a7a]/50 hover:bg-[#0b3a7a]/5" onClick={() => onNavigate("portfolio", "waiver-command")} data-testid="hero-btn-waiver">
