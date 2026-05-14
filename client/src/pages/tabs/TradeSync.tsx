@@ -906,7 +906,6 @@ export default function TradeSync() {
   const [errors, setErrors] = useState<FetchError[]>([]);
   const [pendingTradesAvailable, setPendingTradesAvailable] = useState(false);
   const [view, setView] = useState<TradeView>("pending");
-  const [leagueFilter, setLeagueFilter] = useState<string>("all");
   const [selectedTrade, setSelectedTrade] = useState<NormalizedTrade | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [confirmState, setConfirmState] = useState<{ trade: NormalizedTrade; action: "accept" | "reject" } | null>(null);
@@ -1021,7 +1020,6 @@ export default function TradeSync() {
 
   const filteredTrades = useMemo(() => {
     let result = trades;
-    if (leagueFilter !== "all") result = result.filter((t) => t.leagueId === leagueFilter);
     switch (view) {
       case "pending":   return result.filter(isOpen);
       case "incoming":  return result.filter((t) => isOpen(t) && t.direction === "incoming");
@@ -1032,7 +1030,7 @@ export default function TradeSync() {
       case "activity":  return result;
       default:          return result;
     }
-  }, [trades, view, leagueFilter]);
+  }, [trades, view]);
 
   const kpis = useMemo(() => {
     const open      = trades.filter(isOpen);
@@ -1208,24 +1206,6 @@ export default function TradeSync() {
         </Card>
       )}
 
-      {/* League Filter */}
-      <div className="flex items-center gap-3 flex-wrap">
-        {rawData.length > 1 && (
-          <select
-            className="text-xs bg-muted/50 border border-border/50 rounded-lg px-2.5 py-1.5 text-foreground focus:outline-none focus:ring-1 focus:ring-[#0b3a7a]/30"
-            value={leagueFilter}
-            onChange={(e) => setLeagueFilter(e.target.value)}
-            data-testid="league-filter-select"
-          >
-            <option value="all">All Leagues ({rawData.length})</option>
-            {rawData.map((ld) => (
-              <option key={ld.leagueId} value={ld.leagueId}>{ld.leagueName}</option>
-            ))}
-          </select>
-        )}
-
-
-      </div>
 
       {/* Trade List */}
       {loading ? (
