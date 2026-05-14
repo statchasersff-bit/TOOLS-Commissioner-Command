@@ -468,23 +468,6 @@ export function FinanceTab() {
   return (
     <div className="max-w-4xl mx-auto px-2 md:px-3 py-6 space-y-6">
 
-      {/* Header bar */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <ShieldCheck className="w-4 h-4 text-emerald-500" />
-          <span className="text-xs text-muted-foreground font-medium">Connected as @{user.username}</span>
-        </div>
-        <Button
-          size="sm"
-          variant="ghost"
-          className="h-7 text-xs gap-1.5 text-muted-foreground"
-          onClick={handleLock}
-          data-testid="button-lock-finances"
-        >
-          <LogOut className="w-3.5 h-3.5" /> Lock
-        </Button>
-      </div>
-
       {/* Summary Header */}
       <div className="grid grid-cols-3 gap-3">
         <Card className="p-4 text-center">
