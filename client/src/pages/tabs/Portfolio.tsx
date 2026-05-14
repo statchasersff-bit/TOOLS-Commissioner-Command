@@ -586,21 +586,24 @@ export function PortfolioSummary() {
   if (innerTab === "finances") {
     return (
       <div className="space-y-6">
-        <div className="flex gap-1 p-1 rounded-full bg-muted/40 border border-border/40 w-fit">
-          {(["overview", "finances"] as const).map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setInnerTab(tab)}
-              data-testid={`inner-tab-${tab}`}
-              className={`px-4 py-1.5 rounded-full text-xs font-semibold capitalize transition-all duration-200 ${
-                innerTab === tab
-                  ? "bg-background text-foreground shadow-sm border border-border/60"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {tab === "overview" ? "Overview" : "Finances"}
-            </button>
-          ))}
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <SectionHeader title="My Portfolio" subtitle="Overview of your dynasty portfolio across all leagues" />
+          <div className="flex gap-1 p-1 rounded-full bg-muted/40 border border-border/40">
+            {(["overview", "finances"] as const).map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setInnerTab(tab)}
+                data-testid={`inner-tab-${tab}`}
+                className={`px-4 py-1.5 rounded-full text-xs font-semibold capitalize transition-all duration-200 ${
+                  innerTab === tab
+                    ? "bg-background text-foreground shadow-sm border border-border/60"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {tab === "overview" ? "Overview" : "Finances"}
+              </button>
+            ))}
+          </div>
         </div>
         <Suspense fallback={<div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>}>
           <FinanceTab />
