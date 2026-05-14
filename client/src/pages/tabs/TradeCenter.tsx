@@ -1316,10 +1316,10 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
             <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
           </div>
 
-          <div className="space-y-6">
+          <div className="space-y-3">
 
             {/* 1. VERDICT FRONT AND CENTER */}
-            <div className="text-center space-y-2 py-1">
+            <div className="text-center space-y-1.5 py-0">
               <p className="text-sm sm:text-base font-extrabold tracking-tight text-foreground uppercase leading-tight" data-testid="text-verdict-headline">
                 {diffPct <= 4 ? "Dead Even Trade" : `${winnerLabel} wins the trade`}
               </p>
