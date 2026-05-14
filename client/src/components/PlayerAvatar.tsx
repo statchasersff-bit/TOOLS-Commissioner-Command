@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { cn } from "@/lib/utils";
 
 const POS_COLORS: Record<string, string> = {
@@ -5,6 +6,13 @@ const POS_COLORS: Record<string, string> = {
   RB: "text-emerald-400",
   WR: "text-sky-400",
   TE: "text-yellow-400",
+};
+
+const POS_BG: Record<string, string> = {
+  QB: "bg-rose-500/20",
+  RB: "bg-emerald-500/20",
+  WR: "bg-sky-500/20",
+  TE: "bg-yellow-500/20",
 };
 
 /**
@@ -31,24 +39,41 @@ export function PlayerAvatar({
   sub?: string;
   compact?: boolean;
 }) {
-  const posColor  = POS_COLORS[pos] ?? "text-muted-foreground";
+  const [imgErr, setImgErr] = useState(false);
+
+  const posColor   = POS_COLORS[pos] ?? "text-muted-foreground";
+  const posBg      = POS_BG[pos] ?? "bg-muted/40";
   const avatarSize = size === "md" ? "w-11 h-11" : size === "xs" ? "w-7 h-7" : "w-9 h-9";
   const badgeSize  = size === "md" ? "w-[18px] h-[18px]" : size === "xs" ? "w-[12px] h-[12px]" : "w-[14px] h-[14px]";
   const nameSize   = size === "md" ? "text-[15px]" : size === "xs" ? "text-[12px]" : "text-[13px]";
   const metaSize   = size === "md" ? "text-[13px]" : size === "xs" ? "text-[10px]" : "text-[11px]";
+  const initSize   = size === "md" ? "text-[15px]" : size === "xs" ? "text-[11px]" : "text-[13px]";
+
+  const isSyntheticId = !id || id.startsWith("rookie_") || id.startsWith("pick_");
+  const showFallback  = imgErr || isSyntheticId;
+
+  const initials = (name || "?")
+    .split(" ")
+    .filter(Boolean)
+    .map((w) => w[0])
+    .slice(0, 2)
+    .join("");
 
   const circle = (
     <div className="relative flex-shrink-0">
-      <div className={cn(avatarSize, "rounded-full overflow-hidden bg-[#0b3a7a]/40 ring-1 ring-white/10")}>
-        <img
-          src={`https://sleepercdn.com/content/nfl/players/thumb/${id}.jpg`}
-          alt={name}
-          className="w-full h-full object-cover object-top"
-          onError={(e) => {
-            (e.target as HTMLImageElement).src =
-              "https://sleepercdn.com/images/v2/icons/player_default.webp";
-          }}
-        />
+      <div className={cn(avatarSize, "rounded-full overflow-hidden ring-1 ring-white/10", showFallback ? posBg : "bg-[#0b3a7a]/40")}>
+        {showFallback ? (
+          <div className={cn("w-full h-full flex items-center justify-center font-bold", initSize, posColor)}>
+            {initials}
+          </div>
+        ) : (
+          <img
+            src={`https://sleepercdn.com/content/nfl/players/thumb/${id}.jpg`}
+            alt={name}
+            className="w-full h-full object-cover object-top"
+            onError={() => setImgErr(true)}
+          />
+        )}
       </div>
       {team && team !== "FA" && (
         <div
@@ -84,7 +109,7 @@ export function PlayerAvatar({
           {sub ? (
             <span className="text-muted-foreground">{sub}</span>
           ) : (
-            team && <span className="text-muted-foreground font-medium">{team}</span>
+            team && team !== "FA" && <span className="text-muted-foreground font-medium">{team}</span>
           )}
         </div>
       </div>
