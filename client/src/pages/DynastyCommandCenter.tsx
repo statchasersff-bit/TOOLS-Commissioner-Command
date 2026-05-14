@@ -35,7 +35,6 @@ import { API_BASE } from "@/lib/apiBase";
 import Transactions from "./tabs/Transactions";
 import { LineupCommand } from "./tabs/LineupCommand";
 import TradeSync from "./tabs/TradeSync";
-import TradeNegotiations from "./tabs/TradeNegotiations";
 
 const STORAGE_KEY = "sc-dynasty-state";
 
@@ -301,7 +300,6 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
       case "trade-center:trade-database": return <TradeDatabase league={league} />;
       case "trade-center:trade-calculator": return <TradeCalculator league={league} userTeam={userTeam} />;
       case "trade-center:positional-analysis": return <PositionalAnalysis league={league} userTeam={userTeam} />;
-      case "trade-center:trade-negotiations": return <TradeNegotiations league={league} userTeam={userTeam} />;
       case "trade-center:trade-block": return <TradeBlockScanner league={league} />;
       case "league-market:market-value": return <MarketValue league={league} />;
       case "league-market:analysis": return <Analysis />;
