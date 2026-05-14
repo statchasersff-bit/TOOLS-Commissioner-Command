@@ -1466,7 +1466,6 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
                       </div>
                     )}
                   </div>
-                  <p className="text-[10px] font-bold text-muted-foreground truncate max-w-[120px]">{team?.owner || fallback}</p>
                 </div>
               );
               return (
