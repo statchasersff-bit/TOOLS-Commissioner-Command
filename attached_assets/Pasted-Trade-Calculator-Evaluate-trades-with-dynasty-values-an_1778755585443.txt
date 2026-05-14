@@ -1,0 +1,267 @@
+Trade Calculator
+Evaluate trades with dynasty values and diminishing returns
+
+
+
+Value Adj.
+
+
+Top-Asset Premium
+
+Clear
+Side A Gets...
+makitrain
+Search players...
+Add Pick
+WR
+Ja'Marr Chase
+9,621
+
+1 piece
+9,621
+
+makitrain's Roster
+
+QB
+
+
+Bo Nix
+
+Baker Mayfield
+
+Jacoby Brissett
+
+Joe Milton
+
+Russell Wilson
+RB
+
+
+Chase Brown
+
+Bhayshul Tuten
+
+Chuba Hubbard
+
+Alvin Kamara
+WR
+
+
+Ja'Marr Chase
+
+Ladd McConkey
+
+Terry McLaurin
+
+Josh Downs
+
+Stefon Diggs
+
+Elic Ayomanor
+
+Luke McCaffrey
+
+Savion Williams
+
+Jermaine Burton
+TE
+
+
+Harold Fannin
+
+George Kittle
+
+David Njoku
+
+Pat Freiermuth
+
+Greg Dulcich
+
+Zach Ertz
+
+Tyler Conklin
+
+Luke Schoonmaker
+
+Jonnu Smith
+Side B Gets...
+NinerNation9711
+Trade with:
+
+NinerNation9711
+Search players...
+Add Pick
+WR
+Jaxon Smith-Njigba
+9,581
+
+WR
+Quentin Johnston
+1,793
+
+2 pieces
+11,374
+
+NinerNation9711's Roster
+
+QB
+
+
+Sam Darnold
+
+Daniel Jones
+
+Anthony Richardson
+
+Mac Jones
+RB
+
+
+James Cook
+
+Christian McCaffrey
+
+Saquon Barkley
+
+Mike Washington
+
+Aaron Jones
+
+Eli Heidenreich
+
+Jordan James
+
+Ollie Gordon
+
+Seth McGowan
+WR
+
+
+Jaxon Smith-Njigba
+
+DeVonta Smith
+
+Tee Higgins
+
+Matthew Golden
+
+Mike Evans
+
+Quentin Johnston
+
+Courtland Sutton
+
+Chris Godwin
+
+Jerry Jeudy
+
+Jaylin Noel
+
+Chimere Dike
+
+DeMario Douglas
+
+Jordan Watkins
+TE
+
+
+Travis Kelce
+
+Ja'Tavion Sanders
+Trade Verdict
+NinerNation9711 wins the trade
+
+-1,440 Trade Value
+
+Clear Advantage
+NinerNation9711
+makitrain
+Fair
+Ja'Marr Chase
+makitrain
+
+Jaxon Smith-Njigba
+Quentin Johnston
+NinerNation9711
+
+makitrain receives
+
+9,332
+
+raw 9,621
+
+NinerNation9711 receives
+
+10,772
+
+raw 11,374
+
+Trade Difference: -1,440(13.4%)
+
+makitrain is getting the short end of this deal
+
+Position Impact
+makitrain
+
+Pos	Redraft	Dynasty
+QB	
+#9
+→
+#9
+#10
+→
+#10
+RB	
+#11
+→
+#11
+#12
+→
+#12
+WR	
+#3
+→
+#4
+↓1
+#8
+→
+#4
+↑4
+TE	
+#5
+→
+#5
+#5
+→
+#5
+NinerNation9711
+
+Pos	Redraft	Dynasty
+QB	
+#12
+→
+#12
+#11
+→
+#11
+RB	
+#1
+→
+#1
+#4
+→
+#4
+WR	
+#2
+→
+#2
+#2
+→
+#2
+TE	
+#9
+→
+#9
+#11
+→
+#11

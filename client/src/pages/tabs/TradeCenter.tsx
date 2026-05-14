@@ -1020,15 +1020,18 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
   const maxVal = Math.max(finalA, finalB, 1);
   const diffPct = (diff / maxVal) * 100;
 
-  const signedDiff = finalA - finalB;
+  // sideA = what sideA *sends* (= what sideB receives); sideB = what sideB *sends* (= what sideA receives)
+  // Winner is whoever RECEIVES more, i.e. whose partner sent higher value
+  const signedDiff = finalB - finalA; // positive when sideA receives more (finalB > finalA)
   const winnerSide = signedDiff >= 0 ? "A" : "B";
-  const loserSide = signedDiff >= 0 ? "B" : "A";
+  const loserSide  = signedDiff >= 0 ? "B" : "A";
   const winnerLabel = winnerSide === "A" ? (sideATeam?.owner || sideATeam?.name || "Side A") : (sideBTeam?.owner || sideBTeam?.name || "Side B");
 
   const meterPosition = useMemo(() => {
     if (finalA === 0 && finalB === 0) return 50;
     const total = finalA + finalB;
-    const ratio = finalA / total;
+    // finalB = what sideA receives; larger finalB → sideA is winning → indicator right (gold side)
+    const ratio = finalB / total;
     const clamped = Math.max(0.1, Math.min(0.9, ratio));
     return clamped * 100;
   }, [finalA, finalB]);
@@ -1202,7 +1205,7 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-bold flex items-center gap-2" data-testid={`text-side-${side}-header`}>
               <Scale className="w-4 h-4 text-[#0b3a7a] dark:text-blue-400" />
-              Side {sideLabel} Gets...
+              Side {sideLabel} Sends...
             </h3>
             {rosterTeam && (
               <Badge variant="secondary" className="text-[10px]" data-testid={`badge-side-${side}-team`}>
@@ -1397,7 +1400,7 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
               </p>
               {diff > 0 && (
                 <p className="text-sm font-bold text-[#d4af37]" data-testid="text-verdict-diff">
-                  {signedDiff > 0 ? "+" : ""}{Math.round(signedDiff).toLocaleString()} Trade Value
+                  +{Math.round(diff).toLocaleString()} Trade Value
                 </p>
               )}
               <div className="flex justify-center pt-1">
@@ -1487,23 +1490,25 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
               );
               return (
                 <div className="flex items-center justify-around gap-4 px-2">
-                  {renderStack(playersA, picksA, sideATeam, "Side A")}
-                  {renderStack(playersB, picksB, sideBTeam, "Side B")}
+                  {renderStack(playersA, picksA, sideBTeam, "Side B")}
+                  {renderStack(playersB, picksB, sideATeam, "Side A")}
                 </div>
               );
             })()}
 
             {/* 4. VALUE CARDS */}
             <div className="grid grid-cols-2 gap-3 text-center">
-              <div className={`p-3 rounded-lg border ${winnerSide === "A" && diffPct > 4 ? "bg-[#d4af37]/10 border-[#d4af37]/40" : "bg-muted/20 dark:bg-muted/10 border-border/20"}`}>
-                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">{sideATeam?.owner || "Side A"} receives</p>
+              {/* sideA sends → sideBTeam receives finalA */}
+              <div className={`p-3 rounded-lg border ${winnerSide === "B" && diffPct > 4 ? "bg-[#d4af37]/10 border-[#d4af37]/40" : "bg-muted/20 dark:bg-muted/10 border-border/20"}`}>
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">{sideBTeam?.owner || "Side B"} receives</p>
                 <p className="text-lg font-bold text-foreground" data-testid="text-analysis-final-a">{Math.round(finalA).toLocaleString()}</p>
                 {valueAdjustment && rawA !== finalA && (
                   <p className="text-[10px] text-muted-foreground/60 mt-0.5">raw {rawA.toLocaleString()}</p>
                 )}
               </div>
-              <div className={`p-3 rounded-lg border ${winnerSide === "B" && diffPct > 4 ? "bg-[#d4af37]/10 border-[#d4af37]/40" : "bg-muted/20 dark:bg-muted/10 border-border/20"}`}>
-                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">{sideBTeam?.owner || "Side B"} receives</p>
+              {/* sideB sends → sideATeam receives finalB */}
+              <div className={`p-3 rounded-lg border ${winnerSide === "A" && diffPct > 4 ? "bg-[#d4af37]/10 border-[#d4af37]/40" : "bg-muted/20 dark:bg-muted/10 border-border/20"}`}>
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">{sideATeam?.owner || "Side A"} receives</p>
                 <p className="text-lg font-bold text-foreground" data-testid="text-analysis-final-b">{Math.round(finalB).toLocaleString()}</p>
                 {valueAdjustment && rawB !== finalB && (
                   <p className="text-[10px] text-muted-foreground/60 mt-0.5">raw {rawB.toLocaleString()}</p>
@@ -1513,7 +1518,7 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
 
             {diff > 0 && (
               <p className="text-center text-xs text-muted-foreground" data-testid="text-analysis-diff">
-                Trade Difference: <span className="font-bold text-foreground">{signedDiff > 0 ? "+" : ""}{Math.round(signedDiff).toLocaleString()}</span>
+                Trade Difference: <span className="font-bold text-foreground">+{Math.round(diff).toLocaleString()}</span>
                 <span className="ml-1 opacity-60">({diffPct.toFixed(1)}%)</span>
               </p>
             )}
