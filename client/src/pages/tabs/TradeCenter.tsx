@@ -1316,7 +1316,7 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
       </div>
 
       <Card className="p-5">
-        {(sideA.length > 0 || sideB.length > 0) && (
+        {(sideA.length > 0 && sideB.length > 0) && (
           <>
           <div className="mb-5">
             <h3 className="text-sm font-bold flex items-center gap-2">
