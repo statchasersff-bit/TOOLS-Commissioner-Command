@@ -420,17 +420,17 @@ function PickCardRow({ pick }: { pick: AssetPick }) {
 // ─── Direction pill badge ─────────────────────────────────────────────────────
 
 function DirectionPill({ direction, status }: { direction: NormalizedTrade["direction"]; status: TradeStatus }) {
+  const base = "text-[11px] font-bold px-2.5 py-1 rounded-full border";
   if (status === "complete")
-    return <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-emerald-500 text-white">Completed</span>;
+    return <span className={base} style={{ background: "rgba(212,175,55,.14)", color: "#facc15", borderColor: "rgba(250,204,21,.28)" }}>Completed</span>;
   if (status === "rejected")
-    return <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-red-500 text-white">Rejected</span>;
+    return <span className={base} style={{ background: "rgba(239,68,68,.16)", color: "#f87171", borderColor: "rgba(248,113,113,.32)" }}>Rejected</span>;
   if (status === "failed" || status === "cancelled")
-    return <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-zinc-500 text-white">Cancelled</span>;
-  // proposed
+    return <span className={base} style={{ background: "rgba(148,163,184,.12)", color: "#94a3b8", borderColor: "rgba(148,163,184,.22)" }}>Cancelled</span>;
   if (direction === "incoming")
-    return <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-emerald-500 text-white">Incoming</span>;
+    return <span className={base} style={{ background: "rgba(34,197,94,.18)", color: "#4ade80", borderColor: "rgba(74,222,128,.35)" }}>Incoming</span>;
   if (direction === "outgoing")
-    return <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-blue-500 text-white">Outgoing</span>;
+    return <span className={base} style={{ background: "rgba(59,130,246,.18)", color: "#60a5fa", borderColor: "rgba(96,165,250,.35)" }}>Outgoing</span>;
   return null;
 }
 
