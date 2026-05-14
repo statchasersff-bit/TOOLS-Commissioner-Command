@@ -249,34 +249,54 @@ export function ShareTeam({ league, userTeam }: Props) {
 
   return (
     <div className="space-y-4">
-      {/* Inner tab toggle */}
-      <div className="flex gap-1 p-1 rounded-full bg-muted/40 border border-border/40 w-fit">
-        <button
-          onClick={() => setInnerTab("share")}
-          data-testid="tab-inner-share"
-          className={cn(
-            "flex items-center gap-1.5 px-4 py-1.5 rounded-full text-sm font-semibold transition-all",
-            innerTab === "share"
-              ? "bg-background text-foreground shadow-sm"
-              : "text-muted-foreground hover:text-foreground"
-          )}
-        >
-          <Share2 className="w-3.5 h-3.5" />
-          Share My Team
-        </button>
-        <button
-          onClick={() => setInnerTab("field-view")}
-          data-testid="tab-inner-field-view"
-          className={cn(
-            "flex items-center gap-1.5 px-4 py-1.5 rounded-full text-sm font-semibold transition-all",
-            innerTab === "field-view"
-              ? "bg-background text-foreground shadow-sm"
-              : "text-muted-foreground hover:text-foreground"
-          )}
-        >
-          <LayoutGrid className="w-3.5 h-3.5" />
-          Field View
-        </button>
+      {/* Combined controls + tab toggle row */}
+      <div className="flex flex-wrap items-center gap-2">
+        {innerTab === "share" && (
+          <>
+            <Button size="sm" variant="outline" onClick={copyLink} data-testid="button-copy-link">
+              <Copy className="w-3.5 h-3.5 mr-1.5" /> Copy Link
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => doExport(false)} disabled={isExporting} data-testid="button-export-image">
+              {isExporting ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <Image className="w-3.5 h-3.5 mr-1.5" />}
+              Export Image
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => doExport(true)} disabled={isExporting} data-testid="button-export-anonymous">
+              <EyeOff className="w-3.5 h-3.5 mr-1.5" /> Export Anonymous
+            </Button>
+            <Button size="sm" variant="outline" onClick={copyBlurb} data-testid="button-copy-blurb">
+              <Share2 className="w-3.5 h-3.5 mr-1.5" /> Copy Blurb
+            </Button>
+            <ToggleSwitch id="hide-values" label="Hide Values" checked={hideValues} onCheckedChange={setHideValues} />
+          </>
+        )}
+        <div className="ml-auto flex gap-1 p-1 rounded-full bg-muted/40 border border-border/40">
+          <button
+            onClick={() => setInnerTab("share")}
+            data-testid="tab-inner-share"
+            className={cn(
+              "flex items-center gap-1.5 px-4 py-1.5 rounded-full text-sm font-semibold transition-all",
+              innerTab === "share"
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <Share2 className="w-3.5 h-3.5" />
+            Share My Team
+          </button>
+          <button
+            onClick={() => setInnerTab("field-view")}
+            data-testid="tab-inner-field-view"
+            className={cn(
+              "flex items-center gap-1.5 px-4 py-1.5 rounded-full text-sm font-semibold transition-all",
+              innerTab === "field-view"
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <LayoutGrid className="w-3.5 h-3.5" />
+            Field View
+          </button>
+        </div>
       </div>
 
       {innerTab === "field-view" && (
@@ -285,24 +305,6 @@ export function ShareTeam({ league, userTeam }: Props) {
 
       {innerTab === "share" && (
       <div className="space-y-4">
-
-      {/* Controls bar */}
-      <div className="flex flex-wrap items-center gap-2">
-        <Button size="sm" variant="outline" onClick={copyLink} data-testid="button-copy-link">
-          <Copy className="w-3.5 h-3.5 mr-1.5" /> Copy Link
-        </Button>
-        <Button size="sm" variant="outline" onClick={() => doExport(false)} disabled={isExporting} data-testid="button-export-image">
-          {isExporting ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <Image className="w-3.5 h-3.5 mr-1.5" />}
-          Export Image
-        </Button>
-        <Button size="sm" variant="outline" onClick={() => doExport(true)} disabled={isExporting} data-testid="button-export-anonymous">
-          <EyeOff className="w-3.5 h-3.5 mr-1.5" /> Export Anonymous
-        </Button>
-        <Button size="sm" variant="outline" onClick={copyBlurb} data-testid="button-copy-blurb">
-          <Share2 className="w-3.5 h-3.5 mr-1.5" /> Copy Blurb
-        </Button>
-        <ToggleSwitch id="hide-values" label="Hide Values" checked={hideValues} onCheckedChange={setHideValues} />
-      </div>
 
 
       {/* Two-column layout */}
