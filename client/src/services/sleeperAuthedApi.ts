@@ -306,20 +306,137 @@ export async function submitLineup(
   );
 }
 
-/** @todo Discover propose_trade mutation shape from sleeper.com/graphql */
-export async function proposeTrade(
-  _leagueId: string,
-  _fromRosterId: number,
-  _toRosterId: number,
-  _offeredPlayerIds: string[],
-  _requestedPlayerIds: string[],
-  _offeredPickIds?: string[],
-  _requestedPickIds?: string[]
-): Promise<never> {
-  throw new Error(
-    "propose_trade: mutation shape not yet discovered. " +
-      "Capture from sleeper.com/graphql with x-sleeper-graphql-op: propose_trade."
-  );
+// ─── propose_trade ────────────────────────────────────────────────────────────
+
+function buildProposeTrademutation(
+  leagueId: string,
+  draftPicks: string[],
+  expiresAt: number,
+  rejectTransactionId?: string,
+  rejectTransactionLeg?: number
+): string {
+  const rejectIdLine = rejectTransactionId
+    ? `reject_transaction_id: "${rejectTransactionId}",`
+    : "";
+  const rejectLegLine = rejectTransactionLeg != null
+    ? `reject_transaction_leg: ${rejectTransactionLeg},`
+    : "";
+  return `
+    mutation propose_trade(
+      $k_adds: [String],
+      $v_adds: [Int],
+      $k_drops: [String],
+      $v_drops: [Int]
+    ) {
+      propose_trade(
+        league_id: "${leagueId}",
+        ${rejectIdLine}
+        ${rejectLegLine}
+        draft_picks: ${JSON.stringify(draftPicks)},
+        k_adds: $k_adds,
+        v_adds: $v_adds,
+        k_drops: $k_drops,
+        v_drops: $v_drops,
+        expires_at: ${expiresAt}
+      ) {
+        adds
+        consenter_ids
+        created
+        creator
+        draft_picks
+        drops
+        league_id
+        leg
+        metadata
+        roster_ids
+        settings
+        status
+        status_updated
+        transaction_id
+        type
+        player_map
+        waiver_budget
+      }
+    }
+  `;
+}
+
+export interface ProposeTradeParams {
+  leagueId: string;
+  /** playerId → receiving roster ID */
+  adds: Record<string, number>;
+  /** playerId → sending roster ID */
+  drops: Record<string, number>;
+  draftPicks: string[];
+  expiresAt: number;
+  /** When countering an existing offer, the transaction to reject */
+  rejectTransactionId?: string;
+  rejectTransactionLeg?: number;
+}
+
+export interface ProposeTradeResult {
+  adds: Record<string, number> | null;
+  consenter_ids: number[];
+  created: number;
+  creator: string | null;
+  draft_picks: unknown[];
+  drops: Record<string, number> | null;
+  league_id: string;
+  leg: number;
+  metadata: Record<string, unknown> | null;
+  roster_ids: number[];
+  settings: Record<string, unknown> | null;
+  status: string;
+  status_updated: number | null;
+  transaction_id: string;
+  type: string;
+  player_map: Record<string, unknown> | null;
+  waiver_budget: unknown[];
+}
+
+/**
+ * Propose (or counter) a trade via sleeper.com/graphql.
+ *
+ * IMPORTANT: Always show a confirmation UI before calling this function.
+ * Show exactly what each side receives. If countering, show
+ * "This will counter and reject the existing offer."
+ * Never call this silently or automatically.
+ *
+ * On success, refetch league_transactions_filtered with type_filters ["trade"]
+ * to keep local state in sync.
+ */
+export async function proposeTrade(params: ProposeTradeParams): Promise<ProposeTradeResult> {
+  const {
+    leagueId,
+    adds,
+    drops,
+    draftPicks,
+    expiresAt,
+    rejectTransactionId,
+    rejectTransactionLeg,
+  } = params;
+
+  const k_adds = Object.keys(adds);
+  const v_adds = Object.values(adds);
+  const k_drops = Object.keys(drops);
+  const v_drops = Object.values(drops);
+
+  const data = await sleeperGraphQLRequest<{ propose_trade: ProposeTradeResult }>({
+    operationName: "propose_trade",
+    query: buildProposeTrademutation(
+      leagueId,
+      draftPicks,
+      expiresAt,
+      rejectTransactionId,
+      rejectTransactionLeg
+    ),
+    variables: { k_adds, v_adds, k_drops, v_drops },
+  });
+
+  if (!data.propose_trade) {
+    throw new Error("Trade proposal failed — no response from Sleeper.");
+  }
+  return data.propose_trade;
 }
 
 function buildAcceptTradeMutation(leagueId: string): string {
