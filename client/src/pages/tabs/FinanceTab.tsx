@@ -593,7 +593,7 @@ export function FinanceTab() {
                       </a>
                     )}
                   </label>
-                  <Input type="url" placeholder="https://leaguesafe.com/join/..."
+                  <Input type="url" placeholder="https://leaguesafe.com/league/..."
                     value={f.leagueSafeUrl}
                     onChange={e => updateFinance(league.leagueId, { leagueSafeUrl: e.target.value })}
                     data-testid={`input-leaguesafe-${league.leagueId}`} />
