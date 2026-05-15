@@ -1133,6 +1133,7 @@ export default function LiveDraft() {
     if (!val) return;
     localStorage.setItem(SLEEPER_JWT_KEY, val);
     setSleeperJwt(val);
+    window.dispatchEvent(new CustomEvent("sleeper-jwt-changed", { detail: val }));
     setJwtInput("");
     setShowJwtInput(false);
     if (activeDraftId) {
@@ -1145,6 +1146,7 @@ export default function LiveDraft() {
   const handleClearJwt = () => {
     localStorage.removeItem(SLEEPER_JWT_KEY);
     setSleeperJwt(null);
+    window.dispatchEvent(new CustomEvent("sleeper-jwt-changed", { detail: null }));
     setDraftMessages([]);
     setDraftStarted(false);
     setDraftQueue([]);

@@ -785,8 +785,10 @@ export function TradeBlockScanner({ league }: { league: League }) {
   const [sleeperJwt, setSleeperJwt] = useState<string | null>(() => localStorage.getItem(SLEEPER_JWT_KEY));
   useEffect(() => {
     const onStorage = (e: StorageEvent) => { if (e.key === SLEEPER_JWT_KEY) setSleeperJwt(e.newValue); };
+    const onJwtChanged = (e: Event) => { setSleeperJwt((e as CustomEvent).detail); };
     window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
+    window.addEventListener("sleeper-jwt-changed", onJwtChanged);
+    return () => { window.removeEventListener("storage", onStorage); window.removeEventListener("sleeper-jwt-changed", onJwtChanged); };
   }, []);
 
   const [lpsData, setLpsData] = useState<any[]>([]);
@@ -1145,8 +1147,10 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
   const [sleeperJwt, setSleeperJwt] = useState<string | null>(() => localStorage.getItem(SLEEPER_JWT_KEY));
   useEffect(() => {
     const onStorage = (e: StorageEvent) => { if (e.key === SLEEPER_JWT_KEY) setSleeperJwt(e.newValue); };
+    const onJwtChanged = (e: Event) => { setSleeperJwt((e as CustomEvent).detail); };
     window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
+    window.addEventListener("sleeper-jwt-changed", onJwtChanged);
+    return () => { window.removeEventListener("storage", onStorage); window.removeEventListener("sleeper-jwt-changed", onJwtChanged); };
   }, []);
 
   // Live roster draft picks from Sleeper GraphQL
