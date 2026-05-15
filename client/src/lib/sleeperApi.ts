@@ -29,6 +29,7 @@ interface SleeperRosterRaw {
   players: string[];
   starters: string[];
   taxi?: string[] | null;
+  reserve?: string[] | null;
   settings?: {
     wins?: number;
     losses?: number;
@@ -309,6 +310,7 @@ export async function fetchSleeperLeagueFull(leagueId: string, userId: string) {
 
     const starterSet = new Set(roster.starters || []);
     const taxiSet = new Set(roster.taxi ?? []);
+    const reserveSet = new Set(roster.reserve ?? []);
     const rosterPlayers = (roster.players || [])
       .map((pid) => {
         const pData = playersDb[pid];
@@ -324,6 +326,7 @@ export async function fetchSleeperLeagueFull(leagueId: string, userId: string) {
           team: pData.team || "FA",
           starter: starterSet.has(pid),
           onTaxi: taxiSet.has(pid),
+          onReserve: reserveSet.has(pid),
           sleeperId: pid,
         };
       })
@@ -1649,6 +1652,14 @@ export const SleeperOperations = {
     key: "updateDraftQueue",
     operationName: "update_draft_queue",
     category: "draft_room",
+    authRequired: true,
+    writeAction: true,
+    priority: "high" as const,
+  },
+  updateReserve: {
+    key: "updateReserve",
+    operationName: "roster_update_reserve",
+    category: "roster_management",
     authRequired: true,
     writeAction: true,
     priority: "high" as const,

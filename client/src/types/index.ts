@@ -21,6 +21,7 @@ export interface Player {
   team: string;
   starter?: boolean;
   onTaxi?: boolean;
+  onReserve?: boolean;
   sleeperId?: string;
 }
 

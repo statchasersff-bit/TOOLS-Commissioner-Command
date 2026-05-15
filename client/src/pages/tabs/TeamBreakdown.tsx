@@ -17,6 +17,7 @@ import {
   type NormalizedDraftPick,
 } from "@/lib/sleeperApi";
 import { updateTaxi } from "@/lib/sleeper/graphql/mutations/updateTaxi";
+import { updateReserve } from "@/lib/sleeper/graphql/mutations/updateReserve";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 
@@ -118,6 +119,40 @@ export function RosterBreakdown({ league, userTeam }: TeamProps) {
       setTaxiMutating(null);
     }
   }, [sleeperJwt, userRosterId, league.id, localTaxiIds, toast]);
+
+  // ── IR / Reserve ───────────────────────────────────────────────────────────
+  const irSlots = league.irSlots ?? 0;
+  const [localReserveIds, setLocalReserveIds] = useState<Set<string>>(
+    () => new Set(userTeam.roster.filter((p) => p.onReserve).map((p) => p.id))
+  );
+  const [reserveMutating, setReserveMutating] = useState<string | null>(null);
+
+  useEffect(() => {
+    setLocalReserveIds(new Set(userTeam.roster.filter((p) => p.onReserve).map((p) => p.id)));
+  }, [userTeam.id]);
+
+  const handleReserve = useCallback(async (player: Player, toReserve: boolean) => {
+    if (!sleeperJwt || userRosterId === null || !league.id) return;
+    const nextReserve = toReserve
+      ? [...localReserveIds, player.id].filter((id, i, a) => a.indexOf(id) === i)
+      : [...localReserveIds].filter((id) => id !== player.id);
+    setReserveMutating(player.id);
+    setLocalReserveIds(new Set(nextReserve));
+    try {
+      const data = await updateReserve(sleeperJwt, league.id, userRosterId, nextReserve);
+      setLocalReserveIds(new Set(data.roster_update_reserve?.reserve ?? []));
+      toast({ title: toReserve ? "Moved to IR" : "Removed from IR", description: player.name });
+    } catch (err: any) {
+      setLocalReserveIds(new Set(
+        toReserve
+          ? nextReserve.filter((id) => id !== player.id)
+          : [...nextReserve, player.id]
+      ));
+      toast({ title: "Action failed", description: err?.message || "Could not update IR/reserve. Sleeper may not allow this move.", variant: "destructive" });
+    } finally {
+      setReserveMutating(null);
+    }
+  }, [sleeperJwt, userRosterId, league.id, localReserveIds, toast]);
 
   const posRanks = useMemo(() => {
     const positions = ["QB", "RB", "WR", "TE"] as const;
@@ -255,11 +290,13 @@ export function RosterBreakdown({ league, userTeam }: TeamProps) {
                 </div>
                 <div className="space-y-1">
                   {[...players].sort((a, b) => {
-                    const aScore = a.starter ? 2 : localTaxiIds.has(a.id) ? 0 : 1;
-                    const bScore = b.starter ? 2 : localTaxiIds.has(b.id) ? 0 : 1;
-                    return bScore - aScore || b.value - a.value;
+                    const score = (p: Player) =>
+                      p.starter ? 3 : localReserveIds.has(p.id) ? 0 : localTaxiIds.has(p.id) ? 1 : 2;
+                    return score(b) - score(a) || b.value - a.value;
                   }).map((p) => {
-                    const isOnTaxi = localTaxiIds.has(p.id);
+                    const isOnTaxi    = localTaxiIds.has(p.id);
+                    const isOnIR      = localReserveIds.has(p.id);
+                    const isMutating  = taxiMutating === p.id || reserveMutating === p.id;
                     return (
                       <div key={p.id} className="flex items-center justify-between py-2.5 border-b border-border/20 last:border-0" data-testid={`depth-player-${p.id}`}>
                         <div className="flex items-center gap-2">
@@ -273,23 +310,29 @@ export function RosterBreakdown({ league, userTeam }: TeamProps) {
                           />
                           <Badge
                             variant={p.starter ? "default" : "outline"}
-                            className={cn("text-xs", isOnTaxi && "border-amber-500/40 text-amber-400 bg-amber-500/10")}
+                            className={cn(
+                              "text-xs",
+                              isOnTaxi && "border-amber-500/40 text-amber-400 bg-amber-500/10",
+                              isOnIR   && "border-red-500/40 text-red-400 bg-red-500/10"
+                            )}
                           >
-                            {p.starter ? "Starter" : isOnTaxi ? "Taxi" : "Bench"}
+                            {p.starter ? "Starter" : isOnTaxi ? "Taxi" : isOnIR ? "IR" : "Bench"}
                           </Badge>
                           <span className={cn("text-sm", p.starter ? "font-semibold" : "")}>{p.name}</span>
                         </div>
                         <div className="flex items-center gap-2">
                           <span className="text-xs text-muted-foreground">{p.team}</span>
                           <span className="text-xs text-muted-foreground">Age {p.age}</span>
-                          {sleeperJwt && taxiSlots > 0 && !p.starter && (
+
+                          {/* Taxi actions — hidden while player is on IR */}
+                          {sleeperJwt && taxiSlots > 0 && !p.starter && !isOnIR && (
                             isOnTaxi ? (
                               <Button
                                 variant="outline"
                                 size="sm"
                                 className="h-5 px-1.5 text-[10px] font-medium"
                                 onClick={() => handleTaxi(p, false)}
-                                disabled={taxiMutating === p.id}
+                                disabled={isMutating}
                                 data-testid={`btn-remove-taxi-${p.id}`}
                                 title="Remove from Taxi"
                               >
@@ -303,7 +346,7 @@ export function RosterBreakdown({ league, userTeam }: TeamProps) {
                                 size="sm"
                                 className="h-5 px-1.5 text-[10px] font-medium hover:text-amber-400 hover:border-amber-500/40"
                                 onClick={() => handleTaxi(p, true)}
-                                disabled={taxiMutating === p.id || localTaxiIds.size >= taxiSlots}
+                                disabled={isMutating || localTaxiIds.size >= taxiSlots}
                                 data-testid={`btn-move-taxi-${p.id}`}
                                 title="Move to Taxi"
                               >
@@ -313,6 +356,40 @@ export function RosterBreakdown({ league, userTeam }: TeamProps) {
                               </Button>
                             )
                           )}
+
+                          {/* IR actions — hidden while player is on Taxi */}
+                          {sleeperJwt && irSlots > 0 && !p.starter && !isOnTaxi && (
+                            isOnIR ? (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-5 px-1.5 text-[10px] font-medium"
+                                onClick={() => handleReserve(p, false)}
+                                disabled={isMutating}
+                                data-testid={`btn-remove-ir-${p.id}`}
+                                title="Remove from IR"
+                              >
+                                {reserveMutating === p.id
+                                  ? <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                                  : "← Bench"}
+                              </Button>
+                            ) : (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-5 px-1.5 text-[10px] font-medium hover:text-red-400 hover:border-red-500/40"
+                                onClick={() => handleReserve(p, true)}
+                                disabled={isMutating || localReserveIds.size >= irSlots}
+                                data-testid={`btn-move-ir-${p.id}`}
+                                title="Move to IR"
+                              >
+                                {reserveMutating === p.id
+                                  ? <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                                  : "→ IR"}
+                              </Button>
+                            )
+                          )}
+
                           <span className="text-xs font-bold w-6 text-right">{p.value}</span>
                         </div>
                       </div>
