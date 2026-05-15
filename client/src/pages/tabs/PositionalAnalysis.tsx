@@ -2176,12 +2176,11 @@ function RebuildMode({ league, userTeam }: { league: League; userTeam: Team }) {
 function BuildDynastyMode({ league, userTeam }: { league: League; userTeam: Team }) {
   const { getPlayerValue, getRedraftValue, getPickValue } = useValueModel();
   const { profiles } = usePositionalProfiles(league, userTeam);
-  const [aggressiveness, setAggressiveness] = useState<"conservative" | "balanced" | "aggressive">("balanced");
-  const [includeStuds, setIncludeStuds] = useState(true);
+  const includeStuds = true;
   const [expandedPartner, setExpandedPartner] = useState<string | null>(null);
   const tradeBlockTierMap = useMemo(() => getLeagueTeamTiers(league.teams), [league.teams]);
 
-  const fairnessThreshold = aggressiveness === "conservative" ? 0.08 : aggressiveness === "balanced" ? 0.12 : 0.18;
+  const fairnessThreshold = 0.12;
 
   const userProfile = useMemo(() => profiles.find(p => p.teamId === userTeam.id), [profiles, userTeam]);
 
@@ -2256,7 +2255,7 @@ function BuildDynastyMode({ league, userTeam }: { league: League; userTeam: Team
 
         const suggestions = generateSuggestions(
           userTeam, partner.team, userProfile, partner,
-          effectiveSells, effectiveBuys, getPlayerValue, getPickValue, includeStuds, fairnessThreshold, aggressiveness,
+          effectiveSells, effectiveBuys, getPlayerValue, getPickValue, includeStuds, fairnessThreshold,
           tradeBlockTierMap.get(userTeam.id)?.tier ?? "Balanced",
           tradeBlockTierMap.get(partner.teamId)?.tier ?? "Balanced"
         );
@@ -2265,36 +2264,10 @@ function BuildDynastyMode({ league, userTeam }: { league: League; userTeam: Team
       })
       .filter(o => o.matchScore > 0 && o.suggestions.length > 0)
       .sort((a, b) => b.matchScore - a.matchScore);
-  }, [profiles, userTeam, userProfile, getPlayerValue, getPickValue, includeStuds, fairnessThreshold, aggressiveness, league]);
+  }, [profiles, userTeam, userProfile, getPlayerValue, getPickValue, league]);
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-2">
-          <div className="flex items-center border border-border rounded-md overflow-hidden">
-            {(["conservative", "balanced", "aggressive"] as const).map(level => (
-              <button
-                key={level}
-                onClick={() => setAggressiveness(level)}
-                className={cn(
-                  "px-3 py-1.5 text-xs font-medium capitalize transition-colors",
-                  aggressiveness === level
-                    ? "bg-[#0b3a7a] text-white"
-                    : "bg-background text-muted-foreground hover:bg-muted/50"
-                )}
-                data-testid={`btn-aggr-${level}`}
-              >
-                {level}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <label className="text-xs text-muted-foreground">Include Studs</label>
-          <Switch checked={includeStuds} onCheckedChange={setIncludeStuds} data-testid="switch-include-studs" />
-        </div>
-      </div>
-
       {userProfile && (
         <Card className="bg-muted/20">
           <CardContent className="pt-4 pb-3">
@@ -2385,7 +2358,7 @@ function BuildDynastyMode({ league, userTeam }: { league: League; userTeam: Team
                   <div className="border-t border-border/30 px-5 py-4 space-y-4">
                     {opp.suggestions.length === 0 && (
                       <p className="text-xs text-muted-foreground text-center py-4">
-                        No trade ideas could be generated within the {aggressiveness} fairness band. Try adjusting settings.
+                        No trade ideas could be generated for this partner. Try selecting a different league or check back after roster changes.
                       </p>
                     )}
                     {opp.suggestions.map((sug, idx) => (
@@ -2541,14 +2514,13 @@ function generateSuggestions(
   getPickValue: (p: Pick) => number,
   includeStuds: boolean,
   fairnessThreshold: number,
-  aggressiveness: "conservative" | "balanced" | "aggressive",
   userTier: Tier,
   partnerTier: Tier,
 ): TradeSuggestion[] {
   const suggestions: TradeSuggestion[] = [];
 
-  const fairBand = aggressiveness === "conservative" ? 0.04 : aggressiveness === "balanced" ? 0.05 : 0.07;
-  const reasonableBand = aggressiveness === "conservative" ? 0.08 : aggressiveness === "balanced" ? 0.10 : 0.13;
+  const fairBand = 0.05;
+  const reasonableBand = 0.10;
 
   const mySellCandidates = uSells.flatMap(pos => {
     const players = [...userTeam.roster]
