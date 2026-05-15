@@ -1453,11 +1453,89 @@ export async function fetchLeagueTransactions(leagueId: string) {
       return { type, timestamp, week, adds, drops, draftPicks, involvedTeams };
     });
 
+  const pendingFormatted = allTransactions
+    .filter((t: any) => t.status === "pending" && t.type === "trade")
+    .map((t: any) => {
+      const pAdds: Array<{ playerId: string; name: string; pos: string; team: string; rosterId: number; teamName: string }> = [];
+      const pDrops: Array<{ playerId: string; name: string; pos: string; team: string; rosterId: number; teamName: string }> = [];
+      const pPicks: Array<{ season: string; round: number; fromTeam: string; toTeam: string; originalRosterId?: number; pickSlot?: number }> = [];
+      if (t.adds) {
+        for (const [pid, rid] of Object.entries(t.adds)) {
+          const p = players[pid];
+          pAdds.push({ playerId: pid, name: p?.full_name || pid, pos: p?.position || "?", team: p?.team || "FA", rosterId: rid as number, teamName: rosterOwnerMap.get(rid as number) || `Team ${rid}` });
+        }
+      }
+      if (t.drops) {
+        for (const [pid, rid] of Object.entries(t.drops)) {
+          const p = players[pid];
+          pDrops.push({ playerId: pid, name: p?.full_name || pid, pos: p?.position || "?", team: p?.team || "FA", rosterId: rid as number, teamName: rosterOwnerMap.get(rid as number) || `Team ${rid}` });
+        }
+      }
+      if (t.draft_picks && Array.isArray(t.draft_picks)) {
+        for (const dp of t.draft_picks) {
+          const pickSlot = dp.season === "2026" ? rosterIdToSlot2026.get(dp.roster_id) : undefined;
+          pPicks.push({ season: dp.season, round: dp.round, fromTeam: rosterOwnerMap.get(dp.previous_owner_id) || `Team ${dp.previous_owner_id}`, toTeam: rosterOwnerMap.get(dp.owner_id) || `Team ${dp.owner_id}`, originalRosterId: dp.roster_id, pickSlot });
+        }
+      }
+      const pRosterIds = new Set<number>();
+      if (t.roster_ids) t.roster_ids.forEach((r: number) => pRosterIds.add(r));
+      const pInvolvedTeams = [...pRosterIds].map((rid) => ({ rosterId: rid, teamName: rosterOwnerMap.get(rid) || `Team ${rid}`, avatar: rosterAvatarMap.get(rid) ?? null }));
+      const waiverBudget: Array<{ senderId: number; receiverId: number; amount: number }> =
+        (t.waiver_budget || []).map((wb: any) => ({ senderId: wb.sender, receiverId: wb.receiver, amount: wb.amount }));
+      return {
+        transactionId: t.transaction_id as string,
+        leg: (t.leg as number) || 1,
+        status: t.status as string,
+        consenterIds: (t.consenter_ids || []) as number[],
+        waiverBudget,
+        week: t.week as number,
+        created: (t.created as number) || 0,
+        adds: pAdds,
+        drops: pDrops,
+        draftPicks: pPicks,
+        involvedTeams: pInvolvedTeams,
+      };
+    });
+
   return {
     transactions: formatted,
+    pendingTrades: pendingFormatted,
     leagueName: leagueRaw.name,
     totalRosters: leagueRaw.total_rosters,
   };
+}
+
+export async function acceptTradeOnSleeper(
+  leagueId: string,
+  transactionId: string,
+  leg: number,
+  jwt: string
+): Promise<any> {
+  const res = await fetch("https://sleeper.com/graphql", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "authorization": jwt,
+      "x-sleeper-graphql-op": "accept_trade",
+    },
+    body: JSON.stringify({
+      query: `mutation accept_trade {
+        accept_trade(
+          league_id: "${leagueId}",
+          transaction_id: "${transactionId}",
+          leg: ${leg}
+        ) {
+          adds consenter_ids created creator draft_picks drops
+          league_id leg metadata roster_ids settings status
+          status_updated transaction_id type player_map waiver_budget
+        }
+      }`,
+    }),
+  });
+  if (!res.ok) throw new Error(`GraphQL ${res.status}`);
+  const json = await res.json();
+  if (json?.errors?.length) throw new Error(json.errors[0].message || "Accept trade failed");
+  return json?.data?.accept_trade;
 }
 
 export async function sleeperLogin(login: string, password: string): Promise<string> {
