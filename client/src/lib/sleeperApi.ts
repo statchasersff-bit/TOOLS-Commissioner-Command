@@ -28,6 +28,7 @@ interface SleeperRosterRaw {
   owner_id: string;
   players: string[];
   starters: string[];
+  taxi?: string[] | null;
   settings?: {
     wins?: number;
     losses?: number;
@@ -307,6 +308,7 @@ export async function fetchSleeperLeagueFull(leagueId: string, userId: string) {
     const ownerName = ownerUser?.display_name || `Owner ${roster.roster_id}`;
 
     const starterSet = new Set(roster.starters || []);
+    const taxiSet = new Set(roster.taxi ?? []);
     const rosterPlayers = (roster.players || [])
       .map((pid) => {
         const pData = playersDb[pid];
@@ -321,6 +323,7 @@ export async function fetchSleeperLeagueFull(leagueId: string, userId: string) {
           value: 0,
           team: pData.team || "FA",
           starter: starterSet.has(pid),
+          onTaxi: taxiSet.has(pid),
           sleeperId: pid,
         };
       })

@@ -20,6 +20,7 @@ export interface Player {
   value: number;
   team: string;
   starter?: boolean;
+  onTaxi?: boolean;
   sleeperId?: string;
 }
 

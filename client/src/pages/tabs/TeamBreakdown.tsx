@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -16,6 +16,9 @@ import {
   normalizeRosterDraftPicks,
   type NormalizedDraftPick,
 } from "@/lib/sleeperApi";
+import { updateTaxi } from "@/lib/sleeper/graphql/mutations/updateTaxi";
+import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
 
 const SLEEPER_JWT_KEY = "dc-sleeper-draft-jwt";
 
@@ -75,6 +78,46 @@ export function RosterBreakdown({ league, userTeam }: TeamProps) {
         .map(([season, ps]) => [season, ps.sort((a, b) => a.round - b.round)])
     );
   }, [picks, userTeam.id]);
+
+  // ── Taxi squad ─────────────────────────────────────────────────────────────
+  const taxiSlots = league.taxiSlots ?? 0;
+  const userRosterId = useMemo(() => {
+    const m = userTeam.id.match(/^roster_(\d+)$/);
+    return m ? parseInt(m[1], 10) : null;
+  }, [userTeam.id]);
+
+  const [localTaxiIds, setLocalTaxiIds] = useState<Set<string>>(
+    () => new Set(userTeam.roster.filter((p) => p.onTaxi).map((p) => p.id))
+  );
+  const [taxiMutating, setTaxiMutating] = useState<string | null>(null);
+  const { toast } = useToast();
+
+  useEffect(() => {
+    setLocalTaxiIds(new Set(userTeam.roster.filter((p) => p.onTaxi).map((p) => p.id)));
+  }, [userTeam.id]);
+
+  const handleTaxi = useCallback(async (player: Player, toTaxi: boolean) => {
+    if (!sleeperJwt || userRosterId === null || !league.id) return;
+    const nextTaxi = toTaxi
+      ? [...localTaxiIds, player.id].filter((id, i, a) => a.indexOf(id) === i)
+      : [...localTaxiIds].filter((id) => id !== player.id);
+    setTaxiMutating(player.id);
+    setLocalTaxiIds(new Set(nextTaxi));
+    try {
+      const result = await updateTaxi(sleeperJwt, league.id, userRosterId, nextTaxi);
+      setLocalTaxiIds(new Set(result.taxi ?? []));
+      toast({ title: toTaxi ? "Moved to Taxi" : "Removed from Taxi", description: player.name });
+    } catch (err: any) {
+      setLocalTaxiIds(new Set(
+        toTaxi
+          ? nextTaxi.filter((id) => id !== player.id)
+          : [...nextTaxi, player.id]
+      ));
+      toast({ title: "Action failed", description: err?.message || "Could not update taxi squad.", variant: "destructive" });
+    } finally {
+      setTaxiMutating(null);
+    }
+  }, [sleeperJwt, userRosterId, league.id, localTaxiIds, toast]);
 
   const posRanks = useMemo(() => {
     const positions = ["QB", "RB", "WR", "TE"] as const;
@@ -211,29 +254,70 @@ export function RosterBreakdown({ league, userTeam }: TeamProps) {
                   <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
                 </div>
                 <div className="space-y-1">
-                  {players.sort((a, b) => (b.starter ? 1 : 0) - (a.starter ? 1 : 0) || b.value - a.value).map((p) => (
-                    <div key={p.id} className="flex items-center justify-between py-2.5 border-b border-border/20 last:border-0" data-testid={`depth-player-${p.id}`}>
-                      <div className="flex items-center gap-2">
-                        <PlayerAvatar
-                          id={p.sleeperId ?? p.id}
-                          name={p.name}
-                          pos={p.pos}
-                          team={p.team ?? ""}
-                          size="xs"
-                          compact
-                        />
-                        <Badge variant={p.starter ? "default" : "outline"} className="text-xs">
-                          {p.starter ? "Starter" : "Bench"}
-                        </Badge>
-                        <span className={cn("text-sm", p.starter ? "font-semibold" : "")}>{p.name}</span>
+                  {[...players].sort((a, b) => {
+                    const aScore = a.starter ? 2 : localTaxiIds.has(a.id) ? 0 : 1;
+                    const bScore = b.starter ? 2 : localTaxiIds.has(b.id) ? 0 : 1;
+                    return bScore - aScore || b.value - a.value;
+                  }).map((p) => {
+                    const isOnTaxi = localTaxiIds.has(p.id);
+                    return (
+                      <div key={p.id} className="flex items-center justify-between py-2.5 border-b border-border/20 last:border-0" data-testid={`depth-player-${p.id}`}>
+                        <div className="flex items-center gap-2">
+                          <PlayerAvatar
+                            id={p.sleeperId ?? p.id}
+                            name={p.name}
+                            pos={p.pos}
+                            team={p.team ?? ""}
+                            size="xs"
+                            compact
+                          />
+                          <Badge
+                            variant={p.starter ? "default" : "outline"}
+                            className={cn("text-xs", isOnTaxi && "border-amber-500/40 text-amber-400 bg-amber-500/10")}
+                          >
+                            {p.starter ? "Starter" : isOnTaxi ? "Taxi" : "Bench"}
+                          </Badge>
+                          <span className={cn("text-sm", p.starter ? "font-semibold" : "")}>{p.name}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-muted-foreground">{p.team}</span>
+                          <span className="text-xs text-muted-foreground">Age {p.age}</span>
+                          {sleeperJwt && taxiSlots > 0 && !p.starter && (
+                            isOnTaxi ? (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-5 px-1.5 text-[10px] font-medium"
+                                onClick={() => handleTaxi(p, false)}
+                                disabled={taxiMutating === p.id}
+                                data-testid={`btn-remove-taxi-${p.id}`}
+                                title="Remove from Taxi"
+                              >
+                                {taxiMutating === p.id
+                                  ? <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                                  : "← Active"}
+                              </Button>
+                            ) : (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-5 px-1.5 text-[10px] font-medium hover:text-amber-400 hover:border-amber-500/40"
+                                onClick={() => handleTaxi(p, true)}
+                                disabled={taxiMutating === p.id || localTaxiIds.size >= taxiSlots}
+                                data-testid={`btn-move-taxi-${p.id}`}
+                                title="Move to Taxi"
+                              >
+                                {taxiMutating === p.id
+                                  ? <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                                  : "Taxi →"}
+                              </Button>
+                            )
+                          )}
+                          <span className="text-xs font-bold w-6 text-right">{p.value}</span>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-3">
-                        <span className="text-xs text-muted-foreground">{p.team}</span>
-                        <span className="text-xs text-muted-foreground">Age {p.age}</span>
-                        <span className="text-xs font-bold w-6 text-right">{p.value}</span>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                   {players.length === 0 && <p className="text-xs text-muted-foreground">No players found</p>}
                 </div>
               </Card>
