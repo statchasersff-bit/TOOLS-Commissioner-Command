@@ -732,6 +732,18 @@ function TradeOpportunities({ league, userTeam }: { league: League; userTeam: Te
   );
 }
 
+function posTextColor(pos: string): string {
+  switch (pos) {
+    case "QB":   return "text-red-600 dark:text-red-400";
+    case "RB":   return "text-emerald-600 dark:text-emerald-400";
+    case "WR":   return "text-blue-600 dark:text-blue-400";
+    case "TE":   return "text-yellow-600 dark:text-yellow-400";
+    case "PK":
+    case "PICK": return "text-purple-600 dark:text-purple-400";
+    default:     return "text-muted-foreground";
+  }
+}
+
 // ─── Win-Now Mode ─────────────────────────────────────────────────
 
 function WinNowMode({ league, userTeam }: { league: League; userTeam: Team }) {
@@ -1069,56 +1081,83 @@ function WinNowMode({ league, userTeam }: { league: League; userTeam: Team }) {
                 <div className="border-t border-border/30 px-5 py-4 space-y-3">
                   {ideas.map((idea: WinNowIdea, idx: number) => (
                     <div key={idea.id} className="rounded-xl border border-border/40 overflow-hidden" data-testid={`wn-idea-${pos.toLowerCase()}-${idx}`}>
-                      {/* Partner + You Give / You Get on one row */}
-                      <div className="flex items-stretch divide-x divide-border/30">
-                        {/* Partner info */}
-                        <div className="px-4 py-3 flex flex-col justify-center gap-1.5 min-w-0 w-32 flex-shrink-0 bg-muted/30">
-                          <div className="flex items-center gap-1.5 min-w-0">
+                      {/* Two-column trade layout */}
+                      <div className="grid grid-cols-2 divide-x divide-border/30">
+                        {/* You receive */}
+                        <div className="p-4">
+                          <div className="flex items-center gap-2 mb-3">
+                            <div className="w-6 h-6 rounded-full bg-[#0b3a7a] flex items-center justify-center flex-shrink-0 ring-1 ring-border/30">
+                              <span className="text-[10px] font-bold text-white">Y</span>
+                            </div>
+                            <span className="text-sm font-semibold">You</span>
+                            <span className="text-xs text-muted-foreground">receives</span>
+                          </div>
+                          {idea.youGet.map((a: WinNowIdea["youGet"][number], i: number) => (
+                            <div key={i} className="flex items-center gap-3 py-1.5">
+                              {a.type === "player" && a.sleeperId ? (
+                                <div className="w-10 h-10 rounded-full flex-shrink-0 overflow-hidden bg-muted ring-1 ring-border/20">
+                                  <img
+                                    src={`https://sleepercdn.com/content/nfl/players/thumb/${a.sleeperId}.jpg`}
+                                    alt={a.label}
+                                    className="w-full h-full object-cover object-top"
+                                    onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                                  />
+                                </div>
+                              ) : (
+                                <div className="w-10 h-10 rounded-full flex-shrink-0 bg-muted ring-1 ring-border/20 flex items-center justify-center">
+                                  <span className="text-[9px] font-bold text-muted-foreground">PICK</span>
+                                </div>
+                              )}
+                              <div className="min-w-0">
+                                <p className="text-sm font-semibold leading-tight truncate">{a.label}</p>
+                                {a.pos && (
+                                  <span className={cn("text-[10px] font-semibold", posTextColor(a.pos))}>{a.pos}</span>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Partner receives */}
+                        <div className="p-4">
+                          <div className="flex items-center gap-2 mb-3">
                             {idea.partnerTeam.avatar ? (
                               <img
                                 src={idea.partnerTeam.avatar}
                                 alt={idea.partnerTeam.owner}
-                                className="w-5 h-5 rounded-full object-cover flex-shrink-0 ring-1 ring-border/30"
+                                className="w-6 h-6 rounded-full object-cover flex-shrink-0 ring-1 ring-border/30"
                                 onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
                               />
                             ) : (
-                              <div className="w-5 h-5 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
-                                <span className="text-[9px] font-bold text-muted-foreground">{idea.partnerTeam.owner.charAt(0)}</span>
+                              <div className="w-6 h-6 rounded-full bg-muted flex items-center justify-center flex-shrink-0 ring-1 ring-border/30">
+                                <span className="text-[10px] font-bold text-muted-foreground">{idea.partnerTeam.owner.charAt(0)}</span>
                               </div>
                             )}
-                            <span className="text-xs font-medium truncate">{idea.partnerTeam.owner}</span>
+                            <span className="text-sm font-semibold truncate">{idea.partnerTeam.owner}</span>
+                            <span className="text-xs text-muted-foreground flex-shrink-0">receives</span>
                           </div>
-                          <Badge variant="outline" className={cn("text-[9px] w-fit", getTierColor(idea.partnerTier))}>{idea.partnerTier}</Badge>
-                        </div>
-
-                        {/* You Give / You Get */}
-                        <div className="grid grid-cols-2 divide-x divide-border/30 flex-1 min-w-0">
-                          {(["youGive", "youGet"] as const).map(side => (
-                            <div key={side} className="px-4 py-3">
-                              <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-2">
-                                {side === "youGive" ? "You Give" : "You Get"}
-                              </p>
-                              {idea[side].map((a: WinNowIdea["youGive"][number], i: number) => (
-                                <div key={i} className="flex items-center gap-1.5 py-1 min-w-0">
-                                  {a.type === "player" && a.sleeperId ? (
-                                    <div className="w-5 h-5 rounded-full flex-shrink-0 overflow-hidden bg-muted">
-                                      <img
-                                        src={`https://sleepercdn.com/content/nfl/players/thumb/${a.sleeperId}.jpg`}
-                                        alt={a.label}
-                                        className="w-full h-full object-cover object-top"
-                                        onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-                                      />
-                                    </div>
-                                  ) : a.type === "pick" ? (
-                                    <Badge variant="outline" className="text-[9px] px-1 py-0 flex-shrink-0">PICK</Badge>
-                                  ) : null}
-                                  {a.pos && (
-                                    <Badge variant="outline" className={cn("text-[9px] px-1 py-0 flex-shrink-0", getPositionColor(a.pos))}>{a.pos}</Badge>
-                                  )}
-                                  <span className="text-xs font-medium truncate">{a.label}</span>
-                                  <span className="text-[10px] font-mono text-muted-foreground ml-auto flex-shrink-0">{a.value.toLocaleString()}</span>
+                          {idea.youGive.map((a: WinNowIdea["youGive"][number], i: number) => (
+                            <div key={i} className="flex items-center gap-3 py-1.5">
+                              {a.type === "player" && a.sleeperId ? (
+                                <div className="w-10 h-10 rounded-full flex-shrink-0 overflow-hidden bg-muted ring-1 ring-border/20">
+                                  <img
+                                    src={`https://sleepercdn.com/content/nfl/players/thumb/${a.sleeperId}.jpg`}
+                                    alt={a.label}
+                                    className="w-full h-full object-cover object-top"
+                                    onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                                  />
                                 </div>
-                              ))}
+                              ) : (
+                                <div className="w-10 h-10 rounded-full flex-shrink-0 bg-muted ring-1 ring-border/20 flex items-center justify-center">
+                                  <span className="text-[9px] font-bold text-muted-foreground">PICK</span>
+                                </div>
+                              )}
+                              <div className="min-w-0">
+                                <p className="text-sm font-semibold leading-tight truncate">{a.label}</p>
+                                {a.pos && (
+                                  <span className={cn("text-[10px] font-semibold", posTextColor(a.pos))}>{a.pos}</span>
+                                )}
+                              </div>
                             </div>
                           ))}
                         </div>
