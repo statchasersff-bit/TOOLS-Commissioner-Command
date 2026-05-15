@@ -1692,6 +1692,45 @@ export async function proposeTrade(
   return json?.data?.propose_trade;
 }
 
+export async function fetchMyDMs(jwt: string): Promise<{
+  my_dms: any[];
+  dm_single_inbound: any[];
+  dm_group_inbound: any[];
+}> {
+  const res = await fetch("https://sleeper.com/graphql", {
+    method: "POST",
+    headers: { "authorization": jwt, "x-sleeper-graphql-op": "my_dms", "content-type": "application/json" },
+    body: JSON.stringify({
+      query: `query my_dms {
+        my_dms(unread: false, limit: 1000) {
+          dm_id dm_type hidden_at last_author_avatar last_author_display_name
+          last_author_real_name last_author_id last_message_attachment
+          last_message_id last_message_text last_message_text_map last_message_time
+          last_pinned_message_id last_read_id member_can_invite recent_users title
+        }
+        dm_single_inbound: inbound_requests(request_type: "dm_single") {
+          created request_type requestee_display_name requestee_id requestee_avatar
+          requester_display_name requester_id requester_avatar type_description
+          type_id type_metadata type_name
+        }
+        dm_group_inbound: inbound_requests(request_type: "dm_group") {
+          created request_type requestee_display_name requestee_id requestee_avatar
+          requester_display_name requester_id requester_avatar type_description
+          type_id type_metadata type_name
+        }
+      }`,
+    }),
+  });
+  if (!res.ok) throw new Error(`GraphQL ${res.status}`);
+  const json = await res.json();
+  if (json?.errors?.length) throw new Error(json.errors[0].message || "Fetch DMs failed");
+  return {
+    my_dms: json?.data?.my_dms ?? [],
+    dm_single_inbound: json?.data?.dm_single_inbound ?? [],
+    dm_group_inbound: json?.data?.dm_group_inbound ?? [],
+  };
+}
+
 export async function getDmByMembers(partnerUserId: string, jwt: string): Promise<any> {
   const res = await fetch("https://sleeper.com/graphql", {
     method: "POST",
