@@ -1259,7 +1259,7 @@ function WinNowMode({ league, userTeam }: { league: League; userTeam: Team }) {
                 <div key={sid} className="flex items-center gap-3 py-2.5 border-b border-border/20 last:border-0" data-testid={`chip-row-${sid}`}>
                   <span className="text-xs text-muted-foreground w-4 text-right flex-shrink-0">{i + 1}.</span>
                   <div className="flex-1 min-w-0">
-                    <PlayerAvatar id={sid} name={c.player.name} pos={c.player.pos} team={c.player.team ?? ""} size="md" />
+                    <PlayerAvatar id={sid} name={c.player.name} pos={c.player.pos} team={c.player.team ?? ""} size="sm" />
                   </div>
                   <Badge
                     variant="outline"
