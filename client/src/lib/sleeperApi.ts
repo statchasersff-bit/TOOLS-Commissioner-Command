@@ -1713,18 +1713,40 @@ export async function getDmByMembers(partnerUserId: string, jwt: string): Promis
   return json?.data?.get_dm_by_members;
 }
 
-export async function sendDmMessage(dmId: string, message: string, jwt: string): Promise<any> {
-  const res = await fetch("https://sleeper.com/graphql", {
-    method: "POST",
-    headers: { "authorization": jwt, "x-sleeper-graphql-op": "create_message", "content-type": "application/json" },
-    body: JSON.stringify({
-      query: `mutation create_message($parent_id: String, $message: String) {
+export async function sendDmMessage(
+  dmId: string,
+  message: string,
+  jwt: string,
+  opts?: {
+    parent_type?: string;
+    attachment_type?: string;
+    k_attachment_data?: string[];
+    v_attachment_data?: string[];
+  }
+): Promise<any> {
+  const variables: Record<string, any> = { parent_id: dmId, message };
+  if (opts?.parent_type) variables.parent_type = opts.parent_type;
+  if (opts?.attachment_type) variables.attachment_type = opts.attachment_type;
+  if (opts?.k_attachment_data) variables.k_attachment_data = opts.k_attachment_data;
+  if (opts?.v_attachment_data) variables.v_attachment_data = opts.v_attachment_data;
+
+  const hasAttachment = !!opts?.attachment_type;
+  const query = hasAttachment
+    ? `mutation create_message($parent_id: String, $parent_type: String, $message: String, $attachment_type: String, $k_attachment_data: [String], $v_attachment_data: [String]) {
+        create_message(parent_id: $parent_id, parent_type: $parent_type, message: $message, attachment_type: $attachment_type, k_attachment_data: $k_attachment_data, v_attachment_data: $v_attachment_data) {
+          message_id author_id created message parent_id
+        }
+      }`
+    : `mutation create_message($parent_id: String, $message: String) {
         create_message(parent_id: $parent_id, message: $message) {
           message_id author_id created message parent_id
         }
-      }`,
-      variables: { parent_id: dmId, message },
-    }),
+      }`;
+
+  const res = await fetch("https://sleeper.com/graphql", {
+    method: "POST",
+    headers: { "authorization": jwt, "x-sleeper-graphql-op": "create_message", "content-type": "application/json" },
+    body: JSON.stringify({ query, variables }),
   });
   if (!res.ok) throw new Error(`GraphQL ${res.status}`);
   const json = await res.json();

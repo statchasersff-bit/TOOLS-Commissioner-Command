@@ -1104,6 +1104,9 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
   const [dmSending, setDmSending] = useState(false);
   const [dmSent, setDmSent] = useState(false);
   const [dmError, setDmError] = useState<string | null>(null);
+  const [dmCardSending, setDmCardSending] = useState(false);
+  const [dmCardSent, setDmCardSent] = useState(false);
+  const [dmCardError, setDmCardError] = useState<string | null>(null);
 
   const handleProposeTrade = async () => {
     if (!sleeperJwt || !sideARosterId || !sideBRosterId) return;
@@ -1229,6 +1232,57 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
       setDmError(e.message || "Failed to send message");
     } finally {
       setDmSending(false);
+    }
+  };
+
+  const handleSendTradeCard = async () => {
+    if (!sleeperJwt || !dmData?.dm_id || !proposedTrade) return;
+    setDmCardSending(true);
+    setDmCardError(null);
+    setDmCardSent(false);
+    try {
+      // Build transactionsByRoster from raw propose_trade response
+      const txByRoster: Record<string, { adds: Record<string, number>; drops: Record<string, number> }> = {};
+      if (proposedTrade.adds) {
+        for (const [pid, rid] of Object.entries(proposedTrade.adds as Record<string, number>)) {
+          const r = String(rid);
+          if (!txByRoster[r]) txByRoster[r] = { adds: {}, drops: {} };
+          txByRoster[r].adds[pid] = rid;
+        }
+      }
+      if (proposedTrade.drops) {
+        for (const [pid, rid] of Object.entries(proposedTrade.drops as Record<string, number>)) {
+          const r = String(rid);
+          if (!txByRoster[r]) txByRoster[r] = { adds: {}, drops: {} };
+          txByRoster[r].drops[pid] = rid;
+        }
+      }
+      // Build usersInLeagueMap from league teams
+      const usersInLeagueMap: Record<string, { display_name: string; user_id: string }> = {};
+      for (const team of league.teams) {
+        if (team.ownerId) {
+          usersInLeagueMap[team.ownerId] = { display_name: team.owner || team.name, user_id: team.ownerId };
+        }
+      }
+      const username = user?.username || user?.displayName || "Manager";
+      const text = `@${username} has proposed a trade in ${league.name}`;
+      await sendDmMessage(dmData.dm_id, text, sleeperJwt, {
+        parent_type: "dm",
+        attachment_type: "trade_dm",
+        k_attachment_data: ["status", "transactions_by_roster", "transaction_id", "league_id", "users_in_league_map"],
+        v_attachment_data: [
+          "proposed",
+          JSON.stringify(txByRoster),
+          proposedTrade.transaction_id,
+          league.id,
+          JSON.stringify(usersInLeagueMap),
+        ],
+      });
+      setDmCardSent(true);
+    } catch (e: any) {
+      setDmCardError(e.message || "Failed to send trade card");
+    } finally {
+      setDmCardSending(false);
     }
   };
 
@@ -2108,6 +2162,36 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
                                 )}
                               </div>
                             )}
+
+                            {/* Trade card quick-send */}
+                            {!dmLoading && dmData?.dm_id && (
+                              <div className="rounded bg-muted/20 border border-border/40 px-2.5 py-2 flex items-center justify-between gap-2">
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-[11px] font-medium">Trade card</p>
+                                  <p className="text-[10px] text-muted-foreground truncate">
+                                    @{user?.username || "you"} has proposed a trade in {league.name}
+                                  </p>
+                                </div>
+                                {dmCardSent ? (
+                                  <span className="text-[11px] text-emerald-400 flex items-center gap-1 shrink-0">
+                                    <CheckCircle2 className="w-3 h-3" /> Sent
+                                  </span>
+                                ) : (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-7 text-[11px] gap-1 shrink-0"
+                                    onClick={handleSendTradeCard}
+                                    disabled={dmCardSending}
+                                    data-testid="button-send-trade-card"
+                                  >
+                                    {dmCardSending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
+                                    {dmCardSending ? "Sending…" : "Send card"}
+                                  </Button>
+                                )}
+                              </div>
+                            )}
+                            {dmCardError && <p className="text-[11px] text-red-400">{dmCardError}</p>}
 
                             <textarea
                               className="w-full rounded-md border border-border/50 bg-background/50 px-3 py-2 text-xs resize-none focus:outline-none focus:border-emerald-500/50"
