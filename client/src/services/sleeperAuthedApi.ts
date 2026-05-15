@@ -317,13 +317,14 @@ export async function submitLineup(
 function buildProposeTrademutation(
   leagueId: string,
   picksCsv: string[],
-  expiresAt: number,
+  expiresAt: number | null,
   rejectTransactionId?: string,
   rejectTransactionLeg?: number
 ): string {
   const counterLines = rejectTransactionId
     ? `reject_transaction_id: "${rejectTransactionId}", reject_transaction_leg: ${rejectTransactionLeg ?? 1},`
     : "";
+  const expiresLine = expiresAt !== null ? `expires_at: ${expiresAt},` : "";
   return `
     mutation propose_trade(
       $k_adds: [String],
@@ -340,7 +341,7 @@ function buildProposeTrademutation(
         k_drops: $k_drops,
         v_drops: $v_drops,
         waiver_budget: [],
-        expires_at: ${expiresAt}
+        ${expiresLine}
       ) {
         adds
         consenter_ids
@@ -371,7 +372,7 @@ export interface ProposeTradeParams {
   /** playerId → sending roster ID */
   drops: Record<string, number>;
   draftPicks: SleeperTransactionPick[];
-  expiresAt: number;
+  expiresAt: number | null;
   /** When countering an existing offer, the transaction to reject */
   rejectTransactionId?: string;
   rejectTransactionLeg?: number;

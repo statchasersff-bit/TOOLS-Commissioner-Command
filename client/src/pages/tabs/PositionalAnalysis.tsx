@@ -740,6 +740,35 @@ function posTextColor(pos: string): string {
 // ─── Send Trade Modal ──────────────────────────────────────────────
 
 const SLEEPER_API_BASE = "https://api.sleeper.app/v1";
+
+const EXPIRY_OPTIONS = [
+  { value: "never", label: "Never"        },
+  { value: "1h",    label: "1 Hour"       },
+  { value: "today", label: "End of Today" },
+  { value: "24h",   label: "24 Hours"     },
+  { value: "2d",    label: "2 Days"       },
+  { value: "1w",    label: "1 Week"       },
+  { value: "2w",    label: "2 Weeks"      },
+] as const;
+
+function computeExpiresAt(option: string): number | null {
+  const now = Math.floor(Date.now() / 1000);
+  switch (option) {
+    case "never": return null;
+    case "1h":    return now + 3600;
+    case "today": {
+      const end = new Date();
+      end.setHours(23, 59, 59, 999);
+      return Math.floor(end.getTime() / 1000);
+    }
+    case "24h":   return now + 86400;
+    case "2d":    return now + 172800;
+    case "1w":    return now + 604800;
+    case "2w":    return now + 1209600;
+    default:      return now + 86400;
+  }
+}
+
 type SendStatus = "idle" | "sending" | "success" | "error";
 type DmStatus   = "idle" | "sending" | "sent" | "link-failed" | "failed";
 
@@ -763,6 +792,8 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
   // Per-transaction dedup flags — prevent duplicate sends across retries/rerenders
   const dmTradeCardSentMap = useState(() => new Map<string, boolean>())[0];
   const dmToolLinkSentMap  = useState(() => new Map<string, boolean>())[0];
+
+  const [expiry, setExpiry] = useState<string>("24h");
 
   const hasPick = (idea?.youGive ?? []).some(a => a.type === "pick");
 
@@ -792,6 +823,7 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
     setDmStatus("idle");
     setDmError("");
     setPendingDm(null);
+    setExpiry("24h");
   }, [idea, league.teams, userTeam.picks]);
 
   const userRosterId    = parseInt(userTeam.id.replace("roster_", ""), 10);
@@ -951,7 +983,7 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
         previous_owner_id: userRosterId,
         owner_id:          partnerRosterId,
       }] : [];
-      const expiresAt = Math.floor((Date.now() + 7 * 24 * 60 * 60 * 1000) / 1000);
+      const expiresAt = computeExpiresAt(expiry);
       const tradeResult = await proposeTrade({ leagueId: league.id, adds, drops, draftPicks, expiresAt });
       setStatus("success");
 
@@ -1206,6 +1238,39 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
             </div>
           )}
         </div>
+
+        {/* ── Expiry selector ── */}
+        {status !== "success" && (
+          <div className="px-6 pb-5 flex-shrink-0 border-t border-white/[0.06] pt-4">
+            <div className="flex items-center justify-between mb-2.5">
+              <p className="text-[11px] text-white/40 uppercase tracking-widest font-semibold">Offer Expires In</p>
+              <p className="text-[10px] text-white/25 italic">
+                Sleeper will automatically expire the offer after this time.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {EXPIRY_OPTIONS.map(opt => {
+                const isActive = expiry === opt.value;
+                return (
+                  <button
+                    key={opt.value}
+                    onClick={() => setExpiry(opt.value)}
+                    data-testid={`expiry-opt-${opt.value}`}
+                    disabled={status === "sending"}
+                    className={cn(
+                      "px-3 py-1.5 rounded-full text-[11px] font-semibold border transition-all",
+                      isActive
+                        ? "bg-[#d4af37]/20 border-[#d4af37]/50 text-[#d4af37]"
+                        : "bg-white/[0.04] border-white/[0.09] text-white/50 hover:border-white/25 hover:text-white/75"
+                    )}
+                  >
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* ── Footer ── */}
         <div className="flex items-center justify-end gap-3 px-6 py-5 border-t border-white/[0.08] flex-shrink-0 mt-auto">
