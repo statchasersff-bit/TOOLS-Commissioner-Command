@@ -1090,16 +1090,6 @@ function WinNowMode({ league, userTeam }: { league: League; userTeam: Team }) {
                       {/* Header */}
                       <div className="px-4 py-2.5 bg-muted/20 flex items-center justify-between gap-2 flex-wrap">
                         <div className="flex items-center gap-2 min-w-0">
-                          <Badge
-                            variant="outline"
-                            className={cn("text-[10px] flex-shrink-0",
-                              idea.scoreLabel === "Elite"  ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30" :
-                              idea.scoreLabel === "Strong" ? "bg-[#0b3a7a]/10 text-[#0b3a7a] dark:text-blue-400 border-[#0b3a7a]/20" :
-                                                             "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20"
-                            )}
-                          >
-                            {idea.scoreLabel}
-                          </Badge>
                           <span className="text-xs font-medium text-foreground">{idea.headline}</span>
                         </div>
                       </div>
