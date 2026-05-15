@@ -1547,9 +1547,9 @@ export const ROSTER_DRAFT_PICKS_QUERY = `
 
 /** Raw shape returned by the Sleeper roster_draft_picks GraphQL operation. */
 export interface SleeperRosterDraftPick {
-  /** Roster that currently holds this pick. */
+  /** Original roster the pick was created for. */
   roster_id: number;
-  /** Roster the pick originally belonged to. */
+  /** Roster that currently owns (holds) this pick. */
   owner_id: number;
   season: string;
   round: number;
@@ -1574,13 +1574,13 @@ export function normalizeRosterDraftPicks(
 ): NormalizedDraftPick[] {
   return picks.map((p) => ({
     leagueId,
-    currentRosterId: p.roster_id,
-    originalRosterId: p.owner_id,
+    currentRosterId: p.owner_id,    // owner_id = current holder of the pick
+    originalRosterId: p.roster_id,  // roster_id = original team the pick belongs to
     season: p.season,
     round: p.round,
     label: p.roster_id === p.owner_id
       ? `${p.season} Round ${p.round}`
-      : `${p.season} Round ${p.round} (from Roster ${p.owner_id})`,
+      : `${p.season} Round ${p.round} (from Roster ${p.roster_id})`,
   }));
 }
 

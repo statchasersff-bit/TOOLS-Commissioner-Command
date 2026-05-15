@@ -1112,7 +1112,7 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
       const isUnread = !!dmInfo.last_message_id && dmInfo.last_message_id !== dmInfo.last_read_id;
       setHasUnread(isUnread);
       const msgs = await fetchDmMessages(dmInfo.dm_id);
-      setDmMessages(msgs);
+      setDmMessages([...msgs].sort((a, b) => a.created - b.created));
       if (dmInfo.last_message_id) {
         markDmRead(dmInfo.dm_id, dmInfo.last_message_id).catch(() => {});
         setHasUnread(false);
