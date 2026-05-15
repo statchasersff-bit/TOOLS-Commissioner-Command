@@ -1,0 +1,75 @@
+Design:
+- Use a 3-column desktop layout and single-column mobile layout.
+- Each selected player should render as a premium trading-card style component.
+- Card should have a large square player image at the top.
+- Below image: player name, team, age, and RB tier badge.
+- Then show Dynasty Value and Redraft Value as two large side-by-side score pills.
+- Then show a clean stat grid with:
+  - Rush Att/G
+  - Targets/G
+  - Yds/Touch
+  - Explosive %
+  - RZ Att/G
+
+Data:
+- Fetch RB overview data from:
+https://cdn.jsdelivr.net/gh/statchasersff-bit/statchasers-data@master/statchasers-data/output/rb_player_overview.json
+
+Use these fields:
+- player = player
+- team = team
+- age = age
+- games = games
+- rush_att_per_gm = Rush Att/G
+- targets_per_gm = Targets/G
+- yards_per_touch = Yds/Touch
+- explosive_run_pct = Explosive %
+- rz_rush_att / games = RZ Att/G
+- rb_tier = tier badge
+- overall_score can be used as a secondary stat if helpful
+
+Dynasty Value and Redraft Value:
+- Pull these from the existing values already available in the app/tool.
+- Match by normalized player name.
+- If missing, show “—” instead of breaking the card.
+
+Formatting:
+- Round Rush Att/G, Targets/G, Yds/Touch, and RZ Att/G to 1 decimal.
+- Round Explosive % to 1 decimal and include the % symbol.
+- Dynasty/Redraft values should be visually prominent.
+
+Card style:
+- Dark navy background
+- Gold accent border/glow
+- White player name
+- Muted stat labels
+- Strong card shadow
+- Rounded corners
+- Image should be square, object-fit cover, centered
+- Add a subtle hover lift on desktop
+
+Also include three player search/select boxes at the top. Each selector should filter only RBs from the fetched dataset.
+Stat helper logic
+const formatNum = (value, digits = 1) => {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) return "—";
+  return Number(value).toFixed(digits);
+};
+
+const getRbCompareStats = (player) => ({
+  rushAttGame: formatNum(player.rush_att_per_gm),
+  targetsGame: formatNum(player.targets_per_gm),
+  yardsPerTouch: formatNum(player.yards_per_touch),
+  explosivePct: `${formatNum(player.explosive_run_pct)}%`,
+  rzAttemptsGame: player.games ? formatNum(player.rz_rush_att / player.games) : "—",
+});
+Best UX touch
+
+Add a small “edge” label between compared players:
+
+Best Role: highest Rush Att/G + Targets/G
+Best Efficiency: highest Yds/Touch + Explosive %
+Best TD Opportunity: highest RZ Att/G
+Best Dynasty Asset: highest Dynasty Value
+Best Win-Now Asset: highest Redraft Value
+
+That makes the tab feel useful immediately instead of just showing three stat cards.

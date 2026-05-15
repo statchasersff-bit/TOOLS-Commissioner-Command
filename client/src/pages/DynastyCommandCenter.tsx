@@ -29,6 +29,7 @@ import { TradeBlockScanner, TradeCalculator, TradeDatabase } from "./tabs/TradeC
 import { PositionalAnalysis } from "./tabs/PositionalAnalysis";
 import { MarketValue } from "./tabs/LeagueMarket";
 import Analysis from "./tabs/Analysis";
+import { CompareRBs } from "./tabs/CompareRBs";
 import { LeagueEconomy } from "./tabs/LeagueEconomy";
 import LiveDraft from "./tabs/LiveDraft";
 import { API_BASE } from "@/lib/apiBase";
@@ -316,6 +317,7 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
       case "trade-center:trade-block": return <TradeBlockScanner league={league} />;
       case "league-market:market-value": return <MarketValue league={league} />;
       case "league-market:analysis": return <Analysis />;
+      case "league-market:compare-players": return <CompareRBs />;
       default: return <div className="text-center text-muted-foreground py-12">Select a tab to get started</div>;
     }
   };
