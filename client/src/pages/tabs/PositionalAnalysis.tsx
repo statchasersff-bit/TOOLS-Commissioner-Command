@@ -1258,13 +1258,6 @@ function WinNowMode({ league, userTeam }: { league: League; userTeam: Team }) {
                       <span className="text-sm font-semibold truncate">{c.player.name}</span>
                       <Badge variant="outline" className={cn("text-[9px] px-1 py-0 h-3.5 flex-shrink-0", getPositionColor(c.player.pos))}>{c.player.pos}</Badge>
                     </div>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      <span className="text-[10px] text-muted-foreground">Dyn: {c.dynVal.toLocaleString()}</span>
-                      <span className="text-[10px] text-muted-foreground">·</span>
-                      <span className="text-[10px] text-muted-foreground">
-                        {c.starterCost < 100 ? "Bench player" : `−${Math.round(c.starterCost)} starter cost`}
-                      </span>
-                    </div>
                   </div>
                   <Badge
                     variant="outline"
