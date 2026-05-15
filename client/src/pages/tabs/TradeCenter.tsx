@@ -1054,6 +1054,21 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
       .catch(() => setRosterPicks([]));
   }, [sleeperJwt, league.id]);
 
+  const allPlayers = useMemo(() => {
+    const seen = new Set<string>();
+    const players: Player[] = [];
+    for (const team of league.teams) {
+      for (const p of team.roster) {
+        const key = p.sleeperId || p.id;
+        if (!seen.has(key)) {
+          seen.add(key);
+          players.push(p);
+        }
+      }
+    }
+    return players;
+  }, [league]);
+
   // Prefill from Trade Block "Add to Trade Calc" — on mount (localStorage) and live (CustomEvent)
   useEffect(() => {
     const raw = localStorage.getItem("tc-prefill");
@@ -1520,20 +1535,6 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
     };
   }, [league, userTeam, sideA, sideB, getPlayerValue, getRedraftValue, optimizeLineup, sideATeam, sideBTeam, sideARosterId]);
 
-  const allPlayers = useMemo(() => {
-    const seen = new Set<string>();
-    const players: Player[] = [];
-    for (const team of league.teams) {
-      for (const p of team.roster) {
-        const key = p.sleeperId || p.id;
-        if (!seen.has(key)) {
-          seen.add(key);
-          players.push(p);
-        }
-      }
-    }
-    return players;
-  }, [league]);
 
   // Live picks grouped by current owner roster ID
   const ownerPicksMap = useMemo(() => {
