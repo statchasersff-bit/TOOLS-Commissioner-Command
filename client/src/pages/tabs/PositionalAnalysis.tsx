@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
 import type { League, Team, Player, Pick, Tier } from "@/types";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { getSleeperSession } from "@/services/sleeperAuth";
-import { proposeTrade, getDmByMembers, sendTradeMessage } from "@/services/sleeperAuthedApi";
+import { proposeTrade, getDmByMembers, sendTradeMessage, sendPlainDm } from "@/services/sleeperAuthedApi";
 import type { ProposeTradeResult } from "@/services/sleeperAuthedApi";
 import {
   ArrowRightLeft, Target, TrendingUp, TrendingDown, Zap, RotateCcw, ShieldCheck,
@@ -741,7 +741,7 @@ function posTextColor(pos: string): string {
 
 const SLEEPER_API_BASE = "https://api.sleeper.app/v1";
 type SendStatus = "idle" | "sending" | "success" | "error";
-type DmStatus   = "idle" | "sending" | "sent" | "failed";
+type DmStatus   = "idle" | "sending" | "sent" | "link-failed" | "failed";
 
 interface SendTradeModalProps {
   open: boolean;
@@ -760,8 +760,9 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
   const [dmError, setDmError]         = useState<string>("");
   const [pendingDm, setPendingDm]     = useState<{ trade: ProposeTradeResult; partnerUserId: string } | null>(null);
 
-  // Keyed by transaction_id to prevent duplicate DMs across retries/rerenders
-  const dmSentMap = useState(() => new Map<string, boolean>())[0];
+  // Per-transaction dedup flags — prevent duplicate sends across retries/rerenders
+  const dmTradeCardSentMap = useState(() => new Map<string, boolean>())[0];
+  const dmToolLinkSentMap  = useState(() => new Map<string, boolean>())[0];
 
   const hasPick = (idea?.youGive ?? []).some(a => a.type === "pick");
 
@@ -797,100 +798,130 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
   const partnerRosterId = idea ? parseInt(idea.partnerTeam.id.replace("roster_", ""), 10) : 0;
 
   async function sendTradeDm(trade: ProposeTradeResult, partnerUserId: string, isRetry = false) {
-    if (!isRetry && dmSentMap.has(trade.transaction_id)) return;
+    const txId = trade.transaction_id;
+    const tradeCardAlreadySent = dmTradeCardSentMap.has(txId);
+    const toolLinkAlreadySent  = dmToolLinkSentMap.has(txId);
+
+    // On non-retry skip if everything is already done
+    if (!isRetry && tradeCardAlreadySent && toolLinkAlreadySent) return;
+
     setDmStatus("sending");
     setDmError("");
-    try {
-      // Fetch league users to build usersInLeagueMap and transactionsByRoster.user
-      const usersRaw: any[] = await fetch(`${SLEEPER_API_BASE}/league/${trade.league_id}/users`).then(r => r.json());
 
-      const usersInLeagueMap: Record<string, unknown> = {};
-      const userIdToInfo = new Map<string, any>();
-      for (const u of usersRaw) {
-        const info = {
-          avatar: u.avatar ?? null,
-          display_name: u.display_name || u.username || u.user_id,
-          is_bot: false,
-          is_owner: false,
-          league_id: trade.league_id,
-          metadata: u.metadata || {},
-          settings: u.settings || {},
-          user_id: u.user_id,
-        };
-        usersInLeagueMap[u.user_id] = info;
-        userIdToInfo.set(u.user_id, info);
-      }
+    // ── Step 1: trade-card DM ──────────────────────────────────────────────────
+    let dmId: string | null = null;
+    if (!tradeCardAlreadySent || isRetry) {
+      try {
+        const usersRaw: any[] = await fetch(`${SLEEPER_API_BASE}/league/${trade.league_id}/users`).then(r => r.json());
 
-      // Build roster_id → user info using roster owners known from league.teams
-      const rosterUserMap = new Map<number, unknown>();
-      for (const team of league.teams) {
-        const rid = parseInt(team.id.replace("roster_", ""), 10);
-        if (team.ownerId && userIdToInfo.has(team.ownerId)) {
-          rosterUserMap.set(rid, userIdToInfo.get(team.ownerId));
+        const usersInLeagueMap: Record<string, unknown> = {};
+        const userIdToInfo = new Map<string, any>();
+        for (const u of usersRaw) {
+          const info = {
+            avatar: u.avatar ?? null,
+            display_name: u.display_name || u.username || u.user_id,
+            is_bot: false,
+            is_owner: false,
+            league_id: trade.league_id,
+            metadata: u.metadata || {},
+            settings: u.settings || {},
+            user_id: u.user_id,
+          };
+          usersInLeagueMap[u.user_id] = info;
+          userIdToInfo.set(u.user_id, info);
         }
-      }
 
-      // Build transactionsByRoster
-      const transactionsByRoster: Record<string, unknown> = {};
-      for (const rosterId of (trade.roster_ids || [])) {
-        const ridStr = String(rosterId);
-        const rosterAdds: unknown[] = [];
-        if (trade.adds) {
-          for (const [playerId, receivingRosterId] of Object.entries(trade.adds)) {
-            if (receivingRosterId === rosterId) {
-              const playerObj = (trade.player_map as Record<string, unknown>)?.[playerId] || { player_id: playerId };
-              rosterAdds.push(playerObj);
-            }
+        const rosterUserMap = new Map<number, unknown>();
+        for (const team of league.teams) {
+          const rid = parseInt(team.id.replace("roster_", ""), 10);
+          if (team.ownerId && userIdToInfo.has(team.ownerId)) {
+            rosterUserMap.set(rid, userIdToInfo.get(team.ownerId));
           }
         }
-        const rosterPicks: unknown[] = [];
-        if (Array.isArray(trade.draft_picks)) {
-          for (const pick of trade.draft_picks) {
-            if (typeof pick === "string") {
-              const parts = pick.split(",");
-              if (Number(parts[3]) === rosterId) {
-                rosterPicks.push({ roster_id: Number(parts[0]), season: parts[1], round: Number(parts[2]) });
+
+        const transactionsByRoster: Record<string, unknown> = {};
+        for (const rosterId of (trade.roster_ids || [])) {
+          const ridStr = String(rosterId);
+          const rosterAdds: unknown[] = [];
+          if (trade.adds) {
+            for (const [playerId, receivingRosterId] of Object.entries(trade.adds)) {
+              if (receivingRosterId === rosterId) {
+                const playerObj = (trade.player_map as Record<string, unknown>)?.[playerId] || { player_id: playerId };
+                rosterAdds.push(playerObj);
               }
-            } else if (pick && typeof pick === "object" && (pick as any).owner_id === rosterId) {
-              rosterPicks.push(pick);
             }
           }
+          const rosterPicks: unknown[] = [];
+          if (Array.isArray(trade.draft_picks)) {
+            for (const pick of trade.draft_picks) {
+              if (typeof pick === "string") {
+                const parts = pick.split(",");
+                if (Number(parts[3]) === rosterId) {
+                  rosterPicks.push({ roster_id: Number(parts[0]), season: parts[1], round: Number(parts[2]) });
+                }
+              } else if (pick && typeof pick === "object" && (pick as any).owner_id === rosterId) {
+                rosterPicks.push(pick);
+              }
+            }
+          }
+          transactionsByRoster[ridStr] = {
+            adds: rosterAdds,
+            drops: [],
+            added_picks: rosterPicks,
+            dropped_picks: [],
+            added_budget: [],
+            dropped_budget: [],
+            status: trade.status || "proposed",
+            user: rosterUserMap.get(rosterId) ?? null,
+          };
         }
-        transactionsByRoster[ridStr] = {
-          adds: rosterAdds,
-          drops: [],
-          added_picks: rosterPicks,
-          dropped_picks: [],
-          added_budget: [],
-          dropped_budget: [],
+
+        dmId = await getDmByMembers(partnerUserId);
+        if (!dmId) throw new Error("No DM thread found with this manager.");
+
+        const session = getSleeperSession();
+        const myName = session?.display_name || userTeam.owner;
+        await sendTradeMessage({
+          dmId,
+          text: `@${myName} has proposed a trade in ${league.name} via Dynasty Command`,
+          transactionId: txId,
+          leagueId: trade.league_id,
           status: trade.status || "proposed",
-          user: rosterUserMap.get(rosterId) ?? null,
-        };
+          transactionsByRoster,
+          usersInLeagueMap,
+          attachTradeCard: true,
+        });
+
+        dmTradeCardSentMap.set(txId, true);
+      } catch (err: any) {
+        setDmError(err?.message || "DM could not be delivered.");
+        setDmStatus("failed");
+        return;
       }
+    } else {
+      // Trade card was already sent on a prior attempt — re-fetch dmId for link step
+      try {
+        dmId = await getDmByMembers(partnerUserId);
+      } catch {
+        setDmError("Could not re-open DM thread for tool link retry.");
+        setDmStatus("link-failed");
+        return;
+      }
+    }
 
-      // Get or create DM thread with the partner
-      const dmId = await getDmByMembers(partnerUserId);
-      if (!dmId) throw new Error("No DM thread found with this manager.");
-
-      // Send the trade card DM
-      const session = getSleeperSession();
-      const myName = session?.display_name || userTeam.owner;
-      await sendTradeMessage({
-        dmId,
-        text: `@${myName} has proposed a trade in ${league.name} via Dynasty Command`,
-        transactionId: trade.transaction_id,
-        leagueId: trade.league_id,
-        status: trade.status || "proposed",
-        transactionsByRoster,
-        usersInLeagueMap,
-        attachTradeCard: true,
-      });
-
-      dmSentMap.set(trade.transaction_id, true);
+    // ── Step 2: tool link DM ──────────────────────────────────────────────────
+    if (toolLinkAlreadySent && !isRetry) {
+      setDmStatus("sent");
+      return;
+    }
+    try {
+      if (!dmId) throw new Error("No DM thread available for tool link.");
+      await sendPlainDm(dmId, "https://statchasers.com/dynasty-command-tool/");
+      dmToolLinkSentMap.set(txId, true);
       setDmStatus("sent");
     } catch (err: any) {
-      setDmError(err?.message || "DM could not be delivered.");
-      setDmStatus("failed");
+      setDmError(err?.message || "Tool link DM failed.");
+      setDmStatus("link-failed");
     }
   }
 
@@ -1121,12 +1152,30 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
               <span className="text-[11px] text-yellow-300 font-medium leading-snug">
                 Trade sent, but DM could not be sent.
               </span>
-              {dmError && (
-                <span className="text-[10px] text-yellow-400/70 leading-snug">{dmError}</span>
-              )}
+              {dmError && <span className="text-[10px] text-yellow-400/70 leading-snug">{dmError}</span>}
               {pendingDm && (
                 <button
                   data-testid="btn-retry-trade-dm"
+                  onClick={() => sendTradeDm(pendingDm.trade, pendingDm.partnerUserId, true)}
+                  className="mt-1 self-start text-[10px] font-semibold text-yellow-300 hover:text-yellow-100 underline underline-offset-2 transition-colors"
+                >
+                  Send DM again
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+        {status === "success" && dmStatus === "link-failed" && (
+          <div className="mx-4 mb-1 flex items-start gap-2 rounded-lg bg-yellow-500/10 border border-yellow-500/25 px-3 py-2.5">
+            <AlertTriangle className="w-3.5 h-3.5 text-yellow-400 flex-shrink-0 mt-px" />
+            <div className="flex flex-col gap-1 min-w-0">
+              <span className="text-[11px] text-yellow-300 font-medium leading-snug">
+                Trade sent. Trade card DM sent. Tool link DM failed.
+              </span>
+              {dmError && <span className="text-[10px] text-yellow-400/70 leading-snug">{dmError}</span>}
+              {pendingDm && (
+                <button
+                  data-testid="btn-retry-tool-link-dm"
                   onClick={() => sendTradeDm(pendingDm.trade, pendingDm.partnerUserId, true)}
                   className="mt-1 self-start text-[10px] font-semibold text-yellow-300 hover:text-yellow-100 underline underline-offset-2 transition-colors"
                 >

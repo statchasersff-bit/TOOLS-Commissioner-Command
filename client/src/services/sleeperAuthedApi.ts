@@ -670,6 +670,47 @@ export async function sendTradeMessage(
   return data.create_message;
 }
 
+// ─── sendPlainDm — plain-text only, no attachment ─────────────────────────────
+
+export interface SendPlainDmResult {
+  message_id: string;
+  parent_id: string;
+  parent_type: string;
+  text: string;
+  created: number;
+  client_id: string;
+}
+
+/**
+ * Send a plain-text DM with no attachment_type, no k/v_attachment_data.
+ * A fresh client_id is generated on every call.
+ */
+export async function sendPlainDm(dmId: string, text: string): Promise<SendPlainDmResult> {
+  const clientId = crypto.randomUUID();
+  const data = await sleeperGraphQLRequest<{ create_message: SendPlainDmResult }>({
+    operationName: "create_message",
+    query: `
+      mutation create_message($text: String) {
+        create_message(
+          parent_id: "${dmId}",
+          client_id: "${clientId}",
+          parent_type: "dm",
+          text: $text
+        ) {
+          message_id
+          parent_id
+          parent_type
+          text
+          created
+          client_id
+        }
+      }
+    `,
+    variables: { text },
+  });
+  return data.create_message;
+}
+
 // ─── DM messaging ─────────────────────────────────────────────────────────────
 
 export interface SleeperDmMessage {
