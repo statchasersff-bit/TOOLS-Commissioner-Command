@@ -858,8 +858,8 @@ function WinNowMode({ league, userTeam }: { league: League; userTeam: Team }) {
             const partnerPost1  = [...partner.roster.filter(p => (p.sleeperId ?? p.id) !== (target.sleeperId ?? target.id)), chip.player];
             const partnerPostRd = optimizeLineup(partnerPost1, rp).filter(p => p.starter).reduce((s, p) => s + getRedraftValue(p), 0);
             const partnerRdDelta = partnerPostRd - partnerPreRd;
-            // Partner must gain in at least one dimension — no rational manager accepts losing both
-            if ((dynGive - dynGet) < -1000 && partnerRdDelta < -1000) continue;
+            // Filter out trades where partner loses on both axes and the combined loss is severe
+            { const pDyn = dynGive - dynGet; if (pDyn < 0 && partnerRdDelta < 0 && pDyn + partnerRdDelta <= -3000) continue; }
 
             ideas.push({
               id:          `wn-${partner.id}-${needPos}-${chip.player.sleeperId ?? chip.player.id}`,
@@ -897,8 +897,8 @@ function WinNowMode({ league, userTeam }: { league: League; userTeam: Team }) {
             const partnerPost2   = [...partner.roster.filter(p => (p.sleeperId ?? p.id) !== (target.sleeperId ?? target.id)), chip.player];
             const partnerPostRd2 = optimizeLineup(partnerPost2, rp2).filter(p => p.starter).reduce((s, p) => s + getRedraftValue(p), 0);
             const partnerRdDelta2 = partnerPostRd2 - partnerPreRd2;
-            // Partner must gain in at least one dimension — no rational manager accepts losing both
-            if ((dynGive - dynGet) < -1000 && partnerRdDelta2 < -1000) continue;
+            // Filter out trades where partner loses on both axes and the combined loss is severe
+            { const pDyn = dynGive - dynGet; if (pDyn < 0 && partnerRdDelta2 < 0 && pDyn + partnerRdDelta2 <= -3000) continue; }
 
             ideas.push({
               id:          `wn-pick-${partner.id}-${needPos}-${chip.player.sleeperId ?? chip.player.id}`,
