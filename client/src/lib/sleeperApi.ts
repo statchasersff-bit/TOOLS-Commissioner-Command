@@ -1486,6 +1486,7 @@ export async function fetchLeagueTransactions(leagueId: string) {
         transactionId: t.transaction_id as string,
         leg: (t.leg as number) || 1,
         status: t.status as string,
+        creator: (t.creator as string) || "",
         consenterIds: (t.consenter_ids || []) as number[],
         waiverBudget,
         week: t.week as number,
@@ -1503,6 +1504,39 @@ export async function fetchLeagueTransactions(leagueId: string) {
     leagueName: leagueRaw.name,
     totalRosters: leagueRaw.total_rosters,
   };
+}
+
+export async function rejectTradeOnSleeper(
+  leagueId: string,
+  transactionId: string,
+  leg: number,
+  jwt: string
+): Promise<any> {
+  const res = await fetch("https://sleeper.com/graphql", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "authorization": jwt,
+      "x-sleeper-graphql-op": "reject_trade",
+    },
+    body: JSON.stringify({
+      query: `mutation reject_trade {
+        reject_trade(
+          league_id: "${leagueId}",
+          transaction_id: "${transactionId}",
+          leg: ${leg}
+        ) {
+          adds consenter_ids created creator drops league_id leg
+          metadata roster_ids settings status status_updated
+          transaction_id type player_map
+        }
+      }`,
+    }),
+  });
+  if (!res.ok) throw new Error(`GraphQL ${res.status}`);
+  const json = await res.json();
+  if (json?.errors?.length) throw new Error(json.errors[0].message || "Reject trade failed");
+  return json?.data?.reject_trade;
 }
 
 export async function acceptTradeOnSleeper(
