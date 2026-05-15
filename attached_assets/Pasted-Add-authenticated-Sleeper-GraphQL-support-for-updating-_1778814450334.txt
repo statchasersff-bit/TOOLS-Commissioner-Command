@@ -1,0 +1,237 @@
+Add authenticated Sleeper GraphQL support for updating a roster’s reserve/IR list.
+
+Goal:
+Dynasty Command should allow authenticated users to move eligible players to and from IR/reserve directly from the roster management UI.
+
+Discovered Sleeper operation:
+POST https://sleeper.com/graphql
+
+operationName: roster_update_reserve
+
+Mutation:
+mutation roster_update_reserve($league_id: ID!, $roster_id: Int!, $reserve: [String!]!) {
+  roster_update_reserve(
+    league_id: $league_id,
+    roster_id: $roster_id,
+    reserve: $reserve
+  ) {
+    league_id
+    co_owners
+    metadata
+    owner_id
+    players
+    player_map
+    roster_id
+    reserve
+    taxi
+    settings
+    starters
+  }
+}
+
+Captured example:
+roster_update_reserve(
+  league_id: "1337576095565750272",
+  roster_id: 11,
+  reserve: ["8143", "8146"]
+)
+
+Response:
+Returns the updated roster object, including:
+- players
+- player_map
+- reserve
+- taxi
+- starters
+- settings
+
+Important:
+This mutation should be treated as replacing the full reserve list.
+To move one player to IR, send currentReserve + playerId.
+To remove one player from IR, send currentReserve without playerId.
+
+1. Create mutation file.
+
+Create:
+src/lib/sleeper/graphql/mutations/updateReserve.ts
+
+Add:
+
+import { sleeperGraphql } from "../client";
+
+export const UPDATE_RESERVE_MUTATION = `
+  mutation roster_update_reserve($league_id: ID!, $roster_id: Int!, $reserve: [String!]!) {
+    roster_update_reserve(
+      league_id: $league_id,
+      roster_id: $roster_id,
+      reserve: $reserve
+    ) {
+      league_id
+      co_owners
+      metadata
+      owner_id
+      players
+      player_map
+      roster_id
+      reserve
+      taxi
+      settings
+      starters
+    }
+  }
+`;
+
+export async function updateReserve(
+  token: string,
+  leagueId: string,
+  rosterId: number,
+  reservePlayerIds: string[]
+) {
+  return sleeperGraphql(token, {
+    operationName: "roster_update_reserve",
+    variables: {
+      league_id: leagueId,
+      roster_id: rosterId,
+      reserve: reservePlayerIds,
+    },
+    query: UPDATE_RESERVE_MUTATION,
+  });
+}
+
+2. Add operation registry entry.
+
+Update:
+src/lib/sleeper/graphql/operations.ts
+
+Add or merge:
+
+updateReserve: {
+  key: "updateReserve",
+  operationName: "roster_update_reserve",
+  category: "roster_management",
+  authRequired: true,
+  writeAction: true,
+  priority: "high",
+}
+
+3. Add helper actions.
+
+Create or update:
+src/lib/sleeper/rosterActions.ts
+
+Add:
+
+import { updateReserve } from "./graphql/mutations/updateReserve";
+
+export async function movePlayerToReserve({
+  token,
+  leagueId,
+  rosterId,
+  currentReserve,
+  playerId,
+}: {
+  token: string;
+  leagueId: string;
+  rosterId: number;
+  currentReserve: string[];
+  playerId: string;
+}) {
+  if (currentReserve.includes(playerId)) {
+    return currentReserve;
+  }
+
+  const nextReserve = [...currentReserve, playerId];
+
+  const data = await updateReserve(token, leagueId, rosterId, nextReserve);
+  return data.roster_update_reserve;
+}
+
+export async function removePlayerFromReserve({
+  token,
+  leagueId,
+  rosterId,
+  currentReserve,
+  playerId,
+}: {
+  token: string;
+  leagueId: string;
+  rosterId: number;
+  currentReserve: string[];
+  playerId: string;
+}) {
+  const nextReserve = currentReserve.filter((id) => id !== playerId);
+
+  const data = await updateReserve(token, leagueId, rosterId, nextReserve);
+  return data.roster_update_reserve;
+}
+
+4. Connect to roster/team page UI.
+
+On the roster management/team page:
+- Use the selected leagueId dynamically.
+- Use the authenticated user’s rosterId for that league.
+- Use current roster.reserve || [].
+- Add actions:
+  - Move to IR
+  - Remove from IR
+
+5. UI visibility rules.
+
+Show Move to IR only when:
+- user is authenticated
+- player belongs to the selected roster
+- player is not already in reserve
+- league supports reserve/IR
+
+Show Remove from IR only when:
+- player is already in reserve
+
+Optional:
+If player appears healthy/ineligible, disable the button and show:
+“Player may not be IR eligible.”
+
+But still handle Sleeper errors cleanly because Sleeper will be source of truth.
+
+6. State update behavior.
+
+On success:
+- Replace the local roster object with data.roster_update_reserve.
+- Recompute roster sections:
+  - starters
+  - bench
+  - reserve
+  - taxi
+
+On failure:
+- Roll back optimistic UI changes.
+- Show:
+“Could not update IR/reserve. Sleeper may not allow this move.”
+
+7. Add warning comments.
+
+Near updateReserve, add:
+
+// Sleeper roster_update_reserve replaces the entire reserve array.
+// Always send the full desired reserve player_ids array.
+
+8. Safety.
+
+Never log:
+- Sleeper token
+- authorization header
+- cookies
+
+Allowed dev logs:
+- leagueId
+- rosterId
+- reserve count
+- playerId being moved
+
+9. Acceptance criteria.
+
+Feature is complete when:
+- User can move a player to reserve/IR from Dynasty Command.
+- User can remove a player from reserve/IR.
+- Local roster updates immediately after success.
+- App does not crash if Sleeper rejects the move.
+- Token is never exposed.

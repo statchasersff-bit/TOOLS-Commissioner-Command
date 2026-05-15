@@ -3,11 +3,118 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Search, RefreshCw, Trophy, Target, Radio, Zap, MessageSquare, Key, AlertTriangle, ChevronDown, ChevronUp, ArrowUp, ArrowDown, X, Plus } from "lucide-react";
+import { Loader2, Search, RefreshCw, Trophy, Target, Radio, Zap, MessageSquare, Key, AlertTriangle, ChevronDown, ChevronUp, ArrowUp, ArrowDown, X, Plus, Calendar, Clock } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { useValueModel } from "@/contexts/ValueModelContext";
 import { useSleeper } from "@/contexts/SleeperContext";
 import { detectLiveDrafts as detectLiveDraftsApi, fetchDraftBoard as fetchDraftBoardApi } from "@/lib/sleeperApi";
 import { ROOKIE_BOARD_2026_SF, ROOKIE_BOARD_2026_1QB } from "@/data/rookieBoard2026";
+
+// ── Normalized draft model — abstracted from raw Sleeper format ───────────────
+// UI components consume DraftSummary only; never reference raw Sleeper shapes directly.
+interface DraftSummary {
+  id: string;
+  leagueId: string;
+  leagueName: string;
+  leagueAvatar: string | null;
+  status: "pre_draft" | "drafting" | "complete";
+  type: "snake" | "linear" | "auction";
+  category: "rookie" | "startup" | "redraft";
+  season: string;
+  rounds: number;
+  teams: number;
+  picksMade: number;
+  totalPicks: number;
+  /** 1-indexed current pick slot (= picksMade + 1 when live) */
+  currentPickNumber: number;
+  /** Picks until user's next turn — null when unknown or not live */
+  picksAway: number | null;
+  /** User's draft slot (1-indexed) — null if unknown */
+  mySlot: number | null;
+  /** Unix ms scheduled start — null for active or no schedule */
+  startTime: number | null;
+  /** Seconds per pick timer — null if untimed */
+  timerSeconds: number | null;
+  isMyTurn: boolean;
+  isLive: boolean;
+}
+
+function getCategoryLabel(cat: DraftSummary["category"]): string {
+  return cat === "rookie" ? "Rookie" : cat === "startup" ? "Startup" : "Redraft";
+}
+function getTypeLabel(type: DraftSummary["type"]): string {
+  return type === "snake" ? "Snake" : type === "linear" ? "Linear" : "Auction";
+}
+function formatStartTime(ts: number): string {
+  const diff = ts - Date.now();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "Starting soon";
+  if (mins < 60) return `Starts in ${mins}m`;
+  const hours = Math.floor(mins / 60);
+  const remMins = mins % 60;
+  if (hours < 24) return remMins > 0 ? `Starts in ${hours}h ${remMins}m` : `Starts in ${hours}h`;
+  return `Starts ${new Date(ts).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}`;
+}
+
+// Normalizer: LiveDraftInfo → DraftSummary (populated after real scan)
+function normalizeFromDetect(ld: LiveDraftInfo): DraftSummary {
+  return {
+    id: ld.draftId,
+    leagueId: ld.leagueId,
+    leagueName: ld.leagueName,
+    leagueAvatar: null,
+    status: ld.status === "drafting" ? "drafting" : ld.status === "complete" ? "complete" : "pre_draft",
+    type: (["snake", "linear", "auction"].includes(ld.type) ? ld.type : "snake") as DraftSummary["type"],
+    category: (ld.draftCategory === "rookie" ? "rookie" : ld.draftCategory === "startup" ? "startup" : "redraft") as DraftSummary["category"],
+    season: ld.season,
+    rounds: ld.rounds,
+    teams: ld.teams,
+    picksMade: ld.picksMade,
+    totalPicks: ld.totalPicks,
+    currentPickNumber: ld.picksMade + 1,
+    picksAway: null,
+    mySlot: null,
+    startTime: null,
+    timerSeconds: null,
+    isMyTurn: false,
+    isLive: ld.status === "drafting",
+  };
+}
+
+// Mock drafts — placeholder until final Sleeper draft GraphQL endpoints are confirmed
+function getMockDraftSummaries(): DraftSummary[] {
+  const now = Date.now();
+  return [
+    {
+      id: "mock-active-1", leagueId: "mock-lg-1", leagueName: "Apex Dynasty 2026",
+      leagueAvatar: null, status: "drafting", type: "snake", category: "rookie",
+      season: "2026", rounds: 5, teams: 12, picksMade: 23, totalPicks: 60,
+      currentPickNumber: 24, picksAway: 0, mySlot: 12, startTime: null,
+      timerSeconds: 90, isMyTurn: true, isLive: true,
+    },
+    {
+      id: "mock-active-2", leagueId: "mock-lg-2", leagueName: "StatChasers Main",
+      leagueAvatar: null, status: "drafting", type: "snake", category: "startup",
+      season: "2026", rounds: 24, teams: 10, picksMade: 143, totalPicks: 240,
+      currentPickNumber: 144, picksAway: 3, mySlot: 5, startTime: null,
+      timerSeconds: 120, isMyTurn: false, isLive: true,
+    },
+    {
+      id: "mock-upcoming-1", leagueId: "mock-lg-3", leagueName: "Winners Only Dynasty",
+      leagueAvatar: null, status: "pre_draft", type: "snake", category: "rookie",
+      season: "2026", rounds: 5, teams: 12, picksMade: 0, totalPicks: 60,
+      currentPickNumber: 0, picksAway: null, mySlot: 7,
+      startTime: now + 2.5 * 3600 * 1000, timerSeconds: 60, isMyTurn: false, isLive: false,
+    },
+    {
+      id: "mock-upcoming-2", leagueId: "mock-lg-4", leagueName: "The Dynasty Files",
+      leagueAvatar: null, status: "pre_draft", type: "linear", category: "startup",
+      season: "2026", rounds: 24, teams: 14, picksMade: 0, totalPicks: 336,
+      currentPickNumber: 0, picksAway: null, mySlot: 3,
+      startTime: now + 27 * 3600 * 1000, timerSeconds: null, isMyTurn: false, isLive: false,
+    },
+  ];
+}
 
 interface DraftPick {
   round: number;
@@ -173,6 +280,205 @@ const POS_BADGE_SM: Record<string, string> = {
   TE: "text-orange-600 dark:text-orange-400",
 };
 
+// ── DraftCard ─────────────────────────────────────────────────────────────────
+function DraftCard({ draft, onTrack }: { draft: DraftSummary; onTrack?: () => void }) {
+  const pct = draft.totalPicks > 0 ? Math.round((draft.picksMade / draft.totalPicks) * 100) : 0;
+  const meta = [
+    getCategoryLabel(draft.category),
+    getTypeLabel(draft.type),
+    `${draft.teams}T`,
+    `${draft.rounds}R`,
+  ].join(" · ");
+
+  return (
+    <Card
+      className={cn(
+        "overflow-hidden transition-all hover:border-[#d4af37]/30 hover:shadow-sm",
+        draft.isMyTurn && "border-[#d4af37]/60 shadow-[0_0_0_1px_rgba(212,175,55,0.1)]"
+      )}
+      data-testid={`draft-card-${draft.id}`}
+    >
+      {draft.isMyTurn && (
+        <div className="h-0.5 w-full bg-gradient-to-r from-[#d4af37]/30 via-[#d4af37] to-[#d4af37]/30" />
+      )}
+      <div className="p-4 space-y-3">
+        {/* Identity + badges */}
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-9 h-9 rounded-lg bg-[#0b3a7a]/10 dark:bg-blue-400/10 flex items-center justify-center shrink-0 border border-[#0b3a7a]/15 dark:border-blue-400/15">
+              {draft.leagueAvatar ? (
+                <img src={`https://sleepercdn.com/avatars/thumbs/${draft.leagueAvatar}`} className="w-full h-full rounded-lg object-cover" alt="" />
+              ) : (
+                <Trophy className="w-4 h-4 text-[#0b3a7a] dark:text-blue-400" />
+              )}
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-foreground truncate" data-testid={`text-draft-name-${draft.id}`}>{draft.leagueName}</p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">{meta}</p>
+            </div>
+          </div>
+          <div className="flex flex-col items-end gap-1 shrink-0">
+            {draft.isLive && (
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-red-500 text-white" data-testid={`badge-live-${draft.id}`}>
+                <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                LIVE
+              </span>
+            )}
+            {draft.isLive && draft.picksAway !== null && (
+              draft.picksAway === 0 ? (
+                <span className="inline-flex px-1.5 py-0.5 rounded text-[9px] font-bold bg-[#d4af37] text-[#0b3a7a]" data-testid={`badge-your-pick-${draft.id}`}>
+                  YOUR PICK
+                </span>
+              ) : (
+                <span className="inline-flex px-1.5 py-0.5 rounded text-[9px] border border-amber-500/40 text-amber-600 dark:text-amber-400" data-testid={`badge-picks-away-${draft.id}`}>
+                  {draft.picksAway} away
+                </span>
+              )
+            )}
+          </div>
+        </div>
+
+        {/* Progress bar — live */}
+        {draft.isLive && (
+          <div className="space-y-1">
+            <div className="w-full h-1.5 bg-muted/40 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-[#0b3a7a] to-[#d4af37] rounded-full transition-all duration-700"
+                style={{ width: `${pct}%` }}
+              />
+            </div>
+            <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+              <span>Pick {draft.currentPickNumber} of {draft.totalPicks}</span>
+              {draft.timerSeconds != null && (
+                <span className="flex items-center gap-1">
+                  <Clock className="w-3 h-3" />{draft.timerSeconds}s/pick
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Start time — upcoming */}
+        {!draft.isLive && draft.startTime != null && (
+          <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+            <Calendar className="w-3.5 h-3.5 shrink-0" />
+            <span>{formatStartTime(draft.startTime)}</span>
+            {draft.mySlot != null && (
+              <><span className="text-border/50">·</span><span>Slot {draft.mySlot}</span></>
+            )}
+          </div>
+        )}
+
+        {/* Footer */}
+        <div className="flex items-center justify-between pt-0.5">
+          {draft.isLive && draft.mySlot != null ? (
+            <span className="text-[11px] text-muted-foreground">Slot {draft.mySlot}</span>
+          ) : <span />}
+          <Button
+            size="sm"
+            className={cn(
+              "h-7 text-xs gap-1.5",
+              draft.isMyTurn
+                ? "bg-[#d4af37] hover:bg-[#d4af37]/90 text-[#0b3a7a] font-bold"
+                : "bg-[#0b3a7a] hover:bg-[#0b3a7a]/80 text-white"
+            )}
+            onClick={onTrack}
+            data-testid={`button-track-${draft.id}`}
+          >
+            <Target className="w-3.5 h-3.5" />
+            {draft.isMyTurn ? "Pick Now" : draft.isLive ? "Track" : "View"}
+          </Button>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+// ── DraftsDashboard ────────────────────────────────────────────────────────────
+function DraftsDashboard({
+  mockDrafts, realDrafts, isLoading, hasScanned, scanError, onRefresh, onTrack, isConnected,
+}: {
+  mockDrafts: DraftSummary[];
+  realDrafts: DraftSummary[];
+  isLoading: boolean;
+  hasScanned: boolean;
+  scanError: string | null;
+  onRefresh?: () => void;
+  onTrack: (d: DraftSummary) => void;
+  isConnected: boolean;
+}) {
+  const isMock = realDrafts.length === 0;
+  const displayDrafts = isMock ? mockDrafts : realDrafts;
+  const active = displayDrafts.filter(d => d.isLive);
+  const upcoming = displayDrafts.filter(d => !d.isLive && d.status !== "complete");
+
+  return (
+    <div className="space-y-5" data-testid="drafts-dashboard">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <h3 className="text-base font-bold text-foreground">Your Drafts</h3>
+          {active.length > 0 && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-500/10 text-red-500 border border-red-500/25" data-testid="badge-active-count">
+              <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+              {active.length} Live
+            </span>
+          )}
+          {isMock && (
+            <span className="text-[10px] text-muted-foreground/50 italic" data-testid="text-mock-indicator">
+              {isConnected ? "Scanning…" : "Demo · connect Sleeper to see real drafts"}
+            </span>
+          )}
+        </div>
+        {onRefresh && (
+          <Button variant="outline" size="sm" className="h-8 px-2.5 shrink-0" onClick={onRefresh} disabled={isLoading} data-testid="button-refresh-drafts">
+            {isLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+          </Button>
+        )}
+      </div>
+
+      {scanError && <p className="text-xs text-red-500" data-testid="text-scan-error">{scanError}</p>}
+
+      {/* Active Drafts */}
+      {active.length > 0 && (
+        <div className="space-y-2.5">
+          <div className="flex items-center gap-2">
+            <Radio className="w-3.5 h-3.5 text-red-500 animate-pulse" />
+            <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Active Drafts</span>
+            <span className="flex-1 h-px bg-border/40" />
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3" data-testid="grid-active-drafts">
+            {active.map(d => <DraftCard key={d.id} draft={d} onTrack={() => onTrack(d)} />)}
+          </div>
+        </div>
+      )}
+
+      {/* Upcoming Drafts */}
+      {upcoming.length > 0 && (
+        <div className="space-y-2.5">
+          <div className="flex items-center gap-2">
+            <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
+            <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Upcoming Drafts</span>
+            <span className="flex-1 h-px bg-border/40" />
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3" data-testid="grid-upcoming-drafts">
+            {upcoming.map(d => <DraftCard key={d.id} draft={d} onTrack={() => onTrack(d)} />)}
+          </div>
+        </div>
+      )}
+
+      {/* Empty state — only when real data has been scanned and is genuinely empty */}
+      {active.length === 0 && upcoming.length === 0 && !isLoading && hasScanned && !isMock && (
+        <div className="flex flex-col items-center justify-center py-10 text-center" data-testid="drafts-empty">
+          <Trophy className="w-8 h-8 text-muted-foreground/30 mb-3" />
+          <p className="text-sm font-medium text-muted-foreground">No drafts found</p>
+          <p className="text-xs text-muted-foreground/60 mt-1">Active and upcoming drafts will appear here automatically</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function LiveDraft() {
   const [leagueIdInput, setLeagueIdInput] = useState("");
   const [activeLeagueId, setActiveLeagueId] = useState<string | null>(null);
@@ -192,6 +498,7 @@ export default function LiveDraft() {
   const [rookieFormat, setRookieFormat] = useState<"SF" | "1QB">("1QB");
   const [manualRookieMode, setManualRookieMode] = useState(false);
   const { isConnected, user, leagues } = useSleeper();
+  const mockDrafts = useMemo(() => getMockDraftSummaries(), []);
 
   // ── Draft log / message history ──────────────────────────────────────────
   const [sleeperJwt, setSleeperJwt] = useState<string | null>(null);
@@ -539,83 +846,16 @@ export default function LiveDraft() {
         </p>
       </div>
 
-      {isConnected && (
-        <Card className={liveDrafts.length > 0 ? "border-emerald-500/40 bg-emerald-500/5" : ""}>
-          <CardContent className="pt-5 pb-4">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2 min-w-0">
-                <Radio className={`w-4 h-4 flex-shrink-0 ${liveDrafts.length > 0 ? "text-emerald-500 animate-pulse" : "text-muted-foreground"}`} />
-                <span className="text-sm font-semibold text-foreground whitespace-nowrap" data-testid="text-live-detector-title">Live Draft Detector</span>
-                {liveDrafts.length > 0 && (
-                  <Badge variant="secondary" className="text-[10px] bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 flex-shrink-0" data-testid="badge-live-count">
-                    {liveDrafts.length} LIVE
-                  </Badge>
-                )}
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                className="flex-shrink-0 px-2.5"
-                onClick={scanForLiveDrafts}
-                disabled={isDetecting}
-                data-testid="button-scan-drafts"
-              >
-                {isDetecting ? <Loader2 className="w-3.5 h-3.5 animate-spin sm:mr-1.5" /> : <RefreshCw className="w-3.5 h-3.5 sm:mr-1.5" />}
-                <span className="hidden sm:inline">{hasScanned ? "Re-scan" : "Scan"}</span>
-              </Button>
-            </div>
-            {isDetecting && !hasScanned && (
-              <p className="text-xs text-muted-foreground" data-testid="text-scanning">Scanning your leagues for active drafts...</p>
-            )}
-            {scanError && (
-              <p className="text-xs text-red-500" data-testid="text-scan-error">{scanError}</p>
-            )}
-            {hasScanned && liveDrafts.length === 0 && !isDetecting && !scanError && (
-              <p className="text-xs text-muted-foreground" data-testid="text-no-live-drafts">No active drafts detected across your leagues. You can still enter a league ID manually below.</p>
-            )}
-            {liveDrafts.length > 0 && (
-              <div className="space-y-2" data-testid="list-live-drafts">
-                {liveDrafts.map((ld) => (
-                  <div
-                    key={ld.draftId}
-                    className="flex items-center justify-between gap-2 p-3 rounded-lg border border-emerald-500/20 bg-background"
-                    data-testid={`live-draft-${ld.leagueId}`}
-                  >
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        <Zap className="w-3.5 h-3.5 text-[#d4af37] flex-shrink-0" />
-                        <span className="font-medium text-sm text-foreground truncate" data-testid={`text-live-league-name-${ld.leagueId}`}>
-                          {ld.leagueName}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-1.5 mt-0.5 ml-5">
-                        <span className="text-[11px] text-muted-foreground whitespace-nowrap">
-                          {ld.draftCategory === "rookie" ? "Rookie" : ld.draftCategory === "startup" ? "Startup" : ld.type}
-                          {" · "}{ld.teams}T · {ld.rounds}R
-                        </span>
-                        <span className="text-[11px] text-muted-foreground">·</span>
-                        <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 whitespace-nowrap" data-testid={`text-live-progress-${ld.leagueId}`}>
-                          {ld.picksMade}/{ld.totalPicks} picks
-                        </span>
-                      </div>
-                    </div>
-                    <Button
-                      size="sm"
-                      className="flex-shrink-0 px-3"
-                      onClick={() => handleJoinLiveDraft(ld.leagueId, ld.teams)}
-                      data-testid={`button-join-draft-${ld.leagueId}`}
-                    >
-                      <Target className="w-3.5 h-3.5 mr-1.5" />
-                      <span className="hidden sm:inline">Track Draft</span>
-                      <span className="sm:hidden">Track</span>
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
+      <DraftsDashboard
+        mockDrafts={mockDrafts}
+        realDrafts={liveDrafts.map(normalizeFromDetect)}
+        isLoading={isDetecting}
+        hasScanned={hasScanned}
+        scanError={scanError}
+        onRefresh={isConnected ? scanForLiveDrafts : undefined}
+        onTrack={(d) => handleJoinLiveDraft(d.leagueId, d.teams)}
+        isConnected={isConnected}
+      />
 
       <Card>
         <CardContent className="pt-6">
