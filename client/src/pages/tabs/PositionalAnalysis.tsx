@@ -1211,12 +1211,12 @@ function WinNowMode({ league, userTeam }: { league: League; userTeam: Team }) {
                   <Badge
                     variant="outline"
                     className={cn("text-[9px] flex-shrink-0",
-                      c.effScore > 60
-                        ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
-                        : "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
+                      c.player.starter
+                        ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                        : "bg-slate-500/10 text-slate-400 border-slate-500/20"
                     )}
                   >
-                    {c.effScore > 60 ? "Ideal Chip" : "Good Chip"}
+                    {c.player.starter ? "Starter" : "Bench"}
                   </Badge>
                 </div>
               );
