@@ -1634,6 +1634,14 @@ export const SleeperOperations = {
     writeAction: false,
     priority: "medium" as const,
   },
+  draftAutopickers: {
+    key: "draftAutopickers",
+    operationName: "draft_autopickers",
+    category: "draft_room",
+    authRequired: true,
+    writeAction: false,
+    priority: "medium" as const,
+  },
 } as const;
 
 export async function rejectTradeOnSleeper(
@@ -2193,4 +2201,46 @@ export async function getDraftQueue(token: string, draftId: string): Promise<str
     query: DRAFT_QUEUE_QUERY,
   });
   return data.draft_queue ?? [];
+}
+
+// ── draft_autopickers ─────────────────────────────────────────────────────────
+
+export const DRAFT_AUTOPICKERS_QUERY = `
+  query draft_autopickers($draft_id: ID!) {
+    draft_autopickers(sport: "nfl", draft_id: $draft_id)
+  }
+`;
+
+export interface SleeperDraftAutopickersResponse {
+  draft_autopickers: any[];
+}
+
+/**
+ * Normalised autopicker entry. Shape of individual items is unknown when the
+ * array is empty (captured example returned []). Raw is preserved for
+ * forward compatibility once a populated example is captured.
+ */
+export interface DraftAutopickerStatus {
+  raw: any;
+  userId?: string;
+  rosterId?: number;
+  draftSlot?: number;
+}
+
+export function normalizeDraftAutopickers(rawAutopickers: any[]): DraftAutopickerStatus[] {
+  return (rawAutopickers ?? []).map((item) => ({
+    raw: item,
+    userId: item?.user_id ?? item?.userId,
+    rosterId: item?.roster_id ?? item?.rosterId,
+    draftSlot: item?.draft_slot ?? item?.draftSlot ?? item?.slot,
+  }));
+}
+
+export async function getDraftAutopickers(token: string, draftId: string): Promise<DraftAutopickerStatus[]> {
+  const data = await sleeperGraphql<SleeperDraftAutopickersResponse>(token, {
+    operationName: "draft_autopickers",
+    variables: { draft_id: draftId },
+    query: DRAFT_AUTOPICKERS_QUERY,
+  });
+  return normalizeDraftAutopickers(data.draft_autopickers ?? []);
 }

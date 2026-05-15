@@ -7,8 +7,8 @@ import { Loader2, Search, RefreshCw, Trophy, Target, Radio, Zap, MessageSquare, 
 import { cn } from "@/lib/utils";
 import { useValueModel } from "@/contexts/ValueModelContext";
 import { useSleeper } from "@/contexts/SleeperContext";
-import { detectLiveDrafts as detectLiveDraftsApi, fetchDraftBoard as fetchDraftBoardApi, fetchDraftState, getDraftQueue } from "@/lib/sleeperApi";
-import type { DraftState, DraftUser, DraftPickNormalized } from "@/lib/sleeperApi";
+import { detectLiveDrafts as detectLiveDraftsApi, fetchDraftBoard as fetchDraftBoardApi, fetchDraftState, getDraftQueue, getDraftAutopickers } from "@/lib/sleeperApi";
+import type { DraftState, DraftUser, DraftPickNormalized, DraftAutopickerStatus } from "@/lib/sleeperApi";
 import { ROOKIE_BOARD_2026_SF, ROOKIE_BOARD_2026_1QB } from "@/data/rookieBoard2026";
 
 // ── Normalized draft model — abstracted from raw Sleeper format ───────────────
@@ -728,6 +728,11 @@ export default function LiveDraft() {
   const [draftStateError, setDraftStateError] = useState<string | null>(null);
   const draftStateIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // ── Autopickers ───────────────────────────────────────────────────────────────
+  const [draftAutopickers, setDraftAutopickers] = useState<DraftAutopickerStatus[]>([]);
+  const [draftAutopickersLoading, setDraftAutopickersLoading] = useState(false);
+  const [draftAutopickersError, setDraftAutopickersError] = useState<string | null>(null);
+
   useEffect(() => {
     const saved = localStorage.getItem(SLEEPER_JWT_KEY);
     if (saved) setSleeperJwt(saved);
@@ -794,7 +799,20 @@ export default function LiveDraft() {
     }
   }, []);
 
-  // Fetch draftState whenever activeDraftId + JWT are both available
+  const loadAutopickers = useCallback(async (draftId: string, jwt: string) => {
+    setDraftAutopickersLoading(true);
+    setDraftAutopickersError(null);
+    try {
+      const result = await getDraftAutopickers(jwt, draftId);
+      setDraftAutopickers(result);
+    } catch (e: any) {
+      setDraftAutopickersError(e.message || "Failed to load autopick status");
+    } finally {
+      setDraftAutopickersLoading(false);
+    }
+  }, []);
+
+  // Fetch all live data whenever activeDraftId + JWT are both available
   useEffect(() => {
     if (activeDraftId && sleeperJwt) {
       setDraftMessages([]);
@@ -802,20 +820,22 @@ export default function LiveDraft() {
       refreshMessages(activeDraftId, sleeperJwt);
       refreshQueue(activeDraftId, sleeperJwt);
       loadDraftState(activeDraftId, sleeperJwt);
+      loadAutopickers(activeDraftId, sleeperJwt);
     }
-  }, [activeDraftId, sleeperJwt, refreshMessages, refreshQueue, loadDraftState]);
+  }, [activeDraftId, sleeperJwt, refreshMessages, refreshQueue, loadDraftState, loadAutopickers]);
 
-  // Poll draftState every 12s while JWT is set and draft is active
+  // Poll draftState + autopickers every 12s while JWT is set and draft is active
   useEffect(() => {
     if (!activeDraftId || !sleeperJwt) return;
     if (draftStateIntervalRef.current) clearInterval(draftStateIntervalRef.current);
     draftStateIntervalRef.current = setInterval(() => {
       loadDraftState(activeDraftId, sleeperJwt);
+      loadAutopickers(activeDraftId, sleeperJwt);
     }, 12000);
     return () => {
       if (draftStateIntervalRef.current) clearInterval(draftStateIntervalRef.current);
     };
-  }, [activeDraftId, sleeperJwt, loadDraftState]);
+  }, [activeDraftId, sleeperJwt, loadDraftState, loadAutopickers]);
 
   // Clear all draft data when active league changes
   useEffect(() => {
@@ -826,6 +846,8 @@ export default function LiveDraft() {
     setQueueError(null);
     setDraftState(null);
     setDraftStateError(null);
+    setDraftAutopickers([]);
+    setDraftAutopickersError(null);
   }, [activeLeagueId]);
 
   const scanForLiveDrafts = useCallback(async () => {
@@ -1242,6 +1264,46 @@ export default function LiveDraft() {
             </div>
           )}
 
+          {/* ── Autopick status bar ─────────────────────────────────────── */}
+          {sleeperJwt && activeDraftId && (
+            <div className="flex items-center gap-2 px-1" data-testid="section-autopick-status">
+              {draftAutopickersLoading && (
+                <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                  <Loader2 className="w-3 h-3 animate-spin" />Checking autopick…
+                </span>
+              )}
+              {!draftAutopickersLoading && !draftAutopickersError && draftAutopickers.length === 0 && (
+                <span className="text-[10px] text-muted-foreground" data-testid="text-no-autopickers">
+                  No autopickers detected
+                </span>
+              )}
+              {!draftAutopickersLoading && !draftAutopickersError && draftAutopickers.length > 0 && (
+                <div className="flex items-center gap-2 flex-wrap" data-testid="text-autopick-active">
+                  <span className="text-[10px] font-bold text-amber-500 dark:text-amber-400 uppercase tracking-wide">
+                    Autopick Active: {draftAutopickers.length} manager{draftAutopickers.length !== 1 ? "s" : ""}
+                  </span>
+                  {draftAutopickers.map((ap, idx) => {
+                    const label = ap.userId
+                      ? (draftState?.usersById[ap.userId]?.displayName ?? `User ${ap.userId}`)
+                      : ap.rosterId ? `Roster ${ap.rosterId}`
+                      : ap.draftSlot ? `Slot ${ap.draftSlot}`
+                      : "Unknown";
+                    return (
+                      <span key={idx} className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-600 dark:text-amber-400 font-medium border border-amber-500/30">
+                        {label}
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
+              {!draftAutopickersLoading && draftAutopickersError && (
+                <span className="text-[10px] text-muted-foreground/50" data-testid="text-autopick-error">
+                  Autopick status unavailable
+                </span>
+              )}
+            </div>
+          )}
+
           <div className="flex items-center justify-between flex-wrap gap-3">
             <div className="flex items-center gap-3 flex-wrap">
               <div className="flex items-center gap-2">
@@ -1392,13 +1454,29 @@ export default function LiveDraft() {
                       <div className="bg-muted/50 dark:bg-muted/20 p-1.5 flex items-center justify-center">
                         <span className="text-[10px] font-bold text-muted-foreground uppercase">Rd</span>
                       </div>
-                      {enhancedSlotHeaders.map((header, i) => (
-                        <div key={i} className="bg-muted/50 dark:bg-muted/20 p-1.5 text-center" data-testid={`col-header-${i}`}>
-                          <span className="text-[10px] font-bold text-muted-foreground uppercase truncate block leading-tight">
-                            {header.length > 8 ? header.slice(0, 7) + "…" : header}
-                          </span>
-                        </div>
-                      ))}
+                      {enhancedSlotHeaders.map((header, i) => {
+                        const slot1Based = i + 1;
+                        const isAuto = draftAutopickers.some((ap) =>
+                          ap.draftSlot === slot1Based ||
+                          (ap.userId && draftState?.draftOrderByUserId[ap.userId] === slot1Based) ||
+                          (ap.rosterId && (() => {
+                            const userId = Object.entries(draftState?.draftOrderByUserId ?? {}).find(([, s]) => s === slot1Based)?.[0];
+                            return userId ? ap.rosterId === parseInt(userId) : false;
+                          })())
+                        );
+                        return (
+                          <div key={i} className="bg-muted/50 dark:bg-muted/20 p-1.5 text-center" data-testid={`col-header-${i}`}>
+                            <span className="text-[10px] font-bold text-muted-foreground uppercase truncate block leading-tight">
+                              {header.length > 8 ? header.slice(0, 7) + "…" : header}
+                            </span>
+                            {isAuto && (
+                              <span className="inline-block text-[8px] font-bold px-1 py-px rounded bg-[#0b3a7a]/80 text-[#d4af37] border border-[#d4af37]/30 leading-tight mt-0.5" data-testid={`badge-auto-${i}`}>
+                                AUTO
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })}
 
                       {boardGrid.map((row, roundIdx) => (
                         <Fragment key={`round-${roundIdx}`}>
