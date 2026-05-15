@@ -1087,13 +1087,6 @@ function WinNowMode({ league, userTeam }: { league: League; userTeam: Team }) {
                         <Badge variant="outline" className={cn("text-[9px]", getTierColor(idea.partnerTier))}>{idea.partnerTier}</Badge>
                       </div>
 
-                      {/* Header */}
-                      <div className="px-4 py-2.5 bg-muted/20 flex items-center justify-between gap-2 flex-wrap">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span className="text-xs font-medium text-foreground">{idea.headline}</span>
-                        </div>
-                      </div>
-
                       {/* You Give / You Get */}
                       <div className="grid grid-cols-2 divide-x divide-border/30">
                         {(["youGive", "youGet"] as const).map(side => (
