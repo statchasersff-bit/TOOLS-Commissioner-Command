@@ -256,9 +256,8 @@ export function PositionalAnalysis({ league, userTeam, onNavigateToCalculator }:
       </div>
 
       {/* My Positional Profile */}
-      <Card className="p-6" data-testid="card-positional-profile">
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {POSITIONS.map(pos => {
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3" data-testid="card-positional-profile">
+        {POSITIONS.map(pos => {
             const dynRank = positionalProfile.dynRanks[pos] ?? positionalProfile.leagueSize;
             const rdRank  = positionalProfile.rdRanks[pos]  ?? positionalProfile.leagueSize;
             const dynTier = positionalProfile.rankTier(dynRank);
@@ -297,8 +296,7 @@ export function PositionalAnalysis({ league, userTeam, onNavigateToCalculator }:
               </div>
             );
           })}
-        </div>
-      </Card>
+      </div>
 
       {subTabs.length > 1 && (
         <div className="flex items-center gap-0 border-b border-border/50 pb-0" data-testid="positional-sub-tabs">
