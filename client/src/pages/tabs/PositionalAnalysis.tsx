@@ -771,11 +771,30 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
   useEffect(() => {
     if (idea) {
       const pickAsset = idea.youGive.find(a => a.type === "pick" && a.pick);
-      setSelectedPick(pickAsset?.pick ?? null);
+      if (pickAsset?.pick) {
+        const ideaPick = pickAsset.pick;
+        // Build rosterId → win-now (starters) strength map
+        const rosterToWinNow = new Map<number, number>();
+        for (const team of league.teams) {
+          const rid = parseInt(team.id.replace("roster_", ""), 10);
+          rosterToWinNow.set(rid, team.metrics.starters);
+        }
+        // Among same-round picks, auto-select the one from the strongest win-now team
+        // (highest starters value = drafts latest = cheapest pick to give away)
+        const sameRound = userTeam.picks.filter(p => p.round === ideaPick.round);
+        const sorted = [...sameRound].sort((a, b) => {
+          const aWN = rosterToWinNow.get(a.originalRosterId ?? 0) ?? 0;
+          const bWN = rosterToWinNow.get(b.originalRosterId ?? 0) ?? 0;
+          return bWN - aWN;
+        });
+        setSelectedPick(sorted[0] ?? ideaPick);
+      } else {
+        setSelectedPick(null);
+      }
     }
     setStatus("idle");
     setErrorMsg("");
-  }, [idea]);
+  }, [idea, league.teams, userTeam.picks]);
 
   const userRosterId    = parseInt(userTeam.id.replace("roster_", ""), 10);
   const partnerRosterId = idea ? parseInt(idea.partnerTeam.id.replace("roster_", ""), 10) : 0;
@@ -906,19 +925,27 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
             <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-2 font-medium">Choose pick to include</p>
             <div className="flex flex-wrap gap-1.5">
               {userTeam.picks.map((p, i) => {
+                const origTeam = league.teams.find(t => parseInt(t.id.replace("roster_", ""), 10) === p.originalRosterId);
                 const isSelected = selectedPick?.year === p.year && selectedPick?.round === p.round && selectedPick?.ownerTeamId === p.ownerTeamId;
                 return (
                   <button
                     key={i}
                     onClick={() => setSelectedPick(p)}
                     className={cn(
-                      "text-[10px] font-semibold px-2.5 py-1 rounded-full border transition-colors",
+                      "flex flex-col items-start px-2.5 py-1.5 rounded-lg border transition-colors text-left",
                       isSelected
-                        ? "bg-purple-500/20 border-purple-500/50 text-purple-300"
-                        : "bg-white/[0.04] border-white/[0.1] text-muted-foreground hover:border-purple-500/30 hover:text-purple-300"
+                        ? "bg-purple-500/20 border-purple-500/50"
+                        : "bg-white/[0.04] border-white/[0.08] hover:border-purple-500/30"
                     )}
                   >
-                    {p.year} Rd {p.round}{p.projectedRange ? ` (${p.projectedRange})` : ""}
+                    <span className={cn("text-[10px] font-bold leading-tight", isSelected ? "text-purple-300" : "text-white/80")}>
+                      {p.year} Rd {p.round}
+                    </span>
+                    {origTeam && (
+                      <span className={cn("text-[9px] leading-tight", isSelected ? "text-purple-400/70" : "text-muted-foreground/60")}>
+                        via {origTeam.owner}
+                      </span>
+                    )}
                   </button>
                 );
               })}
