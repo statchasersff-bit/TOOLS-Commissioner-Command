@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -10,7 +10,20 @@ import { useValueModel } from "@/contexts/ValueModelContext";
 import type { League, Team, Player } from "@/types";
 import { cn } from "@/lib/utils";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
-import { Search } from "lucide-react";
+import { Search, Loader2, PackageOpen } from "lucide-react";
+import {
+  fetchRosterDraftPicks,
+  normalizeRosterDraftPicks,
+  type NormalizedDraftPick,
+} from "@/lib/sleeperApi";
+
+const SLEEPER_JWT_KEY = "dc-sleeper-draft-jwt";
+
+function ordinal(n: number): string {
+  const s = ["th", "st", "nd", "rd"];
+  const v = n % 100;
+  return n + (s[(v - 20) % 10] ?? s[v] ?? s[0]);
+}
 
 interface TeamProps {
   league: League;
@@ -20,6 +33,48 @@ interface TeamProps {
 export function RosterBreakdown({ league, userTeam }: TeamProps) {
   const [search, setSearch] = useState("");
   const { getRedraftValue, getPlayerValue, optimizeLineup } = useValueModel();
+
+  // ── Future draft picks ────────────────────────────────────────────────────
+  const [sleeperJwt, setSleeperJwt] = useState<string | null>(
+    () => localStorage.getItem(SLEEPER_JWT_KEY)
+  );
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === SLEEPER_JWT_KEY) setSleeperJwt(e.newValue);
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
+
+  const [picks, setPicks] = useState<NormalizedDraftPick[]>([]);
+  const [picksLoading, setPicksLoading] = useState(false);
+  const [picksError, setPicksError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!sleeperJwt || !league.id) { setPicks([]); return; }
+    setPicksLoading(true);
+    setPicksError(null);
+    fetchRosterDraftPicks(league.id, sleeperJwt)
+      .then((raw) => setPicks(normalizeRosterDraftPicks(league.id, raw)))
+      .catch(() => setPicksError("Unable to load future draft picks."))
+      .finally(() => setPicksLoading(false));
+  }, [sleeperJwt, league.id]);
+
+  // Only this roster's picks, grouped by season then sorted by round
+  const myPicks = useMemo(() => {
+    const myRosterId = parseInt(userTeam.id, 10);
+    const mine = picks.filter((p) => p.currentRosterId === myRosterId);
+    const bySeason = new Map<string, NormalizedDraftPick[]>();
+    for (const p of mine) {
+      if (!bySeason.has(p.season)) bySeason.set(p.season, []);
+      bySeason.get(p.season)!.push(p);
+    }
+    return new Map(
+      [...bySeason.entries()]
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([season, ps]) => [season, ps.sort((a, b) => a.round - b.round)])
+    );
+  }, [picks, userTeam.id]);
 
   const posRanks = useMemo(() => {
     const positions = ["QB", "RB", "WR", "TE"] as const;
@@ -241,6 +296,87 @@ export function RosterBreakdown({ league, userTeam }: TeamProps) {
             }
           </p>
         </Card>
+      </div>
+
+      {/* ── Future Draft Picks ─────────────────────────────────────────── */}
+      <div data-testid="section-future-picks">
+        <div className="mb-5">
+          <h3 className="text-base font-bold text-foreground">Future Draft Picks</h3>
+          <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
+        </div>
+
+        {/* No JWT */}
+        {!sleeperJwt && (
+          <Card className="p-6 flex items-center gap-3 text-muted-foreground" data-testid="picks-no-auth">
+            <PackageOpen className="w-4 h-4 flex-shrink-0" />
+            <p className="text-sm">Connect Sleeper (via Live Draft tab) to view future draft picks.</p>
+          </Card>
+        )}
+
+        {/* Loading */}
+        {sleeperJwt && picksLoading && (
+          <Card className="p-6 flex items-center gap-3 text-muted-foreground" data-testid="picks-loading">
+            <Loader2 className="w-4 h-4 animate-spin flex-shrink-0" />
+            <p className="text-sm">Loading future picks…</p>
+          </Card>
+        )}
+
+        {/* Error */}
+        {sleeperJwt && !picksLoading && picksError && (
+          <Card className="p-6 border-red-500/30" data-testid="picks-error">
+            <p className="text-sm text-red-500 dark:text-red-400">{picksError}</p>
+          </Card>
+        )}
+
+        {/* Picks grouped by season */}
+        {sleeperJwt && !picksLoading && !picksError && myPicks.size > 0 && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4" data-testid="picks-grid">
+            {[...myPicks.entries()].map(([season, seasonPicks]) => (
+              <Card key={season} className="p-5" data-testid={`picks-season-${season}`}>
+                <p className="text-xs font-bold uppercase tracking-wider text-[#d4af37] mb-3">{season}</p>
+                <div className="space-y-2">
+                  {seasonPicks.map((p) => {
+                    const isOwn = p.currentRosterId === p.originalRosterId;
+                    const roundLabel = ordinal(p.round);
+                    const origTeam = league.teams.find((t) => t.id === String(p.originalRosterId));
+                    const fromLabel = origTeam?.owner || origTeam?.name || `Roster ${p.originalRosterId}`;
+                    return (
+                      <div
+                        key={`${p.season}-${p.round}-${p.originalRosterId}`}
+                        className="flex items-center gap-2"
+                        data-testid={`pick-${season}-r${p.round}-from${p.originalRosterId}`}
+                      >
+                        <span className={cn(
+                          "inline-flex items-center justify-center w-6 h-6 rounded-full text-[10px] font-bold flex-shrink-0",
+                          p.round === 1
+                            ? "bg-[#d4af37]/20 text-[#d4af37]"
+                            : p.round === 2
+                              ? "bg-blue-500/15 text-blue-400"
+                              : "bg-muted text-muted-foreground"
+                        )}>
+                          {p.round}
+                        </span>
+                        <span className="text-sm">
+                          {isOwn
+                            ? <span className="font-medium text-foreground">Own {roundLabel}</span>
+                            : <><span className="text-muted-foreground">{fromLabel}'s</span>{" "}<span className="font-medium text-foreground">{roundLabel}</span></>
+                          }
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </Card>
+            ))}
+          </div>
+        )}
+
+        {/* Empty — connected but no picks */}
+        {sleeperJwt && !picksLoading && !picksError && myPicks.size === 0 && picks.length > 0 && (
+          <Card className="p-6 text-center" data-testid="picks-empty">
+            <p className="text-sm text-muted-foreground">No future picks currently assigned to this roster.</p>
+          </Card>
+        )}
       </div>
     </div>
   );

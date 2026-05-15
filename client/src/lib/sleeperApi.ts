@@ -1534,33 +1534,99 @@ export async function fetchLeaguePlayerSettings(
   return json?.data?.league_players ?? [];
 }
 
+// ── roster_draft_picks ────────────────────────────────────────────────────────
+
+export const ROSTER_DRAFT_PICKS_QUERY = `
+  query roster_draft_picks($league_id: ID!) {
+    roster_draft_picks(league_id: $league_id) {
+      roster_id
+      season
+      round
+      owner_id
+    }
+  }
+`;
+
+/** Raw shape returned by the Sleeper roster_draft_picks GraphQL operation. */
+export interface SleeperRosterDraftPick {
+  /** Roster that currently holds this pick. */
+  roster_id: number;
+  /** Roster the pick originally belonged to. */
+  owner_id: number;
+  season: string;
+  round: number;
+}
+
+/** App-normalised pick asset, ready for UI and trade calculator consumption. */
+export interface NormalizedDraftPick {
+  leagueId: string;
+  /** Roster that currently owns the pick. */
+  currentRosterId: number;
+  /** Original roster the pick came from. */
+  originalRosterId: number;
+  season: string;
+  round: number;
+  /** Human-readable label, e.g. "2026 Round 2 (from Roster 10)" */
+  label: string;
+}
+
+export function normalizeRosterDraftPicks(
+  leagueId: string,
+  picks: SleeperRosterDraftPick[]
+): NormalizedDraftPick[] {
+  return picks.map((p) => ({
+    leagueId,
+    currentRosterId: p.roster_id,
+    originalRosterId: p.owner_id,
+    season: p.season,
+    round: p.round,
+    label: p.roster_id === p.owner_id
+      ? `${p.season} Round ${p.round}`
+      : `${p.season} Round ${p.round} (from Roster ${p.owner_id})`,
+  }));
+}
+
 export async function fetchRosterDraftPicks(
   leagueId: string,
   jwt: string
-): Promise<Array<{ roster_id: number; owner_id: number; season: string; round: number }>> {
-  const res = await fetch("https://sleeper.com/graphql", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "authorization": jwt,
-      "x-sleeper-graphql-op": "roster_draft_picks",
-    },
-    body: JSON.stringify({
-      query: `query roster_draft_picks {
-        roster_draft_picks(league_id: "${leagueId}") {
-          roster_id
-          season
-          round
-          owner_id
-        }
-      }`,
-    }),
+): Promise<SleeperRosterDraftPick[]> {
+  const data = await sleeperGraphql<{ roster_draft_picks: SleeperRosterDraftPick[] }>(jwt, {
+    operationName: "roster_draft_picks",
+    variables: { league_id: leagueId },
+    query: ROSTER_DRAFT_PICKS_QUERY,
   });
-  if (!res.ok) throw new Error(`GraphQL ${res.status}`);
-  const json = await res.json();
-  if (json?.errors?.length) throw new Error(json.errors[0].message || "roster_draft_picks failed");
-  return json?.data?.roster_draft_picks ?? [];
+  return data.roster_draft_picks ?? [];
 }
+
+// ── Operation registry ────────────────────────────────────────────────────────
+// Central reference for all authenticated Sleeper GraphQL operations.
+
+export const SleeperOperations = {
+  rosterDraftPicks: {
+    key: "rosterDraftPicks",
+    operationName: "roster_draft_picks",
+    category: "league_assets",
+    authRequired: true,
+    writeAction: false,
+    priority: "high" as const,
+  },
+  getDraft: {
+    key: "getDraft",
+    operationName: "get_draft",
+    category: "live_draft",
+    authRequired: true,
+    writeAction: false,
+    priority: "high" as const,
+  },
+  getUserDraftSettings: {
+    key: "getUserDraftSettings",
+    operationName: "get_user_draft_settings",
+    category: "live_draft",
+    authRequired: true,
+    writeAction: false,
+    priority: "low" as const,
+  },
+} as const;
 
 export async function rejectTradeOnSleeper(
   leagueId: string,
