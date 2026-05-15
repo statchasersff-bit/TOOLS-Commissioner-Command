@@ -107,17 +107,46 @@ export function PositionalAnalysis({ league, userTeam, onNavigateToCalculator }:
     const dynRanks: Record<string, number> = {};
     const rdRanks: Record<string, number> = {};
 
+    const rosterPositions = league.rosterPositions || [];
+    // FLEX-eligible positions: FLEX = RB/WR/TE, SUPER_FLEX = QB/RB/WR/TE
+    const flexSlots = rosterPositions.filter(s => s === "FLEX" || s === "WR/RB/TE" || s === "REC_FLEX").length;
+    const sfSlots   = rosterPositions.filter(s => s === "SUPER_FLEX" || s === "QB/WR/RB/TE").length;
+
     POSITIONS.forEach(pos => {
       // Dynasty: full roster depth (all players at position, not just starters)
       const byDyn = [...league.teams].sort((a, b) =>
         b.roster.filter(p => p.pos === pos).reduce((s, p) => s + getPlayerValue(p), 0) -
         a.roster.filter(p => p.pos === pos).reduce((s, p) => s + getPlayerValue(p), 0)
       );
-      // Win-Now: starters only, ranked by redraft value
-      const byRd = [...league.teams].sort((a, b) =>
-        b.roster.filter(p => p.pos === pos && p.starter).reduce((s, p) => s + getRedraftValue(p), 0) -
-        a.roster.filter(p => p.pos === pos && p.starter).reduce((s, p) => s + getRedraftValue(p), 0)
-      );
+
+      // Win-Now: optimal redraft starters
+      // Step 1 — fill dedicated slots (top N by redraft value)
+      const dedicatedSlots = Math.max(rosterPositions.filter(s => s === pos).length, DEFAULT_STARTERS[pos] || 1);
+      const byRd = [...league.teams].sort((a, b) => {
+        const optimalVal = (team: typeof a) => {
+          const sorted = [...team.roster.filter(p => p.pos === pos)]
+            .sort((x, y) => getRedraftValue(y) - getRedraftValue(x));
+          // Dedicated starters
+          let val = sorted.slice(0, dedicatedSlots).reduce((s, p) => s + getRedraftValue(p), 0);
+          // Step 2 — greedily allocate FLEX slots: each team's best remaining RB/WR/TE contribute fractionally
+          if (flexSlots > 0 && (pos === "RB" || pos === "WR" || pos === "TE")) {
+            // Each FLEX slot is shared equally among eligible positions (3: RB/WR/TE)
+            const flexShare = flexSlots / 3;
+            const bestRemaining = sorted.slice(dedicatedSlots, dedicatedSlots + Math.ceil(flexShare));
+            val += bestRemaining.reduce((s, p) => s + getRedraftValue(p), 0) * (flexShare / Math.max(bestRemaining.length, 1));
+          }
+          // Step 3 — allocate SUPER_FLEX slots: shared among all 4 positions
+          if (sfSlots > 0) {
+            const sfShare = sfSlots / 4;
+            const sfStart = (pos === "RB" || pos === "WR" || pos === "TE") ? dedicatedSlots + Math.ceil(flexSlots / 3) : dedicatedSlots;
+            const sfBest = sorted.slice(sfStart, sfStart + Math.ceil(sfShare));
+            val += sfBest.reduce((s, p) => s + getRedraftValue(p), 0) * (sfShare / Math.max(sfBest.length, 1));
+          }
+          return val;
+        };
+        return optimalVal(b) - optimalVal(a);
+      });
+
       byDyn.forEach((t, i) => { if (t.id === userTeam.id) dynRanks[pos] = i + 1; });
       byRd.forEach((t, i)  => { if (t.id === userTeam.id) rdRanks[pos]  = i + 1; });
     });
