@@ -1731,6 +1731,71 @@ export async function fetchMyDMs(jwt: string): Promise<{
   };
 }
 
+// ── DM message type ──────────────────────────────────────────────────────────
+// State callers should persist per-thread:
+//   dm_id, last_message_id, last_read_id, recent_users, last_message_time
+// Unread: messages whose message_id > last_read_id (string compare by Sleeper convention)
+export interface DmMessage {
+  message_id: string;
+  author_id: string;
+  created: number;
+  message: string | null;
+  parent_id: string;
+  /** Rich text rendering — mention/emoji map keyed by offset */
+  text_map: any | null;
+  /** Trade cards, images, etc. — attachment_type + attachment data */
+  attachment: any | null;
+}
+
+/**
+ * Fetch the latest messages in a DM thread (no cursor — newest page).
+ * Results are returned in ascending (chronological) order.
+ */
+export async function fetchLatestMessages(dmId: string, jwt: string): Promise<DmMessage[]> {
+  const res = await fetch("https://sleeper.com/graphql", {
+    method: "POST",
+    headers: { "authorization": jwt, "x-sleeper-graphql-op": "messages", "content-type": "application/json" },
+    body: JSON.stringify({
+      query: `query messages {
+        messages(parent_id: "${dmId}", order_by: "asc") {
+          message_id author_id created message parent_id text_map attachment
+        }
+      }`,
+    }),
+  });
+  if (!res.ok) throw new Error(`GraphQL ${res.status}`);
+  const json = await res.json();
+  if (json?.errors?.length) throw new Error(json.errors[0].message || "Fetch messages failed");
+  return json?.data?.messages ?? [];
+}
+
+/**
+ * Fetch messages older than beforeMessageId — use the earliest loaded
+ * message_id as the cursor. Prepend results to the existing list for
+ * infinite-scroll chat history. Results returned in ascending order.
+ */
+export async function fetchOlderMessages(
+  dmId: string,
+  beforeMessageId: string,
+  jwt: string
+): Promise<DmMessage[]> {
+  const res = await fetch("https://sleeper.com/graphql", {
+    method: "POST",
+    headers: { "authorization": jwt, "x-sleeper-graphql-op": "messages", "content-type": "application/json" },
+    body: JSON.stringify({
+      query: `query messages {
+        messages(parent_id: "${dmId}", before: "${beforeMessageId}", order_by: "asc") {
+          message_id author_id created message parent_id text_map attachment
+        }
+      }`,
+    }),
+  });
+  if (!res.ok) throw new Error(`GraphQL ${res.status}`);
+  const json = await res.json();
+  if (json?.errors?.length) throw new Error(json.errors[0].message || "Fetch older messages failed");
+  return json?.data?.messages ?? [];
+}
+
 export async function getDmByMembers(partnerUserId: string, jwt: string): Promise<any> {
   const res = await fetch("https://sleeper.com/graphql", {
     method: "POST",
