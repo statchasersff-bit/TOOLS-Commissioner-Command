@@ -893,7 +893,7 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
             <div className="flex items-center gap-1.5 mb-1">
               {userTeam.avatar ? (
                 <img
-                  src={`https://sleepercdn.com/avatars/thumbs/${userTeam.avatar}`}
+                  src={userTeam.avatar}
                   alt={userTeam.owner}
                   className="w-4 h-4 rounded-full object-cover flex-shrink-0 ring-1 ring-border/40"
                   onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
@@ -915,7 +915,7 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
             <div className="flex items-center gap-1.5 mb-1">
               {idea.partnerTeam.avatar ? (
                 <img
-                  src={`https://sleepercdn.com/avatars/thumbs/${idea.partnerTeam.avatar}`}
+                  src={idea.partnerTeam.avatar}
                   alt={idea.partnerTeam.owner}
                   className="w-4 h-4 rounded-full object-cover flex-shrink-0 ring-1 ring-border/40"
                   onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
@@ -1417,7 +1417,7 @@ function WinNowMode({ league, userTeam }: { league: League; userTeam: Team }) {
                               <div className="flex items-center gap-1.5">
                                 {userTeam.avatar ? (
                                   <img
-                                    src={`https://sleepercdn.com/avatars/thumbs/${userTeam.avatar}`}
+                                    src={userTeam.avatar}
                                     alt={userTeam.owner}
                                     className="w-5 h-5 rounded-full object-cover flex-shrink-0 ring-1 ring-border/30"
                                     onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}

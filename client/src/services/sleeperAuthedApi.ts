@@ -327,28 +327,19 @@ function buildProposeTrademutation(
   const rejectLegLine = rejectTransactionLeg != null
     ? `reject_transaction_leg: ${rejectTransactionLeg},`
     : "";
-  // draft_picks must be a JSON object array (not an array of JSON strings)
-  const picksJson = JSON.stringify(
-    draftPicks.map(p => ({
-      season: p.season,
-      round: p.round,
-      roster_id: p.roster_id,
-      previous_owner_id: p.previous_owner_id,
-      owner_id: p.owner_id,
-    }))
-  );
   return `
     mutation propose_trade(
       $k_adds: [String],
       $v_adds: [Int],
       $k_drops: [String],
-      $v_drops: [Int]
+      $v_drops: [Int],
+      $draft_picks: [String]
     ) {
       propose_trade(
         league_id: "${leagueId}",
         ${rejectIdLine}
         ${rejectLegLine}
-        draft_picks: ${picksJson},
+        draft_picks: $draft_picks,
         k_adds: $k_adds,
         v_adds: $v_adds,
         k_drops: $k_drops,
@@ -437,6 +428,9 @@ export async function proposeTrade(params: ProposeTradeParams): Promise<ProposeT
   const v_adds = Object.values(adds);
   const k_drops = Object.keys(drops);
   const v_drops = Object.values(drops);
+  const draft_picks = draftPicks.map(p =>
+    JSON.stringify({ season: p.season, round: p.round, roster_id: p.roster_id, previous_owner_id: p.previous_owner_id, owner_id: p.owner_id })
+  );
 
   const mutation = buildProposeTrademutation(
     leagueId,
@@ -446,12 +440,12 @@ export async function proposeTrade(params: ProposeTradeParams): Promise<ProposeT
     rejectTransactionLeg
   );
   console.log("[proposeTrade] mutation:", mutation);
-  console.log("[proposeTrade] variables:", { k_adds, v_adds, k_drops, v_drops });
+  console.log("[proposeTrade] variables:", { k_adds, v_adds, k_drops, v_drops, draft_picks });
 
   const data = await sleeperGraphQLRequest<{ propose_trade: ProposeTradeResult }>({
     operationName: "propose_trade",
     query: mutation,
-    variables: { k_adds, v_adds, k_drops, v_drops },
+    variables: { k_adds, v_adds, k_drops, v_drops, draft_picks },
   });
 
   if (!data.propose_trade) {
