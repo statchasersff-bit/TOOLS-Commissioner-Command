@@ -96,7 +96,7 @@ function adjustedTotal(values: number[]): number {
 }
 
 export function PositionalAnalysis({ league, userTeam, onNavigateToCalculator }: PositionalAnalysisProps) {
-  const [activeSubTab, setActiveSubTab] = useState<"surplus" | "opportunities">("surplus");
+  const [activeSubTab, setActiveSubTab] = useState<"opportunities">("opportunities");
   const { getPlayerValue, getRedraftValue } = useValueModel();
 
   const positionalProfile = useMemo(() => {
@@ -127,7 +127,6 @@ export function PositionalAnalysis({ league, userTeam, onNavigateToCalculator }:
   }, [league, userTeam, getPlayerValue, getRedraftValue]);
 
   const subTabs = [
-    { id: "surplus" as const, label: "Analysis", icon: Scale },
     { id: "opportunities" as const, label: "Ideas", icon: ArrowRightLeft },
   ];
 
@@ -230,7 +229,6 @@ export function PositionalAnalysis({ league, userTeam, onNavigateToCalculator }:
         })}
       </div>
 
-      {activeSubTab === "surplus" && <SurplusNeeds league={league} userTeam={userTeam} onSwitchTab={setActiveSubTab} />}
       {activeSubTab === "opportunities" && <TradeOpportunities league={league} userTeam={userTeam} />}
     </div>
   );
