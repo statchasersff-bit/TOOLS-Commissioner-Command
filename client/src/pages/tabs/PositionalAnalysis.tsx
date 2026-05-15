@@ -257,13 +257,6 @@ export function PositionalAnalysis({ league, userTeam, onNavigateToCalculator }:
 
       {/* My Positional Profile */}
       <Card className="p-6" data-testid="card-positional-profile">
-        <div className="mb-5">
-          <h3 className="text-base font-bold">My Positional Profile</h3>
-          <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
-          <p className="text-[10px] text-muted-foreground mt-2">
-            Your starter rankings vs. all {positionalProfile.leagueSize} teams — by dynasty and win-now value
-          </p>
-        </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {POSITIONS.map(pos => {
             const dynRank = positionalProfile.dynRanks[pos] ?? positionalProfile.leagueSize;
@@ -462,10 +455,6 @@ function SurplusNeeds({ league, userTeam, onSwitchTab }: { league: League; userT
       {/* My Positional Profile */}
       <Card data-testid="card-my-profile">
         <CardContent className="pt-5">
-          <div className="mb-4">
-            <h3 className="text-base font-bold text-foreground">My Positional Profile</h3>
-            <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
-          </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {/* Surpluses */}
