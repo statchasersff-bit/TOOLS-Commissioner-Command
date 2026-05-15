@@ -1069,6 +1069,75 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
     return players;
   }, [league]);
 
+  const playerToTeamMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const team of league.teams) {
+      for (const p of team.roster) {
+        map.set(p.sleeperId || p.id, team.id);
+      }
+    }
+    return map;
+  }, [league]);
+
+  const addPlayer = useCallback((side: "a" | "b", player: Player) => {
+    const setter = side === "a" ? setSideA : setSideB;
+    const val = getPlayerValue(player);
+    const asset: TradeAsset = {
+      id: `player-${player.sleeperId || player.id}-${Date.now()}`,
+      type: "player",
+      player,
+      value: val,
+      label: player.name,
+      pos: player.pos,
+    };
+    setter((prev) => [...prev, asset]);
+
+    const playerId = player.sleeperId || player.id;
+    const ownerTeamId = playerToTeamMap.get(playerId);
+    if (ownerTeamId) {
+      if (side === "a" && !sideARosterId) {
+        setSideARosterId(ownerTeamId);
+      } else if (side === "b" && !sideBRosterId) {
+        setSideBRosterId(ownerTeamId);
+        setTradePartnerId(ownerTeamId);
+      }
+    }
+  }, [getPlayerValue, playerToTeamMap, sideARosterId, sideBRosterId]);
+
+  const addPick = useCallback((side: "a" | "b", year: number, round: number, range: "Early" | "Mid" | "Late", originalRosterId?: number) => {
+    const setter = side === "a" ? setSideA : setSideB;
+    const rangeKey = range.toLowerCase() as "early" | "mid" | "late";
+    const val = getStaticPickValue(year, round, rangeKey);
+    const asset: TradeAsset = {
+      id: `pick-${year}-${round}-${range}-${originalRosterId ?? ""}-${Date.now()}`,
+      type: "pick",
+      pickYear: year,
+      pickRound: round,
+      pickRange: range,
+      pickOriginalRosterId: originalRosterId,
+      value: val,
+      label: `${year} ${range} ${round}${round === 1 ? "st" : round === 2 ? "nd" : round === 3 ? "rd" : "th"}`,
+    };
+    setter((prev) => [...prev, asset]);
+  }, []);
+
+  const sideATeam = useMemo(() => league.teams.find((t) => t.id === sideARosterId), [league, sideARosterId]);
+  const sideBTeam = useMemo(() => league.teams.find((t) => t.id === sideBRosterId), [league, sideBRosterId]);
+
+  const sideAPlayers = useMemo(() => sideATeam?.roster || [], [sideATeam]);
+  const sideBPlayers = useMemo(() => sideBTeam?.roster || [], [sideBTeam]);
+
+  const handleTradePartnerChange = useCallback((teamId: string) => {
+    setTradePartnerId(teamId);
+    setSideBRosterId(teamId);
+    setSideB([]);
+  }, []);
+
+  const handleSideATeamChange = useCallback((teamId: string) => {
+    setSideARosterId(teamId);
+    setSideA([]);
+  }, []);
+
   // Prefill from Trade Block "Add to Trade Calc" — on mount (localStorage) and live (CustomEvent)
   useEffect(() => {
     const raw = localStorage.getItem("tc-prefill");
@@ -1327,75 +1396,6 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
     const sf = league.scoringFormat?.toLowerCase() || "";
     return sf.includes("sf") || sf.includes("superflex") ? "SF" : "1QB";
   }, [league]);
-
-  const playerToTeamMap = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const team of league.teams) {
-      for (const p of team.roster) {
-        map.set(p.sleeperId || p.id, team.id);
-      }
-    }
-    return map;
-  }, [league]);
-
-  const sideATeam = useMemo(() => league.teams.find((t) => t.id === sideARosterId), [league, sideARosterId]);
-  const sideBTeam = useMemo(() => league.teams.find((t) => t.id === sideBRosterId), [league, sideBRosterId]);
-
-  const sideAPlayers = useMemo(() => sideATeam?.roster || [], [sideATeam]);
-  const sideBPlayers = useMemo(() => sideBTeam?.roster || [], [sideBTeam]);
-
-  const handleTradePartnerChange = useCallback((teamId: string) => {
-    setTradePartnerId(teamId);
-    setSideBRosterId(teamId);
-    setSideB([]);
-  }, []);
-
-  const handleSideATeamChange = useCallback((teamId: string) => {
-    setSideARosterId(teamId);
-    setSideA([]);
-  }, []);
-
-  const addPlayer = useCallback((side: "a" | "b", player: Player) => {
-    const setter = side === "a" ? setSideA : setSideB;
-    const val = getPlayerValue(player);
-    const asset: TradeAsset = {
-      id: `player-${player.sleeperId || player.id}-${Date.now()}`,
-      type: "player",
-      player,
-      value: val,
-      label: player.name,
-      pos: player.pos,
-    };
-    setter((prev) => [...prev, asset]);
-
-    const playerId = player.sleeperId || player.id;
-    const ownerTeamId = playerToTeamMap.get(playerId);
-    if (ownerTeamId) {
-      if (side === "a" && !sideARosterId) {
-        setSideARosterId(ownerTeamId);
-      } else if (side === "b" && !sideBRosterId) {
-        setSideBRosterId(ownerTeamId);
-        setTradePartnerId(ownerTeamId);
-      }
-    }
-  }, [getPlayerValue, playerToTeamMap, sideARosterId, sideBRosterId]);
-
-  const addPick = useCallback((side: "a" | "b", year: number, round: number, range: "Early" | "Mid" | "Late", originalRosterId?: number) => {
-    const setter = side === "a" ? setSideA : setSideB;
-    const rangeKey = range.toLowerCase() as "early" | "mid" | "late";
-    const val = getStaticPickValue(year, round, rangeKey);
-    const asset: TradeAsset = {
-      id: `pick-${year}-${round}-${range}-${originalRosterId ?? ""}-${Date.now()}`,
-      type: "pick",
-      pickYear: year,
-      pickRound: round,
-      pickRange: range,
-      pickOriginalRosterId: originalRosterId,
-      value: val,
-      label: `${year} ${range} ${round}${round === 1 ? "st" : round === 2 ? "nd" : round === 3 ? "rd" : "th"}`,
-    };
-    setter((prev) => [...prev, asset]);
-  }, []);
 
   const removeAsset = useCallback((side: "a" | "b", assetId: string) => {
     const setter = side === "a" ? setSideA : setSideB;
