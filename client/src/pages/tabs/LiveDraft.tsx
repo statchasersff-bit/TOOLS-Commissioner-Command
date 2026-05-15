@@ -7,7 +7,7 @@ import { Loader2, Search, RefreshCw, Trophy, Target, Radio, Zap, MessageSquare, 
 import { cn } from "@/lib/utils";
 import { useValueModel } from "@/contexts/ValueModelContext";
 import { useSleeper } from "@/contexts/SleeperContext";
-import { detectLiveDrafts as detectLiveDraftsApi, fetchDraftBoard as fetchDraftBoardApi, fetchDraftState, getDraftQueue, getDraftAutopickers } from "@/lib/sleeperApi";
+import { detectLiveDrafts as detectLiveDraftsApi, fetchDraftBoard as fetchDraftBoardApi, fetchDraftState, getDraftQueue, getDraftAutopickers, updateDraftQueue as updateDraftQueueApi } from "@/lib/sleeperApi";
 import type { DraftState, DraftUser, DraftPickNormalized, DraftAutopickerStatus } from "@/lib/sleeperApi";
 import { ROOKIE_BOARD_2026_SF, ROOKIE_BOARD_2026_1QB } from "@/data/rookieBoard2026";
 
@@ -227,21 +227,10 @@ async function fetchDraftQueue(draftId: string, jwt: string): Promise<string[]> 
   return getDraftQueue(jwt, draftId);
 }
 
+// Delegates to exported updateDraftQueue (sleeperGraphql helper, proper variables).
+// Sleeper replaces the ENTIRE queue — always send the full desired player_ids array.
 async function updateDraftQueue(draftId: string, playerIds: string[], jwt: string): Promise<string[]> {
-  const res = await fetch("https://sleeper.com/graphql", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "authorization": jwt,
-      "x-sleeper-graphql-op": "update_draft_queue",
-    },
-    body: JSON.stringify({
-      query: `mutation update_draft_queue { update_draft_queue(player_ids: ${JSON.stringify(playerIds)}, draft_id: "${draftId}") }`,
-    }),
-  });
-  if (!res.ok) throw new Error(`GraphQL ${res.status}`);
-  const json = await res.json();
-  return (json?.data?.update_draft_queue as string[]) || [];
+  return updateDraftQueueApi(jwt, draftId, playerIds);
 }
 
 const POS_CELL_BG: Record<string, string> = {

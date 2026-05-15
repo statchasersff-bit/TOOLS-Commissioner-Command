@@ -1642,6 +1642,14 @@ export const SleeperOperations = {
     writeAction: false,
     priority: "medium" as const,
   },
+  updateDraftQueue: {
+    key: "updateDraftQueue",
+    operationName: "update_draft_queue",
+    category: "draft_room",
+    authRequired: true,
+    writeAction: true,
+    priority: "high" as const,
+  },
 } as const;
 
 export async function rejectTradeOnSleeper(
@@ -2243,4 +2251,48 @@ export async function getDraftAutopickers(token: string, draftId: string): Promi
     query: DRAFT_AUTOPICKERS_QUERY,
   });
   return normalizeDraftAutopickers(data.draft_autopickers ?? []);
+}
+
+// ── update_draft_queue ────────────────────────────────────────────────────────
+// Sleeper update_draft_queue REPLACES the entire queue.
+// Always send the full desired player_ids array, not just the changed player.
+
+export const UPDATE_DRAFT_QUEUE_MUTATION = `
+  mutation update_draft_queue($draft_id: ID!, $player_ids: [String!]!) {
+    update_draft_queue(player_ids: $player_ids, draft_id: $draft_id)
+  }
+`;
+
+export async function updateDraftQueue(
+  token: string,
+  draftId: string,
+  playerIds: string[]
+): Promise<string[]> {
+  const data = await sleeperGraphql<{ update_draft_queue: string[] }>(token, {
+    operationName: "update_draft_queue",
+    variables: { draft_id: draftId, player_ids: playerIds },
+    query: UPDATE_DRAFT_QUEUE_MUTATION,
+  });
+  return data.update_draft_queue ?? [];
+}
+
+// ── Queue action helpers ──────────────────────────────────────────────────────
+
+export async function addPlayerToDraftQueue({
+  token, draftId, currentQueue, playerId,
+}: { token: string; draftId: string; currentQueue: string[]; playerId: string }): Promise<string[]> {
+  if (currentQueue.includes(playerId)) return currentQueue;
+  return updateDraftQueue(token, draftId, [...currentQueue, playerId]);
+}
+
+export async function removePlayerFromDraftQueue({
+  token, draftId, currentQueue, playerId,
+}: { token: string; draftId: string; currentQueue: string[]; playerId: string }): Promise<string[]> {
+  return updateDraftQueue(token, draftId, currentQueue.filter((id) => id !== playerId));
+}
+
+export async function reorderDraftQueue({
+  token, draftId, nextQueue,
+}: { token: string; draftId: string; nextQueue: string[] }): Promise<string[]> {
+  return updateDraftQueue(token, draftId, nextQueue);
 }
