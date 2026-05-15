@@ -3,11 +3,12 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Search, RefreshCw, Trophy, Target, Radio, Zap, MessageSquare, Key, AlertTriangle, ChevronDown, ChevronUp, ArrowUp, ArrowDown, X, Plus, Calendar, Clock } from "lucide-react";
+import { Loader2, Search, RefreshCw, Trophy, Target, Radio, Zap, MessageSquare, Key, AlertTriangle, ChevronDown, ChevronUp, ArrowUp, ArrowDown, X, Plus, Calendar, Clock, UserCircle, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useValueModel } from "@/contexts/ValueModelContext";
 import { useSleeper } from "@/contexts/SleeperContext";
-import { detectLiveDrafts as detectLiveDraftsApi, fetchDraftBoard as fetchDraftBoardApi } from "@/lib/sleeperApi";
+import { detectLiveDrafts as detectLiveDraftsApi, fetchDraftBoard as fetchDraftBoardApi, fetchDraftState } from "@/lib/sleeperApi";
+import type { DraftState, DraftUser, DraftPickNormalized } from "@/lib/sleeperApi";
 import { ROOKIE_BOARD_2026_SF, ROOKIE_BOARD_2026_1QB } from "@/data/rookieBoard2026";
 
 // ── Normalized draft model — abstracted from raw Sleeper format ───────────────
@@ -280,6 +281,19 @@ const POS_BADGE_SM: Record<string, string> = {
   TE: "text-orange-600 dark:text-orange-400",
 };
 
+// CurrentPickInfo — computed from DraftState for "on the clock" display
+interface CurrentPickInfo {
+  nextPickNo: number;
+  currentRound: number;
+  pickInRound: number;
+  currentUserId: string | null;
+  currentUser: DraftUser | null;
+  picksAway: number;
+  totalPicks: number;
+  picksRemaining: number;
+  isMyTurn: boolean;
+}
+
 // ── DraftCard ─────────────────────────────────────────────────────────────────
 function DraftCard({ draft, onTrack }: { draft: DraftSummary; onTrack?: () => void }) {
   const pct = draft.totalPicks > 0 ? Math.round((draft.picksMade / draft.totalPicks) * 100) : 0;
@@ -479,6 +493,212 @@ function DraftsDashboard({
   );
 }
 
+// ── DraftStateHeader ─────────────────────────────────────────────────────────
+function DraftStateHeader({ ds, currentPickInfo, draftStateLoading, myUserId }: {
+  ds: DraftState;
+  currentPickInfo: CurrentPickInfo | null;
+  draftStateLoading: boolean;
+  myUserId: string | null;
+}) {
+  const totalPicks = ds.teams * ds.rounds;
+  const pct = totalPicks > 0 ? Math.min(100, Math.round((ds.picks.length / totalPicks) * 100)) : 0;
+  const isLive = ds.status === "drafting";
+  const isComplete = ds.status === "complete" || ds.picks.length >= totalPicks;
+  const typeLabel = ds.type === "linear" ? "Linear" : ds.type === "snake" ? "Snake" : ds.type;
+
+  return (
+    <Card
+      className={cn("overflow-hidden", currentPickInfo?.isMyTurn && "border-[#d4af37]/60 shadow-[0_0_0_1px_rgba(212,175,55,0.1)]")}
+      data-testid="draft-state-header"
+    >
+      {currentPickInfo?.isMyTurn && (
+        <div className="h-0.5 w-full bg-gradient-to-r from-[#d4af37]/30 via-[#d4af37] to-[#d4af37]/30" />
+      )}
+      <CardContent className="pt-4 pb-4 space-y-3">
+        {/* Name + status */}
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="text-base font-bold text-foreground truncate" data-testid="text-draft-state-name">{ds.name}</h3>
+              {isLive && (
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-red-500 text-white shrink-0" data-testid="badge-state-live">
+                  <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />LIVE
+                </span>
+              )}
+              {isComplete && (
+                <span className="inline-flex px-1.5 py-0.5 rounded text-[9px] font-semibold border border-emerald-500/40 text-emerald-600 dark:text-emerald-400 shrink-0" data-testid="badge-state-complete">
+                  Complete
+                </span>
+              )}
+              {draftStateLoading && <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground shrink-0" />}
+            </div>
+            <p className="text-[11px] text-muted-foreground mt-0.5">
+              {ds.season} · {typeLabel} · {ds.teams} teams · {ds.rounds} rounds
+            </p>
+          </div>
+        </div>
+
+        {/* Progress bar */}
+        <div className="space-y-1">
+          <div className="w-full h-1.5 bg-muted/30 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-[#0b3a7a] to-[#d4af37] rounded-full transition-all duration-700"
+              style={{ width: `${pct}%` }}
+            />
+          </div>
+          <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+            <span data-testid="text-state-picks-progress">{ds.picks.length} of {totalPicks} picks · {pct}% complete</span>
+            {currentPickInfo && <span>{currentPickInfo.picksRemaining} remaining</span>}
+          </div>
+        </div>
+
+        {/* On the clock + picks away + timer — live only */}
+        {isLive && currentPickInfo && (
+          <div className="flex items-center gap-4 flex-wrap border-t border-border/30 pt-3">
+            {/* On the clock */}
+            <div className="flex items-center gap-2.5 flex-1 min-w-0">
+              <div className="shrink-0">
+                {currentPickInfo.currentUser?.avatar ? (
+                  <img
+                    src={`https://sleepercdn.com/avatars/thumbs/${currentPickInfo.currentUser.avatar}`}
+                    className="w-8 h-8 rounded-full border border-border/50"
+                    alt=""
+                  />
+                ) : (
+                  <div className="w-8 h-8 rounded-full bg-[#0b3a7a]/10 border border-border/40 flex items-center justify-center">
+                    <UserCircle className="w-5 h-5 text-[#0b3a7a] dark:text-blue-400" />
+                  </div>
+                )}
+              </div>
+              <div className="min-w-0">
+                <p className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">On the Clock</p>
+                <p className="text-sm font-bold text-foreground truncate" data-testid="text-on-clock">
+                  {currentPickInfo.currentUser?.displayName || "—"}
+                </p>
+                <p className="text-[10px] text-muted-foreground">Pick {currentPickInfo.nextPickNo} · Rd {currentPickInfo.currentRound}</p>
+              </div>
+            </div>
+
+            {/* Picks away */}
+            {myUserId && (
+              <div className="text-center shrink-0 px-3 py-1.5 rounded-lg bg-muted/20 border border-border/30">
+                <p className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Picks Away</p>
+                {currentPickInfo.isMyTurn ? (
+                  <p className="text-sm font-bold text-[#d4af37]" data-testid="text-your-pick-now">YOUR PICK</p>
+                ) : (
+                  <p className="text-xl font-bold text-foreground tabular-nums" data-testid="text-picks-away-count">{currentPickInfo.picksAway}</p>
+                )}
+              </div>
+            )}
+
+            {/* Timer */}
+            <div className="text-center shrink-0 px-3 py-1.5 rounded-lg bg-muted/20 border border-border/30">
+              <p className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Timer</p>
+              {ds.pickTimer > 0 ? (
+                <p className="text-sm font-semibold text-foreground" data-testid="text-pick-timer">{ds.pickTimer}s</p>
+              ) : (
+                <p className="text-xs font-medium text-muted-foreground" data-testid="text-no-timer">None</p>
+              )}
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ── RecentPicksRail ───────────────────────────────────────────────────────────
+function RecentPicksRail({ picks, usersById, teams }: {
+  picks: DraftPickNormalized[];
+  usersById: Record<string, DraftUser>;
+  teams: number;
+}) {
+  const recent = [...picks].reverse().slice(0, 8);
+  if (recent.length === 0) return null;
+
+  const posStyle: Record<string, string> = {
+    QB: "bg-red-500/10 border-red-500/30 text-red-700 dark:text-red-300",
+    RB: "bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-300",
+    WR: "bg-blue-500/10 border-blue-500/30 text-blue-700 dark:text-blue-300",
+    TE: "bg-orange-500/10 border-orange-500/30 text-orange-700 dark:text-orange-300",
+  };
+
+  return (
+    <div className="flex items-center gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: "none" }} data-testid="recent-picks-rail">
+      <span className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground shrink-0">Recent</span>
+      {recent.map((pick) => {
+        const pickUser = usersById[pick.pickedBy];
+        const round = Math.ceil(pick.pickNo / teams);
+        const pickInRound = ((pick.pickNo - 1) % teams) + 1;
+        const lastName = pick.playerName.split(" ").slice(1).join(" ") || pick.playerName;
+        const pStyle = posStyle[pick.position] || "bg-muted/20 border-border/30 text-muted-foreground";
+        return (
+          <div key={pick.pickNo} className={cn("shrink-0 flex flex-col gap-0.5 px-2 py-1.5 rounded-lg border min-w-[68px]", pStyle)} data-testid={`recent-pick-${pick.pickNo}`}>
+            <span className="text-[8px] font-mono opacity-60">{round}.{String(pickInRound).padStart(2, "0")}</span>
+            <span className="text-[10px] font-bold leading-tight truncate">{lastName}</span>
+            <span className="text-[9px] opacity-70 leading-none">{pick.position}{pick.teamAbbr ? ` · ${pick.teamAbbr}` : ""}</span>
+            {pickUser && <span className="text-[8px] opacity-50 leading-none truncate">{pickUser.displayName}</span>}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── MyPicksPanel ──────────────────────────────────────────────────────────────
+function MyPicksPanel({ myPicks, myUserId, usersById, teams }: {
+  myPicks: DraftPickNormalized[];
+  myUserId: string | null;
+  usersById: Record<string, DraftUser>;
+  teams: number;
+}) {
+  const myUser = myUserId ? usersById[myUserId] : null;
+  const posColors: Record<string, string> = {
+    QB: "text-red-600 dark:text-red-400",
+    RB: "text-emerald-600 dark:text-emerald-400",
+    WR: "text-blue-600 dark:text-blue-400",
+    TE: "text-orange-500 dark:text-orange-400",
+  };
+
+  return (
+    <Card data-testid="my-picks-panel">
+      <CardContent className="pt-4 pb-4 space-y-2.5">
+        <div className="flex items-center gap-2">
+          {myUser?.avatar ? (
+            <img src={`https://sleepercdn.com/avatars/thumbs/${myUser.avatar}`} className="w-5 h-5 rounded-full border border-border/40" alt="" />
+          ) : (
+            <UserCircle className="w-4 h-4 text-muted-foreground" />
+          )}
+          <span className="text-sm font-semibold">My Picks</span>
+          <Badge variant="outline" className="text-[10px] h-4 px-1.5">{myPicks.length}</Badge>
+        </div>
+        {myPicks.length === 0 ? (
+          <p className="text-xs text-muted-foreground text-center py-2">No picks yet</p>
+        ) : (
+          <div className="space-y-1 max-h-44 overflow-y-auto">
+            {myPicks.map(pick => {
+              const round = Math.ceil(pick.pickNo / teams);
+              const pickInRound = ((pick.pickNo - 1) % teams) + 1;
+              return (
+                <div key={pick.pickNo} className="flex items-center gap-2 text-xs py-1 border-b border-border/15 last:border-0" data-testid={`my-pick-${pick.pickNo}`}>
+                  <span className="text-[10px] font-mono text-muted-foreground w-8 shrink-0 tabular-nums">
+                    {round}.{String(pickInRound).padStart(2, "0")}
+                  </span>
+                  <span className={cn("text-[10px] font-bold w-6 shrink-0", posColors[pick.position] || "text-muted-foreground")}>
+                    {pick.position}
+                  </span>
+                  <span className="font-semibold text-foreground truncate flex-1">{pick.playerName}</span>
+                  <span className="text-[10px] text-muted-foreground shrink-0">{pick.teamAbbr}</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function LiveDraft() {
   const [leagueIdInput, setLeagueIdInput] = useState("");
   const [activeLeagueId, setActiveLeagueId] = useState<string | null>(null);
@@ -513,6 +733,12 @@ export default function LiveDraft() {
   const [queueLoading, setQueueLoading] = useState(false);
   const [queueError, setQueueError] = useState<string | null>(null);
   const [isUpdatingQueue, setIsUpdatingQueue] = useState(false);
+
+  // ── DraftState — live data from confirmed get_draft GraphQL endpoint ─────────
+  const [draftState, setDraftState] = useState<DraftState | null>(null);
+  const [draftStateLoading, setDraftStateLoading] = useState(false);
+  const [draftStateError, setDraftStateError] = useState<string | null>(null);
+  const draftStateIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     const saved = localStorage.getItem(SLEEPER_JWT_KEY);
@@ -567,22 +793,51 @@ export default function LiveDraft() {
     }
   }, [sleeperJwt, activeDraftId, draftQueue]);
 
+  const loadDraftState = useCallback(async (draftId: string, jwt: string) => {
+    setDraftStateLoading(true);
+    setDraftStateError(null);
+    try {
+      const state = await fetchDraftState(draftId, jwt);
+      setDraftState(state);
+    } catch (e: any) {
+      setDraftStateError(e.message || "Failed to load draft state");
+    } finally {
+      setDraftStateLoading(false);
+    }
+  }, []);
+
+  // Fetch draftState whenever activeDraftId + JWT are both available
   useEffect(() => {
     if (activeDraftId && sleeperJwt) {
       setDraftMessages([]);
       setDraftQueue([]);
       refreshMessages(activeDraftId, sleeperJwt);
       refreshQueue(activeDraftId, sleeperJwt);
+      loadDraftState(activeDraftId, sleeperJwt);
     }
-  }, [activeDraftId, sleeperJwt, refreshMessages, refreshQueue]);
+  }, [activeDraftId, sleeperJwt, refreshMessages, refreshQueue, loadDraftState]);
 
-  // Clear messages + queue when draft changes
+  // Poll draftState every 12s while JWT is set and draft is active
+  useEffect(() => {
+    if (!activeDraftId || !sleeperJwt) return;
+    if (draftStateIntervalRef.current) clearInterval(draftStateIntervalRef.current);
+    draftStateIntervalRef.current = setInterval(() => {
+      loadDraftState(activeDraftId, sleeperJwt);
+    }, 12000);
+    return () => {
+      if (draftStateIntervalRef.current) clearInterval(draftStateIntervalRef.current);
+    };
+  }, [activeDraftId, sleeperJwt, loadDraftState]);
+
+  // Clear all draft data when active league changes
   useEffect(() => {
     setDraftMessages([]);
     setDraftStarted(false);
     setMessagesError(null);
     setDraftQueue([]);
     setQueueError(null);
+    setDraftState(null);
+    setDraftStateError(null);
   }, [activeLeagueId]);
 
   const scanForLiveDrafts = useCallback(async () => {
@@ -804,6 +1059,76 @@ export default function LiveDraft() {
     return map;
   }, [draftData]);
 
+  // currentPickInfo — on-clock / picks-away computed from draftState
+  const currentPickInfo = useMemo((): CurrentPickInfo | null => {
+    if (!draftState) return null;
+    const { teams, rounds, picks, draftOrderByUserId, usersById, type } = draftState;
+    const totalPicks = teams * rounds;
+    if (picks.length >= totalPicks) return null;
+    const nextPickNo = picks.length + 1;
+    const currentRound = Math.ceil(nextPickNo / teams);
+    const pickInRound = ((nextPickNo - 1) % teams) + 1;
+    // For linear drafts slot = pickInRound each round; snake support can be added later
+    const draftSlot = type === "snake" ? pickInRound : pickInRound;
+    const currentUserId = Object.entries(draftOrderByUserId).find(([, slot]) => slot === draftSlot)?.[0] ?? null;
+    const currentUser = currentUserId ? (usersById[currentUserId] ?? null) : null;
+    const myUserId = user?.userId ?? null;
+    let picksAway = 0;
+    let isMyTurn = false;
+    if (myUserId) {
+      const mySlot = draftOrderByUserId[myUserId];
+      if (mySlot !== undefined) {
+        isMyTurn = mySlot === draftSlot;
+        if (isMyTurn) {
+          picksAway = 0;
+        } else if (mySlot > draftSlot) {
+          picksAway = mySlot - draftSlot;
+        } else {
+          picksAway = teams - draftSlot + mySlot;
+        }
+      }
+    }
+    return { nextPickNo, currentRound, pickInRound, currentUserId, currentUser, picksAway, totalPicks, picksRemaining: totalPicks - picks.length, isMyTurn };
+  }, [draftState, user?.userId]);
+
+  // My own picks from draftState
+  const myPicks = useMemo(() => {
+    if (!draftState || !user?.userId) return [];
+    return draftState.picks.filter(p => p.pickedBy === user.userId);
+  }, [draftState, user?.userId]);
+
+  // Slot headers: prefer real display names from draftState over REST draftData
+  const enhancedSlotHeaders = useMemo(() => {
+    if (draftState && Object.keys(draftState.draftOrderByUserId).length > 0) {
+      const slotToUser: Record<number, DraftUser> = {};
+      for (const [userId, slot] of Object.entries(draftState.draftOrderByUserId)) {
+        slotToUser[slot] = draftState.usersById[userId] ?? { userId, displayName: `Slot ${slot}`, avatar: null, isBot: false };
+      }
+      return Array.from({ length: draftState.teams }, (_, i) => slotToUser[i + 1]?.displayName || `Pick ${i + 1}`);
+    }
+    return slotHeaders;
+  }, [draftState, slotHeaders]);
+
+  // Merged pick history: draftState.picks (primary) joined with message timing data
+  const mergedPickHistory = useMemo(() => {
+    if (draftState && draftState.picks.length > 0) {
+      return draftState.picks.map((pick, idx) => {
+        const parsed = parsedPicks[idx] ?? null;
+        const timing = parsed ? pickTimings.get(parsed.message_id) : null;
+        const pickUser = draftState.usersById[pick.pickedBy] ?? null;
+        return { pick, timing, user: pickUser, isForced: parsed?.forced ?? false };
+      });
+    }
+    // Fallback: message-based picks only (when draftState not yet loaded)
+    return parsedPicks.map(p => ({
+      pick: null as DraftPickNormalized | null,
+      timing: pickTimings.get(p.message_id) ?? null,
+      user: null as DraftUser | null,
+      isForced: p.forced,
+      _parsed: p,
+    }));
+  }, [draftState, parsedPicks, pickTimings]);
+
   const handleSaveJwt = () => {
     const val = jwtInput.trim();
     if (!val) return;
@@ -814,6 +1139,7 @@ export default function LiveDraft() {
     if (activeDraftId) {
       refreshMessages(activeDraftId, val);
       refreshQueue(activeDraftId, val);
+      loadDraftState(activeDraftId, val);
     }
   };
 
@@ -823,6 +1149,8 @@ export default function LiveDraft() {
     setDraftMessages([]);
     setDraftStarted(false);
     setDraftQueue([]);
+    setDraftState(null);
+    setDraftStateError(null);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -911,6 +1239,21 @@ export default function LiveDraft() {
 
       {activeLeagueId && !isLoading && (
         <>
+          {draftState && (
+            <DraftStateHeader
+              ds={draftState}
+              currentPickInfo={currentPickInfo}
+              draftStateLoading={draftStateLoading}
+              myUserId={user?.userId ?? null}
+            />
+          )}
+          {draftStateError && !draftState && (
+            <div className="flex items-center gap-2 text-xs text-amber-600 dark:text-amber-400 px-1" data-testid="text-draft-state-error">
+              <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+              <span>Live draft state unavailable: {draftStateError}</span>
+            </div>
+          )}
+
           <div className="flex items-center justify-between flex-wrap gap-3">
             <div className="flex items-center gap-3 flex-wrap">
               <div className="flex items-center gap-2">
@@ -1041,6 +1384,10 @@ export default function LiveDraft() {
             )}
           </div>
 
+          {draftState && draftState.picks.length > 0 && (
+            <RecentPicksRail picks={draftState.picks} usersById={draftState.usersById} teams={draftState.teams} />
+          )}
+
           {!isRookieDraft && dynastyPlayerList.length === 0 ? (
             <Card>
               <CardContent className="py-16 text-center">
@@ -1057,7 +1404,7 @@ export default function LiveDraft() {
                       <div className="bg-muted/50 dark:bg-muted/20 p-1.5 flex items-center justify-center">
                         <span className="text-[10px] font-bold text-muted-foreground uppercase">Rd</span>
                       </div>
-                      {slotHeaders.map((header, i) => (
+                      {enhancedSlotHeaders.map((header, i) => (
                         <div key={i} className="bg-muted/50 dark:bg-muted/20 p-1.5 text-center" data-testid={`col-header-${i}`}>
                           <span className="text-[10px] font-bold text-muted-foreground uppercase truncate block leading-tight">
                             {header.length > 8 ? header.slice(0, 7) + "…" : header}
@@ -1186,6 +1533,15 @@ export default function LiveDraft() {
                 </div>
               </CardContent>
             </Card>
+          )}
+
+          {draftState && myPicks.length > 0 && (
+            <MyPicksPanel
+              myPicks={myPicks}
+              myUserId={user?.userId ?? null}
+              usersById={draftState.usersById}
+              teams={draftState.teams}
+            />
           )}
 
           {/* ── My Queue ─────────────────────────────────────────────────── */}
@@ -1393,15 +1749,14 @@ export default function LiveDraft() {
                 </div>
               )}
 
-              {/* Pick history */}
-              {parsedPicks.length > 0 && (
+              {/* Pick history — uses draftState.picks (primary) + message timing (secondary) */}
+              {mergedPickHistory.length > 0 && (
                 <div className="space-y-2" data-testid="section-pick-history">
-                  {/* Recent picks header */}
                   <div className="flex items-center justify-between">
                     <p className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
-                      Recent Picks ({parsedPicks.length} total)
+                      Pick History ({mergedPickHistory.length} total)
                     </p>
-                    {parsedPicks.length > 5 && (
+                    {mergedPickHistory.length > 5 && (
                       <button onClick={() => setShowFullLog(v => !v)}
                         className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
                         data-testid="button-toggle-full-log">
@@ -1410,65 +1765,64 @@ export default function LiveDraft() {
                     )}
                   </div>
 
-                  {/* Pick rows — recent 5 descending, or full log ascending */}
+                  {/* Pick rows */}
                   <div className="space-y-1" data-testid="list-pick-rows">
                     {(showFullLog
-                      ? [...parsedPicks]                              // ascending (already sorted)
-                      : [...parsedPicks].reverse().slice(0, 5)        // most recent first
-                    ).map(pick => {
+                      ? mergedPickHistory
+                      : [...mergedPickHistory].reverse().slice(0, 5)
+                    ).map((entry, idx) => {
+                      const p = entry.pick;
+                      const teams2 = draftState?.teams ?? teamCount;
+                      const round = p ? Math.ceil(p.pickNo / teams2) : ((entry as any)._parsed?.round ?? 0);
+                      const pickInRound = p ? ((p.pickNo - 1) % teams2) + 1 : ((entry as any)._parsed?.pickInRound ?? 0);
+                      const playerName = p ? p.playerName : ((entry as any)._parsed?.playerName ?? "");
+                      const position = p ? p.position : ((entry as any)._parsed?.position ?? "");
+                      const teamAbbr = p ? p.teamAbbr : ((entry as any)._parsed?.team ?? "");
+                      const ownerName = entry.user?.displayName || pickOwnerMap.get(playerName) || "";
                       const posColors: Record<string, string> = {
                         QB: "text-red-600 dark:text-red-400",
                         RB: "text-emerald-600 dark:text-emerald-400",
                         WR: "text-blue-600 dark:text-blue-400",
                         TE: "text-orange-500 dark:text-orange-400",
                       };
-                      const timing = pickTimings.get(pick.message_id);
-                      const rosterName = pickOwnerMap.get(pick.playerName) ?? "";
                       return (
-                        <div key={pick.message_id}
+                        <div key={p ? p.pickNo : idx}
                           className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-xs transition-colors ${
-                            pick.forced
+                            entry.isForced
                               ? "border-amber-500/30 bg-amber-50/50 dark:bg-amber-950/20"
                               : "border-border/30 bg-muted/20"
                           }`}
-                          data-testid={`pick-row-${pick.message_id}`}>
-                          {/* Pick label */}
+                          data-testid={`pick-row-${p ? p.pickNo : idx}`}>
                           <span className="text-[10px] font-mono text-muted-foreground tabular-nums flex-shrink-0 w-8">
-                            {pick.round}.{String(pick.pickInRound).padStart(2, "0")}
+                            {round}.{String(pickInRound).padStart(2, "0")}
                           </span>
-                          {/* Position */}
-                          <span className={`text-[10px] font-bold flex-shrink-0 w-6 ${posColors[pick.position] || "text-muted-foreground"}`}>
-                            {pick.position}
+                          <span className={`text-[10px] font-bold flex-shrink-0 w-6 ${posColors[position] || "text-muted-foreground"}`}>
+                            {position}
                           </span>
-                          {/* Player name */}
-                          <span className="font-semibold text-foreground truncate flex-1 min-w-0">{pick.playerName}</span>
-                          {/* NFL team */}
-                          <span className="text-[10px] text-muted-foreground flex-shrink-0 hidden sm:inline">{pick.team}</span>
-                          {/* Fantasy roster */}
-                          {rosterName && (
-                            <span className="text-[10px] text-muted-foreground/70 flex-shrink-0 truncate max-w-[80px]" title={rosterName}>
-                              {rosterName}
+                          <span className="font-semibold text-foreground truncate flex-1 min-w-0">{playerName}</span>
+                          <span className="text-[10px] text-muted-foreground flex-shrink-0 hidden sm:inline">{teamAbbr}</span>
+                          {ownerName && (
+                            <span className="text-[10px] text-muted-foreground/70 flex-shrink-0 truncate max-w-[80px]" title={ownerName}>
+                              {ownerName}
                             </span>
                           )}
-                          {/* Time used */}
-                          {timing ? (
+                          {/* Approx. time used — from draft room messages */}
+                          {entry.timing ? (
                             <span className={`text-[10px] tabular-nums flex-shrink-0 font-mono ${
-                              timing.timeMs > 5 * 60 * 1000
+                              entry.timing.timeMs > 5 * 60 * 1000
                                 ? "text-red-500 dark:text-red-400"
-                                : timing.timeMs > 2 * 60 * 1000
+                                : entry.timing.timeMs > 2 * 60 * 1000
                                   ? "text-amber-500 dark:text-amber-400"
                                   : "text-emerald-600 dark:text-emerald-400"
-                            }`} data-testid={`pick-time-${pick.message_id}`}>
-                              {timing.timeLabel}
+                            }`} data-testid={`pick-time-${p ? p.pickNo : idx}`}>
+                              {entry.timing.timeLabel}
                             </span>
                           ) : (
                             <span className="text-[10px] text-muted-foreground/30 flex-shrink-0 font-mono tabular-nums">—</span>
                           )}
-                          {/* Forced */}
-                          <span className={`text-[10px] flex-shrink-0 font-medium ${pick.forced ? "text-amber-500 dark:text-amber-400" : "text-muted-foreground/30"}`}
-                            data-testid={`pick-forced-${pick.message_id}`}>
-                            {pick.forced ? "Forced" : "—"}
-                          </span>
+                          {entry.isForced && (
+                            <span className="text-[10px] text-amber-500 dark:text-amber-400 flex-shrink-0 font-medium">Forced</span>
+                          )}
                         </div>
                       );
                     })}
@@ -1476,8 +1830,8 @@ export default function LiveDraft() {
                 </div>
               )}
 
-              {/* Empty state when token is set but no picks yet */}
-              {sleeperJwt && !messagesLoading && parsedPicks.length === 0 && !messagesError && (
+              {/* Empty state */}
+              {sleeperJwt && !messagesLoading && mergedPickHistory.length === 0 && !messagesError && (
                 <p className="text-xs text-muted-foreground text-center py-3" data-testid="text-no-picks-yet">
                   {draftStarted ? "Draft has started — no picks logged yet." : "Waiting for draft picks…"}
                 </p>

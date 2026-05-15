@@ -1889,3 +1889,132 @@ export async function claimPlayerOnSleeper(
     throw new Error(err.error || `Transaction failed (${res.status})`);
   }
 }
+
+// ── DraftState — normalized from confirmed get_draft GraphQL endpoint ─────────
+export interface DraftUser {
+  userId: string;
+  displayName: string;
+  avatar: string | null;
+  isBot: boolean;
+}
+
+export interface DraftPickNormalized {
+  pickNo: number;
+  playerId: string;
+  /** userId of the manager who made this pick */
+  pickedBy: string;
+  isKeeper: boolean;
+  playerName: string;
+  position: string;
+  teamAbbr: string;
+}
+
+export interface DraftState {
+  draftId: string;
+  leagueId: string;
+  name: string;
+  status: "pre_draft" | "drafting" | "complete";
+  season: string;
+  type: string;
+  teams: number;
+  rounds: number;
+  /** seconds per pick; 0 = no timer */
+  pickTimer: number;
+  startTime: number | null;
+  lastPicked: number | null;
+  /** userId → 1-indexed slot number */
+  draftOrderByUserId: Record<string, number>;
+  usersById: Record<string, DraftUser>;
+  picks: DraftPickNormalized[];
+}
+
+/**
+ * Fetch full draft state via confirmed Sleeper GraphQL endpoint.
+ * Single round-trip: get_draft + user_drafts_by_draft + draft_picks.
+ * Requires JWT (x-sleeper-graphql-op: get_draft).
+ */
+export async function fetchDraftState(draftId: string, jwt: string): Promise<DraftState> {
+  const res = await fetch("https://sleeper.com/graphql", {
+    method: "POST",
+    headers: {
+      "authorization": jwt,
+      "x-sleeper-graphql-op": "get_draft",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      query: `query get_draft {
+        get_draft(sport: "nfl", draft_id: "${draftId}") {
+          created draft_id draft_order last_message_time last_message_id
+          last_picked league_id metadata season season_type settings sport
+          status start_time type
+        }
+        user_drafts_by_draft(draft_id: "${draftId}") {
+          user_id user_display_name user_avatar user_is_bot metadata
+        }
+        draft_picks(draft_id: "${draftId}") {
+          draft_id pick_no player_id picked_by is_keeper metadata reactions
+        }
+      }`,
+    }),
+  });
+  if (!res.ok) throw new Error(`get_draft GraphQL ${res.status}`);
+  const json = await res.json();
+  if (json?.errors?.length) throw new Error(json.errors[0].message || "get_draft failed");
+
+  const raw = json?.data?.get_draft;
+  const rawUsers: any[] = json?.data?.user_drafts_by_draft ?? [];
+  const rawPicks: any[] = json?.data?.draft_picks ?? [];
+  if (!raw) throw new Error("No draft data in response");
+
+  const usersById: Record<string, DraftUser> = {};
+  for (const u of rawUsers) {
+    usersById[u.user_id] = {
+      userId: u.user_id,
+      displayName: u.user_display_name || u.user_id,
+      avatar: u.user_avatar || null,
+      isBot: !!u.user_is_bot,
+    };
+  }
+
+  const draftOrderByUserId: Record<string, number> = raw.draft_order || {};
+  const settings = raw.settings || {};
+  const teams = settings.teams || 12;
+  const rounds = settings.rounds || 4;
+  const pickTimer = settings.pick_timer || 0;
+
+  const picks: DraftPickNormalized[] = [...rawPicks]
+    .sort((a: any, b: any) => a.pick_no - b.pick_no)
+    .map((p: any) => {
+      const m = p.metadata || {};
+      return {
+        pickNo: p.pick_no,
+        playerId: p.player_id || "",
+        pickedBy: p.picked_by || "",
+        isKeeper: !!p.is_keeper,
+        playerName: m.player_name || [m.first_name, m.last_name].filter(Boolean).join(" ") || p.player_id || "",
+        position: m.position || "",
+        teamAbbr: m.team || "",
+      };
+    });
+
+  const status: DraftState["status"] =
+    raw.status === "drafting" ? "drafting" :
+    raw.status === "complete" ? "complete" : "pre_draft";
+
+  return {
+    draftId: raw.draft_id,
+    leagueId: raw.league_id,
+    name: raw.metadata?.name || `${raw.season} ${raw.type} Draft`,
+    status,
+    season: raw.season,
+    type: raw.type || "snake",
+    teams,
+    rounds,
+    pickTimer,
+    startTime: raw.start_time || null,
+    lastPicked: raw.last_picked || null,
+    draftOrderByUserId,
+    usersById,
+    picks,
+  };
+}
