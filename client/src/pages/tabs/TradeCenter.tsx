@@ -14,6 +14,7 @@ import { getLeagueTeamTiers, getTierColor, getTierBg, getTierEmoji, getPositionC
 import { getStaticPickValue } from "@/data/pickValues";
 import { API_BASE } from "@/lib/apiBase";
 import { fetchRosterDraftPicks, fetchLeaguePlayerSettings, proposeTrade, rejectTradeOnSleeper, getDmByMembers, sendDmMessage } from "@/lib/sleeperApi";
+import { getSleeperToken } from "@/services/sleeperAuth";
 import type { League, Team, Tier, Player, Pick, TradeRecord, TradeSide, CrawlStatus } from "@/types";
 import { cn } from "@/lib/utils";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
@@ -781,14 +782,20 @@ function CrossLeagueTradeIntel({ league }: { league: League }) {
 export function TradeBlockScanner({ league }: { league: League }) {
   const { getPlayerValue } = useValueModel();
 
-  // JWT — shared with Live Draft / Transactions / Trade Calculator
-  const [sleeperJwt, setSleeperJwt] = useState<string | null>(() => localStorage.getItem(SLEEPER_JWT_KEY));
+  // JWT — prefer the full Sleeper session token, fall back to manual Live Draft key
+  const [sleeperJwt, setSleeperJwt] = useState<string | null>(() => getSleeperToken() ?? localStorage.getItem(SLEEPER_JWT_KEY));
   useEffect(() => {
-    const onStorage = (e: StorageEvent) => { if (e.key === SLEEPER_JWT_KEY) setSleeperJwt(e.newValue); };
-    const onJwtChanged = (e: Event) => { setSleeperJwt((e as CustomEvent).detail); };
+    const refresh = () => setSleeperJwt(getSleeperToken() ?? localStorage.getItem(SLEEPER_JWT_KEY));
+    const onStorage = (e: StorageEvent) => { if (e.key === SLEEPER_JWT_KEY || e.key === "statchasers_sleeper_auth") refresh(); };
+    const onJwtChanged = () => refresh();
     window.addEventListener("storage", onStorage);
     window.addEventListener("sleeper-jwt-changed", onJwtChanged);
-    return () => { window.removeEventListener("storage", onStorage); window.removeEventListener("sleeper-jwt-changed", onJwtChanged); };
+    window.addEventListener("sleeper-session-changed", onJwtChanged);
+    return () => {
+      window.removeEventListener("storage", onStorage);
+      window.removeEventListener("sleeper-jwt-changed", onJwtChanged);
+      window.removeEventListener("sleeper-session-changed", onJwtChanged);
+    };
   }, []);
 
   const [lpsData, setLpsData] = useState<any[]>([]);
@@ -1143,8 +1150,8 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
   const [sideBRosterId, setSideBRosterId] = useState<string>("");
   const [savingPng, setSavingPng] = useState(false);
 
-  // JWT — shared with Live Draft + Transactions tabs
-  const [sleeperJwt, setSleeperJwt] = useState<string | null>(() => localStorage.getItem(SLEEPER_JWT_KEY));
+  // JWT — prefer the full Sleeper session token, fall back to manual Live Draft key
+  const [sleeperJwt, setSleeperJwt] = useState<string | null>(() => getSleeperToken() ?? localStorage.getItem(SLEEPER_JWT_KEY));
   const [jwtInput, setJwtInput] = useState("");
   const handleSaveJwt = () => {
     const val = jwtInput.trim();
@@ -1156,15 +1163,21 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
   };
   const handleClearJwt = () => {
     localStorage.removeItem(SLEEPER_JWT_KEY);
-    setSleeperJwt(null);
+    setSleeperJwt(getSleeperToken());
     window.dispatchEvent(new CustomEvent("sleeper-jwt-changed", { detail: null }));
   };
   useEffect(() => {
-    const onStorage = (e: StorageEvent) => { if (e.key === SLEEPER_JWT_KEY) setSleeperJwt(e.newValue); };
-    const onJwtChanged = (e: Event) => { setSleeperJwt((e as CustomEvent).detail); };
+    const refresh = () => setSleeperJwt(getSleeperToken() ?? localStorage.getItem(SLEEPER_JWT_KEY));
+    const onStorage = (e: StorageEvent) => { if (e.key === SLEEPER_JWT_KEY || e.key === "statchasers_sleeper_auth") refresh(); };
+    const onJwtChanged = () => refresh();
     window.addEventListener("storage", onStorage);
     window.addEventListener("sleeper-jwt-changed", onJwtChanged);
-    return () => { window.removeEventListener("storage", onStorage); window.removeEventListener("sleeper-jwt-changed", onJwtChanged); };
+    window.addEventListener("sleeper-session-changed", onJwtChanged);
+    return () => {
+      window.removeEventListener("storage", onStorage);
+      window.removeEventListener("sleeper-jwt-changed", onJwtChanged);
+      window.removeEventListener("sleeper-session-changed", onJwtChanged);
+    };
   }, []);
 
   // Live roster draft picks from Sleeper GraphQL
