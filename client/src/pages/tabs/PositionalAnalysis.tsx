@@ -4,13 +4,16 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useValueModel } from "@/contexts/ValueModelContext";
 import { getLeagueTeamTiers, getTierColor, getTierEmoji, getPositionColor, isContenderTier, isRebuilderTier } from "@/data/mockData";
 import { cn } from "@/lib/utils";
 import type { League, Team, Player, Pick, Tier } from "@/types";
+import { getSleeperSession } from "@/services/sleeperAuth";
+import { proposeTrade } from "@/services/sleeperAuthedApi";
 import {
   ArrowRightLeft, Target, TrendingUp, TrendingDown, Zap, RotateCcw, ShieldCheck,
-  ChevronRight, Scale
+  ChevronRight, Scale, Send, Loader2, CheckCircle2, AlertTriangle, X
 } from "lucide-react";
 
 interface PositionalAnalysisProps {
@@ -745,12 +748,192 @@ function posTextColor(pos: string): string {
   }
 }
 
+// ─── Send Trade Modal ──────────────────────────────────────────────
+
+type SendStatus = "idle" | "sending" | "success" | "error";
+
+interface SendTradeModalProps {
+  open: boolean;
+  onClose: () => void;
+  idea: WinNowIdea | null;
+  league: League;
+  userTeam: Team;
+}
+
+function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeModalProps) {
+  const [status, setStatus] = useState<SendStatus>("idle");
+  const [errorMsg, setErrorMsg] = useState<string>("");
+
+  const hasPick = (idea?.youGive ?? []).some(a => a.type === "pick");
+
+  const userRosterId  = parseInt(userTeam.id.replace("roster_", ""), 10);
+  const partnerRosterId = idea ? parseInt(idea.partnerTeam.id.replace("roster_", ""), 10) : 0;
+
+  async function handleConfirm() {
+    if (!idea) return;
+    setStatus("sending");
+    setErrorMsg("");
+    try {
+      const adds: Record<string, number> = {};
+      const drops: Record<string, number> = {};
+      for (const a of idea.youGet) {
+        if (a.type === "player" && a.sleeperId) {
+          adds[a.sleeperId]  = userRosterId;
+          drops[a.sleeperId] = partnerRosterId;
+        }
+      }
+      for (const a of idea.youGive) {
+        if (a.type === "player" && a.sleeperId) {
+          adds[a.sleeperId]  = partnerRosterId;
+          drops[a.sleeperId] = userRosterId;
+        }
+      }
+      const expiresAt = Date.now() + 7 * 24 * 60 * 60 * 1000;
+      await proposeTrade({ leagueId: league.id, adds, drops, draftPicks: [], expiresAt });
+      setStatus("success");
+    } catch (e: any) {
+      setStatus("error");
+      setErrorMsg(e?.message || "Trade submission failed.");
+    }
+  }
+
+  function handleClose() {
+    if (status === "sending") return;
+    setStatus("idle");
+    setErrorMsg("");
+    onClose();
+  }
+
+  if (!idea) return null;
+
+  const uDyn = idea.dynGet - idea.dynGive;
+  const uNow = idea.userRdDelta;
+  const pDyn = idea.dynGive - idea.dynGet;
+  const pNow = idea.partnerRdDelta;
+
+  const DeltaChip = ({ dyn, now }: { dyn: number; now: number }) => (
+    <div className="flex items-center gap-2 mt-0.5">
+      <span className={cn("text-[11px] font-semibold", dyn >= 0 ? "text-emerald-400" : "text-red-400")}>
+        {dyn >= 0 ? "+" : "−"}{Math.abs(Math.round(dyn)).toLocaleString()} DYN
+      </span>
+      <span className="text-muted-foreground/30 text-xs">/</span>
+      <span className={cn("text-[11px] font-semibold", now >= 0 ? "text-emerald-400" : "text-red-400")}>
+        {now >= 0 ? "+" : "−"}{Math.abs(Math.round(now)).toLocaleString()} NOW
+      </span>
+    </div>
+  );
+
+  const AssetRow = ({ a }: { a: WinNowIdea["youGet"][number] }) => (
+    <div className="flex items-center gap-2.5 py-1">
+      {a.type === "player" && a.sleeperId ? (
+        <div className="w-8 h-8 rounded-full flex-shrink-0 overflow-hidden bg-muted ring-1 ring-border/20">
+          <img src={`https://sleepercdn.com/content/nfl/players/thumb/${a.sleeperId}.jpg`} alt={a.label} className="w-full h-full object-cover object-top" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+        </div>
+      ) : (
+        <span className="text-[9px] font-bold text-[#d4af37] bg-[#d4af37]/10 border border-[#d4af37]/25 rounded px-1.5 py-0.5 flex-shrink-0">PICK</span>
+      )}
+      <span className="text-sm font-semibold leading-tight">{a.label}</span>
+      {a.pos && <span className={cn("text-[10px] font-bold ml-auto flex-shrink-0", posTextColor(a.pos))}>{a.pos}</span>}
+    </div>
+  );
+
+  return (
+    <Dialog open={open} onOpenChange={handleClose}>
+      <DialogContent className="max-w-sm bg-[#080f1d] border-border/50 p-0 overflow-hidden">
+        <DialogHeader className="px-5 pt-5 pb-3 border-b border-border/20">
+          <DialogTitle className="text-sm font-bold text-white flex items-center gap-2">
+            <Send className="w-4 h-4 text-[#d4af37]" />
+            Confirm Trade Offer
+          </DialogTitle>
+          <p className="text-[11px] text-muted-foreground mt-1 leading-snug">
+            <span className="text-white/70 font-medium">{league.name}</span>
+            {" · "}Partner: <span className="text-white/70 font-medium">{idea.partnerTeam.owner}</span>
+          </p>
+        </DialogHeader>
+
+        {/* Trade sides */}
+        <div className="grid grid-cols-2 divide-x divide-border/30 px-0">
+          {/* You receive */}
+          <div className="px-4 py-3">
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">You receive</p>
+            <DeltaChip dyn={uDyn} now={uNow} />
+            <div className="mt-2">
+              {idea.youGet.map((a, i) => <AssetRow key={i} a={a} />)}
+            </div>
+          </div>
+          {/* Partner receives */}
+          <div className="px-4 py-3">
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">{idea.partnerTeam.owner} receives</p>
+            <DeltaChip dyn={pDyn} now={pNow} />
+            <div className="mt-2">
+              {idea.youGive.map((a, i) => <AssetRow key={i} a={a} />)}
+            </div>
+          </div>
+        </div>
+
+        {/* Pick warning */}
+        {hasPick && status === "idle" && (
+          <div className="mx-4 mb-1 flex items-start gap-2 rounded-lg bg-amber-500/10 border border-amber-500/25 px-3 py-2">
+            <AlertTriangle className="w-3.5 h-3.5 text-amber-400 flex-shrink-0 mt-px" />
+            <p className="text-[10px] text-amber-300 leading-snug">
+              Draft picks can't be included automatically. After sending, open the Sleeper app to add the pick to this offer.
+            </p>
+          </div>
+        )}
+
+        {/* Status banners */}
+        {status === "success" && (
+          <div className="mx-4 mb-1 flex items-center gap-2 rounded-lg bg-emerald-500/10 border border-emerald-500/25 px-3 py-2.5">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+            <span className="text-[11px] text-emerald-300 font-medium">Trade offer sent!</span>
+          </div>
+        )}
+        {status === "error" && (
+          <div className="mx-4 mb-1 flex items-start gap-2 rounded-lg bg-red-500/10 border border-red-500/25 px-3 py-2.5">
+            <X className="w-3.5 h-3.5 text-red-400 flex-shrink-0 mt-px" />
+            <span className="text-[11px] text-red-300 leading-snug">{errorMsg}</span>
+          </div>
+        )}
+
+        <DialogFooter className="px-4 pb-4 pt-2 flex gap-2 justify-end">
+          {status === "success" ? (
+            <Button size="sm" variant="outline" className="h-8 text-xs" onClick={handleClose}>Close</Button>
+          ) : (
+            <>
+              <Button size="sm" variant="ghost" className="h-8 text-xs text-muted-foreground" onClick={handleClose} disabled={status === "sending"}>
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                className="h-8 text-xs bg-emerald-600 hover:bg-emerald-500 text-white gap-1.5"
+                onClick={handleConfirm}
+                disabled={status === "sending"}
+                data-testid="btn-confirm-send-trade"
+              >
+                {status === "sending" ? (
+                  <><Loader2 className="w-3 h-3 animate-spin" />Sending…</>
+                ) : (
+                  <><Send className="w-3 h-3" />Confirm Send Trade</>
+                )}
+              </Button>
+            </>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ─── Win-Now Mode ─────────────────────────────────────────────────
 
 function WinNowMode({ league, userTeam }: { league: League; userTeam: Team }) {
   const { getPlayerValue, getRedraftValue, getPickValue, optimizeLineup } = useValueModel();
   const tierMap = useMemo(() => getLeagueTeamTiers(league.teams), [league.teams]);
   const [expandedPositions, setExpandedPositions] = useState<Set<string>>(new Set());
+  const [sendModal, setSendModal] = useState<{ open: boolean; idea: WinNowIdea | null }>({ open: false, idea: null });
+  const sleeperSession = getSleeperSession();
+  const isSleeperAuthed = !!sleeperSession?.token;
+
   const togglePos = (pos: string) => setExpandedPositions(prev => {
     const next = new Set(prev);
     next.has(pos) ? next.delete(pos) : next.add(pos);
@@ -1186,7 +1369,7 @@ function WinNowMode({ league, userTeam }: { league: League; userTeam: Team }) {
                           </div>
 
                           {/* Footer */}
-                          <div className="px-[18px] pb-[10px] flex justify-end relative z-10">
+                          <div className="px-[18px] pb-[10px] flex justify-end items-center gap-2 relative z-10">
                             <Button
                               variant="ghost"
                               size="sm"
@@ -1196,6 +1379,34 @@ function WinNowMode({ league, userTeam }: { league: League; userTeam: Team }) {
                               <ArrowRightLeft className="w-2.5 h-2.5" />
                               Build in Calculator
                             </Button>
+                            {isSleeperAuthed ? (
+                              <Button
+                                size="sm"
+                                className="h-6 text-[10px] bg-emerald-700 hover:bg-emerald-600 text-white px-2 gap-1"
+                                data-testid={`btn-wn-send-${pos.toLowerCase()}-${idx}`}
+                                onClick={() => setSendModal({ open: true, idea })}
+                              >
+                                <Send className="w-2.5 h-2.5" />
+                                Send Trade
+                              </Button>
+                            ) : (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span tabIndex={0}>
+                                    <Button
+                                      size="sm"
+                                      className="h-6 text-[10px] bg-muted text-muted-foreground px-2 gap-1 cursor-not-allowed"
+                                      disabled
+                                      data-testid={`btn-wn-send-disabled-${pos.toLowerCase()}-${idx}`}
+                                    >
+                                      <Send className="w-2.5 h-2.5" />
+                                      Send Trade
+                                    </Button>
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="text-xs">Connect Sleeper to send offers directly</TooltipContent>
+                              </Tooltip>
+                            )}
                           </div>
                         </div>
                       );
@@ -1209,6 +1420,14 @@ function WinNowMode({ league, userTeam }: { league: League; userTeam: Team }) {
           </div>
         )}
       </div>
+
+      <WinNowSendModal
+        open={sendModal.open}
+        onClose={() => setSendModal({ open: false, idea: null })}
+        idea={sendModal.idea}
+        league={league}
+        userTeam={userTeam}
+      />
     </div>
   );
 }
