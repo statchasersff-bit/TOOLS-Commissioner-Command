@@ -97,11 +97,52 @@ function adjustedTotal(values: number[]): number {
 
 export function PositionalAnalysis({ league, userTeam, onNavigateToCalculator }: PositionalAnalysisProps) {
   const [activeSubTab, setActiveSubTab] = useState<"surplus" | "opportunities">("surplus");
+  const { getPlayerValue, getRedraftValue } = useValueModel();
+
+  const positionalProfile = useMemo(() => {
+    const leagueSize = league.teams.length;
+    const topThird = Math.ceil(leagueSize / 3);
+    const bottomThird = leagueSize - topThird;
+
+    const dynRanks: Record<string, number> = {};
+    const rdRanks: Record<string, number> = {};
+
+    POSITIONS.forEach(pos => {
+      const byDyn = [...league.teams].sort((a, b) =>
+        b.roster.filter(p => p.pos === pos && p.starter).reduce((s, p) => s + getPlayerValue(p), 0) -
+        a.roster.filter(p => p.pos === pos && p.starter).reduce((s, p) => s + getPlayerValue(p), 0)
+      );
+      const byRd = [...league.teams].sort((a, b) =>
+        b.roster.filter(p => p.pos === pos && p.starter).reduce((s, p) => s + getRedraftValue(p), 0) -
+        a.roster.filter(p => p.pos === pos && p.starter).reduce((s, p) => s + getRedraftValue(p), 0)
+      );
+      byDyn.forEach((t, i) => { if (t.id === userTeam.id) dynRanks[pos] = i + 1; });
+      byRd.forEach((t, i)  => { if (t.id === userTeam.id) rdRanks[pos]  = i + 1; });
+    });
+
+    const rankTier = (rank: number) =>
+      rank <= topThird ? "top" : rank > bottomThird ? "bottom" : "mid";
+
+    return { dynRanks, rdRanks, leagueSize, rankTier };
+  }, [league, userTeam, getPlayerValue, getRedraftValue]);
 
   const subTabs = [
     { id: "surplus" as const, label: "Analysis", icon: Scale },
     { id: "opportunities" as const, label: "Ideas", icon: ArrowRightLeft },
   ];
+
+  const ordinal = (n: number) =>
+    n === 1 ? "1st" : n === 2 ? "2nd" : n === 3 ? "3rd" : `${n}th`;
+  const rankColor = (t: "top" | "mid" | "bottom") =>
+    t === "top" ? "text-emerald-500 dark:text-emerald-400"
+    : t === "bottom" ? "text-red-500 dark:text-red-400"
+    : "text-foreground";
+  const barColor = (t: "top" | "mid" | "bottom") =>
+    t === "top" ? "bg-emerald-500" : t === "bottom" ? "bg-red-500" : "bg-[#0b3a7a]";
+  const barPct = (rank: number) =>
+    positionalProfile.leagueSize <= 1
+      ? 100
+      : Math.round((1 - (rank - 1) / (positionalProfile.leagueSize - 1)) * 100);
 
   return (
     <div className="space-y-6">
@@ -114,6 +155,58 @@ export function PositionalAnalysis({ league, userTeam, onNavigateToCalculator }:
           Analyze positional surplus and need across your league. Find trade partners driven by supply and demand.
         </p>
       </div>
+
+      {/* My Positional Profile */}
+      <Card className="p-6" data-testid="card-positional-profile">
+        <div className="mb-5">
+          <h3 className="text-base font-bold">My Positional Profile</h3>
+          <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
+          <p className="text-[10px] text-muted-foreground mt-2">
+            Your starter rankings vs. all {positionalProfile.leagueSize} teams — by dynasty and win-now value
+          </p>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {POSITIONS.map(pos => {
+            const dynRank = positionalProfile.dynRanks[pos] ?? positionalProfile.leagueSize;
+            const rdRank  = positionalProfile.rdRanks[pos]  ?? positionalProfile.leagueSize;
+            const dynTier = positionalProfile.rankTier(dynRank);
+            const rdTier  = positionalProfile.rankTier(rdRank);
+            return (
+              <div
+                key={pos}
+                className="rounded-lg border border-border bg-muted/30 p-4 flex flex-col gap-3"
+                data-testid={`pos-profile-${pos.toLowerCase()}`}
+              >
+                <span className="text-xs font-bold tracking-widest text-muted-foreground uppercase">{pos}</span>
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] text-muted-foreground">Dynasty</span>
+                    <span className={cn("text-sm font-bold tabular-nums", rankColor(dynTier))}>
+                      {ordinal(dynRank)}
+                      <span className="text-[10px] font-normal text-muted-foreground ml-0.5">/{positionalProfile.leagueSize}</span>
+                    </span>
+                  </div>
+                  <div className="h-1.5 rounded-full bg-border overflow-hidden">
+                    <div className={cn("h-full rounded-full transition-all", barColor(dynTier))} style={{ width: `${barPct(dynRank)}%` }} />
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] text-muted-foreground">Win-Now</span>
+                    <span className={cn("text-sm font-bold tabular-nums", rankColor(rdTier))}>
+                      {ordinal(rdRank)}
+                      <span className="text-[10px] font-normal text-muted-foreground ml-0.5">/{positionalProfile.leagueSize}</span>
+                    </span>
+                  </div>
+                  <div className="h-1.5 rounded-full bg-border overflow-hidden">
+                    <div className={cn("h-full rounded-full transition-all", barColor(rdTier))} style={{ width: `${barPct(rdRank)}%` }} />
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </Card>
 
       <div className="flex items-center gap-0 border-b border-border/50 pb-0" data-testid="positional-sub-tabs">
         {subTabs.map(tab => {
