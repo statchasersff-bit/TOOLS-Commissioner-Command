@@ -1252,29 +1252,60 @@ function WinNowMode({ league, userTeam }: { league: League; userTeam: Team }) {
               High dynasty value ÷ low starter impact — ideal trade currency for win-now moves
             </p>
           </div>
-          <div className="space-y-0">
-            {sellCandidates.map((c, i) => {
+          <div className="grid grid-cols-3 gap-3">
+            {sellCandidates.map((c) => {
               const sid = c.player.sleeperId ?? c.player.id;
+              const team = c.player.team ?? "";
+              const isSynthetic = !sid || sid.startsWith("rookie_") || sid.startsWith("pick_");
               return (
-                <div key={sid} className="flex items-center gap-3 py-2.5 border-b border-border/20 last:border-0" data-testid={`chip-row-${sid}`}>
-                  <span className="text-xs text-muted-foreground w-4 text-right flex-shrink-0">{i + 1}.</span>
-                  <PlayerAvatar id={sid} name={c.player.name} pos={c.player.pos} team={c.player.team ?? ""} size="xs" compact />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-sm font-semibold truncate">{c.player.name}</span>
-                      <Badge variant="outline" className={cn("text-[9px] px-1 py-0 h-3.5 flex-shrink-0", getPositionColor(c.player.pos))}>{c.player.pos}</Badge>
+                <div key={sid} className="rounded-xl overflow-hidden border border-[#d4af37]/20 bg-[#080e1c]" data-testid={`chip-row-${sid}`}>
+                  {/* Image area */}
+                  <div className="relative aspect-square w-full overflow-hidden bg-[#0b1628]">
+                    {team && (
+                      <img
+                        src={`https://sleepercdn.com/images/team_logos/nfl/${team.toLowerCase()}.png`}
+                        alt=""
+                        aria-hidden="true"
+                        className="absolute inset-0 w-full h-full object-contain p-3 opacity-[0.18] scale-110 pointer-events-none"
+                        onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                      />
+                    )}
+                    {!isSynthetic ? (
+                      <img
+                        src={`https://sleepercdn.com/content/nfl/players/thumb/${sid}.jpg`}
+                        alt={c.player.name}
+                        className="relative w-full h-full object-cover object-top"
+                        onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                      />
+                    ) : (
+                      <div className="relative w-full h-full flex items-center justify-center">
+                        <span className="text-3xl font-black text-[#d4af37]/20">{c.player.name.charAt(0)}</span>
+                      </div>
+                    )}
+                    <div className="absolute inset-0 bg-gradient-to-t from-[#080e1c] via-transparent to-transparent" />
+                    <div className="absolute bottom-1.5 left-2">
+                      <Badge variant="outline" className={cn("text-[9px] px-1.5 py-0 font-bold backdrop-blur-sm", getPositionColor(c.player.pos))}>
+                        {c.player.pos}
+                      </Badge>
                     </div>
                   </div>
-                  <Badge
-                    variant="outline"
-                    className={cn("text-[9px] flex-shrink-0",
-                      c.player.starter
-                        ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
-                        : "bg-slate-500/10 text-slate-400 border-slate-500/20"
-                    )}
-                  >
-                    {c.player.starter ? "Starter" : "Bench"}
-                  </Badge>
+                  {/* Card body */}
+                  <div className="px-2.5 pt-2 pb-2.5 space-y-1.5">
+                    <p className="text-[11px] font-bold text-white leading-tight truncate">{c.player.name}</p>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-[10px] text-emerald-400 font-semibold">{c.dynVal > 0 ? c.dynVal.toLocaleString() : "—"} DYN</span>
+                      <Badge
+                        variant="outline"
+                        className={cn("text-[8px] px-1 py-0 h-3 ml-auto flex-shrink-0",
+                          c.player.starter
+                            ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                            : "bg-slate-500/10 text-slate-400 border-slate-500/20"
+                        )}
+                      >
+                        {c.player.starter ? "Starter" : "Bench"}
+                      </Badge>
+                    </div>
+                  </div>
                 </div>
               );
             })}
