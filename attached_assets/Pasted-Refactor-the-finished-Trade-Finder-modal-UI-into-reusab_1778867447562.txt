@@ -1,0 +1,178 @@
+Refactor the finished Trade Finder modal/UI into reusable shared trade components, then use them inside Trade Sync without changing Trade Finder behavior.
+
+Goal:
+Trade Sync should use the same design/style/functionality as Trade Finder:
+
+* Confirm trade modal
+* Edit Trade
+* Messages tab
+* expiration selector
+* trade-card DM
+* tool-link DM
+* premium card layout
+
+But Trade Sync also needs:
+
+* Accept Trade
+* Reject Trade
+* Counter Trade
+* Withdraw outgoing offer
+
+Implementation plan:
+
+1. Create shared components folder:
+   src/components/trade/
+
+* TradeActionModal.tsx
+* TradeReviewTab.tsx
+* TradeEditTab.tsx
+* TradeMessagesTab.tsx
+* TradeSidePanel.tsx
+* TradeAssetCard.tsx
+* PickSelectCard.tsx
+* ValueDeltaPill.tsx
+* TradeModalFooter.tsx
+
+2. Do NOT delete or rewrite Trade Finder first.
+   Extract the existing working Trade Finder modal into shared components carefully.
+   Then update Trade Finder to use the shared components with mode="finder".
+
+3. Add modal modes:
+   mode:
+
+* "send"
+* "counter"
+* "incoming"
+* "outgoing"
+* "completed"
+
+Trade Finder uses:
+mode="send"
+
+Trade Sync uses:
+
+* incoming proposed trade: mode="incoming"
+* outgoing proposed trade: mode="outgoing"
+* counter offer flow: mode="counter"
+
+4. Shared props:
+   TradeActionModal({
+   mode,
+   leagueId,
+   myUserId,
+   myRosterId,
+   partnerUserId,
+   partnerRosterId,
+   initialTradeState,
+   existingTransaction,
+   onSendTrade,
+   onAcceptTrade,
+   onRejectTrade,
+   onWithdrawTrade,
+   onCounterTrade,
+   onClose,
+   onRefresh
+   })
+
+5. Preserve selected assets:
+   For Trade Sync, hydrate initialTradeState from the existing transaction:
+
+* transaction.adds
+* transaction.drops
+* transaction.draft_picks
+* transaction.waiver_budget
+* transaction.player_map
+* transaction.roster_ids
+* transaction.settings?.expires_at
+
+6. Incoming trade buttons:
+   For incoming proposed trades:
+
+* Primary button: Accept Trade
+* Secondary button: Counter
+* Danger/muted button: Reject
+
+Accept uses confirmed mutation:
+accept_trade(league_id, transaction_id, leg)
+
+Reject uses confirmed mutation:
+reject_trade(league_id, transaction_id, leg)
+
+Counter opens the same Edit Trade flow but mode="counter".
+Counter uses propose_trade with:
+reject_transaction_id: existingTransaction.transaction_id
+reject_transaction_leg: existingTransaction.leg
+
+7. Outgoing trade buttons:
+   For outgoing proposed trades:
+
+* Primary button: Message Partner
+* Secondary button: Edit/Counter if allowed
+* Danger/muted button: Withdraw Offer
+
+Withdraw uses:
+reject_trade(league_id, transaction_id, leg)
+
+8. Trade Sync list cards:
+   Replace current Trade Sync UI with cards matching the Trade Finder style:
+
+* Incoming Offers
+* Outgoing Offers
+* Completed
+* Rejected/Cancelled
+
+Each card:
+
+* league name
+* partner name/avatar
+* status badge
+* expires in
+* You Receive / They Receive compact preview
+* buttons:
+
+  * Review
+  * Message
+  * Accept / Reject / Counter / Withdraw depending status
+
+9. Do not break Trade Finder.
+   Before refactor:
+
+* snapshot current Trade Finder behavior.
+  After refactor:
+* test sending normal trade
+* test edit trade
+* test messages tab
+* test expiration
+* test auto DM card
+* test tool-link DM
+
+10. Add a feature flag while migrating:
+    const USE_SHARED_TRADE_MODAL = true
+
+If anything breaks, Trade Finder can temporarily fallback to old modal.
+
+11. Shared API service:
+    Move all Sleeper trade/message actions into:
+    src/services/sleeperTradeActions.ts
+
+Include:
+
+* proposeTrade
+* acceptTrade
+* rejectTrade
+* fetchLeagueTrades
+* getDmByMembers
+* fetchDmMessages
+* sendDmMessage
+* sendTradeCardDm
+* sendToolLinkDm
+* markDmAsRead
+* fetchRosterDraftPicks
+* fetchLeaguePlayerSettings
+
+12. Safety:
+
+* Never log JWT
+* Never log DM text in production
+* Confirmation required for accept/reject/withdraw/counter/send
+* After any action, refetch league_transactions_filtered
