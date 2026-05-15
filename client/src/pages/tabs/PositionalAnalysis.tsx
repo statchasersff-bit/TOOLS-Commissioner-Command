@@ -684,8 +684,8 @@ interface WinNowIdea {
   partnerTier: Tier;
   headline: string;
   why: string;
-  youGive: { label: string; value: number; pos?: string; age?: number; type: "player" | "pick"; sleeperId?: string }[];
-  youGet:  { label: string; value: number; pos?: string; age?: number; type: "player" | "pick"; sleeperId?: string }[];
+  youGive: { label: string; value: number; pos?: string; team?: string; age?: number; type: "player" | "pick"; sleeperId?: string }[];
+  youGet:  { label: string; value: number; pos?: string; team?: string; age?: number; type: "player" | "pick"; sleeperId?: string }[];
   gainPos: PosLabel;
   dynGive: number;
   dynGet:  number;
@@ -824,16 +824,25 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
   );
 
   const AssetRow = ({ a }: { a: WinNowIdea["youGet"][number] }) => (
-    <div className="flex items-center gap-2.5 py-1">
+    <div className="flex items-center gap-2.5 rounded-[8px] bg-white/[0.03] border border-white/[0.06] px-2.5 py-1.5 mb-1.5 min-w-0">
       {a.type === "player" && a.sleeperId ? (
-        <div className="w-8 h-8 rounded-full flex-shrink-0 overflow-hidden bg-muted ring-1 ring-border/20">
+        <div className="w-9 h-9 rounded-full flex-shrink-0 overflow-hidden bg-[#111827] ring-1 ring-white/10">
           <img src={`https://sleepercdn.com/content/nfl/players/thumb/${a.sleeperId}.jpg`} alt={a.label} className="w-full h-full object-cover object-top" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
         </div>
       ) : (
-        <span className="text-[9px] font-bold text-[#d4af37] bg-[#d4af37]/10 border border-[#d4af37]/25 rounded px-1.5 py-0.5 flex-shrink-0">PICK</span>
+        <div className="w-9 h-9 rounded-full flex-shrink-0 bg-[#d4af37]/10 border border-[#d4af37]/25 flex items-center justify-center">
+          <span className="text-[8px] font-bold text-[#d4af37] leading-none">PICK</span>
+        </div>
       )}
-      <span className="text-sm font-semibold leading-tight">{a.label}</span>
-      {a.pos && <span className={cn("text-[10px] font-bold ml-auto flex-shrink-0", posTextColor(a.pos))}>{a.pos}</span>}
+      <div className="min-w-0 flex flex-col gap-[2px]">
+        <span className="text-[12px] font-bold truncate leading-tight text-white">{a.label}</span>
+        {(a.pos || a.team) && (
+          <div className="flex items-center gap-1.5">
+            {a.pos && <span className={cn("text-[10px] font-semibold leading-none", posTextColor(a.pos))}>{a.pos}</span>}
+            {a.team && a.team !== "FA" && <span className="text-[10px] text-muted-foreground/70 leading-none">{a.team}</span>}
+          </div>
+        )}
+      </div>
     </div>
   );
 
@@ -1073,8 +1082,8 @@ function WinNowMode({ league, userTeam }: { league: League; userTeam: Team }) {
               partnerTier: tierMap.get(partner.id)?.tier ?? "Balanced",
               headline:    `Upgrade ${needPos} using ${chip.player.pos} surplus`,
               why:         `${chip.player.name} is an ideal chip — strong dynasty value with low lineup impact. Directly addresses your ${needPos} gap.`,
-              youGive: [{ label: chip.player.name, value: chip.dynVal, pos: chip.player.pos, type: "player", sleeperId: chip.player.sleeperId, age: chip.player.age }],
-              youGet:  [{ label: target.name,      value: target.dynv, pos: target.pos,      type: "player", sleeperId: target.sleeperId,      age: target.age      }],
+              youGive: [{ label: chip.player.name, value: chip.dynVal, pos: chip.player.pos, team: chip.player.team, type: "player", sleeperId: chip.player.sleeperId, age: chip.player.age }],
+              youGet:  [{ label: target.name,      value: target.dynv, pos: target.pos,      team: target.team,       type: "player", sleeperId: target.sleeperId,      age: target.age      }],
               gainPos: needPos as PosLabel, dynGive, dynGet, rdGive, rdGet, userRdDelta: userRdDelta1, partnerRdDelta, score, scoreLabel: scoreLabel as WinNowIdea["scoreLabel"],
             });
           }
@@ -1118,10 +1127,10 @@ function WinNowMode({ league, userTeam }: { league: League; userTeam: Team }) {
               headline:    `Upgrade ${needPos} via ${chip.player.pos} + pick`,
               why:         `${chip.player.name} + a pick bridges the value gap while keeping dynasty cost low. Your ${needPos} weakness is your biggest weekly liability.`,
               youGive: [
-                { label: chip.player.name, value: chip.dynVal, pos: chip.player.pos, type: "player", sleeperId: chip.player.sleeperId, age: chip.player.age },
-                { label: pickLabel,        value: pickVal,                            type: "pick"                                                             },
+                { label: chip.player.name, value: chip.dynVal, pos: chip.player.pos, team: chip.player.team, type: "player", sleeperId: chip.player.sleeperId, age: chip.player.age },
+                { label: pickLabel,        value: pickVal,                                                    type: "pick"                                                             },
               ],
-              youGet: [{ label: target.name, value: target.dynv, pos: target.pos, type: "player", sleeperId: target.sleeperId, age: target.age }],
+              youGet: [{ label: target.name, value: target.dynv, pos: target.pos, team: target.team, type: "player", sleeperId: target.sleeperId, age: target.age }],
               gainPos: needPos as PosLabel, dynGive, dynGet, rdGive, rdGet, userRdDelta: userRdDelta2, partnerRdDelta: partnerRdDelta2, score, scoreLabel: scoreLabel as WinNowIdea["scoreLabel"],
             });
           }
@@ -1304,16 +1313,25 @@ function WinNowMode({ league, userTeam }: { league: League; userTeam: Team }) {
                       );
 
                       const AssetPill = ({ a }: { a: WinNowIdea["youGet"][number] }) => (
-                        <div className="flex items-center gap-1.5 rounded-[8px] bg-white/[0.04] border border-white/[0.07] px-2 py-[3px] mb-[5px] min-w-0">
+                        <div className="flex items-center gap-2.5 rounded-[8px] bg-white/[0.04] border border-white/[0.07] px-2.5 py-1.5 mb-[5px] min-w-0">
                           {a.type === "player" && a.sleeperId ? (
-                            <div className="w-6 h-6 rounded-full flex-shrink-0 overflow-hidden bg-muted ring-1 ring-border/20">
+                            <div className="w-9 h-9 rounded-full flex-shrink-0 overflow-hidden bg-[#111827] ring-1 ring-white/10">
                               <img src={`https://sleepercdn.com/content/nfl/players/thumb/${a.sleeperId}.jpg`} alt={a.label} className="w-full h-full object-cover object-top" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
                             </div>
                           ) : (
-                            <span className="text-[8px] font-bold text-[#d4af37] bg-[#d4af37]/10 border border-[#d4af37]/25 rounded px-1 py-px flex-shrink-0">PICK</span>
+                            <div className="w-9 h-9 rounded-full flex-shrink-0 bg-[#d4af37]/10 border border-[#d4af37]/25 flex items-center justify-center">
+                              <span className="text-[8px] font-bold text-[#d4af37] leading-none">PICK</span>
+                            </div>
                           )}
-                          <span className="text-[11px] font-semibold truncate leading-none">{a.label}</span>
-                          {a.pos && <span className={cn("text-[9px] font-bold flex-shrink-0 ml-auto", posTextColor(a.pos))}>{a.pos}</span>}
+                          <div className="min-w-0 flex flex-col gap-[2px]">
+                            <span className="text-[12px] font-bold truncate leading-tight text-white">{a.label}</span>
+                            {(a.pos || a.team) && (
+                              <div className="flex items-center gap-1.5">
+                                {a.pos && <span className={cn("text-[10px] font-semibold leading-none", posTextColor(a.pos))}>{a.pos}</span>}
+                                {a.team && a.team !== "FA" && <span className="text-[10px] text-muted-foreground/70 leading-none">{a.team}</span>}
+                              </div>
+                            )}
+                          </div>
                         </div>
                       );
 
