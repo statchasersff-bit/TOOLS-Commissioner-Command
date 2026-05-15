@@ -1091,6 +1091,18 @@ function WinNowMode({ league, userTeam }: { league: League; userTeam: Team }) {
                             </div>
                             <span className="text-sm font-semibold">You</span>
                             <span className="text-xs text-muted-foreground">receives</span>
+                            <div className="ml-auto flex items-center gap-2 flex-shrink-0">
+                              {(() => { const d = idea.dynGet - idea.dynGive; return (
+                                <span className={cn("text-[10px] font-semibold", d >= 0 ? "text-emerald-500 dark:text-emerald-400" : "text-red-400")}>
+                                  {d >= 0 ? "+" : "−"}{Math.abs(Math.round(d)).toLocaleString()} DYN
+                                </span>
+                              ); })()}
+                              {(() => { const r = idea.rdGet - idea.rdGive; return (
+                                <span className={cn("text-[10px] font-semibold", r >= 0 ? "text-emerald-500 dark:text-emerald-400" : "text-red-400")}>
+                                  {r >= 0 ? "+" : "−"}{Math.abs(Math.round(r)).toLocaleString()} NOW
+                                </span>
+                              ); })()}
+                            </div>
                           </div>
                           {idea.youGet.map((a: WinNowIdea["youGet"][number], i: number) => (
                             <div key={i} className="flex items-center gap-3 py-1.5">
@@ -1135,6 +1147,18 @@ function WinNowMode({ league, userTeam }: { league: League; userTeam: Team }) {
                             )}
                             <span className="text-sm font-semibold truncate">{idea.partnerTeam.owner}</span>
                             <span className="text-xs text-muted-foreground flex-shrink-0">receives</span>
+                            <div className="ml-auto flex items-center gap-2 flex-shrink-0">
+                              {(() => { const d = idea.dynGive - idea.dynGet; return (
+                                <span className={cn("text-[10px] font-semibold", d >= 0 ? "text-emerald-500 dark:text-emerald-400" : "text-red-400")}>
+                                  {d >= 0 ? "+" : "−"}{Math.abs(Math.round(d)).toLocaleString()} DYN
+                                </span>
+                              ); })()}
+                              {(() => { const r = idea.partnerRdDelta; return (
+                                <span className={cn("text-[10px] font-semibold", r >= 0 ? "text-emerald-500 dark:text-emerald-400" : "text-red-400")}>
+                                  {r >= 0 ? "+" : "−"}{Math.abs(Math.round(r)).toLocaleString()} NOW
+                                </span>
+                              ); })()}
+                            </div>
                           </div>
                           {idea.youGive.map((a: WinNowIdea["youGive"][number], i: number) => (
                             <div key={i} className="flex items-center gap-3 py-1.5">
@@ -1163,63 +1187,17 @@ function WinNowMode({ league, userTeam }: { league: League; userTeam: Team }) {
                         </div>
                       </div>
 
-                      {/* Footer — trade value breakdown for both sides */}
-                      <div className="px-4 py-3 bg-muted/10 border-t border-border/20 space-y-2.5">
-                        {/* Value table: Dynasty + Win-Now for each party */}
-                        <div className="grid grid-cols-3 gap-x-2 text-[10px]">
-                          <div />
-                          <span className="text-muted-foreground font-semibold uppercase tracking-wide text-center">Dynasty</span>
-                          <span className="text-muted-foreground font-semibold uppercase tracking-wide text-center">Win-Now</span>
-
-                          {/* You row */}
-                          <span className="text-muted-foreground font-medium self-center">You</span>
-                          {(() => {
-                            const d = idea.dynGet - idea.dynGive;
-                            return (
-                              <span className={cn("text-center font-semibold", d >= 0 ? "text-emerald-500 dark:text-emerald-400" : "text-red-400 dark:text-red-400")}>
-                                {d >= 0 ? "+" : "−"}{Math.abs(Math.round(d)).toLocaleString()}
-                              </span>
-                            );
-                          })()}
-                          {(() => {
-                            const r = idea.rdGet - idea.rdGive;
-                            return (
-                              <span className={cn("text-center font-semibold", r >= 0 ? "text-emerald-500 dark:text-emerald-400" : "text-red-400 dark:text-red-400")}>
-                                {r >= 0 ? "+" : "−"}{Math.abs(Math.round(r)).toLocaleString()}
-                              </span>
-                            );
-                          })()}
-
-                          {/* Partner row */}
-                          <span className="text-muted-foreground font-medium self-center truncate">{idea.partnerTeam.owner}</span>
-                          {(() => {
-                            const d = idea.dynGive - idea.dynGet;
-                            return (
-                              <span className={cn("text-center font-semibold", d >= 0 ? "text-emerald-500 dark:text-emerald-400" : "text-red-400 dark:text-red-400")}>
-                                {d >= 0 ? "+" : "−"}{Math.abs(Math.round(d)).toLocaleString()}
-                              </span>
-                            );
-                          })()}
-                          {(() => {
-                            const r = idea.partnerRdDelta;
-                            return (
-                              <span className={cn("text-center font-semibold", r >= 0 ? "text-emerald-500 dark:text-emerald-400" : "text-red-400 dark:text-red-400")}>
-                                {r >= 0 ? "+" : "−"}{Math.abs(Math.round(r)).toLocaleString()}
-                              </span>
-                            );
-                          })()}
-                        </div>
-                        <div className="flex justify-end">
-                          <Button
-                            variant="default"
-                            size="sm"
-                            className="text-xs bg-[#0b3a7a] hover:bg-[#0b3a7a]/90"
-                            data-testid={`btn-wn-build-${pos.toLowerCase()}-${idx}`}
-                          >
-                            <ArrowRightLeft className="w-3 h-3 mr-1" />
-                            Build in Calculator
-                          </Button>
-                        </div>
+                      {/* Footer — button only */}
+                      <div className="px-4 py-2.5 border-t border-border/20 flex justify-end">
+                        <Button
+                          variant="default"
+                          size="sm"
+                          className="text-xs bg-[#0b3a7a] hover:bg-[#0b3a7a]/90"
+                          data-testid={`btn-wn-build-${pos.toLowerCase()}-${idx}`}
+                        >
+                          <ArrowRightLeft className="w-3 h-3 mr-1" />
+                          Build in Calculator
+                        </Button>
                       </div>
                     </div>
                   ))}
