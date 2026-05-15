@@ -25,6 +25,92 @@ type StatusLabel = "Surplus" | "Neutral" | "Need";
 const POSITIONS: PosLabel[] = ["QB", "RB", "WR", "TE"];
 
 const DEFAULT_STARTERS: Record<string, number> = { QB: 1, RB: 2, WR: 2, TE: 1 };
+
+/**
+ * Builds the optimal redraft starting lineup for a team and returns
+ * the total redraft value contributed by each position.
+ * No player is used twice. Greedy by redraft value at each step.
+ *
+ * Step 1 — dedicated slots (QB×N, RB×N, WR×N, TE×N)
+ * Step 2 — FLEX slots: pick highest remaining RB/WR/TE
+ * Step 3 — SUPER_FLEX slots: pick highest remaining QB/RB/WR/TE
+ */
+function buildOptimalLineupValues(
+  roster: import("@/types").Player[],
+  rosterPositions: string[],
+  getRedraftValue: (p: import("@/types").Player) => number
+): Record<string, number> {
+  const posValues: Record<string, number> = { QB: 0, RB: 0, WR: 0, TE: 0 };
+  const used = new Set<string>();
+
+  // Pool: per-position list sorted best → worst by redraft value
+  const pool: Record<string, import("@/types").Player[]> = { QB: [], RB: [], WR: [], TE: [] };
+  for (const p of roster) {
+    if (p.pos in pool) pool[p.pos].push(p);
+  }
+  for (const pos of Object.keys(pool)) {
+    pool[pos].sort((a, b) => getRedraftValue(b) - getRedraftValue(a));
+  }
+
+  const uid = (p: import("@/types").Player) => p.sleeperId || p.id;
+
+  // Best unused player for a given position
+  const takeBestFromPos = (pos: string): import("@/types").Player | null => {
+    for (const p of pool[pos] ?? []) {
+      if (!used.has(uid(p))) { used.add(uid(p)); return p; }
+    }
+    return null;
+  };
+
+  // Best unused player across multiple eligible positions; returns [player, pos]
+  const takeBestAcross = (eligiblePos: string[]): [import("@/types").Player, string] | null => {
+    let best: import("@/types").Player | null = null;
+    let bestPos = "";
+    let bestVal = -1;
+    for (const pos of eligiblePos) {
+      for (const p of pool[pos] ?? []) {
+        if (!used.has(uid(p))) {
+          const v = getRedraftValue(p);
+          if (v > bestVal) { bestVal = v; best = p; bestPos = pos; }
+          break; // pool is sorted; first unused = best for this pos
+        }
+      }
+    }
+    if (!best) return null;
+    used.add(uid(best));
+    return [best, bestPos];
+  };
+
+  // Step 1 — dedicated position slots
+  const dedicatedCounts: Record<string, number> = {};
+  for (const slot of rosterPositions) {
+    if (slot in pool) dedicatedCounts[slot] = (dedicatedCounts[slot] ?? 0) + 1;
+  }
+  // Fall back to DEFAULT_STARTERS if league has no explicit slots for a position
+  for (const pos of POSITIONS) {
+    const count = Math.max(dedicatedCounts[pos] ?? 0, DEFAULT_STARTERS[pos] ?? 1);
+    for (let i = 0; i < count; i++) {
+      const p = takeBestFromPos(pos);
+      if (p) posValues[pos] += getRedraftValue(p);
+    }
+  }
+
+  // Step 2 — FLEX slots (RB / WR / TE)
+  const flexSlots = rosterPositions.filter(s => s === "FLEX" || s === "WR/RB/TE" || s === "REC_FLEX").length;
+  for (let i = 0; i < flexSlots; i++) {
+    const result = takeBestAcross(["RB", "WR", "TE"]);
+    if (result) posValues[result[1]] += getRedraftValue(result[0]);
+  }
+
+  // Step 3 — SUPER_FLEX slots (QB / RB / WR / TE)
+  const sfSlots = rosterPositions.filter(s => s === "SUPER_FLEX" || s === "QB/WR/RB/TE").length;
+  for (let i = 0; i < sfSlots; i++) {
+    const result = takeBestAcross(["QB", "RB", "WR", "TE"]);
+    if (result) posValues[result[1]] += getRedraftValue(result[0]);
+  }
+
+  return posValues;
+}
 const DEPTH_COUNT = 3;
 
 interface PosStrengthData {
@@ -108,44 +194,23 @@ export function PositionalAnalysis({ league, userTeam, onNavigateToCalculator }:
     const rdRanks: Record<string, number> = {};
 
     const rosterPositions = league.rosterPositions || [];
-    // FLEX-eligible positions: FLEX = RB/WR/TE, SUPER_FLEX = QB/RB/WR/TE
-    const flexSlots = rosterPositions.filter(s => s === "FLEX" || s === "WR/RB/TE" || s === "REC_FLEX").length;
-    const sfSlots   = rosterPositions.filter(s => s === "SUPER_FLEX" || s === "QB/WR/RB/TE").length;
+
+    // Pre-compute optimal lineup values per team (Win-Now) — done once, reused per position
+    const teamOptimalValues = new Map(
+      league.teams.map(t => [t.id, buildOptimalLineupValues(t.roster, rosterPositions, getRedraftValue)])
+    );
 
     POSITIONS.forEach(pos => {
-      // Dynasty: full roster depth (all players at position, not just starters)
+      // Dynasty: full roster depth — all players at this position, dynasty values
       const byDyn = [...league.teams].sort((a, b) =>
         b.roster.filter(p => p.pos === pos).reduce((s, p) => s + getPlayerValue(p), 0) -
         a.roster.filter(p => p.pos === pos).reduce((s, p) => s + getPlayerValue(p), 0)
       );
 
-      // Win-Now: optimal redraft starters
-      // Step 1 — fill dedicated slots (top N by redraft value)
-      const dedicatedSlots = Math.max(rosterPositions.filter(s => s === pos).length, DEFAULT_STARTERS[pos] || 1);
-      const byRd = [...league.teams].sort((a, b) => {
-        const optimalVal = (team: typeof a) => {
-          const sorted = [...team.roster.filter(p => p.pos === pos)]
-            .sort((x, y) => getRedraftValue(y) - getRedraftValue(x));
-          // Dedicated starters
-          let val = sorted.slice(0, dedicatedSlots).reduce((s, p) => s + getRedraftValue(p), 0);
-          // Step 2 — greedily allocate FLEX slots: each team's best remaining RB/WR/TE contribute fractionally
-          if (flexSlots > 0 && (pos === "RB" || pos === "WR" || pos === "TE")) {
-            // Each FLEX slot is shared equally among eligible positions (3: RB/WR/TE)
-            const flexShare = flexSlots / 3;
-            const bestRemaining = sorted.slice(dedicatedSlots, dedicatedSlots + Math.ceil(flexShare));
-            val += bestRemaining.reduce((s, p) => s + getRedraftValue(p), 0) * (flexShare / Math.max(bestRemaining.length, 1));
-          }
-          // Step 3 — allocate SUPER_FLEX slots: shared among all 4 positions
-          if (sfSlots > 0) {
-            const sfShare = sfSlots / 4;
-            const sfStart = (pos === "RB" || pos === "WR" || pos === "TE") ? dedicatedSlots + Math.ceil(flexSlots / 3) : dedicatedSlots;
-            const sfBest = sorted.slice(sfStart, sfStart + Math.ceil(sfShare));
-            val += sfBest.reduce((s, p) => s + getRedraftValue(p), 0) * (sfShare / Math.max(sfBest.length, 1));
-          }
-          return val;
-        };
-        return optimalVal(b) - optimalVal(a);
-      });
+      // Win-Now: optimal lineup value attributed to this position (includes FLEX/SF contributions)
+      const byRd = [...league.teams].sort((a, b) =>
+        (teamOptimalValues.get(b.id)?.[pos] ?? 0) - (teamOptimalValues.get(a.id)?.[pos] ?? 0)
+      );
 
       byDyn.forEach((t, i) => { if (t.id === userTeam.id) dynRanks[pos] = i + 1; });
       byRd.forEach((t, i)  => { if (t.id === userTeam.id) rdRanks[pos]  = i + 1; });
