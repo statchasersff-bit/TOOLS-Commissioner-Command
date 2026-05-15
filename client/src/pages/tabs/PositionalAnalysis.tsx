@@ -597,14 +597,15 @@ interface WinNowIdea {
 // ─── TradeOpportunities — mode selector ──────────────────────────
 
 function TradeOpportunities({ league, userTeam }: { league: League; userTeam: Team }) {
-  const [mode, setMode] = useState<"win-now" | "rebuild" | "build-dynasty">("win-now");
+  const [mode, setMode] = useState<"win-now" | "smart-gm" | "rebuild" | "build-dynasty">("win-now");
   return (
     <div className="space-y-5">
       <div className="flex w-fit rounded-lg border border-border overflow-hidden">
         {([
-          { id: "win-now"       as const, label: "Win-Now",      desc: "Maximize starters now",        Icon: Zap        },
-          { id: "rebuild"       as const, label: "Rebuild",       desc: "Convert to long-term assets",  Icon: RotateCcw  },
-          { id: "build-dynasty" as const, label: "Build Dynasty", desc: "Maximize dynasty value",       Icon: TrendingUp },
+          { id: "win-now"       as const, label: "Win-Now",      desc: "Maximize starters now",       Icon: Zap        },
+          { id: "smart-gm"      as const, label: "Smart GM",     desc: "Balance both timelines",      Icon: Scale      },
+          { id: "rebuild"       as const, label: "Rebuild",      desc: "Convert to long-term assets", Icon: RotateCcw  },
+          { id: "build-dynasty" as const, label: "Build Dynasty",desc: "Maximize dynasty value",      Icon: TrendingUp },
         ]).map(({ id, label, desc, Icon }) => (
           <button
             key={id}
@@ -625,6 +626,7 @@ function TradeOpportunities({ league, userTeam }: { league: League; userTeam: Te
       </div>
 
       {mode === "win-now"       && <WinNowMode       league={league} userTeam={userTeam} />}
+      {mode === "smart-gm"      && <SmartGMMode      league={league} userTeam={userTeam} />}
       {mode === "rebuild"       && <RebuildMode       league={league} userTeam={userTeam} />}
       {mode === "build-dynasty" && <BuildDynastyMode league={league} userTeam={userTeam} />}
     </div>
@@ -1087,6 +1089,550 @@ function WinNowMode({ league, userTeam }: { league: League; userTeam: Team }) {
                                   className="text-xs bg-[#0b3a7a] hover:bg-[#0b3a7a]/90"
                                   data-testid={`btn-wn-build-${pid}-${idx}`}
                                 >
+                                  <ArrowRightLeft className="w-3 h-3 mr-1" />
+                                  Build in Calculator
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Smart GM Mode types ──────────────────────────────────────────
+
+type SmartGMArchetype = "Age Swap" | "Positional Redistribution" | "Depth Consolidation" | "Sell Peak" | "Buy Depressed";
+type SmartGMTeamType  = "Deep Contender" | "Aging Contender" | "Fragile Contender" | "Unbalanced" | "Young Weak" | "Balanced";
+
+interface SmartGMAsset { label: string; dynVal: number; rdVal: number; pos?: string; age?: number; type: "player" | "pick"; sleeperId?: string; }
+interface SmartGMIdea {
+  id: string;
+  partnerId: string;
+  partnerTeam: Team;
+  partnerTier: Tier;
+  archetype: SmartGMArchetype;
+  headline: string;
+  why: string;
+  youGive: SmartGMAsset[];
+  youGet:  SmartGMAsset[];
+  dynastyDelta: number;
+  redraftDelta: number;
+  ageDelta: number;
+  score: number;
+  scoreLabel: "Premium" | "Recommended" | "Solid";
+}
+
+// ─── Smart GM Mode ────────────────────────────────────────────────
+
+function SmartGMMode({ league, userTeam }: { league: League; userTeam: Team }) {
+  const { getPlayerValue, getRedraftValue, getPickValue } = useValueModel();
+  const [expandedPartner, setExpandedPartner] = useState<string | null>(null);
+  const tierMap = useMemo(() => getLeagueTeamTiers(league.teams), [league.teams]);
+
+  const POSITIONS = ["QB", "RB", "WR", "TE"] as const;
+  type Pos = typeof POSITIONS[number];
+
+  // ── Positional balance: rank each position vs league ─────────────
+  const posBalance = useMemo(() => {
+    const n = league.teams.length;
+    const result = {} as Record<Pos, { myVal: number; rank: number; leagueAvg: number; surplus: boolean; deficit: boolean }>;
+    for (const pos of POSITIONS) {
+      const teamVals = league.teams
+        .map(t => ({ id: t.id, val: t.roster.filter(p => p.pos === pos).reduce((s, p) => s + getPlayerValue(p), 0) }))
+        .sort((a, b) => b.val - a.val);
+      const myVal    = teamVals.find(t => t.id === userTeam.id)?.val ?? 0;
+      const rank     = teamVals.findIndex(t => t.id === userTeam.id) + 1;
+      const leagueAvg = teamVals.reduce((s, t) => s + t.val, 0) / n;
+      result[pos] = { myVal, rank, leagueAvg, surplus: rank <= Math.ceil(n * 0.3), deficit: rank > Math.floor(n * 0.65) };
+    }
+    return result;
+  }, [league, userTeam, getPlayerValue]);
+
+  // ── Overall win-now & dynasty ranks ──────────────────────────────
+  const ranks = useMemo(() => {
+    const n = league.teams.length;
+    const byRD = [...league.teams].sort((a, b) =>
+      b.roster.filter(p => p.starter).reduce((s, p) => s + getRedraftValue(p), 0) -
+      a.roster.filter(p => p.starter).reduce((s, p) => s + getRedraftValue(p), 0));
+    const byDyn = [...league.teams].sort((a, b) =>
+      b.roster.reduce((s, p) => s + getPlayerValue(p), 0) -
+      a.roster.reduce((s, p) => s + getPlayerValue(p), 0));
+    const winNowRank  = byRD.findIndex(t => t.id === userTeam.id) + 1;
+    const dynastyRank = byDyn.findIndex(t => t.id === userTeam.id) + 1;
+    const starters    = userTeam.roster.filter(p => p.starter && p.age > 0);
+    const avgStarterAge = starters.length ? starters.reduce((s, p) => s + p.age, 0) / starters.length : 0;
+    const topThird   = Math.ceil(n / 3);
+    const bottomHalf = Math.floor(n * 0.5);
+    return { winNowRank, dynastyRank, avgStarterAge, n, topThird, bottomHalf };
+  }, [league, userTeam, getPlayerValue, getRedraftValue]);
+
+  // ── Fragility score (0-100) ───────────────────────────────────────
+  const fragility = useMemo(() => {
+    let score = 0;
+    for (const pos of POSITIONS) {
+      const starters = userTeam.roster.filter(p => p.pos === pos && p.starter).sort((a, b) => getRedraftValue(b) - getRedraftValue(a));
+      if (starters.length >= 2) {
+        const dropoff = (getRedraftValue(starters[0]) - getRedraftValue(starters[1])) / Math.max(getRedraftValue(starters[0]), 1);
+        if (dropoff > 0.6) score += 18;
+        else if (dropoff > 0.4) score += 10;
+      } else if (starters.length === 1) {
+        score += 20;
+      } else if (starters.length === 0) {
+        score += 5;
+      }
+      const ageRisk = starters.filter(p => p.age >= 29).length;
+      score += ageRisk * 6;
+    }
+    const imbalancedPositions = POSITIONS.filter(p => posBalance[p]?.surplus || posBalance[p]?.deficit).length;
+    score += imbalancedPositions * 4;
+    return Math.min(score, 100);
+  }, [userTeam, posBalance, getRedraftValue]);
+
+  // ── Team type ─────────────────────────────────────────────────────
+  const teamType = useMemo<{ type: SmartGMTeamType; summary: string }>(() => {
+    const { winNowRank, dynastyRank, avgStarterAge, topThird } = ranks;
+    const surplusPositions = POSITIONS.filter(p => posBalance[p]?.surplus);
+    const deficitPositions = POSITIONS.filter(p => posBalance[p]?.deficit);
+    const isContending = winNowRank <= topThird;
+    const hasDynasty   = dynastyRank <= topThird;
+    const isAging      = avgStarterAge >= 28;
+    const isFragile    = fragility >= 50;
+    const isImbalanced = surplusPositions.length > 0 && deficitPositions.length > 0;
+    const isYoung      = avgStarterAge <= 25 && !isContending;
+
+    if (isContending && hasDynasty)   return { type: "Deep Contender",    summary: "Elite on both axes. Focus on insulation — don't break what's working." };
+    if (isContending && isAging)      return { type: "Aging Contender",   summary: "Competing now but aging fast. Smart age swaps preserve your window." };
+    if (isContending && isFragile)    return { type: "Fragile Contender", summary: "Strong lineup, thin depth. One injury away from disaster — shore up fragile spots." };
+    if (isImbalanced)                 return { type: "Unbalanced",        summary: `${surplusPositions.join("/")} surplus and ${deficitPositions.join("/")} deficit. Redistribution trades unlock hidden value.` };
+    if (isYoung)                      return { type: "Young Weak",        summary: "Youth on your side. Seek young producers who score now — don't sacrifice points for picks." };
+    return                                   { type: "Balanced",          summary: "No glaring weaknesses. Focus on upgrading starter quality and reducing position fragility." };
+  }, [ranks, posBalance, fragility]);
+
+  // ── Trade idea generation ─────────────────────────────────────────
+  const tradeIdeas = useMemo<SmartGMIdea[]>(() => {
+    const ideas: SmartGMIdea[] = [];
+
+    const myPlayers = [...userTeam.roster]
+      .map(p => ({ ...p, dynV: getPlayerValue(p), rdV: getRedraftValue(p) }))
+      .filter(p => p.dynV > 300 || p.rdV > 400)
+      .sort((a, b) => b.rdV - a.rdV);
+
+    const surplusPos = POSITIONS.filter(p => posBalance[p]?.surplus);
+    const deficitPos = POSITIONS.filter(p => posBalance[p]?.deficit);
+
+    for (const partner of league.teams) {
+      if (partner.id === userTeam.id) continue;
+
+      const partnerPlayers = [...partner.roster]
+        .map(p => ({ ...p, dynV: getPlayerValue(p), rdV: getRedraftValue(p) }))
+        .filter(p => p.dynV > 300 || p.rdV > 400)
+        .sort((a, b) => b.dynV - a.dynV);
+
+      const partnerTier = tierMap.get(partner.id)?.tier ?? "Balanced";
+
+      for (const give of myPlayers.slice(0, 8)) {
+
+        // ── Age Swap: same position, get younger/more insulated ─────
+        if (give.age >= 27) {
+          const youngSame = partnerPlayers
+            .filter(p => p.pos === give.pos && p.age <= give.age - 2 && p.dynV > give.dynV * 0.78 && p.dynV < give.dynV * 1.22);
+          for (const g of youngSame.slice(0, 2)) {
+            const dynD  = (g.dynV - give.dynV) / Math.max(give.dynV + g.dynV, 1) * 2;
+            const rdD   = (g.rdV  - give.rdV)  / Math.max(give.rdV  + g.rdV,  1) * 2;
+            if (dynD < -0.09 || rdD < -0.10) continue;
+            const ageDelta = g.age - give.age;
+            const score = (dynD * 80 + rdD * 60 + Math.max(0, -ageDelta) * 10 + 15)
+              - Math.max(0, -dynD) * 140 - Math.max(0, -rdD) * 110;
+            if (score < -20) continue;
+            ideas.push({
+              id: `sgm-ageswap-${partner.id}-${give.sleeperId}-${g.sleeperId}`,
+              partnerId: partner.id, partnerTeam: partner, partnerTier,
+              archetype: "Age Swap",
+              headline: `Age swap at ${give.pos}: shed ${give.age}-yr volatility`,
+              why: `${give.name} (${give.age}) carries growing age-curve risk. ${g.name} (${g.age}) provides similar production with ${give.age - g.age} more years of runway, improving your roster's long-term insulation.`,
+              youGive: [{ label: give.name, dynVal: give.dynV, rdVal: give.rdV, pos: give.pos, age: give.age, type: "player", sleeperId: give.sleeperId }],
+              youGet:  [{ label: g.name,    dynVal: g.dynV,    rdVal: g.rdV,    pos: g.pos,   age: g.age,   type: "player", sleeperId: g.sleeperId }],
+              dynastyDelta: dynD, redraftDelta: rdD, ageDelta, score: Math.max(score, 0),
+              scoreLabel: score > 30 ? "Premium" : score > 10 ? "Recommended" : "Solid",
+            });
+          }
+        }
+
+        // ── Positional Redistribution: surplus → deficit ─────────────
+        if (surplusPos.includes(give.pos as Pos) && deficitPos.length > 0) {
+          for (const wantPos of deficitPos) {
+            const targets = partnerPlayers
+              .filter(p => p.pos === wantPos && p.dynV > give.dynV * 0.82 && p.dynV < give.dynV * 1.18);
+            for (const g of targets.slice(0, 2)) {
+              const dynD = (g.dynV - give.dynV) / Math.max(give.dynV + g.dynV, 1) * 2;
+              const rdD  = (g.rdV  - give.rdV)  / Math.max(give.rdV  + g.rdV,  1) * 2;
+              if (dynD < -0.09 || rdD < -0.12) continue;
+              const ageDelta = g.age - give.age;
+              const balanceBonus = 20;
+              const score = (dynD * 80 + rdD * 60 + Math.max(0, -ageDelta) * 8 + balanceBonus)
+                - Math.max(0, -dynD) * 140 - Math.max(0, -rdD) * 110;
+              if (score < -15) continue;
+              ideas.push({
+                id: `sgm-posredist-${partner.id}-${give.sleeperId}-${g.sleeperId}`,
+                partnerId: partner.id, partnerTeam: partner, partnerTier,
+                archetype: "Positional Redistribution",
+                headline: `${give.pos} surplus → ${g.pos} stability`,
+                why: `You're top-heavy at ${give.pos} while ${g.pos} is a structural gap. ${give.name} fills their need; ${g.name} fills yours — improving both positional balance and roster flexibility.`,
+                youGive: [{ label: give.name, dynVal: give.dynV, rdVal: give.rdV, pos: give.pos, age: give.age, type: "player", sleeperId: give.sleeperId }],
+                youGet:  [{ label: g.name,    dynVal: g.dynV,    rdVal: g.rdV,    pos: g.pos,   age: g.age,   type: "player", sleeperId: g.sleeperId }],
+                dynastyDelta: dynD, redraftDelta: rdD, ageDelta, score: Math.max(score, 0),
+                scoreLabel: score > 30 ? "Premium" : score > 10 ? "Recommended" : "Solid",
+              });
+            }
+          }
+        }
+
+        // ── Sell Peak Volatility: rdVal >> dynVal (career year player) ─
+        const rdPremium = give.rdV / Math.max(give.dynV, 1);
+        if (rdPremium > 1.35 && give.age >= 26) {
+          const stableTargets = partnerPlayers
+            .filter(p => p.dynV >= give.dynV * 0.85 && p.rdV >= give.rdV * 0.72 && p.age <= give.age - 1);
+          for (const g of stableTargets.slice(0, 2)) {
+            const dynD = (g.dynV - give.dynV) / Math.max(give.dynV + g.dynV, 1) * 2;
+            const rdD  = (g.rdV  - give.rdV)  / Math.max(give.rdV  + g.rdV,  1) * 2;
+            if (dynD < -0.08 || rdD < -0.14) continue;
+            const ageDelta = g.age - give.age;
+            const peakBonus = (rdPremium - 1.0) * 30;
+            const score = (dynD * 80 + rdD * 55 + Math.max(0, -ageDelta) * 10 + peakBonus)
+              - Math.max(0, -dynD) * 140 - Math.max(0, -rdD) * 100;
+            if (score < -10) continue;
+            ideas.push({
+              id: `sgm-sellpeak-${partner.id}-${give.sleeperId}-${g.sleeperId}`,
+              partnerId: partner.id, partnerTeam: partner, partnerTier,
+              archetype: "Sell Peak",
+              headline: `Lock in ${give.name}'s peak value before decline`,
+              why: `${give.name} is producing at a level that may not be sustainable — redraft value is elevated relative to dynasty. Converting now for ${g.name} locks in value and improves long-term roster stability.`,
+              youGive: [{ label: give.name, dynVal: give.dynV, rdVal: give.rdV, pos: give.pos, age: give.age, type: "player", sleeperId: give.sleeperId }],
+              youGet:  [{ label: g.name,    dynVal: g.dynV,    rdVal: g.rdV,    pos: g.pos,   age: g.age,   type: "player", sleeperId: g.sleeperId }],
+              dynastyDelta: dynD, redraftDelta: rdD, ageDelta, score: Math.max(score, 0),
+              scoreLabel: score > 30 ? "Premium" : score > 10 ? "Recommended" : "Solid",
+            });
+          }
+        }
+
+        // ── Buy Depressed: young player with high dynasty, low redraft ─
+        const depressed = partnerPlayers.filter(p =>
+          p.dynV >= give.dynV * 0.88 &&
+          p.rdV  <= give.rdV  * 0.82 &&
+          p.age  <= give.age - 1 &&
+          p.dynV >= 2000
+        );
+        for (const g of depressed.slice(0, 2)) {
+          const dynD = (g.dynV - give.dynV) / Math.max(give.dynV + g.dynV, 1) * 2;
+          const rdD  = (g.rdV  - give.rdV)  / Math.max(give.rdV  + g.rdV,  1) * 2;
+          if (dynD < -0.08) continue; // can tolerate moderate redraft loss here
+          const ageDelta = g.age - give.age;
+          const score = (dynD * 90 + rdD * 40 + Math.max(0, -ageDelta) * 12 + 10)
+            - Math.max(0, -dynD) * 150 - Math.max(0, -rdD) * 70;
+          if (score < 0) continue;
+          ideas.push({
+            id: `sgm-buydep-${partner.id}-${give.sleeperId}-${g.sleeperId}`,
+            partnerId: partner.id, partnerTeam: partner, partnerTier,
+            archetype: "Buy Depressed",
+            headline: `Buy ${g.name}'s discounted dynasty value`,
+            why: `${g.name}'s redraft value is suppressed — likely due to injury, role competition, or a developmental phase — but dynasty value remains strong. Acquiring discounted insulation is a hallmark of savvy GM play.`,
+            youGive: [{ label: give.name, dynVal: give.dynV, rdVal: give.rdV, pos: give.pos, age: give.age, type: "player", sleeperId: give.sleeperId }],
+            youGet:  [{ label: g.name,    dynVal: g.dynV,    rdVal: g.rdV,    pos: g.pos,   age: g.age,   type: "player", sleeperId: g.sleeperId }],
+            dynastyDelta: dynD, redraftDelta: rdD, ageDelta, score: Math.max(score, 0),
+            scoreLabel: score > 30 ? "Premium" : score > 10 ? "Recommended" : "Solid",
+          });
+        }
+      }
+
+      // ── Depth Consolidation: 2 bench players → 1 starter ──────────
+      const myBench = myPlayers.filter(p => !p.starter && p.dynV > 400).slice(0, 6);
+      for (let i = 0; i < myBench.length - 1; i++) {
+        for (let j = i + 1; j < Math.min(myBench.length, i + 4); j++) {
+          const a = myBench[i], b = myBench[j];
+          const combinedDyn = a.dynV + b.dynV;
+          const combinedRd  = a.rdV  + b.rdV;
+          const starterTargets = partnerPlayers.filter(p =>
+            p.starter && p.dynV >= combinedDyn * 0.82 && p.dynV <= combinedDyn * 1.18
+          );
+          for (const g of starterTargets.slice(0, 2)) {
+            const dynD = (g.dynV - combinedDyn) / Math.max(combinedDyn + g.dynV, 1) * 2;
+            const rdD  = (g.rdV  - combinedRd)  / Math.max(combinedRd  + g.rdV,  1) * 2;
+            if (dynD < -0.10 || rdD < -0.08) continue;
+            const score = (dynD * 75 + rdD * 75 + 25)
+              - Math.max(0, -dynD) * 130 - Math.max(0, -rdD) * 130;
+            if (score < 0) continue;
+            const ageDelta = g.age - (a.age + b.age) / 2;
+            ideas.push({
+              id: `sgm-consol-${partner.id}-${a.sleeperId}-${b.sleeperId}-${g.sleeperId}`,
+              partnerId: partner.id, partnerTeam: partner, partnerTier,
+              archetype: "Depth Consolidation",
+              headline: `Consolidate bench depth into a starter`,
+              why: `${a.name} and ${b.name} together represent consolidatable bench value. Upgrading to ${g.name} reduces roster clutter, improves lineup strength, and keeps dynasty value intact.`,
+              youGive: [
+                { label: a.name, dynVal: a.dynV, rdVal: a.rdV, pos: a.pos, age: a.age, type: "player", sleeperId: a.sleeperId },
+                { label: b.name, dynVal: b.dynV, rdVal: b.rdV, pos: b.pos, age: b.age, type: "player", sleeperId: b.sleeperId },
+              ],
+              youGet: [{ label: g.name, dynVal: g.dynV, rdVal: g.rdV, pos: g.pos, age: g.age, type: "player", sleeperId: g.sleeperId }],
+              dynastyDelta: dynD, redraftDelta: rdD, ageDelta, score: Math.max(score, 0),
+              scoreLabel: score > 30 ? "Premium" : score > 10 ? "Recommended" : "Solid",
+            });
+          }
+        }
+      }
+    }
+
+    const seen = new Set<string>();
+    return ideas
+      .filter(t => {
+        const key = t.youGive.map(a => a.label).join(",") + "→" + t.youGet.map(a => a.label).join(",");
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return t.score > 0;
+      })
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 18);
+  }, [league, userTeam, posBalance, getPlayerValue, getRedraftValue, tierMap]);
+
+  const byPartner = useMemo(() => {
+    const map = new Map<string, SmartGMIdea[]>();
+    tradeIdeas.forEach(t => { if (!map.has(t.partnerId)) map.set(t.partnerId, []); map.get(t.partnerId)!.push(t); });
+    return Array.from(map.entries())
+      .map(([pid, ideas]) => ({ pid, partnerTeam: ideas[0].partnerTeam, partnerTier: ideas[0].partnerTier, ideas }))
+      .sort((a, b) => b.ideas[0].score - a.ideas[0].score);
+  }, [tradeIdeas]);
+
+  const teamTypeColor: Record<SmartGMTeamType, string> = {
+    "Deep Contender":    "text-emerald-500 dark:text-emerald-400",
+    "Aging Contender":   "text-amber-500 dark:text-amber-400",
+    "Fragile Contender": "text-orange-500 dark:text-orange-400",
+    "Unbalanced":        "text-blue-500 dark:text-blue-400",
+    "Young Weak":        "text-purple-500 dark:text-purple-400",
+    "Balanced":          "text-slate-400",
+  };
+
+  const archetypeColor: Record<SmartGMArchetype, string> = {
+    "Age Swap":                  "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20",
+    "Positional Redistribution": "bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20",
+    "Depth Consolidation":       "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20",
+    "Sell Peak":                 "bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-500/20",
+    "Buy Depressed":             "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20",
+  };
+
+  const posBarWidth = (rank: number, n: number) => Math.round((1 - (rank - 1) / Math.max(n - 1, 1)) * 100);
+
+  return (
+    <div className="space-y-5">
+
+      {/* ── Team Ecosystem Card ── */}
+      <Card className="p-5" data-testid="card-smart-gm-profile">
+        <div className="mb-4">
+          <h4 className="text-sm font-bold">Team Ecosystem</h4>
+          <span className="block h-[2px] w-8 bg-[#d4af37] rounded-full mt-1" />
+        </div>
+        <div className="flex items-start gap-4 flex-wrap">
+          <div className="flex-1 min-w-[160px]">
+            <p className={cn("text-xl font-bold", teamTypeColor[teamType.type])}>{teamType.type}</p>
+            <p className="text-[11px] text-muted-foreground mt-1.5 leading-relaxed">{teamType.summary}</p>
+          </div>
+          <div className="grid grid-cols-2 gap-x-6 gap-y-2 flex-shrink-0 text-right">
+            <div>
+              <p className="text-[10px] text-muted-foreground">Win-Now Rank</p>
+              <p className="text-sm font-bold">#{ranks.winNowRank}<span className="text-[10px] text-muted-foreground font-normal">/{ranks.n}</span></p>
+            </div>
+            <div>
+              <p className="text-[10px] text-muted-foreground">Dynasty Rank</p>
+              <p className="text-sm font-bold">#{ranks.dynastyRank}<span className="text-[10px] text-muted-foreground font-normal">/{ranks.n}</span></p>
+            </div>
+            <div>
+              <p className="text-[10px] text-muted-foreground">Avg Starter Age</p>
+              <p className={cn("text-sm font-bold",
+                ranks.avgStarterAge >= 29 ? "text-red-500 dark:text-red-400" :
+                ranks.avgStarterAge >= 27 ? "text-amber-500 dark:text-amber-400" : "text-emerald-500 dark:text-emerald-400"
+              )}>{ranks.avgStarterAge.toFixed(1)}</p>
+            </div>
+            <div>
+              <p className="text-[10px] text-muted-foreground">Fragility</p>
+              <p className={cn("text-sm font-bold",
+                fragility >= 60 ? "text-red-500 dark:text-red-400" :
+                fragility >= 35 ? "text-amber-500 dark:text-amber-400" : "text-emerald-500 dark:text-emerald-400"
+              )}>{fragility < 30 ? "Low" : fragility < 55 ? "Moderate" : "High"}</p>
+            </div>
+          </div>
+        </div>
+      </Card>
+
+      {/* ── Positional Balance ── */}
+      <Card className="p-5" data-testid="card-positional-balance">
+        <div className="mb-4">
+          <h4 className="text-sm font-bold">Positional Balance</h4>
+          <span className="block h-[2px] w-8 bg-[#d4af37] rounded-full mt-1" />
+          <p className="text-[10px] text-muted-foreground mt-1.5">Dynasty value rank per position vs league</p>
+        </div>
+        <div className="grid grid-cols-2 gap-x-8 gap-y-3">
+          {POSITIONS.map(pos => {
+            const d = posBalance[pos];
+            if (!d) return null;
+            const pct = posBarWidth(d.rank, ranks.n);
+            const barColor =
+              d.surplus ? "bg-emerald-500/70" :
+              d.deficit ? "bg-red-500/70" : "bg-[#0b3a7a]/70";
+            return (
+              <div key={pos} data-testid={`pos-balance-${pos}`}>
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center gap-1.5">
+                    <Badge variant="outline" className={cn("text-[9px] px-1 py-0 h-3.5", getPositionColor(pos))}>{pos}</Badge>
+                    {d.surplus && <Badge variant="outline" className="text-[9px] px-1 py-0 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20">Surplus</Badge>}
+                    {d.deficit && <Badge variant="outline" className="text-[9px] px-1 py-0 bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20">Deficit</Badge>}
+                  </div>
+                  <span className="text-[10px] font-mono text-muted-foreground">#{d.rank}/{ranks.n}</span>
+                </div>
+                <div className="h-1.5 rounded-full bg-muted/40 overflow-hidden">
+                  <div className={cn("h-full rounded-full transition-all", barColor)} style={{ width: `${pct}%` }} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </Card>
+
+      {/* ── Smart GM Trade Ideas ── */}
+      <div>
+        <div className="mb-4">
+          <h4 className="text-sm font-bold flex items-center gap-2">
+            Smart GM Trade Ideas
+            <Badge variant="secondary">{tradeIdeas.length}</Badge>
+          </h4>
+          <span className="block h-[2px] w-8 bg-[#d4af37] rounded-full mt-1" />
+          <p className="text-[10px] text-muted-foreground mt-1.5">
+            Net-positive trades — improve roster ecosystem without sacrificing competitiveness.
+            Max <span className="font-semibold">−8% dynasty</span> or <span className="font-semibold">−5% redraft</span> allowed.
+          </p>
+        </div>
+
+        {tradeIdeas.length === 0 ? (
+          <Card>
+            <CardContent className="py-12 text-center">
+              <Scale className="w-10 h-10 mx-auto mb-3 text-muted-foreground/40" />
+              <p className="text-sm text-muted-foreground">No net-positive trades found. Your roster may already be well-balanced — or no partner has a complementary imbalance to exploit.</p>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="space-y-3" data-testid="smart-gm-partner-list">
+            {byPartner.map(({ pid, partnerTeam, partnerTier, ideas }) => {
+              const isExpanded = expandedPartner === pid;
+              return (
+                <Card key={pid} className="overflow-hidden" data-testid={`smart-gm-partner-${pid}`}>
+                  <CardContent className="p-0">
+                    <button
+                      className="w-full flex items-center justify-between px-5 py-4 hover:bg-muted/20 transition-colors text-left"
+                      onClick={() => setExpandedPartner(isExpanded ? null : pid)}
+                      data-testid={`btn-sgm-expand-${pid}`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        {partnerTeam.avatar ? (
+                          <img src={partnerTeam.avatar} alt={partnerTeam.owner} className="w-9 h-9 rounded-full object-cover flex-shrink-0 ring-1 ring-border/40" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                        ) : (
+                          <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
+                            <span className="text-sm font-bold text-muted-foreground">{partnerTeam.owner.charAt(0)}</span>
+                          </div>
+                        )}
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-semibold text-foreground">{partnerTeam.owner}</span>
+                            <Badge variant="outline" className={cn("text-[10px]", getTierColor(partnerTier))}>{partnerTier}</Badge>
+                          </div>
+                          <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                            <Badge variant="outline" className={cn("text-[9px] py-0",
+                              ideas[0].scoreLabel === "Premium"     ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20" :
+                              ideas[0].scoreLabel === "Recommended" ? "bg-[#0b3a7a]/10 text-[#0b3a7a] dark:text-blue-400 border-[#0b3a7a]/20" :
+                              "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
+                            )}>
+                              Best: {ideas[0].scoreLabel}
+                            </Badge>
+                            <Badge variant="outline" className={cn("text-[9px] py-0", archetypeColor[ideas[0].archetype])}>
+                              {ideas[0].archetype}
+                            </Badge>
+                            <span className="text-[9px] text-muted-foreground">{ideas.length} idea{ideas.length !== 1 ? "s" : ""}</span>
+                          </div>
+                        </div>
+                      </div>
+                      <ChevronRight className={cn("w-4 h-4 text-muted-foreground flex-shrink-0 transition-transform", isExpanded && "rotate-90")} />
+                    </button>
+
+                    {isExpanded && (
+                      <div className="border-t border-border/30 px-5 py-4 space-y-4">
+                        {ideas.map((idea, idx) => (
+                          <div key={idea.id} className="rounded-xl border border-border/40 overflow-hidden" data-testid={`sgm-idea-${pid}-${idx}`}>
+                            {/* Header */}
+                            <div className="px-4 py-2.5 bg-muted/20 flex items-center gap-2 flex-wrap">
+                              <Badge variant="outline" className={cn("text-[10px] flex-shrink-0",
+                                idea.scoreLabel === "Premium"     ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30" :
+                                idea.scoreLabel === "Recommended" ? "bg-[#0b3a7a]/10 text-[#0b3a7a] dark:text-blue-400 border-[#0b3a7a]/20" :
+                                "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20"
+                              )}>{idea.scoreLabel}</Badge>
+                              <Badge variant="outline" className={cn("text-[9px] py-0 flex-shrink-0", archetypeColor[idea.archetype])}>{idea.archetype}</Badge>
+                              <span className="text-xs font-medium text-foreground">{idea.headline}</span>
+                            </div>
+
+                            {/* You Give / You Get */}
+                            <div className="grid grid-cols-2 divide-x divide-border/30">
+                              {(["youGive", "youGet"] as const).map(side => (
+                                <div key={side} className="px-4 py-3">
+                                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-2">
+                                    {side === "youGive" ? "You Give" : "You Get"}
+                                  </p>
+                                  {idea[side].map((a: SmartGMAsset, i: number) => (
+                                    <div key={i} className="flex items-center gap-1.5 py-1 min-w-0">
+                                      {a.type === "player" && a.sleeperId ? (
+                                        <div className="w-5 h-5 rounded-full flex-shrink-0 overflow-hidden bg-muted">
+                                          <img src={`https://sleepercdn.com/content/nfl/players/thumb/${a.sleeperId}.jpg`} alt={a.label} className="w-full h-full object-cover object-top" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                                        </div>
+                                      ) : null}
+                                      {a.pos && <Badge variant="outline" className={cn("text-[9px] px-1 py-0 flex-shrink-0", getPositionColor(a.pos))}>{a.pos}</Badge>}
+                                      <span className="text-xs font-medium truncate">{a.label}</span>
+                                      {a.age && <span className="text-[9px] text-muted-foreground flex-shrink-0">({a.age})</span>}
+                                      <div className="ml-auto flex flex-col items-end flex-shrink-0">
+                                        <span className="text-[10px] font-mono text-foreground">{a.dynVal.toLocaleString()}</span>
+                                        <span className="text-[9px] font-mono text-muted-foreground">{a.rdVal.toLocaleString()} rd</span>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              ))}
+                            </div>
+
+                            {/* Footer */}
+                            <div className="px-4 py-2.5 bg-muted/10 border-t border-border/20 space-y-2">
+                              <p className="text-[10px] text-muted-foreground italic">{idea.why}</p>
+                              <div className="flex items-center justify-between flex-wrap gap-2">
+                                <div className="flex items-center gap-3 flex-wrap">
+                                  <span className={cn("text-[10px] font-semibold",
+                                    idea.dynastyDelta >= 0 ? "text-emerald-500 dark:text-emerald-400" : "text-amber-500 dark:text-amber-400"
+                                  )}>
+                                    {idea.dynastyDelta >= 0 ? "+" : ""}{Math.round(idea.dynastyDelta * 100)}% dynasty
+                                  </span>
+                                  <span className={cn("text-[10px] font-semibold",
+                                    idea.redraftDelta >= 0 ? "text-emerald-500 dark:text-emerald-400" : "text-amber-500 dark:text-amber-400"
+                                  )}>
+                                    {idea.redraftDelta >= 0 ? "+" : ""}{Math.round(idea.redraftDelta * 100)}% redraft
+                                  </span>
+                                  {idea.ageDelta < -0.5 && (
+                                    <span className="text-[10px] text-blue-400">
+                                      −{Math.abs(Math.round(idea.ageDelta))} yr{Math.abs(Math.round(idea.ageDelta)) !== 1 ? "s" : ""} avg age
+                                    </span>
+                                  )}
+                                </div>
+                                <Button variant="default" size="sm" className="text-xs bg-[#0b3a7a] hover:bg-[#0b3a7a]/90" data-testid={`btn-sgm-build-${pid}-${idx}`}>
                                   <ArrowRightLeft className="w-3 h-3 mr-1" />
                                   Build in Calculator
                                 </Button>
