@@ -428,8 +428,11 @@ export async function proposeTrade(params: ProposeTradeParams): Promise<ProposeT
   const v_adds = Object.values(adds);
   const k_drops = Object.keys(drops);
   const v_drops = Object.values(drops);
+  // Sleeper's GraphQL scalar for draft_picks is a CSV string per pick:
+  // "roster_id,season,round,owner_id,previous_owner_id"
+  // (matches the format Sleeper returns in league_transactions_filtered responses)
   const draft_picks = draftPicks.map(p =>
-    JSON.stringify({ season: p.season, round: p.round, roster_id: p.roster_id, previous_owner_id: p.previous_owner_id, owner_id: p.owner_id })
+    `${p.roster_id},${p.season},${p.round},${p.owner_id},${p.previous_owner_id}`
   );
 
   const mutation = buildProposeTrademutation(
