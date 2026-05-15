@@ -143,7 +143,7 @@ function ManagerAvatar({ name, avatar, sz = 7 }: { name: string; avatar: string 
 function PlayerAssetRow({ player, onRemove }: { player: AssetPlayer; onRemove?: () => void }) {
   return (
     <div className="flex items-center gap-2.5 py-0.5 group">
-      <PlayerAvatar id={player.playerId} name={player.name} pos={player.pos} team={player.team} size="sm" />
+      <PlayerAvatar id={player.playerId} name={player.name} pos={player.pos} team={player.team} size="sm" compact />
       <div className="flex-1 min-w-0">
         <p className="text-[13px] font-semibold text-white/90 leading-tight truncate">{player.name}</p>
         <p className={cn("text-[10px] font-bold uppercase", posText(player.pos))}>
