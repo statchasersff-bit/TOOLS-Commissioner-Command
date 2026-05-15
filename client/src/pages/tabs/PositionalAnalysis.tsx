@@ -9,7 +9,7 @@ import { getLeagueTeamTiers, getTierColor, getTierEmoji, getPositionColor, isCon
 import { cn } from "@/lib/utils";
 import type { League, Team, Player, Pick, Tier } from "@/types";
 import {
-  ArrowRightLeft, Target, TrendingUp, TrendingDown, Zap,
+  ArrowRightLeft, Target, TrendingUp, TrendingDown, Zap, RotateCcw, ShieldCheck,
   ChevronRight, Scale
 } from "lucide-react";
 
@@ -597,13 +597,14 @@ interface WinNowIdea {
 // ─── TradeOpportunities — mode selector ──────────────────────────
 
 function TradeOpportunities({ league, userTeam }: { league: League; userTeam: Team }) {
-  const [mode, setMode] = useState<"win-now" | "build-dynasty">("win-now");
+  const [mode, setMode] = useState<"win-now" | "rebuild" | "build-dynasty">("win-now");
   return (
     <div className="space-y-5">
       <div className="flex w-fit rounded-lg border border-border overflow-hidden">
         {([
-          { id: "win-now"       as const, label: "Win-Now",       desc: "Maximize weekly lineup output",  Icon: Zap        },
-          { id: "build-dynasty" as const, label: "Build Dynasty",  desc: "Maximize long-term value",       Icon: TrendingUp },
+          { id: "win-now"       as const, label: "Win-Now",      desc: "Maximize starters now",        Icon: Zap        },
+          { id: "rebuild"       as const, label: "Rebuild",       desc: "Convert to long-term assets",  Icon: RotateCcw  },
+          { id: "build-dynasty" as const, label: "Build Dynasty", desc: "Maximize dynasty value",       Icon: TrendingUp },
         ]).map(({ id, label, desc, Icon }) => (
           <button
             key={id}
@@ -624,6 +625,7 @@ function TradeOpportunities({ league, userTeam }: { league: League; userTeam: Te
       </div>
 
       {mode === "win-now"       && <WinNowMode       league={league} userTeam={userTeam} />}
+      {mode === "rebuild"       && <RebuildMode       league={league} userTeam={userTeam} />}
       {mode === "build-dynasty" && <BuildDynastyMode league={league} userTeam={userTeam} />}
     </div>
   );
@@ -1085,6 +1087,524 @@ function WinNowMode({ league, userTeam }: { league: League; userTeam: Team }) {
                                   className="text-xs bg-[#0b3a7a] hover:bg-[#0b3a7a]/90"
                                   data-testid={`btn-wn-build-${pid}-${idx}`}
                                 >
+                                  <ArrowRightLeft className="w-3 h-3 mr-1" />
+                                  Build in Calculator
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Rebuild Mode constants & types ──────────────────────────────
+
+const DECAY_AGE_PENALTY = (pos: string, age: number): number => {
+  if (pos === "RB") return age >= 28 ? 2.5 : age >= 26 ? 1.8 : age >= 24 ? 1.2 : 1.0;
+  if (pos === "WR") return age >= 31 ? 2.5 : age >= 29 ? 1.8 : age >= 27 ? 1.3 : 1.0;
+  if (pos === "TE") return age >= 31 ? 2.2 : age >= 29 ? 1.6 : age >= 27 ? 1.2 : 1.0;
+  return               age >= 33 ? 2.0 : age >= 31 ? 1.5 : age >= 29 ? 1.2 : 1.0;
+};
+const DECAY_POS_VOLATILITY: Record<string, number> = { RB: 1.3, WR: 1.0, TE: 1.1, QB: 0.9 };
+
+type AssetTier = "Cornerstone" | "Hold" | "Liquid" | "Sell High" | "Emergency Exit";
+
+interface RebuildPlayerData {
+  player: Player;
+  dynVal: number;
+  rdVal: number;
+  decayScore: number;
+  tier: AssetTier;
+}
+
+interface RebuildIdea {
+  id: string;
+  partnerId: string;
+  partnerTeam: Team;
+  partnerTier: Tier;
+  headline: string;
+  why: string;
+  youGive: { label: string; value: number; pos?: string; age?: number; type: "player" | "pick"; sleeperId?: string }[];
+  youGet:  { label: string; value: number; pos?: string; age?: number; type: "player" | "pick"; sleeperId?: string }[];
+  dynastyGainPct: number;
+  rdLostPct: number;
+  ageDelta: number;
+  score: number;
+  scoreLabel: "Elite" | "Strong" | "Moderate";
+}
+
+function getAssetTier(pos: string, age: number, dynVal: number, decayScore: number): AssetTier {
+  const isYoung = pos === "RB" ? age <= 24 : age <= 25;
+  if (isYoung && dynVal >= 6000) return "Cornerstone";
+  if (decayScore > 2800) return "Emergency Exit";
+  if (decayScore > 1200) return "Sell High";
+  if (isYoung && dynVal > 1500) return "Hold";
+  if (dynVal > 700) return "Liquid";
+  return "Hold";
+}
+
+type RebuildProfile = "Full Rebuild" | "Soft Rebuild" | "Retool" | "Hold / Contend" | "Productive Struggle";
+
+// ─── Rebuild Mode ─────────────────────────────────────────────────
+
+function RebuildMode({ league, userTeam }: { league: League; userTeam: Team }) {
+  const { getPlayerValue, getRedraftValue, getPickValue } = useValueModel();
+  const [expandedPartner, setExpandedPartner] = useState<string | null>(null);
+  const tierMap = useMemo(() => getLeagueTeamTiers(league.teams), [league.teams]);
+
+  // ── Classify every player on the user's roster ──────────────────
+  const rosterData = useMemo<RebuildPlayerData[]>(() => {
+    return userTeam.roster.map(player => {
+      const dynVal = getPlayerValue(player);
+      const rdVal  = getRedraftValue(player);
+      const rdPremium = Math.max(0, rdVal - dynVal * 0.5);
+      const decayScore = rdPremium
+        * DECAY_AGE_PENALTY(player.pos, player.age)
+        * (DECAY_POS_VOLATILITY[player.pos] ?? 1.0);
+      const tier = getAssetTier(player.pos, player.age, dynVal, decayScore);
+      return { player, dynVal, rdVal, decayScore, tier };
+    }).sort((a, b) => b.decayScore - a.decayScore);
+  }, [userTeam, getPlayerValue, getRedraftValue]);
+
+  // ── Rebuild profile classification ──────────────────────────────
+  const rebuildProfile = useMemo<{
+    type: RebuildProfile;
+    winNowRank: number;
+    dynastyRank: number;
+    avgStarterAge: number;
+    pickCapital: number;
+    summary: string;
+  }>(() => {
+    const n = league.teams.length;
+
+    const byWinNow = [...league.teams].sort((a, b) =>
+      b.roster.filter(p => p.starter).reduce((s, p) => s + getRedraftValue(p), 0) -
+      a.roster.filter(p => p.starter).reduce((s, p) => s + getRedraftValue(p), 0)
+    );
+    const byDynasty = [...league.teams].sort((a, b) =>
+      b.roster.reduce((s, p) => s + getPlayerValue(p), 0) -
+      a.roster.reduce((s, p) => s + getPlayerValue(p), 0)
+    );
+
+    const winNowRank   = byWinNow.findIndex(t => t.id === userTeam.id) + 1;
+    const dynastyRank  = byDynasty.findIndex(t => t.id === userTeam.id) + 1;
+    const topThird     = Math.ceil(n / 3);
+    const bottomThird  = Math.floor(n * 0.66);
+
+    const starters     = userTeam.roster.filter(p => p.starter && p.age > 0);
+    const avgStarterAge = starters.length > 0
+      ? starters.reduce((s, p) => s + p.age, 0) / starters.length : 0;
+    const pickCapital  = userTeam.picks.reduce((s, p) => s + getPickValue(p), 0);
+
+    const lowWinNow    = winNowRank > bottomThird;
+    const lowDynasty   = dynastyRank > bottomThird;
+    const highWinNow   = winNowRank <= topThird;
+    const highDynasty  = dynastyRank <= topThird;
+    const agingRoster  = avgStarterAge >= 28.5;
+
+    let type: RebuildProfile;
+    let summary: string;
+
+    if (highWinNow && highDynasty) {
+      type = "Hold / Contend"; summary = "Your roster is strong on both axes — protect your assets and push for a title.";
+    } else if (lowWinNow && lowDynasty) {
+      type = "Full Rebuild"; summary = "Low win-now and dynasty value signal a full rebuild. Convert aging production into young assets and picks.";
+    } else if (lowWinNow && !lowDynasty) {
+      type = "Soft Rebuild"; summary = "Strong dynasty value but weak starters. Sell peak redraft assets to accelerate contention.";
+    } else if (agingRoster && !lowDynasty) {
+      type = "Retool"; summary = "Your roster is aging. Lock in peak value on aging players before decline hits.";
+    } else {
+      type = "Productive Struggle"; summary = "Young but uncompetitive — prioritize young scorers over aging producers. The window is coming.";
+    }
+
+    return { type, winNowRank, dynastyRank, avgStarterAge, pickCapital, summary };
+  }, [league, userTeam, getPlayerValue, getRedraftValue, getPickValue]);
+
+  // ── Sell candidates: Sell High + Emergency Exit ──────────────────
+  const sellCandidates = useMemo(
+    () => rosterData.filter(d => d.tier === "Sell High" || d.tier === "Emergency Exit").slice(0, 6),
+    [rosterData]
+  );
+
+  // ── League-wide redraft starter ranks (to identify contenders) ──
+  const isContender = useCallback((teamId: string) => {
+    const tier = tierMap.get(teamId)?.tier;
+    return tier ? isContenderTier(tier) : false;
+  }, [tierMap]);
+
+  // ── Generate rebuild trade ideas ────────────────────────────────
+  const tradeIdeas = useMemo<RebuildIdea[]>(() => {
+    if (sellCandidates.length === 0) return [];
+    const leagueSize = league.teams.length;
+    const ideas: RebuildIdea[] = [];
+
+    const myPicks = userTeam.picks
+      .map(p => ({ ...p, val: getPickValue(p) }))
+      .sort((a, b) => b.val - a.val);
+
+    for (const partner of league.teams) {
+      if (partner.id === userTeam.id) continue;
+      if (!isContender(partner.id)) continue; // only sell to contenders
+
+      const partnerTier = tierMap.get(partner.id)?.tier ?? "Balanced";
+
+      // Partner's young players (potential get targets for us)
+      const partnerYoung = [...partner.roster]
+        .map(p => ({ ...p, rdv: getRedraftValue(p), dynv: getPlayerValue(p) }))
+        .filter(p => (p.pos === "RB" ? p.age <= 25 : p.age <= 26) && p.dynv > 800)
+        .sort((a, b) => b.dynv - a.dynv)
+        .slice(0, 4);
+
+      // Partner's picks
+      const partnerPicks = partner.picks
+        .map(p => ({ ...p, val: getPickValue(p) }))
+        .sort((a, b) => b.val - a.val);
+
+      for (const chip of sellCandidates.slice(0, 4)) {
+        const dynGiven  = chip.dynVal;
+        const rdGiven   = chip.rdVal;
+
+        // Option A: player for young player
+        for (const youngTarget of partnerYoung.slice(0, 3)) {
+          const dynReceived = youngTarget.dynv;
+          const dynDelta    = (dynReceived - dynGiven) / Math.max(dynGiven + dynReceived, 1) * 2;
+          if (dynDelta < -0.22) continue; // we shouldn't give away too much dynasty
+
+          const rdDiff = Math.abs(rdGiven - youngTarget.rdv) / Math.max(rdGiven, youngTarget.rdv, 1);
+          if (rdDiff > 0.35) continue; // must be in ballpark for partner to accept
+
+          const ageDelta     = youngTarget.age - chip.player.age; // negative = we got younger
+          const ageCurveGain = Math.max(0, -ageDelta) * 120;
+          const youngBonus   = Math.max(0, 27 - youngTarget.age) * 100;
+          const dynastyGainAbs = dynReceived - dynGiven;
+
+          const score = (dynastyGainAbs + ageCurveGain + youngBonus) / Math.max(chip.decayScore, 200);
+          const scoreLabel = score > 6 ? "Elite" : score > 2.5 ? "Strong" : "Moderate";
+
+          ideas.push({
+            id:          `rb-${partner.id}-${chip.player.sleeperId ?? chip.player.id}-${youngTarget.sleeperId ?? youngTarget.id}`,
+            partnerId:   partner.id,
+            partnerTeam: partner,
+            partnerTier,
+            headline:    `Sell ${chip.player.pos} decay → acquire ${youngTarget.pos} youth`,
+            why:         `${chip.player.name} (age ${chip.player.age}) carries ${chip.tier === "Emergency Exit" ? "extreme" : "significant"} decay risk. ${youngTarget.name} (age ${youngTarget.age}) gives you insulated dynasty value and a longer competitive window.`,
+            youGive: [{ label: chip.player.name, value: chip.dynVal, pos: chip.player.pos, type: "player", sleeperId: chip.player.sleeperId, age: chip.player.age }],
+            youGet:  [{ label: youngTarget.name,  value: youngTarget.dynv, pos: youngTarget.pos, type: "player", sleeperId: youngTarget.sleeperId, age: youngTarget.age }],
+            dynastyGainPct: dynDelta,
+            rdLostPct: (rdGiven - youngTarget.rdv) / Math.max(rdGiven, 1),
+            ageDelta,
+            score,
+            scoreLabel: scoreLabel as RebuildIdea["scoreLabel"],
+          });
+        }
+
+        // Option B: player for pick(s)
+        if (partnerPicks.length > 0) {
+          const topPick     = partnerPicks[0];
+          const pickDynVal  = topPick.val * 1.3; // rebuild premium on picks
+          const secondPick  = partnerPicks[1];
+          const totalPickDyn = pickDynVal + (secondPick ? secondPick.val * 1.2 : 0);
+          const useTwo      = secondPick && totalPickDyn <= dynGiven * 1.15;
+
+          const dynReceived   = useTwo ? totalPickDyn : pickDynVal;
+          const dynDelta      = (dynReceived - dynGiven) / Math.max(dynGiven + dynReceived, 1) * 2;
+          if (dynDelta < -0.18) continue;
+
+          const picksArr = useTwo
+            ? [topPick, secondPick!]
+            : [topPick];
+
+          const score = (dynReceived - dynGiven + chip.decayScore * 0.3) / Math.max(rdGiven - (useTwo ? topPick.val + secondPick!.val : topPick.val), 500);
+          const scoreLabel = score > 1.5 ? "Elite" : score > 0.5 ? "Strong" : "Moderate";
+
+          const youGet: RebuildIdea["youGet"] = picksArr.map(pk => ({
+            label: `${pk.year} Rd ${pk.round} (${pk.projectedRange ?? "Mid"})`,
+            value: Math.round(pk.val * (pk === topPick ? 1.3 : 1.2)),
+            type: "pick" as const,
+          }));
+
+          ideas.push({
+            id:          `rb-pick-${partner.id}-${chip.player.sleeperId ?? chip.player.id}`,
+            partnerId:   partner.id,
+            partnerTeam: partner,
+            partnerTier,
+            headline:    `Convert ${chip.player.pos} peak value → draft capital`,
+            why:         `${chip.player.name} is at or near peak redraft value. Converting now locks in value and adds future flexibility. Picks appreciate during the off-season rebuild cycle.`,
+            youGive:     [{ label: chip.player.name, value: chip.dynVal, pos: chip.player.pos, type: "player", sleeperId: chip.player.sleeperId, age: chip.player.age }],
+            youGet,
+            dynastyGainPct: dynDelta,
+            rdLostPct: (rdGiven - picksArr.reduce((s, p) => s + p.val, 0)) / Math.max(rdGiven, 1),
+            ageDelta: -5, // picks = instant age reset
+            score: Math.max(score, 0),
+            scoreLabel: scoreLabel as RebuildIdea["scoreLabel"],
+          });
+        }
+      }
+    }
+
+    const seen = new Set<string>();
+    return ideas
+      .filter(t => {
+        const key = t.youGive.map(a => a.label).join(",") + "→" + t.youGet.map(a => a.label).join(",");
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 15);
+  }, [league, userTeam, sellCandidates, isContender, tierMap, getPlayerValue, getRedraftValue, getPickValue]);
+
+  // Group by partner
+  const byPartner = useMemo(() => {
+    const map = new Map<string, RebuildIdea[]>();
+    tradeIdeas.forEach(t => {
+      if (!map.has(t.partnerId)) map.set(t.partnerId, []);
+      map.get(t.partnerId)!.push(t);
+    });
+    return Array.from(map.entries())
+      .map(([pid, ideas]) => ({ pid, partnerTeam: ideas[0].partnerTeam, partnerTier: ideas[0].partnerTier, ideas }))
+      .sort((a, b) => b.ideas[0].score - a.ideas[0].score);
+  }, [tradeIdeas]);
+
+  const profileColors: Record<RebuildProfile, string> = {
+    "Full Rebuild":       "text-red-500 dark:text-red-400",
+    "Soft Rebuild":       "text-amber-500 dark:text-amber-400",
+    "Retool":             "text-orange-500 dark:text-orange-400",
+    "Hold / Contend":     "text-emerald-500 dark:text-emerald-400",
+    "Productive Struggle":"text-blue-500 dark:text-blue-400",
+  };
+
+  const tierColors: Record<AssetTier, string> = {
+    "Cornerstone":    "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20",
+    "Hold":           "bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20",
+    "Liquid":         "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20",
+    "Sell High":      "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20",
+    "Emergency Exit": "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20",
+  };
+
+  const ordinalAge = (n: number) => `${n}`;
+
+  return (
+    <div className="space-y-5">
+
+      {/* ── Rebuild Profile card ── */}
+      <Card className="p-5" data-testid="card-rebuild-profile">
+        <div className="mb-4">
+          <h4 className="text-sm font-bold">Team Rebuild Profile</h4>
+          <span className="block h-[2px] w-8 bg-[#d4af37] rounded-full mt-1" />
+        </div>
+        <div className="flex items-start gap-4 flex-wrap">
+          <div className="flex-1 min-w-[160px]">
+            <p className={cn("text-xl font-bold", profileColors[rebuildProfile.type])}>{rebuildProfile.type}</p>
+            <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">{rebuildProfile.summary}</p>
+          </div>
+          <div className="grid grid-cols-2 gap-x-6 gap-y-2 flex-shrink-0 text-right">
+            <div>
+              <p className="text-[10px] text-muted-foreground">Win-Now Rank</p>
+              <p className="text-sm font-bold">#{rebuildProfile.winNowRank}<span className="text-[10px] text-muted-foreground font-normal">/{league.teams.length}</span></p>
+            </div>
+            <div>
+              <p className="text-[10px] text-muted-foreground">Dynasty Rank</p>
+              <p className="text-sm font-bold">#{rebuildProfile.dynastyRank}<span className="text-[10px] text-muted-foreground font-normal">/{league.teams.length}</span></p>
+            </div>
+            <div>
+              <p className="text-[10px] text-muted-foreground">Avg Starter Age</p>
+              <p className={cn("text-sm font-bold", rebuildProfile.avgStarterAge >= 29 ? "text-red-500 dark:text-red-400" : rebuildProfile.avgStarterAge >= 27 ? "text-amber-500 dark:text-amber-400" : "text-emerald-500 dark:text-emerald-400")}>
+                {rebuildProfile.avgStarterAge.toFixed(1)}
+              </p>
+            </div>
+            <div>
+              <p className="text-[10px] text-muted-foreground">Pick Capital</p>
+              <p className="text-sm font-bold">{rebuildProfile.pickCapital.toLocaleString()}</p>
+            </div>
+          </div>
+        </div>
+      </Card>
+
+      {/* ── Asset Classification ── */}
+      <Card className="p-5" data-testid="card-asset-tiers">
+        <div className="mb-4">
+          <h4 className="text-sm font-bold">Asset Classification</h4>
+          <span className="block h-[2px] w-8 bg-[#d4af37] rounded-full mt-1" />
+          <p className="text-[10px] text-muted-foreground mt-1.5">
+            Every player tiered by decay risk vs. dynasty insulation
+          </p>
+        </div>
+        <div className="space-y-0">
+          {rosterData.filter(d => d.dynVal > 200 || d.rdVal > 500).slice(0, 20).map((d, i) => {
+            const sid = d.player.sleeperId ?? d.player.id;
+            return (
+              <div key={sid} className="flex items-center gap-2.5 py-2 border-b border-border/20 last:border-0" data-testid={`asset-row-${sid}`}>
+                <div className="w-6 h-6 rounded-full flex-shrink-0 overflow-hidden bg-muted ring-1 ring-border/20">
+                  <img src={`https://sleepercdn.com/content/nfl/players/thumb/${sid}.jpg`} alt={d.player.name} className="w-full h-full object-cover object-top" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[11px] font-semibold truncate">{d.player.name}</span>
+                    <Badge variant="outline" className={cn("text-[9px] px-1 py-0 h-3.5 flex-shrink-0", getPositionColor(d.player.pos))}>{d.player.pos}</Badge>
+                    <span className="text-[9px] text-muted-foreground flex-shrink-0">Age {d.player.age}</span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <span className="text-[10px] font-mono text-muted-foreground">{d.dynVal.toLocaleString()}</span>
+                  <Badge variant="outline" className={cn("text-[9px] px-1.5 py-0", tierColors[d.tier])}>{d.tier}</Badge>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <div className="mt-3 pt-3 border-t border-border/20 flex items-center gap-3 flex-wrap">
+          {(["Cornerstone", "Hold", "Liquid", "Sell High", "Emergency Exit"] as AssetTier[]).map(tier => (
+            <div key={tier} className="flex items-center gap-1">
+              <Badge variant="outline" className={cn("text-[9px] px-1.5 py-0", tierColors[tier])}>{tier}</Badge>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      {/* ── Rebuild Trade Ideas ── */}
+      <div>
+        <div className="mb-4">
+          <h4 className="text-sm font-bold flex items-center gap-2">
+            Rebuild Trade Ideas
+            <Badge variant="secondary">{tradeIdeas.length}</Badge>
+          </h4>
+          <span className="block h-[2px] w-8 bg-[#d4af37] rounded-full mt-1" />
+          <p className="text-[10px] text-muted-foreground mt-1.5">
+            Sell decay assets to contenders. Score = (dynasty gain + age curve + youth bonus) ÷ decay cost.
+          </p>
+        </div>
+
+        {tradeIdeas.length === 0 ? (
+          <Card>
+            <CardContent className="py-12 text-center">
+              <ShieldCheck className="w-10 h-10 mx-auto mb-3 text-muted-foreground/40" />
+              <p className="text-sm text-muted-foreground">
+                {sellCandidates.length === 0
+                  ? "No high-decay assets detected — your roster is already well-insulated."
+                  : "No rebuild trades found. Contenders may lack the young assets or picks to offer a fair return."}
+              </p>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="space-y-3" data-testid="rebuild-partner-list">
+            {byPartner.map(({ pid, partnerTeam, partnerTier, ideas }) => {
+              const isExpanded = expandedPartner === pid;
+              return (
+                <Card key={pid} className="overflow-hidden" data-testid={`rebuild-partner-${pid}`}>
+                  <CardContent className="p-0">
+                    <button
+                      className="w-full flex items-center justify-between px-5 py-4 hover:bg-muted/20 transition-colors text-left"
+                      onClick={() => setExpandedPartner(isExpanded ? null : pid)}
+                      data-testid={`btn-rebuild-expand-${pid}`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        {partnerTeam.avatar ? (
+                          <img src={partnerTeam.avatar} alt={partnerTeam.owner} className="w-9 h-9 rounded-full object-cover flex-shrink-0 ring-1 ring-border/40" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                        ) : (
+                          <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
+                            <span className="text-sm font-bold text-muted-foreground">{partnerTeam.owner.charAt(0)}</span>
+                          </div>
+                        )}
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-semibold text-foreground">{partnerTeam.owner}</span>
+                            <Badge variant="outline" className={cn("text-[10px]", getTierColor(partnerTier))}>{partnerTier}</Badge>
+                          </div>
+                          <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                            <Badge variant="outline" className={cn("text-[9px] py-0",
+                              ideas[0].scoreLabel === "Elite"  ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20" :
+                              ideas[0].scoreLabel === "Strong" ? "bg-[#0b3a7a]/10 text-[#0b3a7a] dark:text-blue-400 border-[#0b3a7a]/20" :
+                              "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
+                            )}>
+                              Best: {ideas[0].scoreLabel}
+                            </Badge>
+                            <span className="text-[9px] text-muted-foreground">{ideas.length} idea{ideas.length !== 1 ? "s" : ""}</span>
+                          </div>
+                        </div>
+                      </div>
+                      <ChevronRight className={cn("w-4 h-4 text-muted-foreground flex-shrink-0 transition-transform", isExpanded && "rotate-90")} />
+                    </button>
+
+                    {isExpanded && (
+                      <div className="border-t border-border/30 px-5 py-4 space-y-4">
+                        {ideas.map((idea: RebuildIdea, idx: number) => (
+                          <div key={idea.id} className="rounded-xl border border-border/40 overflow-hidden" data-testid={`rebuild-idea-${pid}-${idx}`}>
+                            {/* Header */}
+                            <div className="px-4 py-2.5 bg-muted/20 flex items-center justify-between gap-2 flex-wrap">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <Badge
+                                  variant="outline"
+                                  className={cn("text-[10px] flex-shrink-0",
+                                    idea.scoreLabel === "Elite"  ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30" :
+                                    idea.scoreLabel === "Strong" ? "bg-[#0b3a7a]/10 text-[#0b3a7a] dark:text-blue-400 border-[#0b3a7a]/20" :
+                                                                   "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20"
+                                  )}
+                                >
+                                  {idea.scoreLabel}
+                                </Badge>
+                                <span className="text-xs font-medium text-foreground">{idea.headline}</span>
+                              </div>
+                            </div>
+
+                            {/* You Give / You Get */}
+                            <div className="grid grid-cols-2 divide-x divide-border/30">
+                              {(["youGive", "youGet"] as const).map(side => (
+                                <div key={side} className="px-4 py-3">
+                                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-2">
+                                    {side === "youGive" ? "You Give" : "You Get"}
+                                  </p>
+                                  {idea[side].map((a: RebuildIdea["youGive"][number], i: number) => (
+                                    <div key={i} className="flex items-center gap-1.5 py-1 min-w-0">
+                                      {a.type === "player" && a.sleeperId ? (
+                                        <div className="w-5 h-5 rounded-full flex-shrink-0 overflow-hidden bg-muted">
+                                          <img src={`https://sleepercdn.com/content/nfl/players/thumb/${a.sleeperId}.jpg`} alt={a.label} className="w-full h-full object-cover object-top" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                                        </div>
+                                      ) : a.type === "pick" ? (
+                                        <Badge variant="outline" className="text-[9px] px-1 py-0 flex-shrink-0">PICK</Badge>
+                                      ) : null}
+                                      {a.pos && <Badge variant="outline" className={cn("text-[9px] px-1 py-0 flex-shrink-0", getPositionColor(a.pos))}>{a.pos}</Badge>}
+                                      <span className="text-xs font-medium truncate">{a.label}</span>
+                                      {a.age && a.type === "player" && <span className="text-[9px] text-muted-foreground flex-shrink-0 ml-0.5">({a.age})</span>}
+                                      <span className="text-[10px] font-mono text-muted-foreground ml-auto flex-shrink-0">{a.value.toLocaleString()}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              ))}
+                            </div>
+
+                            {/* Footer */}
+                            <div className="px-4 py-2.5 bg-muted/10 border-t border-border/20 space-y-2">
+                              <p className="text-[10px] text-muted-foreground italic">{idea.why}</p>
+                              <div className="flex items-center justify-between flex-wrap gap-2">
+                                <div className="flex items-center gap-3 flex-wrap">
+                                  <span className={cn("text-[10px] font-semibold",
+                                    idea.dynastyGainPct >= 0 ? "text-emerald-500 dark:text-emerald-400" : "text-amber-500 dark:text-amber-400"
+                                  )}>
+                                    {idea.dynastyGainPct >= 0 ? "+" : ""}{Math.round(idea.dynastyGainPct * 100)}% dynasty
+                                  </span>
+                                  <span className={cn("text-[10px]",
+                                    idea.rdLostPct > 0.2 ? "text-red-400" : "text-muted-foreground"
+                                  )}>
+                                    −{Math.round(idea.rdLostPct * 100)}% production
+                                  </span>
+                                  {idea.ageDelta < -1 && (
+                                    <span className="text-[10px] text-blue-400">
+                                      −{Math.abs(Math.round(idea.ageDelta))} yrs avg age
+                                    </span>
+                                  )}
+                                </div>
+                                <Button variant="default" size="sm" className="text-xs bg-[#0b3a7a] hover:bg-[#0b3a7a]/90" data-testid={`btn-rebuild-build-${pid}-${idx}`}>
                                   <ArrowRightLeft className="w-3 h-3 mr-1" />
                                   Build in Calculator
                                 </Button>
