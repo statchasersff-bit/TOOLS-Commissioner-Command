@@ -5,114 +5,170 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { Search, Trophy, Zap, Target, TrendingUp, Star, ChevronDown } from "lucide-react";
 
-const RB_DATA_URL =
-  "https://cdn.jsdelivr.net/gh/statchasersff-bit/statchasers-data@master/statchasers-data/output/rb_player_overview.json";
+// ── Types ───────────────────────────────────────────────────────────
+type Position = "RB" | "WR" | "TE" | "QB";
 
-const normalizeName = (n: string) => n.toLowerCase().replace(/[^a-z0-9]/g, "");
-
-const formatNum = (value: unknown, digits = 1): string => {
-  if (value === null || value === undefined || Number.isNaN(Number(value))) return "—";
-  return Number(value).toFixed(digits);
-};
-
-interface RBRaw {
+interface PlayerRaw {
   player: string;
   team: string;
   age: number;
   games: number;
-  rush_att_per_gm: number;
-  targets_per_gm: number;
-  yards_per_touch: number;
-  explosive_run_pct: number;
-  rz_rush_att: number;
-  rb_tier: string;
-  overall_score?: number;
+  [key: string]: unknown;
 }
 
-interface ResolvedRB extends RBRaw {
+interface ResolvedPlayer extends PlayerRaw {
   dynVal: number;
   rdVal: number;
   sleeperId: string | null;
 }
 
-const getRbStats = (p: RBRaw) => ({
-  "Rush Att/G":  { raw: p.rush_att_per_gm,   display: formatNum(p.rush_att_per_gm) },
-  "Targets/G":   { raw: p.targets_per_gm,    display: formatNum(p.targets_per_gm) },
-  "Yds/Touch":   { raw: p.yards_per_touch,   display: formatNum(p.yards_per_touch) },
-  "Explosive %": { raw: p.explosive_run_pct, display: `${formatNum(p.explosive_run_pct)}%` },
-  "RZ Att/G":    { raw: p.games ? p.rz_rush_att / p.games : null, display: p.games ? formatNum(p.rz_rush_att / p.games) : "—" },
-});
-
-const TIER_COLORS: Record<string, string> = {
-  "Elite":     "bg-emerald-500/15 text-emerald-400 border-emerald-500/40",
-  "RB1":       "bg-[#d4af37]/15 text-[#d4af37] border-[#d4af37]/40",
-  "RB2":       "bg-blue-500/15 text-blue-400 border-blue-500/30",
-  "RB3":       "bg-slate-500/15 text-slate-400 border-slate-500/30",
-  "RB4":       "bg-slate-500/10 text-slate-500 border-slate-500/20",
-  "Fringe":    "bg-slate-600/10 text-slate-500 border-slate-600/20",
-  "Handcuff":  "bg-purple-500/15 text-purple-400 border-purple-500/30",
+type StatDef = {
+  label: string;
+  compute: (p: PlayerRaw) => number | null;
+  display: (v: number) => string;
 };
+
+type EdgeDef = {
+  id: string;
+  label: string;
+  Icon: React.ComponentType<{ className?: string }>;
+  color: string;
+  bgColor: string;
+  compute: (p: ResolvedPlayer) => number;
+};
+
+// ── Helpers ─────────────────────────────────────────────────────────
+const normalizeName = (n: string) => n.toLowerCase().replace(/[^a-z0-9]/g, "");
+const fmtNum = (v: number | null | undefined, d = 1): string =>
+  v == null || isNaN(v as number) ? "—" : (v as number).toFixed(d);
+const fmtPct = (v: number | null | undefined): string =>
+  v == null || isNaN(v as number) ? "—" : `${(v as number).toFixed(1)}%`;
+
+function getField(p: PlayerRaw, field: string): number | null {
+  const v = p[field];
+  if (v === null || v === undefined) return null;
+  const n = Number(v);
+  return isNaN(n) ? null : n;
+}
 
 function getTierColor(tier: string): string {
   if (!tier) return "bg-slate-500/15 text-slate-400 border-slate-500/30";
-  const key = Object.keys(TIER_COLORS).find(k => tier.toLowerCase().includes(k.toLowerCase()));
-  return key ? TIER_COLORS[key] : "bg-slate-500/15 text-slate-400 border-slate-500/30";
+  const t = tier.toLowerCase();
+  if (t.includes("elite"))                              return "bg-emerald-500/15 text-emerald-400 border-emerald-500/40";
+  if (/[a-z]1$/.test(t))                               return "bg-[#d4af37]/15 text-[#d4af37] border-[#d4af37]/40";
+  if (/[a-z]2$/.test(t))                               return "bg-blue-500/15 text-blue-400 border-blue-500/30";
+  if (/[a-z]3$/.test(t))                               return "bg-slate-500/15 text-slate-400 border-slate-500/30";
+  if (/[a-z]4$/.test(t))                               return "bg-slate-500/10 text-slate-500 border-slate-500/20";
+  if (t.includes("fringe"))                             return "bg-slate-600/10 text-slate-500 border-slate-600/20";
+  if (t.includes("handcuff") || t.includes("backup"))  return "bg-purple-500/15 text-purple-400 border-purple-500/30";
+  return "bg-slate-500/15 text-slate-400 border-slate-500/30";
 }
 
-const EDGES = [
-  {
-    id: "best-role",
-    label: "Best Role Player",
-    Icon: Star,
-    color: "text-[#d4af37]",
-    bgColor: "bg-[#d4af37]/10 border-[#d4af37]/30",
-    compute: (p: ResolvedRB) => (p.rush_att_per_gm ?? 0) + (p.targets_per_gm ?? 0),
-  },
-  {
-    id: "best-efficiency",
-    label: "Best Efficiency",
-    Icon: Zap,
-    color: "text-blue-400",
-    bgColor: "bg-blue-500/10 border-blue-500/30",
-    compute: (p: ResolvedRB) => (p.yards_per_touch ?? 0) + (p.explosive_run_pct ?? 0),
-  },
-  {
-    id: "best-td",
-    label: "Best TD Opportunity",
-    Icon: Target,
-    color: "text-red-400",
-    bgColor: "bg-red-500/10 border-red-500/30",
-    compute: (p: ResolvedRB) => p.games ? p.rz_rush_att / p.games : 0,
-  },
-  {
-    id: "best-dynasty",
-    label: "Best Dynasty Asset",
-    Icon: TrendingUp,
-    color: "text-emerald-400",
-    bgColor: "bg-emerald-500/10 border-emerald-500/30",
-    compute: (p: ResolvedRB) => p.dynVal,
-  },
-  {
-    id: "best-winnow",
-    label: "Best Win-Now Asset",
-    Icon: Trophy,
-    color: "text-amber-400",
-    bgColor: "bg-amber-500/10 border-amber-500/30",
-    compute: (p: ResolvedRB) => p.rdVal,
-  },
-] as const;
+// ── Position config ─────────────────────────────────────────────────
+const POS_DATA_URLS: Record<Position, string> = {
+  RB: "https://cdn.jsdelivr.net/gh/statchasersff-bit/statchasers-data@master/statchasers-data/output/rb_player_overview.json",
+  WR: "https://cdn.jsdelivr.net/gh/statchasersff-bit/statchasers-data@master/statchasers-data/output/wr_player_overview.json",
+  TE: "https://cdn.jsdelivr.net/gh/statchasersff-bit/statchasers-data@master/statchasers-data/output/te_player_overview.json",
+  QB: "https://cdn.jsdelivr.net/gh/statchasersff-bit/statchasers-data@master/statchasers-data/output/qb_player_overview.json",
+};
 
-// ── Player selector combobox ───────────────────────────────────────
+const POS_TIER_FIELD: Record<Position, string> = {
+  RB: "rb_tier", WR: "wr_tier", TE: "te_tier", QB: "qb_tier",
+};
+
+const POS_LABELS: Record<Position, string> = {
+  RB: "Running Backs", WR: "Wide Receivers", TE: "Tight Ends", QB: "Quarterbacks",
+};
+
+const POS_DESC: Record<Position, string> = {
+  RB: "Compare up to 3 running backs for a side-by-side breakdown of stats, dynasty value, and competitive edge.",
+  WR: "Compare up to 3 wide receivers for a side-by-side breakdown of stats, dynasty value, and competitive edge.",
+  TE: "Compare up to 3 tight ends for a side-by-side breakdown of stats, dynasty value, and competitive edge.",
+  QB: "Compare up to 3 quarterbacks for a side-by-side breakdown of stats, dynasty value, and competitive edge.",
+};
+
+const DYNASTY_EDGE: EdgeDef = {
+  id: "best-dynasty", label: "Best Dynasty Asset", Icon: TrendingUp,
+  color: "text-emerald-400", bgColor: "bg-emerald-500/10 border-emerald-500/30",
+  compute: p => p.dynVal,
+};
+const WINNOW_EDGE: EdgeDef = {
+  id: "best-winnow", label: "Best Win-Now", Icon: Trophy,
+  color: "text-amber-400", bgColor: "bg-amber-500/10 border-amber-500/30",
+  compute: p => p.rdVal,
+};
+
+const POS_STATS: Record<Position, StatDef[]> = {
+  RB: [
+    { label: "Rush Att/G",  compute: p => getField(p, "rush_att_per_gm"),   display: v => fmtNum(v) },
+    { label: "Targets/G",   compute: p => getField(p, "targets_per_gm"),    display: v => fmtNum(v) },
+    { label: "Yds/Touch",   compute: p => getField(p, "yards_per_touch"),   display: v => fmtNum(v) },
+    { label: "Explosive %", compute: p => getField(p, "explosive_run_pct"), display: v => fmtPct(v) },
+    { label: "RZ Att/G",    compute: p => { const rz = getField(p, "rz_rush_att"); const g = getField(p, "games"); return rz !== null && g ? rz / g : null; }, display: v => fmtNum(v) },
+  ],
+  WR: [
+    { label: "Targets/G",   compute: p => getField(p, "targets_per_gm"),    display: v => fmtNum(v) },
+    { label: "Rec/G",       compute: p => getField(p, "receptions_per_gm") ?? getField(p, "rec_per_gm"), display: v => fmtNum(v) },
+    { label: "Yards/G",     compute: p => getField(p, "receiving_yards_per_gm") ?? getField(p, "yards_per_gm"), display: v => fmtNum(v) },
+    { label: "TD/G",        compute: p => getField(p, "td_per_gm"),          display: v => fmtNum(v, 2) },
+    { label: "Air Yards/G", compute: p => getField(p, "air_yards_per_gm"),   display: v => fmtNum(v) },
+  ],
+  TE: [
+    { label: "Targets/G",   compute: p => getField(p, "targets_per_gm"),    display: v => fmtNum(v) },
+    { label: "Rec/G",       compute: p => getField(p, "receptions_per_gm") ?? getField(p, "rec_per_gm"), display: v => fmtNum(v) },
+    { label: "Yards/G",     compute: p => getField(p, "receiving_yards_per_gm") ?? getField(p, "yards_per_gm"), display: v => fmtNum(v) },
+    { label: "TD/G",        compute: p => getField(p, "td_per_gm"),          display: v => fmtNum(v, 2) },
+    { label: "RZ Tgts/G",   compute: p => getField(p, "rz_targets_per_gm") ?? getField(p, "rz_targets"), display: v => fmtNum(v) },
+  ],
+  QB: [
+    { label: "Pass Att/G",  compute: p => getField(p, "pass_att_per_gm"),   display: v => fmtNum(v) },
+    { label: "Comp %",      compute: p => getField(p, "completion_pct") ?? getField(p, "comp_pct"), display: v => fmtPct(v) },
+    { label: "Pass Yds/G",  compute: p => getField(p, "pass_yards_per_gm"), display: v => fmtNum(v, 0) },
+    { label: "TD/G",        compute: p => getField(p, "td_per_gm"),          display: v => fmtNum(v, 2) },
+    { label: "Rush Yds/G",  compute: p => getField(p, "rush_yards_per_gm"), display: v => fmtNum(v, 0) },
+  ],
+};
+
+const POS_EDGES: Record<Position, EdgeDef[]> = {
+  RB: [
+    { id: "best-role",     label: "Best Role Player",    Icon: Star,   color: "text-[#d4af37]",  bgColor: "bg-[#d4af37]/10 border-[#d4af37]/30",  compute: p => (getField(p, "rush_att_per_gm") ?? 0) + (getField(p, "targets_per_gm") ?? 0) },
+    { id: "best-eff",      label: "Best Efficiency",     Icon: Zap,    color: "text-blue-400",   bgColor: "bg-blue-500/10 border-blue-500/30",     compute: p => (getField(p, "yards_per_touch") ?? 0) + (getField(p, "explosive_run_pct") ?? 0) },
+    { id: "best-td",       label: "Best TD Opportunity", Icon: Target, color: "text-red-400",    bgColor: "bg-red-500/10 border-red-500/30",       compute: p => { const rz = getField(p, "rz_rush_att"); const g = getField(p, "games"); return rz !== null && g ? rz / g : 0; } },
+    DYNASTY_EDGE, WINNOW_EDGE,
+  ],
+  WR: [
+    { id: "most-targeted", label: "Most Targeted",       Icon: Star,   color: "text-[#d4af37]",  bgColor: "bg-[#d4af37]/10 border-[#d4af37]/30",  compute: p => getField(p, "targets_per_gm") ?? 0 },
+    { id: "best-eff",      label: "Best Efficiency",     Icon: Zap,    color: "text-blue-400",   bgColor: "bg-blue-500/10 border-blue-500/30",     compute: p => (getField(p, "receiving_yards_per_gm") ?? getField(p, "yards_per_gm")) ?? 0 },
+    { id: "best-td",       label: "Best TD Threat",      Icon: Target, color: "text-red-400",    bgColor: "bg-red-500/10 border-red-500/30",       compute: p => getField(p, "td_per_gm") ?? 0 },
+    DYNASTY_EDGE, WINNOW_EDGE,
+  ],
+  TE: [
+    { id: "most-targeted", label: "Most Targeted",       Icon: Star,   color: "text-[#d4af37]",  bgColor: "bg-[#d4af37]/10 border-[#d4af37]/30",  compute: p => getField(p, "targets_per_gm") ?? 0 },
+    { id: "best-eff",      label: "Best Efficiency",     Icon: Zap,    color: "text-blue-400",   bgColor: "bg-blue-500/10 border-blue-500/30",     compute: p => (getField(p, "receiving_yards_per_gm") ?? getField(p, "yards_per_gm")) ?? 0 },
+    { id: "best-td",       label: "Best TD Threat",      Icon: Target, color: "text-red-400",    bgColor: "bg-red-500/10 border-red-500/30",       compute: p => getField(p, "td_per_gm") ?? 0 },
+    DYNASTY_EDGE, WINNOW_EDGE,
+  ],
+  QB: [
+    { id: "best-passer",   label: "Best Passer",         Icon: Star,   color: "text-[#d4af37]",  bgColor: "bg-[#d4af37]/10 border-[#d4af37]/30",  compute: p => getField(p, "pass_yards_per_gm") ?? 0 },
+    { id: "best-accuracy", label: "Best Accuracy",       Icon: Zap,    color: "text-blue-400",   bgColor: "bg-blue-500/10 border-blue-500/30",     compute: p => (getField(p, "completion_pct") ?? getField(p, "comp_pct")) ?? 0 },
+    { id: "best-dual",     label: "Best Dual-Threat",    Icon: Target, color: "text-red-400",    bgColor: "bg-red-500/10 border-red-500/30",       compute: p => getField(p, "rush_yards_per_gm") ?? 0 },
+    DYNASTY_EDGE, WINNOW_EDGE,
+  ],
+};
+
+// ── Player selector combobox ────────────────────────────────────────
 function PlayerSelector({
   label,
   players,
   value,
   onChange,
+  tierField,
 }: {
   label: string;
-  players: RBRaw[];
+  players: PlayerRaw[];
   value: string | null;
   onChange: (name: string | null) => void;
+  tierField: string;
 }) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
@@ -152,7 +208,7 @@ function PlayerSelector({
           <input
             autoFocus
             className="flex-1 bg-transparent text-xs text-foreground outline-none placeholder:text-muted-foreground"
-            placeholder="Search RBs..."
+            placeholder={`Search ${label.replace(/Player \d/, "players")}...`}
             value={query}
             onChange={e => setQuery(e.target.value)}
             onClick={e => e.stopPropagation()}
@@ -177,23 +233,26 @@ function PlayerSelector({
           {filtered.length === 0 ? (
             <div className="px-3 py-4 text-xs text-muted-foreground text-center">No players found</div>
           ) : (
-            filtered.map(p => (
-              <button
-                key={p.player}
-                className={cn(
-                  "w-full text-left flex items-center gap-2 px-3 py-2 text-xs hover:bg-[#0b3a7a]/30 transition-colors",
-                  p.player === value && "bg-[#0b3a7a]/20 text-[#d4af37]"
-                )}
-                onClick={() => handleSelect(p.player)}
-                data-testid={`option-${p.player}`}
-              >
-                <Badge variant="outline" className={cn("text-[9px] px-1 py-0 flex-shrink-0", getTierColor(p.rb_tier))}>
-                  {p.rb_tier || "—"}
-                </Badge>
-                <span className="font-medium truncate">{p.player}</span>
-                <span className="text-muted-foreground ml-auto flex-shrink-0">{p.team}</span>
-              </button>
-            ))
+            filtered.map(p => {
+              const tier = String(p[tierField] ?? "");
+              return (
+                <button
+                  key={p.player}
+                  className={cn(
+                    "w-full text-left flex items-center gap-2 px-3 py-2 text-xs hover:bg-[#0b3a7a]/30 transition-colors",
+                    p.player === value && "bg-[#0b3a7a]/20 text-[#d4af37]"
+                  )}
+                  onClick={() => handleSelect(p.player)}
+                  data-testid={`option-${p.player}`}
+                >
+                  <Badge variant="outline" className={cn("text-[9px] px-1 py-0 flex-shrink-0", getTierColor(tier))}>
+                    {tier || "—"}
+                  </Badge>
+                  <span className="font-medium truncate">{p.player}</span>
+                  <span className="text-muted-foreground ml-auto flex-shrink-0">{p.team}</span>
+                </button>
+              );
+            })
           )}
         </div>
       )}
@@ -201,17 +260,21 @@ function PlayerSelector({
   );
 }
 
-// ── Player card ────────────────────────────────────────────────────
+// ── Player card ─────────────────────────────────────────────────────
 function PlayerCard({
   player,
   bestStats,
   slot,
+  stats,
+  tierField,
 }: {
-  player: ResolvedRB;
+  player: ResolvedPlayer;
   bestStats: Record<string, number>;
   slot: number;
+  stats: StatDef[];
+  tierField: string;
 }) {
-  const stats = getRbStats(player);
+  const tier = String(player[tierField] ?? "");
 
   return (
     <div
@@ -244,8 +307,8 @@ function PlayerCard({
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-[#080e1c] via-transparent to-transparent" />
         <div className="absolute bottom-2 left-3">
-          <Badge variant="outline" className={cn("text-[10px] px-2 py-0.5 font-bold backdrop-blur-sm", getTierColor(player.rb_tier))}>
-            {player.rb_tier || "—"}
+          <Badge variant="outline" className={cn("text-[10px] px-2 py-0.5 font-bold backdrop-blur-sm", getTierColor(tier))}>
+            {tier || "—"}
           </Badge>
         </div>
       </div>
@@ -275,8 +338,9 @@ function PlayerCard({
       {/* Stat grid */}
       <div className="px-4 pb-4 space-y-1.5">
         <div className="h-px bg-[#d4af37]/10 mb-2" />
-        {(Object.entries(stats) as [string, { raw: number | null; display: string }][]).map(([label, { raw, display }]) => {
-          const isBest = raw !== null && raw !== undefined && bestStats[label] !== undefined && raw === bestStats[label];
+        {stats.map(({ label, compute, display }) => {
+          const raw = compute(player);
+          const isBest = raw !== null && bestStats[label] !== undefined && raw === bestStats[label];
           return (
             <div key={label} className="flex items-center justify-between">
               <span className="text-[10px] text-muted-foreground">{label}</span>
@@ -285,7 +349,7 @@ function PlayerCard({
                 isBest ? "text-emerald-400" : "text-foreground/80"
               )}>
                 {isBest && <span className="mr-0.5 text-emerald-500">▲</span>}
-                {display}
+                {raw !== null ? display(raw) : "—"}
               </span>
             </div>
           );
@@ -295,9 +359,9 @@ function PlayerCard({
   );
 }
 
-// ── Edge summary row ───────────────────────────────────────────────
-function EdgeLabels({ players }: { players: (ResolvedRB | null)[] }) {
-  const active = players.filter(Boolean) as ResolvedRB[];
+// ── Edge summary row ────────────────────────────────────────────────
+function EdgeLabels({ players, edges }: { players: (ResolvedPlayer | null)[]; edges: EdgeDef[] }) {
+  const active = players.filter(Boolean) as ResolvedPlayer[];
   if (active.length < 2) return null;
 
   return (
@@ -305,7 +369,7 @@ function EdgeLabels({ players }: { players: (ResolvedRB | null)[] }) {
       <CardContent className="p-4">
         <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-3">Comparison Edge</p>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
-          {EDGES.map(({ id, label, Icon, color, bgColor, compute }) => {
+          {edges.map(({ id, label, Icon, color, bgColor, compute }) => {
             const scores = active.map(p => ({ name: p.player, score: compute(p) }));
             const best = scores.reduce((a, b) => b.score > a.score ? b : a, scores[0]);
             const isTie = scores.filter(s => s.score === best.score).length > 1;
@@ -326,30 +390,38 @@ function EdgeLabels({ players }: { players: (ResolvedRB | null)[] }) {
   );
 }
 
-// ── Main export ────────────────────────────────────────────────────
+// ── Main export ─────────────────────────────────────────────────────
 export function CompareRBs() {
   const { dynastyPlayerList, redraftValuesBySleeperId } = useValueModel();
-  const [rbData, setRbData] = useState<RBRaw[]>([]);
+  const [pos, setPos] = useState<Position>("RB");
+  const [playerData, setPlayerData] = useState<PlayerRaw[]>([]);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [selected, setSelected] = useState<[string | null, string | null, string | null]>([null, null, null]);
 
   useEffect(() => {
-    fetch(RB_DATA_URL)
+    setLoading(true);
+    setFetchError(null);
+    setPlayerData([]);
+    setSelected([null, null, null]);
+    fetch(POS_DATA_URLS[pos])
       .then(r => { if (!r.ok) throw new Error("Network error"); return r.json(); })
-      .then((data: { rows?: RBRaw[] } | RBRaw[]) => {
-        const rows = Array.isArray(data) ? data : (data as { rows?: RBRaw[] }).rows ?? [];
-        setRbData(rows);
+      .then((data: { rows?: PlayerRaw[] } | PlayerRaw[]) => {
+        const rows = Array.isArray(data) ? data : (data as { rows?: PlayerRaw[] }).rows ?? [];
+        setPlayerData(rows);
         setLoading(false);
       })
       .catch(() => { setFetchError("Failed to load player data."); setLoading(false); });
-  }, []);
+  }, [pos]);
 
-  // Build name → dynasty/redraft/sleeperId lookup
+  const tierField = POS_TIER_FIELD[pos];
+  const stats     = POS_STATS[pos];
+  const edges     = POS_EDGES[pos];
+
   const nameMap = useMemo(() => {
     const m = new Map<string, { dynVal: number; rdVal: number; sleeperId: string }>();
     for (const p of dynastyPlayerList) {
-      if (p.pos !== "RB") continue;
+      if (p.pos !== pos) continue;
       m.set(normalizeName(p.name), {
         dynVal: p.value,
         rdVal: redraftValuesBySleeperId[p.sleeperId] ?? 0,
@@ -357,15 +429,14 @@ export function CompareRBs() {
       });
     }
     return m;
-  }, [dynastyPlayerList, redraftValuesBySleeperId]);
+  }, [dynastyPlayerList, redraftValuesBySleeperId, pos]);
 
-  const resolved = useMemo<(ResolvedRB | null)[]>(() => {
+  const resolved = useMemo<(ResolvedPlayer | null)[]>(() => {
     return selected.map(name => {
       if (!name) return null;
-      const rb = rbData.find(p => p.player === name);
-      if (!rb) return null;
+      const raw = playerData.find(p => p.player === name);
+      if (!raw) return null;
       const matched = nameMap.get(normalizeName(name));
-      // fallback: try first-last name partial match
       let fallback = matched;
       if (!fallback) {
         const nameParts = normalizeName(name).slice(0, 5);
@@ -375,27 +446,24 @@ export function CompareRBs() {
         }
       }
       return {
-        ...rb,
+        ...raw,
         dynVal: fallback?.dynVal ?? 0,
-        rdVal: fallback?.rdVal ?? 0,
+        rdVal:  fallback?.rdVal  ?? 0,
         sleeperId: fallback?.sleeperId ?? null,
       };
     });
-  }, [selected, rbData, nameMap]);
+  }, [selected, playerData, nameMap]);
 
-  // Compute per-stat best values across selected players (for green highlight)
   const bestStats = useMemo(() => {
-    const activeResolved = resolved.filter(Boolean) as ResolvedRB[];
-    if (activeResolved.length < 2) return {} as Record<string, number>;
+    const active = resolved.filter(Boolean) as ResolvedPlayer[];
+    if (active.length < 2) return {} as Record<string, number>;
     const result: Record<string, number> = {};
-    const statSets = activeResolved.map(p => getRbStats(p));
-    const keys = Object.keys(statSets[0]) as (keyof ReturnType<typeof getRbStats>)[];
-    for (const key of keys) {
-      const raws = statSets.map(s => s[key].raw).filter(v => v !== null) as number[];
-      if (raws.length > 0) result[key] = Math.max(...raws);
+    for (const { label, compute } of stats) {
+      const vals = active.map(compute).filter(v => v !== null) as number[];
+      if (vals.length > 0) result[label] = Math.max(...vals);
     }
     return result;
-  }, [resolved]);
+  }, [resolved, stats]);
 
   const setSlot = (slot: 0 | 1 | 2, name: string | null) => {
     setSelected(prev => {
@@ -411,11 +479,32 @@ export function CompareRBs() {
     <div className="space-y-5" data-testid="compare-rbs">
       {/* Header */}
       <div>
-        <h3 className="text-base font-bold">Compare RBs</h3>
-        <span className="block h-[2px] w-8 bg-[#d4af37] rounded-full mt-1" />
-        <p className="text-[11px] text-muted-foreground mt-1.5">
-          Select up to 3 running backs for a side-by-side breakdown of stats, dynasty value, and competitive edge.
-        </p>
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <h3 className="text-base font-bold">Compare {POS_LABELS[pos]}</h3>
+            <span className="block h-[2px] w-8 bg-[#d4af37] rounded-full mt-1" />
+            <p className="text-[11px] text-muted-foreground mt-1.5">{POS_DESC[pos]}</p>
+          </div>
+
+          {/* Position switcher */}
+          <div className="flex items-center gap-1 bg-[#0a1220] rounded-full p-1 flex-shrink-0 border border-border/30">
+            {(["RB", "WR", "TE", "QB"] as Position[]).map(p => (
+              <button
+                key={p}
+                onClick={() => setPos(p)}
+                data-testid={`pos-tab-${p}`}
+                className={cn(
+                  "px-4 py-1.5 rounded-full text-xs font-bold transition-all",
+                  pos === p
+                    ? "bg-[#0b3a7a] text-white shadow-sm"
+                    : "text-muted-foreground hover:text-white"
+                )}
+              >
+                {p}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
       {/* Selectors */}
@@ -424,9 +513,10 @@ export function CompareRBs() {
           <PlayerSelector
             key={slot}
             label={loading ? "Loading..." : SLOT_LABELS[slot]}
-            players={rbData}
+            players={playerData}
             value={selected[slot]}
             onChange={name => setSlot(slot, name)}
+            tierField={tierField}
           />
         ))}
       </div>
@@ -451,6 +541,8 @@ export function CompareRBs() {
                   player={resolved[slot]!}
                   bestStats={bestStats}
                   slot={slot}
+                  stats={stats}
+                  tierField={tierField}
                 />
               ) : (
                 <div
@@ -465,7 +557,7 @@ export function CompareRBs() {
             ))}
           </div>
 
-          <EdgeLabels players={resolved} />
+          <EdgeLabels players={resolved} edges={edges} />
         </>
       )}
 
