@@ -327,7 +327,11 @@ export function CompareRBs() {
   useEffect(() => {
     fetch(RB_DATA_URL)
       .then(r => { if (!r.ok) throw new Error("Network error"); return r.json(); })
-      .then((data: RBRaw[]) => { setRbData(data); setLoading(false); })
+      .then((data: { rows?: RBRaw[] } | RBRaw[]) => {
+        const rows = Array.isArray(data) ? data : (data as { rows?: RBRaw[] }).rows ?? [];
+        setRbData(rows);
+        setLoading(false);
+      })
       .catch(() => { setFetchError("Failed to load player data."); setLoading(false); });
   }, []);
 
