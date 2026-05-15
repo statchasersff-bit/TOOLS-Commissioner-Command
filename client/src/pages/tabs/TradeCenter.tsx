@@ -12,11 +12,13 @@ import { useSleeper } from "@/contexts/SleeperContext";
 import { getLeagueTeamTiers, getTierColor, getTierBg, getTierEmoji, getPositionColor, isContenderTier, isRebuilderTier } from "@/data/mockData";
 import { getStaticPickValue } from "@/data/pickValues";
 import { API_BASE } from "@/lib/apiBase";
-import { fetchRosterDraftPicks } from "@/lib/sleeperApi";
+import { fetchRosterDraftPicks, fetchLeaguePlayerSettings } from "@/lib/sleeperApi";
 import type { League, Team, Tier, Player, Pick, TradeRecord, TradeSide, CrawlStatus } from "@/types";
 import { cn } from "@/lib/utils";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
-import { ArrowRightLeft, TrendingUp, TrendingDown, Target, X, Plus, Search, Scale, RotateCcw, Database, Play, Pause, Loader2, ChevronLeft, ChevronRight, ChevronDown, Download } from "lucide-react";
+import { ArrowRightLeft, TrendingUp, TrendingDown, Target, X, Plus, Search, Scale, RotateCcw, Database, Play, Pause, Loader2, ChevronLeft, ChevronRight, ChevronDown, Download, Tag, Clock, ArrowRight } from "lucide-react";
+
+const SLEEPER_JWT_KEY = "dc-sleeper-draft-jwt";
 
 interface TradeProps {
   league: League;
@@ -671,55 +673,243 @@ function CrossLeagueTradeIntel({ league }: { league: League }) {
 }
 
 export function TradeBlockScanner({ league }: { league: League }) {
-  const { getRedraftValue, getPlayerValue } = useValueModel();
-  const scannerTierMap = useMemo(() => getLeagueTeamTiers(league.teams), [league.teams]);
+  const { getPlayerValue } = useValueModel();
 
-  const tradeBlockCandidates = useMemo(() => {
-    const total = league.teams.length;
-    const topThird = Math.ceil(total / 3);
-    const bottomStart = total - topThird + 1;
+  // JWT — shared with Live Draft / Transactions / Trade Calculator
+  const [sleeperJwt, setSleeperJwt] = useState<string | null>(() => localStorage.getItem(SLEEPER_JWT_KEY));
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => { if (e.key === SLEEPER_JWT_KEY) setSleeperJwt(e.newValue); };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
 
-    const totalDynasty = [...league.teams]
-      .sort((a, b) => b.roster.reduce((s, p) => s + getPlayerValue(p), 0) - a.roster.reduce((s, p) => s + getPlayerValue(p), 0));
-    const totalRedraft = [...league.teams]
-      .sort((a, b) => b.roster.reduce((s, p) => s + getRedraftValue(p), 0) - a.roster.reduce((s, p) => s + getRedraftValue(p), 0));
+  const [lpsData, setLpsData] = useState<any[]>([]);
+  const [lpsLoading, setLpsLoading] = useState(false);
+  useEffect(() => {
+    if (!sleeperJwt || !league.id) { setLpsData([]); return; }
+    setLpsLoading(true);
+    fetchLeaguePlayerSettings(league.id, sleeperJwt)
+      .then(data => { setLpsData(data); setLpsLoading(false); })
+      .catch(() => setLpsLoading(false));
+  }, [sleeperJwt, league.id]);
 
-    const dynastyRank: Record<string, number> = {};
-    const redraftRank: Record<string, number> = {};
-    totalDynasty.forEach((t, i) => { dynastyRank[t.id] = i + 1; });
-    totalRedraft.forEach((t, i) => { redraftRank[t.id] = i + 1; });
+  const playerById = useMemo(() => {
+    const map = new Map<string, Player>();
+    for (const team of league.teams) for (const p of team.roster) if (p.sleeperId) map.set(p.sleeperId, p);
+    return map;
+  }, [league.teams]);
 
-    return league.teams
-      .flatMap(t => {
-        const tier = scannerTierMap.get(t.id)?.tier ?? "Balanced";
-        const isRebuilder = isRebuilderTier(tier);
-        const isDynastyHeavy = (dynastyRank[t.id] ?? total) <= topThird && (redraftRank[t.id] ?? total) >= bottomStart;
-        if (!isRebuilder && !isDynastyHeavy) return [];
-        return t.roster
-          .filter(p => p.age >= 27 && getRedraftValue(p) >= 1500)
-          .map(p => ({
-            ...p,
-            teamName: t.name,
-            ownerName: t.owner,
-            redraftVal: getRedraftValue(p),
-            reason: isRebuilder ? "Rebuilder" as const : "Dynasty-heavy" as const,
-          }));
-      })
-      .sort((a, b) => b.redraftVal - a.redraftVal);
-  }, [league, scannerTierMap, getRedraftValue, getPlayerValue]);
+  const teamByRosterId = useMemo(() => {
+    const map = new Map<number, Team>();
+    for (const team of league.teams) map.set(Number(team.id), team);
+    return map;
+  }, [league.teams]);
+
+  const liveTradeBlock = useMemo(() => {
+    const items = lpsData.filter(lp => lp.settings?.otb != null);
+    return items.map(lp => {
+      const ownerRosterId = Number(lp.settings.otb);
+      const ownerTeam = teamByRosterId.get(ownerRosterId);
+      const addedAt = lp.settings.otb_added_at ? Number(lp.settings.otb_added_at) : undefined;
+      // Pick IDs: "originalRosterId,season,round"
+      const isPickId = typeof lp.player_id === "string" && /^\d+,\d{4},\d+$/.test(lp.player_id);
+      if (isPickId) {
+        const [origRStr, seasonStr, roundStr] = (lp.player_id as string).split(",");
+        const originalRosterId = Number(origRStr);
+        const season = Number(seasonStr);
+        const round = Number(roundStr);
+        const origTeam = teamByRosterId.get(originalRosterId);
+        return {
+          type: "pick" as const,
+          pickYear: season, pickRound: round, pickOriginalRosterId: originalRosterId,
+          pickOriginalTeamName: origTeam?.owner || origTeam?.name || `Roster ${originalRosterId}`,
+          ownerRosterId,
+          ownerTeamName: ownerTeam?.owner || ownerTeam?.name || `Roster ${ownerRosterId}`,
+          ownerAvatar: ownerTeam?.avatar,
+          addedAt,
+          dynastyValue: getStaticPickValue(season, round, "mid"),
+          sleeperId: undefined as string | undefined,
+          name: undefined as string | undefined,
+          pos: undefined as string | undefined,
+          team: undefined as string | undefined,
+        };
+      }
+      const player = playerById.get(lp.player_id as string);
+      return {
+        type: "player" as const,
+        sleeperId: lp.player_id as string,
+        name: player?.name || `Player ${lp.player_id}`,
+        pos: player?.pos || "?",
+        team: player?.team || "",
+        ownerRosterId,
+        ownerTeamName: ownerTeam?.owner || ownerTeam?.name || `Roster ${ownerRosterId}`,
+        ownerAvatar: ownerTeam?.avatar,
+        addedAt,
+        dynastyValue: player ? getPlayerValue(player) : 0,
+        pickYear: undefined as number | undefined,
+        pickRound: undefined as number | undefined,
+        pickOriginalRosterId: undefined as number | undefined,
+        pickOriginalTeamName: undefined as string | undefined,
+      };
+    }).sort((a, b) => b.dynastyValue - a.dynastyValue);
+  }, [lpsData, playerById, teamByRosterId, getPlayerValue]);
 
   return (
     <div className="space-y-8">
       <SectionHeader title="Trade Intel" subtitle="Identify likely sellers and buyers in your league" />
 
-      <CrossLeagueTradeIntel league={league} />
+      {/* Live Trade Block */}
+      <div className="space-y-3" data-testid="section-live-trade-block">
+        <div className="flex items-center gap-2">
+          <div className="w-[3px] h-5 rounded-full bg-[#d4af37]" />
+          <span className="text-sm font-bold">On Trade Block</span>
+          {sleeperJwt && liveTradeBlock.length > 0 && (
+            <Badge variant="outline" className="text-[10px] border-[#d4af37]/40 text-[#d4af37]">
+              {liveTradeBlock.length}
+            </Badge>
+          )}
+          {!sleeperJwt && (
+            <span className="text-[10px] text-muted-foreground">— token required (set in Live Draft tab)</span>
+          )}
+        </div>
 
+        {sleeperJwt && lpsLoading && (
+          <Card className="p-6 flex items-center justify-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="w-4 h-4 animate-spin" /> Loading trade block…
+          </Card>
+        )}
+
+        {sleeperJwt && !lpsLoading && liveTradeBlock.length === 0 && (
+          <Card className="p-5 text-center text-sm text-muted-foreground" data-testid="text-no-trade-block">
+            No assets currently on the trade block
+          </Card>
+        )}
+
+        {liveTradeBlock.length > 0 && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+            {liveTradeBlock.map((item, i) => (
+              <TradeBlockItemCard key={i} item={item} />
+            ))}
+          </div>
+        )}
+      </div>
+
+      <CrossLeagueTradeIntel league={league} />
     </div>
   );
 }
 
+type TradeBlockItem = {
+  type: "player" | "pick";
+  sleeperId?: string;
+  name?: string;
+  pos?: string;
+  team?: string;
+  pickYear?: number;
+  pickRound?: number;
+  pickOriginalRosterId?: number;
+  pickOriginalTeamName?: string;
+  ownerRosterId: number;
+  ownerTeamName: string;
+  ownerAvatar?: string | null;
+  addedAt?: number;
+  dynastyValue: number;
+};
+
+function TradeBlockItemCard({ item }: { item: TradeBlockItem }) {
+  const [prefilled, setPrefilled] = useState(false);
+
+  const ordRound = (r: number) => r === 1 ? "1st" : r === 2 ? "2nd" : r === 3 ? "3rd" : `${r}th`;
+
+  const handleAddToCalc = () => {
+    const payload =
+      item.type === "pick"
+        ? { type: "pick", year: item.pickYear, round: item.pickRound, originalRosterId: item.pickOriginalRosterId, originalTeamName: item.pickOriginalTeamName }
+        : { type: "player", sleeperId: item.sleeperId, name: item.name, pos: item.pos, team: item.team };
+    localStorage.setItem("tc-prefill", JSON.stringify(payload));
+    window.dispatchEvent(new CustomEvent("tc-prefill", { detail: payload }));
+    setPrefilled(true);
+    setTimeout(() => setPrefilled(false), 2000);
+  };
+
+  const isOwn = item.type === "pick" && item.pickOriginalRosterId != null && item.pickOriginalRosterId === item.ownerRosterId;
+
+  return (
+    <Card className="p-3 flex flex-col gap-2 hover:border-[#d4af37]/30 transition-colors" data-testid={`trade-block-item-${item.sleeperId ?? `pick-${item.pickYear}-${item.pickRound}-${item.pickOriginalRosterId}`}`}>
+      <div className="flex items-start gap-2">
+        {item.type === "player" && item.sleeperId ? (
+          <PlayerAvatar id={item.sleeperId} name={item.name || ""} pos={item.pos || "?"} team={item.team || ""} size="sm" compact />
+        ) : (
+          <div className="w-9 h-9 rounded-full flex-shrink-0 flex items-center justify-center text-[10px] font-bold bg-purple-100 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400 ring-1 ring-border/50">PK</div>
+        )}
+        <div className="flex-1 min-w-0">
+          {item.type === "player" ? (
+            <>
+              <p className="text-sm font-semibold truncate">{item.name}</p>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                {item.pos && (
+                  <span className={cn("text-[10px] font-bold",
+                    item.pos === "QB" ? "text-rose-400" : item.pos === "RB" ? "text-emerald-400" :
+                    item.pos === "WR" ? "text-sky-400" : item.pos === "TE" ? "text-yellow-400" : "text-muted-foreground"
+                  )}>{item.pos}</span>
+                )}
+                {item.team && <span className="text-[10px] text-muted-foreground">{item.team}</span>}
+                {item.dynastyValue > 0 && (
+                  <span className="text-[10px] text-[#d4af37] font-semibold ml-auto">{item.dynastyValue.toLocaleString()}</span>
+                )}
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="text-sm font-semibold">{item.pickYear} {ordRound(item.pickRound!)}</p>
+              {!isOwn && item.pickOriginalTeamName && (
+                <p className="text-[10px] text-purple-400 truncate">via {item.pickOriginalTeamName}</p>
+              )}
+              {item.dynastyValue > 0 && (
+                <p className="text-[10px] text-[#d4af37] font-semibold">{item.dynastyValue.toLocaleString()} dynasty</p>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between gap-2 pt-1 border-t border-border/30">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <Tag className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+          <span className="text-[10px] text-muted-foreground truncate">{item.ownerTeamName}</span>
+        </div>
+        {item.addedAt && (
+          <div className="flex items-center gap-1 shrink-0">
+            <Clock className="w-3 h-3 text-muted-foreground" />
+            <span className="text-[9px] text-muted-foreground">
+              {new Date(item.addedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+            </span>
+          </div>
+        )}
+      </div>
+
+      <Button
+        size="sm"
+        variant="outline"
+        className={cn("h-7 text-[11px] w-full transition-colors",
+          prefilled
+            ? "border-emerald-500/40 text-emerald-500 bg-emerald-500/10"
+            : "border-[#d4af37]/30 text-[#d4af37] hover:bg-[#d4af37]/10"
+        )}
+        onClick={handleAddToCalc}
+        data-testid={`button-add-to-calc-${item.sleeperId ?? `pick-${item.pickYear}-${item.pickRound}`}`}
+      >
+        {prefilled ? (
+          "✓ Switch to Trade Calculator"
+        ) : (
+          <><ArrowRight className="w-3 h-3 mr-1" />Add to Trade Calc</>
+        )}
+      </Button>
+    </Card>
+  );
+}
+
 const DIMINISHING_WEIGHTS = [1.00, 0.85, 0.72, 0.60, 0.50, 0.42, 0.36, 0.31];
-const SLEEPER_JWT_KEY = "dc-sleeper-draft-jwt";
 
 interface TradeAsset {
   id: string;
@@ -860,6 +1050,38 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
       .then(setRosterPicks)
       .catch(() => setRosterPicks([]));
   }, [sleeperJwt, league.id]);
+
+  // Prefill from Trade Block "Add to Trade Calc" — on mount (localStorage) and live (CustomEvent)
+  useEffect(() => {
+    const raw = localStorage.getItem("tc-prefill");
+    if (!raw) return;
+    localStorage.removeItem("tc-prefill");
+    try {
+      const asset = JSON.parse(raw);
+      if (asset.type === "player" && asset.sleeperId) {
+        const player = allPlayers.find(p => (p.sleeperId || p.id) === asset.sleeperId);
+        if (player) addPlayer("a", player);
+      } else if (asset.type === "pick" && asset.year && asset.round) {
+        addPick("a", asset.year, asset.round, "Mid", asset.originalRosterId);
+      }
+    } catch {}
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const asset = (e as CustomEvent).detail;
+      if (!asset) return;
+      if (asset.type === "player" && asset.sleeperId) {
+        const player = allPlayers.find(p => (p.sleeperId || p.id) === asset.sleeperId);
+        if (player) addPlayer("a", player);
+      } else if (asset.type === "pick" && asset.year && asset.round) {
+        addPick("a", asset.year, asset.round, "Mid", asset.originalRosterId);
+      }
+    };
+    window.addEventListener("tc-prefill", handler);
+    return () => window.removeEventListener("tc-prefill", handler);
+  }, [allPlayers, addPlayer, addPick]);
+
   const verdictCardRef = useRef<HTMLDivElement>(null);
 
   const saveVerdictPng = async () => {

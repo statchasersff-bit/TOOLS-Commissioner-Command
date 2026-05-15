@@ -1506,6 +1506,34 @@ export async function fetchLeagueTransactions(leagueId: string) {
   };
 }
 
+export async function fetchLeaguePlayerSettings(
+  leagueId: string,
+  jwt: string
+): Promise<Array<{ league_id: string; metadata: any; player_id: string; settings: any }>> {
+  const res = await fetch("https://sleeper.com/graphql", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "authorization": jwt,
+      "x-sleeper-graphql-op": "league_players",
+    },
+    body: JSON.stringify({
+      query: `query league_players {
+        league_players(league_id: "${leagueId}") {
+          league_id
+          metadata
+          player_id
+          settings
+        }
+      }`,
+    }),
+  });
+  if (!res.ok) throw new Error(`GraphQL ${res.status}`);
+  const json = await res.json();
+  if (json?.errors?.length) throw new Error(json.errors[0].message || "league_players failed");
+  return json?.data?.league_players ?? [];
+}
+
 export async function fetchRosterDraftPicks(
   leagueId: string,
   jwt: string
