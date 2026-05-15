@@ -733,7 +733,6 @@ function TradeOpportunities({ league, userTeam }: { league: League; userTeam: Te
 
 function WinNowMode({ league, userTeam }: { league: League; userTeam: Team }) {
   const { getPlayerValue, getRedraftValue, getPickValue } = useValueModel();
-  const [expandedPartner, setExpandedPartner] = useState<string | null>(null);
   const tierMap = useMemo(() => getLeagueTeamTiers(league.teams), [league.teams]);
 
   // Step 1 — Positional urgency: gap vs league avg × scarcity multiplier
@@ -898,17 +897,23 @@ function WinNowMode({ league, userTeam }: { league: League; userTeam: Team }) {
       .slice(0, 15);
   }, [league, userTeam, sortedNeeds, sellCandidates, urgency, posRdRanks, tierMap, getPlayerValue, getRedraftValue, getPickValue]);
 
-  // Group ideas by trade partner
-  const byPartner = useMemo(() => {
+  // Group ideas by upgrade position, ordered by positional urgency
+  const byPosition = useMemo(() => {
     const map = new Map<string, WinNowIdea[]>();
-    tradeIdeas.forEach(t => {
-      if (!map.has(t.partnerId)) map.set(t.partnerId, []);
-      map.get(t.partnerId)!.push(t);
+    tradeIdeas.forEach(idea => {
+      if (!map.has(idea.gainPos)) map.set(idea.gainPos, []);
+      map.get(idea.gainPos)!.push(idea);
     });
-    return Array.from(map.entries())
-      .map(([pid, ideas]) => ({ pid, partnerTeam: ideas[0].partnerTeam, partnerTier: ideas[0].partnerTier, ideas }))
-      .sort((a, b) => b.ideas[0].score - a.ideas[0].score);
-  }, [tradeIdeas]);
+    // Order groups by sortedNeeds priority (most urgent first), then any extras
+    const ordered: string[] = [];
+    sortedNeeds.forEach(pos => { if (map.has(pos)) ordered.push(pos); });
+    map.forEach((_, pos) => { if (!ordered.includes(pos)) ordered.push(pos); });
+    return ordered.map(pos => ({
+      pos,
+      ideas: map.get(pos)!,
+      needRank: sortedNeeds.indexOf(pos),
+    }));
+  }, [tradeIdeas, sortedNeeds]);
 
   const noNeeds = sortedNeeds.length === 0;
 
@@ -1051,153 +1056,127 @@ function WinNowMode({ league, userTeam }: { league: League; userTeam: Team }) {
             </CardContent>
           </Card>
         ) : (
-          <div className="space-y-3" data-testid="wn-partner-list">
-            {byPartner.map(({ pid, partnerTeam, partnerTier, ideas }) => {
-              const isExpanded = expandedPartner === pid;
-              return (
-                <Card key={pid} className="overflow-hidden" data-testid={`wn-partner-${pid}`}>
-                  <CardContent className="p-0">
-                    <button
-                      className="w-full flex items-center justify-between px-5 py-4 hover:bg-muted/20 transition-colors text-left"
-                      onClick={() => setExpandedPartner(isExpanded ? null : pid)}
-                      data-testid={`btn-wn-expand-${pid}`}
-                    >
-                      <div className="flex items-center gap-3 min-w-0">
-                        {partnerTeam.avatar ? (
+          <div className="space-y-6" data-testid="wn-position-groups">
+            {byPosition.map(({ pos, ideas, needRank }) => (
+              <div key={pos} data-testid={`wn-pos-group-${pos.toLowerCase()}`}>
+                {/* Position group header */}
+                <div className="flex items-center gap-2 mb-3">
+                  <Badge variant="outline" className={cn("text-[10px] font-bold px-1.5", getPositionColor(pos))}>{pos}</Badge>
+                  <span className="text-sm font-semibold">{pos} Upgrades</span>
+                  <span className={cn("text-[10px] font-medium",
+                    needRank === 0 ? "text-red-500 dark:text-red-400" :
+                    needRank === 1 ? "text-amber-500 dark:text-amber-400" :
+                    "text-muted-foreground"
+                  )}>
+                    — {needRank === 0 ? "Primary Need" : needRank === 1 ? "Secondary Need" : "Tertiary Need"}
+                  </span>
+                  <Badge variant="secondary" className="text-[10px] ml-auto">{ideas.length}</Badge>
+                </div>
+
+                <div className="space-y-3">
+                  {ideas.map((idea: WinNowIdea, idx: number) => (
+                    <div key={idea.id} className="rounded-xl border border-border/40 overflow-hidden" data-testid={`wn-idea-${pos.toLowerCase()}-${idx}`}>
+                      {/* Partner row */}
+                      <div className="px-4 py-2 bg-muted/30 border-b border-border/20 flex items-center gap-2">
+                        {idea.partnerTeam.avatar ? (
                           <img
-                            src={partnerTeam.avatar}
-                            alt={partnerTeam.owner}
-                            className="w-9 h-9 rounded-full object-cover flex-shrink-0 ring-1 ring-border/40"
+                            src={idea.partnerTeam.avatar}
+                            alt={idea.partnerTeam.owner}
+                            className="w-5 h-5 rounded-full object-cover flex-shrink-0 ring-1 ring-border/30"
                             onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
                           />
                         ) : (
-                          <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
-                            <span className="text-sm font-bold text-muted-foreground">{partnerTeam.owner.charAt(0)}</span>
+                          <div className="w-5 h-5 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
+                            <span className="text-[9px] font-bold text-muted-foreground">{idea.partnerTeam.owner.charAt(0)}</span>
                           </div>
                         )}
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-semibold text-foreground">{partnerTeam.owner}</span>
-                            <Badge variant="outline" className={cn("text-[10px]", getTierColor(partnerTier))}>{partnerTier}</Badge>
-                          </div>
-                          <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                            {Array.from(new Set(ideas.map((idea: WinNowIdea) => idea.gainPos))).map(pos => (
-                              <Badge key={pos} variant="outline" className={cn("text-[9px] py-0", getPositionColor(pos))}>
-                                {pos} upgrade
-                              </Badge>
-                            ))}
-                            <Badge
-                              variant="outline"
-                              className={cn("text-[9px] py-0",
-                                ideas[0].scoreLabel === "Elite"  ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20" :
-                                ideas[0].scoreLabel === "Strong" ? "bg-[#0b3a7a]/10 text-[#0b3a7a] dark:text-blue-400 border-[#0b3a7a]/20" :
-                                "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
-                              )}
-                            >
-                              Best: {ideas[0].scoreLabel}
-                            </Badge>
-                          </div>
+                        <span className="text-xs font-medium">{idea.partnerTeam.owner}</span>
+                        <Badge variant="outline" className={cn("text-[9px]", getTierColor(idea.partnerTier))}>{idea.partnerTier}</Badge>
+                      </div>
+
+                      {/* Header */}
+                      <div className="px-4 py-2.5 bg-muted/20 flex items-center justify-between gap-2 flex-wrap">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Badge
+                            variant="outline"
+                            className={cn("text-[10px] flex-shrink-0",
+                              idea.scoreLabel === "Elite"  ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30" :
+                              idea.scoreLabel === "Strong" ? "bg-[#0b3a7a]/10 text-[#0b3a7a] dark:text-blue-400 border-[#0b3a7a]/20" :
+                                                             "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20"
+                            )}
+                          >
+                            {idea.scoreLabel}
+                          </Badge>
+                          <span className="text-xs font-medium text-foreground">{idea.headline}</span>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2 flex-shrink-0">
-                        <span className="text-xs text-muted-foreground">{ideas.length} idea{ideas.length !== 1 ? "s" : ""}</span>
-                        <ChevronRight className={cn("w-4 h-4 text-muted-foreground transition-transform", isExpanded && "rotate-90")} />
-                      </div>
-                    </button>
 
-                    {isExpanded && (
-                      <div className="border-t border-border/30 px-5 py-4 space-y-4">
-                        {ideas.map((idea: WinNowIdea, idx: number) => (
-                          <div key={idea.id} className="rounded-xl border border-border/40 overflow-hidden" data-testid={`wn-idea-${pid}-${idx}`}>
-                            {/* Header */}
-                            <div className="px-4 py-2.5 bg-muted/20 flex items-center justify-between gap-2 flex-wrap">
-                              <div className="flex items-center gap-2 min-w-0">
-                                <Badge
-                                  variant="outline"
-                                  className={cn("text-[10px] flex-shrink-0",
-                                    idea.scoreLabel === "Elite"  ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30" :
-                                    idea.scoreLabel === "Strong" ? "bg-[#0b3a7a]/10 text-[#0b3a7a] dark:text-blue-400 border-[#0b3a7a]/20" :
-                                                                   "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20"
-                                  )}
-                                >
-                                  {idea.scoreLabel}
-                                </Badge>
-                                <span className="text-xs font-medium text-foreground">{idea.headline}</span>
+                      {/* You Give / You Get */}
+                      <div className="grid grid-cols-2 divide-x divide-border/30">
+                        {(["youGive", "youGet"] as const).map(side => (
+                          <div key={side} className="px-4 py-3">
+                            <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-2">
+                              {side === "youGive" ? "You Give" : "You Get"}
+                            </p>
+                            {idea[side].map((a: WinNowIdea["youGive"][number], i: number) => (
+                              <div key={i} className="flex items-center gap-1.5 py-1 min-w-0">
+                                {a.type === "player" && a.sleeperId ? (
+                                  <div className="w-5 h-5 rounded-full flex-shrink-0 overflow-hidden bg-muted">
+                                    <img
+                                      src={`https://sleepercdn.com/content/nfl/players/thumb/${a.sleeperId}.jpg`}
+                                      alt={a.label}
+                                      className="w-full h-full object-cover object-top"
+                                      onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                                    />
+                                  </div>
+                                ) : a.type === "pick" ? (
+                                  <Badge variant="outline" className="text-[9px] px-1 py-0 flex-shrink-0">PICK</Badge>
+                                ) : null}
+                                {a.pos && (
+                                  <Badge variant="outline" className={cn("text-[9px] px-1 py-0 flex-shrink-0", getPositionColor(a.pos))}>{a.pos}</Badge>
+                                )}
+                                <span className="text-xs font-medium truncate">{a.label}</span>
+                                <span className="text-[10px] font-mono text-muted-foreground ml-auto flex-shrink-0">{a.value.toLocaleString()}</span>
                               </div>
-                              <Badge variant="outline" className={cn("text-[10px] flex-shrink-0", getPositionColor(idea.gainPos))}>
-                                {idea.gainPos} need
-                              </Badge>
-                            </div>
-
-                            {/* You Give / You Get */}
-                            <div className="grid grid-cols-2 divide-x divide-border/30">
-                              {(["youGive", "youGet"] as const).map(side => (
-                                <div key={side} className="px-4 py-3">
-                                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-2">
-                                    {side === "youGive" ? "You Give" : "You Get"}
-                                  </p>
-                                  {idea[side].map((a: WinNowIdea["youGive"][number], i: number) => (
-                                    <div key={i} className="flex items-center gap-1.5 py-1 min-w-0">
-                                      {a.type === "player" && a.sleeperId ? (
-                                        <div className="w-5 h-5 rounded-full flex-shrink-0 overflow-hidden bg-muted">
-                                          <img
-                                            src={`https://sleepercdn.com/content/nfl/players/thumb/${a.sleeperId}.jpg`}
-                                            alt={a.label}
-                                            className="w-full h-full object-cover object-top"
-                                            onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-                                          />
-                                        </div>
-                                      ) : a.type === "pick" ? (
-                                        <Badge variant="outline" className="text-[9px] px-1 py-0 flex-shrink-0">PICK</Badge>
-                                      ) : null}
-                                      {a.pos && (
-                                        <Badge variant="outline" className={cn("text-[9px] px-1 py-0 flex-shrink-0", getPositionColor(a.pos))}>{a.pos}</Badge>
-                                      )}
-                                      <span className="text-xs font-medium truncate">{a.label}</span>
-                                      <span className="text-[10px] font-mono text-muted-foreground ml-auto flex-shrink-0">{a.value.toLocaleString()}</span>
-                                    </div>
-                                  ))}
-                                </div>
-                              ))}
-                            </div>
-
-                            {/* Footer — narrative + metrics */}
-                            <div className="px-4 py-2.5 bg-muted/10 border-t border-border/20 space-y-2">
-                              <p className="text-[10px] text-muted-foreground italic">{idea.why}</p>
-                              <div className="flex items-center justify-between flex-wrap gap-2">
-                                <div className="flex items-center gap-3 flex-wrap">
-                                  <span className={cn("text-[10px] font-semibold",
-                                    idea.rdGain > 0 ? "text-emerald-500 dark:text-emerald-400" : "text-muted-foreground"
-                                  )}>
-                                    {idea.rdGain > 0 ? "+" : ""}{Math.round(idea.rdGain)} win-now value
-                                  </span>
-                                  <span className="text-[10px] text-muted-foreground">
-                                    {idea.dynastyDeltaPct > 0.02
-                                      ? `−${Math.round(idea.dynastyDeltaPct * 100)}% dynasty`
-                                      : idea.dynastyDeltaPct < -0.02
-                                      ? `+${Math.round(Math.abs(idea.dynastyDeltaPct) * 100)}% dynasty gain`
-                                      : "~Even dynasty value"}
-                                  </span>
-                                </div>
-                                <Button
-                                  variant="default"
-                                  size="sm"
-                                  className="text-xs bg-[#0b3a7a] hover:bg-[#0b3a7a]/90"
-                                  data-testid={`btn-wn-build-${pid}-${idx}`}
-                                >
-                                  <ArrowRightLeft className="w-3 h-3 mr-1" />
-                                  Build in Calculator
-                                </Button>
-                              </div>
-                            </div>
+                            ))}
                           </div>
                         ))}
                       </div>
-                    )}
-                  </CardContent>
-                </Card>
-              );
-            })}
+
+                      {/* Footer — narrative + metrics */}
+                      <div className="px-4 py-2.5 bg-muted/10 border-t border-border/20 space-y-2">
+                        <p className="text-[10px] text-muted-foreground italic">{idea.why}</p>
+                        <div className="flex items-center justify-between flex-wrap gap-2">
+                          <div className="flex items-center gap-3 flex-wrap">
+                            <span className={cn("text-[10px] font-semibold",
+                              idea.rdGain > 0 ? "text-emerald-500 dark:text-emerald-400" : "text-muted-foreground"
+                            )}>
+                              {idea.rdGain > 0 ? "+" : ""}{Math.round(idea.rdGain)} win-now value
+                            </span>
+                            <span className="text-[10px] text-muted-foreground">
+                              {idea.dynastyDeltaPct > 0.02
+                                ? `−${Math.round(idea.dynastyDeltaPct * 100)}% dynasty`
+                                : idea.dynastyDeltaPct < -0.02
+                                ? `+${Math.round(Math.abs(idea.dynastyDeltaPct) * 100)}% dynasty gain`
+                                : "~Even dynasty value"}
+                            </span>
+                          </div>
+                          <Button
+                            variant="default"
+                            size="sm"
+                            className="text-xs bg-[#0b3a7a] hover:bg-[#0b3a7a]/90"
+                            data-testid={`btn-wn-build-${pos.toLowerCase()}-${idx}`}
+                          >
+                            <ArrowRightLeft className="w-3 h-3 mr-1" />
+                            Build in Calculator
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>
