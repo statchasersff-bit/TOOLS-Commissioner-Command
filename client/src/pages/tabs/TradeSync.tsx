@@ -14,9 +14,10 @@ import { useValueModel } from "@/contexts/ValueModelContext";
 import { getSleeperSession } from "@/services/sleeperAuth";
 import {
   fetchLeagueTransactionsFiltered, acceptTrade, rejectTrade,
-  fetchDmMessages, sendDmMessage,
+  fetchDmMessages, sendDmMessage, proposeTrade,
 } from "@/services/sleeperAuthedApi";
-import type { SleeperTransaction, SleeperDmMessage } from "@/services/sleeperAuthedApi";
+import type { SleeperTransaction, SleeperDmMessage, SleeperTransactionPick } from "@/services/sleeperAuthedApi";
+import { Input } from "@/components/ui/input";
 import { getSleeperPlayers } from "@/lib/sleeperApi";
 import { getPositionColor } from "@/data/mockData";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
@@ -903,12 +904,13 @@ function NegotiationThread({
 
 // ─── Trade Dialog (centered modal) ────────────────────────────────────────────
 
-function TradeDialog({ trade, open, onClose, onAccept, onReject, actionLoading, myUsername, myAvatar, myUserId }: {
+function TradeDialog({ trade, open, onClose, onAccept, onReject, onCounter, actionLoading, myUsername, myAvatar, myUserId }: {
   trade: NormalizedTrade | null;
   open: boolean;
   onClose: () => void;
   onAccept: (t: NormalizedTrade) => void;
   onReject: (t: NormalizedTrade) => void;
+  onCounter: (t: NormalizedTrade) => void;
   actionLoading: boolean;
   myUsername: string;
   myAvatar: string | null;
@@ -1023,10 +1025,14 @@ function TradeDialog({ trade, open, onClose, onAccept, onReject, actionLoading, 
                   Accept
                 </Button>
               )}
-              <Button asChild variant="outline" className="w-full h-11 gap-2 text-sm font-semibold">
-                <a href={`https://sleeper.com/leagues/${trade.leagueId}`} target="_blank" rel="noopener noreferrer">
-                  <ArrowRightLeft className="w-4 h-4" /> Counter
-                </a>
+              <Button
+                variant="outline"
+                className="w-full h-11 gap-2 text-sm font-semibold"
+                onClick={() => { onClose(); onCounter(trade); }}
+                disabled={actionLoading}
+                data-testid={`dialog-btn-counter-${trade.transactionId}`}
+              >
+                <ArrowRightLeft className="w-4 h-4" /> Counter
               </Button>
               <Button
                 variant="outline"
@@ -1056,6 +1062,273 @@ function TradeDialog({ trade, open, onClose, onAccept, onReject, actionLoading, 
             />
           )}
         </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Counter Modal ─────────────────────────────────────────────────────────────
+
+function CounterModal({ trade, myUserId, valuesBySleeperId, onClose, onSubmitted }: {
+  trade: NormalizedTrade;
+  myUserId: string;
+  valuesBySleeperId: Record<string, number>;
+  onClose: () => void;
+  onSubmitted: () => void;
+}) {
+  const { toast } = useToast();
+  const [loadingRoster, setLoadingRoster] = useState(true);
+  const [myRosterPlayers, setMyRosterPlayers] = useState<AssetPlayer[]>([]);
+
+  const [theyOffer, setTheyOffer] = useState<AssetPlayer[]>(() => [...trade.iGet.players]);
+  const [iOffer, setIOffer] = useState<AssetPlayer[]>(() => [...trade.iGive.players]);
+  const [theyOfferPicks, setTheyOfferPicks] = useState<AssetPick[]>(() => [...trade.iGet.picks]);
+  const [iOfferPicks, setIOfferPicks] = useState<AssetPick[]>(() => [...trade.iGive.picks]);
+
+  const [playerSearch, setPlayerSearch] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [result, setResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [rostersRaw, playersDb] = await Promise.all([
+          fetchJson<any[]>(`${SLEEPER_API}/league/${trade.leagueId}/rosters`),
+          getSleeperPlayers(),
+        ]);
+        if (cancelled) return;
+        const userRoster = rostersRaw.find((r: any) => r.owner_id === myUserId);
+        const playerIds: string[] = userRoster?.players || [];
+        const enriched: AssetPlayer[] = playerIds
+          .map((pid) => {
+            const info = playersDb[pid];
+            if (!info) return null;
+            const name = info.full_name || `${info.first_name || ""} ${info.last_name || ""}`.trim();
+            if (!name) return null;
+            return { playerId: pid, name, pos: info.position || "?", team: info.team || "FA", value: valuesBySleeperId[pid] || 0 };
+          })
+          .filter(Boolean) as AssetPlayer[];
+        setMyRosterPlayers(enriched.sort((a, b) => b.value - a.value));
+      } catch {}
+      if (!cancelled) setLoadingRoster(false);
+    })();
+    return () => { cancelled = true; };
+  }, [trade.leagueId, myUserId, valuesBySleeperId]);
+
+  const iOfferIds = new Set(iOffer.map((p) => p.playerId));
+
+  const searchResults = playerSearch.trim().length >= 2
+    ? myRosterPlayers.filter(
+        (p) => p.name.toLowerCase().includes(playerSearch.toLowerCase()) && !iOfferIds.has(p.playerId)
+      ).slice(0, 8)
+    : [];
+
+  const counterIGetValue = theyOffer.reduce((s, p) => s + p.value, 0) + theyOfferPicks.reduce((s, p) => s + p.value, 0);
+  const counterIGiveValue = iOffer.reduce((s, p) => s + p.value, 0) + iOfferPicks.reduce((s, p) => s + p.value, 0);
+  const counterDiff = counterIGetValue - counterIGiveValue;
+
+  async function handleSubmit() {
+    if (iOffer.length === 0 && iOfferPicks.length === 0 && theyOffer.length === 0 && theyOfferPicks.length === 0) return;
+    setSubmitting(true);
+    try {
+      const adds: Record<string, number> = {};
+      const drops: Record<string, number> = {};
+      for (const p of theyOffer) {
+        adds[p.playerId] = trade.userRosterId;
+        drops[p.playerId] = trade.partnerRosterId;
+      }
+      for (const p of iOffer) {
+        adds[p.playerId] = trade.partnerRosterId;
+        drops[p.playerId] = trade.userRosterId;
+      }
+      const draftPicks: SleeperTransactionPick[] = [
+        ...theyOfferPicks.map((p) => ({
+          roster_id: p.originalRosterId,
+          season: p.season,
+          round: p.round,
+          owner_id: trade.userRosterId,
+          previous_owner_id: trade.partnerRosterId,
+        })),
+        ...iOfferPicks.map((p) => ({
+          roster_id: p.originalRosterId,
+          season: p.season,
+          round: p.round,
+          owner_id: trade.partnerRosterId,
+          previous_owner_id: trade.userRosterId,
+        })),
+      ];
+      const expiresAt = Math.floor((Date.now() + 7 * 24 * 60 * 60 * 1000) / 1000);
+      await proposeTrade({
+        leagueId: trade.leagueId,
+        adds,
+        drops,
+        draftPicks,
+        expiresAt,
+        rejectTransactionId: trade.transactionId,
+        rejectTransactionLeg: trade.leg,
+      });
+      setResult({ success: true, message: "Counter offer sent! The existing offer has been rejected." });
+      toast({ title: "Counter sent", description: `Your counter offer to ${trade.partnerName} was submitted.` });
+      setTimeout(onSubmitted, 1500);
+    } catch (err: any) {
+      const msg = err?.message || "Failed to send counter offer.";
+      setResult({ success: false, message: `${msg}. You can also counter directly on Sleeper.com.` });
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(v) => { if (!v && !submitting) onClose(); }}>
+      <DialogContent className="max-w-2xl p-0 gap-0 overflow-hidden" data-testid="counter-modal">
+        <DialogHeader className="px-5 pt-5 pb-4 border-b border-border/40 space-y-0.5">
+          <DialogTitle className="text-lg font-bold flex items-center gap-2">
+            <ArrowRightLeft className="w-5 h-5 text-[#d4af37]" />
+            Counter Offer
+          </DialogTitle>
+          <DialogDescription className="text-sm text-muted-foreground">
+            Countering {trade.partnerName} · {trade.leagueName}. The existing offer will be rejected automatically.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="px-5 py-5 space-y-5 overflow-y-auto max-h-[65vh]">
+          {result ? (
+            <div className={cn("flex items-start gap-2 p-4 rounded-lg text-sm font-medium", result.success ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : "bg-red-500/10 text-red-500")}>
+              {result.success ? <CheckCircle2 className="w-4 h-4 mt-0.5 flex-shrink-0" /> : <XCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />}
+              {result.message}
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 gap-4">
+                {/* You receive */}
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">You receive</p>
+                  <div className="space-y-1 min-h-[60px] p-3 rounded-lg bg-muted/30 border border-border/40">
+                    {theyOffer.length === 0 && theyOfferPicks.length === 0 && (
+                      <p className="text-xs text-muted-foreground italic">Nothing</p>
+                    )}
+                    {theyOffer.map((p) => (
+                      <div key={p.playerId} className="flex items-center gap-2 group">
+                        <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded", getPositionColor(p.pos))}>{p.pos}</span>
+                        <span className="text-sm flex-1 truncate">{p.name}</span>
+                        <button
+                          className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-red-400 transition-opacity"
+                          onClick={() => setTheyOffer((prev) => prev.filter((x) => x.playerId !== p.playerId))}
+                          data-testid={`counter-remove-receive-${p.playerId}`}
+                        ><X className="w-3.5 h-3.5" /></button>
+                      </div>
+                    ))}
+                    {theyOfferPicks.map((p, i) => (
+                      <div key={i} className="flex items-center gap-2 group">
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-400">PICK</span>
+                        <span className="text-xs flex-1 truncate">{p.label}</span>
+                        <button
+                          className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-red-400 transition-opacity"
+                          onClick={() => setTheyOfferPicks((prev) => prev.filter((_, j) => j !== i))}
+                          data-testid={`counter-remove-receive-pick-${i}`}
+                        ><X className="w-3.5 h-3.5" /></button>
+                      </div>
+                    ))}
+                    <p className="text-xs text-muted-foreground/60 pt-1">{counterIGetValue.toFixed(0)} pts</p>
+                  </div>
+                </div>
+
+                {/* You give */}
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">You give</p>
+                  <div className="space-y-1 min-h-[60px] p-3 rounded-lg bg-muted/30 border border-border/40">
+                    {iOffer.length === 0 && iOfferPicks.length === 0 && (
+                      <p className="text-xs text-muted-foreground italic">Nothing</p>
+                    )}
+                    {iOffer.map((p) => (
+                      <div key={p.playerId} className="flex items-center gap-2 group">
+                        <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded", getPositionColor(p.pos))}>{p.pos}</span>
+                        <span className="text-sm flex-1 truncate">{p.name}</span>
+                        <button
+                          className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-red-400 transition-opacity"
+                          onClick={() => setIOffer((prev) => prev.filter((x) => x.playerId !== p.playerId))}
+                          data-testid={`counter-remove-give-${p.playerId}`}
+                        ><X className="w-3.5 h-3.5" /></button>
+                      </div>
+                    ))}
+                    {iOfferPicks.map((p, i) => (
+                      <div key={i} className="flex items-center gap-2 group">
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-400">PICK</span>
+                        <span className="text-xs flex-1 truncate">{p.label}</span>
+                        <button
+                          className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-red-400 transition-opacity"
+                          onClick={() => setIOfferPicks((prev) => prev.filter((_, j) => j !== i))}
+                          data-testid={`counter-remove-give-pick-${i}`}
+                        ><X className="w-3.5 h-3.5" /></button>
+                      </div>
+                    ))}
+                    <p className="text-xs text-muted-foreground/60 pt-1">{counterIGiveValue.toFixed(0)} pts</p>
+                  </div>
+
+                  {/* Add player from roster */}
+                  <div className="mt-3 relative">
+                    <Input
+                      placeholder={loadingRoster ? "Loading roster…" : "Add player from your roster…"}
+                      value={playerSearch}
+                      onChange={(e) => setPlayerSearch(e.target.value)}
+                      disabled={loadingRoster}
+                      className="h-8 text-xs"
+                      data-testid="counter-player-search"
+                    />
+                    {searchResults.length > 0 && (
+                      <div className="absolute z-10 top-full mt-1 left-0 right-0 bg-background border border-border rounded-lg shadow-lg overflow-hidden">
+                        {searchResults.map((p) => (
+                          <button
+                            key={p.playerId}
+                            className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted/60 text-left"
+                            onClick={() => { setIOffer((prev) => [...prev, p]); setPlayerSearch(""); }}
+                            data-testid={`counter-add-player-${p.playerId}`}
+                          >
+                            <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded flex-shrink-0", getPositionColor(p.pos))}>{p.pos}</span>
+                            <span className="flex-1 truncate">{p.name}</span>
+                            <span className="text-xs text-muted-foreground">{p.value.toFixed(0)}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Value summary */}
+              <div className="flex items-center justify-between text-sm px-1">
+                <span className="text-muted-foreground">Value: {counterIGetValue.toFixed(0)} vs {counterIGiveValue.toFixed(0)}</span>
+                {Math.abs(counterDiff) >= 5 ? (
+                  <span className={counterDiff > 0 ? "text-emerald-400 font-semibold" : "text-red-400 font-semibold"}>
+                    {Math.abs(counterDiff).toFixed(0)} — Favors {counterDiff > 0 ? "You" : trade.partnerName}
+                  </span>
+                ) : (
+                  <span className="text-muted-foreground">~Even</span>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+
+        <DialogFooter className="px-5 pb-5 pt-0 gap-2">
+          {result ? (
+            <Button variant="outline" onClick={onClose} data-testid="counter-close">Close</Button>
+          ) : (
+            <>
+              <Button variant="outline" onClick={onClose} disabled={submitting} data-testid="counter-cancel">Cancel</Button>
+              <Button
+                className="bg-[#0b3a7a] hover:bg-[#0b3a7a]/80 text-white gap-2"
+                onClick={handleSubmit}
+                disabled={submitting || (iOffer.length === 0 && iOfferPicks.length === 0 && theyOffer.length === 0 && theyOfferPicks.length === 0)}
+                data-testid="counter-submit"
+              >
+                {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRightLeft className="w-4 h-4" />}
+                Send Counter
+              </Button>
+            </>
+          )}
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
@@ -1164,6 +1437,7 @@ export default function TradeSync() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [actionResults, setActionResults] = useState<Map<string, { success: boolean; message: string }>>(new Map());
   const [confirmResult, setConfirmResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [counterTrade, setCounterTrade] = useState<NormalizedTrade | null>(null);
 
   const fetchAllData = useCallback(async () => {
     if (!sleeper.isConnected || !sleeper.user) return;
@@ -1331,6 +1605,10 @@ export default function TradeSync() {
   const handleRejectClick = useCallback((trade: NormalizedTrade) => {
     setConfirmResult(null);
     setConfirmState({ trade, action: "reject" });
+  }, []);
+
+  const handleCounterClick = useCallback((trade: NormalizedTrade) => {
+    setCounterTrade(trade);
   }, []);
 
   const handleConfirm = useCallback(async () => {
@@ -1527,11 +1805,23 @@ export default function TradeSync() {
         onClose={() => { setDrawerOpen(false); setSelectedTrade(null); }}
         onAccept={handleAcceptClick}
         onReject={handleRejectClick}
+        onCounter={handleCounterClick}
         actionLoading={actionLoading === selectedTrade?.transactionId}
         myUsername={sleeper.user?.username ?? sleeper.user?.displayName ?? "Me"}
         myAvatar={sleeper.user?.avatar ? `https://sleepercdn.com/avatars/thumbs/${sleeper.user.avatar}` : null}
         myUserId={sleeper.user?.userId ?? ""}
       />
+
+      {/* Counter Modal */}
+      {counterTrade && (
+        <CounterModal
+          trade={counterTrade}
+          myUserId={sleeper.user?.userId ?? ""}
+          valuesBySleeperId={valuesBySleeperId}
+          onClose={() => setCounterTrade(null)}
+          onSubmitted={() => { setCounterTrade(null); setTimeout(fetchAllData, 1500); }}
+        />
+      )}
 
       {/* Confirm Dialog */}
       <ConfirmDialog

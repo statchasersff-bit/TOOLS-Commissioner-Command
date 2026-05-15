@@ -424,10 +424,11 @@ export async function proposeTrade(params: ProposeTradeParams): Promise<ProposeT
   const k_drops = Object.keys(drops);
   const v_drops = Object.values(drops);
 
-  // Spec format: "originalRosterId,season,round,fromRosterId,toRosterId"
-  // fromRosterId = previous_owner_id (sender), toRosterId = owner_id (receiver)
+  // Sleeper pick CSV: "originalRosterId,season,round,owner_id,previous_owner_id"
+  // owner_id = receiving roster; previous_owner_id = sending roster
+  // (matches the format Sleeper returns in completed trade draft_picks arrays)
   const picksCsv = draftPicks.map(p =>
-    `${p.roster_id},${p.season},${p.round},${p.previous_owner_id},${p.owner_id}`
+    `${p.roster_id},${p.season},${p.round},${p.owner_id},${p.previous_owner_id}`
   );
 
   const mutation = buildProposeTrademutation(
@@ -437,6 +438,8 @@ export async function proposeTrade(params: ProposeTradeParams): Promise<ProposeT
     rejectTransactionId,
     rejectTransactionLeg
   );
+  console.log("[proposeTrade] draftPicks raw:", JSON.stringify(draftPicks));
+  console.log("[proposeTrade] picksCsv:", JSON.stringify(picksCsv));
   console.log("[proposeTrade] mutation:", mutation);
   console.log("[proposeTrade] variables:", { k_adds, v_adds, k_drops, v_drops });
 
