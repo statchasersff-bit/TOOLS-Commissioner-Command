@@ -55,16 +55,29 @@ export async function sleeperGraphQLRequest<T = unknown>(
     }),
   });
 
+  let rawBody = "";
+  try { rawBody = await res.text(); } catch { /* ignore */ }
+
   if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(
-      (body as any)?.errors?.[0]?.message ||
-        `Sleeper request failed (${res.status})`
-    );
+    let message = `Sleeper request failed (${res.status})`;
+    try {
+      const body = JSON.parse(rawBody);
+      message =
+        body?.errors?.[0]?.message ||
+        body?.message ||
+        body?.error ||
+        message;
+    } catch { /* ignore */ }
+    console.error("[Sleeper GQL] error response", res.status, rawBody);
+    throw new Error(message + (rawBody ? ` — ${rawBody.slice(0, 300)}` : ""));
   }
 
-  const json = await res.json();
+  let json: any;
+  try { json = JSON.parse(rawBody); } catch {
+    throw new Error("Sleeper returned non-JSON response.");
+  }
   if (json.errors?.length) {
+    console.error("[Sleeper GQL] GraphQL errors", json.errors);
     throw new Error(json.errors[0]?.message || "Sleeper operation failed.");
   }
   return (json.data ?? {}) as T;
@@ -417,15 +430,19 @@ export async function proposeTrade(params: ProposeTradeParams): Promise<ProposeT
   const k_drops = Object.keys(drops);
   const v_drops = Object.values(drops);
 
+  const mutation = buildProposeTrademutation(
+    leagueId,
+    draftPicks,
+    expiresAt,
+    rejectTransactionId,
+    rejectTransactionLeg
+  );
+  console.log("[proposeTrade] mutation:", mutation);
+  console.log("[proposeTrade] variables:", { k_adds, v_adds, k_drops, v_drops });
+
   const data = await sleeperGraphQLRequest<{ propose_trade: ProposeTradeResult }>({
     operationName: "propose_trade",
-    query: buildProposeTrademutation(
-      leagueId,
-      draftPicks,
-      expiresAt,
-      rejectTransactionId,
-      rejectTransactionLeg
-    ),
+    query: mutation,
     variables: { k_adds, v_adds, k_drops, v_drops },
   });
 
