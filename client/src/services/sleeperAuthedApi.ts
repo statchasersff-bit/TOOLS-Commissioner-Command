@@ -563,6 +563,51 @@ export async function getDmByMembers(otherUserId: string): Promise<string | null
   return data.get_dm_by_members?.dm_id ?? null;
 }
 
+// ─── getDmByMembersFull ───────────────────────────────────────────────────────
+
+export interface SleeperDmInfo {
+  dm_id: string;
+  last_message_id: string | null;
+  last_read_id: string | null;
+}
+
+export async function getDmByMembersFull(otherUserId: string): Promise<SleeperDmInfo | null> {
+  const data = await sleeperGraphQLRequest<{
+    get_dm_by_members: SleeperDmInfo | null;
+  }>({
+    operationName: "get_dm_by_members",
+    query: `
+      query get_dm_by_members {
+        get_dm_by_members(members: ["${otherUserId}"]) {
+          dm_id
+          last_message_id
+          last_read_id
+        }
+      }
+    `,
+  });
+  return data.get_dm_by_members ?? null;
+}
+
+// ─── markDmRead ───────────────────────────────────────────────────────────────
+
+export async function markDmRead(dmId: string, messageId: string): Promise<void> {
+  try {
+    await sleeperGraphQLRequest({
+      operationName: "create_receipt",
+      query: `
+        query create_receipt {
+          create_read_receipt(
+            parent_type: "dm",
+            parent_id: "${dmId}",
+            message_id: "${messageId}"
+          )
+        }
+      `,
+    });
+  } catch { /* not critical */ }
+}
+
 // ─── create_message (trade DM) ───────────────────────────────────────────────
 
 export interface SendTradeMessageParams {

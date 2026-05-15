@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,8 +12,8 @@ import type { League, Team, Player, Pick, Tier } from "@/types";
 import { formatPickLabel } from "@/types";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { getSleeperSession } from "@/services/sleeperAuth";
-import { proposeTrade, getDmByMembers, sendTradeMessage, sendPlainDm } from "@/services/sleeperAuthedApi";
-import type { ProposeTradeResult, SleeperTransactionPick } from "@/services/sleeperAuthedApi";
+import { proposeTrade, getDmByMembers, getDmByMembersFull, markDmRead, sendTradeMessage, sendPlainDm, sendDmMessage, fetchDmMessages } from "@/services/sleeperAuthedApi";
+import type { ProposeTradeResult, SleeperTransactionPick, SleeperDmMessage } from "@/services/sleeperAuthedApi";
 import {
   ArrowRightLeft, Target, TrendingUp, TrendingDown, Zap, RotateCcw, ShieldCheck,
   ChevronRight, Scale, Send, Loader2, CheckCircle2, AlertTriangle, X, Pencil, Search
@@ -827,7 +827,7 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
 
   const [expiry, setExpiry] = useState<string>("24h");
 
-  const [editMode, setEditMode]             = useState(false);
+  const [activeTab, setActiveTab]           = useState<"review" | "edit" | "messages">("review");
   const [editState, setEditState]           = useState<EditTradeState>(() => ({
     sending:   { playerIds: new Set(), picks: new Set() },
     receiving: { playerIds: new Set(), picks: new Set() },
@@ -838,6 +838,14 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
   const [myPosFilter, setMyPosFilter]       = useState("All");
   const [partnerSearch, setPartnerSearch]   = useState("");
   const [partnerPosFilter, setPartnerPosFilter] = useState("All");
+
+  const [dmId, setDmId]                     = useState<string | null>(null);
+  const [dmMessages, setDmMessages]         = useState<SleeperDmMessage[]>([]);
+  const [dmLoading, setDmLoading]           = useState(false);
+  const [hasUnread, setHasUnread]           = useState(false);
+  const [msgInput, setMsgInput]             = useState("");
+  const [msgSending, setMsgSending]         = useState(false);
+  const msgListRef                          = useRef<HTMLDivElement>(null);
 
   const hasPick = (idea?.youGive ?? []).some(a => a.type === "pick");
 
@@ -871,12 +879,16 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
     setDmError("");
     setPendingDm(null);
     setExpiry("24h");
-    setEditMode(false);
+    setActiveTab("review");
     setHasCustomEdits(false);
     setMySearch("");
     setMyPosFilter("All");
     setPartnerSearch("");
     setPartnerPosFilter("All");
+    setDmId(null);
+    setDmMessages([]);
+    setHasUnread(false);
+    setMsgInput("");
   }, [idea, league.teams, userTeam.picks]);
 
   const userRosterId    = parseInt(userTeam.id.replace("roster_", ""), 10);
@@ -1047,7 +1059,7 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
       const expiresAt = computeExpiresAt(expiry);
       const tradeResult = await proposeTrade({ leagueId: league.id, adds, drops, draftPicks, expiresAt });
       setStatus("success");
-      setEditMode(false);
+      setActiveTab("review");
 
       // Kick off DM after trade succeeds — fire and forget, never blocks trade success
       const partnerUserId = idea.partnerTeam.ownerId;
@@ -1071,14 +1083,43 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
     setDmStatus("idle");
     setDmError("");
     setPendingDm(null);
-    setEditMode(false);
+    setActiveTab("review");
     setHasCustomEdits(false);
     onClose();
   }
 
-  function openEditMode() {
-    setSavedSnapshot({ state: deepCopyEditState(editState), hasCustomEdits });
-    setEditMode(true);
+  async function handleTabChange(newTab: "review" | "edit" | "messages") {
+    if (newTab === "edit" && activeTab !== "edit") {
+      setSavedSnapshot({ state: deepCopyEditState(editState), hasCustomEdits });
+    } else if (activeTab === "edit" && newTab !== "edit") {
+      setHasCustomEdits(true);
+    }
+    setActiveTab(newTab);
+    if (newTab === "messages") {
+      await loadMessages();
+    }
+  }
+
+  async function loadMessages() {
+    if (!idea) return;
+    const partnerUserId = idea.partnerTeam.ownerId;
+    if (!partnerUserId) return;
+    setDmLoading(true);
+    try {
+      const dmInfo = await getDmByMembersFull(partnerUserId);
+      if (!dmInfo) return;
+      setDmId(dmInfo.dm_id);
+      const isUnread = !!dmInfo.last_message_id && dmInfo.last_message_id !== dmInfo.last_read_id;
+      setHasUnread(isUnread);
+      const msgs = await fetchDmMessages(dmInfo.dm_id);
+      setDmMessages(msgs);
+      if (dmInfo.last_message_id) {
+        markDmRead(dmInfo.dm_id, dmInfo.last_message_id).catch(() => {});
+        setHasUnread(false);
+      }
+    } catch { /* silent */ } finally {
+      setDmLoading(false);
+    }
   }
 
   function cancelEdits() {
@@ -1086,12 +1127,45 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
       setEditState(savedSnapshot.state);
       setHasCustomEdits(savedSnapshot.hasCustomEdits);
     }
-    setEditMode(false);
+    setActiveTab("review");
   }
 
-  function backToReview() {
-    setHasCustomEdits(true);
-    setEditMode(false);
+  async function handleSendMessage() {
+    if (!dmId || !msgInput.trim() || msgSending) return;
+    const text = msgInput.trim();
+    const session = getSleeperSession();
+    setMsgInput("");
+    setMsgSending(true);
+    const optimisticId = `opt-${Date.now()}`;
+    const optimistic: SleeperDmMessage = {
+      message_id: optimisticId,
+      parent_id: dmId,
+      parent_type: "dm",
+      author_id: session?.userId ?? "",
+      author_display_name: session?.displayName ?? "You",
+      author_avatar: null,
+      author_real_name: null,
+      author_is_bot: false,
+      author_role_id: null,
+      text,
+      text_map: null,
+      attachment: null,
+      created: Date.now(),
+      edited: null,
+      pinned: false,
+      reactions: null,
+      user_reactions: null,
+      _optimistic: true,
+    };
+    setDmMessages(prev => [...prev, optimistic]);
+    try {
+      const sent = await sendDmMessage(dmId, text);
+      setDmMessages(prev => prev.map(m => m.message_id === optimisticId ? { ...sent } : m));
+    } catch {
+      setDmMessages(prev => prev.filter(m => m.message_id !== optimisticId));
+    } finally {
+      setMsgSending(false);
+    }
   }
 
   // ── Derived: resolved assets for review pane (may be overridden by edit) ──
@@ -1128,6 +1202,17 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
   const editSendEmpty = editState.sending.playerIds.size === 0 && editState.sending.picks.size === 0;
   const editRecvEmpty = editState.receiving.playerIds.size === 0 && editState.receiving.picks.size === 0;
   const editBothEmpty = editSendEmpty && editRecvEmpty;
+
+  // ── Computed mode helpers (after all state, before early return) ──
+  const editMode   = activeTab === "edit";
+  const reviewMode = activeTab === "review";
+
+  // ── Auto-scroll message list to bottom when messages change ──
+  useEffect(() => {
+    if (activeTab === "messages" && msgListRef.current) {
+      msgListRef.current.scrollTop = msgListRef.current.scrollHeight;
+    }
+  }, [dmMessages, activeTab]);
 
   if (!idea) return null;
 
@@ -1368,53 +1453,73 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
     );
   };
 
+  const TradeDmCard = ({ attachment }: { attachment: Record<string, unknown> }) => {
+    let txCount = 0;
+    try {
+      const data = attachment.data as Record<string, string> | undefined;
+      if (data?.transactions_by_roster) {
+        txCount = Object.keys(JSON.parse(data.transactions_by_roster)).length;
+      }
+    } catch { /* show fallback */ }
+    return (
+      <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/[0.05] border border-white/[0.10] text-[12px] text-white/50 italic">
+        <ArrowRightLeft className="w-3.5 h-3.5 text-[#d4af37]/60 flex-shrink-0" />
+        <span>{txCount > 0 ? `Trade · ${txCount} teams` : "Trade attachment"}</span>
+      </div>
+    );
+  };
+
   return (
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="max-w-[820px] w-full bg-[#07111f] border border-white/[0.10] p-0 overflow-hidden max-h-[90vh] flex flex-col">
 
         {/* ── Header ── */}
-        <div className="flex items-start justify-between px-6 pt-6 pb-4 border-b border-white/[0.08] flex-shrink-0 gap-4">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              {editMode
-                ? <Pencil className="w-4 h-4 text-[#d4af37] flex-shrink-0" />
-                : <Send    className="w-4 h-4 text-[#d4af37] flex-shrink-0" />}
-              <DialogTitle className="text-[15px] font-bold text-white leading-none">
-                {editMode ? "Edit Trade Offer" : "Confirm Trade Offer"}
-              </DialogTitle>
-            </div>
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1.5">
-              <span className="text-[12px] text-white/50 font-medium">{league.name}</span>
-              <span className="text-white/20 text-xs">·</span>
-              <span className="text-[12px] text-white/50">
-                Partner: <span className="text-white/75 font-semibold">{idea.partnerTeam.owner}</span>
-              </span>
-            </div>
+        <div className="px-6 pt-6 pb-4 flex-shrink-0">
+          <div className="flex items-center gap-2 mb-1">
+            <Send className="w-4 h-4 text-[#d4af37] flex-shrink-0" />
+            <DialogTitle className="text-[15px] font-bold text-white leading-none">
+              Confirm Trade Offer
+            </DialogTitle>
           </div>
-          {/* Header action button */}
-          {!editMode && status !== "success" && (
-            <button
-              data-testid="btn-edit-trade"
-              onClick={openEditMode}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/[0.12] bg-white/[0.04] text-white/50 hover:text-white/80 hover:border-white/25 text-[12px] font-semibold transition-all flex-shrink-0 mt-0.5"
-            >
-              <Pencil className="w-3 h-3" />
-              Edit Trade
-            </button>
-          )}
-          {editMode && (
-            <button
-              data-testid="btn-back-to-review-header"
-              onClick={backToReview}
-              disabled={editBothEmpty}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#d4af37]/30 bg-[#d4af37]/10 text-[#d4af37] hover:bg-[#d4af37]/20 text-[12px] font-semibold transition-all flex-shrink-0 mt-0.5 disabled:opacity-40"
-            >
-              ‹ Back to Review
-            </button>
-          )}
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1.5">
+            <span className="text-[12px] text-white/50 font-medium">{league.name}</span>
+            <span className="text-white/20 text-xs">·</span>
+            <span className="text-[12px] text-white/50">
+              Partner: <span className="text-white/75 font-semibold">{idea.partnerTeam.owner}</span>
+            </span>
+          </div>
         </div>
 
+        {/* ── Tab bar ── */}
+        {status !== "success" && (
+          <div className="flex px-6 border-b border-white/[0.08] flex-shrink-0">
+            {([
+              { id: "review"   as const, label: "Review Trade" },
+              { id: "edit"     as const, label: "Edit Trade"   },
+              { id: "messages" as const, label: "Messages",   badge: hasUnread },
+            ]).map(({ id, label, badge }) => (
+              <button
+                key={id}
+                data-testid={`tab-${id}`}
+                onClick={() => handleTabChange(id)}
+                className={cn(
+                  "relative px-5 py-3 text-[12px] font-semibold border-b-2 transition-all",
+                  activeTab === id
+                    ? "border-[#d4af37] text-white"
+                    : "border-transparent text-white/40 hover:text-white/70"
+                )}
+              >
+                {label}
+                {badge && (
+                  <span className="absolute top-2.5 right-1.5 w-1.5 h-1.5 rounded-full bg-blue-400" />
+                )}
+              </button>
+            ))}
+          </div>
+        )}
+
         {/* ── Trade columns / Edit panel ── */}
+        {activeTab !== "messages" && (
         <div className="grid grid-cols-2 gap-4 px-6 py-5 overflow-y-auto flex-1">
           {editMode ? (
             <>
@@ -1455,9 +1560,10 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
             </>
           )}
         </div>
+        )}
 
         {/* ── Pick selector ── */}
-        {!editMode && hasPick && status === "idle" && (
+        {reviewMode && hasPick && status === "idle" && (
           <div className="px-6 pb-5 flex-shrink-0 border-t border-white/[0.06] pt-4">
             <p className="text-[10px] text-white/40 uppercase tracking-widest font-semibold mb-3">Choose pick to include</p>
             <div className="flex flex-wrap gap-2">
@@ -1497,7 +1603,7 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
         )}
 
         {/* ── Status banners ── */}
-        <div className={cn("px-6 flex-shrink-0 space-y-2 empty:hidden", editMode && "hidden")}>
+        <div className={cn("px-6 flex-shrink-0 space-y-2 empty:hidden", !reviewMode && "hidden")}>
           {status === "success" && dmStatus === "idle" && (
             <div className="flex items-center gap-2 rounded-lg bg-emerald-500/10 border border-emerald-500/25 px-4 py-3">
               <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
@@ -1557,7 +1663,7 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
         </div>
 
         {/* ── Expiry selector ── */}
-        {!editMode && status !== "success" && (
+        {reviewMode && status !== "success" && (
           <div className="px-6 pb-5 flex-shrink-0 border-t border-white/[0.06] pt-4">
             <div className="flex items-center justify-between mb-2.5">
               <p className="text-[11px] text-white/40 uppercase tracking-widest font-semibold">Offer Expires In</p>
@@ -1589,6 +1695,96 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
           </div>
         )}
 
+        {/* ── Messages view ── */}
+        {activeTab === "messages" && (
+          <div className="flex flex-col flex-1 overflow-hidden min-h-0 px-6 pt-4">
+            {dmLoading ? (
+              <div className="flex-1 flex items-center justify-center">
+                <Loader2 className="w-5 h-5 animate-spin text-white/30" />
+              </div>
+            ) : !dmId ? (
+              <div className="flex-1 flex items-center justify-center">
+                <p className="text-[13px] text-white/30">
+                  {idea.partnerTeam.ownerId ? "Could not load DM thread." : "Partner user ID unavailable."}
+                </p>
+              </div>
+            ) : dmMessages.length === 0 ? (
+              <div className="flex-1 flex items-center justify-center">
+                <p className="text-[13px] text-white/30 italic">No messages yet. Say something!</p>
+              </div>
+            ) : (
+              <div ref={msgListRef} className="flex-1 overflow-y-auto space-y-2.5 pb-2 pr-1">
+                {dmMessages.map(msg => {
+                  const myUserId = getSleeperSession()?.userId ?? "";
+                  const isMe = msg.author_id === myUserId;
+                  const att = msg.attachment as Record<string, unknown> | null;
+                  const isTradeCard = att?.type === "trade_dm";
+                  return (
+                    <div key={msg.message_id} className={cn("flex items-end gap-2", isMe && "flex-row-reverse")}>
+                      {msg.author_avatar ? (
+                        <img src={`https://sleepercdn.com/avatars/thumbs/${msg.author_avatar}`} alt=""
+                          className="w-6 h-6 rounded-full object-cover flex-shrink-0 ring-1 ring-white/10"
+                          onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                      ) : (
+                        <div className={cn(
+                          "w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center text-[9px] font-bold text-white/60",
+                          isMe ? "bg-[#0b3a7a]" : "bg-white/[0.10]"
+                        )}>
+                          {(msg.author_display_name ?? "?").charAt(0).toUpperCase()}
+                        </div>
+                      )}
+                      <div className={cn("max-w-[68%] flex flex-col gap-0.5", isMe && "items-end")}>
+                        {isTradeCard ? (
+                          <TradeDmCard attachment={att!} />
+                        ) : (
+                          <div className={cn(
+                            "px-3 py-2 rounded-2xl text-[13px] leading-relaxed break-words",
+                            isMe
+                              ? "bg-[#0b3a7a] text-white rounded-br-sm"
+                              : "bg-white/[0.07] text-white/85 rounded-bl-sm",
+                            msg._optimistic && "opacity-60"
+                          )}>
+                            {msg.text || <span className="text-white/30 italic">attachment</span>}
+                          </div>
+                        )}
+                        <span className="text-[10px] text-white/20 px-1 tabular-nums">
+                          {msg.created
+                            ? new Date(msg.created).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+                            : ""}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            {/* Compose bar */}
+            <div className="flex gap-2 flex-shrink-0 py-4 border-t border-white/[0.06] mt-2">
+              <input
+                value={msgInput}
+                onChange={e => setMsgInput(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSendMessage(); }
+                }}
+                placeholder={dmId ? "Message partner…" : "Loading…"}
+                disabled={!dmId || msgSending}
+                data-testid="input-message"
+                className="flex-1 bg-white/[0.05] border border-white/[0.08] rounded-xl px-4 py-2.5 text-[13px] text-white/80 placeholder:text-white/25 focus:outline-none focus:border-white/20 disabled:opacity-40 transition-colors"
+              />
+              <Button
+                data-testid="btn-send-message"
+                onClick={handleSendMessage}
+                disabled={!msgInput.trim() || !dmId || msgSending}
+                className="h-10 px-4 bg-[#0b3a7a] hover:bg-[#0d4a9a] text-white"
+              >
+                {msgSending
+                  ? <Loader2 className="w-4 h-4 animate-spin" />
+                  : <Send className="w-4 h-4" />}
+              </Button>
+            </div>
+          </div>
+        )}
+
         {/* ── Footer ── */}
         <div className={cn(
           "flex items-center gap-3 px-6 py-5 border-t border-white/[0.08] flex-shrink-0 mt-auto",
@@ -1615,12 +1811,12 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
                 </span>
               )}
               <Button
-                data-testid="btn-back-to-review-footer"
+                data-testid="btn-apply-edits"
                 className="h-10 px-6 text-[13px] font-bold bg-[#0b3a7a] hover:bg-[#0d4499] text-white border border-[#0b3a7a]/80 transition-all disabled:opacity-40"
-                onClick={backToReview}
+                onClick={() => handleTabChange("review")}
                 disabled={editBothEmpty}
               >
-                Back to Review ›
+                Apply Changes ›
               </Button>
             </>
           ) : status === "success" ? (

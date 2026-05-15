@@ -1,0 +1,166 @@
+Add a “Messages” tab/button to the Confirm Trade Offer modal for trade negotiations.
+
+Goal:
+Inside the trade confirmation modal, let the user view their Sleeper DM thread with the trade partner and send messages before sending/countering the trade.
+
+UI:
+
+* Add tabs near the top of the modal:
+
+  * Review Trade
+  * Edit Trade
+  * Messages
+* Or add a button: “Message Partner” beside “Edit Trade.”
+* The Messages view should stay inside the modal.
+* Header: “Messages with {partnerDisplayName}”
+* Add “Back to Review” button.
+* Show message thread with current user messages on right and partner messages on left.
+* Add message input at bottom with Send button.
+* Keep footer sticky if possible.
+
+Required flow:
+
+1. Determine partnerUserId.
+
+   * partnerRosterId = trade.roster_ids.find(id => id !== myRosterId)
+   * partnerUserId = rosterUsersByRosterId[partnerRosterId].user_id
+   * Do NOT use roster_id as user_id.
+
+2. Fetch/create DM thread using get_dm_by_members.
+
+Headers:
+{
+"Content-Type": "application/json",
+"authorization": token,
+"x-sleeper-graphql-op": "get_dm_by_members"
+}
+
+Query:
+query get_dm_by_members {
+get_dm_by_members(members: ["${partnerUserId}"]) {
+dm_id
+dm_type
+title
+recent_users
+last_message_id
+last_message_text
+last_message_time
+last_read_id
+}
+}
+
+3. Fetch messages.
+
+Headers:
+{
+"Content-Type": "application/json",
+"authorization": token,
+"x-sleeper-graphql-op": "messages"
+}
+
+Query:
+query messages {
+latest: messages(parent_id: "${dmId}") {
+attachment
+author_avatar
+author_display_name
+author_real_name
+author_id
+author_is_bot
+author_role_id
+created
+edited
+message_id
+parent_id
+parent_type
+pinned
+reactions
+user_reactions
+text
+text_map
+}
+}
+
+4. Send plain message.
+
+Headers:
+{
+"Content-Type": "application/json",
+"authorization": token,
+"x-sleeper-graphql-op": "create_message"
+}
+
+Mutation:
+mutation create_message($text: String) {
+create_message(
+parent_id: "${dmId}",
+client_id: "${crypto.randomUUID()}",
+parent_type: "dm",
+text: $text
+) {
+attachment
+author_avatar
+author_display_name
+author_real_name
+author_id
+author_is_bot
+author_role_id
+created
+edited
+message_id
+parent_id
+parent_type
+pinned
+reactions
+user_reactions
+text
+text_map
+client_id
+}
+}
+
+Variables:
+{
+text: messageText.trim()
+}
+
+5. Mark as read after opening thread.
+
+Headers:
+{
+"Content-Type": "application/json",
+"authorization": token,
+"x-sleeper-graphql-op": "create_receipt"
+}
+
+Query:
+query create_receipt {
+create_read_receipt(
+parent_type: "dm",
+parent_id: "${dmId}",
+message_id: "${latestMessageId}"
+)
+}
+
+Rules:
+
+* Do not send empty messages.
+* Disable Send while sending.
+* Optimistically append message, then replace with server response.
+* Do not auto-send anything from the Messages tab unless user clicks Send.
+* Do not duplicate the automatic post-trade DMs.
+* Do not log private DM content in production.
+* Do not log JWT.
+
+Message rendering:
+
+* Render text normally.
+* If attachment?.type === "trade_dm", render a compact trade-card preview.
+* Parse attachment.data.transactions_by_roster with JSON.parse.
+* If parsing fails, show “Trade attachment.”
+* Show timestamp in small muted text.
+* Scroll to bottom when opened.
+
+Optional:
+
+* Add small unread badge on Messages tab if last_read_id !== last_message_id from get_dm_by_members.
