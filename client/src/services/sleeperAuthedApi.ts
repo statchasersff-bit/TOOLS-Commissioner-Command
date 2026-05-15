@@ -316,30 +316,25 @@ export async function submitLineup(
 
 function buildProposeTrademutation(
   leagueId: string,
-  draftPicks: SleeperTransactionPick[],
+  picksCsv: string[],
   expiresAt: number,
   rejectTransactionId?: string,
   rejectTransactionLeg?: number
 ): string {
-  const rejectIdLine = rejectTransactionId
-    ? `reject_transaction_id: "${rejectTransactionId}",`
-    : "";
-  const rejectLegLine = rejectTransactionLeg != null
-    ? `reject_transaction_leg: ${rejectTransactionLeg},`
+  const counterLines = rejectTransactionId
+    ? `reject_transaction_id: "${rejectTransactionId}", reject_transaction_leg: ${rejectTransactionLeg ?? 1},`
     : "";
   return `
     mutation propose_trade(
       $k_adds: [String],
       $v_adds: [Int],
       $k_drops: [String],
-      $v_drops: [Int],
-      $draft_picks: [String]
+      $v_drops: [Int]
     ) {
       propose_trade(
         league_id: "${leagueId}",
-        ${rejectIdLine}
-        ${rejectLegLine}
-        draft_picks: $draft_picks,
+        ${counterLines}
+        draft_picks: ${JSON.stringify(picksCsv)},
         k_adds: $k_adds,
         v_adds: $v_adds,
         k_drops: $k_drops,
@@ -428,27 +423,27 @@ export async function proposeTrade(params: ProposeTradeParams): Promise<ProposeT
   const v_adds = Object.values(adds);
   const k_drops = Object.keys(drops);
   const v_drops = Object.values(drops);
-  // Sleeper's GraphQL scalar for draft_picks is a CSV string per pick:
-  // "roster_id,season,round,owner_id,previous_owner_id"
-  // (matches the format Sleeper returns in league_transactions_filtered responses)
-  const draft_picks = draftPicks.map(p =>
-    `${p.roster_id},${p.season},${p.round},${p.owner_id},${p.previous_owner_id}`
+
+  // Spec format: "originalRosterId,season,round,fromRosterId,toRosterId"
+  // fromRosterId = previous_owner_id (sender), toRosterId = owner_id (receiver)
+  const picksCsv = draftPicks.map(p =>
+    `${p.roster_id},${p.season},${p.round},${p.previous_owner_id},${p.owner_id}`
   );
 
   const mutation = buildProposeTrademutation(
     leagueId,
-    draftPicks,
+    picksCsv,
     expiresAt,
     rejectTransactionId,
     rejectTransactionLeg
   );
   console.log("[proposeTrade] mutation:", mutation);
-  console.log("[proposeTrade] variables:", { k_adds, v_adds, k_drops, v_drops, draft_picks });
+  console.log("[proposeTrade] variables:", { k_adds, v_adds, k_drops, v_drops });
 
   const data = await sleeperGraphQLRequest<{ propose_trade: ProposeTradeResult }>({
     operationName: "propose_trade",
     query: mutation,
-    variables: { k_adds, v_adds, k_drops, v_drops, draft_picks },
+    variables: { k_adds, v_adds, k_drops, v_drops },
   });
 
   if (!data.propose_trade) {

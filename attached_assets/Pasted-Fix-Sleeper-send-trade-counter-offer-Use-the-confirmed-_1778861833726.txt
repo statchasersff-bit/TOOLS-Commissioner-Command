@@ -1,0 +1,128 @@
+Fix Sleeper send trade / counter offer.
+
+Use the confirmed native Sleeper GraphQL structure.
+
+Endpoint:
+POST https://sleeper.com/graphql
+
+Headers:
+{
+"Content-Type": "application/json",
+"authorization": token,
+"x-sleeper-graphql-op": "propose_trade"
+}
+
+Important:
+
+* authorization header is the raw JWT only.
+* Do NOT use Bearer.
+* Do NOT rely on cookies.
+* Never log JWT.
+
+Mutation:
+
+mutation propose_trade(
+$k_adds: [String],
+$v_adds: [Int],
+$k_drops: [String],
+$v_drops: [Int]
+) {
+propose_trade(
+league_id: "${leagueId}",
+${isCounter ? `reject_transaction_id: "${rejectTransactionId}", reject_transaction_leg: ${rejectTransactionLeg},` : ""}
+draft_picks: ${JSON.stringify(draftPicks || [])},
+k_adds: $k_adds,
+v_adds: $v_adds,
+k_drops: $k_drops,
+v_drops: $v_drops,
+waiver_budget: ${JSON.stringify(waiverBudget || [])},
+expires_at: ${expiresAt}
+) {
+adds
+consenter_ids
+created
+creator
+drops
+league_id
+leg
+metadata
+roster_ids
+settings
+status
+status_updated
+transaction_id
+draft_picks
+type
+player_map
+waiver_budget
+}
+}
+
+Variables:
+{
+k_adds: Object.keys(adds),
+v_adds: Object.values(adds),
+k_drops: Object.keys(drops),
+v_drops: Object.values(drops)
+}
+
+Data mapping:
+
+* adds = Record<playerId, receivingRosterId>
+* drops = Record<playerId, sendingRosterId>
+* k_adds = player IDs being received
+* v_adds = roster IDs receiving those players
+* k_drops = player IDs being sent away
+* v_drops = roster IDs losing those players
+
+Example:
+If roster 1 sends players 8161 and 9758 to roster 7, and roster 7 sends player 11256 to roster 1:
+
+variables:
+{
+k_adds: ["11256", "8161", "9758"],
+v_adds: [1, 7, 7],
+k_drops: ["11256", "8161", "9758"],
+v_drops: [7, 1, 1]
+}
+
+For draft picks:
+Use Sleeper pick strings:
+"originalRosterId,season,round,fromRosterId,toRosterId"
+
+Example:
+"9,2026,1,10,9"
+
+For FAAB:
+waiver_budget should be an array.
+Use [] if no FAAB is included.
+
+For expiration:
+expires_at must be a Unix timestamp in seconds, not milliseconds.
+Default to now + 1 hour:
+Math.floor(Date.now() / 1000) + 3600
+
+Counter offer:
+Use the same propose_trade mutation, but include:
+reject_transaction_id: "${rejectTransactionId}"
+reject_transaction_leg: ${rejectTransactionLeg}
+
+Do not include reject_transaction_id or reject_transaction_leg for a new trade.
+
+Required validation before submit:
+
+* token exists and is not expired
+* leagueId exists
+* at least one asset or pick or FAAB is included
+* every selected player has both add and drop side mapping
+* expiresAt is seconds, not milliseconds
+* for counter offers, rejectTransactionId and rejectTransactionLeg are present
+
+After success:
+
+* response is data.propose_trade
+* status should usually be "proposed"
+* store transaction_id
+* add to outgoing offers if creator === myUserId
+* refetch league_transactions_filtered
+* optionally ask user if they want to send DM trade card
