@@ -76,7 +76,7 @@ function pickLabel(p: Pick): string {
 
 export function ShareTeam({ league, userTeam }: Props) {
   const { toast } = useToast();
-  const { getPlayerValue, getRedraftValue } = useValueModel();
+  const { getPlayerValue, getRedraftValue, optimizeLineup } = useValueModel();
   const cardRef = useRef<HTMLDivElement>(null);
 
   const [innerTab, setInnerTab] = useState<"share" | "field-view">("field-view");
@@ -108,8 +108,11 @@ export function ShareTeam({ league, userTeam }: Props) {
       .sort((a, b) => byDynValue(b) - byDynValue(a))
       .findIndex((t) => t.id === userTeam.id) + 1;
 
+    const rp = league.rosterPositions || [];
     const byCompetingValue = (t: Team) =>
-      t.roster.filter((p) => p.starter).reduce((s, p) => s + getRedraftValue(p), 0);
+      optimizeLineup(t.roster, rp)
+        .filter((p) => p.starter)
+        .reduce((s, p) => s + getRedraftValue(p), 0);
     const competingRank = [...league.teams]
       .sort((a, b) => byCompetingValue(b) - byCompetingValue(a))
       .findIndex((t) => t.id === userTeam.id) + 1;
@@ -184,7 +187,7 @@ export function ShareTeam({ league, userTeam }: Props) {
       scoring, format,
       avgAge, totalValue, startersValue, future1sts,
     };
-  }, [league, userTeam, getPlayerValue, getRedraftValue]);
+  }, [league, userTeam, getPlayerValue, getRedraftValue, optimizeLineup]);
 
   const displayName   = (hideManagerName || anonMode) ? "Anonymous Manager" : (userTeam.owner || "Your Team");
   const displayLeague = (hideLeagueName  || anonMode) ? `${computed.total}-Team ${computed.format} Dynasty` : league.name;

@@ -116,6 +116,13 @@ export function TradeFinder({ league, userTeam }: TradeProps) {
   const [posFilter, setPosFilter] = useState<string>("all");
   const [showAllProposals, setShowAllProposals] = useState(false);
 
+  const optimalRosterMap = useMemo(() => {
+    const rp = league.rosterPositions || [];
+    const m = new Map<string, ReturnType<typeof optimizeLineup>>();
+    league.teams.forEach(t => m.set(t.id, optimizeLineup(t.roster, rp)));
+    return m;
+  }, [league.teams, league.rosterPositions, optimizeLineup]);
+
   const positions = ["QB", "RB", "WR", "TE"] as const;
 
   const positionalProfile = useMemo(() => {
@@ -128,9 +135,10 @@ export function TradeFinder({ league, userTeam }: TradeProps) {
     league.teams.forEach(t => {
       const d: Record<string, number> = {};
       const r: Record<string, number> = {};
+      const optRoster = optimalRosterMap.get(t.id) || t.roster;
       positions.forEach(pos => {
         d[pos] = t.roster.filter(p => p.pos === pos && p.starter).reduce((s, p) => s + getPlayerValue(p), 0);
-        r[pos] = t.roster.filter(p => p.pos === pos && p.starter).reduce((s, p) => s + getRedraftValue(p), 0);
+        r[pos] = optRoster.filter(p => p.pos === pos && p.starter).reduce((s, p) => s + getRedraftValue(p), 0);
       });
       dynTotals.set(t.id, d);
       rdTotals.set(t.id, r);
@@ -151,7 +159,7 @@ export function TradeFinder({ league, userTeam }: TradeProps) {
       rank <= topThird ? "top" : rank > bottomThird ? "bottom" : "mid";
 
     return { dynRanks, rdRanks, leagueSize, tier };
-  }, [league, userTeam, getPlayerValue, getRedraftValue]);
+  }, [league, userTeam, getPlayerValue, getRedraftValue, optimalRosterMap]);
 
   const { userNeeds, userSurplus, partnerNeedsMap, partnerSurplusMap } = useMemo(() => {
     const getValue = (p: Player) => proposalMode === "dynasty" ? getPlayerValue(p) : getRedraftValue(p);
@@ -159,14 +167,17 @@ export function TradeFinder({ league, userTeam }: TradeProps) {
     const topThird = Math.ceil(leagueSize / 3);
     const bottomThird = leagueSize - topThird;
 
-    // Positional STARTER value for every team — use Sleeper's actual starter flag.
-    // This correctly handles FLEX slots: a player in a FLEX spot is marked starter: true
-    // by Sleeper, so they're counted here without needing to infer slot types.
+    // Positional STARTER value for every team.
+    // Redraft mode: use greedy-optimal lineup (same algorithm as buildOptimalLineupValues).
+    // Dynasty mode: use Sleeper's actual starter flag.
     const teamPosTotals = new Map<string, Record<string, number>>();
     league.teams.forEach(t => {
+      const rosterToUse = proposalMode === "redraft"
+        ? (optimalRosterMap.get(t.id) || t.roster)
+        : t.roster;
       const totals: Record<string, number> = {};
       positions.forEach(pos => {
-        totals[pos] = t.roster
+        totals[pos] = rosterToUse
           .filter(p => p.pos === pos && p.starter)
           .reduce((s, p) => s + getValue(p), 0);
       });
@@ -192,10 +203,17 @@ export function TradeFinder({ league, userTeam }: TradeProps) {
     const userNeeds = new Set(positions.filter(pos =>
       (userRanks[pos] ?? leagueSize) > bottomThird
     ));
+    const userOptimalStarterIds = new Set(
+      (optimalRosterMap.get(userTeam.id) || userTeam.roster).filter(p => p.starter).map(p => p.id)
+    );
     const userSurplus = new Set(positions.filter(pos => {
       if ((userRanks[pos] ?? leagueSize) > topThird) return false; // must be top-33% in league
       // surplus = has at least one quality non-starter (bench depth) at this position
-      const qualityBench = userTeam.roster.filter(p => p.pos === pos && !p.starter && getValue(p) >= MIN_SURPLUS_DEPTH).length;
+      const qualityBench = userTeam.roster.filter(p =>
+        p.pos === pos &&
+        (proposalMode === "redraft" ? !userOptimalStarterIds.has(p.id) : !p.starter) &&
+        getValue(p) >= MIN_SURPLUS_DEPTH
+      ).length;
       return qualityBench > 0;
     }));
 
@@ -209,7 +227,7 @@ export function TradeFinder({ league, userTeam }: TradeProps) {
     });
 
     return { userNeeds, userSurplus, partnerNeedsMap, partnerSurplusMap };
-  }, [league, userTeam, getPlayerValue, getRedraftValue, proposalMode]);
+  }, [league, userTeam, getPlayerValue, getRedraftValue, proposalMode, optimalRosterMap]);
 
   const generatedTrades = useMemo<TradeProposal[]>(() => {
     const getValue = (p: Player) => proposalMode === "dynasty" ? getPlayerValue(p) : getRedraftValue(p);
@@ -218,10 +236,9 @@ export function TradeFinder({ league, userTeam }: TradeProps) {
     const MAX_POOL = 7;
     const MAX_PER_PARTNER = 4;
 
-    // Core starters: use Sleeper's actual starter flag (includes FLEX slots).
-    // This prevents offering any player who is actually starting, regardless of position slot type.
+    // Core starters: greedy-optimal lineup — never offer away an optimal starter.
     const coreStarters = new Set<string>(
-      userTeam.roster.filter(p => p.starter).map(p => p.id)
+      (optimalRosterMap.get(userTeam.id) || userTeam.roster).filter(p => p.starter).map(p => p.id)
     );
 
     const buildRationale = (gives: Player[], gets: Player[], pNeeds: Set<string>, pSurplus: Set<string>): string => {
@@ -339,7 +356,7 @@ export function TradeFinder({ league, userTeam }: TradeProps) {
     }
 
     return allProposals.sort((a, b) => (b.needScore * 10 - b.diff * 100) - (a.needScore * 10 - a.diff * 100));
-  }, [league, userTeam, getPlayerValue, getRedraftValue, proposalMode, userNeeds, userSurplus, partnerNeedsMap, partnerSurplusMap]);
+  }, [league, userTeam, getPlayerValue, getRedraftValue, proposalMode, userNeeds, userSurplus, partnerNeedsMap, partnerSurplusMap, optimalRosterMap]);
 
   const filteredProposals = useMemo(() => {
     if (posFilter === "all") return generatedTrades;
@@ -358,9 +375,12 @@ export function TradeFinder({ league, userTeam }: TradeProps) {
     const totalDynasty = [...league.teams].sort((a, b) =>
       b.roster.reduce((s, p) => s + getPlayerValue(p), 0) - a.roster.reduce((s, p) => s + getPlayerValue(p), 0)
     );
-    const totalRedraft = [...league.teams].sort((a, b) =>
-      b.roster.reduce((s, p) => s + getRedraftValue(p), 0) - a.roster.reduce((s, p) => s + getRedraftValue(p), 0)
-    );
+    const totalRedraft = [...league.teams].sort((a, b) => {
+      const getOptVal = (t: Team) => (optimalRosterMap.get(t.id) || t.roster)
+        .filter(p => p.starter)
+        .reduce((s, p) => s + getRedraftValue(p), 0);
+      return getOptVal(b) - getOptVal(a);
+    });
     const dynRank: Record<string, number> = {};
     const rdRank: Record<string, number> = {};
     totalDynasty.forEach((t, i) => { dynRank[t.id] = i + 1; });
@@ -382,7 +402,7 @@ export function TradeFinder({ league, userTeam }: TradeProps) {
           }));
       })
       .sort((a, b) => b.redraftVal - a.redraftVal);
-  }, [league, userTeam, getRedraftValue, getPlayerValue, tradeFinderTierMap, total]);
+  }, [league, userTeam, getRedraftValue, getPlayerValue, tradeFinderTierMap, total, optimalRosterMap]);
 
   return (
     <div className="space-y-8">

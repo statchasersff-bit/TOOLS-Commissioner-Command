@@ -1,4 +1,5 @@
 import { getFantasyCalcValues, getFantasyCalcRedraftValues } from "./fantasycalcApi";
+import { buildOptimalStarterIds } from "./lineupUtils";
 
 const SLEEPER_API = "https://api.sleeper.app/v1";
 const PLAYERS_CACHE_KEY = "sc-sleeper-players";
@@ -593,21 +594,25 @@ export async function fetchPortfolioSummary(
       }
 
       const hasRedraftValues = Object.keys(fcRedraft).length > 0;
+      // Greedy optimal-lineup redraft rank — same algorithm as ValueModelContext.optimizeLineup
       let redraftRank = 0;
       if (hasRedraftValues) {
+        const rp: string[] = leagueRaw.roster_positions || [];
         const rosterValues = rostersRaw.map((r) => {
-          const totalValue = (r.players || []).reduce(
-            (sum, pid) => sum + (fcRedraft[pid] || 0),
-            0
+          const starterIds = buildOptimalStarterIds(
+            r.players || [],
+            (id) => playersDb[id]?.position ?? null,
+            (id) => fcRedraft[id] ?? 0,
+            rp
           );
-          return { rosterId: r.roster_id, totalValue };
+          const value = [...starterIds].reduce((s, id) => s + (fcRedraft[id] ?? 0), 0);
+          return { rosterId: r.roster_id, value };
         });
-        rosterValues.sort((a, b) => b.totalValue - a.totalValue);
-        redraftRank =
-          rosterValues.findIndex(
-            (r) => r.rosterId === userRoster.roster_id
-          ) + 1;
+        rosterValues.sort((a, b) => b.value - a.value);
+        redraftRank = rosterValues.findIndex((r) => r.rosterId === userRoster.roster_id) + 1 || 0;
       }
+      // redraftStarterRank uses same greedy-optimal logic (used for playoff% talent score)
+      const redraftStarterRank = redraftRank;
 
       const hasPpts = rostersRaw.some((r) => (r.settings?.ppts ?? 0) > 0);
       let maxPfRank = 0;
@@ -622,19 +627,6 @@ export async function fetchPortfolioSummary(
           rosterMaxPf.findIndex(
             (r) => r.rosterId === userRoster.roster_id
           ) + 1;
-      }
-
-      // Starter-only redraft rank — more predictive of actual performance than full roster
-      let redraftStarterRank = 0;
-      if (hasRedraftValues) {
-        const starterValues = rostersRaw.map((r) => {
-          const starters = (r.starters || []).filter((pid) => pid && pid !== "0");
-          const value = starters.reduce((sum, pid) => sum + (fcRedraft[pid] || 0), 0);
-          return { rosterId: r.roster_id, value };
-        });
-        starterValues.sort((a, b) => b.value - a.value);
-        redraftStarterRank =
-          starterValues.findIndex((r) => r.rosterId === userRoster.roster_id) + 1 || 0;
       }
 
       // Actual points-scored (PF) rank — based on fpts accumulated this season

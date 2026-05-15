@@ -406,7 +406,7 @@ export function TierBreakdown({ league }: AnalyzerProps) {
 export function RosterComparison({ league }: AnalyzerProps) {
   const [teamAId, setTeamAId] = useState(league.teams[0]?.id || "");
   const [teamBId, setTeamBId] = useState(league.teams[1]?.id || "");
-  const { getPlayerValue, getRedraftValue } = useValueModel();
+  const { getPlayerValue, getRedraftValue, optimizeLineup } = useValueModel();
 
   const teamA = league.teams.find((t) => t.id === teamAId);
   const teamB = league.teams.find((t) => t.id === teamBId);
@@ -415,6 +415,8 @@ export function RosterComparison({ league }: AnalyzerProps) {
 
   const posStats = useMemo(() => {
     const positions = ["QB", "RB", "WR", "TE"] as const;
+    const rp = league.rosterPositions || [];
+    const optRosters = new Map(league.teams.map(t => [t.id, optimizeLineup(t.roster, rp)]));
     const result: Record<string, {
       dynTotals: Record<string, number>;
       redTotals: Record<string, number>;
@@ -428,7 +430,7 @@ export function RosterComparison({ league }: AnalyzerProps) {
         dynTotals[team.id] = team.roster
           .filter(p => p.pos === pos)
           .reduce((s, p) => s + getPlayerValue(p), 0);
-        redTotals[team.id] = team.roster
+        redTotals[team.id] = (optRosters.get(team.id) || team.roster)
           .filter(p => p.pos === pos && p.starter)
           .reduce((s, p) => s + getRedraftValue(p), 0);
       });
@@ -441,7 +443,7 @@ export function RosterComparison({ league }: AnalyzerProps) {
       result[pos] = { dynTotals, redTotals, dynRanks, redRanks };
     });
     return result;
-  }, [league.teams, getPlayerValue, getRedraftValue]);
+  }, [league.teams, league.rosterPositions, getPlayerValue, getRedraftValue, optimizeLineup]);
   const getTeamTier = (teamId: string): Tier | null => {
     return teamTiers.get(teamId)?.tier ?? null;
   };
