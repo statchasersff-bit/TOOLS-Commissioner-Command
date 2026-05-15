@@ -1700,14 +1700,22 @@ function SmartGMMode({ league, userTeam }: { league: League; userTeam: Team }) {
 }
 
 // ─── Rebuild Mode constants & types ──────────────────────────────
+// Age curves based on EPA research: QB peaks 28-33, RB peaks 25-27, WR peaks 26-30, TE peaks 27-30
+
+const SELL_AGE: Record<string, number> = { RB: 27, WR: 30, TE: 30, QB: 33 };
+const EXIT_AGE: Record<string, number> = { RB: 29, WR: 32, TE: 32, QB: 36 };
 
 const DECAY_AGE_PENALTY = (pos: string, age: number): number => {
-  if (pos === "RB") return age >= 28 ? 2.5 : age >= 26 ? 1.8 : age >= 24 ? 1.2 : 1.0;
-  if (pos === "WR") return age >= 31 ? 2.5 : age >= 29 ? 1.8 : age >= 27 ? 1.3 : 1.0;
-  if (pos === "TE") return age >= 31 ? 2.2 : age >= 29 ? 1.6 : age >= 27 ? 1.2 : 1.0;
-  return               age >= 33 ? 2.0 : age >= 31 ? 1.5 : age >= 29 ? 1.2 : 1.0;
+  const sell = SELL_AGE[pos] ?? 30;
+  const exit = EXIT_AGE[pos] ?? 34;
+  if (age >= exit)        return 4.0; // well past cliff — emergency sell
+  if (age >= exit - 1)    return 3.0;
+  if (age >= sell + 1)    return 2.0; // clearly past peak window
+  if (age >= sell)        return 1.5; // entering decline
+  return 1.0;
 };
-const DECAY_POS_VOLATILITY: Record<string, number> = { RB: 1.3, WR: 1.0, TE: 1.1, QB: 0.9 };
+// RB = highest positional injury risk + shortest peak → highest sell urgency
+const DECAY_POS_VOLATILITY: Record<string, number> = { RB: 1.6, WR: 1.0, TE: 1.1, QB: 0.7 };
 
 type AssetTier = "Cornerstone" | "Hold" | "Liquid" | "Sell High" | "Emergency Exit";
 
@@ -1728,20 +1736,26 @@ interface RebuildIdea {
   why: string;
   youGive: { label: string; value: number; pos?: string; age?: number; type: "player" | "pick"; sleeperId?: string }[];
   youGet:  { label: string; value: number; pos?: string; age?: number; type: "player" | "pick"; sleeperId?: string }[];
-  dynastyGainPct: number;
-  rdLostPct: number;
+  dynGive: number;
+  dynGet:  number;
+  rdGive:  number;
+  rdGet:   number;
   ageDelta: number;
   score: number;
   scoreLabel: "Elite" | "Strong" | "Moderate";
 }
 
-function getAssetTier(pos: string, age: number, dynVal: number, decayScore: number): AssetTier {
-  const isYoung = pos === "RB" ? age <= 24 : age <= 25;
-  if (isYoung && dynVal >= 6000) return "Cornerstone";
-  if (decayScore > 2800) return "Emergency Exit";
-  if (decayScore > 1200) return "Sell High";
-  if (isYoung && dynVal > 1500) return "Hold";
-  if (dynVal > 700) return "Liquid";
+function getAssetTier(pos: string, age: number, dynVal: number, rdVal: number): AssetTier {
+  const isYoung  = pos === "RB" ? age <= 24 : pos === "QB" ? age <= 26 : age <= 25;
+  const exitAge  = EXIT_AGE[pos] ?? 34;
+  const sellAge  = SELL_AGE[pos] ?? 30;
+  if (isYoung && dynVal >= 5000)                          return "Cornerstone";
+  if (age >= exitAge && rdVal >= 1500)                    return "Emergency Exit";
+  if (age >= exitAge)                                     return "Sell High";
+  if (age >= sellAge && rdVal >= 1800)                    return "Sell High";
+  if (rdVal > dynVal * 1.3 && rdVal >= 2500)              return "Sell High"; // redraft premium asset
+  if (isYoung && dynVal > 1500)                           return "Hold";
+  if (dynVal > 700)                                       return "Liquid";
   return "Hold";
 }
 
@@ -1751,19 +1765,26 @@ type RebuildProfile = "Full Rebuild" | "Soft Rebuild" | "Retool" | "Hold / Conte
 
 function RebuildMode({ league, userTeam }: { league: League; userTeam: Team }) {
   const { getPlayerValue, getRedraftValue, getPickValue } = useValueModel();
-  const [expandedPartner, setExpandedPartner] = useState<string | null>(null);
+  const [expandedPartners, setExpandedPartners] = useState<Set<string>>(new Set());
+  const togglePartner = (pid: string) => setExpandedPartners(prev => {
+    const next = new Set(prev);
+    next.has(pid) ? next.delete(pid) : next.add(pid);
+    return next;
+  });
   const tierMap = useMemo(() => getLeagueTeamTiers(league.teams), [league.teams]);
 
   // ── Classify every player on the user's roster ──────────────────
+  // Sell score: raw rdVal × rd/dyn premium × position-aware age decay × injury volatility
+  // Prioritises: high redraft value · low dynasty value · aging · RB position
   const rosterData = useMemo<RebuildPlayerData[]>(() => {
     return userTeam.roster.map(player => {
-      const dynVal = getPlayerValue(player);
-      const rdVal  = getRedraftValue(player);
-      const rdPremium = Math.max(0, rdVal - dynVal * 0.5);
-      const decayScore = rdPremium
+      const dynVal    = getPlayerValue(player);
+      const rdVal     = getRedraftValue(player);
+      const rdToDyn   = Math.max(1, rdVal / Math.max(dynVal, 100)); // >1 = overvalued in redraft
+      const decayScore = rdVal * rdToDyn
         * DECAY_AGE_PENALTY(player.pos, player.age)
         * (DECAY_POS_VOLATILITY[player.pos] ?? 1.0);
-      const tier = getAssetTier(player.pos, player.age, dynVal, decayScore);
+      const tier = getAssetTier(player.pos, player.age, dynVal, rdVal);
       return { player, dynVal, rdVal, decayScore, tier };
     }).sort((a, b) => b.decayScore - a.decayScore);
   }, [userTeam, getPlayerValue, getRedraftValue]);
@@ -1863,24 +1884,24 @@ function RebuildMode({ league, userTeam }: { league: League; userTeam: Team }) {
         .sort((a, b) => b.val - a.val);
 
       for (const chip of sellCandidates.slice(0, 4)) {
-        const dynGiven  = chip.dynVal;
-        const rdGiven   = chip.rdVal;
+        const dynGive = chip.dynVal;
+        const rdGive  = chip.rdVal;
 
         // Option A: player for young player
         for (const youngTarget of partnerYoung.slice(0, 3)) {
-          const dynReceived = youngTarget.dynv;
-          const dynDelta    = (dynReceived - dynGiven) / Math.max(dynGiven + dynReceived, 1) * 2;
-          if (dynDelta < -0.22) continue; // we shouldn't give away too much dynasty
-
-          const rdDiff = Math.abs(rdGiven - youngTarget.rdv) / Math.max(rdGiven, youngTarget.rdv, 1);
-          if (rdDiff > 0.35) continue; // must be in ballpark for partner to accept
+          const dynGet = youngTarget.dynv;
+          const rdGet  = youngTarget.rdv;
+          // Dynasty fairness: we shouldn't give away more than 22% net dynasty value
+          const dynOverpay = (dynGive - dynGet) / Math.max(dynGive, dynGet, 1);
+          if (dynOverpay > 0.22) continue;
+          // Rough redraft balance check so partner has reason to accept
+          const rdDiff = Math.abs(rdGive - rdGet) / Math.max(rdGive, rdGet, 1);
+          if (rdDiff > 0.35) continue;
 
           const ageDelta     = youngTarget.age - chip.player.age; // negative = we got younger
           const ageCurveGain = Math.max(0, -ageDelta) * 120;
           const youngBonus   = Math.max(0, 27 - youngTarget.age) * 100;
-          const dynastyGainAbs = dynReceived - dynGiven;
-
-          const score = (dynastyGainAbs + ageCurveGain + youngBonus) / Math.max(chip.decayScore, 200);
+          const score = ((dynGet - dynGive) + ageCurveGain + youngBonus) / Math.max(chip.decayScore / 1000, 0.2);
           const scoreLabel = score > 6 ? "Elite" : score > 2.5 ? "Strong" : "Moderate";
 
           ideas.push({
@@ -1890,12 +1911,9 @@ function RebuildMode({ league, userTeam }: { league: League; userTeam: Team }) {
             partnerTier,
             headline:    `Sell ${chip.player.pos} decay → acquire ${youngTarget.pos} youth`,
             why:         `${chip.player.name} (age ${chip.player.age}) carries ${chip.tier === "Emergency Exit" ? "extreme" : "significant"} decay risk. ${youngTarget.name} (age ${youngTarget.age}) gives you insulated dynasty value and a longer competitive window.`,
-            youGive: [{ label: chip.player.name, value: chip.dynVal, pos: chip.player.pos, type: "player", sleeperId: chip.player.sleeperId, age: chip.player.age }],
-            youGet:  [{ label: youngTarget.name,  value: youngTarget.dynv, pos: youngTarget.pos, type: "player", sleeperId: youngTarget.sleeperId, age: youngTarget.age }],
-            dynastyGainPct: dynDelta,
-            rdLostPct: (rdGiven - youngTarget.rdv) / Math.max(rdGiven, 1),
-            ageDelta,
-            score,
+            youGive: [{ label: chip.player.name, value: dynGive, pos: chip.player.pos, type: "player", sleeperId: chip.player.sleeperId, age: chip.player.age }],
+            youGet:  [{ label: youngTarget.name,  value: dynGet, pos: youngTarget.pos, type: "player", sleeperId: youngTarget.sleeperId, age: youngTarget.age }],
+            dynGive, dynGet, rdGive, rdGet, ageDelta, score,
             scoreLabel: scoreLabel as RebuildIdea["scoreLabel"],
           });
         }
@@ -1903,25 +1921,22 @@ function RebuildMode({ league, userTeam }: { league: League; userTeam: Team }) {
         // Option B: player for pick(s)
         if (partnerPicks.length > 0) {
           const topPick     = partnerPicks[0];
-          const pickDynVal  = topPick.val * 1.3; // rebuild premium on picks
           const secondPick  = partnerPicks[1];
-          const totalPickDyn = pickDynVal + (secondPick ? secondPick.val * 1.2 : 0);
-          const useTwo      = secondPick && totalPickDyn <= dynGiven * 1.15;
+          const pickDynGet  = topPick.val + (secondPick ? secondPick.val : 0);
+          const useTwo      = !!secondPick && pickDynGet <= dynGive * 1.15;
+          const dynGet      = useTwo ? pickDynGet : topPick.val;
+          // Dynasty fairness
+          const dynOverpay  = (dynGive - dynGet) / Math.max(dynGive, dynGet, 1);
+          if (dynOverpay > 0.18) continue;
 
-          const dynReceived   = useTwo ? totalPickDyn : pickDynVal;
-          const dynDelta      = (dynReceived - dynGiven) / Math.max(dynGiven + dynReceived, 1) * 2;
-          if (dynDelta < -0.18) continue;
-
-          const picksArr = useTwo
-            ? [topPick, secondPick!]
-            : [topPick];
-
-          const score = (dynReceived - dynGiven + chip.decayScore * 0.3) / Math.max(rdGiven - (useTwo ? topPick.val + secondPick!.val : topPick.val), 500);
+          const picksArr = useTwo ? [topPick, secondPick!] : [topPick];
+          const rdGet    = 0; // picks have no current-season redraft value
+          const score    = Math.max((dynGet - dynGive + rdGive * 0.15) / Math.max(rdGive, 500), 0);
           const scoreLabel = score > 1.5 ? "Elite" : score > 0.5 ? "Strong" : "Moderate";
 
           const youGet: RebuildIdea["youGet"] = picksArr.map(pk => ({
             label: `${pk.year} Rd ${pk.round} (${pk.projectedRange ?? "Mid"})`,
-            value: Math.round(pk.val * (pk === topPick ? 1.3 : 1.2)),
+            value: pk.val,
             type: "pick" as const,
           }));
 
@@ -1931,13 +1946,12 @@ function RebuildMode({ league, userTeam }: { league: League; userTeam: Team }) {
             partnerTeam: partner,
             partnerTier,
             headline:    `Convert ${chip.player.pos} peak value → draft capital`,
-            why:         `${chip.player.name} is at or near peak redraft value. Converting now locks in value and adds future flexibility. Picks appreciate during the off-season rebuild cycle.`,
-            youGive:     [{ label: chip.player.name, value: chip.dynVal, pos: chip.player.pos, type: "player", sleeperId: chip.player.sleeperId, age: chip.player.age }],
+            why:         `${chip.player.name} is at or near peak redraft value. Converting now locks in dynasty capital and resets your age curve. Picks compound value into the next window.`,
+            youGive: [{ label: chip.player.name, value: dynGive, pos: chip.player.pos, type: "player", sleeperId: chip.player.sleeperId, age: chip.player.age }],
             youGet,
-            dynastyGainPct: dynDelta,
-            rdLostPct: (rdGiven - picksArr.reduce((s, p) => s + p.val, 0)) / Math.max(rdGiven, 1),
+            dynGive, dynGet, rdGive, rdGet,
             ageDelta: -5, // picks = instant age reset
-            score: Math.max(score, 0),
+            score,
             scoreLabel: scoreLabel as RebuildIdea["scoreLabel"],
           });
         }
@@ -2091,13 +2105,13 @@ function RebuildMode({ league, userTeam }: { league: League; userTeam: Team }) {
         ) : (
           <div className="space-y-3" data-testid="rebuild-partner-list">
             {byPartner.map(({ pid, partnerTeam, partnerTier, ideas }) => {
-              const isExpanded = expandedPartner === pid;
+              const isExpanded = expandedPartners.has(pid);
               return (
                 <Card key={pid} className="overflow-hidden" data-testid={`rebuild-partner-${pid}`}>
                   <CardContent className="p-0">
                     <button
                       className="w-full flex items-center justify-between px-5 py-4 hover:bg-muted/20 transition-colors text-left"
-                      onClick={() => setExpandedPartner(isExpanded ? null : pid)}
+                      onClick={() => togglePartner(pid)}
                       data-testid={`btn-rebuild-expand-${pid}`}
                     >
                       <div className="flex items-center gap-3 min-w-0">
@@ -2175,27 +2189,42 @@ function RebuildMode({ league, userTeam }: { league: League; userTeam: Team }) {
                               ))}
                             </div>
 
-                            {/* Footer */}
-                            <div className="px-4 py-2.5 bg-muted/10 border-t border-border/20 space-y-2">
+                            {/* Footer — trade value breakdown for both sides */}
+                            <div className="px-4 py-3 bg-muted/10 border-t border-border/20 space-y-2.5">
                               <p className="text-[10px] text-muted-foreground italic">{idea.why}</p>
-                              <div className="flex items-center justify-between flex-wrap gap-2">
-                                <div className="flex items-center gap-3 flex-wrap">
-                                  <span className={cn("text-[10px] font-semibold",
-                                    idea.dynastyGainPct >= 0 ? "text-emerald-500 dark:text-emerald-400" : "text-amber-500 dark:text-amber-400"
-                                  )}>
-                                    {idea.dynastyGainPct >= 0 ? "+" : ""}{Math.round(idea.dynastyGainPct * 100)}% dynasty
+                              <div className="grid grid-cols-3 gap-x-2 text-[10px]">
+                                <div />
+                                <span className="text-muted-foreground font-semibold uppercase tracking-wide text-center">Dynasty</span>
+                                <span className="text-muted-foreground font-semibold uppercase tracking-wide text-center">Win-Now</span>
+
+                                <span className="text-muted-foreground font-medium self-center">You</span>
+                                {(() => { const d = idea.dynGet - idea.dynGive; return (
+                                  <span className={cn("text-center font-semibold", d >= 0 ? "text-emerald-500 dark:text-emerald-400" : "text-red-400")}>
+                                    {d >= 0 ? "+" : "−"}{Math.abs(Math.round(d)).toLocaleString()}
                                   </span>
-                                  <span className={cn("text-[10px]",
-                                    idea.rdLostPct > 0.2 ? "text-red-400" : "text-muted-foreground"
-                                  )}>
-                                    −{Math.round(idea.rdLostPct * 100)}% production
+                                ); })()}
+                                {(() => { const r = idea.rdGet - idea.rdGive; return (
+                                  <span className={cn("text-center font-semibold", r >= 0 ? "text-emerald-500 dark:text-emerald-400" : "text-red-400")}>
+                                    {r >= 0 ? "+" : "−"}{Math.abs(Math.round(r)).toLocaleString()}
                                   </span>
-                                  {idea.ageDelta < -1 && (
-                                    <span className="text-[10px] text-blue-400">
-                                      −{Math.abs(Math.round(idea.ageDelta))} yrs avg age
-                                    </span>
-                                  )}
-                                </div>
+                                ); })()}
+
+                                <span className="text-muted-foreground font-medium self-center truncate">{idea.partnerTeam.owner}</span>
+                                {(() => { const d = idea.dynGive - idea.dynGet; return (
+                                  <span className={cn("text-center font-semibold", d >= 0 ? "text-emerald-500 dark:text-emerald-400" : "text-red-400")}>
+                                    {d >= 0 ? "+" : "−"}{Math.abs(Math.round(d)).toLocaleString()}
+                                  </span>
+                                ); })()}
+                                {(() => { const r = idea.rdGive - idea.rdGet; return (
+                                  <span className={cn("text-center font-semibold", r >= 0 ? "text-emerald-500 dark:text-emerald-400" : "text-red-400")}>
+                                    {r >= 0 ? "+" : "−"}{Math.abs(Math.round(r)).toLocaleString()}
+                                  </span>
+                                ); })()}
+                              </div>
+                              {idea.ageDelta < -1 && (
+                                <p className="text-[10px] text-blue-400">−{Math.abs(Math.round(idea.ageDelta))} yrs avg age</p>
+                              )}
+                              <div className="flex justify-end">
                                 <Button variant="default" size="sm" className="text-xs bg-[#0b3a7a] hover:bg-[#0b3a7a]/90" data-testid={`btn-rebuild-build-${pid}-${idx}`}>
                                   <ArrowRightLeft className="w-3 h-3 mr-1" />
                                   Build in Calculator
