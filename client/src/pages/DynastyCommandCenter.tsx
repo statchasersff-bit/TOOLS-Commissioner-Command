@@ -316,6 +316,7 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
       case "trade-center:positional-analysis": return <PositionalAnalysis league={league} userTeam={userTeam} />;
       case "trade-center:trade-block": return <TradeBlockScanner league={league} />;
       case "league-market:market-value": return <MarketValue league={league} />;
+      case "league-market:analysis": return <Analysis />;
       case "league-market:compare-players": return <CompareRBs />;
       default: return <div className="text-center text-muted-foreground py-12">Select a tab to get started</div>;
     }
