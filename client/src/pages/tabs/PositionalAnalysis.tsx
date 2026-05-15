@@ -11,7 +11,8 @@ import { cn } from "@/lib/utils";
 import type { League, Team, Player, Pick, Tier } from "@/types";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { getSleeperSession } from "@/services/sleeperAuth";
-import { proposeTrade } from "@/services/sleeperAuthedApi";
+import { proposeTrade, getDmByMembers, sendTradeMessage } from "@/services/sleeperAuthedApi";
+import type { ProposeTradeResult } from "@/services/sleeperAuthedApi";
 import {
   ArrowRightLeft, Target, TrendingUp, TrendingDown, Zap, RotateCcw, ShieldCheck,
   ChevronRight, Scale, Send, Loader2, CheckCircle2, AlertTriangle, X
@@ -738,7 +739,9 @@ function posTextColor(pos: string): string {
 
 // ─── Send Trade Modal ──────────────────────────────────────────────
 
+const SLEEPER_API_BASE = "https://api.sleeper.app/v1";
 type SendStatus = "idle" | "sending" | "success" | "error";
+type DmStatus   = "idle" | "sending" | "sent" | "failed";
 
 interface SendTradeModalProps {
   open: boolean;
@@ -749,9 +752,16 @@ interface SendTradeModalProps {
 }
 
 function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeModalProps) {
-  const [status, setStatus] = useState<SendStatus>("idle");
-  const [errorMsg, setErrorMsg] = useState<string>("");
+  const [status, setStatus]           = useState<SendStatus>("idle");
+  const [errorMsg, setErrorMsg]       = useState<string>("");
   const [selectedPick, setSelectedPick] = useState<Pick | null>(null);
+
+  const [dmStatus, setDmStatus]       = useState<DmStatus>("idle");
+  const [dmError, setDmError]         = useState<string>("");
+  const [pendingDm, setPendingDm]     = useState<{ trade: ProposeTradeResult; partnerUserId: string } | null>(null);
+
+  // Keyed by transaction_id to prevent duplicate DMs across retries/rerenders
+  const dmSentMap = useState(() => new Map<string, boolean>())[0];
 
   const hasPick = (idea?.youGive ?? []).some(a => a.type === "pick");
 
@@ -760,14 +770,11 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
       const pickAsset = idea.youGive.find(a => a.type === "pick" && a.pick);
       if (pickAsset?.pick) {
         const ideaPick = pickAsset.pick;
-        // Build rosterId → win-now (starters) strength map
         const rosterToWinNow = new Map<number, number>();
         for (const team of league.teams) {
           const rid = parseInt(team.id.replace("roster_", ""), 10);
           rosterToWinNow.set(rid, team.metrics.starters);
         }
-        // Among same-round picks, auto-select the one from the strongest win-now team
-        // (highest starters value = drafts latest = cheapest pick to give away)
         const sameRound = userTeam.picks.filter(p => p.round === ideaPick.round);
         const sorted = [...sameRound].sort((a, b) => {
           const aWN = rosterToWinNow.get(a.originalRosterId ?? 0) ?? 0;
@@ -781,10 +788,111 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
     }
     setStatus("idle");
     setErrorMsg("");
+    setDmStatus("idle");
+    setDmError("");
+    setPendingDm(null);
   }, [idea, league.teams, userTeam.picks]);
 
   const userRosterId    = parseInt(userTeam.id.replace("roster_", ""), 10);
   const partnerRosterId = idea ? parseInt(idea.partnerTeam.id.replace("roster_", ""), 10) : 0;
+
+  async function sendTradeDm(trade: ProposeTradeResult, partnerUserId: string, isRetry = false) {
+    if (!isRetry && dmSentMap.has(trade.transaction_id)) return;
+    setDmStatus("sending");
+    setDmError("");
+    try {
+      // Fetch league users to build usersInLeagueMap and transactionsByRoster.user
+      const usersRaw: any[] = await fetch(`${SLEEPER_API_BASE}/league/${trade.league_id}/users`).then(r => r.json());
+
+      const usersInLeagueMap: Record<string, unknown> = {};
+      const userIdToInfo = new Map<string, any>();
+      for (const u of usersRaw) {
+        const info = {
+          avatar: u.avatar ?? null,
+          display_name: u.display_name || u.username || u.user_id,
+          is_bot: false,
+          is_owner: false,
+          league_id: trade.league_id,
+          metadata: u.metadata || {},
+          settings: u.settings || {},
+          user_id: u.user_id,
+        };
+        usersInLeagueMap[u.user_id] = info;
+        userIdToInfo.set(u.user_id, info);
+      }
+
+      // Build roster_id → user info using roster owners known from league.teams
+      const rosterUserMap = new Map<number, unknown>();
+      for (const team of league.teams) {
+        const rid = parseInt(team.id.replace("roster_", ""), 10);
+        if (team.ownerId && userIdToInfo.has(team.ownerId)) {
+          rosterUserMap.set(rid, userIdToInfo.get(team.ownerId));
+        }
+      }
+
+      // Build transactionsByRoster
+      const transactionsByRoster: Record<string, unknown> = {};
+      for (const rosterId of (trade.roster_ids || [])) {
+        const ridStr = String(rosterId);
+        const rosterAdds: unknown[] = [];
+        if (trade.adds) {
+          for (const [playerId, receivingRosterId] of Object.entries(trade.adds)) {
+            if (receivingRosterId === rosterId) {
+              const playerObj = (trade.player_map as Record<string, unknown>)?.[playerId] || { player_id: playerId };
+              rosterAdds.push(playerObj);
+            }
+          }
+        }
+        const rosterPicks: unknown[] = [];
+        if (Array.isArray(trade.draft_picks)) {
+          for (const pick of trade.draft_picks) {
+            if (typeof pick === "string") {
+              const parts = pick.split(",");
+              if (Number(parts[3]) === rosterId) {
+                rosterPicks.push({ roster_id: Number(parts[0]), season: parts[1], round: Number(parts[2]) });
+              }
+            } else if (pick && typeof pick === "object" && (pick as any).owner_id === rosterId) {
+              rosterPicks.push(pick);
+            }
+          }
+        }
+        transactionsByRoster[ridStr] = {
+          adds: rosterAdds,
+          drops: [],
+          added_picks: rosterPicks,
+          dropped_picks: [],
+          added_budget: [],
+          dropped_budget: [],
+          status: trade.status || "proposed",
+          user: rosterUserMap.get(rosterId) ?? null,
+        };
+      }
+
+      // Get or create DM thread with the partner
+      const dmId = await getDmByMembers(partnerUserId);
+      if (!dmId) throw new Error("No DM thread found with this manager.");
+
+      // Send the trade card DM
+      const session = getSleeperSession();
+      const myName = session?.display_name || userTeam.owner;
+      await sendTradeMessage({
+        dmId,
+        text: `${myName} has proposed a trade in ${league.name}`,
+        transactionId: trade.transaction_id,
+        leagueId: trade.league_id,
+        status: trade.status || "proposed",
+        transactionsByRoster,
+        usersInLeagueMap,
+        attachTradeCard: true,
+      });
+
+      dmSentMap.set(trade.transaction_id, true);
+      setDmStatus("sent");
+    } catch (err: any) {
+      setDmError(err?.message || "DM could not be delivered.");
+      setDmStatus("failed");
+    }
+  }
 
   async function handleConfirm() {
     if (!idea) return;
@@ -813,8 +921,18 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
         owner_id:          partnerRosterId,
       }] : [];
       const expiresAt = Math.floor((Date.now() + 7 * 24 * 60 * 60 * 1000) / 1000);
-      await proposeTrade({ leagueId: league.id, adds, drops, draftPicks, expiresAt });
+      const tradeResult = await proposeTrade({ leagueId: league.id, adds, drops, draftPicks, expiresAt });
       setStatus("success");
+
+      // Kick off DM after trade succeeds — fire and forget, never blocks trade success
+      const partnerUserId = idea.partnerTeam.ownerId;
+      if (partnerUserId) {
+        setPendingDm({ trade: tradeResult, partnerUserId });
+        sendTradeDm(tradeResult, partnerUserId);
+      } else {
+        setDmStatus("failed");
+        setDmError("Partner user ID not available — DM could not be sent.");
+      }
     } catch (e: any) {
       setStatus("error");
       setErrorMsg(e?.message || "Trade submission failed.");
@@ -825,6 +943,9 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
     if (status === "sending") return;
     setStatus("idle");
     setErrorMsg("");
+    setDmStatus("idle");
+    setDmError("");
+    setPendingDm(null);
     onClose();
   }
 
@@ -975,10 +1096,44 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
         )}
 
         {/* Status banners */}
-        {status === "success" && (
+        {status === "success" && dmStatus === "idle" && (
           <div className="mx-4 mb-1 flex items-center gap-2 rounded-lg bg-emerald-500/10 border border-emerald-500/25 px-3 py-2.5">
             <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-            <span className="text-[11px] text-emerald-300 font-medium">Trade offer sent!</span>
+            <span className="text-[11px] text-emerald-300 font-medium">Trade sent.</span>
+          </div>
+        )}
+        {status === "success" && dmStatus === "sending" && (
+          <div className="mx-4 mb-1 flex items-center gap-2 rounded-lg bg-emerald-500/10 border border-emerald-500/25 px-3 py-2.5">
+            <Loader2 className="w-4 h-4 text-emerald-400 flex-shrink-0 animate-spin" />
+            <span className="text-[11px] text-emerald-300 font-medium">Trade sent. Sending DM…</span>
+          </div>
+        )}
+        {status === "success" && dmStatus === "sent" && (
+          <div className="mx-4 mb-1 flex items-center gap-2 rounded-lg bg-emerald-500/10 border border-emerald-500/25 px-3 py-2.5">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+            <span className="text-[11px] text-emerald-300 font-medium">Trade sent and DM delivered.</span>
+          </div>
+        )}
+        {status === "success" && dmStatus === "failed" && (
+          <div className="mx-4 mb-1 flex items-start gap-2 rounded-lg bg-yellow-500/10 border border-yellow-500/25 px-3 py-2.5">
+            <AlertTriangle className="w-3.5 h-3.5 text-yellow-400 flex-shrink-0 mt-px" />
+            <div className="flex flex-col gap-1 min-w-0">
+              <span className="text-[11px] text-yellow-300 font-medium leading-snug">
+                Trade sent, but DM could not be sent.
+              </span>
+              {dmError && (
+                <span className="text-[10px] text-yellow-400/70 leading-snug">{dmError}</span>
+              )}
+              {pendingDm && (
+                <button
+                  data-testid="btn-retry-trade-dm"
+                  onClick={() => sendTradeDm(pendingDm.trade, pendingDm.partnerUserId, true)}
+                  className="mt-1 self-start text-[10px] font-semibold text-yellow-300 hover:text-yellow-100 underline underline-offset-2 transition-colors"
+                >
+                  Send DM again
+                </button>
+              )}
+            </div>
           </div>
         )}
         {status === "error" && (

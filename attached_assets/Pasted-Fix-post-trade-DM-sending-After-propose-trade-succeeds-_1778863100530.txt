@@ -1,0 +1,173 @@
+Fix post-trade DM sending.
+
+After propose_trade succeeds, run these steps:
+
+1. Save created trade:
+   const trade = response.data.propose_trade;
+
+Required fields:
+
+* trade.transaction_id
+* trade.league_id
+* trade.status
+* trade.roster_ids
+* trade.adds
+* trade.drops
+* trade.player_map
+* trade.draft_picks
+* trade.waiver_budget
+
+2. Identify trade partner user_id.
+
+Use roster_id → user_id mapping from league rosters/users.
+
+partnerRosterId:
+
+* trade.roster_ids.find(id => id !== myRosterId)
+
+partnerUserId:
+
+* rosterUsersByRosterId[partnerRosterId].user_id
+
+Do NOT use roster_id as user_id.
+
+3. Get DM thread.
+
+GraphQL operation:
+get_dm_by_members
+
+Headers:
+{
+"Content-Type": "application/json",
+"authorization": token,
+"x-sleeper-graphql-op": "get_dm_by_members"
+}
+
+Query:
+query get_dm_by_members {
+get_dm_by_members(members: ["${partnerUserId}"]) {
+dm_id
+dm_type
+title
+recent_users
+last_message_id
+last_message_text
+last_message_time
+last_read_id
+}
+}
+
+4. Create trade-card DM message.
+
+GraphQL operation:
+create_message
+
+Headers:
+{
+"Content-Type": "application/json",
+"authorization": token,
+"x-sleeper-graphql-op": "create_message"
+}
+
+Mutation:
+mutation create_message(
+$text: String,
+$k_attachment_data: [String],
+$v_attachment_data: [String]
+) {
+create_message(
+parent_id: "${dmId}",
+client_id: "${crypto.randomUUID()}",
+parent_type: "dm",
+text: $text,
+attachment_type: "trade_dm",
+k_attachment_data: $k_attachment_data,
+v_attachment_data: $v_attachment_data
+) {
+attachment
+author_avatar
+author_display_name
+author_id
+created
+message_id
+parent_id
+parent_type
+text
+text_map
+user_reactions
+client_id
+}
+}
+
+Variables:
+{
+text: `<@${myDisplayName}> has proposed a trade in ${leagueName}`,
+k_attachment_data: [
+"status",
+"transactions_by_roster",
+"transaction_id",
+"league_id",
+"users_in_league_map"
+],
+v_attachment_data: [
+trade.status || "proposed",
+JSON.stringify(transactionsByRoster),
+trade.transaction_id,
+trade.league_id,
+JSON.stringify(usersInLeagueMap)
+]
+}
+
+5. Build transactionsByRoster.
+
+Shape:
+{
+[rosterId]: {
+adds: PlayerObject[],
+drops: [],
+added_picks: PickObject[],
+dropped_picks: [],
+added_budget: [],
+dropped_budget: [],
+status: trade.status,
+user: leagueUserObject
+}
+}
+
+Important:
+
+* For each player in trade.adds, put the player object from trade.player_map[playerId] into that receiving roster's adds array.
+* Sleeper’s native payload uses adds arrays only for what each roster receives.
+* drops arrays can be empty for the DM attachment.
+* For draft picks, map draft_picks to added_picks by receiving roster if possible.
+* For FAAB, map waiver_budget if included.
+
+6. Build usersInLeagueMap.
+
+Use league users keyed by user_id:
+{
+[userId]: {
+avatar,
+display_name,
+is_bot,
+is_owner,
+league_id,
+metadata,
+settings,
+user_id
+}
+}
+
+7. UI behavior.
+
+After trade success:
+
+* Show “Trade sent.”
+* Then attempt DM.
+* If DM succeeds, show “Trade sent and DM delivered.”
+* If DM fails, do NOT mark trade as failed. Show: “Trade sent, but DM could not be sent.”
+* Add a retry button: “Send DM again.”
+
+Do not auto-send duplicate DMs on refresh.
+Store a local flag keyed by transaction_id:
+dmSentForTransaction[transaction_id] = true

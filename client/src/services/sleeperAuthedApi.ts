@@ -578,6 +578,16 @@ export interface SendTradeMessageParams {
 export interface SendTradeMessageResult {
   message_id: string;
   text: string;
+  attachment?: string;
+  author_avatar?: string;
+  author_display_name?: string;
+  author_id?: string;
+  created?: number;
+  parent_id?: string;
+  parent_type?: string;
+  text_map?: string;
+  user_reactions?: string;
+  client_id?: string;
 }
 
 /**
@@ -636,8 +646,18 @@ export async function sendTradeMessage(
           k_attachment_data: $k_attachment_data,
           v_attachment_data: $v_attachment_data
         ) {
+          attachment
+          author_avatar
+          author_display_name
+          author_id
+          created
           message_id
+          parent_id
+          parent_type
           text
+          text_map
+          user_reactions
+          client_id
         }
       }
     `,
