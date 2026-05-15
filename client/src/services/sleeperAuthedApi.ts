@@ -325,7 +325,10 @@ function buildProposeTrademutation(
         league_id: "${leagueId}",
         ${rejectIdLine}
         ${rejectLegLine}
-        draft_picks: [${draftPicks.map(p => `{season: "${p.season}", round: ${p.round}, roster_id: ${p.roster_id}, previous_owner_id: ${p.previous_owner_id}, owner_id: ${p.owner_id}}`).join(", ")}],
+        draft_picks: [${draftPicks.map(p => {
+          const json = JSON.stringify({ season: p.season, round: p.round, roster_id: p.roster_id, previous_owner_id: p.previous_owner_id, owner_id: p.owner_id });
+          return `"${json.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+        }).join(", ")}],
         k_adds: $k_adds,
         v_adds: $v_adds,
         k_drops: $k_drops,
