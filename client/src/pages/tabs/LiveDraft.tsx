@@ -7,7 +7,7 @@ import { Loader2, Search, RefreshCw, Trophy, Target, Radio, Zap, MessageSquare, 
 import { cn } from "@/lib/utils";
 import { useValueModel } from "@/contexts/ValueModelContext";
 import { useSleeper } from "@/contexts/SleeperContext";
-import { detectLiveDrafts as detectLiveDraftsApi, fetchDraftBoard as fetchDraftBoardApi, fetchDraftState } from "@/lib/sleeperApi";
+import { detectLiveDrafts as detectLiveDraftsApi, fetchDraftBoard as fetchDraftBoardApi, fetchDraftState, getDraftQueue } from "@/lib/sleeperApi";
 import type { DraftState, DraftUser, DraftPickNormalized } from "@/lib/sleeperApi";
 import { ROOKIE_BOARD_2026_SF, ROOKIE_BOARD_2026_1QB } from "@/data/rookieBoard2026";
 
@@ -222,21 +222,9 @@ async function fetchDraftMessages(draftId: string, jwt: string): Promise<DraftMe
   return (json?.data?.messages as DraftMessage[]) || [];
 }
 
+// Delegates to the exported getDraftQueue (sleeperGraphql helper, proper $draft_id variable)
 async function fetchDraftQueue(draftId: string, jwt: string): Promise<string[]> {
-  const res = await fetch("https://sleeper.com/graphql", {
-    method: "POST",
-    headers: {
-      "authorization": jwt,
-      "x-sleeper-graphql-op": "draft_queue",
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({
-      query: `query draft_queue { draft_queue(draft_id: "${draftId}") }`,
-    }),
-  });
-  if (!res.ok) throw new Error(`GraphQL ${res.status}`);
-  const json = await res.json();
-  return (json?.data?.draft_queue as string[]) || [];
+  return getDraftQueue(jwt, draftId);
 }
 
 async function updateDraftQueue(draftId: string, playerIds: string[], jwt: string): Promise<string[]> {

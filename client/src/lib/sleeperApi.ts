@@ -1626,6 +1626,14 @@ export const SleeperOperations = {
     writeAction: false,
     priority: "low" as const,
   },
+  draftQueue: {
+    key: "draftQueue",
+    operationName: "draft_queue",
+    category: "draft_room",
+    authRequired: true,
+    writeAction: false,
+    priority: "medium" as const,
+  },
 } as const;
 
 export async function rejectTradeOnSleeper(
@@ -2136,4 +2144,53 @@ export async function getUserDraftSettings(
     query: GET_USER_DRAFT_SETTINGS_QUERY,
   });
   return data.get_user_draft_settings ?? null;
+}
+
+// ── draft_queue ───────────────────────────────────────────────────────────────
+
+export const DRAFT_QUEUE_QUERY = `
+  query draft_queue($draft_id: ID!) {
+    draft_queue(draft_id: $draft_id)
+  }
+`;
+
+export interface SleeperDraftQueueResponse {
+  draft_queue: string[];
+}
+
+export interface DraftQueuePlayer {
+  playerId: string;
+  rank: number;
+  name?: string;
+  position?: string;
+  team?: string;
+}
+
+/**
+ * Enriches raw player-ID queue with player metadata from the Sleeper
+ * player map (keyed by player_id).
+ */
+export function normalizeDraftQueue(
+  queue: string[],
+  playersById: Record<string, any>
+): DraftQueuePlayer[] {
+  return queue.map((playerId, index) => {
+    const p = playersById[playerId];
+    return {
+      playerId,
+      rank: index + 1,
+      name: p?.full_name || (p ? `${p.first_name ?? ""} ${p.last_name ?? ""}`.trim() : undefined),
+      position: p?.position,
+      team: p?.team,
+    };
+  });
+}
+
+export async function getDraftQueue(token: string, draftId: string): Promise<string[]> {
+  const data = await sleeperGraphql<SleeperDraftQueueResponse>(token, {
+    operationName: "draft_queue",
+    variables: { draft_id: draftId },
+    query: DRAFT_QUEUE_QUERY,
+  });
+  return data.draft_queue ?? [];
 }
