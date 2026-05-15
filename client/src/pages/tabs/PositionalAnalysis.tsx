@@ -877,7 +877,7 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
       const myName = session?.display_name || userTeam.owner;
       await sendTradeMessage({
         dmId,
-        text: `${myName} has proposed a trade in ${league.name}`,
+        text: `@${myName} has proposed a trade in ${league.name} via Dynasty Command`,
         transactionId: trade.transaction_id,
         leagueId: trade.league_id,
         status: trade.status || "proposed",
