@@ -12,11 +12,11 @@ import { useSleeper } from "@/contexts/SleeperContext";
 import { getLeagueTeamTiers, getTierColor, getTierBg, getTierEmoji, getPositionColor, isContenderTier, isRebuilderTier } from "@/data/mockData";
 import { getStaticPickValue } from "@/data/pickValues";
 import { API_BASE } from "@/lib/apiBase";
-import { fetchRosterDraftPicks, fetchLeaguePlayerSettings } from "@/lib/sleeperApi";
+import { fetchRosterDraftPicks, fetchLeaguePlayerSettings, proposeTrade } from "@/lib/sleeperApi";
 import type { League, Team, Tier, Player, Pick, TradeRecord, TradeSide, CrawlStatus } from "@/types";
 import { cn } from "@/lib/utils";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
-import { ArrowRightLeft, TrendingUp, TrendingDown, Target, X, Plus, Search, Scale, RotateCcw, Database, Play, Pause, Loader2, ChevronLeft, ChevronRight, ChevronDown, Download, Tag, Clock, ArrowRight } from "lucide-react";
+import { ArrowRightLeft, TrendingUp, TrendingDown, Target, X, Plus, Search, Scale, RotateCcw, Database, Play, Pause, Loader2, ChevronLeft, ChevronRight, ChevronDown, Download, Tag, Clock, ArrowRight, Send, CheckCircle2, DollarSign } from "lucide-react";
 
 const SLEEPER_JWT_KEY = "dc-sleeper-draft-jwt";
 
@@ -1082,6 +1082,61 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
     return () => window.removeEventListener("tc-prefill", handler);
   }, [allPlayers, addPlayer, addPick]);
 
+  // Propose trade state
+  const [expiresIn, setExpiresIn] = useState("72");
+  const [faabOpen, setFaabOpen] = useState(false);
+  const [faabASends, setFaabASends] = useState("");
+  const [faabBSends, setFaabBSends] = useState("");
+  const [proposing, setProposing] = useState(false);
+  const [proposeSuccess, setProposeSuccess] = useState<string | null>(null);
+  const [proposeError, setProposeError] = useState<string | null>(null);
+
+  const handleProposeTrade = async () => {
+    if (!sleeperJwt || !sideARosterId || !sideBRosterId) return;
+    const kAdds: string[] = [];
+    const vAdds: number[] = [];
+    const kDrops: string[] = [];
+    const vDrops: number[] = [];
+    const draftPicks: Array<{ season: string; round: number; roster_id: number; owner_id: number; previous_owner_id: number }> = [];
+
+    for (const asset of sideA) {
+      if (asset.type === "player" && asset.player?.sleeperId) {
+        kAdds.push(asset.player.sleeperId); vAdds.push(parseInt(sideBRosterId));
+        kDrops.push(asset.player.sleeperId); vDrops.push(parseInt(sideARosterId));
+      } else if (asset.type === "pick" && asset.pickYear && asset.pickRound) {
+        draftPicks.push({ season: String(asset.pickYear), round: asset.pickRound, roster_id: asset.pickOriginalRosterId ?? parseInt(sideARosterId), owner_id: parseInt(sideARosterId), previous_owner_id: parseInt(sideARosterId) });
+      }
+    }
+    for (const asset of sideB) {
+      if (asset.type === "player" && asset.player?.sleeperId) {
+        kAdds.push(asset.player.sleeperId); vAdds.push(parseInt(sideARosterId));
+        kDrops.push(asset.player.sleeperId); vDrops.push(parseInt(sideBRosterId));
+      } else if (asset.type === "pick" && asset.pickYear && asset.pickRound) {
+        draftPicks.push({ season: String(asset.pickYear), round: asset.pickRound, roster_id: asset.pickOriginalRosterId ?? parseInt(sideBRosterId), owner_id: parseInt(sideBRosterId), previous_owner_id: parseInt(sideBRosterId) });
+      }
+    }
+
+    const waiverBudget: Array<{ sender: number; receiver: number; amount: number }> = [];
+    const aAmt = parseInt(faabASends) || 0;
+    const bAmt = parseInt(faabBSends) || 0;
+    if (aAmt > 0) waiverBudget.push({ sender: parseInt(sideARosterId), receiver: parseInt(sideBRosterId), amount: aAmt });
+    if (bAmt > 0) waiverBudget.push({ sender: parseInt(sideBRosterId), receiver: parseInt(sideARosterId), amount: bAmt });
+
+    const expiresAt = parseInt(expiresIn) > 0 ? Date.now() + parseInt(expiresIn) * 3600 * 1000 : 0;
+
+    setProposing(true);
+    setProposeError(null);
+    setProposeSuccess(null);
+    try {
+      const result = await proposeTrade(league.id, sleeperJwt, { kAdds, vAdds, kDrops, vDrops, draftPicks, waiverBudget, expiresAt });
+      setProposeSuccess(result?.transaction_id ?? "sent");
+    } catch (e: any) {
+      setProposeError(e.message || "Failed to propose trade");
+    } finally {
+      setProposing(false);
+    }
+  };
+
   const verdictCardRef = useRef<HTMLDivElement>(null);
 
   const saveVerdictPng = async () => {
@@ -1759,6 +1814,158 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
           {renderSide("b", sideB, rawB)}
         </div>
       </Card>
+
+      {/* ── Propose Trade Panel ─────────────────────────────── */}
+      {(sideA.length > 0 || sideB.length > 0) && (() => {
+        const ordRound = (r: number) => r === 1 ? "1st" : r === 2 ? "2nd" : r === 3 ? "3rd" : `${r}th`;
+        const posColor = (pos?: string) =>
+          pos === "QB" ? "text-rose-400" : pos === "RB" ? "text-emerald-400" :
+          pos === "WR" ? "text-sky-400"  : pos === "TE" ? "text-yellow-400" : "text-muted-foreground";
+        const missingIds = [...sideA, ...sideB].some(a => a.type === "player" && !a.player?.sleeperId);
+        const canSubmit = !!sleeperJwt && !!sideBRosterId && !missingIds && (sideA.length > 0 || sideB.length > 0) && !proposing;
+        const issues: string[] = [];
+        if (!!sleeperJwt && !sideBRosterId) issues.push("Select a trade partner (Side B) to enable submit");
+        if (!!sleeperJwt && missingIds) issues.push("Some players are missing Sleeper IDs — add them via the roster picker");
+        return (
+          <Card className="p-5" data-testid="card-propose-trade">
+            <div className="mb-4">
+              <h3 className="text-sm font-bold flex items-center gap-2">
+                <Send className="w-4 h-4 text-[#0b3a7a] dark:text-blue-400" />
+                Propose Trade on Sleeper
+              </h3>
+              <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
+            </div>
+
+            {!sleeperJwt ? (
+              <p className="text-xs text-muted-foreground py-1">
+                Connect your Sleeper account in the{" "}
+                <span className="text-[#d4af37] font-medium">Live Draft</span>{" "}
+                tab to propose trades directly from this calculator.
+              </p>
+            ) : (
+              <div className="space-y-4">
+
+                {/* Preview — both sides */}
+                <div className="grid grid-cols-2 gap-3">
+                  {(["a", "b"] as const).map(side => {
+                    const assets = side === "a" ? sideA : sideB;
+                    const team   = side === "a" ? sideATeam : sideBTeam;
+                    return (
+                      <div key={side} className="rounded-lg bg-muted/20 border border-border/40 p-3 space-y-1.5">
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                          {team?.owner || team?.name || `Side ${side.toUpperCase()}`} gives
+                        </p>
+                        {assets.length === 0 ? (
+                          <p className="text-[11px] text-muted-foreground/50 italic">Nothing</p>
+                        ) : assets.map(a => (
+                          <div key={a.id} className="text-[11px] flex items-center gap-1.5 min-w-0">
+                            {a.type === "player" ? (
+                              <>
+                                <span className={cn("font-bold text-[10px] shrink-0", posColor(a.player?.pos))}>{a.player?.pos}</span>
+                                <span className="truncate">{a.player?.name}</span>
+                              </>
+                            ) : (
+                              <span className="text-purple-400">{a.pickYear} {ordRound(a.pickRound!)} ({a.pickRange})</span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Expiration */}
+                <div className="flex items-center gap-3 flex-wrap">
+                  <label className="text-xs text-muted-foreground font-medium shrink-0">Expires in</label>
+                  <Select value={expiresIn} onValueChange={setExpiresIn}>
+                    <SelectTrigger className="w-32 h-8 text-xs" data-testid="select-trade-expiry">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="24">24 hours</SelectItem>
+                      <SelectItem value="48">48 hours</SelectItem>
+                      <SelectItem value="72">72 hours</SelectItem>
+                      <SelectItem value="168">7 days</SelectItem>
+                      <SelectItem value="720">30 days</SelectItem>
+                      <SelectItem value="0">No expiry</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* FAAB (optional) */}
+                <div className="space-y-2">
+                  <button
+                    type="button"
+                    className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                    onClick={() => setFaabOpen(v => !v)}
+                    data-testid="button-toggle-faab"
+                  >
+                    <DollarSign className="w-3.5 h-3.5" />
+                    Include FAAB
+                    <ChevronDown className={cn("w-3.5 h-3.5 transition-transform duration-200", faabOpen && "rotate-180")} />
+                  </button>
+                  {faabOpen && (
+                    <div className="flex items-center gap-4 flex-wrap pl-5 pt-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground shrink-0">{sideATeam?.owner || "Side A"} sends $</span>
+                        <Input type="number" min={0} className="w-20 h-7 text-xs" value={faabASends} onChange={e => setFaabASends(e.target.value)} placeholder="0" data-testid="input-faab-a" />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground shrink-0">{sideBTeam?.owner || "Side B"} sends $</span>
+                        <Input type="number" min={0} className="w-20 h-7 text-xs" value={faabBSends} onChange={e => setFaabBSends(e.target.value)} placeholder="0" data-testid="input-faab-b" />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Validation warnings */}
+                {issues.length > 0 && (
+                  <ul className="space-y-1">
+                    {issues.map((msg, i) => (
+                      <li key={i} className="text-xs text-amber-400 flex items-start gap-1.5">
+                        <span className="shrink-0 mt-px">⚠</span>{msg}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
+                {/* Error */}
+                {proposeError && (
+                  <div className="rounded-md bg-red-500/10 border border-red-500/20 px-3 py-2 text-xs text-red-400" data-testid="text-propose-error">
+                    {proposeError}
+                  </div>
+                )}
+
+                {/* Success */}
+                {proposeSuccess && (
+                  <div className="rounded-md bg-emerald-500/10 border border-emerald-500/20 px-3 py-2.5 text-xs text-emerald-400 flex items-center gap-2.5" data-testid="text-propose-success">
+                    <CheckCircle2 className="w-4 h-4 shrink-0" />
+                    <div>
+                      <p className="font-semibold">Trade offer sent!</p>
+                      <p className="text-[10px] text-emerald-400/70 mt-0.5">Transaction: {proposeSuccess}</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Submit */}
+                <div className="flex justify-end pt-1">
+                  <Button
+                    size="sm"
+                    onClick={handleProposeTrade}
+                    disabled={!canSubmit}
+                    className="bg-[#0b3a7a] hover:bg-[#0b3a7a]/80 text-white gap-2 disabled:opacity-50"
+                    data-testid="button-propose-trade"
+                  >
+                    {proposing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                    {proposing ? "Sending…" : "Send Trade Offer"}
+                  </Button>
+                </div>
+
+              </div>
+            )}
+          </Card>
+        );
+      })()}
 
       <Card className="p-5">
         <div className="mb-4">

@@ -1,0 +1,112 @@
+Build the Live Draft tab using the confirmed Sleeper GraphQL draft endpoint.
+
+Endpoint:
+POST https://sleeper.com/graphql
+
+Headers:
+authorization: <JWT>
+x-sleeper-graphql-op: get_draft
+content-type: application/json
+
+Query:
+query get_draft {
+  get_draft(sport: "nfl", draft_id: "${draftId}") {
+    created
+    creators
+    draft_id
+    draft_order
+    last_message_time
+    last_message_id
+    last_picked
+    league_id
+    metadata
+    season
+    season_type
+    settings
+    sport
+    status
+    start_time
+    type
+  }
+
+  user_drafts_by_draft(draft_id: "${draftId}") {
+    user_id
+    user_display_name
+    user_avatar
+    user_is_bot
+    metadata
+  }
+
+  draft_picks(draft_id: "${draftId}") {
+    draft_id
+    pick_no
+    player_id
+    picked_by
+    is_keeper
+    metadata
+    reactions
+  }
+}
+
+Normalize into:
+DraftState {
+  draftId
+  leagueId
+  name
+  status
+  season
+  type
+  teams
+  rounds
+  pickTimer
+  startTime
+  lastPicked
+  draftOrderByUserId
+  usersById
+  picks
+}
+
+Build UI:
+- Live Draft tab
+- Draft header: name, status, season, rounds, type
+- Draft board grid by round/team
+- Recent picks rail
+- My picks panel
+- Available players/search placeholder
+- My Queue panel using draft_queue and update_draft_queue
+- Pick history table
+- Approx Time Used column calculated from draft room messages
+- Badge if draft.status === "drafting"
+- Show "Complete" when picks.length >= teams * rounds
+
+Current pick logic:
+- totalPicks = teams * rounds
+- nextPickNo = draft_picks.length + 1
+- currentRound = Math.ceil(nextPickNo / teams)
+- pickInRound = ((nextPickNo - 1) % teams) + 1
+- because this draft type is linear, draft slot = pickInRound
+- currentUserId = inverse lookup of draft_order where slot === pickInRound
+- picksAway for logged-in user:
+  - mySlot = draft_order[myUserId]
+  - if mySlot >= pickInRound: mySlot - pickInRound
+  - else: teams - pickInRound + mySlot
+  - for linear drafts, same slot each round
+- If pickTimer = 0, show "No timer" instead of countdown.
+
+Pick board:
+- Use draft_picks by pick_no.
+- For empty future cells, calculate assigned slot/user from draft_order.
+- For linear drafts, slot = pickInRound each round.
+- Later add snake support.
+
+Time used:
+- Use messages(parent_id: draftId) bot pick messages.
+- Sort by created ascending.
+- Pick 1.1 time = pick1.created - “This draft has begun!”.created
+- Pick N time = pickN.created - previousPick.created
+- Label as “Approx. Time Used.”
+
+Refresh:
+- Poll get_draft every 10–15 seconds while status === "drafting".
+- Poll messages every 20–30 seconds for draft log/time used.
+- Poll draft_queue when user opens queue panel.

@@ -1640,6 +1640,58 @@ export async function sleeperLogin(login: string, password: string): Promise<str
   return data.token as string;
 }
 
+export async function proposeTrade(
+  leagueId: string,
+  jwt: string,
+  args: {
+    kAdds: string[];
+    vAdds: number[];
+    kDrops: string[];
+    vDrops: number[];
+    draftPicks: Array<{ season: string; round: number; roster_id: number; owner_id: number; previous_owner_id: number }>;
+    waiverBudget: Array<{ sender: number; receiver: number; amount: number }>;
+    expiresAt: number;
+  }
+): Promise<any> {
+  const { kAdds, vAdds, kDrops, vDrops, draftPicks, waiverBudget, expiresAt } = args;
+  const res = await fetch("https://sleeper.com/graphql", {
+    method: "POST",
+    headers: {
+      "authorization": jwt,
+      "x-sleeper-graphql-op": "propose_trade",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      query: `mutation propose_trade(
+        $k_adds: [String],
+        $v_adds: [Int],
+        $k_drops: [String],
+        $v_drops: [Int]
+      ) {
+        propose_trade(
+          league_id: "${leagueId}",
+          draft_picks: ${JSON.stringify(draftPicks)},
+          k_adds: $k_adds,
+          v_adds: $v_adds,
+          k_drops: $k_drops,
+          v_drops: $v_drops,
+          waiver_budget: ${JSON.stringify(waiverBudget)},
+          expires_at: ${expiresAt}
+        ) {
+          adds consenter_ids created creator drops league_id leg metadata
+          roster_ids settings status status_updated transaction_id draft_picks
+          type player_map waiver_budget
+        }
+      }`,
+      variables: { k_adds: kAdds, v_adds: vAdds, k_drops: kDrops, v_drops: vDrops },
+    }),
+  });
+  if (!res.ok) throw new Error(`GraphQL ${res.status}`);
+  const json = await res.json();
+  if (json?.errors?.length) throw new Error(json.errors[0].message || "Propose trade failed");
+  return json?.data?.propose_trade;
+}
+
 export async function claimPlayerOnSleeper(
   leagueId: string,
   rosterId: number,
