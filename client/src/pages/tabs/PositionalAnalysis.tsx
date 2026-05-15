@@ -734,6 +734,12 @@ function TradeOpportunities({ league, userTeam }: { league: League; userTeam: Te
 function WinNowMode({ league, userTeam }: { league: League; userTeam: Team }) {
   const { getPlayerValue, getRedraftValue, getPickValue } = useValueModel();
   const tierMap = useMemo(() => getLeagueTeamTiers(league.teams), [league.teams]);
+  const [expandedPositions, setExpandedPositions] = useState<Set<string>>(new Set());
+  const togglePos = (pos: string) => setExpandedPositions(prev => {
+    const next = new Set(prev);
+    next.has(pos) ? next.delete(pos) : next.add(pos);
+    return next;
+  });
 
   // Step 1 — Positional urgency: gap vs league avg × scarcity multiplier
   const { leagueAvgRd, myStarterRd, urgency, sortedNeeds } = useMemo(() => {
@@ -1057,11 +1063,18 @@ function WinNowMode({ league, userTeam }: { league: League; userTeam: Team }) {
           </Card>
         ) : (
           <div className="space-y-6" data-testid="wn-position-groups">
-            {byPosition.map(({ pos, ideas, needRank }) => (
-              <div key={pos} data-testid={`wn-pos-group-${pos.toLowerCase()}`}>
-                {/* Position group header */}
-                <div className="flex items-center gap-2 mb-3">
-                  <Badge variant="outline" className={cn("text-[10px] font-bold px-1.5", getPositionColor(pos))}>{pos}</Badge>
+            {byPosition.map(({ pos, ideas, needRank }) => {
+              const isOpen = expandedPositions.has(pos);
+              return (
+              <Card key={pos} className="overflow-hidden" data-testid={`wn-pos-group-${pos.toLowerCase()}`}>
+                <CardContent className="p-0">
+                {/* Position group header — clickable toggle */}
+                <button
+                  className="w-full flex items-center gap-2 px-5 py-4 hover:bg-muted/20 transition-colors text-left"
+                  onClick={() => togglePos(pos)}
+                  data-testid={`btn-wn-pos-${pos.toLowerCase()}`}
+                >
+                  <Badge variant="outline" className={cn("text-[10px] font-bold px-1.5 flex-shrink-0", getPositionColor(pos))}>{pos}</Badge>
                   <span className="text-sm font-semibold">{pos} Upgrades</span>
                   <span className={cn("text-[10px] font-medium",
                     needRank === 0 ? "text-red-500 dark:text-red-400" :
@@ -1070,10 +1083,14 @@ function WinNowMode({ league, userTeam }: { league: League; userTeam: Team }) {
                   )}>
                     — {needRank === 0 ? "Primary Need" : needRank === 1 ? "Secondary Need" : "Tertiary Need"}
                   </span>
-                  <Badge variant="secondary" className="text-[10px] ml-auto">{ideas.length}</Badge>
-                </div>
+                  <div className="flex items-center gap-2 ml-auto flex-shrink-0">
+                    <Badge variant="secondary" className="text-[10px]">{ideas.length} idea{ideas.length !== 1 ? "s" : ""}</Badge>
+                    <ChevronRight className={cn("w-4 h-4 text-muted-foreground transition-transform", isOpen && "rotate-90")} />
+                  </div>
+                </button>
 
-                <div className="space-y-3">
+                {isOpen && (
+                <div className="border-t border-border/30 px-5 py-4 space-y-3">
                   {ideas.map((idea: WinNowIdea, idx: number) => (
                     <div key={idea.id} className="rounded-xl border border-border/40 overflow-hidden" data-testid={`wn-idea-${pos.toLowerCase()}-${idx}`}>
                       {/* Partner row */}
@@ -1175,8 +1192,11 @@ function WinNowMode({ league, userTeam }: { league: League; userTeam: Team }) {
                     </div>
                   ))}
                 </div>
-              </div>
-            ))}
+                )}
+                </CardContent>
+              </Card>
+              );
+            })}
           </div>
         )}
       </div>
