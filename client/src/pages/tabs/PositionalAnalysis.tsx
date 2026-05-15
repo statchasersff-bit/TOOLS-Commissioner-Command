@@ -1132,7 +1132,6 @@ function WinNowMode({ league, userTeam }: { league: League; userTeam: Team }) {
 
                       {/* Footer — trade value breakdown for both sides */}
                       <div className="px-4 py-3 bg-muted/10 border-t border-border/20 space-y-2.5">
-                        <p className="text-[10px] text-muted-foreground italic">{idea.why}</p>
                         {/* Value table: Dynasty + Win-Now for each party */}
                         <div className="grid grid-cols-3 gap-x-2 text-[10px]">
                           <div />
@@ -2221,7 +2220,6 @@ function RebuildMode({ league, userTeam }: { league: League; userTeam: Team }) {
 
                             {/* Footer — trade value breakdown for both sides */}
                             <div className="px-4 py-3 bg-muted/10 border-t border-border/20 space-y-2.5">
-                              <p className="text-[10px] text-muted-foreground italic">{idea.why}</p>
                               <div className="grid grid-cols-3 gap-x-2 text-[10px]">
                                 <div />
                                 <span className="text-muted-foreground font-semibold uppercase tracking-wide text-center">Dynasty</span>
