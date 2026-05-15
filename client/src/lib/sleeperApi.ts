@@ -1506,6 +1506,34 @@ export async function fetchLeagueTransactions(leagueId: string) {
   };
 }
 
+export async function fetchRosterDraftPicks(
+  leagueId: string,
+  jwt: string
+): Promise<Array<{ roster_id: number; owner_id: number; season: string; round: number }>> {
+  const res = await fetch("https://sleeper.com/graphql", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "authorization": jwt,
+      "x-sleeper-graphql-op": "roster_draft_picks",
+    },
+    body: JSON.stringify({
+      query: `query roster_draft_picks {
+        roster_draft_picks(league_id: "${leagueId}") {
+          roster_id
+          season
+          round
+          owner_id
+        }
+      }`,
+    }),
+  });
+  if (!res.ok) throw new Error(`GraphQL ${res.status}`);
+  const json = await res.json();
+  if (json?.errors?.length) throw new Error(json.errors[0].message || "roster_draft_picks failed");
+  return json?.data?.roster_draft_picks ?? [];
+}
+
 export async function rejectTradeOnSleeper(
   leagueId: string,
   transactionId: string,

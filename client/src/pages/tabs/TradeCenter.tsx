@@ -12,6 +12,7 @@ import { useSleeper } from "@/contexts/SleeperContext";
 import { getLeagueTeamTiers, getTierColor, getTierBg, getTierEmoji, getPositionColor, isContenderTier, isRebuilderTier } from "@/data/mockData";
 import { getStaticPickValue } from "@/data/pickValues";
 import { API_BASE } from "@/lib/apiBase";
+import { fetchRosterDraftPicks } from "@/lib/sleeperApi";
 import type { League, Team, Tier, Player, Pick, TradeRecord, TradeSide, CrawlStatus } from "@/types";
 import { cn } from "@/lib/utils";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
@@ -718,6 +719,7 @@ export function TradeBlockScanner({ league }: { league: League }) {
 }
 
 const DIMINISHING_WEIGHTS = [1.00, 0.85, 0.72, 0.60, 0.50, 0.42, 0.36, 0.31];
+const SLEEPER_JWT_KEY = "dc-sleeper-draft-jwt";
 
 interface TradeAsset {
   id: string;
@@ -726,6 +728,7 @@ interface TradeAsset {
   pickYear?: number;
   pickRound?: number;
   pickRange?: "Early" | "Mid" | "Late";
+  pickOriginalRosterId?: number;
   value: number;
   label: string;
   pos?: string;
@@ -839,6 +842,24 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
   const [sideARosterId, setSideARosterId] = useState<string>(userTeam.id);
   const [sideBRosterId, setSideBRosterId] = useState<string>("");
   const [savingPng, setSavingPng] = useState(false);
+
+  // JWT — shared with Live Draft + Transactions tabs
+  const [sleeperJwt, setSleeperJwt] = useState<string | null>(() => localStorage.getItem(SLEEPER_JWT_KEY));
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => { if (e.key === SLEEPER_JWT_KEY) setSleeperJwt(e.newValue); };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
+
+  // Live roster draft picks from Sleeper GraphQL
+  type LivePick = { roster_id: number; owner_id: number; season: string; round: number };
+  const [rosterPicks, setRosterPicks] = useState<LivePick[]>([]);
+  useEffect(() => {
+    if (!sleeperJwt || !league.id) { setRosterPicks([]); return; }
+    fetchRosterDraftPicks(league.id, sleeperJwt)
+      .then(setRosterPicks)
+      .catch(() => setRosterPicks([]));
+  }, [sleeperJwt, league.id]);
   const verdictCardRef = useRef<HTMLDivElement>(null);
 
   const saveVerdictPng = async () => {
@@ -918,16 +939,17 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
     }
   }, [getPlayerValue, playerToTeamMap, sideARosterId, sideBRosterId]);
 
-  const addPick = useCallback((side: "a" | "b", year: number, round: number, range: "Early" | "Mid" | "Late") => {
+  const addPick = useCallback((side: "a" | "b", year: number, round: number, range: "Early" | "Mid" | "Late", originalRosterId?: number) => {
     const setter = side === "a" ? setSideA : setSideB;
     const rangeKey = range.toLowerCase() as "early" | "mid" | "late";
     const val = getStaticPickValue(year, round, rangeKey);
     const asset: TradeAsset = {
-      id: `pick-${year}-${round}-${range}-${Date.now()}`,
+      id: `pick-${year}-${round}-${range}-${originalRosterId ?? ""}-${Date.now()}`,
       type: "pick",
       pickYear: year,
       pickRound: round,
       pickRange: range,
+      pickOriginalRosterId: originalRosterId,
       value: val,
       label: `${year} ${range} ${round}${round === 1 ? "st" : round === 2 ? "nd" : round === 3 ? "rd" : "th"}`,
     };
@@ -1087,18 +1109,36 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
     return players;
   }, [league]);
 
+  // Live picks grouped by current owner roster ID
+  const ownerPicksMap = useMemo(() => {
+    const map = new Map<string, Array<{ season: string; round: number; originalRosterId: number; originalTeamName: string }>>();
+    for (const p of rosterPicks) {
+      const key = String(p.owner_id);
+      if (!map.has(key)) map.set(key, []);
+      const origTeam = league.teams.find((t) => t.id === String(p.roster_id));
+      map.get(key)!.push({
+        season: p.season,
+        round: p.round,
+        originalRosterId: p.roster_id,
+        originalTeamName: origTeam?.owner || origTeam?.name || `Roster ${p.roster_id}`,
+      });
+    }
+    return map;
+  }, [rosterPicks, league.teams]);
+
   const [rosterOpenA, setRosterOpenA] = useState(true);
   const [rosterOpenB, setRosterOpenB] = useState(true);
 
-  const RosterCollapsible = ({ rosterTeam, rosterPlayers, addedPlayerIds, addedPickKeys, side, onTogglePlayer, onTogglePick, getPlayerValue }: {
+  const RosterCollapsible = ({ rosterTeam, rosterPlayers, addedPlayerIds, addedPickKeys, side, onTogglePlayer, onTogglePick, getPlayerValue, ownerPicks }: {
     rosterTeam: Team;
     rosterPlayers: Player[];
     addedPlayerIds: Set<string>;
     addedPickKeys: Set<string>;
     side: "a" | "b";
     onTogglePlayer: (p: Player, isAdded: boolean) => void;
-    onTogglePick: (pick: { year: number; round: number; projectedRange?: string }, isAdded: boolean, assetId: string | undefined) => void;
+    onTogglePick: (pick: { year: number; round: number; projectedRange?: string; originalRosterId?: number }, isAdded: boolean, assetId: string | undefined) => void;
     getPlayerValue: (p: Player) => number;
+    ownerPicks: Array<{ season: string; round: number; originalRosterId: number; originalTeamName: string }> | null;
   }) => {
     const isOpen = side === "a" ? rosterOpenA : rosterOpenB;
     const setOpen = side === "a" ? setRosterOpenA : setRosterOpenB;
@@ -1152,34 +1192,63 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
               );
             })}
 
-            {/* Picks column */}
+            {/* Picks column — live data (JWT) or static fallback */}
             <div className="space-y-0.5">
               <p className="text-[10px] font-bold uppercase tracking-wider text-center pb-1 border-b border-border/30 bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-400">
                 Picks
               </p>
-              {[...rosterTeam.picks]
-                .sort((a, b) => String(a.year).localeCompare(String(b.year)) || a.round - b.round)
-                .map((pick, i) => {
-                  const rd = pick.round === 1 ? "1st" : pick.round === 2 ? "2nd" : pick.round === 3 ? "3rd" : `${pick.round}th`;
-                  const pickKey = `${pick.year}-${pick.round}`;
-                  const isPickAdded = addedPickKeys.has(pickKey);
-                  return (
-                    <button
-                      key={i}
-                      className={cn(
-                        "w-full flex flex-col px-1.5 py-1 rounded text-left transition-colors",
-                        isPickAdded
-                          ? "bg-[#d4af37]/15 border border-[#d4af37]/40 cursor-pointer hover:bg-red-500/10 hover:border-red-500/40"
-                          : "hover:bg-muted/40 cursor-pointer"
-                      )}
-                      onClick={() => onTogglePick(pick, isPickAdded, isPickAdded ? undefined : undefined)}
-                      data-testid={`button-roster-pick-${side}-${i}`}
-                    >
-                      <span className={cn("truncate text-[11px] font-medium", isPickAdded && "text-[#d4af37]")}>{pick.year} {rd}</span>
-                    </button>
-                  );
-                })}
-              {rosterTeam.picks.length === 0 && (
+              {ownerPicks
+                ? [...ownerPicks]
+                    .sort((a, b) => a.season.localeCompare(b.season) || a.round - b.round)
+                    .map((pick, i) => {
+                      const rd = pick.round === 1 ? "1st" : pick.round === 2 ? "2nd" : pick.round === 3 ? "3rd" : `${pick.round}th`;
+                      const pickKey = `${pick.season}-${pick.round}-${pick.originalRosterId}`;
+                      const isPickAdded = addedPickKeys.has(pickKey);
+                      const isSameOwner = pick.originalRosterId === Number(rosterTeam.id);
+                      return (
+                        <button
+                          key={`live-${i}`}
+                          className={cn(
+                            "w-full flex flex-col px-1.5 py-1 rounded text-left transition-colors",
+                            isPickAdded
+                              ? "bg-[#d4af37]/15 border border-[#d4af37]/40 cursor-pointer hover:bg-red-500/10 hover:border-red-500/40"
+                              : "hover:bg-muted/40 cursor-pointer"
+                          )}
+                          onClick={() => onTogglePick({ year: Number(pick.season), round: pick.round, originalRosterId: pick.originalRosterId }, isPickAdded, undefined)}
+                          data-testid={`button-roster-pick-${side}-${i}`}
+                        >
+                          <span className={cn("truncate text-[11px] font-medium", isPickAdded && "text-[#d4af37]")}>
+                            {pick.season} {rd}
+                          </span>
+                          {!isSameOwner && (
+                            <span className="text-[9px] text-purple-400 truncate leading-tight">via {pick.originalTeamName}</span>
+                          )}
+                        </button>
+                      );
+                    })
+                : [...rosterTeam.picks]
+                    .sort((a, b) => String(a.year).localeCompare(String(b.year)) || a.round - b.round)
+                    .map((pick, i) => {
+                      const rd = pick.round === 1 ? "1st" : pick.round === 2 ? "2nd" : pick.round === 3 ? "3rd" : `${pick.round}th`;
+                      const pickKey = `${pick.year}-${pick.round}`;
+                      const isPickAdded = addedPickKeys.has(pickKey);
+                      return (
+                        <button
+                          key={i}
+                          className={cn(
+                            "w-full flex flex-col px-1.5 py-1 rounded text-left transition-colors",
+                            isPickAdded
+                              ? "bg-[#d4af37]/15 border border-[#d4af37]/40 cursor-pointer hover:bg-red-500/10 hover:border-red-500/40"
+                              : "hover:bg-muted/40 cursor-pointer"
+                          )}
+                          onClick={() => onTogglePick(pick, isPickAdded, undefined)}
+                          data-testid={`button-roster-pick-${side}-${i}`}
+                        >
+                          <span className={cn("truncate text-[11px] font-medium", isPickAdded && "text-[#d4af37]")}>{pick.year} {rd}</span>
+                        </button>
+                      );
+                    })}
+              {(ownerPicks ? ownerPicks.length === 0 : rosterTeam.picks.length === 0) && (
                 <p className="text-[9px] text-muted-foreground/50 text-center py-2">None</p>
               )}
             </div>
@@ -1194,7 +1263,9 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
     const rosterTeam = side === "a" ? sideATeam : sideBTeam;
     const rosterPlayers = side === "a" ? sideAPlayers : sideBPlayers;
     const addedPlayerIds = new Set(assets.filter((a) => a.type === "player" && a.player).map((a) => a.player!.sleeperId || a.player!.id));
-    const addedPickKeys = new Set(assets.filter((a) => a.type === "pick").map((a) => `${a.pickYear}-${a.pickRound}`));
+    const addedPickKeys = new Set(assets.filter((a) => a.type === "pick").map((a) =>
+      a.pickOriginalRosterId != null ? `${a.pickYear}-${a.pickRound}-${a.pickOriginalRosterId}` : `${a.pickYear}-${a.pickRound}`
+    ));
 
     return (
       <Card className="p-5 flex-1">
@@ -1284,13 +1355,19 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
               onTogglePick={(pick, isAdded) => {
                 if (isAdded) {
                   const currentAssets = side === "a" ? sideA : sideB;
-                  const asset = currentAssets.find(a => a.type === "pick" && Number(a.pickYear) === Number(pick.year) && a.pickRound === pick.round);
+                  const asset = currentAssets.find(a =>
+                    a.type === "pick" &&
+                    Number(a.pickYear) === Number(pick.year) &&
+                    a.pickRound === pick.round &&
+                    (pick.originalRosterId == null || a.pickOriginalRosterId == null || a.pickOriginalRosterId === pick.originalRosterId)
+                  );
                   if (asset) removeAsset(side, asset.id);
                 } else {
-                  addPick(side, pick.year, pick.round, pick.projectedRange || "Mid");
+                  addPick(side, pick.year, pick.round, (pick.projectedRange as "Early" | "Mid" | "Late") || "Mid", pick.originalRosterId);
                 }
               }}
               getPlayerValue={getPlayerValue}
+              ownerPicks={ownerPicksMap.get(rosterTeam?.id ?? "") ?? null}
             />
           )}
         </div>
