@@ -1187,14 +1187,7 @@ function WinNowMode({ league, userTeam }: { league: League; userTeam: Team }) {
               return (
                 <div key={sid} className="flex items-center gap-3 py-2.5 border-b border-border/20 last:border-0" data-testid={`chip-row-${sid}`}>
                   <span className="text-xs text-muted-foreground w-4 text-right flex-shrink-0">{i + 1}.</span>
-                  <div className="w-7 h-7 rounded-full flex-shrink-0 overflow-hidden bg-muted ring-1 ring-border/30">
-                    <img
-                      src={`https://sleepercdn.com/content/nfl/players/thumb/${sid}.jpg`}
-                      alt={c.player.name}
-                      className="w-full h-full object-cover object-top"
-                      onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-                    />
-                  </div>
+                  <PlayerAvatar id={sid} name={c.player.name} pos={c.player.pos} team={c.player.team ?? ""} size="xs" compact />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5">
                       <span className="text-sm font-semibold truncate">{c.player.name}</span>
