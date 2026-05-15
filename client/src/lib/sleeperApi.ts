@@ -1692,6 +1692,46 @@ export async function proposeTrade(
   return json?.data?.propose_trade;
 }
 
+export async function getDmByMembers(partnerUserId: string, jwt: string): Promise<any> {
+  const res = await fetch("https://sleeper.com/graphql", {
+    method: "POST",
+    headers: { "authorization": jwt, "x-sleeper-graphql-op": "get_dm_by_members", "content-type": "application/json" },
+    body: JSON.stringify({
+      query: `query get_dm_by_members {
+        get_dm_by_members(members: ["${partnerUserId}"]) {
+          dm_id dm_type hidden_at last_author_avatar last_author_display_name
+          last_author_real_name last_author_id last_message_id last_message_text
+          last_message_text_map last_message_time last_pinned_message_id last_read_id
+          member_can_invite recent_users title
+        }
+      }`,
+    }),
+  });
+  if (!res.ok) throw new Error(`GraphQL ${res.status}`);
+  const json = await res.json();
+  if (json?.errors?.length) throw new Error(json.errors[0].message || "Get DM failed");
+  return json?.data?.get_dm_by_members;
+}
+
+export async function sendDmMessage(dmId: string, message: string, jwt: string): Promise<any> {
+  const res = await fetch("https://sleeper.com/graphql", {
+    method: "POST",
+    headers: { "authorization": jwt, "x-sleeper-graphql-op": "create_message", "content-type": "application/json" },
+    body: JSON.stringify({
+      query: `mutation create_message($parent_id: String, $message: String) {
+        create_message(parent_id: $parent_id, message: $message) {
+          message_id author_id created message parent_id
+        }
+      }`,
+      variables: { parent_id: dmId, message },
+    }),
+  });
+  if (!res.ok) throw new Error(`GraphQL ${res.status}`);
+  const json = await res.json();
+  if (json?.errors?.length) throw new Error(json.errors[0].message || "Send message failed");
+  return json?.data?.create_message;
+}
+
 export async function claimPlayerOnSleeper(
   leagueId: string,
   rosterId: number,

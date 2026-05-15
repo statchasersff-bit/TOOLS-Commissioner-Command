@@ -1,0 +1,242 @@
+Add authenticated Sleeper GraphQL support for future rookie/draft pick ownership using the roster_draft_picks operation.
+
+Goal:
+Dynasty Command needs to fetch and display future draft pick assets for each league. This will power roster asset views, trade calculator pick inventory, team outlook, and future trade features.
+
+Operation discovered from Sleeper:
+POST https://sleeper.com/graphql
+
+operationName: roster_draft_picks
+
+Query:
+query roster_draft_picks($league_id: ID!) {
+  roster_draft_picks(league_id: $league_id) {
+    roster_id
+    season
+    round
+    owner_id
+  }
+}
+
+Important interpretation:
+- roster_id = the team/roster that currently owns the pick
+- owner_id = the original team/roster the pick came from
+- season = draft year
+- round = pick round
+
+Example:
+{
+  owner_id: 10,
+  roster_id: 1,
+  round: 2,
+  season: "2026"
+}
+
+This means:
+Roster 1 currently owns Roster 10’s 2026 2nd-round pick.
+
+Implementation requirements:
+
+1. Add a centralized Sleeper GraphQL client if one does not already exist.
+
+Create or update:
+src/lib/sleeper/graphql/client.ts
+
+It should expose a function like:
+
+export async function sleeperGraphql(token, payload) {
+  const res = await fetch("https://sleeper.com/graphql", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "authorization": token,
+      "x-sleeper-graphql-op": payload.operationName,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Sleeper GraphQL error: ${res.status}`);
+  }
+
+  const json = await res.json();
+
+  if (json.errors) {
+    throw new Error(json.errors.map(e => e.message).join(", "));
+  }
+
+  return json.data;
+}
+
+Important:
+Sleeper’s browser request uses:
+authorization: <JWT>
+not:
+authorization: Bearer <JWT>
+
+So pass the raw token exactly.
+
+2. Add the roster draft picks query.
+
+Create or update:
+src/lib/sleeper/graphql/queries/rosterDraftPicks.ts
+
+Add:
+
+export const ROSTER_DRAFT_PICKS_QUERY = `
+  query roster_draft_picks($league_id: ID!) {
+    roster_draft_picks(league_id: $league_id) {
+      roster_id
+      season
+      round
+      owner_id
+    }
+  }
+`;
+
+export async function getRosterDraftPicks(token: string, leagueId: string) {
+  return sleeperGraphql(token, {
+    operationName: "roster_draft_picks",
+    variables: { league_id: leagueId },
+    query: ROSTER_DRAFT_PICKS_QUERY,
+  });
+}
+
+3. Add TypeScript types.
+
+Create or update:
+src/lib/sleeper/types.ts
+
+Add:
+
+export type SleeperRosterDraftPick = {
+  roster_id: number;
+  season: string;
+  round: number;
+  owner_id: number;
+};
+
+export type NormalizedDraftPick = {
+  leagueId: string;
+  currentRosterId: number;
+  originalRosterId: number;
+  season: string;
+  round: number;
+  label: string;
+};
+
+4. Normalize the pick data.
+
+Create:
+src/lib/sleeper/normalizers/draftPicks.ts
+
+Add a function that converts Sleeper’s response into clean app data.
+
+Example:
+
+export function normalizeRosterDraftPicks(
+  leagueId: string,
+  picks: SleeperRosterDraftPick[]
+): NormalizedDraftPick[] {
+  return picks.map((pick) => ({
+    leagueId,
+    currentRosterId: pick.roster_id,
+    originalRosterId: pick.owner_id,
+    season: pick.season,
+    round: pick.round,
+    label: `${pick.season} Round ${pick.round} Pick from Roster ${pick.owner_id}`,
+  }));
+}
+
+5. Connect this to the league sync flow.
+
+Wherever Dynasty Command currently loads a league’s rosters, users, and players, also call:
+
+getRosterDraftPicks(token, leagueId)
+
+Store the normalized picks in league state/cache.
+
+Suggested state shape:
+
+leagueAssets[leagueId] = {
+  rosters,
+  users,
+  players,
+  draftPicks,
+};
+
+6. Add UI display to each roster/team page.
+
+On the roster detail/team asset page, add a new section:
+
+Future Draft Picks
+
+Group picks by season, then round.
+
+Example display:
+
+2026
+- Own 1st
+- Roster 10’s 2nd
+- Own 3rd
+
+2027
+- Own 1st
+- Own 2nd
+- Roster 4’s 3rd
+
+Logic:
+If currentRosterId === originalRosterId, show:
+Own 2026 1st
+
+If currentRosterId !== originalRosterId, show:
+Roster X’s 2026 2nd
+
+Later we can map roster IDs to owner display names, but for now roster ID is acceptable.
+
+7. Add loading and error states.
+
+The UI should show:
+
+Loading future picks...
+
+If auth is missing:
+Connect Sleeper to view future draft picks.
+
+If request fails:
+Unable to load future draft picks.
+
+Do not break the entire league page if this operation fails.
+
+8. Add this operation to the internal operation registry.
+
+Create/update something like:
+src/lib/sleeper/graphql/operations.ts
+
+Add:
+
+export const SleeperOperations = {
+  rosterDraftPicks: {
+    key: "rosterDraftPicks",
+    operationName: "roster_draft_picks",
+    category: "league_assets",
+    authRequired: true,
+    writeAction: false,
+    priority: "high",
+  },
+};
+
+9. Important product note:
+This should be treated as a core Dynasty Command sync operation because future picks are required for:
+- trade calculator pick assets
+- roster value calculations
+- team outlook
+- orphan evaluation
+- trade proposal builder
+- dispersal draft asset boards
+
+10. Do not hardcode the league ID.
+Use the active selected league ID dynamically.
+
+11. Do not expose the user’s Sleeper token in logs, console output, errors, or UI.
+Never print the token.

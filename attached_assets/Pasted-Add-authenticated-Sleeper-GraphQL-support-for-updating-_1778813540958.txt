@@ -1,0 +1,252 @@
+Add authenticated Sleeper GraphQL support for updating the live draft queue.
+
+Goal:
+In the live draft room, users should be able to add/remove/reorder players in their Sleeper draft queue from inside Dynasty Command.
+
+Discovered Sleeper operation:
+POST https://sleeper.com/graphql
+
+operationName: update_draft_queue
+
+Mutation:
+mutation update_draft_queue($draft_id: ID!, $player_ids: [String!]!) {
+  update_draft_queue(player_ids: $player_ids, draft_id: $draft_id)
+}
+
+Captured example:
+update_draft_queue(player_ids: ["11435"], draft_id: "1312021297428971520")
+
+Response:
+{
+  "data": {
+    "update_draft_queue": ["11435"]
+  }
+}
+
+Important behavior:
+This mutation appears to replace the full queue with the provided player_ids array, not simply append one player.
+
+So:
+- To add a player: send existingQueue + newPlayerId
+- To remove a player: send existingQueue without that playerId
+- To reorder players: send the reordered full player_ids array
+
+Do NOT send only the new player unless you intend to replace the entire queue.
+
+Important auth:
+Sleeper’s browser request sends:
+authorization: <JWT>
+not:
+authorization: Bearer <JWT>
+
+Never log or expose the token.
+
+1. Add mutation file.
+
+Create:
+src/lib/sleeper/graphql/mutations/updateDraftQueue.ts
+
+Add:
+
+import { sleeperGraphql } from "../client";
+
+export const UPDATE_DRAFT_QUEUE_MUTATION = `
+  mutation update_draft_queue($draft_id: ID!, $player_ids: [String!]!) {
+    update_draft_queue(player_ids: $player_ids, draft_id: $draft_id)
+  }
+`;
+
+export async function updateDraftQueue(
+  token: string,
+  draftId: string,
+  playerIds: string[]
+) {
+  return sleeperGraphql(token, {
+    operationName: "update_draft_queue",
+    variables: {
+      draft_id: draftId,
+      player_ids: playerIds,
+    },
+    query: UPDATE_DRAFT_QUEUE_MUTATION,
+  });
+}
+
+2. Add operation registry entry.
+
+Update:
+src/lib/sleeper/graphql/operations.ts
+
+Add or merge:
+
+updateDraftQueue: {
+  key: "updateDraftQueue",
+  operationName: "update_draft_queue",
+  category: "draft_room",
+  authRequired: true,
+  writeAction: true,
+  priority: "high",
+}
+
+3. Add queue helper functions.
+
+Create:
+src/lib/sleeper/draftQueueActions.ts
+
+Add helper functions:
+
+import { updateDraftQueue } from "./graphql/mutations/updateDraftQueue";
+
+export async function addPlayerToDraftQueue({
+  token,
+  draftId,
+  currentQueue,
+  playerId,
+}: {
+  token: string;
+  draftId: string;
+  currentQueue: string[];
+  playerId: string;
+}) {
+  if (currentQueue.includes(playerId)) {
+    return currentQueue;
+  }
+
+  const nextQueue = [...currentQueue, playerId];
+
+  const data = await updateDraftQueue(token, draftId, nextQueue);
+  return data.update_draft_queue;
+}
+
+export async function removePlayerFromDraftQueue({
+  token,
+  draftId,
+  currentQueue,
+  playerId,
+}: {
+  token: string;
+  draftId: string;
+  currentQueue: string[];
+  playerId: string;
+}) {
+  const nextQueue = currentQueue.filter((id) => id !== playerId);
+
+  const data = await updateDraftQueue(token, draftId, nextQueue);
+  return data.update_draft_queue;
+}
+
+export async function reorderDraftQueue({
+  token,
+  draftId,
+  nextQueue,
+}: {
+  token: string;
+  draftId: string;
+  nextQueue: string[];
+}) {
+  const data = await updateDraftQueue(token, draftId, nextQueue);
+  return data.update_draft_queue;
+}
+
+4. Connect this to the live draft room My Queue panel.
+
+In the live draft room:
+- Keep the current raw queue as string[] in state.
+- Keep normalized queue for display.
+- Use updateDraftQueue for add/remove/reorder actions.
+
+Suggested state:
+const [draftQueueIds, setDraftQueueIds] = useState<string[]>([]);
+const [draftQueuePlayers, setDraftQueuePlayers] = useState<DraftQueuePlayer[]>([]);
+const [queueUpdating, setQueueUpdating] = useState(false);
+const [queueActionError, setQueueActionError] = useState<string | null>(null);
+
+When getDraftQueue returns:
+setDraftQueueIds(data.draft_queue || []);
+
+Then normalize for display.
+
+5. Add “Queue” buttons to player rows.
+
+In the live draft player pool / available players table:
+- If player is not in queue, show button: Add to Queue
+- If player is already in queue, show button: Queued
+- Clicking Add to Queue should:
+  - optimistically add player to local queue
+  - call update_draft_queue with full updated queue
+  - replace local queue with server response
+  - rollback and show error if request fails
+
+6. Add remove button inside My Queue.
+
+Each queued player row should have:
+Remove
+
+Clicking remove should:
+- optimistically remove from queue
+- call update_draft_queue with full updated queue
+- replace local queue with server response
+- rollback on failure
+
+7. Add reorder support.
+
+If drag-and-drop already exists, connect it to reorderDraftQueue.
+
+If drag-and-drop does not exist yet, add simple buttons first:
+- Move Up
+- Move Down
+
+On reorder:
+- create nextQueue array
+- optimistically update UI
+- call update_draft_queue with full nextQueue
+- replace local queue with server response
+- rollback on failure
+
+8. Add a warning comment in code.
+
+Near updateDraftQueue, add:
+
+// Sleeper update_draft_queue replaces the entire queue.
+// Always send the full desired player_ids array, not just the changed player.
+
+9. Refresh behavior.
+
+After successful update:
+- Update local queue from response immediately.
+- Optionally refetch draft_queue after 1 second to confirm sync.
+
+Do not auto-refresh while the user is actively dragging/reordering.
+
+10. UI behavior.
+
+Empty queue:
+“Your queue is empty. Add players from the draft board.”
+
+While updating:
+Show small “Syncing...” state in the My Queue panel.
+
+Error:
+“Could not update Sleeper queue. Try again.”
+
+11. Safety.
+
+Never log:
+- Sleeper token
+- authorization headers
+- cookies
+
+Allowed logs in dev only:
+- draftId
+- queue length
+- playerId being added/removed
+
+12. Acceptance criteria.
+
+Feature is complete when:
+- User can add a player to My Queue.
+- User can remove a player from My Queue.
+- User can move queued players up/down.
+- Sleeper queue remains synced after refresh.
+- Existing queued players are not accidentally wiped.
+- Token is never exposed.
+- Failed mutation does not crash the draft room.

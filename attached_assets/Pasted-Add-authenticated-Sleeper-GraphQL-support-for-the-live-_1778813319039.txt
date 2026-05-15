@@ -1,0 +1,237 @@
+Add authenticated Sleeper GraphQL support for the live draft queue feature.
+
+Goal:
+In the live draft room, Dynasty Command should be able to fetch and display the user’s Sleeper draft queue for the active draft.
+
+Discovered Sleeper operation:
+POST https://sleeper.com/graphql
+
+operationName: draft_queue
+
+Query:
+query draft_queue($draft_id: ID!) {
+  draft_queue(draft_id: $draft_id)
+}
+
+Important:
+Sleeper’s browser request sends:
+authorization: <JWT>
+not:
+authorization: Bearer <JWT>
+
+Do not log, print, expose, or store the token insecurely.
+
+Implementation requirements:
+
+1. Use the existing Sleeper GraphQL client.
+
+If there is no centralized client yet, create:
+
+src/lib/sleeper/graphql/client.ts
+
+with:
+
+export async function sleeperGraphql(token: string, payload: any) {
+  const res = await fetch("https://sleeper.com/graphql", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "authorization": token,
+      "x-sleeper-graphql-op": payload.operationName,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Sleeper GraphQL error: ${res.status}`);
+  }
+
+  const json = await res.json();
+
+  if (json.errors) {
+    throw new Error(json.errors.map((e: any) => e.message).join(", "));
+  }
+
+  return json.data;
+}
+
+2. Add draft queue query file.
+
+Create:
+
+src/lib/sleeper/graphql/queries/draftQueue.ts
+
+Add:
+
+import { sleeperGraphql } from "../client";
+
+export const DRAFT_QUEUE_QUERY = `
+  query draft_queue($draft_id: ID!) {
+    draft_queue(draft_id: $draft_id)
+  }
+`;
+
+export async function getDraftQueue(token: string, draftId: string) {
+  return sleeperGraphql(token, {
+    operationName: "draft_queue",
+    variables: { draft_id: draftId },
+    query: DRAFT_QUEUE_QUERY,
+  });
+}
+
+3. Add operation registry entry.
+
+Update:
+
+src/lib/sleeper/graphql/operations.ts
+
+Add:
+
+export const SleeperOperations = {
+  draftQueue: {
+    key: "draftQueue",
+    operationName: "draft_queue",
+    category: "draft_room",
+    authRequired: true,
+    writeAction: false,
+    priority: "medium",
+  },
+};
+
+If SleeperOperations already exists, merge this entry instead of replacing the file.
+
+4. Add types.
+
+Update:
+
+src/lib/sleeper/types.ts
+
+Add:
+
+export type SleeperDraftQueueResponse = {
+  draft_queue: string[];
+};
+
+export type DraftQueuePlayer = {
+  playerId: string;
+  rank: number;
+  name?: string;
+  position?: string;
+  team?: string;
+};
+
+5. Normalize queue players.
+
+Create:
+
+src/lib/sleeper/normalizers/draftQueue.ts
+
+Add:
+
+export function normalizeDraftQueue(
+  queue: string[],
+  playersById: Record<string, any>
+): DraftQueuePlayer[] {
+  return queue.map((playerId, index) => {
+    const player = playersById[playerId];
+
+    return {
+      playerId,
+      rank: index + 1,
+      name: player?.full_name || player?.first_name + " " + player?.last_name || playerId,
+      position: player?.position,
+      team: player?.team,
+    };
+  });
+}
+
+6. Connect to the live draft room.
+
+In the live draft room component/page:
+- Get the active draftId dynamically.
+- Get the Sleeper auth token from the existing authenticated Sleeper connection.
+- Fetch draft_queue using getDraftQueue(token, draftId).
+- Normalize it using the existing player map.
+- Store it in local draft room state.
+
+Suggested state:
+const [draftQueue, setDraftQueue] = useState<DraftQueuePlayer[]>([]);
+const [draftQueueLoading, setDraftQueueLoading] = useState(false);
+const [draftQueueError, setDraftQueueError] = useState<string | null>(null);
+
+7. Add a “My Queue” panel to the live draft room UI.
+
+Panel title:
+My Queue
+
+Display:
+- If no auth token: “Connect Sleeper to view your live draft queue.”
+- If loading: “Loading queue...”
+- If empty: “Your Sleeper queue is empty.”
+- If error: “Unable to load draft queue.”
+- If players exist: show ordered queue list.
+
+Each row should show:
+- rank number
+- player name
+- position
+- team
+- player ID fallback if player name is missing
+
+Example row:
+1. Marvin Harrison Jr. — WR ARI
+
+8. Refresh behavior.
+
+For now:
+- Fetch the queue when the draft room loads.
+- Refetch every 10 seconds while the draft is active.
+- Add a manual refresh button in the My Queue panel.
+
+Important:
+Do not spam Sleeper. Only poll this operation while the live draft room is open.
+
+9. UI placement.
+
+Place the My Queue panel near the draft board / player pool area.
+
+On desktop:
+- right-side panel or secondary column
+
+On mobile:
+- make My Queue accessible as a bottom sticky tab or collapsible drawer
+- do not overcrowd the main pick board
+
+10. Do not implement queue write actions yet.
+
+For this step, only read and display the queue.
+
+Do not add:
+- add to queue
+- remove from queue
+- reorder queue
+- draft from queue
+
+Those require separate writable mutations that still need to be captured from Sleeper DevTools.
+
+11. Add basic debugging without exposing secrets.
+
+Allowed console logs:
+- draftId
+- queue length
+- loading/error status
+
+Never log:
+- Sleeper token
+- cookies
+- authorization headers
+
+12. Acceptance criteria.
+
+This feature is complete when:
+- The live draft room loads the user’s current Sleeper draft queue.
+- Empty queue shows a clean empty state.
+- Queue updates after manual refresh.
+- Queue auto-refreshes every 10 seconds while the draft room is open.
+- Token is never printed or exposed.
+- The app does not crash if the queue operation fails.

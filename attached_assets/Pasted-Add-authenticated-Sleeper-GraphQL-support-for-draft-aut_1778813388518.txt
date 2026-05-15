@@ -1,0 +1,191 @@
+Add authenticated Sleeper GraphQL support for draft autopicker status in the live draft room.
+
+Goal:
+The live draft room should detect which draft slots/users are currently on autopick so Dynasty Command can show autopick status, improve turn awareness, and eventually warn users when a pick may auto-select from queue.
+
+Discovered Sleeper operation:
+POST https://sleeper.com/graphql
+
+operationName: draft_autopickers
+
+Query:
+query draft_autopickers($draft_id: ID!) {
+  draft_autopickers(sport: "nfl", draft_id: $draft_id)
+}
+
+Captured response example:
+{
+  "data": {
+    "draft_autopickers": []
+  }
+}
+
+An empty array means no detected autopickers for this draft at the time of the request.
+
+Important:
+Sleeper’s browser request sends:
+authorization: <JWT>
+not:
+authorization: Bearer <JWT>
+
+Do not log, print, expose, or store the token insecurely.
+
+1. Add the GraphQL query file.
+
+Create:
+src/lib/sleeper/graphql/queries/draftAutopickers.ts
+
+Add:
+
+import { sleeperGraphql } from "../client";
+
+export const DRAFT_AUTOPICKERS_QUERY = `
+  query draft_autopickers($draft_id: ID!) {
+    draft_autopickers(sport: "nfl", draft_id: $draft_id)
+  }
+`;
+
+export async function getDraftAutopickers(token: string, draftId: string) {
+  return sleeperGraphql(token, {
+    operationName: "draft_autopickers",
+    variables: { draft_id: draftId },
+    query: DRAFT_AUTOPICKERS_QUERY,
+  });
+}
+
+2. Add operation registry entry.
+
+Update:
+src/lib/sleeper/graphql/operations.ts
+
+Add or merge:
+
+draftAutopickers: {
+  key: "draftAutopickers",
+  operationName: "draft_autopickers",
+  category: "draft_room",
+  authRequired: true,
+  writeAction: false,
+  priority: "medium",
+}
+
+3. Add types.
+
+Update:
+src/lib/sleeper/types.ts
+
+Add flexible types because the response structure may vary when autopickers exist:
+
+export type SleeperDraftAutopickersResponse = {
+  draft_autopickers: any[];
+};
+
+export type DraftAutopickerStatus = {
+  raw: any;
+  userId?: string;
+  rosterId?: number;
+  draftSlot?: number;
+};
+
+4. Add normalizer.
+
+Create:
+src/lib/sleeper/normalizers/draftAutopickers.ts
+
+Add:
+
+export function normalizeDraftAutopickers(rawAutopickers: any[]): DraftAutopickerStatus[] {
+  return (rawAutopickers || []).map((item) => ({
+    raw: item,
+    userId: item?.user_id || item?.userId,
+    rosterId: item?.roster_id || item?.rosterId,
+    draftSlot: item?.draft_slot || item?.draftSlot || item?.slot,
+  }));
+}
+
+Keep the raw object because we do not yet know the exact object shape when autopickers exist.
+
+5. Connect to the live draft room.
+
+In the live draft room component/page:
+- Get active draftId dynamically.
+- Get Sleeper auth token from the existing Sleeper connection.
+- Fetch getDraftAutopickers(token, draftId).
+- Normalize the response.
+- Store it in draft room state.
+
+Suggested state:
+
+const [draftAutopickers, setDraftAutopickers] = useState<DraftAutopickerStatus[]>([]);
+const [draftAutopickersLoading, setDraftAutopickersLoading] = useState(false);
+const [draftAutopickersError, setDraftAutopickersError] = useState<string | null>(null);
+
+6. Refresh behavior.
+
+While the live draft room is open:
+- Fetch autopickers on initial load.
+- Refetch every 10 seconds while the draft is active.
+- Also refetch whenever the current pick changes, if that event/state already exists.
+- Do not poll this operation outside the live draft room.
+
+7. UI behavior.
+
+Add a small “Autopick Status” indicator to the live draft room.
+
+If no auth token:
+Do not show an error. Just hide the autopick panel or show “Connect Sleeper for live autopick status.”
+
+If loading:
+Checking autopick status...
+
+If empty:
+No autopickers detected.
+
+If autopickers exist:
+Show:
+Autopick Active: X manager(s)
+
+For each autopicker, display the best available label:
+- Manager name if userId can be mapped to draft users
+- Roster/team name if rosterId can be mapped
+- Draft slot if available
+- Otherwise “Unknown manager”
+
+8. Add subtle visual indicators on the draft board.
+
+If an autopicker maps to a draft slot or roster:
+- Add a small “AUTO” pill/badge next to that manager/team in the draft board.
+- Do not make it loud or distracting.
+- Use StatChasers styling: navy, white, gold accent.
+
+9. Do not implement autopick write actions yet.
+
+This step is read-only:
+- Do not toggle autopick
+- Do not disable autopick
+- Do not submit draft picks
+- Do not alter queue
+
+Those write actions require separate captured mutations.
+
+10. Safe debugging.
+
+Allowed logs:
+- draftId
+- autopicker count
+- raw autopicker object only in development mode
+
+Never log:
+- Sleeper token
+- authorization header
+- cookies
+
+11. Acceptance criteria.
+
+Feature is complete when:
+- Live draft room can fetch draft_autopickers.
+- Empty response shows “No autopickers detected.”
+- Non-empty response displays an autopick count and badges where mapping is possible.
+- The operation refreshes every 10 seconds while the draft room is open.
+- The app does not crash if the operation fails.
+- Token is never logged or exposed.

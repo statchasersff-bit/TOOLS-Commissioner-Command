@@ -139,6 +139,24 @@ export default function Transactions({ leagueId }: { leagueId: string }) {
 
   useEffect(() => { fetchTransactions(); }, [fetchTransactions]);
 
+  // Listen for trades proposed from Trade Calculator
+  useEffect(() => {
+    const onCreated = (e: Event) => {
+      const trade = (e as CustomEvent).detail as PendingTrade;
+      if (!trade?.transactionId) return;
+      setPendingTrades(prev =>
+        prev.some(t => t.transactionId === trade.transactionId) ? prev : [trade, ...prev]
+      );
+    };
+    const onRefresh = () => { fetchTransactions(); };
+    window.addEventListener("sleeper-txn-created", onCreated);
+    window.addEventListener("sleeper-txn-refresh", onRefresh);
+    return () => {
+      window.removeEventListener("sleeper-txn-created", onCreated);
+      window.removeEventListener("sleeper-txn-refresh", onRefresh);
+    };
+  }, [fetchTransactions]);
+
   const handleAccept = useCallback(async (trade: PendingTrade) => {
     if (!sleeperJwt) return;
     setAccepting(true);
