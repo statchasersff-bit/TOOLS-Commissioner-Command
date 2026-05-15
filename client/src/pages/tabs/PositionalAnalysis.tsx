@@ -1512,40 +1512,6 @@ function SmartGMMode({ league, userTeam }: { league: League; userTeam: Team }) {
         </div>
       </Card>
 
-      {/* ── Positional Balance ── */}
-      <Card className="p-5" data-testid="card-positional-balance">
-        <div className="mb-4">
-          <h4 className="text-sm font-bold">Positional Balance</h4>
-          <span className="block h-[2px] w-8 bg-[#d4af37] rounded-full mt-1" />
-          <p className="text-[10px] text-muted-foreground mt-1.5">Dynasty value rank per position vs league</p>
-        </div>
-        <div className="grid grid-cols-2 gap-x-8 gap-y-3">
-          {POSITIONS.map(pos => {
-            const d = posBalance[pos];
-            if (!d) return null;
-            const pct = posBarWidth(d.rank, ranks.n);
-            const barColor =
-              d.surplus ? "bg-emerald-500/70" :
-              d.deficit ? "bg-red-500/70" : "bg-[#0b3a7a]/70";
-            return (
-              <div key={pos} data-testid={`pos-balance-${pos}`}>
-                <div className="flex items-center justify-between mb-1">
-                  <div className="flex items-center gap-1.5">
-                    <Badge variant="outline" className={cn("text-[9px] px-1 py-0 h-3.5", getPositionColor(pos))}>{pos}</Badge>
-                    {d.surplus && <Badge variant="outline" className="text-[9px] px-1 py-0 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20">Surplus</Badge>}
-                    {d.deficit && <Badge variant="outline" className="text-[9px] px-1 py-0 bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20">Deficit</Badge>}
-                  </div>
-                  <span className="text-[10px] font-mono text-muted-foreground">#{d.rank}/{ranks.n}</span>
-                </div>
-                <div className="h-1.5 rounded-full bg-muted/40 overflow-hidden">
-                  <div className={cn("h-full rounded-full transition-all", barColor)} style={{ width: `${pct}%` }} />
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </Card>
-
       {/* ── Smart GM Trade Ideas ── */}
       <div>
         <div className="mb-4">
