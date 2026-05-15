@@ -987,110 +987,131 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
   const pDyn = idea.dynGive - idea.dynGet;
   const pNow = idea.partnerRdDelta;
 
-  const DeltaChip = ({ dyn, now }: { dyn: number; now: number }) => (
-    <div className="flex items-center gap-2 mt-0.5">
-      <span className={cn("text-[11px] font-semibold", dyn >= 0 ? "text-emerald-400" : "text-red-400")}>
-        {dyn >= 0 ? "+" : "−"}{Math.abs(Math.round(dyn)).toLocaleString()} DYN
+  // ── sub-components (scoped to this render) ────────────────────────────────
+
+  const ValPills = ({ dyn, now }: { dyn: number; now: number }) => (
+    <div className="flex flex-wrap gap-1.5 mt-2">
+      <span className={cn(
+        "inline-flex items-center px-2.5 py-[3px] rounded-full text-[11px] font-bold border",
+        dyn >= 0
+          ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/25"
+          : "bg-red-500/15 text-red-400 border-red-500/25"
+      )}>
+        {dyn >= 0 ? "+" : "−"}{Math.abs(Math.round(dyn)).toLocaleString()} Dynasty
       </span>
-      <span className="text-muted-foreground/30 text-xs">/</span>
-      <span className={cn("text-[11px] font-semibold", now >= 0 ? "text-emerald-400" : "text-red-400")}>
-        {now >= 0 ? "+" : "−"}{Math.abs(Math.round(now)).toLocaleString()} NOW
+      <span className={cn(
+        "inline-flex items-center px-2.5 py-[3px] rounded-full text-[11px] font-bold border",
+        now >= 0
+          ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/25"
+          : "bg-red-500/15 text-red-400 border-red-500/25"
+      )}>
+        {now >= 0 ? "+" : "−"}{Math.abs(Math.round(now)).toLocaleString()} Win Now
       </span>
     </div>
   );
 
-  const AssetRow = ({ a }: { a: WinNowIdea["youGet"][number] }) => (
-    <div className="flex items-center gap-2.5 rounded-[8px] bg-white/[0.03] border border-white/[0.06] px-2.5 py-1.5 mb-1.5 min-w-0">
+  const AssetCard = ({ a }: { a: WinNowIdea["youGet"][number] }) => (
+    <div className="flex items-center gap-3 w-full rounded-lg bg-white/[0.04] border border-white/[0.08] px-3 py-2.5 mt-2">
       {a.type === "player" && a.sleeperId ? (
         <PlayerAvatar id={a.sleeperId} name={a.label} pos={a.pos ?? ""} team={a.team ?? ""} size="sm" compact />
       ) : (
-        <div className="w-9 h-9 rounded-full flex-shrink-0 bg-purple-500/10 border border-purple-500/25 flex items-center justify-center">
+        <div className="w-10 h-10 rounded-full flex-shrink-0 bg-purple-500/10 border border-purple-500/30 flex items-center justify-center">
           <span className="text-[8px] font-bold text-purple-400 leading-none">PICK</span>
         </div>
       )}
-      <div className="min-w-0 flex flex-col gap-[2px]">
-        <span className="text-[12px] font-bold truncate leading-tight text-white">
+      <div className="min-w-0 flex flex-col gap-0.5">
+        <span className="text-[13px] font-bold text-white leading-tight">
           {a.type === "pick" && selectedPick
             ? `${selectedPick.year} Rd ${selectedPick.round}${selectedPick.projectedRange ? ` (${selectedPick.projectedRange})` : ""}`
             : a.label}
         </span>
         {(a.pos || a.team) && (
-          <div className="flex items-center gap-1.5">
-            {a.pos && <span className={cn("text-[10px] font-semibold leading-none", posTextColor(a.pos))}>{a.pos}</span>}
-            {a.team && a.team !== "FA" && <span className="text-[10px] text-muted-foreground/70 leading-none">{a.team}</span>}
+          <div className="flex items-center gap-2">
+            {a.pos && <span className={cn("text-[11px] font-semibold leading-none", posTextColor(a.pos))}>{a.pos}</span>}
+            {a.team && a.team !== "FA" && <span className="text-[11px] text-white/40 leading-none">{a.team}</span>}
           </div>
         )}
       </div>
     </div>
   );
 
+  const ManagerAvatar = ({ team }: { team: typeof userTeam }) => (
+    team.avatar ? (
+      <img
+        src={team.avatar}
+        alt={team.owner}
+        className="w-7 h-7 rounded-full object-cover flex-shrink-0 ring-1 ring-white/20"
+        onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+      />
+    ) : (
+      <div className="w-7 h-7 rounded-full bg-[#0b3a7a] border border-white/10 flex items-center justify-center flex-shrink-0">
+        <span className="text-[10px] font-bold text-white">{team.owner.charAt(0).toUpperCase()}</span>
+      </div>
+    )
+  );
+
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-sm bg-[#080f1d] border-border/50 p-0 overflow-hidden">
-        <DialogHeader className="px-5 pt-5 pb-3 border-b border-border/20">
-          <DialogTitle className="text-sm font-bold text-white flex items-center gap-2">
-            <Send className="w-4 h-4 text-[#d4af37]" />
-            Confirm Trade Offer
-          </DialogTitle>
-          <p className="text-[11px] text-muted-foreground mt-1 leading-snug">
-            <span className="text-white/70 font-medium">{league.name}</span>
-            {" · "}Partner: <span className="text-white/70 font-medium">{idea.partnerTeam.owner}</span>
-          </p>
-        </DialogHeader>
+      <DialogContent className="max-w-[820px] w-full bg-[#07111f] border border-white/[0.10] p-0 overflow-hidden max-h-[90vh] flex flex-col">
 
-        {/* Trade sides */}
-        <div className="grid grid-cols-2 divide-x divide-border/30 px-0">
-          {/* You receive */}
-          <div className="px-4 py-3">
-            <div className="flex items-center gap-1.5 mb-1">
-              {userTeam.avatar ? (
-                <img
-                  src={userTeam.avatar}
-                  alt={userTeam.owner}
-                  className="w-4 h-4 rounded-full object-cover flex-shrink-0 ring-1 ring-border/40"
-                  onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-                />
-              ) : (
-                <div className="w-4 h-4 rounded-full bg-[#0b3a7a] flex items-center justify-center flex-shrink-0">
-                  <span className="text-[7px] font-bold text-white">{userTeam.owner.charAt(0).toUpperCase()}</span>
-                </div>
-              )}
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wide truncate">{userTeam.owner} receives</p>
+        {/* ── Header ── */}
+        <div className="flex items-start justify-between px-6 pt-6 pb-4 border-b border-white/[0.08] flex-shrink-0">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <Send className="w-4 h-4 text-[#d4af37] flex-shrink-0" />
+              <DialogTitle className="text-[15px] font-bold text-white leading-none">
+                Confirm Trade Offer
+              </DialogTitle>
             </div>
-            <DeltaChip dyn={uDyn} now={uNow} />
-            <div className="mt-2">
-              {idea.youGet.map((a, i) => <AssetRow key={i} a={a} />)}
-            </div>
-          </div>
-          {/* Partner receives */}
-          <div className="px-4 py-3">
-            <div className="flex items-center gap-1.5 mb-1">
-              {idea.partnerTeam.avatar ? (
-                <img
-                  src={idea.partnerTeam.avatar}
-                  alt={idea.partnerTeam.owner}
-                  className="w-4 h-4 rounded-full object-cover flex-shrink-0 ring-1 ring-border/40"
-                  onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-                />
-              ) : (
-                <div className="w-4 h-4 rounded-full bg-[#0b3a7a] flex items-center justify-center flex-shrink-0">
-                  <span className="text-[7px] font-bold text-white">{idea.partnerTeam.owner.charAt(0).toUpperCase()}</span>
-                </div>
-              )}
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wide truncate">{idea.partnerTeam.owner} receives</p>
-            </div>
-            <DeltaChip dyn={pDyn} now={pNow} />
-            <div className="mt-2">
-              {idea.youGive.map((a, i) => <AssetRow key={i} a={a} />)}
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1.5">
+              <span className="text-[12px] text-white/50 font-medium">{league.name}</span>
+              <span className="text-white/20 text-xs">·</span>
+              <span className="text-[12px] text-white/50">
+                Partner: <span className="text-white/75 font-semibold">{idea.partnerTeam.owner}</span>
+              </span>
             </div>
           </div>
         </div>
 
-        {/* Pick selector */}
+        {/* ── Trade columns ── */}
+        <div className="grid grid-cols-2 gap-4 px-6 py-5 overflow-y-auto flex-1">
+
+          {/* You receive */}
+          <div className="bg-white/[0.025] border border-white/[0.08] rounded-xl p-4">
+            <div className="flex items-center gap-2.5 mb-0.5">
+              <ManagerAvatar team={userTeam} />
+              <div className="min-w-0">
+                <p className="text-[13px] font-bold text-white leading-tight break-words">{userTeam.owner}</p>
+                <p className="text-[10px] text-white/35 uppercase tracking-widest font-semibold leading-tight mt-0.5">Receives</p>
+              </div>
+            </div>
+            <ValPills dyn={uDyn} now={uNow} />
+            <div className="mt-1">
+              {idea.youGet.map((a, i) => <AssetCard key={i} a={a} />)}
+            </div>
+          </div>
+
+          {/* Partner receives */}
+          <div className="bg-white/[0.025] border border-white/[0.08] rounded-xl p-4">
+            <div className="flex items-center gap-2.5 mb-0.5">
+              <ManagerAvatar team={idea.partnerTeam} />
+              <div className="min-w-0">
+                <p className="text-[13px] font-bold text-white leading-tight break-words">{idea.partnerTeam.owner}</p>
+                <p className="text-[10px] text-white/35 uppercase tracking-widest font-semibold leading-tight mt-0.5">Receives</p>
+              </div>
+            </div>
+            <ValPills dyn={pDyn} now={pNow} />
+            <div className="mt-1">
+              {idea.youGive.map((a, i) => <AssetCard key={i} a={a} />)}
+            </div>
+          </div>
+        </div>
+
+        {/* ── Pick selector ── */}
         {hasPick && status === "idle" && (
-          <div className="px-4 py-3 border-t border-border/20">
-            <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-2 font-medium">Choose pick to include</p>
-            <div className="flex flex-wrap gap-1.5">
+          <div className="px-6 pb-5 flex-shrink-0 border-t border-white/[0.06] pt-4">
+            <p className="text-[10px] text-white/40 uppercase tracking-widest font-semibold mb-3">Choose pick to include</p>
+            <div className="flex flex-wrap gap-2">
               {userTeam.picks.filter(p => {
                 const ideaPick = idea.youGive.find(a => a.type === "pick" && a.pick)?.pick;
                 return ideaPick ? p.round === ideaPick.round : true;
@@ -1105,17 +1126,17 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
                     key={i}
                     onClick={() => setSelectedPick(p)}
                     className={cn(
-                      "flex flex-col items-start px-2.5 py-1.5 rounded-lg border transition-colors text-left",
+                      "flex flex-col items-start px-3 py-2 rounded-lg border transition-all text-left",
                       isSelected
-                        ? "bg-purple-500/20 border-purple-500/50"
-                        : "bg-white/[0.04] border-white/[0.08] hover:border-purple-500/30"
+                        ? "bg-purple-500/20 border-purple-500/50 shadow-[0_0_12px_rgba(168,85,247,0.15)]"
+                        : "bg-white/[0.04] border-white/[0.09] hover:border-purple-500/40 hover:bg-white/[0.06]"
                     )}
                   >
-                    <span className={cn("text-[10px] font-bold leading-tight", isSelected ? "text-purple-300" : "text-white/80")}>
+                    <span className={cn("text-[11px] font-bold leading-tight", isSelected ? "text-purple-300" : "text-white/85")}>
                       {p.year} Rd {p.round}
                     </span>
                     {origTeam && (
-                      <span className={cn("text-[9px] leading-tight", isSelected ? "text-purple-400/70" : "text-muted-foreground/60")}>
+                      <span className={cn("text-[10px] leading-tight mt-0.5", isSelected ? "text-purple-400/70" : "text-white/35")}>
                         via {origTeam.owner}
                       </span>
                     )}
@@ -1126,96 +1147,102 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
           </div>
         )}
 
-        {/* Status banners */}
-        {status === "success" && dmStatus === "idle" && (
-          <div className="mx-4 mb-1 flex items-center gap-2 rounded-lg bg-emerald-500/10 border border-emerald-500/25 px-3 py-2.5">
-            <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-            <span className="text-[11px] text-emerald-300 font-medium">Trade sent.</span>
-          </div>
-        )}
-        {status === "success" && dmStatus === "sending" && (
-          <div className="mx-4 mb-1 flex items-center gap-2 rounded-lg bg-emerald-500/10 border border-emerald-500/25 px-3 py-2.5">
-            <Loader2 className="w-4 h-4 text-emerald-400 flex-shrink-0 animate-spin" />
-            <span className="text-[11px] text-emerald-300 font-medium">Trade sent. Sending DM…</span>
-          </div>
-        )}
-        {status === "success" && dmStatus === "sent" && (
-          <div className="mx-4 mb-1 flex items-center gap-2 rounded-lg bg-emerald-500/10 border border-emerald-500/25 px-3 py-2.5">
-            <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-            <span className="text-[11px] text-emerald-300 font-medium">Trade sent and DM delivered.</span>
-          </div>
-        )}
-        {status === "success" && dmStatus === "failed" && (
-          <div className="mx-4 mb-1 flex items-start gap-2 rounded-lg bg-yellow-500/10 border border-yellow-500/25 px-3 py-2.5">
-            <AlertTriangle className="w-3.5 h-3.5 text-yellow-400 flex-shrink-0 mt-px" />
-            <div className="flex flex-col gap-1 min-w-0">
-              <span className="text-[11px] text-yellow-300 font-medium leading-snug">
-                Trade sent, but DM could not be sent.
-              </span>
-              {dmError && <span className="text-[10px] text-yellow-400/70 leading-snug">{dmError}</span>}
-              {pendingDm && (
-                <button
-                  data-testid="btn-retry-trade-dm"
-                  onClick={() => sendTradeDm(pendingDm.trade, pendingDm.partnerUserId, true)}
-                  className="mt-1 self-start text-[10px] font-semibold text-yellow-300 hover:text-yellow-100 underline underline-offset-2 transition-colors"
-                >
-                  Send DM again
-                </button>
-              )}
+        {/* ── Status banners ── */}
+        <div className="px-6 flex-shrink-0 space-y-2 empty:hidden">
+          {status === "success" && dmStatus === "idle" && (
+            <div className="flex items-center gap-2 rounded-lg bg-emerald-500/10 border border-emerald-500/25 px-4 py-3">
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+              <span className="text-[12px] text-emerald-300 font-medium">Trade sent.</span>
             </div>
-          </div>
-        )}
-        {status === "success" && dmStatus === "link-failed" && (
-          <div className="mx-4 mb-1 flex items-start gap-2 rounded-lg bg-yellow-500/10 border border-yellow-500/25 px-3 py-2.5">
-            <AlertTriangle className="w-3.5 h-3.5 text-yellow-400 flex-shrink-0 mt-px" />
-            <div className="flex flex-col gap-1 min-w-0">
-              <span className="text-[11px] text-yellow-300 font-medium leading-snug">
-                Trade sent. Trade card DM sent. Tool link DM failed.
-              </span>
-              {dmError && <span className="text-[10px] text-yellow-400/70 leading-snug">{dmError}</span>}
-              {pendingDm && (
-                <button
-                  data-testid="btn-retry-tool-link-dm"
-                  onClick={() => sendTradeDm(pendingDm.trade, pendingDm.partnerUserId, true)}
-                  className="mt-1 self-start text-[10px] font-semibold text-yellow-300 hover:text-yellow-100 underline underline-offset-2 transition-colors"
-                >
-                  Send DM again
-                </button>
-              )}
+          )}
+          {status === "success" && dmStatus === "sending" && (
+            <div className="flex items-center gap-2 rounded-lg bg-emerald-500/10 border border-emerald-500/25 px-4 py-3">
+              <Loader2 className="w-4 h-4 text-emerald-400 flex-shrink-0 animate-spin" />
+              <span className="text-[12px] text-emerald-300 font-medium">Trade sent. Sending DM…</span>
             </div>
-          </div>
-        )}
-        {status === "error" && (
-          <div className="mx-4 mb-1 flex items-start gap-2 rounded-lg bg-red-500/10 border border-red-500/25 px-3 py-2.5">
-            <X className="w-3.5 h-3.5 text-red-400 flex-shrink-0 mt-px" />
-            <span className="text-[11px] text-red-300 leading-snug">{errorMsg}</span>
-          </div>
-        )}
+          )}
+          {status === "success" && dmStatus === "sent" && (
+            <div className="flex items-center gap-2 rounded-lg bg-emerald-500/10 border border-emerald-500/25 px-4 py-3">
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+              <span className="text-[12px] text-emerald-300 font-medium">Trade sent and DM delivered.</span>
+            </div>
+          )}
+          {status === "success" && dmStatus === "failed" && (
+            <div className="flex items-start gap-2 rounded-lg bg-yellow-500/10 border border-yellow-500/25 px-4 py-3">
+              <AlertTriangle className="w-4 h-4 text-yellow-400 flex-shrink-0 mt-px" />
+              <div className="flex flex-col gap-1 min-w-0">
+                <span className="text-[12px] text-yellow-300 font-medium leading-snug">Trade sent, but DM could not be sent.</span>
+                {dmError && <span className="text-[11px] text-yellow-400/70 leading-snug">{dmError}</span>}
+                {pendingDm && (
+                  <button data-testid="btn-retry-trade-dm"
+                    onClick={() => sendTradeDm(pendingDm.trade, pendingDm.partnerUserId, true)}
+                    className="mt-0.5 self-start text-[11px] font-semibold text-yellow-300 hover:text-yellow-100 underline underline-offset-2 transition-colors">
+                    Send DM again
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+          {status === "success" && dmStatus === "link-failed" && (
+            <div className="flex items-start gap-2 rounded-lg bg-yellow-500/10 border border-yellow-500/25 px-4 py-3">
+              <AlertTriangle className="w-4 h-4 text-yellow-400 flex-shrink-0 mt-px" />
+              <div className="flex flex-col gap-1 min-w-0">
+                <span className="text-[12px] text-yellow-300 font-medium leading-snug">Trade sent. Trade card DM sent. Tool link DM failed.</span>
+                {dmError && <span className="text-[11px] text-yellow-400/70 leading-snug">{dmError}</span>}
+                {pendingDm && (
+                  <button data-testid="btn-retry-tool-link-dm"
+                    onClick={() => sendTradeDm(pendingDm.trade, pendingDm.partnerUserId, true)}
+                    className="mt-0.5 self-start text-[11px] font-semibold text-yellow-300 hover:text-yellow-100 underline underline-offset-2 transition-colors">
+                    Send DM again
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+          {status === "error" && (
+            <div className="flex items-start gap-2 rounded-lg bg-red-500/10 border border-red-500/25 px-4 py-3">
+              <X className="w-4 h-4 text-red-400 flex-shrink-0 mt-px" />
+              <span className="text-[12px] text-red-300 leading-snug">{errorMsg}</span>
+            </div>
+          )}
+        </div>
 
-        <DialogFooter className="px-4 pb-4 pt-2 flex gap-2 justify-end">
+        {/* ── Footer ── */}
+        <div className="flex items-center justify-end gap-3 px-6 py-5 border-t border-white/[0.08] flex-shrink-0 mt-auto">
           {status === "success" ? (
-            <Button size="sm" variant="outline" className="h-8 text-xs" onClick={handleClose}>Close</Button>
+            <Button
+              variant="outline"
+              className="h-10 px-5 text-[13px] font-semibold border-white/20 text-white/70 hover:text-white hover:border-white/40 bg-transparent"
+              onClick={handleClose}
+            >
+              Close
+            </Button>
           ) : (
             <>
-              <Button size="sm" variant="ghost" className="h-8 text-xs text-muted-foreground" onClick={handleClose} disabled={status === "sending"}>
+              <Button
+                variant="ghost"
+                className="h-10 px-5 text-[13px] font-semibold text-white/40 hover:text-white/70"
+                onClick={handleClose}
+                disabled={status === "sending"}
+              >
                 Cancel
               </Button>
               <Button
-                size="sm"
-                className="h-8 text-xs bg-emerald-600 hover:bg-emerald-500 text-white gap-1.5"
+                className="h-10 px-6 text-[13px] font-bold bg-emerald-600 hover:bg-emerald-500 text-white gap-2 shadow-[0_0_20px_rgba(16,185,129,0.25)] hover:shadow-[0_0_24px_rgba(16,185,129,0.35)] transition-all"
                 onClick={handleConfirm}
                 disabled={status === "sending"}
                 data-testid="btn-confirm-send-trade"
               >
                 {status === "sending" ? (
-                  <><Loader2 className="w-3 h-3 animate-spin" />Sending…</>
+                  <><Loader2 className="w-4 h-4 animate-spin" />Sending…</>
                 ) : (
-                  <><Send className="w-3 h-3" />Confirm Send Trade</>
+                  <><Send className="w-4 h-4" />Confirm Send Trade</>
                 )}
               </Button>
             </>
           )}
-        </DialogFooter>
+        </div>
+
       </DialogContent>
     </Dialog>
   );
