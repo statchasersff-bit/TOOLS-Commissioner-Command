@@ -4,24 +4,16 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
   Send, Loader2, ArrowRightLeft, CheckCircle2, XCircle,
-  AlertTriangle, ExternalLink, MessageSquare, X, Pencil,
+  AlertTriangle, ExternalLink, MessageSquare, Pencil, X,
 } from "lucide-react";
+import { PlayerAvatar } from "@/components/PlayerAvatar";
 import {
   getDmByMembersFull, markDmRead, fetchDmMessages, sendDmMessage,
+  sendTradeMessage, sendPlainDm,
   acceptTrade, rejectTrade, proposeTrade,
 } from "@/services/sleeperAuthedApi";
-import type { SleeperDmMessage, SleeperTransactionPick } from "@/services/sleeperAuthedApi";
-import { PlayerAvatar } from "@/components/PlayerAvatar";
-import { getSleeperPlayers } from "@/lib/sleeperApi";
-import { getPositionColor } from "@/data/mockData";
-
-const SLEEPER_API = "https://api.sleeper.app/v1";
-
-async function jsonFetch<T>(url: string): Promise<T> {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json() as Promise<T>;
-}
+import type { SleeperDmMessage, SleeperTransactionPick, ProposeTradeResult } from "@/services/sleeperAuthedApi";
+import { TradeEditTab, type EditAssetsWithFaab } from "./TradeEditTab";
 
 // ─── Exported Types ───────────────────────────────────────────────────────────
 
@@ -90,11 +82,6 @@ export interface TradeActionModalProps {
   onWithdraw?: () => Promise<void>;
   onCounterSent?: () => void;
   onRefresh?: () => void;
-}
-
-interface EditAssets {
-  players: AssetPlayer[];
-  picks: AssetPick[];
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -259,214 +246,6 @@ function TradeValueBar({
             {Math.abs(diff).toFixed(0)} — Favors {diff > 0 ? myName : theirName}
           </span>
         )}
-      </div>
-    </div>
-  );
-}
-
-// ─── CounterEditPanel ─────────────────────────────────────────────────────────
-
-function CounterEditPanel({
-  trade, myUserId, valuesBySleeperId, onAssetsChange,
-  initialMyReceive, initialMyGive,
-}: {
-  trade: NormalizedTrade;
-  myUserId: string;
-  valuesBySleeperId: Record<string, number>;
-  onAssetsChange: (myReceive: EditAssets, myGive: EditAssets) => void;
-  initialMyReceive?: EditAssets;
-  initialMyGive?: EditAssets;
-}) {
-  const [myReceive, setMyReceive] = useState<EditAssets>(
-    initialMyReceive ?? { players: [...trade.iGet.players], picks: [...trade.iGet.picks] }
-  );
-  const [myGive, setMyGive] = useState<EditAssets>(
-    initialMyGive ?? { players: [...trade.iGive.players], picks: [...trade.iGive.picks] }
-  );
-
-  // Report initial assets to parent so the submit button is enabled immediately
-  useEffect(() => {
-    onAssetsChange(
-      initialMyReceive ?? { players: [...trade.iGet.players], picks: [...trade.iGet.picks] },
-      initialMyGive ?? { players: [...trade.iGive.players], picks: [...trade.iGive.picks] }
-    );
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const [myRoster, setMyRoster] = useState<AssetPlayer[]>([]);
-  const [partnerRoster, setPartnerRoster] = useState<AssetPlayer[]>([]);
-  const [rosterLoading, setRosterLoading] = useState(true);
-  const [mySearch, setMySearch] = useState("");
-  const [partnerSearch, setPartnerSearch] = useState("");
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const [rostersRaw, playersDb] = await Promise.all([
-          jsonFetch<any[]>(`${SLEEPER_API}/league/${trade.leagueId}/rosters`),
-          getSleeperPlayers(),
-        ]);
-        if (cancelled) return;
-
-        const enrich = (ids: string[]): AssetPlayer[] =>
-          ids
-            .map((pid) => {
-              const info = playersDb[pid];
-              if (!info) return null;
-              const name =
-                info.full_name || `${info.first_name || ""} ${info.last_name || ""}`.trim();
-              if (!name) return null;
-              return {
-                playerId: pid,
-                name,
-                pos: info.position || "?",
-                team: info.team || "FA",
-                value: valuesBySleeperId[pid] || 0,
-              };
-            })
-            .filter(Boolean) as AssetPlayer[];
-
-        for (const r of rostersRaw) {
-          const ids: string[] = r.players || [];
-          if (r.owner_id === myUserId) {
-            setMyRoster(enrich(ids).sort((a, b) => b.value - a.value));
-          }
-          if (r.roster_id === trade.partnerRosterId) {
-            setPartnerRoster(enrich(ids).sort((a, b) => b.value - a.value));
-          }
-        }
-      } catch {}
-      if (!cancelled) setRosterLoading(false);
-    })();
-    return () => { cancelled = true; };
-  }, [trade.leagueId, trade.partnerRosterId, myUserId, valuesBySleeperId]);
-
-  const myGiveIds = new Set(myGive.players.map((p) => p.playerId));
-  const myReceiveIds = new Set(myReceive.players.map((p) => p.playerId));
-
-  const myResults = mySearch.trim().length >= 2
-    ? myRoster
-        .filter((p) => p.name.toLowerCase().includes(mySearch.toLowerCase()) && !myGiveIds.has(p.playerId))
-        .slice(0, 7)
-    : [];
-  const partnerResults = partnerSearch.trim().length >= 2
-    ? partnerRoster
-        .filter((p) => p.name.toLowerCase().includes(partnerSearch.toLowerCase()) && !myReceiveIds.has(p.playerId))
-        .slice(0, 7)
-    : [];
-
-  const updRcv = (next: EditAssets) => { setMyReceive(next); onAssetsChange(next, myGive); };
-  const updGiv = (next: EditAssets) => { setMyGive(next); onAssetsChange(myReceive, next); };
-
-  return (
-    <div className="grid grid-cols-2 gap-4 px-6 py-4 overflow-y-auto flex-1 min-h-0">
-      {/* You Receive */}
-      <div className="bg-white/[0.025] border border-white/[0.08] rounded-xl p-4 flex flex-col">
-        <p className="text-[10px] text-white/40 uppercase tracking-widest font-semibold mb-3">
-          You Receive
-        </p>
-        <div className="space-y-0.5 flex-1 min-h-[60px]">
-          {myReceive.players.map((p) => (
-            <PlayerAssetRow
-              key={p.playerId}
-              player={p}
-              onRemove={() => updRcv({ ...myReceive, players: myReceive.players.filter((x) => x.playerId !== p.playerId) })}
-            />
-          ))}
-          {myReceive.picks.map((pk, i) => (
-            <PickAssetRow
-              key={i}
-              pick={pk}
-              onRemove={() => updRcv({ ...myReceive, picks: myReceive.picks.filter((_, j) => j !== i) })}
-            />
-          ))}
-          {myReceive.players.length === 0 && myReceive.picks.length === 0 && <EmptyAssets />}
-        </div>
-        {/* Search partner's roster */}
-        <div className="mt-3 relative">
-          <input
-            value={partnerSearch}
-            onChange={(e) => setPartnerSearch(e.target.value)}
-            placeholder={rosterLoading ? "Loading…" : "Add from partner's roster…"}
-            disabled={rosterLoading}
-            className="w-full bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-2 text-[12px] text-white/70 placeholder:text-white/25 focus:outline-none focus:border-white/20 disabled:opacity-40 transition-colors"
-            data-testid="counter-search-receive"
-          />
-          {partnerResults.length > 0 && (
-            <div className="absolute z-20 top-full mt-1 left-0 right-0 bg-[#07111f] border border-white/[0.12] rounded-xl shadow-xl overflow-hidden">
-              {partnerResults.map((p) => (
-                <button
-                  key={p.playerId}
-                  className="w-full flex items-center gap-2.5 px-3 py-2.5 text-left hover:bg-white/[0.05] transition-colors"
-                  onClick={() => {
-                    updRcv({ ...myReceive, players: [...myReceive.players, p] });
-                    setPartnerSearch("");
-                  }}
-                  data-testid={`counter-add-receive-${p.playerId}`}
-                >
-                  <span className={cn("text-[9px] font-bold flex-shrink-0", posText(p.pos))}>{p.pos}</span>
-                  <span className="text-[12px] text-white/80 flex-1 truncate">{p.name}</span>
-                  <span className="text-[10px] text-white/30">{p.value.toLocaleString()}</span>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* You Give */}
-      <div className="bg-white/[0.025] border border-white/[0.08] rounded-xl p-4 flex flex-col">
-        <p className="text-[10px] text-white/40 uppercase tracking-widest font-semibold mb-3">
-          You Give
-        </p>
-        <div className="space-y-0.5 flex-1 min-h-[60px]">
-          {myGive.players.map((p) => (
-            <PlayerAssetRow
-              key={p.playerId}
-              player={p}
-              onRemove={() => updGiv({ ...myGive, players: myGive.players.filter((x) => x.playerId !== p.playerId) })}
-            />
-          ))}
-          {myGive.picks.map((pk, i) => (
-            <PickAssetRow
-              key={i}
-              pick={pk}
-              onRemove={() => updGiv({ ...myGive, picks: myGive.picks.filter((_, j) => j !== i) })}
-            />
-          ))}
-          {myGive.players.length === 0 && myGive.picks.length === 0 && <EmptyAssets />}
-        </div>
-        {/* Search my roster */}
-        <div className="mt-3 relative">
-          <input
-            value={mySearch}
-            onChange={(e) => setMySearch(e.target.value)}
-            placeholder={rosterLoading ? "Loading…" : "Add from your roster…"}
-            disabled={rosterLoading}
-            className="w-full bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-2 text-[12px] text-white/70 placeholder:text-white/25 focus:outline-none focus:border-white/20 disabled:opacity-40 transition-colors"
-            data-testid="counter-search-give"
-          />
-          {myResults.length > 0 && (
-            <div className="absolute z-20 top-full mt-1 left-0 right-0 bg-[#07111f] border border-white/[0.12] rounded-xl shadow-xl overflow-hidden">
-              {myResults.map((p) => (
-                <button
-                  key={p.playerId}
-                  className="w-full flex items-center gap-2.5 px-3 py-2.5 text-left hover:bg-white/[0.05] transition-colors"
-                  onClick={() => {
-                    updGiv({ ...myGive, players: [...myGive.players, p] });
-                    setMySearch("");
-                  }}
-                  data-testid={`counter-add-give-${p.playerId}`}
-                >
-                  <span className={cn("text-[9px] font-bold flex-shrink-0", posText(p.pos))}>{p.pos}</span>
-                  <span className="text-[12px] text-white/80 flex-1 truncate">{p.name}</span>
-                  <span className="text-[10px] text-white/30">{p.value.toLocaleString()}</span>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
       </div>
     </div>
   );
@@ -678,7 +457,7 @@ export function TradeActionModal({
   const [actionResult, setActionResult] = useState<{ success: boolean; message: string } | null>(null);
 
   // Counter / resend state
-  const [counterAssets, setCounterAssets] = useState<{ myReceive: EditAssets; myGive: EditAssets } | null>(null);
+  const [counterAssets, setCounterAssets] = useState<{ myReceive: EditAssetsWithFaab; myGive: EditAssetsWithFaab } | null>(null);
   const [counterSubmitting, setCounterSubmitting] = useState(false);
   const [counterResult, setCounterResult] = useState<{ success: boolean; message: string } | null>(null);
   const [showResendConfirm, setShowResendConfirm] = useState(false);
@@ -796,8 +575,8 @@ export function TradeActionModal({
     if (!counterAssets) return;
     const { myReceive, myGive } = counterAssets;
     const hasAssets =
-      myReceive.players.length > 0 || myReceive.picks.length > 0 ||
-      myGive.players.length > 0 || myGive.picks.length > 0;
+      myReceive.players.length > 0 || myReceive.picks.length > 0 || myReceive.faab > 0 ||
+      myGive.players.length > 0 || myGive.picks.length > 0 || myGive.faab > 0;
     if (!hasAssets) return;
 
     setCounterSubmitting(true);
@@ -828,13 +607,48 @@ export function TradeActionModal({
           previous_owner_id: trade.userRosterId,
         })),
       ];
+      const waiverBudget: Array<{ sender: number; receiver: number; amount: number }> = [];
+      if (myGive.faab > 0) waiverBudget.push({ sender: trade.userRosterId, receiver: trade.partnerRosterId, amount: myGive.faab });
+      if (myReceive.faab > 0) waiverBudget.push({ sender: trade.partnerRosterId, receiver: trade.userRosterId, amount: myReceive.faab });
       const expiresAt = Math.floor((Date.now() + 7 * 24 * 60 * 60 * 1000) / 1000);
-      await proposeTrade({
+      const result = await proposeTrade({
         leagueId: trade.leagueId,
-        adds, drops, draftPicks, expiresAt,
+        adds, drops, draftPicks, waiverBudget, expiresAt,
         rejectTransactionId: trade.transactionId,
         rejectTransactionLeg: trade.leg,
       });
+
+      // DM flow: trade card + tool link (non-fatal if partner ID missing)
+      if (trade.partnerUserId) {
+        try {
+          const dmInfo = await getDmByMembersFull(trade.partnerUserId);
+          if (dmInfo?.dm_id) {
+            const txByRoster: Record<string, { adds: Record<string, number>; drops: Record<string, number> }> = {};
+            for (const [pid, rid] of Object.entries(result.adds ?? {})) {
+              const r = String(rid); if (!txByRoster[r]) txByRoster[r] = { adds: {}, drops: {} }; txByRoster[r].adds[pid] = rid;
+            }
+            for (const [pid, rid] of Object.entries(result.drops ?? {})) {
+              const r = String(rid); if (!txByRoster[r]) txByRoster[r] = { adds: {}, drops: {} }; txByRoster[r].drops[pid] = rid;
+            }
+            const usersInLeagueMap: Record<string, { display_name: string; user_id: string }> = {
+              [myUserId]: { display_name: myUsername, user_id: myUserId },
+              [trade.partnerUserId]: { display_name: trade.partnerName, user_id: trade.partnerUserId },
+            };
+            await sendTradeMessage({
+              dmId: dmInfo.dm_id,
+              text: `@${myUsername} has sent a counter offer in ${trade.leagueName}`,
+              transactionId: result.transaction_id,
+              leagueId: trade.leagueId,
+              status: result.status,
+              transactionsByRoster: txByRoster,
+              usersInLeagueMap,
+              attachTradeCard: true,
+            });
+            await sendPlainDm(dmInfo.dm_id, "https://statchasers.com/dynasty-command-tool/");
+          }
+        } catch { /* DM failures are non-fatal */ }
+      }
+
       setCounterResult({ success: true, message: "Counter offer sent! The existing offer has been rejected." });
       setTimeout(() => onCounterSent?.(), 1600);
     } catch (err: any) {
@@ -845,15 +659,15 @@ export function TradeActionModal({
     } finally {
       setCounterSubmitting(false);
     }
-  }, [counterAssets, trade, onCounterSent]);
+  }, [counterAssets, trade, myUserId, myUsername, onCounterSent]);
 
   // ── Edit & Resend submit ─────────────────────────────────────────────────────
   const handleResendSubmit = useCallback(async () => {
     if (!counterAssets) return;
     const { myReceive, myGive } = counterAssets;
     const hasAssets =
-      myReceive.players.length > 0 || myReceive.picks.length > 0 ||
-      myGive.players.length > 0 || myGive.picks.length > 0;
+      myReceive.players.length > 0 || myReceive.picks.length > 0 || myReceive.faab > 0 ||
+      myGive.players.length > 0 || myGive.picks.length > 0 || myGive.faab > 0;
     if (!hasAssets) return;
 
     setResendSubmitting(true);
@@ -888,11 +702,45 @@ export function TradeActionModal({
           previous_owner_id: trade.userRosterId,
         })),
       ];
+      const waiverBudget: Array<{ sender: number; receiver: number; amount: number }> = [];
+      if (myGive.faab > 0) waiverBudget.push({ sender: trade.userRosterId, receiver: trade.partnerRosterId, amount: myGive.faab });
+      if (myReceive.faab > 0) waiverBudget.push({ sender: trade.partnerRosterId, receiver: trade.userRosterId, amount: myReceive.faab });
       const expiresAt = trade.expiresAt && trade.expiresAt > Date.now()
         ? Math.floor(trade.expiresAt / 1000)
         : Math.floor((Date.now() + 7 * 24 * 60 * 60 * 1000) / 1000);
 
-      await proposeTrade({ leagueId: trade.leagueId, adds, drops, draftPicks, expiresAt });
+      const result = await proposeTrade({ leagueId: trade.leagueId, adds, drops, draftPicks, waiverBudget, expiresAt });
+
+      // DM flow: trade card + tool link (non-fatal if partner ID missing)
+      if (trade.partnerUserId) {
+        try {
+          const dmInfo = await getDmByMembersFull(trade.partnerUserId);
+          if (dmInfo?.dm_id) {
+            const txByRoster: Record<string, { adds: Record<string, number>; drops: Record<string, number> }> = {};
+            for (const [pid, rid] of Object.entries(result.adds ?? {})) {
+              const r = String(rid); if (!txByRoster[r]) txByRoster[r] = { adds: {}, drops: {} }; txByRoster[r].adds[pid] = rid;
+            }
+            for (const [pid, rid] of Object.entries(result.drops ?? {})) {
+              const r = String(rid); if (!txByRoster[r]) txByRoster[r] = { adds: {}, drops: {} }; txByRoster[r].drops[pid] = rid;
+            }
+            const usersInLeagueMap: Record<string, { display_name: string; user_id: string }> = {
+              [myUserId]: { display_name: myUsername, user_id: myUserId },
+              [trade.partnerUserId]: { display_name: trade.partnerName, user_id: trade.partnerUserId },
+            };
+            await sendTradeMessage({
+              dmId: dmInfo.dm_id,
+              text: `@${myUsername} has updated a trade offer in ${trade.leagueName}`,
+              transactionId: result.transaction_id,
+              leagueId: trade.leagueId,
+              status: result.status,
+              transactionsByRoster: txByRoster,
+              usersInLeagueMap,
+              attachTradeCard: true,
+            });
+            await sendPlainDm(dmInfo.dm_id, "https://statchasers.com/dynasty-command-tool/");
+          }
+        } catch { /* DM failures are non-fatal */ }
+      }
 
       setCounterResult({ success: true, message: "Updated offer sent! Your previous offer has been withdrawn." });
       setTimeout(() => onCounterSent?.(), 1600);
@@ -911,7 +759,7 @@ export function TradeActionModal({
     } finally {
       setResendSubmitting(false);
     }
-  }, [counterAssets, trade, onCounterSent]);
+  }, [counterAssets, trade, myUserId, myUsername, onCounterSent]);
 
   const handleClose = useCallback(() => {
     onRefresh?.();
@@ -1078,7 +926,7 @@ export function TradeActionModal({
           )}
 
           {!finalResult && activeTab === "edit" && activeMode === "counter" && (
-            <CounterEditPanel
+            <TradeEditTab
               trade={trade}
               myUserId={myUserId}
               valuesBySleeperId={valuesBySleeperId}
@@ -1087,12 +935,12 @@ export function TradeActionModal({
           )}
 
           {!finalResult && activeTab === "edit" && activeMode === "resend" && (
-            <CounterEditPanel
+            <TradeEditTab
               trade={trade}
               myUserId={myUserId}
               valuesBySleeperId={valuesBySleeperId}
-              initialMyReceive={{ players: trade.iGet.players, picks: trade.iGet.picks }}
-              initialMyGive={{ players: trade.iGive.players, picks: trade.iGive.picks }}
+              initialMyReceive={{ players: trade.iGet.players, picks: trade.iGet.picks, faab: trade.iGet.faab }}
+              initialMyGive={{ players: trade.iGive.players, picks: trade.iGive.picks, faab: trade.iGive.faab }}
               onAssetsChange={(myReceive, myGive) => setCounterAssets({ myReceive, myGive })}
             />
           )}
@@ -1273,8 +1121,10 @@ export function TradeActionModal({
                   !counterAssets ||
                   (counterAssets.myReceive.players.length === 0 &&
                    counterAssets.myReceive.picks.length === 0 &&
+                   counterAssets.myReceive.faab === 0 &&
                    counterAssets.myGive.players.length === 0 &&
-                   counterAssets.myGive.picks.length === 0)
+                   counterAssets.myGive.picks.length === 0 &&
+                   counterAssets.myGive.faab === 0)
                 }
                 data-testid="btn-resend-submit"
               >
@@ -1303,8 +1153,10 @@ export function TradeActionModal({
                   !counterAssets ||
                   (counterAssets.myReceive.players.length === 0 &&
                    counterAssets.myReceive.picks.length === 0 &&
+                   counterAssets.myReceive.faab === 0 &&
                    counterAssets.myGive.players.length === 0 &&
-                   counterAssets.myGive.picks.length === 0)
+                   counterAssets.myGive.picks.length === 0 &&
+                   counterAssets.myGive.faab === 0)
                 }
                 data-testid="btn-counter-submit"
               >

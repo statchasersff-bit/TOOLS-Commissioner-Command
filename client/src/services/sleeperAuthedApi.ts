@@ -319,12 +319,16 @@ function buildProposeTrademutation(
   picksCsv: string[],
   expiresAt: number | null,
   rejectTransactionId?: string,
-  rejectTransactionLeg?: number
+  rejectTransactionLeg?: number,
+  waiverBudget?: Array<{ sender: number; receiver: number; amount: number }>
 ): string {
   const counterLines = rejectTransactionId
     ? `reject_transaction_id: "${rejectTransactionId}", reject_transaction_leg: ${rejectTransactionLeg ?? 1},`
     : "";
   const expiresLine = expiresAt !== null ? `expires_at: ${expiresAt},` : "";
+  const budgetLiteral = waiverBudget && waiverBudget.length > 0
+    ? JSON.stringify(waiverBudget)
+    : "[]";
   return `
     mutation propose_trade(
       $k_adds: [String],
@@ -340,7 +344,7 @@ function buildProposeTrademutation(
         v_adds: $v_adds,
         k_drops: $k_drops,
         v_drops: $v_drops,
-        waiver_budget: [],
+        waiver_budget: ${budgetLiteral},
         ${expiresLine}
       ) {
         adds
@@ -373,6 +377,8 @@ export interface ProposeTradeParams {
   drops: Record<string, number>;
   draftPicks: SleeperTransactionPick[];
   expiresAt: number | null;
+  /** FAAB transfers included in this trade */
+  waiverBudget?: Array<{ sender: number; receiver: number; amount: number }>;
   /** When countering an existing offer, the transaction to reject */
   rejectTransactionId?: string;
   rejectTransactionLeg?: number;
@@ -416,6 +422,7 @@ export async function proposeTrade(params: ProposeTradeParams): Promise<ProposeT
     drops,
     draftPicks,
     expiresAt,
+    waiverBudget,
     rejectTransactionId,
     rejectTransactionLeg,
   } = params;
@@ -437,7 +444,8 @@ export async function proposeTrade(params: ProposeTradeParams): Promise<ProposeT
     picksCsv,
     expiresAt,
     rejectTransactionId,
-    rejectTransactionLeg
+    rejectTransactionLeg,
+    waiverBudget
   );
   console.log("[proposeTrade] draftPicks raw:", JSON.stringify(draftPicks));
   console.log("[proposeTrade] picksCsv:", JSON.stringify(picksCsv));

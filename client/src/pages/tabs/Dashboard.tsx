@@ -8,10 +8,10 @@ import { InsightCallout } from "@/components/InsightCallout";
 import { SectionHeader } from "@/components/SectionHeader";
 import { getLeagueTeamTiers, getTierColor, getTierEmoji, getTierTooltip, isContenderTier, isRebuilderTier, generateInsights, computeNowScore, computeFutureScore, getDynastyWindowLabel, getDynastyWindowSubtitle, getDynastyWindowColor } from "@/data/mockData";
 import { useValueModel } from "@/contexts/ValueModelContext";
-import type { League, Team, Player } from "@/types";
+import type { League, Team, Player, Pick } from "@/types";
 import { formatPickLabel } from "@/types";
 import { cn } from "@/lib/utils";
-import { Trophy, Zap, Target, Calendar, Users, Medal, ArrowRight, ArrowUp, ArrowDown, ArrowUpDown, Table, ArrowRightLeft, Compass, Flame, Sprout, Archive, ChevronDown, ChevronUp, ChevronRight, TrendingUp, TrendingDown, MapPin, BarChart2, Grid3X3, List, LayoutDashboard, Calculator, Activity, Waves, CheckCircle2, AlertTriangle, Coins, Settings2 } from "lucide-react";
+import { Trophy, Zap, Target, Calendar, Users, Medal, ArrowRight, ArrowUp, ArrowDown, ArrowUpDown, Table, ArrowRightLeft, Compass, Flame, Sprout, Archive, ChevronDown, ChevronUp, ChevronRight, TrendingUp, TrendingDown, MapPin, BarChart2, Grid3X3, List, LayoutDashboard, Activity, CheckCircle2, AlertTriangle, Coins, Settings2 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 
@@ -793,11 +793,15 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
   const [viewMode, setViewMode] = useState<"table" | "economy" | "chart" | "heatmap">("table");
   const [hmSortKey, setHmSortKey] = useState<HmSortKey>("dynOverall");
   const [hmSortDir, setHmSortDir] = useState<"asc" | "desc">("asc");
+  const [hmExpandedRow, setHmExpandedRow] = useState<string | null>(null);
 
   function handleHmSort(key: HmSortKey) {
     if (hmSortKey === key) setHmSortDir(d => d === "asc" ? "desc" : "asc");
     else { setHmSortKey(key); setHmSortDir("asc"); }
   }
+
+  const toggleHmRow = (teamId: string) =>
+    setHmExpandedRow(prev => (prev === teamId ? null : teamId));
 
   const snapshotTierMap = useMemo(() => getLeagueTeamTiers(teams), [teams]);
 
@@ -960,6 +964,22 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
         : String(vb).localeCompare(String(va));
     });
   }, [teams, teamRanks, strengthProfiles, hmSortKey, hmSortDir]);
+
+  const hmRosterByTeamId = useMemo(() => {
+    type HmRoster = { qbs: Player[]; rbs: Player[]; wrs: Player[]; tes: Player[]; picks: Pick[] };
+    const byValue = (a: Player, b: Player) => (b.value ?? 0) - (a.value ?? 0);
+    const map: Record<string, HmRoster> = {};
+    for (const team of teams) {
+      map[team.id] = {
+        qbs:  [...team.roster.filter(p => p.pos === "QB")].sort(byValue),
+        rbs:  [...team.roster.filter(p => p.pos === "RB")].sort(byValue),
+        wrs:  [...team.roster.filter(p => p.pos === "WR")].sort(byValue),
+        tes:  [...team.roster.filter(p => p.pos === "TE")].sort(byValue),
+        picks: [...team.picks].sort((a, b) => a.year - b.year || a.round - b.round),
+      };
+    }
+    return map;
+  }, [teams]);
 
   const thHeat = "px-2 py-2.5 text-center text-[10px] font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap bg-muted/30 dark:bg-muted/20";
   const thHeatLeft = "px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap bg-muted/30 dark:bg-muted/20";
@@ -1363,6 +1383,7 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
                   const isUser = team.id === userTeam.id;
                   const total = heatmapTeams.length;
                   const isEven = idx % 2 === 0;
+                  const isExpanded = hmExpandedRow === team.id;
                   const rowBase = isUser
                     ? "bg-[#0b3a7a]/5 dark:bg-blue-400/8"
                     : isEven ? "bg-background" : "bg-muted/10 dark:bg-muted/5";
@@ -1373,6 +1394,7 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
                   const pksRank = teamRanks.ranks[team.id]?.picksRank ?? total;
                   const dRanks = strengthProfiles.dynastyRanks[team.id] || {};
                   const rRanks = strengthProfiles.redraftRanks[team.id] || {};
+                  const hmRoster = hmRosterByTeamId[team.id];
 
                   const hc = (rank: number, divider?: "dyn" | "red") => (
                     <td className={cn(
@@ -1387,34 +1409,104 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
                   );
 
                   return (
-                    <tr key={team.id} className={cn("border-b border-border/20", rowBase)} data-testid={`heatmap-row-${team.id}`}>
-                      <td className={cn("px-3 py-2.5 whitespace-nowrap", rowBase)}>
-                        <div className="flex items-center gap-2">
-                          {team.avatar ? (
-                            <img src={team.avatar} alt={team.owner} className="w-5 h-5 rounded-full object-cover flex-shrink-0" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
-                          ) : (
-                            <div className={cn("w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold flex-shrink-0", isUser ? "bg-[#0b3a7a]/20 text-[#0b3a7a] dark:bg-blue-400/20 dark:text-blue-400" : "bg-muted text-muted-foreground")}>
-                              {(team.owner || "?").charAt(0).toUpperCase()}
+                    <Fragment key={team.id}>
+                      <tr
+                        className={cn("border-b border-border/20 cursor-pointer select-none", rowBase, isExpanded && "border-b-0")}
+                        onClick={() => toggleHmRow(team.id)}
+                        data-testid={`heatmap-row-${team.id}`}
+                      >
+                        <td className={cn("px-3 py-2.5 whitespace-nowrap", rowBase)}>
+                          <div className="flex items-center gap-2">
+                            <ChevronRight className={cn(
+                              "w-3 h-3 flex-shrink-0 text-muted-foreground/40 transition-transform duration-150",
+                              isExpanded && "rotate-90 text-muted-foreground/70",
+                            )} />
+                            {team.avatar ? (
+                              <img src={team.avatar} alt={team.owner} className="w-5 h-5 rounded-full object-cover flex-shrink-0" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                            ) : (
+                              <div className={cn("w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold flex-shrink-0", isUser ? "bg-[#0b3a7a]/20 text-[#0b3a7a] dark:bg-blue-400/20 dark:text-blue-400" : "bg-muted text-muted-foreground")}>
+                                {(team.owner || "?").charAt(0).toUpperCase()}
+                              </div>
+                            )}
+                            <span className={cn("font-semibold truncate max-w-[80px] sm:max-w-none", isUser ? "text-[#0b3a7a] dark:text-blue-400" : "text-foreground")}>
+                              {team.owner}
+                            </span>
+                            {isUser && <div className="w-1.5 h-1.5 rounded-full bg-[#d4af37] flex-shrink-0" />}
+                          </div>
+                        </td>
+                        {hc(dynRank, "dyn")}
+                        {hc(dRanks["QB"] ?? total)}
+                        {hc(dRanks["RB"] ?? total)}
+                        {hc(dRanks["WR"] ?? total)}
+                        {hc(dRanks["TE"] ?? total)}
+                        {hc(pksRank)}
+                        {hc(redRank, "red")}
+                        {hc(rRanks["QB"] ?? total)}
+                        {hc(rRanks["RB"] ?? total)}
+                        {hc(rRanks["WR"] ?? total)}
+                        {hc(rRanks["TE"] ?? total)}
+                      </tr>
+
+                      {isExpanded && hmRoster && (
+                        <tr className={cn("border-b border-border/20", rowBase)}>
+                          <td colSpan={12} className="p-0">
+                            <div className="px-4 py-3 bg-muted/[0.04] dark:bg-white/[0.02] border-t border-border/20">
+                              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+                                {(
+                                  [
+                                    { label: "QB",    players: hmRoster.qbs,  pos: "QB"   },
+                                    { label: "RB",    players: hmRoster.rbs,  pos: "RB"   },
+                                    { label: "WR",    players: hmRoster.wrs,  pos: "WR"   },
+                                    { label: "TE",    players: hmRoster.tes,  pos: "TE"   },
+                                  ] as const
+                                ).map(({ label, players }) => (
+                                  <div key={label}>
+                                    <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/60 mb-1.5">{label}</p>
+                                    <div className="flex flex-col gap-0.5">
+                                      {players.length === 0 ? (
+                                        <p className="text-[11px] text-muted-foreground/40 italic">None</p>
+                                      ) : (
+                                        players.map((p) => (
+                                          <div
+                                            key={p.id}
+                                            className="px-2 py-1 rounded bg-background/70 dark:bg-white/[0.04] border border-border/25 text-[11px] leading-snug"
+                                          >
+                                            <span className="font-semibold text-foreground">{p.name}</span>
+                                            <span className="text-muted-foreground"> · {p.team}</span>
+                                          </div>
+                                        ))
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+
+                                {/* Picks */}
+                                <div>
+                                  <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/60 mb-1.5">Picks</p>
+                                  <div className="flex flex-col gap-0.5">
+                                    {hmRoster.picks.length === 0 ? (
+                                      <p className="text-[11px] text-muted-foreground/40 italic">None</p>
+                                    ) : (
+                                      hmRoster.picks.map((pk, i) => (
+                                        <div
+                                          key={i}
+                                          className="px-2 py-1 rounded bg-background/70 dark:bg-white/[0.04] border border-border/25 text-[11px] leading-snug"
+                                        >
+                                          <span className="font-semibold text-foreground">{formatPickLabel(pk)}</span>
+                                          {pk.projectedRange && (
+                                            <span className="text-muted-foreground"> · {pk.projectedRange}</span>
+                                          )}
+                                        </div>
+                                      ))
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
                             </div>
-                          )}
-                          <span className={cn("font-semibold truncate max-w-[80px] sm:max-w-none", isUser ? "text-[#0b3a7a] dark:text-blue-400" : "text-foreground")}>
-                            {team.owner}
-                          </span>
-                          {isUser && <div className="w-1.5 h-1.5 rounded-full bg-[#d4af37] flex-shrink-0" />}
-                        </div>
-                      </td>
-                      {hc(dynRank, "dyn")}
-                      {hc(dRanks["QB"] ?? total)}
-                      {hc(dRanks["RB"] ?? total)}
-                      {hc(dRanks["WR"] ?? total)}
-                      {hc(dRanks["TE"] ?? total)}
-                      {hc(pksRank)}
-                      {hc(redRank, "red")}
-                      {hc(rRanks["QB"] ?? total)}
-                      {hc(rRanks["RB"] ?? total)}
-                      {hc(rRanks["WR"] ?? total)}
-                      {hc(rRanks["TE"] ?? total)}
-                    </tr>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
                   );
                 })}
               </tbody>
@@ -1626,76 +1718,10 @@ export function MyTeam({ league, userTeam, onNavigate }: DashboardOverviewProps)
   }));
 
 
-  // League meta string for hero
-  const leagueMeta = [
-    `${total} Teams`,
-    league.format,
-    league.scoringFormat,
-  ].filter(Boolean).join(" · ");
-
   return (
     <div className="space-y-8">
 
-      {/* ── 1. HERO HEADER ─────────────────────────────────────────────────── */}
-      <div className="rounded-2xl border border-border/60 dark:border-[#1a2d4a]/80 bg-gradient-to-br from-[#0b3a7a]/5 via-background to-[#d4af37]/5 dark:from-[#0b3a7a]/10 dark:via-[#0c1929] dark:to-[#d4af37]/5 p-6" data-testid="myteam-hero">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-4 flex-1 min-w-0">
-            <div className="w-14 h-14 rounded-2xl bg-[#0b3a7a]/15 dark:bg-blue-400/10 flex items-center justify-center ring-2 ring-[#0b3a7a]/20 dark:ring-blue-400/20 flex-shrink-0 overflow-hidden">
-              {userTeam.avatar ? (
-                <img
-                  src={userTeam.avatar}
-                  alt={userTeam.owner}
-                  className="w-full h-full object-cover"
-                  onError={(e) => {
-                    const img = e.target as HTMLImageElement;
-                    img.onerror = null;
-                    img.style.display = "none";
-                    img.parentElement!.innerHTML = `<span class="text-xl font-black text-[#0b3a7a] dark:text-blue-400 uppercase">${userTeam.name?.[0] ?? "T"}</span>`;
-                  }}
-                />
-              ) : (
-                <span className="text-xl font-black text-[#0b3a7a] dark:text-blue-400 uppercase">
-                  {userTeam.name?.[0] ?? "T"}
-                </span>
-              )}
-            </div>
-            <div>
-              <h2 className="text-xl font-black text-foreground leading-tight" data-testid="hero-team-name">
-                {userTeam.name}
-              </h2>
-              {userTeam.owner && userTeam.owner !== userTeam.name && (
-                <p className="text-sm text-muted-foreground mt-0.5">
-                  Managed by <span className="font-semibold text-foreground">{userTeam.owner}</span>
-                </p>
-              )}
-              <p className="text-xs text-muted-foreground/70 mt-1 font-medium">{leagueMeta}</p>
-            </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-2 flex-shrink-0">
-            <Badge className={`text-sm font-bold px-3 py-1 border ${getTierBadgeClasses(tier)}`} data-testid="hero-tier-badge">
-              {tier}
-            </Badge>
-            {onNavigate && (
-              <>
-                <Button variant="outline" size="sm" className="text-xs h-8 gap-1.5 border-[#0b3a7a]/25 hover:border-[#0b3a7a]/50 hover:bg-[#0b3a7a]/5" onClick={() => onNavigate("trade-center", "trade-calculator")} data-testid="hero-btn-trade-calc">
-                  <Calculator className="w-3.5 h-3.5" /> Trade Calculator
-                </Button>
-                <Button variant="outline" size="sm" className="text-xs h-8 gap-1.5 border-[#0b3a7a]/25 hover:border-[#0b3a7a]/50 hover:bg-[#0b3a7a]/5" onClick={() => onNavigate("league-analyzer", "power-rankings")} data-testid="hero-btn-league-analyzer">
-                  <BarChart2 className="w-3.5 h-3.5" /> League Analyzer
-                </Button>
-                <Button variant="outline" size="sm" className="text-xs h-8 gap-1.5 border-[#0b3a7a]/25 hover:border-[#0b3a7a]/50 hover:bg-[#0b3a7a]/5" onClick={() => onNavigate("dashboard", "share-team")} data-testid="hero-btn-field-view">
-                  <Grid3X3 className="w-3.5 h-3.5" /> Field View
-                </Button>
-                <Button variant="outline" size="sm" className="text-xs h-8 gap-1.5 border-[#0b3a7a]/25 hover:border-[#0b3a7a]/50 hover:bg-[#0b3a7a]/5" onClick={() => onNavigate("portfolio", "waiver-command")} data-testid="hero-btn-waiver">
-                  <Waves className="w-3.5 h-3.5" /> Waiver Command
-                </Button>
-              </>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* ── 2. KPI STRIP ───────────────────────────────────────────────────── */}
+      {/* ── 1. KPI STRIP ───────────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3" data-testid="myteam-kpi-strip">
         {[
           {
