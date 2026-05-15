@@ -1,0 +1,139 @@
+Add an “Edit Trade” button to the Confirm Trade Offer modal.
+
+Goal:
+When clicked, open an edit view that shows both managers’ rosters/assets and lets the user select or unselect players, picks, and FAAB for the trade.
+
+Important behavior:
+
+* Existing selected assets must remain selected when Edit Trade opens.
+* User can unselect existing assets.
+* User can add new assets.
+* Returning to confirmation should update the trade summary using the modified selections.
+* Do not reset the trade state when opening edit mode.
+
+UI placement:
+
+* Add “Edit Trade” secondary button near the top-right of the trade summary area or beside the modal title.
+* Button text: “Edit Trade”
+* Icon optional: pencil/edit icon.
+
+Edit view layout:
+
+* Same modal, but switch body into edit mode.
+* Header changes to: “Edit Trade Offer”
+* Include a small “Back to Review” button.
+* Two side-by-side roster panels on desktop:
+
+  * Left: My Roster
+  * Right: Partner Roster
+* Stack vertically on mobile.
+
+Each roster panel should include:
+
+* Manager name/avatar
+* Search input
+* Position filters: All, QB, RB, WR, TE, Picks
+* Player list grouped by position or sorted by value
+* Draft picks section
+* FAAB input if league uses FAAB
+
+Selectable asset behavior:
+
+* Clicking a player toggles selected/unselected.
+* Selected assets should show:
+
+  * checked state
+  * highlighted border
+  * “Included” label
+* Unselected assets should remain normal.
+* Disable assets that are not tradable if needed.
+
+Trade direction:
+
+* If user selects asset from My Roster, it means I am sending it.
+* If user selects asset from Partner Roster, it means I am receiving it.
+* Confirmation view should display:
+
+  * You Receive = selected assets from partner
+  * They Receive = selected assets from me
+
+State model:
+Use one source of truth for selected assets.
+
+Example:
+selectedTrade = {
+myRosterId,
+partnerRosterId,
+myUserId,
+partnerUserId,
+sending: {
+playerIds: Set<string>,
+picks: Set<string>,
+faab: number
+},
+receiving: {
+playerIds: Set<string>,
+picks: Set<string>,
+faab: number
+},
+expiration
+}
+
+When opening Edit Trade:
+
+* hydrate selectedTrade from the current proposed trade payload.
+* do not clear selected assets.
+* preserve selected picks and FAAB.
+* preserve expiration choice.
+
+When returning to review:
+
+* rebuild adds/drops from selectedTrade.
+
+Build adds/drops:
+For each receiving player from partner:
+adds[playerId] = myRosterId
+drops[playerId] = partnerRosterId
+
+For each sending player from me:
+adds[playerId] = partnerRosterId
+drops[playerId] = myRosterId
+
+Draft picks:
+
+* Build Sleeper pick strings from selected picks:
+  "originalRosterId,season,round,fromRosterId,toRosterId"
+
+FAAB:
+
+* Build waiver_budget array if either side includes FAAB.
+* Keep [] if no FAAB.
+
+Validation:
+
+* Must have at least one asset, pick, or FAAB on either side.
+* Show warning if one side is empty:
+  “This offer gives one side nothing. Continue?”
+* Do not allow duplicate player IDs across both sides.
+* Do not allow selecting the same pick twice.
+
+Data needed:
+
+* Use existing roster/player data already loaded for league.
+* Use roster_draft_picks for picks.
+* Use league_users/rosters mapping for manager names and roster ownership.
+* If roster data is missing, fetch it before opening edit mode.
+
+Footer behavior:
+In edit mode:
+
+* Left button: “Cancel Edits”
+* Right button: “Back to Review”
+* Cancel Edits restores the trade to the last reviewed state.
+* Back to Review applies the selected state and returns to confirmation mode.
+
+After user confirms send:
+
+* use the same propose_trade function.
+* do not change DM behavior.
+* after successful trade, send trade-card DM and tool link DM as currently implemented.

@@ -9,13 +9,14 @@ import { useValueModel } from "@/contexts/ValueModelContext";
 import { getLeagueTeamTiers, getTierColor, getTierEmoji, getPositionColor, isContenderTier, isRebuilderTier } from "@/data/mockData";
 import { cn } from "@/lib/utils";
 import type { League, Team, Player, Pick, Tier } from "@/types";
+import { formatPickLabel } from "@/types";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { getSleeperSession } from "@/services/sleeperAuth";
 import { proposeTrade, getDmByMembers, sendTradeMessage, sendPlainDm } from "@/services/sleeperAuthedApi";
-import type { ProposeTradeResult } from "@/services/sleeperAuthedApi";
+import type { ProposeTradeResult, SleeperTransactionPick } from "@/services/sleeperAuthedApi";
 import {
   ArrowRightLeft, Target, TrendingUp, TrendingDown, Zap, RotateCcw, ShieldCheck,
-  ChevronRight, Scale, Send, Loader2, CheckCircle2, AlertTriangle, X
+  ChevronRight, Scale, Send, Loader2, CheckCircle2, AlertTriangle, X, Pencil, Search
 } from "lucide-react";
 
 interface PositionalAnalysisProps {
@@ -769,6 +770,37 @@ function computeExpiresAt(option: string): number | null {
   }
 }
 
+// ─── Edit-trade state types & helpers ─────────────────────────────────────
+
+interface EditSide { playerIds: Set<string>; picks: Set<string> }
+interface EditTradeState { sending: EditSide; receiving: EditSide }
+
+function pickKey(p: Pick): string {
+  return `${p.year}-${p.round}-${p.originalRosterId ?? 0}`;
+}
+function findPickByKey(picks: Pick[], key: string): Pick | undefined {
+  return picks.find(p => pickKey(p) === key);
+}
+function deepCopyEditState(s: EditTradeState): EditTradeState {
+  return {
+    sending:   { playerIds: new Set(s.sending.playerIds),   picks: new Set(s.sending.picks)   },
+    receiving: { playerIds: new Set(s.receiving.playerIds), picks: new Set(s.receiving.picks) },
+  };
+}
+function hydrateFromIdea(idea: WinNowIdea, resolvedPick: Pick | null): EditTradeState {
+  const sending: EditSide   = { playerIds: new Set(), picks: new Set() };
+  const receiving: EditSide = { playerIds: new Set(), picks: new Set() };
+  for (const a of idea.youGive) {
+    if (a.type === "player" && a.sleeperId) sending.playerIds.add(a.sleeperId);
+    else if (a.type === "pick") { const pk = resolvedPick ?? a.pick; if (pk) sending.picks.add(pickKey(pk)); }
+  }
+  for (const a of idea.youGet) {
+    if (a.type === "player" && a.sleeperId) receiving.playerIds.add(a.sleeperId);
+    else if (a.type === "pick" && a.pick) receiving.picks.add(pickKey(a.pick));
+  }
+  return { sending, receiving };
+}
+
 type SendStatus = "idle" | "sending" | "success" | "error";
 type DmStatus   = "idle" | "sending" | "sent" | "link-failed" | "failed";
 
@@ -795,11 +827,24 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
 
   const [expiry, setExpiry] = useState<string>("24h");
 
+  const [editMode, setEditMode]             = useState(false);
+  const [editState, setEditState]           = useState<EditTradeState>(() => ({
+    sending:   { playerIds: new Set(), picks: new Set() },
+    receiving: { playerIds: new Set(), picks: new Set() },
+  }));
+  const [savedSnapshot, setSavedSnapshot]   = useState<{ state: EditTradeState; hasCustomEdits: boolean } | null>(null);
+  const [hasCustomEdits, setHasCustomEdits] = useState(false);
+  const [mySearch, setMySearch]             = useState("");
+  const [myPosFilter, setMyPosFilter]       = useState("All");
+  const [partnerSearch, setPartnerSearch]   = useState("");
+  const [partnerPosFilter, setPartnerPosFilter] = useState("All");
+
   const hasPick = (idea?.youGive ?? []).some(a => a.type === "pick");
 
   useEffect(() => {
     if (idea) {
       const pickAsset = idea.youGive.find(a => a.type === "pick" && a.pick);
+      let resolvedPick: Pick | null = null;
       if (pickAsset?.pick) {
         const ideaPick = pickAsset.pick;
         const rosterToWinNow = new Map<number, number>();
@@ -813,10 +858,12 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
           const bWN = rosterToWinNow.get(b.originalRosterId ?? 0) ?? 0;
           return bWN - aWN;
         });
-        setSelectedPick(sorted[0] ?? ideaPick);
+        resolvedPick = sorted[0] ?? ideaPick;
+        setSelectedPick(resolvedPick);
       } else {
         setSelectedPick(null);
       }
+      setEditState(hydrateFromIdea(idea, resolvedPick));
     }
     setStatus("idle");
     setErrorMsg("");
@@ -824,6 +871,12 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
     setDmError("");
     setPendingDm(null);
     setExpiry("24h");
+    setEditMode(false);
+    setHasCustomEdits(false);
+    setMySearch("");
+    setMyPosFilter("All");
+    setPartnerSearch("");
+    setPartnerPosFilter("All");
   }, [idea, league.teams, userTeam.picks]);
 
   const userRosterId    = parseInt(userTeam.id.replace("roster_", ""), 10);
@@ -964,28 +1017,37 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
     try {
       const adds: Record<string, number> = {};
       const drops: Record<string, number> = {};
-      for (const a of idea.youGet) {
-        if (a.type === "player" && a.sleeperId) {
-          adds[a.sleeperId]  = userRosterId;
-          drops[a.sleeperId] = partnerRosterId;
+      const draftPicks: SleeperTransactionPick[] = [];
+
+      if (hasCustomEdits) {
+        for (const id of editState.receiving.playerIds) { adds[id] = userRosterId;    drops[id] = partnerRosterId; }
+        for (const id of editState.sending.playerIds)   { adds[id] = partnerRosterId; drops[id] = userRosterId; }
+        for (const key of editState.sending.picks) {
+          const pk = findPickByKey(userTeam.picks, key);
+          if (pk) draftPicks.push({ season: String(pk.year), round: pk.round, roster_id: pk.originalRosterId ?? userRosterId, previous_owner_id: userRosterId, owner_id: partnerRosterId });
         }
-      }
-      for (const a of idea.youGive) {
-        if (a.type === "player" && a.sleeperId) {
-          adds[a.sleeperId]  = partnerRosterId;
-          drops[a.sleeperId] = userRosterId;
+        for (const key of editState.receiving.picks) {
+          const pk = findPickByKey(idea.partnerTeam.picks, key);
+          if (pk) draftPicks.push({ season: String(pk.year), round: pk.round, roster_id: pk.originalRosterId ?? partnerRosterId, previous_owner_id: partnerRosterId, owner_id: userRosterId });
         }
+      } else {
+        for (const a of idea.youGet) {
+          if (a.type === "player" && a.sleeperId) { adds[a.sleeperId] = userRosterId;    drops[a.sleeperId] = partnerRosterId; }
+        }
+        for (const a of idea.youGive) {
+          if (a.type === "player" && a.sleeperId) { adds[a.sleeperId] = partnerRosterId; drops[a.sleeperId] = userRosterId; }
+        }
+        if (selectedPick) draftPicks.push({
+          season: String(selectedPick.year), round: selectedPick.round,
+          roster_id: selectedPick.originalRosterId ?? userRosterId,
+          previous_owner_id: userRosterId, owner_id: partnerRosterId,
+        });
       }
-      const draftPicks = selectedPick ? [{
-        season:            String(selectedPick.year),
-        round:             selectedPick.round,
-        roster_id:         selectedPick.originalRosterId ?? userRosterId,
-        previous_owner_id: userRosterId,
-        owner_id:          partnerRosterId,
-      }] : [];
+
       const expiresAt = computeExpiresAt(expiry);
       const tradeResult = await proposeTrade({ leagueId: league.id, adds, drops, draftPicks, expiresAt });
       setStatus("success");
+      setEditMode(false);
 
       // Kick off DM after trade succeeds — fire and forget, never blocks trade success
       const partnerUserId = idea.partnerTeam.ownerId;
@@ -1009,8 +1071,63 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
     setDmStatus("idle");
     setDmError("");
     setPendingDm(null);
+    setEditMode(false);
+    setHasCustomEdits(false);
     onClose();
   }
+
+  function openEditMode() {
+    setSavedSnapshot({ state: deepCopyEditState(editState), hasCustomEdits });
+    setEditMode(true);
+  }
+
+  function cancelEdits() {
+    if (savedSnapshot) {
+      setEditState(savedSnapshot.state);
+      setHasCustomEdits(savedSnapshot.hasCustomEdits);
+    }
+    setEditMode(false);
+  }
+
+  function backToReview() {
+    setHasCustomEdits(true);
+    setEditMode(false);
+  }
+
+  // ── Derived: resolved assets for review pane (may be overridden by edit) ──
+
+  const resolvedYouGet = useMemo<WinNowIdea["youGet"]>(() => {
+    if (!idea || !hasCustomEdits) return idea?.youGet ?? [];
+    const result: WinNowIdea["youGet"] = [];
+    for (const id of editState.receiving.playerIds) {
+      const p = idea.partnerTeam.roster.find(pl => pl.sleeperId === id);
+      if (p) result.push({ label: p.name, value: p.value, pos: p.pos, team: p.team, age: p.age, type: "player", sleeperId: p.sleeperId });
+    }
+    for (const key of editState.receiving.picks) {
+      const pk = findPickByKey(idea.partnerTeam.picks, key);
+      if (pk) result.push({ label: formatPickLabel(pk), value: pk.value, type: "pick", pick: pk });
+    }
+    return result;
+  }, [idea, hasCustomEdits, editState]);
+
+  const resolvedYouGive = useMemo<WinNowIdea["youGive"]>(() => {
+    if (!idea || !hasCustomEdits) return idea?.youGive ?? [];
+    const result: WinNowIdea["youGive"] = [];
+    for (const id of editState.sending.playerIds) {
+      const p = userTeam.roster.find(pl => pl.sleeperId === id);
+      if (p) result.push({ label: p.name, value: p.value, pos: p.pos, team: p.team, age: p.age, type: "player", sleeperId: p.sleeperId });
+    }
+    for (const key of editState.sending.picks) {
+      const pk = findPickByKey(userTeam.picks, key);
+      if (pk) result.push({ label: formatPickLabel(pk), value: pk.value, type: "pick", pick: pk });
+    }
+    return result;
+  }, [idea, hasCustomEdits, editState, userTeam]);
+
+  // ── Edit-mode validation ──
+  const editSendEmpty = editState.sending.playerIds.size === 0 && editState.sending.picks.size === 0;
+  const editRecvEmpty = editState.receiving.playerIds.size === 0 && editState.receiving.picks.size === 0;
+  const editBothEmpty = editSendEmpty && editRecvEmpty;
 
   if (!idea) return null;
 
@@ -1053,8 +1170,8 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
       )}
       <div className="min-w-0 flex flex-col gap-0.5">
         <span className="text-[13px] font-bold text-white leading-tight">
-          {a.type === "pick" && selectedPick
-            ? `${selectedPick.year} Rd ${selectedPick.round}${selectedPick.projectedRange ? ` (${selectedPick.projectedRange})` : ""}`
+          {a.type === "pick"
+            ? (() => { const pk = a.pick ?? selectedPick; return pk ? `${pk.year} Rd ${pk.round}${pk.projectedRange ? ` (${pk.projectedRange})` : ""}` : a.label; })()
             : a.label}
         </span>
         {(a.pos || a.team) && (
@@ -1082,17 +1199,188 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
     )
   );
 
+  const POS_FILTERS = ["All", "QB", "RB", "WR", "TE", "Picks"] as const;
+
+  const RosterEditPanel = ({ teamData, isMyRoster }: { teamData: Team; isMyRoster: boolean }) => {
+    const search       = isMyRoster ? mySearch       : partnerSearch;
+    const posFilter    = isMyRoster ? myPosFilter    : partnerPosFilter;
+    const setSearch    = isMyRoster ? setMySearch    : setPartnerSearch;
+    const setPosFilter = isMyRoster ? setMyPosFilter : setPartnerPosFilter;
+    const selPlayers   = isMyRoster ? editState.sending.playerIds   : editState.receiving.playerIds;
+    const selPicks     = isMyRoster ? editState.sending.picks       : editState.receiving.picks;
+    const side         = isMyRoster ? "sending" : "receiving" as const;
+
+    const togglePlayer = (id: string) =>
+      setEditState(prev => {
+        const ids = new Set(prev[side].playerIds);
+        ids.has(id) ? ids.delete(id) : ids.add(id);
+        return { ...prev, [side]: { ...prev[side], playerIds: ids } };
+      });
+
+    const togglePick = (key: string) =>
+      setEditState(prev => {
+        const pks = new Set(prev[side].picks);
+        pks.has(key) ? pks.delete(key) : pks.add(key);
+        return { ...prev, [side]: { ...prev[side], picks: pks } };
+      });
+
+    const filteredPlayers = teamData.roster
+      .filter(p => {
+        if (!p.sleeperId) return false;
+        if (posFilter === "Picks") return false;
+        const matchPos    = posFilter === "All" || p.pos === posFilter;
+        const matchSearch = !search || p.name.toLowerCase().includes(search.toLowerCase());
+        return matchPos && matchSearch;
+      })
+      .sort((a, b) => b.value - a.value);
+
+    const filteredPicks = teamData.picks.filter(p =>
+      !search || `${p.year} Rd ${p.round}`.toLowerCase().includes(search.toLowerCase())
+    );
+
+    return (
+      <div className="flex flex-col bg-white/[0.025] border border-white/[0.08] rounded-xl overflow-hidden">
+        {/* Panel header */}
+        <div className="px-4 pt-4 pb-3 border-b border-white/[0.06]">
+          <div className="flex items-center gap-2 mb-3">
+            <ManagerAvatar team={teamData} />
+            <div className="min-w-0">
+              <p className="text-[13px] font-bold text-white leading-tight truncate">{teamData.owner}</p>
+              <p className="text-[10px] text-white/35 uppercase tracking-widest font-semibold leading-tight mt-0.5">
+                {isMyRoster ? "Sending" : "Receiving"}
+              </p>
+            </div>
+          </div>
+          {/* Search */}
+          <div className="relative mb-2">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/30 pointer-events-none" />
+            <input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search players or picks…"
+              data-testid={`search-${isMyRoster ? "my" : "partner"}-roster`}
+              className="w-full bg-white/[0.05] border border-white/[0.08] rounded-lg pl-8 pr-3 py-1.5 text-[12px] text-white/70 placeholder:text-white/25 focus:outline-none focus:border-white/25 transition-colors"
+            />
+          </div>
+          {/* Pos filters */}
+          <div className="flex gap-1 flex-wrap">
+            {POS_FILTERS.map(f => (
+              <button
+                key={f}
+                onClick={() => setPosFilter(f)}
+                data-testid={`filter-${isMyRoster ? "my" : "partner"}-${f.toLowerCase()}`}
+                className={cn(
+                  "px-2 py-0.5 rounded-full text-[10px] font-semibold border transition-all",
+                  posFilter === f
+                    ? "bg-[#0b3a7a]/60 border-blue-500/40 text-blue-300"
+                    : "bg-white/[0.04] border-white/[0.08] text-white/40 hover:text-white/65 hover:border-white/20"
+                )}
+              >
+                {f}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Scrollable list */}
+        <div className="overflow-y-auto px-3 py-2 space-y-0.5" style={{ maxHeight: 272 }}>
+          {/* Players */}
+          {posFilter !== "Picks" && filteredPlayers.map(p => {
+            const isSel = selPlayers.has(p.sleeperId!);
+            return (
+              <button
+                key={p.sleeperId}
+                data-testid={`toggle-player-${p.sleeperId}`}
+                onClick={() => togglePlayer(p.sleeperId!)}
+                className={cn(
+                  "w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg border transition-all text-left",
+                  isSel
+                    ? "bg-emerald-500/10 border-emerald-500/30"
+                    : "bg-transparent border-transparent hover:bg-white/[0.04] hover:border-white/[0.08]"
+                )}
+              >
+                <PlayerAvatar id={p.sleeperId!} name={p.name} pos={p.pos} team={p.team} size="sm" compact />
+                <div className="flex-1 min-w-0">
+                  <p className="text-[12px] font-semibold text-white leading-tight truncate">{p.name}</p>
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <span className={cn("text-[10px] font-bold", posTextColor(p.pos))}>{p.pos}</span>
+                    {p.team && p.team !== "FA" && <span className="text-[10px] text-white/35">{p.team}</span>}
+                    {p.age > 0 && <span className="text-[10px] text-white/25">Age {p.age}</span>}
+                  </div>
+                </div>
+                {isSel ? (
+                  <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/15 border border-emerald-500/25 rounded-full px-2 py-0.5 flex-shrink-0 whitespace-nowrap">Included</span>
+                ) : (
+                  <span className="text-[10px] text-white/20 tabular-nums flex-shrink-0">{Math.round(p.value).toLocaleString()}</span>
+                )}
+              </button>
+            );
+          })}
+
+          {posFilter !== "Picks" && filteredPlayers.length === 0 && (
+            <p className="text-[11px] text-white/25 text-center py-5">No players match</p>
+          )}
+
+          {/* Picks */}
+          {(posFilter === "All" || posFilter === "Picks") && filteredPicks.length > 0 && (
+            <div className="pt-1">
+              {posFilter === "All" && (
+                <p className="text-[9px] text-white/25 uppercase tracking-widest font-semibold px-2 pt-2 pb-1.5">Draft Picks</p>
+              )}
+              <div className="flex flex-wrap gap-1.5 px-1 pb-1">
+                {filteredPicks.map((p, i) => {
+                  const key   = pickKey(p);
+                  const isSel = selPicks.has(key);
+                  const orig  = league.teams.find(t => parseInt(t.id.replace("roster_", ""), 10) === p.originalRosterId);
+                  return (
+                    <button
+                      key={i}
+                      data-testid={`toggle-pick-${key}`}
+                      onClick={() => togglePick(key)}
+                      className={cn(
+                        "flex flex-col items-start px-2.5 py-1.5 rounded-lg border transition-all text-left",
+                        isSel
+                          ? "bg-emerald-500/10 border-emerald-500/30"
+                          : "bg-white/[0.04] border-white/[0.08] hover:border-white/20 hover:bg-white/[0.06]"
+                      )}
+                    >
+                      <span className={cn("text-[11px] font-bold leading-tight", isSel ? "text-emerald-300" : "text-white/80")}>
+                        {p.year} Rd {p.round}
+                      </span>
+                      {orig && (
+                        <span className={cn("text-[9px] leading-tight mt-0.5", isSel ? "text-emerald-400/60" : "text-white/30")}>
+                          via {orig.owner}
+                        </span>
+                      )}
+                      {isSel && <span className="text-[9px] text-emerald-400 font-bold mt-0.5">Included</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {posFilter === "Picks" && filteredPicks.length === 0 && (
+            <p className="text-[11px] text-white/25 text-center py-5">No picks available</p>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="max-w-[820px] w-full bg-[#07111f] border border-white/[0.10] p-0 overflow-hidden max-h-[90vh] flex flex-col">
 
         {/* ── Header ── */}
-        <div className="flex items-start justify-between px-6 pt-6 pb-4 border-b border-white/[0.08] flex-shrink-0">
+        <div className="flex items-start justify-between px-6 pt-6 pb-4 border-b border-white/[0.08] flex-shrink-0 gap-4">
           <div>
             <div className="flex items-center gap-2 mb-1">
-              <Send className="w-4 h-4 text-[#d4af37] flex-shrink-0" />
+              {editMode
+                ? <Pencil className="w-4 h-4 text-[#d4af37] flex-shrink-0" />
+                : <Send    className="w-4 h-4 text-[#d4af37] flex-shrink-0" />}
               <DialogTitle className="text-[15px] font-bold text-white leading-none">
-                Confirm Trade Offer
+                {editMode ? "Edit Trade Offer" : "Confirm Trade Offer"}
               </DialogTitle>
             </div>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1.5">
@@ -1103,44 +1391,73 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
               </span>
             </div>
           </div>
+          {/* Header action button */}
+          {!editMode && status !== "success" && (
+            <button
+              data-testid="btn-edit-trade"
+              onClick={openEditMode}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/[0.12] bg-white/[0.04] text-white/50 hover:text-white/80 hover:border-white/25 text-[12px] font-semibold transition-all flex-shrink-0 mt-0.5"
+            >
+              <Pencil className="w-3 h-3" />
+              Edit Trade
+            </button>
+          )}
+          {editMode && (
+            <button
+              data-testid="btn-back-to-review-header"
+              onClick={backToReview}
+              disabled={editBothEmpty}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#d4af37]/30 bg-[#d4af37]/10 text-[#d4af37] hover:bg-[#d4af37]/20 text-[12px] font-semibold transition-all flex-shrink-0 mt-0.5 disabled:opacity-40"
+            >
+              ‹ Back to Review
+            </button>
+          )}
         </div>
 
-        {/* ── Trade columns ── */}
+        {/* ── Trade columns / Edit panel ── */}
         <div className="grid grid-cols-2 gap-4 px-6 py-5 overflow-y-auto flex-1">
-
-          {/* You receive */}
-          <div className="bg-white/[0.025] border border-white/[0.08] rounded-xl p-4">
-            <div className="flex items-center gap-2.5 mb-0.5">
-              <ManagerAvatar team={userTeam} />
-              <div className="min-w-0">
-                <p className="text-[13px] font-bold text-white leading-tight break-words">{userTeam.owner}</p>
-                <p className="text-[10px] text-white/35 uppercase tracking-widest font-semibold leading-tight mt-0.5">Receives</p>
+          {editMode ? (
+            <>
+              <RosterEditPanel teamData={userTeam}         isMyRoster={true}  />
+              <RosterEditPanel teamData={idea.partnerTeam} isMyRoster={false} />
+            </>
+          ) : (
+            <>
+              {/* You receive */}
+              <div className="bg-white/[0.025] border border-white/[0.08] rounded-xl p-4">
+                <div className="flex items-center gap-2.5 mb-0.5">
+                  <ManagerAvatar team={userTeam} />
+                  <div className="min-w-0">
+                    <p className="text-[13px] font-bold text-white leading-tight break-words">{userTeam.owner}</p>
+                    <p className="text-[10px] text-white/35 uppercase tracking-widest font-semibold leading-tight mt-0.5">Receives</p>
+                  </div>
+                </div>
+                {!hasCustomEdits && <ValPills dyn={uDyn} now={uNow} />}
+                <div className="mt-1">
+                  {resolvedYouGet.map((a, i) => <AssetCard key={i} a={a} />)}
+                </div>
               </div>
-            </div>
-            <ValPills dyn={uDyn} now={uNow} />
-            <div className="mt-1">
-              {idea.youGet.map((a, i) => <AssetCard key={i} a={a} />)}
-            </div>
-          </div>
 
-          {/* Partner receives */}
-          <div className="bg-white/[0.025] border border-white/[0.08] rounded-xl p-4">
-            <div className="flex items-center gap-2.5 mb-0.5">
-              <ManagerAvatar team={idea.partnerTeam} />
-              <div className="min-w-0">
-                <p className="text-[13px] font-bold text-white leading-tight break-words">{idea.partnerTeam.owner}</p>
-                <p className="text-[10px] text-white/35 uppercase tracking-widest font-semibold leading-tight mt-0.5">Receives</p>
+              {/* Partner receives */}
+              <div className="bg-white/[0.025] border border-white/[0.08] rounded-xl p-4">
+                <div className="flex items-center gap-2.5 mb-0.5">
+                  <ManagerAvatar team={idea.partnerTeam} />
+                  <div className="min-w-0">
+                    <p className="text-[13px] font-bold text-white leading-tight break-words">{idea.partnerTeam.owner}</p>
+                    <p className="text-[10px] text-white/35 uppercase tracking-widest font-semibold leading-tight mt-0.5">Receives</p>
+                  </div>
+                </div>
+                {!hasCustomEdits && <ValPills dyn={pDyn} now={pNow} />}
+                <div className="mt-1">
+                  {resolvedYouGive.map((a, i) => <AssetCard key={i} a={a} />)}
+                </div>
               </div>
-            </div>
-            <ValPills dyn={pDyn} now={pNow} />
-            <div className="mt-1">
-              {idea.youGive.map((a, i) => <AssetCard key={i} a={a} />)}
-            </div>
-          </div>
+            </>
+          )}
         </div>
 
         {/* ── Pick selector ── */}
-        {hasPick && status === "idle" && (
+        {!editMode && hasPick && status === "idle" && (
           <div className="px-6 pb-5 flex-shrink-0 border-t border-white/[0.06] pt-4">
             <p className="text-[10px] text-white/40 uppercase tracking-widest font-semibold mb-3">Choose pick to include</p>
             <div className="flex flex-wrap gap-2">
@@ -1180,7 +1497,7 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
         )}
 
         {/* ── Status banners ── */}
-        <div className="px-6 flex-shrink-0 space-y-2 empty:hidden">
+        <div className={cn("px-6 flex-shrink-0 space-y-2 empty:hidden", editMode && "hidden")}>
           {status === "success" && dmStatus === "idle" && (
             <div className="flex items-center gap-2 rounded-lg bg-emerald-500/10 border border-emerald-500/25 px-4 py-3">
               <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
@@ -1240,7 +1557,7 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
         </div>
 
         {/* ── Expiry selector ── */}
-        {status !== "success" && (
+        {!editMode && status !== "success" && (
           <div className="px-6 pb-5 flex-shrink-0 border-t border-white/[0.06] pt-4">
             <div className="flex items-center justify-between mb-2.5">
               <p className="text-[11px] text-white/40 uppercase tracking-widest font-semibold">Offer Expires In</p>
@@ -1273,8 +1590,40 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
         )}
 
         {/* ── Footer ── */}
-        <div className="flex items-center justify-end gap-3 px-6 py-5 border-t border-white/[0.08] flex-shrink-0 mt-auto">
-          {status === "success" ? (
+        <div className={cn(
+          "flex items-center gap-3 px-6 py-5 border-t border-white/[0.08] flex-shrink-0 mt-auto",
+          editMode ? "justify-between" : "justify-end"
+        )}>
+          {editMode ? (
+            <>
+              <Button
+                variant="ghost"
+                data-testid="btn-cancel-edits"
+                className="h-10 px-5 text-[13px] font-semibold text-white/40 hover:text-white/70"
+                onClick={cancelEdits}
+              >
+                Cancel Edits
+              </Button>
+              {editBothEmpty && (
+                <span className="text-[11px] text-yellow-400/70 flex-1 text-center px-2">
+                  Add at least one asset to each side.
+                </span>
+              )}
+              {!editBothEmpty && (editSendEmpty || editRecvEmpty) && (
+                <span className="text-[11px] text-yellow-400/70 flex-1 text-center px-2">
+                  One side has no assets — continue?
+                </span>
+              )}
+              <Button
+                data-testid="btn-back-to-review-footer"
+                className="h-10 px-6 text-[13px] font-bold bg-[#0b3a7a] hover:bg-[#0d4499] text-white border border-[#0b3a7a]/80 transition-all disabled:opacity-40"
+                onClick={backToReview}
+                disabled={editBothEmpty}
+              >
+                Back to Review ›
+              </Button>
+            </>
+          ) : status === "success" ? (
             <Button
               variant="outline"
               className="h-10 px-5 text-[13px] font-semibold border-white/20 text-white/70 hover:text-white hover:border-white/40 bg-transparent"
