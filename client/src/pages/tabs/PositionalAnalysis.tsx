@@ -812,7 +812,7 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
         previous_owner_id: userRosterId,
         owner_id:          partnerRosterId,
       }] : [];
-      const expiresAt = Date.now() + 7 * 24 * 60 * 60 * 1000;
+      const expiresAt = Math.floor((Date.now() + 7 * 24 * 60 * 60 * 1000) / 1000);
       await proposeTrade({ leagueId: league.id, adds, drops, draftPicks, expiresAt });
       setStatus("success");
     } catch (e: any) {
