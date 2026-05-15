@@ -327,6 +327,16 @@ function buildProposeTrademutation(
   const rejectLegLine = rejectTransactionLeg != null
     ? `reject_transaction_leg: ${rejectTransactionLeg},`
     : "";
+  // draft_picks must be a JSON object array (not an array of JSON strings)
+  const picksJson = JSON.stringify(
+    draftPicks.map(p => ({
+      season: p.season,
+      round: p.round,
+      roster_id: p.roster_id,
+      previous_owner_id: p.previous_owner_id,
+      owner_id: p.owner_id,
+    }))
+  );
   return `
     mutation propose_trade(
       $k_adds: [String],
@@ -338,14 +348,12 @@ function buildProposeTrademutation(
         league_id: "${leagueId}",
         ${rejectIdLine}
         ${rejectLegLine}
-        draft_picks: [${draftPicks.map(p => {
-          const json = JSON.stringify({ season: p.season, round: p.round, roster_id: p.roster_id, previous_owner_id: p.previous_owner_id, owner_id: p.owner_id });
-          return `"${json.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
-        }).join(", ")}],
+        draft_picks: ${picksJson},
         k_adds: $k_adds,
         v_adds: $v_adds,
         k_drops: $k_drops,
         v_drops: $v_drops,
+        waiver_budget: [],
         expires_at: ${expiresAt}
       ) {
         adds
