@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -764,10 +764,20 @@ interface SendTradeModalProps {
 function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeModalProps) {
   const [status, setStatus] = useState<SendStatus>("idle");
   const [errorMsg, setErrorMsg] = useState<string>("");
+  const [selectedPick, setSelectedPick] = useState<Pick | null>(null);
 
   const hasPick = (idea?.youGive ?? []).some(a => a.type === "pick");
 
-  const userRosterId  = parseInt(userTeam.id.replace("roster_", ""), 10);
+  useEffect(() => {
+    if (idea) {
+      const pickAsset = idea.youGive.find(a => a.type === "pick" && a.pick);
+      setSelectedPick(pickAsset?.pick ?? null);
+    }
+    setStatus("idle");
+    setErrorMsg("");
+  }, [idea]);
+
+  const userRosterId    = parseInt(userTeam.id.replace("roster_", ""), 10);
   const partnerRosterId = idea ? parseInt(idea.partnerTeam.id.replace("roster_", ""), 10) : 0;
 
   async function handleConfirm() {
@@ -789,15 +799,13 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
           drops[a.sleeperId] = userRosterId;
         }
       }
-      const draftPicks = idea.youGive
-        .filter(a => a.type === "pick" && a.pick)
-        .map(a => ({
-          season:           String(a.pick!.year),
-          round:            a.pick!.round,
-          roster_id:        a.pick!.originalRosterId ?? userRosterId,
-          previous_owner_id: userRosterId,
-          owner_id:         partnerRosterId,
-        }));
+      const draftPicks = selectedPick ? [{
+        season:            String(selectedPick.year),
+        round:             selectedPick.round,
+        roster_id:         selectedPick.originalRosterId ?? userRosterId,
+        previous_owner_id: userRosterId,
+        owner_id:          partnerRosterId,
+      }] : [];
       const expiresAt = Date.now() + 7 * 24 * 60 * 60 * 1000;
       await proposeTrade({ leagueId: league.id, adds, drops, draftPicks, expiresAt });
       setStatus("success");
@@ -843,7 +851,11 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
         </div>
       )}
       <div className="min-w-0 flex flex-col gap-[2px]">
-        <span className="text-[12px] font-bold truncate leading-tight text-white">{a.label}</span>
+        <span className="text-[12px] font-bold truncate leading-tight text-white">
+          {a.type === "pick" && selectedPick
+            ? `${selectedPick.year} Rd ${selectedPick.round}${selectedPick.projectedRange ? ` (${selectedPick.projectedRange})` : ""}`
+            : a.label}
+        </span>
         {(a.pos || a.team) && (
           <div className="flex items-center gap-1.5">
             {a.pos && <span className={cn("text-[10px] font-semibold leading-none", posTextColor(a.pos))}>{a.pos}</span>}
@@ -887,6 +899,32 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
             </div>
           </div>
         </div>
+
+        {/* Pick selector */}
+        {hasPick && status === "idle" && (
+          <div className="px-4 py-3 border-t border-border/20">
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-2 font-medium">Choose pick to include</p>
+            <div className="flex flex-wrap gap-1.5">
+              {userTeam.picks.map((p, i) => {
+                const isSelected = selectedPick?.year === p.year && selectedPick?.round === p.round && selectedPick?.ownerTeamId === p.ownerTeamId;
+                return (
+                  <button
+                    key={i}
+                    onClick={() => setSelectedPick(p)}
+                    className={cn(
+                      "text-[10px] font-semibold px-2.5 py-1 rounded-full border transition-colors",
+                      isSelected
+                        ? "bg-purple-500/20 border-purple-500/50 text-purple-300"
+                        : "bg-white/[0.04] border-white/[0.1] text-muted-foreground hover:border-purple-500/30 hover:text-purple-300"
+                    )}
+                  >
+                    {p.year} Rd {p.round}{p.projectedRange ? ` (${p.projectedRange})` : ""}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Status banners */}
         {status === "success" && (
