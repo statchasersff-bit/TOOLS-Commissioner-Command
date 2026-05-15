@@ -1415,11 +1415,20 @@ function WinNowMode({ league, userTeam }: { league: League; userTeam: Team }) {
                             {/* ── You receive ── */}
                             <div className="px-[18px] pt-[14px] pb-3 relative z-10">
                               <div className="flex items-center gap-1.5">
-                                <div className="w-5 h-5 rounded-full bg-[#0b3a7a] flex items-center justify-center flex-shrink-0">
-                                  <span className="text-[9px] font-bold text-white">Y</span>
-                                </div>
-                                <span className="text-xs font-semibold">You</span>
-                                <span className="text-[10px] text-muted-foreground">receives</span>
+                                {userTeam.avatar ? (
+                                  <img
+                                    src={`https://sleepercdn.com/avatars/thumbs/${userTeam.avatar}`}
+                                    alt={userTeam.owner}
+                                    className="w-5 h-5 rounded-full object-cover flex-shrink-0 ring-1 ring-border/30"
+                                    onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                                  />
+                                ) : (
+                                  <div className="w-5 h-5 rounded-full bg-[#0b3a7a] flex items-center justify-center flex-shrink-0">
+                                    <span className="text-[9px] font-bold text-white">{userTeam.owner.charAt(0).toUpperCase()}</span>
+                                  </div>
+                                )}
+                                <span className="text-xs font-semibold truncate">{userTeam.owner}</span>
+                                <span className="text-[10px] text-muted-foreground flex-shrink-0">receives</span>
                               </div>
                               <ValStack dyn={uDyn} now={uNow} />
                               {idea.youGet.map((a: WinNowIdea["youGet"][number], i: number) => <AssetPill key={i} a={a} />)}
