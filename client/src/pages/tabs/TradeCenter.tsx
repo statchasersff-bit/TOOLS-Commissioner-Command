@@ -1706,27 +1706,43 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
     const playersGivenBySideA = sideA.filter((a) => a.type === "player" && a.player).map((a) => a.player!);
     const playersGivenBySideB = sideB.filter((a) => a.type === "player" && a.player).map((a) => a.player!);
 
-    const getTeamPosTotals = (teamId: string, pos: string, mode: "dynasty" | "redraft", deltaReceiving: Player[], deltaGiving: Player[]) => {
-      const team = league.teams.find(t => t.id === teamId);
-      if (!team) return 0;
-      const roster = rosterPositions.length > 0 ? optimizeLineup(team.roster, rosterPositions) : team.roster;
-      const base = mode === "redraft"
-        ? roster.filter(p => p.starter && p.pos === pos).reduce((s, p) => s + getRedraftValue(p), 0)
-        : team.roster.filter(p => p.pos === pos).reduce((s, p) => s + getPlayerValue(p), 0);
-      const added = deltaReceiving.filter(p => p.pos === pos).reduce((s, p) => mode === "redraft" ? s + getRedraftValue(p) : s + getPlayerValue(p), 0);
-      const removed = deltaGiving.filter(p => p.pos === pos).reduce((s, p) => mode === "redraft" ? s + getRedraftValue(p) : s + getPlayerValue(p), 0);
-      return base + added - removed;
+    // Build actual post-trade roster: remove traded-away players, add incoming players
+    const buildPostTradeRoster = (roster: Player[], giving: Player[], receiving: Player[]): Player[] => {
+      const givenIds = new Set(giving.map(p => p.sleeperId ?? p.id));
+      return [...roster.filter(p => !givenIds.has(p.sleeperId ?? p.id)), ...receiving];
     };
 
-    const getRank = (teamId: string, pos: string, mode: "dynasty" | "redraft", receiving: Player[], giving: Player[]) => {
-      const myTotal = getTeamPosTotals(teamId, pos, mode, receiving, giving);
+    // Sum positional value after trade — redraft always re-runs optimizeLineup on the full post-trade roster
+    const getTeamPosTotals = (team: Team, pos: string, mode: "dynasty" | "redraft", giving: Player[], receiving: Player[]) => {
+      const postRoster = buildPostTradeRoster(team.roster, giving, receiving);
+      if (mode === "redraft") {
+        const withStarters = rosterPositions.length > 0 ? optimizeLineup(postRoster, rosterPositions) : postRoster;
+        return withStarters.filter(p => p.starter && p.pos === pos).reduce((s, p) => s + getRedraftValue(p), 0);
+      }
+      return postRoster.filter(p => p.pos === pos).reduce((s, p) => s + getPlayerValue(p), 0);
+    };
+
+    // Rank a team vs the full league — partner's post-trade roster is also simulated
+    const getRank = (
+      team: Team,
+      pos: string,
+      mode: "dynasty" | "redraft",
+      giving: Player[],
+      receiving: Player[],
+      partnerId: string,
+      partnerGiving: Player[],
+      partnerReceiving: Player[],
+    ) => {
+      const myTotal = getTeamPosTotals(team, pos, mode, giving, receiving);
       let rank = 1;
       for (const t of league.teams) {
-        if (t.id === teamId) continue;
-        const otherRoster = rosterPositions.length > 0 ? optimizeLineup(t.roster, rosterPositions) : t.roster;
-        const otherTotal = mode === "redraft"
-          ? otherRoster.filter(p => p.starter && p.pos === pos).reduce((s, p) => s + getRedraftValue(p), 0)
-          : t.roster.filter(p => p.pos === pos).reduce((s, p) => s + getPlayerValue(p), 0);
+        if (t.id === team.id) continue;
+        const isPartner = t.id === partnerId;
+        const otherTotal = getTeamPosTotals(
+          t, pos, mode,
+          isPartner ? partnerGiving   : [],
+          isPartner ? partnerReceiving : [],
+        );
         if (otherTotal > myTotal) rank++;
       }
       return rank;
@@ -1735,14 +1751,19 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
     const calcImpact = (team: Team | undefined) => {
       if (!team) return null;
       const isUserSide = team.id === sideARosterId;
-      const receiving = isUserSide ? playersGivenBySideB : playersGivenBySideA;
-      const giving = isUserSide ? playersGivenBySideA : playersGivenBySideB;
+      const giving     = isUserSide ? playersGivenBySideA : playersGivenBySideB;
+      const receiving  = isUserSide ? playersGivenBySideB : playersGivenBySideA;
+      const partner    = isUserSide ? sideBTeam : sideATeam;
+      const partnerId  = partner?.id ?? "";
+      // From the partner's perspective they give what this side receives and vice-versa
+      const partnerGiving    = receiving;
+      const partnerReceiving = giving;
 
       return positions.map((pos) => {
-        const dynastyBefore = getRank(team.id, pos, "dynasty", [], []);
-        const dynastyAfter = getRank(team.id, pos, "dynasty", receiving, giving);
-        const redraftBefore = getRank(team.id, pos, "redraft", [], []);
-        const redraftAfter = getRank(team.id, pos, "redraft", receiving, giving);
+        const dynastyBefore = getRank(team, pos, "dynasty", [], [], partnerId, [], []);
+        const dynastyAfter  = getRank(team, pos, "dynasty", giving, receiving, partnerId, partnerGiving, partnerReceiving);
+        const redraftBefore = getRank(team, pos, "redraft", [], [], partnerId, [], []);
+        const redraftAfter  = getRank(team, pos, "redraft", giving, receiving, partnerId, partnerGiving, partnerReceiving);
         return {
           pos,
           dynastyBefore, dynastyAfter, dynastyChange: dynastyBefore - dynastyAfter,
