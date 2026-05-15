@@ -1092,115 +1092,114 @@ function WinNowMode({ league, userTeam }: { league: League; userTeam: Team }) {
 
                 {isOpen && (
                 <div className="border-t border-border/30 px-5 py-4 space-y-3">
-                  {ideas.map((idea: WinNowIdea, idx: number) => (
-                    <div key={idea.id} className="relative rounded-lg border border-border/40 bg-muted/10 overflow-hidden" data-testid={`wn-idea-${pos.toLowerCase()}-${idx}`}>
-                      {/* Centered swap icon */}
-                      <div className="hidden md:flex absolute left-1/2 top-[38px] -translate-x-1/2 z-10 w-6 h-6 rounded-full bg-background border border-border/50 items-center justify-center shadow-sm">
-                        <ArrowRightLeft className="w-3 h-3 text-muted-foreground" />
-                      </div>
+                  {ideas.map((idea: WinNowIdea, idx: number) => {
+                      const uDyn = idea.dynGet - idea.dynGive;
+                      const uNow = idea.userRdDelta;
+                      const outerBorder = uNow > 1200
+                        ? "border-emerald-500/35 shadow-[0_0_12px_rgba(52,211,153,0.08)]"
+                        : uDyn > 1200
+                        ? "border-[#d4af37]/35 shadow-[0_0_12px_rgba(212,175,55,0.08)]"
+                        : "border-border/40";
+                      const pDyn = idea.dynGive - idea.dynGet;
+                      const pNow = idea.partnerRdDelta;
 
-                      {/* Main two-column grid */}
-                      <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-border/30">
-
-                        {/* ── You receive ── */}
-                        <div className="px-3 pt-3 pb-2">
-                          {/* Title row */}
-                          <div className="flex items-center gap-1.5 mb-0.5">
-                            <div className="w-5 h-5 rounded-full bg-[#0b3a7a] flex items-center justify-center flex-shrink-0">
-                              <span className="text-[9px] font-bold text-white">Y</span>
-                            </div>
-                            <span className="text-xs font-semibold">You</span>
-                            <span className="text-[11px] text-muted-foreground">receives</span>
+                      const ValStack = ({ dyn, now }: { dyn: number; now: number }) => (
+                        <div className="flex flex-col gap-[1px] mt-1 mb-2">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[9px] text-muted-foreground/60 w-[46px] flex-shrink-0">Dynasty</span>
+                            <span className={cn("text-[10px] font-semibold tabular-nums", dyn >= 0 ? "text-emerald-400" : "text-red-400")}>
+                              {dyn >= 0 ? "+" : "−"}{Math.abs(Math.round(dyn)).toLocaleString()}
+                            </span>
                           </div>
-                          {/* Value chip */}
-                          <div className="flex items-center gap-2 mb-2 pl-[26px]">
-                            {(() => { const d = idea.dynGet - idea.dynGive; const r = idea.userRdDelta; return (
-                              <span className="text-[10px] text-muted-foreground">
-                                <span className={cn("font-semibold", d >= 0 ? "text-emerald-500 dark:text-emerald-400" : "text-red-400")}>
-                                  {d >= 0 ? "+" : "−"}{Math.abs(Math.round(d)).toLocaleString()} DYN
-                                </span>
-                                <span className="mx-1 opacity-40">/</span>
-                                <span className={cn("font-semibold", r >= 0 ? "text-emerald-500 dark:text-emerald-400" : "text-red-400")}>
-                                  {r >= 0 ? "+" : "−"}{Math.abs(Math.round(r)).toLocaleString()} NOW
-                                </span>
-                              </span>
-                            ); })()}
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[9px] text-muted-foreground/60 w-[46px] flex-shrink-0">Win-Now</span>
+                            <span className={cn("text-[10px] font-semibold tabular-nums", now >= 0 ? "text-emerald-400" : "text-red-400")}>
+                              {now >= 0 ? "+" : "−"}{Math.abs(Math.round(now)).toLocaleString()}
+                            </span>
                           </div>
-                          {/* Asset rows */}
-                          {idea.youGet.map((a: WinNowIdea["youGet"][number], i: number) => (
-                            <div key={i} className="flex items-center gap-2 py-1 min-w-0">
-                              {a.type === "player" && a.sleeperId ? (
-                                <div className="w-7 h-7 rounded-full flex-shrink-0 overflow-hidden bg-muted ring-1 ring-border/20">
-                                  <img src={`https://sleepercdn.com/content/nfl/players/thumb/${a.sleeperId}.jpg`} alt={a.label} className="w-full h-full object-cover object-top" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
-                                </div>
-                              ) : (
-                                <Badge variant="outline" className="text-[9px] px-1 py-0 flex-shrink-0 h-5">PICK</Badge>
-                              )}
-                              <span className="text-xs font-semibold truncate leading-tight">{a.label}</span>
-                              {a.pos && <span className={cn("text-[10px] font-semibold flex-shrink-0", posTextColor(a.pos))}>{a.pos}</span>}
-                            </div>
-                          ))}
                         </div>
+                      );
 
-                        {/* ── Partner receives ── */}
-                        <div className="px-3 pt-3 pb-2">
-                          {/* Title row */}
-                          <div className="flex items-center gap-1.5 mb-0.5">
-                            {idea.partnerTeam.avatar ? (
-                              <img src={idea.partnerTeam.avatar} alt={idea.partnerTeam.owner} className="w-5 h-5 rounded-full object-cover flex-shrink-0 ring-1 ring-border/30" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
-                            ) : (
-                              <div className="w-5 h-5 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
-                                <span className="text-[9px] font-bold text-muted-foreground">{idea.partnerTeam.owner.charAt(0)}</span>
+                      const AssetPill = ({ a }: { a: WinNowIdea["youGet"][number] }) => (
+                        <div className="flex items-center gap-1.5 rounded-[8px] bg-white/[0.04] border border-white/[0.07] px-2 py-[3px] mb-[5px] min-w-0">
+                          {a.type === "player" && a.sleeperId ? (
+                            <div className="w-6 h-6 rounded-full flex-shrink-0 overflow-hidden bg-muted ring-1 ring-border/20">
+                              <img src={`https://sleepercdn.com/content/nfl/players/thumb/${a.sleeperId}.jpg`} alt={a.label} className="w-full h-full object-cover object-top" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                            </div>
+                          ) : (
+                            <span className="text-[8px] font-bold text-[#d4af37] bg-[#d4af37]/10 border border-[#d4af37]/25 rounded px-1 py-px flex-shrink-0">PICK</span>
+                          )}
+                          <span className="text-[11px] font-semibold truncate leading-none">{a.label}</span>
+                          {a.pos && <span className={cn("text-[9px] font-bold flex-shrink-0 ml-auto", posTextColor(a.pos))}>{a.pos}</span>}
+                        </div>
+                      );
+
+                      return (
+                        <div key={idea.id} className={cn("relative rounded-lg border bg-[#080f1d] overflow-hidden", outerBorder)} data-testid={`wn-idea-${pos.toLowerCase()}-${idx}`}>
+
+                          {/* Center divider: vertical line + darker strip + glowing icon */}
+                          <div className="hidden md:block absolute inset-y-0 left-1/2 -translate-x-1/2 w-px bg-border/50 z-0" />
+                          <div className="hidden md:block absolute inset-y-0 left-[calc(50%-10px)] w-5 bg-black/20 z-0" />
+                          <div className="hidden md:flex absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-20 w-7 h-7 rounded-full bg-[#0b1e3d] border border-[#d4af37]/50 items-center justify-center shadow-[0_0_10px_rgba(212,175,55,0.35)]">
+                            <ArrowRightLeft className="w-3 h-3 text-[#d4af37]" />
+                          </div>
+
+                          {/* Two-column grid — no divide-x, center handled above */}
+                          <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 divide-border/30">
+
+                            {/* ── You receive ── */}
+                            <div className="px-[18px] pt-[14px] pb-3 relative z-10">
+                              <div className="flex items-center gap-1.5">
+                                <div className="w-5 h-5 rounded-full bg-[#0b3a7a] flex items-center justify-center flex-shrink-0">
+                                  <span className="text-[9px] font-bold text-white">Y</span>
+                                </div>
+                                <span className="text-xs font-semibold">You</span>
+                                <span className="text-[10px] text-muted-foreground">receives</span>
                               </div>
-                            )}
-                            <span className="text-xs font-semibold truncate">{idea.partnerTeam.owner}</span>
-                            <span className="text-[11px] text-muted-foreground flex-shrink-0">receives</span>
-                          </div>
-                          {/* Value chip */}
-                          <div className="flex items-center gap-2 mb-2 pl-[26px]">
-                            {(() => { const d = idea.dynGive - idea.dynGet; const r = idea.partnerRdDelta; return (
-                              <span className="text-[10px] text-muted-foreground">
-                                <span className={cn("font-semibold", d >= 0 ? "text-emerald-500 dark:text-emerald-400" : "text-red-400")}>
-                                  {d >= 0 ? "+" : "−"}{Math.abs(Math.round(d)).toLocaleString()} DYN
-                                </span>
-                                <span className="mx-1 opacity-40">/</span>
-                                <span className={cn("font-semibold", r >= 0 ? "text-emerald-500 dark:text-emerald-400" : "text-red-400")}>
-                                  {r >= 0 ? "+" : "−"}{Math.abs(Math.round(r)).toLocaleString()} NOW
-                                </span>
-                              </span>
-                            ); })()}
-                          </div>
-                          {/* Asset rows */}
-                          {idea.youGive.map((a: WinNowIdea["youGive"][number], i: number) => (
-                            <div key={i} className="flex items-center gap-2 py-1 min-w-0">
-                              {a.type === "player" && a.sleeperId ? (
-                                <div className="w-7 h-7 rounded-full flex-shrink-0 overflow-hidden bg-muted ring-1 ring-border/20">
-                                  <img src={`https://sleepercdn.com/content/nfl/players/thumb/${a.sleeperId}.jpg`} alt={a.label} className="w-full h-full object-cover object-top" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
-                                </div>
-                              ) : (
-                                <Badge variant="outline" className="text-[9px] px-1 py-0 flex-shrink-0 h-5">PICK</Badge>
-                              )}
-                              <span className="text-xs font-semibold truncate leading-tight">{a.label}</span>
-                              {a.pos && <span className={cn("text-[10px] font-semibold flex-shrink-0", posTextColor(a.pos))}>{a.pos}</span>}
+                              <ValStack dyn={uDyn} now={uNow} />
+                              {idea.youGet.map((a: WinNowIdea["youGet"][number], i: number) => <AssetPill key={i} a={a} />)}
                             </div>
-                          ))}
-                        </div>
-                      </div>
 
-                      {/* Footer — button only, minimal padding */}
-                      <div className="px-3 pb-2 flex justify-end">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 text-[11px] text-[#d4af37] hover:text-[#d4af37] hover:bg-[#d4af37]/10 px-2"
-                          data-testid={`btn-wn-build-${pos.toLowerCase()}-${idx}`}
-                        >
-                          <ArrowRightLeft className="w-3 h-3 mr-1" />
-                          Build in Calculator
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
+                            {/* Mobile trade divider */}
+                            <div className="flex md:hidden items-center gap-2 px-4 py-1 bg-black/20">
+                              <div className="flex-1 h-px bg-border/30" />
+                              <ArrowRightLeft className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+                              <div className="flex-1 h-px bg-border/30" />
+                            </div>
+
+                            {/* ── Partner receives ── */}
+                            <div className="px-[18px] pt-[14px] pb-3 relative z-10">
+                              <div className="flex items-center gap-1.5">
+                                {idea.partnerTeam.avatar ? (
+                                  <img src={idea.partnerTeam.avatar} alt={idea.partnerTeam.owner} className="w-5 h-5 rounded-full object-cover flex-shrink-0 ring-1 ring-border/30" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                                ) : (
+                                  <div className="w-5 h-5 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
+                                    <span className="text-[9px] font-bold text-muted-foreground">{idea.partnerTeam.owner.charAt(0)}</span>
+                                  </div>
+                                )}
+                                <span className="text-xs font-semibold truncate">{idea.partnerTeam.owner}</span>
+                                <span className="text-[10px] text-muted-foreground flex-shrink-0">receives</span>
+                              </div>
+                              <ValStack dyn={pDyn} now={pNow} />
+                              {idea.youGive.map((a: WinNowIdea["youGive"][number], i: number) => <AssetPill key={i} a={a} />)}
+                            </div>
+                          </div>
+
+                          {/* Footer */}
+                          <div className="px-[18px] pb-[10px] flex justify-end relative z-10">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 text-[10px] text-[#d4af37] hover:text-[#d4af37] hover:bg-[#d4af37]/10 px-2 gap-1"
+                              data-testid={`btn-wn-build-${pos.toLowerCase()}-${idx}`}
+                            >
+                              <ArrowRightLeft className="w-2.5 h-2.5" />
+                              Build in Calculator
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                  })}
                 </div>
                 )}
                 </CardContent>
