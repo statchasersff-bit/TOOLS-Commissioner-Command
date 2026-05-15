@@ -108,10 +108,12 @@ export function PositionalAnalysis({ league, userTeam, onNavigateToCalculator }:
     const rdRanks: Record<string, number> = {};
 
     POSITIONS.forEach(pos => {
+      // Dynasty: full roster depth (all players at position, not just starters)
       const byDyn = [...league.teams].sort((a, b) =>
-        b.roster.filter(p => p.pos === pos && p.starter).reduce((s, p) => s + getPlayerValue(p), 0) -
-        a.roster.filter(p => p.pos === pos && p.starter).reduce((s, p) => s + getPlayerValue(p), 0)
+        b.roster.filter(p => p.pos === pos).reduce((s, p) => s + getPlayerValue(p), 0) -
+        a.roster.filter(p => p.pos === pos).reduce((s, p) => s + getPlayerValue(p), 0)
       );
+      // Win-Now: starters only, ranked by redraft value
       const byRd = [...league.teams].sort((a, b) =>
         b.roster.filter(p => p.pos === pos && p.starter).reduce((s, p) => s + getRedraftValue(p), 0) -
         a.roster.filter(p => p.pos === pos && p.starter).reduce((s, p) => s + getRedraftValue(p), 0)
