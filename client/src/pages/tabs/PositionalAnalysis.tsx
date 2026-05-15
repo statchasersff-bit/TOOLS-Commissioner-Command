@@ -684,8 +684,10 @@ interface WinNowIdea {
   youGive: { label: string; value: number; pos?: string; age?: number; type: "player" | "pick"; sleeperId?: string }[];
   youGet:  { label: string; value: number; pos?: string; age?: number; type: "player" | "pick"; sleeperId?: string }[];
   gainPos: PosLabel;
-  rdGain: number;
-  dynastyDeltaPct: number;
+  dynGive: number;
+  dynGet:  number;
+  rdGive:  number;
+  rdGet:   number;
   score: number;
   scoreLabel: "Elite" | "Strong" | "Moderate";
 }
@@ -834,13 +836,19 @@ function WinNowMode({ league, userTeam }: { league: League; userTeam: Team }) {
           // 1-for-1 player swap
           for (const chip of sellCandidates.slice(0, 4)) {
             if (chip.player.pos === needPos) continue;
-            const rdDiff   = Math.abs(chip.rdVal - target.rdv) / Math.max(chip.rdVal, target.rdv, 1);
+            // Redraft balance filter (same logic as trade calculator)
+            const rdDiff = Math.abs(chip.rdVal - target.rdv) / Math.max(chip.rdVal, target.rdv, 1);
             if (rdDiff > 0.28) continue;
-            const dynDelta = (chip.dynVal - target.dynv) / Math.max(chip.dynVal + target.dynv, 1) * 2;
-            if (dynDelta > 0.18) continue;
+            // Dynasty fairness: user overpays by at most 18% (trade calculator formula)
+            const dynGive = chip.dynVal;
+            const dynGet  = target.dynv;
+            const dynOverpay = (dynGive - dynGet) / Math.max(dynGive, dynGet, 1);
+            if (dynOverpay > 0.18) continue;
 
-            const rdGain     = target.rdv - chip.starterCost;
-            const score      = (Math.max(rdGain, 1) * urgency[needPos]) / Math.max(dynDelta * 600 + 1, 1);
+            const rdGive = chip.rdVal;
+            const rdGet  = target.rdv;
+            const rdDelta    = rdGet - rdGive;
+            const score      = (Math.max(rdDelta, 1) * urgency[needPos]) / Math.max(dynOverpay * 600 + 1, 1);
             const scoreLabel = score > 1800 ? "Elite" : score > 600 ? "Strong" : "Moderate";
 
             ideas.push({
@@ -850,25 +858,26 @@ function WinNowMode({ league, userTeam }: { league: League; userTeam: Team }) {
               partnerTier: tierMap.get(partner.id)?.tier ?? "Balanced",
               headline:    `Upgrade ${needPos} using ${chip.player.pos} surplus`,
               why:         `${chip.player.name} is an ideal chip — strong dynasty value with low lineup impact. Directly addresses your ${needPos} gap.`,
-              youGive:     [{ label: chip.player.name, value: chip.dynVal, pos: chip.player.pos, type: "player", sleeperId: chip.player.sleeperId, age: chip.player.age }],
-              youGet:      [{ label: target.name,      value: target.dynv, pos: target.pos,      type: "player", sleeperId: target.sleeperId,      age: target.age      }],
-              gainPos: needPos as PosLabel, rdGain, dynastyDeltaPct: dynDelta, score, scoreLabel: scoreLabel as WinNowIdea["scoreLabel"],
+              youGive: [{ label: chip.player.name, value: chip.dynVal, pos: chip.player.pos, type: "player", sleeperId: chip.player.sleeperId, age: chip.player.age }],
+              youGet:  [{ label: target.name,      value: target.dynv, pos: target.pos,      type: "player", sleeperId: target.sleeperId,      age: target.age      }],
+              gainPos: needPos as PosLabel, dynGive, dynGet, rdGive, rdGet, score, scoreLabel: scoreLabel as WinNowIdea["scoreLabel"],
             });
           }
 
           // Player + pick to balance value gap
           for (const chip of sellCandidates.slice(0, 3)) {
             if (chip.player.pos === needPos || !myPicks[0]) continue;
-            const pickVal    = myPicks[0].val;
-            const rdWithPick = chip.rdVal + pickVal;
-            const rdDiff     = Math.abs(rdWithPick - target.rdv) / Math.max(rdWithPick, target.rdv, 1);
-            if (rdDiff > 0.22) continue;
-            const dynGiven   = chip.dynVal + pickVal;
-            const dynDelta   = (dynGiven - target.dynv) / Math.max(dynGiven + target.dynv, 1) * 2;
-            if (dynDelta > 0.18 || dynDelta < -0.25) continue;
+            const pickVal = myPicks[0].val;
+            // Dynasty fairness using trade calculator formula
+            const dynGive    = chip.dynVal + pickVal;
+            const dynGet     = target.dynv;
+            const dynOverpay = (dynGive - dynGet) / Math.max(dynGive, dynGet, 1);
+            if (dynOverpay > 0.18 || dynOverpay < -0.25) continue;
 
-            const rdGain     = target.rdv - chip.starterCost;
-            const score      = (Math.max(rdGain, 1) * urgency[needPos]) / Math.max(dynDelta * 600 + 1, 1);
+            const rdGive  = chip.rdVal; // picks have no current-season redraft value
+            const rdGet   = target.rdv;
+            const rdDelta    = rdGet - rdGive;
+            const score      = (Math.max(rdDelta, 1) * urgency[needPos]) / Math.max(dynOverpay * 600 + 1, 1);
             const scoreLabel = score > 1800 ? "Elite" : score > 600 ? "Strong" : "Moderate";
             const pickLabel  = `${myPicks[0].year} Rd ${myPicks[0].round} (${myPicks[0].projectedRange ?? "Mid"})`;
 
@@ -881,10 +890,10 @@ function WinNowMode({ league, userTeam }: { league: League; userTeam: Team }) {
               why:         `${chip.player.name} + a pick bridges the value gap while keeping dynasty cost low. Your ${needPos} weakness is your biggest weekly liability.`,
               youGive: [
                 { label: chip.player.name, value: chip.dynVal, pos: chip.player.pos, type: "player", sleeperId: chip.player.sleeperId, age: chip.player.age },
-                { label: pickLabel,         value: pickVal,                           type: "pick"                                                              },
+                { label: pickLabel,        value: pickVal,                            type: "pick"                                                             },
               ],
               youGet: [{ label: target.name, value: target.dynv, pos: target.pos, type: "player", sleeperId: target.sleeperId, age: target.age }],
-              gainPos: needPos as PosLabel, rdGain, dynastyDeltaPct: dynDelta, score, scoreLabel: scoreLabel as WinNowIdea["scoreLabel"],
+              gainPos: needPos as PosLabel, dynGive, dynGet, rdGive, rdGet, score, scoreLabel: scoreLabel as WinNowIdea["scoreLabel"],
             });
           }
         }
@@ -1106,24 +1115,54 @@ function WinNowMode({ league, userTeam }: { league: League; userTeam: Team }) {
                         ))}
                       </div>
 
-                      {/* Footer — narrative + metrics */}
-                      <div className="px-4 py-2.5 bg-muted/10 border-t border-border/20 space-y-2">
+                      {/* Footer — trade value breakdown for both sides */}
+                      <div className="px-4 py-3 bg-muted/10 border-t border-border/20 space-y-2.5">
                         <p className="text-[10px] text-muted-foreground italic">{idea.why}</p>
-                        <div className="flex items-center justify-between flex-wrap gap-2">
-                          <div className="flex items-center gap-3 flex-wrap">
-                            <span className={cn("text-[10px] font-semibold",
-                              idea.rdGain > 0 ? "text-emerald-500 dark:text-emerald-400" : "text-muted-foreground"
-                            )}>
-                              {idea.rdGain > 0 ? "+" : ""}{Math.round(idea.rdGain)} win-now value
-                            </span>
-                            <span className="text-[10px] text-muted-foreground">
-                              {idea.dynastyDeltaPct > 0.02
-                                ? `−${Math.round(idea.dynastyDeltaPct * 100)}% dynasty`
-                                : idea.dynastyDeltaPct < -0.02
-                                ? `+${Math.round(Math.abs(idea.dynastyDeltaPct) * 100)}% dynasty gain`
-                                : "~Even dynasty value"}
-                            </span>
-                          </div>
+                        {/* Value table: Dynasty + Win-Now for each party */}
+                        <div className="grid grid-cols-3 gap-x-2 text-[10px]">
+                          <div />
+                          <span className="text-muted-foreground font-semibold uppercase tracking-wide text-center">Dynasty</span>
+                          <span className="text-muted-foreground font-semibold uppercase tracking-wide text-center">Win-Now</span>
+
+                          {/* You row */}
+                          <span className="text-muted-foreground font-medium self-center">You</span>
+                          {(() => {
+                            const d = idea.dynGet - idea.dynGive;
+                            return (
+                              <span className={cn("text-center font-semibold", d >= 0 ? "text-emerald-500 dark:text-emerald-400" : "text-red-400 dark:text-red-400")}>
+                                {d >= 0 ? "+" : "−"}{Math.abs(Math.round(d)).toLocaleString()}
+                              </span>
+                            );
+                          })()}
+                          {(() => {
+                            const r = idea.rdGet - idea.rdGive;
+                            return (
+                              <span className={cn("text-center font-semibold", r >= 0 ? "text-emerald-500 dark:text-emerald-400" : "text-red-400 dark:text-red-400")}>
+                                {r >= 0 ? "+" : "−"}{Math.abs(Math.round(r)).toLocaleString()}
+                              </span>
+                            );
+                          })()}
+
+                          {/* Partner row */}
+                          <span className="text-muted-foreground font-medium self-center truncate">{idea.partnerTeam.owner}</span>
+                          {(() => {
+                            const d = idea.dynGive - idea.dynGet;
+                            return (
+                              <span className={cn("text-center font-semibold", d >= 0 ? "text-emerald-500 dark:text-emerald-400" : "text-red-400 dark:text-red-400")}>
+                                {d >= 0 ? "+" : "−"}{Math.abs(Math.round(d)).toLocaleString()}
+                              </span>
+                            );
+                          })()}
+                          {(() => {
+                            const r = idea.rdGive - idea.rdGet;
+                            return (
+                              <span className={cn("text-center font-semibold", r >= 0 ? "text-emerald-500 dark:text-emerald-400" : "text-red-400 dark:text-red-400")}>
+                                {r >= 0 ? "+" : "−"}{Math.abs(Math.round(r)).toLocaleString()}
+                              </span>
+                            );
+                          })()}
+                        </div>
+                        <div className="flex justify-end">
                           <Button
                             variant="default"
                             size="sm"
