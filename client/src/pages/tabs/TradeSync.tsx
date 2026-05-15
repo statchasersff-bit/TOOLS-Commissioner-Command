@@ -1023,11 +1023,11 @@ function TradeDialog({ trade, open, onClose, onAccept, onReject, actionLoading, 
                   Accept
                 </Button>
               )}
-              <a href={`https://sleeper.com/leagues/${trade.leagueId}`} target="_blank" rel="noopener noreferrer" className="block">
-                <Button variant="outline" className="w-full h-11 gap-2 text-sm font-semibold">
+              <Button asChild variant="outline" className="w-full h-11 gap-2 text-sm font-semibold">
+                <a href={`https://sleeper.com/leagues/${trade.leagueId}`} target="_blank" rel="noopener noreferrer">
                   <ArrowRightLeft className="w-4 h-4" /> Counter
-                </Button>
-              </a>
+                </a>
+              </Button>
               <Button
                 variant="outline"
                 className="w-full h-11 gap-2 text-sm font-semibold hover:border-red-400/50 hover:text-red-400"
@@ -1040,11 +1040,11 @@ function TradeDialog({ trade, open, onClose, onAccept, onReject, actionLoading, 
               </Button>
             </div>
           ) : (
-            <a href={`https://sleeper.com/leagues/${trade.leagueId}`} target="_blank" rel="noopener noreferrer" className="block">
-              <Button variant="outline" className="w-full h-10 gap-2 text-xs">
+            <Button asChild variant="outline" className="w-full h-10 gap-2 text-xs">
+              <a href={`https://sleeper.com/leagues/${trade.leagueId}`} target="_blank" rel="noopener noreferrer">
                 <ExternalLink className="w-3.5 h-3.5" /> Open in Sleeper
-              </Button>
-            </a>
+              </a>
+            </Button>
           )}
 
           {/* Negotiation Thread */}
