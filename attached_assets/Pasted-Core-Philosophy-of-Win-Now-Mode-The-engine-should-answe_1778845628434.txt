@@ -1,0 +1,359 @@
+Core Philosophy of Win-Now Mode
+
+The engine should answer:
+
+“How can this team improve weekly starting lineup output while sacrificing the least amount of long-term dynasty value?”
+
+NOT:
+
+maximize dynasty value
+maximize total roster value
+maximize bench points
+
+ONLY:
+
+maximize starter production delta
+minimize dynasty overpay
+exploit roster imbalances
+Step 1 — Determine Team Needs
+
+You already have positional profile rankings.
+
+Example:
+
+Position	Dynasty Rank	Win-Now Rank
+QB	8th	7th
+RB	1st	1st
+WR	11th	10th
+TE	12th	11th
+
+This team is:
+
+elite at RB
+weak at WR
+catastrophic at TE
+below average at QB
+
+So the engine should produce:
+
+Primary Need: TE
+Secondary Need: WR
+Tertiary Need: QB
+Avoid buying: RB
+Step 2 — Measure Positional Urgency
+
+Not all weak positions matter equally.
+
+You need:
+
+Positional Upgrade Urgency Score
+
+Example:
+
+urgency =
+(
+ leagueAverageStarterValue
+ -
+ yourStarterValue
+)
+*
+positionalScarcityMultiplier
+
+Example:
+
+Position	Gap vs Avg	Scarcity	Urgency
+TE	-42	1.5	63
+WR	-25	1.1	27.5
+QB	-10	0.8	8
+
+So:
+
+TE > WR >>> QB
+
+This prevents the engine from wasting time suggesting tiny QB upgrades.
+
+Step 3 — Identify Expendable Dynasty Value
+
+This is the MOST IMPORTANT PART.
+
+The engine needs to identify:
+
+Which dynasty assets can be removed with minimal impact to weekly starter output?
+
+This is where your platform becomes elite.
+
+Step 4 — Starter Impact Score
+
+For each player:
+
+Calculate:
+Starter Impact Loss
+=
+Current Starter Projection
+-
+Replacement Projection
+
+Example RB room:
+
+Bijan
+Gibbs
+Achane
+Conner
+Spears
+
+If Achane is traded:
+Starter still becomes:
+
+Bijan
+Gibbs
+Conner
+
+Loss might only be:
+
+2.4 PPG
+
+BUT Achane dynasty value may be massive.
+
+That means:
+
+HIGH dynasty liquidity
+LOW starter dependency
+
+Which is EXACTLY what win-now mode wants to sell.
+
+Step 5 — Dynasty Efficiency Score
+
+This becomes the core metric.
+
+Example:
+Dynasty Efficiency Score
+=
+Dynasty Value
+/
+Starter Impact Loss
+
+Example:
+
+Player	Dynasty	Starter Loss	Efficiency
+Achane	7800	2.4	3250
+Spears	2900	1.8	1611
+Conner	1200	6.5	184
+
+High score = ideal trade chip.
+
+This becomes:
+
+“Best Sell Candidates”
+Step 6 — Identify Trade Partners
+
+Now evaluate every league roster.
+
+You want:
+
+Teams that:
+rank poorly in dynasty
+rank poorly in win-now
+have excess at your need position
+are unlikely contenders
+Step 7 — Team Direction Classification
+
+Every team gets classified:
+
+Type	Description
+Contender	High win-now
+Fraud Contender	High dynasty, weak starters
+Rebuilder	Low win-now, strong dynasty
+Tanking	Low both
+Productive Struggle	Young + competitive
+Suggested Formula
+Team Direction Score
+=
+(WinNowRankWeight * WinNowStrength)
++
+(DynastyRankWeight * DynastyStrength)
++
+(AgeCurveModifier)
+
+OR simpler:
+
+Contender Score
+=
+StarterRedraftValue
+-
+FutureDynastyBias
+Step 8 — Identify Position Surplus Teams
+
+Example:
+User needs TE.
+
+Find:
+
+rebuilding teams
+strong at TE
+weak at RB
+weak at flex
+
+Now the engine says:
+
+This team is a strong match.
+Step 9 — Trade Construction Logic
+
+THIS is the secret sauce.
+
+The engine should optimize:
+
+Objective Function
+maximize:
+(
+Starter Gain
+-
+Dynasty Overpay
+)
+
+Subject to:
+
+Dynasty trade delta <= 15%
+Step 10 — Win-Now Trade Score
+
+This becomes the ranking metric.
+
+Example:
+WinNowTradeScore
+=
+(
+ProjectedStarterPPGGain
+*
+UrgencyMultiplier
+)
+/
+DynastyCostPaid
+Example Trade
+
+Team needs TE badly.
+
+Trade:
+
+Give:
+Achane + 2nd
+
+Get:
+McBride
+
+Results:
+
+Metric	Value
+TE Starter Gain	+5.8
+RB Starter Loss	-1.9
+Net Starter Gain	+3.9
+Dynasty Delta	-6%
+Win-Now Score	Elite
+
+This becomes:
+
+“Highly Recommended”
+Important Hidden Layer
+
+You ALSO need:
+
+Lineup Slot Optimization
+
+Example:
+Adding WR4 doesn’t matter if:
+
+WR already deep
+WR4 never starts
+
+But upgrading:
+TE12 → TE5
+might massively impact weekly lineup EV.
+
+So:
+
+Only count gains that affect starting lineup.
+
+NOT bench totals.
+
+Recommended Internal Metrics
+Team Metrics
+Starter Redraft Value
+Bench Dynasty Value
+Positional Fragility
+Injury Risk
+Age Curve
+Contender Probability
+Player Metrics
+Dynasty Value
+Redraft Value
+Weekly Starter Probability
+Replacement Delta
+Liquidity Score
+Age Risk
+Suggested Outputs
+
+Instead of:
+
+Trade for Trey McBride
+
+You generate:
+
+Suggested Win-Now Move
+Acquire elite TE production while leveraging RB surplus.
+
+Trade:
+Achane + 2027 2nd
+for
+McBride
+
+Why:
+• TE is your largest weekly weakness
+• RB depth absorbs Achane loss
+• Improves projected weekly lineup by 4.1 points
+• Costs only 5% dynasty value overpay
+
+THAT is premium-level UX.
+
+Extra Advanced Layer (Massive Edge)
+
+You can eventually add:
+
+“Trade Pressure Index”
+
+Detect:
+
+rebuilders with aging vets
+contenders with injured starters
+teams overloaded at one position
+inactive benches
+low flexibility rosters
+
+This helps recommend:
+
+Most likely trade partners
+
+Not just theoretically valid trades.
+
+Final Architecture Recommendation
+Phase 1
+
+Build:
+
+positional needs
+surplus detection
+starter impact modeling
+dynasty efficiency scores
+trade matching
+Phase 2
+
+Add:
+
+contender/rebuilder classification
+lineup EV modeling
+weekly projection simulations
+Phase 3
+
+Add:
+
+AI-generated negotiation logic
+trade likelihood modeling
+behavioral tendencies
+league economy analysis

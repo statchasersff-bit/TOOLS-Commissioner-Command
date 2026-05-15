@@ -9,7 +9,7 @@ import { getLeagueTeamTiers, getTierColor, getTierEmoji, getPositionColor, isCon
 import { cn } from "@/lib/utils";
 import type { League, Team, Player, Pick, Tier } from "@/types";
 import {
-  ArrowRightLeft, Target, TrendingUp, TrendingDown,
+  ArrowRightLeft, Target, TrendingUp, TrendingDown, Zap,
   ChevronRight, Scale
 } from "lucide-react";
 
@@ -573,7 +573,541 @@ function SurplusNeeds({ league, userTeam, onSwitchTab }: { league: League; userT
   );
 }
 
+
+// ─── Win-Now engine constants & types ────────────────────────────
+
+const SCARCITY_MULT: Record<PosLabel, number> = { QB: 0.8, RB: 1.0, WR: 1.1, TE: 1.5 };
+
+interface WinNowIdea {
+  id: string;
+  partnerId: string;
+  partnerTeam: Team;
+  partnerTier: Tier;
+  headline: string;
+  why: string;
+  youGive: { label: string; value: number; pos?: string; age?: number; type: "player" | "pick"; sleeperId?: string }[];
+  youGet:  { label: string; value: number; pos?: string; age?: number; type: "player" | "pick"; sleeperId?: string }[];
+  gainPos: PosLabel;
+  rdGain: number;
+  dynastyDeltaPct: number;
+  score: number;
+  scoreLabel: "Elite" | "Strong" | "Moderate";
+}
+
+// ─── TradeOpportunities — mode selector ──────────────────────────
+
 function TradeOpportunities({ league, userTeam }: { league: League; userTeam: Team }) {
+  const [mode, setMode] = useState<"win-now" | "build-dynasty">("win-now");
+  return (
+    <div className="space-y-5">
+      <div className="flex w-fit rounded-lg border border-border overflow-hidden">
+        {([
+          { id: "win-now"       as const, label: "Win-Now",       desc: "Maximize weekly lineup output",  Icon: Zap        },
+          { id: "build-dynasty" as const, label: "Build Dynasty",  desc: "Maximize long-term value",       Icon: TrendingUp },
+        ]).map(({ id, label, desc, Icon }) => (
+          <button
+            key={id}
+            onClick={() => setMode(id)}
+            className={cn(
+              "flex items-center gap-2 px-4 py-2.5 text-left transition-colors border-r border-border last:border-r-0",
+              mode === id ? "bg-[#0b3a7a] text-white" : "bg-background text-muted-foreground hover:bg-muted/50"
+            )}
+            data-testid={`btn-mode-${id}`}
+          >
+            <Icon className="w-3.5 h-3.5 flex-shrink-0" />
+            <div className="flex flex-col items-start">
+              <span className="text-xs font-semibold leading-tight">{label}</span>
+              <span className={cn("text-[10px] leading-tight", mode === id ? "text-white/70" : "text-muted-foreground/70")}>{desc}</span>
+            </div>
+          </button>
+        ))}
+      </div>
+
+      {mode === "win-now"       && <WinNowMode       league={league} userTeam={userTeam} />}
+      {mode === "build-dynasty" && <BuildDynastyMode league={league} userTeam={userTeam} />}
+    </div>
+  );
+}
+
+// ─── Win-Now Mode ─────────────────────────────────────────────────
+
+function WinNowMode({ league, userTeam }: { league: League; userTeam: Team }) {
+  const { getPlayerValue, getRedraftValue, getPickValue } = useValueModel();
+  const [expandedPartner, setExpandedPartner] = useState<string | null>(null);
+  const tierMap = useMemo(() => getLeagueTeamTiers(league.teams), [league.teams]);
+
+  // Step 1 — Positional urgency: gap vs league avg × scarcity multiplier
+  const { leagueAvgRd, myStarterRd, urgency, sortedNeeds } = useMemo(() => {
+    const n = league.teams.length;
+    const leagueAvgRd: Record<string, number> = {};
+    const myStarterRd: Record<string, number> = {};
+    POSITIONS.forEach(pos => {
+      const vals = league.teams.map(t =>
+        t.roster.filter(p => p.pos === pos && p.starter).reduce((s, p) => s + getRedraftValue(p), 0)
+      );
+      leagueAvgRd[pos]  = vals.reduce((s, v) => s + v, 0) / Math.max(n, 1);
+      myStarterRd[pos]  = userTeam.roster
+        .filter(p => p.pos === pos && p.starter)
+        .reduce((s, p) => s + getRedraftValue(p), 0);
+    });
+    const urgency: Record<string, number> = {};
+    POSITIONS.forEach(pos => {
+      urgency[pos] = Math.max(0, leagueAvgRd[pos] - myStarterRd[pos]) * SCARCITY_MULT[pos];
+    });
+    const sortedNeeds = [...POSITIONS]
+      .filter(p => urgency[p] > 0)
+      .sort((a, b) => urgency[b] - urgency[a]);
+    return { leagueAvgRd, myStarterRd, urgency, sortedNeeds };
+  }, [league, userTeam, getRedraftValue]);
+
+  // Step 2 — Dynasty Efficiency Scores: dynasty value ÷ starter impact loss
+  const sellCandidates = useMemo(() => {
+    return userTeam.roster
+      .map(player => {
+        const dynVal = getPlayerValue(player);
+        const rdVal  = getRedraftValue(player);
+        const posRoster = [...userTeam.roster]
+          .filter(p => p.pos === player.pos)
+          .map(p => ({ id: p.sleeperId ?? p.id, rdv: getRedraftValue(p) }))
+          .sort((a, b) => b.rdv - a.rdv);
+        const idx         = posRoster.findIndex(p => p.id === (player.sleeperId ?? player.id));
+        const replacement = posRoster[idx + 1];
+        const starterCost = player.starter
+          ? Math.max(0, rdVal - (replacement ? replacement.rdv : 0))
+          : 0;
+        const effScore = dynVal / Math.max(starterCost, 60);
+        return { player, dynVal, rdVal, starterCost, effScore };
+      })
+      .filter(c => c.dynVal > 600 && !sortedNeeds.includes(c.player.pos as PosLabel))
+      .sort((a, b) => b.effScore - a.effScore)
+      .slice(0, 6);
+  }, [userTeam, getPlayerValue, getRedraftValue, sortedNeeds]);
+
+  // Step 3 — Per-team redraft positional ranks
+  const posRdRanks = useMemo(() => {
+    const map = new Map<string, Record<string, number>>();
+    POSITIONS.forEach(pos => {
+      [...league.teams]
+        .sort((a, b) =>
+          b.roster.filter(p => p.pos === pos && p.starter).reduce((s, p) => s + getRedraftValue(p), 0) -
+          a.roster.filter(p => p.pos === pos && p.starter).reduce((s, p) => s + getRedraftValue(p), 0)
+        )
+        .forEach((t, i) => {
+          if (!map.has(t.id)) map.set(t.id, {});
+          map.get(t.id)![pos] = i + 1;
+        });
+    });
+    return map;
+  }, [league, getRedraftValue]);
+
+  // Step 4 — Generate Win-Now trade ideas (max 18% dynasty delta)
+  const tradeIdeas = useMemo<WinNowIdea[]>(() => {
+    if (sortedNeeds.length === 0 || sellCandidates.length === 0) return [];
+    const leagueSize = league.teams.length;
+    const ideas: WinNowIdea[] = [];
+    const myPicks = userTeam.picks
+      .map(p => ({ ...p, val: getPickValue(p) }))
+      .sort((a, b) => b.val - a.val);
+
+    for (const partner of league.teams) {
+      if (partner.id === userTeam.id) continue;
+      const pRanks = posRdRanks.get(partner.id) ?? {};
+
+      for (const needPos of sortedNeeds.slice(0, 3)) {
+        // Partner must be strong at my need position (top 40%)
+        if ((pRanks[needPos] ?? leagueSize) > Math.ceil(leagueSize * 0.4)) continue;
+
+        const targets = [...partner.roster]
+          .filter(p => p.pos === needPos)
+          .map(p => ({ ...p, rdv: getRedraftValue(p), dynv: getPlayerValue(p) }))
+          .sort((a, b) => b.rdv - a.rdv)
+          .slice(0, 3);
+
+        for (const target of targets) {
+          if (target.rdv < 600) continue;
+
+          // 1-for-1 player swap
+          for (const chip of sellCandidates.slice(0, 4)) {
+            if (chip.player.pos === needPos) continue;
+            const rdDiff   = Math.abs(chip.rdVal - target.rdv) / Math.max(chip.rdVal, target.rdv, 1);
+            if (rdDiff > 0.28) continue;
+            const dynDelta = (chip.dynVal - target.dynv) / Math.max(chip.dynVal + target.dynv, 1) * 2;
+            if (dynDelta > 0.18) continue;
+
+            const rdGain     = target.rdv - chip.starterCost;
+            const score      = (Math.max(rdGain, 1) * urgency[needPos]) / Math.max(dynDelta * 600 + 1, 1);
+            const scoreLabel = score > 1800 ? "Elite" : score > 600 ? "Strong" : "Moderate";
+
+            ideas.push({
+              id:          `wn-${partner.id}-${needPos}-${chip.player.sleeperId ?? chip.player.id}`,
+              partnerId:   partner.id,
+              partnerTeam: partner,
+              partnerTier: tierMap.get(partner.id)?.tier ?? "Balanced",
+              headline:    `Upgrade ${needPos} using ${chip.player.pos} surplus`,
+              why:         `${chip.player.name} is an ideal chip — strong dynasty value with low lineup impact. Directly addresses your ${needPos} gap.`,
+              youGive:     [{ label: chip.player.name, value: chip.dynVal, pos: chip.player.pos, type: "player", sleeperId: chip.player.sleeperId, age: chip.player.age }],
+              youGet:      [{ label: target.name,      value: target.dynv, pos: target.pos,      type: "player", sleeperId: target.sleeperId,      age: target.age      }],
+              gainPos: needPos as PosLabel, rdGain, dynastyDeltaPct: dynDelta, score, scoreLabel: scoreLabel as WinNowIdea["scoreLabel"],
+            });
+          }
+
+          // Player + pick to balance value gap
+          for (const chip of sellCandidates.slice(0, 3)) {
+            if (chip.player.pos === needPos || !myPicks[0]) continue;
+            const pickVal    = myPicks[0].val;
+            const rdWithPick = chip.rdVal + pickVal;
+            const rdDiff     = Math.abs(rdWithPick - target.rdv) / Math.max(rdWithPick, target.rdv, 1);
+            if (rdDiff > 0.22) continue;
+            const dynGiven   = chip.dynVal + pickVal;
+            const dynDelta   = (dynGiven - target.dynv) / Math.max(dynGiven + target.dynv, 1) * 2;
+            if (dynDelta > 0.18 || dynDelta < -0.25) continue;
+
+            const rdGain     = target.rdv - chip.starterCost;
+            const score      = (Math.max(rdGain, 1) * urgency[needPos]) / Math.max(dynDelta * 600 + 1, 1);
+            const scoreLabel = score > 1800 ? "Elite" : score > 600 ? "Strong" : "Moderate";
+            const pickLabel  = `${myPicks[0].year} Rd ${myPicks[0].round} (${myPicks[0].projectedRange ?? "Mid"})`;
+
+            ideas.push({
+              id:          `wn-pick-${partner.id}-${needPos}-${chip.player.sleeperId ?? chip.player.id}`,
+              partnerId:   partner.id,
+              partnerTeam: partner,
+              partnerTier: tierMap.get(partner.id)?.tier ?? "Balanced",
+              headline:    `Upgrade ${needPos} via ${chip.player.pos} + pick`,
+              why:         `${chip.player.name} + a pick bridges the value gap while keeping dynasty cost low. Your ${needPos} weakness is your biggest weekly liability.`,
+              youGive: [
+                { label: chip.player.name, value: chip.dynVal, pos: chip.player.pos, type: "player", sleeperId: chip.player.sleeperId, age: chip.player.age },
+                { label: pickLabel,         value: pickVal,                           type: "pick"                                                              },
+              ],
+              youGet: [{ label: target.name, value: target.dynv, pos: target.pos, type: "player", sleeperId: target.sleeperId, age: target.age }],
+              gainPos: needPos as PosLabel, rdGain, dynastyDeltaPct: dynDelta, score, scoreLabel: scoreLabel as WinNowIdea["scoreLabel"],
+            });
+          }
+        }
+      }
+    }
+
+    const seen = new Set<string>();
+    return ideas
+      .filter(t => {
+        const key = t.youGive.map(a => a.label).join(",") + "→" + t.youGet.map(a => a.label).join(",");
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 15);
+  }, [league, userTeam, sortedNeeds, sellCandidates, urgency, posRdRanks, tierMap, getPlayerValue, getRedraftValue, getPickValue]);
+
+  // Group ideas by trade partner
+  const byPartner = useMemo(() => {
+    const map = new Map<string, WinNowIdea[]>();
+    tradeIdeas.forEach(t => {
+      if (!map.has(t.partnerId)) map.set(t.partnerId, []);
+      map.get(t.partnerId)!.push(t);
+    });
+    return Array.from(map.entries())
+      .map(([pid, ideas]) => ({ pid, partnerTeam: ideas[0].partnerTeam, partnerTier: ideas[0].partnerTier, ideas }))
+      .sort((a, b) => b.ideas[0].score - a.ideas[0].score);
+  }, [tradeIdeas]);
+
+  const noNeeds = sortedNeeds.length === 0;
+
+  return (
+    <div className="space-y-5">
+
+      {/* ── Positional Urgency card ── */}
+      <Card className="p-5" data-testid="card-wn-urgency">
+        <div className="mb-4">
+          <h4 className="text-sm font-bold">Positional Urgency</h4>
+          <span className="block h-[2px] w-8 bg-[#d4af37] rounded-full mt-1" />
+          <p className="text-[10px] text-muted-foreground mt-1.5">
+            Gap vs. league avg × positional scarcity (TE 1.5× · WR 1.1× · RB 1.0× · QB 0.8×)
+          </p>
+        </div>
+        {noNeeds ? (
+          <p className="text-xs text-muted-foreground">
+            Your starters are at or above league average at every position — no urgent win-now needs detected.
+          </p>
+        ) : (
+          <div className="space-y-3">
+            {POSITIONS.map(pos => {
+              const gap        = Math.max(0, leagueAvgRd[pos] - myStarterRd[pos]);
+              const maxUrgency = Math.max(...POSITIONS.map(p => urgency[p]), 1);
+              const pct        = Math.round((urgency[pos] / maxUrgency) * 100);
+              const isUrgent   = urgency[pos] > 0;
+              const needRank   = sortedNeeds.indexOf(pos);
+              return (
+                <div key={pos} className="space-y-1" data-testid={`urgency-row-${pos}`}>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className={cn("text-[10px] px-1.5 py-0", getPositionColor(pos))}>{pos}</Badge>
+                      {isUrgent
+                        ? <span className="text-[11px] text-muted-foreground">−{Math.round(gap).toLocaleString()} vs avg</span>
+                        : <span className="text-[11px] text-emerald-500 dark:text-emerald-400">Above average</span>
+                      }
+                    </div>
+                    {isUrgent && (
+                      <span className={cn("text-[10px] font-semibold",
+                        needRank === 0 ? "text-red-500 dark:text-red-400" :
+                        needRank === 1 ? "text-amber-500 dark:text-amber-400" :
+                        "text-muted-foreground"
+                      )}>
+                        {needRank === 0 ? "Primary Need" : needRank === 1 ? "Secondary" : "Tertiary"}
+                      </span>
+                    )}
+                  </div>
+                  <div className="h-1.5 rounded-full bg-border overflow-hidden">
+                    <div
+                      className={cn("h-full rounded-full transition-all", isUrgent ? "bg-red-500" : "bg-emerald-500")}
+                      style={{ width: isUrgent ? `${pct}%` : "100%" }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </Card>
+
+      {/* ── Best Chips to Move ── */}
+      {sellCandidates.length > 0 && (
+        <Card className="p-5" data-testid="card-wn-chips">
+          <div className="mb-4">
+            <h4 className="text-sm font-bold">Best Chips to Move</h4>
+            <span className="block h-[2px] w-8 bg-[#d4af37] rounded-full mt-1" />
+            <p className="text-[10px] text-muted-foreground mt-1.5">
+              High dynasty value ÷ low starter impact — ideal trade currency for win-now moves
+            </p>
+          </div>
+          <div className="space-y-0">
+            {sellCandidates.map((c, i) => {
+              const sid = c.player.sleeperId ?? c.player.id;
+              return (
+                <div key={sid} className="flex items-center gap-3 py-2.5 border-b border-border/20 last:border-0" data-testid={`chip-row-${sid}`}>
+                  <span className="text-xs text-muted-foreground w-4 text-right flex-shrink-0">{i + 1}.</span>
+                  <div className="w-7 h-7 rounded-full flex-shrink-0 overflow-hidden bg-muted ring-1 ring-border/30">
+                    <img
+                      src={`https://sleepercdn.com/content/nfl/players/thumb/${sid}.jpg`}
+                      alt={c.player.name}
+                      className="w-full h-full object-cover object-top"
+                      onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                    />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-sm font-semibold truncate">{c.player.name}</span>
+                      <Badge variant="outline" className={cn("text-[9px] px-1 py-0 h-3.5 flex-shrink-0", getPositionColor(c.player.pos))}>{c.player.pos}</Badge>
+                    </div>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className="text-[10px] text-muted-foreground">Dyn: {c.dynVal.toLocaleString()}</span>
+                      <span className="text-[10px] text-muted-foreground">·</span>
+                      <span className="text-[10px] text-muted-foreground">
+                        {c.starterCost < 100 ? "Bench player" : `−${Math.round(c.starterCost)} starter cost`}
+                      </span>
+                    </div>
+                  </div>
+                  <Badge
+                    variant="outline"
+                    className={cn("text-[9px] flex-shrink-0",
+                      c.effScore > 60
+                        ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
+                        : "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
+                    )}
+                  >
+                    {c.effScore > 60 ? "Ideal Chip" : "Good Chip"}
+                  </Badge>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      )}
+
+      {/* ── Win-Now Trade Ideas ── */}
+      <div>
+        <div className="mb-4">
+          <h4 className="text-sm font-bold flex items-center gap-2">
+            Win-Now Trade Ideas
+            <Badge variant="secondary">{tradeIdeas.length}</Badge>
+          </h4>
+          <span className="block h-[2px] w-8 bg-[#d4af37] rounded-full mt-1" />
+          <p className="text-[10px] text-muted-foreground mt-1.5">
+            Ranked by Win-Now Score = (starter gain × urgency) ÷ dynasty cost. Max 18% dynasty delta.
+          </p>
+        </div>
+
+        {tradeIdeas.length === 0 ? (
+          <Card>
+            <CardContent className="py-12 text-center">
+              <ArrowRightLeft className="w-10 h-10 mx-auto mb-3 text-muted-foreground/40" />
+              <p className="text-sm text-muted-foreground">
+                {noNeeds
+                  ? "Your starters are balanced — no urgent win-now moves detected."
+                  : "No win-now trades found within the 18% dynasty delta constraint."}
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Try loading a different league or checking back after roster moves.
+              </p>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="space-y-3" data-testid="wn-partner-list">
+            {byPartner.map(({ pid, partnerTeam, partnerTier, ideas }) => {
+              const isExpanded = expandedPartner === pid;
+              return (
+                <Card key={pid} className="overflow-hidden" data-testid={`wn-partner-${pid}`}>
+                  <CardContent className="p-0">
+                    <button
+                      className="w-full flex items-center justify-between px-5 py-4 hover:bg-muted/20 transition-colors text-left"
+                      onClick={() => setExpandedPartner(isExpanded ? null : pid)}
+                      data-testid={`btn-wn-expand-${pid}`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        {partnerTeam.avatar ? (
+                          <img
+                            src={partnerTeam.avatar}
+                            alt={partnerTeam.owner}
+                            className="w-9 h-9 rounded-full object-cover flex-shrink-0 ring-1 ring-border/40"
+                            onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                          />
+                        ) : (
+                          <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
+                            <span className="text-sm font-bold text-muted-foreground">{partnerTeam.owner.charAt(0)}</span>
+                          </div>
+                        )}
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-semibold text-foreground">{partnerTeam.owner}</span>
+                            <Badge variant="outline" className={cn("text-[10px]", getTierColor(partnerTier))}>{partnerTier}</Badge>
+                          </div>
+                          <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                            {Array.from(new Set(ideas.map((idea: WinNowIdea) => idea.gainPos))).map(pos => (
+                              <Badge key={pos} variant="outline" className={cn("text-[9px] py-0", getPositionColor(pos))}>
+                                {pos} upgrade
+                              </Badge>
+                            ))}
+                            <Badge
+                              variant="outline"
+                              className={cn("text-[9px] py-0",
+                                ideas[0].scoreLabel === "Elite"  ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20" :
+                                ideas[0].scoreLabel === "Strong" ? "bg-[#0b3a7a]/10 text-[#0b3a7a] dark:text-blue-400 border-[#0b3a7a]/20" :
+                                "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
+                              )}
+                            >
+                              Best: {ideas[0].scoreLabel}
+                            </Badge>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <span className="text-xs text-muted-foreground">{ideas.length} idea{ideas.length !== 1 ? "s" : ""}</span>
+                        <ChevronRight className={cn("w-4 h-4 text-muted-foreground transition-transform", isExpanded && "rotate-90")} />
+                      </div>
+                    </button>
+
+                    {isExpanded && (
+                      <div className="border-t border-border/30 px-5 py-4 space-y-4">
+                        {ideas.map((idea: WinNowIdea, idx: number) => (
+                          <div key={idea.id} className="rounded-xl border border-border/40 overflow-hidden" data-testid={`wn-idea-${pid}-${idx}`}>
+                            {/* Header */}
+                            <div className="px-4 py-2.5 bg-muted/20 flex items-center justify-between gap-2 flex-wrap">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <Badge
+                                  variant="outline"
+                                  className={cn("text-[10px] flex-shrink-0",
+                                    idea.scoreLabel === "Elite"  ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30" :
+                                    idea.scoreLabel === "Strong" ? "bg-[#0b3a7a]/10 text-[#0b3a7a] dark:text-blue-400 border-[#0b3a7a]/20" :
+                                                                   "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20"
+                                  )}
+                                >
+                                  {idea.scoreLabel}
+                                </Badge>
+                                <span className="text-xs font-medium text-foreground">{idea.headline}</span>
+                              </div>
+                              <Badge variant="outline" className={cn("text-[10px] flex-shrink-0", getPositionColor(idea.gainPos))}>
+                                {idea.gainPos} need
+                              </Badge>
+                            </div>
+
+                            {/* You Give / You Get */}
+                            <div className="grid grid-cols-2 divide-x divide-border/30">
+                              {(["youGive", "youGet"] as const).map(side => (
+                                <div key={side} className="px-4 py-3">
+                                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-2">
+                                    {side === "youGive" ? "You Give" : "You Get"}
+                                  </p>
+                                  {idea[side].map((a: WinNowIdea["youGive"][number], i: number) => (
+                                    <div key={i} className="flex items-center gap-1.5 py-1 min-w-0">
+                                      {a.type === "player" && a.sleeperId ? (
+                                        <div className="w-5 h-5 rounded-full flex-shrink-0 overflow-hidden bg-muted">
+                                          <img
+                                            src={`https://sleepercdn.com/content/nfl/players/thumb/${a.sleeperId}.jpg`}
+                                            alt={a.label}
+                                            className="w-full h-full object-cover object-top"
+                                            onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                                          />
+                                        </div>
+                                      ) : a.type === "pick" ? (
+                                        <Badge variant="outline" className="text-[9px] px-1 py-0 flex-shrink-0">PICK</Badge>
+                                      ) : null}
+                                      {a.pos && (
+                                        <Badge variant="outline" className={cn("text-[9px] px-1 py-0 flex-shrink-0", getPositionColor(a.pos))}>{a.pos}</Badge>
+                                      )}
+                                      <span className="text-xs font-medium truncate">{a.label}</span>
+                                      <span className="text-[10px] font-mono text-muted-foreground ml-auto flex-shrink-0">{a.value.toLocaleString()}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              ))}
+                            </div>
+
+                            {/* Footer — narrative + metrics */}
+                            <div className="px-4 py-2.5 bg-muted/10 border-t border-border/20 space-y-2">
+                              <p className="text-[10px] text-muted-foreground italic">{idea.why}</p>
+                              <div className="flex items-center justify-between flex-wrap gap-2">
+                                <div className="flex items-center gap-3 flex-wrap">
+                                  <span className={cn("text-[10px] font-semibold",
+                                    idea.rdGain > 0 ? "text-emerald-500 dark:text-emerald-400" : "text-muted-foreground"
+                                  )}>
+                                    {idea.rdGain > 0 ? "+" : ""}{Math.round(idea.rdGain)} win-now value
+                                  </span>
+                                  <span className="text-[10px] text-muted-foreground">
+                                    {idea.dynastyDeltaPct > 0.02
+                                      ? `−${Math.round(idea.dynastyDeltaPct * 100)}% dynasty`
+                                      : idea.dynastyDeltaPct < -0.02
+                                      ? `+${Math.round(Math.abs(idea.dynastyDeltaPct) * 100)}% dynasty gain`
+                                      : "~Even dynasty value"}
+                                  </span>
+                                </div>
+                                <Button
+                                  variant="default"
+                                  size="sm"
+                                  className="text-xs bg-[#0b3a7a] hover:bg-[#0b3a7a]/90"
+                                  data-testid={`btn-wn-build-${pid}-${idx}`}
+                                >
+                                  <ArrowRightLeft className="w-3 h-3 mr-1" />
+                                  Build in Calculator
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Build Dynasty Mode (existing logic) ─────────────────────────
+
+function BuildDynastyMode({ league, userTeam }: { league: League; userTeam: Team }) {
   const { getPlayerValue, getRedraftValue, getPickValue } = useValueModel();
   const { profiles } = usePositionalProfiles(league, userTeam);
   const [aggressiveness, setAggressiveness] = useState<"conservative" | "balanced" | "aggressive">("balanced");
@@ -643,11 +1177,11 @@ function TradeOpportunities({ league, userTeam }: { league: League; userTeam: Te
         }
 
         const effectiveSells = uSells.length > 0 ? uSells : fallbackSells;
-        const effectiveBuys = uBuys.length > 0 ? uBuys : fallbackBuys;
+        const effectiveBuys  = uBuys.length  > 0 ? uBuys  : fallbackBuys;
 
         const whyBadges: { label: string; type: "surplus" | "need" | "info" }[] = [];
         uSells.forEach(pos => whyBadges.push({ label: `${pos} Need (#${partner.positions[pos].rank})`, type: "need" }));
-        uBuys.forEach(pos => whyBadges.push({ label: `${pos} Surplus (#${partner.positions[pos].rank})`, type: "surplus" }));
+        uBuys.forEach(pos  => whyBadges.push({ label: `${pos} Surplus (#${partner.positions[pos].rank})`, type: "surplus" }));
         if (uSells.length === 0 && uBuys.length === 0 && tierMatch) {
           whyBadges.push({ label: "Tier Match", type: "info" });
         }
@@ -661,14 +1195,7 @@ function TradeOpportunities({ league, userTeam }: { league: League; userTeam: Te
           tradeBlockTierMap.get(partner.teamId)?.tier ?? "Balanced"
         );
 
-        return {
-          partner,
-          uSells: effectiveSells,
-          uBuys: effectiveBuys,
-          matchScore,
-          whyBadges,
-          suggestions,
-        };
+        return { partner, uSells: effectiveSells, uBuys: effectiveBuys, matchScore, whyBadges, suggestions };
       })
       .filter(o => o.matchScore > 0 && o.suggestions.length > 0)
       .sort((a, b) => b.matchScore - a.matchScore);
@@ -717,7 +1244,7 @@ function TradeOpportunities({ league, userTeam }: { league: League; userTeam: Te
               })}
               <Badge variant="outline" className={cn("text-xs",
                 userProfile.pickStrength === "High" ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30" :
-                userProfile.pickStrength === "Low" ? "bg-red-500/15 text-red-700 dark:text-red-400 border-red-500/30" :
+                userProfile.pickStrength === "Low"  ? "bg-red-500/15 text-red-700 dark:text-red-400 border-red-500/30" :
                 "bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20"
               )}>
                 Picks: {userProfile.pickStrength}
@@ -771,7 +1298,7 @@ function TradeOpportunities({ league, userTeam }: { league: League; userTeam: Te
                             key={i}
                             variant="outline"
                             className={cn("text-[9px] py-0",
-                              b.type === "need" ? "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20" :
+                              b.type === "need"    ? "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20" :
                               b.type === "surplus" ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20" :
                               "bg-slate-500/10 text-slate-500 border-slate-500/20"
                             )}
@@ -805,7 +1332,7 @@ function TradeOpportunities({ league, userTeam }: { league: League; userTeam: Te
                           <Badge
                             variant="outline"
                             className={cn("text-[10px]",
-                              sug.fairness === "Fair" ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30" :
+                              sug.fairness === "Fair"       ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30" :
                               sug.fairness === "Reasonable" ? "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30" :
                               "bg-red-500/15 text-red-700 dark:text-red-400 border-red-500/30"
                             )}
@@ -822,12 +1349,7 @@ function TradeOpportunities({ league, userTeam }: { league: League; userTeam: Te
                                 <div className="flex items-center gap-1.5 min-w-0">
                                   {a.type === "player" && a.sleeperId ? (
                                     <div className="w-6 h-6 rounded-full flex-shrink-0 overflow-hidden bg-muted ring-1 ring-border/30">
-                                      <img
-                                        src={`https://sleepercdn.com/content/nfl/players/thumb/${a.sleeperId}.jpg`}
-                                        alt={a.label}
-                                        className="w-full h-full object-cover object-top"
-                                        onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-                                      />
+                                      <img src={`https://sleepercdn.com/content/nfl/players/thumb/${a.sleeperId}.jpg`} alt={a.label} className="w-full h-full object-cover object-top" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
                                     </div>
                                   ) : a.type === "pick" ? (
                                     <Badge variant="outline" className="text-[9px] px-1 py-0 flex-shrink-0">PICK</Badge>
@@ -854,12 +1376,7 @@ function TradeOpportunities({ league, userTeam }: { league: League; userTeam: Te
                                 <div className="flex items-center gap-1.5 min-w-0">
                                   {a.type === "player" && a.sleeperId ? (
                                     <div className="w-6 h-6 rounded-full flex-shrink-0 overflow-hidden bg-muted ring-1 ring-border/30">
-                                      <img
-                                        src={`https://sleepercdn.com/content/nfl/players/thumb/${a.sleeperId}.jpg`}
-                                        alt={a.label}
-                                        className="w-full h-full object-cover object-top"
-                                        onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-                                      />
+                                      <img src={`https://sleepercdn.com/content/nfl/players/thumb/${a.sleeperId}.jpg`} alt={a.label} className="w-full h-full object-cover object-top" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
                                     </div>
                                   ) : a.type === "pick" ? (
                                     <Badge variant="outline" className="text-[9px] px-1 py-0 flex-shrink-0">PICK</Badge>
@@ -920,12 +1437,7 @@ function TradeOpportunities({ league, userTeam }: { league: League; userTeam: Te
             <div key={`${sleeperId}-${i}`} className="flex items-center gap-2 py-2.5 border-b border-border/20 last:border-0" data-testid={`trade-block-candidate-${sleeperId}`}>
               <span className="text-xs text-muted-foreground w-5 text-right flex-shrink-0">{i + 1}.</span>
               <div className="w-7 h-7 rounded-full flex-shrink-0 overflow-hidden bg-muted ring-1 ring-border/30">
-                <img
-                  src={`https://sleepercdn.com/content/nfl/players/thumb/${sleeperId}.jpg`}
-                  alt={p.name}
-                  className="w-full h-full object-cover object-top"
-                  onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-                />
+                <img src={`https://sleepercdn.com/content/nfl/players/thumb/${sleeperId}.jpg`} alt={p.name} className="w-full h-full object-cover object-top" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5">
@@ -950,6 +1462,7 @@ function TradeOpportunities({ league, userTeam }: { league: League; userTeam: Te
     </div>
   );
 }
+
 
 function generateSuggestions(
   userTeam: Team,

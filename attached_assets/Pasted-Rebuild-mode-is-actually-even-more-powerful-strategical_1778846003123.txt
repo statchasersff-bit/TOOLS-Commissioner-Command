@@ -1,0 +1,403 @@
+Rebuild mode is actually even more powerful strategically because you can create a very “smart GM” experience instead of just:
+
+“Sell old players for picks.”
+
+The core philosophy becomes:
+
+“Convert fragile short-term production into stable long-term dynasty insulation while preserving future upside.”
+
+Win-now mode optimizes:
+
+lineup points
+starter upgrades
+contention windows
+
+Rebuild mode optimizes:
+
+insulation
+age curve
+liquidity
+future appreciation
+market timing
+
+This is where StatChasers can become incredibly differentiated.
+
+Core Philosophy of Rebuild Mode
+
+The engine should answer:
+
+“How can this team maximize long-term dynasty value growth while minimizing future value decline risk?”
+
+NOT:
+
+maximize current points
+maximize projections
+maximize lineup strength
+
+Instead:
+
+increase dynasty appreciation potential
+reduce aging asset exposure
+improve future flexibility
+accumulate liquid value
+increase championship window duration
+Step 1 — Detect Rebuild Eligibility
+
+You should NOT suggest rebuild mode aggressively for everyone.
+
+Need a:
+
+Rebuild Likelihood Score
+
+Example inputs:
+
+Metric	Meaning
+Win-Now Rank	Current competitiveness
+Dynasty Rank	Long-term outlook
+Avg Starter Age	Aging roster?
+Pick Capital	Future flexibility
+Starter Fragility	Injury/decline risk
+Championship Odds	Simulation-based
+Example Classification
+Team Type	Recommendation
+High Win-Now + High Dynasty	Hold/contend
+Low Win-Now + High Dynasty	Retool
+Low Win-Now + Low Dynasty	Full rebuild
+Mid Win-Now + Aging	Soft rebuild
+Young + weak	Productive struggle
+Step 2 — Identify “Value Decay Assets”
+
+This becomes the centerpiece.
+
+Win-now mode found:
+
+expendable dynasty value
+
+Rebuild mode finds:
+
+ticking time bombs
+Asset Decay Score
+
+Example formula:
+
+Decay Score =
+(
+Current Redraft Value
+-
+Future Dynasty Stability
+)
+*
+AgeCurvePenalty
+*
+VolatilityRisk
+Example Players
+Player	Redraft	Dynasty	Age	Decay
+Derrick Henry	Elite	Low	32	Massive
+Mike Evans	Strong	Moderate	33	High
+Kamara	Productive	Weak	31	High
+Kelce	Good	Crashing	37	Extreme
+
+These become:
+
+“Must Sell” assets
+Step 3 — Future Value Appreciation Model
+
+You now need the opposite of redraft optimization.
+
+You want assets that:
+
+gain dynasty value
+hold value longer
+increase liquidity
+fit future contention window
+Dynasty Appreciation Score
+
+Example:
+
+Appreciation Score =
+(
+AgeAdjustedDynastyTrajectory
++
+MarketLiquidity
++
+UpsideProjection
+)
+-
+RiskPenalty
+Target Asset Archetypes
+Elite Rebuild Targets
+Young WRs
+insulated value
+longer windows
+slower decline
+Rookie Picks
+liquidity
+appreciation during offseason
+Year 1-2 Breakout Players
+value spikes possible
+Injured Young Players
+discounted insulation
+Step 4 — Positional Rebuild Logic
+
+Not all positions rebuild equally.
+
+Dynasty Stability Curves
+Position	Rebuild Preference
+WR	Highest
+QB SF	Extremely high
+TE premium	Moderate
+RB	Lowest
+
+So rebuild mode should:
+
+prioritize:
+WR
+young QB
+picks
+deprioritize:
+aging RB production
+Step 5 — Market Timing Engine
+
+This is HUGE.
+
+Rebuild mode should identify:
+
+“Peak Sell Windows”
+
+Examples:
+
+Situation	Sell Signal
+RB career year	SELL
+TD overperformance	SELL
+Veteran hot streak	SELL
+Temporary role spike	SELL
+Injury replacement starter	SELL
+
+This makes the tool feel intelligent.
+
+Step 6 — Team Direction Matching
+
+Now reverse the trade partner logic.
+
+Find:
+
+contenders that:
+need current production
+lack RB depth
+lack veteran stability
+weak at current starter positions
+
+And:
+
+rebuilders that:
+already young
+unlikely buyers
+
+Avoid suggesting trades to other rebuilders.
+
+Step 7 — Trade Construction Logic
+
+Rebuild trades should optimize:
+
+maximize:
+(
+DynastyValueGain
++
+FutureAppreciationPotential
+)
+-
+CurrentProductionLostPenalty
+
+BUT:
+Current production penalty should be LOW.
+
+Unlike win-now mode.
+
+Step 8 — Rebuild Trade Score
+
+Example:
+
+RebuildScore =
+(
+DynastyGain
++
+FutureFlexibilityGain
++
+AgeCurveImprovement
++
+LiquidityGain
+)
+/
+ProductionGivenAway
+Example Trade
+Give:
+Derrick Henry
+Mike Evans
+
+Get:
+2027 1st
+2028 1st
+Jordan Addison
+
+Results:
+
+Metric	Value
+Dynasty Gain	+18%
+Avg Age Improvement	-5.4 years
+Future Flexibility	Massive
+Win-Now Loss	Significant
+Rebuild Score	Elite
+Step 9 — Productive Struggle Logic
+
+VERY important advanced layer.
+
+Not all rebuilds should:
+
+intentionally tank
+destroy lineup completely
+
+Instead:
+
+Productive Struggle
+
+Meaning:
+
+young players still scoring
+roster still competitive long-term
+maintain optionality
+
+This is a MASSIVE dynasty concept.
+
+Tool should understand:
+
+young points > old points
+Example
+
+Prefer:
+
+Rome Odunze scoring 11 PPG
+
+over:
+
+Keenan Allen scoring 15 PPG
+
+in rebuild mode.
+
+Even if redraft output is worse.
+
+Step 10 — Rebuild Asset Tiers
+
+You should classify assets into:
+
+Tier	Meaning
+Cornerstone	Untouchable young elite
+Hold	Stable insulated value
+Liquid	Movable at market value
+Sell High	Likely declining
+Emergency Exit	Rapid decay
+Step 11 — Draft Pick Logic
+
+Picks should have:
+
+Dynamic rebuild weighting
+
+Examples:
+
+Pick Type	Rebuild Weight
+Early 1st	Massive
+Random 1st	High
+Future 1st	Very High
+2nds	Moderate
+3rds	Minimal
+
+And:
+
+Future picks gain rebuild value
+
+because of insulation + appreciation.
+
+Step 12 — Rebuild Output UX
+
+Instead of:
+
+Trade Derrick Henry
+
+Generate:
+
+Suggested Rebuild Move
+Convert short-term RB production into insulated dynasty value.
+
+Trade:
+Derrick Henry
+
+for:
+2027 1st + Xavier Worthy
+
+Why:
+• Henry carries major age-related value decline risk
+• Your current roster is unlikely to contend
+• Worthy aligns with a future competitive window
+• Adds insulated long-term value and draft flexibility
+
+THAT feels premium.
+
+Advanced Layer — Window Modeling
+
+Eventually:
+
+Championship Window Projection
+
+Estimate:
+
+likely contention years
+roster aging curves
+expected future trajectory
+
+Then:
+
+all rebuild logic aligns with:
+target contention window
+
+Example:
+
+Projected Contention Window:
+2027-2029
+
+So engine prefers:
+
+20-24 year olds
+future picks
+Year 2 WRs
+sophomore QBs
+
+NOT:
+
+28-year-old producers
+Hidden Secret Sauce
+
+The BEST rebuild mode:
+
+values insulation over upside
+
+Meaning:
+A stable WR with preserved value may matter more than a volatile RB with ceiling.
+
+This is VERY advanced dynasty thinking.
+
+Final Architecture
+Win-Now Mode
+
+Optimizes:
+
+starter points
+lineup EV
+weekly edge
+Rebuild Mode
+
+Optimizes:
+
+insulation
+appreciation
+liquidity
+age curve
+future windows

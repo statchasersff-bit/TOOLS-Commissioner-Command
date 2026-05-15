@@ -1,0 +1,399 @@
+Core Philosophy
+
+This mode should answer:
+
+“How can this team improve total roster quality, flexibility, and long-term outlook without materially hurting current competitiveness?”
+
+Unlike:
+
+Win-Now → prioritizes points
+Rebuild → prioritizes future insulation
+
+This mode:
+
+balances BOTH
+Best Name Ideas
+
+This mode needs a better name than “middle.”
+
+Possible names:
+
+Name	Feel
+Balanced Mode	simple
+Competitive Mode	strong
+Sustainable Contender	premium
+Team Builder Mode	approachable
+Smart GM Mode	VERY good
+Dynasty Optimizer	premium
+Hybrid Mode	technical
+Long-Term Contender	excellent
+
+I honestly think:
+
+“Smart GM Mode”
+
+is incredibly strong branding.
+
+Core Objective Function
+
+This mode optimizes:
+
+maximize:
+(
+DynastyGain
++
+RedraftGain
++
+RosterFlexibility
++
+AgeCurveImprovement
+)
+
+while limiting:
+
+negative impact
+to either side
+Philosophy Shift
+
+Win-now asks:
+
+How can I maximize points this season?
+
+Rebuild asks:
+
+How can I maximize future value?
+
+Smart GM Mode asks:
+
+How can I improve my overall roster ecosystem?
+
+This is VERY different.
+
+What Trades Should This Mode Seek?
+Examples:
+aging WR → younger WR with similar production
+RB depth → WR insulation
+consolidate bench clutter into starters
+sell overperformers for stable assets
+turn fragile assets into insulated value
+improve positional balance
+improve flexibility
+gain value without losing contention odds
+Core Concept:
+“Net Positive Trades”
+
+Meaning:
+
+Gains in one area
+
+without meaningful losses elsewhere.
+
+Step 1 — Team Identity Detection
+
+This mode heavily depends on:
+
+roster archetype
+
+Examples:
+
+Team Type	Strategy
+Aging contender	get younger while competing
+Young weak team	productive struggle
+Deep contender	consolidate
+Fragile contender	increase depth
+Unbalanced roster	redistribute value
+Step 2 — Positional Balance Engine
+
+This mode should heavily value:
+
+structural balance
+
+Example:
+
+Position	Dynasty	Win-Now
+QB	7th	7th
+RB	1st	1st
+WR	10th	9th
+TE	4th	5th
+
+This roster is:
+
+RB-heavy and WR-fragile
+
+So engine should seek:
+
+RB → WR conversions
+
+WITHOUT:
+
+killing win-now chances
+Step 3 — Fragility Detection
+
+This becomes HUGE here.
+
+Example:
+A team may rank:
+
+2nd in win-now
+
+BUT:
+
+only has 2 startable RBs
+no WR depth
+old TE
+weak QB2
+
+This team is:
+
+fragile
+
+Smart GM mode should:
+
+prioritize insulation
+Fragility Score
+
+Example:
+
+Fragility =
+StarterDropoff
++
+InjuryRisk
++
+AgeRisk
++
+DepthWeakness
+Step 4 — Trade Archetypes
+
+This mode should prioritize specific trade TYPES.
+
+1. Age Swaps
+
+Example:
+
+Tyreek Hill
+→
+Drake London +
+
+Small production loss.
+Massive insulation gain.
+
+2. Depth Consolidation
+
+Example:
+
+3 mediocre assets
+→
+1 elite insulated asset
+3. Positional Redistribution
+
+Example:
+
+RB surplus
+→
+WR stability
+4. Sell Peak Volatility
+
+Example:
+
+career-year RB
+→
+stable young WR
+5. Buy Depressed Insulation
+
+Example:
+
+injured young WR
+suspended QB
+Year 2 breakout candidate
+Step 5 — Trade Quality Matrix
+
+You should score every trade across:
+
+Category	Weight
+Redraft impact	high
+Dynasty impact	high
+Age improvement	medium
+Fragility reduction	high
+Flexibility gain	medium
+Liquidity gain	medium
+Smart GM Score
+
+Example:
+
+SmartGMScore =
+(
+DynastyGain
++
+RedraftGain
++
+FlexibilityGain
++
+FragilityReduction
++
+AgeCurveImprovement
+)
+-
+OverpayPenalty
+IMPORTANT:
+Avoid “one-dimensional” trades
+
+This mode should DISLIKE:
+
+massive all-in pushes
+hard rebuild sells
+fragile roster constructions
+Example Trade
+Give:
+Saquon Barkley
+
+Get:
+Jordan Addison + 2027 1st
+
+Results:
+
+Metric	Result
+Redraft Loss	Moderate
+Dynasty Gain	Strong
+Age Curve	Better
+Flexibility	Better
+Contention Odds	Still viable
+
+This becomes:
+
+“Recommended”
+Another Example
+Give:
+2027 1st + bench WR
+
+Get:
+Amon-Ra
+
+If:
+
+team is already competitive
+lineup needs elite WR
+
+Then:
+
+redraft improves
+dynasty improves
+
+This is:
+
+premium optimization
+Step 6 — Directional Constraints
+
+This mode should enforce:
+
+“don’t break the roster”
+
+Meaning:
+
+max allowable redraft loss
+
+AND:
+
+max allowable dynasty loss
+
+Example:
+
+no more than 8% dynasty decline
+no more than 5% starter projection loss
+Step 7 — Long-Term Contention Modeling
+
+This becomes the signature feature eventually.
+
+Not:
+
+Can this team win this year?
+
+But:
+
+“How long can this team stay competitive?”
+Sustained Contention Score
+
+Measures:
+
+age insulation
+starter stability
+future flexibility
+positional longevity
+dynasty liquidity
+
+This is VERY unique.
+
+Step 8 — Trade Partner Logic
+
+Smart GM mode should seek:
+
+mutually beneficial structure trades
+
+Examples:
+
+Your Team	Other Team
+RB heavy	WR heavy
+old contender	rebuilding
+fragile contender	deep contender
+youth-heavy	point-heavy
+Step 9 — “Silent Value” Detection
+
+One of the BEST advanced features.
+
+Find:
+
+players helping both timelines
+young productive WRs
+Year 2 QBs
+insulated elite assets
+
+Example archetypes:
+
+Amon-Ra
+Nabers
+Garrett Wilson
+Stroud
+Laporta
+
+These are:
+
+dual-threat assets
+
+valuable in BOTH redraft and dynasty.
+
+Step 10 — UX Output
+
+Instead of:
+
+Trade Saquon Barkley
+
+Generate:
+
+Suggested Smart GM Move
+Improve long-term roster insulation while remaining competitive.
+
+Trade:
+Saquon Barkley
+
+for:
+Jordan Addison + 2027 1st
+
+Why:
+• Reduces RB age-related volatility
+• Adds insulated long-term WR value
+• Maintains competitive weekly lineup strength
+• Improves roster flexibility and future trade liquidity
+
+That feels like:
+
+an actual dynasty assistant
+
+not a calculator.
+
+Final Recommended System
+
+I would structure the tool as:
+
+Mode	Goal
+Win-Now	maximize starter points
+Smart GM	improve total roster ecosystem
+Rebuild	maximize future dynasty insulation
