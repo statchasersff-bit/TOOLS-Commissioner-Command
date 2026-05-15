@@ -684,8 +684,8 @@ interface WinNowIdea {
   partnerTier: Tier;
   headline: string;
   why: string;
-  youGive: { label: string; value: number; pos?: string; team?: string; age?: number; type: "player" | "pick"; sleeperId?: string }[];
-  youGet:  { label: string; value: number; pos?: string; team?: string; age?: number; type: "player" | "pick"; sleeperId?: string }[];
+  youGive: { label: string; value: number; pos?: string; team?: string; age?: number; type: "player" | "pick"; sleeperId?: string; pick?: Pick }[];
+  youGet:  { label: string; value: number; pos?: string; team?: string; age?: number; type: "player" | "pick"; sleeperId?: string; pick?: Pick }[];
   gainPos: PosLabel;
   dynGive: number;
   dynGet:  number;
@@ -788,8 +788,17 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
           drops[a.sleeperId] = userRosterId;
         }
       }
+      const draftPicks = idea.youGive
+        .filter(a => a.type === "pick" && a.pick)
+        .map(a => ({
+          season:           String(a.pick!.year),
+          round:            a.pick!.round,
+          roster_id:        a.pick!.originalRosterId ?? userRosterId,
+          previous_owner_id: userRosterId,
+          owner_id:         partnerRosterId,
+        }));
       const expiresAt = Date.now() + 7 * 24 * 60 * 60 * 1000;
-      await proposeTrade({ leagueId: league.id, adds, drops, draftPicks: [], expiresAt });
+      await proposeTrade({ leagueId: league.id, adds, drops, draftPicks, expiresAt });
       setStatus("success");
     } catch (e: any) {
       setStatus("error");
@@ -879,16 +888,6 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
             </div>
           </div>
         </div>
-
-        {/* Pick warning */}
-        {hasPick && status === "idle" && (
-          <div className="mx-4 mb-1 flex items-start gap-2 rounded-lg bg-amber-500/10 border border-amber-500/25 px-3 py-2">
-            <AlertTriangle className="w-3.5 h-3.5 text-amber-400 flex-shrink-0 mt-px" />
-            <p className="text-[10px] text-amber-300 leading-snug">
-              Draft picks can't be included automatically. After sending, open the Sleeper app to add the pick to this offer.
-            </p>
-          </div>
-        )}
 
         {/* Status banners */}
         {status === "success" && (
@@ -1128,7 +1127,7 @@ function WinNowMode({ league, userTeam }: { league: League; userTeam: Team }) {
               why:         `${chip.player.name} + a pick bridges the value gap while keeping dynasty cost low. Your ${needPos} weakness is your biggest weekly liability.`,
               youGive: [
                 { label: chip.player.name, value: chip.dynVal, pos: chip.player.pos, team: chip.player.team, type: "player", sleeperId: chip.player.sleeperId, age: chip.player.age },
-                { label: pickLabel,        value: pickVal,                                                    type: "pick"                                                             },
+                { label: pickLabel,        value: pickVal,                                                    type: "pick", pick: myPicks[0]                                       },
               ],
               youGet: [{ label: target.name, value: target.dynv, pos: target.pos, team: target.team, type: "player", sleeperId: target.sleeperId, age: target.age }],
               gainPos: needPos as PosLabel, dynGive, dynGet, rdGive, rdGet, userRdDelta: userRdDelta2, partnerRdDelta: partnerRdDelta2, score, scoreLabel: scoreLabel as WinNowIdea["scoreLabel"],

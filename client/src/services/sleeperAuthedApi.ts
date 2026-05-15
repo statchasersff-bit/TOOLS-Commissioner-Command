@@ -303,7 +303,7 @@ export async function submitLineup(
 
 function buildProposeTrademutation(
   leagueId: string,
-  draftPicks: string[],
+  draftPicks: SleeperTransactionPick[],
   expiresAt: number,
   rejectTransactionId?: string,
   rejectTransactionLeg?: number
@@ -360,7 +360,7 @@ export interface ProposeTradeParams {
   adds: Record<string, number>;
   /** playerId → sending roster ID */
   drops: Record<string, number>;
-  draftPicks: string[];
+  draftPicks: SleeperTransactionPick[];
   expiresAt: number;
   /** When countering an existing offer, the transaction to reject */
   rejectTransactionId?: string;
