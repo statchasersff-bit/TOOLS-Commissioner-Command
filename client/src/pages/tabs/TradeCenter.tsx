@@ -367,6 +367,36 @@ export function TradeFinder({ league, userTeam }: TradeProps) {
 
   const displayedProposals = showAllProposals ? filteredProposals : filteredProposals.slice(0, 12);
 
+  const PER_GROUP = 4;
+
+  const groupedProposals = useMemo(() => {
+    const getValue = (p: Player) =>
+      proposalMode === "dynasty" ? getPlayerValue(p) : getRedraftValue(p);
+
+    const getUpgradePos = (proposal: TradeProposal): string => {
+      if (proposal.gets.length === 0) return "Other";
+      return [...proposal.gets].sort((a, b) => getValue(b) - getValue(a))[0].pos;
+    };
+
+    const groups = new Map<string, TradeProposal[]>();
+    for (const proposal of filteredProposals) {
+      const pos = getUpgradePos(proposal);
+      if (!groups.has(pos)) groups.set(pos, []);
+      groups.get(pos)!.push(proposal);
+    }
+
+    const getRank = (pos: string): number => {
+      if (!["QB", "RB", "WR", "TE"].includes(pos)) return 0;
+      return proposalMode === "dynasty"
+        ? (positionalProfile.dynRanks[pos as "QB" | "RB" | "WR" | "TE"] ?? 0)
+        : (positionalProfile.rdRanks[pos as "QB" | "RB" | "WR" | "TE"] ?? 0);
+    };
+
+    return [...groups.entries()]
+      .sort(([posA], [posB]) => getRank(posB) - getRank(posA))
+      .map(([pos, proposals]) => ({ pos, proposals, rank: getRank(pos) }));
+  }, [filteredProposals, positionalProfile, proposalMode, getPlayerValue, getRedraftValue]);
+
   const total = league.teams.length;
 
   const tradeBlockCandidates = useMemo(() => {
@@ -522,7 +552,7 @@ export function TradeFinder({ league, userTeam }: TradeProps) {
             <p className="text-sm text-muted-foreground">No fair trade proposals found.</p>
             <p className="text-xs text-muted-foreground mt-1">This can happen when roster values are very uneven or player data hasn't loaded yet.</p>
           </div>
-        ) : (
+        ) : posFilter !== "all" ? (
           <>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {displayedProposals.map((proposal, i) => (
@@ -535,6 +565,42 @@ export function TradeFinder({ league, userTeam }: TradeProps) {
               </Button>
             )}
           </>
+        ) : (
+          <div className="space-y-7">
+            {groupedProposals.map(({ pos, proposals, rank }) => {
+              const shown = showAllProposals ? proposals : proposals.slice(0, PER_GROUP);
+              const ordinal = (n: number) =>
+                n === 1 ? "1st" : n === 2 ? "2nd" : n === 3 ? "3rd" : `${n}th`;
+              return (
+                <div key={pos} data-testid={`proposal-group-${pos.toLowerCase()}`}>
+                  <div className="flex items-center gap-2 mb-3">
+                    <Badge variant="outline" className={cn("text-[10px] font-bold px-1.5", getPositionColor(pos))}>{pos}</Badge>
+                    <span className="text-sm font-semibold">{pos} Upgrades</span>
+                    {rank > 0 && (
+                      <span className="text-[10px] text-muted-foreground">
+                        — currently {ordinal(rank)}/{positionalProfile.leagueSize} {proposalMode === "dynasty" ? "dynasty" : "win-now"}
+                      </span>
+                    )}
+                    <Badge variant="secondary" className="text-[10px] ml-auto">{proposals.length}</Badge>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {shown.map((proposal, i) => (
+                      <TradeProposalCard key={i} proposal={proposal} mode={proposalMode} />
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+            {(() => {
+              const totalShown = groupedProposals.reduce((s, g) => s + Math.min(g.proposals.length, PER_GROUP), 0);
+              const remaining = filteredProposals.length - totalShown;
+              return !showAllProposals && remaining > 0 ? (
+                <Button variant="outline" className="w-full" onClick={() => setShowAllProposals(true)} data-testid="btn-show-more-proposals">
+                  Show {remaining} more proposals
+                </Button>
+              ) : null;
+            })()}
+          </div>
         )}
       </Card>
 
