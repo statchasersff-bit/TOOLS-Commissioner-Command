@@ -890,7 +890,21 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
         <div className="grid grid-cols-2 divide-x divide-border/30 px-0">
           {/* You receive */}
           <div className="px-4 py-3">
-            <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">You receive</p>
+            <div className="flex items-center gap-1.5 mb-1">
+              {userTeam.avatar ? (
+                <img
+                  src={`https://sleepercdn.com/avatars/thumbs/${userTeam.avatar}`}
+                  alt={userTeam.owner}
+                  className="w-4 h-4 rounded-full object-cover flex-shrink-0 ring-1 ring-border/40"
+                  onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                />
+              ) : (
+                <div className="w-4 h-4 rounded-full bg-[#0b3a7a] flex items-center justify-center flex-shrink-0">
+                  <span className="text-[7px] font-bold text-white">{userTeam.owner.charAt(0).toUpperCase()}</span>
+                </div>
+              )}
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wide truncate">{userTeam.owner} receives</p>
+            </div>
             <DeltaChip dyn={uDyn} now={uNow} />
             <div className="mt-2">
               {idea.youGet.map((a, i) => <AssetRow key={i} a={a} />)}
@@ -898,7 +912,21 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
           </div>
           {/* Partner receives */}
           <div className="px-4 py-3">
-            <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">{idea.partnerTeam.owner} receives</p>
+            <div className="flex items-center gap-1.5 mb-1">
+              {idea.partnerTeam.avatar ? (
+                <img
+                  src={`https://sleepercdn.com/avatars/thumbs/${idea.partnerTeam.avatar}`}
+                  alt={idea.partnerTeam.owner}
+                  className="w-4 h-4 rounded-full object-cover flex-shrink-0 ring-1 ring-border/40"
+                  onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                />
+              ) : (
+                <div className="w-4 h-4 rounded-full bg-[#0b3a7a] flex items-center justify-center flex-shrink-0">
+                  <span className="text-[7px] font-bold text-white">{idea.partnerTeam.owner.charAt(0).toUpperCase()}</span>
+                </div>
+              )}
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wide truncate">{idea.partnerTeam.owner} receives</p>
+            </div>
             <DeltaChip dyn={pDyn} now={pNow} />
             <div className="mt-2">
               {idea.youGive.map((a, i) => <AssetRow key={i} a={a} />)}
