@@ -220,15 +220,25 @@ function PlayerCard({
     >
       {/* Player image */}
       <div className="relative aspect-square w-full overflow-hidden bg-[#0b1628]">
+        {/* Team logo watermark */}
+        {player.team && (
+          <img
+            src={`https://sleepercdn.com/images/team_logos/nfl/${player.team.toLowerCase()}.png`}
+            alt=""
+            aria-hidden="true"
+            className="absolute inset-0 w-full h-full object-contain p-4 opacity-[0.18] scale-110 pointer-events-none"
+            onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+          />
+        )}
         {player.sleeperId ? (
           <img
             src={`https://sleepercdn.com/content/nfl/players/thumb/${player.sleeperId}.jpg`}
             alt={player.player}
-            className="w-full h-full object-cover object-top"
+            className="relative w-full h-full object-cover object-top"
             onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
           />
         ) : (
-          <div className="w-full h-full flex items-center justify-center">
+          <div className="relative w-full h-full flex items-center justify-center">
             <span className="text-5xl font-black text-[#d4af37]/20">{player.player.charAt(0)}</span>
           </div>
         )}
