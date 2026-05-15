@@ -1145,6 +1145,20 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
 
   // JWT — shared with Live Draft + Transactions tabs
   const [sleeperJwt, setSleeperJwt] = useState<string | null>(() => localStorage.getItem(SLEEPER_JWT_KEY));
+  const [jwtInput, setJwtInput] = useState("");
+  const handleSaveJwt = () => {
+    const val = jwtInput.trim();
+    if (!val) return;
+    localStorage.setItem(SLEEPER_JWT_KEY, val);
+    setSleeperJwt(val);
+    setJwtInput("");
+    window.dispatchEvent(new CustomEvent("sleeper-jwt-changed", { detail: val }));
+  };
+  const handleClearJwt = () => {
+    localStorage.removeItem(SLEEPER_JWT_KEY);
+    setSleeperJwt(null);
+    window.dispatchEvent(new CustomEvent("sleeper-jwt-changed", { detail: null }));
+  };
   useEffect(() => {
     const onStorage = (e: StorageEvent) => { if (e.key === SLEEPER_JWT_KEY) setSleeperJwt(e.newValue); };
     const onJwtChanged = (e: Event) => { setSleeperJwt((e as CustomEvent).detail); };
@@ -2096,11 +2110,25 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
             </div>
 
             {!sleeperJwt ? (
-              <p className="text-xs text-muted-foreground py-1">
-                Connect your Sleeper account in the{" "}
-                <span className="text-[#d4af37] font-medium">Live Draft</span>{" "}
-                tab to propose trades directly from this calculator.
-              </p>
+              <div className="space-y-3">
+                <p className="text-xs text-muted-foreground">
+                  Paste your Sleeper auth token to propose trades directly. Find it in browser DevTools → Application → Local Storage → <code className="font-mono bg-muted px-1 rounded text-[10px]">sleeper-auth</code>.
+                </p>
+                <div className="flex gap-2">
+                  <Input
+                    type="password"
+                    placeholder="eyJhbGci…"
+                    value={jwtInput}
+                    onChange={e => setJwtInput(e.target.value)}
+                    onKeyDown={e => e.key === "Enter" && handleSaveJwt()}
+                    className="font-mono text-xs flex-1"
+                    data-testid="input-trade-calc-jwt"
+                  />
+                  <Button size="sm" onClick={handleSaveJwt} disabled={!jwtInput.trim()} data-testid="button-trade-calc-jwt-save">
+                    Connect
+                  </Button>
+                </div>
+              </div>
             ) : (
               <div className="space-y-4">
 
