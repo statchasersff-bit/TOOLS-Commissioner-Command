@@ -926,60 +926,6 @@ function WinNowMode({ league, userTeam }: { league: League; userTeam: Team }) {
   return (
     <div className="space-y-5">
 
-      {/* ── Positional Urgency card ── */}
-      <Card className="p-5" data-testid="card-wn-urgency">
-        <div className="mb-4">
-          <h4 className="text-sm font-bold">Positional Urgency</h4>
-          <span className="block h-[2px] w-8 bg-[#d4af37] rounded-full mt-1" />
-          <p className="text-[10px] text-muted-foreground mt-1.5">
-            Gap vs. league avg × positional scarcity (TE 1.5× · WR 1.1× · RB 1.0× · QB 0.8×)
-          </p>
-        </div>
-        {noNeeds ? (
-          <p className="text-xs text-muted-foreground">
-            Your starters are at or above league average at every position — no urgent win-now needs detected.
-          </p>
-        ) : (
-          <div className="space-y-3">
-            {POSITIONS.map(pos => {
-              const gap        = Math.max(0, leagueAvgRd[pos] - myStarterRd[pos]);
-              const maxUrgency = Math.max(...POSITIONS.map(p => urgency[p]), 1);
-              const pct        = Math.round((urgency[pos] / maxUrgency) * 100);
-              const isUrgent   = urgency[pos] > 0;
-              const needRank   = sortedNeeds.indexOf(pos);
-              return (
-                <div key={pos} className="space-y-1" data-testid={`urgency-row-${pos}`}>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Badge variant="outline" className={cn("text-[10px] px-1.5 py-0", getPositionColor(pos))}>{pos}</Badge>
-                      {isUrgent
-                        ? <span className="text-[11px] text-muted-foreground">−{Math.round(gap).toLocaleString()} vs avg</span>
-                        : <span className="text-[11px] text-emerald-500 dark:text-emerald-400">Above average</span>
-                      }
-                    </div>
-                    {isUrgent && (
-                      <span className={cn("text-[10px] font-semibold",
-                        needRank === 0 ? "text-red-500 dark:text-red-400" :
-                        needRank === 1 ? "text-amber-500 dark:text-amber-400" :
-                        "text-muted-foreground"
-                      )}>
-                        {needRank === 0 ? "Primary Need" : needRank === 1 ? "Secondary" : "Tertiary"}
-                      </span>
-                    )}
-                  </div>
-                  <div className="h-1.5 rounded-full bg-border overflow-hidden">
-                    <div
-                      className={cn("h-full rounded-full transition-all", isUrgent ? "bg-red-500" : "bg-emerald-500")}
-                      style={{ width: isUrgent ? `${pct}%` : "100%" }}
-                    />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </Card>
-
       {/* ── Best Chips to Move ── */}
       {sellCandidates.length > 0 && (
         <Card className="p-5" data-testid="card-wn-chips">
