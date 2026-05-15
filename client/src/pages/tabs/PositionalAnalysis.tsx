@@ -688,6 +688,7 @@ interface WinNowIdea {
   dynGet:  number;
   rdGive:  number;
   rdGet:   number;
+  partnerRdDelta: number; // partner's actual lineup win-now change (optimizeLineup-based)
   score: number;
   scoreLabel: "Elite" | "Strong" | "Moderate";
 }
@@ -734,7 +735,7 @@ function TradeOpportunities({ league, userTeam }: { league: League; userTeam: Te
 // ─── Win-Now Mode ─────────────────────────────────────────────────
 
 function WinNowMode({ league, userTeam }: { league: League; userTeam: Team }) {
-  const { getPlayerValue, getRedraftValue, getPickValue } = useValueModel();
+  const { getPlayerValue, getRedraftValue, getPickValue, optimizeLineup } = useValueModel();
   const tierMap = useMemo(() => getLeagueTeamTiers(league.teams), [league.teams]);
   const [expandedPositions, setExpandedPositions] = useState<Set<string>>(new Set());
   const togglePos = (pos: string) => setExpandedPositions(prev => {
@@ -851,6 +852,13 @@ function WinNowMode({ league, userTeam }: { league: League; userTeam: Team }) {
             const score      = (Math.max(rdDelta, 1) * urgency[needPos]) / Math.max(dynOverpay * 600 + 1, 1);
             const scoreLabel = score > 1800 ? "Elite" : score > 600 ? "Strong" : "Moderate";
 
+            // Partner's actual lineup win-now change: they lose target, gain chip
+            const rp = league.rosterPositions ?? [];
+            const partnerPreRd  = optimizeLineup(partner.roster, rp).filter(p => p.starter).reduce((s, p) => s + getRedraftValue(p), 0);
+            const partnerPost1  = [...partner.roster.filter(p => (p.sleeperId ?? p.id) !== (target.sleeperId ?? target.id)), chip.player];
+            const partnerPostRd = optimizeLineup(partnerPost1, rp).filter(p => p.starter).reduce((s, p) => s + getRedraftValue(p), 0);
+            const partnerRdDelta = partnerPostRd - partnerPreRd;
+
             ideas.push({
               id:          `wn-${partner.id}-${needPos}-${chip.player.sleeperId ?? chip.player.id}`,
               partnerId:   partner.id,
@@ -860,7 +868,7 @@ function WinNowMode({ league, userTeam }: { league: League; userTeam: Team }) {
               why:         `${chip.player.name} is an ideal chip — strong dynasty value with low lineup impact. Directly addresses your ${needPos} gap.`,
               youGive: [{ label: chip.player.name, value: chip.dynVal, pos: chip.player.pos, type: "player", sleeperId: chip.player.sleeperId, age: chip.player.age }],
               youGet:  [{ label: target.name,      value: target.dynv, pos: target.pos,      type: "player", sleeperId: target.sleeperId,      age: target.age      }],
-              gainPos: needPos as PosLabel, dynGive, dynGet, rdGive, rdGet, score, scoreLabel: scoreLabel as WinNowIdea["scoreLabel"],
+              gainPos: needPos as PosLabel, dynGive, dynGet, rdGive, rdGet, partnerRdDelta, score, scoreLabel: scoreLabel as WinNowIdea["scoreLabel"],
             });
           }
 
@@ -881,6 +889,13 @@ function WinNowMode({ league, userTeam }: { league: League; userTeam: Team }) {
             const scoreLabel = score > 1800 ? "Elite" : score > 600 ? "Strong" : "Moderate";
             const pickLabel  = `${myPicks[0].year} Rd ${myPicks[0].round} (${myPicks[0].projectedRange ?? "Mid"})`;
 
+            // Partner's actual lineup win-now change: they lose target, gain chip (pick adds no rdv)
+            const rp2 = league.rosterPositions ?? [];
+            const partnerPreRd2  = optimizeLineup(partner.roster, rp2).filter(p => p.starter).reduce((s, p) => s + getRedraftValue(p), 0);
+            const partnerPost2   = [...partner.roster.filter(p => (p.sleeperId ?? p.id) !== (target.sleeperId ?? target.id)), chip.player];
+            const partnerPostRd2 = optimizeLineup(partnerPost2, rp2).filter(p => p.starter).reduce((s, p) => s + getRedraftValue(p), 0);
+            const partnerRdDelta2 = partnerPostRd2 - partnerPreRd2;
+
             ideas.push({
               id:          `wn-pick-${partner.id}-${needPos}-${chip.player.sleeperId ?? chip.player.id}`,
               partnerId:   partner.id,
@@ -893,7 +908,7 @@ function WinNowMode({ league, userTeam }: { league: League; userTeam: Team }) {
                 { label: pickLabel,        value: pickVal,                            type: "pick"                                                             },
               ],
               youGet: [{ label: target.name, value: target.dynv, pos: target.pos, type: "player", sleeperId: target.sleeperId, age: target.age }],
-              gainPos: needPos as PosLabel, dynGive, dynGet, rdGive, rdGet, score, scoreLabel: scoreLabel as WinNowIdea["scoreLabel"],
+              gainPos: needPos as PosLabel, dynGive, dynGet, rdGive, rdGet, partnerRdDelta: partnerRdDelta2, score, scoreLabel: scoreLabel as WinNowIdea["scoreLabel"],
             });
           }
         }
@@ -1154,7 +1169,7 @@ function WinNowMode({ league, userTeam }: { league: League; userTeam: Team }) {
                             );
                           })()}
                           {(() => {
-                            const r = idea.rdGive - idea.rdGet;
+                            const r = idea.partnerRdDelta;
                             return (
                               <span className={cn("text-center font-semibold", r >= 0 ? "text-emerald-500 dark:text-emerald-400" : "text-red-400 dark:text-red-400")}>
                                 {r >= 0 ? "+" : "−"}{Math.abs(Math.round(r)).toLocaleString()}
@@ -1740,6 +1755,7 @@ interface RebuildIdea {
   dynGet:  number;
   rdGive:  number;
   rdGet:   number;
+  partnerRdDelta: number; // partner's actual lineup win-now change (optimizeLineup-based)
   ageDelta: number;
   score: number;
   scoreLabel: "Elite" | "Strong" | "Moderate";
@@ -1764,7 +1780,7 @@ type RebuildProfile = "Full Rebuild" | "Soft Rebuild" | "Retool" | "Hold / Conte
 // ─── Rebuild Mode ─────────────────────────────────────────────────
 
 function RebuildMode({ league, userTeam }: { league: League; userTeam: Team }) {
-  const { getPlayerValue, getRedraftValue, getPickValue } = useValueModel();
+  const { getPlayerValue, getRedraftValue, getPickValue, optimizeLineup } = useValueModel();
   const [expandedPartners, setExpandedPartners] = useState<Set<string>>(new Set());
   const togglePartner = (pid: string) => setExpandedPartners(prev => {
     const next = new Set(prev);
@@ -1904,6 +1920,13 @@ function RebuildMode({ league, userTeam }: { league: League; userTeam: Team }) {
           const score = ((dynGet - dynGive) + ageCurveGain + youngBonus) / Math.max(chip.decayScore / 1000, 0.2);
           const scoreLabel = score > 6 ? "Elite" : score > 2.5 ? "Strong" : "Moderate";
 
+          // Partner's actual lineup win-now change: they lose youngTarget, gain chip
+          const rp = league.rosterPositions ?? [];
+          const pPreRd  = optimizeLineup(partner.roster, rp).filter(p => p.starter).reduce((s, p) => s + getRedraftValue(p), 0);
+          const pPost   = [...partner.roster.filter(p => (p.sleeperId ?? p.id) !== (youngTarget.sleeperId ?? youngTarget.id)), chip.player];
+          const pPostRd = optimizeLineup(pPost, rp).filter(p => p.starter).reduce((s, p) => s + getRedraftValue(p), 0);
+          const partnerRdDelta = pPostRd - pPreRd;
+
           ideas.push({
             id:          `rb-${partner.id}-${chip.player.sleeperId ?? chip.player.id}-${youngTarget.sleeperId ?? youngTarget.id}`,
             partnerId:   partner.id,
@@ -1913,7 +1936,7 @@ function RebuildMode({ league, userTeam }: { league: League; userTeam: Team }) {
             why:         `${chip.player.name} (age ${chip.player.age}) carries ${chip.tier === "Emergency Exit" ? "extreme" : "significant"} decay risk. ${youngTarget.name} (age ${youngTarget.age}) gives you insulated dynasty value and a longer competitive window.`,
             youGive: [{ label: chip.player.name, value: dynGive, pos: chip.player.pos, type: "player", sleeperId: chip.player.sleeperId, age: chip.player.age }],
             youGet:  [{ label: youngTarget.name,  value: dynGet, pos: youngTarget.pos, type: "player", sleeperId: youngTarget.sleeperId, age: youngTarget.age }],
-            dynGive, dynGet, rdGive, rdGet, ageDelta, score,
+            dynGive, dynGet, rdGive, rdGet, partnerRdDelta, ageDelta, score,
             scoreLabel: scoreLabel as RebuildIdea["scoreLabel"],
           });
         }
@@ -1940,6 +1963,13 @@ function RebuildMode({ league, userTeam }: { league: League; userTeam: Team }) {
             type: "pick" as const,
           }));
 
+          // Partner's actual lineup win-now change: they gain chip, no player leaves their roster
+          const rp2 = league.rosterPositions ?? [];
+          const pPreRd2  = optimizeLineup(partner.roster, rp2).filter(p => p.starter).reduce((s, p) => s + getRedraftValue(p), 0);
+          const pPost2   = [...partner.roster, chip.player];
+          const pPostRd2 = optimizeLineup(pPost2, rp2).filter(p => p.starter).reduce((s, p) => s + getRedraftValue(p), 0);
+          const partnerRdDelta2 = pPostRd2 - pPreRd2;
+
           ideas.push({
             id:          `rb-pick-${partner.id}-${chip.player.sleeperId ?? chip.player.id}`,
             partnerId:   partner.id,
@@ -1949,7 +1979,7 @@ function RebuildMode({ league, userTeam }: { league: League; userTeam: Team }) {
             why:         `${chip.player.name} is at or near peak redraft value. Converting now locks in dynasty capital and resets your age curve. Picks compound value into the next window.`,
             youGive: [{ label: chip.player.name, value: dynGive, pos: chip.player.pos, type: "player", sleeperId: chip.player.sleeperId, age: chip.player.age }],
             youGet,
-            dynGive, dynGet, rdGive, rdGet,
+            dynGive, dynGet, rdGive, rdGet, partnerRdDelta: partnerRdDelta2,
             ageDelta: -5, // picks = instant age reset
             score,
             scoreLabel: scoreLabel as RebuildIdea["scoreLabel"],
@@ -2215,7 +2245,7 @@ function RebuildMode({ league, userTeam }: { league: League; userTeam: Team }) {
                                     {d >= 0 ? "+" : "−"}{Math.abs(Math.round(d)).toLocaleString()}
                                   </span>
                                 ); })()}
-                                {(() => { const r = idea.rdGive - idea.rdGet; return (
+                                {(() => { const r = idea.partnerRdDelta; return (
                                   <span className={cn("text-center font-semibold", r >= 0 ? "text-emerald-500 dark:text-emerald-400" : "text-red-400")}>
                                     {r >= 0 ? "+" : "−"}{Math.abs(Math.round(r)).toLocaleString()}
                                   </span>
