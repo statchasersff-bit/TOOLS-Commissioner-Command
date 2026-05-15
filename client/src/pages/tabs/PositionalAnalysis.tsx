@@ -924,9 +924,15 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
           <div className="px-4 py-3 border-t border-border/20">
             <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-2 font-medium">Choose pick to include</p>
             <div className="flex flex-wrap gap-1.5">
-              {userTeam.picks.map((p, i) => {
+              {userTeam.picks.filter(p => {
+                const ideaPick = idea.youGive.find(a => a.type === "pick" && a.pick)?.pick;
+                return ideaPick ? p.round === ideaPick.round : true;
+              }).map((p, i) => {
                 const origTeam = league.teams.find(t => parseInt(t.id.replace("roster_", ""), 10) === p.originalRosterId);
-                const isSelected = selectedPick?.year === p.year && selectedPick?.round === p.round && selectedPick?.ownerTeamId === p.ownerTeamId;
+                const isSelected =
+                  selectedPick?.year === p.year &&
+                  selectedPick?.round === p.round &&
+                  selectedPick?.originalRosterId === p.originalRosterId;
                 return (
                   <button
                     key={i}
