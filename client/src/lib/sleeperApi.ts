@@ -2018,3 +2018,56 @@ export async function fetchDraftState(draftId: string, jwt: string): Promise<Dra
     picks,
   };
 }
+
+// ── Generic Sleeper GraphQL helper ────────────────────────────────────────────
+// All JWT-authenticated GraphQL calls (with variables) go through here.
+// The x-sleeper-graphql-op header must match the operationName in the query.
+export async function sleeperGraphql<T = any>(
+  token: string,
+  body: { operationName: string; variables?: Record<string, unknown>; query: string }
+): Promise<T> {
+  const res = await fetch("https://sleeper.com/graphql", {
+    method: "POST",
+    headers: {
+      "authorization": token,
+      "x-sleeper-graphql-op": body.operationName,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`Sleeper GraphQL ${body.operationName} ${res.status}`);
+  const json = await res.json();
+  if (json?.errors?.length) throw new Error(json.errors[0].message || `${body.operationName} failed`);
+  return json?.data as T;
+}
+
+// ── get_user_draft_settings ───────────────────────────────────────────────────
+export const GET_USER_DRAFT_SETTINGS_QUERY = `
+  query get_user_draft_settings($draft_id: ID!) {
+    get_user_draft_settings(draft_id: $draft_id) {
+      draft_id
+      allow_pn
+      mention_pn
+    }
+  }
+`;
+
+export interface UserDraftSettings {
+  draft_id: string;
+  /** Whether push notifications are enabled for this draft */
+  allow_pn: boolean;
+  /** Whether @mention push notifications are enabled */
+  mention_pn: boolean;
+}
+
+export async function getUserDraftSettings(
+  token: string,
+  draftId: string
+): Promise<UserDraftSettings | null> {
+  const data = await sleeperGraphql<{ get_user_draft_settings: UserDraftSettings | null }>(token, {
+    operationName: "get_user_draft_settings",
+    variables: { draft_id: draftId },
+    query: GET_USER_DRAFT_SETTINGS_QUERY,
+  });
+  return data.get_user_draft_settings ?? null;
+}
