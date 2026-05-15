@@ -1147,18 +1147,11 @@ function WinNowMode({ league, userTeam }: { league: League; userTeam: Team }) {
                             )}
                             <span className="text-sm font-semibold truncate">{idea.partnerTeam.owner}</span>
                             <span className="text-xs text-muted-foreground flex-shrink-0">receives</span>
-                            <div className="ml-auto flex items-center gap-2 flex-shrink-0">
-                              {(() => { const d = idea.dynGive - idea.dynGet; return (
-                                <span className={cn("text-[10px] font-semibold", d >= 0 ? "text-emerald-500 dark:text-emerald-400" : "text-red-400")}>
-                                  {d >= 0 ? "+" : "−"}{Math.abs(Math.round(d)).toLocaleString()} DYN
-                                </span>
-                              ); })()}
-                              {(() => { const r = idea.partnerRdDelta; return (
-                                <span className={cn("text-[10px] font-semibold", r >= 0 ? "text-emerald-500 dark:text-emerald-400" : "text-red-400")}>
-                                  {r >= 0 ? "+" : "−"}{Math.abs(Math.round(r)).toLocaleString()} NOW
-                                </span>
-                              ); })()}
-                            </div>
+                            {(() => { const d = idea.dynGive - idea.dynGet; return (
+                              <span className={cn("ml-auto text-[10px] font-semibold flex-shrink-0", d >= 0 ? "text-emerald-500 dark:text-emerald-400" : "text-red-400")}>
+                                {d >= 0 ? "+" : "−"}{Math.abs(Math.round(d)).toLocaleString()} DYN
+                              </span>
+                            ); })()}
                           </div>
                           {idea.youGive.map((a: WinNowIdea["youGive"][number], i: number) => (
                             <div key={i} className="flex items-center gap-3 py-1.5">
