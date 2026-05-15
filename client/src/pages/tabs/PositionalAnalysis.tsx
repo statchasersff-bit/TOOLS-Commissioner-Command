@@ -688,6 +688,7 @@ interface WinNowIdea {
   dynGet:  number;
   rdGive:  number;
   rdGet:   number;
+  userRdDelta:    number; // user's actual lineup win-now change (optimizeLineup-based)
   partnerRdDelta: number; // partner's actual lineup win-now change (optimizeLineup-based)
   score: number;
   scoreLabel: "Elite" | "Strong" | "Moderate";
@@ -829,6 +830,10 @@ function WinNowMode({ league, userTeam }: { league: League; userTeam: Team }) {
       .map(p => ({ ...p, val: getPickValue(p) }))
       .sort((a, b) => b.val - a.val);
 
+    const rosterPositions = league.rosterPositions ?? [];
+    const userPreRd = optimizeLineup(userTeam.roster, rosterPositions)
+      .filter(p => p.starter).reduce((s, p) => s + getRedraftValue(p), 0);
+
     for (const partner of league.teams) {
       if (partner.id === userTeam.id) continue;
       const pRanks = posRdRanks.get(partner.id) ?? {};
@@ -864,11 +869,15 @@ function WinNowMode({ league, userTeam }: { league: League; userTeam: Team }) {
             const score      = (Math.max(rdDelta, 1) * urgency[needPos]) / Math.max(dynOverpay * 600 + 1, 1);
             const scoreLabel = score > 1800 ? "Elite" : score > 600 ? "Strong" : "Moderate";
 
+            // User's actual lineup win-now change: they lose chip, gain target
+            const userPost1   = [...userTeam.roster.filter(p => (p.sleeperId ?? p.id) !== (chip.player.sleeperId ?? chip.player.id)), target];
+            const userPostRd1 = optimizeLineup(userPost1, rosterPositions).filter(p => p.starter).reduce((s, p) => s + getRedraftValue(p), 0);
+            const userRdDelta1 = userPostRd1 - userPreRd;
+
             // Partner's actual lineup win-now change: they lose target, gain chip
-            const rp = league.rosterPositions ?? [];
-            const partnerPreRd  = optimizeLineup(partner.roster, rp).filter(p => p.starter).reduce((s, p) => s + getRedraftValue(p), 0);
+            const partnerPreRd  = optimizeLineup(partner.roster, rosterPositions).filter(p => p.starter).reduce((s, p) => s + getRedraftValue(p), 0);
             const partnerPost1  = [...partner.roster.filter(p => (p.sleeperId ?? p.id) !== (target.sleeperId ?? target.id)), chip.player];
-            const partnerPostRd = optimizeLineup(partnerPost1, rp).filter(p => p.starter).reduce((s, p) => s + getRedraftValue(p), 0);
+            const partnerPostRd = optimizeLineup(partnerPost1, rosterPositions).filter(p => p.starter).reduce((s, p) => s + getRedraftValue(p), 0);
             const partnerRdDelta = partnerPostRd - partnerPreRd;
             // Filter out trades where partner loses on both axes and the combined loss is severe
             const _pDyn1 = dynGive - dynGet;
@@ -883,7 +892,7 @@ function WinNowMode({ league, userTeam }: { league: League; userTeam: Team }) {
               why:         `${chip.player.name} is an ideal chip — strong dynasty value with low lineup impact. Directly addresses your ${needPos} gap.`,
               youGive: [{ label: chip.player.name, value: chip.dynVal, pos: chip.player.pos, type: "player", sleeperId: chip.player.sleeperId, age: chip.player.age }],
               youGet:  [{ label: target.name,      value: target.dynv, pos: target.pos,      type: "player", sleeperId: target.sleeperId,      age: target.age      }],
-              gainPos: needPos as PosLabel, dynGive, dynGet, rdGive, rdGet, partnerRdDelta, score, scoreLabel: scoreLabel as WinNowIdea["scoreLabel"],
+              gainPos: needPos as PosLabel, dynGive, dynGet, rdGive, rdGet, userRdDelta: userRdDelta1, partnerRdDelta, score, scoreLabel: scoreLabel as WinNowIdea["scoreLabel"],
             });
           }
 
@@ -904,11 +913,15 @@ function WinNowMode({ league, userTeam }: { league: League; userTeam: Team }) {
             const scoreLabel = score > 1800 ? "Elite" : score > 600 ? "Strong" : "Moderate";
             const pickLabel  = `${myPicks[0].year} Rd ${myPicks[0].round} (${myPicks[0].projectedRange ?? "Mid"})`;
 
-            // Partner's actual lineup win-now change: they lose target, gain chip (pick adds no rdv)
-            const rp2 = league.rosterPositions ?? [];
-            const partnerPreRd2  = optimizeLineup(partner.roster, rp2).filter(p => p.starter).reduce((s, p) => s + getRedraftValue(p), 0);
+            // User's actual lineup win-now change: they lose chip, gain target
+            const userPost2   = [...userTeam.roster.filter(p => (p.sleeperId ?? p.id) !== (chip.player.sleeperId ?? chip.player.id)), target];
+            const userPostRd2 = optimizeLineup(userPost2, rosterPositions).filter(p => p.starter).reduce((s, p) => s + getRedraftValue(p), 0);
+            const userRdDelta2 = userPostRd2 - userPreRd;
+
+            // Partner's actual lineup win-now change: they lose target, gain chip (pick adds no current rdv)
+            const partnerPreRd2  = optimizeLineup(partner.roster, rosterPositions).filter(p => p.starter).reduce((s, p) => s + getRedraftValue(p), 0);
             const partnerPost2   = [...partner.roster.filter(p => (p.sleeperId ?? p.id) !== (target.sleeperId ?? target.id)), chip.player];
-            const partnerPostRd2 = optimizeLineup(partnerPost2, rp2).filter(p => p.starter).reduce((s, p) => s + getRedraftValue(p), 0);
+            const partnerPostRd2 = optimizeLineup(partnerPost2, rosterPositions).filter(p => p.starter).reduce((s, p) => s + getRedraftValue(p), 0);
             const partnerRdDelta2 = partnerPostRd2 - partnerPreRd2;
             // Filter out trades where partner loses on both axes and the combined loss is severe
             const _pDyn2 = dynGive - dynGet;
@@ -926,7 +939,7 @@ function WinNowMode({ league, userTeam }: { league: League; userTeam: Team }) {
                 { label: pickLabel,        value: pickVal,                            type: "pick"                                                             },
               ],
               youGet: [{ label: target.name, value: target.dynv, pos: target.pos, type: "player", sleeperId: target.sleeperId, age: target.age }],
-              gainPos: needPos as PosLabel, dynGive, dynGet, rdGive, rdGet, partnerRdDelta: partnerRdDelta2, score, scoreLabel: scoreLabel as WinNowIdea["scoreLabel"],
+              gainPos: needPos as PosLabel, dynGive, dynGet, rdGive, rdGet, userRdDelta: userRdDelta2, partnerRdDelta: partnerRdDelta2, score, scoreLabel: scoreLabel as WinNowIdea["scoreLabel"],
             });
           }
         }
@@ -1097,7 +1110,7 @@ function WinNowMode({ league, userTeam }: { league: League; userTeam: Team }) {
                                   {d >= 0 ? "+" : "−"}{Math.abs(Math.round(d)).toLocaleString()} DYN
                                 </span>
                               ); })()}
-                              {(() => { const r = idea.rdGet - idea.rdGive; return (
+                              {(() => { const r = idea.userRdDelta; return (
                                 <span className={cn("text-[10px] font-semibold", r >= 0 ? "text-emerald-500 dark:text-emerald-400" : "text-red-400")}>
                                   {r >= 0 ? "+" : "−"}{Math.abs(Math.round(r)).toLocaleString()} NOW
                                 </span>
@@ -1147,11 +1160,18 @@ function WinNowMode({ league, userTeam }: { league: League; userTeam: Team }) {
                             )}
                             <span className="text-sm font-semibold truncate">{idea.partnerTeam.owner}</span>
                             <span className="text-xs text-muted-foreground flex-shrink-0">receives</span>
-                            {(() => { const d = idea.dynGive - idea.dynGet; return (
-                              <span className={cn("ml-auto text-[10px] font-semibold flex-shrink-0", d >= 0 ? "text-emerald-500 dark:text-emerald-400" : "text-red-400")}>
-                                {d >= 0 ? "+" : "−"}{Math.abs(Math.round(d)).toLocaleString()} DYN
-                              </span>
-                            ); })()}
+                            <div className="ml-auto flex items-center gap-2 flex-shrink-0">
+                              {(() => { const d = idea.dynGive - idea.dynGet; return (
+                                <span className={cn("text-[10px] font-semibold", d >= 0 ? "text-emerald-500 dark:text-emerald-400" : "text-red-400")}>
+                                  {d >= 0 ? "+" : "−"}{Math.abs(Math.round(d)).toLocaleString()} DYN
+                                </span>
+                              ); })()}
+                              {(() => { const r = idea.partnerRdDelta; return (
+                                <span className={cn("text-[10px] font-semibold", r >= 0 ? "text-emerald-500 dark:text-emerald-400" : "text-red-400")}>
+                                  {r >= 0 ? "+" : "−"}{Math.abs(Math.round(r)).toLocaleString()} NOW
+                                </span>
+                              ); })()}
+                            </div>
                           </div>
                           {idea.youGive.map((a: WinNowIdea["youGive"][number], i: number) => (
                             <div key={i} className="flex items-center gap-3 py-1.5">
