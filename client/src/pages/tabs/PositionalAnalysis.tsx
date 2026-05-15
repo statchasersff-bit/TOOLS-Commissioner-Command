@@ -9,6 +9,7 @@ import { useValueModel } from "@/contexts/ValueModelContext";
 import { getLeagueTeamTiers, getTierColor, getTierEmoji, getPositionColor, isContenderTier, isRebuilderTier } from "@/data/mockData";
 import { cn } from "@/lib/utils";
 import type { League, Team, Player, Pick, Tier } from "@/types";
+import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { getSleeperSession } from "@/services/sleeperAuth";
 import { proposeTrade } from "@/services/sleeperAuthedApi";
 import {
@@ -835,12 +836,10 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
   const AssetRow = ({ a }: { a: WinNowIdea["youGet"][number] }) => (
     <div className="flex items-center gap-2.5 rounded-[8px] bg-white/[0.03] border border-white/[0.06] px-2.5 py-1.5 mb-1.5 min-w-0">
       {a.type === "player" && a.sleeperId ? (
-        <div className="w-9 h-9 rounded-full flex-shrink-0 overflow-hidden bg-[#111827] ring-1 ring-white/10">
-          <img src={`https://sleepercdn.com/content/nfl/players/thumb/${a.sleeperId}.jpg`} alt={a.label} className="w-full h-full object-cover object-top" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
-        </div>
+        <PlayerAvatar id={a.sleeperId} name={a.label} pos={a.pos ?? ""} team={a.team ?? ""} size="sm" compact />
       ) : (
-        <div className="w-9 h-9 rounded-full flex-shrink-0 bg-[#d4af37]/10 border border-[#d4af37]/25 flex items-center justify-center">
-          <span className="text-[8px] font-bold text-[#d4af37] leading-none">PICK</span>
+        <div className="w-9 h-9 rounded-full flex-shrink-0 bg-purple-500/10 border border-purple-500/25 flex items-center justify-center">
+          <span className="text-[8px] font-bold text-purple-400 leading-none">PICK</span>
         </div>
       )}
       <div className="min-w-0 flex flex-col gap-[2px]">
@@ -1314,12 +1313,10 @@ function WinNowMode({ league, userTeam }: { league: League; userTeam: Team }) {
                       const AssetPill = ({ a }: { a: WinNowIdea["youGet"][number] }) => (
                         <div className="flex items-center gap-2.5 rounded-[8px] bg-white/[0.04] border border-white/[0.07] px-2.5 py-1.5 mb-[5px] min-w-0">
                           {a.type === "player" && a.sleeperId ? (
-                            <div className="w-9 h-9 rounded-full flex-shrink-0 overflow-hidden bg-[#111827] ring-1 ring-white/10">
-                              <img src={`https://sleepercdn.com/content/nfl/players/thumb/${a.sleeperId}.jpg`} alt={a.label} className="w-full h-full object-cover object-top" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
-                            </div>
+                            <PlayerAvatar id={a.sleeperId} name={a.label} pos={a.pos ?? ""} team={a.team ?? ""} size="sm" compact />
                           ) : (
-                            <div className="w-9 h-9 rounded-full flex-shrink-0 bg-[#d4af37]/10 border border-[#d4af37]/25 flex items-center justify-center">
-                              <span className="text-[8px] font-bold text-[#d4af37] leading-none">PICK</span>
+                            <div className="w-9 h-9 rounded-full flex-shrink-0 bg-purple-500/10 border border-purple-500/25 flex items-center justify-center">
+                              <span className="text-[8px] font-bold text-purple-400 leading-none">PICK</span>
                             </div>
                           )}
                           <div className="min-w-0 flex flex-col gap-[2px]">
