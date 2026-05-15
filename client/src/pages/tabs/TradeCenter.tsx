@@ -1367,7 +1367,7 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
       // Pre-fill DM with trade summary
       const aGives = [...sideA.filter(a => a.type === "player").map(a => a.player?.name).filter(Boolean), ...sideA.filter(a => a.type === "pick" && a.pickYear && a.pickRound).map(a => `${a.pickYear} Rd${a.pickRound}`)].join(", ") || "nothing";
       const bGives = [...sideB.filter(a => a.type === "player").map(a => a.player?.name).filter(Boolean), ...sideB.filter(a => a.type === "pick" && a.pickYear && a.pickRound).map(a => `${a.pickYear} Rd${a.pickRound}`)].join(", ") || "nothing";
-      setDmMessage(`Hey! Just sent you a trade — you'd give ${bGives}, I'd give ${aGives}. Thoughts?\n\nAnalyzed with StatChasers: https://statchasers.com/dynasty-command-tool/`);
+      setDmMessage(`Hey! Just sent you a trade — you'd give ${bGives}, I'd give ${aGives}. Thoughts?\n\nhttps://statchasers.com/dynasty-command-tool/`);
       // Dispatch to Transactions tab
       window.dispatchEvent(new CustomEvent("sleeper-txn-created", { detail: optimisticTrade }));
       window.dispatchEvent(new CustomEvent("sleeper-txn-refresh"));
