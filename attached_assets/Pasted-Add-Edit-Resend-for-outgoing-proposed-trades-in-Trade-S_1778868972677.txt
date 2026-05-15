@@ -1,0 +1,60 @@
+Add “Edit & Resend” for outgoing proposed trades in Trade Sync.
+
+Current outgoing trade actions:
+
+* Withdraw Offer
+* Message Partner
+
+Add:
+
+* Edit & Resend
+
+Behavior:
+
+1. User clicks “Edit & Resend”
+2. Show confirmation:
+   “Editing this offer will withdraw the current Sleeper trade and create a new offer with your changes.”
+3. If confirmed:
+
+   * hydrate TradeActionModal from the existing transaction
+   * open the same Edit Trade flow used in Trade Finder
+   * keep all current players/picks/FAAB pre-selected
+   * preserve expiration if possible
+4. When user clicks “Send Updated Trade”:
+
+   * first call reject_trade on the original transaction to withdraw it
+   * then call propose_trade with the edited assets
+   * then send trade-card DM + tool link DM like normal
+   * refetch league_transactions_filtered
+
+Important:
+
+* Do NOT withdraw the original offer immediately when opening edit mode.
+* Only withdraw when the user confirms “Send Updated Trade.”
+* If propose_trade fails after withdraw succeeds, show:
+  “Original offer was withdrawn, but the updated trade could not be sent.”
+* Prevent duplicate DMs with transaction_id keys.
+
+UI:
+
+* Add button next to Withdraw Offer:
+  “Edit & Resend”
+* Use pencil/edit icon.
+* Button style should be secondary, not danger.
+* Footer for outgoing trade should show:
+  Withdraw Offer | Edit & Resend | Message Partner
+
+Hydration from transaction:
+
+* selected sending players = players where transaction.drops[playerId] === myRosterId
+* selected receiving players = players where transaction.adds[playerId] === myRosterId
+* partnerRosterId = transaction.roster_ids.find(id => id !== myRosterId)
+* draft picks from transaction.draft_picks
+* FAAB from transaction.waiver_budget
+* expiresAt from transaction.settings?.expires_at
+
+When resending:
+
+* use propose_trade as a new trade.
+* Do not include reject_transaction_id unless this is a counter flow.
+* This is not a counter; it is a replacement outgoing offer.

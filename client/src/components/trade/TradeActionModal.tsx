@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
   Send, Loader2, ArrowRightLeft, CheckCircle2, XCircle,
-  AlertTriangle, ExternalLink, MessageSquare, X,
+  AlertTriangle, ExternalLink, MessageSquare, X, Pencil,
 } from "lucide-react";
 import {
   getDmByMembersFull, markDmRead, fetchDmMessages, sendDmMessage,
@@ -74,7 +74,7 @@ export interface NormalizedTrade {
   rejecterId?: string;
 }
 
-export type TradeModalMode = "incoming" | "outgoing" | "counter" | "completed";
+export type TradeModalMode = "incoming" | "outgoing" | "counter" | "completed" | "resend";
 
 export interface TradeActionModalProps {
   open: boolean;
@@ -268,20 +268,30 @@ function TradeValueBar({
 
 function CounterEditPanel({
   trade, myUserId, valuesBySleeperId, onAssetsChange,
+  initialMyReceive, initialMyGive,
 }: {
   trade: NormalizedTrade;
   myUserId: string;
   valuesBySleeperId: Record<string, number>;
   onAssetsChange: (myReceive: EditAssets, myGive: EditAssets) => void;
+  initialMyReceive?: EditAssets;
+  initialMyGive?: EditAssets;
 }) {
-  const [myReceive, setMyReceive] = useState<EditAssets>({
-    players: [...trade.iGet.players],
-    picks: [...trade.iGet.picks],
-  });
-  const [myGive, setMyGive] = useState<EditAssets>({
-    players: [...trade.iGive.players],
-    picks: [...trade.iGive.picks],
-  });
+  const [myReceive, setMyReceive] = useState<EditAssets>(
+    initialMyReceive ?? { players: [...trade.iGet.players], picks: [...trade.iGet.picks] }
+  );
+  const [myGive, setMyGive] = useState<EditAssets>(
+    initialMyGive ?? { players: [...trade.iGive.players], picks: [...trade.iGive.picks] }
+  );
+
+  // Report initial assets to parent so the submit button is enabled immediately
+  useEffect(() => {
+    onAssetsChange(
+      initialMyReceive ?? { players: [...trade.iGet.players], picks: [...trade.iGet.picks] },
+      initialMyGive ?? { players: [...trade.iGive.players], picks: [...trade.iGive.picks] }
+    );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const [myRoster, setMyRoster] = useState<AssetPlayer[]>([]);
   const [partnerRoster, setPartnerRoster] = useState<AssetPlayer[]>([]);
@@ -667,20 +677,24 @@ export function TradeActionModal({
   const [actionLoading, setActionLoading] = useState(false);
   const [actionResult, setActionResult] = useState<{ success: boolean; message: string } | null>(null);
 
-  // Counter state
+  // Counter / resend state
   const [counterAssets, setCounterAssets] = useState<{ myReceive: EditAssets; myGive: EditAssets } | null>(null);
   const [counterSubmitting, setCounterSubmitting] = useState(false);
   const [counterResult, setCounterResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [showResendConfirm, setShowResendConfirm] = useState(false);
+  const [resendSubmitting, setResendSubmitting] = useState(false);
 
   // Reset when modal opens or trade changes
   useEffect(() => {
     if (open) {
       setActiveMode(initialMode);
-      setActiveTab(initialMode === "counter" ? "edit" : "review");
+      setActiveTab(initialMode === "counter" || initialMode === "resend" ? "edit" : "review");
       setConfirmAction(null);
       setActionResult(null);
       setCounterResult(null);
       setCounterAssets(null);
+      setShowResendConfirm(false);
+      setResendSubmitting(false);
       setDmId(null);
       setDmMessages([]);
       setHasUnread(false);
@@ -833,6 +847,72 @@ export function TradeActionModal({
     }
   }, [counterAssets, trade, onCounterSent]);
 
+  // ── Edit & Resend submit ─────────────────────────────────────────────────────
+  const handleResendSubmit = useCallback(async () => {
+    if (!counterAssets) return;
+    const { myReceive, myGive } = counterAssets;
+    const hasAssets =
+      myReceive.players.length > 0 || myReceive.picks.length > 0 ||
+      myGive.players.length > 0 || myGive.picks.length > 0;
+    if (!hasAssets) return;
+
+    setResendSubmitting(true);
+    let withdrew = false;
+    try {
+      await rejectTrade(trade.leagueId, trade.transactionId, trade.leg);
+      withdrew = true;
+
+      const adds: Record<string, number> = {};
+      const drops: Record<string, number> = {};
+      for (const p of myReceive.players) {
+        adds[p.playerId] = trade.userRosterId;
+        drops[p.playerId] = trade.partnerRosterId;
+      }
+      for (const p of myGive.players) {
+        adds[p.playerId] = trade.partnerRosterId;
+        drops[p.playerId] = trade.userRosterId;
+      }
+      const draftPicks: SleeperTransactionPick[] = [
+        ...myReceive.picks.map((p) => ({
+          roster_id: p.originalRosterId,
+          season: p.season,
+          round: p.round,
+          owner_id: trade.userRosterId,
+          previous_owner_id: trade.partnerRosterId,
+        })),
+        ...myGive.picks.map((p) => ({
+          roster_id: p.originalRosterId,
+          season: p.season,
+          round: p.round,
+          owner_id: trade.partnerRosterId,
+          previous_owner_id: trade.userRosterId,
+        })),
+      ];
+      const expiresAt = trade.expiresAt && trade.expiresAt > Date.now()
+        ? Math.floor(trade.expiresAt / 1000)
+        : Math.floor((Date.now() + 7 * 24 * 60 * 60 * 1000) / 1000);
+
+      await proposeTrade({ leagueId: trade.leagueId, adds, drops, draftPicks, expiresAt });
+
+      setCounterResult({ success: true, message: "Updated offer sent! Your previous offer has been withdrawn." });
+      setTimeout(() => onCounterSent?.(), 1600);
+    } catch (err: any) {
+      if (withdrew) {
+        setCounterResult({
+          success: false,
+          message: "Original offer was withdrawn, but the updated trade could not be sent. Please re-submit on Sleeper.",
+        });
+      } else {
+        setCounterResult({
+          success: false,
+          message: `${err?.message || "Failed."} Your original offer was not changed.`,
+        });
+      }
+    } finally {
+      setResendSubmitting(false);
+    }
+  }, [counterAssets, trade, onCounterSent]);
+
   const handleClose = useCallback(() => {
     onRefresh?.();
     onClose();
@@ -845,6 +925,11 @@ export function TradeActionModal({
           { id: "edit", label: "Edit Counter" },
           { id: "messages", label: "Messages", badge: hasUnread },
         ]
+      : activeMode === "resend"
+      ? [
+          { id: "edit", label: "Edit Trade" },
+          { id: "messages", label: "Messages", badge: hasUnread },
+        ]
       : [
           { id: "review", label: "Review Trade" },
           { id: "messages", label: "Messages", badge: hasUnread },
@@ -852,6 +937,7 @@ export function TradeActionModal({
 
   const modalTitle =
     activeMode === "counter"  ? "Counter Offer"   :
+    activeMode === "resend"   ? "Edit & Resend"    :
     activeMode === "incoming" ? "Incoming Trade"   :
     activeMode === "outgoing" ? "Outgoing Trade"   :
     "Trade Details";
@@ -1000,6 +1086,17 @@ export function TradeActionModal({
             />
           )}
 
+          {!finalResult && activeTab === "edit" && activeMode === "resend" && (
+            <CounterEditPanel
+              trade={trade}
+              myUserId={myUserId}
+              valuesBySleeperId={valuesBySleeperId}
+              initialMyReceive={{ players: trade.iGet.players, picks: trade.iGet.picks }}
+              initialMyGive={{ players: trade.iGive.players, picks: trade.iGive.picks }}
+              onAssetsChange={(myReceive, myGive) => setCounterAssets({ myReceive, myGive })}
+            />
+          )}
+
           {activeTab === "messages" && !finalResult && (
             <MessagesPanel
               trade={trade}
@@ -1088,24 +1185,103 @@ export function TradeActionModal({
               </div>
             </>
           ) : activeMode === "outgoing" && isProposed ? (
+            showResendConfirm ? (
+              /* Resend confirmation */
+              <>
+                <p className="flex-1 text-[12px] text-white/65 leading-relaxed">
+                  Editing this offer will{" "}
+                  <span className="text-white/90 font-semibold">withdraw</span> the current
+                  Sleeper trade and create a new offer with your changes.
+                </p>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="text-white/40 hover:text-white/70 flex-shrink-0"
+                  onClick={() => setShowResendConfirm(false)}
+                  data-testid="btn-resend-confirm-cancel"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  className="bg-[#0b3a7a] hover:bg-[#0d4a9a] text-white font-semibold flex-shrink-0"
+                  onClick={() => {
+                    setShowResendConfirm(false);
+                    setCounterAssets(null);
+                    setActiveMode("resend");
+                    setActiveTab("edit");
+                  }}
+                  data-testid="btn-resend-confirm-proceed"
+                >
+                  <Pencil className="w-3.5 h-3.5 mr-1.5" />
+                  Edit Trade
+                </Button>
+              </>
+            ) : (
+              /* Normal outgoing footer */
+              <>
+                <Button
+                  variant="ghost"
+                  className="text-red-400/80 hover:text-red-400 hover:bg-red-500/10"
+                  onClick={() => setConfirmAction("withdraw")}
+                  data-testid="btn-withdraw-trade"
+                >
+                  <XCircle className="w-4 h-4 mr-1.5" />
+                  Withdraw Offer
+                </Button>
+                <Button
+                  variant="ghost"
+                  className="text-white/55 hover:text-white/85"
+                  onClick={() => setShowResendConfirm(true)}
+                  data-testid="btn-edit-resend"
+                >
+                  <Pencil className="w-4 h-4 mr-1.5" />
+                  Edit & Resend
+                </Button>
+                <Button
+                  variant="ghost"
+                  className="ml-auto text-white/40 hover:text-white/70"
+                  onClick={() => handleTabChange("messages")}
+                  data-testid="btn-message-partner"
+                >
+                  <MessageSquare className="w-4 h-4 mr-1.5" />
+                  Message Partner
+                </Button>
+              </>
+            )
+          ) : activeMode === "resend" ? (
             <>
               <Button
                 variant="ghost"
-                className="text-red-400/80 hover:text-red-400 hover:bg-red-500/10"
-                onClick={() => setConfirmAction("withdraw")}
-                data-testid="btn-withdraw-trade"
+                className="text-white/40 hover:text-white/60"
+                onClick={() => {
+                  setActiveMode("outgoing");
+                  setActiveTab("review");
+                  setCounterAssets(null);
+                  setShowResendConfirm(false);
+                }}
+                disabled={resendSubmitting}
+                data-testid="btn-resend-back"
               >
-                <XCircle className="w-4 h-4 mr-1.5" />
-                Withdraw Offer
+                ← Back
               </Button>
               <Button
-                variant="ghost"
-                className="ml-auto text-white/40 hover:text-white/70"
-                onClick={() => handleTabChange("messages")}
-                data-testid="btn-message-partner"
+                className="ml-auto bg-[#0b3a7a] hover:bg-[#0d4a9a] text-white font-bold"
+                onClick={handleResendSubmit}
+                disabled={
+                  resendSubmitting ||
+                  !counterAssets ||
+                  (counterAssets.myReceive.players.length === 0 &&
+                   counterAssets.myReceive.picks.length === 0 &&
+                   counterAssets.myGive.players.length === 0 &&
+                   counterAssets.myGive.picks.length === 0)
+                }
+                data-testid="btn-resend-submit"
               >
-                <MessageSquare className="w-4 h-4 mr-1.5" />
-                Message Partner
+                {resendSubmitting
+                  ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" />
+                  : <Pencil className="w-4 h-4 mr-1.5" />}
+                Send Updated Trade
               </Button>
             </>
           ) : activeMode === "counter" ? (
