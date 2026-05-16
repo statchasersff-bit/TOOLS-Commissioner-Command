@@ -1,0 +1,68 @@
+Redesign the mobile Trade Calculator asset selection flow.
+
+Goal:
+On mobile, do not show the full roster/player grid by default. Instead, show a large “+ Add Asset” button. When tapped, open a mobile-friendly popup/modal where the user can select players or picks by position.
+
+Core mobile behavior:
+1. Replace the default visible roster grid with a large button:
+   “+ Add Asset”
+
+2. When the button is clicked, open a popup/modal/bottom sheet.
+
+3. Inside the popup, show position tabs:
+   QB | RB | WR | TE | PICKS
+
+4. Only one position group can be selected/viewed at a time.
+
+5. Default selected tab should be QB, unless the user previously selected another tab.
+
+6. Each tab shows only assets from that group.
+
+Player row design inside popup:
+- Show full player name
+- Show position/team/value if available
+- Add a clear selectable row state
+- Use a plus icon or checkbox
+- When selected, row becomes highlighted with a gold accent and checkmark
+
+Example row:
+[+] Lamar Jackson
+BAL · QB · Value 8,450
+
+Picks tab:
+- Show picks as selectable rows or chips
+- Example:
+[+] 2026 1st
+[+] 2026 2nd
+[+] 2027 1st
+
+Selected assets:
+- On the main trade calculator screen, show selected players/picks as removable chips under the “+ Add Asset” button.
+- Example:
+Lamar Jackson ×
+2026 1st ×
+
+Modal/bottom sheet behavior:
+- On mobile, use a bottom sheet style modal.
+- It should slide up from the bottom.
+- Height should be around 80–90vh.
+- The inside of the modal should scroll.
+- The position tabs should stay sticky at the top of the modal.
+- Add a search bar above or below the tabs.
+- Add a clear “Done” button at the bottom or top-right.
+- Add an X close button.
+- Prevent background page scrolling while modal is open.
+
+Mobile layout:
+- Team header at top
+- “+ Add Asset” button
+- Selected asset chips
+- Trade value summary
+- Repeat for the other trade side when applicable
+
+Important:
+- This mobile picker should only apply at mobile breakpoints.
+- Do not break or remove the existing desktop roster selection layout unless I approve it.
+- Do not convert analysis/result tables into cards.
+- Keep desktop behavior the same.
+- Preserve Dynasty Command styling: navy background, gold accents, clean premium look.

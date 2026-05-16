@@ -1657,118 +1657,291 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
     const isOpen = side === "a" ? rosterOpenA : rosterOpenB;
     const setOpen = side === "a" ? setRosterOpenA : setRosterOpenB;
 
+    const [mobileOpen, setMobileOpen] = useState(false);
+    const [mobileTab, setMobileTab] = useState<"QB" | "RB" | "WR" | "TE" | "Picks">("QB");
+    const [mobileSearch, setMobileSearch] = useState("");
+
+    useEffect(() => {
+      if (mobileOpen) { document.body.style.overflow = "hidden"; }
+      else { document.body.style.overflow = ""; }
+      return () => { document.body.style.overflow = ""; };
+    }, [mobileOpen]);
+
+    const rdLabel = (r: number) => r === 1 ? "1st" : r === 2 ? "2nd" : r === 3 ? "3rd" : `${r}th`;
+
+    const selectedPlayers = rosterPlayers.filter(p => addedPlayerIds.has(p.sleeperId || p.id));
+    const selectedPicksDisplay: Array<{ label: string; sub?: string; onRemove: () => void }> = ownerPicks
+      ? ownerPicks.filter(p => addedPickKeys.has(`${p.season}-${p.round}-${p.originalRosterId}`)).map(p => ({
+          label: `${p.season} ${rdLabel(p.round)}`,
+          sub: p.originalRosterId !== Number(rosterTeam.id) ? `via ${p.originalTeamName}` : undefined,
+          onRemove: () => onTogglePick({ year: Number(p.season), round: p.round, originalRosterId: p.originalRosterId }, true, undefined),
+        }))
+      : rosterTeam.picks.filter(p => addedPickKeys.has(`${p.year}-${p.round}`)).map(p => ({
+          label: `${p.year} ${rdLabel(p.round)}`,
+          onRemove: () => onTogglePick(p, true, undefined),
+        }));
+
+    const POS_TABS = ["QB", "RB", "WR", "TE", "Picks"] as const;
+    const posTabColor: Record<string, string> = { QB: "#f87171", RB: "#34d399", WR: "#60a5fa", TE: "#fbbf24", Picks: "#c084fc" };
+
+    const filteredTabPlayers = mobileTab !== "Picks"
+      ? rosterPlayers.filter(p => p.pos === mobileTab && (!mobileSearch || p.name.toLowerCase().includes(mobileSearch.toLowerCase()))).sort((a, b) => getPlayerValue(b) - getPlayerValue(a))
+      : [];
+
+    const filteredTabPicks = mobileTab === "Picks"
+      ? (ownerPicks
+          ? [...ownerPicks].sort((a, b) => a.season.localeCompare(b.season) || a.round - b.round).filter(p => !mobileSearch || `${p.season} ${rdLabel(p.round)}`.toLowerCase().includes(mobileSearch.toLowerCase()))
+          : [...rosterTeam.picks].sort((a, b) => String(a.year).localeCompare(String(b.year)) || a.round - b.round).filter(p => !mobileSearch || `${p.year} ${rdLabel(p.round)}`.toLowerCase().includes(mobileSearch.toLowerCase())))
+      : [];
+
     return (
       <div className="mt-3 pt-3 border-t border-border/30">
-        <button
-          className="flex items-center gap-1.5 w-full text-left group"
-          onClick={() => setOpen(!isOpen)}
-          data-testid={`button-toggle-roster-${side}`}
-        >
-          <ChevronRight className={cn("w-3.5 h-3.5 text-muted-foreground transition-transform", isOpen && "rotate-90")} />
-          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider group-hover:text-foreground transition-colors">
-            {rosterTeam.owner || rosterTeam.name}'s Roster
-          </p>
-        </button>
-        {isOpen && (
-          <div className="overflow-x-auto mt-2"><div className="grid grid-cols-5 gap-2 max-h-64 overflow-y-auto min-w-[300px]">
-            {(["QB", "RB", "WR", "TE"] as const).map((pos) => {
-              const posPlayers = [...rosterPlayers]
-                .filter((p) => p.pos === pos)
-                .sort((a, b) => getPlayerValue(b) - getPlayerValue(a));
-              return (
-                <div key={pos} className="space-y-0.5">
-                  <p className={`text-[10px] font-bold uppercase tracking-wider text-center pb-1 border-b border-border/30 ${getPositionColor(pos)}`}>
-                    {pos}
-                  </p>
-                  {posPlayers.map((p) => {
-                    const pid = p.sleeperId || p.id;
-                    const isAdded = addedPlayerIds.has(pid);
-                    return (
-                      <button
-                        key={pid}
-                        className={cn(
-                          "w-full flex flex-col px-1.5 py-1 rounded text-left text-xs transition-colors",
-                          isAdded
-                            ? "bg-[#d4af37]/15 border border-[#d4af37]/40 cursor-pointer hover:bg-red-500/10 hover:border-red-500/40"
-                            : "hover:bg-muted/40 cursor-pointer"
-                        )}
-                        onClick={() => onTogglePlayer(p, isAdded)}
-                        data-testid={`button-roster-player-${side}-${pid}`}
-                      >
-                        <span className={cn("truncate text-[11px] font-medium", isAdded && "text-[#d4af37]")}>{p.name}</span>
-                      </button>
-                    );
-                  })}
-                  {posPlayers.length === 0 && (
-                    <p className="text-[9px] text-muted-foreground/50 text-center py-2">None</p>
-                  )}
-                </div>
-              );
-            })}
 
-            {/* Picks column — live data (JWT) or static fallback */}
-            <div className="space-y-0.5">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-center pb-1 border-b border-border/30 bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-400">
-                Picks
-              </p>
-              {ownerPicks
-                ? [...ownerPicks]
-                    .sort((a, b) => a.season.localeCompare(b.season) || a.round - b.round)
-                    .map((pick, i) => {
-                      const rd = pick.round === 1 ? "1st" : pick.round === 2 ? "2nd" : pick.round === 3 ? "3rd" : `${pick.round}th`;
-                      const pickKey = `${pick.season}-${pick.round}-${pick.originalRosterId}`;
-                      const isPickAdded = addedPickKeys.has(pickKey);
-                      const isSameOwner = pick.originalRosterId === Number(rosterTeam.id);
+        {/* ── Desktop: existing collapsible grid ─────────────────── */}
+        <div className="hidden md:block">
+          <button
+            className="flex items-center gap-1.5 w-full text-left group"
+            onClick={() => setOpen(!isOpen)}
+            data-testid={`button-toggle-roster-${side}`}
+          >
+            <ChevronRight className={cn("w-3.5 h-3.5 text-muted-foreground transition-transform", isOpen && "rotate-90")} />
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider group-hover:text-foreground transition-colors">
+              {rosterTeam.owner || rosterTeam.name}'s Roster
+            </p>
+          </button>
+          {isOpen && (
+            <div className="overflow-x-auto mt-2"><div className="grid grid-cols-5 gap-2 max-h-64 overflow-y-auto min-w-[300px]">
+              {(["QB", "RB", "WR", "TE"] as const).map((pos) => {
+                const posPlayers = [...rosterPlayers].filter((p) => p.pos === pos).sort((a, b) => getPlayerValue(b) - getPlayerValue(a));
+                return (
+                  <div key={pos} className="space-y-0.5">
+                    <p className={`text-[10px] font-bold uppercase tracking-wider text-center pb-1 border-b border-border/30 ${getPositionColor(pos)}`}>{pos}</p>
+                    {posPlayers.map((p) => {
+                      const pid = p.sleeperId || p.id;
+                      const isAdded = addedPlayerIds.has(pid);
                       return (
-                        <button
-                          key={`live-${i}`}
-                          className={cn(
-                            "w-full flex flex-col px-1.5 py-1 rounded text-left transition-colors",
-                            isPickAdded
-                              ? "bg-[#d4af37]/15 border border-[#d4af37]/40 cursor-pointer hover:bg-red-500/10 hover:border-red-500/40"
-                              : "hover:bg-muted/40 cursor-pointer"
-                          )}
-                          onClick={() => onTogglePick({ year: Number(pick.season), round: pick.round, originalRosterId: pick.originalRosterId }, isPickAdded, undefined)}
-                          data-testid={`button-roster-pick-${side}-${i}`}
-                        >
-                          <span className={cn("truncate text-[11px] font-medium", isPickAdded && "text-[#d4af37]")}>
-                            {pick.season} {rd}
-                          </span>
-                          {!isSameOwner && (
-                            <span className="text-[9px] text-purple-400 truncate leading-tight">via {pick.originalTeamName}</span>
-                          )}
-                        </button>
-                      );
-                    })
-                : [...rosterTeam.picks]
-                    .sort((a, b) => String(a.year).localeCompare(String(b.year)) || a.round - b.round)
-                    .map((pick, i) => {
-                      const rd = pick.round === 1 ? "1st" : pick.round === 2 ? "2nd" : pick.round === 3 ? "3rd" : `${pick.round}th`;
-                      const pickKey = `${pick.year}-${pick.round}`;
-                      const isPickAdded = addedPickKeys.has(pickKey);
-                      return (
-                        <button
-                          key={i}
-                          className={cn(
-                            "w-full flex flex-col px-1.5 py-1 rounded text-left transition-colors",
-                            isPickAdded
-                              ? "bg-[#d4af37]/15 border border-[#d4af37]/40 cursor-pointer hover:bg-red-500/10 hover:border-red-500/40"
-                              : "hover:bg-muted/40 cursor-pointer"
-                          )}
-                          onClick={() => onTogglePick(pick, isPickAdded, undefined)}
-                          data-testid={`button-roster-pick-${side}-${i}`}
-                        >
-                          <span className={cn("truncate text-[11px] font-medium", isPickAdded && "text-[#d4af37]")}>{pick.year} {rd}</span>
+                        <button key={pid} className={cn("w-full flex flex-col px-1.5 py-1 rounded text-left text-xs transition-colors", isAdded ? "bg-[#d4af37]/15 border border-[#d4af37]/40 cursor-pointer hover:bg-red-500/10 hover:border-red-500/40" : "hover:bg-muted/40 cursor-pointer")} onClick={() => onTogglePlayer(p, isAdded)} data-testid={`button-roster-player-${side}-${pid}`}>
+                          <span className={cn("truncate text-[11px] font-medium", isAdded && "text-[#d4af37]")}>{p.name}</span>
                         </button>
                       );
                     })}
-              {(ownerPicks ? ownerPicks.length === 0 : rosterTeam.picks.length === 0) && (
-                <p className="text-[9px] text-muted-foreground/50 text-center py-2">None</p>
-              )}
-            </div>
+                    {posPlayers.length === 0 && <p className="text-[9px] text-muted-foreground/50 text-center py-2">None</p>}
+                  </div>
+                );
+              })}
+              <div className="space-y-0.5">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-center pb-1 border-b border-border/30 bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-400">Picks</p>
+                {ownerPicks
+                  ? [...ownerPicks].sort((a, b) => a.season.localeCompare(b.season) || a.round - b.round).map((pick, i) => {
+                      const pickKey = `${pick.season}-${pick.round}-${pick.originalRosterId}`;
+                      const isPickAdded = addedPickKeys.has(pickKey);
+                      return (
+                        <button key={`live-${i}`} className={cn("w-full flex flex-col px-1.5 py-1 rounded text-left transition-colors", isPickAdded ? "bg-[#d4af37]/15 border border-[#d4af37]/40 cursor-pointer hover:bg-red-500/10 hover:border-red-500/40" : "hover:bg-muted/40 cursor-pointer")} onClick={() => onTogglePick({ year: Number(pick.season), round: pick.round, originalRosterId: pick.originalRosterId }, isPickAdded, undefined)} data-testid={`button-roster-pick-${side}-${i}`}>
+                          <span className={cn("truncate text-[11px] font-medium", isPickAdded && "text-[#d4af37]")}>{pick.season} {rdLabel(pick.round)}</span>
+                          {pick.originalRosterId !== Number(rosterTeam.id) && <span className="text-[9px] text-purple-400 truncate leading-tight">via {pick.originalTeamName}</span>}
+                        </button>
+                      );
+                    })
+                  : [...rosterTeam.picks].sort((a, b) => String(a.year).localeCompare(String(b.year)) || a.round - b.round).map((pick, i) => {
+                      const pickKey = `${pick.year}-${pick.round}`;
+                      const isPickAdded = addedPickKeys.has(pickKey);
+                      return (
+                        <button key={i} className={cn("w-full flex flex-col px-1.5 py-1 rounded text-left transition-colors", isPickAdded ? "bg-[#d4af37]/15 border border-[#d4af37]/40 cursor-pointer hover:bg-red-500/10 hover:border-red-500/40" : "hover:bg-muted/40 cursor-pointer")} onClick={() => onTogglePick(pick, isPickAdded, undefined)} data-testid={`button-roster-pick-${side}-${i}`}>
+                          <span className={cn("truncate text-[11px] font-medium", isPickAdded && "text-[#d4af37]")}>{pick.year} {rdLabel(pick.round)}</span>
+                        </button>
+                      );
+                    })}
+                {(ownerPicks ? ownerPicks.length === 0 : rosterTeam.picks.length === 0) && <p className="text-[9px] text-muted-foreground/50 text-center py-2">None</p>}
+              </div>
             </div></div>
+          )}
+        </div>
 
-        )}
+        {/* ── Mobile: + Add Asset button + chips ─────────────────── */}
+        <div className="md:hidden">
+          <button
+            onClick={() => setMobileOpen(true)}
+            data-testid={`button-mobile-add-asset-${side}`}
+            className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border border-dashed transition-all duration-200 text-sm font-semibold"
+            style={{ borderColor: "rgba(212,175,55,0.35)", color: "rgba(212,175,55,0.75)", background: "rgba(212,175,55,0.04)" }}
+          >
+            <Plus className="w-4 h-4" />
+            Add Asset
+          </button>
+
+          {(selectedPlayers.length > 0 || selectedPicksDisplay.length > 0) && (
+            <div className="flex flex-wrap gap-1.5 mt-2.5">
+              {selectedPlayers.map(p => (
+                <button
+                  key={p.sleeperId || p.id}
+                  onClick={() => onTogglePlayer(p, true)}
+                  data-testid={`chip-player-${side}-${p.sleeperId || p.id}`}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all"
+                  style={{ background: "rgba(212,175,55,0.12)", border: "1px solid rgba(212,175,55,0.35)", color: "#d4af37" }}
+                >
+                  {p.name}
+                  <X className="w-3 h-3 opacity-70" />
+                </button>
+              ))}
+              {selectedPicksDisplay.map((pick, i) => (
+                <button
+                  key={i}
+                  onClick={pick.onRemove}
+                  data-testid={`chip-pick-${side}-${i}`}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all"
+                  style={{ background: "rgba(192,132,252,0.12)", border: "1px solid rgba(192,132,252,0.35)", color: "#c084fc" }}
+                >
+                  {pick.label}{pick.sub ? ` (${pick.sub})` : ""}
+                  <X className="w-3 h-3 opacity-70" />
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Bottom sheet */}
+          {mobileOpen && (
+            <>
+              <div className="fixed inset-0 z-[60] bg-black/65 backdrop-blur-sm" onClick={() => setMobileOpen(false)} />
+              <div className="fixed inset-x-0 bottom-0 z-[61] flex flex-col" style={{ height: "88vh", borderRadius: "20px 20px 0 0", background: "rgba(5,10,24,0.98)", border: "1px solid rgba(255,255,255,0.08)", borderBottom: "none" }}>
+
+                {/* Sheet header */}
+                <div className="flex items-center justify-between px-5 pt-5 pb-3 flex-shrink-0" style={{ borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
+                  <div>
+                    <p className="text-sm font-bold text-white">{rosterTeam.owner || rosterTeam.name}</p>
+                    <p className="text-[11px] text-white/40 mt-0.5">Tap assets to add · tap again to remove</p>
+                  </div>
+                  <button onClick={() => setMobileOpen(false)} data-testid={`button-mobile-picker-close-${side}`} className="flex items-center justify-center w-8 h-8 rounded-full transition-colors" style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.10)" }}>
+                    <X className="w-4 h-4 text-white/60" />
+                  </button>
+                </div>
+
+                {/* Position tabs — sticky */}
+                <div className="flex gap-1.5 px-4 py-3 flex-shrink-0 overflow-x-auto" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+                  {POS_TABS.map(tab => {
+                    const isActive = mobileTab === tab;
+                    const color = posTabColor[tab];
+                    return (
+                      <button
+                        key={tab}
+                        onClick={() => { setMobileTab(tab); setMobileSearch(""); }}
+                        data-testid={`button-mobile-tab-${side}-${tab}`}
+                        className="flex-shrink-0 px-4 py-1.5 rounded-full text-xs font-bold transition-all duration-150"
+                        style={{ background: isActive ? `${color}22` : "rgba(255,255,255,0.04)", color: isActive ? color : "rgba(203,213,225,0.45)", border: isActive ? `1px solid ${color}55` : "1px solid rgba(255,255,255,0.07)" }}
+                      >
+                        {tab}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Search bar */}
+                <div className="px-4 py-2.5 flex-shrink-0">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/30" />
+                    <input
+                      value={mobileSearch}
+                      onChange={e => setMobileSearch(e.target.value)}
+                      placeholder={mobileTab === "Picks" ? "Search picks…" : `Search ${mobileTab}s…`}
+                      className="w-full pl-9 pr-4 py-2 rounded-xl text-sm text-white placeholder:text-white/25 outline-none transition-colors"
+                      style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)" }}
+                      data-testid={`input-mobile-search-${side}`}
+                    />
+                  </div>
+                </div>
+
+                {/* Scrollable asset list */}
+                <div className="flex-1 overflow-y-auto px-4 pb-24">
+                  {mobileTab !== "Picks" && filteredTabPlayers.map(p => {
+                    const pid = p.sleeperId || p.id;
+                    const isAdded = addedPlayerIds.has(pid);
+                    const val = getPlayerValue(p);
+                    return (
+                      <button
+                        key={pid}
+                        onClick={() => onTogglePlayer(p, isAdded)}
+                        data-testid={`button-mobile-player-${side}-${pid}`}
+                        className="w-full flex items-center gap-3 px-3 py-3 rounded-xl mb-1.5 text-left transition-all duration-150"
+                        style={{ background: isAdded ? "rgba(212,175,55,0.10)" : "rgba(255,255,255,0.025)", border: isAdded ? "1px solid rgba(212,175,55,0.40)" : "1px solid rgba(255,255,255,0.05)" }}
+                      >
+                        <div className="flex items-center justify-center w-7 h-7 rounded-full flex-shrink-0 transition-all" style={{ background: isAdded ? "rgba(212,175,55,0.20)" : "rgba(255,255,255,0.05)", border: isAdded ? "1.5px solid rgba(212,175,55,0.60)" : "1.5px solid rgba(255,255,255,0.10)" }}>
+                          {isAdded
+                            ? <CheckCircle2 className="w-4 h-4" style={{ color: "#d4af37" }} />
+                            : <Plus className="w-3.5 h-3.5 text-white/30" />}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold truncate" style={{ color: isAdded ? "#d4af37" : "#e2e8f0" }}>{p.name}</p>
+                          <p className="text-[11px] text-white/35 mt-0.5">{p.team} · {p.pos}{val > 0 ? ` · ${val.toLocaleString()}` : ""}</p>
+                        </div>
+                      </button>
+                    );
+                  })}
+                  {mobileTab !== "Picks" && filteredTabPlayers.length === 0 && (
+                    <p className="text-center text-sm text-white/25 py-10">No {mobileTab}s found</p>
+                  )}
+                  {mobileTab === "Picks" && (ownerPicks
+                    ? (filteredTabPicks as typeof ownerPicks).map((pick, i) => {
+                        const pickKey = `${pick.season}-${pick.round}-${pick.originalRosterId}`;
+                        const isAdded = addedPickKeys.has(pickKey);
+                        const isSameOwner = pick.originalRosterId === Number(rosterTeam.id);
+                        return (
+                          <button
+                            key={i}
+                            onClick={() => onTogglePick({ year: Number(pick.season), round: pick.round, originalRosterId: pick.originalRosterId }, isAdded, undefined)}
+                            data-testid={`button-mobile-pick-${side}-${i}`}
+                            className="w-full flex items-center gap-3 px-3 py-3 rounded-xl mb-1.5 text-left transition-all duration-150"
+                            style={{ background: isAdded ? "rgba(192,132,252,0.10)" : "rgba(255,255,255,0.025)", border: isAdded ? "1px solid rgba(192,132,252,0.40)" : "1px solid rgba(255,255,255,0.05)" }}
+                          >
+                            <div className="flex items-center justify-center w-7 h-7 rounded-full flex-shrink-0" style={{ background: isAdded ? "rgba(192,132,252,0.20)" : "rgba(255,255,255,0.05)", border: isAdded ? "1.5px solid rgba(192,132,252,0.60)" : "1.5px solid rgba(255,255,255,0.10)" }}>
+                              {isAdded ? <CheckCircle2 className="w-4 h-4" style={{ color: "#c084fc" }} /> : <Plus className="w-3.5 h-3.5 text-white/30" />}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-semibold" style={{ color: isAdded ? "#c084fc" : "#e2e8f0" }}>{pick.season} {rdLabel(pick.round)}</p>
+                              {!isSameOwner && <p className="text-[11px] text-purple-400/60 mt-0.5">via {pick.originalTeamName}</p>}
+                            </div>
+                          </button>
+                        );
+                      })
+                    : (filteredTabPicks as typeof rosterTeam.picks).map((pick, i) => {
+                        const pickKey = `${pick.year}-${pick.round}`;
+                        const isAdded = addedPickKeys.has(pickKey);
+                        return (
+                          <button
+                            key={i}
+                            onClick={() => onTogglePick(pick, isAdded, undefined)}
+                            data-testid={`button-mobile-pick-${side}-${i}`}
+                            className="w-full flex items-center gap-3 px-3 py-3 rounded-xl mb-1.5 text-left transition-all duration-150"
+                            style={{ background: isAdded ? "rgba(192,132,252,0.10)" : "rgba(255,255,255,0.025)", border: isAdded ? "1px solid rgba(192,132,252,0.40)" : "1px solid rgba(255,255,255,0.05)" }}
+                          >
+                            <div className="flex items-center justify-center w-7 h-7 rounded-full flex-shrink-0" style={{ background: isAdded ? "rgba(192,132,252,0.20)" : "rgba(255,255,255,0.05)", border: isAdded ? "1.5px solid rgba(192,132,252,0.60)" : "1.5px solid rgba(255,255,255,0.10)" }}>
+                              {isAdded ? <CheckCircle2 className="w-4 h-4" style={{ color: "#c084fc" }} /> : <Plus className="w-3.5 h-3.5 text-white/30" />}
+                            </div>
+                            <p className="text-sm font-semibold" style={{ color: isAdded ? "#c084fc" : "#e2e8f0" }}>{pick.year} {rdLabel(pick.round)}</p>
+                          </button>
+                        );
+                      })
+                  )}
+                  {mobileTab === "Picks" && filteredTabPicks.length === 0 && (
+                    <p className="text-center text-sm text-white/25 py-10">No picks found</p>
+                  )}
+                </div>
+
+                {/* Done button — fixed at bottom of sheet */}
+                <div className="absolute bottom-0 inset-x-0 px-4 py-4 flex-shrink-0" style={{ background: "linear-gradient(to top, rgba(5,10,24,1) 70%, transparent)", borderTop: "1px solid rgba(255,255,255,0.07)" }}>
+                  <button
+                    onClick={() => setMobileOpen(false)}
+                    data-testid={`button-mobile-picker-done-${side}`}
+                    className="w-full py-3.5 rounded-xl text-sm font-bold transition-all"
+                    style={{ background: "linear-gradient(135deg, rgba(11,58,122,0.90) 0%, rgba(11,58,122,0.70) 100%)", border: "1px solid rgba(212,175,55,0.30)", color: "#fff", boxShadow: "0 2px 16px rgba(11,58,122,0.50)" }}
+                  >
+                    Done{(addedPlayerIds.size + addedPickKeys.size) > 0 ? ` · ${addedPlayerIds.size + addedPickKeys.size} selected` : ""}
+                  </button>
+                </div>
+
+              </div>
+            </>
+          )}
+        </div>
+
       </div>
     );
   };
