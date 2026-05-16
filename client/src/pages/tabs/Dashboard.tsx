@@ -1033,7 +1033,7 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
           const pills: Array<{ label: string; show: boolean }> = [
             { label: `${league.teams.length}-Team`,      show: true },
             { label: league.scoringFormat,               show: !!league.scoringFormat },
-            { label: league.format ?? "1QB",             show: true },
+            { label: league.format ?? "1QB",             show: !league.scoringFormat?.includes(league.format ?? "1QB") },
             { label: `Start ${starterCount}`,            show: starterCount > 0 },
             { label: `Bench ${league.benchSlots}`,       show: (league.benchSlots ?? 0) > 0 },
             { label: `Taxi ${league.taxiSlots}`,         show: (league.taxiSlots ?? 0) > 0 },
