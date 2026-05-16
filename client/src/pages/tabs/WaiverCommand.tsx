@@ -513,13 +513,8 @@ export default function WaiverCommand() {
     <div className="space-y-5">
       {/* Page header */}
       <SectionHeader title="Waiver Command" subtitle="Find waiver targets, compare league availability, and manage adds across your teams." />
-      <div className="flex items-center justify-end flex-wrap gap-3">
+      <div className="flex flex-col sm:flex-row items-center justify-center sm:justify-end flex-wrap gap-3">
         <div className="flex items-center gap-3">
-          {lastFetched && (
-            <span className="text-[11px] text-muted-foreground/60">
-              Updated {Math.round((Date.now() - lastFetched) / 1000)}s ago
-            </span>
-          )}
           {isFetching && (
             <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
               <RefreshCw className="w-3 h-3 animate-spin text-[#d4af37]" />
