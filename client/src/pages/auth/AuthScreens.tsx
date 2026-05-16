@@ -144,7 +144,7 @@ export interface AuthState {
 
 function FakeAppBackground() {
   return (
-    <div className="absolute inset-0 overflow-hidden" style={{ filter: "blur(14px)", transform: "scale(1.06)" }}>
+    <div className="absolute inset-0 overflow-hidden" style={{ filter: "blur(7px)", transform: "scale(1.06)" }}>
       {/* Blueprint grid */}
       <div className="absolute inset-0 bg-[#060d1a]"
         style={{
@@ -263,7 +263,7 @@ export function LandingScreen({ onNavigate }: ScreenProps) {
       <FakeAppBackground />
 
       {/* Dark overlay */}
-      <div className="absolute inset-0 bg-[#060d1a]/70" />
+      <div className="absolute inset-0 bg-[#060d1a]/45" />
 
       {/* Card */}
       <div className="relative z-10 w-full max-w-[460px]">
