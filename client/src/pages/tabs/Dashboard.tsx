@@ -986,32 +986,29 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
 
   // ── View toggle ──────────────────────────────────────────────────
   const viewToggle = (
-    <div className="flex items-center gap-1 p-1 rounded-xl bg-white/[0.03] border border-white/6 flex-shrink-0">
+    <div className="grid flex-shrink-0" style={{ gridTemplateColumns: "repeat(4, 1fr)", height: 48, borderRadius: 16, padding: 4, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", gap: 4, minWidth: 0 }}>
       {([
-        { id: "table",   icon: List,      label: "Table"          },
-        { id: "economy", icon: Coins,      label: "Dynasty Window" },
-        { id: "chart",   icon: BarChart2,  label: "Position Chart" },
-        { id: "heatmap", icon: Grid3X3,    label: "Heatmap"        },
-      ] as const).map(({ id, icon: Icon, label }) => (
-        <button
-          key={id}
-          onClick={() => setViewMode(id)}
-          title={label}
-          data-testid={`view-toggle-${id}`}
-          className={cn(
-            "relative flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-all duration-200",
-            viewMode === id
-              ? "bg-[#0b3a7a]/60 text-white border border-[#d4af37]/25"
-              : "text-white/35 hover:text-white/60"
-          )}
-        >
-          <Icon className="w-3.5 h-3.5" />
-          <span className="hidden sm:inline">{label}</span>
-          {viewMode === id && (
-            <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-6 h-[2px] rounded-full bg-[#d4af37]" />
-          )}
-        </button>
-      ))}
+        { id: "table",   icon: List,      label: "Table"    },
+        { id: "economy", icon: Coins,     label: "Dynasty"  },
+        { id: "chart",   icon: BarChart2, label: "Chart"    },
+        { id: "heatmap", icon: Grid3X3,   label: "Heatmap"  },
+      ] as const).map(({ id, icon: Icon, label }) => {
+        const isActive = viewMode === id;
+        return (
+          <button
+            key={id}
+            onClick={() => setViewMode(id)}
+            title={label}
+            data-testid={`view-toggle-${id}`}
+            className="relative flex items-center justify-center gap-1.5 font-semibold transition-all duration-200"
+            style={{ borderRadius: 12, fontSize: 12, letterSpacing: "0.01em", background: isActive ? "linear-gradient(135deg, rgba(11,58,122,0.85) 0%, rgba(11,58,122,0.65) 100%)" : "transparent", color: isActive ? "#fff" : "rgba(203,213,225,0.45)", border: isActive ? "1px solid rgba(212,175,55,0.30)" : "1px solid transparent", boxShadow: isActive ? "0 2px 12px rgba(11,58,122,0.40), inset 0 1px 0 rgba(255,255,255,0.06)" : "none", paddingLeft: 8, paddingRight: 8 }}
+          >
+            <Icon style={{ width: 14, height: 14, flexShrink: 0 }} />
+            <span className="hidden sm:inline">{label}</span>
+            {isActive && <span className="absolute bottom-[3px] left-1/2 -translate-x-1/2 rounded-full" style={{ width: 24, height: 2, background: "#d4af37", opacity: 0.85 }} />}
+          </button>
+        );
+      })}
     </div>
   );
 
