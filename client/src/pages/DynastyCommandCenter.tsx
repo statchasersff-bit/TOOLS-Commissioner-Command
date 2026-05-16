@@ -15,7 +15,7 @@ import { NAV_CONFIG } from "@/data/mockData";
 import type { League, Team } from "@/types";
 import { fetchSleeperLeagueFull } from "@/lib/sleeperApi";
 import { DataDiagnostics } from "@/components/DataDiagnostics";
-import { LayoutDashboard, Loader2, Lock, Check, User, RefreshCw, AlertCircle, Wifi, WifiOff, ChevronDown, LogOut } from "lucide-react";
+import { LayoutDashboard, Loader2, Lock, Check, User, RefreshCw, AlertCircle, Wifi, WifiOff, ChevronDown, LogOut, Trophy, ArrowRightLeft, TrendingUp, Zap, X } from "lucide-react";
 import { SiDiscord } from "react-icons/si";
 import logoDark from "@assets/statchasers_logo_transparent_dark_1772764844282.png";
 import logoLight from "@assets/statchasers_logo_transparent_light_1772764844283.png";
@@ -70,6 +70,8 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
   const [isLeagueLoading, setIsLeagueLoading] = useState(false);
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
   const userDropdownRef = useRef<HTMLDivElement>(null);
+  const [logoMenuOpen, setLogoMenuOpen] = useState(false);
+  const logoMenuRef = useRef<HTMLDivElement>(null);
 
   const { isRecalculating, isLoading, getPlayerValue, getPickValue, calculateAllTeamMetrics, optimizeLineup } = useValueModel();
   const sleeper = useSleeper();
@@ -189,6 +191,17 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
     document.addEventListener("mousedown", handleOutside);
     return () => document.removeEventListener("mousedown", handleOutside);
   }, [userDropdownOpen]);
+
+  useEffect(() => {
+    if (!logoMenuOpen) return;
+    function handleOutside(e: MouseEvent) {
+      if (logoMenuRef.current && !logoMenuRef.current.contains(e.target as Node)) {
+        setLogoMenuOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleOutside);
+    return () => document.removeEventListener("mousedown", handleOutside);
+  }, [logoMenuOpen]);
 
   const handleLeagueSelect = useCallback((id: string) => {
     setSelectedLeagueId(id);
@@ -338,18 +351,87 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
         <div className="max-w-7xl mx-auto px-4 md:px-3 py-[14px] md:py-3">
           <div className="flex items-center gap-3">
 
-            {/* ── Logo ── */}
-            <div className="flex items-center gap-2.5 flex-shrink-0 flex-1">
-              <div className="w-8 h-8 md:w-9 md:h-9 rounded-lg flex items-center justify-center flex-shrink-0">
-                <img src={logoDark} alt="StatChasers" className="w-8 h-8 md:w-9 md:h-9 hidden dark:block" />
-                <img src={logoLight} alt="StatChasers" className="w-8 h-8 md:w-9 md:h-9 block dark:hidden" />
-              </div>
-              <div className="leading-none hidden md:block">
-                <h1 className="text-sm md:text-base font-bold text-foreground leading-tight tracking-tight" data-testid="text-app-title">
-                  StatChasers
-                </h1>
-                <p className="text-[10px] md:text-xs text-[#d4af37] font-semibold tracking-wide leading-tight mt-0.5">Dynasty Command</p>
-              </div>
+            {/* ── Logo (clickable menu trigger) ── */}
+            <div className="relative flex-shrink-0 flex-1" ref={logoMenuRef}>
+              <button
+                onClick={() => setLogoMenuOpen(v => !v)}
+                data-testid="button-logo-menu"
+                className="flex items-center gap-2.5 rounded-xl transition-all duration-200 group"
+                style={{ padding: "4px 8px 4px 4px", background: logoMenuOpen ? "rgba(212,175,55,0.07)" : "transparent", border: logoMenuOpen ? "1px solid rgba(212,175,55,0.20)" : "1px solid transparent" }}
+              >
+                <div className="w-8 h-8 md:w-9 md:h-9 rounded-lg flex items-center justify-center flex-shrink-0">
+                  <img src={logoDark} alt="StatChasers" className="w-8 h-8 md:w-9 md:h-9 hidden dark:block" />
+                  <img src={logoLight} alt="StatChasers" className="w-8 h-8 md:w-9 md:h-9 block dark:hidden" />
+                </div>
+                <div className="leading-none hidden md:block text-left">
+                  <h1 className="text-sm md:text-base font-bold text-foreground leading-tight tracking-tight" data-testid="text-app-title">StatChasers</h1>
+                  <p className="text-[10px] md:text-xs text-[#d4af37] font-semibold tracking-wide leading-tight mt-0.5">Dynasty Command</p>
+                </div>
+                <ChevronDown className={`w-3 h-3 text-white/30 group-hover:text-white/55 transition-transform duration-200 hidden md:block ${logoMenuOpen ? "rotate-180" : ""}`} />
+              </button>
+
+              {/* Logo dropdown menu */}
+              {logoMenuOpen && (
+                <div
+                  className="absolute left-0 top-full mt-2 z-[55] overflow-hidden"
+                  style={{ width: 240, borderRadius: 16, background: "rgba(5,10,24,0.98)", border: "1px solid rgba(255,255,255,0.08)", boxShadow: "0 20px 40px rgba(0,0,0,0.50), 0 0 0 1px rgba(212,175,55,0.06)" }}
+                >
+                  {/* Brand header */}
+                  <div className="px-4 py-3.5" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)", background: "linear-gradient(135deg, rgba(11,58,122,0.18) 0%, transparent 100%)" }}>
+                    <div className="flex items-center gap-2.5">
+                      <img src={logoDark} alt="StatChasers" className="w-7 h-7 hidden dark:block" />
+                      <img src={logoLight} alt="StatChasers" className="w-7 h-7 block dark:hidden" />
+                      <div>
+                        <p className="text-[13px] font-black text-white leading-tight">StatChasers</p>
+                        <p className="text-[10px] font-semibold leading-tight" style={{ color: "#d4af37" }}>Dynasty Command Center</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Nav items */}
+                  <div className="py-1.5">
+                    {([
+                      { tab: "portfolio",      sub: "portfolio-summary",  label: "Command Center",  Icon: LayoutDashboard },
+                      { tab: "dashboard",      sub: "my-team",            label: "My Team",         Icon: User },
+                      { tab: "league-analyzer",sub: "power-rankings",     label: "League Analyzer", Icon: Trophy },
+                      { tab: "trade-center",   sub: "trade-calculator",   label: "Trade Center",    Icon: ArrowRightLeft },
+                      { tab: "league-market",  sub: "analysis",           label: "Research",        Icon: TrendingUp },
+                      { tab: "live-draft",     sub: "draft-board",        label: "Live Draft",      Icon: Zap },
+                    ] as const).map(({ tab, sub, label, Icon }) => {
+                      const isActive = activeMainTab === tab;
+                      return (
+                        <button
+                          key={tab}
+                          onClick={() => { handleMainTabChange(tab); handleSubTabChange(sub); setLogoMenuOpen(false); }}
+                          data-testid={`button-logo-nav-${tab}`}
+                          className="w-full flex items-center gap-3 px-4 py-2.5 text-left transition-all duration-150"
+                          style={{ background: isActive ? "rgba(212,175,55,0.07)" : "transparent" }}
+                        >
+                          <Icon style={{ width: 14, height: 14, flexShrink: 0, color: isActive ? "#d4af37" : "rgba(203,213,225,0.40)" }} />
+                          <span style={{ fontSize: 13, fontWeight: isActive ? 700 : 500, color: isActive ? "#fff" : "rgba(203,213,225,0.55)" }}>{label}</span>
+                          {isActive && <span className="ml-auto w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: "#d4af37" }} />}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Footer row */}
+                  <div className="flex items-center justify-between px-4 py-3" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+                    <a
+                      href="https://discord.gg/34XkMXF6t3"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={() => setLogoMenuOpen(false)}
+                      className="flex items-center gap-1.5 text-[12px] font-semibold transition-colors"
+                      style={{ color: "#5865F2" }}
+                    >
+                      <SiDiscord className="w-3.5 h-3.5" />
+                      Discord
+                    </a>
+                    <ThemeToggle />
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* ── League selector (centered) ── */}
