@@ -10,7 +10,7 @@ function AuthLayout({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen bg-[#060d1a] flex items-center justify-center p-4">
       <div className="w-full max-w-[420px]">
         <div className="text-center mb-8">
-          <img src={logoDark} alt="StatChasers" className="h-20 mx-auto mb-3 object-contain" />
+          <img src={logoDark} alt="StatChasers" className="h-20 mx-auto mb-1.5 object-contain" />
           <p className="text-[#d4af37] text-[13px] font-medium">Dynasty Command</p>
         </div>
         <div className="bg-[#0d1f35] rounded-2xl border border-white/8 p-8 shadow-2xl shadow-black/40">
