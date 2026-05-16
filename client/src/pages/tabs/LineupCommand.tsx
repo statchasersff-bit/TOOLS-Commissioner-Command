@@ -572,85 +572,103 @@ function MatchupBattleCard({ m }: { m: MatchupAnalysis }) {
         )}
       </div>
 
-      {/* ══════════════ MOBILE layout ══════════════ */}
+      {/* ══════════════ MOBILE layout (redesigned) ══════════════ */}
       <div
-        className={cn("md:hidden px-4 py-4 transition-colors", canExpand ? "cursor-pointer active:bg-white/[0.02]" : "")}
+        className={cn("md:hidden px-4 pt-4 pb-3 transition-colors", canExpand ? "cursor-pointer active:bg-white/[0.02]" : "")}
         onClick={() => canExpand && setExpanded(v => !v)}
       >
-        {/* League header */}
-        <div className="flex items-center gap-2 mb-3">
-          {m.avatar ? (
-            <img src={m.avatar} alt="" className="w-6 h-6 rounded-md object-cover flex-shrink-0"
-              onError={e => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
-          ) : (
-            <div className="w-6 h-6 rounded-md flex-shrink-0 bg-[#0b3a7a]/40" />
-          )}
-          <span className="text-[11px] font-bold text-white/50 truncate flex-1">{m.leagueName}</span>
-          <span className="flex-shrink-0 text-[9px] font-semibold px-2 py-0.5 rounded-full" style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", color: "rgba(203,213,225,0.40)" }}>
-            {m.format} · {m.scoringFormat}
-          </span>
+        {/* ── Row 1: Me | League | Opponent ── */}
+        <div className="grid grid-cols-[1fr_auto_1fr] items-start gap-2 mb-4">
+          {/* My profile */}
+          <div className="flex flex-col items-center gap-1.5 min-w-0">
+            <div className="w-11 h-11 rounded-full bg-[#0b3a7a]/70 border-2 border-[#d4af37]/30 flex items-center justify-center flex-shrink-0 shadow-lg">
+              <span className="text-base font-black text-[#d4af37] leading-none select-none">
+                {m.myTeamName.trim().charAt(0).toUpperCase()}
+              </span>
+            </div>
+            <p className="text-[11px] font-bold text-white/90 truncate w-full text-center leading-tight px-1">{m.myTeamName}</p>
+          </div>
+
+          {/* League avatar + name (center) */}
+          <div className="flex flex-col items-center gap-1 flex-shrink-0 w-[84px]">
+            {m.avatar ? (
+              <img src={m.avatar} alt="" className="w-9 h-9 rounded-xl object-cover shadow-md"
+                onError={e => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
+            ) : (
+              <div className="w-9 h-9 rounded-xl bg-[#0b3a7a]/40 border border-white/10 flex items-center justify-center">
+                <Users className="w-4 h-4 text-blue-400/40" />
+              </div>
+            )}
+            <p className="text-[9px] font-semibold text-white/30 truncate text-center w-full leading-tight px-1">{m.leagueName}</p>
+            <span className="text-[8px] text-white/20 font-medium">{m.format} · {m.scoringFormat}</span>
+          </div>
+
+          {/* Opponent profile */}
+          <div className="flex flex-col items-center gap-1.5 min-w-0">
+            {hasBye ? (
+              <div className="w-11 h-11 rounded-full bg-white/5 border-2 border-white/10 flex items-center justify-center flex-shrink-0">
+                <span className="text-[8px] font-black text-white/20 tracking-wide">BYE</span>
+              </div>
+            ) : (
+              <div className="w-11 h-11 rounded-full bg-white/8 border-2 border-white/15 flex items-center justify-center flex-shrink-0 shadow-lg">
+                <span className="text-base font-black text-white/45 leading-none select-none">
+                  {m.opponentTeamName.trim().charAt(0).toUpperCase()}
+                </span>
+              </div>
+            )}
+            <p className="text-[11px] font-bold text-white/45 truncate w-full text-center leading-tight px-1">
+              {hasBye ? "Bye Week" : m.opponentTeamName}
+            </p>
+          </div>
         </div>
 
-        {hasBye ? (
-          /* ── BYE WEEK layout ── */
-          <div className="space-y-3">
-            <div className="flex items-center gap-3">
-              <div className="flex-1 min-w-0">
-                <p className="text-[15px] font-black text-white/90 truncate leading-tight">{m.myTeamName}</p>
-                <p className="text-[11px] text-white/35 mt-0.5 tabular-nums">{fmtRecord(m.myRecord.wins, m.myRecord.losses, m.myRecord.ties)}</p>
-              </div>
-              <p className={cn("text-2xl font-black tabular-nums leading-none flex-shrink-0", "text-white/30")}>{fmt1(m.myProj)}</p>
-            </div>
-            <div className="flex items-center justify-center py-2">
-              <span className="text-[10px] font-bold uppercase tracking-[0.18em] px-4 py-1.5 rounded-full" style={{ background: "rgba(148,163,184,0.08)", border: "1px solid rgba(148,163,184,0.18)", color: "rgba(148,163,184,0.55)" }}>
-                Bye Week
-              </span>
-            </div>
+        {/* ── Row 2: Stats | VS + Win% | Stats ── */}
+        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+          {/* My stats */}
+          <div className="flex flex-col items-center gap-0.5">
+            <span className="text-[10px] text-white/35 tabular-nums font-medium">
+              {fmtRecord(m.myRecord.wins, m.myRecord.losses, m.myRecord.ties)}
+            </span>
+            <span className={cn("text-[26px] font-black tabular-nums leading-none mt-0.5", isFav ? theme.txt : "text-white/50")}>
+              {fmt1(m.myProj)}
+            </span>
+            <span className="text-[9px] text-white/25 uppercase tracking-wider font-semibold">Projected</span>
           </div>
-        ) : (
-          /* ── Normal matchup layout ── */
-          <div className="space-y-0">
-            {/* My team row */}
-            <div className="flex items-center gap-3 py-2.5 border-b border-white/[0.05]">
-              <div className="flex-1 min-w-0">
-                <p className="text-[15px] font-black text-white/90 truncate leading-tight">{m.myTeamName}</p>
-                <div className="flex items-center gap-2 mt-1">
-                  <span className="text-[10px] text-white/35 tabular-nums">{fmtRecord(m.myRecord.wins, m.myRecord.losses, m.myRecord.ties)}</span>
-                  <span className={cn("text-[9px] font-bold px-2 py-0.5 rounded-full border tabular-nums", theme.pill)}>{Math.round(m.winPct)}%</span>
-                </div>
-              </div>
-              <div className="flex-shrink-0 text-right">
-                <p className="text-[10px] text-white/25 uppercase tracking-wider font-semibold">Proj</p>
-                <p className={cn("text-2xl font-black tabular-nums leading-tight", isFav ? theme.txt : "text-white/50")}>{fmt1(m.myProj)}</p>
-              </div>
-            </div>
 
-            {/* VS divider */}
-            <div className="flex items-center gap-3 py-1.5">
-              <div className="flex-1 h-px bg-white/[0.04]" />
-              <span className="text-[9px] font-bold text-white/20 uppercase tracking-[0.2em] flex-shrink-0">
-                {isClose ? "Pick 'em" : `${isFav ? "fav" : "dog"} ${fmt1(Math.abs(m.spread))}`}
+          {/* VS + Win% */}
+          <div className="flex flex-col items-center gap-1.5 flex-shrink-0 w-[60px]">
+            <span className="text-[13px] font-black text-white/25 tracking-widest">VS.</span>
+            {!hasBye && (
+              <span className={cn("text-[12px] font-black tabular-nums border rounded-full px-2.5 py-0.5 leading-tight", theme.pill)}>
+                {Math.round(m.winPct)}%
               </span>
-              <div className="flex-1 h-px bg-white/[0.04]" />
-            </div>
+            )}
+          </div>
 
-            {/* Opponent row */}
-            <div className="flex items-center gap-3 py-2.5">
-              <div className="flex-1 min-w-0">
-                <p className="text-[14px] font-bold text-white/55 truncate leading-tight">{m.opponentTeamName}</p>
-                <span className="text-[10px] text-white/25 tabular-nums mt-0.5 block">{fmtRecord(m.opponentRecord.wins, m.opponentRecord.losses, m.opponentRecord.ties)}</span>
-              </div>
-              <div className="flex-shrink-0 text-right">
-                <p className="text-[10px] text-white/20 uppercase tracking-wider font-semibold">Proj</p>
-                <p className={cn("text-2xl font-black tabular-nums leading-tight", !isFav ? "text-red-400/55" : "text-white/25")}>{fmt1(m.opponentProj)}</p>
-              </div>
-            </div>
+          {/* Opponent stats */}
+          <div className="flex flex-col items-center gap-0.5">
+            <span className="text-[10px] text-white/25 tabular-nums font-medium">
+              {hasBye ? "" : fmtRecord(m.opponentRecord.wins, m.opponentRecord.losses, m.opponentRecord.ties)}
+            </span>
+            <span className={cn("text-[26px] font-black tabular-nums leading-none mt-0.5", !isFav && !hasBye ? "text-red-400/50" : "text-white/25")}>
+              {hasBye ? "—" : fmt1(m.opponentProj)}
+            </span>
+            <span className="text-[9px] text-white/20 uppercase tracking-wider font-semibold">
+              {hasBye ? "" : "Projected"}
+            </span>
+          </div>
+        </div>
 
-            {/* Win prob bar */}
-            <div className="pt-1 pb-0.5">
-              <div className="h-1.5 rounded-full bg-white/6 overflow-hidden">
-                <div className="h-full rounded-full transition-all duration-700" style={{ width: `${m.winPct}%`, backgroundColor: theme.bar, opacity: 0.75 }} />
-              </div>
+        {/* ── Win probability bar ── */}
+        {!hasBye && (
+          <div className="mt-3.5">
+            <div className="h-1.5 rounded-full bg-white/6 overflow-hidden">
+              <div className="h-full rounded-full transition-all duration-700"
+                style={{ width: `${m.winPct}%`, backgroundColor: theme.bar, opacity: 0.75 }} />
+            </div>
+            <div className="flex justify-between mt-1">
+              <span className="text-[9px] text-white/20 truncate max-w-[40%]">{m.myTeamName}</span>
+              <span className="text-[9px] text-white/20 truncate max-w-[40%] text-right">{m.opponentTeamName}</span>
             </div>
           </div>
         )}
