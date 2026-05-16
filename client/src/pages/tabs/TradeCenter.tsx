@@ -342,7 +342,11 @@ export function TradeFinder({ league, userTeam }: TradeProps) {
           const giveAge   = gives.reduce((s, p) => s + (p.age ?? 25), 0) / gives.length;
           const getAge    = gets.reduce((s, p)  => s + (p.age ?? 25), 0) / gets.length;
           const ageBonus  = Math.max(0, giveAge - getAge) * 180;
-          const needScore = dynNet + rdNet * 0.35 + ageBonus;
+          // Penalise trades where the partner's win-now gain greatly outpaces our
+          // dynasty gain. A 1.5× ratio is the tolerance threshold; anything beyond
+          // that is progressively penalised so those trades rank last.
+          const excessRd  = Math.max(0, rdNet - dynNet * 1.5);
+          const needScore = dynNet + rdNet * 0.10 - excessRd * 0.55 + ageBonus;
           const diff      = Math.abs(dynGive - dynGet) / Math.max(dynGive, dynGet, 1);
 
           const parts: string[] = [];
