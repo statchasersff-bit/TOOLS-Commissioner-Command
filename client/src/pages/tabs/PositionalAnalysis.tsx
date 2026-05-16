@@ -738,6 +738,141 @@ function posTextColor(pos: string): string {
   }
 }
 
+// ─── Shared Win-Now card primitives ────────────────────────────────
+
+function WinNowValStack({ dyn, now }: { dyn: number; now: number }) {
+  return (
+    <div className="flex flex-col gap-[1px] mt-1 mb-2">
+      <div className="flex items-center gap-1.5">
+        <span className="text-[9px] text-muted-foreground/60 w-[46px] flex-shrink-0">Dynasty</span>
+        <span className={cn("text-[10px] font-semibold tabular-nums", dyn >= 0 ? "text-emerald-400" : "text-red-400")}>
+          {dyn >= 0 ? "+" : "−"}{Math.abs(Math.round(dyn)).toLocaleString()}
+        </span>
+      </div>
+      <div className="flex items-center gap-1.5">
+        <span className="text-[9px] text-muted-foreground/60 w-[46px] flex-shrink-0">Win-Now</span>
+        <span className={cn("text-[10px] font-semibold tabular-nums", now >= 0 ? "text-emerald-400" : "text-red-400")}>
+          {now >= 0 ? "+" : "−"}{Math.abs(Math.round(now)).toLocaleString()}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function WinNowAssetPill({ a }: { a: WinNowIdea["youGet"][number] }) {
+  return (
+    <div className="flex items-center gap-2.5 rounded-[8px] bg-white/[0.04] border border-white/[0.07] px-2.5 py-1.5 mb-[5px] min-w-0">
+      {a.type === "player" && a.sleeperId ? (
+        <PlayerAvatar id={a.sleeperId} name={a.label} pos={a.pos ?? ""} team={a.team ?? ""} size="sm" compact />
+      ) : (
+        <div className="w-9 h-9 rounded-full flex-shrink-0 bg-purple-500/10 border border-purple-500/25 flex items-center justify-center">
+          <span className="text-[8px] font-bold text-purple-400 leading-none">PICK</span>
+        </div>
+      )}
+      <div className="min-w-0 flex flex-col gap-[2px]">
+        <span className="text-[12px] font-bold truncate leading-tight text-white">{a.label}</span>
+        {(a.pos || a.team) && (
+          <div className="flex items-center gap-1.5">
+            {a.pos && <span className={cn("text-[10px] font-semibold leading-none", posTextColor(a.pos))}>{a.pos}</span>}
+            {a.team && a.team !== "FA" && <span className="text-[10px] text-muted-foreground/70 leading-none">{a.team}</span>}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+interface WinNowIdeaCardProps {
+  idea: WinNowIdea;
+  userTeam: Team;
+  isSleeperAuthed: boolean;
+  onSend: () => void;
+  testId?: string;
+}
+
+function WinNowIdeaCard({ idea, userTeam, isSleeperAuthed, onSend, testId }: WinNowIdeaCardProps) {
+  const uDyn = idea.dynGet - idea.dynGive;
+  const uNow = idea.userRdDelta;
+  const outerBorder = uNow > 1200
+    ? "border-emerald-500/35 shadow-[0_0_12px_rgba(52,211,153,0.08)]"
+    : uDyn > 1200
+    ? "border-[#d4af37]/35 shadow-[0_0_12px_rgba(212,175,55,0.08)]"
+    : "border-border/40";
+  const pDyn = idea.dynGive - idea.dynGet;
+  const pNow = idea.partnerRdDelta;
+
+  return (
+    <div className={cn("relative rounded-lg border bg-[#080f1d] overflow-hidden", outerBorder)} data-testid={testId}>
+      <div className="hidden md:block absolute inset-y-0 left-1/2 -translate-x-1/2 w-px bg-border/50 z-0" />
+      <div className="hidden md:block absolute inset-y-0 left-[calc(50%-10px)] w-5 bg-black/20 z-0" />
+      <div className="hidden md:flex absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-20 w-7 h-7 rounded-full bg-[#0b1e3d] border border-[#d4af37]/50 items-center justify-center shadow-[0_0_10px_rgba(212,175,55,0.35)]">
+        <ArrowRightLeft className="w-3 h-3 text-[#d4af37]" />
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 divide-border/30">
+        <div className="px-[18px] pt-[14px] pb-3 relative z-10">
+          <div className="flex items-center gap-1.5">
+            {userTeam.avatar ? (
+              <img src={userTeam.avatar} alt={userTeam.owner} className="w-5 h-5 rounded-full object-cover flex-shrink-0 ring-1 ring-border/30" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+            ) : (
+              <div className="w-5 h-5 rounded-full bg-[#0b3a7a] flex items-center justify-center flex-shrink-0">
+                <span className="text-[9px] font-bold text-white">{userTeam.owner.charAt(0).toUpperCase()}</span>
+              </div>
+            )}
+            <span className="text-xs font-semibold truncate">{userTeam.owner}</span>
+            <span className="text-[10px] text-muted-foreground flex-shrink-0">receives</span>
+          </div>
+          <WinNowValStack dyn={uDyn} now={uNow} />
+          {idea.youGet.map((a, i) => <WinNowAssetPill key={i} a={a} />)}
+        </div>
+        <div className="flex md:hidden items-center gap-2 px-4 py-1 bg-black/20">
+          <div className="flex-1 h-px bg-border/30" />
+          <ArrowRightLeft className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+          <div className="flex-1 h-px bg-border/30" />
+        </div>
+        <div className="px-[18px] pt-[14px] pb-3 relative z-10">
+          <div className="flex items-center gap-1.5">
+            {idea.partnerTeam.avatar ? (
+              <img src={idea.partnerTeam.avatar} alt={idea.partnerTeam.owner} className="w-5 h-5 rounded-full object-cover flex-shrink-0 ring-1 ring-border/30" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+            ) : (
+              <div className="w-5 h-5 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
+                <span className="text-[9px] font-bold text-muted-foreground">{idea.partnerTeam.owner.charAt(0)}</span>
+              </div>
+            )}
+            <span className="text-xs font-semibold truncate">{idea.partnerTeam.owner}</span>
+            <span className="text-[10px] text-muted-foreground flex-shrink-0">receives</span>
+          </div>
+          <WinNowValStack dyn={pDyn} now={pNow} />
+          {idea.youGive.map((a, i) => <WinNowAssetPill key={i} a={a} />)}
+        </div>
+      </div>
+      <div className="px-[18px] pb-[10px] flex justify-end items-center gap-2 relative z-10">
+        <Button variant="ghost" size="sm" className="h-6 text-[10px] text-[#d4af37] hover:text-[#d4af37] hover:bg-[#d4af37]/10 px-2 gap-1">
+          <ArrowRightLeft className="w-2.5 h-2.5" />
+          Build in Calculator
+        </Button>
+        {isSleeperAuthed ? (
+          <Button size="sm" className="h-6 text-[10px] bg-emerald-700 hover:bg-emerald-600 text-white px-2 gap-1" onClick={onSend}>
+            <Send className="w-2.5 h-2.5" />
+            Send Trade
+          </Button>
+        ) : (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span tabIndex={0}>
+                <Button size="sm" className="h-6 text-[10px] bg-muted text-muted-foreground px-2 gap-1 cursor-not-allowed" disabled>
+                  <Send className="w-2.5 h-2.5" />
+                  Send Trade
+                </Button>
+              </span>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="text-xs">Connect Sleeper to send offers directly</TooltipContent>
+          </Tooltip>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Send Trade Modal ──────────────────────────────────────────────
 
 const SLEEPER_API_BASE = "https://api.sleeper.app/v1";
@@ -2815,96 +2950,16 @@ function SmartGMMode({ league, userTeam }: { league: League; userTeam: Team }) {
                     </button>
 
                     {isExpanded && (
-                      <div className="border-t border-border/30 px-5 py-4 space-y-4">
+                      <div className="border-t border-border/30 px-5 py-4 space-y-3">
                         {ideas.map((idea, idx) => (
-                          <div key={idea.id} className="rounded-xl border border-border/40 overflow-hidden" data-testid={`sgm-idea-${pid}-${idx}`}>
-                            {/* Header */}
-                            <div className="px-4 py-2.5 bg-muted/20 flex items-center gap-2 flex-wrap">
-                              <Badge variant="outline" className={cn("text-[10px] flex-shrink-0",
-                                idea.scoreLabel === "Premium"     ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30" :
-                                idea.scoreLabel === "Recommended" ? "bg-[#0b3a7a]/10 text-[#0b3a7a] dark:text-blue-400 border-[#0b3a7a]/20" :
-                                "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20"
-                              )}>{idea.scoreLabel}</Badge>
-                              <Badge variant="outline" className={cn("text-[9px] py-0 flex-shrink-0", archetypeColor[idea.archetype])}>{idea.archetype}</Badge>
-                              <span className="text-xs font-medium text-foreground">{idea.headline}</span>
-                            </div>
-
-                            {/* You Give / You Get */}
-                            <div className="grid grid-cols-2 divide-x divide-border/30">
-                              {(["youGive", "youGet"] as const).map(side => (
-                                <div key={side} className="px-4 py-3">
-                                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-2">
-                                    {side === "youGive" ? "You Give" : "You Get"}
-                                  </p>
-                                  {idea[side].map((a: SmartGMAsset, i: number) => (
-                                    <div key={i} className="flex items-center gap-1.5 py-1 min-w-0">
-                                      {a.type === "player" && a.sleeperId ? (
-                                        <div className="w-5 h-5 rounded-full flex-shrink-0 overflow-hidden bg-muted">
-                                          <img src={`https://sleepercdn.com/content/nfl/players/thumb/${a.sleeperId}.jpg`} alt={a.label} className="w-full h-full object-cover object-top" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
-                                        </div>
-                                      ) : null}
-                                      {a.pos && <Badge variant="outline" className={cn("text-[9px] px-1 py-0 flex-shrink-0", getPositionColor(a.pos))}>{a.pos}</Badge>}
-                                      <span className="text-xs font-medium truncate">{a.label}</span>
-                                      {a.age && <span className="text-[9px] text-muted-foreground flex-shrink-0">({a.age})</span>}
-                                      <div className="ml-auto flex flex-col items-end flex-shrink-0">
-                                        <span className="text-[10px] font-mono text-foreground">{a.dynVal.toLocaleString()}</span>
-                                        <span className="text-[9px] font-mono text-muted-foreground">{a.rdVal.toLocaleString()} rd</span>
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              ))}
-                            </div>
-
-                            {/* Footer */}
-                            <div className="px-4 py-2.5 bg-muted/10 border-t border-border/20 space-y-2">
-                              <p className="text-[10px] text-muted-foreground italic">{idea.why}</p>
-                              <div className="flex items-center justify-between flex-wrap gap-2">
-                                <div className="flex items-center gap-3 flex-wrap">
-                                  <span className={cn("text-[10px] font-semibold",
-                                    idea.dynastyDelta >= 0 ? "text-emerald-500 dark:text-emerald-400" : "text-amber-500 dark:text-amber-400"
-                                  )}>
-                                    {idea.dynastyDelta >= 0 ? "+" : ""}{Math.round(idea.dynastyDelta * 100)}% dynasty
-                                  </span>
-                                  <span className={cn("text-[10px] font-semibold",
-                                    idea.redraftDelta >= 0 ? "text-emerald-500 dark:text-emerald-400" : "text-amber-500 dark:text-amber-400"
-                                  )}>
-                                    {idea.redraftDelta >= 0 ? "+" : ""}{Math.round(idea.redraftDelta * 100)}% redraft
-                                  </span>
-                                  {idea.ageDelta < -0.5 && (
-                                    <span className="text-[10px] text-blue-400">
-                                      −{Math.abs(Math.round(idea.ageDelta))} yr{Math.abs(Math.round(idea.ageDelta)) !== 1 ? "s" : ""} avg age
-                                    </span>
-                                  )}
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <Button variant="default" size="sm" className="text-xs bg-[#0b3a7a] hover:bg-[#0b3a7a]/90" data-testid={`btn-sgm-build-${pid}-${idx}`}>
-                                    <ArrowRightLeft className="w-3 h-3 mr-1" />
-                                    Build in Calculator
-                                  </Button>
-                                  {isSleeperAuthed ? (
-                                    <Button size="sm" className="text-xs bg-emerald-700 hover:bg-emerald-600 text-white gap-1" data-testid={`btn-sgm-send-${pid}-${idx}`}
-                                      onClick={() => setSendModal({ open: true, idea: smartGMIdeaToWinNow(idea) })}>
-                                      <Send className="w-3 h-3" />
-                                      Send Trade
-                                    </Button>
-                                  ) : (
-                                    <Tooltip>
-                                      <TooltipTrigger asChild>
-                                        <span tabIndex={0}>
-                                          <Button size="sm" className="text-xs bg-muted text-muted-foreground gap-1 cursor-not-allowed" disabled data-testid={`btn-sgm-send-disabled-${pid}-${idx}`}>
-                                            <Send className="w-3 h-3" />
-                                            Send Trade
-                                          </Button>
-                                        </span>
-                                      </TooltipTrigger>
-                                      <TooltipContent side="top" className="text-xs">Connect Sleeper to send offers directly</TooltipContent>
-                                    </Tooltip>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          </div>
+                          <WinNowIdeaCard
+                            key={idea.id}
+                            idea={smartGMIdeaToWinNow(idea)}
+                            userTeam={userTeam}
+                            isSleeperAuthed={isSleeperAuthed}
+                            onSend={() => setSendModal({ open: true, idea: smartGMIdeaToWinNow(idea) })}
+                            testId={`sgm-idea-${pid}-${idx}`}
+                          />
                         ))}
                       </div>
                     )}
@@ -3405,113 +3460,16 @@ function RebuildMode({ league, userTeam }: { league: League; userTeam: Team }) {
                     </button>
 
                     {isExpanded && (
-                      <div className="border-t border-border/30 px-5 py-4 space-y-4">
+                      <div className="border-t border-border/30 px-5 py-4 space-y-3">
                         {ideas.map((idea: RebuildIdea, idx: number) => (
-                          <div key={idea.id} className="rounded-xl border border-border/40 overflow-hidden" data-testid={`rebuild-idea-${pid}-${idx}`}>
-                            {/* Header */}
-                            <div className="px-4 py-2.5 bg-muted/20 flex items-center justify-between gap-2 flex-wrap">
-                              <div className="flex items-center gap-2 min-w-0">
-                                <Badge
-                                  variant="outline"
-                                  className={cn("text-[10px] flex-shrink-0",
-                                    idea.scoreLabel === "Elite"  ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30" :
-                                    idea.scoreLabel === "Strong" ? "bg-[#0b3a7a]/10 text-[#0b3a7a] dark:text-blue-400 border-[#0b3a7a]/20" :
-                                                                   "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20"
-                                  )}
-                                >
-                                  {idea.scoreLabel}
-                                </Badge>
-                                <span className="text-xs font-medium text-foreground">{idea.headline}</span>
-                              </div>
-                            </div>
-
-                            {/* You Give / You Get */}
-                            <div className="grid grid-cols-2 divide-x divide-border/30">
-                              {(["youGive", "youGet"] as const).map(side => (
-                                <div key={side} className="px-4 py-3">
-                                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-2">
-                                    {side === "youGive" ? "You Give" : "You Get"}
-                                  </p>
-                                  {idea[side].map((a: RebuildIdea["youGive"][number], i: number) => (
-                                    <div key={i} className="flex items-center gap-1.5 py-1 min-w-0">
-                                      {a.type === "player" && a.sleeperId ? (
-                                        <div className="w-5 h-5 rounded-full flex-shrink-0 overflow-hidden bg-muted">
-                                          <img src={`https://sleepercdn.com/content/nfl/players/thumb/${a.sleeperId}.jpg`} alt={a.label} className="w-full h-full object-cover object-top" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
-                                        </div>
-                                      ) : a.type === "pick" ? (
-                                        <Badge variant="outline" className="text-[9px] px-1 py-0 flex-shrink-0">PICK</Badge>
-                                      ) : null}
-                                      {a.pos && <Badge variant="outline" className={cn("text-[9px] px-1 py-0 flex-shrink-0", getPositionColor(a.pos))}>{a.pos}</Badge>}
-                                      <span className="text-xs font-medium truncate">{a.label}</span>
-                                      {a.age && a.type === "player" && <span className="text-[9px] text-muted-foreground flex-shrink-0 ml-0.5">({a.age})</span>}
-                                      <span className="text-[10px] font-mono text-muted-foreground ml-auto flex-shrink-0">{a.value.toLocaleString()}</span>
-                                    </div>
-                                  ))}
-                                </div>
-                              ))}
-                            </div>
-
-                            {/* Footer — trade value breakdown for both sides */}
-                            <div className="px-4 py-3 bg-muted/10 border-t border-border/20 space-y-2.5">
-                              <div className="grid grid-cols-3 gap-x-2 text-[10px]">
-                                <div />
-                                <span className="text-muted-foreground font-semibold uppercase tracking-wide text-center">Dynasty</span>
-                                <span className="text-muted-foreground font-semibold uppercase tracking-wide text-center">Win-Now</span>
-
-                                <span className="text-muted-foreground font-medium self-center">You</span>
-                                {(() => { const d = idea.dynGet - idea.dynGive; return (
-                                  <span className={cn("text-center font-semibold", d >= 0 ? "text-emerald-500 dark:text-emerald-400" : "text-red-400")}>
-                                    {d >= 0 ? "+" : "−"}{Math.abs(Math.round(d)).toLocaleString()}
-                                  </span>
-                                ); })()}
-                                {(() => { const r = idea.rdGet - idea.rdGive; return (
-                                  <span className={cn("text-center font-semibold", r >= 0 ? "text-emerald-500 dark:text-emerald-400" : "text-red-400")}>
-                                    {r >= 0 ? "+" : "−"}{Math.abs(Math.round(r)).toLocaleString()}
-                                  </span>
-                                ); })()}
-
-                                <span className="text-muted-foreground font-medium self-center truncate">{idea.partnerTeam.owner}</span>
-                                {(() => { const d = idea.dynGive - idea.dynGet; return (
-                                  <span className={cn("text-center font-semibold", d >= 0 ? "text-emerald-500 dark:text-emerald-400" : "text-red-400")}>
-                                    {d >= 0 ? "+" : "−"}{Math.abs(Math.round(d)).toLocaleString()}
-                                  </span>
-                                ); })()}
-                                {(() => { const r = idea.partnerRdDelta; return (
-                                  <span className={cn("text-center font-semibold", r >= 0 ? "text-emerald-500 dark:text-emerald-400" : "text-red-400")}>
-                                    {r >= 0 ? "+" : "−"}{Math.abs(Math.round(r)).toLocaleString()}
-                                  </span>
-                                ); })()}
-                              </div>
-                              {idea.ageDelta < -1 && (
-                                <p className="text-[10px] text-blue-400">−{Math.abs(Math.round(idea.ageDelta))} yrs avg age</p>
-                              )}
-                              <div className="flex justify-end gap-2">
-                                <Button variant="default" size="sm" className="text-xs bg-[#0b3a7a] hover:bg-[#0b3a7a]/90" data-testid={`btn-rebuild-build-${pid}-${idx}`}>
-                                  <ArrowRightLeft className="w-3 h-3 mr-1" />
-                                  Build in Calculator
-                                </Button>
-                                {isSleeperAuthed ? (
-                                  <Button size="sm" className="text-xs bg-emerald-700 hover:bg-emerald-600 text-white gap-1" data-testid={`btn-rebuild-send-${pid}-${idx}`}
-                                    onClick={() => setSendModal({ open: true, idea: rebuildIdeaToWinNow(idea) })}>
-                                    <Send className="w-3 h-3" />
-                                    Send Trade
-                                  </Button>
-                                ) : (
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <span tabIndex={0}>
-                                        <Button size="sm" className="text-xs bg-muted text-muted-foreground gap-1 cursor-not-allowed" disabled data-testid={`btn-rebuild-send-disabled-${pid}-${idx}`}>
-                                          <Send className="w-3 h-3" />
-                                          Send Trade
-                                        </Button>
-                                      </span>
-                                    </TooltipTrigger>
-                                    <TooltipContent side="top" className="text-xs">Connect Sleeper to send offers directly</TooltipContent>
-                                  </Tooltip>
-                                )}
-                              </div>
-                            </div>
-                          </div>
+                          <WinNowIdeaCard
+                            key={idea.id}
+                            idea={rebuildIdeaToWinNow(idea)}
+                            userTeam={userTeam}
+                            isSleeperAuthed={isSleeperAuthed}
+                            onSend={() => setSendModal({ open: true, idea: rebuildIdeaToWinNow(idea) })}
+                            testId={`rebuild-idea-${pid}-${idx}`}
+                          />
                         ))}
                       </div>
                     )}
@@ -3737,120 +3695,21 @@ function BuildDynastyMode({ league, userTeam }: { league: League; userTeam: Team
                 </button>
 
                 {isExpanded && (
-                  <div className="border-t border-border/30 px-5 py-4 space-y-4">
+                  <div className="border-t border-border/30 px-5 py-4 space-y-3">
                     {opp.suggestions.length === 0 && (
                       <p className="text-xs text-muted-foreground text-center py-4">
                         No trade ideas could be generated for this partner. Try selecting a different league or check back after roster changes.
                       </p>
                     )}
                     {opp.suggestions.map((sug, idx) => (
-                      <div key={sug.id} className="rounded-xl border border-border/40 overflow-hidden" data-testid={`suggestion-${opp.partner.teamId}-${idx}`}>
-                        <div className="px-4 py-2.5 bg-muted/20 flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <Badge variant="outline" className="text-[10px] bg-[#0b3a7a]/10 text-[#0b3a7a] dark:text-blue-400 border-[#0b3a7a]/20">{sug.template}</Badge>
-                            <span className="text-xs text-foreground font-medium">{sug.headline}</span>
-                          </div>
-                          <Badge
-                            variant="outline"
-                            className={cn("text-[10px]",
-                              sug.fairness === "Fair"       ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30" :
-                              sug.fairness === "Reasonable" ? "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30" :
-                              "bg-red-500/15 text-red-700 dark:text-red-400 border-red-500/30"
-                            )}
-                            data-testid={`fairness-${opp.partner.teamId}-${idx}`}
-                          >
-                            {sug.fairness}
-                          </Badge>
-                        </div>
-                        <div className="grid grid-cols-2 divide-x divide-border/30">
-                          <div className="px-4 py-3">
-                            <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-2">You Give</p>
-                            {sug.youGive.map((a, i) => (
-                              <div key={i} className="flex items-center justify-between py-1">
-                                <div className="flex items-center gap-1.5 min-w-0">
-                                  {a.type === "player" && a.sleeperId ? (
-                                    <div className="w-6 h-6 rounded-full flex-shrink-0 overflow-hidden bg-muted ring-1 ring-border/30">
-                                      <img src={`https://sleepercdn.com/content/nfl/players/thumb/${a.sleeperId}.jpg`} alt={a.label} className="w-full h-full object-cover object-top" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
-                                    </div>
-                                  ) : a.type === "pick" ? (
-                                    <Badge variant="outline" className="text-[9px] px-1 py-0 flex-shrink-0">PICK</Badge>
-                                  ) : null}
-                                  {a.pos && a.type === "player" && <Badge variant="outline" className={cn("text-[9px] px-1 py-0 flex-shrink-0", getPositionColor(a.pos))}>{a.pos}</Badge>}
-                                  <span className="text-xs font-medium text-foreground truncate">{a.label}</span>
-                                </div>
-                                <span className="text-[10px] font-mono text-muted-foreground flex-shrink-0 ml-1">{a.value.toLocaleString()}</span>
-                              </div>
-                            ))}
-                            <div className="mt-2 pt-2 border-t border-border/20 flex items-center justify-between">
-                              <span className="text-[10px] text-muted-foreground">Raw</span>
-                              <span className="text-xs font-mono font-semibold">{sug.rawSide1.toLocaleString()}</span>
-                            </div>
-                            <div className="flex items-center justify-between">
-                              <span className="text-[10px] text-muted-foreground">Adjusted</span>
-                              <span className="text-xs font-mono font-semibold">{Math.round(sug.adjustedSide1).toLocaleString()}</span>
-                            </div>
-                          </div>
-                          <div className="px-4 py-3">
-                            <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-2">You Get</p>
-                            {sug.youGet.map((a, i) => (
-                              <div key={i} className="flex items-center justify-between py-1">
-                                <div className="flex items-center gap-1.5 min-w-0">
-                                  {a.type === "player" && a.sleeperId ? (
-                                    <div className="w-6 h-6 rounded-full flex-shrink-0 overflow-hidden bg-muted ring-1 ring-border/30">
-                                      <img src={`https://sleepercdn.com/content/nfl/players/thumb/${a.sleeperId}.jpg`} alt={a.label} className="w-full h-full object-cover object-top" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
-                                    </div>
-                                  ) : a.type === "pick" ? (
-                                    <Badge variant="outline" className="text-[9px] px-1 py-0 flex-shrink-0">PICK</Badge>
-                                  ) : null}
-                                  {a.pos && a.type === "player" && <Badge variant="outline" className={cn("text-[9px] px-1 py-0 flex-shrink-0", getPositionColor(a.pos))}>{a.pos}</Badge>}
-                                  <span className="text-xs font-medium text-foreground truncate">{a.label}</span>
-                                </div>
-                                <span className="text-[10px] font-mono text-muted-foreground flex-shrink-0 ml-1">{a.value.toLocaleString()}</span>
-                              </div>
-                            ))}
-                            <div className="mt-2 pt-2 border-t border-border/20 flex items-center justify-between">
-                              <span className="text-[10px] text-muted-foreground">Raw</span>
-                              <span className="text-xs font-mono font-semibold">{sug.rawSide2.toLocaleString()}</span>
-                            </div>
-                            <div className="flex items-center justify-between">
-                              <span className="text-[10px] text-muted-foreground">Adjusted</span>
-                              <span className="text-xs font-mono font-semibold">{Math.round(sug.adjustedSide2).toLocaleString()}</span>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="px-4 py-2.5 bg-muted/10 flex items-center justify-between flex-wrap gap-2 border-t border-border/20">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            {sug.reasons.map((r, i) => (
-                              <span key={i} className="text-[10px] text-muted-foreground">{r}</span>
-                            ))}
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Button variant="default" size="sm" className="text-xs bg-[#0b3a7a] hover:bg-[#0b3a7a]/90" data-testid={`btn-build-trade-${opp.partner.teamId}-${idx}`}>
-                              <ArrowRightLeft className="w-3 h-3 mr-1" />
-                              Build in Calculator
-                            </Button>
-                            {isSleeperAuthed ? (
-                              <Button size="sm" className="text-xs bg-emerald-700 hover:bg-emerald-600 text-white gap-1" data-testid={`btn-bd-send-${opp.partner.teamId}-${idx}`}
-                                onClick={() => setSendModal({ open: true, idea: tradeSuggestionToWinNow(sug, opp.partner.team, opp.partner.tier) })}>
-                                <Send className="w-3 h-3" />
-                                Send Trade
-                              </Button>
-                            ) : (
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <span tabIndex={0}>
-                                    <Button size="sm" className="text-xs bg-muted text-muted-foreground gap-1 cursor-not-allowed" disabled data-testid={`btn-bd-send-disabled-${opp.partner.teamId}-${idx}`}>
-                                      <Send className="w-3 h-3" />
-                                      Send Trade
-                                    </Button>
-                                  </span>
-                                </TooltipTrigger>
-                                <TooltipContent side="top" className="text-xs">Connect Sleeper to send offers directly</TooltipContent>
-                              </Tooltip>
-                            )}
-                          </div>
-                        </div>
-                      </div>
+                      <WinNowIdeaCard
+                        key={sug.id}
+                        idea={tradeSuggestionToWinNow(sug, opp.partner.team, opp.partner.tier)}
+                        userTeam={userTeam}
+                        isSleeperAuthed={isSleeperAuthed}
+                        onSend={() => setSendModal({ open: true, idea: tradeSuggestionToWinNow(sug, opp.partner.team, opp.partner.tier) })}
+                        testId={`suggestion-${opp.partner.teamId}-${idx}`}
+                      />
                     ))}
                   </div>
                 )}

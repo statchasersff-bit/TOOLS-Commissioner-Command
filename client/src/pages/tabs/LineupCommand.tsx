@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
+import { SectionHeader } from "@/components/SectionHeader";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,7 +9,7 @@ import { cn } from "@/lib/utils";
 import {
   AlertTriangle, TrendingUp, Zap, Users, CalendarX,
   ChevronDown, ChevronUp, RefreshCw, Lock, CheckCircle2,
-  ArrowRight, Activity, ArrowUpDown,
+  ArrowRight, Activity, ArrowUpDown, Trophy, Shield, Target, Swords,
 } from "lucide-react";
 import type { SleeperLeagueSummary } from "@/types";
 
@@ -61,7 +62,33 @@ interface LeagueAnalysis {
   error: boolean;
 }
 
+// ─── Types (matchup) ─────────────────────────────────────────────────────────
+interface MatchupAnalysis {
+  leagueId: string;
+  leagueName: string;
+  format: string;
+  scoringFormat: string;
+  avatar?: string | null;
+  myRosterId: number;
+  myRecord: { wins: number; losses: number; ties: number };
+  myProj: number;
+  opponentRosterId: number | null;
+  opponentRecord: { wins: number; losses: number; ties: number };
+  opponentProj: number;
+  winPct: number;
+  loading: boolean;
+  error: boolean;
+}
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
+function fmtRecord(w: number, l: number, t: number): string {
+  return t > 0 ? `${w}-${l}-${t}` : `${w}-${l}`;
+}
+function recordWinPct(w: number, l: number, t: number): number {
+  const total = w + l + t;
+  return total > 0 ? ((w + t * 0.5) / total) * 100 : 0;
+}
+
 function projKey(scoringFormat: string): "pts_ppr" | "pts_half_ppr" | "pts_std" {
   const f = scoringFormat.toLowerCase();
   if (f.includes("ppr") && !f.includes("half")) return "pts_ppr";
@@ -406,9 +433,107 @@ function LeagueRow({ analysis }: { analysis: LeagueAnalysis }) {
   );
 }
 
+// ─── Matchup skeleton row ─────────────────────────────────────────────────────
+function MatchupSkeletonRow() {
+  return (
+    <div className="flex items-center gap-3 px-3 md:px-5 py-3 border-b border-white/5 animate-pulse">
+      <div className="flex-1 h-3.5 bg-white/8 rounded" />
+      <div className="w-14 h-3.5 bg-white/8 rounded" />
+      <div className="w-16 h-3.5 bg-white/8 rounded" />
+      <div className="w-14 h-3.5 bg-white/8 rounded" />
+      <div className="w-16 h-3.5 bg-white/8 rounded" />
+      <div className="w-16 h-5 bg-white/8 rounded-full" />
+    </div>
+  );
+}
+
+// ─── Matchup row ──────────────────────────────────────────────────────────────
+function MatchupRow({ m }: { m: MatchupAnalysis }) {
+  const { leagueName, format, scoringFormat, avatar, myRecord, myProj, opponentRecord, opponentProj, winPct, loading, error } = m;
+
+  const winColor =
+    winPct >= 65 ? "text-emerald-400 bg-emerald-500/12 border-emerald-500/30" :
+    winPct >= 50 ? "text-blue-400 bg-blue-500/12 border-blue-500/30" :
+    winPct >= 35 ? "text-yellow-400 bg-yellow-500/12 border-yellow-500/30" :
+                   "text-red-400 bg-red-500/12 border-red-500/30";
+
+  const myProjColor   = myProj > opponentProj ? "text-emerald-400" : myProj < opponentProj ? "text-red-400/80" : "text-white/60";
+  const oppProjColor  = opponentProj > myProj  ? "text-red-400/80"  : "text-white/40";
+
+  return (
+    <div
+      className="flex items-center gap-3 px-3 md:px-5 py-3 border-b border-white/5 last:border-0 hover:bg-white/[0.02] transition-colors"
+      data-testid={`row-matchup-${m.leagueId}`}
+    >
+      {/* League */}
+      <div className="flex-1 min-w-0 flex items-center gap-2">
+        {avatar ? (
+          <img src={avatar} alt="" className="w-7 h-7 rounded-lg flex-shrink-0 object-cover bg-white/10"
+            onError={e => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
+        ) : (
+          <div className="w-7 h-7 rounded-lg flex-shrink-0 bg-[#0b3a7a]/40 flex items-center justify-center">
+            <Users className="w-3.5 h-3.5 text-blue-400/60" />
+          </div>
+        )}
+        <div className="min-w-0">
+          <p className="text-[12px] md:text-sm font-bold text-white/90 truncate leading-tight">{leagueName}</p>
+          <p className="text-[8px] md:text-[9px] text-white/30 font-medium">{format} · {scoringFormat}</p>
+        </div>
+      </div>
+
+      {/* My Record */}
+      <div className="w-14 text-right flex-shrink-0">
+        {loading ? <div className="h-3.5 bg-white/8 rounded animate-pulse" /> :
+         error   ? <span className="text-[10px] text-white/20">—</span> :
+         <p className="text-[12px] font-bold text-white/70 tabular-nums">{fmtRecord(myRecord.wins, myRecord.losses, myRecord.ties)}</p>}
+      </div>
+
+      {/* My Projected Pts */}
+      <div className="w-16 text-right flex-shrink-0">
+        {loading ? <div className="h-3.5 bg-white/8 rounded animate-pulse" /> :
+         error   ? <span className="text-[10px] text-white/20">—</span> :
+         <p className={cn("text-[12px] font-black tabular-nums", myProjColor)}>{fmt1(myProj)}</p>}
+      </div>
+
+      {/* Opp Record */}
+      <div className="w-14 text-right flex-shrink-0">
+        {loading ? <div className="h-3.5 bg-white/8 rounded animate-pulse" /> :
+         error   ? <span className="text-[10px] text-white/20">—</span> :
+         m.opponentRosterId == null
+           ? <span className="text-[10px] text-white/25">Bye</span>
+           : <p className="text-[12px] font-bold text-white/50 tabular-nums">{fmtRecord(opponentRecord.wins, opponentRecord.losses, opponentRecord.ties)}</p>}
+      </div>
+
+      {/* Opp Projected Pts */}
+      <div className="w-16 text-right flex-shrink-0">
+        {loading ? <div className="h-3.5 bg-white/8 rounded animate-pulse" /> :
+         error   ? <span className="text-[10px] text-white/20">—</span> :
+         m.opponentRosterId == null
+           ? <span className="text-[10px] text-white/25">—</span>
+           : <p className={cn("text-[12px] font-bold tabular-nums", oppProjColor)}>{fmt1(opponentProj)}</p>}
+      </div>
+
+      {/* Win % */}
+      <div className="w-[72px] flex-shrink-0 flex justify-end">
+        {loading ? (
+          <div className="h-5 w-14 bg-white/8 rounded-full animate-pulse" />
+        ) : error || m.opponentRosterId == null ? (
+          <span className="text-[10px] text-white/25">—</span>
+        ) : (
+          <span className={cn("inline-flex items-center justify-center text-[10px] font-bold rounded-full px-2.5 py-0.5 border tabular-nums", winColor)}>
+            {Math.round(winPct)}%
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 export function LineupCommand() {
   const { isConnected, user, leagues } = useSleeper();
+
+  const [activeTab, setActiveTab] = useState<"lineup" | "matchups">("lineup");
 
   const [nflWeek, setNflWeek]     = useState<number | null>(null);
   const [season, setSeason]       = useState("2025");
@@ -419,6 +544,10 @@ export function LineupCommand() {
   const [analyses, setAnalyses]   = useState<Record<string, LeagueAnalysis>>({});
   const [sortKey, setSortKey]     = useState<"league" | "current" | "improvement" | "hard" | "soft" | "status">("improvement");
   const [sortDir, setSortDir]     = useState<"asc" | "desc">("desc");
+
+  const [matchups, setMatchups]   = useState<Record<string, MatchupAnalysis>>({});
+  const [mSortKey, setMSortKey]   = useState<"league" | "record" | "myProj" | "oppRecord" | "oppProj" | "winPct">("winPct");
+  const [mSortDir, setMSortDir]   = useState<"asc" | "desc">("desc");
 
   const activeLeagues = leagues.filter(l => l.status !== "archived");
 
@@ -536,16 +665,131 @@ export function LineupCommand() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nflWeek, user?.userId, activeLeagues.length, rawProj, playerDb]);
 
+  // ── 3. Per-league matchup fetch ───────────────────────────────────────────
+  useEffect(() => {
+    if (nflWeek == null || !user?.userId || activeLeagues.length === 0) return;
+
+    // Init loading skeletons for matchups
+    setMatchups(prev => {
+      const next = { ...prev };
+      for (const l of activeLeagues) {
+        if (!next[l.leagueId]) {
+          next[l.leagueId] = {
+            leagueId: l.leagueId,
+            leagueName: l.name,
+            format: l.format || "1QB",
+            scoringFormat: l.scoringFormat,
+            avatar: l.avatar ? `https://sleepercdn.com/avatars/thumbs/${l.avatar}` : null,
+            myRosterId: 0,
+            myRecord: { wins: 0, losses: 0, ties: 0 },
+            myProj: 0,
+            opponentRosterId: null,
+            opponentRecord: { wins: 0, losses: 0, ties: 0 },
+            opponentProj: 0,
+            winPct: 50,
+            loading: true,
+            error: false,
+          };
+        }
+      }
+      return next;
+    });
+
+    activeLeagues.forEach(league => {
+      const field = projKey(league.scoringFormat);
+      Promise.all([
+        fetch(`${SLEEPER_API}/league/${league.leagueId}/rosters`).then(r => r.ok ? r.json() : null),
+        fetch(`${SLEEPER_API}/league/${league.leagueId}/matchups/${nflWeek}`).then(r => r.ok ? r.json() : null),
+      ]).then(([rosters, weekMatchups]: [any[] | null, any[] | null]) => {
+        if (!rosters || !weekMatchups) throw new Error("no data");
+
+        const myRoster = rosters.find((r: any) => r.owner_id === user.userId);
+        if (!myRoster) {
+          setMatchups(prev => ({
+            ...prev,
+            [league.leagueId]: { ...prev[league.leagueId], loading: false, error: false },
+          }));
+          return;
+        }
+
+        const myMatchup = weekMatchups.find((m: any) => m.roster_id === myRoster.roster_id);
+        if (!myMatchup) {
+          setMatchups(prev => ({
+            ...prev,
+            [league.leagueId]: { ...prev[league.leagueId], loading: false, error: false },
+          }));
+          return;
+        }
+
+        const opponentMatchup = weekMatchups.find(
+          (m: any) => m.matchup_id === myMatchup.matchup_id && m.roster_id !== myRoster.roster_id
+        ) ?? null;
+
+        const mySett = myRoster.settings || {};
+        const myRecord = { wins: mySett.wins || 0, losses: mySett.losses || 0, ties: mySett.ties || 0 };
+
+        let opponentRecord = { wins: 0, losses: 0, ties: 0 };
+        if (opponentMatchup) {
+          const oppRoster = rosters.find((r: any) => r.roster_id === opponentMatchup.roster_id);
+          if (oppRoster) {
+            const os = oppRoster.settings || {};
+            opponentRecord = { wins: os.wins || 0, losses: os.losses || 0, ties: os.ties || 0 };
+          }
+        }
+
+        const proj = (pid: string): number => (rawProj[pid]?.[field] ?? 0);
+        const myProj = (myMatchup.starters || [])
+          .filter((id: string) => id && id !== "0")
+          .reduce((s: number, id: string) => s + proj(id), 0);
+        const opponentProj = opponentMatchup
+          ? (opponentMatchup.starters || [])
+              .filter((id: string) => id && id !== "0")
+              .reduce((s: number, id: string) => s + proj(id), 0)
+          : 0;
+
+        const total = myProj + opponentProj;
+        const winPct = total > 0 ? (myProj / total) * 100 : 50;
+
+        setMatchups(prev => ({
+          ...prev,
+          [league.leagueId]: {
+            leagueId: league.leagueId,
+            leagueName: league.name,
+            format: league.format || "1QB",
+            scoringFormat: league.scoringFormat,
+            avatar: league.avatar ? `https://sleepercdn.com/avatars/thumbs/${league.avatar}` : null,
+            myRosterId: myRoster.roster_id,
+            myRecord,
+            myProj,
+            opponentRosterId: opponentMatchup?.roster_id ?? null,
+            opponentRecord,
+            opponentProj,
+            winPct,
+            loading: false,
+            error: false,
+          },
+        }));
+      }).catch(() => {
+        setMatchups(prev => ({
+          ...prev,
+          [league.leagueId]: { ...prev[league.leagueId], loading: false, error: true },
+        }));
+      });
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nflWeek, user?.userId, activeLeagues.length, rawProj]);
+
   const refresh = useCallback(() => {
     setBaseLoading(true);
     setAnalyses({});
+    setMatchups({});
     setNflWeek(null);
     setRawProj({});
     setPlayerDb({});
     setBaseLoading(false);
   }, []);
 
-  // ── Aggregate KPIs ───────────────────────────────────────────────────────
+  // ── Lineup KPIs ───────────────────────────────────────────────────────────
   const kpis = useMemo(() => {
     const list = Object.values(analyses).filter(a => !a.loading && !a.error);
     const totalIssues     = list.reduce((s, a) => s + a.issues.filter(i => i.type !== "questionable").length, 0);
@@ -584,6 +828,52 @@ export function LineupCommand() {
   const allLoading = Object.values(analyses).every(a => a.loading);
   const hasAnyData = Object.values(analyses).some(a => !a.loading && !a.error);
 
+  // ── Matchup KPIs ──────────────────────────────────────────────────────────
+  const matchupKpis = useMemo(() => {
+    const list = Object.values(matchups).filter(m => !m.loading && !m.error && m.opponentRosterId != null);
+    const projWins   = list.filter(m => m.winPct >= 50).length;
+    const projLosses = list.filter(m => m.winPct < 50).length;
+    const bestPF     = list.reduce<MatchupAnalysis | null>((best, m) => (!best || m.myProj > best.myProj ? m : best), null);
+    const avgOppWinPct = list.length > 0
+      ? list.reduce((s, m) => s + recordWinPct(m.opponentRecord.wins, m.opponentRecord.losses, m.opponentRecord.ties), 0) / list.length
+      : 0;
+    const toughest = list.reduce<MatchupAnalysis | null>((worst, m) => {
+      if (!worst) return m;
+      return recordWinPct(m.opponentRecord.wins, m.opponentRecord.losses, m.opponentRecord.ties)
+           > recordWinPct(worst.opponentRecord.wins, worst.opponentRecord.losses, worst.opponentRecord.ties)
+        ? m : worst;
+    }, null);
+    return { projWins, projLosses, bestPF, avgOppWinPct, toughest };
+  }, [matchups]);
+
+  function handleMSort(key: typeof mSortKey) {
+    if (mSortKey === key) setMSortDir(d => d === "asc" ? "desc" : "asc");
+    else { setMSortKey(key); setMSortDir("desc"); }
+  }
+
+  const sortedMatchups = useMemo(() => {
+    const list = Object.values(matchups);
+    const dir = mSortDir === "desc" ? -1 : 1;
+    return [...list].sort((a, b) => {
+      if (a.loading !== b.loading) return a.loading ? 1 : -1;
+      let cmp = 0;
+      switch (mSortKey) {
+        case "league":    cmp = a.leagueName.localeCompare(b.leagueName); break;
+        case "record":    cmp = recordWinPct(a.myRecord.wins, a.myRecord.losses, a.myRecord.ties)
+                              - recordWinPct(b.myRecord.wins, b.myRecord.losses, b.myRecord.ties); break;
+        case "myProj":    cmp = a.myProj - b.myProj; break;
+        case "oppRecord": cmp = recordWinPct(a.opponentRecord.wins, a.opponentRecord.losses, a.opponentRecord.ties)
+                              - recordWinPct(b.opponentRecord.wins, b.opponentRecord.losses, b.opponentRecord.ties); break;
+        case "oppProj":   cmp = a.opponentProj - b.opponentProj; break;
+        case "winPct":    cmp = a.winPct - b.winPct; break;
+      }
+      return cmp * dir;
+    });
+  }, [matchups, mSortKey, mSortDir]);
+
+  const mAllLoading = Object.values(matchups).every(m => m.loading);
+  const mHasAnyData = Object.values(matchups).some(m => !m.loading && !m.error);
+
   // ── Not connected gate ───────────────────────────────────────────────────
   if (!isConnected || !user) {
     return (
@@ -618,19 +908,13 @@ export function LineupCommand() {
     <div className="space-y-5">
 
       {/* ── Page header ──────────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between flex-wrap gap-2">
-        <div>
-          <div className="flex items-center gap-2">
-            <Activity className="w-4 h-4 text-[#d4af37]" />
-            <h2 className="text-sm font-bold text-foreground">Lineup Command</h2>
-            <Badge variant="outline" className="text-[9px] px-1.5 h-4 border-[#d4af37]/30 text-[#d4af37]/70">
-              Week {nflWeek ?? "—"} · Priority View
-            </Badge>
-            {(baseLoading || allLoading) && <RefreshCw className="w-3.5 h-3.5 text-muted-foreground animate-spin" />}
-          </div>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Cross-league lineup optimization · {activeLeagues.length} league{activeLeagues.length !== 1 ? "s" : ""}
-          </p>
+      <SectionHeader title="Lineup Command" subtitle="Review starters, identify lineup issues, and optimize weekly decisions." />
+      <div className="flex items-center justify-between flex-wrap gap-2 -mt-4">
+        <div className="flex items-center gap-2">
+          <Badge variant="outline" className="text-[9px] px-1.5 h-4 border-[#d4af37]/30 text-[#d4af37]/70">
+            Week {nflWeek ?? "—"}
+          </Badge>
+          {(baseLoading || allLoading || mAllLoading) && <RefreshCw className="w-3.5 h-3.5 text-muted-foreground animate-spin" />}
         </div>
         <Button size="sm" variant="outline" onClick={refresh} disabled={baseLoading} data-testid="button-refresh-lineup">
           <RefreshCw className="w-3.5 h-3.5" />
@@ -638,113 +922,189 @@ export function LineupCommand() {
         </Button>
       </div>
 
-      {/* ── Hero KPI bar ─────────────────────────────────────────────────── */}
-      <div
-        className="rounded-2xl border border-[#d4af37]/15 p-4 md:p-5"
-        style={{ background: "linear-gradient(135deg, rgba(4,13,26,0.95) 0%, rgba(11,58,122,0.08) 100%)" }}
-      >
-        <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-[#d4af37]/60 mb-3 md:mb-4">
-          Operations Overview
-        </p>
-        <div className="grid grid-cols-3 md:grid-cols-5 gap-2 md:gap-3">
-          <KpiCard
-            icon={AlertTriangle}
-            label="Lineup Issues"
-            value={hasAnyData ? kpis.totalIssues : "—"}
-            accent="red"
-            sub="Out · IR · Bye"
-          />
-          <KpiCard
-            icon={TrendingUp}
-            label="Optimal Swaps"
-            value={hasAnyData ? kpis.totalSwaps : "—"}
-            accent="blue"
-            sub="Available"
-          />
-          <KpiCard
-            icon={Zap}
-            label="Points Gain"
-            value={hasAnyData ? (kpis.totalGain > 0 ? `+${fmt1(kpis.totalGain)}` : "—") : "—"}
-            accent="gold"
-            sub="Projected"
-          />
-          <KpiCard
-            icon={Activity}
-            label="Questionable"
-            value={hasAnyData ? kpis.questionable : "—"}
-            accent="yellow"
-            sub="Starters"
-          />
-          <KpiCard
-            icon={CalendarX}
-            label="Bye Conflicts"
-            value={hasAnyData ? kpis.byeConflicts : "—"}
-            accent="slate"
-            sub="Active starters"
-          />
-        </div>
+      {/* ── Sub-tab switcher ─────────────────────────────────────────────── */}
+      <div className="flex gap-1 p-1 rounded-xl bg-white/[0.03] border border-white/6 w-fit">
+        {(["lineup", "matchups"] as const).map(tab => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            data-testid={`tab-${tab}`}
+            className={cn(
+              "relative px-4 py-1.5 rounded-lg text-[11px] font-semibold transition-all duration-200",
+              activeTab === tab
+                ? "bg-[#0b3a7a]/60 text-white border border-[#d4af37]/25"
+                : "text-white/35 hover:text-white/60"
+            )}
+          >
+            {tab === "lineup" ? "Lineup Command" : "Matchups"}
+            {activeTab === tab && (
+              <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-6 h-[2px] rounded-full bg-[#d4af37]" />
+            )}
+          </button>
+        ))}
       </div>
 
-      {/* ── Main table ───────────────────────────────────────────────────── */}
-      <div
-        className="rounded-2xl overflow-hidden border border-white/6"
-        style={{ background: "linear-gradient(180deg, rgba(4,13,26,0.9) 0%, rgba(4,10,20,0.95) 100%)" }}
-      >
-        {/* Table header */}
-        <div className="flex items-center gap-2 md:gap-3 px-3 md:px-5 py-2 border-b border-white/6 bg-white/[0.02]">
-          {(() => {
-            function SortBtn({ col, label, className }: { col: typeof sortKey; label: string; className?: string }) {
-              const active = sortKey === col;
-              return (
-                <button
-                  onClick={() => handleSort(col)}
-                  className={cn(
-                    "flex items-center gap-0.5 text-[9px] font-bold uppercase tracking-widest transition-colors cursor-pointer select-none",
-                    active ? "text-[#d4af37]" : "text-white/30 hover:text-white/55",
-                    className
-                  )}
-                >
-                  {label}
-                  {active
-                    ? (sortDir === "desc" ? <ChevronDown className="w-2.5 h-2.5 flex-shrink-0" /> : <ChevronUp className="w-2.5 h-2.5 flex-shrink-0" />)
-                    : <ArrowUpDown className="w-2.5 h-2.5 flex-shrink-0 opacity-40" />
-                  }
-                </button>
-              );
-            }
-            return (
-              <>
-                <SortBtn col="league"      label="League"      className="flex-1 min-w-0 justify-start" />
-                <SortBtn col="current"     label="Current"     className="w-14 md:w-16 justify-end" />
-                <SortBtn col="improvement" label="Improvement" className="w-24 md:w-28 justify-end" />
-                <SortBtn col="hard"        label="Out/IR/Bye"  className="w-[72px] md:w-24 justify-center" />
-                <SortBtn col="soft"        label="Ques/Doub"   className="w-[64px] md:w-20 justify-center hidden sm:flex" />
-                <SortBtn col="status"      label="Status"      className="w-[96px] md:w-[108px] justify-end" />
-              </>
-            );
-          })()}
-        </div>
-
-        {/* Rows */}
-        {baseLoading && sortedAnalyses.length === 0 ? (
-          <>
-            {[...Array(Math.min(activeLeagues.length || 4, 6))].map((_, i) => <SkeletonRow key={i} />)}
-          </>
-        ) : sortedAnalyses.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
-            <Users className="w-8 h-8 text-white/15 mb-3" />
-            <p className="text-sm font-semibold text-white/40">No leagues found</p>
-            <p className="text-xs text-white/25 mt-1">Connect leagues in the Portfolio tab to get started.</p>
+      {/* ══════════════════ LINEUP COMMAND TAB ══════════════════ */}
+      {activeTab === "lineup" && (
+        <>
+          {/* ── Hero KPI bar ───────────────────────────────────────── */}
+          <div
+            className="rounded-2xl border border-[#d4af37]/15 p-4 md:p-5"
+            style={{ background: "linear-gradient(135deg, rgba(4,13,26,0.95) 0%, rgba(11,58,122,0.08) 100%)" }}
+          >
+            <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-[#d4af37]/60 mb-3 md:mb-4">
+              Operations Overview
+            </p>
+            <div className="grid grid-cols-3 md:grid-cols-5 gap-2 md:gap-3">
+              <KpiCard icon={AlertTriangle} label="Lineup Issues"  value={hasAnyData ? kpis.totalIssues : "—"} accent="red"    sub="Out · IR · Bye" />
+              <KpiCard icon={TrendingUp}   label="Optimal Swaps"  value={hasAnyData ? kpis.totalSwaps : "—"}  accent="blue"   sub="Available" />
+              <KpiCard icon={Zap}          label="Points Gain"    value={hasAnyData ? (kpis.totalGain > 0 ? `+${fmt1(kpis.totalGain)}` : "—") : "—"} accent="gold" sub="Projected" />
+              <KpiCard icon={Activity}     label="Questionable"   value={hasAnyData ? kpis.questionable : "—"} accent="yellow" sub="Starters" />
+              <KpiCard icon={CalendarX}    label="Bye Conflicts"  value={hasAnyData ? kpis.byeConflicts : "—"} accent="slate"  sub="Active starters" />
+            </div>
           </div>
-        ) : (
-          sortedAnalyses.map(a => <LeagueRow key={a.leagueId} analysis={a} />)
-        )}
-      </div>
 
-      {/* ── Footer note ──────────────────────────────────────────────────── */}
-      <p className="text-[9px] text-white/20 text-center px-4">
-        Projections from Sleeper · Updated weekly · Optimal lineup uses projected points, not dynasty values
-      </p>
+          {/* ── Lineup table ───────────────────────────────────────── */}
+          <div
+            className="rounded-2xl overflow-hidden border border-white/6"
+            style={{ background: "linear-gradient(180deg, rgba(4,13,26,0.9) 0%, rgba(4,10,20,0.95) 100%)" }}
+          >
+            <div className="flex items-center gap-2 md:gap-3 px-3 md:px-5 py-2 border-b border-white/6 bg-white/[0.02]">
+              {(() => {
+                function SortBtn({ col, label, className }: { col: typeof sortKey; label: string; className?: string }) {
+                  const active = sortKey === col;
+                  return (
+                    <button onClick={() => handleSort(col)} className={cn("flex items-center gap-0.5 text-[9px] font-bold uppercase tracking-widest transition-colors cursor-pointer select-none", active ? "text-[#d4af37]" : "text-white/30 hover:text-white/55", className)}>
+                      {label}
+                      {active ? (sortDir === "desc" ? <ChevronDown className="w-2.5 h-2.5 flex-shrink-0" /> : <ChevronUp className="w-2.5 h-2.5 flex-shrink-0" />) : <ArrowUpDown className="w-2.5 h-2.5 flex-shrink-0 opacity-40" />}
+                    </button>
+                  );
+                }
+                return (
+                  <>
+                    <SortBtn col="league"      label="League"      className="flex-1 min-w-0 justify-start" />
+                    <SortBtn col="current"     label="Current"     className="w-14 md:w-16 justify-end" />
+                    <SortBtn col="improvement" label="Improvement" className="w-24 md:w-28 justify-end" />
+                    <SortBtn col="hard"        label="Out/IR/Bye"  className="w-[72px] md:w-24 justify-center" />
+                    <SortBtn col="soft"        label="Ques/Doub"   className="w-[64px] md:w-20 justify-center hidden sm:flex" />
+                    <SortBtn col="status"      label="Status"      className="w-[96px] md:w-[108px] justify-end" />
+                  </>
+                );
+              })()}
+            </div>
+            {baseLoading && sortedAnalyses.length === 0 ? (
+              [...Array(Math.min(activeLeagues.length || 4, 6))].map((_, i) => <SkeletonRow key={i} />)
+            ) : sortedAnalyses.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
+                <Users className="w-8 h-8 text-white/15 mb-3" />
+                <p className="text-sm font-semibold text-white/40">No leagues found</p>
+                <p className="text-xs text-white/25 mt-1">Connect leagues in the Portfolio tab to get started.</p>
+              </div>
+            ) : (
+              sortedAnalyses.map(a => <LeagueRow key={a.leagueId} analysis={a} />)
+            )}
+          </div>
+
+          <p className="text-[9px] text-white/20 text-center px-4">
+            Projections from Sleeper · Updated weekly · Optimal lineup uses projected points, not dynasty values
+          </p>
+        </>
+      )}
+
+      {/* ══════════════════ MATCHUPS TAB ══════════════════ */}
+      {activeTab === "matchups" && (
+        <>
+          {/* ── Matchup KPI bar ────────────────────────────────────── */}
+          <div
+            className="rounded-2xl border border-[#d4af37]/15 p-4 md:p-5"
+            style={{ background: "linear-gradient(135deg, rgba(4,13,26,0.95) 0%, rgba(11,58,122,0.08) 100%)" }}
+          >
+            <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-[#d4af37]/60 mb-3 md:mb-4">
+              Matchup Overview
+            </p>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
+              <KpiCard
+                icon={Trophy}
+                label="Projected Record"
+                value={mHasAnyData ? `${matchupKpis.projWins}-${matchupKpis.projLosses}` : "—"}
+                accent="gold"
+                sub="This week"
+              />
+              <KpiCard
+                icon={Zap}
+                label="Best Projected PF"
+                value={mHasAnyData && matchupKpis.bestPF ? fmt1(matchupKpis.bestPF.myProj) : "—"}
+                accent="blue"
+                sub={matchupKpis.bestPF?.leagueName ?? "Highest output"}
+              />
+              <KpiCard
+                icon={Users}
+                label="Avg Opp Record"
+                value={mHasAnyData ? `${Math.round(matchupKpis.avgOppWinPct)}%` : "—"}
+                accent="yellow"
+                sub="Opponent win rate"
+              />
+              <KpiCard
+                icon={Shield}
+                label="Toughest Opponent"
+                value={mHasAnyData && matchupKpis.toughest
+                  ? `${Math.round(recordWinPct(matchupKpis.toughest.opponentRecord.wins, matchupKpis.toughest.opponentRecord.losses, matchupKpis.toughest.opponentRecord.ties))}%`
+                  : "—"}
+                accent="red"
+                sub={matchupKpis.toughest?.leagueName ?? "Hardest matchup"}
+              />
+            </div>
+          </div>
+
+          {/* ── Matchup table ──────────────────────────────────────── */}
+          <div
+            className="rounded-2xl overflow-hidden border border-white/6"
+            style={{ background: "linear-gradient(180deg, rgba(4,13,26,0.9) 0%, rgba(4,10,20,0.95) 100%)" }}
+          >
+            {/* Header */}
+            <div className="flex items-center gap-3 px-3 md:px-5 py-2 border-b border-white/6 bg-white/[0.02]">
+              {(() => {
+                function MSortBtn({ col, label, className }: { col: typeof mSortKey; label: string; className?: string }) {
+                  const active = mSortKey === col;
+                  return (
+                    <button onClick={() => handleMSort(col)} className={cn("flex items-center gap-0.5 text-[9px] font-bold uppercase tracking-widest transition-colors cursor-pointer select-none", active ? "text-[#d4af37]" : "text-white/30 hover:text-white/55", className)}>
+                      {label}
+                      {active ? (mSortDir === "desc" ? <ChevronDown className="w-2.5 h-2.5 flex-shrink-0" /> : <ChevronUp className="w-2.5 h-2.5 flex-shrink-0" />) : <ArrowUpDown className="w-2.5 h-2.5 flex-shrink-0 opacity-40" />}
+                    </button>
+                  );
+                }
+                return (
+                  <>
+                    <MSortBtn col="league"    label="League"         className="flex-1 min-w-0 justify-start" />
+                    <MSortBtn col="record"    label="Record"         className="w-14 justify-end" />
+                    <MSortBtn col="myProj"    label="Proj Pts"       className="w-16 justify-end" />
+                    <MSortBtn col="oppRecord" label="Opp Record"     className="w-14 justify-end" />
+                    <MSortBtn col="oppProj"   label="Opp Pts"        className="w-16 justify-end" />
+                    <MSortBtn col="winPct"    label="Win %"          className="w-[72px] justify-end" />
+                  </>
+                );
+              })()}
+            </div>
+
+            {/* Rows */}
+            {baseLoading && sortedMatchups.length === 0 ? (
+              [...Array(Math.min(activeLeagues.length || 4, 6))].map((_, i) => <MatchupSkeletonRow key={i} />)
+            ) : sortedMatchups.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
+                <Swords className="w-8 h-8 text-white/15 mb-3" />
+                <p className="text-sm font-semibold text-white/40">No matchup data yet</p>
+                <p className="text-xs text-white/25 mt-1">Matchup data loads once projections are available.</p>
+              </div>
+            ) : (
+              sortedMatchups.map(m => <MatchupRow key={m.leagueId} m={m} />)
+            )}
+          </div>
+
+          <p className="text-[9px] text-white/20 text-center px-4">
+            Matchup projections from Sleeper starters · Win % = projected pts / combined projected pts · Records from current standings
+          </p>
+        </>
+      )}
     </div>
   );
 }

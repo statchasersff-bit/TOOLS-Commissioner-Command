@@ -216,7 +216,7 @@ export function RosterBreakdown({ league, userTeam }: TeamProps) {
 
   return (
     <div className="space-y-10">
-      <SectionHeader title="Roster Breakdown" subtitle={`${userTeam.name}: strength, age, and depth analysis`} />
+      <SectionHeader title="My Team" subtitle="View your roster, team value, positional strengths, and dynasty outlook." />
 
       <div>
         <div className="mb-5">

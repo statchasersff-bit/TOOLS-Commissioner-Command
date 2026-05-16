@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, useCallback } from "react";
+import { SectionHeader } from "@/components/SectionHeader";
 import { toPng } from "html-to-image";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -252,6 +253,7 @@ export function ShareTeam({ league, userTeam }: Props) {
 
   return (
     <div className="space-y-4">
+      <SectionHeader title="Share My Team" subtitle="Create a clean shareable snapshot of your roster, values, and team profile." />
       {/* Combined controls + tab toggle row */}
       <div className="flex flex-wrap items-center gap-2">
         <Button size="sm" variant="outline" onClick={copyLink} data-testid="button-copy-link">

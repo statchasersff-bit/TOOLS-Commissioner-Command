@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { SectionHeader } from "@/components/SectionHeader";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -511,17 +512,8 @@ export default function WaiverCommand() {
   return (
     <div className="space-y-5">
       {/* Page header */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-[#0b3a7a]/10 dark:bg-blue-400/10 flex items-center justify-center ring-1 ring-[#0b3a7a]/15 dark:ring-blue-400/15">
-            <Waves className="w-4.5 h-4.5 text-[#0b3a7a] dark:text-blue-400" />
-          </div>
-          <div>
-            <h2 className="text-lg font-bold text-foreground leading-tight" data-testid="text-waiver-command-title">WaiverCommand</h2>
-            <p className="text-xs text-muted-foreground mt-0.5">Centralized waiver management across every league</p>
-          </div>
-        </div>
-
+      <SectionHeader title="Waiver Command" subtitle="Find waiver targets, compare league availability, and manage adds across your teams." />
+      <div className="flex items-center justify-end flex-wrap gap-3">
         <div className="flex items-center gap-3">
           {lastFetched && (
             <span className="text-[11px] text-muted-foreground/60">

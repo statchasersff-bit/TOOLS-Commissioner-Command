@@ -20,7 +20,7 @@ import type { League, Team, Tier, Player, Pick, TradeRecord, TradeSide, CrawlSta
 import { cn } from "@/lib/utils";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { TradeBlockCandidates } from "@/components/trade/TradeBlockCandidates";
-import { ArrowRightLeft, TrendingUp, TrendingDown, Target, X, Plus, Search, Scale, RotateCcw, Database, Play, Pause, Loader2, ChevronLeft, ChevronRight, ChevronDown, Download, Tag, Clock, ArrowRight, Send, CheckCircle2, DollarSign, MessageSquare, Undo2 } from "lucide-react";
+import { ArrowRightLeft, TrendingUp, TrendingDown, Target, X, Plus, Search, Scale, RotateCcw, Database, Play, Pause, Loader2, ChevronLeft, ChevronRight, ChevronDown, Download, Tag, Clock, ArrowRight, Send, CheckCircle2, DollarSign, Undo2 } from "lucide-react";
 
 const SLEEPER_JWT_KEY = "dc-sleeper-draft-jwt";
 const SLEEPER_API_BASE = "https://api.sleeper.app/v1";
@@ -973,19 +973,6 @@ export function TradeBlockScanner({ league }: { league: League }) {
   );
 }
 
-function computeTradeExpiry(option: string): number | null {
-  const now = Math.floor(Date.now() / 1000);
-  switch (option) {
-    case "never": return null;
-    case "1h":    return now + 3600;
-    case "today": { const end = new Date(); end.setHours(23, 59, 59, 999); return Math.floor(end.getTime() / 1000); }
-    case "24h":   return now + 86400;
-    case "2d":    return now + 172800;
-    case "1w":    return now + 604800;
-    case "2w":    return now + 1209600;
-    default:      return now + 86400;
-  }
-}
 
 const DIMINISHING_WEIGHTS = [1.00, 0.85, 0.72, 0.60, 0.50, 0.42, 0.36, 0.31];
 
@@ -1313,7 +1300,7 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
     if (aAmt > 0) waiverBudget.push({ sender: aRosterId, receiver: bRosterId, amount: aAmt });
     if (bAmt > 0) waiverBudget.push({ sender: bRosterId, receiver: aRosterId, amount: bAmt });
 
-    const expiresAt = computeTradeExpiry(expiry);
+    const expiresAt = computeExpiresAt(expiry);
 
     setProposing(true);
     setProposeError(null);
@@ -2054,282 +2041,217 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
         const posColor = (pos?: string) =>
           pos === "QB" ? "text-rose-400" : pos === "RB" ? "text-emerald-400" :
           pos === "WR" ? "text-sky-400"  : pos === "TE" ? "text-yellow-400" : "text-muted-foreground";
+        const posBg = (pos?: string) =>
+          pos === "QB" ? "bg-rose-500/15 border-rose-500/25" :
+          pos === "RB" ? "bg-emerald-500/15 border-emerald-500/25" :
+          pos === "WR" ? "bg-sky-500/15 border-sky-500/25" :
+          pos === "TE" ? "bg-yellow-500/15 border-yellow-500/25" :
+          "bg-muted/30 border-border/40";
         const missingIds = [...sideA, ...sideB].some(a => a.type === "player" && !a.player?.sleeperId);
         const canSubmit = !!sleeperJwt && !!sideBRosterId && !missingIds && (sideA.length > 0 || sideB.length > 0) && !proposing && !proposedTrade;
         const issues: string[] = [];
         if (!proposedTrade && !!sleeperJwt && !sideBRosterId) issues.push("Select a trade partner (Side B) to enable submit");
         if (!proposedTrade && !!sleeperJwt && missingIds) issues.push("Some players are missing Sleeper IDs — add them via the roster picker");
         return (
-          <Card className="p-5" data-testid="card-propose-trade">
-            <div className="mb-4">
-              <h3 className="text-sm font-bold flex items-center gap-2">
-                <Send className="w-4 h-4 text-[#0b3a7a] dark:text-blue-400" />
-                Propose Trade on Sleeper
-              </h3>
-              <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
-            </div>
-
-            {!sleeperJwt ? (
-              <div className="space-y-3">
-                <p className="text-xs text-muted-foreground">
-                  Paste your Sleeper auth token to propose trades directly. Find it in browser DevTools → Application → Local Storage → <code className="font-mono bg-muted px-1 rounded text-[10px]">sleeper-auth</code>.
-                </p>
-                <div className="flex gap-2">
-                  <Input
-                    type="password"
-                    placeholder="eyJhbGci…"
-                    value={jwtInput}
-                    onChange={e => setJwtInput(e.target.value)}
-                    onKeyDown={e => e.key === "Enter" && handleSaveJwt()}
-                    className="font-mono text-xs flex-1"
-                    data-testid="input-trade-calc-jwt"
-                  />
-                  <Button size="sm" onClick={handleSaveJwt} disabled={!jwtInput.trim()} data-testid="button-trade-calc-jwt-save">
-                    Connect
-                  </Button>
+          <Card className="overflow-hidden border-border/60" data-testid="card-propose-trade">
+            {/* Dark gradient header */}
+            <div className="bg-gradient-to-r from-[#0b1e36] to-[#0c2444] dark:from-[#07111f] dark:to-[#0a1c34] px-5 py-4 border-b border-white/[0.06]">
+              <div className="flex items-center gap-2.5">
+                <div className="w-7 h-7 rounded-full bg-[#d4af37]/10 border border-[#d4af37]/25 flex items-center justify-center flex-shrink-0">
+                  <Send className="w-3.5 h-3.5 text-[#d4af37]" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white leading-tight">Propose Trade on Sleeper</h3>
+                  <span className="block h-[2px] w-8 bg-[#d4af37] rounded-full mt-1" />
                 </div>
               </div>
-            ) : (
-              <div className="space-y-4">
+            </div>
 
-                {/* Preview — both sides */}
-                <div className="grid grid-cols-2 gap-3">
-                  {(["a", "b"] as const).map(side => {
-                    const assets = side === "a" ? sideA : sideB;
-                    const team   = side === "a" ? sideATeam : sideBTeam;
-                    return (
-                      <div key={side} className="rounded-lg bg-muted/20 border border-border/40 p-3 space-y-1.5">
-                        <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                          {team?.owner || team?.name || `Side ${side.toUpperCase()}`} gives
-                        </p>
-                        {assets.length === 0 ? (
-                          <p className="text-[11px] text-muted-foreground/50 italic">Nothing</p>
-                        ) : assets.map(a => (
-                          <div key={a.id} className="text-[11px] flex items-center gap-1.5 min-w-0">
-                            {a.type === "player" ? (
-                              <>
-                                <span className={cn("font-bold text-[10px] shrink-0", posColor(a.player?.pos))}>{a.player?.pos}</span>
-                                <span className="truncate">{a.player?.name}</span>
-                              </>
-                            ) : (
-                              <span className="text-purple-400">{a.pickYear} {ordRound(a.pickRound!)} ({a.pickRange})</span>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    );
-                  })}
+            <div className="p-5 space-y-4 dark:bg-[#0a1628]/30">
+              {!sleeperJwt ? (
+                <div className="space-y-3">
+                  <p className="text-xs text-muted-foreground">Connect your Sleeper account to propose trades directly from Dynasty Command.</p>
+                  <div className="flex gap-2">
+                    <Input
+                      type="password"
+                      placeholder="eyJhbGci…"
+                      value={jwtInput}
+                      onChange={e => setJwtInput(e.target.value)}
+                      onKeyDown={e => e.key === "Enter" && handleSaveJwt()}
+                      className="font-mono text-xs flex-1"
+                      data-testid="input-trade-calc-jwt"
+                    />
+                    <Button size="sm" onClick={handleSaveJwt} disabled={!jwtInput.trim()} data-testid="button-trade-calc-jwt-save">Connect</Button>
+                  </div>
                 </div>
-
-                {!proposedTrade ? (
-                  <>
-                    {/* Expiration */}
-                    <div className="flex items-center gap-3 flex-wrap">
-                      <label className="text-xs text-muted-foreground font-medium shrink-0">Expires in</label>
-                      <Select value={expiresIn} onValueChange={setExpiresIn}>
-                        <SelectTrigger className="w-32 h-8 text-xs" data-testid="select-trade-expiry">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="24">24 hours</SelectItem>
-                          <SelectItem value="48">48 hours</SelectItem>
-                          <SelectItem value="72">72 hours</SelectItem>
-                          <SelectItem value="168">7 days</SelectItem>
-                          <SelectItem value="720">30 days</SelectItem>
-                          <SelectItem value="0">No expiry</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    {/* FAAB (optional) */}
-                    <div className="space-y-2">
-                      <button
-                        type="button"
-                        className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-                        onClick={() => setFaabOpen(v => !v)}
-                        data-testid="button-toggle-faab"
-                      >
-                        <DollarSign className="w-3.5 h-3.5" />
-                        Include FAAB
-                        <ChevronDown className={cn("w-3.5 h-3.5 transition-transform duration-200", faabOpen && "rotate-180")} />
-                      </button>
-                      {faabOpen && (
-                        <div className="flex items-center gap-4 flex-wrap pl-5 pt-1">
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs text-muted-foreground shrink-0">{sideATeam?.owner || "Side A"} sends $</span>
-                            <Input type="number" min={0} className="w-20 h-7 text-xs" value={faabASends} onChange={e => setFaabASends(e.target.value)} placeholder="0" data-testid="input-faab-a" />
+              ) : (
+                <div className="space-y-4">
+                  {/* Two-column trade preview */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {(["a", "b"] as const).map(side => {
+                      const assets = side === "a" ? sideA : sideB;
+                      const team   = side === "a" ? sideATeam : sideBTeam;
+                      const label  = side === "a" ? "You Send" : "You Receive";
+                      return (
+                        <div key={side} className="rounded-xl bg-white/[0.03] dark:bg-black/20 border border-white/[0.07] dark:border-white/[0.06] overflow-hidden">
+                          <div className="px-3 py-2 bg-white/[0.02] border-b border-white/[0.05] flex items-center gap-2">
+                            {team?.avatar ? (
+                              <img src={team.avatar} alt="" className="w-4 h-4 rounded-full object-cover flex-shrink-0 ring-1 ring-white/10" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                            ) : (
+                              <div className="w-4 h-4 rounded-full bg-[#0b3a7a]/30 flex-shrink-0" />
+                            )}
+                            <span className={cn("text-[11px] font-bold tracking-wide", side === "a" ? "text-rose-400/90" : "text-emerald-400/90")}>{label}</span>
+                            <span className="text-[10px] text-white/30 ml-auto truncate max-w-[80px]">{team?.owner || team?.name || (side === "a" ? "Side A" : "Side B")}</span>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs text-muted-foreground shrink-0">{sideBTeam?.owner || "Side B"} sends $</span>
-                            <Input type="number" min={0} className="w-20 h-7 text-xs" value={faabBSends} onChange={e => setFaabBSends(e.target.value)} placeholder="0" data-testid="input-faab-b" />
+                          <div className="px-3 py-2.5 space-y-2 min-h-[60px]">
+                            {assets.length === 0 ? (
+                              <p className="text-[11px] text-white/20 italic py-1">Nothing added yet</p>
+                            ) : assets.map(a => (
+                              <div key={a.id} className="flex items-center gap-2 min-w-0">
+                                {a.type === "player" ? (
+                                  <>
+                                    <div className="w-7 h-7 rounded-full overflow-hidden bg-muted flex-shrink-0 ring-1 ring-white/10">
+                                      {a.player?.sleeperId && (
+                                        <img src={`https://sleepercdn.com/content/nfl/players/thumb/${a.player.sleeperId}.jpg`} alt={a.player.name} className="w-full h-full object-cover object-top" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                                      )}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-[12px] font-semibold text-foreground dark:text-white/90 truncate leading-tight">{a.player?.name}</p>
+                                      <div className="flex items-center gap-1.5 mt-0.5">
+                                        <span className={cn("text-[9px] font-bold px-1 py-px rounded border", posColor(a.player?.pos), posBg(a.player?.pos))}>{a.player?.pos}</span>
+                                        {a.player?.team && <span className="text-[10px] text-white/30">{a.player.team}</span>}
+                                      </div>
+                                    </div>
+                                    {a.value > 0 && <span className="text-[11px] text-white/35 tabular-nums flex-shrink-0">{a.value.toLocaleString()}</span>}
+                                  </>
+                                ) : (
+                                  <>
+                                    <div className="w-7 h-7 rounded-full bg-purple-500/15 border border-purple-500/25 flex items-center justify-center flex-shrink-0 text-[9px] font-bold text-purple-400">R{a.pickRound}</div>
+                                    <span className="text-[12px] text-foreground dark:text-white/85 flex-1 truncate">{a.pickYear} {ordRound(a.pickRound!)}<span className="text-white/30"> ({a.pickRange})</span></span>
+                                    {a.value > 0 && <span className="text-[11px] text-white/35 tabular-nums flex-shrink-0">{a.value.toLocaleString()}</span>}
+                                  </>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {!proposedTrade ? (
+                    <>
+                      {/* Controls row */}
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[11px] text-muted-foreground font-medium">Expires</span>
+                          <Select value={expiry} onValueChange={setExpiry}>
+                            <SelectTrigger className="h-7 w-36 text-[11px] rounded-full border-border/50 bg-background/60" data-testid="select-trade-expiry">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {EXPIRY_OPTIONS.map(opt => (
+                                <SelectItem key={opt.value} value={opt.value} className="text-xs">{opt.label}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setFaabOpen(v => !v)}
+                          data-testid="button-toggle-faab"
+                          className={cn("flex items-center gap-1.5 text-[11px] rounded-full px-2.5 py-1 border transition-colors", faabOpen ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400" : "bg-muted/30 border-border/50 text-muted-foreground hover:text-foreground hover:border-border")}
+                        >
+                          <DollarSign className="w-3 h-3" />
+                          FAAB
+                          <ChevronDown className={cn("w-3 h-3 transition-transform duration-200", faabOpen && "rotate-180")} />
+                        </button>
+                      </div>
+
+                      {/* FAAB panel */}
+                      {faabOpen && (
+                        <div className="rounded-lg bg-muted/20 border border-border/40 p-3 space-y-2.5">
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Include FAAB</p>
+                          <div className="flex flex-wrap gap-4">
+                            <div className="flex items-center gap-2">
+                              <span className="text-[11px] text-muted-foreground shrink-0">{sideATeam?.owner || "Side A"}</span>
+                              <div className="relative">
+                                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[11px] text-muted-foreground pointer-events-none">$</span>
+                                <Input type="number" min={0} className="w-20 h-7 text-xs pl-5" value={faabASends} onChange={e => setFaabASends(e.target.value)} placeholder="0" data-testid="input-faab-a" />
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-[11px] text-muted-foreground shrink-0">{sideBTeam?.owner || "Side B"}</span>
+                              <div className="relative">
+                                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[11px] text-muted-foreground pointer-events-none">$</span>
+                                <Input type="number" min={0} className="w-20 h-7 text-xs pl-5" value={faabBSends} onChange={e => setFaabBSends(e.target.value)} placeholder="0" data-testid="input-faab-b" />
+                              </div>
+                            </div>
                           </div>
                         </div>
                       )}
-                    </div>
 
-                    {/* Validation warnings */}
-                    {issues.length > 0 && (
-                      <ul className="space-y-1">
-                        {issues.map((msg, i) => (
-                          <li key={i} className="text-xs text-amber-400 flex items-start gap-1.5">
-                            <span className="shrink-0 mt-px">⚠</span>{msg}
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-
-                    {/* Error */}
-                    {proposeError && (
-                      <div className="rounded-md bg-red-500/10 border border-red-500/20 px-3 py-2 text-xs text-red-400" data-testid="text-propose-error">
-                        {proposeError}
-                      </div>
-                    )}
-
-                    {/* Submit */}
-                    <div className="flex justify-end pt-1">
-                      <Button
-                        size="sm"
-                        onClick={handleProposeTrade}
-                        disabled={!canSubmit}
-                        className="bg-[#0b3a7a] hover:bg-[#0b3a7a]/80 text-white gap-2 disabled:opacity-50"
-                        data-testid="button-propose-trade"
-                      >
-                        {proposing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                        {proposing ? "Sending…" : "Send Trade Offer"}
-                      </Button>
-                    </div>
-                  </>
-                ) : (
-                  /* ── Success + DM card ── */
-                  <div className="rounded-md bg-emerald-500/10 border border-emerald-500/20 p-3 space-y-3" data-testid="card-propose-success">
-                    {/* Txn info + Withdraw */}
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                        <div>
-                          <p className="text-xs font-semibold text-emerald-400">Trade offer sent!</p>
-                          <p className="text-[10px] text-emerald-400/60 font-mono mt-0.5">ID: {proposedTrade.transaction_id}</p>
+                      {/* Validation warnings */}
+                      {issues.length > 0 && (
+                        <div className="rounded-lg bg-amber-500/8 border border-amber-500/20 px-3 py-2 space-y-1">
+                          {issues.map((msg, i) => (
+                            <p key={i} className="text-[11px] text-amber-400 flex items-start gap-1.5"><span className="shrink-0 mt-px">⚠</span>{msg}</p>
+                          ))}
                         </div>
+                      )}
+
+                      {/* Error */}
+                      {proposeError && (
+                        <div className="rounded-lg bg-red-500/8 border border-red-500/20 px-3 py-2 text-[11px] text-red-400" data-testid="text-propose-error">{proposeError}</div>
+                      )}
+
+                      {/* Send button */}
+                      <div className="flex justify-end pt-1">
+                        <Button
+                          onClick={handleProposeTrade}
+                          disabled={!canSubmit}
+                          className="h-10 px-6 bg-gradient-to-r from-[#0b3a7a] to-[#1151a8] hover:from-[#0d4a9e] hover:to-[#1362c8] text-white font-semibold gap-2.5 rounded-full shadow-lg shadow-[#0b3a7a]/25 disabled:opacity-40 disabled:shadow-none transition-all duration-200 text-sm"
+                          data-testid="button-propose-trade"
+                        >
+                          {proposing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                          {proposing ? "Sending…" : "Send Trade Offer"}
+                        </Button>
                       </div>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-7 text-[11px] border-red-500/30 text-red-400 hover:bg-red-500/10 gap-1.5 shrink-0"
-                        onClick={handleWithdraw}
-                        disabled={withdrawing}
-                        data-testid="button-withdraw-trade"
-                      >
-                        {withdrawing ? <Loader2 className="w-3 h-3 animate-spin" /> : <Undo2 className="w-3 h-3" />}
-                        Withdraw
-                      </Button>
-                    </div>
-                    {withdrawError && <p className="text-[11px] text-red-400">{withdrawError}</p>}
-
-                    {/* Message manager — only when partner has a known userId */}
-                    {sideBTeam?.ownerId && (
-                      <div className="border-t border-emerald-500/20 pt-2.5 space-y-2">
-                        {!dmOpen ? (
-                          <button
-                            type="button"
-                            className="text-xs text-emerald-400/60 hover:text-emerald-400 flex items-center gap-1.5 transition-colors"
-                            onClick={handleOpenDm}
-                            data-testid="button-message-manager"
-                          >
-                            <MessageSquare className="w-3.5 h-3.5" />
-                            Message manager
-                          </button>
-                        ) : (
-                          <div className="space-y-2">
-                            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Direct Message</p>
-
-                            {dmLoading && (
-                              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                <Loader2 className="w-3.5 h-3.5 animate-spin" /> Looking up conversation…
-                              </div>
-                            )}
-                            {!dmLoading && dmData && (
-                              <div className="rounded bg-muted/20 border border-border/40 px-2.5 py-2 space-y-0.5">
-                                <p className="text-[11px] font-semibold">{dmData.title || sideBTeam?.owner || "Manager"}</p>
-                                {dmData.last_message_text && (
-                                  <p className="text-[10px] text-muted-foreground truncate">
-                                    Last: "{dmData.last_message_text}"
-                                    {dmData.last_message_time
-                                      ? ` · ${new Date(Number(dmData.last_message_time)).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
-                                      : ""}
-                                  </p>
-                                )}
-                              </div>
-                            )}
-
-                            {/* Trade card quick-send */}
-                            {!dmLoading && dmData?.dm_id && (
-                              <div className="rounded bg-muted/20 border border-border/40 px-2.5 py-2 flex items-center justify-between gap-2">
-                                <div className="min-w-0 flex-1">
-                                  <p className="text-[11px] font-medium">Trade card</p>
-                                  <p className="text-[10px] text-muted-foreground truncate">
-                                    @{user?.username || "you"} has proposed a trade in {league.name}
-                                  </p>
-                                </div>
-                                {dmCardSent ? (
-                                  <span className="text-[11px] text-emerald-400 flex items-center gap-1 shrink-0">
-                                    <CheckCircle2 className="w-3 h-3" /> Sent
-                                  </span>
-                                ) : (
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    className="h-7 text-[11px] gap-1 shrink-0"
-                                    onClick={handleSendTradeCard}
-                                    disabled={dmCardSending}
-                                    data-testid="button-send-trade-card"
-                                  >
-                                    {dmCardSending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
-                                    {dmCardSending ? "Sending…" : "Send card"}
-                                  </Button>
-                                )}
-                              </div>
-                            )}
-                            {dmCardError && <p className="text-[11px] text-red-400">{dmCardError}</p>}
-
-                            <textarea
-                              className="w-full rounded-md border border-border/50 bg-background/50 px-3 py-2 text-xs resize-none focus:outline-none focus:border-emerald-500/50"
-                              rows={3}
-                              value={dmMessage}
-                              onChange={e => setDmMessage(e.target.value)}
-                              placeholder="Write a message…"
-                              data-testid="textarea-dm-message"
-                            />
-                            {dmError && <p className="text-[11px] text-red-400">{dmError}</p>}
-                            {dmSent && <p className="text-[11px] text-emerald-400">✓ Message sent!</p>}
-
-                            <div className="flex items-center justify-between gap-2">
-                              <button
-                                type="button"
-                                className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
-                                onClick={() => setDmOpen(false)}
-                              >
-                                Cancel
-                              </button>
-                              <Button
-                                size="sm"
-                                className="h-7 text-[11px] bg-emerald-700 hover:bg-emerald-600 text-white gap-1.5"
-                                onClick={handleSendDm}
-                                disabled={dmSending || !dmMessage.trim() || !dmData?.dm_id}
-                                data-testid="button-send-dm"
-                              >
-                                {dmSending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
-                                {dmSending ? "Sending…" : "Send"}
-                              </Button>
-                            </div>
+                    </>
+                  ) : (
+                    /* Success state */
+                    <div className="rounded-xl bg-emerald-500/8 border border-emerald-500/20 p-4 space-y-3" data-testid="card-propose-success">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2.5">
+                          <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+                          <div>
+                            <p className="text-sm font-semibold text-emerald-400">Trade offer sent!</p>
+                            <p className="text-[10px] text-emerald-400/50 font-mono mt-0.5">ID: {proposedTrade.transaction_id}</p>
                           </div>
-                        )}
+                        </div>
+                        <Button size="sm" variant="outline" className="h-7 text-[11px] border-red-500/30 text-red-400 hover:bg-red-500/10 gap-1.5 shrink-0 rounded-full" onClick={handleWithdraw} disabled={withdrawing} data-testid="button-withdraw-trade">
+                          {withdrawing ? <Loader2 className="w-3 h-3 animate-spin" /> : <Undo2 className="w-3 h-3" />}
+                          Withdraw
+                        </Button>
                       </div>
-                    )}
-                  </div>
-                )}
-
-              </div>
-            )}
+                      {withdrawError && <p className="text-[11px] text-red-400">{withdrawError}</p>}
+                      {dmStatus !== "idle" && (
+                        <div className="border-t border-emerald-500/15 pt-2.5">
+                          {dmStatus === "sending" && <div className="flex items-center gap-2 text-[11px] text-emerald-400/60"><Loader2 className="w-3 h-3 animate-spin" />Sending trade card to partner…</div>}
+                          {dmStatus === "sent" && <div className="flex items-center gap-1.5 text-[11px] text-emerald-400"><CheckCircle2 className="w-3 h-3" />Trade card + tool link sent via Sleeper DM</div>}
+                          {dmStatus === "failed" && (
+                            <div className="space-y-1">
+                              <p className="text-[11px] text-amber-400">DM could not be delivered automatically.</p>
+                              {dmError && <p className="text-[10px] text-red-400/70">{dmError}</p>}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </Card>
         );
       })()}

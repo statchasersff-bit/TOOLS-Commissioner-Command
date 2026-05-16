@@ -821,15 +821,31 @@ export async function sendDmMessage(dmId: string, text: string): Promise<Sleeper
   return data.create_message;
 }
 
-/** @todo Discover send_message mutation shape from sleeper.com/graphql */
 export async function sendLeagueChatMessage(
-  _leagueId: string,
-  _message: string
-): Promise<never> {
-  throw new Error(
-    "send_message: mutation shape not yet discovered. " +
-      "Capture from sleeper.com/graphql with x-sleeper-graphql-op: send_message."
-  );
+  leagueId: string,
+  text: string
+): Promise<SleeperDmMessage> {
+  const clientId = crypto.randomUUID();
+  const data = await sleeperGraphQLRequest<{ create_message: SleeperDmMessage }>({
+    operationName: "create_message",
+    query: `
+      mutation create_message($text: String) {
+        create_message(
+          parent_id: "${leagueId}",
+          client_id: "${clientId}",
+          parent_type: "league",
+          text: $text
+        ) {
+          attachment author_avatar author_display_name author_real_name
+          author_id author_is_bot author_role_id created edited
+          message_id parent_id parent_type pinned reactions
+          user_reactions text text_map client_id
+        }
+      }
+    `,
+    variables: { text },
+  });
+  return data.create_message;
 }
 
 /** @todo Discover draft_pick mutation shape from sleeper.com/graphql */

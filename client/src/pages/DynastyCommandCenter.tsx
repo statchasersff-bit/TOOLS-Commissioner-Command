@@ -36,6 +36,7 @@ import { API_BASE } from "@/lib/apiBase";
 import Transactions from "./tabs/Transactions";
 import { LineupCommand } from "./tabs/LineupCommand";
 import TradeSync from "./tabs/TradeSync";
+import { ShareDynastyPopup } from "@/components/ShareDynastyPopup";
 
 const STORAGE_KEY = "sc-dynasty-state";
 
@@ -504,6 +505,7 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
         </div>
       </main>
       <DataDiagnostics />
+      <ShareDynastyPopup blocked={false} />
     </div>
   );
 }
