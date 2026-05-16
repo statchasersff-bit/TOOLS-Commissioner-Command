@@ -434,19 +434,27 @@ export function MobileBottomNav({ tabs, activeTab, setActiveTab }: MobileBottomN
 
         {/* Center avatar */}
         <div className="flex-shrink-0 w-14 flex flex-col items-center justify-center">
-          {user?.avatar ? (
-            <img
-              src={`https://sleepercdn.com/avatars/thumbs/${user.avatar}`}
-              alt={user.username ?? ""}
-              className="w-9 h-9 rounded-full object-cover"
-              style={{ boxShadow: "0 0 0 2px rgba(212,175,55,0.30)" }}
-            />
-          ) : (
-            <>
-              <img src={logoDark} alt="StatChasers" className="hidden dark:block w-8 h-8 object-contain" />
-              <img src={logoLight} alt="StatChasers" className="block dark:hidden w-8 h-8 object-contain" />
-            </>
-          )}
+          <div className="flex flex-col items-center gap-1.5 px-2 py-2">
+            {user?.avatar ? (
+              <img
+                src={`https://sleepercdn.com/avatars/thumbs/${user.avatar}`}
+                alt={user.username ?? ""}
+                className="rounded-full object-cover flex-shrink-0"
+                style={{ width: 18, height: 18, boxShadow: "0 0 0 1.5px rgba(212,175,55,0.45)" }}
+              />
+            ) : (
+              <>
+                <img src={logoDark} alt="StatChasers" className="hidden dark:block object-contain flex-shrink-0" style={{ width: 18, height: 18 }} />
+                <img src={logoLight} alt="StatChasers" className="block dark:hidden object-contain flex-shrink-0" style={{ width: 18, height: 18 }} />
+              </>
+            )}
+            <span
+              className="whitespace-nowrap font-semibold tracking-wide leading-none"
+              style={{ fontSize: 10, color: "rgba(203,213,225,0.55)" }}
+            >
+              {user?.username ? user.username.slice(0, 6) : "You"}
+            </span>
+          </div>
         </div>
 
         {rightTabs.map(renderTab)}
