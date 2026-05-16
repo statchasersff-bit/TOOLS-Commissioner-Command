@@ -21,7 +21,7 @@ import { cn } from "@/lib/utils";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { TradeBlockCandidates } from "@/components/trade/TradeBlockCandidates";
 import { BulkTrade } from "@/components/trade/BulkTrade";
-import { ArrowRightLeft, TrendingUp, TrendingDown, Target, X, Plus, Search, Scale, RotateCcw, Database, Play, Pause, Loader2, ChevronLeft, ChevronRight, ChevronDown, Download, Tag, Clock, ArrowRight, Send, CheckCircle2, DollarSign, Undo2, Layers } from "lucide-react";
+import { ArrowRightLeft, TrendingUp, TrendingDown, Target, X, Plus, Search, Scale, RotateCcw, Database, Play, Pause, Loader2, ChevronLeft, ChevronRight, ChevronDown, Download, Tag, Clock, ArrowRight, Send, CheckCircle2, DollarSign, Undo2, Layers, Globe } from "lucide-react";
 
 const SLEEPER_JWT_KEY = "dc-sleeper-draft-jwt";
 const SLEEPER_API_BASE = "https://api.sleeper.app/v1";
@@ -1068,6 +1068,7 @@ function CrossLeagueTradeIntel({ league }: { league: League }) {
 
 export function TradeBlockScanner({ league }: { league: League }) {
   const { getPlayerValue } = useValueModel();
+  const [intelMode, setIntelMode] = useState<"block" | "intel">("block");
 
   const [sleeperJwt, setSleeperJwt] = useState<string | null>(() => getSleeperToken() ?? localStorage.getItem(SLEEPER_JWT_KEY));
   useEffect(() => {
@@ -1133,19 +1134,80 @@ export function TradeBlockScanner({ league }: { league: League }) {
       .sort((a, b) => (b.addedAt ?? 0) - (a.addedAt ?? 0));
   }, [lpsData, playerById, teamByRosterId, getPlayerValue]);
 
+  const INTEL_TABS = [
+    { id: "block" as const, label: "Trade Block", Icon: Target },
+    { id: "intel" as const, label: "Cross-League Intel", Icon: Globe },
+  ];
+
   return (
     <div className="space-y-8">
-      <SectionHeader title="Trade Intel" subtitle="Identify likely sellers and buyers in your league" />
 
-      <TradeBlockCandidates
-        candidates={actualTradeBlock}
-        mode="actualTradeBlock"
-        title="On Trade Block"
-        isLoading={lpsLoading}
-        noJwt={!sleeperJwt}
-      />
+      {/* ── Header + desktop toggle ─────────────────────────────────────── */}
+      <div className="flex items-start justify-between gap-4">
+        <SectionHeader title="Trade Intel" subtitle="Identify likely sellers and buyers in your league" />
+        <div
+          className="hidden md:grid flex-shrink-0"
+          style={{ gridTemplateColumns: "1fr 1fr", height: 48, borderRadius: 16, padding: 4, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", gap: 4, width: 300 }}
+        >
+          {INTEL_TABS.map(({ id, label, Icon }) => {
+            const isActive = intelMode === id;
+            return (
+              <button
+                key={id}
+                onClick={() => setIntelMode(id)}
+                data-testid={`tab-intel-${id}-desktop`}
+                className="relative flex items-center justify-center gap-2 font-semibold transition-all duration-200"
+                style={{ borderRadius: 12, fontSize: 12, letterSpacing: "0.01em", background: isActive ? "linear-gradient(135deg, rgba(11,58,122,0.85) 0%, rgba(11,58,122,0.65) 100%)" : "transparent", color: isActive ? "#fff" : "rgba(203,213,225,0.45)", border: isActive ? "1px solid rgba(212,175,55,0.30)" : "1px solid transparent", boxShadow: isActive ? "0 2px 12px rgba(11,58,122,0.40), inset 0 1px 0 rgba(255,255,255,0.06)" : "none" }}
+              >
+                <Icon style={{ width: 14, height: 14, flexShrink: 0 }} />
+                {label}
+                {isActive && <span className="absolute bottom-[3px] left-1/2 -translate-x-1/2 rounded-full" style={{ width: 28, height: 2, background: "#d4af37", opacity: 0.85 }} />}
+              </button>
+            );
+          })}
+        </div>
+      </div>
 
-      <CrossLeagueTradeIntel league={league} />
+      {/* ── Mobile toggle ───────────────────────────────────────────────── */}
+      <div className="md:hidden flex justify-center sm:justify-start !mt-0">
+        <div
+          className="grid w-full sm:w-auto"
+          style={{ gridTemplateColumns: "1fr 1fr", maxWidth: 420, height: 48, borderRadius: 16, padding: 4, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", gap: 4 }}
+        >
+          {INTEL_TABS.map(({ id, label, Icon }) => {
+            const isActive = intelMode === id;
+            return (
+              <button
+                key={id}
+                onClick={() => setIntelMode(id)}
+                data-testid={`tab-intel-${id}`}
+                className="relative flex items-center justify-center gap-2 font-semibold transition-all duration-200"
+                style={{ borderRadius: 12, fontSize: 12, letterSpacing: "0.01em", background: isActive ? "linear-gradient(135deg, rgba(11,58,122,0.85) 0%, rgba(11,58,122,0.65) 100%)" : "transparent", color: isActive ? "#fff" : "rgba(203,213,225,0.45)", border: isActive ? "1px solid rgba(212,175,55,0.30)" : "1px solid transparent", boxShadow: isActive ? "0 2px 12px rgba(11,58,122,0.40), inset 0 1px 0 rgba(255,255,255,0.06)" : "none" }}
+              >
+                <Icon style={{ width: 14, height: 14, flexShrink: 0 }} />
+                {label}
+                {isActive && <span className="absolute bottom-[3px] left-1/2 -translate-x-1/2 rounded-full" style={{ width: 28, height: 2, background: "#d4af37", opacity: 0.85 }} />}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ── Pages ───────────────────────────────────────────────────────── */}
+      {intelMode === "block" && (
+        <TradeBlockCandidates
+          candidates={actualTradeBlock}
+          mode="actualTradeBlock"
+          title="On Trade Block"
+          isLoading={lpsLoading}
+          noJwt={!sleeperJwt}
+        />
+      )}
+
+      {intelMode === "intel" && (
+        <CrossLeagueTradeIntel league={league} />
+      )}
+
     </div>
   );
 }
