@@ -534,23 +534,6 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
                           {scUser?.email && <p className="text-[11px] text-muted-foreground truncate">{scUser.email}</p>}
                         </div>
                       </div>
-                      {/* Discord */}
-                      <a
-                        href="https://discord.gg/34XkMXF6t3"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        data-testid="button-discord"
-                        onClick={() => setUserDropdownOpen(false)}
-                        className="flex items-center gap-2.5 px-3 py-2.5 text-xs font-medium text-[#5865F2] hover:bg-[#5865F2]/8 transition-colors"
-                      >
-                        <SiDiscord className="w-3.5 h-3.5 flex-shrink-0" />
-                        Join Discord
-                      </a>
-                      {/* Theme */}
-                      <div className="flex items-center justify-between px-3 py-2.5 border-t border-border/30">
-                        <span className="text-xs text-muted-foreground">Theme</span>
-                        <ThemeToggle />
-                      </div>
                       {/* Sign out */}
                       <button
                         onClick={() => { setUserDropdownOpen(false); scLogout(); }}
