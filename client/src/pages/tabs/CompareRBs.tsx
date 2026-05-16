@@ -73,17 +73,18 @@ function getTierColor(tier: string): string {
 const POS_DATA_URLS: Record<Position, string> = {
   RB: "https://cdn.jsdelivr.net/gh/statchasersff-bit/statchasers-data@master/statchasers-data/output/rb_player_overview.json",
   WR: "https://cdn.jsdelivr.net/gh/statchasersff-bit/statchasers-data@master/statchasers-data/output/wr_player_overview_2025.json",
-  TE: "https://cdn.jsdelivr.net/gh/statchasersff-bit/statchasers-data@master/statchasers-data/output/te_player_overview.json",
+  TE: "https://cdn.jsdelivr.net/gh/statchasersff-bit/statchasers-data@master/statchasers-data/output/te_player_overview_2025.json",
   QB: "https://cdn.jsdelivr.net/gh/statchasersff-bit/statchasers-data@master/statchasers-data/output/qb_player_overview.json",
 };
 
 // Secondary data URLs (fetched and merged into primary rows by normalized player name)
 const POS_SECONDARY_URL: Partial<Record<Position, string>> = {
   WR: "https://raw.githubusercontent.com/statchasersff-bit/statchasers-data/refs/heads/master/statchasers-data/output/wr_advanced_stats_2025.json",
+  TE: "https://cdn.jsdelivr.net/gh/statchasersff-bit/statchasers-data@master/statchasers-data/output/te_advanced_stats_2025.json",
 };
 
 const POS_TIER_FIELD: Record<Position, string> = {
-  RB: "rb_tier", WR: "exp_tier", TE: "te_tier", QB: "qb_tier",
+  RB: "rb_tier", WR: "exp_tier", TE: "exp_tier", QB: "qb_tier",
 };
 
 const POS_LABELS: Record<Position, string> = {
@@ -136,11 +137,11 @@ const POS_STATS: Record<Position, StatDef[]> = {
     { label: "RZ Tgt/Gm",   compute: p => getField(p, "rz_tgt_per_game"),   display: v => fmtNum(v) },
   ],
   TE: [
-    { label: "Targets/G",   compute: p => getField(p, "targets_per_gm"),    display: v => fmtNum(v) },
-    { label: "Rec/G",       compute: p => getField(p, "receptions_per_gm") ?? getField(p, "rec_per_gm"), display: v => fmtNum(v) },
-    { label: "Yards/G",     compute: p => getField(p, "receiving_yards_per_gm") ?? getField(p, "yards_per_gm"), display: v => fmtNum(v) },
-    { label: "TD/G",        compute: p => getField(p, "td_per_gm"),          display: v => fmtNum(v, 2) },
-    { label: "RZ Tgts/G",   compute: p => getField(p, "rz_targets_per_gm") ?? getField(p, "rz_targets"), display: v => fmtNum(v) },
+    { label: "Tgt/Gm",       compute: p => getField(p, "targets_per_gm"),    display: v => fmtNum(v) },
+    { label: "Rec/Gm",       compute: p => getField(p, "receptions_per_gm"), display: v => fmtNum(v) },
+    { label: "Air Yds/Gm",   compute: p => getField(p, "air_yards_per_gm"),  display: v => fmtNum(v) },
+    { label: "Yds/Tgt",      compute: p => getField(p, "yards_per_target"),  display: v => fmtNum(v) },
+    { label: "RZ Tgt/Gm",    compute: p => getField(p, "rz_tgt_per_game"),   display: v => fmtNum(v) },
   ],
   QB: [
     { label: "Pass Att/G",  compute: p => getField(p, "pass_att_per_gm"),   display: v => fmtNum(v) },
@@ -166,10 +167,11 @@ const POS_EDGES: Record<Position, EdgeDef[]> = {
     WR_DYNASTY_EDGE, WR_WINNOW_EDGE,
   ],
   TE: [
-    { id: "most-targeted", label: "Most Targeted",       Icon: Star,   color: "text-[#d4af37]",  bgColor: "bg-[#d4af37]/10 border-[#d4af37]/30",  compute: p => getField(p, "targets_per_gm") ?? 0 },
-    { id: "best-eff",      label: "Best Efficiency",     Icon: Zap,    color: "text-blue-400",   bgColor: "bg-blue-500/10 border-blue-500/30",     compute: p => (getField(p, "receiving_yards_per_gm") ?? getField(p, "yards_per_gm")) ?? 0 },
-    { id: "best-td",       label: "Best TD Threat",      Icon: Target, color: "text-red-400",    bgColor: "bg-red-500/10 border-red-500/30",       compute: p => getField(p, "td_per_gm") ?? 0 },
-    DYNASTY_EDGE, WINNOW_EDGE,
+    { id: "volume",      label: "Volume Edge",        Icon: Star,        color: "text-[#d4af37]",   bgColor: "bg-[#d4af37]/10 border-[#d4af37]/30",    compute: p => (getField(p, "targets_per_gm") ?? 0) + (getField(p, "receptions_per_gm") ?? 0) },
+    { id: "downfield",   label: "Downfield Edge",     Icon: ArrowUpRight,color: "text-blue-400",    bgColor: "bg-blue-500/10 border-blue-500/30",      compute: p => getField(p, "air_yards_per_gm") ?? 0 },
+    { id: "efficiency",  label: "Efficiency Edge",    Icon: Zap,         color: "text-purple-400",  bgColor: "bg-purple-500/10 border-purple-500/30",  compute: p => getField(p, "yards_per_target") ?? 0 },
+    { id: "td-opp",      label: "TD Opportunity",     Icon: Target,      color: "text-red-400",     bgColor: "bg-red-500/10 border-red-500/30",        compute: p => getField(p, "rz_tgt_per_game") ?? 0 },
+    WR_DYNASTY_EDGE, WR_WINNOW_EDGE,
   ],
   QB: [
     { id: "best-passer",   label: "Best Passer",         Icon: Star,   color: "text-[#d4af37]",  bgColor: "bg-[#d4af37]/10 border-[#d4af37]/30",  compute: p => getField(p, "pass_yards_per_gm") ?? 0 },
