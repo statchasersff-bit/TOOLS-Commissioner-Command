@@ -1118,10 +1118,10 @@ export function LineupCommand() {
         <>
           {/* ── Hero KPI bar ───────────────────────────────────────── */}
           <div
-            className="rounded-2xl border border-[#d4af37]/15 p-4 md:p-5"
+            className="rounded-2xl border border-white/8 p-4 md:p-5"
             style={{ background: "linear-gradient(135deg, rgba(4,13,26,0.95) 0%, rgba(11,58,122,0.08) 100%)" }}
           >
-            <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-[#d4af37]/60 mb-3 md:mb-4">
+            <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-white/30 mb-3 md:mb-4">
               Operations Overview
             </p>
             <div className="grid grid-cols-3 md:grid-cols-5 gap-2 md:gap-3">
@@ -1236,10 +1236,10 @@ export function LineupCommand() {
         <>
           {/* ── Matchup KPI bar ────────────────────────────────────── */}
           <div
-            className="rounded-2xl border border-[#d4af37]/15 p-4 md:p-5"
+            className="rounded-2xl border border-white/8 p-4 md:p-5"
             style={{ background: "linear-gradient(135deg, rgba(4,13,26,0.95) 0%, rgba(11,58,122,0.08) 100%)" }}
           >
-            <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-[#d4af37]/60 mb-3 md:mb-4">
+            <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-white/30 mb-3 md:mb-4">
               Matchup Overview
             </p>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
