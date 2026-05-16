@@ -526,7 +526,7 @@ export default function WaiverCommand() {
               <span>Fetching leagues…</span>
             </div>
           )}
-          <div className="flex items-center gap-0.5 bg-muted/50 dark:bg-white/[0.04] rounded-lg p-0.5 border border-border/40 dark:border-white/[0.06]">
+          <div className="flex items-center gap-1 p-1 rounded-xl bg-white/[0.03] border border-white/6">
             {([
               { id: "overview" as const, icon: LayoutList, label: "Overview" },
               { id: "league"   as const, icon: BarChart3,  label: "League View" },
@@ -543,14 +543,17 @@ export default function WaiverCommand() {
                 }}
                 data-testid={`view-toggle-${id}`}
                 className={cn(
-                  "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all",
+                  "relative flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all duration-200",
                   activeView === id
-                    ? "bg-background shadow text-foreground"
-                    : "text-muted-foreground hover:text-foreground"
+                    ? "bg-[#0b3a7a]/60 text-white border border-[#d4af37]/25"
+                    : "text-white/35 hover:text-white/60"
                 )}
               >
                 <Icon className="w-3.5 h-3.5" />
                 <span>{label}</span>
+                {activeView === id && (
+                  <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-6 h-[2px] rounded-full bg-[#d4af37]" />
+                )}
               </button>
             ))}
           </div>

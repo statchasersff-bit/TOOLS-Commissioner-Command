@@ -588,19 +588,23 @@ export function PortfolioSummary() {
       <div className="space-y-6">
         <div className="flex items-center justify-between gap-4 flex-wrap">
           <SectionHeader title="League Finances" subtitle="Track buy-ins, prizes, and ROI across your leagues" />
-          <div className="flex gap-1 p-1 rounded-full bg-muted/40 border border-border/40">
+          <div className="flex gap-1 p-1 rounded-xl bg-white/[0.03] border border-white/6 w-fit">
             {(["overview", "finances"] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setInnerTab(tab)}
                 data-testid={`inner-tab-${tab}`}
-                className={`px-4 py-1.5 rounded-full text-xs font-semibold capitalize transition-all duration-200 ${
+                className={cn(
+                  "relative px-4 py-1.5 rounded-lg text-[11px] font-semibold transition-all duration-200",
                   innerTab === tab
-                    ? "bg-background text-foreground shadow-sm border border-border/60"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
+                    ? "bg-[#0b3a7a]/60 text-white border border-[#d4af37]/25"
+                    : "text-white/35 hover:text-white/60"
+                )}
               >
                 {tab === "overview" ? "Overview" : "Finances"}
+                {innerTab === tab && (
+                  <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-6 h-[2px] rounded-full bg-[#d4af37]" />
+                )}
               </button>
             ))}
           </div>
@@ -616,19 +620,23 @@ export function PortfolioSummary() {
     <div className="space-y-8">
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <SectionHeader title="My Portfolio" subtitle="Overview of your dynasty portfolio across all leagues" />
-        <div className="flex gap-1 p-1 rounded-full bg-muted/40 border border-border/40">
+        <div className="flex gap-1 p-1 rounded-xl bg-white/[0.03] border border-white/6 w-fit">
           {(["overview", "finances"] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setInnerTab(tab)}
               data-testid={`inner-tab-${tab}`}
-              className={`px-4 py-1.5 rounded-full text-xs font-semibold capitalize transition-all duration-200 ${
+              className={cn(
+                "relative px-4 py-1.5 rounded-lg text-[11px] font-semibold transition-all duration-200",
                 innerTab === tab
-                  ? "bg-background text-foreground shadow-sm border border-border/60"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
+                  ? "bg-[#0b3a7a]/60 text-white border border-[#d4af37]/25"
+                  : "text-white/35 hover:text-white/60"
+              )}
             >
               {tab === "overview" ? "Overview" : "Finances"}
+              {innerTab === tab && (
+                <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-6 h-[2px] rounded-full bg-[#d4af37]" />
+              )}
             </button>
           ))}
         </div>
