@@ -258,27 +258,27 @@ export function ShareTeam({ league, userTeam }: Props) {
       {/* Combined controls + tab toggle row */}
       <div className="flex flex-col gap-2">
         {/* Action buttons — centered on mobile */}
-        <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
-          <Button size="sm" variant="outline" onClick={copyLink} data-testid="button-copy-link">
-            <Copy className="w-3.5 h-3.5 mr-1.5" /> Copy Link
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <Button size="sm" variant="outline" onClick={copyLink} data-testid="button-copy-link" className="h-7 px-2 text-[11px] gap-1">
+            <Copy className="w-3 h-3" /> Copy Link
           </Button>
-          <Button size="sm" variant="outline" onClick={copyBlurb} data-testid="button-copy-blurb">
-            <Share2 className="w-3.5 h-3.5 mr-1.5" /> Copy Blurb
+          <Button size="sm" variant="outline" onClick={copyBlurb} data-testid="button-copy-blurb" className="h-7 px-2 text-[11px] gap-1">
+            <Share2 className="w-3 h-3" /> Copy Blurb
           </Button>
           {innerTab === "share" && (
-            <Button size="sm" variant="outline" onClick={() => doExport(true)} disabled={isExporting} data-testid="button-export-anonymous">
-              <EyeOff className="w-3.5 h-3.5 mr-1.5" /> Export Anonymous
+            <Button size="sm" variant="outline" onClick={() => doExport(true)} disabled={isExporting} data-testid="button-export-anonymous" className="h-7 px-2 text-[11px] gap-1">
+              <EyeOff className="w-3 h-3" /> Anon Export
             </Button>
           )}
           {innerTab === "share" && (
-            <Button size="sm" variant="outline" onClick={() => doExport(false)} disabled={isExporting} data-testid="button-export-image">
-              {isExporting ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <Image className="w-3.5 h-3.5 mr-1.5" />}
-              Export Image
+            <Button size="sm" variant="outline" onClick={() => doExport(false)} disabled={isExporting} data-testid="button-export-image" className="h-7 px-2 text-[11px] gap-1">
+              {isExporting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Image className="w-3 h-3" />}
+              Export
             </Button>
           )}
           {innerTab === "field-view" && (
-            <Button size="sm" variant="outline" onClick={() => fieldViewRef.current?.triggerExport()} data-testid="button-export-field-image">
-              <Image className="w-3.5 h-3.5 mr-1.5" /> Export Image
+            <Button size="sm" variant="outline" onClick={() => fieldViewRef.current?.triggerExport()} data-testid="button-export-field-image" className="h-7 px-2 text-[11px] gap-1">
+              <Image className="w-3 h-3" /> Export
             </Button>
           )}
           {innerTab === "share" && (
