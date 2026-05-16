@@ -1,0 +1,97 @@
+Feature sections to include:
+
+Command Center
+My Team
+Trade Center
+League Analyzer
+Lineup Command
+Waiver Command
+Live Draft
+Trade Finder
+Trade Sync
+Trade Calculator
+Trade Database
+Share My Team
+Bulk Trade
+Feedback & Bug Reports
+
+Each section should have:
+
+title
+short description
+“Go to page” button if route/tab exists
+bullet points explaining what it does
+note if Sleeper login is required
+
+Tone:
+
+professional but not corporate
+StatChasers-branded
+concise and helpful
+do not copy OTC wording directly
+
+Design:
+
+Match Dynasty Command dark premium UI.
+Use same main header styling as Trade Center.
+Use clean cards/accordion sections.
+Add quick-nav pills/tabs at top for feature categories.
+Mobile responsive.
+
+Content draft:
+
+Command Center:
+Your hub for managing teams, lineups, waivers, and priority actions across leagues.
+
+My Team:
+View your roster, team value, positional strengths, picks, and dynasty outlook.
+
+Trade Center:
+Analyze trades, find opportunities, sync active offers, message managers, and send offers directly through Sleeper.
+
+Trade Finder:
+Generates trade ideas based on team direction, roster needs, dynasty value, redraft value, age curves, and pick capital.
+
+Trade Sync:
+View incoming, outgoing, completed, rejected, and cancelled Sleeper trade offers. Accept, reject, withdraw, counter, edit, resend, and message trade partners. Requires Sleeper login.
+
+Trade Calculator:
+Build trades manually, compare both sides, include picks/FAAB, and send offers through Sleeper.
+
+Trade Database:
+Search and compare real trade examples and player values.
+
+Lineup Command:
+Review lineup issues, optimize starters, and submit lineup changes to Sleeper. Requires Sleeper login for saving changes.
+
+Waiver Command:
+Find available players, compare waiver targets, and submit claims through Sleeper. Requires Sleeper login.
+
+Live Draft:
+View draft boards, pick history, draft queue, recent picks, and live draft state. Sleeper login required for queue updates or making picks.
+
+Share My Team:
+Create a clean shareable snapshot of your roster, picks, team value, and dynasty profile.
+
+Bulk Trade:
+Build similar offers across multiple leagues and send them safely through a delayed queue. Requires Sleeper login.
+
+Feedback & Bug Reports:
+Send bug reports, feature requests, and UI feedback directly to StatChasers.
+
+Sleeper Login / Privacy section:
+
+Sleeper credentials are sent directly to Sleeper.
+Dynasty Command uses Sleeper auth tokens to perform actions only when the user chooses.
+Tokens should stay local/browser-side unless explicitly changed.
+Never log JWTs or private DM contents.
+
+Footer:
+Dynasty Command is built by StatChasers for serious dynasty fantasy football managers.
+
+Implementation:
+
+Reuse existing menu system.
+Reuse existing page header component.
+Do not break existing routes/tabs.
+If full routing is hard, create About as a modal first.

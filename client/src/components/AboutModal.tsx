@@ -1,0 +1,432 @@
+import { useState } from "react";
+import { X, Info, Crosshair, Waves, Users, Share2, Trophy, ArrowLeftRight, Search, Inbox, Calculator, Database, Zap, MessageSquare, Lock, ChevronRight, Package } from "lucide-react";
+import { cn } from "@/lib/utils";
+import logoDark from "@assets/statchasers_logo_transparent_dark_1772764844282.png";
+import logoLight from "@assets/statchasers_logo_transparent_light_1772764844283.png";
+
+interface FeatureDef {
+  id: string;
+  category: string;
+  title: string;
+  icon: React.ElementType;
+  description: string;
+  bullets: string[];
+  requiresSleeper?: boolean;
+  sleeperNote?: string;
+  tab?: string;
+  sub?: string;
+  comingSoon?: boolean;
+}
+
+const FEATURES: FeatureDef[] = [
+  {
+    id: "command-center",
+    category: "Portfolio",
+    title: "Command Center",
+    icon: Package,
+    description: "Your hub for managing teams, lineups, waivers, and priority actions across all your dynasty leagues in one place.",
+    bullets: [
+      "Cross-league portfolio summary with exposure metrics",
+      "Roster health alerts and priority action items",
+      "Quick-access to all tools from a single dashboard",
+    ],
+    tab: "portfolio",
+    sub: "portfolio-summary",
+  },
+  {
+    id: "lineup-command",
+    category: "Portfolio",
+    title: "Lineup Command",
+    icon: Crosshair,
+    description: "Review lineup issues across every league, optimize your starters, and submit lineup changes without leaving Dynasty Command.",
+    bullets: [
+      "Cross-league lineup war room in a single table",
+      "Bench vs. starter value comparisons",
+      "Projected score and injury/status alerts",
+      "Submit lineup changes directly through Sleeper",
+    ],
+    requiresSleeper: true,
+    sleeperNote: "Saving lineup changes requires Sleeper login.",
+    tab: "portfolio",
+    sub: "lineup-command",
+  },
+  {
+    id: "waiver-command",
+    category: "Portfolio",
+    title: "Waiver Command",
+    icon: Waves,
+    description: "Find the best available players across all your leagues, compare waiver targets, and submit claims through Sleeper.",
+    bullets: [
+      "Cross-league waiver wire and FAAB dashboard",
+      "Available player rankings by dynasty and redraft value",
+      "One-click waiver claim submission via Sleeper",
+    ],
+    requiresSleeper: true,
+    sleeperNote: "Submitting waiver claims requires Sleeper login.",
+    tab: "portfolio",
+    sub: "waiver-command",
+  },
+  {
+    id: "my-team",
+    category: "My Team",
+    title: "My Team",
+    icon: Users,
+    description: "A full overview of your roster — team value, positional strengths, picks, age curve, and dynasty outlook.",
+    bullets: [
+      "Roster value breakdown by position and tier",
+      "Pick capital valuation and draft asset overview",
+      "Age curve analysis and dynasty window projection",
+      "Team tier classification (Juggernaut, Rebuilder, etc.)",
+    ],
+    tab: "dashboard",
+    sub: "my-team",
+  },
+  {
+    id: "share-team",
+    category: "My Team",
+    title: "Share My Team",
+    icon: Share2,
+    description: "Generate a clean, shareable snapshot of your roster, picks, team value, and dynasty profile.",
+    bullets: [
+      "Export a visual team card with roster and value summary",
+      "Share your dynasty profile with commissioners or trade partners",
+      "Includes team tier, record, and key metrics",
+    ],
+    tab: "dashboard",
+    sub: "share-team",
+  },
+  {
+    id: "league-analyzer",
+    category: "League",
+    title: "League Analyzer",
+    icon: Trophy,
+    description: "Understand where every team stands in your league — power rankings, roster tiers, and league-wide intelligence.",
+    bullets: [
+      "Power rankings based on dynasty and redraft value",
+      "Team tier classification for every roster in the league",
+      "Head-to-head roster comparison tool",
+      "Recent transactions: adds, drops, and trades",
+    ],
+    tab: "league-analyzer",
+    sub: "power-rankings",
+  },
+  {
+    id: "trade-center",
+    category: "Trade",
+    title: "Trade Center",
+    icon: ArrowLeftRight,
+    description: "The complete trade toolkit — analyze deals, find opportunities, sync active offers, and send proposals through Sleeper.",
+    bullets: [
+      "Trade calculator with dynasty and redraft value models",
+      "Positional trade finder based on roster needs",
+      "Live trade offer inbox synced with Sleeper",
+      "Real trade database for market comparison",
+    ],
+    tab: "trade-center",
+    sub: "trade-calculator",
+  },
+  {
+    id: "trade-finder",
+    category: "Trade",
+    title: "Trade Finder",
+    icon: Search,
+    description: "Generates trade ideas based on your team direction, roster needs, dynasty value, redraft value, age curve, and pick capital.",
+    bullets: [
+      "Filter trade targets by position, value tier, and team need",
+      "Weighted scoring by dynasty vs. redraft value",
+      "Sorts results by most impactful acquisition for your roster",
+    ],
+    tab: "trade-center",
+    sub: "positional-analysis",
+  },
+  {
+    id: "trade-sync",
+    category: "Trade",
+    title: "Trade Sync",
+    icon: Inbox,
+    description: "View all your Sleeper trade offers across every league — incoming, outgoing, completed, rejected, and cancelled.",
+    bullets: [
+      "Accept, reject, or withdraw active trade offers",
+      "Counter, edit, and resend proposals",
+      "Message trade partners directly from the offer view",
+      "Full trade history with outcome tracking",
+    ],
+    requiresSleeper: true,
+    sleeperNote: "Requires Sleeper login to view and act on offers.",
+    tab: "trade-center",
+    sub: "trade-sync",
+  },
+  {
+    id: "trade-calculator",
+    category: "Trade",
+    title: "Trade Calculator",
+    icon: Calculator,
+    description: "Build trades manually, compare both sides by dynasty or redraft value, include picks and FAAB, and send offers through Sleeper.",
+    bullets: [
+      "Add any player, pick, or FAAB amount to either side",
+      "Live value delta with win-now vs. future weighting",
+      "Send the trade directly to a Sleeper league partner",
+    ],
+    tab: "trade-center",
+    sub: "trade-calculator",
+  },
+  {
+    id: "trade-database",
+    category: "Trade",
+    title: "Trade Database",
+    icon: Database,
+    description: "Search and compare real trade examples from active dynasty leagues to understand the going market rate for any player.",
+    bullets: [
+      "Filter by format (SF/1QB), scoring, and league size",
+      "Player name search across thousands of real trades",
+      "Anonymized data — no team names or manager identities stored",
+    ],
+    tab: "trade-center",
+    sub: "trade-database",
+  },
+  {
+    id: "bulk-trade",
+    category: "Trade",
+    title: "Bulk Trade",
+    icon: Package,
+    description: "Build similar trade offers across multiple leagues and send them safely through a delayed queue.",
+    bullets: [
+      "Replicate a trade template across all your leagues at once",
+      "Delayed send queue with review before submission",
+      "Reduces repetitive manual offer entry across leagues",
+    ],
+    requiresSleeper: true,
+    sleeperNote: "Requires Sleeper login to send offers.",
+    comingSoon: true,
+  },
+  {
+    id: "live-draft",
+    category: "Draft",
+    title: "Live Draft",
+    icon: Zap,
+    description: "View draft boards, pick history, draft queues, and recent selections with live draft state tracking.",
+    bullets: [
+      "Live dynasty rankings board synced to your draft",
+      "Draft queue management and pick history",
+      "Recent picks feed with value tracking",
+      "Make picks directly through Sleeper integration",
+    ],
+    requiresSleeper: true,
+    sleeperNote: "Sleeper login required for queue updates or making picks.",
+    tab: "live-draft",
+    sub: "draft-board",
+  },
+  {
+    id: "feedback",
+    category: "Other",
+    title: "Feedback & Bug Reports",
+    icon: MessageSquare,
+    description: "Send bug reports, feature requests, and UI feedback directly to the StatChasers team.",
+    bullets: [
+      "Bug reports, feature requests, and general feedback",
+      "Optional screenshot attachment",
+      "Goes directly to the StatChasers build team",
+    ],
+  },
+];
+
+const CATEGORIES = ["All", "Portfolio", "My Team", "League", "Trade", "Draft", "Other"] as const;
+type Category = typeof CATEGORIES[number];
+
+interface AboutModalProps {
+  open: boolean;
+  onClose: () => void;
+  onNavigate: (tab: string, sub: string) => void;
+  onOpenFeedback: () => void;
+}
+
+export function AboutModal({ open, onClose, onNavigate, onOpenFeedback }: AboutModalProps) {
+  const [activeCategory, setActiveCategory] = useState<Category>("All");
+
+  if (!open) return null;
+
+  const filtered = activeCategory === "All" ? FEATURES : FEATURES.filter(f => f.category === activeCategory);
+
+  function handleGoTo(feature: FeatureDef) {
+    if (feature.id === "feedback") {
+      onClose();
+      onOpenFeedback();
+      return;
+    }
+    if (feature.tab && feature.sub) {
+      onNavigate(feature.tab, feature.sub);
+      onClose();
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-[80] flex flex-col overflow-hidden"
+      style={{ background: "rgba(4,8,20,0.97)", backdropFilter: "blur(12px)" }}
+    >
+      {/* ── Sticky header ── */}
+      <div
+        className="flex-shrink-0 px-4 md:px-8 py-4 flex items-center justify-between"
+        style={{ borderBottom: "1px solid rgba(255,255,255,0.07)", background: "rgba(5,10,24,0.90)" }}
+      >
+        <div className="flex items-center gap-3">
+          <img src={logoDark} alt="StatChasers" className="w-7 h-7 hidden dark:block" />
+          <img src={logoLight} alt="StatChasers" className="w-7 h-7 block dark:hidden" />
+          <div>
+            <h2 className="text-[15px] md:text-base font-black text-white leading-tight tracking-tight">About Dynasty Command</h2>
+            <p className="text-[11px] text-white/40 leading-tight mt-0.5 hidden sm:block">
+              Learn how each feature works, what requires Sleeper login, and how Dynasty Command helps manage your dynasty leagues.
+            </p>
+          </div>
+        </div>
+        <button
+          onClick={onClose}
+          data-testid="button-about-close"
+          className="flex items-center justify-center w-8 h-8 rounded-full transition-colors hover:bg-white/10 text-white/40 hover:text-white/80 flex-shrink-0"
+        >
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+
+      {/* ── Category pills ── */}
+      <div
+        className="flex-shrink-0 px-4 md:px-8 py-3 flex gap-2 overflow-x-auto scrollbar-none"
+        style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}
+      >
+        {CATEGORIES.map(cat => (
+          <button
+            key={cat}
+            onClick={() => setActiveCategory(cat)}
+            data-testid={`button-about-cat-${cat.toLowerCase()}`}
+            className={cn(
+              "flex-shrink-0 px-3.5 py-1.5 rounded-full text-[12px] font-semibold transition-all duration-150 border",
+              activeCategory === cat
+                ? "text-[#0b3a7a] border-[#d4af37]"
+                : "text-white/40 border-white/10 hover:border-white/25 hover:text-white/60"
+            )}
+            style={activeCategory === cat ? { background: "#d4af37" } : {}}
+          >
+            {cat}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Scrollable content ── */}
+      <div className="flex-1 overflow-y-auto px-4 md:px-8 py-6">
+        <div className="max-w-4xl mx-auto space-y-4">
+
+          {filtered.map(feature => {
+            const Icon = feature.icon;
+            const canNavigate = (feature.tab && feature.sub) || feature.id === "feedback";
+            return (
+              <div
+                key={feature.id}
+                data-testid={`card-about-${feature.id}`}
+                className="rounded-2xl p-5"
+                style={{
+                  background: "rgba(255,255,255,0.03)",
+                  border: "1px solid rgba(255,255,255,0.07)",
+                }}
+              >
+                {/* Card header */}
+                <div className="flex items-start gap-3 mb-3">
+                  <div
+                    className="flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center"
+                    style={{ background: "rgba(212,175,55,0.10)", border: "1px solid rgba(212,175,55,0.18)" }}
+                  >
+                    <Icon className="w-4 h-4" style={{ color: "#d4af37" }} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="text-[14px] font-bold text-white leading-tight">{feature.title}</h3>
+                      {feature.comingSoon && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold"
+                          style={{ background: "rgba(212,175,55,0.12)", color: "#d4af37", border: "1px solid rgba(212,175,55,0.25)" }}>
+                          Coming Soon
+                        </span>
+                      )}
+                      {feature.requiresSleeper && (
+                        <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold"
+                          style={{ background: "rgba(99,102,241,0.12)", color: "#a5b4fc", border: "1px solid rgba(99,102,241,0.25)" }}>
+                          <Lock className="w-2.5 h-2.5" />
+                          Sleeper Required
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[12px] text-white/50 leading-snug mt-1">{feature.description}</p>
+                  </div>
+                </div>
+
+                {/* Bullets */}
+                <ul className="space-y-1.5 mb-3 pl-1">
+                  {feature.bullets.map((b, i) => (
+                    <li key={i} className="flex items-start gap-2">
+                      <span className="flex-shrink-0 w-1 h-1 rounded-full mt-[7px]" style={{ background: "#d4af37" }} />
+                      <span className="text-[12px] text-white/55 leading-snug">{b}</span>
+                    </li>
+                  ))}
+                </ul>
+
+                {/* Sleeper note */}
+                {feature.sleeperNote && (
+                  <div className="flex items-start gap-2 mb-3 px-3 py-2 rounded-lg"
+                    style={{ background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.15)" }}>
+                    <Lock className="w-3 h-3 text-indigo-400 flex-shrink-0 mt-0.5" />
+                    <p className="text-[11px] text-indigo-300/80 leading-snug">{feature.sleeperNote}</p>
+                  </div>
+                )}
+
+                {/* Go to page button */}
+                {canNavigate && !feature.comingSoon && (
+                  <button
+                    onClick={() => handleGoTo(feature)}
+                    data-testid={`button-about-goto-${feature.id}`}
+                    className="flex items-center gap-1.5 text-[12px] font-semibold transition-colors"
+                    style={{ color: "#d4af37" }}
+                  >
+                    {feature.id === "feedback" ? "Open Feedback" : "Go to page"}
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            );
+          })}
+
+          {/* ── Sleeper / Privacy section ── */}
+          {(activeCategory === "All" || activeCategory === "Other") && (
+            <div
+              className="rounded-2xl p-5"
+              style={{ background: "rgba(99,102,241,0.05)", border: "1px solid rgba(99,102,241,0.15)" }}
+            >
+              <div className="flex items-center gap-2.5 mb-3">
+                <Lock className="w-4 h-4 text-indigo-400 flex-shrink-0" />
+                <h3 className="text-[14px] font-bold text-white">Sleeper Login &amp; Privacy</h3>
+              </div>
+              <ul className="space-y-2">
+                {[
+                  "Your Sleeper credentials go directly to Sleeper — never through StatChasers servers.",
+                  "Dynasty Command uses Sleeper auth tokens only when you choose to perform an action.",
+                  "Tokens stay in your browser unless you explicitly log out or clear your session.",
+                  "StatChasers never logs JWTs, private DMs, or personally identifiable Sleeper data.",
+                  "Trade Database stores only anonymized player and pick asset data — no team names, owner names, or league names.",
+                ].map((line, i) => (
+                  <li key={i} className="flex items-start gap-2">
+                    <span className="flex-shrink-0 w-1 h-1 rounded-full mt-[7px]" style={{ background: "#a5b4fc" }} />
+                    <span className="text-[12px] text-indigo-200/60 leading-snug">{line}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* ── Footer ── */}
+          {(activeCategory === "All" || activeCategory === "Other") && (
+            <p className="text-center text-[12px] text-white/25 py-4">
+              Dynasty Command is built by <span className="text-[#d4af37]/60 font-semibold">StatChasers</span> for serious dynasty fantasy football managers.
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

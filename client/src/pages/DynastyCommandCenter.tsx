@@ -15,7 +15,7 @@ import { NAV_CONFIG } from "@/data/mockData";
 import type { League, Team } from "@/types";
 import { fetchSleeperLeagueFull } from "@/lib/sleeperApi";
 import { DataDiagnostics } from "@/components/DataDiagnostics";
-import { LayoutDashboard, Loader2, Lock, Check, User, RefreshCw, AlertCircle, Wifi, WifiOff, ChevronDown, LogOut, Trophy, ArrowRightLeft, TrendingUp, Zap, X, MessageSquare } from "lucide-react";
+import { LayoutDashboard, Loader2, Lock, Check, User, RefreshCw, AlertCircle, Wifi, WifiOff, ChevronDown, LogOut, Trophy, ArrowRightLeft, TrendingUp, Zap, X, MessageSquare, HelpCircle } from "lucide-react";
 import { SiDiscord } from "react-icons/si";
 import logoDark from "@assets/statchasers_logo_transparent_dark_1772764844282.png";
 import logoLight from "@assets/statchasers_logo_transparent_light_1772764844283.png";
@@ -39,6 +39,7 @@ import TradeSync from "./tabs/TradeSync";
 import { CompareRBs } from "./tabs/CompareRBs";
 import { ShareDynastyPopup } from "@/components/ShareDynastyPopup";
 import { FeedbackModal } from "@/components/FeedbackModal";
+import { AboutModal } from "@/components/AboutModal";
 
 const STORAGE_KEY = "sc-dynasty-state";
 
@@ -75,6 +76,7 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
   const [logoMenuOpen, setLogoMenuOpen] = useState(false);
   const logoMenuRef = useRef<HTMLDivElement>(null);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
 
   const { isRecalculating, isLoading, getPlayerValue, getPickValue, calculateAllTeamMetrics, optimizeLineup } = useValueModel();
   const sleeper = useSleeper();
@@ -392,8 +394,16 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
                     </div>
                   </div>
 
-                  {/* Feedback item */}
+                  {/* About + Feedback items */}
                   <div className="px-1.5 pb-1.5">
+                    <button
+                      onClick={() => { setLogoMenuOpen(false); setAboutOpen(true); }}
+                      data-testid="button-logo-about"
+                      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-all duration-150 hover:bg-white/5"
+                    >
+                      <HelpCircle style={{ width: 14, height: 14, flexShrink: 0, color: "rgba(212,175,55,0.65)" }} />
+                      <span style={{ fontSize: 13, fontWeight: 500, color: "rgba(203,213,225,0.55)" }}>About</span>
+                    </button>
                     <button
                       onClick={() => { setLogoMenuOpen(false); setFeedbackOpen(true); }}
                       data-testid="button-logo-feedback"
@@ -623,6 +633,12 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
         currentSubTab={activeSubTab}
         leagueId={selectedLeagueId}
         currentRoute={typeof window !== "undefined" ? window.location.pathname + window.location.search : ""}
+      />
+      <AboutModal
+        open={aboutOpen}
+        onClose={() => setAboutOpen(false)}
+        onNavigate={(tab, sub) => { handleMainTabChange(tab); handleSubTabChange(sub); }}
+        onOpenFeedback={() => setFeedbackOpen(true)}
       />
       <MobileBottomNav
         tabs={NAV_CONFIG}
