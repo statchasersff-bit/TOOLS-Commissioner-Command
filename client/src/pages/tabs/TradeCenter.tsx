@@ -2391,7 +2391,7 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
                       )}
 
                       {/* Send button */}
-                      <div className="flex justify-end pt-1">
+                      <div className="flex justify-center sm:justify-end pt-1">
                         <Button
                           onClick={handleProposeTrade}
                           disabled={!canSubmit}
