@@ -80,6 +80,7 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
   const userDropdownRef = useRef<HTMLDivElement>(null);
   const [logoMenuOpen, setLogoMenuOpen] = useState(false);
   const logoMenuRef = useRef<HTMLDivElement>(null);
+  const [forceOpenShare, setForceOpenShare] = useState(false);
 
   const { isRecalculating, isLoading, getPlayerValue, getPickValue, calculateAllTeamMetrics, optimizeLineup } = useValueModel();
   const sleeper = useSleeper();
@@ -303,6 +304,7 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
           onOpenCookies={() => handleMainTabChange("cookies")}
           onOpenTerms={() => handleMainTabChange("terms")}
           onOpenPrivacy={() => handleMainTabChange("privacy")}
+          onShareWithLeagues={() => setForceOpenShare(true)}
         />
       );
     }
@@ -629,7 +631,11 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
         </div>
       </main>
       <DataDiagnostics />
-      <ShareDynastyPopup blocked={false} />
+      <ShareDynastyPopup
+        blocked={false}
+        forceOpen={forceOpenShare}
+        onForceOpenConsumed={() => setForceOpenShare(false)}
+      />
       <MobileBottomNav
         tabs={NAV_CONFIG}
         activeTab={activeMainTab}

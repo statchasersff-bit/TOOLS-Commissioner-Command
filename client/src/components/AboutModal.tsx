@@ -1,4 +1,4 @@
-import { Crosshair, Waves, Users, Share2, Trophy, ArrowLeftRight, Search, Inbox, Calculator, Database, MessageSquare, Lock, ChevronRight, Package } from "lucide-react";
+import { Crosshair, Waves, Users, Share2, Trophy, ArrowLeftRight, Search, Inbox, Calculator, Database, MessageSquare, Lock, ChevronRight, Package, Heart } from "lucide-react";
 
 interface FeatureDef {
   id: string;
@@ -205,9 +205,10 @@ interface AboutPageProps {
   onOpenCookies: () => void;
   onOpenTerms: () => void;
   onOpenPrivacy: () => void;
+  onShareWithLeagues: () => void;
 }
 
-export function AboutPage({ onNavigate, onOpenFeedback, onOpenCookies, onOpenTerms, onOpenPrivacy }: AboutPageProps) {
+export function AboutPage({ onNavigate, onOpenFeedback, onOpenCookies, onOpenTerms, onOpenPrivacy, onShareWithLeagues }: AboutPageProps) {
   function handleGoTo(feature: FeatureDef) {
     if (feature.id === "feedback") {
       onOpenFeedback();
@@ -220,6 +221,47 @@ export function AboutPage({ onNavigate, onOpenFeedback, onOpenCookies, onOpenTer
 
   return (
     <div>
+      {/* Support / Share banner */}
+      <div
+        className="mb-5 rounded-2xl overflow-hidden border"
+        style={{ borderColor: "rgba(212,175,55,0.25)", background: "linear-gradient(135deg, rgba(11,58,122,0.55) 0%, rgba(10,20,40,0.75) 100%)" }}
+        data-testid="card-about-support"
+      >
+        {/* Gold accent bar */}
+        <div className="h-[2px] w-full" style={{ background: "linear-gradient(90deg, #d4af37 0%, rgba(212,175,55,0.15) 100%)" }} />
+
+        <div className="px-5 py-4">
+          <div className="flex items-start gap-3">
+            {/* Icon */}
+            <div
+              className="flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center mt-0.5"
+              style={{ background: "rgba(212,175,55,0.12)", border: "1px solid rgba(212,175,55,0.22)" }}
+            >
+              <Heart className="w-4 h-4" style={{ color: "#d4af37" }} />
+            </div>
+
+            {/* Text + button */}
+            <div className="flex-1 min-w-0">
+              <h3 className="text-[14px] font-bold text-foreground leading-tight mb-1">
+                Help Keep Dynasty Command Free
+              </h3>
+              <p className="text-[12px] text-muted-foreground leading-snug mb-3">
+                If Dynasty Command has helped you, share it with your dynasty leagues. It helps StatChasers grow and keeps the tool free for more managers.
+              </p>
+              <button
+                onClick={onShareWithLeagues}
+                data-testid="button-about-share-leagues"
+                className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-[12px] font-bold transition-opacity hover:opacity-90 active:opacity-75"
+                style={{ background: "linear-gradient(90deg, #d4af37 0%, #b8962e 100%)", color: "#0a1428" }}
+              >
+                <Share2 className="w-3.5 h-3.5" />
+                Share with My Leagues
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Page header */}
       <div className="mb-5">
         <div className="flex items-center gap-2 mb-1">

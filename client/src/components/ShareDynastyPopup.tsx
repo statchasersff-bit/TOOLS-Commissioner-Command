@@ -149,9 +149,9 @@ function approxWait(ts: number): string {
 }
 
 // ── Component ─────────────────────────────────────────────────────────────
-interface Props { blocked?: boolean; }
+interface Props { blocked?: boolean; forceOpen?: boolean; onForceOpenConsumed?: () => void; }
 
-export function ShareDynastyPopup({ blocked = false }: Props) {
+export function ShareDynastyPopup({ blocked = false, forceOpen = false, onForceOpenConsumed }: Props) {
   const { isConnected, leagues } = useSleeper();
 
   const [popupStep, setPopupStep]   = useState<PopupStep>("hidden");
@@ -313,6 +313,15 @@ export function ShareDynastyPopup({ blocked = false }: Props) {
     // If q.paused was already true (user explicitly paused) → stay paused
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // ── External trigger (e.g. "Share with My Leagues" button on About page) ─
+  useEffect(() => {
+    if (!forceOpen) return;
+    setPopupStep("select");
+    setSelected(new Set(eligibleLeagues.map(l => l.leagueId)));
+    onForceOpenConsumed?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [forceOpen]);
 
   // ── 10-minute popup timer ──────────────────────────────────────────────
   useEffect(() => {
