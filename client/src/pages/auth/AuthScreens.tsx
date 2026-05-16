@@ -277,7 +277,7 @@ export function LandingScreen({ onNavigate }: ScreenProps) {
         >
           {/* Brand header */}
           <div className="flex flex-col items-center mb-7">
-            <img src={logoDark} alt="StatChasers" className="h-16 object-contain mb-2" />
+            <img src={logoDark} alt="StatChasers" className="h-20 object-contain mb-2" />
             <div className="flex items-center gap-3 w-full">
               <span className="flex-1 h-px" style={{ background: "linear-gradient(to right, transparent, rgba(212,175,55,0.35))" }} />
               <span className="text-[#d4af37] text-[11px] font-bold tracking-[0.18em] uppercase whitespace-nowrap">Dynasty Command</span>
@@ -286,7 +286,7 @@ export function LandingScreen({ onNavigate }: ScreenProps) {
           </div>
 
           {/* Welcome copy */}
-          <div className="mb-6">
+          <div className="mb-6 text-center">
             <h2 className="text-[22px] font-bold text-white mb-1.5">Welcome back</h2>
             <p className="text-[13px] text-white/50 leading-relaxed">
               Sign in to your StatChasers account to access Dynasty Command.
