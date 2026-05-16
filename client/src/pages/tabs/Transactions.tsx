@@ -663,30 +663,26 @@ function PlayerRow({ player, action, dynVal }: { player: TransactionPlayer; acti
     action === "drop" ? "bg-red-500/15 text-red-600 dark:text-red-400 border border-red-500/30" : "";
 
   return (
-    <div className="flex items-center gap-2 py-1 min-w-0">
-      <PlayerAvatar id={player.playerId} name="" pos={player.pos} team={player.team ?? ""} size="sm" compact />
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1.5 min-w-0">
-          <span className={cn("text-sm font-semibold truncate", action === "drop" && "text-muted-foreground")}>{player.name}</span>
-          {player.pos && (
-            <span className={cn("text-[10px] font-bold shrink-0",
-              player.pos === "QB" ? "text-rose-400" : player.pos === "RB" ? "text-emerald-400" :
-              player.pos === "WR" ? "text-sky-400" : player.pos === "TE" ? "text-yellow-400" : "text-muted-foreground"
-            )}>{player.pos}</span>
-          )}
-          {player.team && <span className="text-[10px] text-muted-foreground shrink-0">{player.team}</span>}
-        </div>
+    <div className={cn("flex items-center justify-between gap-2 py-1 min-w-0", action === "drop" && "opacity-60")}>
+      <PlayerAvatar
+        id={player.playerId}
+        name={player.name}
+        pos={player.pos}
+        team={player.team ?? ""}
+        size="sm"
+      />
+      <div className="flex items-center gap-1.5 shrink-0">
         {dynVal > 0 && (
-          <p className="text-[10px] text-[#d4af37] font-semibold" data-testid={`text-dynasty-val-${player.playerId}`}>
-            {dynVal.toLocaleString()} dynasty
-          </p>
+          <span className="text-[10px] text-[#d4af37] font-semibold" data-testid={`text-dynasty-val-${player.playerId}`}>
+            {dynVal.toLocaleString()}
+          </span>
+        )}
+        {action !== "received" && (
+          <span className={cn("text-[9px] font-bold px-1.5 py-0.5 rounded", actionCls)}>
+            {action === "add" ? "ADD" : "DROP"}
+          </span>
         )}
       </div>
-      {action !== "received" && (
-        <span className={cn("text-[9px] font-bold px-1.5 py-0.5 rounded shrink-0", actionCls)}>
-          {action === "add" ? "ADD" : "DROP"}
-        </span>
-      )}
     </div>
   );
 }
