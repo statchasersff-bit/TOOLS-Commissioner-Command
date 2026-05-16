@@ -73,7 +73,7 @@ async function sendEmail(to: string, subject: string, text: string): Promise<voi
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      from: "StatChasers <noreply@statchasers.com>",
+      from: "StatChasers <noreply@mail.statchasers.com>",
       to: [to],
       subject,
       text,
