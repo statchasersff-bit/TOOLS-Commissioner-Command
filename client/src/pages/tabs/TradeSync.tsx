@@ -923,7 +923,7 @@ export default function TradeSync() {
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <SectionHeader
           title="Trade Sync"
-          subtitle="All pending trade offers across your leagues — managed from one dashboard."
+          subtitle="All pending trade offers across your leagues, managed from one dashboard."
         />
       </div>
 
@@ -991,7 +991,7 @@ export default function TradeSync() {
           </p>
           <p className="text-xs text-muted-foreground">
             {view === "pending"
-              ? "You're all caught up — no open trade offers across your leagues."
+              ? "You're all caught up. No open trade offers across your leagues."
               : "No trades match this filter."}
           </p>
         </Card>

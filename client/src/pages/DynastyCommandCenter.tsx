@@ -40,7 +40,7 @@ import { CompareRBs } from "./tabs/CompareRBs";
 import { ShareDynastyPopup } from "@/components/ShareDynastyPopup";
 import { AboutPage } from "@/components/AboutModal";
 import { FeedbackPage } from "@/components/FeedbackPage";
-import { CookiesModal, TermsModal, PrivacyModal } from "@/components/LegalModals";
+import { TermsPage, PrivacyPage, CookiesPage } from "@/components/LegalModals";
 
 const STORAGE_KEY = "sc-dynasty-state";
 
@@ -76,9 +76,6 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
   const userDropdownRef = useRef<HTMLDivElement>(null);
   const [logoMenuOpen, setLogoMenuOpen] = useState(false);
   const logoMenuRef = useRef<HTMLDivElement>(null);
-  const [cookiesOpen, setCookiesOpen] = useState(false);
-  const [termsOpen, setTermsOpen] = useState(false);
-  const [privacyOpen, setPrivacyOpen] = useState(false);
 
   const { isRecalculating, isLoading, getPlayerValue, getPickValue, calculateAllTeamMetrics, optimizeLineup } = useValueModel();
   const sleeper = useSleeper();
@@ -299,15 +296,27 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
         <AboutPage
           onNavigate={(tab, sub) => { handleMainTabChange(tab); handleSubTabChange(sub); }}
           onOpenFeedback={() => handleMainTabChange("feedback")}
-          onOpenCookies={() => setCookiesOpen(true)}
-          onOpenTerms={() => setTermsOpen(true)}
-          onOpenPrivacy={() => setPrivacyOpen(true)}
+          onOpenCookies={() => handleMainTabChange("cookies")}
+          onOpenTerms={() => handleMainTabChange("terms")}
+          onOpenPrivacy={() => handleMainTabChange("privacy")}
         />
       );
     }
 
     if (activeMainTab === "feedback") {
       return <FeedbackPage />;
+    }
+
+    if (activeMainTab === "terms") {
+      return <TermsPage onNavigate={handleMainTabChange} />;
+    }
+
+    if (activeMainTab === "privacy") {
+      return <PrivacyPage onNavigate={handleMainTabChange} />;
+    }
+
+    if (activeMainTab === "cookies") {
+      return <CookiesPage onNavigate={handleMainTabChange} />;
     }
 
     if (activeMainTab === "live-draft") {
@@ -627,9 +636,6 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
       </main>
       <DataDiagnostics />
       <ShareDynastyPopup blocked={false} />
-      <CookiesModal open={cookiesOpen} onClose={() => setCookiesOpen(false)} />
-      <TermsModal   open={termsOpen}   onClose={() => setTermsOpen(false)} />
-      <PrivacyModal open={privacyOpen} onClose={() => setPrivacyOpen(false)} />
       <MobileBottomNav
         tabs={NAV_CONFIG}
         activeTab={activeMainTab}

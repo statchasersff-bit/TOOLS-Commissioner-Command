@@ -217,7 +217,7 @@ export async function loginWithCredentials(
   });
 
   const token: string = (data.login as any)?.token;
-  if (!token) throw new Error("Login failed — no token returned from Sleeper.");
+  if (!token) throw new Error("Login failed. No token returned from Sleeper.");
 
   const session = sessionFromJWT(token, identifier);
   saveSleeperSession(session);
@@ -233,7 +233,7 @@ export async function loginWithToken(
   fallbackUsername = "unknown"
 ): Promise<SleeperSession> {
   const session = sessionFromJWT(token.trim(), fallbackUsername);
-  if (!session.token) throw new Error("Invalid token — could not parse.");
+  if (!session.token) throw new Error("Invalid token. Could not parse.");
   saveSleeperSession(session);
   return session;
 }

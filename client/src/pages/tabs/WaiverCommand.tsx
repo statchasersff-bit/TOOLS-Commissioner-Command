@@ -979,7 +979,7 @@ function computeBulkScan(rows: WaiverRow[], player: RankedPlayer): BulkScanRow[]
       const isFaab = r.waiverType === 2;
       const warnings: string[] = [];
       if (!available) warnings.push("Already rostered");
-      else if (rosterFull) warnings.push("Roster full — must drop");
+      else if (rosterFull) warnings.push("Roster full (must drop)");
       if (available && isFaab && r.faabRemaining === 0) warnings.push("$0 FAAB remaining");
       const suggestedBid = isFaab
         ? Math.min(Math.round(r.faabRemaining * 0.12), r.faabRemaining)
@@ -1124,7 +1124,7 @@ function BulkClaimsView({
         {isFetching && (
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#d4af37]" />
-            Still loading league data — you can search now, results will update.
+            Still loading league data. You can search now; results will update.
           </div>
         )}
 
@@ -1132,7 +1132,7 @@ function BulkClaimsView({
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
             <Input
-              placeholder="Search player — e.g. Ty Chandler"
+              placeholder="Search player (e.g. Ty Chandler)"
               value={query}
               onChange={e => { setQuery(e.target.value); setShowSuggestions(true); }}
               onFocus={() => setShowSuggestions(true)}
@@ -1217,7 +1217,7 @@ function BulkClaimsView({
           <div className="flex items-start gap-2.5 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
             <AlertCircle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
             <p className="text-xs text-amber-200/80">
-              <strong className="text-amber-300">Sleeper write access required</strong> — Go to{" "}
+              <strong className="text-amber-300">Sleeper write access required.</strong> Go to{" "}
               <strong>Connect</strong> → Sleeper Actions and sign in before submitting.
             </p>
           </div>

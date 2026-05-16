@@ -131,7 +131,7 @@ export function FeedbackPage() {
                 <CheckCircle2 className="w-7 h-7 text-emerald-400" />
               </div>
               <div>
-                <p className="text-[17px] font-bold text-foreground">Thanks — feedback sent.</p>
+                <p className="text-[17px] font-bold text-foreground">Thanks. Feedback sent.</p>
                 <p className="text-[13px] text-muted-foreground mt-1">We appreciate you helping make Dynasty Command better.</p>
               </div>
               <button

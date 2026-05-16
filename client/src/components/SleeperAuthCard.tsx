@@ -151,7 +151,7 @@ export function SleeperAuthCard() {
       setOpen(false);
       reset();
     } catch (e: any) {
-      setErrorMsg(e.message || "Invalid token — could not parse.");
+      setErrorMsg(e.message || "Invalid token. Could not parse.");
       setStep("error");
     }
   }
@@ -208,7 +208,7 @@ export function SleeperAuthCard() {
               </div>
               <p className="text-[11px] text-muted-foreground mt-0.5">
                 {expired
-                  ? "Token expired — reconnect to restore write access"
+                  ? "Token expired. Reconnect to restore write access."
                   : `Actions enabled${session.exp ? ` · Expires ${formatExpiry(session)}` : ""}`}
               </p>
             </div>
@@ -280,7 +280,7 @@ export function SleeperAuthCard() {
               <DialogTitle className="text-base font-bold">Authentication Required</DialogTitle>
             </div>
             <DialogDescription className="text-[13px] leading-relaxed">
-              To make changes on Sleeper, connect your account. Your credentials go directly to Sleeper — auth tokens are stored only in your browser.
+              To make changes on Sleeper, connect your account. Your credentials go directly to Sleeper. Auth tokens are stored only in your browser.
             </DialogDescription>
           </DialogHeader>
 
@@ -448,7 +448,7 @@ export function SleeperAuthCard() {
                     />
                   </div>
                   <p className="text-[11px] text-muted-foreground leading-snug">
-                    Paste a JWT from Sleeper's app (Chrome DevTools → Network → Authorization header). Decoded locally — never sent to our servers.
+                    Paste a JWT from Sleeper's app (Chrome DevTools → Network → Authorization header). Decoded locally. Never sent to our servers.
                   </p>
                 </div>
                 <Button

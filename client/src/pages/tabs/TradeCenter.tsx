@@ -475,7 +475,7 @@ export function TradeFinder({ league, userTeam }: TradeProps) {
           <h3 className="text-base font-bold">My Positional Profile</h3>
           <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
           <p className="text-[10px] text-muted-foreground mt-2">
-            Your starter rankings vs. all {positionalProfile.leagueSize} teams — by dynasty and win-now value
+            Your starter rankings vs. all {positionalProfile.leagueSize} teams, by dynasty and win-now value
           </p>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -619,7 +619,7 @@ export function TradeFinder({ league, userTeam }: TradeProps) {
                     <span className="text-sm font-semibold">{pos} Upgrades</span>
                     {rank > 0 && (
                       <span className="text-[10px] text-muted-foreground">
-                        — currently {ordinal(rank)}/{positionalProfile.leagueSize} {proposalMode === "dynasty" ? "dynasty" : "win-now"}
+                        (currently {ordinal(rank)}/{positionalProfile.leagueSize} {proposalMode === "dynasty" ? "dynasty" : "win-now"})
                       </span>
                     )}
                     <Badge variant="secondary" className="text-[10px] ml-auto">{proposals.length}</Badge>
@@ -2239,7 +2239,7 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
         const canSubmit = !!sleeperJwt && !!sideBRosterId && !missingIds && (sideA.length > 0 || sideB.length > 0) && !proposing && !proposedTrade;
         const issues: string[] = [];
         if (!proposedTrade && !!sleeperJwt && !sideBRosterId) issues.push("Select a trade partner (Side B) to enable submit");
-        if (!proposedTrade && !!sleeperJwt && missingIds) issues.push("Some players are missing Sleeper IDs — add them via the roster picker");
+        if (!proposedTrade && !!sleeperJwt && missingIds) issues.push("Some players are missing Sleeper IDs. Add them via the roster picker.");
         return (
           <Card className="p-5" data-testid="card-propose-trade">
             <div className="mb-4">

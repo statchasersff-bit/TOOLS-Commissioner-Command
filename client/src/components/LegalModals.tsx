@@ -1,64 +1,77 @@
-import { X, Cookie, FileText, Shield, Database, Sliders, UserX, Mail, Server, BarChart2, Link2, AlertCircle } from "lucide-react";
-import logoDark from "@assets/statchasers_logo_transparent_dark_1772764844282.png";
-import logoLight from "@assets/statchasers_logo_transparent_light_1772764844283.png";
+import { Cookie, FileText, Shield, Database, Sliders, UserX, Mail, Server, BarChart2, Link2, AlertCircle } from "lucide-react";
 
 const LAST_UPDATED = "May 2025";
 
-// ── Shared modal shell ──────────────────────────────────────────────────────
+// ── Shared footer ───────────────────────────────────────────────────────────
 
-interface LegalShellProps {
-  open: boolean;
-  onClose: () => void;
-  title: string;
-  subtitle: string;
-  testId: string;
-  children: React.ReactNode;
+interface LegalFooterProps {
+  onNavigate: (tab: string) => void;
 }
 
-function LegalShell({ open, onClose, title, subtitle, testId, children }: LegalShellProps) {
-  if (!open) return null;
+function LegalFooter({ onNavigate }: LegalFooterProps) {
   return (
-    <div
-      className="fixed inset-x-0 bottom-0 z-[45] flex flex-col overflow-hidden"
-      style={{ top: "61px", background: "rgba(4,8,20,0.97)", backdropFilter: "blur(12px)" }}
-    >
-      {/* Sticky header */}
-      <div
-        className="flex-shrink-0 px-4 md:px-8 py-4 flex items-center justify-between"
-        style={{ borderBottom: "1px solid rgba(255,255,255,0.07)", background: "rgba(5,10,24,0.90)" }}
-      >
-        <div className="flex items-center gap-3">
-          <img src={logoDark} alt="StatChasers" className="w-7 h-7 hidden dark:block" />
-          <img src={logoLight} alt="StatChasers" className="w-7 h-7 block dark:hidden" />
-          <div>
-            <h2 className="text-[15px] md:text-base font-black text-white leading-tight tracking-tight">{title}</h2>
-            <p className="text-[11px] text-white/40 leading-tight mt-0.5 hidden sm:block">{subtitle}</p>
-          </div>
-        </div>
-        <button
-          onClick={onClose}
-          data-testid={`button-${testId}-close`}
-          className="flex items-center justify-center w-8 h-8 rounded-full transition-colors hover:bg-white/10 text-white/40 hover:text-white/80 flex-shrink-0"
-        >
-          <X className="w-4 h-4" />
-        </button>
+    <div className="pt-2 pb-8 flex flex-col items-center gap-3">
+      <p className="text-center text-[12px] text-muted-foreground/50">
+        Dynasty Command is built by{" "}
+        <span className="font-semibold" style={{ color: "#d4af37" }}>StatChasers</span>{" "}
+        for serious dynasty fantasy football managers.
+      </p>
+      <div className="flex items-center gap-1 flex-wrap justify-center">
+        {[
+          { label: "Terms of Service", tab: "terms",   testId: "button-footer-terms" },
+          { label: "Privacy Policy",   tab: "privacy", testId: "button-footer-privacy" },
+          { label: "Cookies",          tab: "cookies", testId: "button-footer-cookies" },
+        ].map(({ label, tab, testId }, i, arr) => (
+          <span key={label} className="flex items-center gap-1">
+            <button
+              onClick={() => onNavigate(tab)}
+              data-testid={testId}
+              className="text-[11px] text-muted-foreground/40 hover:text-[#d4af37]/70 transition-colors underline underline-offset-2"
+            >
+              {label}
+            </button>
+            {i < arr.length - 1 && (
+              <span className="text-[11px] text-muted-foreground/20 select-none">·</span>
+            )}
+          </span>
+        ))}
       </div>
-
-      {/* Scrollable content */}
-      <div className="flex-1 overflow-y-auto px-4 md:px-8 py-6">
-        <div className="max-w-3xl mx-auto space-y-4">
-          {children}
-          {/* Last updated */}
-          <p className="text-center text-[11px] text-white/20 pt-4 pb-6">
-            Last updated: {LAST_UPDATED}
-          </p>
-        </div>
-      </div>
+      <p className="text-center text-[11px] text-muted-foreground/25 mt-1">
+        Last updated: {LAST_UPDATED}
+      </p>
     </div>
   );
 }
 
-// ── Section card ───────────────────────────────────────────────────────────
+// ── Shared page shell ───────────────────────────────────────────────────────
+
+interface LegalPageShellProps {
+  title: string;
+  subtitle: string;
+  onNavigate: (tab: string) => void;
+  children: React.ReactNode;
+}
+
+function LegalPageShell({ title, subtitle, onNavigate, children }: LegalPageShellProps) {
+  return (
+    <div className="max-w-3xl mx-auto px-4 md:px-6 py-6 space-y-4">
+      {/* Page header */}
+      <div className="mb-2">
+        <div className="flex items-center gap-2 mb-1">
+          <div className="w-[3px] h-5 rounded-full flex-shrink-0" style={{ background: "#d4af37" }} />
+          <h1 className="text-xl font-black text-foreground tracking-tight">{title}</h1>
+        </div>
+        <p className="text-[13px] text-muted-foreground/70 pl-[11px]">{subtitle}</p>
+      </div>
+
+      {children}
+
+      <LegalFooter onNavigate={onNavigate} />
+    </div>
+  );
+}
+
+// ── Section card ────────────────────────────────────────────────────────────
 
 interface SectionProps {
   icon: React.ElementType;
@@ -70,10 +83,7 @@ interface SectionProps {
 
 function Section({ icon: Icon, iconColor = "#d4af37", iconBg = "rgba(212,175,55,0.10)", title, children }: SectionProps) {
   return (
-    <div
-      className="rounded-2xl p-5"
-      style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}
-    >
+    <div className="rounded-2xl p-5 bg-card border border-border/60">
       <div className="flex items-center gap-3 mb-3">
         <div
           className="flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center"
@@ -81,7 +91,7 @@ function Section({ icon: Icon, iconColor = "#d4af37", iconBg = "rgba(212,175,55,
         >
           <Icon className="w-4 h-4" style={{ color: iconColor }} />
         </div>
-        <h3 className="text-[14px] font-bold text-white">{title}</h3>
+        <h3 className="text-[14px] font-bold text-foreground">{title}</h3>
       </div>
       {children}
     </div>
@@ -94,7 +104,7 @@ function Bullets({ items }: { items: string[] }) {
       {items.map((item, i) => (
         <li key={i} className="flex items-start gap-2">
           <span className="flex-shrink-0 w-1 h-1 rounded-full mt-[7px]" style={{ background: "#d4af37" }} />
-          <span className="text-[12px] text-white/55 leading-snug">{item}</span>
+          <span className="text-[12px] text-muted-foreground leading-snug">{item}</span>
         </li>
       ))}
     </ul>
@@ -102,57 +112,22 @@ function Bullets({ items }: { items: string[] }) {
 }
 
 function BodyText({ children }: { children: React.ReactNode }) {
-  return <p className="text-[12px] text-white/55 leading-relaxed">{children}</p>;
+  return <p className="text-[12px] text-muted-foreground leading-relaxed">{children}</p>;
 }
 
-// ── Placeholder shell ──────────────────────────────────────────────────────
+// ── Cookies Page ────────────────────────────────────────────────────────────
 
-interface PlaceholderProps {
-  open: boolean;
-  onClose: () => void;
-  title: string;
-  subtitle: string;
-  testId: string;
+interface LegalPageProps {
+  onNavigate: (tab: string) => void;
 }
 
-function ComingSoonPlaceholder({ open, onClose, title, subtitle, testId }: PlaceholderProps) {
+export function CookiesPage({ onNavigate }: LegalPageProps) {
   return (
-    <LegalShell open={open} onClose={onClose} title={title} subtitle={subtitle} testId={testId}>
-      <div
-        className="rounded-2xl p-10 flex flex-col items-center justify-center text-center"
-        style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}
-      >
-        <AlertCircle className="w-8 h-8 mb-4" style={{ color: "#d4af37" }} />
-        <p className="text-[14px] font-bold text-white mb-1">{title}</p>
-        <p className="text-[12px] text-white/40 max-w-sm">
-          This document is being finalized. Check back soon or contact{" "}
-          <a href="mailto:support@statchasers.com" className="underline" style={{ color: "#d4af37" }}>
-            support@statchasers.com
-          </a>{" "}
-          for questions.
-        </p>
-      </div>
-    </LegalShell>
-  );
-}
-
-// ── Cookies Modal ──────────────────────────────────────────────────────────
-
-interface CookiesModalProps {
-  open: boolean;
-  onClose: () => void;
-}
-
-export function CookiesModal({ open, onClose }: CookiesModalProps) {
-  return (
-    <LegalShell
-      open={open}
-      onClose={onClose}
+    <LegalPageShell
       title="Cookies & Tracking"
       subtitle="How Dynasty Command uses cookies, local storage, and Sleeper authentication data."
-      testId="cookies"
+      onNavigate={onNavigate}
     >
-      {/* Overview */}
       <Section icon={Cookie} title="Overview">
         <BodyText>
           Dynasty Command uses cookies, local storage, and temporary authentication tokens to improve
@@ -161,7 +136,6 @@ export function CookiesModal({ open, onClose }: CookiesModalProps) {
         </BodyText>
       </Section>
 
-      {/* Essential Functionality */}
       <Section icon={Sliders} title="Essential Functionality">
         <BodyText>
           Certain cookies and local storage entries are required for Dynasty Command to work properly.
@@ -179,13 +153,7 @@ export function CookiesModal({ open, onClose }: CookiesModalProps) {
         </div>
       </Section>
 
-      {/* Sleeper Authentication */}
-      <Section
-        icon={Shield}
-        title="Sleeper Authentication"
-        iconColor="#a5b4fc"
-        iconBg="rgba(99,102,241,0.10)"
-      >
+      <Section icon={Shield} title="Sleeper Authentication" iconColor="#a5b4fc" iconBg="rgba(99,102,241,0.10)">
         <BodyText>
           Dynasty Command integrates with Sleeper to enable live roster management, trade actions, and
           lineup submissions. Here is how Sleeper authentication is handled:
@@ -193,7 +161,7 @@ export function CookiesModal({ open, onClose }: CookiesModalProps) {
         <div className="mt-3">
           <Bullets items={[
             "Sleeper authentication tokens are used only for actions you explicitly authorize",
-            "Tokens are stored locally in your browser — Dynasty Command does not store Sleeper passwords",
+            "Tokens are stored locally in your browser. Dynasty Command does not store Sleeper passwords.",
             "Authorized actions include: trade offers, lineup changes, waiver claims, DMs, and draft actions",
             "You can disconnect Sleeper at any time from your account settings",
             "Tokens are cleared when you log out or revoke access",
@@ -201,13 +169,7 @@ export function CookiesModal({ open, onClose }: CookiesModalProps) {
         </div>
       </Section>
 
-      {/* Analytics & Performance */}
-      <Section
-        icon={BarChart2}
-        title="Analytics & Performance"
-        iconColor="#34d399"
-        iconBg="rgba(52,211,153,0.10)"
-      >
+      <Section icon={BarChart2} title="Analytics & Performance" iconColor="#34d399" iconBg="rgba(52,211,153,0.10)">
         <BodyText>
           Dynasty Command may use lightweight analytics and performance monitoring tools to understand
           how the platform is used, identify errors, and improve stability. This data is aggregated and
@@ -216,35 +178,23 @@ export function CookiesModal({ open, onClose }: CookiesModalProps) {
         </BodyText>
       </Section>
 
-      {/* Third-Party Services */}
-      <Section
-        icon={Link2}
-        title="Third-Party Services"
-        iconColor="#fb923c"
-        iconBg="rgba(251,146,60,0.10)"
-      >
+      <Section icon={Link2} title="Third-Party Services" iconColor="#fb923c" iconBg="rgba(251,146,60,0.10)">
         <BodyText>
           Dynasty Command may interact with the following third-party services, each operating under
           their own privacy and cookie policies:
         </BodyText>
         <div className="mt-3">
           <Bullets items={[
-            "Sleeper — fantasy sports data, authentication, and roster management",
-            "Stripe — payment processing for premium subscriptions (no card data stored by Dynasty Command)",
-            "Discord — community integration and support links",
-            "Cloudflare — CDN, DDoS protection, and performance optimization",
-            "Analytics providers — aggregated usage metrics and error tracking",
+            "Sleeper: fantasy sports data, authentication, and roster management",
+            "Stripe: payment processing for premium subscriptions (no card data stored by Dynasty Command)",
+            "Discord: community integration and support links",
+            "Cloudflare: CDN, DDoS protection, and performance optimization",
+            "Analytics providers: aggregated usage metrics and error tracking",
           ]} />
         </div>
       </Section>
 
-      {/* User Control */}
-      <Section
-        icon={UserX}
-        title="Your Control"
-        iconColor="#f472b6"
-        iconBg="rgba(244,114,182,0.10)"
-      >
+      <Section icon={UserX} title="Your Control" iconColor="#f472b6" iconBg="rgba(244,114,182,0.10)">
         <BodyText>
           You are in control of your data and browser state at all times.
         </BodyText>
@@ -259,13 +209,7 @@ export function CookiesModal({ open, onClose }: CookiesModalProps) {
         </div>
       </Section>
 
-      {/* Contact */}
-      <Section
-        icon={Mail}
-        title="Contact"
-        iconColor="#60a5fa"
-        iconBg="rgba(96,165,250,0.10)"
-      >
+      <Section icon={Mail} title="Contact" iconColor="#60a5fa" iconBg="rgba(96,165,250,0.10)">
         <BodyText>
           If you have questions or concerns about how Dynasty Command uses cookies or handles your data,
           reach out at{" "}
@@ -279,23 +223,19 @@ export function CookiesModal({ open, onClose }: CookiesModalProps) {
           .
         </BodyText>
       </Section>
-    </LegalShell>
+    </LegalPageShell>
   );
 }
 
-// ── Terms of Service Modal ─────────────────────────────────────────────────
+// ── Terms of Service Page ───────────────────────────────────────────────────
 
-interface TermsModalProps { open: boolean; onClose: () => void; }
-export function TermsModal({ open, onClose }: TermsModalProps) {
+export function TermsPage({ onNavigate }: LegalPageProps) {
   return (
-    <LegalShell
-      open={open}
-      onClose={onClose}
+    <LegalPageShell
       title="Terms of Service"
       subtitle="Please read these terms carefully before using Dynasty Command and related StatChasers tools."
-      testId="terms"
+      onNavigate={onNavigate}
     >
-      {/* 1. Overview */}
       <Section icon={FileText} title="Overview">
         <BodyText>
           Dynasty Command ("the Service") is a fantasy football management and analytics platform operated
@@ -306,14 +246,12 @@ export function TermsModal({ open, onClose }: TermsModalProps) {
           <Bullets items={[
             "These terms apply to all users of Dynasty Command, including free and paid tier users.",
             "StatChasers reserves the right to update these terms at any time. Continued use constitutes acceptance.",
-            "Some features are in active development or beta — behavior may change without notice.",
+            "Some features are in active development or beta. Behavior may change without notice.",
           ]} />
         </div>
       </Section>
 
-      {/* 2. Sleeper Authentication */}
-      <Section icon={Shield} title="Sleeper Authentication & User Responsibility"
-        iconColor="#a5b4fc" iconBg="rgba(99,102,241,0.10)">
+      <Section icon={Shield} title="Sleeper Authentication & User Responsibility" iconColor="#a5b4fc" iconBg="rgba(99,102,241,0.10)">
         <BodyText>
           Dynasty Command integrates with Sleeper to enable live roster management and league actions.
           By connecting your Sleeper account, you acknowledge and accept the following:
@@ -323,13 +261,12 @@ export function TermsModal({ open, onClose }: TermsModalProps) {
             "Dynasty Command does not store your Sleeper password at any point.",
             "You are solely responsible for the security of your Sleeper account.",
             "You are responsible for all actions initiated through Dynasty Command on your behalf.",
-            "Revoking access or disconnecting Sleeper is your responsibility — Dynasty Command does not automatically revoke tokens.",
+            "Revoking access or disconnecting Sleeper is your responsibility. Dynasty Command does not automatically revoke tokens.",
             "If your account is compromised, notify Sleeper directly. StatChasers has no ability to modify Sleeper account credentials.",
           ]} />
         </div>
       </Section>
 
-      {/* 3. Platform Features */}
       <Section icon={Server} title="Platform Features & Actions">
         <BodyText>
           Dynasty Command provides tools that may interact with your Sleeper account on your behalf.
@@ -355,9 +292,7 @@ export function TermsModal({ open, onClose }: TermsModalProps) {
         </div>
       </Section>
 
-      {/* 4. No Affiliation With Sleeper */}
-      <Section icon={AlertCircle} title="No Affiliation With Sleeper"
-        iconColor="#fb923c" iconBg="rgba(251,146,60,0.10)">
+      <Section icon={AlertCircle} title="No Affiliation With Sleeper" iconColor="#fb923c" iconBg="rgba(251,146,60,0.10)">
         <BodyText>
           StatChasers and Dynasty Command are independent products. We are not affiliated with,
           endorsed by, sponsored by, or officially connected to Sleeper in any way. Use of the
@@ -366,9 +301,7 @@ export function TermsModal({ open, onClose }: TermsModalProps) {
         </BodyText>
       </Section>
 
-      {/* 5. No Guarantees / As Is */}
-      <Section icon={AlertCircle} title='Service Provided "As Is"'
-        iconColor="#f472b6" iconBg="rgba(244,114,182,0.10)">
+      <Section icon={AlertCircle} title='Service Provided "As Is"' iconColor="#f472b6" iconBg="rgba(244,114,182,0.10)">
         <BodyText>
           The Service is provided on an "as is" and "as available" basis without warranties of any kind,
           either express or implied. StatChasers expressly disclaims all warranties, including but not limited to:
@@ -390,16 +323,14 @@ export function TermsModal({ open, onClose }: TermsModalProps) {
         </div>
       </Section>
 
-      {/* 6. Fantasy Advice Disclaimer */}
-      <Section icon={BarChart2} title="Fantasy Advice Disclaimer"
-        iconColor="#34d399" iconBg="rgba(52,211,153,0.10)">
+      <Section icon={BarChart2} title="Fantasy Advice Disclaimer" iconColor="#34d399" iconBg="rgba(52,211,153,0.10)">
         <BodyText>
           All rankings, trade values, projections, recommendations, and analytics provided by Dynasty Command
           are for informational purposes only. They do not constitute professional advice of any kind.
         </BodyText>
         <div className="mt-3">
           <Bullets items={[
-            "You make all final fantasy decisions — Dynasty Command provides data, not instructions.",
+            "You make all final fantasy decisions. Dynasty Command provides data, not instructions.",
             "StatChasers is not responsible for fantasy losses, missed playoffs, poor draft picks, or bad trades.",
             "StatChasers is not responsible for financial losses in paid fantasy leagues or contests.",
             "StatChasers is not responsible for league disputes arising from actions taken through the platform.",
@@ -407,9 +338,7 @@ export function TermsModal({ open, onClose }: TermsModalProps) {
         </div>
       </Section>
 
-      {/* 7. Limitation of Liability */}
-      <Section icon={UserX} title="Limitation of Liability"
-        iconColor="#60a5fa" iconBg="rgba(96,165,250,0.10)">
+      <Section icon={UserX} title="Limitation of Liability" iconColor="#60a5fa" iconBg="rgba(96,165,250,0.10)">
         <BodyText>
           To the maximum extent permitted by applicable law, StatChasers and Dynasty Command shall not be
           liable for any indirect, incidental, special, consequential, or punitive damages, including but
@@ -436,7 +365,6 @@ export function TermsModal({ open, onClose }: TermsModalProps) {
         </div>
       </Section>
 
-      {/* 8. Acceptable Use */}
       <Section icon={Sliders} title="Acceptable Use">
         <BodyText>
           By using Dynasty Command, you agree not to engage in any of the following:
@@ -456,9 +384,7 @@ export function TermsModal({ open, onClose }: TermsModalProps) {
         </div>
       </Section>
 
-      {/* 9. Suspension / Termination */}
-      <Section icon={UserX} title="Suspension & Termination"
-        iconColor="#f87171" iconBg="rgba(248,113,113,0.10)">
+      <Section icon={UserX} title="Suspension & Termination" iconColor="#f87171" iconBg="rgba(248,113,113,0.10)">
         <BodyText>
           StatChasers reserves the right to suspend, restrict, or terminate your access to Dynasty Command
           at any time, with or without notice, for any of the following reasons:
@@ -480,9 +406,7 @@ export function TermsModal({ open, onClose }: TermsModalProps) {
         </div>
       </Section>
 
-      {/* 10. Subscription & Billing */}
-      <Section icon={Database} title="Subscription & Billing"
-        iconColor="#d4af37" iconBg="rgba(212,175,55,0.10)">
+      <Section icon={Database} title="Subscription & Billing" iconColor="#d4af37" iconBg="rgba(212,175,55,0.10)">
         <BodyText>
           Dynasty Command may offer free and paid subscription tiers. By subscribing to a paid tier, you agree:
         </BodyText>
@@ -490,7 +414,7 @@ export function TermsModal({ open, onClose }: TermsModalProps) {
           <Bullets items={[
             "Subscription pricing is subject to change with reasonable notice",
             "Cancellation takes effect at the end of the current billing period",
-            "Refunds are issued at StatChasers' sole discretion — no automatic refunds are guaranteed",
+            "Refunds are issued at StatChasers' sole discretion (no automatic refunds are guaranteed)",
             "Payment is processed by Stripe; StatChasers does not store card data",
             "Chargebacks or disputes must be raised with StatChasers support before initiating with your bank",
             "Failure to pay may result in downgrade or suspension of premium features",
@@ -498,20 +422,18 @@ export function TermsModal({ open, onClose }: TermsModalProps) {
         </div>
       </Section>
 
-      {/* 11. Third-Party Services */}
-      <Section icon={Link2} title="Third-Party Services"
-        iconColor="#fb923c" iconBg="rgba(251,146,60,0.10)">
+      <Section icon={Link2} title="Third-Party Services" iconColor="#fb923c" iconBg="rgba(251,146,60,0.10)">
         <BodyText>
           Dynasty Command relies on third-party services to operate. These services have their own
           terms and privacy policies, and their outages or changes are outside StatChasers' control:
         </BodyText>
         <div className="mt-3">
           <Bullets items={[
-            "Sleeper — fantasy sports data, authentication, and real-time league actions",
-            "Stripe — payment processing for premium subscriptions",
-            "Discord — community support and optional integration features",
-            "Cloudflare — content delivery, DDoS protection, and performance",
-            "Analytics providers — aggregated usage metrics and error tracking",
+            "Sleeper: fantasy sports data, authentication, and real-time league actions",
+            "Stripe: payment processing for premium subscriptions",
+            "Discord: community support and optional integration features",
+            "Cloudflare: content delivery, DDoS protection, and performance",
+            "Analytics providers: aggregated usage metrics and error tracking",
           ]} />
         </div>
         <div className="mt-3">
@@ -522,9 +444,7 @@ export function TermsModal({ open, onClose }: TermsModalProps) {
         </div>
       </Section>
 
-      {/* 12. Privacy & Cookies */}
-      <Section icon={Cookie} title="Privacy & Cookies"
-        iconColor="#a5b4fc" iconBg="rgba(99,102,241,0.10)">
+      <Section icon={Cookie} title="Privacy & Cookies" iconColor="#a5b4fc" iconBg="rgba(99,102,241,0.10)">
         <BodyText>
           Your use of Dynasty Command is also governed by our Privacy Policy and Cookies policy, which
           are incorporated into these Terms by reference. Please review both documents carefully.
@@ -532,7 +452,6 @@ export function TermsModal({ open, onClose }: TermsModalProps) {
         </BodyText>
       </Section>
 
-      {/* 13. Changes To Terms */}
       <Section icon={FileText} title="Changes to These Terms">
         <BodyText>
           StatChasers may update these Terms of Service at any time. When changes are made, the "Last updated"
@@ -542,9 +461,7 @@ export function TermsModal({ open, onClose }: TermsModalProps) {
         </BodyText>
       </Section>
 
-      {/* 14. Jurisdiction & Arbitration */}
-      <Section icon={Shield} title="Jurisdiction & Dispute Resolution"
-        iconColor="#94a3b8" iconBg="rgba(148,163,184,0.10)">
+      <Section icon={Shield} title="Jurisdiction & Dispute Resolution" iconColor="#94a3b8" iconBg="rgba(148,163,184,0.10)">
         <BodyText>
           These Terms shall be governed by and construed in accordance with applicable law. Any disputes
           arising from or related to these Terms or your use of Dynasty Command shall first be attempted
@@ -554,9 +471,7 @@ export function TermsModal({ open, onClose }: TermsModalProps) {
         </BodyText>
       </Section>
 
-      {/* 15. Contact */}
-      <Section icon={Mail} title="Contact"
-        iconColor="#60a5fa" iconBg="rgba(96,165,250,0.10)">
+      <Section icon={Mail} title="Contact" iconColor="#60a5fa" iconBg="rgba(96,165,250,0.10)">
         <BodyText>
           Questions, concerns, or legal notices regarding these Terms of Service should be directed to{" "}
           <a
@@ -569,21 +484,33 @@ export function TermsModal({ open, onClose }: TermsModalProps) {
           .
         </BodyText>
       </Section>
-    </LegalShell>
+    </LegalPageShell>
   );
 }
 
-// ── Privacy Policy Modal (placeholder) ────────────────────────────────────
+// ── Privacy Policy Page ─────────────────────────────────────────────────────
 
-interface PrivacyModalProps { open: boolean; onClose: () => void; }
-export function PrivacyModal({ open, onClose }: PrivacyModalProps) {
+export function PrivacyPage({ onNavigate }: LegalPageProps) {
   return (
-    <ComingSoonPlaceholder
-      open={open}
-      onClose={onClose}
+    <LegalPageShell
       title="Privacy Policy"
       subtitle="How StatChasers collects, uses, and protects your data."
-      testId="privacy"
-    />
+      onNavigate={onNavigate}
+    >
+      <Section icon={AlertCircle} title="Coming Soon" iconColor="#d4af37" iconBg="rgba(212,175,55,0.10)">
+        <BodyText>
+          Our full Privacy Policy is being finalized. In the meantime, if you have any questions or
+          concerns about how your data is handled, please contact us at{" "}
+          <a
+            href="mailto:support@statchasers.com"
+            className="font-semibold underline underline-offset-2 transition-opacity hover:opacity-80"
+            style={{ color: "#d4af37" }}
+          >
+            support@statchasers.com
+          </a>
+          .
+        </BodyText>
+      </Section>
+    </LegalPageShell>
   );
 }

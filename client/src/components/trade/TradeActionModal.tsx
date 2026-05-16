@@ -246,7 +246,7 @@ function TradeValueBar({
           <span className="text-white/30">~Even</span>
         ) : (
           <span className={diff > 0 ? "text-emerald-400 font-semibold" : "text-red-400 font-semibold"}>
-            {Math.abs(diff).toFixed(0)} — Favors {diff > 0 ? myName : theirName}
+            {Math.abs(diff).toFixed(0)} · Favors {diff > 0 ? myName : theirName}
           </span>
         )}
       </div>
@@ -346,7 +346,7 @@ function MessagesPanel({
           </p>
         ) : dmMessages.length === 0 ? (
           <p className="text-center text-[12px] text-white/30 italic py-8">
-            No messages yet — start the conversation below.
+            No messages yet. Start the conversation below.
           </p>
         ) : (
           dmMessages.map((msg) => {

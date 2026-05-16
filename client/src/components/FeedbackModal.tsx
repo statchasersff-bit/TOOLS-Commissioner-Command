@@ -190,7 +190,7 @@ export function FeedbackModal({ open, onClose, currentTab = "", currentSubTab = 
                 <CheckCircle2 className="w-7 h-7 text-emerald-400" />
               </div>
               <div>
-                <p className="text-[17px] font-bold text-white">Thanks — feedback sent.</p>
+                <p className="text-[17px] font-bold text-white">Thanks. Feedback sent.</p>
                 <p className="text-[13px] text-white/40 mt-1">We appreciate you helping make Dynasty Command better.</p>
               </div>
               <button
