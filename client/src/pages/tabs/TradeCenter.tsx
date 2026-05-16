@@ -1732,48 +1732,43 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
     setDmStatus("sending");
     setDmError(null);
     try {
-      const usersRaw: any[] = await fetch(`https://api.sleeper.app/v1/league/${trade.league_id}/users`).then(r => r.json());
-      const usersInLeagueMap: Record<string, unknown> = {};
-      const userIdToInfo = new Map<string, any>();
-      for (const u of usersRaw) {
-        const info = { avatar: u.avatar ?? null, display_name: u.display_name || u.username || u.user_id, is_bot: false, is_owner: false, league_id: trade.league_id, metadata: u.metadata || {}, settings: u.settings || {}, user_id: u.user_id };
-        usersInLeagueMap[u.user_id] = info;
-        userIdToInfo.set(u.user_id, info);
+      const session = getSleeperSession();
+      const myUserId = session?.user_id ?? "";
+      const myName = session?.display_name || userTeam.owner;
+
+      // Build transactionsByRoster as flat pid→rosterId maps — the format
+      // Sleeper's mobile app requires to render the trade card correctly.
+      const txByRoster: Record<string, { adds: Record<string, number>; drops: Record<string, number> }> = {};
+      for (const [pid, rid] of Object.entries(trade.adds ?? {})) {
+        const r = String(rid);
+        if (!txByRoster[r]) txByRoster[r] = { adds: {}, drops: {} };
+        txByRoster[r].adds[pid] = rid as number;
       }
-      const rosterUserMap = new Map<number, unknown>();
-      for (const team of league.teams) {
-        const rid = parseInt(team.id.replace("roster_", ""), 10);
-        if (team.ownerId && userIdToInfo.has(team.ownerId)) rosterUserMap.set(rid, userIdToInfo.get(team.ownerId));
+      for (const [pid, rid] of Object.entries(trade.drops ?? {})) {
+        const r = String(rid);
+        if (!txByRoster[r]) txByRoster[r] = { adds: {}, drops: {} };
+        txByRoster[r].drops[pid] = rid as number;
       }
-      const transactionsByRoster: Record<string, unknown> = {};
-      for (const rosterId of (trade.roster_ids || [])) {
-        const rosterAdds: unknown[] = [];
-        if (trade.adds) {
-          for (const [pid, receivingRid] of Object.entries(trade.adds)) {
-            if (receivingRid === rosterId) {
-              const playerObj = (trade.player_map as Record<string, unknown>)?.[pid] || { player_id: pid };
-              rosterAdds.push(playerObj);
-            }
-          }
-        }
-        const rosterPicks: unknown[] = [];
-        if (Array.isArray(trade.draft_picks)) {
-          for (const pick of trade.draft_picks) {
-            if (typeof pick === "string") {
-              const parts = pick.split(",");
-              if (Number(parts[3]) === rosterId) rosterPicks.push({ roster_id: Number(parts[0]), season: parts[1], round: Number(parts[2]) });
-            } else if (pick && typeof pick === "object" && (pick as any).owner_id === rosterId) {
-              rosterPicks.push(pick);
-            }
-          }
-        }
-        transactionsByRoster[String(rosterId)] = { adds: rosterAdds, drops: [], added_picks: rosterPicks, dropped_picks: [], added_budget: [], dropped_budget: [], status: trade.status || "proposed", user: rosterUserMap.get(rosterId) ?? null };
-      }
+
+      // usersInLeagueMap only needs the two involved parties for mobile rendering
+      const usersInLeagueMap: Record<string, { display_name: string; user_id: string }> = {
+        [myUserId]: { display_name: myName, user_id: myUserId },
+        [partnerUserId]: { display_name: sideBTeam?.owner || sideBTeam?.name || "Partner", user_id: partnerUserId },
+      };
+
       const dmInfo = await getDmByMembersFull(partnerUserId);
       if (!dmInfo) throw new Error("No DM thread found with this manager.");
-      const session = getSleeperSession();
-      const myName = session?.display_name || userTeam.owner;
-      await sendTradeMessage({ dmId: dmInfo.dm_id, text: `@${myName} has proposed a trade in ${league.name} via Dynasty Command`, transactionId: trade.transaction_id, leagueId: trade.league_id, status: trade.status || "proposed", transactionsByRoster, usersInLeagueMap, attachTradeCard: true });
+
+      await sendTradeMessage({
+        dmId: dmInfo.dm_id,
+        text: `@${myName} has proposed a trade in ${league.name} via Dynasty Command`,
+        transactionId: trade.transaction_id,
+        leagueId: trade.league_id,
+        status: trade.status || "proposed",
+        transactionsByRoster: txByRoster,
+        usersInLeagueMap,
+        attachTradeCard: true,
+      });
       await sendPlainDm(dmInfo.dm_id, "https://statchasers.com/dynasty-command-tool/");
       setDmStatus("sent");
     } catch (e: any) {
