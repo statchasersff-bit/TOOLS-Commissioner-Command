@@ -64,6 +64,10 @@ interface TradeProposal {
   needScore: number;
   type: "1v1" | "2v1" | "1v2";
   rationale: string;
+  /** Build Dynasty mode only: user's net dynasty value change */
+  dynNet?: number;
+  /** Build Dynasty mode only: partner's net win-now (redraft) value change */
+  rdNet?: number;
 }
 
 function PlayerChip({ player, value }: { player: Player; value: number }) {
@@ -120,16 +124,41 @@ function TradeProposalCard({ proposal, mode, userTeam }: { proposal: TradePropos
         </div>
       </div>
 
-      <div className="mt-3 pt-2.5 border-t border-border/30 flex items-center justify-between gap-2">
-        <p className="text-[10px] text-muted-foreground italic truncate">{proposal.rationale}</p>
-        <div className="flex items-center gap-1.5 flex-shrink-0">
-          <span className="text-[10px] text-muted-foreground">{proposal.giveVal.toLocaleString()} → {proposal.getVal.toLocaleString()}</span>
-          <Badge
-            variant={isEven ? "secondary" : isFavorable ? "default" : "outline"}
-            className={cn("text-[10px]", isFavorable && !isEven && "bg-emerald-600 dark:bg-emerald-700 text-white border-0", !isFavorable && !isEven && "text-amber-600 dark:text-amber-400 border-amber-400")}
-          >
-            {isEven ? "Even" : isFavorable ? `+${Math.round(Math.abs(valueDiff)).toLocaleString()} for you` : `+${Math.round(Math.abs(valueDiff)).toLocaleString()} for them`}
-          </Badge>
+      <div className="mt-3 pt-2.5 border-t border-border/30 space-y-1.5">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-[10px] text-muted-foreground italic truncate">{proposal.rationale}</p>
+          {mode === "dynasty" && proposal.dynNet !== undefined ? (
+            <div className="flex items-center gap-1.5 flex-shrink-0">
+              <Badge
+                variant={proposal.dynNet > 0 ? "default" : proposal.dynNet > -200 ? "secondary" : "outline"}
+                className={cn("text-[10px]",
+                  proposal.dynNet > 0 && "bg-emerald-600 dark:bg-emerald-700 text-white border-0",
+                  proposal.dynNet <= -200 && "text-amber-600 dark:text-amber-400 border-amber-400"
+                )}
+              >
+                {proposal.dynNet > 0
+                  ? `+${Math.round(proposal.dynNet).toLocaleString()} dynasty`
+                  : proposal.dynNet > -200
+                    ? "Even dynasty"
+                    : `-${Math.round(Math.abs(proposal.dynNet)).toLocaleString()} dynasty`}
+              </Badge>
+              {proposal.rdNet !== undefined && proposal.rdNet > 0 && (
+                <Badge variant="outline" className="text-[10px] text-blue-400 border-blue-400/40">
+                  partner +{Math.round(proposal.rdNet).toLocaleString()} W-N
+                </Badge>
+              )}
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5 flex-shrink-0">
+              <span className="text-[10px] text-muted-foreground">{proposal.giveVal.toLocaleString()} → {proposal.getVal.toLocaleString()}</span>
+              <Badge
+                variant={isEven ? "secondary" : isFavorable ? "default" : "outline"}
+                className={cn("text-[10px]", isFavorable && !isEven && "bg-emerald-600 dark:bg-emerald-700 text-white border-0", !isFavorable && !isEven && "text-amber-600 dark:text-amber-400 border-amber-400")}
+              >
+                {isEven ? "Even" : isFavorable ? `+${Math.round(Math.abs(valueDiff)).toLocaleString()} for you` : `+${Math.round(Math.abs(valueDiff)).toLocaleString()} for them`}
+              </Badge>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -257,36 +286,130 @@ export function TradeFinder({ league, userTeam }: TradeProps) {
   }, [league, userTeam, getPlayerValue, getRedraftValue, proposalMode, optimalRosterMap]);
 
   const generatedTrades = useMemo<TradeProposal[]>(() => {
-    const getValue = (p: Player) => proposalMode === "dynasty" ? getPlayerValue(p) : getRedraftValue(p);
-    const FAIR_THRESHOLD = 0.22;
-    const MIN_VALUE = 800;
     const MAX_POOL = 7;
     const MAX_PER_PARTNER = 4;
 
-    // Core starters: in redraft mode, protect the greedy-optimal lineup starters so the
-    // algorithm never gives away a lineup-critical player.
-    // In dynasty mode we leave this empty — dynasty trades routinely involve starter-for-starter
-    // swaps (e.g. ageing WR1 for a young ascending talent), so every player with sufficient
-    // dynasty value should be available to offer. Fairness is still enforced by FAIR_THRESHOLD.
-    const coreStarters = proposalMode === "redraft"
-      ? new Set<string>((optimalRosterMap.get(userTeam.id) || userTeam.roster).filter(p => p.starter).map(p => p.id))
-      : new Set<string>();
+    // ── BUILD DYNASTY MODE ──────────────────────────────────────────────────
+    // Core principle: give win-now-heavy assets (high rdVal/dynVal) so the partner's
+    // win-now value increases; receive dynasty-heavy assets (high dynVal/rdVal, i.e. young
+    // players/picks) so your own dynasty value increases. Both parties benefit on the
+    // value dimension that matters most to them.
+    if (proposalMode === "dynasty") {
+      const MIN_DYN_VALUE    = 800;
+      const DYNASTY_FAIR     = 0.28;   // max fraction we can overpay in dynasty value
+      const MIN_PARTNER_GAIN = 0.80;   // partner must receive ≥80% of the rdVal we give
+
+      const allDynProposals: TradeProposal[] = [];
+
+      for (const partner of league.teams.filter(t => t.id !== userTeam.id)) {
+        // Offer pool: sorted by rdVal/dynVal ratio desc — win-now-heavy assets a contender craves
+        const myOffers = userTeam.roster
+          .filter(p => getPlayerValue(p) >= MIN_DYN_VALUE)
+          .sort((a, b) =>
+            (getRedraftValue(b) / Math.max(getPlayerValue(b), 100)) -
+            (getRedraftValue(a) / Math.max(getPlayerValue(a), 100))
+          )
+          .slice(0, MAX_POOL);
+
+        // Target pool: sorted by dynVal/rdVal ratio desc — dynasty-heavy assets we want
+        const theirTargets = partner.roster
+          .filter(p => getPlayerValue(p) >= MIN_DYN_VALUE)
+          .sort((a, b) =>
+            (getPlayerValue(b) / Math.max(getRedraftValue(b), 100)) -
+            (getPlayerValue(a) / Math.max(getRedraftValue(a), 100))
+          )
+          .slice(0, MAX_POOL);
+
+        if (!myOffers.length || !theirTargets.length) continue;
+
+        const evaluate = (gives: Player[], gets: Player[]): TradeProposal | null => {
+          const dynGive = gives.reduce((s, p) => s + getPlayerValue(p), 0);
+          const dynGet  = gets.reduce((s, p)  => s + getPlayerValue(p), 0);
+          const rdGive  = gives.reduce((s, p) => s + getRedraftValue(p), 0);
+          const rdGet   = gets.reduce((s, p)  => s + getRedraftValue(p), 0);
+
+          if (Math.max(dynGive, dynGet) < 1000) return null;
+          // Dynasty fairness: don't overpay in dynasty value beyond threshold
+          const dynDiff = (dynGive - dynGet) / Math.max(dynGive, dynGet, 1);
+          if (dynDiff > DYNASTY_FAIR) return null;
+          // Partner win-now condition: they must receive at least MIN_PARTNER_GAIN of the rdVal we give
+          if (rdGive < rdGet * MIN_PARTNER_GAIN) return null;
+
+          const dynNet    = dynGet  - dynGive;   // +ve = user's dynasty value grows
+          const rdNet     = rdGive  - rdGet;     // +ve = partner's win-now value grows
+          const giveAge   = gives.reduce((s, p) => s + (p.age ?? 25), 0) / gives.length;
+          const getAge    = gets.reduce((s, p)  => s + (p.age ?? 25), 0) / gets.length;
+          const ageBonus  = Math.max(0, giveAge - getAge) * 180;
+          const needScore = dynNet + rdNet * 0.35 + ageBonus;
+          const diff      = Math.abs(dynGive - dynGet) / Math.max(dynGive, dynGet, 1);
+
+          const parts: string[] = [];
+          if (dynNet > 0)   parts.push(`+${Math.round(dynNet).toLocaleString()} dynasty`);
+          if (rdNet > 200)  parts.push(`partner +${Math.round(rdNet).toLocaleString()} win-now`);
+          else if (rdNet >= 0) parts.push("partner neutral win-now");
+          if (giveAge > getAge + 1) parts.push(`${Math.round(giveAge - getAge)}yr younger`);
+          const rationale = parts.length > 0 ? parts.slice(0, 2).join(" · ") : "Dynasty value exchange";
+
+          const type: "1v1" | "2v1" | "1v2" = gives.length === 2 ? "2v1" : gets.length === 2 ? "1v2" : "1v1";
+          return { partner, gives, gets, giveVal: dynGive, getVal: dynGet, diff, needScore, type, rationale, dynNet, rdNet };
+        };
+
+        const pProposals: TradeProposal[] = [];
+        const top5Off = myOffers.slice(0, 5);
+        const top5Tgt = theirTargets.slice(0, 5);
+
+        // 1v1
+        for (const g of top5Off)
+          for (const r of top5Tgt)
+            if (g.id !== r.id) { const p = evaluate([g], [r]); if (p) pProposals.push(p); }
+
+        // 2v1 (send 2, get 1 elite dynasty asset)
+        for (let i = 0; i < top5Off.length; i++)
+          for (let j = i + 1; j < top5Off.length; j++)
+            for (const r of top5Tgt)
+              if (getPlayerValue(r) >= 2500) { const p = evaluate([top5Off[i], top5Off[j]], [r]); if (p) pProposals.push(p); }
+
+        // 1v2 (send 1 premium, get 2 dynasty pieces)
+        for (const g of top5Off)
+          if (getPlayerValue(g) >= 2500)
+            for (let i = 0; i < top5Tgt.length; i++)
+              for (let j = i + 1; j < top5Tgt.length; j++) {
+                const p = evaluate([g], [top5Tgt[i], top5Tgt[j]]);
+                if (p) pProposals.push(p);
+              }
+
+        pProposals.sort((a, b) => b.needScore - a.needScore);
+        allDynProposals.push(...pProposals.slice(0, MAX_PER_PARTNER));
+      }
+
+      return allDynProposals.sort((a, b) => b.needScore - a.needScore);
+    }
+
+    // ── WIN-NOW (REDRAFT) MODE ──────────────────────────────────────────────
+    const getValue = (p: Player) => getRedraftValue(p);
+    const FAIR_THRESHOLD = 0.22;
+    const MIN_VALUE = 800;
+
+    // Protect greedy-optimal lineup starters — never give away a lineup-critical player
+    const coreStarters = new Set<string>(
+      (optimalRosterMap.get(userTeam.id) || userTeam.roster).filter(p => p.starter).map(p => p.id)
+    );
 
     const buildRationale = (gives: Player[], gets: Player[], pNeeds: Set<string>, pSurplus: Set<string>): string => {
       const parts: string[] = [];
-      const getPositions = [...new Set(gets.map(p => p.pos))];
+      const getPositions  = [...new Set(gets.map(p => p.pos))];
       const givePositions = [...new Set(gives.map(p => p.pos))];
-      if (getPositions.some(pos => userNeeds.has(pos))) parts.push(`fills your ${getPositions.filter(p => userNeeds.has(p)).join("/")} need`);
+      if (getPositions.some(pos => userNeeds.has(pos)))   parts.push(`fills your ${getPositions.filter(p => userNeeds.has(p)).join("/")} need`);
       if (givePositions.some(pos => userSurplus.has(pos))) parts.push(`uses your ${givePositions.filter(p => userSurplus.has(p)).join("/")} depth`);
-      if (givePositions.some(pos => pNeeds.has(pos))) parts.push(`addresses their ${givePositions.filter(p => pNeeds.has(p)).join("/")} need`);
-      if (getPositions.some(pos => pSurplus.has(pos))) parts.push(`targets their ${getPositions.filter(p => pSurplus.has(p)).join("/")} surplus`);
+      if (givePositions.some(pos => pNeeds.has(pos)))     parts.push(`addresses their ${givePositions.filter(p => pNeeds.has(p)).join("/")} need`);
+      if (getPositions.some(pos => pSurplus.has(pos)))    parts.push(`targets their ${getPositions.filter(p => pSurplus.has(p)).join("/")} surplus`);
       return parts.length > 0 ? parts.slice(0, 2).join(" · ") : "Value-equivalent swap";
     };
 
     const allProposals: TradeProposal[] = [];
 
     for (const partner of league.teams.filter(t => t.id !== userTeam.id)) {
-      const pNeeds = partnerNeedsMap.get(partner.id) ?? new Set();
+      const pNeeds   = partnerNeedsMap.get(partner.id)   ?? new Set();
       const pSurplus = partnerSurplusMap.get(partner.id) ?? new Set();
 
       const myOffers = userTeam.roster
@@ -328,7 +451,7 @@ export function TradeFinder({ league, userTeam }: TradeProps) {
       }
 
       // 2v1 (user sends 2, gets 1 star)
-      const top5Offers = myOffers.slice(0, 5);
+      const top5Offers  = myOffers.slice(0, 5);
       const top5Targets = theirTargets.slice(0, 5);
       for (let i = 0; i < top5Offers.length; i++) {
         for (let j = i + 1; j < top5Offers.length; j++) {

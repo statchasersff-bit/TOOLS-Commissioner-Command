@@ -1,0 +1,135 @@
+Step 4: Queue Execution
+Do not send trades instantly.
+
+Every selected trade should become a queue item using the universal Batch Action Queue system.
+
+Queue actionType:
+trade_offer
+
+Queue item should include:
+- id
+- actionType
+- leagueId
+- targetRosterId
+- targetUserId
+- userRosterId
+- userAssets
+- targetAssets
+- payload
+- status
+- scheduledAt
+- sentAt
+- errorMessage
+- retryCount
+
+Use Safe Mode by default:
+- random 45 to 120 seconds between trade offers
+- after every 5 trade offers, pause 3 to 7 minutes
+- after every 10 trade offers, pause 8 to 15 minutes
+- if offers span more than 10 leagues, use slower delays
+- never send two offers at the same timestamp
+
+Bulk Trade Rules:
+- max 10 trade offers per batch for launch
+- max 25 trade write actions per day
+- max 3 trade offers to the same manager within 24 hours
+- block duplicate offers to the same manager in the same league within 24 hours
+- block offers where the user or partner asset is no longer available
+- revalidate all assets immediately before queueing
+- revalidate again immediately before sending
+
+Trade Finder Integration:
+The Bulk Trade feature should be connected to the existing trade finder logic.
+
+Allow three starting options:
+1. Start from scratch
+2. Start from an existing trade idea
+3. Start from a selected player/pick
+
+If started from an existing trade idea:
+- prefill the user gives/user receives sides
+- show matching eligible targets
+- allow edits before queueing
+
+UI Requirements:
+- Keep styling consistent with Dynasty Command
+- Use dark navy panels, gold accent buttons, clean rounded cards
+- Avoid cramped tables on mobile
+- Use stacked cards on mobile
+- Use responsive two-column layout on desktop
+- Keep the queue warning visible but not scary
+
+Important Safety Design:
+This feature should feel like “multi-league trade assistant,” not a spam tool.
+
+Use copy like:
+“Bulk Trade lets you prepare similar offers across leagues and send them gradually through a safe queue.”
+
+Do not use copy like:
+“blast trade offers”
+“spam managers”
+“send instantly”
+
+Needed Components / Files:
+Create reusable components if they do not exist:
+- BulkTradeTab
+- BulkTradeBuilder
+- BulkTradeAssetSelector
+- BulkTradeTargetSelector
+- BulkTradeReview
+- BulkTradeQueuePreview
+- useBulkTrade
+- tradeValidationService
+- tradePayloadBuilder
+- batchQueueService integration
+
+Data Requirements:
+Use existing loaded Sleeper data where possible:
+- user leagues
+- rosters
+- users/managers
+- players
+- draft picks
+- existing trade finder values
+- player values
+- pick values
+
+Validation Requirements:
+Before queueing:
+- confirm user owns all outgoing assets in each league
+- confirm partner owns all requested assets in that league
+- confirm league allows trading
+- confirm trade deadline has not passed if available
+- confirm no duplicate pending offer already exists if pending trade data is available
+- confirm user is authenticated with Sleeper token
+
+Before sending:
+- rerun the same validation
+- if validation fails, mark item as skipped with a clear reason
+
+Queue UI:
+After queueing, show:
+- total queued trades
+- next trade scheduled time
+- estimated completion window
+- list of pending/sent/failed/skipped trades
+- Pause Queue
+- Cancel Pending
+- Retry Failed
+- Send Next Now only if development/admin mode is enabled
+
+Error Handling:
+If Sleeper returns 429, 403, auth error, or repeated failures:
+- pause the queue
+- show a message:
+“Queue paused because Sleeper rejected one or more requests. Please review before continuing.”
+
+Launch Scope:
+For first version, keep it simple:
+- Build offer
+- Select targets
+- Review
+- Queue trades safely
+
+Do not overbuild advanced AI recommendations yet.
+The priority is safe, reliable bulk trade creation and queue-based sending.
