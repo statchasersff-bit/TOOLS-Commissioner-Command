@@ -362,7 +362,7 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
       case "league-analyzer:transactions": return <Transactions leagueId={selectedLeagueId!} />;
       case "trade-center:trade-database": return <TradeDatabase league={league} />;
       case "trade-center:trade-calculator": return <TradeCalculator league={league} userTeam={userTeam} />;
-      case "trade-center:positional-analysis": return <TradeFinder league={league} userTeam={userTeam} />;
+      case "trade-center:positional-analysis": return <PositionalAnalysis league={league} userTeam={userTeam} />;
       case "trade-center:trade-block": return <TradeBlockScanner league={league} />;
       case "league-market:market-value": return <MarketValue league={league} />;
       case "league-market:analysis": return <Analysis />;
