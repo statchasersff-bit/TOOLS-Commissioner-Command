@@ -359,56 +359,147 @@ const TAB_SHORT_LABELS: Record<string, string> = {
 interface MobileBottomNavProps {
   tabs: MainTabConfig[];
   activeTab: string;
-  setActiveTab: (id: string) => void;
+  activeSub: string;
+  onNavigate: (tab: string, sub: string) => void;
 }
 
-export function MobileBottomNav({ tabs, activeTab, setActiveTab }: MobileBottomNavProps) {
+export function MobileBottomNav({ tabs, activeTab, activeSub, onNavigate }: MobileBottomNavProps) {
+  const [openMenu, setOpenMenu] = useState<string | null>(null);
 
-  const renderTab = (tab: MainTabConfig) => {
-    const Icon = TAB_ICONS[tab.id] || BarChart2;
-    const isActive = activeTab === tab.id;
-    const label = TAB_SHORT_LABELS[tab.id] ?? tab.label;
-    return (
-      <button
-        key={tab.id}
-        onClick={() => setActiveTab(tab.id)}
-        data-testid={`bottom-nav-${tab.id}`}
-        className="flex-1 flex flex-col items-center justify-center gap-2 transition-all duration-150"
-        style={{ minWidth: 44, minHeight: 44, paddingTop: 8, paddingBottom: 4 }}
-      >
-        <Icon
-          className="flex-shrink-0"
-          style={{ width: 18, height: 18, color: isActive ? "#d4af37" : "rgba(203,213,225,0.50)" }}
-        />
-        <span
-          className="whitespace-nowrap font-semibold leading-none"
-          style={{ fontSize: 10, letterSpacing: "0.02em", color: isActive ? "#d4af37" : "rgba(203,213,225,0.50)" }}
-        >
-          {label}
-        </span>
-      </button>
-    );
-  };
+  const handleTabPress = useCallback((tab: MainTabConfig) => {
+    const sections = MEGA_DATA[tab.id];
+    const allItems = sections?.flatMap(s => s.items) ?? [];
+    if (allItems.length <= 1) {
+      onNavigate(tab.id, allItems[0]?.subId ?? "");
+      setOpenMenu(null);
+    } else {
+      setOpenMenu(prev => prev === tab.id ? null : tab.id);
+      onNavigate(tab.id, allItems[0]?.subId ?? "");
+    }
+  }, [onNavigate]);
+
+  const handleSubPress = useCallback((tabId: string, subId: string) => {
+    onNavigate(tabId, subId);
+    setOpenMenu(null);
+  }, [onNavigate]);
+
+  const openSections = openMenu ? (MEGA_DATA[openMenu] ?? []) : [];
+  const openItems = openSections.flatMap(s => s.items);
 
   return (
-    <nav
-      className="fixed bottom-0 left-0 right-0 md:hidden"
-      style={{
-        zIndex: 1000,
-        height: "calc(72px + env(safe-area-inset-bottom, 0px))",
-        paddingBottom: "env(safe-area-inset-bottom, 0px)",
-        background: "rgba(8,15,34,0.94)",
-        backdropFilter: "blur(14px)",
-        WebkitBackdropFilter: "blur(14px)",
-        borderTop: "1px solid rgba(212,175,55,0.18)",
-        boxShadow: "0 -8px 24px rgba(0,0,0,0.35)",
-      }}
-      data-testid="mobile-bottom-nav"
-    >
-      <div className="flex items-stretch h-[72px]">
-        {tabs.map(renderTab)}
+    <>
+      {/* Backdrop */}
+      {openMenu && (
+        <div
+          className="fixed inset-0 md:hidden"
+          style={{ zIndex: 998, background: "rgba(0,0,0,0.45)" }}
+          onClick={() => setOpenMenu(null)}
+        />
+      )}
+
+      {/* Slide-up menu panel */}
+      <div
+        className="fixed left-0 right-0 md:hidden"
+        style={{
+          bottom: "calc(72px + env(safe-area-inset-bottom, 0px))",
+          zIndex: 999,
+          transform: openMenu ? "translateY(0)" : "translateY(110%)",
+          transition: "transform 0.22s cubic-bezier(0.32,0.72,0,1)",
+          background: "rgba(8,15,34,0.97)",
+          backdropFilter: "blur(18px)",
+          WebkitBackdropFilter: "blur(18px)",
+          borderTop: "1px solid rgba(212,175,55,0.28)",
+          borderRadius: "18px 18px 0 0",
+          boxShadow: "0 -12px 40px rgba(0,0,0,0.5)",
+          padding: "12px 4px 8px",
+        }}
+      >
+        {/* Handle bar */}
+        <div className="flex justify-center mb-3">
+          <div style={{ width: 36, height: 4, borderRadius: 2, background: "rgba(212,175,55,0.35)" }} />
+        </div>
+
+        <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${Math.min(openItems.length, 3)}, 1fr)` }}>
+          {openItems.map(item => {
+            const Icon = item.icon;
+            const isActive = activeSub === item.subId;
+            return (
+              <button
+                key={item.subId}
+                onClick={() => handleSubPress(openMenu!, item.subId)}
+                data-testid={`mobile-submenu-${item.subId}`}
+                className="flex flex-col items-center gap-1.5 rounded-xl px-2 py-3 transition-all duration-150"
+                style={{
+                  background: isActive ? "rgba(212,175,55,0.12)" : "transparent",
+                  border: `1px solid ${isActive ? "rgba(212,175,55,0.35)" : "transparent"}`,
+                }}
+              >
+                <Icon
+                  style={{ width: 20, height: 20, color: isActive ? "#d4af37" : "rgba(203,213,225,0.70)", flexShrink: 0 }}
+                />
+                <span
+                  className="font-semibold text-center leading-tight"
+                  style={{ fontSize: 11, color: isActive ? "#d4af37" : "rgba(203,213,225,0.85)", letterSpacing: "0.01em" }}
+                >
+                  {item.label}
+                </span>
+                <span
+                  className="text-center leading-tight hidden"
+                  style={{ fontSize: 9, color: "rgba(203,213,225,0.40)" }}
+                >
+                  {item.description}
+                </span>
+              </button>
+            );
+          })}
+        </div>
       </div>
-    </nav>
+
+      {/* Bottom nav bar */}
+      <nav
+        className="fixed bottom-0 left-0 right-0 md:hidden"
+        style={{
+          zIndex: 1000,
+          height: "calc(72px + env(safe-area-inset-bottom, 0px))",
+          paddingBottom: "env(safe-area-inset-bottom, 0px)",
+          background: "rgba(8,15,34,0.94)",
+          backdropFilter: "blur(14px)",
+          WebkitBackdropFilter: "blur(14px)",
+          borderTop: "1px solid rgba(212,175,55,0.18)",
+          boxShadow: "0 -8px 24px rgba(0,0,0,0.35)",
+        }}
+        data-testid="mobile-bottom-nav"
+      >
+        <div className="flex items-stretch h-[72px]">
+          {tabs.map(tab => {
+            const Icon = TAB_ICONS[tab.id] || BarChart2;
+            const isActive = activeTab === tab.id;
+            const isMenuOpen = openMenu === tab.id;
+            const label = TAB_SHORT_LABELS[tab.id] ?? tab.label;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => handleTabPress(tab)}
+                data-testid={`bottom-nav-${tab.id}`}
+                className="flex-1 flex flex-col items-center justify-center gap-2 transition-all duration-150"
+                style={{ minWidth: 44, minHeight: 44, paddingTop: 8, paddingBottom: 4 }}
+              >
+                <Icon
+                  className="flex-shrink-0"
+                  style={{ width: 18, height: 18, color: isActive || isMenuOpen ? "#d4af37" : "rgba(203,213,225,0.50)" }}
+                />
+                <span
+                  className="whitespace-nowrap font-semibold leading-none"
+                  style={{ fontSize: 10, letterSpacing: "0.02em", color: isActive || isMenuOpen ? "#d4af37" : "rgba(203,213,225,0.50)" }}
+                >
+                  {label}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </nav>
+    </>
   );
 }
 

@@ -539,7 +539,8 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
       <MobileBottomNav
         tabs={NAV_CONFIG}
         activeTab={activeMainTab}
-        setActiveTab={handleMainTabChange}
+        activeSub={activeSubTab}
+        onNavigate={(tab, sub) => { handleMainTabChange(tab); if (sub) handleSubTabChange(sub); }}
       />
     </div>
   );
