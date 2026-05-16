@@ -8,7 +8,7 @@ interface SectionHeaderProps {
 
 export function SectionHeader({ title, subtitle, className }: SectionHeaderProps) {
   return (
-    <div className={cn("mb-8", className)}>
+    <div className={cn("hidden md:block mb-8", className)}>
       <h2 className="text-xl md:text-2xl font-bold text-foreground tracking-tight" data-testid={`section-header-${title.toLowerCase().replace(/\s+/g, "-")}`}>
         {title}
       </h2>
