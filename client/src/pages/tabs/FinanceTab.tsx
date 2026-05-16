@@ -711,10 +711,10 @@ export function FinanceTab() {
               <div className={`${COL} gap-x-2 px-4 py-2.5 border-b border-border/50 bg-muted/30 items-center`}>
                 <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">League</span>
                 <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Tier</span>
-                <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground text-center">Standing</span>
-                <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground text-center">Record</span>
-                <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground text-center">Pts For</span>
-                <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground text-center">Playoffs</span>
+                <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground text-center">RNK</span>
+                <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground text-center">REC</span>
+                <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground text-center">PF</span>
+                <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground text-center">PLYF%</span>
                 <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground text-right">Buy-in</span>
                 <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground text-right">🥇</span>
                 <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground text-right">🥈</span>
@@ -756,7 +756,7 @@ export function FinanceTab() {
                           )}
                         </div>
                         <div className="min-w-0">
-                          <p className="font-semibold text-sm truncate leading-tight">{league.name}</p>
+                          <p className="font-semibold text-xs truncate leading-tight">{league.name}</p>
                           <p className="text-[10px] text-muted-foreground truncate">{league.totalRosters}T · {league.scoringFormat} {league.format} · {league.season}</p>
                         </div>
                       </div>
