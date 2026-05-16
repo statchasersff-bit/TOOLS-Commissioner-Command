@@ -10,11 +10,12 @@ import { HeaderValueSourceBadge } from "@/components/ValueSourceSelector";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useValueModel } from "@/contexts/ValueModelContext";
 import { useSleeper } from "@/contexts/SleeperContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { NAV_CONFIG } from "@/data/mockData";
 import type { League, Team } from "@/types";
 import { fetchSleeperLeagueFull } from "@/lib/sleeperApi";
 import { DataDiagnostics } from "@/components/DataDiagnostics";
-import { LayoutDashboard, Loader2, Lock, Check, User, RefreshCw, AlertCircle, Wifi, WifiOff, ChevronDown } from "lucide-react";
+import { LayoutDashboard, Loader2, Lock, Check, User, RefreshCw, AlertCircle, Wifi, WifiOff, ChevronDown, LogOut } from "lucide-react";
 import { SiDiscord } from "react-icons/si";
 import logoDark from "@assets/statchasers_logo_transparent_dark_1772764844282.png";
 import logoLight from "@assets/statchasers_logo_transparent_light_1772764844283.png";
@@ -73,6 +74,7 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
 
   const { isRecalculating, isLoading, getPlayerValue, getPickValue, calculateAllTeamMetrics, optimizeLineup } = useValueModel();
   const sleeper = useSleeper();
+  const { user: scUser, logout: scLogout } = useAuth();
 
   const sleeperLeaguesAsLeagues = useMemo(() => {
     return sleeper.leagues.map((sl) => ({
@@ -410,11 +412,27 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
                   </button>
 
                   {userDropdownOpen && (
-                    <div className="absolute right-0 top-full mt-1.5 w-48 rounded-xl border border-border/60 bg-background shadow-lg shadow-black/10 dark:shadow-black/30 z-50 overflow-hidden">
-                      <div className="px-3 py-2 border-b border-border/40">
-                        <p className="text-[11px] text-muted-foreground">Signed in as</p>
-                        <p className="text-xs font-semibold text-foreground truncate">@{sleeper.user.username}</p>
+                    <div className="absolute right-0 top-full mt-1.5 w-56 rounded-xl border border-border/60 bg-background shadow-lg shadow-black/10 dark:shadow-black/30 z-50 overflow-hidden">
+                      {/* Sleeper identity */}
+                      <div className="px-3 py-2.5 border-b border-border/40 flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0 ring-1 ring-border/40 bg-muted flex items-center justify-center">
+                          {sleeper.user?.avatar ? (
+                            <img
+                              src={`https://sleepercdn.com/avatars/thumbs/${sleeper.user.avatar}`}
+                              alt={sleeper.user.displayName}
+                              className="w-full h-full object-cover"
+                              onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                            />
+                          ) : (
+                            <User className="w-4 h-4 text-muted-foreground" />
+                          )}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-xs font-semibold text-foreground truncate">@{sleeper.user?.username}</p>
+                          {scUser?.email && <p className="text-[11px] text-muted-foreground truncate">{scUser.email}</p>}
+                        </div>
                       </div>
+                      {/* Discord */}
                       <a
                         href="https://discord.gg/34XkMXF6t3"
                         target="_blank"
@@ -426,10 +444,20 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
                         <SiDiscord className="w-3.5 h-3.5 flex-shrink-0" />
                         Join Discord
                       </a>
+                      {/* Theme */}
                       <div className="flex items-center justify-between px-3 py-2.5 border-t border-border/30">
                         <span className="text-xs text-muted-foreground">Theme</span>
                         <ThemeToggle />
                       </div>
+                      {/* Sign out */}
+                      <button
+                        onClick={() => { setUserDropdownOpen(false); scLogout(); }}
+                        data-testid="button-sign-out"
+                        className="w-full flex items-center gap-2.5 px-3 py-2.5 text-xs font-medium text-red-400 hover:bg-red-500/8 border-t border-border/30 transition-colors"
+                      >
+                        <LogOut className="w-3.5 h-3.5 flex-shrink-0" />
+                        Sign out
+                      </button>
                     </div>
                   )}
                 </div>

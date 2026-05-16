@@ -135,11 +135,6 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     return <ConnectSleeperScreen />;
   }
 
-  // ready — show the app with floating account button
-  return (
-    <>
-      {children}
-      <AccountButton />
-    </>
-  );
+  // ready — show the app (account menu is embedded in the header)
+  return <>{children}</>;
 }
