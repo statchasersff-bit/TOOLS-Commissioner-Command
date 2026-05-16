@@ -61,11 +61,16 @@ function getTierColor(tier: string): string {
   if (/[a-z]4$/.test(t))                               return "bg-slate-500/10 text-slate-500 border-slate-500/20";
   if (t.includes("fringe"))                             return "bg-slate-600/10 text-slate-500 border-slate-600/20";
   if (t.includes("handcuff") || t.includes("backup"))  return "bg-purple-500/15 text-purple-400 border-purple-500/30";
-  // Experience tiers (WR overview_2025)
+  // Experience tiers (WR/TE overview_2025, Year X–Y style)
   if (t.includes("year 1") || t.includes("year 2"))    return "bg-emerald-500/15 text-emerald-400 border-emerald-500/40";
   if (t.includes("year 3") || t.includes("year 4"))    return "bg-[#d4af37]/15 text-[#d4af37] border-[#d4af37]/40";
   if (t.includes("year 5") || t.includes("year 6"))    return "bg-blue-500/15 text-blue-400 border-blue-500/30";
   if (t.includes("veteran") || t.includes("year 7"))   return "bg-slate-500/15 text-slate-400 border-slate-500/30";
+  // QB experienceTier values (Early Career, Ascending, Prime, Peak, Veteran, Declining)
+  if (t.includes("early career"))   return "bg-emerald-500/15 text-emerald-400 border-emerald-500/40";
+  if (t.includes("ascending"))      return "bg-[#d4af37]/15 text-[#d4af37] border-[#d4af37]/40";
+  if (t.includes("prime") || t.includes("peak")) return "bg-blue-500/15 text-blue-400 border-blue-500/30";
+  if (t.includes("declining"))      return "bg-red-500/15 text-red-400 border-red-500/30";
   return "bg-slate-500/15 text-slate-400 border-slate-500/30";
 }
 
@@ -74,7 +79,12 @@ const POS_DATA_URLS: Record<Position, string> = {
   RB: "https://cdn.jsdelivr.net/gh/statchasersff-bit/statchasers-data@master/statchasers-data/output/rb_player_overview.json",
   WR: "https://cdn.jsdelivr.net/gh/statchasersff-bit/statchasers-data@master/statchasers-data/output/wr_player_overview_2025.json",
   TE: "https://cdn.jsdelivr.net/gh/statchasersff-bit/statchasers-data@master/statchasers-data/output/te_player_overview_2025.json",
-  QB: "https://cdn.jsdelivr.net/gh/statchasersff-bit/statchasers-data@master/statchasers-data/output/qb_player_overview.json",
+  QB: "https://cdn.jsdelivr.net/gh/statchasersff-bit/statchasers-data@master/statchasers-data/output/performance_analytics_latest.json",
+};
+
+// Row-level filters applied after extractRows (for multi-position source files)
+const POS_ROW_FILTER: Partial<Record<Position, (row: PlayerRaw) => boolean>> = {
+  QB: (row) => String(row.pos ?? row.position ?? "") === "QB",
 };
 
 // Secondary data URLs (fetched and merged into primary rows by normalized player name)
@@ -84,7 +94,7 @@ const POS_SECONDARY_URL: Partial<Record<Position, string>> = {
 };
 
 const POS_TIER_FIELD: Record<Position, string> = {
-  RB: "rb_tier", WR: "exp_tier", TE: "exp_tier", QB: "qb_tier",
+  RB: "rb_tier", WR: "exp_tier", TE: "exp_tier", QB: "experienceTier",
 };
 
 const POS_LABELS: Record<Position, string> = {
@@ -109,7 +119,7 @@ const WINNOW_EDGE: EdgeDef = {
   compute: p => p.rdVal,
 };
 
-// WR-specific named dynasty/win-now edges
+// Shared named dynasty/win-now edges (WR, TE, QB)
 const WR_DYNASTY_EDGE: EdgeDef = {
   id: "dynasty-edge", label: "Dynasty Edge", Icon: TrendingUp,
   color: "text-emerald-400", bgColor: "bg-emerald-500/10 border-emerald-500/30",
@@ -144,11 +154,11 @@ const POS_STATS: Record<Position, StatDef[]> = {
     { label: "RZ Tgt/Gm",    compute: p => getField(p, "rz_tgt_per_game"),   display: v => fmtNum(v) },
   ],
   QB: [
-    { label: "Pass Att/G",  compute: p => getField(p, "pass_att_per_gm"),   display: v => fmtNum(v) },
-    { label: "Comp %",      compute: p => getField(p, "completion_pct") ?? getField(p, "comp_pct"), display: v => fmtPct(v) },
-    { label: "Pass Yds/G",  compute: p => getField(p, "pass_yards_per_gm"), display: v => fmtNum(v, 0) },
-    { label: "TD/G",        compute: p => getField(p, "td_per_gm"),          display: v => fmtNum(v, 2) },
-    { label: "Rush Yds/G",  compute: p => getField(p, "rush_yards_per_gm"), display: v => fmtNum(v, 0) },
+    { label: "DB/Gm",       compute: p => getField(p, "dropbacksPerGame"),  display: v => fmtNum(v) },
+    { label: "Rush/Gm",     compute: p => getField(p, "rushAttPerGame"),     display: v => fmtNum(v) },
+    { label: "RZ Att/Gm",   compute: p => { const rz = getField(p, "rzAtt"); const g = getField(p, "games"); return rz !== null && g ? rz / g : null; }, display: v => fmtNum(v) },
+    { label: "Deep Att %",  compute: p => getField(p, "deepAttemptRate"),   display: v => fmtPct(v) },
+    { label: "Yds/Att",     compute: p => getField(p, "ypa"),               display: v => fmtNum(v) },
   ],
 };
 
@@ -174,10 +184,12 @@ const POS_EDGES: Record<Position, EdgeDef[]> = {
     WR_DYNASTY_EDGE, WR_WINNOW_EDGE,
   ],
   QB: [
-    { id: "best-passer",   label: "Best Passer",         Icon: Star,   color: "text-[#d4af37]",  bgColor: "bg-[#d4af37]/10 border-[#d4af37]/30",  compute: p => getField(p, "pass_yards_per_gm") ?? 0 },
-    { id: "best-accuracy", label: "Best Accuracy",       Icon: Zap,    color: "text-blue-400",   bgColor: "bg-blue-500/10 border-blue-500/30",     compute: p => (getField(p, "completion_pct") ?? getField(p, "comp_pct")) ?? 0 },
-    { id: "best-dual",     label: "Best Dual-Threat",    Icon: Target, color: "text-red-400",    bgColor: "bg-red-500/10 border-red-500/30",       compute: p => getField(p, "rush_yards_per_gm") ?? 0 },
-    DYNASTY_EDGE, WINNOW_EDGE,
+    { id: "volume",    label: "Volume Edge",        Icon: Star,        color: "text-[#d4af37]",   bgColor: "bg-[#d4af37]/10 border-[#d4af37]/30",    compute: p => getField(p, "dropbacksPerGame") ?? 0 },
+    { id: "rushing",   label: "Rushing Edge",       Icon: ArrowUpRight,color: "text-blue-400",    bgColor: "bg-blue-500/10 border-blue-500/30",      compute: p => getField(p, "rushAttPerGame") ?? 0 },
+    { id: "td-opp",    label: "TD Opportunity",     Icon: Target,      color: "text-red-400",     bgColor: "bg-red-500/10 border-red-500/30",        compute: p => { const rz = getField(p, "rzAtt"); const g = getField(p, "games"); return rz !== null && g ? rz / g : 0; } },
+    { id: "deep",      label: "Deep Passing Edge",  Icon: Zap,         color: "text-purple-400",  bgColor: "bg-purple-500/10 border-purple-500/30",  compute: p => getField(p, "deepAttemptRate") ?? 0 },
+    { id: "efficiency",label: "Efficiency Edge",    Icon: TrendingUp,  color: "text-sky-400",     bgColor: "bg-sky-500/10 border-sky-500/30",        compute: p => getField(p, "ypa") ?? 0 },
+    WR_DYNASTY_EDGE, WR_WINNOW_EDGE,
   ],
 };
 
@@ -402,7 +414,9 @@ function EdgeLabels({ players, edges }: { players: (ResolvedPlayer | null)[]; ed
   const active = players.filter(Boolean) as ResolvedPlayer[];
   if (active.length < 2) return null;
 
-  const gridClass = edges.length >= 6
+  const gridClass = edges.length >= 7
+    ? "grid-cols-2 sm:grid-cols-4 lg:grid-cols-7"
+    : edges.length >= 6
     ? "grid-cols-2 sm:grid-cols-3 lg:grid-cols-6"
     : "grid-cols-2 sm:grid-cols-3 lg:grid-cols-5";
 
@@ -462,7 +476,11 @@ export function CompareRBs() {
       : Promise.resolve([] as PlayerRaw[]);
 
     Promise.all([primaryFetch, secondaryFetch])
-      .then(([primary, secondary]) => {
+      .then(([rawPrimary, secondary]) => {
+        // Apply position row filter (e.g. QB comes from a multi-position file)
+        const rowFilter = POS_ROW_FILTER[pos];
+        const primary = rowFilter ? rawPrimary.filter(rowFilter) : rawPrimary;
+
         if (!secondary.length) {
           setPlayerData(primary);
         } else {
@@ -565,7 +583,7 @@ export function CompareRBs() {
 
           {/* Position switcher */}
           <div className="flex items-center gap-1 bg-[#0a1220] rounded-full p-1 flex-shrink-0 border border-border/30">
-            {(["RB", "WR", "TE", "QB"] as Position[]).map(p => (
+            {(["QB", "RB", "WR", "TE"] as Position[]).map(p => (
               <button
                 key={p}
                 onClick={() => setPos(p)}
