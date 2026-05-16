@@ -61,7 +61,7 @@ const FEATURES: FeatureDef[] = [
     category: "My Team",
     title: "My Team",
     icon: Users,
-    description: "A full overview of your roster — team value, positional strengths, picks, age curve, and dynasty outlook.",
+    description: "A full overview of your roster: team value, positional strengths, picks, age curve, and dynasty outlook.",
     bullets: [
       "Roster value breakdown by position and tier",
       "Pick capital valuation and draft asset overview",
@@ -90,7 +90,7 @@ const FEATURES: FeatureDef[] = [
     category: "League",
     title: "League Analyzer",
     icon: Trophy,
-    description: "Understand where every team stands in your league — power rankings, roster tiers, and league-wide intelligence.",
+    description: "Understand where every team stands in your league: power rankings, roster tiers, and league-wide intelligence.",
     bullets: [
       "Power rankings based on dynasty and redraft value",
       "Team tier classification for every roster in the league",
@@ -105,7 +105,7 @@ const FEATURES: FeatureDef[] = [
     category: "Trade",
     title: "Trade Center",
     icon: ArrowLeftRight,
-    description: "The complete trade toolkit — analyze deals, find opportunities, sync active offers, and send proposals through Sleeper.",
+    description: "The complete trade toolkit. Analyze deals, find opportunities, sync active offers, and send proposals through Sleeper.",
     bullets: [
       "Trade calculator with dynasty and redraft value models",
       "Positional trade finder based on roster needs",
@@ -134,7 +134,7 @@ const FEATURES: FeatureDef[] = [
     category: "Trade",
     title: "Trade Sync",
     icon: Inbox,
-    description: "View all your Sleeper trade offers across every league — incoming, outgoing, completed, rejected, and cancelled.",
+    description: "View all your Sleeper trade offers across every league: incoming, outgoing, completed, rejected, and cancelled.",
     bullets: [
       "Accept, reject, or withdraw active trade offers",
       "Counter, edit, and resend proposals",
@@ -167,7 +167,7 @@ const FEATURES: FeatureDef[] = [
     bullets: [
       "Filter by format (SF/1QB), scoring, and league size",
       "Player name search across thousands of real trades",
-      "Anonymized data — no team names or manager identities stored",
+      "Anonymized data (no team names or manager identities stored)",
     ],
     tab: "trade-center",
     sub: "trade-database",
@@ -310,11 +310,11 @@ export function AboutPage({ onNavigate, onOpenFeedback, onOpenCookies, onOpenTer
             </div>
             <ul className="space-y-2">
               {[
-                "Your Sleeper credentials go directly to Sleeper — never through StatChasers servers.",
+                "Your Sleeper credentials go directly to Sleeper, never through StatChasers servers.",
                 "Dynasty Command uses Sleeper auth tokens only when you choose to perform an action.",
                 "Tokens stay in your browser unless you explicitly log out or clear your session.",
                 "StatChasers never logs JWTs, private DMs, or personally identifiable Sleeper data.",
-                "Trade Database stores only anonymized player and pick asset data — no team names, owner names, or league names.",
+                "Trade Database stores only anonymized player and pick asset data. No team names, owner names, or league names.",
               ].map((line, i) => (
                 <li key={i} className="flex items-start gap-2">
                   <span className="flex-shrink-0 w-1 h-1 rounded-full mt-[7px] bg-indigo-400" />

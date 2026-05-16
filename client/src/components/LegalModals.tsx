@@ -19,8 +19,8 @@ function LegalShell({ open, onClose, title, subtitle, testId, children }: LegalS
   if (!open) return null;
   return (
     <div
-      className="fixed inset-0 z-[90] flex flex-col overflow-hidden"
-      style={{ background: "rgba(4,8,20,0.97)", backdropFilter: "blur(12px)" }}
+      className="fixed inset-x-0 bottom-0 z-[45] flex flex-col overflow-hidden"
+      style={{ top: "61px", background: "rgba(4,8,20,0.97)", backdropFilter: "blur(12px)" }}
     >
       {/* Sticky header */}
       <div
