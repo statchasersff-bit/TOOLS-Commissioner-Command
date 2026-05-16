@@ -925,17 +925,6 @@ export default function TradeSync() {
           title="Trade Sync"
           subtitle="All pending trade offers across your leagues — managed from one dashboard."
         />
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-8 gap-1.5 text-xs"
-          onClick={fetchAllData}
-          disabled={loading}
-          data-testid="button-refresh-tradesync"
-        >
-          <RefreshCw className={cn("w-3 h-3", loading && "animate-spin")} />
-          Refresh
-        </Button>
       </div>
 
       {/* KPI Row */}
