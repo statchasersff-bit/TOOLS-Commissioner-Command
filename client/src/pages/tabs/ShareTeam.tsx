@@ -255,41 +255,52 @@ export function ShareTeam({ league, userTeam }: Props) {
   return (
     <div className="space-y-4">
       <SectionHeader title="Share My Team" subtitle="Create a clean shareable snapshot of your roster, values, and team profile." />
-      {/* Tab toggle — directly under league selector */}
+      {/* Tab toggle — view switcher */}
       <div className="flex justify-center sm:justify-start">
-        <div className="flex gap-1 p-1 rounded-xl bg-white/[0.03] border border-white/6">
-          <button
-            onClick={() => setInnerTab("share")}
-            data-testid="tab-inner-share"
-            className={cn(
-              "relative flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-[11px] font-semibold transition-all duration-200",
-              innerTab === "share"
-                ? "bg-[#0b3a7a]/60 text-white border border-[#d4af37]/25"
-                : "text-white/35 hover:text-white/60"
-            )}
-          >
-            <Share2 className="w-3.5 h-3.5" />
-            List View
-            {innerTab === "share" && (
-              <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-6 h-[2px] rounded-full bg-[#d4af37]" />
-            )}
-          </button>
-          <button
-            onClick={() => setInnerTab("field-view")}
-            data-testid="tab-inner-field-view"
-            className={cn(
-              "relative flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-[11px] font-semibold transition-all duration-200",
-              innerTab === "field-view"
-                ? "bg-[#0b3a7a]/60 text-white border border-[#d4af37]/25"
-                : "text-white/35 hover:text-white/60"
-            )}
-          >
-            <LayoutGrid className="w-3.5 h-3.5" />
-            Field View
-            {innerTab === "field-view" && (
-              <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-6 h-[2px] rounded-full bg-[#d4af37]" />
-            )}
-          </button>
+        <div
+          className="grid w-full sm:w-auto"
+          style={{
+            gridTemplateColumns: "1fr 1fr",
+            maxWidth: 420,
+            height: 48,
+            borderRadius: 16,
+            padding: 4,
+            background: "rgba(255,255,255,0.04)",
+            border: "1px solid rgba(255,255,255,0.07)",
+            gap: 4,
+          }}
+        >
+          {(["share", "field-view"] as const).map((val) => {
+            const isActive = innerTab === val;
+            const Icon = val === "share" ? Share2 : LayoutGrid;
+            const label = val === "share" ? "List View" : "Field View";
+            return (
+              <button
+                key={val}
+                onClick={() => setInnerTab(val)}
+                data-testid={`tab-inner-${val}`}
+                className="relative flex items-center justify-center gap-2 font-semibold transition-all duration-200"
+                style={{
+                  borderRadius: 12,
+                  fontSize: 13,
+                  letterSpacing: "0.01em",
+                  background: isActive ? "linear-gradient(135deg, rgba(11,58,122,0.85) 0%, rgba(11,58,122,0.65) 100%)" : "transparent",
+                  color: isActive ? "#fff" : "rgba(203,213,225,0.45)",
+                  border: isActive ? "1px solid rgba(212,175,55,0.30)" : "1px solid transparent",
+                  boxShadow: isActive ? "0 2px 12px rgba(11,58,122,0.40), inset 0 1px 0 rgba(255,255,255,0.06)" : "none",
+                }}
+              >
+                <Icon style={{ width: 15, height: 15, flexShrink: 0 }} />
+                {label}
+                {isActive && (
+                  <span
+                    className="absolute bottom-[3px] left-1/2 -translate-x-1/2 rounded-full"
+                    style={{ width: 28, height: 2, background: "#d4af37", opacity: 0.85 }}
+                  />
+                )}
+              </button>
+            );
+          })}
         </div>
       </div>
 
