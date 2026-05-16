@@ -76,7 +76,7 @@ export function DataTable<T extends Record<string, any>>({
               <th
                 key={col.key}
                 className={cn(
-                  "px-4 py-3.5 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap",
+                  "px-2 sm:px-4 py-2.5 sm:py-3.5 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap",
                   col.sticky && "sticky left-0 z-10 bg-muted/30 dark:bg-muted/20",
                   col.sortable && "cursor-pointer select-none hover:text-foreground transition-colors",
                   col.className
@@ -122,7 +122,7 @@ export function DataTable<T extends Record<string, any>>({
                   <td
                     key={col.key}
                     className={cn(
-                      "px-4 py-3.5 whitespace-nowrap",
+                      "px-2 sm:px-4 py-2 sm:py-3.5 whitespace-nowrap",
                       col.sticky && "sticky left-0 z-10",
                       col.sticky && (isHighlighted ? "bg-[#d4af37]/5 dark:bg-[#d4af37]/8" : rowBg),
                       col.className
@@ -143,15 +143,15 @@ export function DataTable<T extends Record<string, any>>({
 function DataTableSkeleton({ columns, rows }: { columns: number; rows: number }) {
   return (
     <div className="rounded-md border border-border/60" data-testid="table-skeleton">
-      <div className="border-b border-border bg-muted/30 dark:bg-muted/20 flex gap-4 px-4 py-3.5">
+      <div className="border-b border-border bg-muted/30 dark:bg-muted/20 flex gap-4 px-2 sm:px-4 py-2.5 sm:py-3.5">
         {Array.from({ length: columns }).map((_, i) => (
           <div key={i} className="h-3 rounded skeleton-pulse" style={{ width: `${60 + Math.random() * 60}px` }} />
         ))}
       </div>
       {Array.from({ length: rows }).map((_, rowIdx) => (
-        <div key={rowIdx} className={cn("flex gap-4 px-4 py-3.5 border-b border-border/20", rowIdx % 2 === 0 ? "bg-background" : "bg-muted/10")}>
+        <div key={rowIdx} className={cn("flex gap-4 px-2 sm:px-4 py-2 sm:py-3.5 border-b border-border/20", rowIdx % 2 === 0 ? "bg-background" : "bg-muted/10")}>
           {Array.from({ length: columns }).map((_, colIdx) => (
-            <div key={colIdx} className="h-4 rounded skeleton-pulse" style={{ width: `${50 + Math.random() * 80}px` }} />
+            <div key={colIdx} className="h-3.5 rounded skeleton-pulse" style={{ width: `${40 + Math.random() * 70}px` }} />
           ))}
         </div>
       ))}

@@ -705,6 +705,8 @@ export function FinanceTab() {
         return (
           <>
             <Card className="overflow-hidden">
+              <div className="overflow-x-auto">
+              <div className="min-w-[820px]">
               {/* Table header */}
               <div className={`${COL} gap-x-2 px-4 py-2.5 border-b border-border/50 bg-muted/30 items-center`}>
                 <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">League</span>
@@ -840,6 +842,8 @@ export function FinanceTab() {
                   </div>
                 );
               })}
+              </div>
+              </div>
             </Card>
 
             {/* Hidden leagues */}

@@ -423,7 +423,7 @@ export function ShareDynastyPopup({ blocked = false }: Props) {
 
           {/* Expanded panel — shown above the pill */}
           {isExpanded && (
-            <div className="w-[360px] rounded-xl border border-[#d4af37]/30 bg-[#080f1d] shadow-[0_8px_32px_rgba(0,0,0,0.7)] overflow-hidden">
+            <div className="w-[min(360px,calc(100vw-32px))] rounded-xl border border-[#d4af37]/30 bg-[#080f1d] shadow-[0_8px_32px_rgba(0,0,0,0.7)] overflow-hidden">
               {/* Panel header */}
               <div className="bg-gradient-to-r from-[#0b1e36] to-[#0c2444] px-4 py-2.5 flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -595,7 +595,7 @@ export function ShareDynastyPopup({ blocked = false }: Props) {
 
       {/* ── Popup card (3-step opt-in flow) ──────────────────────────── */}
       {popupStep !== "hidden" && (
-        <div className="fixed bottom-5 right-5 z-[200] w-[360px] animate-in slide-in-from-bottom-4 fade-in duration-300">
+        <div className="fixed bottom-4 right-4 z-[200] w-[min(360px,calc(100vw-32px))] animate-in slide-in-from-bottom-4 fade-in duration-300">
           <div className="rounded-xl border border-[#d4af37]/30 bg-[#080f1d] shadow-[0_8px_32px_rgba(0,0,0,0.6)] overflow-hidden max-h-[88vh] flex flex-col">
 
             {/* Header */}

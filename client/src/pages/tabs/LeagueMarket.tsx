@@ -158,6 +158,7 @@ export function MarketValue({ league }: MarketProps) {
       </div>
 
       <Card className="overflow-hidden">
+        <div className="overflow-x-auto">
         <table className="w-full" data-testid="table-market-values">
           <thead>
             <tr className="border-b bg-muted/40">
@@ -229,6 +230,7 @@ export function MarketValue({ league }: MarketProps) {
             ))}
           </tbody>
         </table>
+        </div>
       </Card>
     </div>
   );

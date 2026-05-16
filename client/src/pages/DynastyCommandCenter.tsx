@@ -482,12 +482,17 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
 
           {/* League selector (mobile) */}
           {sleeper.isConnected && (
-            <div className="flex items-center gap-2 mt-1.5 md:hidden">
+            <div className="flex items-center gap-2 mt-1.5 md:hidden w-full">
               <LeagueSelector
                 leagues={sleeperLeaguesAsLeagues}
                 selectedLeagueId={selectedLeagueId}
                 onSelect={handleLeagueSelect}
               />
+              {isSelectedBestBall && (
+                <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 bg-sky-50 text-sky-700 dark:bg-sky-950/30 dark:text-sky-400 border-sky-300 dark:border-sky-700 flex-shrink-0" data-testid="badge-bestball-mobile">
+                  Best Ball
+                </Badge>
+              )}
             </div>
           )}
 
@@ -515,7 +520,7 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
         <SubTabs tabs={currentMainConfig.subTabs} activeTab={activeSubTab} setActiveTab={handleSubTabChange} />
       )}
 
-      <main className="max-w-7xl mx-auto px-1.5 md:px-3 py-6 md:py-8 relative">
+      <main className="max-w-7xl mx-auto px-2 sm:px-3 md:px-4 py-4 sm:py-6 md:py-8 relative">
         {showLoadingOverlay && (
           <div className="absolute inset-0 z-30 flex items-start justify-center pt-24" data-testid="recalculating-overlay">
             <div className="bg-background/90 backdrop-blur-sm border border-border rounded-lg px-5 py-3 shadow-lg flex items-center gap-3">

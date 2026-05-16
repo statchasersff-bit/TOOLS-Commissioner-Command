@@ -177,7 +177,7 @@ export function TradeEditTab({
   // ────────────────────────────────────────────────────────────────────────────
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 px-6 py-4 overflow-y-auto flex-1 min-h-0">
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 px-3 sm:px-6 py-3 sm:py-4 overflow-y-auto flex-1 min-h-0">
       {/* You Receive — browse partner's roster */}
       <TradeSidePanel
         label="You Receive"

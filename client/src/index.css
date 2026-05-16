@@ -172,6 +172,11 @@
 
   body {
     @apply font-sans antialiased bg-background text-foreground;
+    overflow-x: hidden;
+  }
+
+  #root {
+    overflow-x: hidden;
   }
 }
 
@@ -305,6 +310,12 @@
       linear-gradient(rgba(100, 160, 255, 0.04) 1px, transparent 1px),
       linear-gradient(90deg, rgba(100, 160, 255, 0.04) 1px, transparent 1px);
     background-size: 24px 24px;
+  }
+
+  /* Mobile table utility: wrap any table for horizontal scroll without full-page overflow */
+  .table-scroll-x {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
   }
 
   .skeleton-pulse {

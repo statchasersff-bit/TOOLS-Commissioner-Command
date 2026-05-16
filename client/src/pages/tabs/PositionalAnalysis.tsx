@@ -270,7 +270,7 @@ export function PositionalAnalysis({ league, userTeam, onNavigateToCalculator }:
       </div>
 
       {subTabs.length > 1 && (
-        <div className="flex items-center gap-0 border-b border-border/50 pb-0" data-testid="positional-sub-tabs">
+        <div className="flex items-center gap-0 border-b border-border/50 pb-0 overflow-x-auto scrollbar-hide" data-testid="positional-sub-tabs">
           {subTabs.map(tab => {
             const Icon = tab.icon;
             return (
@@ -1571,10 +1571,10 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-[820px] w-full bg-[#07111f] border border-white/[0.10] p-0 overflow-hidden max-h-[90vh] flex flex-col">
+      <DialogContent className="max-w-[820px] w-full bg-[#07111f] border border-white/[0.10] p-0 overflow-hidden max-h-[95dvh] sm:max-h-[90vh] flex flex-col">
 
         {/* ── Header ── */}
-        <div className="px-6 pt-6 pb-4 flex-shrink-0">
+        <div className="px-4 sm:px-6 pt-4 sm:pt-6 pb-4 flex-shrink-0">
           <div className="flex items-center gap-2 mb-1">
             <Send className="w-4 h-4 text-[#d4af37] flex-shrink-0" />
             <DialogTitle className="text-[15px] font-bold text-white leading-none">
@@ -1592,7 +1592,7 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
 
         {/* ── Tab bar ── */}
         {status !== "success" && (
-          <div className="flex px-6 border-b border-white/[0.08] flex-shrink-0">
+          <div className="flex px-4 sm:px-6 border-b border-white/[0.08] flex-shrink-0 overflow-x-auto scrollbar-hide">
             {([
               { id: "review"   as const, label: "Review Trade" },
               { id: "edit"     as const, label: "Edit Trade"   },
@@ -1603,7 +1603,7 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
                 data-testid={`tab-${id}`}
                 onClick={() => handleTabChange(id)}
                 className={cn(
-                  "relative px-5 py-3 text-[12px] font-semibold border-b-2 transition-all",
+                  "relative px-3 sm:px-5 py-3 text-[12px] font-semibold border-b-2 transition-all whitespace-nowrap",
                   activeTab === id
                     ? "border-[#d4af37] text-white"
                     : "border-transparent text-white/40 hover:text-white/70"
@@ -1620,7 +1620,7 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
 
         {/* ── Trade columns / Edit panel ── */}
         {activeTab !== "messages" && (
-        <div className="grid grid-cols-2 gap-4 px-6 py-5 overflow-y-auto flex-1">
+        <div className="grid grid-cols-2 gap-2 sm:gap-4 px-3 sm:px-6 py-3 sm:py-5 overflow-y-auto flex-1">
           {editMode ? (
             <>
               <RosterEditPanel teamData={userTeam}         isMyRoster={true}  />
@@ -1664,7 +1664,7 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
 
         {/* ── Pick selector ── */}
         {reviewMode && hasPick && status === "idle" && (
-          <div className="px-6 pb-5 flex-shrink-0 border-t border-white/[0.06] pt-4">
+          <div className="px-3 sm:px-6 pb-4 sm:pb-5 flex-shrink-0 border-t border-white/[0.06] pt-4">
             <p className="text-[10px] text-white/40 uppercase tracking-widest font-semibold mb-3">Choose pick to include</p>
             <div className="flex flex-wrap gap-2">
               {userTeam.picks.filter(p => {
@@ -1703,7 +1703,7 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
         )}
 
         {/* ── Status banners ── */}
-        <div className={cn("px-6 flex-shrink-0 space-y-2 empty:hidden", !reviewMode && "hidden")}>
+        <div className={cn("px-3 sm:px-6 flex-shrink-0 space-y-2 empty:hidden", !reviewMode && "hidden")}>
           {status === "success" && dmStatus === "idle" && (
             <div className="flex items-center gap-2 rounded-lg bg-emerald-500/10 border border-emerald-500/25 px-4 py-3">
               <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
@@ -1764,10 +1764,10 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
 
         {/* ── Expiry selector ── */}
         {reviewMode && status !== "success" && (
-          <div className="px-6 pb-5 flex-shrink-0 border-t border-white/[0.06] pt-4">
-            <div className="flex items-center justify-between mb-2.5">
+          <div className="px-3 sm:px-6 pb-4 sm:pb-5 flex-shrink-0 border-t border-white/[0.06] pt-4">
+            <div className="flex items-center justify-between mb-2.5 flex-wrap gap-1">
               <p className="text-[11px] text-white/40 uppercase tracking-widest font-semibold">Offer Expires In</p>
-              <p className="text-[10px] text-white/25 italic">
+              <p className="text-[10px] text-white/25 italic hidden sm:block">
                 Sleeper will automatically expire the offer after this time.
               </p>
             </div>
@@ -1797,7 +1797,7 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
 
         {/* ── Messages view ── */}
         {activeTab === "messages" && (
-          <div className="flex flex-col flex-1 overflow-hidden min-h-0 px-6 pt-4">
+          <div className="flex flex-col flex-1 overflow-hidden min-h-0 px-3 sm:px-6 pt-4">
             {dmLoading ? (
               <div className="flex-1 flex items-center justify-center">
                 <Loader2 className="w-5 h-5 animate-spin text-white/30" />
@@ -1887,7 +1887,7 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
 
         {/* ── Footer ── */}
         <div className={cn(
-          "flex items-center gap-3 px-6 py-5 border-t border-white/[0.08] flex-shrink-0 mt-auto",
+          "flex items-center gap-2 sm:gap-3 px-3 sm:px-6 py-3 sm:py-5 border-t border-white/[0.08] flex-shrink-0 mt-auto flex-wrap",
           editMode ? "justify-between" : "justify-end"
         )}>
           {editMode ? (

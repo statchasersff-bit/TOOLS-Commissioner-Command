@@ -17,7 +17,7 @@ export function ValueSourceSelector() {
         </span>
       )}
       <Select value={sourceId} onValueChange={(v) => setSourceId(v as ValueSourceId)}>
-        <SelectTrigger className="w-[170px] h-9 text-sm rounded-full border-[#0b3a7a]/30 dark:border-blue-400/25 bg-background hover:border-[#d4af37] dark:hover:border-[#d4af37] focus:ring-[#d4af37]/30 transition-all duration-200" data-testid="select-value-source">
+        <SelectTrigger className="w-[130px] sm:w-[170px] h-9 text-xs sm:text-sm rounded-full border-[#0b3a7a]/30 dark:border-blue-400/25 bg-background hover:border-[#d4af37] dark:hover:border-[#d4af37] focus:ring-[#d4af37]/30 transition-all duration-200" data-testid="select-value-source">
           <div className="flex items-center gap-2">
             {isLoading && <Loader2 className="w-3 h-3 animate-spin text-[#d4af37] flex-shrink-0" />}
             <SelectValue placeholder="Value Source" />

@@ -235,7 +235,7 @@ function TradeValueBar({
   const diff = myValue - theirValue;
   const even = Math.abs(diff) < 10;
   return (
-    <div className="px-6 py-3 border-t border-white/[0.06] flex-shrink-0">
+    <div className="px-3 sm:px-6 py-3 border-t border-white/[0.06] flex-shrink-0">
       <div className="flex h-1.5 rounded-full overflow-hidden mb-1.5">
         <div className="bg-emerald-500 transition-all" style={{ width: `${myPct}%` }} />
         <div className="bg-red-500/60 transition-all" style={{ width: `${100 - myPct}%` }} />
@@ -260,7 +260,7 @@ function ReviewPanel({
   trade, myUsername, myAvatar,
 }: { trade: NormalizedTrade; myUsername: string; myAvatar: string | null }) {
   return (
-    <div className="grid grid-cols-2 gap-4 px-6 py-4 overflow-y-auto flex-1 min-h-0">
+    <div className="grid grid-cols-2 gap-2 sm:gap-4 px-3 sm:px-6 py-3 sm:py-4 overflow-y-auto flex-1 min-h-0">
       {/* You receive */}
       <div className="bg-white/[0.025] border border-white/[0.08] rounded-xl p-4">
         <div className="flex items-center gap-2 mb-3">
@@ -331,7 +331,7 @@ function MessagesPanel({
   return (
     <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
       {/* Message list */}
-      <div className="flex-1 min-h-0 overflow-y-auto px-6 pt-3 pb-2 space-y-3" ref={msgListRef}>
+      <div className="flex-1 min-h-0 overflow-y-auto px-3 sm:px-6 pt-3 pb-2 space-y-3" ref={msgListRef}>
         {dmLoading ? (
           <div className="flex items-center justify-center h-full">
             <Loader2 className="w-5 h-5 animate-spin text-white/30" />
@@ -403,7 +403,7 @@ function MessagesPanel({
       </div>
 
       {/* Compose */}
-      <div className="flex gap-2 flex-shrink-0 px-6 py-4 border-t border-white/[0.06]">
+      <div className="flex gap-2 flex-shrink-0 px-3 sm:px-6 py-3 sm:py-4 border-t border-white/[0.06]">
         <input
           value={msgInput}
           onChange={(e) => setMsgInput(e.target.value)}
@@ -800,11 +800,11 @@ export function TradeActionModal({
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) handleClose(); }}>
       <DialogContent
-        className="max-w-[820px] w-full bg-[#07111f] border border-white/[0.10] p-0 overflow-hidden max-h-[88vh] flex flex-col gap-0"
+        className="max-w-[820px] w-full bg-[#07111f] border border-white/[0.10] p-0 overflow-hidden max-h-[88vh] sm:max-h-[88vh] max-h-[95dvh] flex flex-col gap-0 sm:rounded-xl rounded-t-xl rounded-b-none sm:translate-y-0 translate-y-0"
         data-testid={`trade-action-modal-${trade.transactionId}`}
       >
         {/* ── Header ──────────────────────────────────────────────────────────── */}
-        <div className="px-6 pt-5 pb-3 flex-shrink-0 border-b border-white/[0.06]">
+        <div className="px-4 sm:px-6 pt-4 sm:pt-5 pb-3 flex-shrink-0 border-b border-white/[0.06]">
           <div className="flex items-start gap-3">
             <div className="w-9 h-9 rounded-xl bg-[#0b3a7a]/50 flex items-center justify-center flex-shrink-0 mt-0.5">
               <ArrowRightLeft className="w-4 h-4 text-[#d4af37]" />
@@ -837,14 +837,14 @@ export function TradeActionModal({
 
         {/* ── Tab bar ──────────────────────────────────────────────────────────── */}
         {showTabs && (
-          <div className="flex px-6 border-b border-white/[0.06] flex-shrink-0">
+          <div className="flex px-4 sm:px-6 border-b border-white/[0.06] flex-shrink-0 overflow-x-auto scrollbar-hide">
             {tabs.map(({ id, label, badge }) => (
               <button
                 key={id}
                 onClick={() => handleTabChange(id)}
                 data-testid={`trade-modal-tab-${id}`}
                 className={cn(
-                  "relative px-5 py-3 text-[12px] font-semibold border-b-2 transition-all",
+                  "relative px-3 sm:px-5 py-3 text-[12px] font-semibold border-b-2 transition-all whitespace-nowrap",
                   activeTab === id
                     ? "border-[#d4af37] text-white"
                     : "border-transparent text-white/40 hover:text-white/65"
@@ -862,7 +862,7 @@ export function TradeActionModal({
         {/* ── Result banner ────────────────────────────────────────────────────── */}
         {finalResult && (
           <div className={cn(
-            "mx-6 mt-5 flex items-start gap-3 px-4 py-3 rounded-xl text-[13px] font-medium flex-shrink-0",
+            "mx-3 sm:mx-6 mt-4 sm:mt-5 flex items-start gap-3 px-4 py-3 rounded-xl text-[13px] font-medium flex-shrink-0",
             finalResult.success
               ? "bg-emerald-500/10 border border-emerald-500/25 text-emerald-300"
               : "bg-red-500/10 border border-red-500/25 text-red-300"
@@ -876,7 +876,7 @@ export function TradeActionModal({
 
         {/* ── Confirm banner ───────────────────────────────────────────────────── */}
         {confirmAction && !actionLoading && (
-          <div className="mx-6 mt-3 px-4 py-3 rounded-xl bg-white/[0.04] border border-white/[0.10] flex-shrink-0">
+          <div className="mx-3 sm:mx-6 mt-3 px-4 py-3 rounded-xl bg-white/[0.04] border border-white/[0.10] flex-shrink-0">
             <p className="text-[13px] text-white/75 mb-3">
               {confirmAction === "accept"
                 ? "Are you sure you want to accept this trade? This cannot be undone."
@@ -966,7 +966,7 @@ export function TradeActionModal({
         </div>
 
         {/* ── Footer ───────────────────────────────────────────────────────────── */}
-        <div className="flex items-center gap-2.5 px-6 py-4 border-t border-white/[0.06] flex-shrink-0">
+        <div className="flex items-center gap-2 flex-wrap px-3 sm:px-6 py-3 sm:py-4 border-t border-white/[0.06] flex-shrink-0">
           {/* ── After result ── */}
           {finalResult ? (
             <>

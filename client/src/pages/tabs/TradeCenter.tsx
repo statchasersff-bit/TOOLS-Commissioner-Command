@@ -1670,7 +1670,7 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
           </p>
         </button>
         {isOpen && (
-          <div className="grid grid-cols-5 gap-2 max-h-64 overflow-y-auto mt-2">
+          <div className="overflow-x-auto mt-2"><div className="grid grid-cols-5 gap-2 max-h-64 overflow-y-auto min-w-[300px]">
             {(["QB", "RB", "WR", "TE"] as const).map((pos) => {
               const posPlayers = [...rosterPlayers]
                 .filter((p) => p.pos === pos)
@@ -1766,7 +1766,8 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
                 <p className="text-[9px] text-muted-foreground/50 text-center py-2">None</p>
               )}
             </div>
-          </div>
+            </div></div>
+
         )}
       </div>
     );
@@ -2103,7 +2104,9 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
                     {(["a", "b"] as const).map(side => {
                       const assets = side === "a" ? sideA : sideB;
                       const team   = side === "a" ? sideATeam : sideBTeam;
-                      const label  = side === "a" ? "You Send" : "You Receive";
+                      const label  = side === "a"
+                        ? `${sideATeam?.owner || "You"} Sends`
+                        : `${sideBTeam?.owner || "Partner"} Sends`;
                       return (
                         <div key={side} className="rounded-lg border border-border overflow-hidden">
                           <div className="px-3 py-2 bg-muted/30 border-b border-border/50 flex items-center gap-2">
@@ -2553,7 +2556,7 @@ export function TradeDatabase({ league }: { league: League }) {
             ))}
           </div>
 
-          <div className="w-px h-5 bg-[#d4af37]/50 flex-shrink-0" />
+          <div className="hidden sm:block w-px h-5 bg-[#d4af37]/50 flex-shrink-0" />
 
           <div className="flex gap-1">
             {(["all", "PPR", "Half", "Standard"] as const).map((s) => (
@@ -2573,7 +2576,7 @@ export function TradeDatabase({ league }: { league: League }) {
             ))}
           </div>
 
-          <div className="w-px h-5 bg-[#d4af37]/50 flex-shrink-0" />
+          <div className="hidden sm:block w-px h-5 bg-[#d4af37]/50 flex-shrink-0" />
 
           <div className="flex gap-1">
             {(["all", "10", "12", "14"] as const).map((size) => (
