@@ -1018,33 +1018,33 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
   return (
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-4">
-        <div className="flex-1 min-w-0">
-          <SectionHeader
-            title="League Power Rankings"
-            subtitle="League-wide roster rankings by redraft value, dynasty value, and draft capital."
-          />
-          <div className="flex flex-wrap gap-1.5 mt-2">
-            {(() => {
-              const rp = league.rosterPositions || [];
-              const starterCount = rp.filter(p => p !== "BN" && p !== "IR" && p !== "TAXI").length;
-              const pills: Array<{ label: string; show: boolean }> = [
-                { label: `${league.teams.length}-Team`,      show: true },
-                { label: league.scoringFormat,               show: !!league.scoringFormat },
-                { label: league.format ?? "1QB",             show: true },
-                { label: `Start ${starterCount}`,            show: starterCount > 0 },
-                { label: `Bench ${league.benchSlots}`,       show: (league.benchSlots ?? 0) > 0 },
-                { label: `Taxi ${league.taxiSlots}`,         show: (league.taxiSlots ?? 0) > 0 },
-                { label: "TEP",                              show: (league.tePremium ?? 0) > 0 },
-              ];
-              return pills.filter(p => p.show).map(p => (
-                <span key={p.label} className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-muted/60 text-muted-foreground border border-border/50">
-                  {p.label}
-                </span>
-              ));
-            })()}
-          </div>
-        </div>
+        <SectionHeader
+          title="League Power Rankings"
+          subtitle="League-wide roster rankings by redraft value, dynasty value, and draft capital."
+        />
         {viewToggle}
+      </div>
+
+      {/* ── League format pills ───────────────────────────────────── */}
+      <div className="flex flex-wrap gap-1.5">
+        {(() => {
+          const rp = league.rosterPositions || [];
+          const starterCount = rp.filter(p => p !== "BN" && p !== "IR" && p !== "TAXI").length;
+          const pills: Array<{ label: string; show: boolean }> = [
+            { label: `${league.teams.length}-Team`,      show: true },
+            { label: league.scoringFormat,               show: !!league.scoringFormat },
+            { label: league.format ?? "1QB",             show: true },
+            { label: `Start ${starterCount}`,            show: starterCount > 0 },
+            { label: `Bench ${league.benchSlots}`,       show: (league.benchSlots ?? 0) > 0 },
+            { label: `Taxi ${league.taxiSlots}`,         show: (league.taxiSlots ?? 0) > 0 },
+            { label: "TEP",                              show: (league.tePremium ?? 0) > 0 },
+          ];
+          return pills.filter(p => p.show).map(p => (
+            <span key={p.label} className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-muted/60 text-muted-foreground border border-border/50">
+              {p.label}
+            </span>
+          ));
+        })()}
       </div>
 
       {/* ── VIEW 1: Table ─────────────────────────────────────────── */}
