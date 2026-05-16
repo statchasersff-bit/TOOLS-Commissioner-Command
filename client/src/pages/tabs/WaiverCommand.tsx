@@ -512,8 +512,50 @@ export default function WaiverCommand() {
   return (
     <div className="space-y-5">
       {/* Page header */}
-      <SectionHeader title="Waiver Command" subtitle="Find waiver targets, compare league availability, and manage adds across your teams." />
-      <div className="flex flex-col sm:flex-row items-center justify-center sm:justify-end flex-wrap gap-3">
+      <div className="flex items-start justify-between gap-4">
+        <SectionHeader title="Waiver Command" subtitle="Find waiver targets, compare league availability, and manage adds across your teams." />
+        <div className="hidden md:flex items-center gap-3 flex-shrink-0 pt-1">
+          {isFetching && (
+            <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+              <RefreshCw className="w-3 h-3 animate-spin text-[#d4af37]" />
+              <span>Fetching…</span>
+            </div>
+          )}
+          <div className="flex items-center gap-1 p-1 rounded-xl bg-white/[0.03] border border-white/6">
+            {([
+              { id: "overview" as const, icon: LayoutList, label: "Overview" },
+              { id: "league"   as const, icon: BarChart3,  label: "League View" },
+              { id: "bulk"     as const, icon: Layers,     label: "Bulk Claims" },
+            ]).map(({ id, icon: Icon, label }) => (
+              <button
+                key={id}
+                onClick={() => {
+                  setActiveView(id);
+                  if (id === "league" && !detailRow) {
+                    const first = rows.find(r => !r.loading && !r.error);
+                    if (first) setDetailRow(first);
+                  }
+                }}
+                data-testid={`view-toggle-${id}-desktop`}
+                className={cn(
+                  "relative flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all duration-200",
+                  activeView === id
+                    ? "bg-[#0b3a7a]/60 text-white border border-[#d4af37]/25"
+                    : "text-white/35 hover:text-white/60"
+                )}
+              >
+                <Icon className="w-3.5 h-3.5" />
+                <span>{label}</span>
+                {activeView === id && (
+                  <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-6 h-[2px] rounded-full bg-[#d4af37]" />
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+      {/* Mobile toggle */}
+      <div className="md:hidden flex flex-col sm:flex-row items-center justify-center sm:justify-end flex-wrap gap-3">
         <div className="flex items-center gap-3">
           {isFetching && (
             <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
