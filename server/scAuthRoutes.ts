@@ -68,6 +68,9 @@ export function registerScAuthRoutes(app: Express): void {
       const result = await registerUser(email, password);
       if (!result.ok) return res.status(400).json({ error: result.error });
       (req.session as any).scUserId = result.userId;
+      await new Promise<void>((resolve, reject) => {
+        req.session.save(err => (err ? reject(err) : resolve()));
+      });
       res.json({ ok: true });
     } catch (err: any) {
       console.error("[sc-auth] register error:", err.message);
@@ -83,6 +86,9 @@ export function registerScAuthRoutes(app: Express): void {
       const result = await loginUser(email, password);
       if (!result.ok) return res.status(401).json({ error: result.error });
       (req.session as any).scUserId = result.userId;
+      await new Promise<void>((resolve, reject) => {
+        req.session.save(err => (err ? reject(err) : resolve()));
+      });
       res.json({ ok: true });
     } catch (err: any) {
       console.error("[sc-auth] login error:", err.message);
