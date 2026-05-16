@@ -1,6 +1,4 @@
-import { useState } from "react";
 import { Crosshair, Waves, Users, Share2, Trophy, ArrowLeftRight, Search, Inbox, Calculator, Database, Zap, MessageSquare, Lock, ChevronRight, Package } from "lucide-react";
-import { cn } from "@/lib/utils";
 
 interface FeatureDef {
   id: string;
@@ -216,9 +214,6 @@ const FEATURES: FeatureDef[] = [
   },
 ];
 
-const CATEGORIES = ["All", "Portfolio", "My Team", "League", "Trade", "Draft", "Other"] as const;
-type Category = typeof CATEGORIES[number];
-
 interface AboutPageProps {
   onNavigate: (tab: string, sub: string) => void;
   onOpenFeedback: () => void;
@@ -228,10 +223,6 @@ interface AboutPageProps {
 }
 
 export function AboutPage({ onNavigate, onOpenFeedback, onOpenCookies, onOpenTerms, onOpenPrivacy }: AboutPageProps) {
-  const [activeCategory, setActiveCategory] = useState<Category>("All");
-
-  const filtered = activeCategory === "All" ? FEATURES : FEATURES.filter(f => f.category === activeCategory);
-
   function handleGoTo(feature: FeatureDef) {
     if (feature.id === "feedback") {
       onOpenFeedback();
@@ -255,29 +246,9 @@ export function AboutPage({ onNavigate, onOpenFeedback, onOpenCookies, onOpenTer
         </p>
       </div>
 
-      {/* Category pills */}
-      <div className="flex gap-2 overflow-x-auto scrollbar-none pb-1 mb-5">
-        {CATEGORIES.map(cat => (
-          <button
-            key={cat}
-            onClick={() => setActiveCategory(cat)}
-            data-testid={`button-about-cat-${cat.toLowerCase()}`}
-            className={cn(
-              "flex-shrink-0 px-3.5 py-1.5 rounded-full text-[12px] font-semibold transition-all duration-150 border",
-              activeCategory === cat
-                ? "text-[#0b3a7a] border-[#d4af37]"
-                : "text-muted-foreground border-border hover:border-foreground/30 hover:text-foreground/70"
-            )}
-            style={activeCategory === cat ? { background: "#d4af37" } : {}}
-          >
-            {cat}
-          </button>
-        ))}
-      </div>
-
       {/* Feature cards */}
       <div className="space-y-3">
-        {filtered.map(feature => {
+        {FEATURES.map(feature => {
           const Icon = feature.icon;
           const canNavigate = (feature.tab && feature.sub) || feature.id === "feedback";
           return (
@@ -332,8 +303,7 @@ export function AboutPage({ onNavigate, onOpenFeedback, onOpenCookies, onOpenTer
         })}
 
         {/* Sleeper / Privacy section */}
-        {(activeCategory === "All" || activeCategory === "Other") && (
-          <div className="rounded-2xl p-5 border border-indigo-500/20 bg-indigo-500/5">
+        <div className="rounded-2xl p-5 border border-indigo-500/20 bg-indigo-500/5">
             <div className="flex items-center gap-2.5 mb-3">
               <Lock className="w-4 h-4 text-indigo-400 flex-shrink-0" />
               <h3 className="text-[14px] font-bold text-foreground">Sleeper Login &amp; Privacy</h3>
@@ -352,37 +322,34 @@ export function AboutPage({ onNavigate, onOpenFeedback, onOpenCookies, onOpenTer
                 </li>
               ))}
             </ul>
-          </div>
-        )}
+        </div>
 
         {/* Footer */}
-        {(activeCategory === "All" || activeCategory === "Other") && (
-          <div className="pt-2 pb-4 flex flex-col items-center gap-3">
-            <p className="text-center text-[12px] text-muted-foreground/50">
-              Dynasty Command is built by <span className="font-semibold" style={{ color: "#d4af37" }}>StatChasers</span> for serious dynasty fantasy football managers.
-            </p>
-            <div className="flex items-center gap-1 flex-wrap justify-center">
-              {[
-                { label: "Terms of Service", action: onOpenTerms,   testId: "button-about-terms" },
-                { label: "Privacy Policy",   action: onOpenPrivacy, testId: "button-about-privacy" },
-                { label: "Cookies",          action: onOpenCookies, testId: "button-about-cookies" },
-              ].map(({ label, action, testId }, i, arr) => (
-                <span key={label} className="flex items-center gap-1">
-                  <button
-                    onClick={action}
-                    data-testid={testId}
-                    className="text-[11px] text-muted-foreground/40 hover:text-[#d4af37]/70 transition-colors underline underline-offset-2"
-                  >
-                    {label}
-                  </button>
-                  {i < arr.length - 1 && (
-                    <span className="text-[11px] text-muted-foreground/20 select-none">·</span>
-                  )}
-                </span>
-              ))}
-            </div>
+        <div className="pt-2 pb-4 flex flex-col items-center gap-3">
+          <p className="text-center text-[12px] text-muted-foreground/50">
+            Dynasty Command is built by <span className="font-semibold" style={{ color: "#d4af37" }}>StatChasers</span> for serious dynasty fantasy football managers.
+          </p>
+          <div className="flex items-center gap-1 flex-wrap justify-center">
+            {[
+              { label: "Terms of Service", action: onOpenTerms,   testId: "button-about-terms" },
+              { label: "Privacy Policy",   action: onOpenPrivacy, testId: "button-about-privacy" },
+              { label: "Cookies",          action: onOpenCookies, testId: "button-about-cookies" },
+            ].map(({ label, action, testId }, i, arr) => (
+              <span key={label} className="flex items-center gap-1">
+                <button
+                  onClick={action}
+                  data-testid={testId}
+                  className="text-[11px] text-muted-foreground/40 hover:text-[#d4af37]/70 transition-colors underline underline-offset-2"
+                >
+                  {label}
+                </button>
+                {i < arr.length - 1 && (
+                  <span className="text-[11px] text-muted-foreground/20 select-none">·</span>
+                )}
+              </span>
+            ))}
           </div>
-        )}
+        </div>
       </div>
     </div>
   );

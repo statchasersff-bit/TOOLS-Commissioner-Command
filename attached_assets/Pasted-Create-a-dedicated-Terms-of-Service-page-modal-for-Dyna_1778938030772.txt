@@ -1,0 +1,157 @@
+Create a dedicated Terms of Service page/modal for Dynasty Command / StatChasers.
+
+Goal:
+Create a professional, premium-looking TOS page that helps protect StatChasers legally while matching the Dynasty Command UI/design system.
+
+Route:
+
+* /about/terms
+  OR modal opened from About footer.
+
+Page title:
+Terms of Service
+
+Subtitle:
+Please read these terms carefully before using Dynasty Command and related StatChasers tools.
+
+Design:
+
+* Match Dynasty Command dark premium styling.
+* Use the same large page header style used in Trade Center.
+* Use clean cards/accordion sections.
+* Mobile responsive.
+* Do NOT make it look like generic legal boilerplate.
+
+Content:
+Use the following structure and wording style, but rewrite/customize for StatChasers and Dynasty Command.
+
+IMPORTANT:
+This is not formal legal advice. Structure it professionally and conservatively to maximize platform protection.
+
+Sections to include:
+
+1. Overview
+   Dynasty Command (“the Service”) is a fantasy football management and analytics platform operated by StatChasers. By accessing or using the Service, you agree to these Terms of Service.
+
+2. Sleeper Authentication & User Responsibility
+
+* Users authenticate using Sleeper.
+* Dynasty Command does not store Sleeper passwords.
+* Users are responsible for their Sleeper account security.
+* Users are responsible for all actions initiated through the platform.
+
+3. Platform Features
+   Explain that Dynasty Command may:
+
+* analyze leagues
+* calculate trade values
+* submit trades
+* submit lineup changes
+* submit waiver claims
+* send direct messages
+* interact with Sleeper APIs
+* provide projections/recommendations
+
+Clarify that all actions are user-authorized.
+
+4. No Affiliation With Sleeper
+   State clearly:
+   StatChasers and Dynasty Command are not affiliated with, endorsed by, or officially connected to Sleeper.
+
+5. No Guarantees / “As Is”
+   Very important:
+
+* platform provided “as is”
+* no guarantee of uptime
+* no guarantee projections/values are accurate
+* no guarantee Sleeper actions execute successfully
+* no guarantee of profitability/winning
+
+6. Fantasy Advice Disclaimer
+   Clarify:
+
+* rankings/trade values/projections are informational only
+* users make final decisions
+* StatChasers is not responsible for fantasy outcomes, losses, league disputes, or financial losses from paid leagues
+
+7. Limitation of Liability
+   Strong protection section:
+   StatChasers/Dynasty Command shall not be liable for:
+
+* lost leagues
+* rejected trades
+* failed lineup changes
+* missed waivers
+* API outages
+* fantasy losses
+* account issues
+* indirect/consequential damages
+
+Cap liability to amount paid to the platform in prior 12 months if applicable.
+
+8. Acceptable Use
+   Users may not:
+
+* spam Sleeper users
+* abuse bulk messaging
+* reverse engineer the platform
+* scrape data
+* attempt unauthorized access
+* overload APIs
+* exploit bugs
+* bypass subscription limits
+
+9. Suspension / Termination
+   StatChasers may suspend/restrict access for:
+
+* abuse
+* automation misuse
+* spam behavior
+* API abuse
+* malicious activity
+
+10. Subscription & Billing
+    Prepare for future paid tiers:
+
+* subscriptions may exist
+* pricing may change
+* cancellation policy
+* refund discretion
+* Stripe/payment processor language
+
+11. Third-Party Services
+    Mention:
+
+* Sleeper
+* Stripe
+* Discord
+* Cloudflare
+* analytics providers
+
+Clarify third-party outages are outside platform control.
+
+12. Privacy & Cookies
+    Reference Privacy Policy and Cookies pages.
+
+13. Changes To Terms
+    StatChasers may update terms at any time.
+    Continued use constitutes acceptance.
+
+14. Contact
+    [support@statchasers.com](mailto:support@statchasers.com)
+
+Footer:
+Last updated: dynamically generated or static placeholder.
+
+Additional protections:
+
+* Add arbitration/jurisdiction placeholder section if possible.
+* Add “use at your own risk” style language professionally.
+* Add “beta feature” disclaimer for experimental tools/features.
+* Add language protecting against accidental Sleeper API failures or duplicate submissions.
+
+Implementation:
+
+* Add clickable “Terms of Service” link in About footer.
+* Match About/Cookies design exactly.
+* Reuse existing page container/header components.
