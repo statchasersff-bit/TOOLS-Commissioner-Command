@@ -218,7 +218,7 @@ export function PositionalAnalysis({ league, userTeam, onNavigateToCalculator }:
 
   return (
     <div className="space-y-6">
-      <div>
+      <div className="hidden md:block">
         <h2 className="text-2xl font-bold tracking-tight text-foreground" data-testid="text-positional-analysis-title">
           Positional Analysis
         </h2>

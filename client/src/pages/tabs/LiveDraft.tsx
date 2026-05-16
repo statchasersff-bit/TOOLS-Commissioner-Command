@@ -1165,7 +1165,7 @@ export default function LiveDraft() {
 
   return (
     <div className="space-y-6">
-      <div>
+      <div className="hidden md:block">
         <h2 className="text-2xl font-bold tracking-tight text-foreground" data-testid="live-draft-title">
           Live Draft Board
         </h2>
