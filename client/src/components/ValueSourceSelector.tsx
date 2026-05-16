@@ -83,6 +83,24 @@ function formatValuesDate(iso: string): string {
   }
 }
 
+export function HeaderValueSourceBadge() {
+  const { sourceId } = useValueModel();
+  if (sourceId !== "fantasycalc") return null;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span
+          className="hidden sm:inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold tracking-wide text-[#d4af37]/75 dark:text-[#d4af37]/65 bg-[#0b3a7a]/6 dark:bg-[#0b3a7a]/25 border border-[#d4af37]/20 dark:border-[#d4af37]/20 cursor-default select-none"
+          data-testid="badge-fc-attribution"
+        >
+          FC
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="bottom" className="text-xs">FantasyCalc values</TooltipContent>
+    </Tooltip>
+  );
+}
+
 export function ValueAttribution() {
   const { sourceId, isLoading, unmatchedCount, diagnostics } = useValueModel();
 

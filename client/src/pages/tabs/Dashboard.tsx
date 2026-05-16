@@ -1447,65 +1447,93 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
                         {hc(rRanks["TE"] ?? total)}
                       </tr>
 
-                      {isExpanded && hmRoster && (
-                        <tr className={cn("border-b border-border/20", rowBase)}>
-                          <td colSpan={12} className="p-0">
-                            <div className="px-4 py-3 bg-muted/[0.04] dark:bg-white/[0.02] border-t border-border/20">
-                              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-                                {(
-                                  [
-                                    { label: "QB",    players: hmRoster.qbs,  pos: "QB"   },
-                                    { label: "RB",    players: hmRoster.rbs,  pos: "RB"   },
-                                    { label: "WR",    players: hmRoster.wrs,  pos: "WR"   },
-                                    { label: "TE",    players: hmRoster.tes,  pos: "TE"   },
-                                  ] as const
-                                ).map(({ label, players }) => (
-                                  <div key={label}>
-                                    <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/60 mb-1.5">{label}</p>
-                                    <div className="flex flex-col gap-0.5">
-                                      {players.length === 0 ? (
-                                        <p className="text-[11px] text-muted-foreground/40 italic">None</p>
-                                      ) : (
-                                        players.map((p) => (
-                                          <div
-                                            key={p.id}
-                                            className="px-2 py-1 rounded bg-background/70 dark:bg-white/[0.04] border border-border/25 text-[11px] leading-snug"
-                                          >
-                                            <span className="font-semibold text-foreground">{p.name}</span>
-                                            <span className="text-muted-foreground"> · {p.team}</span>
-                                          </div>
-                                        ))
-                                      )}
+                      {isExpanded && hmRoster && (() => {
+                        function hmRankBadge(rank: number) {
+                          const top = Math.ceil(total * 0.33);
+                          const bot = Math.floor(total * 0.67) + 1;
+                          const cls = rank <= top
+                            ? "text-emerald-600 dark:text-emerald-400 bg-emerald-500/10"
+                            : rank >= bot
+                            ? "text-red-500 dark:text-red-400 bg-red-500/10"
+                            : "text-amber-600 dark:text-amber-400 bg-amber-500/10";
+                          return <span className={`text-[9px] font-bold px-1 py-0.5 rounded ${cls}`}>#{rank}</span>;
+                        }
+                        return (
+                          <tr className={cn("border-b border-border/20", rowBase)} data-testid={`heatmap-expanded-${team.id}`}>
+                            <td colSpan={12} className="px-3 sm:px-5 py-4">
+                              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
+                                {([
+                                  { pos: "QB", players: hmRoster.qbs, textColor: "text-rose-500 dark:text-rose-400",      border: "border-rose-500/25",    bg: "bg-rose-500/5"    },
+                                  { pos: "RB", players: hmRoster.rbs, textColor: "text-emerald-500 dark:text-emerald-400", border: "border-emerald-500/25", bg: "bg-emerald-500/5" },
+                                  { pos: "WR", players: hmRoster.wrs, textColor: "text-sky-500 dark:text-sky-400",        border: "border-sky-500/25",     bg: "bg-sky-500/5"     },
+                                  { pos: "TE", players: hmRoster.tes, textColor: "text-orange-500 dark:text-orange-400",  border: "border-orange-500/25",  bg: "bg-orange-500/5"  },
+                                ] as const).map(({ pos, players, textColor, border, bg }) => {
+                                  const wnRank  = rRanks[pos] ?? total;
+                                  const dynRank = dRanks[pos] ?? total;
+                                  return (
+                                    <div key={pos} className={`rounded-lg border ${border} ${bg} p-2.5`} data-testid={`hm-pos-col-${team.id}-${pos.toLowerCase()}`}>
+                                      <div className="flex items-center justify-between mb-2">
+                                        <span className={`text-xs font-black ${textColor}`}>{pos}</span>
+                                        <div className="flex items-center gap-1">
+                                          <span className="text-[9px] text-muted-foreground/60 font-medium">WN</span>
+                                          {hmRankBadge(wnRank)}
+                                          <span className="text-[9px] text-muted-foreground/60 font-medium ml-0.5">DYN</span>
+                                          {hmRankBadge(dynRank)}
+                                        </div>
+                                      </div>
+                                      <div className="space-y-1">
+                                        {players.length === 0 ? (
+                                          <p className="text-[10px] text-muted-foreground/50 italic">None rostered</p>
+                                        ) : (
+                                          players.slice(0, 5).map((p, i) => (
+                                            <div key={p.sleeperId ?? i} className="flex items-center gap-1.5 min-w-0">
+                                              <span className="text-[10px] text-muted-foreground/40 w-3 flex-shrink-0">{i + 1}</span>
+                                              <span className="text-[11px] text-foreground truncate flex-1 font-medium">{p.name}</span>
+                                              <span className="text-[10px] font-mono text-muted-foreground/70 flex-shrink-0">{(getPlayerValue(p) / 1000).toFixed(1)}k</span>
+                                            </div>
+                                          ))
+                                        )}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+
+                                {/* Picks column */}
+                                <div className="rounded-lg border border-purple-500/25 bg-purple-500/5 p-2.5" data-testid={`hm-pos-col-${team.id}-picks`}>
+                                  <div className="flex items-center justify-between mb-2">
+                                    <span className="text-xs font-black text-purple-500 dark:text-purple-400">Picks</span>
+                                    <div className="flex items-center gap-1">
+                                      <span className="text-[9px] text-muted-foreground/60 font-medium">RANK</span>
+                                      {hmRankBadge(pksRank)}
                                     </div>
                                   </div>
-                                ))}
-
-                                {/* Picks */}
-                                <div>
-                                  <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/60 mb-1.5">Picks</p>
-                                  <div className="flex flex-col gap-0.5">
+                                  <div className="space-y-1">
                                     {hmRoster.picks.length === 0 ? (
-                                      <p className="text-[11px] text-muted-foreground/40 italic">None</p>
+                                      <p className="text-[10px] text-muted-foreground/50 italic">No picks</p>
                                     ) : (
-                                      hmRoster.picks.map((pk, i) => (
-                                        <div
-                                          key={i}
-                                          className="px-2 py-1 rounded bg-background/70 dark:bg-white/[0.04] border border-border/25 text-[11px] leading-snug"
-                                        >
-                                          <span className="font-semibold text-foreground">{formatPickLabel(pk)}</span>
-                                          {pk.projectedRange && (
-                                            <span className="text-muted-foreground"> · {pk.projectedRange}</span>
-                                          )}
-                                        </div>
-                                      ))
+                                      hmRoster.picks.slice(0, 8).map((pick, i) => {
+                                        const rd = pick.round === 1 ? "1st" : pick.round === 2 ? "2nd" : pick.round === 3 ? "3rd" : `${pick.round}th`;
+                                        return (
+                                          <div key={i} className="flex items-center gap-1.5 min-w-0">
+                                            <span className="text-[11px] text-foreground font-medium flex-shrink-0">{pick.year}</span>
+                                            <span className="text-[11px] text-muted-foreground font-medium flex-shrink-0">{rd}</span>
+                                            {pick.projectedRange && (
+                                              <span className="text-[10px] text-muted-foreground/60 truncate ml-auto">{pick.projectedRange}</span>
+                                            )}
+                                          </div>
+                                        );
+                                      })
+                                    )}
+                                    {hmRoster.picks.length > 8 && (
+                                      <p className="text-[10px] text-muted-foreground/60">+{hmRoster.picks.length - 8} more</p>
                                     )}
                                   </div>
                                 </div>
                               </div>
-                            </div>
-                          </td>
-                        </tr>
-                      )}
+                            </td>
+                          </tr>
+                        );
+                      })()}
                     </Fragment>
                   );
                 })}

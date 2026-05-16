@@ -13,14 +13,41 @@ import { useToast } from "@/hooks/use-toast";
 import { getLeagueTeamTiers, getTierColor, getTierBg, getTierEmoji, getPositionColor, isContenderTier, isRebuilderTier } from "@/data/mockData";
 import { getStaticPickValue } from "@/data/pickValues";
 import { API_BASE } from "@/lib/apiBase";
-import { fetchRosterDraftPicks, fetchLeaguePlayerSettings, proposeTrade, rejectTradeOnSleeper, getDmByMembers, sendDmMessage } from "@/lib/sleeperApi";
-import { getSleeperToken } from "@/services/sleeperAuth";
+import { fetchRosterDraftPicks, fetchLeaguePlayerSettings } from "@/lib/sleeperApi";
+import { getSleeperToken, getSleeperSession } from "@/services/sleeperAuth";
+import { proposeTrade as proposeTradeAuthed, rejectTrade, getDmByMembersFull, sendTradeMessage, sendPlainDm, type ProposeTradeResult } from "@/services/sleeperAuthedApi";
 import type { League, Team, Tier, Player, Pick, TradeRecord, TradeSide, CrawlStatus } from "@/types";
 import { cn } from "@/lib/utils";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
+import { TradeBlockCandidates } from "@/components/trade/TradeBlockCandidates";
 import { ArrowRightLeft, TrendingUp, TrendingDown, Target, X, Plus, Search, Scale, RotateCcw, Database, Play, Pause, Loader2, ChevronLeft, ChevronRight, ChevronDown, Download, Tag, Clock, ArrowRight, Send, CheckCircle2, DollarSign, MessageSquare, Undo2 } from "lucide-react";
 
 const SLEEPER_JWT_KEY = "dc-sleeper-draft-jwt";
+const SLEEPER_API_BASE = "https://api.sleeper.app/v1";
+
+const EXPIRY_OPTIONS = [
+  { value: "never", label: "Never"        },
+  { value: "1h",    label: "1 Hour"       },
+  { value: "today", label: "End of Today" },
+  { value: "24h",   label: "24 Hours"     },
+  { value: "2d",    label: "2 Days"       },
+  { value: "1w",    label: "1 Week"       },
+  { value: "2w",    label: "2 Weeks"      },
+] as const;
+
+function computeExpiresAt(option: string): number | null {
+  const now = Math.floor(Date.now() / 1000);
+  switch (option) {
+    case "never": return null;
+    case "1h":    return now + 3600;
+    case "today": { const end = new Date(); end.setHours(23, 59, 59, 999); return Math.floor(end.getTime() / 1000); }
+    case "24h":   return now + 86400;
+    case "2d":    return now + 172800;
+    case "1w":    return now + 604800;
+    case "2w":    return now + 1209600;
+    default:      return now + 86400;
+  }
+}
 
 interface TradeProps {
   league: League;
@@ -868,19 +895,17 @@ function CrossLeagueTradeIntel({ league }: { league: League }) {
 export function TradeBlockScanner({ league }: { league: League }) {
   const { getPlayerValue } = useValueModel();
 
-  // JWT — prefer the full Sleeper session token, fall back to manual Live Draft key
   const [sleeperJwt, setSleeperJwt] = useState<string | null>(() => getSleeperToken() ?? localStorage.getItem(SLEEPER_JWT_KEY));
   useEffect(() => {
     const refresh = () => setSleeperJwt(getSleeperToken() ?? localStorage.getItem(SLEEPER_JWT_KEY));
     const onStorage = (e: StorageEvent) => { if (e.key === SLEEPER_JWT_KEY || e.key === "statchasers_sleeper_auth") refresh(); };
-    const onJwtChanged = () => refresh();
     window.addEventListener("storage", onStorage);
-    window.addEventListener("sleeper-jwt-changed", onJwtChanged);
-    window.addEventListener("sleeper-session-changed", onJwtChanged);
+    window.addEventListener("sleeper-jwt-changed", refresh);
+    window.addEventListener("sleeper-session-changed", refresh);
     return () => {
       window.removeEventListener("storage", onStorage);
-      window.removeEventListener("sleeper-jwt-changed", onJwtChanged);
-      window.removeEventListener("sleeper-session-changed", onJwtChanged);
+      window.removeEventListener("sleeper-jwt-changed", refresh);
+      window.removeEventListener("sleeper-session-changed", refresh);
     };
   }, []);
 
@@ -906,208 +931,60 @@ export function TradeBlockScanner({ league }: { league: League }) {
     return map;
   }, [league.teams]);
 
-  const liveTradeBlock = useMemo(() => {
-    const items = lpsData.filter(lp => lp.settings?.otb != null);
-    return items.map(lp => {
-      const ownerRosterId = Number(lp.settings.otb);
-      const ownerTeam = teamByRosterId.get(ownerRosterId);
-      const addedAt = lp.settings.otb_added_at ? Number(lp.settings.otb_added_at) : undefined;
-      // Pick IDs: "originalRosterId,season,round"
-      const isPickId = typeof lp.player_id === "string" && /^\d+,\d{4},\d+$/.test(lp.player_id);
-      if (isPickId) {
-        const [origRStr, seasonStr, roundStr] = (lp.player_id as string).split(",");
-        const originalRosterId = Number(origRStr);
-        const season = Number(seasonStr);
-        const round = Number(roundStr);
-        const origTeam = teamByRosterId.get(originalRosterId);
+  const actualTradeBlock = useMemo(() => {
+    const isPickId = (id: string) => /^\d+,\d{4},\d+$/.test(id);
+    return lpsData
+      .filter(lp => lp.settings?.otb != null && !isPickId(String(lp.player_id)))
+      .map(lp => {
+        const sid = String(lp.player_id);
+        const player = playerById.get(sid);
+        const ownerRosterId = Number(lp.settings.otb);
+        const ownerTeam = teamByRosterId.get(ownerRosterId);
+        const addedAt = lp.settings.otb_added_at ? Number(lp.settings.otb_added_at) : undefined;
         return {
-          type: "pick" as const,
-          pickYear: season, pickRound: round, pickOriginalRosterId: originalRosterId,
-          pickOriginalTeamName: origTeam?.owner || origTeam?.name || `Roster ${originalRosterId}`,
-          ownerRosterId,
-          ownerTeamName: ownerTeam?.owner || ownerTeam?.name || `Roster ${ownerRosterId}`,
-          ownerAvatar: ownerTeam?.avatar,
+          id: sid,
+          sleeperId: sid,
+          name: player?.name || `Player ${sid}`,
+          pos: player?.pos || "?",
+          age: player?.age ?? 0,
+          team: player?.team,
+          ownerName: ownerTeam?.owner || ownerTeam?.name || `Roster ${ownerRosterId}`,
+          redraftVal: player ? getPlayerValue(player) : 0,
           addedAt,
-          dynastyValue: getStaticPickValue(season, round, "mid"),
-          sleeperId: undefined as string | undefined,
-          name: undefined as string | undefined,
-          pos: undefined as string | undefined,
-          team: undefined as string | undefined,
         };
-      }
-      const player = playerById.get(lp.player_id as string);
-      return {
-        type: "player" as const,
-        sleeperId: lp.player_id as string,
-        name: player?.name || `Player ${lp.player_id}`,
-        pos: player?.pos || "?",
-        team: player?.team || "",
-        ownerRosterId,
-        ownerTeamName: ownerTeam?.owner || ownerTeam?.name || `Roster ${ownerRosterId}`,
-        ownerAvatar: ownerTeam?.avatar,
-        addedAt,
-        dynastyValue: player ? getPlayerValue(player) : 0,
-        pickYear: undefined as number | undefined,
-        pickRound: undefined as number | undefined,
-        pickOriginalRosterId: undefined as number | undefined,
-        pickOriginalTeamName: undefined as string | undefined,
-      };
-    }).sort((a, b) => b.dynastyValue - a.dynastyValue);
+      })
+      .sort((a, b) => (b.addedAt ?? 0) - (a.addedAt ?? 0));
   }, [lpsData, playerById, teamByRosterId, getPlayerValue]);
 
   return (
     <div className="space-y-8">
       <SectionHeader title="Trade Intel" subtitle="Identify likely sellers and buyers in your league" />
 
-      {/* Live Trade Block */}
-      <div className="space-y-3" data-testid="section-live-trade-block">
-        <div className="flex items-center gap-2">
-          <div className="w-[3px] h-5 rounded-full bg-[#d4af37]" />
-          <span className="text-sm font-bold">On Trade Block</span>
-          {sleeperJwt && liveTradeBlock.length > 0 && (
-            <Badge variant="outline" className="text-[10px] border-[#d4af37]/40 text-[#d4af37]">
-              {liveTradeBlock.length}
-            </Badge>
-          )}
-          {!sleeperJwt && (
-            <span className="text-[10px] text-muted-foreground">— token required (set in Live Draft tab)</span>
-          )}
-        </div>
-
-        {sleeperJwt && lpsLoading && (
-          <Card className="p-6 flex items-center justify-center gap-2 text-sm text-muted-foreground">
-            <Loader2 className="w-4 h-4 animate-spin" /> Loading trade block…
-          </Card>
-        )}
-
-        {sleeperJwt && !lpsLoading && liveTradeBlock.length === 0 && (
-          <Card className="p-5 text-center text-sm text-muted-foreground" data-testid="text-no-trade-block">
-            No assets currently on the trade block
-          </Card>
-        )}
-
-        {liveTradeBlock.length > 0 && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-            {liveTradeBlock.map((item, i) => (
-              <TradeBlockItemCard key={i} item={item} />
-            ))}
-          </div>
-        )}
-      </div>
+      <TradeBlockCandidates
+        candidates={actualTradeBlock}
+        mode="actualTradeBlock"
+        title="On Trade Block"
+        isLoading={lpsLoading}
+        noJwt={!sleeperJwt}
+      />
 
       <CrossLeagueTradeIntel league={league} />
     </div>
   );
 }
 
-type TradeBlockItem = {
-  type: "player" | "pick";
-  sleeperId?: string;
-  name?: string;
-  pos?: string;
-  team?: string;
-  pickYear?: number;
-  pickRound?: number;
-  pickOriginalRosterId?: number;
-  pickOriginalTeamName?: string;
-  ownerRosterId: number;
-  ownerTeamName: string;
-  ownerAvatar?: string | null;
-  addedAt?: number;
-  dynastyValue: number;
-};
-
-function TradeBlockItemCard({ item }: { item: TradeBlockItem }) {
-  const [prefilled, setPrefilled] = useState(false);
-
-  const ordRound = (r: number) => r === 1 ? "1st" : r === 2 ? "2nd" : r === 3 ? "3rd" : `${r}th`;
-
-  const handleAddToCalc = () => {
-    const payload =
-      item.type === "pick"
-        ? { type: "pick", year: item.pickYear, round: item.pickRound, originalRosterId: item.pickOriginalRosterId, originalTeamName: item.pickOriginalTeamName }
-        : { type: "player", sleeperId: item.sleeperId, name: item.name, pos: item.pos, team: item.team };
-    localStorage.setItem("tc-prefill", JSON.stringify(payload));
-    window.dispatchEvent(new CustomEvent("tc-prefill", { detail: payload }));
-    setPrefilled(true);
-    setTimeout(() => setPrefilled(false), 2000);
-  };
-
-  const isOwn = item.type === "pick" && item.pickOriginalRosterId != null && item.pickOriginalRosterId === item.ownerRosterId;
-
-  return (
-    <Card className="p-3 flex flex-col gap-2 hover:border-[#d4af37]/30 transition-colors" data-testid={`trade-block-item-${item.sleeperId ?? `pick-${item.pickYear}-${item.pickRound}-${item.pickOriginalRosterId}`}`}>
-      <div className="flex items-start gap-2">
-        {item.type === "player" && item.sleeperId ? (
-          <PlayerAvatar id={item.sleeperId} name={item.name || ""} pos={item.pos || "?"} team={item.team || ""} size="sm" compact />
-        ) : (
-          <div className="w-9 h-9 rounded-full flex-shrink-0 flex items-center justify-center text-[10px] font-bold bg-purple-100 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400 ring-1 ring-border/50">PK</div>
-        )}
-        <div className="flex-1 min-w-0">
-          {item.type === "player" ? (
-            <>
-              <p className="text-sm font-semibold truncate">{item.name}</p>
-              <div className="flex items-center gap-1.5 mt-0.5">
-                {item.pos && (
-                  <span className={cn("text-[10px] font-bold",
-                    item.pos === "QB" ? "text-rose-400" : item.pos === "RB" ? "text-emerald-400" :
-                    item.pos === "WR" ? "text-sky-400" : item.pos === "TE" ? "text-yellow-400" : "text-muted-foreground"
-                  )}>{item.pos}</span>
-                )}
-                {item.team && <span className="text-[10px] text-muted-foreground">{item.team}</span>}
-                {item.dynastyValue > 0 && (
-                  <span className="text-[10px] text-[#d4af37] font-semibold ml-auto">{item.dynastyValue.toLocaleString()}</span>
-                )}
-              </div>
-            </>
-          ) : (
-            <>
-              <p className="text-sm font-semibold">{item.pickYear} {ordRound(item.pickRound!)}</p>
-              {!isOwn && item.pickOriginalTeamName && (
-                <p className="text-[10px] text-purple-400 truncate">via {item.pickOriginalTeamName}</p>
-              )}
-              {item.dynastyValue > 0 && (
-                <p className="text-[10px] text-[#d4af37] font-semibold">{item.dynastyValue.toLocaleString()} dynasty</p>
-              )}
-            </>
-          )}
-        </div>
-      </div>
-
-      <div className="flex items-center justify-between gap-2 pt-1 border-t border-border/30">
-        <div className="flex items-center gap-1.5 min-w-0">
-          <Tag className="w-3 h-3 text-muted-foreground flex-shrink-0" />
-          <span className="text-[10px] text-muted-foreground truncate">{item.ownerTeamName}</span>
-        </div>
-        {item.addedAt && (
-          <div className="flex items-center gap-1 shrink-0">
-            <Clock className="w-3 h-3 text-muted-foreground" />
-            <span className="text-[9px] text-muted-foreground">
-              {new Date(item.addedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-            </span>
-          </div>
-        )}
-      </div>
-
-      <Button
-        size="sm"
-        variant="outline"
-        className={cn("h-7 text-[11px] w-full transition-colors",
-          prefilled
-            ? "border-emerald-500/40 text-emerald-500 bg-emerald-500/10"
-            : "border-[#d4af37]/30 text-[#d4af37] hover:bg-[#d4af37]/10"
-        )}
-        onClick={handleAddToCalc}
-        data-testid={`button-add-to-calc-${item.sleeperId ?? `pick-${item.pickYear}-${item.pickRound}`}`}
-      >
-        {prefilled ? (
-          "✓ Switch to Trade Calculator"
-        ) : (
-          <><ArrowRight className="w-3 h-3 mr-1" />Add to Trade Calc</>
-        )}
-      </Button>
-    </Card>
-  );
+function computeTradeExpiry(option: string): number | null {
+  const now = Math.floor(Date.now() / 1000);
+  switch (option) {
+    case "never": return null;
+    case "1h":    return now + 3600;
+    case "today": { const end = new Date(); end.setHours(23, 59, 59, 999); return Math.floor(end.getTime() / 1000); }
+    case "24h":   return now + 86400;
+    case "2d":    return now + 172800;
+    case "1w":    return now + 604800;
+    case "2w":    return now + 1209600;
+    default:      return now + 86400;
+  }
 }
 
 const DIMINISHING_WEIGHTS = [1.00, 0.85, 0.72, 0.60, 0.50, 0.42, 0.36, 0.31];
@@ -1392,67 +1269,61 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
   }, [allPlayers, addPlayer, addPick]);
 
   // Propose trade state
-  const [expiresIn, setExpiresIn] = useState("72");
+  const [expiry, setExpiry] = useState("24h");
   const [faabOpen, setFaabOpen] = useState(false);
   const [faabASends, setFaabASends] = useState("");
   const [faabBSends, setFaabBSends] = useState("");
   const [proposing, setProposing] = useState(false);
-  const [proposedTrade, setProposedTrade] = useState<any | null>(null);
+  const [proposedTrade, setProposedTrade] = useState<ProposeTradeResult | null>(null);
   const [proposeError, setProposeError] = useState<string | null>(null);
-  // Withdraw state
   const [withdrawing, setWithdrawing] = useState(false);
   const [withdrawError, setWithdrawError] = useState<string | null>(null);
-  // DM state
-  const [dmOpen, setDmOpen] = useState(false);
-  const [dmData, setDmData] = useState<any | null>(null);
-  const [dmLoading, setDmLoading] = useState(false);
-  const [dmMessage, setDmMessage] = useState("");
-  const [dmSending, setDmSending] = useState(false);
-  const [dmSent, setDmSent] = useState(false);
+  const [dmStatus, setDmStatus] = useState<"idle" | "sending" | "sent" | "failed">("idle");
   const [dmError, setDmError] = useState<string | null>(null);
-  const [dmCardSending, setDmCardSending] = useState(false);
-  const [dmCardSent, setDmCardSent] = useState(false);
-  const [dmCardError, setDmCardError] = useState<string | null>(null);
 
   const handleProposeTrade = async () => {
-    if (!sleeperJwt || !sideARosterId || !sideBRosterId) return;
-    const kAdds: string[] = [];
-    const vAdds: number[] = [];
-    const kDrops: string[] = [];
-    const vDrops: number[] = [];
+    if (!sideBRosterId) return;
+    const aRosterId = parseInt(sideARosterId);
+    const bRosterId = parseInt(sideBRosterId);
+
+    const adds: Record<string, number> = {};
+    const drops: Record<string, number> = {};
     const draftPicks: Array<{ season: string; round: number; roster_id: number; owner_id: number; previous_owner_id: number }> = [];
 
     for (const asset of sideA) {
       if (asset.type === "player" && asset.player?.sleeperId) {
-        kAdds.push(asset.player.sleeperId); vAdds.push(parseInt(sideBRosterId));
-        kDrops.push(asset.player.sleeperId); vDrops.push(parseInt(sideARosterId));
+        adds[asset.player.sleeperId] = bRosterId;
+        drops[asset.player.sleeperId] = aRosterId;
       } else if (asset.type === "pick" && asset.pickYear && asset.pickRound) {
-        draftPicks.push({ season: String(asset.pickYear), round: asset.pickRound, roster_id: asset.pickOriginalRosterId ?? parseInt(sideARosterId), owner_id: parseInt(sideARosterId), previous_owner_id: parseInt(sideARosterId) });
+        draftPicks.push({ season: String(asset.pickYear), round: asset.pickRound, roster_id: asset.pickOriginalRosterId ?? aRosterId, owner_id: aRosterId, previous_owner_id: aRosterId });
       }
     }
     for (const asset of sideB) {
       if (asset.type === "player" && asset.player?.sleeperId) {
-        kAdds.push(asset.player.sleeperId); vAdds.push(parseInt(sideARosterId));
-        kDrops.push(asset.player.sleeperId); vDrops.push(parseInt(sideBRosterId));
+        adds[asset.player.sleeperId] = aRosterId;
+        drops[asset.player.sleeperId] = bRosterId;
       } else if (asset.type === "pick" && asset.pickYear && asset.pickRound) {
-        draftPicks.push({ season: String(asset.pickYear), round: asset.pickRound, roster_id: asset.pickOriginalRosterId ?? parseInt(sideBRosterId), owner_id: parseInt(sideBRosterId), previous_owner_id: parseInt(sideBRosterId) });
+        draftPicks.push({ season: String(asset.pickYear), round: asset.pickRound, roster_id: asset.pickOriginalRosterId ?? bRosterId, owner_id: bRosterId, previous_owner_id: bRosterId });
       }
     }
 
     const waiverBudget: Array<{ sender: number; receiver: number; amount: number }> = [];
     const aAmt = parseInt(faabASends) || 0;
     const bAmt = parseInt(faabBSends) || 0;
-    if (aAmt > 0) waiverBudget.push({ sender: parseInt(sideARosterId), receiver: parseInt(sideBRosterId), amount: aAmt });
-    if (bAmt > 0) waiverBudget.push({ sender: parseInt(sideBRosterId), receiver: parseInt(sideARosterId), amount: bAmt });
+    if (aAmt > 0) waiverBudget.push({ sender: aRosterId, receiver: bRosterId, amount: aAmt });
+    if (bAmt > 0) waiverBudget.push({ sender: bRosterId, receiver: aRosterId, amount: bAmt });
 
-    const expiresAt = parseInt(expiresIn) > 0 ? Date.now() + parseInt(expiresIn) * 3600 * 1000 : 0;
+    const expiresAt = computeTradeExpiry(expiry);
 
     setProposing(true);
     setProposeError(null);
     setProposedTrade(null);
+    setDmStatus("idle");
+    setDmError(null);
     try {
-      const result = await proposeTrade(league.id, sleeperJwt, { kAdds, vAdds, kDrops, vDrops, draftPicks, waiverBudget, expiresAt });
-      // Build optimistic PendingTrade for immediate Transactions tab update
+      const result = await proposeTradeAuthed({ leagueId: league.id, adds, drops, draftPicks, expiresAt, waiverBudget });
+      setProposedTrade(result);
+      toast({ title: "Trade sent!" });
       const optimisticTrade = {
         transactionId: result.transaction_id,
         leg: result.leg ?? 1,
@@ -1463,31 +1334,26 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
         week: 0,
         created: result.created ?? Date.now(),
         adds: [
-          ...sideA.filter(a => a.type === "player" && a.player?.sleeperId).map(a => ({ playerId: a.player!.sleeperId!, name: a.player!.name, pos: a.player!.pos || "?", team: a.player!.team || "", rosterId: parseInt(sideBRosterId), teamName: sideBTeam?.owner || sideBTeam?.name || "Side B" })),
-          ...sideB.filter(a => a.type === "player" && a.player?.sleeperId).map(a => ({ playerId: a.player!.sleeperId!, name: a.player!.name, pos: a.player!.pos || "?", team: a.player!.team || "", rosterId: parseInt(sideARosterId), teamName: sideATeam?.owner || sideATeam?.name || "Side A" })),
+          ...sideA.filter(a => a.type === "player" && a.player?.sleeperId).map(a => ({ playerId: a.player!.sleeperId!, name: a.player!.name, pos: a.player!.pos || "?", team: a.player!.team || "", rosterId: bRosterId, teamName: sideBTeam?.owner || sideBTeam?.name || "Side B" })),
+          ...sideB.filter(a => a.type === "player" && a.player?.sleeperId).map(a => ({ playerId: a.player!.sleeperId!, name: a.player!.name, pos: a.player!.pos || "?", team: a.player!.team || "", rosterId: aRosterId, teamName: sideATeam?.owner || sideATeam?.name || "Side A" })),
         ],
         drops: [
-          ...sideA.filter(a => a.type === "player" && a.player?.sleeperId).map(a => ({ playerId: a.player!.sleeperId!, name: a.player!.name, pos: a.player!.pos || "?", team: a.player!.team || "", rosterId: parseInt(sideARosterId), teamName: sideATeam?.owner || sideATeam?.name || "Side A" })),
-          ...sideB.filter(a => a.type === "player" && a.player?.sleeperId).map(a => ({ playerId: a.player!.sleeperId!, name: a.player!.name, pos: a.player!.pos || "?", team: a.player!.team || "", rosterId: parseInt(sideBRosterId), teamName: sideBTeam?.owner || sideBTeam?.name || "Side B" })),
+          ...sideA.filter(a => a.type === "player" && a.player?.sleeperId).map(a => ({ playerId: a.player!.sleeperId!, name: a.player!.name, pos: a.player!.pos || "?", team: a.player!.team || "", rosterId: aRosterId, teamName: sideATeam?.owner || sideATeam?.name || "Side A" })),
+          ...sideB.filter(a => a.type === "player" && a.player?.sleeperId).map(a => ({ playerId: a.player!.sleeperId!, name: a.player!.name, pos: a.player!.pos || "?", team: a.player!.team || "", rosterId: bRosterId, teamName: sideBTeam?.owner || sideBTeam?.name || "Side B" })),
         ],
         draftPicks: [
           ...sideA.filter(a => a.type === "pick" && a.pickYear && a.pickRound).map(a => ({ season: String(a.pickYear), round: a.pickRound!, fromTeam: sideATeam?.owner || sideATeam?.name || "Side A", toTeam: sideBTeam?.owner || sideBTeam?.name || "Side B", originalRosterId: a.pickOriginalRosterId })),
           ...sideB.filter(a => a.type === "pick" && a.pickYear && a.pickRound).map(a => ({ season: String(a.pickYear), round: a.pickRound!, fromTeam: sideBTeam?.owner || sideBTeam?.name || "Side B", toTeam: sideATeam?.owner || sideATeam?.name || "Side A", originalRosterId: a.pickOriginalRosterId })),
         ],
         involvedTeams: [
-          { rosterId: parseInt(sideARosterId), teamName: sideATeam?.owner || sideATeam?.name || "Side A", avatar: (sideATeam as any)?.avatar ?? null },
-          ...(sideBRosterId ? [{ rosterId: parseInt(sideBRosterId), teamName: sideBTeam?.owner || sideBTeam?.name || "Side B", avatar: (sideBTeam as any)?.avatar ?? null }] : []),
+          { rosterId: aRosterId, teamName: sideATeam?.owner || sideATeam?.name || "Side A", avatar: (sideATeam as any)?.avatar ?? null },
+          ...(sideBRosterId ? [{ rosterId: bRosterId, teamName: sideBTeam?.owner || sideBTeam?.name || "Side B", avatar: (sideBTeam as any)?.avatar ?? null }] : []),
         ],
       };
-      setProposedTrade(result);
-      toast({ title: "Trade sent." });
-      // Pre-fill DM with trade summary
-      const aGives = [...sideA.filter(a => a.type === "player").map(a => a.player?.name).filter(Boolean), ...sideA.filter(a => a.type === "pick" && a.pickYear && a.pickRound).map(a => `${a.pickYear} Rd${a.pickRound}`)].join(", ") || "nothing";
-      const bGives = [...sideB.filter(a => a.type === "player").map(a => a.player?.name).filter(Boolean), ...sideB.filter(a => a.type === "pick" && a.pickYear && a.pickRound).map(a => `${a.pickYear} Rd${a.pickRound}`)].join(", ") || "nothing";
-      setDmMessage(`https://statchasers.com/dynasty-command-tool/`);
-      // Dispatch to Transactions tab
       window.dispatchEvent(new CustomEvent("sleeper-txn-created", { detail: optimisticTrade }));
       window.dispatchEvent(new CustomEvent("sleeper-txn-refresh"));
+      const partnerUserId = sideBTeam?.ownerId;
+      if (partnerUserId) sendCalcTradeDm(result, partnerUserId);
     } catch (e: any) {
       setProposeError(e.message || "Failed to propose trade");
     } finally {
@@ -1496,13 +1362,13 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
   };
 
   const handleWithdraw = async () => {
-    if (!sleeperJwt || !proposedTrade) return;
+    if (!proposedTrade) return;
     setWithdrawing(true);
     setWithdrawError(null);
     try {
-      await rejectTradeOnSleeper(league.id, proposedTrade.transaction_id, proposedTrade.leg ?? 1, sleeperJwt);
+      await rejectTrade(league.id, proposedTrade.transaction_id, proposedTrade.leg ?? 1);
       setProposedTrade(null);
-      setDmOpen(false);
+      setDmStatus("idle");
       window.dispatchEvent(new CustomEvent("sleeper-txn-refresh"));
       toast({ title: "Trade withdrawn." });
     } catch (e: any) {
@@ -1512,83 +1378,57 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
     }
   };
 
-  const handleOpenDm = async () => {
-    const partnerUserId = sideBTeam?.ownerId;
-    if (!partnerUserId || !sleeperJwt) return;
-    setDmOpen(true);
-    setDmLoading(true);
+  const sendCalcTradeDm = async (trade: ProposeTradeResult, partnerUserId: string) => {
+    setDmStatus("sending");
     setDmError(null);
     try {
-      const data = await getDmByMembers(partnerUserId, sleeperJwt);
-      setDmData(data);
-    } catch {}
-    setDmLoading(false);
-  };
-
-  const handleSendDm = async () => {
-    if (!sleeperJwt || !dmData?.dm_id || !dmMessage.trim()) return;
-    setDmSending(true);
-    setDmError(null);
-    setDmSent(false);
-    try {
-      await sendDmMessage(dmData.dm_id, dmMessage.trim(), sleeperJwt);
-      setDmSent(true);
-      setDmMessage("");
-    } catch (e: any) {
-      setDmError(e.message || "Failed to send message");
-    } finally {
-      setDmSending(false);
-    }
-  };
-
-  const handleSendTradeCard = async () => {
-    if (!sleeperJwt || !dmData?.dm_id || !proposedTrade) return;
-    setDmCardSending(true);
-    setDmCardError(null);
-    setDmCardSent(false);
-    try {
-      // Build transactionsByRoster from raw propose_trade response
-      const txByRoster: Record<string, { adds: Record<string, number>; drops: Record<string, number> }> = {};
-      if (proposedTrade.adds) {
-        for (const [pid, rid] of Object.entries(proposedTrade.adds as Record<string, number>)) {
-          const r = String(rid);
-          if (!txByRoster[r]) txByRoster[r] = { adds: {}, drops: {} };
-          txByRoster[r].adds[pid] = rid;
-        }
+      const usersRaw: any[] = await fetch(`https://api.sleeper.app/v1/league/${trade.league_id}/users`).then(r => r.json());
+      const usersInLeagueMap: Record<string, unknown> = {};
+      const userIdToInfo = new Map<string, any>();
+      for (const u of usersRaw) {
+        const info = { avatar: u.avatar ?? null, display_name: u.display_name || u.username || u.user_id, is_bot: false, is_owner: false, league_id: trade.league_id, metadata: u.metadata || {}, settings: u.settings || {}, user_id: u.user_id };
+        usersInLeagueMap[u.user_id] = info;
+        userIdToInfo.set(u.user_id, info);
       }
-      if (proposedTrade.drops) {
-        for (const [pid, rid] of Object.entries(proposedTrade.drops as Record<string, number>)) {
-          const r = String(rid);
-          if (!txByRoster[r]) txByRoster[r] = { adds: {}, drops: {} };
-          txByRoster[r].drops[pid] = rid;
-        }
-      }
-      // Build usersInLeagueMap from league teams
-      const usersInLeagueMap: Record<string, { display_name: string; user_id: string }> = {};
+      const rosterUserMap = new Map<number, unknown>();
       for (const team of league.teams) {
-        if (team.ownerId) {
-          usersInLeagueMap[team.ownerId] = { display_name: team.owner || team.name, user_id: team.ownerId };
-        }
+        const rid = parseInt(team.id.replace("roster_", ""), 10);
+        if (team.ownerId && userIdToInfo.has(team.ownerId)) rosterUserMap.set(rid, userIdToInfo.get(team.ownerId));
       }
-      const username = user?.username || user?.displayName || "Manager";
-      const text = `@${username} has proposed a trade in ${league.name}`;
-      await sendDmMessage(dmData.dm_id, text, sleeperJwt, {
-        parent_type: "dm",
-        attachment_type: "trade_dm",
-        k_attachment_data: ["status", "transactions_by_roster", "transaction_id", "league_id", "users_in_league_map"],
-        v_attachment_data: [
-          "proposed",
-          JSON.stringify(txByRoster),
-          proposedTrade.transaction_id,
-          league.id,
-          JSON.stringify(usersInLeagueMap),
-        ],
-      });
-      setDmCardSent(true);
+      const transactionsByRoster: Record<string, unknown> = {};
+      for (const rosterId of (trade.roster_ids || [])) {
+        const rosterAdds: unknown[] = [];
+        if (trade.adds) {
+          for (const [pid, receivingRid] of Object.entries(trade.adds)) {
+            if (receivingRid === rosterId) {
+              const playerObj = (trade.player_map as Record<string, unknown>)?.[pid] || { player_id: pid };
+              rosterAdds.push(playerObj);
+            }
+          }
+        }
+        const rosterPicks: unknown[] = [];
+        if (Array.isArray(trade.draft_picks)) {
+          for (const pick of trade.draft_picks) {
+            if (typeof pick === "string") {
+              const parts = pick.split(",");
+              if (Number(parts[3]) === rosterId) rosterPicks.push({ roster_id: Number(parts[0]), season: parts[1], round: Number(parts[2]) });
+            } else if (pick && typeof pick === "object" && (pick as any).owner_id === rosterId) {
+              rosterPicks.push(pick);
+            }
+          }
+        }
+        transactionsByRoster[String(rosterId)] = { adds: rosterAdds, drops: [], added_picks: rosterPicks, dropped_picks: [], added_budget: [], dropped_budget: [], status: trade.status || "proposed", user: rosterUserMap.get(rosterId) ?? null };
+      }
+      const dmInfo = await getDmByMembersFull(partnerUserId);
+      if (!dmInfo) throw new Error("No DM thread found with this manager.");
+      const session = getSleeperSession();
+      const myName = session?.display_name || userTeam.owner;
+      await sendTradeMessage({ dmId: dmInfo.dm_id, text: `@${myName} has proposed a trade in ${league.name} via Dynasty Command`, transactionId: trade.transaction_id, leagueId: trade.league_id, status: trade.status || "proposed", transactionsByRoster, usersInLeagueMap, attachTradeCard: true });
+      await sendPlainDm(dmInfo.dm_id, "https://statchasers.com/dynasty-command-tool/");
+      setDmStatus("sent");
     } catch (e: any) {
-      setDmCardError(e.message || "Failed to send trade card");
-    } finally {
-      setDmCardSending(false);
+      setDmStatus("failed");
+      setDmError(e?.message || "DM could not be sent.");
     }
   };
 

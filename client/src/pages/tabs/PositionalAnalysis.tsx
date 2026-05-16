@@ -2387,12 +2387,36 @@ interface SmartGMIdea {
   scoreLabel: "Premium" | "Recommended" | "Solid";
 }
 
+// ─── Smart GM Mode adapter ────────────────────────────────────────
+
+function smartGMIdeaToWinNow(idea: SmartGMIdea): WinNowIdea {
+  const dynGive = idea.youGive.reduce((s, a) => s + a.dynVal, 0);
+  const dynGet  = idea.youGet.reduce((s, a)  => s + a.dynVal, 0);
+  const rdGive  = idea.youGive.reduce((s, a) => s + a.rdVal, 0);
+  const rdGet   = idea.youGet.reduce((s, a)  => s + a.rdVal, 0);
+  const avg     = (rdGive + rdGet) / 2 || 1;
+  return {
+    id: idea.id, partnerId: idea.partnerId, partnerTeam: idea.partnerTeam, partnerTier: idea.partnerTier,
+    headline: idea.headline, why: idea.why,
+    youGive: idea.youGive.map(a => ({ label: a.label, value: a.dynVal, pos: a.pos, age: a.age, type: a.type, sleeperId: a.sleeperId })),
+    youGet:  idea.youGet.map(a  => ({ label: a.label, value: a.dynVal, pos: a.pos, age: a.age, type: a.type, sleeperId: a.sleeperId })),
+    gainPos: ((idea.youGet[0]?.pos) ?? "QB") as PosLabel,
+    dynGive, dynGet, rdGive, rdGet,
+    userRdDelta: Math.round(idea.redraftDelta * avg),
+    partnerRdDelta: Math.round(-idea.redraftDelta * avg),
+    score: idea.score,
+    scoreLabel: idea.scoreLabel === "Premium" ? "Elite" : idea.scoreLabel === "Recommended" ? "Strong" : "Moderate",
+  };
+}
+
 // ─── Smart GM Mode ────────────────────────────────────────────────
 
 function SmartGMMode({ league, userTeam }: { league: League; userTeam: Team }) {
   const { getPlayerValue, getRedraftValue, getPickValue } = useValueModel();
   const [expandedPartner, setExpandedPartner] = useState<string | null>(null);
+  const [sendModal, setSendModal] = useState<{ open: boolean; idea: WinNowIdea | null }>({ open: false, idea: null });
   const tierMap = useMemo(() => getLeagueTeamTiers(league.teams), [league.teams]);
+  const isSleeperAuthed = !!getSleeperSession()?.token;
 
   const POSITIONS = ["QB", "RB", "WR", "TE"] as const;
   type Pos = typeof POSITIONS[number];
@@ -2853,10 +2877,31 @@ function SmartGMMode({ league, userTeam }: { league: League; userTeam: Team }) {
                                     </span>
                                   )}
                                 </div>
-                                <Button variant="default" size="sm" className="text-xs bg-[#0b3a7a] hover:bg-[#0b3a7a]/90" data-testid={`btn-sgm-build-${pid}-${idx}`}>
-                                  <ArrowRightLeft className="w-3 h-3 mr-1" />
-                                  Build in Calculator
-                                </Button>
+                                <div className="flex items-center gap-2">
+                                  <Button variant="default" size="sm" className="text-xs bg-[#0b3a7a] hover:bg-[#0b3a7a]/90" data-testid={`btn-sgm-build-${pid}-${idx}`}>
+                                    <ArrowRightLeft className="w-3 h-3 mr-1" />
+                                    Build in Calculator
+                                  </Button>
+                                  {isSleeperAuthed ? (
+                                    <Button size="sm" className="text-xs bg-emerald-700 hover:bg-emerald-600 text-white gap-1" data-testid={`btn-sgm-send-${pid}-${idx}`}
+                                      onClick={() => setSendModal({ open: true, idea: smartGMIdeaToWinNow(idea) })}>
+                                      <Send className="w-3 h-3" />
+                                      Send Trade
+                                    </Button>
+                                  ) : (
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <span tabIndex={0}>
+                                          <Button size="sm" className="text-xs bg-muted text-muted-foreground gap-1 cursor-not-allowed" disabled data-testid={`btn-sgm-send-disabled-${pid}-${idx}`}>
+                                            <Send className="w-3 h-3" />
+                                            Send Trade
+                                          </Button>
+                                        </span>
+                                      </TooltipTrigger>
+                                      <TooltipContent side="top" className="text-xs">Connect Sleeper to send offers directly</TooltipContent>
+                                    </Tooltip>
+                                  )}
+                                </div>
                               </div>
                             </div>
                           </div>
@@ -2870,6 +2915,13 @@ function SmartGMMode({ league, userTeam }: { league: League; userTeam: Team }) {
           </div>
         )}
       </div>
+      <WinNowSendModal
+        open={sendModal.open}
+        onClose={() => setSendModal({ open: false, idea: null })}
+        idea={sendModal.idea}
+        league={league}
+        userTeam={userTeam}
+      />
     </div>
   );
 }
@@ -2937,11 +2989,31 @@ function getAssetTier(pos: string, age: number, dynVal: number, rdVal: number): 
 
 type RebuildProfile = "Full Rebuild" | "Soft Rebuild" | "Retool" | "Hold / Contend" | "Productive Struggle";
 
+// ─── Rebuild Mode adapter ─────────────────────────────────────────
+
+function rebuildIdeaToWinNow(idea: RebuildIdea): WinNowIdea {
+  return {
+    id: idea.id, partnerId: idea.partnerId, partnerTeam: idea.partnerTeam, partnerTier: idea.partnerTier,
+    headline: idea.headline, why: idea.why,
+    youGive: idea.youGive.map(a => ({ label: a.label, value: a.value, pos: a.pos, age: a.age, type: a.type, sleeperId: a.sleeperId })),
+    youGet:  idea.youGet.map(a  => ({ label: a.label, value: a.value, pos: a.pos, age: a.age, type: a.type, sleeperId: a.sleeperId })),
+    gainPos: ((idea.youGet.find(a => a.type === "player")?.pos) ?? "QB") as PosLabel,
+    dynGive: idea.dynGive, dynGet: idea.dynGet,
+    rdGive: idea.rdGive, rdGet: idea.rdGet,
+    userRdDelta: idea.rdGet - idea.rdGive,
+    partnerRdDelta: idea.partnerRdDelta,
+    score: idea.score,
+    scoreLabel: idea.scoreLabel,
+  };
+}
+
 // ─── Rebuild Mode ─────────────────────────────────────────────────
 
 function RebuildMode({ league, userTeam }: { league: League; userTeam: Team }) {
   const { getPlayerValue, getRedraftValue, getPickValue, optimizeLineup } = useValueModel();
   const [expandedPartners, setExpandedPartners] = useState<Set<string>>(new Set());
+  const [sendModal, setSendModal] = useState<{ open: boolean; idea: WinNowIdea | null }>({ open: false, idea: null });
+  const isSleeperAuthed = !!getSleeperSession()?.token;
   const togglePartner = (pid: string) => setExpandedPartners(prev => {
     const next = new Set(prev);
     next.has(pid) ? next.delete(pid) : next.add(pid);
@@ -3413,11 +3485,30 @@ function RebuildMode({ league, userTeam }: { league: League; userTeam: Team }) {
                               {idea.ageDelta < -1 && (
                                 <p className="text-[10px] text-blue-400">−{Math.abs(Math.round(idea.ageDelta))} yrs avg age</p>
                               )}
-                              <div className="flex justify-end">
+                              <div className="flex justify-end gap-2">
                                 <Button variant="default" size="sm" className="text-xs bg-[#0b3a7a] hover:bg-[#0b3a7a]/90" data-testid={`btn-rebuild-build-${pid}-${idx}`}>
                                   <ArrowRightLeft className="w-3 h-3 mr-1" />
                                   Build in Calculator
                                 </Button>
+                                {isSleeperAuthed ? (
+                                  <Button size="sm" className="text-xs bg-emerald-700 hover:bg-emerald-600 text-white gap-1" data-testid={`btn-rebuild-send-${pid}-${idx}`}
+                                    onClick={() => setSendModal({ open: true, idea: rebuildIdeaToWinNow(idea) })}>
+                                    <Send className="w-3 h-3" />
+                                    Send Trade
+                                  </Button>
+                                ) : (
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <span tabIndex={0}>
+                                        <Button size="sm" className="text-xs bg-muted text-muted-foreground gap-1 cursor-not-allowed" disabled data-testid={`btn-rebuild-send-disabled-${pid}-${idx}`}>
+                                          <Send className="w-3 h-3" />
+                                          Send Trade
+                                        </Button>
+                                      </span>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="top" className="text-xs">Connect Sleeper to send offers directly</TooltipContent>
+                                  </Tooltip>
+                                )}
                               </div>
                             </div>
                           </div>
@@ -3431,8 +3522,33 @@ function RebuildMode({ league, userTeam }: { league: League; userTeam: Team }) {
           </div>
         )}
       </div>
+      <WinNowSendModal
+        open={sendModal.open}
+        onClose={() => setSendModal({ open: false, idea: null })}
+        idea={sendModal.idea}
+        league={league}
+        userTeam={userTeam}
+      />
     </div>
   );
+}
+
+// ─── Build Dynasty Mode adapter ───────────────────────────────────
+
+function tradeSuggestionToWinNow(sug: TradeSuggestion, partnerTeam: Team, partnerTier: Tier): WinNowIdea {
+  return {
+    id: sug.id, partnerId: partnerTeam.id, partnerTeam, partnerTier,
+    headline: sug.headline, why: sug.reasons.join(" "),
+    youGive: sug.youGive.map(a => ({ label: a.label, value: a.value, pos: a.pos, age: a.age, type: a.type, sleeperId: a.sleeperId })),
+    youGet:  sug.youGet.map(a  => ({ label: a.label, value: a.value, pos: a.pos, age: a.age, type: a.type, sleeperId: a.sleeperId })),
+    gainPos: ((sug.youGet.find(a => a.type === "player")?.pos) ?? "QB") as PosLabel,
+    dynGive: sug.rawSide1, dynGet: sug.rawSide2,
+    rdGive: sug.adjustedSide1, rdGet: sug.adjustedSide2,
+    userRdDelta: sug.rawSide2 - sug.rawSide1,
+    partnerRdDelta: sug.rawSide1 - sug.rawSide2,
+    score: 0,
+    scoreLabel: sug.fairness === "Fair" ? "Elite" : sug.fairness === "Reasonable" ? "Strong" : "Moderate",
+  };
 }
 
 // ─── Build Dynasty Mode (existing logic) ─────────────────────────
@@ -3442,6 +3558,8 @@ function BuildDynastyMode({ league, userTeam }: { league: League; userTeam: Team
   const { profiles } = usePositionalProfiles(league, userTeam);
   const includeStuds = true;
   const [expandedPartner, setExpandedPartner] = useState<string | null>(null);
+  const [sendModal, setSendModal] = useState<{ open: boolean; idea: WinNowIdea | null }>({ open: false, idea: null });
+  const isSleeperAuthed = !!getSleeperSession()?.token;
   const tradeBlockTierMap = useMemo(() => getLeagueTeamTiers(league.teams), [league.teams]);
 
   const fairnessThreshold = 0.12;
@@ -3706,10 +3824,31 @@ function BuildDynastyMode({ league, userTeam }: { league: League; userTeam: Team
                               <span key={i} className="text-[10px] text-muted-foreground">{r}</span>
                             ))}
                           </div>
-                          <Button variant="default" size="sm" className="text-xs bg-[#0b3a7a] hover:bg-[#0b3a7a]/90" data-testid={`btn-build-trade-${opp.partner.teamId}-${idx}`}>
-                            <ArrowRightLeft className="w-3 h-3 mr-1" />
-                            Build in Calculator
-                          </Button>
+                          <div className="flex items-center gap-2">
+                            <Button variant="default" size="sm" className="text-xs bg-[#0b3a7a] hover:bg-[#0b3a7a]/90" data-testid={`btn-build-trade-${opp.partner.teamId}-${idx}`}>
+                              <ArrowRightLeft className="w-3 h-3 mr-1" />
+                              Build in Calculator
+                            </Button>
+                            {isSleeperAuthed ? (
+                              <Button size="sm" className="text-xs bg-emerald-700 hover:bg-emerald-600 text-white gap-1" data-testid={`btn-bd-send-${opp.partner.teamId}-${idx}`}
+                                onClick={() => setSendModal({ open: true, idea: tradeSuggestionToWinNow(sug, opp.partner.team, opp.partner.tier) })}>
+                                <Send className="w-3 h-3" />
+                                Send Trade
+                              </Button>
+                            ) : (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span tabIndex={0}>
+                                    <Button size="sm" className="text-xs bg-muted text-muted-foreground gap-1 cursor-not-allowed" disabled data-testid={`btn-bd-send-disabled-${opp.partner.teamId}-${idx}`}>
+                                      <Send className="w-3 h-3" />
+                                      Send Trade
+                                    </Button>
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="text-xs">Connect Sleeper to send offers directly</TooltipContent>
+                              </Tooltip>
+                            )}
+                          </div>
                         </div>
                       </div>
                     ))}
@@ -3762,6 +3901,13 @@ function BuildDynastyMode({ league, userTeam }: { league: League; userTeam: Team
           })}
         </div>
       </Card>
+      <WinNowSendModal
+        open={sendModal.open}
+        onClose={() => setSendModal({ open: false, idea: null })}
+        idea={sendModal.idea}
+        league={league}
+        userTeam={userTeam}
+      />
     </div>
   );
 }

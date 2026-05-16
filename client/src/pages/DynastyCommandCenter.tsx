@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { MegaMenuNav, MobileMenuButton } from "@/components/MegaMenu";
 import { SubTabs } from "@/components/SubTabs";
 import { LeagueSelector } from "@/components/LeagueSelector";
-import { ValueAttribution } from "@/components/ValueSourceSelector";
+import { HeaderValueSourceBadge } from "@/components/ValueSourceSelector";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useValueModel } from "@/contexts/ValueModelContext";
 import { useSleeper } from "@/contexts/SleeperContext";
@@ -379,6 +379,8 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
               {/* Mobile menu button */}
               <MobileMenuButton tabs={NAV_CONFIG} activeTab={activeMainTab} setActiveTab={handleMainTabChange} />
 
+              <HeaderValueSourceBadge />
+
               {/* User dropdown (when connected) — contains Discord + ThemeToggle */}
               {sleeper.isConnected && sleeper.user ? (
                 <div className="relative" ref={userDropdownRef}>
@@ -460,20 +462,15 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
             </div>
           )}
 
-          {/* Bottom strip: sync + attribution */}
-          <div className="flex items-center justify-between gap-2 mt-1 flex-wrap">
-            <div className="flex items-center gap-1.5">
-              {sleeper.error && (
-                <span className="flex items-center gap-1 text-[11px] text-destructive" data-testid="text-sync-error">
-                  <AlertCircle className="w-3 h-3" />
-                  {sleeper.error}
-                </span>
-              )}
+          {/* Bottom strip: sync errors */}
+          {sleeper.error && (
+            <div className="mt-1">
+              <span className="flex items-center gap-1 text-[11px] text-destructive" data-testid="text-sync-error">
+                <AlertCircle className="w-3 h-3" />
+                {sleeper.error}
+              </span>
             </div>
-            <div className="flex items-center gap-2">
-              <ValueAttribution />
-            </div>
-          </div>
+          )}
         </div>
       </header>
 
