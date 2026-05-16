@@ -1894,18 +1894,6 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
     <div className="space-y-6">
       <SectionHeader title="Trade Calculator" subtitle="Evaluate trades with dynasty values and diminishing returns" />
 
-      <div className="flex justify-end">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={clearAll}
-          className="flex-shrink-0 h-8 px-2.5 sm:px-3"
-          data-testid="button-clear-trade"
-        >
-          <RotateCcw className="w-3 h-3 sm:mr-1" />
-          <span className="hidden sm:inline">Clear</span>
-        </Button>
-      </div>
 
       <Card className="p-5" ref={verdictCardRef}>
         {(sideA.length > 0 && sideB.length > 0) && (
