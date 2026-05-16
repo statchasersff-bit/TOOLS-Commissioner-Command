@@ -547,17 +547,27 @@ export function TradeFinder({ league, userTeam }: TradeProps) {
             <p className="text-[10px] text-muted-foreground mt-2">Fair 1v1, 2v1, and 1v2 packages ranked by positional need + value match</p>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0 flex-wrap justify-end">
-            <div className="flex rounded-lg border border-border overflow-hidden">
+            <div className="flex gap-1 p-1 rounded-xl bg-white/[0.03] border border-white/6">
               <button
                 onClick={() => setProposalMode("dynasty")}
-                className={cn("px-2.5 py-1 text-xs font-medium transition-colors", proposalMode === "dynasty" ? "bg-[#0b3a7a] text-white" : "bg-transparent text-muted-foreground hover:text-foreground")}
+                className={cn("relative px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-all duration-200", proposalMode === "dynasty" ? "bg-[#0b3a7a]/60 text-white border border-[#d4af37]/25" : "text-white/35 hover:text-white/60")}
                 data-testid="btn-mode-dynasty"
-              >Dynasty</button>
+              >
+                Build Dynasty
+                {proposalMode === "dynasty" && (
+                  <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-6 h-[2px] rounded-full bg-[#d4af37]" />
+                )}
+              </button>
               <button
                 onClick={() => setProposalMode("redraft")}
-                className={cn("px-2.5 py-1 text-xs font-medium transition-colors border-l border-border", proposalMode === "redraft" ? "bg-[#0b3a7a] text-white" : "bg-transparent text-muted-foreground hover:text-foreground")}
+                className={cn("relative px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-all duration-200", proposalMode === "redraft" ? "bg-[#0b3a7a]/60 text-white border border-[#d4af37]/25" : "text-white/35 hover:text-white/60")}
                 data-testid="btn-mode-redraft"
-              >Redraft</button>
+              >
+                Win-Now
+                {proposalMode === "redraft" && (
+                  <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-6 h-[2px] rounded-full bg-[#d4af37]" />
+                )}
+              </button>
             </div>
             <select
               value={posFilter}
