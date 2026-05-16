@@ -390,7 +390,7 @@ export function MobileBottomNav({ tabs, activeTab, setActiveTab }: MobileBottomN
         )}
         {/* Icon + label pill */}
         <div
-          className="flex flex-col items-center gap-1 px-3 py-1.5 rounded-[14px] transition-all duration-150"
+          className="flex flex-col items-center gap-1.5 px-3 py-2 rounded-[14px] transition-all duration-150"
           style={undefined}
         >
           <Icon
@@ -419,7 +419,7 @@ export function MobileBottomNav({ tabs, activeTab, setActiveTab }: MobileBottomN
       className="fixed bottom-0 left-0 right-0 md:hidden"
       style={{
         zIndex: 1000,
-        height: "calc(68px + env(safe-area-inset-bottom, 0px))",
+        height: "calc(72px + env(safe-area-inset-bottom, 0px))",
         paddingBottom: "env(safe-area-inset-bottom, 0px)",
         background: "rgba(8,15,34,0.94)",
         backdropFilter: "blur(14px)",
@@ -429,7 +429,7 @@ export function MobileBottomNav({ tabs, activeTab, setActiveTab }: MobileBottomN
       }}
       data-testid="mobile-bottom-nav"
     >
-      <div className="flex items-stretch h-[68px]">
+      <div className="flex items-stretch h-[72px]">
         {leftTabs.map(renderTab)}
 
         {/* Center avatar */}
