@@ -21,7 +21,6 @@ import { cn } from "@/lib/utils";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { TradeBlockCandidates } from "@/components/trade/TradeBlockCandidates";
 import { BulkTrade } from "@/components/trade/BulkTrade";
-import { AssetScanner } from "@/components/trade/AssetScanner";
 import { ArrowRightLeft, TrendingUp, TrendingDown, Target, X, Plus, Search, Scale, RotateCcw, Database, Play, Pause, Loader2, ChevronLeft, ChevronRight, ChevronDown, Download, Tag, Clock, ArrowRight, Send, CheckCircle2, DollarSign, Undo2, Layers, Globe } from "lucide-react";
 
 const SLEEPER_JWT_KEY = "dc-sleeper-draft-jwt";
@@ -170,7 +169,7 @@ function TradeProposalCard({ proposal, mode, userTeam }: { proposal: TradePropos
 export function TradeFinder({ league, userTeam }: TradeProps) {
   const { getPlayerValue, getRedraftValue, optimizeLineup } = useValueModel();
   const tradeFinderTierMap = useMemo(() => getLeagueTeamTiers(league.teams), [league.teams]);
-  const [finderMode, setFinderMode] = useState<"finder" | "bulk" | "scan">("finder");
+  const [finderMode, setFinderMode] = useState<"finder" | "bulk">("finder");
   const [proposalMode, setProposalMode] = useState<"dynasty" | "redraft">("dynasty");
   const [posFilter, setPosFilter] = useState<string>("all");
   const [showAllProposals, setShowAllProposals] = useState(false);
@@ -620,27 +619,12 @@ export function TradeFinder({ league, userTeam }: TradeProps) {
             Bulk Trade
             {finderMode === "bulk" && <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-6 h-[2px] rounded-full bg-[#d4af37]" />}
           </button>
-          <button
-            onClick={() => setFinderMode("scan")}
-            className={cn("relative px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all duration-200 flex items-center gap-1.5",
-              finderMode === "scan" ? "bg-[#0b3a7a]/60 text-white border border-[#d4af37]/25" : "text-white/35 hover:text-white/60")}
-            data-testid="btn-mode-scan"
-          >
-            <Search className="w-3 h-3" />
-            Asset Scan
-            {finderMode === "scan" && <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-6 h-[2px] rounded-full bg-[#d4af37]" />}
-          </button>
         </div>
       </div>
 
       {/* Bulk Trade workspace */}
       {finderMode === "bulk" && (
         <BulkTrade league={league} userTeam={userTeam} onBack={() => setFinderMode("finder")} />
-      )}
-
-      {/* Asset Scan workspace */}
-      {finderMode === "scan" && (
-        <AssetScanner league={league} userTeam={userTeam} />
       )}
 
       {finderMode === "finder" && <>

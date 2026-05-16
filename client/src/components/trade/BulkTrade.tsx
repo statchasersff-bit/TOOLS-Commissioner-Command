@@ -8,6 +8,8 @@
  */
 
 import { useState, useRef, useMemo, useCallback } from "react";
+import { useSleeper } from "@/contexts/SleeperContext";
+import { fetchSleeperLeagueFull } from "@/lib/sleeperApi";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -24,6 +26,7 @@ import type { SleeperTransactionPick } from "@/services/sleeperAuthedApi";
 import {
   ArrowRightLeft, Plus, X, CheckCircle2, AlertTriangle,
   ChevronLeft, Pause, Play, SkipForward, Clock, Loader2, Package,
+  ScanLine, RefreshCw,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -61,6 +64,19 @@ interface QueueItem {
   sentAt?: number;
   dynNet: number;
   rdNet: number;
+}
+
+// ─── Cross-league scan target ─────────────────────────────────────────────────
+
+interface CrossLeagueTarget {
+  uid: string;           // `${leagueId}:${partner.id}` — globally unique
+  partner: Team;
+  leagueId: string;
+  leagueName: string;
+  userRosterId: number;
+  selected: boolean;
+  resolvedGetAssets: BulkAsset[];
+  delta: number;         // wantValue - giveValue
 }
 
 // ─── Queue helpers ────────────────────────────────────────────────────────────
@@ -339,6 +355,7 @@ export function BulkTrade({
 }) {
   const { getPlayerValue, getRedraftValue, getPickValue } = useValueModel();
   const isSleeperAuthed = !!getSleeperToken();
+  const sleeperCtx = useSleeper();
 
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
 
@@ -369,6 +386,12 @@ export function BulkTrade({
   const [qStatus, setQStatus] = useState<"idle" | "running" | "paused" | "done">("idle");
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [pauseMsg, setPauseMsg] = useState<string | null>(null);
+
+  // ── Cross-league scan state ──────────────────────────────────────────────
+  const [crossTargets, setCrossTargets] = useState<CrossLeagueTarget[]>([]);
+  const [clScanState, setClScanState]   = useState<"idle" | "scanning" | "done">("idle");
+  const [clProgress, setClProgress]     = useState(0);
+  const [clTotal, setClTotal]           = useState(0);
   const qStatusRef = useRef<"idle" | "running" | "paused" | "done">("idle");
   const queueRef   = useRef<QueueItem[]>([]);
   const loopActive = useRef(false);
@@ -387,7 +410,8 @@ export function BulkTrade({
     [league, userTeam],
   );
 
-  const selectedTargets = targets.filter(t => t.selected && t.blockers.length === 0);
+  const selectedTargets      = targets.filter(t => t.selected && t.blockers.length === 0);
+  const selectedCrossTargets = crossTargets.filter(t => t.selected);
 
   // ── Queue state management ────────────────────────────────────────────────
   function setQueueItems(
@@ -455,6 +479,85 @@ export function BulkTrade({
       return { ...t, warnings, blockers, resolvedGetAssets };
     }));
   }, [giveAssets, getAssets, userTeam, isSleeperAuthed]);
+
+  // ── Cross-league scan ─────────────────────────────────────────────────────
+  const handleCrossLeagueScan = useCallback(async () => {
+    if (!sleeperCtx.user) return;
+
+    const givePlayer = giveAssets.find(a => a.type === "player" && a.player)?.player ?? null;
+    const wantPlayer = getAssets.find(a => a.type === "player" && a.player)?.player ?? null;
+    if (!givePlayer || !wantPlayer) return;
+
+    const allLeagues = sleeperCtx.leagues ?? [];
+    setClScanState("scanning");
+    setClProgress(0);
+    setClTotal(allLeagues.length);
+    setCrossTargets([]);
+
+    const giveSid  = givePlayer.sleeperId ?? givePlayer.id;
+    const wantSid  = wantPlayer.sleeperId ?? wantPlayer.id;
+    const giveName = givePlayer.name.toLowerCase();
+    const wantName = wantPlayer.name.toLowerCase();
+
+    function playerMatches(p: Player, sid: string, name: string) {
+      return (p.sleeperId ?? p.id) === sid || p.name.toLowerCase() === name;
+    }
+
+    await Promise.allSettled(
+      allLeagues.map(async (summary) => {
+        try {
+          if (summary.leagueId === league.id) return; // current league already shown above
+          const data = await fetchSleeperLeagueFull(summary.leagueId, sleeperCtx.user!.userId);
+          const { league: lg, userTeamId } = data;
+
+          const ut = userTeamId ? lg.teams.find((t: Team) => t.id === userTeamId) : null;
+          if (!ut) return;
+          if (!ut.roster.some((p: Player) => playerMatches(p, giveSid, giveName))) return;
+
+          for (const team of lg.teams) {
+            if (team.id === userTeamId) continue;
+            const partnerHas = team.roster.find((p: Player) => playerMatches(p, wantSid, wantName));
+            if (!partnerHas) continue;
+
+            // Resolve all get assets against this partner
+            const resolvedGetAssets: BulkAsset[] = [];
+            for (const asset of getAssets) {
+              if (asset.type === "player" && asset.player) {
+                const match = team.roster.find((p: Player) =>
+                  playerMatches(p, asset.player!.sleeperId ?? asset.player!.id, asset.player!.name.toLowerCase()),
+                );
+                if (match) resolvedGetAssets.push({ ...asset, player: match, uid: `player:${match.sleeperId ?? match.id}` });
+              } else if (asset.type === "pick" && asset.pick) {
+                const match = team.picks.find((p: Pick) =>
+                  p.year === asset.pick!.year && p.round === asset.pick!.round,
+                );
+                if (match) resolvedGetAssets.push({ ...asset, pick: match, uid: `pick:${match.year}-${match.round}-${match.ownerTeamId}` });
+              }
+            }
+            if (resolvedGetAssets.length === 0) continue;
+
+            const uid = `${summary.leagueId}:${team.id}`;
+            setCrossTargets(prev => {
+              if (prev.some(ct => ct.uid === uid)) return prev;
+              return [...prev, {
+                uid,
+                partner: team,
+                leagueId: summary.leagueId,
+                leagueName: summary.name,
+                userRosterId: parseInt(ut!.id),
+                selected: false,
+                resolvedGetAssets,
+                delta: getPlayerValue(partnerHas) - getPlayerValue(givePlayer),
+              }];
+            });
+          }
+        } catch { /* skip unreachable leagues silently */ }
+        finally { setClProgress(p => p + 1); }
+      }),
+    );
+
+    setClScanState("done");
+  }, [giveAssets, getAssets, sleeperCtx, league.id, getPlayerValue]);
 
   // ── Queue loop ────────────────────────────────────────────────────────────
   const runQueueLoop = useCallback(async () => {
@@ -605,19 +708,33 @@ export function BulkTrade({
 
   // ── Queue controls ────────────────────────────────────────────────────────
   const startQueue = useCallback(() => {
-    const items: QueueItem[] = selectedTargets.map((t, i) => ({
-      id:             `bt-${t.partner.id}-${Date.now()}-${i}`,
-      partner:        t.partner,
-      leagueId:       league.id,
-      leagueName:     league.name,
+    const inLeague: QueueItem[] = selectedTargets.map((t, i) => ({
+      id:              `bt-${t.partner.id}-${Date.now()}-${i}`,
+      partner:         t.partner,
+      leagueId:        league.id,
+      leagueName:      league.name,
       giveAssets,
-      getAssets:      t.resolvedGetAssets,
-      userRosterId:   parseInt(userTeam.id),
+      getAssets:       t.resolvedGetAssets,
+      userRosterId:    parseInt(userTeam.id),
       partnerRosterId: parseInt(t.partner.id),
-      status:         "pending",
-      dynNet:         sumDyn(t.resolvedGetAssets) - sumDyn(giveAssets),
-      rdNet:          sumRd(giveAssets)           - sumRd(t.resolvedGetAssets),
+      status:          "pending",
+      dynNet:          sumDyn(t.resolvedGetAssets) - sumDyn(giveAssets),
+      rdNet:           sumRd(giveAssets)           - sumRd(t.resolvedGetAssets),
     }));
+    const crossLeague: QueueItem[] = selectedCrossTargets.map((t, i) => ({
+      id:              `bt-cl-${t.uid}-${Date.now()}-${i}`,
+      partner:         t.partner,
+      leagueId:        t.leagueId,
+      leagueName:      t.leagueName,
+      giveAssets,
+      getAssets:       t.resolvedGetAssets,
+      userRosterId:    t.userRosterId,
+      partnerRosterId: parseInt(t.partner.id),
+      status:          "pending",
+      dynNet:          sumDyn(t.resolvedGetAssets) - sumDyn(giveAssets),
+      rdNet:           sumRd(giveAssets)           - sumRd(t.resolvedGetAssets),
+    }));
+    const items = [...inLeague, ...crossLeague];
     queueRef.current   = items;
     qStatusRef.current = "running";
     setQueueItems(items);
@@ -625,7 +742,7 @@ export function BulkTrade({
     setProcessingId(null);
     setPauseMsg(null);
     runQueueLoop();
-  }, [selectedTargets, league, userTeam, giveAssets, runQueueLoop]);
+  }, [selectedTargets, selectedCrossTargets, league, userTeam, giveAssets, runQueueLoop]);
 
   const pauseQueue  = () => { if (qStatusRef.current === "running") { qStatusRef.current = "paused"; setQStatus("paused"); } };
   const resumeQueue = () => {
@@ -665,6 +782,10 @@ export function BulkTrade({
     setQueueItems([]);
     setProcessingId(null);
     setPauseMsg(null);
+    setCrossTargets([]);
+    setClScanState("idle");
+    setClProgress(0);
+    setClTotal(0);
   };
 
   // ── Derived queue metrics ─────────────────────────────────────────────────
@@ -831,8 +952,9 @@ export function BulkTrade({
               <h4 className="text-sm font-bold">Choose Targets</h4>
               <span className="block h-[2px] w-6 bg-[#d4af37] rounded-full mt-1" />
               <p className="text-[10px] text-muted-foreground mt-1">
-                {selectedTargets.length} manager{selectedTargets.length !== 1 ? "s" : ""} selected
+                {selectedTargets.length + selectedCrossTargets.length} manager{(selectedTargets.length + selectedCrossTargets.length) !== 1 ? "s" : ""} selected
                 · {league.name}
+                {selectedCrossTargets.length > 0 && ` + ${selectedCrossTargets.length} cross-league`}
               </p>
             </div>
             <button
@@ -927,6 +1049,114 @@ export function BulkTrade({
             })}
           </div>
 
+          {/* ── Scan All My Leagues ─────────────────────────────────────── */}
+          <div className="rounded-xl border border-border/50 overflow-hidden" data-testid="cross-league-scan-section">
+            <div className="flex items-center justify-between px-4 py-3">
+              <div>
+                <h5 className="text-xs font-bold flex items-center gap-1.5">
+                  <ScanLine className="w-3.5 h-3.5 text-[#d4af37]" />
+                  Scan All My Leagues
+                </h5>
+                <p className="text-[10px] text-muted-foreground mt-0.5">
+                  Find partners in your other leagues who own your target asset.
+                </p>
+              </div>
+              <button
+                onClick={handleCrossLeagueScan}
+                disabled={
+                  clScanState === "scanning" ||
+                  !sleeperCtx.user ||
+                  !giveAssets.some(a => a.type === "player") ||
+                  !getAssets.some(a => a.type === "player")
+                }
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all flex-shrink-0 ml-3",
+                  clScanState === "scanning"
+                    ? "bg-muted/30 text-muted-foreground/40 cursor-not-allowed"
+                    : clScanState === "done"
+                    ? "bg-muted/30 text-muted-foreground hover:bg-muted/50"
+                    : (!sleeperCtx.user || !giveAssets.some(a => a.type === "player") || !getAssets.some(a => a.type === "player"))
+                    ? "bg-muted/30 text-muted-foreground/40 cursor-not-allowed"
+                    : "bg-[#0b3a7a] text-white hover:bg-[#0b3a7a]/80",
+                )}
+                data-testid="btn-cross-league-scan"
+              >
+                {clScanState === "scanning" ? (
+                  <><Loader2 className="w-3 h-3 animate-spin" /> {clProgress}/{clTotal}</>
+                ) : clScanState === "done" ? (
+                  <><RefreshCw className="w-3 h-3" /> Re-scan</>
+                ) : (
+                  <><ScanLine className="w-3 h-3" /> Scan {sleeperCtx.leagues?.length ?? ""} Leagues</>
+                )}
+              </button>
+            </div>
+
+            {clScanState === "scanning" && clTotal > 0 && (
+              <div className="px-4 pb-3">
+                <div className="h-1 rounded-full bg-muted/30 overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-[#d4af37]/60 transition-all duration-300"
+                    style={{ width: `${Math.round((clProgress / clTotal) * 100)}%` }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {crossTargets.length > 0 && (
+              <div className="border-t border-border/30 divide-y divide-border/20">
+                {crossTargets.map(t => (
+                  <div
+                    key={t.uid}
+                    onClick={() => setCrossTargets(prev => prev.map(ct =>
+                      ct.uid === t.uid ? { ...ct, selected: !ct.selected } : ct,
+                    ))}
+                    className={cn(
+                      "flex items-center gap-3 px-4 py-3 cursor-pointer transition-colors",
+                      t.selected ? "bg-[#d4af37]/5" : "hover:bg-muted/20",
+                    )}
+                    data-testid={`cross-target-${t.uid}`}
+                  >
+                    <div className={cn(
+                      "w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors",
+                      t.selected ? "bg-[#d4af37] border-[#d4af37]" : "border-border",
+                    )}>
+                      {t.selected && <CheckCircle2 className="w-2.5 h-2.5 text-black" />}
+                    </div>
+                    <img
+                      src={t.partner.avatar || "https://sleepercdn.com/images/v2/icons/player_default.webp"}
+                      alt={t.partner.owner}
+                      className="w-7 h-7 rounded-full object-cover bg-muted flex-shrink-0"
+                      onError={e => { e.currentTarget.src = "https://sleepercdn.com/images/v2/icons/player_default.webp"; }}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold truncate">{t.partner.name}</p>
+                      <p className="text-[10px] text-muted-foreground truncate">{t.partner.owner} · {t.leagueName}</p>
+                    </div>
+                    <span className={cn(
+                      "text-[10px] font-bold px-1.5 py-0.5 rounded flex-shrink-0",
+                      Math.abs(t.delta) < 50 ? "text-muted-foreground bg-muted/40" :
+                      t.delta > 0 ? "text-emerald-400 bg-emerald-400/10" : "text-red-400 bg-red-400/10",
+                    )}>
+                      {Math.abs(t.delta) < 50 ? "≈ Even" : `${t.delta > 0 ? "+" : ""}${Math.round(t.delta).toLocaleString()} dyn`}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {clScanState === "done" && crossTargets.length === 0 && (
+              <p className="px-4 pb-3 text-center text-[11px] text-muted-foreground/60">
+                No additional trade partners found in your other leagues.
+              </p>
+            )}
+
+            {!sleeperCtx.user && (
+              <p className="px-4 pb-3 text-center text-[11px] text-muted-foreground/50">
+                Connect your Sleeper account to scan across leagues.
+              </p>
+            )}
+          </div>
+
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => setStep(1)} className="flex-1" data-testid="btn-bulk-step2-back">
               ← Back
@@ -934,10 +1164,13 @@ export function BulkTrade({
             <Button
               className="flex-1 bg-[#0b3a7a] hover:bg-[#0b3a7a]/80 text-white"
               onClick={goToStep3}
-              disabled={selectedTargets.length === 0}
+              disabled={selectedTargets.length === 0 && selectedCrossTargets.length === 0}
               data-testid="btn-bulk-step2-continue"
             >
-              Review {selectedTargets.length > 0 ? `${selectedTargets.length} ` : ""}Offer{selectedTargets.length !== 1 ? "s" : ""} →
+              {(() => {
+                const n = selectedTargets.length + selectedCrossTargets.length;
+                return `Review ${n > 0 ? `${n} ` : ""}Offer${n !== 1 ? "s" : ""} →`;
+              })()}
             </Button>
           </div>
         </div>
@@ -1015,6 +1248,66 @@ export function BulkTrade({
               );
             })}
           </div>
+
+          {/* Cross-league selected targets */}
+          {selectedCrossTargets.length > 0 && (
+            <div className="space-y-3">
+              <p className="text-[10px] text-muted-foreground/60 font-semibold uppercase tracking-wider px-0.5">Cross-League</p>
+              {selectedCrossTargets.map(target => {
+                const localDynNet = sumDyn(target.resolvedGetAssets) - sumDyn(giveAssets);
+                const localRdNet  = sumRd(giveAssets)               - sumRd(target.resolvedGetAssets);
+                return (
+                  <div
+                    key={target.uid}
+                    className="rounded-xl border border-border/50 p-4 bg-muted/10"
+                    data-testid={`review-cross-card-${target.uid}`}
+                  >
+                    <div className="flex items-center gap-2 mb-3">
+                      <img
+                        src={target.partner.avatar || "https://sleepercdn.com/images/v2/icons/player_default.webp"}
+                        alt={target.partner.owner}
+                        className="w-6 h-6 rounded-full object-cover bg-muted flex-shrink-0"
+                        onError={e => { e.currentTarget.src = "https://sleepercdn.com/images/v2/icons/player_default.webp"; }}
+                      />
+                      <span className="text-sm font-semibold">{target.partner.name}</span>
+                      <span className="text-xs text-muted-foreground">{target.partner.owner}</span>
+                      <span className="ml-auto text-[10px] text-muted-foreground/60 truncate max-w-[120px]">{target.leagueName}</span>
+                    </div>
+                    <div className="grid grid-cols-[1fr_22px_1fr] gap-2 items-start">
+                      <div>
+                        <p className="text-[9px] text-muted-foreground font-semibold uppercase tracking-wider mb-1.5">You Send</p>
+                        <div className="flex flex-wrap gap-1">
+                          {giveAssets.map(a => <AssetChip key={a.uid} asset={a} size="sm" />)}
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-center pt-4">
+                        <ArrowRightLeft className="w-3 h-3 text-muted-foreground/50" />
+                      </div>
+                      <div>
+                        <p className="text-[9px] text-muted-foreground font-semibold uppercase tracking-wider mb-1.5">You Receive</p>
+                        <div className="flex flex-wrap gap-1">
+                          {target.resolvedGetAssets.map(a => <AssetChip key={a.uid} asset={a} size="sm" />)}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="mt-3 pt-2 border-t border-border/30 flex items-center gap-1.5 flex-wrap">
+                      <Badge
+                        variant={localDynNet > 0 ? "default" : "secondary"}
+                        className={cn("text-[9px]", localDynNet > 0 && "bg-emerald-600 text-white border-0")}
+                      >
+                        {localDynNet > 0 ? "+" : ""}{Math.round(localDynNet).toLocaleString()} dynasty
+                      </Badge>
+                      {localRdNet > 0 && (
+                        <Badge variant="outline" className="text-[9px] text-blue-400 border-blue-400/30">
+                          partner +{Math.round(localRdNet).toLocaleString()} win-now
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
           {/* Safe queue info */}
           <div className="rounded-lg border border-[#0b3a7a]/30 bg-[#0b3a7a]/10 p-3.5 space-y-1.5">
