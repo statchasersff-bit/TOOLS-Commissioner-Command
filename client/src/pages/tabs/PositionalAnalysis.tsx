@@ -16,7 +16,7 @@ import { proposeTrade, getDmByMembers, getDmByMembersFull, markDmRead, sendTrade
 import type { ProposeTradeResult, SleeperTransactionPick, SleeperDmMessage } from "@/services/sleeperAuthedApi";
 import {
   ArrowRightLeft, Target, TrendingUp, TrendingDown, Zap, RotateCcw, ShieldCheck,
-  ChevronRight, Scale, Send, Loader2, CheckCircle2, AlertTriangle, X, Pencil, Search
+  ChevronRight, Send, Loader2, CheckCircle2, AlertTriangle, X, Pencil, Search
 } from "lucide-react";
 
 interface PositionalAnalysisProps {
@@ -690,13 +690,12 @@ interface WinNowIdea {
 // ─── TradeOpportunities — mode selector ──────────────────────────
 
 function TradeOpportunities({ league, userTeam }: { league: League; userTeam: Team }) {
-  const [mode, setMode] = useState<"win-now" | "smart-gm" | "rebuild" | "build-dynasty">("win-now");
+  const [mode, setMode] = useState<"win-now" | "rebuild" | "build-dynasty">("win-now");
   return (
     <div className="space-y-5">
       <div className="flex w-fit rounded-lg border border-border overflow-hidden">
         {([
           { id: "win-now"       as const, label: "Win-Now",      desc: "Maximize starters now",       Icon: Zap        },
-          { id: "smart-gm"      as const, label: "Smart GM",     desc: "Balance both timelines",      Icon: Scale      },
           { id: "rebuild"       as const, label: "Rebuild",      desc: "Convert to long-term assets", Icon: RotateCcw  },
           { id: "build-dynasty" as const, label: "Build Dynasty",desc: "Maximize dynasty value",      Icon: TrendingUp },
         ]).map(({ id, label, desc, Icon }) => (
@@ -719,7 +718,6 @@ function TradeOpportunities({ league, userTeam }: { league: League; userTeam: Te
       </div>
 
       {mode === "win-now"       && <WinNowMode       league={league} userTeam={userTeam} />}
-      {mode === "smart-gm"      && <SmartGMMode      league={league} userTeam={userTeam} />}
       {mode === "rebuild"       && <RebuildMode       league={league} userTeam={userTeam} />}
       {mode === "build-dynasty" && <BuildDynastyMode league={league} userTeam={userTeam} />}
     </div>
@@ -2499,488 +2497,6 @@ function WinNowMode({ league, userTeam }: { league: League; userTeam: Team }) {
   );
 }
 
-// ─── Smart GM Mode types ──────────────────────────────────────────
-
-type SmartGMArchetype = "Age Swap" | "Positional Redistribution" | "Depth Consolidation" | "Sell Peak" | "Buy Depressed";
-type SmartGMTeamType  = "Deep Contender" | "Aging Contender" | "Fragile Contender" | "Unbalanced" | "Young Weak" | "Balanced";
-
-interface SmartGMAsset { label: string; dynVal: number; rdVal: number; pos?: string; age?: number; type: "player" | "pick"; sleeperId?: string; }
-interface SmartGMIdea {
-  id: string;
-  partnerId: string;
-  partnerTeam: Team;
-  partnerTier: Tier;
-  archetype: SmartGMArchetype;
-  headline: string;
-  why: string;
-  youGive: SmartGMAsset[];
-  youGet:  SmartGMAsset[];
-  dynastyDelta: number;
-  redraftDelta: number;
-  ageDelta: number;
-  score: number;
-  scoreLabel: "Premium" | "Recommended" | "Solid";
-}
-
-// ─── Smart GM Mode adapter ────────────────────────────────────────
-
-function smartGMIdeaToWinNow(idea: SmartGMIdea): WinNowIdea {
-  const dynGive = idea.youGive.reduce((s, a) => s + a.dynVal, 0);
-  const dynGet  = idea.youGet.reduce((s, a)  => s + a.dynVal, 0);
-  const rdGive  = idea.youGive.reduce((s, a) => s + a.rdVal, 0);
-  const rdGet   = idea.youGet.reduce((s, a)  => s + a.rdVal, 0);
-  const avg     = (rdGive + rdGet) / 2 || 1;
-  return {
-    id: idea.id, partnerId: idea.partnerId, partnerTeam: idea.partnerTeam, partnerTier: idea.partnerTier,
-    headline: idea.headline, why: idea.why,
-    youGive: idea.youGive.map(a => ({ label: a.label, value: a.dynVal, pos: a.pos, age: a.age, type: a.type, sleeperId: a.sleeperId })),
-    youGet:  idea.youGet.map(a  => ({ label: a.label, value: a.dynVal, pos: a.pos, age: a.age, type: a.type, sleeperId: a.sleeperId })),
-    gainPos: ((idea.youGet[0]?.pos) ?? "QB") as PosLabel,
-    dynGive, dynGet, rdGive, rdGet,
-    userRdDelta: Math.round(idea.redraftDelta * avg),
-    partnerRdDelta: Math.round(-idea.redraftDelta * avg),
-    score: idea.score,
-    scoreLabel: idea.scoreLabel === "Premium" ? "Elite" : idea.scoreLabel === "Recommended" ? "Strong" : "Moderate",
-  };
-}
-
-// ─── Smart GM Mode ────────────────────────────────────────────────
-
-function SmartGMMode({ league, userTeam }: { league: League; userTeam: Team }) {
-  const { getPlayerValue, getRedraftValue, getPickValue } = useValueModel();
-  const [expandedPartner, setExpandedPartner] = useState<string | null>(null);
-  const [sendModal, setSendModal] = useState<{ open: boolean; idea: WinNowIdea | null }>({ open: false, idea: null });
-  const tierMap = useMemo(() => getLeagueTeamTiers(league.teams), [league.teams]);
-  const isSleeperAuthed = !!getSleeperSession()?.token;
-
-  const POSITIONS = ["QB", "RB", "WR", "TE"] as const;
-  type Pos = typeof POSITIONS[number];
-
-  // ── Positional balance: rank each position vs league ─────────────
-  const posBalance = useMemo(() => {
-    const n = league.teams.length;
-    const result = {} as Record<Pos, { myVal: number; rank: number; leagueAvg: number; surplus: boolean; deficit: boolean }>;
-    for (const pos of POSITIONS) {
-      const teamVals = league.teams
-        .map(t => ({ id: t.id, val: t.roster.filter(p => p.pos === pos).reduce((s, p) => s + getPlayerValue(p), 0) }))
-        .sort((a, b) => b.val - a.val);
-      const myVal    = teamVals.find(t => t.id === userTeam.id)?.val ?? 0;
-      const rank     = teamVals.findIndex(t => t.id === userTeam.id) + 1;
-      const leagueAvg = teamVals.reduce((s, t) => s + t.val, 0) / n;
-      result[pos] = { myVal, rank, leagueAvg, surplus: rank <= Math.ceil(n * 0.3), deficit: rank > Math.floor(n * 0.65) };
-    }
-    return result;
-  }, [league, userTeam, getPlayerValue]);
-
-  // ── Overall win-now & dynasty ranks ──────────────────────────────
-  const ranks = useMemo(() => {
-    const n = league.teams.length;
-    const byRD = [...league.teams].sort((a, b) =>
-      b.roster.filter(p => p.starter).reduce((s, p) => s + getRedraftValue(p), 0) -
-      a.roster.filter(p => p.starter).reduce((s, p) => s + getRedraftValue(p), 0));
-    const byDyn = [...league.teams].sort((a, b) =>
-      b.roster.reduce((s, p) => s + getPlayerValue(p), 0) -
-      a.roster.reduce((s, p) => s + getPlayerValue(p), 0));
-    const winNowRank  = byRD.findIndex(t => t.id === userTeam.id) + 1;
-    const dynastyRank = byDyn.findIndex(t => t.id === userTeam.id) + 1;
-    const starters    = userTeam.roster.filter(p => p.starter && p.age > 0);
-    const avgStarterAge = starters.length ? starters.reduce((s, p) => s + p.age, 0) / starters.length : 0;
-    const topThird   = Math.ceil(n / 3);
-    const bottomHalf = Math.floor(n * 0.5);
-    return { winNowRank, dynastyRank, avgStarterAge, n, topThird, bottomHalf };
-  }, [league, userTeam, getPlayerValue, getRedraftValue]);
-
-  // ── Fragility score (0-100) ───────────────────────────────────────
-  const fragility = useMemo(() => {
-    let score = 0;
-    for (const pos of POSITIONS) {
-      const starters = userTeam.roster.filter(p => p.pos === pos && p.starter).sort((a, b) => getRedraftValue(b) - getRedraftValue(a));
-      if (starters.length >= 2) {
-        const dropoff = (getRedraftValue(starters[0]) - getRedraftValue(starters[1])) / Math.max(getRedraftValue(starters[0]), 1);
-        if (dropoff > 0.6) score += 18;
-        else if (dropoff > 0.4) score += 10;
-      } else if (starters.length === 1) {
-        score += 20;
-      } else if (starters.length === 0) {
-        score += 5;
-      }
-      const ageRisk = starters.filter(p => p.age >= 29).length;
-      score += ageRisk * 6;
-    }
-    const imbalancedPositions = POSITIONS.filter(p => posBalance[p]?.surplus || posBalance[p]?.deficit).length;
-    score += imbalancedPositions * 4;
-    return Math.min(score, 100);
-  }, [userTeam, posBalance, getRedraftValue]);
-
-  // ── Team type ─────────────────────────────────────────────────────
-  const teamType = useMemo<{ type: SmartGMTeamType; summary: string }>(() => {
-    const { winNowRank, dynastyRank, avgStarterAge, topThird } = ranks;
-    const surplusPositions = POSITIONS.filter(p => posBalance[p]?.surplus);
-    const deficitPositions = POSITIONS.filter(p => posBalance[p]?.deficit);
-    const isContending = winNowRank <= topThird;
-    const hasDynasty   = dynastyRank <= topThird;
-    const isAging      = avgStarterAge >= 28;
-    const isFragile    = fragility >= 50;
-    const isImbalanced = surplusPositions.length > 0 && deficitPositions.length > 0;
-    const isYoung      = avgStarterAge <= 25 && !isContending;
-
-    if (isContending && hasDynasty)   return { type: "Deep Contender",    summary: "Elite on both axes. Focus on insulation — don't break what's working." };
-    if (isContending && isAging)      return { type: "Aging Contender",   summary: "Competing now but aging fast. Smart age swaps preserve your window." };
-    if (isContending && isFragile)    return { type: "Fragile Contender", summary: "Strong lineup, thin depth. One injury away from disaster — shore up fragile spots." };
-    if (isImbalanced)                 return { type: "Unbalanced",        summary: `${surplusPositions.join("/")} surplus and ${deficitPositions.join("/")} deficit. Redistribution trades unlock hidden value.` };
-    if (isYoung)                      return { type: "Young Weak",        summary: "Youth on your side. Seek young producers who score now — don't sacrifice points for picks." };
-    return                                   { type: "Balanced",          summary: "No glaring weaknesses. Focus on upgrading starter quality and reducing position fragility." };
-  }, [ranks, posBalance, fragility]);
-
-  // ── Trade idea generation ─────────────────────────────────────────
-  const tradeIdeas = useMemo<SmartGMIdea[]>(() => {
-    const ideas: SmartGMIdea[] = [];
-
-    const myPlayers = [...userTeam.roster]
-      .map(p => ({ ...p, dynV: getPlayerValue(p), rdV: getRedraftValue(p) }))
-      .filter(p => p.dynV > 300 || p.rdV > 400)
-      .sort((a, b) => b.rdV - a.rdV);
-
-    const surplusPos = POSITIONS.filter(p => posBalance[p]?.surplus);
-    const deficitPos = POSITIONS.filter(p => posBalance[p]?.deficit);
-
-    for (const partner of league.teams) {
-      if (partner.id === userTeam.id) continue;
-
-      const partnerPlayers = [...partner.roster]
-        .map(p => ({ ...p, dynV: getPlayerValue(p), rdV: getRedraftValue(p) }))
-        .filter(p => p.dynV > 300 || p.rdV > 400)
-        .sort((a, b) => b.dynV - a.dynV);
-
-      const partnerTier = tierMap.get(partner.id)?.tier ?? "Balanced";
-
-      for (const give of myPlayers.slice(0, 8)) {
-
-        // ── Age Swap: same position, get younger/more insulated ─────
-        if (give.age >= 27) {
-          const youngSame = partnerPlayers
-            .filter(p => p.pos === give.pos && p.age <= give.age - 2 && p.dynV > give.dynV * 0.78 && p.dynV < give.dynV * 1.22);
-          for (const g of youngSame.slice(0, 2)) {
-            const dynD  = (g.dynV - give.dynV) / Math.max(give.dynV + g.dynV, 1) * 2;
-            const rdD   = (g.rdV  - give.rdV)  / Math.max(give.rdV  + g.rdV,  1) * 2;
-            if (dynD < -0.09 || rdD < -0.10) continue;
-            const ageDelta = g.age - give.age;
-            const score = (dynD * 80 + rdD * 60 + Math.max(0, -ageDelta) * 10 + 15)
-              - Math.max(0, -dynD) * 140 - Math.max(0, -rdD) * 110;
-            if (score < -20) continue;
-            ideas.push({
-              id: `sgm-ageswap-${partner.id}-${give.sleeperId}-${g.sleeperId}`,
-              partnerId: partner.id, partnerTeam: partner, partnerTier,
-              archetype: "Age Swap",
-              headline: `Age swap at ${give.pos}: shed ${give.age}-yr volatility`,
-              why: `${give.name} (${give.age}) carries growing age-curve risk. ${g.name} (${g.age}) provides similar production with ${give.age - g.age} more years of runway, improving your roster's long-term insulation.`,
-              youGive: [{ label: give.name, dynVal: give.dynV, rdVal: give.rdV, pos: give.pos, age: give.age, type: "player", sleeperId: give.sleeperId }],
-              youGet:  [{ label: g.name,    dynVal: g.dynV,    rdVal: g.rdV,    pos: g.pos,   age: g.age,   type: "player", sleeperId: g.sleeperId }],
-              dynastyDelta: dynD, redraftDelta: rdD, ageDelta, score: Math.max(score, 0),
-              scoreLabel: score > 30 ? "Premium" : score > 10 ? "Recommended" : "Solid",
-            });
-          }
-        }
-
-        // ── Positional Redistribution: surplus → deficit ─────────────
-        if (surplusPos.includes(give.pos as Pos) && deficitPos.length > 0) {
-          for (const wantPos of deficitPos) {
-            const targets = partnerPlayers
-              .filter(p => p.pos === wantPos && p.dynV > give.dynV * 0.82 && p.dynV < give.dynV * 1.18);
-            for (const g of targets.slice(0, 2)) {
-              const dynD = (g.dynV - give.dynV) / Math.max(give.dynV + g.dynV, 1) * 2;
-              const rdD  = (g.rdV  - give.rdV)  / Math.max(give.rdV  + g.rdV,  1) * 2;
-              if (dynD < -0.09 || rdD < -0.12) continue;
-              const ageDelta = g.age - give.age;
-              const balanceBonus = 20;
-              const score = (dynD * 80 + rdD * 60 + Math.max(0, -ageDelta) * 8 + balanceBonus)
-                - Math.max(0, -dynD) * 140 - Math.max(0, -rdD) * 110;
-              if (score < -15) continue;
-              ideas.push({
-                id: `sgm-posredist-${partner.id}-${give.sleeperId}-${g.sleeperId}`,
-                partnerId: partner.id, partnerTeam: partner, partnerTier,
-                archetype: "Positional Redistribution",
-                headline: `${give.pos} surplus → ${g.pos} stability`,
-                why: `You're top-heavy at ${give.pos} while ${g.pos} is a structural gap. ${give.name} fills their need; ${g.name} fills yours — improving both positional balance and roster flexibility.`,
-                youGive: [{ label: give.name, dynVal: give.dynV, rdVal: give.rdV, pos: give.pos, age: give.age, type: "player", sleeperId: give.sleeperId }],
-                youGet:  [{ label: g.name,    dynVal: g.dynV,    rdVal: g.rdV,    pos: g.pos,   age: g.age,   type: "player", sleeperId: g.sleeperId }],
-                dynastyDelta: dynD, redraftDelta: rdD, ageDelta, score: Math.max(score, 0),
-                scoreLabel: score > 30 ? "Premium" : score > 10 ? "Recommended" : "Solid",
-              });
-            }
-          }
-        }
-
-        // ── Sell Peak Volatility: rdVal >> dynVal (career year player) ─
-        const rdPremium = give.rdV / Math.max(give.dynV, 1);
-        if (rdPremium > 1.35 && give.age >= 26) {
-          const stableTargets = partnerPlayers
-            .filter(p => p.dynV >= give.dynV * 0.85 && p.rdV >= give.rdV * 0.72 && p.age <= give.age - 1);
-          for (const g of stableTargets.slice(0, 2)) {
-            const dynD = (g.dynV - give.dynV) / Math.max(give.dynV + g.dynV, 1) * 2;
-            const rdD  = (g.rdV  - give.rdV)  / Math.max(give.rdV  + g.rdV,  1) * 2;
-            if (dynD < -0.08 || rdD < -0.14) continue;
-            const ageDelta = g.age - give.age;
-            const peakBonus = (rdPremium - 1.0) * 30;
-            const score = (dynD * 80 + rdD * 55 + Math.max(0, -ageDelta) * 10 + peakBonus)
-              - Math.max(0, -dynD) * 140 - Math.max(0, -rdD) * 100;
-            if (score < -10) continue;
-            ideas.push({
-              id: `sgm-sellpeak-${partner.id}-${give.sleeperId}-${g.sleeperId}`,
-              partnerId: partner.id, partnerTeam: partner, partnerTier,
-              archetype: "Sell Peak",
-              headline: `Lock in ${give.name}'s peak value before decline`,
-              why: `${give.name} is producing at a level that may not be sustainable — redraft value is elevated relative to dynasty. Converting now for ${g.name} locks in value and improves long-term roster stability.`,
-              youGive: [{ label: give.name, dynVal: give.dynV, rdVal: give.rdV, pos: give.pos, age: give.age, type: "player", sleeperId: give.sleeperId }],
-              youGet:  [{ label: g.name,    dynVal: g.dynV,    rdVal: g.rdV,    pos: g.pos,   age: g.age,   type: "player", sleeperId: g.sleeperId }],
-              dynastyDelta: dynD, redraftDelta: rdD, ageDelta, score: Math.max(score, 0),
-              scoreLabel: score > 30 ? "Premium" : score > 10 ? "Recommended" : "Solid",
-            });
-          }
-        }
-
-        // ── Buy Depressed: young player with high dynasty, low redraft ─
-        const depressed = partnerPlayers.filter(p =>
-          p.dynV >= give.dynV * 0.88 &&
-          p.rdV  <= give.rdV  * 0.82 &&
-          p.age  <= give.age - 1 &&
-          p.dynV >= 2000
-        );
-        for (const g of depressed.slice(0, 2)) {
-          const dynD = (g.dynV - give.dynV) / Math.max(give.dynV + g.dynV, 1) * 2;
-          const rdD  = (g.rdV  - give.rdV)  / Math.max(give.rdV  + g.rdV,  1) * 2;
-          if (dynD < -0.08) continue; // can tolerate moderate redraft loss here
-          const ageDelta = g.age - give.age;
-          const score = (dynD * 90 + rdD * 40 + Math.max(0, -ageDelta) * 12 + 10)
-            - Math.max(0, -dynD) * 150 - Math.max(0, -rdD) * 70;
-          if (score < 0) continue;
-          ideas.push({
-            id: `sgm-buydep-${partner.id}-${give.sleeperId}-${g.sleeperId}`,
-            partnerId: partner.id, partnerTeam: partner, partnerTier,
-            archetype: "Buy Depressed",
-            headline: `Buy ${g.name}'s discounted dynasty value`,
-            why: `${g.name}'s redraft value is suppressed — likely due to injury, role competition, or a developmental phase — but dynasty value remains strong. Acquiring discounted insulation is a hallmark of savvy GM play.`,
-            youGive: [{ label: give.name, dynVal: give.dynV, rdVal: give.rdV, pos: give.pos, age: give.age, type: "player", sleeperId: give.sleeperId }],
-            youGet:  [{ label: g.name,    dynVal: g.dynV,    rdVal: g.rdV,    pos: g.pos,   age: g.age,   type: "player", sleeperId: g.sleeperId }],
-            dynastyDelta: dynD, redraftDelta: rdD, ageDelta, score: Math.max(score, 0),
-            scoreLabel: score > 30 ? "Premium" : score > 10 ? "Recommended" : "Solid",
-          });
-        }
-      }
-
-      // ── Depth Consolidation: 2 bench players → 1 starter ──────────
-      const myBench = myPlayers.filter(p => !p.starter && p.dynV > 400).slice(0, 6);
-      for (let i = 0; i < myBench.length - 1; i++) {
-        for (let j = i + 1; j < Math.min(myBench.length, i + 4); j++) {
-          const a = myBench[i], b = myBench[j];
-          const combinedDyn = a.dynV + b.dynV;
-          const combinedRd  = a.rdV  + b.rdV;
-          const starterTargets = partnerPlayers.filter(p =>
-            p.starter && p.dynV >= combinedDyn * 0.82 && p.dynV <= combinedDyn * 1.18
-          );
-          for (const g of starterTargets.slice(0, 2)) {
-            const dynD = (g.dynV - combinedDyn) / Math.max(combinedDyn + g.dynV, 1) * 2;
-            const rdD  = (g.rdV  - combinedRd)  / Math.max(combinedRd  + g.rdV,  1) * 2;
-            if (dynD < -0.10 || rdD < -0.08) continue;
-            const score = (dynD * 75 + rdD * 75 + 25)
-              - Math.max(0, -dynD) * 130 - Math.max(0, -rdD) * 130;
-            if (score < 0) continue;
-            const ageDelta = g.age - (a.age + b.age) / 2;
-            ideas.push({
-              id: `sgm-consol-${partner.id}-${a.sleeperId}-${b.sleeperId}-${g.sleeperId}`,
-              partnerId: partner.id, partnerTeam: partner, partnerTier,
-              archetype: "Depth Consolidation",
-              headline: `Consolidate bench depth into a starter`,
-              why: `${a.name} and ${b.name} together represent consolidatable bench value. Upgrading to ${g.name} reduces roster clutter, improves lineup strength, and keeps dynasty value intact.`,
-              youGive: [
-                { label: a.name, dynVal: a.dynV, rdVal: a.rdV, pos: a.pos, age: a.age, type: "player", sleeperId: a.sleeperId },
-                { label: b.name, dynVal: b.dynV, rdVal: b.rdV, pos: b.pos, age: b.age, type: "player", sleeperId: b.sleeperId },
-              ],
-              youGet: [{ label: g.name, dynVal: g.dynV, rdVal: g.rdV, pos: g.pos, age: g.age, type: "player", sleeperId: g.sleeperId }],
-              dynastyDelta: dynD, redraftDelta: rdD, ageDelta, score: Math.max(score, 0),
-              scoreLabel: score > 30 ? "Premium" : score > 10 ? "Recommended" : "Solid",
-            });
-          }
-        }
-      }
-    }
-
-    const seen = new Set<string>();
-    return ideas
-      .filter(t => {
-        const key = t.youGive.map(a => a.label).join(",") + "→" + t.youGet.map(a => a.label).join(",");
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return t.score > 0;
-      })
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 18);
-  }, [league, userTeam, posBalance, getPlayerValue, getRedraftValue, tierMap]);
-
-  const byPartner = useMemo(() => {
-    const map = new Map<string, SmartGMIdea[]>();
-    tradeIdeas.forEach(t => { if (!map.has(t.partnerId)) map.set(t.partnerId, []); map.get(t.partnerId)!.push(t); });
-    return Array.from(map.entries())
-      .map(([pid, ideas]) => ({ pid, partnerTeam: ideas[0].partnerTeam, partnerTier: ideas[0].partnerTier, ideas }))
-      .sort((a, b) => b.ideas[0].score - a.ideas[0].score);
-  }, [tradeIdeas]);
-
-  const teamTypeColor: Record<SmartGMTeamType, string> = {
-    "Deep Contender":    "text-emerald-500 dark:text-emerald-400",
-    "Aging Contender":   "text-amber-500 dark:text-amber-400",
-    "Fragile Contender": "text-orange-500 dark:text-orange-400",
-    "Unbalanced":        "text-blue-500 dark:text-blue-400",
-    "Young Weak":        "text-purple-500 dark:text-purple-400",
-    "Balanced":          "text-slate-400",
-  };
-
-  const archetypeColor: Record<SmartGMArchetype, string> = {
-    "Age Swap":                  "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20",
-    "Positional Redistribution": "bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20",
-    "Depth Consolidation":       "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20",
-    "Sell Peak":                 "bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-500/20",
-    "Buy Depressed":             "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20",
-  };
-
-  const posBarWidth = (rank: number, n: number) => Math.round((1 - (rank - 1) / Math.max(n - 1, 1)) * 100);
-
-  return (
-    <div className="space-y-5">
-
-      {/* ── Team Ecosystem Card ── */}
-      <Card className="p-5" data-testid="card-smart-gm-profile">
-        <div className="mb-4">
-          <h4 className="text-sm font-bold">Team Ecosystem</h4>
-          <span className="block h-[2px] w-8 bg-[#d4af37] rounded-full mt-1" />
-        </div>
-        <div className="flex items-start gap-4 flex-wrap">
-          <div className="flex-1 min-w-[160px]">
-            <p className={cn("text-xl font-bold", teamTypeColor[teamType.type])}>{teamType.type}</p>
-            <p className="text-[11px] text-muted-foreground mt-1.5 leading-relaxed">{teamType.summary}</p>
-          </div>
-          <div className="grid grid-cols-2 gap-x-6 gap-y-2 flex-shrink-0 text-right">
-            <div>
-              <p className="text-[10px] text-muted-foreground">Win-Now Rank</p>
-              <p className="text-sm font-bold">#{ranks.winNowRank}<span className="text-[10px] text-muted-foreground font-normal">/{ranks.n}</span></p>
-            </div>
-            <div>
-              <p className="text-[10px] text-muted-foreground">Dynasty Rank</p>
-              <p className="text-sm font-bold">#{ranks.dynastyRank}<span className="text-[10px] text-muted-foreground font-normal">/{ranks.n}</span></p>
-            </div>
-            <div>
-              <p className="text-[10px] text-muted-foreground">Avg Starter Age</p>
-              <p className={cn("text-sm font-bold",
-                ranks.avgStarterAge >= 29 ? "text-red-500 dark:text-red-400" :
-                ranks.avgStarterAge >= 27 ? "text-amber-500 dark:text-amber-400" : "text-emerald-500 dark:text-emerald-400"
-              )}>{ranks.avgStarterAge.toFixed(1)}</p>
-            </div>
-            <div>
-              <p className="text-[10px] text-muted-foreground">Fragility</p>
-              <p className={cn("text-sm font-bold",
-                fragility >= 60 ? "text-red-500 dark:text-red-400" :
-                fragility >= 35 ? "text-amber-500 dark:text-amber-400" : "text-emerald-500 dark:text-emerald-400"
-              )}>{fragility < 30 ? "Low" : fragility < 55 ? "Moderate" : "High"}</p>
-            </div>
-          </div>
-        </div>
-      </Card>
-
-      {/* ── Smart GM Trade Ideas ── */}
-      <div>
-        <div className="mb-4">
-          <h4 className="text-sm font-bold flex items-center gap-2">
-            Smart GM Trade Ideas
-            <Badge variant="secondary">{tradeIdeas.length}</Badge>
-          </h4>
-          <span className="block h-[2px] w-8 bg-[#d4af37] rounded-full mt-1" />
-          <p className="text-[10px] text-muted-foreground mt-1.5">
-            Net-positive trades — improve roster ecosystem without sacrificing competitiveness.
-            Max <span className="font-semibold">−8% dynasty</span> or <span className="font-semibold">−5% redraft</span> allowed.
-          </p>
-        </div>
-
-        {tradeIdeas.length === 0 ? (
-          <Card>
-            <CardContent className="py-12 text-center">
-              <Scale className="w-10 h-10 mx-auto mb-3 text-muted-foreground/40" />
-              <p className="text-sm text-muted-foreground">No net-positive trades found. Your roster may already be well-balanced — or no partner has a complementary imbalance to exploit.</p>
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="space-y-3" data-testid="smart-gm-partner-list">
-            {byPartner.map(({ pid, partnerTeam, partnerTier, ideas }) => {
-              const isExpanded = expandedPartner === pid;
-              return (
-                <Card key={pid} className="overflow-hidden" data-testid={`smart-gm-partner-${pid}`}>
-                  <CardContent className="p-0">
-                    <button
-                      className="w-full flex items-center justify-between px-5 py-4 hover:bg-muted/20 transition-colors text-left"
-                      onClick={() => setExpandedPartner(isExpanded ? null : pid)}
-                      data-testid={`btn-sgm-expand-${pid}`}
-                    >
-                      <div className="flex items-center gap-3 min-w-0">
-                        {partnerTeam.avatar ? (
-                          <img src={partnerTeam.avatar} alt={partnerTeam.owner} className="w-9 h-9 rounded-full object-cover flex-shrink-0 ring-1 ring-border/40" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
-                        ) : (
-                          <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
-                            <span className="text-sm font-bold text-muted-foreground">{partnerTeam.owner.charAt(0)}</span>
-                          </div>
-                        )}
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-semibold text-foreground">{partnerTeam.owner}</span>
-                            <Badge variant="outline" className={cn("text-[10px]", getTierColor(partnerTier))}>{partnerTier}</Badge>
-                          </div>
-                          <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                            <Badge variant="outline" className={cn("text-[9px] py-0",
-                              ideas[0].scoreLabel === "Premium"     ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20" :
-                              ideas[0].scoreLabel === "Recommended" ? "bg-[#0b3a7a]/10 text-[#0b3a7a] dark:text-blue-400 border-[#0b3a7a]/20" :
-                              "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
-                            )}>
-                              Best: {ideas[0].scoreLabel}
-                            </Badge>
-                            <Badge variant="outline" className={cn("text-[9px] py-0", archetypeColor[ideas[0].archetype])}>
-                              {ideas[0].archetype}
-                            </Badge>
-                            <span className="text-[9px] text-muted-foreground">{ideas.length} idea{ideas.length !== 1 ? "s" : ""}</span>
-                          </div>
-                        </div>
-                      </div>
-                      <ChevronRight className={cn("w-4 h-4 text-muted-foreground flex-shrink-0 transition-transform", isExpanded && "rotate-90")} />
-                    </button>
-
-                    {isExpanded && (
-                      <div className="border-t border-border/30 px-5 py-4 space-y-3">
-                        {ideas.map((idea, idx) => (
-                          <WinNowIdeaCard
-                            key={idea.id}
-                            idea={smartGMIdeaToWinNow(idea)}
-                            userTeam={userTeam}
-                            isSleeperAuthed={isSleeperAuthed}
-                            onSend={() => setSendModal({ open: true, idea: smartGMIdeaToWinNow(idea) })}
-                            testId={`sgm-idea-${pid}-${idx}`}
-                          />
-                        ))}
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
-        )}
-      </div>
-      <WinNowSendModal
-        open={sendModal.open}
-        onClose={() => setSendModal({ open: false, idea: null })}
-        idea={sendModal.idea}
-        league={league}
-        userTeam={userTeam}
-      />
-    </div>
-  );
-}
-
 // ─── Rebuild Mode constants & types ──────────────────────────────
 // Age curves based on EPA research: QB peaks 28-33, RB peaks 25-27, WR peaks 26-30, TE peaks 27-30
 
@@ -3091,60 +2607,6 @@ function RebuildMode({ league, userTeam }: { league: League; userTeam: Team }) {
       return { player, dynVal, rdVal, decayScore, tier };
     }).sort((a, b) => b.decayScore - a.decayScore);
   }, [userTeam, getPlayerValue, getRedraftValue]);
-
-  // ── Rebuild profile classification ──────────────────────────────
-  const rebuildProfile = useMemo<{
-    type: RebuildProfile;
-    winNowRank: number;
-    dynastyRank: number;
-    avgStarterAge: number;
-    pickCapital: number;
-    summary: string;
-  }>(() => {
-    const n = league.teams.length;
-
-    const byWinNow = [...league.teams].sort((a, b) =>
-      b.roster.filter(p => p.starter).reduce((s, p) => s + getRedraftValue(p), 0) -
-      a.roster.filter(p => p.starter).reduce((s, p) => s + getRedraftValue(p), 0)
-    );
-    const byDynasty = [...league.teams].sort((a, b) =>
-      b.roster.reduce((s, p) => s + getPlayerValue(p), 0) -
-      a.roster.reduce((s, p) => s + getPlayerValue(p), 0)
-    );
-
-    const winNowRank   = byWinNow.findIndex(t => t.id === userTeam.id) + 1;
-    const dynastyRank  = byDynasty.findIndex(t => t.id === userTeam.id) + 1;
-    const topThird     = Math.ceil(n / 3);
-    const bottomThird  = Math.floor(n * 0.66);
-
-    const starters     = userTeam.roster.filter(p => p.starter && p.age > 0);
-    const avgStarterAge = starters.length > 0
-      ? starters.reduce((s, p) => s + p.age, 0) / starters.length : 0;
-    const pickCapital  = userTeam.picks.reduce((s, p) => s + getPickValue(p), 0);
-
-    const lowWinNow    = winNowRank > bottomThird;
-    const lowDynasty   = dynastyRank > bottomThird;
-    const highWinNow   = winNowRank <= topThird;
-    const highDynasty  = dynastyRank <= topThird;
-    const agingRoster  = avgStarterAge >= 28.5;
-
-    let type: RebuildProfile;
-    let summary: string;
-
-    if (highWinNow && highDynasty) {
-      type = "Hold / Contend"; summary = "Your roster is strong on both axes — protect your assets and push for a title.";
-    } else if (lowWinNow && lowDynasty) {
-      type = "Full Rebuild"; summary = "Low win-now and dynasty value signal a full rebuild. Convert aging production into young assets and picks.";
-    } else if (lowWinNow && !lowDynasty) {
-      type = "Soft Rebuild"; summary = "Strong dynasty value but weak starters. Sell peak redraft assets to accelerate contention.";
-    } else if (agingRoster && !lowDynasty) {
-      type = "Retool"; summary = "Your roster is aging. Lock in peak value on aging players before decline hits.";
-    } else {
-      type = "Productive Struggle"; summary = "Young but uncompetitive — prioritize young scorers over aging producers. The window is coming.";
-    }
-
-    return { type, winNowRank, dynastyRank, avgStarterAge, pickCapital, summary };
-  }, [league, userTeam, getPlayerValue, getRedraftValue, getPickValue]);
 
   // ── Sell candidates: Sell High + Emergency Exit ──────────────────
   const sellCandidates = useMemo(
@@ -3299,14 +2761,6 @@ function RebuildMode({ league, userTeam }: { league: League; userTeam: Team }) {
       .sort((a, b) => b.ideas[0].score - a.ideas[0].score);
   }, [tradeIdeas]);
 
-  const profileColors: Record<RebuildProfile, string> = {
-    "Full Rebuild":       "text-red-500 dark:text-red-400",
-    "Soft Rebuild":       "text-amber-500 dark:text-amber-400",
-    "Retool":             "text-orange-500 dark:text-orange-400",
-    "Hold / Contend":     "text-emerald-500 dark:text-emerald-400",
-    "Productive Struggle":"text-blue-500 dark:text-blue-400",
-  };
-
   const tierColors: Record<AssetTier, string> = {
     "Cornerstone":    "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20",
     "Hold":           "bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20",
@@ -3315,44 +2769,8 @@ function RebuildMode({ league, userTeam }: { league: League; userTeam: Team }) {
     "Emergency Exit": "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20",
   };
 
-  const ordinalAge = (n: number) => `${n}`;
-
   return (
     <div className="space-y-5">
-
-      {/* ── Rebuild Profile card ── */}
-      <Card className="p-5" data-testid="card-rebuild-profile">
-        <div className="mb-4">
-          <h4 className="text-sm font-bold">Team Rebuild Profile</h4>
-          <span className="block h-[2px] w-8 bg-[#d4af37] rounded-full mt-1" />
-        </div>
-        <div className="flex items-start gap-4 flex-wrap">
-          <div className="flex-1 min-w-[160px]">
-            <p className={cn("text-xl font-bold", profileColors[rebuildProfile.type])}>{rebuildProfile.type}</p>
-            <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">{rebuildProfile.summary}</p>
-          </div>
-          <div className="grid grid-cols-2 gap-x-6 gap-y-2 flex-shrink-0 text-right">
-            <div>
-              <p className="text-[10px] text-muted-foreground">Win-Now Rank</p>
-              <p className="text-sm font-bold">#{rebuildProfile.winNowRank}<span className="text-[10px] text-muted-foreground font-normal">/{league.teams.length}</span></p>
-            </div>
-            <div>
-              <p className="text-[10px] text-muted-foreground">Dynasty Rank</p>
-              <p className="text-sm font-bold">#{rebuildProfile.dynastyRank}<span className="text-[10px] text-muted-foreground font-normal">/{league.teams.length}</span></p>
-            </div>
-            <div>
-              <p className="text-[10px] text-muted-foreground">Avg Starter Age</p>
-              <p className={cn("text-sm font-bold", rebuildProfile.avgStarterAge >= 29 ? "text-red-500 dark:text-red-400" : rebuildProfile.avgStarterAge >= 27 ? "text-amber-500 dark:text-amber-400" : "text-emerald-500 dark:text-emerald-400")}>
-                {rebuildProfile.avgStarterAge.toFixed(1)}
-              </p>
-            </div>
-            <div>
-              <p className="text-[10px] text-muted-foreground">Pick Capital</p>
-              <p className="text-sm font-bold">{rebuildProfile.pickCapital.toLocaleString()}</p>
-            </div>
-          </div>
-        </div>
-      </Card>
 
       {/* ── Asset Classification ── */}
       <Card className="p-5" data-testid="card-asset-tiers">
@@ -3524,34 +2942,6 @@ function BuildDynastyMode({ league, userTeam }: { league: League; userTeam: Team
 
   const userProfile = useMemo(() => profiles.find(p => p.teamId === userTeam.id), [profiles, userTeam]);
 
-  const tradeBlockCandidates = useMemo(() => {
-    const total = league.teams.length;
-    const topThird = Math.ceil(total / 3);
-    const bottomStart = total - topThird + 1;
-    const rankedTeams = [...league.teams].sort((a, b) => (b.metrics?.overall ?? 0) - (a.metrics?.overall ?? 0));
-    return league.teams
-      .filter(t => t.id !== userTeam.id)
-      .flatMap(t => {
-        const dynastyRank = rankedTeams.findIndex(rt => rt.id === t.id) + 1;
-        const redraftRank = [...league.teams].sort((a, b) => (b.metrics?.starters ?? 0) - (a.metrics?.starters ?? 0)).findIndex(rt => rt.id === t.id) + 1;
-        const tier = tradeBlockTierMap.get(t.id)?.tier ?? "Balanced";
-        const isRebuilder = isRebuilderTier(tier);
-        const isDynastyStrong = dynastyRank <= topThird && redraftRank >= bottomStart;
-        if (!isRebuilder && !isDynastyStrong) return [];
-        return t.roster
-          .filter(p => p.age >= 27 && getRedraftValue(p) >= 1500)
-          .map(p => ({
-            ...p,
-            teamName: t.name,
-            ownerName: t.owner,
-            tier,
-            redraftVal: getRedraftValue(p),
-            dynastyVal: getPlayerValue(p),
-            reason: isRebuilder ? "Rebuilder" as const : "Dynasty-heavy" as const,
-          }));
-      })
-      .sort((a, b) => b.redraftVal - a.redraftVal);
-  }, [league, userTeam, getRedraftValue, getPlayerValue]);
 
   const partnerOpportunities = useMemo(() => {
     if (!userProfile) return [];
@@ -3608,30 +2998,6 @@ function BuildDynastyMode({ league, userTeam }: { league: League; userTeam: Team
 
   return (
     <div className="space-y-5">
-      {userProfile && (
-        <Card className="bg-muted/20">
-          <CardContent className="pt-4 pb-3">
-            <p className="text-xs text-muted-foreground mb-2">Your positional profile:</p>
-            <div className="flex items-center gap-3 flex-wrap">
-              {POSITIONS.map(pos => {
-                const p = userProfile.positions[pos];
-                return (
-                  <Badge key={pos} variant="outline" className={cn("text-xs", getStatusColor(p.status))} data-testid={`my-status-${pos}`}>
-                    {pos}: {p.status} (#{p.rank})
-                  </Badge>
-                );
-              })}
-              <Badge variant="outline" className={cn("text-xs",
-                userProfile.pickStrength === "High" ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30" :
-                userProfile.pickStrength === "Low"  ? "bg-red-500/15 text-red-700 dark:text-red-400 border-red-500/30" :
-                "bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20"
-              )}>
-                Picks: {userProfile.pickStrength}
-              </Badge>
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
       {partnerOpportunities.length === 0 && (
         <Card>
@@ -3719,47 +3085,6 @@ function BuildDynastyMode({ league, userTeam }: { league: League; userTeam: Team
         })}
       </div>
 
-      <Card className="p-6" data-testid="card-trade-block-candidates">
-        <div className="mb-5">
-          <h3 className="text-base font-bold flex items-center gap-2">
-            Trade Block Candidates
-            <Badge variant="secondary">{tradeBlockCandidates.length}</Badge>
-          </h3>
-          <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
-          <p className="text-[10px] text-muted-foreground mt-2">
-            Veteran players (27+) on rebuilding or dynasty-heavy teams with strong redraft value. Likely trade targets.
-          </p>
-        </div>
-        <div className="space-y-0">
-          {tradeBlockCandidates.length === 0 && <p className="text-xs text-muted-foreground">No trade block candidates found</p>}
-          {tradeBlockCandidates.slice(0, 20).map((p, i) => {
-            const sleeperId = p.sleeperId ?? p.id;
-            return (
-            <div key={`${sleeperId}-${i}`} className="flex items-center gap-2 py-2.5 border-b border-border/20 last:border-0" data-testid={`trade-block-candidate-${sleeperId}`}>
-              <span className="text-xs text-muted-foreground w-5 text-right flex-shrink-0">{i + 1}.</span>
-              <div className="w-7 h-7 rounded-full flex-shrink-0 overflow-hidden bg-muted ring-1 ring-border/30">
-                <img src={`https://sleepercdn.com/content/nfl/players/thumb/${sleeperId}.jpg`} alt={p.name} className="w-full h-full object-cover object-top" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1.5">
-                  <p className="text-sm font-semibold leading-tight">{p.name}</p>
-                  <Badge variant="outline" className={`text-[10px] px-1 py-0 h-4 flex-shrink-0 ${getPositionColor(p.pos)}`}>{p.pos}</Badge>
-                </div>
-                <p className="text-[10px] text-muted-foreground mt-0.5 truncate">
-                  {p.ownerName} · Age {p.age}
-                </p>
-              </div>
-              <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                <span className="text-xs font-bold text-[#0b3a7a] dark:text-blue-400 tabular-nums">{p.redraftVal.toLocaleString()}</span>
-                <Badge variant="outline" className={cn("text-[9px] px-1.5 py-0 h-4", p.reason === "Rebuilder" ? getTierColor("Future Powerhouse") : "text-amber-600 dark:text-amber-400 border-amber-300 dark:border-amber-700")}>
-                  {p.reason}
-                </Badge>
-              </div>
-            </div>
-            );
-          })}
-        </div>
-      </Card>
       <WinNowSendModal
         open={sendModal.open}
         onClose={() => setSendModal({ open: false, idea: null })}

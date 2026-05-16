@@ -63,6 +63,14 @@ interface LeagueAnalysis {
 }
 
 // ─── Types (matchup) ─────────────────────────────────────────────────────────
+interface StarterDetail {
+  pid: string;
+  name: string;
+  pos: string;
+  proj: number;
+  injury?: string;
+}
+
 interface MatchupAnalysis {
   leagueId: string;
   leagueName: string;
@@ -70,11 +78,16 @@ interface MatchupAnalysis {
   scoringFormat: string;
   avatar?: string | null;
   myRosterId: number;
+  myTeamName: string;
   myRecord: { wins: number; losses: number; ties: number };
   myProj: number;
+  myStarters: StarterDetail[];
   opponentRosterId: number | null;
+  opponentTeamName: string;
   opponentRecord: { wins: number; losses: number; ties: number };
   opponentProj: number;
+  opponentStarters: StarterDetail[];
+  spread: number;
   winPct: number;
   loading: boolean;
   error: boolean;
@@ -100,6 +113,12 @@ function lastName(playerDb: Record<string, any>, pid: string): string {
   const p = playerDb[pid];
   if (!p) return pid.slice(0, 8);
   return p.last_name || p.full_name?.split(" ").slice(1).join(" ") || p.full_name || pid;
+}
+
+function fullName(playerDb: Record<string, any>, pid: string): string {
+  const p = playerDb[pid];
+  if (!p) return "—";
+  return p.full_name || [p.first_name, p.last_name].filter(Boolean).join(" ") || pid;
 }
 
 function playerPos(playerDb: Record<string, any>, pid: string): string {
@@ -433,98 +452,200 @@ function LeagueRow({ analysis }: { analysis: LeagueAnalysis }) {
   );
 }
 
-// ─── Matchup skeleton row ─────────────────────────────────────────────────────
+// ─── Matchup skeleton card ────────────────────────────────────────────────────
 function MatchupSkeletonRow() {
   return (
-    <div className="flex items-center gap-3 px-3 md:px-5 py-3 border-b border-white/5 animate-pulse">
-      <div className="flex-1 h-3.5 bg-white/8 rounded" />
-      <div className="w-14 h-3.5 bg-white/8 rounded" />
-      <div className="w-16 h-3.5 bg-white/8 rounded" />
-      <div className="w-14 h-3.5 bg-white/8 rounded" />
-      <div className="w-16 h-3.5 bg-white/8 rounded" />
-      <div className="w-16 h-5 bg-white/8 rounded-full" />
+    <div className="px-4 md:px-5 py-4 border-b border-white/5 animate-pulse">
+      <div className="flex items-center gap-2 mb-3">
+        <div className="w-5 h-5 rounded bg-white/8" />
+        <div className="h-3 w-32 bg-white/8 rounded" />
+        <div className="ml-auto h-3 w-20 bg-white/8 rounded" />
+      </div>
+      <div className="grid grid-cols-[1fr_auto_1fr] gap-4 items-center">
+        <div className="space-y-2">
+          <div className="h-4 w-28 bg-white/8 rounded" />
+          <div className="h-3 w-12 bg-white/8 rounded" />
+          <div className="h-7 w-16 bg-white/8 rounded" />
+        </div>
+        <div className="px-4 space-y-1.5 text-center">
+          <div className="h-3 w-8 bg-white/8 rounded mx-auto" />
+          <div className="h-4 w-14 bg-white/8 rounded mx-auto" />
+          <div className="h-3 w-10 bg-white/8 rounded mx-auto" />
+        </div>
+        <div className="space-y-2 items-end flex flex-col">
+          <div className="h-4 w-28 bg-white/8 rounded" />
+          <div className="h-3 w-12 bg-white/8 rounded" />
+          <div className="h-7 w-16 bg-white/8 rounded" />
+        </div>
+      </div>
+      <div className="mt-3 h-1.5 bg-white/6 rounded-full" />
     </div>
   );
 }
 
-// ─── Matchup row ──────────────────────────────────────────────────────────────
-function MatchupRow({ m }: { m: MatchupAnalysis }) {
-  const { leagueName, format, scoringFormat, avatar, myRecord, myProj, opponentRecord, opponentProj, winPct, loading, error } = m;
+// ─── Matchup battle card ──────────────────────────────────────────────────────
+function MatchupBattleCard({ m }: { m: MatchupAnalysis }) {
+  const [expanded, setExpanded] = useState(false);
 
-  const winColor =
-    winPct >= 65 ? "text-emerald-400 bg-emerald-500/12 border-emerald-500/30" :
-    winPct >= 50 ? "text-blue-400 bg-blue-500/12 border-blue-500/30" :
-    winPct >= 35 ? "text-yellow-400 bg-yellow-500/12 border-yellow-500/30" :
-                   "text-red-400 bg-red-500/12 border-red-500/30";
+  const hasBye = m.opponentRosterId === null;
+  const isFav  = m.spread > 0;
+  const isClose = Math.abs(m.spread) < 3;
 
-  const myProjColor   = myProj > opponentProj ? "text-emerald-400" : myProj < opponentProj ? "text-red-400/80" : "text-white/60";
-  const oppProjColor  = opponentProj > myProj  ? "text-red-400/80"  : "text-white/40";
+  const theme =
+    m.winPct >= 65 ? { bar: "#22c55e", txt: "text-emerald-400", pill: "bg-emerald-500/15 text-emerald-400 border-emerald-500/25" } :
+    m.winPct >= 50 ? { bar: "#60a5fa", txt: "text-blue-400",    pill: "bg-blue-500/15 text-blue-400 border-blue-500/25" } :
+    m.winPct >= 35 ? { bar: "#facc15", txt: "text-yellow-400",  pill: "bg-yellow-500/15 text-yellow-400 border-yellow-500/25" } :
+                     { bar: "#f87171", txt: "text-red-400",     pill: "bg-red-500/15 text-red-400 border-red-500/25" };
+
+  const canExpand = !hasBye && m.myStarters.length > 0;
+
+  const injLabel = (inj?: string) => {
+    if (!inj) return null;
+    if (inj === "Out" || inj === "IR") return "OUT";
+    if (inj === "Doubtful") return "DBT";
+    if (inj === "Questionable") return "Q";
+    return null;
+  };
 
   return (
-    <div
-      className="flex items-center gap-3 px-3 md:px-5 py-3 border-b border-white/5 last:border-0 hover:bg-white/[0.02] transition-colors"
-      data-testid={`row-matchup-${m.leagueId}`}
-    >
-      {/* League */}
-      <div className="flex-1 min-w-0 flex items-center gap-2">
-        {avatar ? (
-          <img src={avatar} alt="" className="w-7 h-7 rounded-lg flex-shrink-0 object-cover bg-white/10"
-            onError={e => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
-        ) : (
-          <div className="w-7 h-7 rounded-lg flex-shrink-0 bg-[#0b3a7a]/40 flex items-center justify-center">
-            <Users className="w-3.5 h-3.5 text-blue-400/60" />
+    <div className="border-b border-white/5 last:border-0" data-testid={`card-matchup-${m.leagueId}`}>
+
+      {/* ── Main card ── */}
+      <div
+        className={cn("px-4 md:px-5 py-4 transition-colors", canExpand ? "cursor-pointer hover:bg-white/[0.018]" : "")}
+        onClick={() => canExpand && setExpanded(v => !v)}
+      >
+        {/* League label row */}
+        <div className="flex items-center gap-2 mb-3">
+          {m.avatar ? (
+            <img src={m.avatar} alt="" className="w-5 h-5 rounded object-cover flex-shrink-0"
+              onError={e => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
+          ) : (
+            <div className="w-5 h-5 rounded flex-shrink-0 bg-[#0b3a7a]/40" />
+          )}
+          <span className="text-[10px] font-bold text-white/40 uppercase tracking-wider truncate">{m.leagueName}</span>
+          <span className="ml-auto text-[9px] text-white/20 flex-shrink-0">{m.format} · {m.scoringFormat}</span>
+        </div>
+
+        {/* Battle row */}
+        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 md:gap-4">
+
+          {/* Left: My team */}
+          <div className="min-w-0">
+            <p className="text-[13px] md:text-sm font-black text-white/90 truncate leading-tight">{m.myTeamName}</p>
+            <p className="text-[10px] text-white/35 mt-0.5 tabular-nums">{fmtRecord(m.myRecord.wins, m.myRecord.losses, m.myRecord.ties)}</p>
+            <p className={cn("text-2xl md:text-3xl font-black tabular-nums mt-1.5 leading-none", isFav ? theme.txt : "text-white/55")}>
+              {fmt1(m.myProj)}
+            </p>
+          </div>
+
+          {/* Center: verdict */}
+          <div className="text-center px-2 md:px-4 flex-shrink-0">
+            {hasBye ? (
+              <div className="text-[10px] font-bold text-white/20 uppercase tracking-widest">Bye Week</div>
+            ) : (
+              <>
+                <div className="text-[8px] text-white/20 uppercase tracking-[0.2em] font-bold">vs</div>
+                <div className={cn("mt-1 text-[12px] md:text-[13px] font-black tabular-nums", theme.txt)}>
+                  {isClose ? "Pick 'em" : `${isFav ? "+" : "–"}${fmt1(Math.abs(m.spread))}`}
+                </div>
+                <div className={cn("mt-0.5 text-[9px] font-bold border rounded-full px-2 py-0.5 tabular-nums", theme.pill)}>
+                  {Math.round(m.winPct)}%
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Right: Opponent */}
+          <div className="min-w-0 text-right">
+            <p className="text-[13px] md:text-sm font-black text-white/50 truncate leading-tight">
+              {hasBye ? "—" : m.opponentTeamName}
+            </p>
+            <p className="text-[10px] text-white/25 mt-0.5 tabular-nums">
+              {hasBye ? "" : fmtRecord(m.opponentRecord.wins, m.opponentRecord.losses, m.opponentRecord.ties)}
+            </p>
+            <p className={cn("text-2xl md:text-3xl font-black tabular-nums mt-1.5 leading-none", !isFav && !hasBye ? "text-red-400/60" : "text-white/30")}>
+              {hasBye ? "—" : fmt1(m.opponentProj)}
+            </p>
+          </div>
+        </div>
+
+        {/* Win probability bar */}
+        {!hasBye && (
+          <div className="mt-3.5">
+            <div className="h-1.5 rounded-full bg-white/6 overflow-hidden">
+              <div
+                className="h-full rounded-full transition-all duration-700"
+                style={{ width: `${m.winPct}%`, backgroundColor: theme.bar, opacity: 0.8 }}
+              />
+            </div>
+            <div className="flex justify-between mt-1">
+              <span className="text-[9px] text-white/25">{m.myTeamName}</span>
+              <span className="text-[9px] text-white/25">{m.opponentTeamName}</span>
+            </div>
           </div>
         )}
-        <div className="min-w-0">
-          <p className="text-[12px] md:text-sm font-bold text-white/90 truncate leading-tight">{leagueName}</p>
-          <p className="text-[8px] md:text-[9px] text-white/30 font-medium">{format} · {scoringFormat}</p>
-        </div>
-      </div>
 
-      {/* My Record */}
-      <div className="w-14 text-right flex-shrink-0">
-        {loading ? <div className="h-3.5 bg-white/8 rounded animate-pulse" /> :
-         error   ? <span className="text-[10px] text-white/20">—</span> :
-         <p className="text-[12px] font-bold text-white/70 tabular-nums">{fmtRecord(myRecord.wins, myRecord.losses, myRecord.ties)}</p>}
-      </div>
-
-      {/* My Projected Pts */}
-      <div className="w-16 text-right flex-shrink-0">
-        {loading ? <div className="h-3.5 bg-white/8 rounded animate-pulse" /> :
-         error   ? <span className="text-[10px] text-white/20">—</span> :
-         <p className={cn("text-[12px] font-black tabular-nums", myProjColor)}>{fmt1(myProj)}</p>}
-      </div>
-
-      {/* Opp Record */}
-      <div className="w-14 text-right flex-shrink-0">
-        {loading ? <div className="h-3.5 bg-white/8 rounded animate-pulse" /> :
-         error   ? <span className="text-[10px] text-white/20">—</span> :
-         m.opponentRosterId == null
-           ? <span className="text-[10px] text-white/25">Bye</span>
-           : <p className="text-[12px] font-bold text-white/50 tabular-nums">{fmtRecord(opponentRecord.wins, opponentRecord.losses, opponentRecord.ties)}</p>}
-      </div>
-
-      {/* Opp Projected Pts */}
-      <div className="w-16 text-right flex-shrink-0">
-        {loading ? <div className="h-3.5 bg-white/8 rounded animate-pulse" /> :
-         error   ? <span className="text-[10px] text-white/20">—</span> :
-         m.opponentRosterId == null
-           ? <span className="text-[10px] text-white/25">—</span>
-           : <p className={cn("text-[12px] font-bold tabular-nums", oppProjColor)}>{fmt1(opponentProj)}</p>}
-      </div>
-
-      {/* Win % */}
-      <div className="w-[72px] flex-shrink-0 flex justify-end">
-        {loading ? (
-          <div className="h-5 w-14 bg-white/8 rounded-full animate-pulse" />
-        ) : error || m.opponentRosterId == null ? (
-          <span className="text-[10px] text-white/25">—</span>
-        ) : (
-          <span className={cn("inline-flex items-center justify-center text-[10px] font-bold rounded-full px-2.5 py-0.5 border tabular-nums", winColor)}>
-            {Math.round(winPct)}%
-          </span>
+        {/* Expand hint */}
+        {canExpand && (
+          <div className="flex items-center justify-center mt-2 gap-1">
+            {expanded
+              ? <ChevronUp className="w-3 h-3 text-white/15" />
+              : <ChevronDown className="w-3 h-3 text-white/15" />}
+          </div>
         )}
       </div>
+
+      {/* ── Expanded starters panel ── */}
+      {expanded && (
+        <div className="px-4 md:px-5 pb-4 pt-3 border-t border-white/4 bg-white/[0.01]">
+          <div className="grid grid-cols-2 gap-4">
+
+            {/* My starters */}
+            <div>
+              <p className="text-[8px] font-bold uppercase tracking-[0.2em] text-[#d4af37]/50 mb-2">{m.myTeamName}</p>
+              <div className="space-y-1.5">
+                {m.myStarters.filter(s => s.pos !== "K" && s.pos !== "DEF").map((s, i) => {
+                  const inj = injLabel(s.injury);
+                  return (
+                    <div key={i} className="flex items-center gap-1.5">
+                      <span className="text-[8px] font-bold text-white/25 w-7 flex-shrink-0">{s.pos}</span>
+                      <span className="text-[11px] text-white/75 flex-1 truncate">{s.name}</span>
+                      {inj && (
+                        <span className={cn("text-[7px] font-bold flex-shrink-0",
+                          inj === "OUT" ? "text-red-400" : "text-yellow-400")}>{inj}</span>
+                      )}
+                      <span className="text-[11px] font-bold text-white/50 tabular-nums flex-shrink-0 ml-1">{fmt1(s.proj)}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Their starters */}
+            <div>
+              <p className="text-[8px] font-bold uppercase tracking-[0.2em] text-white/25 mb-2">{m.opponentTeamName}</p>
+              <div className="space-y-1.5">
+                {m.opponentStarters.filter(s => s.pos !== "K" && s.pos !== "DEF").map((s, i) => {
+                  const inj = injLabel(s.injury);
+                  return (
+                    <div key={i} className="flex items-center gap-1.5">
+                      <span className="text-[8px] font-bold text-white/20 w-7 flex-shrink-0">{s.pos}</span>
+                      <span className="text-[11px] text-white/45 flex-1 truncate">{s.name}</span>
+                      {inj && (
+                        <span className={cn("text-[7px] font-bold flex-shrink-0",
+                          inj === "OUT" ? "text-red-400/70" : "text-yellow-400/70")}>{inj}</span>
+                      )}
+                      <span className="text-[11px] font-bold text-white/30 tabular-nums flex-shrink-0 ml-1">{fmt1(s.proj)}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -681,11 +802,16 @@ export function LineupCommand() {
             scoringFormat: l.scoringFormat,
             avatar: l.avatar ? `https://sleepercdn.com/avatars/thumbs/${l.avatar}` : null,
             myRosterId: 0,
+            myTeamName: "",
             myRecord: { wins: 0, losses: 0, ties: 0 },
             myProj: 0,
+            myStarters: [],
             opponentRosterId: null,
+            opponentTeamName: "",
             opponentRecord: { wins: 0, losses: 0, ties: 0 },
             opponentProj: 0,
+            opponentStarters: [],
+            spread: 0,
             winPct: 50,
             loading: true,
             error: false,
@@ -749,6 +875,26 @@ export function LineupCommand() {
 
         const total = myProj + opponentProj;
         const winPct = total > 0 ? (myProj / total) * 100 : 50;
+        const spread = myProj - opponentProj;
+
+        const myTeamName = myRoster.metadata?.team_name || myRoster.metadata?.team_abbrev || "My Team";
+        const oppRoster = opponentMatchup ? rosters.find((r: any) => r.roster_id === opponentMatchup.roster_id) : null;
+        const opponentTeamName = oppRoster?.metadata?.team_name || oppRoster?.metadata?.team_abbrev || "Opponent";
+
+        const toStarter = (pid: string): StarterDetail => ({
+          pid,
+          name: fullName(playerDb, pid),
+          pos: playerPos(playerDb, pid),
+          proj: proj(pid),
+          injury: playerDb[pid]?.injury_status as string | undefined,
+        });
+
+        const myStarters = (myMatchup.starters || [])
+          .filter((id: string) => id && id !== "0")
+          .map(toStarter);
+        const opponentStarters = opponentMatchup
+          ? (opponentMatchup.starters || []).filter((id: string) => id && id !== "0").map(toStarter)
+          : [];
 
         setMatchups(prev => ({
           ...prev,
@@ -759,11 +905,16 @@ export function LineupCommand() {
             scoringFormat: league.scoringFormat,
             avatar: league.avatar ? `https://sleepercdn.com/avatars/thumbs/${league.avatar}` : null,
             myRosterId: myRoster.roster_id,
+            myTeamName,
             myRecord,
             myProj,
+            myStarters,
             opponentRosterId: opponentMatchup?.roster_id ?? null,
+            opponentTeamName,
             opponentRecord,
             opponentProj,
+            opponentStarters,
+            spread,
             winPct,
             loading: false,
             error: false,
@@ -1048,39 +1199,35 @@ export function LineupCommand() {
             </div>
           </div>
 
-          {/* ── Matchup table ──────────────────────────────────────── */}
+          {/* ── Matchup cards ──────────────────────────────────────── */}
           <div
             className="rounded-2xl overflow-hidden border border-white/6"
             style={{ background: "linear-gradient(180deg, rgba(4,13,26,0.9) 0%, rgba(4,10,20,0.95) 100%)" }}
           >
-            {/* Header */}
-            <div className="flex items-center gap-3 px-3 md:px-5 py-2 border-b border-white/6 bg-white/[0.02]">
-              {(() => {
-                function MSortBtn({ col, label, className }: { col: typeof mSortKey; label: string; className?: string }) {
-                  const active = mSortKey === col;
-                  return (
-                    <button onClick={() => handleMSort(col)} className={cn("flex items-center gap-0.5 text-[9px] font-bold uppercase tracking-widest transition-colors cursor-pointer select-none", active ? "text-[#d4af37]" : "text-white/30 hover:text-white/55", className)}>
-                      {label}
-                      {active ? (mSortDir === "desc" ? <ChevronDown className="w-2.5 h-2.5 flex-shrink-0" /> : <ChevronUp className="w-2.5 h-2.5 flex-shrink-0" />) : <ArrowUpDown className="w-2.5 h-2.5 flex-shrink-0 opacity-40" />}
-                    </button>
-                  );
-                }
-                return (
-                  <>
-                    <MSortBtn col="league"    label="League"         className="flex-1 min-w-0 justify-start" />
-                    <MSortBtn col="record"    label="Record"         className="w-14 justify-end" />
-                    <MSortBtn col="myProj"    label="Proj Pts"       className="w-16 justify-end" />
-                    <MSortBtn col="oppRecord" label="Opp Record"     className="w-14 justify-end" />
-                    <MSortBtn col="oppProj"   label="Opp Pts"        className="w-16 justify-end" />
-                    <MSortBtn col="winPct"    label="Win %"          className="w-[72px] justify-end" />
-                  </>
-                );
-              })()}
+            {/* Sort pills */}
+            <div className="flex items-center gap-2 px-4 py-2.5 border-b border-white/5 bg-white/[0.015]">
+              <span className="text-[9px] text-white/20 font-medium uppercase tracking-widest mr-auto">
+                {sortedMatchups.filter(m => !m.loading).length} matchup{sortedMatchups.filter(m => !m.loading).length !== 1 ? "s" : ""}
+              </span>
+              {(["winPct", "myProj", "record"] as const).map(key => (
+                <button
+                  key={key}
+                  onClick={() => handleMSort(key)}
+                  className={cn(
+                    "text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full transition-colors border",
+                    mSortKey === key
+                      ? "bg-[#d4af37]/15 text-[#d4af37] border-[#d4af37]/30"
+                      : "text-white/25 border-transparent hover:text-white/50"
+                  )}
+                >
+                  {key === "winPct" ? "Win %" : key === "myProj" ? "Proj Pts" : "Record"}
+                </button>
+              ))}
             </div>
 
-            {/* Rows */}
+            {/* Cards */}
             {baseLoading && sortedMatchups.length === 0 ? (
-              [...Array(Math.min(activeLeagues.length || 4, 6))].map((_, i) => <MatchupSkeletonRow key={i} />)
+              [...Array(Math.min(activeLeagues.length || 3, 4))].map((_, i) => <MatchupSkeletonRow key={i} />)
             ) : sortedMatchups.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
                 <Swords className="w-8 h-8 text-white/15 mb-3" />
@@ -1088,7 +1235,7 @@ export function LineupCommand() {
                 <p className="text-xs text-white/25 mt-1">Matchup data loads once projections are available.</p>
               </div>
             ) : (
-              sortedMatchups.map(m => <MatchupRow key={m.leagueId} m={m} />)
+              sortedMatchups.map(m => <MatchupBattleCard key={m.leagueId} m={m} />)
             )}
           </div>
 

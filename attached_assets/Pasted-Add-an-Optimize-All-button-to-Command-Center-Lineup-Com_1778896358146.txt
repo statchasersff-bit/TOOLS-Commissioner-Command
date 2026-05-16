@@ -1,0 +1,88 @@
+Add an “Optimize All” button to Command Center → Lineup Command.
+
+Goal:
+Optimize every league/team currently shown in the table that needs lineup optimization.
+
+Requirements:
+
+* Add button near the Lineup Command header/table controls:
+  “Optimize All”
+* Only include leagues/teams flagged as needing optimization.
+* Do not touch leagues already optimized.
+* Before running, show confirmation modal:
+  “This will update lineups for X leagues. Continue?”
+* Show each league/team in the confirmation list.
+* After confirmation, process sequentially, not all at once.
+
+Safety:
+
+* Use the existing single-lineup optimization logic.
+* Do not rewrite lineup logic.
+* Do not use Promise.all.
+* Add delays between each lineup submission.
+* Require Sleeper auth/token.
+* If token missing/expired, open Connect Sleeper modal.
+* Never log JWT.
+* Never submit lineups without final confirmation.
+
+Dynamic delay scaling:
+
+* For the first 5 leagues:
+  use short randomized delays between 5–10 seconds.
+* After 5 leagues:
+  gradually increase delays to look more human and reduce spam/rate-limit risk.
+* Example progression:
+  leagues 1–5 → 5–10 sec
+  leagues 6–10 → 20–45 sec
+  leagues 11–20 → 60–120 sec
+  20+ leagues → 2–4 min randomized
+* Randomize all delays.
+* Queue should continue in the background while user navigates the tool.
+* If user closes the modal/page section, queue should still continue.
+* Persist queue state locally so refresh does not immediately break progress.
+
+Progress UX:
+
+* Show live queue progress:
+  “Optimizing 3 of 12…”
+* Show current league being processed.
+* Show estimated remaining time.
+* Allow:
+  Pause Queue
+  Resume Queue
+  Cancel Remaining
+
+Failure handling:
+
+* If one league fails:
+  continue to next league.
+* Log failures in queue UI only.
+* Retry failed leagues once automatically after a short delay.
+
+Button states:
+
+* Disabled if no teams need optimization.
+* Loading while queue is running.
+* Text while running:
+  “Optimizing…”
+
+Completion:
+
+* Refresh Lineup Command table after queue completion.
+* Show summary:
+  “Optimized 9 lineups. 2 failed. 1 skipped.”
+
+Architecture:
+
+* Create centralized queue manager service for future reuse.
+* Make queue reusable later for:
+  bulk waivers
+  bulk trades
+  bulk DM sending
+  other Sleeper actions
+
+Important:
+
+* Do not modify existing single-team optimization UX/design.
+* Match current StatChasers design system exactly.
+* Preserve mobile responsiveness.
