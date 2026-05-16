@@ -140,27 +140,197 @@ export interface AuthState {
   verifiedToken: string;
 }
 
+// ── Landing decorative background ────────────────────────────────────────────
+
+function FakeAppBackground() {
+  return (
+    <div className="absolute inset-0 overflow-hidden" style={{ filter: "blur(14px)", transform: "scale(1.06)" }}>
+      {/* Blueprint grid */}
+      <div className="absolute inset-0 bg-[#060d1a]"
+        style={{
+          backgroundImage: "linear-gradient(rgba(100,160,255,0.05) 1px,transparent 1px),linear-gradient(90deg,rgba(100,160,255,0.05) 1px,transparent 1px)",
+          backgroundSize: "24px 24px",
+        }}
+      />
+
+      {/* Glow orbs */}
+      <div className="absolute top-[-10%] left-[10%] w-[500px] h-[400px] rounded-full opacity-25"
+        style={{ background: "radial-gradient(ellipse, #0b3a7a 0%, transparent 70%)" }} />
+      <div className="absolute bottom-[-5%] right-[5%] w-[420px] h-[360px] rounded-full opacity-20"
+        style={{ background: "radial-gradient(ellipse, #0b3a7a 0%, transparent 70%)" }} />
+      <div className="absolute top-[40%] right-[25%] w-[300px] h-[260px] rounded-full opacity-15"
+        style={{ background: "radial-gradient(ellipse, #d4af37 0%, transparent 65%)" }} />
+
+      {/* Fake tab bar */}
+      <div className="absolute top-4 left-0 right-0 flex items-center gap-2 px-6">
+        {["Dashboard","My Team","Trade Center","Players","Transactions"].map((t,i) => (
+          <div key={i} className={cn(
+            "px-4 py-1.5 rounded-full text-[11px] font-semibold",
+            i === 0 ? "bg-[#d4af37]/20 text-[#d4af37] border border-[#d4af37]/30" : "text-white/30 border border-white/8"
+          )}>{t}</div>
+        ))}
+      </div>
+
+      {/* Fake KPI cards row */}
+      <div className="absolute top-16 left-4 right-4 grid grid-cols-4 gap-3">
+        {[
+          { label: "Roster Value", val: "94,280", delta: "+2.4%", color: "emerald" },
+          { label: "Power Rank", val: "#2", delta: "↑3", color: "gold" },
+          { label: "Avg Age", val: "26.4", delta: "−0.2", color: "blue" },
+          { label: "Pick Capital", val: "Top 18%", delta: "→", color: "purple" },
+        ].map((c, i) => (
+          <div key={i} className="bg-[#0d1f35]/80 border border-white/8 rounded-xl p-3">
+            <p className="text-[10px] text-white/40 mb-1">{c.label}</p>
+            <p className="text-lg font-bold text-white">{c.val}</p>
+            <p className={cn("text-[11px] font-medium", c.color === "gold" ? "text-[#d4af37]" : "text-emerald-400")}>{c.delta}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Fake power rankings table */}
+      <div className="absolute top-52 left-4 w-[340px] bg-[#0d1f35]/80 border border-white/8 rounded-xl overflow-hidden">
+        <div className="px-4 py-2.5 border-b border-white/8 flex items-center gap-2">
+          <div className="w-1 h-4 bg-[#d4af37] rounded-full" />
+          <p className="text-[11px] font-bold text-white tracking-wide uppercase">Power Rankings</p>
+        </div>
+        {[
+          { rank: 1, team: "Gridiron Gods", tier: "Juggernaut", val: "94.2", badge: "bg-yellow-500/20 text-yellow-400" },
+          { rank: 2, team: "Dynasty Kings", tier: "Win-Now", val: "91.8", badge: "bg-blue-500/20 text-blue-400" },
+          { rank: 3, team: "The Machine", tier: "Contender", val: "89.3", badge: "bg-emerald-500/20 text-emerald-400" },
+          { rank: 4, team: "Stacked Squad", tier: "Win-Now", val: "87.1", badge: "bg-blue-500/20 text-blue-400" },
+          { rank: 5, team: "Future Stars", tier: "Future Powerhouse", val: "85.6", badge: "bg-purple-500/20 text-purple-400" },
+          { rank: 6, team: "Rebuilding Now", tier: "Rebuilder", val: "78.2", badge: "bg-orange-500/20 text-orange-400" },
+        ].map((r, i) => (
+          <div key={i} className="flex items-center gap-3 px-4 py-2 border-b border-white/5 last:border-0">
+            <span className="text-[11px] font-bold text-white/40 w-4 text-center">{r.rank}</span>
+            <div className="flex-1">
+              <p className="text-[12px] font-semibold text-white/80">{r.team}</p>
+              <span className={cn("text-[10px] font-medium px-1.5 py-0.5 rounded", r.badge)}>{r.tier}</span>
+            </div>
+            <span className="text-[12px] font-bold text-[#d4af37]">{r.val}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Fake player market value chart */}
+      <div className="absolute top-52 right-4 w-[calc(100%-380px)] bg-[#0d1f35]/80 border border-white/8 rounded-xl overflow-hidden">
+        <div className="px-4 py-2.5 border-b border-white/8 flex items-center gap-2">
+          <div className="w-1 h-4 bg-[#d4af37] rounded-full" />
+          <p className="text-[11px] font-bold text-white tracking-wide uppercase">Roster Breakdown</p>
+        </div>
+        <div className="p-4 flex flex-col gap-2">
+          {[
+            { pos: "QB", pct: 82, color: "bg-blue-500" },
+            { pos: "RB", pct: 68, color: "bg-emerald-500" },
+            { pos: "WR", pct: 91, color: "bg-purple-500" },
+            { pos: "TE", pct: 74, color: "bg-amber-500" },
+            { pos: "PICKS", pct: 55, color: "bg-[#d4af37]" },
+          ].map((r, i) => (
+            <div key={i} className="flex items-center gap-3">
+              <span className="text-[10px] font-bold text-white/50 w-8">{r.pos}</span>
+              <div className="flex-1 h-2 bg-white/8 rounded-full overflow-hidden">
+                <div className={cn("h-full rounded-full", r.color)} style={{ width: `${r.pct}%` }} />
+              </div>
+              <span className="text-[11px] font-semibold text-white/60 w-8 text-right">{r.pct}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Fake trade card row */}
+      <div className="absolute bottom-8 left-4 right-4 grid grid-cols-3 gap-3">
+        {[
+          { label: "Recent Trade", from: "WR Davante Adams", for: "RB1 + 2026 1st" },
+          { label: "Trade Alert", from: "Travis Kelce + 2nd", for: "WR + 2025 1st" },
+          { label: "Waiver Wire", from: "Pickup: RB Jaleel", for: "Dropped: WR Bench" },
+        ].map((c, i) => (
+          <div key={i} className="bg-[#0d1f35]/80 border border-white/8 rounded-xl p-3">
+            <p className="text-[10px] text-white/40 mb-2 uppercase tracking-wide">{c.label}</p>
+            <p className="text-[11px] text-emerald-400 font-medium">↑ {c.from}</p>
+            <p className="text-[11px] text-red-400 font-medium mt-0.5">↓ {c.for}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // Landing
 export function LandingScreen({ onNavigate }: ScreenProps) {
   return (
-    <AuthLayout>
-      <h2 className="text-xl font-bold text-white">Welcome back</h2>
-      <GoldBar />
-      <p className="text-[13px] text-white/50 mb-6">Sign in to your StatChasers account to access Dynasty Command.</p>
-      <div className="space-y-3">
-        <GoldButton onClick={() => onNavigate("login")}>Log In</GoldButton>
-        <button
-          type="button"
-          onClick={() => onNavigate("signup-email")}
-          className="w-full border border-white/15 hover:border-white/30 text-white/80 hover:text-white font-semibold text-sm py-2.5 rounded-lg transition-colors"
+    <div className="min-h-screen relative flex items-center justify-center p-4 overflow-hidden bg-[#060d1a]">
+      {/* Blurred app preview */}
+      <FakeAppBackground />
+
+      {/* Dark overlay */}
+      <div className="absolute inset-0 bg-[#060d1a]/70" />
+
+      {/* Card */}
+      <div className="relative z-10 w-full max-w-[460px]">
+        <div
+          className="rounded-2xl p-8 shadow-2xl"
+          style={{
+            background: "linear-gradient(160deg, #0f2a47 0%, #0b1e3a 55%, #091629 100%)",
+            border: "1px solid rgba(212,175,55,0.22)",
+            boxShadow: "0 32px 80px rgba(0,0,0,0.7), 0 0 0 1px rgba(212,175,55,0.06), inset 0 1px 0 rgba(255,255,255,0.04)",
+          }}
         >
-          Create Account
-        </button>
+          {/* Brand header */}
+          <div className="flex flex-col items-center mb-7">
+            <img src={logoDark} alt="StatChasers" className="h-16 object-contain mb-2" />
+            <div className="flex items-center gap-3 w-full">
+              <span className="flex-1 h-px" style={{ background: "linear-gradient(to right, transparent, rgba(212,175,55,0.35))" }} />
+              <span className="text-[#d4af37] text-[11px] font-bold tracking-[0.18em] uppercase whitespace-nowrap">Dynasty Command</span>
+              <span className="flex-1 h-px" style={{ background: "linear-gradient(to left, transparent, rgba(212,175,55,0.35))" }} />
+            </div>
+          </div>
+
+          {/* Welcome copy */}
+          <div className="mb-6">
+            <h2 className="text-[22px] font-bold text-white mb-1.5">Welcome back</h2>
+            <p className="text-[13px] text-white/50 leading-relaxed">
+              Sign in to your StatChasers account to access Dynasty Command.
+            </p>
+          </div>
+
+          {/* Buttons */}
+          <div className="space-y-3">
+            <button
+              type="button"
+              onClick={() => onNavigate("login")}
+              className="w-full font-bold text-sm py-3 rounded-xl transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+              style={{
+                background: "linear-gradient(135deg, #d4af37 0%, #c9a227 60%, #b8921f 100%)",
+                color: "#07111f",
+                boxShadow: "0 4px 20px rgba(212,175,55,0.28), 0 1px 0 rgba(255,255,255,0.15) inset",
+              }}
+              onMouseEnter={e => (e.currentTarget.style.boxShadow = "0 6px 28px rgba(212,175,55,0.42), 0 1px 0 rgba(255,255,255,0.15) inset")}
+              onMouseLeave={e => (e.currentTarget.style.boxShadow = "0 4px 20px rgba(212,175,55,0.28), 0 1px 0 rgba(255,255,255,0.15) inset")}
+            >
+              Log In
+            </button>
+            <button
+              type="button"
+              onClick={() => onNavigate("signup-email")}
+              className="w-full font-semibold text-sm py-3 rounded-xl transition-all text-white/80 hover:text-white active:scale-[0.98]"
+              style={{
+                background: "rgba(255,255,255,0.04)",
+                border: "1px solid rgba(255,255,255,0.13)",
+              }}
+              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.08)"; (e.currentTarget as HTMLElement).style.borderColor = "rgba(255,255,255,0.22)"; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.04)"; (e.currentTarget as HTMLElement).style.borderColor = "rgba(255,255,255,0.13)"; }}
+            >
+              Create Account
+            </button>
+          </div>
+
+          {/* Footer */}
+          <p className="text-center text-[11px] text-white/20 mt-6">
+            Dynasty Command · StatChasers
+          </p>
+        </div>
       </div>
-      <p className="text-center text-[11px] text-white/25 mt-6">
-        Dynasty Command · StatChasers
-      </p>
-    </AuthLayout>
+    </div>
   );
 }
 
