@@ -909,13 +909,11 @@ export function LineupCommand() {
 
       {/* ── Page header ──────────────────────────────────────────────────── */}
       <SectionHeader title="Lineup Command" subtitle="Review starters, identify lineup issues, and optimize weekly decisions." />
-      {(baseLoading || allLoading || mAllLoading) && (
-        <div className="-mt-4">
-          <RefreshCw className="w-3.5 h-3.5 text-muted-foreground animate-spin" />
-        </div>
-      )}
-
       {/* ── Sub-tab switcher ─────────────────────────────────────────────── */}
+      <div className="flex items-center justify-end -mt-3">
+      {(baseLoading || allLoading || mAllLoading) && (
+        <RefreshCw className="w-3.5 h-3.5 text-muted-foreground animate-spin mr-3" />
+      )}
       <div className="flex gap-1 p-1 rounded-xl bg-white/[0.03] border border-white/6 w-fit">
         {(["lineup", "matchups"] as const).map(tab => (
           <button
@@ -935,6 +933,7 @@ export function LineupCommand() {
             )}
           </button>
         ))}
+      </div>
       </div>
 
       {/* ══════════════════ LINEUP COMMAND TAB ══════════════════ */}
