@@ -238,7 +238,7 @@ function IssueBadge({ type }: { type: IssueType }) {
 function SkeletonRow() {
   return (
     <div className="flex items-center gap-1.5 md:gap-3 px-2 md:px-5 py-3 border-b border-white/5 animate-pulse">
-      <div className="flex-1 min-w-0 h-3.5 bg-white/8 rounded" />
+      <div className="flex-1 min-w-[140px] h-3.5 bg-white/8 rounded" />
       <div className="w-10 md:w-16 flex-shrink-0 h-3.5 bg-white/8 rounded" />
       <div className="w-12 md:w-28 flex-shrink-0 h-3.5 bg-white/8 rounded" />
       <div className="w-8 md:w-24 flex-shrink-0 h-4 bg-white/8 rounded" />
@@ -297,7 +297,7 @@ function LeagueRow({ analysis }: { analysis: LeagueAnalysis }) {
         data-testid={`row-lineup-${analysis.leagueId}`}
       >
         {/* League avatar + name + format */}
-        <div className="flex-1 min-w-0 flex items-center gap-1.5 md:gap-2 cursor-pointer" onClick={() => swaps.length > 0 && setExpanded(v => !v)}>
+        <div className="flex-1 min-w-[140px] flex items-center gap-1.5 md:gap-2 cursor-pointer" onClick={() => swaps.length > 0 && setExpanded(v => !v)}>
           {avatar ? (
             <img
               src={avatar}
@@ -311,7 +311,7 @@ function LeagueRow({ analysis }: { analysis: LeagueAnalysis }) {
             </div>
           )}
           <div className="min-w-0">
-            <p className="text-[11px] md:text-sm font-bold text-white/90 truncate leading-tight">{leagueName}</p>
+            <p className="text-[12px] md:text-sm font-bold text-white/90 truncate leading-tight">{leagueName}</p>
             <div className="flex items-center gap-1 mt-0.5">
               <span className="text-[8px] md:text-[9px] text-white/30 font-medium truncate">{format} · {scoringFormat}</span>
             </div>
@@ -1217,7 +1217,7 @@ export function LineupCommand() {
           >
             {/* Scroll container */}
             <div className="overflow-x-auto" style={{ WebkitOverflowScrolling: "touch" }}>
-              <div style={{ minWidth: 340 }}>
+              <div style={{ minWidth: 500 }}>
                 {/* Header */}
                 <div className="flex items-center gap-1.5 md:gap-3 px-2 md:px-5 py-2 border-b border-white/6 bg-white/[0.02]">
                   {(() => {
@@ -1232,7 +1232,7 @@ export function LineupCommand() {
                     }
                     return (
                       <>
-                        <SortBtn col="league"      label="League"      className="flex-1 min-w-0 justify-start" />
+                        <SortBtn col="league"      label="League"      className="flex-1 min-w-[140px] justify-start" />
                         <SortBtn col="current"     label={<><span className="md:hidden">Proj</span><span className="hidden md:inline">Current</span></>}     className="w-10 md:w-16 flex-shrink-0 justify-end" />
                         <SortBtn col="improvement" label={<><span className="md:hidden">+Pts</span><span className="hidden md:inline">Improvement</span></>}  className="w-12 md:w-28 flex-shrink-0 justify-end" />
                         <SortBtn col="hard"        label={<><span className="md:hidden">OUT</span><span className="hidden md:inline">Out/IR/Bye</span></>}    className="w-8 md:w-24 flex-shrink-0 justify-center" />
