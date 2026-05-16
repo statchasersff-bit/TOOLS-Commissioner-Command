@@ -33,7 +33,7 @@ export function LeagueSelector({ leagues, selectedLeagueId, onSelect }: LeagueSe
   return (
     <div className="flex items-center gap-2 flex-1 min-w-0">
       <Select value={selectedLeagueId || ""} onValueChange={onSelect}>
-        <SelectTrigger className="w-full max-w-[260px] h-9 text-sm rounded-full border-[#0b3a7a]/30 dark:border-blue-400/25 bg-background hover:border-[#d4af37] dark:hover:border-[#d4af37] focus:ring-[#d4af37]/30 transition-all duration-200 [&>span]:flex-1 [&>span]:flex [&>span]:items-center [&>span]:justify-center" data-testid="select-league">
+        <SelectTrigger className="w-full h-9 text-sm rounded-full border-[#0b3a7a]/30 dark:border-blue-400/25 bg-background hover:border-[#d4af37] dark:hover:border-[#d4af37] focus:ring-[#d4af37]/30 transition-all duration-200 [&>span]:flex-1 [&>span]:flex [&>span]:items-center [&>span]:justify-center" data-testid="select-league">
           <SelectValue placeholder="Select League" />
         </SelectTrigger>
         <SelectContent>

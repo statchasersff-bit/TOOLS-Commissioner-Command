@@ -327,8 +327,15 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
 
   return (
     <div className="min-h-screen bg-background blueprint-bg">
-      <header className="border-b border-border/60 bg-background/95 backdrop-blur-sm sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-1.5 md:px-3 py-2.5 md:py-3">
+      <header
+        className="sticky top-0 z-50 md:border-b md:border-border/60 md:bg-background/95 md:backdrop-blur-sm md:shadow-none"
+        style={{
+          background: "rgba(5, 10, 24, 0.98)",
+          borderBottom: "1px solid rgba(212, 175, 55, 0.16)",
+          boxShadow: "0 10px 24px rgba(0,0,0,0.30)",
+        }}
+      >
+        <div className="max-w-7xl mx-auto px-4 md:px-3 py-[14px] md:py-3">
           <div className="flex items-center gap-3">
 
             {/* ── Logo ── */}
@@ -479,7 +486,7 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
 
           {/* League selector (mobile) */}
           {sleeper.isConnected && (
-            <div className="flex items-center gap-2 mt-1.5 md:hidden mx-auto" style={{ maxWidth: 280 }}>
+            <div className="flex items-center gap-2 mt-3 mb-1 md:hidden mx-auto" style={{ width: "calc(90vw - 32px)", maxWidth: 380 }}>
               <LeagueSelector
                 leagues={sleeperLeaguesAsLeagues}
                 selectedLeagueId={selectedLeagueId}
@@ -519,7 +526,7 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
         </div>
       )}
 
-      <main className="max-w-7xl mx-auto px-2 sm:px-3 md:px-4 py-4 sm:py-6 md:py-8 md:pb-8 relative" style={{ paddingBottom: "calc(80px + env(safe-area-inset-bottom, 0px))" }}>
+      <main className="max-w-7xl mx-auto px-2 sm:px-3 md:px-4 pt-5 pb-4 sm:py-6 md:py-8 md:pb-8 relative" style={{ paddingBottom: "calc(80px + env(safe-area-inset-bottom, 0px))" }}>
         {showLoadingOverlay && (
           <div className="absolute inset-0 z-30 flex items-start justify-center pt-24" data-testid="recalculating-overlay">
             <div className="bg-background/90 backdrop-blur-sm border border-border rounded-lg px-5 py-3 shadow-lg flex items-center gap-3">
