@@ -334,7 +334,7 @@ export function MegaMenuNav({ tabs, activeTab, activeSub, setActiveTab, onNaviga
   );
 }
 
-// ── Re-export MobileMenuButton unchanged ──────────────────────────────────────
+// ── Shared tab icon map ────────────────────────────────────────────────────────
 
 const TAB_ICONS: Record<string, typeof BarChart2> = {
   portfolio: BarChart2,
@@ -344,6 +344,66 @@ const TAB_ICONS: Record<string, typeof BarChart2> = {
   "league-market": LineChart,
   "live-draft": Zap,
 };
+
+const TAB_SHORT_LABELS: Record<string, string> = {
+  portfolio: "Command",
+  dashboard: "My Team",
+  "league-analyzer": "League",
+  "trade-center": "Trades",
+  "league-market": "Research",
+  "live-draft": "Draft",
+};
+
+// ── MobileBottomNav ────────────────────────────────────────────────────────────
+
+interface MobileBottomNavProps {
+  tabs: MainTabConfig[];
+  activeTab: string;
+  setActiveTab: (id: string) => void;
+}
+
+export function MobileBottomNav({ tabs, activeTab, setActiveTab }: MobileBottomNavProps) {
+  return (
+    <nav
+      className="fixed bottom-0 left-0 right-0 z-50 md:hidden"
+      style={{
+        background: "rgba(8,11,20,0.97)",
+        backdropFilter: "blur(16px)",
+        WebkitBackdropFilter: "blur(16px)",
+        borderTop: "1px solid rgba(255,255,255,0.07)",
+        paddingBottom: "env(safe-area-inset-bottom, 0px)",
+      }}
+      data-testid="mobile-bottom-nav"
+    >
+      <div className="flex items-stretch">
+        {tabs.map((tab) => {
+          const Icon = TAB_ICONS[tab.id] || BarChart2;
+          const isActive = activeTab === tab.id;
+          const label = TAB_SHORT_LABELS[tab.id] ?? tab.label;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              data-testid={`bottom-nav-${tab.id}`}
+              className={cn(
+                "flex-1 flex flex-col items-center justify-center gap-0.5 py-2.5 transition-all duration-150 active:scale-95 relative",
+                isActive ? "text-[#d4af37]" : "text-white/35 hover:text-white/60"
+              )}
+            >
+              {isActive && (
+                <span className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-[2px] rounded-full bg-[#d4af37]" />
+              )}
+              <Icon className="w-5 h-5 flex-shrink-0" />
+              <span className="text-[9px] font-semibold tracking-wide leading-none">{label}</span>
+            </button>
+          );
+        })}
+      </div>
+    </nav>
+  );
+}
+
+// ── MobileMenuButton (kept for reference, no longer used on mobile) ────────────
 
 interface MobileMenuButtonProps {
   tabs: MainTabConfig[];

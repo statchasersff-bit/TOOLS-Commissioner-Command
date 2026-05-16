@@ -3,7 +3,7 @@ import { useRoute, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { MegaMenuNav, MobileMenuButton } from "@/components/MegaMenu";
+import { MegaMenuNav, MobileBottomNav } from "@/components/MegaMenu";
 import { SubTabs } from "@/components/SubTabs";
 import { LeagueSelector } from "@/components/LeagueSelector";
 import { HeaderValueSourceBadge } from "@/components/ValueSourceSelector";
@@ -379,8 +379,6 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
                 </button>
               )}
 
-              {/* Mobile menu button */}
-              <MobileMenuButton tabs={NAV_CONFIG} activeTab={activeMainTab} setActiveTab={handleMainTabChange} />
 
               <HeaderValueSourceBadge />
 
@@ -520,7 +518,7 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
         <SubTabs tabs={currentMainConfig.subTabs} activeTab={activeSubTab} setActiveTab={handleSubTabChange} />
       )}
 
-      <main className="max-w-7xl mx-auto px-2 sm:px-3 md:px-4 py-4 sm:py-6 md:py-8 relative">
+      <main className="max-w-7xl mx-auto px-2 sm:px-3 md:px-4 py-4 sm:py-6 md:py-8 pb-24 md:pb-8 relative">
         {showLoadingOverlay && (
           <div className="absolute inset-0 z-30 flex items-start justify-center pt-24" data-testid="recalculating-overlay">
             <div className="bg-background/90 backdrop-blur-sm border border-border rounded-lg px-5 py-3 shadow-lg flex items-center gap-3">
@@ -539,6 +537,11 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
       </main>
       <DataDiagnostics />
       <ShareDynastyPopup blocked={false} />
+      <MobileBottomNav
+        tabs={NAV_CONFIG}
+        activeTab={activeMainTab}
+        setActiveTab={handleMainTabChange}
+      />
     </div>
   );
 }
