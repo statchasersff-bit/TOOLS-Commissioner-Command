@@ -2475,10 +2475,10 @@ const EXIT_AGE: Record<string, number> = { RB: 29, WR: 32, TE: 32, QB: 36 };
 const DECAY_AGE_PENALTY = (pos: string, age: number): number => {
   const sell = SELL_AGE[pos] ?? 30;
   const exit = EXIT_AGE[pos] ?? 34;
-  if (age >= exit)        return 4.0; // well past cliff — emergency sell
-  if (age >= exit - 1)    return 3.0;
-  if (age >= sell + 1)    return 2.0; // clearly past peak window
-  if (age >= sell)        return 1.5; // entering decline
+  if (age >= exit + 1)    return 4.0; // past exit age
+  if (age >= exit)        return 3.0; // at exit age
+  if (age >= sell + 1)    return 2.0; // past sell age
+  if (age >= sell)        return 1.5; // at sell age
   return 1.0;
 };
 // RB = highest positional injury risk + shortest peak → highest sell urgency
@@ -2753,12 +2753,12 @@ function RebuildMode({ league, userTeam }: { league: League; userTeam: Team }) {
                   <Badge
                     variant="outline"
                     className={cn("text-[9px] flex-shrink-0",
-                      d.player.starter
-                        ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
-                        : "bg-slate-500/10 text-slate-400 border-slate-500/20"
+                      d.tier === "Emergency Exit" ? "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20" :
+                      d.tier === "Sell High"      ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20" :
+                      "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20"
                     )}
                   >
-                    {d.player.starter ? "Starter" : "Bench"}
+                    {d.tier}
                   </Badge>
                 </div>
               );

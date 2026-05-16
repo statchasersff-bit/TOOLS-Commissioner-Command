@@ -927,7 +927,10 @@ export function TradeBlockScanner({ league }: { league: League }) {
 
   const teamByRosterId = useMemo(() => {
     const map = new Map<number, Team>();
-    for (const team of league.teams) map.set(Number(team.id), team);
+    for (const team of league.teams) {
+      const numId = Number(team.id.replace(/^roster_/, ""));
+      if (!isNaN(numId)) map.set(numId, team);
+    }
     return map;
   }, [league.teams]);
 
