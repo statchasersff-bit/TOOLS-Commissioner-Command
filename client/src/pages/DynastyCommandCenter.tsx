@@ -514,7 +514,9 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
       />
 
       {currentMainConfig && (
-        <SubTabs tabs={currentMainConfig.subTabs} activeTab={activeSubTab} setActiveTab={handleSubTabChange} />
+        <div className="hidden md:block">
+          <SubTabs tabs={currentMainConfig.subTabs} activeTab={activeSubTab} setActiveTab={handleSubTabChange} />
+        </div>
       )}
 
       <main className="max-w-7xl mx-auto px-2 sm:px-3 md:px-4 py-4 sm:py-6 md:py-8 md:pb-8 relative" style={{ paddingBottom: "calc(80px + env(safe-area-inset-bottom, 0px))" }}>
