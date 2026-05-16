@@ -364,10 +364,6 @@ interface MobileBottomNavProps {
 }
 
 export function MobileBottomNav({ tabs, activeTab, setActiveTab }: MobileBottomNavProps) {
-  const { user } = useSleeper();
-  const half = Math.floor(tabs.length / 2);
-  const leftTabs  = tabs.slice(0, half);
-  const rightTabs = tabs.slice(half);
 
   const renderTab = (tab: MainTabConfig) => {
     const Icon = TAB_ICONS[tab.id] || BarChart2;
@@ -411,29 +407,7 @@ export function MobileBottomNav({ tabs, activeTab, setActiveTab }: MobileBottomN
       data-testid="mobile-bottom-nav"
     >
       <div className="flex items-stretch h-[72px]">
-        {leftTabs.map(renderTab)}
-
-        {/* Center avatar */}
-        <div
-          className="flex-shrink-0 flex flex-col items-center justify-center gap-2"
-          style={{ width: 56, minHeight: 44, paddingTop: 8, paddingBottom: 4 }}
-        >
-          {user?.avatar ? (
-            <img
-              src={`https://sleepercdn.com/avatars/thumbs/${user.avatar}`}
-              alt={user.username ?? ""}
-              className="rounded-full object-cover flex-shrink-0"
-              style={{ width: 18, height: 18, boxShadow: "0 0 0 1.5px rgba(212,175,55,0.45)" }}
-            />
-          ) : (
-            <>
-              <img src={logoDark} alt="StatChasers" className="hidden dark:block object-contain flex-shrink-0" style={{ width: 18, height: 18 }} />
-              <img src={logoLight} alt="StatChasers" className="block dark:hidden object-contain flex-shrink-0" style={{ width: 18, height: 18 }} />
-            </>
-          )}
-        </div>
-
-        {rightTabs.map(renderTab)}
+        {tabs.map(renderTab)}
       </div>
     </nav>
   );
