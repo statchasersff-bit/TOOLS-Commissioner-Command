@@ -87,13 +87,38 @@ function PlayerChip({ player, value }: { player: Player; value: number }) {
   );
 }
 
-function TradeProposalCard({ proposal, mode, userTeam }: { proposal: TradeProposal; mode: "dynasty" | "redraft"; userTeam: Team }) {
+function TradeProposalCard({ proposal, mode, userTeam, league }: { proposal: TradeProposal; mode: "dynasty" | "redraft"; userTeam: Team; league: League }) {
+  const [sendState, setSendState] = useState<"idle" | "sending" | "sent" | "failed">("idle");
+
+  const handleSend = async () => {
+    const session = getSleeperSession();
+    if (!session?.token) { setSendState("failed"); return; }
+    const userRosterId = parseInt(userTeam.id);
+    const partnerRosterId = parseInt(proposal.partner.id);
+    const adds: Record<string, number> = {};
+    const drops: Record<string, number> = {};
+    for (const p of proposal.gives) {
+      if (p.sleeperId) { adds[p.sleeperId] = partnerRosterId; drops[p.sleeperId] = userRosterId; }
+    }
+    for (const p of proposal.gets) {
+      if (p.sleeperId) { adds[p.sleeperId] = userRosterId; drops[p.sleeperId] = partnerRosterId; }
+    }
+    setSendState("sending");
+    try {
+      await proposeTradeAuthed({ leagueId: league.id, adds, drops, draftPicks: [], expiresAt: null });
+      setSendState("sent");
+    } catch {
+      setSendState("failed");
+    }
+  };
+
   const valueDiff = proposal.getVal - proposal.giveVal;
   const maxVal = Math.max(proposal.giveVal, proposal.getVal);
   const diffPct = maxVal > 0 ? Math.abs(valueDiff) / maxVal : 0;
   const isEven = diffPct < 0.05;
   const isFavorable = valueDiff > 0;
   const typeLabel = proposal.type === "1v1" ? "1-for-1" : proposal.type === "2v1" ? "2-for-1" : "1-for-2";
+  const isSleeperAuthed = !!getSleeperSession()?.token;
 
   return (
     <div className="rounded-xl border border-border/50 p-4 bg-muted/10 hover:bg-muted/25 transition-colors" data-testid={`proposal-card-${proposal.partner.id}`}>
@@ -161,6 +186,36 @@ function TradeProposalCard({ proposal, mode, userTeam }: { proposal: TradePropos
             </div>
           )}
         </div>
+
+        {/* Send Trade button */}
+        <div className="flex justify-end">
+          {sendState === "sent" ? (
+            <span className="flex items-center gap-1 text-[10px] text-emerald-400" data-testid={`proposal-sent-${proposal.partner.id}`}>
+              <CheckCircle2 className="w-3 h-3" /> Trade sent!
+            </span>
+          ) : sendState === "failed" ? (
+            <span className="text-[10px] text-red-400">Failed — check Sleeper connection</span>
+          ) : isSleeperAuthed ? (
+            <button
+              onClick={handleSend}
+              disabled={sendState === "sending"}
+              className="flex items-center gap-1 text-[10px] font-semibold text-emerald-400 hover:text-emerald-300 disabled:opacity-40 transition-colors"
+              data-testid={`btn-send-proposal-${proposal.partner.id}`}
+            >
+              {sendState === "sending" ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
+              {sendState === "sending" ? "Sending…" : "Send Trade"}
+            </button>
+          ) : (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="flex items-center gap-1 text-[10px] text-muted-foreground/40 cursor-default">
+                  <Send className="w-3 h-3" /> Send Trade
+                </span>
+              </TooltipTrigger>
+              <TooltipContent>Connect Sleeper to send trades</TooltipContent>
+            </Tooltip>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -180,6 +235,34 @@ export function TradeFinder({ league, userTeam }: TradeProps) {
     league.teams.forEach(t => m.set(t.id, optimizeLineup(t.roster, rp)));
     return m;
   }, [league.teams, league.rosterPositions, optimizeLineup]);
+
+  const chipsToMove = useMemo(() => {
+    const POSITIONS = ["QB", "RB", "WR", "TE"] as const;
+    const leagueSize = league.teams.length;
+    const posRdRanks: Record<string, number> = {};
+    POSITIONS.forEach(pos => {
+      [...league.teams]
+        .sort((a, b) =>
+          b.roster.filter(p => p.pos === pos && p.starter).reduce((s, p) => s + getRedraftValue(p), 0) -
+          a.roster.filter(p => p.pos === pos && p.starter).reduce((s, p) => s + getRedraftValue(p), 0)
+        )
+        .forEach((t, i) => { if (t.id === userTeam.id) posRdRanks[pos] = i + 1; });
+    });
+    const needPositions = new Set(
+      POSITIONS.filter(pos => (posRdRanks[pos] ?? leagueSize) > Math.floor(leagueSize * 0.6))
+    );
+    return userTeam.roster
+      .filter(p => (POSITIONS as readonly string[]).includes(p.pos))
+      .map(p => {
+        const dynVal = getPlayerValue(p);
+        const rdVal  = getRedraftValue(p);
+        const effScore = dynVal / Math.max(p.starter ? rdVal : 0, 60);
+        return { player: p, dynVal, rdVal, effScore };
+      })
+      .filter(c => c.dynVal > 600 && !needPositions.has(c.player.pos))
+      .sort((a, b) => b.effScore - a.effScore)
+      .slice(0, 6);
+  }, [league, userTeam, getPlayerValue, getRedraftValue]);
 
   const positions = ["QB", "RB", "WR", "TE"] as const;
 
@@ -698,6 +781,47 @@ export function TradeFinder({ league, userTeam }: TradeProps) {
         </div>
       </Card>
 
+      {/* Best Chips to Move */}
+      {chipsToMove.length > 0 && (
+        <Card className="p-6" data-testid="card-chips-to-move">
+          <div className="mb-5">
+            <h3 className="text-base font-bold">Best Chips to Move</h3>
+            <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
+            <p className="text-[10px] text-muted-foreground mt-2">
+              High dynasty value ÷ low starter impact — ideal trade currency to upgrade weak positions
+            </p>
+          </div>
+          <div className="space-y-0">
+            {chipsToMove.map((c, i) => {
+              const sid = c.player.sleeperId ?? c.player.id;
+              return (
+                <div key={sid} className="flex items-center gap-3 py-2.5 border-b border-border/20 last:border-0" data-testid={`chip-row-${sid}`}>
+                  <span className="text-xs text-muted-foreground w-5 text-right flex-shrink-0">{i + 1}.</span>
+                  <div className="flex-1 min-w-0">
+                    <PlayerAvatar id={sid} name={c.player.name} pos={c.player.pos} team={c.player.team ?? ""} size="sm" />
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <Badge
+                      variant="outline"
+                      className={cn("text-[9px]",
+                        c.player.starter
+                          ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                          : "bg-slate-500/10 text-slate-400 border-slate-500/20"
+                      )}
+                    >
+                      {c.player.starter ? "Starter" : "Bench"}
+                    </Badge>
+                    <span className="text-xs font-bold tabular-nums text-[#0b3a7a] dark:text-blue-400">
+                      {c.dynVal.toLocaleString()}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      )}
+
       {/* Trade Proposals */}
       <Card className="p-6" data-testid="card-trade-proposals">
         <div className="flex items-start justify-between mb-5 gap-4">
@@ -756,7 +880,7 @@ export function TradeFinder({ league, userTeam }: TradeProps) {
           <>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {displayedProposals.map((proposal, i) => (
-                <TradeProposalCard key={i} proposal={proposal} mode={proposalMode} userTeam={userTeam} />
+                <TradeProposalCard key={i} proposal={proposal} mode={proposalMode} userTeam={userTeam} league={league} />
               ))}
             </div>
             {!showAllProposals && filteredProposals.length > 12 && (
@@ -785,7 +909,7 @@ export function TradeFinder({ league, userTeam }: TradeProps) {
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     {shown.map((proposal, i) => (
-                      <TradeProposalCard key={i} proposal={proposal} mode={proposalMode} userTeam={userTeam} />
+                      <TradeProposalCard key={i} proposal={proposal} mode={proposalMode} userTeam={userTeam} league={league} />
                     ))}
                   </div>
                 </div>
