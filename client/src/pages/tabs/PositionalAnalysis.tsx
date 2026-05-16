@@ -12,7 +12,7 @@ import type { League, Team, Player, Pick, Tier } from "@/types";
 import { formatPickLabel } from "@/types";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { getSleeperSession } from "@/services/sleeperAuth";
-import { proposeTrade, getDmByMembers, getDmByMembersFull, markDmRead, sendTradeMessage, sendPlainDm, sendDmMessage, fetchDmMessages } from "@/services/sleeperAuthedApi";
+import { proposeTrade, getDmByMembers, getDmByMembersFull, markDmRead, sendTradeMessage, sendDmMessage, fetchDmMessages } from "@/services/sleeperAuthedApi";
 import type { ProposeTradeResult, SleeperTransactionPick, SleeperDmMessage } from "@/services/sleeperAuthedApi";
 import {
   ArrowRightLeft, Target, TrendingUp, TrendingDown, Zap, ShieldCheck,
@@ -936,7 +936,7 @@ function hydrateFromIdea(idea: WinNowIdea, resolvedPick: Pick | null): EditTrade
 }
 
 type SendStatus = "idle" | "sending" | "success" | "error";
-type DmStatus   = "idle" | "sending" | "sent" | "link-failed" | "failed";
+type DmStatus   = "idle" | "sending" | "sent" | "failed";
 
 interface SendTradeModalProps {
   open: boolean;
@@ -957,7 +957,6 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
 
   // Per-transaction dedup flags — prevent duplicate sends across retries/rerenders
   const dmTradeCardSentMap = useState(() => new Map<string, boolean>())[0];
-  const dmToolLinkSentMap  = useState(() => new Map<string, boolean>())[0];
 
   const [expiry, setExpiry] = useState<string>("24h");
 
@@ -1031,10 +1030,8 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
   async function sendTradeDm(trade: ProposeTradeResult, partnerUserId: string, isRetry = false) {
     const txId = trade.transaction_id;
     const tradeCardAlreadySent = dmTradeCardSentMap.has(txId);
-    const toolLinkAlreadySent  = dmToolLinkSentMap.has(txId);
-
-    // On non-retry skip if everything is already done
-    if (!isRetry && tradeCardAlreadySent && toolLinkAlreadySent) return;
+    // On non-retry skip if trade card already sent
+    if (!isRetry && tradeCardAlreadySent) return;
 
     setDmStatus("sending");
     setDmError("");
@@ -1114,7 +1111,7 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
         const myName = session?.display_name || userTeam.owner;
         await sendTradeMessage({
           dmId,
-          text: `@${myName} has proposed a trade in ${league.name} via Dynasty Command`,
+          text: `@${myName} has proposed a trade in ${league.name} via Dynasty Command — statchasers.com/dynasty-command-tool`,
           transactionId: txId,
           leagueId: trade.league_id,
           status: trade.status || "proposed",
@@ -1124,35 +1121,14 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
         });
 
         dmTradeCardSentMap.set(txId, true);
+        setDmStatus("sent");
       } catch (err: any) {
         setDmError(err?.message || "DM could not be delivered.");
         setDmStatus("failed");
         return;
       }
     } else {
-      // Trade card was already sent on a prior attempt — re-fetch dmId for link step
-      try {
-        dmId = await getDmByMembers(partnerUserId);
-      } catch {
-        setDmError("Could not re-open DM thread for tool link retry.");
-        setDmStatus("link-failed");
-        return;
-      }
-    }
-
-    // ── Step 2: tool link DM ──────────────────────────────────────────────────
-    if (toolLinkAlreadySent && !isRetry) {
       setDmStatus("sent");
-      return;
-    }
-    try {
-      if (!dmId) throw new Error("No DM thread available for tool link.");
-      await sendPlainDm(dmId, "https://statchasers.com/dynasty-command-tool/");
-      dmToolLinkSentMap.set(txId, true);
-      setDmStatus("sent");
-    } catch (err: any) {
-      setDmError(err?.message || "Tool link DM failed.");
-      setDmStatus("link-failed");
     }
   }
 
@@ -1605,7 +1581,7 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-[820px] w-full bg-[#07111f] border border-white/[0.10] p-0 overflow-hidden max-h-[95dvh] sm:max-h-[90vh] flex flex-col">
+      <DialogContent className="max-w-[820px] w-full bg-[#07111f] border border-white/[0.10] p-0 overflow-hidden max-h-[calc(90dvh-72px)] sm:max-h-[90vh] flex flex-col">
 
         {/* ── Header ── */}
         <div className="px-4 sm:px-6 pt-4 sm:pt-6 pb-4 flex-shrink-0">
@@ -1766,22 +1742,6 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
                     {dmError && <span className="text-[11px] text-yellow-400/70 leading-snug">{dmError}</span>}
                     {pendingDm && (
                       <button data-testid="btn-retry-trade-dm"
-                        onClick={() => sendTradeDm(pendingDm.trade, pendingDm.partnerUserId, true)}
-                        className="mt-0.5 self-start text-[11px] font-semibold text-yellow-300 hover:text-yellow-100 underline underline-offset-2 transition-colors">
-                        Send DM again
-                      </button>
-                    )}
-                  </div>
-                </div>
-              )}
-              {status === "success" && dmStatus === "link-failed" && (
-                <div className="flex items-start gap-2 rounded-lg bg-yellow-500/10 border border-yellow-500/25 px-4 py-3">
-                  <AlertTriangle className="w-4 h-4 text-yellow-400 flex-shrink-0 mt-px" />
-                  <div className="flex flex-col gap-1 min-w-0">
-                    <span className="text-[12px] text-yellow-300 font-medium leading-snug">Trade sent. Trade card DM sent. Tool link DM failed.</span>
-                    {dmError && <span className="text-[11px] text-yellow-400/70 leading-snug">{dmError}</span>}
-                    {pendingDm && (
-                      <button data-testid="btn-retry-tool-link-dm"
                         onClick={() => sendTradeDm(pendingDm.trade, pendingDm.partnerUserId, true)}
                         className="mt-0.5 self-start text-[11px] font-semibold text-yellow-300 hover:text-yellow-100 underline underline-offset-2 transition-colors">
                         Send DM again

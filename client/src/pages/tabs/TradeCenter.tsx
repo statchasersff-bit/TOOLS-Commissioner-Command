@@ -15,7 +15,7 @@ import { getStaticPickValue } from "@/data/pickValues";
 import { API_BASE } from "@/lib/apiBase";
 import { fetchRosterDraftPicks, fetchLeaguePlayerSettings } from "@/lib/sleeperApi";
 import { getSleeperToken, getSleeperSession } from "@/services/sleeperAuth";
-import { proposeTrade as proposeTradeAuthed, rejectTrade, getDmByMembersFull, sendTradeMessage, sendPlainDm, type ProposeTradeResult } from "@/services/sleeperAuthedApi";
+import { proposeTrade as proposeTradeAuthed, rejectTrade, getDmByMembersFull, sendTradeMessage, type ProposeTradeResult } from "@/services/sleeperAuthedApi";
 import type { League, Team, Tier, Player, Pick, TradeRecord, TradeSide, CrawlStatus } from "@/types";
 import { cn } from "@/lib/utils";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
@@ -1761,7 +1761,7 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
 
       await sendTradeMessage({
         dmId: dmInfo.dm_id,
-        text: `@${myName} has proposed a trade in ${league.name} via Dynasty Command`,
+        text: `@${myName} has proposed a trade in ${league.name} via Dynasty Command — statchasers.com/dynasty-command-tool`,
         transactionId: trade.transaction_id,
         leagueId: trade.league_id,
         status: trade.status || "proposed",
@@ -1769,7 +1769,6 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
         usersInLeagueMap,
         attachTradeCard: true,
       });
-      await sendPlainDm(dmInfo.dm_id, "https://statchasers.com/dynasty-command-tool/");
       setDmStatus("sent");
     } catch (e: any) {
       setDmStatus("failed");

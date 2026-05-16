@@ -800,7 +800,7 @@ export function TradeActionModal({
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) handleClose(); }}>
       <DialogContent
-        className="max-w-[820px] w-full bg-[#07111f] border border-white/[0.10] p-0 overflow-hidden max-h-[90dvh] flex flex-col gap-0 rounded-xl"
+        className="max-w-[820px] w-full bg-[#07111f] border border-white/[0.10] p-0 overflow-hidden max-h-[calc(90dvh-72px)] sm:max-h-[90dvh] flex flex-col gap-0 rounded-xl"
         data-testid={`trade-action-modal-${trade.transactionId}`}
       >
         {/* ── Header ──────────────────────────────────────────────────────────── */}
