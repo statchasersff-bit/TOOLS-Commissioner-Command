@@ -373,9 +373,16 @@ export function LoginScreen({ onNavigate, onLoginSuccess }: ScreenProps) {
         body: JSON.stringify({ email, password }),
       });
       const data = await res.json();
+      console.log("[sc-auth] login response status:", res.status, "body:", data);
       if (!res.ok) { setError(data.error || "Login failed."); return; }
-      onLoginSuccess(data.token ?? "");
-    } catch {
+      const token: string = data.token || data.accessToken || "";
+      console.log("[sc-auth] token received:", !!token, "length:", token.length);
+      if (!token) { setError("Login error: server did not return an auth token."); return; }
+      localStorage.setItem("sc_auth_token", token);
+      console.log("[sc-auth] token saved to localStorage:", !!localStorage.getItem("sc_auth_token"));
+      onLoginSuccess(token);
+    } catch (err) {
+      console.error("[sc-auth] login error:", err);
       setError("Network error. Please try again.");
     } finally {
       setLoading(false);
@@ -546,8 +553,13 @@ export function SignupPasswordScreen({ onNavigate, state, onLoginSuccess }: Scre
         }),
       });
       const data = await res.json();
+      console.log("[sc-auth] register response status:", res.status, "body:", data);
       if (!res.ok) { setError(data.error || "Registration failed."); return; }
-      onLoginSuccess(data.token ?? "");
+      const token: string = data.token || data.accessToken || "";
+      if (!token) { setError("Registration error: server did not return an auth token."); return; }
+      localStorage.setItem("sc_auth_token", token);
+      console.log("[sc-auth] register token saved:", !!localStorage.getItem("sc_auth_token"));
+      onLoginSuccess(token);
     } catch {
       setError("Network error. Please try again.");
     } finally {

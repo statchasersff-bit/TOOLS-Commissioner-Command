@@ -58,10 +58,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const checkSession = useCallback(async () => {
     try {
       setStatus("loading");
+      const storedToken = getStoredToken();
+      const headers = { "Content-Type": "application/json", ...authHeaders() };
+      console.log("[sc-auth] checkSession — token in localStorage:", !!storedToken, "Authorization header set:", !!headers.Authorization);
       const res = await fetch(`${API_BASE}/api/sc-auth/me`, {
         credentials: "include",
-        headers: { "Content-Type": "application/json", ...authHeaders() },
+        headers,
       });
+      console.log("[sc-auth] /me response status:", res.status);
       if (res.status === 401) {
         clearToken();
         setUser(null);
