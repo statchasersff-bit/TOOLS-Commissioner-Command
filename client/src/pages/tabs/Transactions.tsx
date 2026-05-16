@@ -312,22 +312,17 @@ export default function Transactions({ leagueId }: { leagueId: string }) {
 
       {!isLoading && !error && (
         <>
-          <div className="flex items-center justify-between flex-wrap gap-3">
-            <div className="flex items-center gap-1.5">
-              {filters.map((f) => (
-                <button key={f.key}
-                  className={cn("px-3 py-1.5 rounded-full text-xs font-medium transition-all",
-                    filter === f.key ? "bg-[#0b3a7a] text-white shadow-sm" : "bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground"
-                  )}
-                  onClick={() => { setFilter(f.key); setShowCount(50); }}
-                  data-testid={`button-filter-${f.key}`}>
-                  {f.label} <span className="ml-1 opacity-70">{counts[f.key]}</span>
-                </button>
-              ))}
-            </div>
-            <Button variant="outline" size="sm" onClick={fetchTransactions} disabled={isLoading} data-testid="button-refresh-transactions">
-              <RefreshCw className="w-3.5 h-3.5 mr-1.5" /> Refresh
-            </Button>
+          <div className="flex items-center gap-1.5">
+            {filters.map((f) => (
+              <button key={f.key}
+                className={cn("px-3 py-1.5 rounded-full text-xs font-medium transition-all",
+                  filter === f.key ? "bg-[#0b3a7a] text-white shadow-sm" : "bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground"
+                )}
+                onClick={() => { setFilter(f.key); setShowCount(50); }}
+                data-testid={`button-filter-${f.key}`}>
+                {f.label} <span className="ml-1 opacity-70">{counts[f.key]}</span>
+              </button>
+            ))}
           </div>
 
           {visible.length === 0 && (
