@@ -347,8 +347,8 @@ const TAB_ICONS: Record<string, typeof BarChart2> = {
 };
 
 const TAB_SHORT_LABELS: Record<string, string> = {
-  portfolio: "Command",
-  dashboard: "My Team",
+  portfolio: "Home",
+  dashboard: "Team",
   "league-analyzer": "League",
   "trade-center": "Trades",
   "league-market": "Research",
@@ -431,12 +431,6 @@ export function MobileBottomNav({ tabs, activeTab, setActiveTab }: MobileBottomN
               <img src={logoLight} alt="StatChasers" className="block dark:hidden object-contain flex-shrink-0" style={{ width: 18, height: 18 }} />
             </>
           )}
-          <span
-            className="whitespace-nowrap font-semibold leading-none"
-            style={{ fontSize: 10, letterSpacing: "0.02em", color: "rgba(203,213,225,0.50)" }}
-          >
-            {user?.username ? user.username.slice(0, 6) : "You"}
-          </span>
         </div>
 
         {rightTabs.map(renderTab)}
