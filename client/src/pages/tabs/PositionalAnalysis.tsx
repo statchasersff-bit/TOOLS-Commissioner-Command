@@ -2646,12 +2646,9 @@ function RebuildMode({ league, userTeam }: { league: League; userTeam: Team }) {
         for (const youngTarget of partnerYoung.slice(0, 3)) {
           const dynGet = youngTarget.dynv;
           const rdGet  = youngTarget.rdv;
-          // Dynasty fairness: we shouldn't give away more than 22% net dynasty value
-          const dynOverpay = (dynGive - dynGet) / Math.max(dynGive, dynGet, 1);
-          if (dynOverpay > 0.22) continue;
-          // Directional win-now check: partner must receive at least 75% of the rdVal they give up.
-          // We intentionally give MORE win-now value than we receive — that's the whole point.
-          // The old bilateral check (rdDiff > 0.35) was wrong: it rejected the best dynasty trades.
+          // User must gain dynasty value (strict: dynGet > dynGive)
+          if (dynGet <= dynGive) continue;
+          // Redraft balance: partner must give up at least 75% of what they receive
           if (rdGive < rdGet * 0.75) continue;
 
           const ageDelta     = youngTarget.age - chip.player.age; // negative = we got younger
@@ -2666,8 +2663,8 @@ function RebuildMode({ league, userTeam }: { league: League; userTeam: Team }) {
           const pPost   = [...partner.roster.filter(p => (p.sleeperId ?? p.id) !== (youngTarget.sleeperId ?? youngTarget.id)), chip.player];
           const pPostRd = optimizeLineup(pPost, rp).filter(p => p.starter).reduce((s, p) => s + getRedraftValue(p), 0);
           const partnerRdDelta = pPostRd - pPreRd;
-          // Only recommend this trade if the partner's actual lineup win-now doesn't drop
-          if (partnerRdDelta < -150) continue;
+          // Partner's win-now must increase
+          if (partnerRdDelta <= 0) continue;
 
           ideas.push({
             id:          `rb-${partner.id}-${chip.player.sleeperId ?? chip.player.id}-${youngTarget.sleeperId ?? youngTarget.id}`,
@@ -2690,9 +2687,8 @@ function RebuildMode({ league, userTeam }: { league: League; userTeam: Team }) {
           const pickDynGet  = topPick.val + (secondPick ? secondPick.val : 0);
           const useTwo      = !!secondPick && pickDynGet <= dynGive * 1.15;
           const dynGet      = useTwo ? pickDynGet : topPick.val;
-          // Dynasty fairness
-          const dynOverpay  = (dynGive - dynGet) / Math.max(dynGive, dynGet, 1);
-          if (dynOverpay > 0.18) continue;
+          // User must gain dynasty value (strict: dynGet > dynGive)
+          if (dynGet <= dynGive) continue;
 
           const picksArr = useTwo ? [topPick, secondPick!] : [topPick];
           const rdGet    = 0; // picks have no current-season redraft value
@@ -2711,6 +2707,9 @@ function RebuildMode({ league, userTeam }: { league: League; userTeam: Team }) {
           const pPost2   = [...partner.roster, chip.player];
           const pPostRd2 = optimizeLineup(pPost2, rp2).filter(p => p.starter).reduce((s, p) => s + getRedraftValue(p), 0);
           const partnerRdDelta2 = pPostRd2 - pPreRd2;
+
+          // Partner's win-now must increase (they receive chip player)
+          if (partnerRdDelta2 <= 0) continue;
 
           ideas.push({
             id:          `rb-pick-${partner.id}-${chip.player.sleeperId ?? chip.player.id}`,
