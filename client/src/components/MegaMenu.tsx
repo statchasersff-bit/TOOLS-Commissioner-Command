@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback } from "react";
+import { useSleeper } from "@/contexts/SleeperContext";
 import { cn } from "@/lib/utils";
 import {
   BarChart2, LayoutDashboard, Users, Share2,
@@ -363,6 +364,7 @@ interface MobileBottomNavProps {
 }
 
 export function MobileBottomNav({ tabs, activeTab, setActiveTab }: MobileBottomNavProps) {
+  const { user } = useSleeper();
   const half = Math.floor(tabs.length / 2);
   const leftTabs  = tabs.slice(0, half);
   const rightTabs = tabs.slice(half);
@@ -405,10 +407,20 @@ export function MobileBottomNav({ tabs, activeTab, setActiveTab }: MobileBottomN
       <div className="flex items-stretch">
         {leftTabs.map(renderTab)}
 
-        {/* Center logo */}
+        {/* Center avatar */}
         <div className="flex-shrink-0 w-14 flex flex-col items-center justify-center py-1.5">
-          <img src={logoDark} alt="StatChasers" className="hidden dark:block w-8 h-8 object-contain" />
-          <img src={logoLight} alt="StatChasers" className="block dark:hidden w-8 h-8 object-contain" />
+          {user?.avatar ? (
+            <img
+              src={`https://sleepercdn.com/avatars/thumbs/${user.avatar}`}
+              alt={user.username ?? ""}
+              className="w-8 h-8 rounded-full object-cover ring-1 ring-white/10"
+            />
+          ) : (
+            <>
+              <img src={logoDark} alt="StatChasers" className="hidden dark:block w-8 h-8 object-contain" />
+              <img src={logoLight} alt="StatChasers" className="block dark:hidden w-8 h-8 object-contain" />
+            </>
+          )}
         </div>
 
         {rightTabs.map(renderTab)}
