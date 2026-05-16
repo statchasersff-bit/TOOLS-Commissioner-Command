@@ -123,12 +123,12 @@ function UnauthFlow({ onLoginSuccess }: { onLoginSuccess: () => void }) {
 
 // The outer gate — decides which layer to render
 export function AuthGate({ children }: { children: React.ReactNode }) {
-  const { status, checkSession } = useAuth();
+  const { status, onLoginSuccess } = useAuth();
 
   if (status === "loading") return <LoadingScreen />;
 
   if (status === "unauthenticated") {
-    return <UnauthFlow onLoginSuccess={checkSession} />;
+    return <UnauthFlow onLoginSuccess={onLoginSuccess} />;
   }
 
   if (status === "needs-sleeper") {

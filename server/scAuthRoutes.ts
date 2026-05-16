@@ -1,3 +1,4 @@
+import jwt from "jsonwebtoken";
 import type { Express, Request } from "express";
 import {
   sendVerificationCode,
@@ -12,6 +13,26 @@ import {
   disconnectSleeper,
   decryptToken,
 } from "./scAuth";
+
+const JWT_SECRET = process.env.SESSION_SECRET || "fallback-dev-secret";
+const JWT_EXPIRES = "30d";
+
+function signUserJwt(userId: string): string {
+  return jwt.sign({ scUserId: userId }, JWT_SECRET, { expiresIn: JWT_EXPIRES });
+}
+
+function getUserIdFromRequest(req: Request): string | null {
+  const auth = req.headers.authorization;
+  if (auth?.startsWith("Bearer ")) {
+    try {
+      const payload = jwt.verify(auth.slice(7), JWT_SECRET) as any;
+      return payload.scUserId ?? null;
+    } catch {
+      return null;
+    }
+  }
+  return (req.session as any).scUserId ?? null;
+}
 
 function getIp(req: Request): string {
   const forwarded = req.headers["x-forwarded-for"];
@@ -68,10 +89,8 @@ export function registerScAuthRoutes(app: Express): void {
       const result = await registerUser(email, password);
       if (!result.ok) return res.status(400).json({ error: result.error });
       (req.session as any).scUserId = result.userId;
-      await new Promise<void>((resolve, reject) => {
-        req.session.save(err => (err ? reject(err) : resolve()));
-      });
-      res.json({ ok: true });
+      req.session.save(() => {});
+      res.json({ ok: true, token: signUserJwt(result.userId) });
     } catch (err: any) {
       console.error("[sc-auth] register error:", err.message);
       res.status(500).json({ error: "Registration failed. Please try again." });
@@ -86,10 +105,8 @@ export function registerScAuthRoutes(app: Express): void {
       const result = await loginUser(email, password);
       if (!result.ok) return res.status(401).json({ error: result.error });
       (req.session as any).scUserId = result.userId;
-      await new Promise<void>((resolve, reject) => {
-        req.session.save(err => (err ? reject(err) : resolve()));
-      });
-      res.json({ ok: true });
+      req.session.save(() => {});
+      res.json({ ok: true, token: signUserJwt(result.userId) });
     } catch (err: any) {
       console.error("[sc-auth] login error:", err.message);
       res.status(500).json({ error: "Login failed. Please try again." });
@@ -107,7 +124,7 @@ export function registerScAuthRoutes(app: Express): void {
   // GET /api/sc-auth/me
   app.get("/api/sc-auth/me", async (req, res) => {
     try {
-      const userId = (req.session as any).scUserId as string | undefined;
+      const userId = getUserIdFromRequest(req);
       if (!userId) return res.status(401).json({ error: "Not authenticated" });
       const user = await getUser(userId);
       if (!user) {
@@ -156,7 +173,7 @@ export function registerScAuthRoutes(app: Express): void {
   // POST /api/sc-auth/connect-sleeper
   app.post("/api/sc-auth/connect-sleeper", async (req, res) => {
     try {
-      const userId = (req.session as any).scUserId as string | undefined;
+      const userId = getUserIdFromRequest(req);
       if (!userId) return res.status(401).json({ error: "Not authenticated" });
       const { sleeperUsername, sleeperUserId, token } = req.body as {
         sleeperUsername?: string; sleeperUserId?: string; token?: string;
@@ -175,7 +192,7 @@ export function registerScAuthRoutes(app: Express): void {
   // DELETE /api/sc-auth/disconnect-sleeper
   app.delete("/api/sc-auth/disconnect-sleeper", async (req, res) => {
     try {
-      const userId = (req.session as any).scUserId as string | undefined;
+      const userId = getUserIdFromRequest(req);
       if (!userId) return res.status(401).json({ error: "Not authenticated" });
       await disconnectSleeper(userId);
       res.json({ ok: true });

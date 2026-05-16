@@ -2,6 +2,22 @@ import { createContext, useContext, useState, useCallback, useEffect, type React
 import { saveSleeperSession, clearSleeperSession, type SleeperSession } from "@/services/sleeperAuth";
 import { API_BASE } from "@/lib/apiBase";
 
+const SC_TOKEN_KEY = "sc_auth_token";
+
+function getStoredToken(): string | null {
+  try { return localStorage.getItem(SC_TOKEN_KEY); } catch { return null; }
+}
+function saveToken(token: string): void {
+  try { localStorage.setItem(SC_TOKEN_KEY, token); } catch {}
+}
+function clearToken(): void {
+  try { localStorage.removeItem(SC_TOKEN_KEY); } catch {}
+}
+function authHeaders(): Record<string, string> {
+  const token = getStoredToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 export interface ScUser {
   id: string;
   email: string;
@@ -21,6 +37,7 @@ interface AuthContextValue {
   sleeperInfo: SleeperInfo | null;
   checkSession: () => Promise<void>;
   logout: () => Promise<void>;
+  onLoginSuccess: (token: string) => Promise<void>;
   onSleeperConnected: (username: string, userId: string, token: string) => Promise<void>;
   onSleeperDisconnected: () => Promise<void>;
 }
@@ -41,8 +58,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const checkSession = useCallback(async () => {
     try {
       setStatus("loading");
-      const res = await fetch(`${API_BASE}/api/sc-auth/me`, { credentials: "include" });
+      const res = await fetch(`${API_BASE}/api/sc-auth/me`, {
+        credentials: "include",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+      });
       if (res.status === 401) {
+        clearToken();
         setUser(null);
         setSleeperInfo(null);
         setStatus("unauthenticated");
@@ -50,6 +71,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       const data = await res.json();
       if (!data.user) {
+        clearToken();
         setUser(null);
         setSleeperInfo(null);
         setStatus("unauthenticated");
@@ -83,10 +105,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     checkSession();
   }, [checkSession]);
 
+  const onLoginSuccess = useCallback(async (token: string) => {
+    saveToken(token);
+    await checkSession();
+  }, [checkSession]);
+
   const logout = useCallback(async () => {
     try {
-      await fetch(`${API_BASE}/api/sc-auth/logout`, { method: "POST", credentials: "include" });
+      await fetch(`${API_BASE}/api/sc-auth/logout`, {
+        method: "POST",
+        credentials: "include",
+        headers: authHeaders(),
+      });
     } catch { /* ignore */ }
+    clearToken();
     clearSleeperSession();
     setUser(null);
     setSleeperInfo(null);
@@ -96,7 +128,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const onSleeperConnected = useCallback(async (username: string, userId: string, token: string) => {
     await fetch(`${API_BASE}/api/sc-auth/connect-sleeper`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...authHeaders() },
       credentials: "include",
       body: JSON.stringify({ sleeperUsername: username, sleeperUserId: userId, token }),
     });
@@ -104,14 +136,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [checkSession]);
 
   const onSleeperDisconnected = useCallback(async () => {
-    await fetch(`${API_BASE}/api/sc-auth/disconnect-sleeper`, { method: "DELETE", credentials: "include" });
+    await fetch(`${API_BASE}/api/sc-auth/disconnect-sleeper`, {
+      method: "DELETE",
+      credentials: "include",
+      headers: authHeaders(),
+    });
     clearSleeperSession();
     setSleeperInfo(null);
     setStatus("needs-sleeper");
   }, []);
 
   return (
-    <AuthContext.Provider value={{ status, user, sleeperInfo, checkSession, logout, onSleeperConnected, onSleeperDisconnected }}>
+    <AuthContext.Provider value={{ status, user, sleeperInfo, checkSession, logout, onLoginSuccess, onSleeperConnected, onSleeperDisconnected }}>
       {children}
     </AuthContext.Provider>
   );

@@ -152,7 +152,7 @@ export type AuthScreen =
 interface ScreenProps {
   onNavigate: (screen: AuthScreen, state?: Partial<AuthState>) => void;
   state: AuthState;
-  onLoginSuccess: () => void;
+  onLoginSuccess: (token: string) => void;
 }
 
 export interface AuthState {
@@ -374,7 +374,7 @@ export function LoginScreen({ onNavigate, onLoginSuccess }: ScreenProps) {
       });
       const data = await res.json();
       if (!res.ok) { setError(data.error || "Login failed."); return; }
-      onLoginSuccess();
+      onLoginSuccess(data.token ?? "");
     } catch {
       setError("Network error. Please try again.");
     } finally {
@@ -547,7 +547,7 @@ export function SignupPasswordScreen({ onNavigate, state, onLoginSuccess }: Scre
       });
       const data = await res.json();
       if (!res.ok) { setError(data.error || "Registration failed."); return; }
-      onLoginSuccess();
+      onLoginSuccess(data.token ?? "");
     } catch {
       setError("Network error. Please try again.");
     } finally {
