@@ -1,4 +1,5 @@
 import express, { type Request, Response, NextFunction } from "express";
+import cors from "cors";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import { registerRoutes } from "./routes";
@@ -13,6 +14,7 @@ const BUILTIN_ORIGINS = [
   "https://statchasers.com",
   "https://www.statchasers.com",
   "https://dynasty-command.pages.dev",
+  "https://dynasty-command.replit.app",
 ];
 const CORS_ORIGINS = [
   ...BUILTIN_ORIGINS,
@@ -21,21 +23,30 @@ const CORS_ORIGINS = [
     : []),
 ];
 
-app.use((req, res, next) => {
-  const origin = req.headers.origin;
-  if (origin && (CORS_ORIGINS.includes(origin) || CORS_ORIGINS.includes("*"))) {
-    res.setHeader("Access-Control-Allow-Origin", origin);
-    res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
-    res.setHeader("Access-Control-Allow-Credentials", "true");
-    res.setHeader("Access-Control-Max-Age", "86400");
-  }
-  if (req.method === "OPTIONS") {
-    res.sendStatus(204);
-    return;
-  }
-  next();
-});
+const corsOptions: cors.CorsOptions = {
+  origin(origin, callback) {
+    // Allow requests with no origin (server-to-server, curl, etc.)
+    if (!origin) return callback(null, true);
+    // Allow known origins + Replit dev/preview domains
+    if (
+      CORS_ORIGINS.includes(origin) ||
+      /\.replit\.dev$/.test(origin) ||
+      /\.replit\.app$/.test(origin) ||
+      /^https?:\/\/localhost(:\d+)?$/.test(origin)
+    ) {
+      return callback(null, true);
+    }
+    // Unknown origin — no CORS headers, but don't 500
+    callback(null, false);
+  },
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  maxAge: 86400,
+};
+
+app.use(cors(corsOptions));
+app.options("/{*path}", cors(corsOptions));
 
 declare module "http" {
   interface IncomingMessage {
