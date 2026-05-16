@@ -337,7 +337,7 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
                 <img src={logoDark} alt="StatChasers" className="w-8 h-8 md:w-9 md:h-9 hidden dark:block" />
                 <img src={logoLight} alt="StatChasers" className="w-8 h-8 md:w-9 md:h-9 block dark:hidden" />
               </div>
-              <div className="leading-none">
+              <div className="leading-none hidden md:block">
                 <h1 className="text-sm md:text-base font-bold text-foreground leading-tight tracking-tight" data-testid="text-app-title">
                   StatChasers
                 </h1>
@@ -347,7 +347,7 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
 
             {/* ── League selector (centered) ── */}
             {sleeper.isConnected && (
-              <div className="hidden md:flex items-center gap-1.5 flex-shrink-0">
+              <div className="flex items-center gap-1.5 flex-shrink-0">
                 <LeagueSelector
                   leagues={sleeperLeaguesAsLeagues}
                   selectedLeagueId={selectedLeagueId}
