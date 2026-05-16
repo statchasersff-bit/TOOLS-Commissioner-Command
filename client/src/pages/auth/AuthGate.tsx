@@ -96,7 +96,7 @@ function AccountButton() {
 }
 
 // Unauthenticated flow — manages which auth screen to show
-function UnauthFlow({ onLoginSuccess }: { onLoginSuccess: () => void }) {
+function UnauthFlow({ onLoginSuccess }: { onLoginSuccess: (token: string) => void }) {
   const [screen, setScreen] = useState<AuthScreen>("landing");
   const [flowState, setFlowState] = useState<AuthState>(defaultState);
 

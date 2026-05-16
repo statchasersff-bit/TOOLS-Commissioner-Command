@@ -24,3 +24,9 @@ id = "sazs3jvthYzTqyrlpFv4o"
 uri = "file://dist/dynasty-command.zip"
 type = "unspecified"
 title = "dynasty-command.zip — create_verification_code fix"
+
+[[outputs]]
+id = "KJqu1P4-2pJdPwNiiBv45"
+uri = "file://dynasty-command-frontend.zip"
+type = "unspecified"
+title = "Dynasty Command — Static Frontend Build"
