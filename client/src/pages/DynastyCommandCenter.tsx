@@ -387,36 +387,9 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
                       <img src={logoLight} alt="StatChasers" className="w-7 h-7 block dark:hidden" />
                       <div>
                         <p className="text-[13px] font-black text-white leading-tight">StatChasers</p>
-                        <p className="text-[10px] font-semibold leading-tight" style={{ color: "#d4af37" }}>Dynasty Command Center</p>
+                        <p className="text-[10px] font-semibold leading-tight" style={{ color: "#d4af37" }}>Dynasty Command</p>
                       </div>
                     </div>
-                  </div>
-
-                  {/* Nav items */}
-                  <div className="py-1.5">
-                    {([
-                      { tab: "portfolio",      sub: "portfolio-summary",  label: "Command Center",  Icon: LayoutDashboard },
-                      { tab: "dashboard",      sub: "my-team",            label: "My Team",         Icon: User },
-                      { tab: "league-analyzer",sub: "power-rankings",     label: "League Analyzer", Icon: Trophy },
-                      { tab: "trade-center",   sub: "trade-calculator",   label: "Trade Center",    Icon: ArrowRightLeft },
-                      { tab: "league-market",  sub: "analysis",           label: "Research",        Icon: TrendingUp },
-                      { tab: "live-draft",     sub: "draft-board",        label: "Live Draft",      Icon: Zap },
-                    ] as const).map(({ tab, sub, label, Icon }) => {
-                      const isActive = activeMainTab === tab;
-                      return (
-                        <button
-                          key={tab}
-                          onClick={() => { handleMainTabChange(tab); handleSubTabChange(sub); setLogoMenuOpen(false); }}
-                          data-testid={`button-logo-nav-${tab}`}
-                          className="w-full flex items-center gap-3 px-4 py-2.5 text-left transition-all duration-150"
-                          style={{ background: isActive ? "rgba(212,175,55,0.07)" : "transparent" }}
-                        >
-                          <Icon style={{ width: 14, height: 14, flexShrink: 0, color: isActive ? "#d4af37" : "rgba(203,213,225,0.40)" }} />
-                          <span style={{ fontSize: 13, fontWeight: isActive ? 700 : 500, color: isActive ? "#fff" : "rgba(203,213,225,0.55)" }}>{label}</span>
-                          {isActive && <span className="ml-auto w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: "#d4af37" }} />}
-                        </button>
-                      );
-                    })}
                   </div>
 
                   {/* Feedback item */}
