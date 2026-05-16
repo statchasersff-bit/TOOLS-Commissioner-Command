@@ -518,7 +518,7 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
         <SubTabs tabs={currentMainConfig.subTabs} activeTab={activeSubTab} setActiveTab={handleSubTabChange} />
       )}
 
-      <main className="max-w-7xl mx-auto px-2 sm:px-3 md:px-4 py-4 sm:py-6 md:py-8 pb-24 md:pb-8 relative">
+      <main className="max-w-7xl mx-auto px-2 sm:px-3 md:px-4 py-4 sm:py-6 md:py-8 md:pb-8 relative" style={{ paddingBottom: "calc(80px + env(safe-area-inset-bottom, 0px))" }}>
         {showLoadingOverlay && (
           <div className="absolute inset-0 z-30 flex items-start justify-center pt-24" data-testid="recalculating-overlay">
             <div className="bg-background/90 backdrop-blur-sm border border-border rounded-lg px-5 py-3 shadow-lg flex items-center gap-3">

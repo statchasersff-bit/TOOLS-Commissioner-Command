@@ -378,42 +378,68 @@ export function MobileBottomNav({ tabs, activeTab, setActiveTab }: MobileBottomN
         key={tab.id}
         onClick={() => setActiveTab(tab.id)}
         data-testid={`bottom-nav-${tab.id}`}
-        className={cn(
-          "flex-1 flex flex-col items-center justify-center gap-0.5 py-2.5 transition-all duration-150 active:scale-95 relative",
-          isActive ? "text-[#d4af37]" : "text-white/35 hover:text-white/60"
-        )}
+        className="flex-1 flex flex-col items-center justify-center relative"
+        style={{ minWidth: 0 }}
       >
+        {/* Active top indicator */}
         {isActive && (
-          <span className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-[2px] rounded-full bg-[#d4af37]" />
+          <span
+            className="absolute top-0 left-1/2 -translate-x-1/2 rounded-full"
+            style={{ width: 20, height: 2.5, background: "#d4af37" }}
+          />
         )}
-        <Icon className="w-5 h-5 flex-shrink-0" />
-        <span className="text-[9px] font-semibold tracking-wide leading-none">{label}</span>
+        {/* Icon + label pill */}
+        <div
+          className="flex flex-col items-center gap-1 px-3 py-1.5 rounded-[14px] transition-all duration-150"
+          style={isActive ? { background: "rgba(212,175,55,0.10)" } : undefined}
+        >
+          <Icon
+            className="flex-shrink-0"
+            style={{
+              width: 21, height: 21,
+              color: isActive ? "#d4af37" : "rgba(203,213,225,0.55)",
+            }}
+          />
+          <span
+            className="whitespace-nowrap font-semibold tracking-wide leading-none"
+            style={{
+              fontSize: 10,
+              color: isActive ? "#d4af37" : "rgba(203,213,225,0.55)",
+            }}
+          >
+            {label}
+          </span>
+        </div>
       </button>
     );
   };
 
   return (
     <nav
-      className="fixed bottom-0 left-0 right-0 z-50 md:hidden"
+      className="fixed bottom-0 left-0 right-0 md:hidden"
       style={{
-        background: "rgba(8,11,20,0.97)",
-        backdropFilter: "blur(16px)",
-        WebkitBackdropFilter: "blur(16px)",
-        borderTop: "1px solid rgba(255,255,255,0.07)",
+        zIndex: 1000,
+        height: "calc(68px + env(safe-area-inset-bottom, 0px))",
         paddingBottom: "env(safe-area-inset-bottom, 0px)",
+        background: "rgba(8,15,34,0.94)",
+        backdropFilter: "blur(14px)",
+        WebkitBackdropFilter: "blur(14px)",
+        borderTop: "1px solid rgba(212,175,55,0.18)",
+        boxShadow: "0 -8px 24px rgba(0,0,0,0.35)",
       }}
       data-testid="mobile-bottom-nav"
     >
-      <div className="flex items-stretch">
+      <div className="flex items-stretch h-[68px]">
         {leftTabs.map(renderTab)}
 
         {/* Center avatar */}
-        <div className="flex-shrink-0 w-14 flex flex-col items-center justify-center py-1.5">
+        <div className="flex-shrink-0 w-14 flex flex-col items-center justify-center">
           {user?.avatar ? (
             <img
               src={`https://sleepercdn.com/avatars/thumbs/${user.avatar}`}
               alt={user.username ?? ""}
-              className="w-8 h-8 rounded-full object-cover ring-1 ring-white/10"
+              className="w-9 h-9 rounded-full object-cover"
+              style={{ boxShadow: "0 0 0 2px rgba(212,175,55,0.30)" }}
             />
           ) : (
             <>
