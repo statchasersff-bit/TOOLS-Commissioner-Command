@@ -112,23 +112,15 @@ export function FeedbackPage() {
 
       {/* Form card — centered, capped width */}
       <div className="max-w-lg">
-        <div
-          className="overflow-hidden"
-          style={{
-            background: "linear-gradient(160deg, #0f2a47 0%, #0b1e3a 55%, #091629 100%)",
-            border: "1px solid rgba(212,175,55,0.22)",
-            boxShadow: "0 8px 32px rgba(0,0,0,0.30), inset 0 1px 0 rgba(255,255,255,0.04)",
-            borderRadius: 20,
-          }}
-        >
+        <div className="overflow-hidden rounded-2xl bg-card border border-border/60 shadow-sm">
           {/* Card header */}
-          <div className="flex items-center gap-3 px-6 py-5" style={{ borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
+          <div className="flex items-center gap-3 px-6 py-5 border-b border-border/50">
             <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: "rgba(212,175,55,0.12)", border: "1px solid rgba(212,175,55,0.25)" }}>
               <MessageSquare className="w-4 h-4" style={{ color: "#d4af37" }} />
             </div>
             <div>
-              <h3 className="text-[15px] font-bold text-white leading-tight">Help Improve Dynasty Command</h3>
-              <p className="text-[11px] text-white/35 mt-0.5">Bug reports, feature requests, or general feedback</p>
+              <h3 className="text-[15px] font-bold text-foreground leading-tight">Help Improve Dynasty Command</h3>
+              <p className="text-[11px] text-muted-foreground mt-0.5">Bug reports, feature requests, or general feedback</p>
             </div>
           </div>
 
@@ -139,8 +131,8 @@ export function FeedbackPage() {
                 <CheckCircle2 className="w-7 h-7 text-emerald-400" />
               </div>
               <div>
-                <p className="text-[17px] font-bold text-white">Thanks — feedback sent.</p>
-                <p className="text-[13px] text-white/40 mt-1">We appreciate you helping make Dynasty Command better.</p>
+                <p className="text-[17px] font-bold text-foreground">Thanks — feedback sent.</p>
+                <p className="text-[13px] text-muted-foreground mt-1">We appreciate you helping make Dynasty Command better.</p>
               </div>
               <button
                 type="button"
@@ -156,36 +148,35 @@ export function FeedbackPage() {
             <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
               {/* Feedback type */}
               <div className="space-y-1.5">
-                <label className="text-[11px] font-semibold text-white/50 uppercase tracking-wide">Feedback Type</label>
+                <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Feedback Type</label>
                 <div className="relative">
                   <button
                     type="button"
                     data-testid="button-feedback-type"
                     onClick={() => setTypeOpen(v => !v)}
-                    className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm text-white text-left transition-colors"
-                    style={{ background: "rgba(255,255,255,0.04)", border: `1px solid ${typeOpen ? "rgba(212,175,55,0.40)" : "rgba(255,255,255,0.10)"}` }}
+                    className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm text-foreground text-left transition-colors bg-muted/40 hover:bg-muted/60"
+                    style={{ border: `1px solid ${typeOpen ? "rgba(212,175,55,0.40)" : "hsl(var(--border))"}` }}
                   >
                     <selectedType.Icon className={cn("w-4 h-4 flex-shrink-0", selectedType.color)} />
                     <span className="flex-1 font-medium">{selectedType.label}</span>
-                    <ChevronDown className={cn("w-4 h-4 text-white/30 transition-transform", typeOpen && "rotate-180")} />
+                    <ChevronDown className={cn("w-4 h-4 text-muted-foreground transition-transform", typeOpen && "rotate-180")} />
                   </button>
                   {typeOpen && (
                     <>
                       <div className="fixed inset-0 z-10" onClick={() => setTypeOpen(false)} />
-                      <div
-                        className="absolute left-0 top-full mt-1.5 w-full z-20 overflow-hidden py-1"
-                        style={{ background: "rgba(8,18,35,0.98)", border: "1px solid rgba(255,255,255,0.10)", borderRadius: 12, boxShadow: "0 12px 32px rgba(0,0,0,0.50)" }}
-                      >
+                      <div className="absolute left-0 top-full mt-1.5 w-full z-20 overflow-hidden py-1 rounded-xl bg-popover border border-border shadow-lg shadow-black/20">
                         {FEEDBACK_TYPES.map(t => (
                           <button
                             key={t.value}
                             type="button"
                             onClick={() => { setType(t.value); setTypeOpen(false); }}
-                            className="w-full flex items-center gap-3 px-3.5 py-2.5 text-sm text-left transition-colors hover:bg-white/5"
-                            style={{ background: type === t.value ? "rgba(212,175,55,0.07)" : "transparent" }}
+                            className={cn(
+                              "w-full flex items-center gap-3 px-3.5 py-2.5 text-sm text-left transition-colors hover:bg-muted/60",
+                              type === t.value && "bg-muted/40"
+                            )}
                           >
                             <t.Icon className={cn("w-4 h-4 flex-shrink-0", t.color)} />
-                            <span className={cn("font-medium", type === t.value ? "text-white" : "text-white/60")}>{t.label}</span>
+                            <span className={cn("font-medium", type === t.value ? "text-foreground" : "text-muted-foreground")}>{t.label}</span>
                             {type === t.value && <span className="ml-auto w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: "#d4af37" }} />}
                           </button>
                         ))}
@@ -197,7 +188,7 @@ export function FeedbackPage() {
 
               {/* Message */}
               <div className="space-y-1.5">
-                <label className="text-[11px] font-semibold text-white/50 uppercase tracking-wide">Message <span style={{ color: "#d4af37" }}>*</span></label>
+                <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Message <span style={{ color: "#d4af37" }}>*</span></label>
                 <textarea
                   value={message}
                   onChange={e => setMessage(e.target.value)}
@@ -205,13 +196,13 @@ export function FeedbackPage() {
                   placeholder="Tell us what you're experiencing or what you'd like to see…"
                   rows={4}
                   required
-                  className="w-full bg-[#0b1a2e] border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder:text-white/25 focus:outline-none focus:border-[#d4af37]/60 focus:ring-1 focus:ring-[#d4af37]/20 transition-colors resize-none"
+                  className="w-full bg-muted/30 border border-border rounded-xl px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-[#d4af37]/60 focus:ring-1 focus:ring-[#d4af37]/20 transition-colors resize-none"
                 />
               </div>
 
               {/* Optional email */}
               <div className="space-y-1.5">
-                <label className="text-[11px] font-semibold text-white/50 uppercase tracking-wide">Email <span className="text-white/25">(optional)</span></label>
+                <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Email <span className="text-muted-foreground/50">(optional)</span></label>
                 <input
                   type="email"
                   value={email}
@@ -219,21 +210,21 @@ export function FeedbackPage() {
                   data-testid="input-feedback-email"
                   placeholder="you@example.com"
                   autoComplete="email"
-                  className="w-full bg-[#0b1a2e] border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/25 focus:outline-none focus:border-[#d4af37]/60 focus:ring-1 focus:ring-[#d4af37]/20 transition-colors"
+                  className="w-full bg-muted/30 border border-border rounded-xl px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-[#d4af37]/60 focus:ring-1 focus:ring-[#d4af37]/20 transition-colors"
                 />
               </div>
 
               {/* Screenshot upload */}
               <div className="space-y-1.5">
-                <label className="text-[11px] font-semibold text-white/50 uppercase tracking-wide">Screenshot <span className="text-white/25">(optional)</span></label>
+                <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Screenshot <span className="text-muted-foreground/50">(optional)</span></label>
                 {screenshot ? (
                   <div className="flex items-center gap-3 px-3.5 py-2.5 rounded-xl" style={{ background: "rgba(34,197,94,0.06)", border: "1px solid rgba(34,197,94,0.20)" }}>
                     <Image className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-                    <span className="text-[13px] text-emerald-300 flex-1 truncate">{screenshot.name}</span>
+                    <span className="text-[13px] text-emerald-500 dark:text-emerald-300 flex-1 truncate">{screenshot.name}</span>
                     <button
                       type="button"
                       onClick={() => { setScreenshot(null); if (fileRef.current) fileRef.current.value = ""; }}
-                      className="text-white/30 hover:text-white/60 transition-colors"
+                      className="text-muted-foreground/50 hover:text-muted-foreground transition-colors"
                     ><X className="w-3.5 h-3.5" /></button>
                   </div>
                 ) : (
@@ -241,12 +232,11 @@ export function FeedbackPage() {
                     type="button"
                     data-testid="button-feedback-screenshot"
                     onClick={() => fileRef.current?.click()}
-                    className="w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-sm text-white/40 hover:text-white/60 transition-colors"
-                    style={{ background: "rgba(255,255,255,0.03)", border: "1px dashed rgba(255,255,255,0.12)" }}
+                    className="w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-sm text-muted-foreground hover:text-foreground transition-colors bg-muted/20 border border-dashed border-border hover:border-border/80"
                   >
                     <Image className="w-4 h-4" />
                     <span>Attach a screenshot</span>
-                    <span className="ml-auto text-[11px] text-white/20">PNG, JPG &lt; 5 MB</span>
+                    <span className="ml-auto text-[11px] text-muted-foreground/50">PNG, JPG &lt; 5 MB</span>
                   </button>
                 )}
                 <input
@@ -278,7 +268,7 @@ export function FeedbackPage() {
                 {loading ? "Sending…" : "Send Feedback"}
               </button>
 
-              <p className="text-center text-[11px] text-white/20 pb-1">
+              <p className="text-center text-[11px] text-muted-foreground/50 pb-1">
                 Feedback is anonymous unless you include your email.
               </p>
             </form>
