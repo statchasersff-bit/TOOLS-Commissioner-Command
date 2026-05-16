@@ -276,32 +276,38 @@ export function ShareTeam({ league, userTeam }: Props) {
         {innerTab === "share" && (
           <ToggleSwitch id="hide-values" label="Hide Values" checked={hideValues} onCheckedChange={setHideValues} />
         )}
-        <div className="ml-auto flex gap-1 p-1 rounded-full bg-muted/40 border border-border/40">
+        <div className="ml-auto flex gap-1 p-1 rounded-xl bg-white/[0.03] border border-white/6">
           <button
             onClick={() => setInnerTab("share")}
             data-testid="tab-inner-share"
             className={cn(
-              "flex items-center gap-1.5 px-4 py-1.5 rounded-full text-sm font-semibold transition-all",
+              "relative flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-[11px] font-semibold transition-all duration-200",
               innerTab === "share"
-                ? "bg-background text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
+                ? "bg-[#0b3a7a]/60 text-white border border-[#d4af37]/25"
+                : "text-white/35 hover:text-white/60"
             )}
           >
             <Share2 className="w-3.5 h-3.5" />
             List View
+            {innerTab === "share" && (
+              <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-6 h-[2px] rounded-full bg-[#d4af37]" />
+            )}
           </button>
           <button
             onClick={() => setInnerTab("field-view")}
             data-testid="tab-inner-field-view"
             className={cn(
-              "flex items-center gap-1.5 px-4 py-1.5 rounded-full text-sm font-semibold transition-all",
+              "relative flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-[11px] font-semibold transition-all duration-200",
               innerTab === "field-view"
-                ? "bg-background text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
+                ? "bg-[#0b3a7a]/60 text-white border border-[#d4af37]/25"
+                : "text-white/35 hover:text-white/60"
             )}
           >
             <LayoutGrid className="w-3.5 h-3.5" />
             Field View
+            {innerTab === "field-view" && (
+              <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-6 h-[2px] rounded-full bg-[#d4af37]" />
+            )}
           </button>
         </div>
       </div>

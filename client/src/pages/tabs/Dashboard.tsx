@@ -986,7 +986,7 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
 
   // ── View toggle ──────────────────────────────────────────────────
   const viewToggle = (
-    <div className="flex items-center gap-0.5 bg-muted/50 rounded-lg p-0.5 flex-shrink-0">
+    <div className="flex items-center gap-1 p-1 rounded-xl bg-white/[0.03] border border-white/6 flex-shrink-0">
       {([
         { id: "table",   icon: List,      label: "Table"          },
         { id: "economy", icon: Coins,      label: "Dynasty Window" },
@@ -999,14 +999,17 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
           title={label}
           data-testid={`view-toggle-${id}`}
           className={cn(
-            "flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-all",
+            "relative flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-all duration-200",
             viewMode === id
-              ? "bg-background shadow text-foreground"
-              : "text-muted-foreground hover:text-foreground"
+              ? "bg-[#0b3a7a]/60 text-white border border-[#d4af37]/25"
+              : "text-white/35 hover:text-white/60"
           )}
         >
           <Icon className="w-3.5 h-3.5" />
           <span className="hidden sm:inline">{label}</span>
+          {viewMode === id && (
+            <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-6 h-[2px] rounded-full bg-[#d4af37]" />
+          )}
         </button>
       ))}
     </div>
