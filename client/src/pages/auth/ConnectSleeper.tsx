@@ -2,6 +2,7 @@ import { useState, useRef, type FormEvent } from "react";
 import HCaptcha from "@hcaptcha/react-hcaptcha";
 import { ArrowLeft, Loader2, Mail, RefreshCw, Shield, User, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
+import logoDark from "@assets/statchasers_logo_transparent_dark_1772764844282.png";
 import {
   requestSleeperCode,
   loginWithCredentials,
@@ -135,11 +136,8 @@ export function ConnectSleeperScreen() {
     <div className="min-h-screen bg-[#060d1a] flex items-center justify-center p-4">
       <div className="w-full max-w-[420px]">
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-[#0b3a7a]/40 border border-[#d4af37]/30 mb-4 shadow-lg shadow-[#0b3a7a]/20">
-            <Shield className="w-7 h-7 text-[#d4af37]" />
-          </div>
-          <h1 className="text-2xl font-bold text-white tracking-tight">Connect Sleeper</h1>
-          <p className="text-[#d4af37] text-[13px] font-medium mt-0.5">One last step</p>
+          <img src={logoDark} alt="StatChasers" className="h-14 mx-auto mb-3 object-contain" />
+          <p className="text-[#d4af37] text-[13px] font-medium">Connect Sleeper — one last step</p>
         </div>
 
         <div className="bg-[#0d1f35] rounded-2xl border border-white/8 p-8 shadow-2xl shadow-black/40">

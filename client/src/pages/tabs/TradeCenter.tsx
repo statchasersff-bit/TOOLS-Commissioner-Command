@@ -82,7 +82,7 @@ function PlayerChip({ player, value }: { player: Player; value: number }) {
   );
 }
 
-function TradeProposalCard({ proposal, mode }: { proposal: TradeProposal; mode: "dynasty" | "redraft" }) {
+function TradeProposalCard({ proposal, mode, userTeam }: { proposal: TradeProposal; mode: "dynasty" | "redraft"; userTeam: Team }) {
   const valueDiff = proposal.getVal - proposal.giveVal;
   const maxVal = Math.max(proposal.giveVal, proposal.getVal);
   const diffPct = maxVal > 0 ? Math.abs(valueDiff) / maxVal : 0;
@@ -108,14 +108,14 @@ function TradeProposalCard({ proposal, mode }: { proposal: TradeProposal; mode: 
 
       <div className="grid grid-cols-[1fr_28px_1fr] gap-2 items-start">
         <div>
-          <p className="text-[9px] text-muted-foreground font-semibold uppercase tracking-wider mb-0.5">You send</p>
+          <p className="text-[9px] text-muted-foreground font-semibold uppercase tracking-wider mb-0.5">{userTeam.owner} sends</p>
           {proposal.gives.map((p, i) => <PlayerChip key={i} player={p} value={proposal.giveVal / proposal.gives.length} />)}
         </div>
         <div className="flex items-center justify-center pt-4">
           <ArrowRightLeft className="w-3.5 h-3.5 text-muted-foreground/60" />
         </div>
         <div>
-          <p className="text-[9px] text-muted-foreground font-semibold uppercase tracking-wider mb-0.5">You receive</p>
+          <p className="text-[9px] text-muted-foreground font-semibold uppercase tracking-wider mb-0.5">{proposal.partner.owner} sends</p>
           {proposal.gets.map((p, i) => <PlayerChip key={i} player={p} value={proposal.getVal / proposal.gets.length} />)}
         </div>
       </div>
@@ -583,7 +583,7 @@ export function TradeFinder({ league, userTeam }: TradeProps) {
           <>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {displayedProposals.map((proposal, i) => (
-                <TradeProposalCard key={i} proposal={proposal} mode={proposalMode} />
+                <TradeProposalCard key={i} proposal={proposal} mode={proposalMode} userTeam={userTeam} />
               ))}
             </div>
             {!showAllProposals && filteredProposals.length > 12 && (
@@ -612,7 +612,7 @@ export function TradeFinder({ league, userTeam }: TradeProps) {
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     {shown.map((proposal, i) => (
-                      <TradeProposalCard key={i} proposal={proposal} mode={proposalMode} />
+                      <TradeProposalCard key={i} proposal={proposal} mode={proposalMode} userTeam={userTeam} />
                     ))}
                   </div>
                 </div>

@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { Eye, EyeOff, Loader2, ArrowLeft, Mail, Lock, CheckCircle2, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
+import logoDark from "@assets/statchasers_logo_transparent_dark_1772764844282.png";
 
 // ── Shared helpers ────────────────────────────────────────────────────────────
 
@@ -9,13 +10,8 @@ function AuthLayout({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen bg-[#060d1a] flex items-center justify-center p-4">
       <div className="w-full max-w-[420px]">
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-[#0b3a7a]/40 border border-[#d4af37]/30 mb-4 shadow-lg shadow-[#0b3a7a]/20">
-            <svg viewBox="0 0 24 24" className="w-7 h-7 fill-[#d4af37]">
-              <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="#d4af37" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </div>
-          <h1 className="text-2xl font-bold text-white tracking-tight">StatChasers</h1>
-          <p className="text-[#d4af37] text-[13px] font-medium mt-0.5">Dynasty Command Center</p>
+          <img src={logoDark} alt="StatChasers" className="h-14 mx-auto mb-3 object-contain" />
+          <p className="text-[#d4af37] text-[13px] font-medium">Dynasty Command Center</p>
         </div>
         <div className="bg-[#0d1f35] rounded-2xl border border-white/8 p-8 shadow-2xl shadow-black/40">
           {children}
