@@ -1087,30 +1087,26 @@ export function LineupCommand() {
       {/* ── Page header ──────────────────────────────────────────────────── */}
       <SectionHeader title="Lineup Command" subtitle="Review starters, identify lineup issues, and optimize weekly decisions." />
       {/* ── Sub-tab switcher ─────────────────────────────────────────────── */}
-      <div className="flex items-center justify-end -mt-3">
-      {(baseLoading || allLoading || mAllLoading) && (
-        <RefreshCw className="w-3.5 h-3.5 text-muted-foreground animate-spin mr-3" />
-      )}
-      <div className="flex gap-1 p-1 rounded-xl bg-white/[0.03] border border-white/6 w-fit">
-        {(["lineup", "matchups"] as const).map(tab => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            data-testid={`tab-${tab}`}
-            className={cn(
-              "relative px-4 py-1.5 rounded-lg text-[11px] font-semibold transition-all duration-200",
-              activeTab === tab
-                ? "bg-[#0b3a7a]/60 text-white border border-[#d4af37]/25"
-                : "text-white/35 hover:text-white/60"
-            )}
-          >
-            {tab === "lineup" ? "Lineup Command" : "Matchups"}
-            {activeTab === tab && (
-              <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-6 h-[2px] rounded-full bg-[#d4af37]" />
-            )}
-          </button>
-        ))}
-      </div>
+      <div className="flex justify-center sm:justify-start !mt-0 md:!mt-5">
+        {(baseLoading || allLoading || mAllLoading) && (
+          <RefreshCw className="w-3.5 h-3.5 text-muted-foreground animate-spin absolute right-4 top-4" />
+        )}
+        <div className="grid w-full sm:w-auto" style={{ gridTemplateColumns: "1fr 1fr", maxWidth: 420, height: 48, borderRadius: 16, padding: 4, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", gap: 4 }}>
+          {(["lineup", "matchups"] as const).map(tab => {
+            const isActive = activeTab === tab;
+            const Icon = tab === "lineup" ? Zap : Swords;
+            const label = tab === "lineup" ? "Lineup Command" : "Matchups";
+            return (
+              <button key={tab} onClick={() => setActiveTab(tab)} data-testid={`tab-${tab}`}
+                className="relative flex items-center justify-center gap-2 font-semibold transition-all duration-200"
+                style={{ borderRadius: 12, fontSize: 13, letterSpacing: "0.01em", background: isActive ? "linear-gradient(135deg, rgba(11,58,122,0.85) 0%, rgba(11,58,122,0.65) 100%)" : "transparent", color: isActive ? "#fff" : "rgba(203,213,225,0.45)", border: isActive ? "1px solid rgba(212,175,55,0.30)" : "1px solid transparent", boxShadow: isActive ? "0 2px 12px rgba(11,58,122,0.40), inset 0 1px 0 rgba(255,255,255,0.06)" : "none" }}>
+                <Icon style={{ width: 15, height: 15, flexShrink: 0 }} />
+                {label}
+                {isActive && <span className="absolute bottom-[3px] left-1/2 -translate-x-1/2 rounded-full" style={{ width: 28, height: 2, background: "#d4af37", opacity: 0.85 }} />}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* ══════════════════ LINEUP COMMAND TAB ══════════════════ */}
