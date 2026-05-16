@@ -40,7 +40,7 @@ const MEGA_DATA: Record<string, MegaSection[]> = {
     {
       title: "My Team",
       items: [
-        { subId: "my-team",    label: "My Team",       description: "Team snapshot, KPIs & roster strength",          icon: Users          },
+        { subId: "my-team",    label: "Overview",      description: "Team snapshot, KPIs & roster strength",          icon: Users          },
         { subId: "share-team", label: "Share My Team", description: "Export & share your roster report & field view",  icon: Share2         },
       ],
     },
@@ -71,8 +71,9 @@ const MEGA_DATA: Record<string, MegaSection[]> = {
     {
       title: "Research",
       items: [
-        { subId: "analysis",     label: "Analysis",     description: "League trends & positional insights",            icon: LineChart  },
-        { subId: "market-value", label: "Market Value", description: "Player market values across formats",            icon: TrendingUp },
+        { subId: "analysis",        label: "Analysis",        description: "League trends & positional insights",           icon: LineChart  },
+        { subId: "market-value",    label: "Market Value",    description: "Player market values across formats",           icon: TrendingUp },
+        { subId: "compare-players", label: "Compare Players", description: "Side-by-side player card comparison by position", icon: LayoutGrid },
       ],
     },
   ],
