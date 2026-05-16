@@ -396,7 +396,7 @@ export function MobileBottomNav({ tabs, activeTab, setActiveTab }: MobileBottomN
           <Icon
             className="flex-shrink-0"
             style={{
-              width: 21, height: 21,
+              width: 18, height: 18,
               color: isActive ? "#d4af37" : "rgba(203,213,225,0.55)",
             }}
           />
