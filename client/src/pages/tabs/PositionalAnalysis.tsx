@@ -1275,8 +1275,8 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
       message_id: optimisticId,
       parent_id: dmId,
       parent_type: "dm",
-      author_id: session?.userId ?? "",
-      author_display_name: session?.displayName ?? "You",
+      author_id: session?.user_id ?? "",
+      author_display_name: session?.display_name ?? "You",
       author_avatar: null,
       author_real_name: null,
       author_is_bot: false,
@@ -1652,180 +1652,185 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
           </div>
         )}
 
-        {/* ── Trade columns / Edit panel ── */}
+        {/* ── Review / Edit content (unified scrollable body) ── */}
         {activeTab !== "messages" && (
-        <div className="grid grid-cols-2 gap-2 sm:gap-4 px-3 sm:px-6 py-3 sm:py-5 overflow-y-auto flex-1">
-          {editMode ? (
-            <>
-              <RosterEditPanel teamData={userTeam}         isMyRoster={true}  />
-              <RosterEditPanel teamData={idea.partnerTeam} isMyRoster={false} />
-            </>
-          ) : (
-            <>
-              {/* You receive */}
-              <div className="bg-white/[0.025] border border-white/[0.08] rounded-xl p-4">
-                <div className="flex items-center gap-2.5 mb-0.5">
-                  <ManagerAvatar team={userTeam} />
-                  <div className="min-w-0">
-                    <p className="text-[13px] font-bold text-white leading-tight break-words">{userTeam.owner}</p>
-                    <p className="text-[10px] text-white/35 uppercase tracking-widest font-semibold leading-tight mt-0.5">Receives</p>
+          <div className="flex-1 overflow-y-auto min-h-0">
+
+            {/* Trade columns / Edit panel */}
+            <div className="grid grid-cols-2 gap-2 sm:gap-4 px-3 sm:px-6 py-3 sm:py-5">
+              {editMode ? (
+                <>
+                  <RosterEditPanel teamData={userTeam}         isMyRoster={true}  />
+                  <RosterEditPanel teamData={idea.partnerTeam} isMyRoster={false} />
+                </>
+              ) : (
+                <>
+                  {/* You receive */}
+                  <div className="bg-white/[0.025] border border-white/[0.08] rounded-xl p-4">
+                    <div className="flex items-center gap-2.5 mb-0.5">
+                      <ManagerAvatar team={userTeam} />
+                      <div className="min-w-0">
+                        <p className="text-[13px] font-bold text-white leading-tight break-words">{userTeam.owner}</p>
+                        <p className="text-[10px] text-white/35 uppercase tracking-widest font-semibold leading-tight mt-0.5">Receives</p>
+                      </div>
+                    </div>
+                    {!hasCustomEdits && <ValPills dyn={uDyn} now={uNow} />}
+                    <div className="mt-1">
+                      {resolvedYouGet.map((a, i) => <AssetCard key={i} a={a} />)}
+                    </div>
+                  </div>
+
+                  {/* Partner receives */}
+                  <div className="bg-white/[0.025] border border-white/[0.08] rounded-xl p-4">
+                    <div className="flex items-center gap-2.5 mb-0.5">
+                      <ManagerAvatar team={idea.partnerTeam} />
+                      <div className="min-w-0">
+                        <p className="text-[13px] font-bold text-white leading-tight break-words">{idea.partnerTeam.owner}</p>
+                        <p className="text-[10px] text-white/35 uppercase tracking-widest font-semibold leading-tight mt-0.5">Receives</p>
+                      </div>
+                    </div>
+                    {!hasCustomEdits && <ValPills dyn={pDyn} now={pNow} />}
+                    <div className="mt-1">
+                      {resolvedYouGive.map((a, i) => <AssetCard key={i} a={a} />)}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Pick selector */}
+            {reviewMode && hasPick && status === "idle" && (
+              <div className="px-3 sm:px-6 pb-4 sm:pb-5 border-t border-white/[0.06] pt-4">
+                <p className="text-[10px] text-white/40 uppercase tracking-widest font-semibold mb-3">Choose pick to include</p>
+                <div className="flex flex-wrap gap-2">
+                  {userTeam.picks.filter(p => {
+                    const ideaPick = idea.youGive.find(a => a.type === "pick" && a.pick)?.pick;
+                    return ideaPick ? p.round === ideaPick.round : true;
+                  }).map((p, i) => {
+                    const origTeam = league.teams.find(t => parseInt(t.id.replace("roster_", ""), 10) === p.originalRosterId);
+                    const isSelected =
+                      selectedPick?.year === p.year &&
+                      selectedPick?.round === p.round &&
+                      selectedPick?.originalRosterId === p.originalRosterId;
+                    return (
+                      <button
+                        key={i}
+                        onClick={() => setSelectedPick(p)}
+                        className={cn(
+                          "flex flex-col items-start px-3 py-2 rounded-lg border transition-all text-left",
+                          isSelected
+                            ? "bg-purple-500/20 border-purple-500/50 shadow-[0_0_12px_rgba(168,85,247,0.15)]"
+                            : "bg-white/[0.04] border-white/[0.09] hover:border-purple-500/40 hover:bg-white/[0.06]"
+                        )}
+                      >
+                        <span className={cn("text-[11px] font-bold leading-tight", isSelected ? "text-purple-300" : "text-white/85")}>
+                          {p.year} Rd {p.round}
+                        </span>
+                        {origTeam && (
+                          <span className={cn("text-[10px] leading-tight mt-0.5", isSelected ? "text-purple-400/70" : "text-white/35")}>
+                            via {origTeam.owner}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Status banners */}
+            <div className={cn("px-3 sm:px-6 space-y-2 empty:hidden", !reviewMode && "hidden")}>
+              {status === "success" && dmStatus === "idle" && (
+                <div className="flex items-center gap-2 rounded-lg bg-emerald-500/10 border border-emerald-500/25 px-4 py-3">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                  <span className="text-[12px] text-emerald-300 font-medium">Trade sent.</span>
+                </div>
+              )}
+              {status === "success" && dmStatus === "sending" && (
+                <div className="flex items-center gap-2 rounded-lg bg-emerald-500/10 border border-emerald-500/25 px-4 py-3">
+                  <Loader2 className="w-4 h-4 text-emerald-400 flex-shrink-0 animate-spin" />
+                  <span className="text-[12px] text-emerald-300 font-medium">Trade sent. Sending DM…</span>
+                </div>
+              )}
+              {status === "success" && dmStatus === "sent" && (
+                <div className="flex items-center gap-2 rounded-lg bg-emerald-500/10 border border-emerald-500/25 px-4 py-3">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                  <span className="text-[12px] text-emerald-300 font-medium">Trade sent and DM delivered.</span>
+                </div>
+              )}
+              {status === "success" && dmStatus === "failed" && (
+                <div className="flex items-start gap-2 rounded-lg bg-yellow-500/10 border border-yellow-500/25 px-4 py-3">
+                  <AlertTriangle className="w-4 h-4 text-yellow-400 flex-shrink-0 mt-px" />
+                  <div className="flex flex-col gap-1 min-w-0">
+                    <span className="text-[12px] text-yellow-300 font-medium leading-snug">Trade sent, but DM could not be sent.</span>
+                    {dmError && <span className="text-[11px] text-yellow-400/70 leading-snug">{dmError}</span>}
+                    {pendingDm && (
+                      <button data-testid="btn-retry-trade-dm"
+                        onClick={() => sendTradeDm(pendingDm.trade, pendingDm.partnerUserId, true)}
+                        className="mt-0.5 self-start text-[11px] font-semibold text-yellow-300 hover:text-yellow-100 underline underline-offset-2 transition-colors">
+                        Send DM again
+                      </button>
+                    )}
                   </div>
                 </div>
-                {!hasCustomEdits && <ValPills dyn={uDyn} now={uNow} />}
-                <div className="mt-1">
-                  {resolvedYouGet.map((a, i) => <AssetCard key={i} a={a} />)}
-                </div>
-              </div>
-
-              {/* Partner receives */}
-              <div className="bg-white/[0.025] border border-white/[0.08] rounded-xl p-4">
-                <div className="flex items-center gap-2.5 mb-0.5">
-                  <ManagerAvatar team={idea.partnerTeam} />
-                  <div className="min-w-0">
-                    <p className="text-[13px] font-bold text-white leading-tight break-words">{idea.partnerTeam.owner}</p>
-                    <p className="text-[10px] text-white/35 uppercase tracking-widest font-semibold leading-tight mt-0.5">Receives</p>
+              )}
+              {status === "success" && dmStatus === "link-failed" && (
+                <div className="flex items-start gap-2 rounded-lg bg-yellow-500/10 border border-yellow-500/25 px-4 py-3">
+                  <AlertTriangle className="w-4 h-4 text-yellow-400 flex-shrink-0 mt-px" />
+                  <div className="flex flex-col gap-1 min-w-0">
+                    <span className="text-[12px] text-yellow-300 font-medium leading-snug">Trade sent. Trade card DM sent. Tool link DM failed.</span>
+                    {dmError && <span className="text-[11px] text-yellow-400/70 leading-snug">{dmError}</span>}
+                    {pendingDm && (
+                      <button data-testid="btn-retry-tool-link-dm"
+                        onClick={() => sendTradeDm(pendingDm.trade, pendingDm.partnerUserId, true)}
+                        className="mt-0.5 self-start text-[11px] font-semibold text-yellow-300 hover:text-yellow-100 underline underline-offset-2 transition-colors">
+                        Send DM again
+                      </button>
+                    )}
                   </div>
                 </div>
-                {!hasCustomEdits && <ValPills dyn={pDyn} now={pNow} />}
-                <div className="mt-1">
-                  {resolvedYouGive.map((a, i) => <AssetCard key={i} a={a} />)}
+              )}
+              {status === "error" && (
+                <div className="flex items-start gap-2 rounded-lg bg-red-500/10 border border-red-500/25 px-4 py-3">
+                  <X className="w-4 h-4 text-red-400 flex-shrink-0 mt-px" />
+                  <span className="text-[12px] text-red-300 leading-snug">{errorMsg}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Expiry selector */}
+            {reviewMode && status !== "success" && (
+              <div className="px-3 sm:px-6 pb-4 sm:pb-5 border-t border-white/[0.06] pt-4">
+                <div className="flex items-center justify-between mb-2.5 flex-wrap gap-1">
+                  <p className="text-[11px] text-white/40 uppercase tracking-widest font-semibold">Offer Expires In</p>
+                  <p className="text-[10px] text-white/25 italic hidden sm:block">
+                    Sleeper will automatically expire the offer after this time.
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {EXPIRY_OPTIONS.map(opt => {
+                    const isActive = expiry === opt.value;
+                    return (
+                      <button
+                        key={opt.value}
+                        onClick={() => setExpiry(opt.value)}
+                        data-testid={`expiry-opt-${opt.value}`}
+                        disabled={status === "sending"}
+                        className={cn(
+                          "px-3 py-1.5 rounded-full text-[11px] font-semibold border transition-all",
+                          isActive
+                            ? "bg-[#d4af37]/20 border-[#d4af37]/50 text-[#d4af37]"
+                            : "bg-white/[0.04] border-white/[0.09] text-white/50 hover:border-white/25 hover:text-white/75"
+                        )}
+                      >
+                        {opt.label}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
-            </>
-          )}
-        </div>
-        )}
+            )}
 
-        {/* ── Pick selector ── */}
-        {reviewMode && hasPick && status === "idle" && (
-          <div className="px-3 sm:px-6 pb-4 sm:pb-5 flex-shrink-0 border-t border-white/[0.06] pt-4">
-            <p className="text-[10px] text-white/40 uppercase tracking-widest font-semibold mb-3">Choose pick to include</p>
-            <div className="flex flex-wrap gap-2">
-              {userTeam.picks.filter(p => {
-                const ideaPick = idea.youGive.find(a => a.type === "pick" && a.pick)?.pick;
-                return ideaPick ? p.round === ideaPick.round : true;
-              }).map((p, i) => {
-                const origTeam = league.teams.find(t => parseInt(t.id.replace("roster_", ""), 10) === p.originalRosterId);
-                const isSelected =
-                  selectedPick?.year === p.year &&
-                  selectedPick?.round === p.round &&
-                  selectedPick?.originalRosterId === p.originalRosterId;
-                return (
-                  <button
-                    key={i}
-                    onClick={() => setSelectedPick(p)}
-                    className={cn(
-                      "flex flex-col items-start px-3 py-2 rounded-lg border transition-all text-left",
-                      isSelected
-                        ? "bg-purple-500/20 border-purple-500/50 shadow-[0_0_12px_rgba(168,85,247,0.15)]"
-                        : "bg-white/[0.04] border-white/[0.09] hover:border-purple-500/40 hover:bg-white/[0.06]"
-                    )}
-                  >
-                    <span className={cn("text-[11px] font-bold leading-tight", isSelected ? "text-purple-300" : "text-white/85")}>
-                      {p.year} Rd {p.round}
-                    </span>
-                    {origTeam && (
-                      <span className={cn("text-[10px] leading-tight mt-0.5", isSelected ? "text-purple-400/70" : "text-white/35")}>
-                        via {origTeam.owner}
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* ── Status banners ── */}
-        <div className={cn("px-3 sm:px-6 flex-shrink-0 space-y-2 empty:hidden", !reviewMode && "hidden")}>
-          {status === "success" && dmStatus === "idle" && (
-            <div className="flex items-center gap-2 rounded-lg bg-emerald-500/10 border border-emerald-500/25 px-4 py-3">
-              <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-              <span className="text-[12px] text-emerald-300 font-medium">Trade sent.</span>
-            </div>
-          )}
-          {status === "success" && dmStatus === "sending" && (
-            <div className="flex items-center gap-2 rounded-lg bg-emerald-500/10 border border-emerald-500/25 px-4 py-3">
-              <Loader2 className="w-4 h-4 text-emerald-400 flex-shrink-0 animate-spin" />
-              <span className="text-[12px] text-emerald-300 font-medium">Trade sent. Sending DM…</span>
-            </div>
-          )}
-          {status === "success" && dmStatus === "sent" && (
-            <div className="flex items-center gap-2 rounded-lg bg-emerald-500/10 border border-emerald-500/25 px-4 py-3">
-              <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-              <span className="text-[12px] text-emerald-300 font-medium">Trade sent and DM delivered.</span>
-            </div>
-          )}
-          {status === "success" && dmStatus === "failed" && (
-            <div className="flex items-start gap-2 rounded-lg bg-yellow-500/10 border border-yellow-500/25 px-4 py-3">
-              <AlertTriangle className="w-4 h-4 text-yellow-400 flex-shrink-0 mt-px" />
-              <div className="flex flex-col gap-1 min-w-0">
-                <span className="text-[12px] text-yellow-300 font-medium leading-snug">Trade sent, but DM could not be sent.</span>
-                {dmError && <span className="text-[11px] text-yellow-400/70 leading-snug">{dmError}</span>}
-                {pendingDm && (
-                  <button data-testid="btn-retry-trade-dm"
-                    onClick={() => sendTradeDm(pendingDm.trade, pendingDm.partnerUserId, true)}
-                    className="mt-0.5 self-start text-[11px] font-semibold text-yellow-300 hover:text-yellow-100 underline underline-offset-2 transition-colors">
-                    Send DM again
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
-          {status === "success" && dmStatus === "link-failed" && (
-            <div className="flex items-start gap-2 rounded-lg bg-yellow-500/10 border border-yellow-500/25 px-4 py-3">
-              <AlertTriangle className="w-4 h-4 text-yellow-400 flex-shrink-0 mt-px" />
-              <div className="flex flex-col gap-1 min-w-0">
-                <span className="text-[12px] text-yellow-300 font-medium leading-snug">Trade sent. Trade card DM sent. Tool link DM failed.</span>
-                {dmError && <span className="text-[11px] text-yellow-400/70 leading-snug">{dmError}</span>}
-                {pendingDm && (
-                  <button data-testid="btn-retry-tool-link-dm"
-                    onClick={() => sendTradeDm(pendingDm.trade, pendingDm.partnerUserId, true)}
-                    className="mt-0.5 self-start text-[11px] font-semibold text-yellow-300 hover:text-yellow-100 underline underline-offset-2 transition-colors">
-                    Send DM again
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
-          {status === "error" && (
-            <div className="flex items-start gap-2 rounded-lg bg-red-500/10 border border-red-500/25 px-4 py-3">
-              <X className="w-4 h-4 text-red-400 flex-shrink-0 mt-px" />
-              <span className="text-[12px] text-red-300 leading-snug">{errorMsg}</span>
-            </div>
-          )}
-        </div>
-
-        {/* ── Expiry selector ── */}
-        {reviewMode && status !== "success" && (
-          <div className="px-3 sm:px-6 pb-4 sm:pb-5 flex-shrink-0 border-t border-white/[0.06] pt-4">
-            <div className="flex items-center justify-between mb-2.5 flex-wrap gap-1">
-              <p className="text-[11px] text-white/40 uppercase tracking-widest font-semibold">Offer Expires In</p>
-              <p className="text-[10px] text-white/25 italic hidden sm:block">
-                Sleeper will automatically expire the offer after this time.
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              {EXPIRY_OPTIONS.map(opt => {
-                const isActive = expiry === opt.value;
-                return (
-                  <button
-                    key={opt.value}
-                    onClick={() => setExpiry(opt.value)}
-                    data-testid={`expiry-opt-${opt.value}`}
-                    disabled={status === "sending"}
-                    className={cn(
-                      "px-3 py-1.5 rounded-full text-[11px] font-semibold border transition-all",
-                      isActive
-                        ? "bg-[#d4af37]/20 border-[#d4af37]/50 text-[#d4af37]"
-                        : "bg-white/[0.04] border-white/[0.09] text-white/50 hover:border-white/25 hover:text-white/75"
-                    )}
-                  >
-                    {opt.label}
-                  </button>
-                );
-              })}
-            </div>
           </div>
         )}
 
@@ -1839,7 +1844,7 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
             ) : !dmId ? (
               <div className="flex-1 flex items-center justify-center">
                 <p className="text-[13px] text-white/30">
-                  {idea.partnerTeam.ownerId ? "Could not load DM thread." : "Partner user ID unavailable."}
+                  {idea.partnerTeam.ownerId ? "No message history with this partner yet." : "Partner user ID unavailable."}
                 </p>
               </div>
             ) : dmMessages.length === 0 ? (
@@ -1849,7 +1854,7 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
             ) : (
               <div ref={msgListRef} className="flex-1 overflow-y-auto space-y-2.5 pb-2 pr-1">
                 {dmMessages.map(msg => {
-                  const myUserId = getSleeperSession()?.userId ?? "";
+                  const myUserId = getSleeperSession()?.user_id ?? "";
                   const isMe = msg.author_id === myUserId;
                   const att = msg.attachment as Record<string, unknown> | null;
                   const isTradeCard = att?.type === "trade_dm";
