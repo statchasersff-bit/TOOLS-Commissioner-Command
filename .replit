@@ -46,6 +46,7 @@ waitForPort = 5000
 
 [userenv.production]
 CORS_ORIGIN = "https://statchasers.com,https://www.statchasers.com,https://dynasty-command.pages.dev"
+NODE_ENV = "production"
 
 [userenv.shared]
 VITE_BASE_PATH = "/dynasty-command/launch/"
