@@ -294,7 +294,7 @@ export function ShareTeam({ league, userTeam }: Props) {
       </div>
 
       {/* Action buttons */}
-      <div className="flex items-center gap-1.5 flex-wrap">
+      <div className="flex items-center justify-center gap-1.5 flex-wrap">
         <Button size="sm" variant="outline" onClick={copyLink} data-testid="button-copy-link" className="h-7 px-2 text-[11px] gap-1">
           <Copy className="w-3 h-3" /> Copy Link
         </Button>
