@@ -391,7 +391,7 @@ export function MobileBottomNav({ tabs, activeTab, setActiveTab }: MobileBottomN
         {/* Icon + label pill */}
         <div
           className="flex flex-col items-center gap-1 px-3 py-1.5 rounded-[14px] transition-all duration-150"
-          style={isActive ? { background: "rgba(212,175,55,0.10)" } : undefined}
+          style={undefined}
         >
           <Icon
             className="flex-shrink-0"
