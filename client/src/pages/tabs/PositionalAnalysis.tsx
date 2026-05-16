@@ -1168,7 +1168,7 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
         sendTradeDm(tradeResult, partnerUserId);
       } else {
         setDmStatus("failed");
-        setDmError("Partner user ID not available — DM could not be sent.");
+        setDmError("Partner user ID not available. DM could not be sent.");
       }
     } catch (e: any) {
       setStatus("error");
@@ -1907,7 +1907,7 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
               )}
               {!editBothEmpty && (editSendEmpty || editRecvEmpty) && (
                 <span className="text-[11px] text-yellow-400/70 flex-1 text-center px-2">
-                  One side has no assets — continue?
+                  One side has no assets. Continue?
                 </span>
               )}
               <Button
@@ -2106,7 +2106,7 @@ function WinNowMode({ league, userTeam }: { league: League; userTeam: Team }) {
               partnerTeam: partner,
               partnerTier: tierMap.get(partner.id)?.tier ?? "Balanced",
               headline:    `Upgrade ${needPos} using ${chip.player.pos} surplus`,
-              why:         `${chip.player.name} is an ideal chip — strong dynasty value with low lineup impact. Directly addresses your ${needPos} gap.`,
+              why:         `${chip.player.name} is an ideal chip: strong dynasty value with low lineup impact. Directly addresses your ${needPos} gap.`,
               youGive: [{ label: chip.player.name, value: chip.dynVal, pos: chip.player.pos, team: chip.player.team, type: "player", sleeperId: chip.player.sleeperId, age: chip.player.age }],
               youGet:  [{ label: target.name,      value: target.dynv, pos: target.pos,      team: target.team,       type: "player", sleeperId: target.sleeperId,      age: target.age      }],
               gainPos: needPos as PosLabel, dynGive, dynGet, rdGive, rdGet, userRdDelta: userRdDelta1, partnerRdDelta, score, scoreLabel: scoreLabel as WinNowIdea["scoreLabel"],
@@ -2205,7 +2205,7 @@ function WinNowMode({ league, userTeam }: { league: League; userTeam: Team }) {
             <h4 className="text-sm font-bold">Best Chips to Move</h4>
             <span className="block h-[2px] w-8 bg-[#d4af37] rounded-full mt-1" />
             <p className="text-[10px] text-muted-foreground mt-1.5">
-              High dynasty value ÷ low starter impact — ideal trade currency for win-now moves
+              High dynasty value ÷ low starter impact (ideal trade currency for win-now moves)
             </p>
           </div>
           <div className="space-y-0">
@@ -2253,7 +2253,7 @@ function WinNowMode({ league, userTeam }: { league: League; userTeam: Team }) {
               <ArrowRightLeft className="w-10 h-10 mx-auto mb-3 text-muted-foreground/40" />
               <p className="text-sm text-muted-foreground">
                 {noNeeds
-                  ? "Your starters are balanced — no urgent win-now moves detected."
+                  ? "Your starters are balanced. No urgent win-now moves detected."
                   : "No win-now trades found within the 18% dynasty delta constraint."}
               </p>
               <p className="text-xs text-muted-foreground mt-1">
@@ -2281,7 +2281,7 @@ function WinNowMode({ league, userTeam }: { league: League; userTeam: Team }) {
                     needRank === 1 ? "text-amber-500 dark:text-amber-400" :
                     "text-muted-foreground"
                   )}>
-                    — {needRank === 0 ? "Primary Need" : needRank === 1 ? "Secondary Need" : "Tertiary Need"}
+                    · {needRank === 0 ? "Primary Need" : needRank === 1 ? "Secondary Need" : "Tertiary Need"}
                   </span>
                   <div className="flex items-center gap-2 ml-auto flex-shrink-0">
                     <Badge variant="secondary" className="text-[10px]">{ideas.length} idea{ideas.length !== 1 ? "s" : ""}</Badge>
@@ -2736,7 +2736,7 @@ function RebuildMode({ league, userTeam }: { league: League; userTeam: Team }) {
             <h4 className="text-sm font-bold">Assets to Move</h4>
             <span className="block h-[2px] w-8 bg-[#d4af37] rounded-full mt-1" />
             <p className="text-[10px] text-muted-foreground mt-1.5">
-              Trade currency for rebuild deals — from liquid assets to priority sells
+              Trade currency for rebuild deals (from liquid assets to priority sells)
             </p>
           </div>
           <div className="space-y-0">
@@ -2803,7 +2803,7 @@ function RebuildMode({ league, userTeam }: { league: League; userTeam: Team }) {
               <ShieldCheck className="w-10 h-10 mx-auto mb-3 text-muted-foreground/40" />
               <p className="text-sm text-muted-foreground">
                 {sellCandidates.length === 0
-                  ? "No high-decay assets detected — your roster is already well-insulated."
+                  ? "No high-decay assets detected. Your roster is already well-insulated."
                   : "No rebuild trades found. No partners currently have the young assets or picks to offer a fair return."}
               </p>
             </CardContent>

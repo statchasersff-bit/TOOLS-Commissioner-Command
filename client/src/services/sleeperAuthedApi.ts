@@ -69,7 +69,7 @@ export async function sleeperGraphQLRequest<T = unknown>(
         message;
     } catch { /* ignore */ }
     console.error("[Sleeper GQL] error response", res.status, rawBody);
-    throw new Error(message + (rawBody ? ` — ${rawBody.slice(0, 300)}` : ""));
+    throw new Error(message + (rawBody ? `: ${rawBody.slice(0, 300)}` : ""));
   }
 
   let json: any;
@@ -290,7 +290,7 @@ export async function submitWaiverClaim(
   });
 
   if (!data.submit_waiver_claim) {
-    throw new Error("Waiver claim submission failed — no response from Sleeper.");
+    throw new Error("Waiver claim submission failed. No response from Sleeper.");
   }
   return data.submit_waiver_claim;
 }
@@ -483,7 +483,7 @@ export async function proposeTrade(params: ProposeTradeParams): Promise<ProposeT
   });
 
   if (!data.propose_trade) {
-    throw new Error("Trade proposal failed — no response from Sleeper.");
+    throw new Error("Trade proposal failed. No response from Sleeper.");
   }
   return data.propose_trade;
 }
@@ -549,7 +549,7 @@ export async function acceptTrade(
     variables: { transaction_id: transactionId },
   });
   if (!data.accept_trade) {
-    throw new Error("Trade acceptance failed — no response from Sleeper.");
+    throw new Error("Trade acceptance failed. No response from Sleeper.");
   }
   return data.accept_trade;
 }
@@ -565,7 +565,7 @@ export async function rejectTrade(
     variables: { transactionId, leg },
   });
   if (!data.reject_trade) {
-    throw new Error("Trade rejection failed — no response from Sleeper.");
+    throw new Error("Trade rejection failed. No response from Sleeper.");
   }
   return data.reject_trade;
 }

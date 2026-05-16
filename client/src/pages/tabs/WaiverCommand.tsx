@@ -1442,7 +1442,7 @@ function BulkClaimsView({
           <div className="flex items-start gap-2.5 p-3 rounded-lg bg-rose-500/10 border border-rose-500/20">
             <AlertCircle className="w-4 h-4 text-rose-400 flex-shrink-0 mt-0.5" />
             <p className="text-xs text-rose-200/80">
-              <strong className="text-rose-300">Cannot submit — Sleeper write access not connected.</strong>{" "}
+              <strong className="text-rose-300">Cannot submit. Sleeper write access not connected.</strong>{" "}
               Go to Connect and sign in via Sleeper Actions, then return here.
             </p>
           </div>
@@ -1608,7 +1608,7 @@ function ClaimPlayerModal({ row, preAddId, onClose }: { row: WaiverRow | null; p
       );
       setSuccess(true);
     } catch (e: any) {
-      setSubmitError(e.message || "Claim failed — check Sleeper for details");
+      setSubmitError(e.message || "Claim failed. Check Sleeper for details.");
     } finally {
       setSubmitting(false);
     }

@@ -517,7 +517,7 @@ function PendingTradeCard({
         {acceptResult && (
           <div className="flex items-center gap-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 px-3 py-2.5 text-xs text-emerald-700 dark:text-emerald-400" data-testid={`accept-result-${trade.transactionId}`}>
             <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" />
-            <span>Trade accepted — status: <strong>{acceptResult.status}</strong>. May remain pending until commissioner review is complete.</span>
+            <span>Trade accepted. Status: <strong>{acceptResult.status}</strong>. May remain pending until commissioner review is complete.</span>
           </div>
         )}
 
@@ -610,7 +610,7 @@ function PendingTradeCard({
               {rejectIcon}{rejectLabel}
             </Button>
             {!sleeperJwt && (
-              <span className="text-[10px] text-muted-foreground">Token required — set in Live Draft tab</span>
+              <span className="text-[10px] text-muted-foreground">Token required (set in Live Draft tab)</span>
             )}
           </div>
         )}

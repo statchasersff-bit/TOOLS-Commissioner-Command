@@ -18,6 +18,8 @@ import type { SleeperLeagueSummary } from "@/types";
 
 const SLEEPER_API = "https://api.sleeper.app/v1";
 
+const IS_PRESEASON = true;
+
 // ─── Slot eligibility (mirrors FieldView) ────────────────────────────────────
 const SLOT_ELIGIBILITY: Record<string, string[]> = {
   QB:         ["QB"],
@@ -277,7 +279,7 @@ function KpiCard({
 }
 
 // ─── League row ───────────────────────────────────────────────────────────────
-function LeagueRow({ analysis }: { analysis: LeagueAnalysis }) {
+function LeagueRow({ analysis, preseason }: { analysis: LeagueAnalysis; preseason?: boolean }) {
   const [expanded, setExpanded] = useState(false);
   const { leagueName, format, scoringFormat, avatar, currentProj, gain, issues, swaps, loading, error } = analysis;
 
@@ -322,6 +324,8 @@ function LeagueRow({ analysis }: { analysis: LeagueAnalysis }) {
         <div className="text-right w-10 md:w-16 flex-shrink-0">
           {loading ? (
             <div className="h-3.5 bg-white/8 rounded animate-pulse" />
+          ) : preseason ? (
+            <span className="text-[10px] text-white/25 font-medium">N/A</span>
           ) : error ? (
             <span className="text-[10px] text-white/20">—</span>
           ) : (
@@ -333,6 +337,8 @@ function LeagueRow({ analysis }: { analysis: LeagueAnalysis }) {
         <div className="text-right w-12 md:w-28 flex-shrink-0">
           {loading ? (
             <div className="h-3.5 bg-white/8 rounded animate-pulse" />
+          ) : preseason ? (
+            <span className="text-[10px] text-white/25 font-medium">N/A</span>
           ) : error ? (
             <span className="text-[10px] text-white/20">—</span>
           ) : (
@@ -346,6 +352,8 @@ function LeagueRow({ analysis }: { analysis: LeagueAnalysis }) {
         <div className="w-8 md:w-24 flex-shrink-0 flex justify-center">
           {loading ? (
             <div className="h-4 w-4 bg-white/8 rounded animate-pulse" />
+          ) : preseason ? (
+            <span className="text-[10px] text-white/25 font-medium">N/A</span>
           ) : hardIssues.length === 0 ? (
             <CheckCircle2 className="w-3 h-3 md:w-3.5 md:h-3.5 text-emerald-500/60" />
           ) : (
@@ -359,6 +367,8 @@ function LeagueRow({ analysis }: { analysis: LeagueAnalysis }) {
         <div className="w-8 md:w-20 flex-shrink-0 flex justify-center">
           {loading ? (
             <div className="h-4 w-4 bg-white/8 rounded animate-pulse" />
+          ) : preseason ? (
+            <span className="text-[10px] text-white/25 font-medium">N/A</span>
           ) : softIssues.length === 0 ? (
             <CheckCircle2 className="w-3 h-3 md:w-3.5 md:h-3.5 text-emerald-500/60" />
           ) : (
@@ -372,6 +382,8 @@ function LeagueRow({ analysis }: { analysis: LeagueAnalysis }) {
         <div className="w-[68px] md:w-[108px] flex-shrink-0 flex justify-end">
           {loading ? (
             <div className="h-6 w-[56px] md:w-20 bg-white/8 rounded-full animate-pulse" />
+          ) : preseason ? (
+            <span className="text-[10px] text-white/25 font-medium">N/A</span>
           ) : error ? (
             <span className="text-[10px] text-white/20">—</span>
           ) : isOptimized ? (
@@ -445,7 +457,7 @@ function LeagueRow({ analysis }: { analysis: LeagueAnalysis }) {
                       <AlertTriangle className="w-3 h-3 flex-shrink-0" />
                       <span className="font-bold">{iss.playerName}</span>
                       <span className="text-white/40">({iss.pos})</span>
-                      <span className="font-medium">— {typeLabel[iss.type]}</span>
+                      <span className="font-medium">· {typeLabel[iss.type]}</span>
                     </div>
                   );
                 })}
@@ -490,7 +502,7 @@ function MatchupSkeletonRow() {
 }
 
 // ─── Matchup battle card ──────────────────────────────────────────────────────
-function MatchupBattleCard({ m }: { m: MatchupAnalysis }) {
+function MatchupBattleCard({ m, preseason }: { m: MatchupAnalysis; preseason?: boolean }) {
   const [expanded, setExpanded] = useState(false);
 
   const hasBye = m.opponentRosterId === null;
@@ -534,11 +546,13 @@ function MatchupBattleCard({ m }: { m: MatchupAnalysis }) {
         <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4">
           <div className="min-w-0">
             <p className="text-sm font-black text-white/90 truncate leading-tight">{m.myTeamName}</p>
-            <p className="text-[10px] text-white/35 mt-0.5 tabular-nums">{fmtRecord(m.myRecord.wins, m.myRecord.losses, m.myRecord.ties)}</p>
-            <p className={cn("text-3xl font-black tabular-nums mt-1.5 leading-none", isFav ? theme.txt : "text-white/55")}>{fmt1(m.myProj)}</p>
+            <p className="text-[10px] text-white/35 mt-0.5 tabular-nums">{preseason ? "N/A" : fmtRecord(m.myRecord.wins, m.myRecord.losses, m.myRecord.ties)}</p>
+            <p className={cn("text-3xl font-black tabular-nums mt-1.5 leading-none", preseason ? "text-white/25" : isFav ? theme.txt : "text-white/55")}>{preseason ? "N/A" : fmt1(m.myProj)}</p>
           </div>
           <div className="text-center px-4 flex-shrink-0">
-            {hasBye ? (
+            {preseason ? (
+              <div className="text-[10px] font-bold text-white/20 uppercase tracking-widest">Preseason</div>
+            ) : hasBye ? (
               <div className="text-[10px] font-bold text-white/20 uppercase tracking-widest">Bye Week</div>
             ) : (
               <>
@@ -550,11 +564,11 @@ function MatchupBattleCard({ m }: { m: MatchupAnalysis }) {
           </div>
           <div className="min-w-0 text-right">
             <p className="text-sm font-black text-white/50 truncate leading-tight">{hasBye ? "—" : m.opponentTeamName}</p>
-            <p className="text-[10px] text-white/25 mt-0.5 tabular-nums">{hasBye ? "" : fmtRecord(m.opponentRecord.wins, m.opponentRecord.losses, m.opponentRecord.ties)}</p>
-            <p className={cn("text-3xl font-black tabular-nums mt-1.5 leading-none", !isFav && !hasBye ? "text-red-400/60" : "text-white/30")}>{hasBye ? "—" : fmt1(m.opponentProj)}</p>
+            <p className="text-[10px] text-white/25 mt-0.5 tabular-nums">{preseason ? "N/A" : hasBye ? "" : fmtRecord(m.opponentRecord.wins, m.opponentRecord.losses, m.opponentRecord.ties)}</p>
+            <p className={cn("text-3xl font-black tabular-nums mt-1.5 leading-none", preseason ? "text-white/25" : !isFav && !hasBye ? "text-red-400/60" : "text-white/30")}>{preseason ? "N/A" : hasBye ? "—" : fmt1(m.opponentProj)}</p>
           </div>
         </div>
-        {!hasBye && (
+        {!preseason && !hasBye && (
           <div className="mt-3.5">
             <div className="h-1.5 rounded-full bg-white/6 overflow-hidden">
               <div className="h-full rounded-full transition-all duration-700" style={{ width: `${m.winPct}%`, backgroundColor: theme.bar, opacity: 0.8 }} />
@@ -627,10 +641,10 @@ function MatchupBattleCard({ m }: { m: MatchupAnalysis }) {
           {/* My stats */}
           <div className="flex flex-col items-center gap-0.5">
             <span className="text-[10px] text-white/35 tabular-nums font-medium">
-              {fmtRecord(m.myRecord.wins, m.myRecord.losses, m.myRecord.ties)}
+              {preseason ? "N/A" : fmtRecord(m.myRecord.wins, m.myRecord.losses, m.myRecord.ties)}
             </span>
-            <span className={cn("text-[26px] font-black tabular-nums leading-none mt-0.5", isFav ? theme.txt : "text-white/50")}>
-              {fmt1(m.myProj)}
+            <span className={cn("text-[26px] font-black tabular-nums leading-none mt-0.5", preseason ? "text-white/25" : isFav ? theme.txt : "text-white/50")}>
+              {preseason ? "N/A" : fmt1(m.myProj)}
             </span>
             <span className="text-[9px] text-white/25 uppercase tracking-wider font-semibold">Projected</span>
           </div>
@@ -638,7 +652,7 @@ function MatchupBattleCard({ m }: { m: MatchupAnalysis }) {
           {/* VS + Win% */}
           <div className="flex flex-col items-center gap-1.5 flex-shrink-0 w-[60px]">
             <span className="text-[13px] font-black text-white/25 tracking-widest">VS.</span>
-            {!hasBye && (
+            {!preseason && !hasBye && (
               <span className={cn("text-[12px] font-black tabular-nums border rounded-full px-2.5 py-0.5 leading-tight", theme.pill)}>
                 {Math.round(m.winPct)}%
               </span>
@@ -648,19 +662,19 @@ function MatchupBattleCard({ m }: { m: MatchupAnalysis }) {
           {/* Opponent stats */}
           <div className="flex flex-col items-center gap-0.5">
             <span className="text-[10px] text-white/25 tabular-nums font-medium">
-              {hasBye ? "" : fmtRecord(m.opponentRecord.wins, m.opponentRecord.losses, m.opponentRecord.ties)}
+              {preseason ? "N/A" : hasBye ? "" : fmtRecord(m.opponentRecord.wins, m.opponentRecord.losses, m.opponentRecord.ties)}
             </span>
-            <span className={cn("text-[26px] font-black tabular-nums leading-none mt-0.5", !isFav && !hasBye ? "text-red-400/50" : "text-white/25")}>
-              {hasBye ? "—" : fmt1(m.opponentProj)}
+            <span className={cn("text-[26px] font-black tabular-nums leading-none mt-0.5", preseason ? "text-white/25" : !isFav && !hasBye ? "text-red-400/50" : "text-white/25")}>
+              {preseason ? "N/A" : hasBye ? "—" : fmt1(m.opponentProj)}
             </span>
             <span className="text-[9px] text-white/20 uppercase tracking-wider font-semibold">
-              {hasBye ? "" : "Projected"}
+              {preseason ? "" : hasBye ? "" : "Projected"}
             </span>
           </div>
         </div>
 
         {/* ── Win probability bar ── */}
-        {!hasBye && (
+        {!preseason && !hasBye && (
           <div className="mt-3.5">
             <div className="h-1.5 rounded-full bg-white/6 overflow-hidden">
               <div className="h-full rounded-full transition-all duration-700"
@@ -1154,6 +1168,17 @@ export function LineupCommand() {
 
       {/* ── Page header ──────────────────────────────────────────────────── */}
       <SectionHeader title="Lineup Command" subtitle="Review starters, identify lineup issues, and optimize weekly decisions." />
+      {/* ── Preseason notice ─────────────────────────────────────────────── */}
+      {IS_PRESEASON && (
+        <div className="flex items-center gap-3 rounded-xl px-4 py-3 border border-yellow-500/25 bg-yellow-500/8">
+          <CalendarX className="w-4 h-4 text-yellow-400/80 flex-shrink-0" />
+          <div>
+            <span className="text-[12px] font-bold text-yellow-300/80">Preseason (live values unavailable)</span>
+            <span className="text-[11px] text-yellow-400/50 ml-2">Projections, records, and lineup data will populate once the regular season begins.</span>
+          </div>
+        </div>
+      )}
+
       {/* ── Sub-tab switcher ─────────────────────────────────────────────── */}
       <div className="flex justify-center sm:justify-start !mt-0 md:!mt-5">
         {(baseLoading || allLoading || mAllLoading) && (
@@ -1189,11 +1214,11 @@ export function LineupCommand() {
               Operations Overview
             </p>
             <div className="grid grid-cols-3 md:grid-cols-5 gap-2 md:gap-3">
-              <KpiCard icon={AlertTriangle} label="Lineup Issues"  value={hasAnyData ? kpis.totalIssues : "—"} accent="red"    sub="Out · IR · Bye" />
-              <KpiCard icon={TrendingUp}   label="Optimal Swaps"  value={hasAnyData ? kpis.totalSwaps : "—"}  accent="blue"   sub="Available" />
-              <KpiCard icon={Zap}          label="Points Gain"    value={hasAnyData ? (kpis.totalGain > 0 ? `+${fmt1(kpis.totalGain)}` : "—") : "—"} accent="gold" sub="Projected" />
-              <KpiCard icon={Activity}     label="Questionable"   value={hasAnyData ? kpis.questionable : "—"} accent="yellow" sub="Starters" />
-              <KpiCard icon={CalendarX}    label="Bye Conflicts"  value={hasAnyData ? kpis.byeConflicts : "—"} accent="slate"  sub="Active starters" />
+              <KpiCard icon={AlertTriangle} label="Lineup Issues"  value={IS_PRESEASON ? "N/A" : hasAnyData ? kpis.totalIssues : "—"} accent="red"    sub="Out · IR · Bye" />
+              <KpiCard icon={TrendingUp}   label="Optimal Swaps"  value={IS_PRESEASON ? "N/A" : hasAnyData ? kpis.totalSwaps : "—"}  accent="blue"   sub="Available" />
+              <KpiCard icon={Zap}          label="Points Gain"    value={IS_PRESEASON ? "N/A" : hasAnyData ? (kpis.totalGain > 0 ? `+${fmt1(kpis.totalGain)}` : "—") : "—"} accent="gold" sub="Projected" />
+              <KpiCard icon={Activity}     label="Questionable"   value={IS_PRESEASON ? "N/A" : hasAnyData ? kpis.questionable : "—"} accent="yellow" sub="Starters" />
+              <KpiCard icon={CalendarX}    label="Bye Conflicts"  value={IS_PRESEASON ? "N/A" : hasAnyData ? kpis.byeConflicts : "—"} accent="slate"  sub="Active starters" />
             </div>
           </div>
 
@@ -1270,7 +1295,7 @@ export function LineupCommand() {
                     <p className="text-xs text-white/25 mt-1">Connect leagues in the Portfolio tab to get started.</p>
                   </div>
                 ) : (
-                  sortedAnalyses.map(a => <LeagueRow key={a.leagueId} analysis={a} />)
+                  sortedAnalyses.map(a => <LeagueRow key={a.leagueId} analysis={a} preseason={IS_PRESEASON} />)
                 )}
               </div>
             </div>
@@ -1323,32 +1348,32 @@ export function LineupCommand() {
               <KpiCard
                 icon={Trophy}
                 label="Projected Record"
-                value={mHasAnyData ? `${matchupKpis.projWins}-${matchupKpis.projLosses}` : "—"}
+                value={IS_PRESEASON ? "N/A" : mHasAnyData ? `${matchupKpis.projWins}-${matchupKpis.projLosses}` : "—"}
                 accent="gold"
                 sub="This week"
               />
               <KpiCard
                 icon={Zap}
                 label="Best Projected PF"
-                value={mHasAnyData && matchupKpis.bestPF ? fmt1(matchupKpis.bestPF.myProj) : "—"}
+                value={IS_PRESEASON ? "N/A" : mHasAnyData && matchupKpis.bestPF ? fmt1(matchupKpis.bestPF.myProj) : "—"}
                 accent="blue"
-                sub={matchupKpis.bestPF?.leagueName ?? "Highest output"}
+                sub={IS_PRESEASON ? "Preseason" : matchupKpis.bestPF?.leagueName ?? "Highest output"}
               />
               <KpiCard
                 icon={Users}
                 label="Avg Opp Record"
-                value={mHasAnyData ? `${Math.round(matchupKpis.avgOppWinPct)}%` : "—"}
+                value={IS_PRESEASON ? "N/A" : mHasAnyData ? `${Math.round(matchupKpis.avgOppWinPct)}%` : "—"}
                 accent="yellow"
                 sub="Opponent win rate"
               />
               <KpiCard
                 icon={Shield}
                 label="Toughest Opponent"
-                value={mHasAnyData && matchupKpis.toughest
+                value={IS_PRESEASON ? "N/A" : mHasAnyData && matchupKpis.toughest
                   ? `${Math.round(recordWinPct(matchupKpis.toughest.opponentRecord.wins, matchupKpis.toughest.opponentRecord.losses, matchupKpis.toughest.opponentRecord.ties))}%`
                   : "—"}
                 accent="red"
-                sub={matchupKpis.toughest?.leagueName ?? "Hardest matchup"}
+                sub={IS_PRESEASON ? "Preseason" : matchupKpis.toughest?.leagueName ?? "Hardest matchup"}
               />
             </div>
           </div>
@@ -1389,7 +1414,7 @@ export function LineupCommand() {
                 <p className="text-xs text-white/25 mt-1">Matchup data loads once projections are available.</p>
               </div>
             ) : (
-              sortedMatchups.map(m => <MatchupBattleCard key={m.leagueId} m={m} />)
+              sortedMatchups.map(m => <MatchupBattleCard key={m.leagueId} m={m} preseason={IS_PRESEASON} />)
             )}
           </div>
 

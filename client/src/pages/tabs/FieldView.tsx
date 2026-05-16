@@ -508,7 +508,7 @@ export const FieldView = forwardRef<FieldViewHandle, FieldViewProps>(function Fi
           } catch { /* matchup optional */ }
         }
       } catch {
-        if (!cancelled) setError("Could not load live data — showing dynasty values only.");
+        if (!cancelled) setError("Could not load live data. Showing dynasty values only.");
       } finally {
         if (!cancelled) setIsLoading(false);
       }

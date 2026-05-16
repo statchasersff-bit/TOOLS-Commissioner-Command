@@ -1890,7 +1890,7 @@ export default function LiveDraft() {
               {/* Empty state */}
               {sleeperJwt && !messagesLoading && mergedPickHistory.length === 0 && !messagesError && (
                 <p className="text-xs text-muted-foreground text-center py-3" data-testid="text-no-picks-yet">
-                  {draftStarted ? "Draft has started — no picks logged yet." : "Waiting for draft picks…"}
+                  {draftStarted ? "Draft has started. No picks logged yet." : "Waiting for draft picks…"}
                 </p>
               )}
 

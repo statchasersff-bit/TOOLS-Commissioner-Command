@@ -83,7 +83,7 @@ export async function verifyChallenge(sleeperId: string, leagueId?: string): Pro
     if (leagueId) {
       const found = await checkLeagueForCode(sleeperId, leagueId, entry.code);
       if (found) { challenges.delete(sleeperId); return { ok: true }; }
-      return { ok: false, error: "Code not found yet. Sleeper's API can take 1–2 minutes to reflect team name changes — wait a moment and try again." };
+      return { ok: false, error: "Code not found yet. Sleeper's API can take 1–2 minutes to reflect team name changes. Wait a moment and try again." };
     }
 
     // No league specified — check all leagues in parallel batches of 15

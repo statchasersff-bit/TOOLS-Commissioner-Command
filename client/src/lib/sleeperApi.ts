@@ -1732,7 +1732,7 @@ export async function sleeperLogin(login: string, password: string): Promise<str
   });
   if (!res.ok) throw new Error("Invalid username or password");
   const data = await res.json();
-  if (!data.token) throw new Error("Authentication failed — no token returned");
+  if (!data.token) throw new Error("Authentication failed. No token returned.");
   return data.token as string;
 }
 
