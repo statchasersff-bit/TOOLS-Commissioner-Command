@@ -21,7 +21,7 @@ export function KpiCard({ label, value, icon: Icon, subtitle, trend, className, 
   }
 
   return (
-    <Card className={cn("p-5 hover-elevate", className)} data-testid={`kpi-${label.toLowerCase().replace(/\s+/g, "-")}`}>
+    <Card className={cn("p-3 sm:p-5 hover-elevate", className)} data-testid={`kpi-${label.toLowerCase().replace(/\s+/g, "-")}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1">
@@ -44,7 +44,7 @@ export function KpiCard({ label, value, icon: Icon, subtitle, trend, className, 
           <p className="text-2xl font-bold mt-1.5 text-foreground leading-none">{value}</p>
           {subtitle && (
             <p className={cn(
-              "text-xs mt-2",
+              "text-[10px] sm:text-xs mt-1.5 break-words",
               trend === "up" ? "text-emerald-600 dark:text-emerald-400" :
               trend === "down" ? "text-red-600 dark:text-red-400" :
               "text-muted-foreground"

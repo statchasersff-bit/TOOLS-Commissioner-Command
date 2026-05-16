@@ -411,9 +411,9 @@ function SortableLeagueRecords({ records }: { records: any[] }) {
           <tr className="border-b border-border bg-muted/30">
             <PortfolioSortHeader label="League" sortKey="leagueName" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} align="left" />
             <PortfolioSortHeader label="Rec" sortKey="wins" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-            <PortfolioSortHeader label="Redraft" sortKey="redraftRank" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-            <PortfolioSortHeader label="Dynasty" sortKey="dynastyRank" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-            <PortfolioSortHeader label="Playoff%" sortKey="playoffOdds" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+            <PortfolioSortHeader label="W-N" sortKey="redraftRank" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+            <PortfolioSortHeader label="DYN" sortKey="dynastyRank" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+            <PortfolioSortHeader label="PLYF%" sortKey="playoffOdds" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
             <PortfolioSortHeader label="PF Rk" sortKey="pfRank" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
             <PortfolioSortHeader label="Max PF" sortKey="maxPfRank" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
             <PortfolioSortHeader label="Stnd" sortKey="standing" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
@@ -432,7 +432,7 @@ function SortableLeagueRecords({ records }: { records: any[] }) {
                     </div>
                   )}
                   <div className="min-w-0">
-                    <div className="font-semibold text-[10px] md:text-sm text-foreground truncate" title={rec.leagueName}>{rec.leagueName}</div>
+                    <div className="font-semibold text-[10px] md:text-sm text-foreground break-words line-clamp-2" title={rec.leagueName}>{rec.leagueName}</div>
                     <div className="hidden md:flex items-center gap-1 mt-0.5 flex-wrap">
                       <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-muted/60 text-muted-foreground">{rec.scoringFormat === "Half" ? "Half-PPR" : rec.scoringFormat}</span>
                       <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-muted/60 text-muted-foreground">{rec.totalRosters} Teams</span>
@@ -586,9 +586,9 @@ export function PortfolioSummary() {
   if (innerTab === "finances") {
     return (
       <div className="space-y-6">
-        <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <SectionHeader title="League Finances" subtitle="Track buy-ins, prizes, and ROI across your leagues" />
-          <div className="flex gap-1 p-1 rounded-xl bg-white/[0.03] border border-white/6 w-fit">
+          <div className="flex gap-1 p-1 rounded-xl bg-white/[0.03] border border-white/6 w-fit self-center sm:self-auto">
             {(["overview", "finances"] as const).map((tab) => (
               <button
                 key={tab}
@@ -618,9 +618,9 @@ export function PortfolioSummary() {
 
   return (
     <div className="space-y-8">
-      <div className="flex items-center justify-between gap-4 flex-wrap">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <SectionHeader title="My Portfolio" subtitle="Overview of your dynasty portfolio across all leagues" />
-        <div className="flex gap-1 p-1 rounded-xl bg-white/[0.03] border border-white/6 w-fit">
+        <div className="flex gap-1 p-1 rounded-xl bg-white/[0.03] border border-white/6 w-fit self-center sm:self-auto">
           {(["overview", "finances"] as const).map((tab) => (
             <button
               key={tab}
@@ -682,7 +682,7 @@ export function PortfolioSummary() {
               <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
             </div>
 
-            <div className="flex flex-wrap items-center gap-2 mb-4">
+            <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 mb-4">
               {([
                 { key: "all",       label: "All",                count: summaryData.leagueRecords.length, icon: null,                                  inactive: "bg-muted/40 text-muted-foreground border-border hover:border-[#0b3a7a]/40" },
                 { key: "contender", label: "Contenders (Top 3)", count: summaryData.contenderCount,       icon: <Crown className="w-3.5 h-3.5" />,     inactive: "bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 border-emerald-200/50 dark:border-emerald-800/30 hover:border-emerald-500" },
