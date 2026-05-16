@@ -604,7 +604,7 @@ export function ShareDynastyPopup({ blocked = false, forceOpen = false, onForceO
 
       {/* ── Popup card (3-step opt-in flow) ──────────────────────────── */}
       {popupStep !== "hidden" && (
-        <div className="fixed bottom-4 right-4 z-[200] w-[min(360px,calc(100vw-32px))] animate-in slide-in-from-bottom-4 fade-in duration-300">
+        <div className="fixed z-[200] w-[min(360px,calc(100vw-32px))] animate-in fade-in zoom-in-95 duration-300 left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 sm:left-auto sm:top-auto sm:right-4 sm:bottom-4 sm:translate-x-0 sm:translate-y-0 sm:animate-in sm:slide-in-from-bottom-4">
           <div className="rounded-xl border border-[#d4af37]/30 bg-[#080f1d] shadow-[0_8px_32px_rgba(0,0,0,0.6)] overflow-hidden max-h-[88vh] flex flex-col">
 
             {/* Header */}
