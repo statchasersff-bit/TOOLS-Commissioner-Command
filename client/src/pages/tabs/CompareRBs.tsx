@@ -3,7 +3,7 @@ import { useValueModel } from "@/contexts/ValueModelContext";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { Search, Trophy, Zap, Target, TrendingUp, Star, ChevronDown } from "lucide-react";
+import { Search, Trophy, Zap, Target, TrendingUp, Star, ChevronDown, ArrowUpRight } from "lucide-react";
 
 // ── Types ───────────────────────────────────────────────────────────
 type Position = "RB" | "WR" | "TE" | "QB";
@@ -61,19 +61,29 @@ function getTierColor(tier: string): string {
   if (/[a-z]4$/.test(t))                               return "bg-slate-500/10 text-slate-500 border-slate-500/20";
   if (t.includes("fringe"))                             return "bg-slate-600/10 text-slate-500 border-slate-600/20";
   if (t.includes("handcuff") || t.includes("backup"))  return "bg-purple-500/15 text-purple-400 border-purple-500/30";
+  // Experience tiers (WR overview_2025)
+  if (t.includes("year 1") || t.includes("year 2"))    return "bg-emerald-500/15 text-emerald-400 border-emerald-500/40";
+  if (t.includes("year 3") || t.includes("year 4"))    return "bg-[#d4af37]/15 text-[#d4af37] border-[#d4af37]/40";
+  if (t.includes("year 5") || t.includes("year 6"))    return "bg-blue-500/15 text-blue-400 border-blue-500/30";
+  if (t.includes("veteran") || t.includes("year 7"))   return "bg-slate-500/15 text-slate-400 border-slate-500/30";
   return "bg-slate-500/15 text-slate-400 border-slate-500/30";
 }
 
 // ── Position config ─────────────────────────────────────────────────
 const POS_DATA_URLS: Record<Position, string> = {
   RB: "https://cdn.jsdelivr.net/gh/statchasersff-bit/statchasers-data@master/statchasers-data/output/rb_player_overview.json",
-  WR: "https://cdn.jsdelivr.net/gh/statchasersff-bit/statchasers-data@master/statchasers-data/output/wr_player_overview.json",
+  WR: "https://cdn.jsdelivr.net/gh/statchasersff-bit/statchasers-data@master/statchasers-data/output/wr_player_overview_2025.json",
   TE: "https://cdn.jsdelivr.net/gh/statchasersff-bit/statchasers-data@master/statchasers-data/output/te_player_overview.json",
   QB: "https://cdn.jsdelivr.net/gh/statchasersff-bit/statchasers-data@master/statchasers-data/output/qb_player_overview.json",
 };
 
+// Secondary data URLs (fetched and merged into primary rows by normalized player name)
+const POS_SECONDARY_URL: Partial<Record<Position, string>> = {
+  WR: "https://raw.githubusercontent.com/statchasersff-bit/statchasers-data/refs/heads/master/statchasers-data/output/wr_advanced_stats_2025.json",
+};
+
 const POS_TIER_FIELD: Record<Position, string> = {
-  RB: "rb_tier", WR: "wr_tier", TE: "te_tier", QB: "qb_tier",
+  RB: "rb_tier", WR: "exp_tier", TE: "te_tier", QB: "qb_tier",
 };
 
 const POS_LABELS: Record<Position, string> = {
@@ -98,6 +108,18 @@ const WINNOW_EDGE: EdgeDef = {
   compute: p => p.rdVal,
 };
 
+// WR-specific named dynasty/win-now edges
+const WR_DYNASTY_EDGE: EdgeDef = {
+  id: "dynasty-edge", label: "Dynasty Edge", Icon: TrendingUp,
+  color: "text-emerald-400", bgColor: "bg-emerald-500/10 border-emerald-500/30",
+  compute: p => p.dynVal,
+};
+const WR_WINNOW_EDGE: EdgeDef = {
+  id: "winnow-edge", label: "Win-Now Edge", Icon: Trophy,
+  color: "text-amber-400", bgColor: "bg-amber-500/10 border-amber-500/30",
+  compute: p => p.rdVal,
+};
+
 const POS_STATS: Record<Position, StatDef[]> = {
   RB: [
     { label: "Rush Att/G",  compute: p => getField(p, "rush_att_per_gm"),   display: v => fmtNum(v) },
@@ -107,11 +129,11 @@ const POS_STATS: Record<Position, StatDef[]> = {
     { label: "RZ Att/G",    compute: p => { const rz = getField(p, "rz_rush_att"); const g = getField(p, "games"); return rz !== null && g ? rz / g : null; }, display: v => fmtNum(v) },
   ],
   WR: [
-    { label: "Targets/G",   compute: p => getField(p, "targets_per_gm"),    display: v => fmtNum(v) },
-    { label: "Rec/G",       compute: p => getField(p, "receptions_per_gm") ?? getField(p, "rec_per_gm"), display: v => fmtNum(v) },
-    { label: "Yards/G",     compute: p => getField(p, "receiving_yards_per_gm") ?? getField(p, "yards_per_gm"), display: v => fmtNum(v) },
-    { label: "TD/G",        compute: p => getField(p, "td_per_gm"),          display: v => fmtNum(v, 2) },
-    { label: "Air Yards/G", compute: p => getField(p, "air_yards_per_gm"),   display: v => fmtNum(v) },
+    { label: "Tgt/Gm",       compute: p => getField(p, "targets_per_gm"),    display: v => fmtNum(v) },
+    { label: "Rec/Gm",       compute: p => getField(p, "receptions_per_gm"), display: v => fmtNum(v) },
+    { label: "Air Yards/Gm", compute: p => getField(p, "air_yards_per_gm"),  display: v => fmtNum(v) },
+    { label: "Yards/Tgt",    compute: p => getField(p, "yards_per_target"),  display: v => fmtNum(v) },
+    { label: "RZ Tgt/Gm",   compute: p => getField(p, "rz_tgt_per_game"),   display: v => fmtNum(v) },
   ],
   TE: [
     { label: "Targets/G",   compute: p => getField(p, "targets_per_gm"),    display: v => fmtNum(v) },
@@ -137,10 +159,11 @@ const POS_EDGES: Record<Position, EdgeDef[]> = {
     DYNASTY_EDGE, WINNOW_EDGE,
   ],
   WR: [
-    { id: "most-targeted", label: "Most Targeted",       Icon: Star,   color: "text-[#d4af37]",  bgColor: "bg-[#d4af37]/10 border-[#d4af37]/30",  compute: p => getField(p, "targets_per_gm") ?? 0 },
-    { id: "best-eff",      label: "Best Efficiency",     Icon: Zap,    color: "text-blue-400",   bgColor: "bg-blue-500/10 border-blue-500/30",     compute: p => (getField(p, "receiving_yards_per_gm") ?? getField(p, "yards_per_gm")) ?? 0 },
-    { id: "best-td",       label: "Best TD Threat",      Icon: Target, color: "text-red-400",    bgColor: "bg-red-500/10 border-red-500/30",       compute: p => getField(p, "td_per_gm") ?? 0 },
-    DYNASTY_EDGE, WINNOW_EDGE,
+    { id: "volume",      label: "Volume Edge",        Icon: Star,        color: "text-[#d4af37]",   bgColor: "bg-[#d4af37]/10 border-[#d4af37]/30",    compute: p => (getField(p, "targets_per_gm") ?? 0) + (getField(p, "receptions_per_gm") ?? 0) },
+    { id: "downfield",   label: "Downfield Edge",     Icon: ArrowUpRight,color: "text-blue-400",    bgColor: "bg-blue-500/10 border-blue-500/30",      compute: p => getField(p, "air_yards_per_gm") ?? 0 },
+    { id: "efficiency",  label: "Efficiency Edge",    Icon: Zap,         color: "text-purple-400",  bgColor: "bg-purple-500/10 border-purple-500/30",  compute: p => getField(p, "yards_per_target") ?? 0 },
+    { id: "td-opp",      label: "TD Opportunity",     Icon: Target,      color: "text-red-400",     bgColor: "bg-red-500/10 border-red-500/30",        compute: p => getField(p, "rz_tgt_per_game") ?? 0 },
+    WR_DYNASTY_EDGE, WR_WINNOW_EDGE,
   ],
   TE: [
     { id: "most-targeted", label: "Most Targeted",       Icon: Star,   color: "text-[#d4af37]",  bgColor: "bg-[#d4af37]/10 border-[#d4af37]/30",  compute: p => getField(p, "targets_per_gm") ?? 0 },
@@ -155,6 +178,19 @@ const POS_EDGES: Record<Position, EdgeDef[]> = {
     DYNASTY_EDGE, WINNOW_EDGE,
   ],
 };
+
+// ── Parse helpers ────────────────────────────────────────────────────
+// Handles multiple envelope shapes: bare array, { rows }, { players }, { data }
+function extractRows(raw: unknown): PlayerRaw[] {
+  if (Array.isArray(raw)) return raw as PlayerRaw[];
+  if (raw && typeof raw === "object") {
+    const obj = raw as Record<string, unknown>;
+    for (const key of ["rows", "players", "data", "results"]) {
+      if (Array.isArray(obj[key])) return obj[key] as PlayerRaw[];
+    }
+  }
+  return [];
+}
 
 // ── Player selector combobox ────────────────────────────────────────
 function PlayerSelector({
@@ -364,11 +400,15 @@ function EdgeLabels({ players, edges }: { players: (ResolvedPlayer | null)[]; ed
   const active = players.filter(Boolean) as ResolvedPlayer[];
   if (active.length < 2) return null;
 
+  const gridClass = edges.length >= 6
+    ? "grid-cols-2 sm:grid-cols-3 lg:grid-cols-6"
+    : "grid-cols-2 sm:grid-cols-3 lg:grid-cols-5";
+
   return (
     <Card className="mt-2 bg-[#080e1c] border-[#d4af37]/15" data-testid="edge-labels">
       <CardContent className="p-4">
         <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-3">Comparison Edge</p>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+        <div className={cn("grid gap-2", gridClass)}>
           {edges.map(({ id, label, Icon, color, bgColor, compute }) => {
             const scores = active.map(p => ({ name: p.player, score: compute(p) }));
             const best = scores.reduce((a, b) => b.score > a.score ? b : a, scores[0]);
@@ -404,11 +444,46 @@ export function CompareRBs() {
     setFetchError(null);
     setPlayerData([]);
     setSelected([null, null, null]);
-    fetch(POS_DATA_URLS[pos])
+
+    const primaryUrl = POS_DATA_URLS[pos];
+    const secondaryUrl = POS_SECONDARY_URL[pos] ?? null;
+
+    const primaryFetch = fetch(primaryUrl)
       .then(r => { if (!r.ok) throw new Error("Network error"); return r.json(); })
-      .then((data: { rows?: PlayerRaw[] } | PlayerRaw[]) => {
-        const rows = Array.isArray(data) ? data : (data as { rows?: PlayerRaw[] }).rows ?? [];
-        setPlayerData(rows);
+      .then(extractRows);
+
+    const secondaryFetch = secondaryUrl
+      ? fetch(secondaryUrl)
+          .then(r => r.ok ? r.json() : null)
+          .then(d => d ? extractRows(d) : [])
+          .catch(() => [] as PlayerRaw[])
+      : Promise.resolve([] as PlayerRaw[]);
+
+    Promise.all([primaryFetch, secondaryFetch])
+      .then(([primary, secondary]) => {
+        if (!secondary.length) {
+          setPlayerData(primary);
+        } else {
+          // Build lookup: normalized name → secondary row
+          const secMap = new Map<string, PlayerRaw>();
+          for (const row of secondary) {
+            secMap.set(normalizeName(row.player), row);
+          }
+          // Merge: compute derived fields (rz_tgt_per_game for WR)
+          const merged = primary.map(p => {
+            const sec = secMap.get(normalizeName(p.player));
+            if (!sec) return p;
+            // rz_tgt_per_game = rz_tgt / g (from advanced stats)
+            const rz = Number(sec["rz_tgt"]);
+            const g  = Number(sec["g"]);
+            const rzPerGame = !isNaN(rz) && g > 0 ? rz / g : null;
+            return {
+              ...p,
+              ...(rzPerGame !== null ? { rz_tgt_per_game: rzPerGame } : {}),
+            };
+          });
+          setPlayerData(merged);
+        }
         setLoading(false);
       })
       .catch(() => { setFetchError("Failed to load player data."); setLoading(false); });
