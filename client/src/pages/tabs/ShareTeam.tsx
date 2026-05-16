@@ -256,7 +256,7 @@ export function ShareTeam({ league, userTeam }: Props) {
     <div className="space-y-4">
       <SectionHeader title="Share My Team" subtitle="Create a clean shareable snapshot of your roster, values, and team profile." />
       {/* Tab toggle — view switcher */}
-      <div className="flex justify-center sm:justify-start">
+      <div className="flex justify-center sm:justify-start !mt-0 md:!mt-8">
         <div
           className="grid w-full sm:w-auto"
           style={{
