@@ -2707,7 +2707,7 @@ export function TradeDatabase({ league }: { league: League }) {
           )}
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 justify-center md:justify-start">
           <div className="flex gap-1">
             {(["all", "SF", "1QB"] as const).map((f) => (
               <button
@@ -2769,7 +2769,7 @@ export function TradeDatabase({ league }: { league: League }) {
       </div>
 
       {!isSearching && total > 0 && (
-        <p className="text-xs text-muted-foreground" data-testid="text-results-count">
+        <p className="text-xs text-muted-foreground text-center md:text-left" data-testid="text-results-count">
           Showing {tradeResults.length.toLocaleString()} of {total.toLocaleString()} trades
         </p>
       )}
