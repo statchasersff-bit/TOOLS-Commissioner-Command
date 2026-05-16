@@ -74,7 +74,6 @@ const MEGA_DATA: Record<string, MegaSection[]> = {
       items: [
         { subId: "analysis",        label: "Analysis",        description: "League trends & positional insights",           icon: LineChart  },
         { subId: "market-value",    label: "Market Value",    description: "Player market values across formats",           icon: TrendingUp },
-        { subId: "compare-players", label: "Compare Players", description: "Side-by-side player card comparison by position", icon: LayoutGrid },
       ],
     },
   ],
