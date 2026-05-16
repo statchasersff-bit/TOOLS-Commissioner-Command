@@ -1752,6 +1752,8 @@ export function MyTeam({ league, userTeam, onNavigate }: DashboardOverviewProps)
   return (
     <div className="space-y-8">
 
+      <SectionHeader title="Overview" subtitle={`${userTeam.name} · managed by ${userTeam.owner}`} />
+
       {/* ── 1. KPI STRIP ───────────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3" data-testid="myteam-kpi-strip">
         {[
