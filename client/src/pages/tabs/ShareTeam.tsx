@@ -260,12 +260,6 @@ export function ShareTeam({ league, userTeam }: Props) {
           <Copy className="w-3.5 h-3.5 mr-1.5" /> Copy Link
         </Button>
         {innerTab === "share" && (
-          <Button size="sm" variant="outline" onClick={() => doExport(false)} disabled={isExporting} data-testid="button-export-image">
-            {isExporting ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <Image className="w-3.5 h-3.5 mr-1.5" />}
-            Export Image
-          </Button>
-        )}
-        {innerTab === "share" && (
           <Button size="sm" variant="outline" onClick={() => doExport(true)} disabled={isExporting} data-testid="button-export-anonymous">
             <EyeOff className="w-3.5 h-3.5 mr-1.5" /> Export Anonymous
           </Button>
@@ -273,6 +267,12 @@ export function ShareTeam({ league, userTeam }: Props) {
         <Button size="sm" variant="outline" onClick={copyBlurb} data-testid="button-copy-blurb">
           <Share2 className="w-3.5 h-3.5 mr-1.5" /> Copy Blurb
         </Button>
+        {innerTab === "share" && (
+          <Button size="sm" variant="outline" onClick={() => doExport(false)} disabled={isExporting} data-testid="button-export-image">
+            {isExporting ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <Image className="w-3.5 h-3.5 mr-1.5" />}
+            Export Image
+          </Button>
+        )}
         {innerTab === "share" && (
           <ToggleSwitch id="hide-values" label="Hide Values" checked={hideValues} onCheckedChange={setHideValues} />
         )}
