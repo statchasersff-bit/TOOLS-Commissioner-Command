@@ -12,7 +12,7 @@ import { getPositionColor } from "@/data/mockData";
 import type { League, Team, Player, Pick } from "@/types";
 import { cn } from "@/lib/utils";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
-import { FieldView } from "./FieldView";
+import { FieldView, type FieldViewHandle } from "./FieldView";
 import {
   Copy, Image, Share2, EyeOff, Loader2,
   Shield, Star, TrendingDown, Zap, Target, ChevronRight,
@@ -79,6 +79,7 @@ export function ShareTeam({ league, userTeam }: Props) {
   const { toast } = useToast();
   const { getPlayerValue, getRedraftValue, optimizeLineup } = useValueModel();
   const cardRef = useRef<HTMLDivElement>(null);
+  const fieldViewRef = useRef<FieldViewHandle>(null);
 
   const [innerTab, setInnerTab] = useState<"share" | "field-view">("field-view");
 
@@ -255,65 +256,76 @@ export function ShareTeam({ league, userTeam }: Props) {
     <div className="space-y-4">
       <SectionHeader title="Share My Team" subtitle="Create a clean shareable snapshot of your roster, values, and team profile." />
       {/* Combined controls + tab toggle row */}
-      <div className="flex flex-wrap items-center gap-2">
-        <Button size="sm" variant="outline" onClick={copyLink} data-testid="button-copy-link">
-          <Copy className="w-3.5 h-3.5 mr-1.5" /> Copy Link
-        </Button>
-        {innerTab === "share" && (
-          <Button size="sm" variant="outline" onClick={() => doExport(true)} disabled={isExporting} data-testid="button-export-anonymous">
-            <EyeOff className="w-3.5 h-3.5 mr-1.5" /> Export Anonymous
+      <div className="flex flex-col gap-2">
+        {/* Action buttons — centered on mobile */}
+        <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
+          <Button size="sm" variant="outline" onClick={copyLink} data-testid="button-copy-link">
+            <Copy className="w-3.5 h-3.5 mr-1.5" /> Copy Link
           </Button>
-        )}
-        <Button size="sm" variant="outline" onClick={copyBlurb} data-testid="button-copy-blurb">
-          <Share2 className="w-3.5 h-3.5 mr-1.5" /> Copy Blurb
-        </Button>
-        {innerTab === "share" && (
-          <Button size="sm" variant="outline" onClick={() => doExport(false)} disabled={isExporting} data-testid="button-export-image">
-            {isExporting ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <Image className="w-3.5 h-3.5 mr-1.5" />}
-            Export Image
+          <Button size="sm" variant="outline" onClick={copyBlurb} data-testid="button-copy-blurb">
+            <Share2 className="w-3.5 h-3.5 mr-1.5" /> Copy Blurb
           </Button>
-        )}
-        {innerTab === "share" && (
-          <ToggleSwitch id="hide-values" label="Hide Values" checked={hideValues} onCheckedChange={setHideValues} />
-        )}
-        <div className="ml-auto flex gap-1 p-1 rounded-xl bg-white/[0.03] border border-white/6">
-          <button
-            onClick={() => setInnerTab("share")}
-            data-testid="tab-inner-share"
-            className={cn(
-              "relative flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-[11px] font-semibold transition-all duration-200",
-              innerTab === "share"
-                ? "bg-[#0b3a7a]/60 text-white border border-[#d4af37]/25"
-                : "text-white/35 hover:text-white/60"
-            )}
-          >
-            <Share2 className="w-3.5 h-3.5" />
-            List View
-            {innerTab === "share" && (
-              <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-6 h-[2px] rounded-full bg-[#d4af37]" />
-            )}
-          </button>
-          <button
-            onClick={() => setInnerTab("field-view")}
-            data-testid="tab-inner-field-view"
-            className={cn(
-              "relative flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-[11px] font-semibold transition-all duration-200",
-              innerTab === "field-view"
-                ? "bg-[#0b3a7a]/60 text-white border border-[#d4af37]/25"
-                : "text-white/35 hover:text-white/60"
-            )}
-          >
-            <LayoutGrid className="w-3.5 h-3.5" />
-            Field View
-            {innerTab === "field-view" && (
-              <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-6 h-[2px] rounded-full bg-[#d4af37]" />
-            )}
-          </button>
+          {innerTab === "share" && (
+            <Button size="sm" variant="outline" onClick={() => doExport(true)} disabled={isExporting} data-testid="button-export-anonymous">
+              <EyeOff className="w-3.5 h-3.5 mr-1.5" /> Export Anonymous
+            </Button>
+          )}
+          {innerTab === "share" && (
+            <Button size="sm" variant="outline" onClick={() => doExport(false)} disabled={isExporting} data-testid="button-export-image">
+              {isExporting ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <Image className="w-3.5 h-3.5 mr-1.5" />}
+              Export Image
+            </Button>
+          )}
+          {innerTab === "field-view" && (
+            <Button size="sm" variant="outline" onClick={() => fieldViewRef.current?.triggerExport()} data-testid="button-export-field-image">
+              <Image className="w-3.5 h-3.5 mr-1.5" /> Export Image
+            </Button>
+          )}
+          {innerTab === "share" && (
+            <ToggleSwitch id="hide-values" label="Hide Values" checked={hideValues} onCheckedChange={setHideValues} />
+          )}
+        </div>
+        {/* Tab toggle — centered on mobile, right-aligned on desktop */}
+        <div className="flex justify-center sm:justify-end">
+          <div className="flex gap-1 p-1 rounded-xl bg-white/[0.03] border border-white/6">
+            <button
+              onClick={() => setInnerTab("share")}
+              data-testid="tab-inner-share"
+              className={cn(
+                "relative flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-[11px] font-semibold transition-all duration-200",
+                innerTab === "share"
+                  ? "bg-[#0b3a7a]/60 text-white border border-[#d4af37]/25"
+                  : "text-white/35 hover:text-white/60"
+              )}
+            >
+              <Share2 className="w-3.5 h-3.5" />
+              List View
+              {innerTab === "share" && (
+                <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-6 h-[2px] rounded-full bg-[#d4af37]" />
+              )}
+            </button>
+            <button
+              onClick={() => setInnerTab("field-view")}
+              data-testid="tab-inner-field-view"
+              className={cn(
+                "relative flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-[11px] font-semibold transition-all duration-200",
+                innerTab === "field-view"
+                  ? "bg-[#0b3a7a]/60 text-white border border-[#d4af37]/25"
+                  : "text-white/35 hover:text-white/60"
+              )}
+            >
+              <LayoutGrid className="w-3.5 h-3.5" />
+              Field View
+              {innerTab === "field-view" && (
+                <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-6 h-[2px] rounded-full bg-[#d4af37]" />
+              )}
+            </button>
+          </div>
         </div>
       </div>
 
       {innerTab === "field-view" && (
-        <FieldView league={league} userTeam={userTeam} />
+        <FieldView ref={fieldViewRef} league={league} userTeam={userTeam} />
       )}
 
       {innerTab === "share" && (

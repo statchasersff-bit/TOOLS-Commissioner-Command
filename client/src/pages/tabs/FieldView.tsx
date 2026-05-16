@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback, forwardRef, useImperativeHandle } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
@@ -409,7 +409,10 @@ function FieldLegend() {
 }
 
 // ─── Main Component ───────────────────────────────────────────────────────────
-export function FieldView({ league, userTeam }: { league: League; userTeam: Team }) {
+export interface FieldViewHandle { triggerExport: () => void; }
+type FieldViewProps = { league: League; userTeam: Team };
+
+export const FieldView = forwardRef<FieldViewHandle, FieldViewProps>(function FieldView({ league, userTeam }, ref) {
   const { getPlayerValue } = useValueModel();
   const { toast } = useToast();
 
@@ -442,6 +445,8 @@ export function FieldView({ league, userTeam }: { league: League; userTeam: Team
       setIsExporting(false);
     }
   }, [userTeam.owner, toast]);
+
+  useImperativeHandle(ref, () => ({ triggerExport: doExport }), [doExport]);
 
   const rosterPositions = useMemo(() => league.rosterPositions ?? [], [league.rosterPositions]);
   const scoringFormat   = league.scoringFormat ?? "PPR";
@@ -606,20 +611,7 @@ export function FieldView({ league, userTeam }: { league: League; userTeam: Team
               <span className="hidden md:inline">{error}</span>
             </div>
           )}
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={doExport}
-            disabled={isExporting || isLoading}
-            data-testid="button-export-field-image"
-          >
-            {isExporting
-              ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
-              : <Download className="w-3.5 h-3.5 mr-1.5" />
-            }
-            Export Image
-          </Button>
-        </div>
+          </div>
       </div>
 
       {/* ── Mobile GM header strip (hidden on desktop) ────────────────── */}
@@ -784,4 +776,4 @@ export function FieldView({ league, userTeam }: { league: League; userTeam: Team
       </div>
     </div>
   );
-}
+});
