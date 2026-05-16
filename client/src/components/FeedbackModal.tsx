@@ -308,34 +308,6 @@ export function FeedbackModal({ open, onClose, currentTab = "", currentSubTab = 
                 />
               </div>
 
-              {/* Auto-captured context */}
-              {(currentTab || leagueId || sleeperInfo?.username) && (
-                <div className="rounded-xl px-3.5 py-2.5 space-y-1" style={{ background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.06)" }}>
-                  <p className="text-[10px] font-semibold text-white/30 uppercase tracking-wide mb-1.5">Auto-captured context</p>
-                  {currentTab && (
-                    <div className="flex items-center gap-2">
-                      <span className="text-[11px] text-white/25 w-14">Tab</span>
-                      <span className="text-[11px] text-white/50">{getTabLabel(currentTab, currentSubTab)}</span>
-                    </div>
-                  )}
-                  {leagueId && (
-                    <div className="flex items-center gap-2">
-                      <span className="text-[11px] text-white/25 w-14">League</span>
-                      <span className="text-[11px] text-white/50 font-mono">{leagueId}</span>
-                    </div>
-                  )}
-                  {sleeperInfo?.username && (
-                    <div className="flex items-center gap-2">
-                      <span className="text-[11px] text-white/25 w-14">Sleeper</span>
-                      <span className="text-[11px] text-white/50">@{sleeperInfo.username}</span>
-                    </div>
-                  )}
-                  <div className="flex items-center gap-2">
-                    <span className="text-[11px] text-white/25 w-14">Browser</span>
-                    <span className="text-[11px] text-white/50">{getBrowserInfo()}</span>
-                  </div>
-                </div>
-              )}
 
               {/* Error */}
               {(errorMsg || status === "error") && (
