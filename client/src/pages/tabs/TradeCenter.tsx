@@ -2056,21 +2056,16 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
         if (!proposedTrade && !!sleeperJwt && !sideBRosterId) issues.push("Select a trade partner (Side B) to enable submit");
         if (!proposedTrade && !!sleeperJwt && missingIds) issues.push("Some players are missing Sleeper IDs — add them via the roster picker");
         return (
-          <Card className="overflow-hidden border-border/60" data-testid="card-propose-trade">
-            {/* Dark gradient header */}
-            <div className="bg-gradient-to-r from-[#0b1e36] to-[#0c2444] dark:from-[#07111f] dark:to-[#0a1c34] px-5 py-4 border-b border-white/[0.06]">
-              <div className="flex items-center gap-2.5">
-                <div className="w-7 h-7 rounded-full bg-[#d4af37]/10 border border-[#d4af37]/25 flex items-center justify-center flex-shrink-0">
-                  <Send className="w-3.5 h-3.5 text-[#d4af37]" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-white leading-tight">Propose Trade on Sleeper</h3>
-                  <span className="block h-[2px] w-8 bg-[#d4af37] rounded-full mt-1" />
-                </div>
-              </div>
+          <Card className="p-5" data-testid="card-propose-trade">
+            <div className="mb-4">
+              <h3 className="text-sm font-bold flex items-center gap-2">
+                <Send className="w-4 h-4 text-[#0b3a7a] dark:text-blue-400" />
+                Propose Trade on Sleeper
+              </h3>
+              <span className="block h-[2px] w-8 bg-[#d4af37] rounded-full mt-1" />
             </div>
 
-            <div className="p-5 space-y-4 dark:bg-[#0a1628]/30">
+            <div className="space-y-4">
               {!sleeperJwt ? (
                 <div className="space-y-3">
                   <p className="text-xs text-muted-foreground">Connect your Sleeper account to propose trades directly from Dynasty Command.</p>
@@ -2096,42 +2091,42 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
                       const team   = side === "a" ? sideATeam : sideBTeam;
                       const label  = side === "a" ? "You Send" : "You Receive";
                       return (
-                        <div key={side} className="rounded-xl bg-white/[0.03] dark:bg-black/20 border border-white/[0.07] dark:border-white/[0.06] overflow-hidden">
-                          <div className="px-3 py-2 bg-white/[0.02] border-b border-white/[0.05] flex items-center gap-2">
+                        <div key={side} className="rounded-lg border border-border overflow-hidden">
+                          <div className="px-3 py-2 bg-muted/30 border-b border-border/50 flex items-center gap-2">
                             {team?.avatar ? (
-                              <img src={team.avatar} alt="" className="w-4 h-4 rounded-full object-cover flex-shrink-0 ring-1 ring-white/10" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                              <img src={team.avatar} alt="" className="w-4 h-4 rounded-full object-cover flex-shrink-0 ring-1 ring-border/40" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
                             ) : (
-                              <div className="w-4 h-4 rounded-full bg-[#0b3a7a]/30 flex-shrink-0" />
+                              <div className="w-4 h-4 rounded-full bg-muted flex-shrink-0" />
                             )}
-                            <span className={cn("text-[11px] font-bold tracking-wide", side === "a" ? "text-rose-400/90" : "text-emerald-400/90")}>{label}</span>
-                            <span className="text-[10px] text-white/30 ml-auto truncate max-w-[80px]">{team?.owner || team?.name || (side === "a" ? "Side A" : "Side B")}</span>
+                            <span className={cn("text-[11px] font-bold tracking-wide", side === "a" ? "text-rose-500 dark:text-rose-400" : "text-emerald-600 dark:text-emerald-400")}>{label}</span>
+                            <span className="text-[10px] text-muted-foreground ml-auto truncate max-w-[80px]">{team?.owner || team?.name || (side === "a" ? "Side A" : "Side B")}</span>
                           </div>
                           <div className="px-3 py-2.5 space-y-2 min-h-[60px]">
                             {assets.length === 0 ? (
-                              <p className="text-[11px] text-white/20 italic py-1">Nothing added yet</p>
+                              <p className="text-[11px] text-muted-foreground/50 italic py-1">Nothing added yet</p>
                             ) : assets.map(a => (
                               <div key={a.id} className="flex items-center gap-2 min-w-0">
                                 {a.type === "player" ? (
                                   <>
-                                    <div className="w-7 h-7 rounded-full overflow-hidden bg-muted flex-shrink-0 ring-1 ring-white/10">
+                                    <div className="w-7 h-7 rounded-full overflow-hidden bg-muted flex-shrink-0 ring-1 ring-border/30">
                                       {a.player?.sleeperId && (
                                         <img src={`https://sleepercdn.com/content/nfl/players/thumb/${a.player.sleeperId}.jpg`} alt={a.player.name} className="w-full h-full object-cover object-top" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
                                       )}
                                     </div>
                                     <div className="flex-1 min-w-0">
-                                      <p className="text-[12px] font-semibold text-foreground dark:text-white/90 truncate leading-tight">{a.player?.name}</p>
+                                      <p className="text-[12px] font-semibold text-foreground truncate leading-tight">{a.player?.name}</p>
                                       <div className="flex items-center gap-1.5 mt-0.5">
                                         <span className={cn("text-[9px] font-bold px-1 py-px rounded border", posColor(a.player?.pos), posBg(a.player?.pos))}>{a.player?.pos}</span>
-                                        {a.player?.team && <span className="text-[10px] text-white/30">{a.player.team}</span>}
+                                        {a.player?.team && <span className="text-[10px] text-muted-foreground">{a.player.team}</span>}
                                       </div>
                                     </div>
-                                    {a.value > 0 && <span className="text-[11px] text-white/35 tabular-nums flex-shrink-0">{a.value.toLocaleString()}</span>}
+                                    {a.value > 0 && <span className="text-[11px] text-muted-foreground tabular-nums flex-shrink-0">{a.value.toLocaleString()}</span>}
                                   </>
                                 ) : (
                                   <>
                                     <div className="w-7 h-7 rounded-full bg-purple-500/15 border border-purple-500/25 flex items-center justify-center flex-shrink-0 text-[9px] font-bold text-purple-400">R{a.pickRound}</div>
-                                    <span className="text-[12px] text-foreground dark:text-white/85 flex-1 truncate">{a.pickYear} {ordRound(a.pickRound!)}<span className="text-white/30"> ({a.pickRange})</span></span>
-                                    {a.value > 0 && <span className="text-[11px] text-white/35 tabular-nums flex-shrink-0">{a.value.toLocaleString()}</span>}
+                                    <span className="text-[12px] text-foreground flex-1 truncate">{a.pickYear} {ordRound(a.pickRound!)}<span className="text-muted-foreground"> ({a.pickRange})</span></span>
+                                    {a.value > 0 && <span className="text-[11px] text-muted-foreground tabular-nums flex-shrink-0">{a.value.toLocaleString()}</span>}
                                   </>
                                 )}
                               </div>

@@ -31,6 +31,7 @@ import {
   startSnapshotScheduler,
 } from "./valueSnapshots";
 import { getFinancesForUser, upsertLeagueFinance } from "./finances";
+import { registerScAuthRoutes } from "./scAuthRoutes";
 import {
   confirmSleeperToken,
   createChallenge,
@@ -65,6 +66,8 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+  registerScAuthRoutes(app);
+
   app.get("/api/health", (_req, res) => {
     res.json({ status: "ok", ts: Date.now() });
   });

@@ -1,4 +1,6 @@
 import express, { type Request, Response, NextFunction } from "express";
+import session from "express-session";
+import connectPgSimple from "connect-pg-simple";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
@@ -50,6 +52,34 @@ app.use(
 );
 
 app.use(express.urlencoded({ extended: false }));
+
+// ── Session middleware ─────────────────────────────────────────────────────────
+declare module "express-session" {
+  interface SessionData {
+    scUserId?: string;
+  }
+}
+
+const PgStore = connectPgSimple(session);
+app.use(
+  session({
+    store: new PgStore({
+      conString: process.env.DATABASE_URL,
+      createTableIfMissing: true,
+      tableName: "sc_sessions",
+    }),
+    name: "sc.sid",
+    secret: process.env.SESSION_SECRET || "fallback-dev-secret",
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+      maxAge: 30 * 24 * 60 * 60 * 1000,
+    },
+  }),
+);
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {

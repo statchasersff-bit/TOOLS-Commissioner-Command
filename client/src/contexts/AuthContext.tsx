@@ -1,0 +1,117 @@
+import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from "react";
+import { saveSleeperSession, clearSleeperSession, type SleeperSession } from "@/services/sleeperAuth";
+
+export interface ScUser {
+  id: string;
+  email: string;
+}
+
+export interface SleeperInfo {
+  username: string | null;
+  userId: string | null;
+  token: string | null;
+}
+
+export type AuthStatus = "loading" | "unauthenticated" | "needs-sleeper" | "ready";
+
+interface AuthContextValue {
+  status: AuthStatus;
+  user: ScUser | null;
+  sleeperInfo: SleeperInfo | null;
+  checkSession: () => Promise<void>;
+  logout: () => Promise<void>;
+  onSleeperConnected: (username: string, userId: string, token: string) => Promise<void>;
+  onSleeperDisconnected: () => Promise<void>;
+}
+
+const AuthContext = createContext<AuthContextValue | null>(null);
+
+export function useAuth(): AuthContextValue {
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error("useAuth must be used within AuthProvider");
+  return ctx;
+}
+
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const [status, setStatus] = useState<AuthStatus>("loading");
+  const [user, setUser] = useState<ScUser | null>(null);
+  const [sleeperInfo, setSleeperInfo] = useState<SleeperInfo | null>(null);
+
+  const checkSession = useCallback(async () => {
+    try {
+      setStatus("loading");
+      const res = await fetch("/api/sc-auth/me", { credentials: "include" });
+      if (res.status === 401) {
+        setUser(null);
+        setSleeperInfo(null);
+        setStatus("unauthenticated");
+        return;
+      }
+      const data = await res.json();
+      if (!data.user) {
+        setUser(null);
+        setSleeperInfo(null);
+        setStatus("unauthenticated");
+        return;
+      }
+      setUser(data.user);
+      if (data.sleeper?.token) {
+        const session: SleeperSession = {
+          token: data.sleeper.token,
+          user_id: data.sleeper.userId ?? "",
+          display_name: data.sleeper.username ?? "",
+          avatar: null,
+          exp: null,
+          iat: null,
+        };
+        saveSleeperSession(session);
+        setSleeperInfo(data.sleeper);
+        setStatus("ready");
+      } else {
+        setSleeperInfo(null);
+        setStatus("needs-sleeper");
+      }
+    } catch {
+      setUser(null);
+      setSleeperInfo(null);
+      setStatus("unauthenticated");
+    }
+  }, []);
+
+  useEffect(() => {
+    checkSession();
+  }, [checkSession]);
+
+  const logout = useCallback(async () => {
+    try {
+      await fetch("/api/sc-auth/logout", { method: "POST", credentials: "include" });
+    } catch { /* ignore */ }
+    clearSleeperSession();
+    setUser(null);
+    setSleeperInfo(null);
+    setStatus("unauthenticated");
+  }, []);
+
+  const onSleeperConnected = useCallback(async (username: string, userId: string, token: string) => {
+    await fetch("/api/sc-auth/connect-sleeper", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ sleeperUsername: username, sleeperUserId: userId, token }),
+    });
+    await checkSession();
+  }, [checkSession]);
+
+  const onSleeperDisconnected = useCallback(async () => {
+    await fetch("/api/sc-auth/disconnect-sleeper", { method: "DELETE", credentials: "include" });
+    clearSleeperSession();
+    setSleeperInfo(null);
+    setStatus("needs-sleeper");
+  }, []);
+
+  return (
+    <AuthContext.Provider value={{ status, user, sleeperInfo, checkSession, logout, onSleeperConnected, onSleeperDisconnected }}>
+      {children}
+    </AuthContext.Provider>
+  );
+}

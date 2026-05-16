@@ -205,12 +205,12 @@ export function PositionalAnalysis({ league, userTeam, onNavigateToCalculator }:
 
   const ordinal = (n: number) =>
     n === 1 ? "1st" : n === 2 ? "2nd" : n === 3 ? "3rd" : `${n}th`;
-  const rankColor = (t: "top" | "mid" | "bottom") =>
-    t === "top" ? "text-emerald-500 dark:text-emerald-400"
-    : t === "bottom" ? "text-red-500 dark:text-red-400"
-    : "text-foreground";
-  const barColor = (t: "top" | "mid" | "bottom") =>
-    t === "top" ? "bg-emerald-500" : t === "bottom" ? "bg-red-500" : "bg-[#0b3a7a]";
+  const rankColor = (rank: number) =>
+    rank <= 4 ? "text-emerald-500 dark:text-emerald-400"
+    : rank <= 8 ? "text-yellow-500 dark:text-yellow-400"
+    : "text-red-500 dark:text-red-400";
+  const barColor = (rank: number) =>
+    rank <= 4 ? "bg-emerald-500" : rank <= 8 ? "bg-yellow-500" : "bg-red-500";
   const barPct = (rank: number) =>
     positionalProfile.leagueSize <= 1
       ? 100
@@ -233,8 +233,6 @@ export function PositionalAnalysis({ league, userTeam, onNavigateToCalculator }:
         {POSITIONS.map(pos => {
             const dynRank = positionalProfile.dynRanks[pos] ?? positionalProfile.leagueSize;
             const rdRank  = positionalProfile.rdRanks[pos]  ?? positionalProfile.leagueSize;
-            const dynTier = positionalProfile.rankTier(dynRank);
-            const rdTier  = positionalProfile.rankTier(rdRank);
             return (
               <div
                 key={pos}
@@ -245,25 +243,25 @@ export function PositionalAnalysis({ league, userTeam, onNavigateToCalculator }:
                 <div className="space-y-1">
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] text-muted-foreground">Dynasty</span>
-                    <span className={cn("text-sm font-bold tabular-nums", rankColor(dynTier))}>
+                    <span className={cn("text-sm font-bold tabular-nums", rankColor(dynRank))}>
                       {ordinal(dynRank)}
                       <span className="text-[10px] font-normal text-muted-foreground ml-0.5">/{positionalProfile.leagueSize}</span>
                     </span>
                   </div>
                   <div className="h-1.5 rounded-full bg-border overflow-hidden">
-                    <div className={cn("h-full rounded-full transition-all", barColor(dynTier))} style={{ width: `${barPct(dynRank)}%` }} />
+                    <div className={cn("h-full rounded-full transition-all", barColor(dynRank))} style={{ width: `${barPct(dynRank)}%` }} />
                   </div>
                 </div>
                 <div className="space-y-1">
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] text-muted-foreground">Win-Now</span>
-                    <span className={cn("text-sm font-bold tabular-nums", rankColor(rdTier))}>
+                    <span className={cn("text-sm font-bold tabular-nums", rankColor(rdRank))}>
                       {ordinal(rdRank)}
                       <span className="text-[10px] font-normal text-muted-foreground ml-0.5">/{positionalProfile.leagueSize}</span>
                     </span>
                   </div>
                   <div className="h-1.5 rounded-full bg-border overflow-hidden">
-                    <div className={cn("h-full rounded-full transition-all", barColor(rdTier))} style={{ width: `${barPct(rdRank)}%` }} />
+                    <div className={cn("h-full rounded-full transition-all", barColor(rdRank))} style={{ width: `${barPct(rdRank)}%` }} />
                   </div>
                 </div>
               </div>

@@ -5,6 +5,8 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ValueModelProvider } from "@/contexts/ValueModelContext";
 import { SleeperProvider } from "@/contexts/SleeperContext";
+import { AuthProvider } from "@/contexts/AuthContext";
+import { AuthGate } from "@/pages/auth/AuthGate";
 import DynastyCommandCenter from "@/pages/DynastyCommandCenter";
 
 const BASE_PATH = import.meta.env.BASE_URL.replace(/\/$/, "") || "";
@@ -25,12 +27,16 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <SleeperProvider>
-          <ValueModelProvider>
-            <Toaster />
-            <Router />
-          </ValueModelProvider>
-        </SleeperProvider>
+        <AuthProvider>
+          <AuthGate>
+            <SleeperProvider>
+              <ValueModelProvider>
+                <Toaster />
+                <Router />
+              </ValueModelProvider>
+            </SleeperProvider>
+          </AuthGate>
+        </AuthProvider>
       </TooltipProvider>
     </QueryClientProvider>
   );

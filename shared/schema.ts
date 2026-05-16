@@ -142,3 +142,40 @@ export type TradeAsset = typeof tradeAssets.$inferSelect;
 export type CrawlState = typeof crawlState.$inferSelect;
 export type CrawlQueueItem = typeof crawlQueue.$inferSelect;
 export type PlayerValueSnapshot = typeof playerValueSnapshots.$inferSelect;
+
+// ── StatChasers Account System ────────────────────────────────────────────────
+
+export const scUsers = pgTable("sc_users", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  email: text("email").notNull().unique(),
+  passwordHash: text("password_hash").notNull(),
+  emailVerified: boolean("email_verified").notNull().default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+  lastLoginAt: timestamp("last_login_at"),
+});
+
+export const emailVerificationCodes = pgTable("email_verification_codes", {
+  id: serial("id").primaryKey(),
+  email: text("email").notNull(),
+  codeHash: text("code_hash").notNull(),
+  purpose: varchar("purpose", { length: 20 }).notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  usedAt: timestamp("used_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const scConnectedAccounts = pgTable("sc_connected_accounts", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull(),
+  provider: varchar("provider", { length: 20 }).notNull(),
+  sleeperUsername: text("sleeper_username"),
+  sleeperUserId: text("sleeper_user_id"),
+  encryptedToken: text("encrypted_token"),
+  connectedAt: timestamp("connected_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export type ScUser = typeof scUsers.$inferSelect;
+export type EmailVerificationCode = typeof emailVerificationCodes.$inferSelect;
+export type ScConnectedAccount = typeof scConnectedAccounts.$inferSelect;

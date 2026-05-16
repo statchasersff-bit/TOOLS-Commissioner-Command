@@ -1,0 +1,176 @@
+I want to add a full StatChasers account system to Dynasty Command.
+
+Context:
+- My main StatChasers website is built on WordPress.
+- Dynasty Command is currently located at:
+  https://statchasers.com/dynasty-command/
+- Do not try to modify WordPress login.
+- The login/account system should be built directly inside the Dynasty Command app.
+- This should become the reusable account foundation for future tools like Redraft Command and Commissioner Command.
+
+Main goal:
+Users should be able to create a StatChasers account with email verification, create a password, log back in with email/password, connect their Sleeper account, and then access Dynasty Command.
+
+Build the auth flow like this:
+
+1. Entry Screen
+When a user visits Dynasty Command, check if they are logged in.
+
+If not logged in, show a polished StatChasers auth screen with:
+- StatChasers branding
+- “Log In”
+- “Create Account”
+
+2. Create Account Flow
+When user clicks Create Account:
+- Ask for email address.
+- Send a 6-digit one-time verification code to that email.
+- Show a code verification screen.
+- User enters the code.
+- If valid, mark email as verified.
+- Then show a Create Password screen.
+- User creates password.
+- Create the StatChasers user account.
+- Log the user in automatically.
+- Route them to Sleeper connection onboarding.
+
+Password rules:
+- Minimum 8 characters.
+- Show confirm password field.
+- Show clear error if passwords do not match.
+- Never store plain-text passwords.
+- Hash passwords server-side using bcrypt or Argon2.
+
+Verification code rules:
+- 6-digit numeric code.
+- Expires after 10 minutes.
+- Single-use only.
+- Store verification codes hashed, not plain text.
+- Add resend code option.
+- Add cooldown to prevent spam.
+- Add basic rate limiting by email/IP.
+
+3. Login Flow
+When user clicks Log In:
+- Ask for email and password.
+- Validate credentials.
+- If correct, log user in.
+- Then check Sleeper connection status.
+- If Sleeper is connected, load Dynasty Command.
+- If Sleeper is not connected, show Connect Sleeper onboarding.
+
+4. Forgot Password Flow
+Add a Forgot Password option:
+- User enters email.
+- Send reset/verification code.
+- User enters code.
+- If valid, allow user to create new password.
+- Hash and save new password.
+- Log user in or route back to login.
+
+5. Sleeper Connection Flow
+After login/account creation:
+- Check whether the logged-in StatChasers user has a Sleeper account connected.
+- If not connected, show a clean “Connect Sleeper” screen.
+- Use our existing Sleeper token authentication flow.
+- Store the Sleeper token securely server-side.
+- Associate the Sleeper token with the StatChasers user ID.
+- Once connected, load Dynasty Command.
+- Add ability to disconnect/reconnect Sleeper later from an Account/Settings area.
+
+6. Session Requirements
+Use secure sessions:
+- Prefer secure HTTP-only cookies.
+- Keep user logged in across page refreshes.
+- Add logout button.
+- On logout, clear the session and return to login screen.
+- Do not expose session tokens, Sleeper tokens, passwords, or verification codes in frontend code, browser console, logs, or API responses.
+
+7. Database Requirements
+Create/adjust database tables as needed for:
+
+Users:
+- id
+- email
+- password_hash
+- email_verified
+- created_at
+- updated_at
+- last_login_at
+
+Email verification codes:
+- id
+- email
+- code_hash
+- purpose: signup/password_reset
+- expires_at
+- used_at
+- created_at
+
+Connected accounts:
+- id
+- user_id
+- provider: sleeper
+- sleeper_username
+- sleeper_user_id if available
+- encrypted_access_token/token
+- connected_at
+- updated_at
+
+8. Email Sending
+Set up transactional email sending for:
+- Signup verification code
+- Password reset code
+
+Use a service like Resend, SendGrid, Postmark, or Amazon SES.
+
+Email copy should be simple:
+Subject: Your StatChasers verification code
+Body: Your verification code is: ######. This code expires in 10 minutes.
+
+9. UX Requirements
+Make the auth screens feel premium and match StatChasers:
+- Dark navy background
+- Gold accent color
+- Clean card layout
+- Professional SaaS-style login experience
+- Mobile responsive
+- Clear error messages
+- Loading states on buttons
+- Disabled buttons while requests are processing
+
+Recommended screens:
+- Login
+- Create Account: Enter Email
+- Verify Email Code
+- Create Password
+- Forgot Password
+- Reset Password
+- Connect Sleeper
+- Account Settings / Connected Accounts
+
+10. App Access Rules
+Dynasty Command should only load after:
+- User is logged in
+- User has connected Sleeper
+
+If not logged in:
+- Show login/create account screen
+
+If logged in but Sleeper not connected:
+- Show Connect Sleeper screen
+
+If logged in and Sleeper connected:
+- Load Dynasty Command normally
+
+11. Future-Proofing
+Build this so the same StatChasers account system can later be used by:
+- Redraft Command
+- Commissioner Command
+- Trade Center
+- Lineup Command
+- Waiver Command
+- Fantasy Report Card
+- Other future StatChasers tools
+
+Please implement this carefully without breaking the existing Dynasty Command functionality.
