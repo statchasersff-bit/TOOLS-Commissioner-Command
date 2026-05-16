@@ -4,7 +4,6 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { MegaMenuNav, MobileBottomNav } from "@/components/MegaMenu";
-import { SubTabs } from "@/components/SubTabs";
 import { LeagueSelector } from "@/components/LeagueSelector";
 import { HeaderValueSourceBadge } from "@/components/ValueSourceSelector";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -611,12 +610,6 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
         setActiveTab={handleMainTabChange}
         onNavigate={(tab, sub) => { handleMainTabChange(tab); handleSubTabChange(sub); }}
       />
-
-      {currentMainConfig && (
-        <div className="hidden md:block">
-          <SubTabs tabs={currentMainConfig.subTabs} activeTab={activeSubTab} setActiveTab={handleSubTabChange} />
-        </div>
-      )}
 
       <main className="max-w-7xl mx-auto px-2 sm:px-3 md:px-4 pt-5 pb-4 sm:py-6 md:py-8 md:pb-8 relative" style={{ paddingBottom: "calc(80px + env(safe-area-inset-bottom, 0px))" }}>
         {showLoadingOverlay && (
