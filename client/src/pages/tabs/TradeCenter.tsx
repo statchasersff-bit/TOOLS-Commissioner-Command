@@ -263,10 +263,14 @@ export function TradeFinder({ league, userTeam }: TradeProps) {
     const MAX_POOL = 7;
     const MAX_PER_PARTNER = 4;
 
-    // Core starters: greedy-optimal lineup — never offer away an optimal starter.
-    const coreStarters = new Set<string>(
-      (optimalRosterMap.get(userTeam.id) || userTeam.roster).filter(p => p.starter).map(p => p.id)
-    );
+    // Core starters: in redraft mode, protect the greedy-optimal lineup starters so the
+    // algorithm never gives away a lineup-critical player.
+    // In dynasty mode we leave this empty — dynasty trades routinely involve starter-for-starter
+    // swaps (e.g. ageing WR1 for a young ascending talent), so every player with sufficient
+    // dynasty value should be available to offer. Fairness is still enforced by FAIR_THRESHOLD.
+    const coreStarters = proposalMode === "redraft"
+      ? new Set<string>((optimalRosterMap.get(userTeam.id) || userTeam.roster).filter(p => p.starter).map(p => p.id))
+      : new Set<string>();
 
     const buildRationale = (gives: Player[], gets: Player[], pNeeds: Set<string>, pSurplus: Set<string>): string => {
       const parts: string[] = [];
