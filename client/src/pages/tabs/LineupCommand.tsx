@@ -237,13 +237,13 @@ function IssueBadge({ type }: { type: IssueType }) {
 // ─── Skeleton row ─────────────────────────────────────────────────────────────
 function SkeletonRow() {
   return (
-    <div className="flex items-center gap-2 md:gap-3 px-3 md:px-5 py-3 border-b border-white/5 animate-pulse">
-      <div className="flex-1 min-w-[140px] h-3.5 bg-white/8 rounded" />
-      <div className="w-14 md:w-16 flex-shrink-0 h-3.5 bg-white/8 rounded" />
-      <div className="w-24 md:w-28 flex-shrink-0 h-3.5 bg-white/8 rounded" />
-      <div className="w-[72px] md:w-24 flex-shrink-0 h-4 bg-white/8 rounded" />
-      <div className="w-[64px] md:w-20 flex-shrink-0 h-4 bg-white/8 rounded" />
-      <div className="w-[96px] md:w-[108px] flex-shrink-0 h-7 bg-white/8 rounded-lg" />
+    <div className="flex items-center gap-1.5 md:gap-3 px-2 md:px-5 py-3 border-b border-white/5 animate-pulse">
+      <div className="flex-1 min-w-0 h-3.5 bg-white/8 rounded" />
+      <div className="w-10 md:w-16 flex-shrink-0 h-3.5 bg-white/8 rounded" />
+      <div className="w-12 md:w-28 flex-shrink-0 h-3.5 bg-white/8 rounded" />
+      <div className="w-8 md:w-24 flex-shrink-0 h-4 bg-white/8 rounded" />
+      <div className="w-8 md:w-20 flex-shrink-0 h-4 bg-white/8 rounded" />
+      <div className="w-[68px] md:w-[108px] flex-shrink-0 h-7 bg-white/8 rounded-lg" />
     </div>
   );
 }
@@ -293,100 +293,101 @@ function LeagueRow({ analysis }: { analysis: LeagueAnalysis }) {
     )}>
       {/* Main row */}
       <div
-        className="flex items-center gap-2 md:gap-3 px-3 md:px-5 py-3 select-none"
+        className="flex items-center gap-1.5 md:gap-3 px-2 md:px-5 py-3 select-none"
         data-testid={`row-lineup-${analysis.leagueId}`}
       >
         {/* League avatar + name + format */}
-        <div className="flex-1 min-w-0 flex items-center gap-2 cursor-pointer" onClick={() => swaps.length > 0 && setExpanded(v => !v)}>
+        <div className="flex-1 min-w-0 flex items-center gap-1.5 md:gap-2 cursor-pointer" onClick={() => swaps.length > 0 && setExpanded(v => !v)}>
           {avatar ? (
             <img
               src={avatar}
               alt=""
-              className="w-7 h-7 rounded-lg flex-shrink-0 object-cover bg-white/10"
+              className="w-6 h-6 md:w-7 md:h-7 rounded-lg flex-shrink-0 object-cover bg-white/10"
               onError={e => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
             />
           ) : (
-            <div className="w-7 h-7 rounded-lg flex-shrink-0 bg-[#0b3a7a]/40 flex items-center justify-center">
-              <Users className="w-3.5 h-3.5 text-blue-400/60" />
+            <div className="w-6 h-6 md:w-7 md:h-7 rounded-lg flex-shrink-0 bg-[#0b3a7a]/40 flex items-center justify-center">
+              <Users className="w-3 h-3 md:w-3.5 md:h-3.5 text-blue-400/60" />
             </div>
           )}
           <div className="min-w-0">
-            <p className="text-[12px] md:text-sm font-bold text-white/90 truncate leading-tight">{leagueName}</p>
+            <p className="text-[11px] md:text-sm font-bold text-white/90 truncate leading-tight">{leagueName}</p>
             <div className="flex items-center gap-1 mt-0.5">
-              <span className="text-[8px] md:text-[9px] text-white/30 font-medium">{format} · {scoringFormat}</span>
+              <span className="text-[8px] md:text-[9px] text-white/30 font-medium truncate">{format} · {scoringFormat}</span>
             </div>
           </div>
         </div>
 
-        {/* Current proj */}
-        <div className="text-right w-14 md:w-16 flex-shrink-0">
+        {/* Proj (Current) */}
+        <div className="text-right w-10 md:w-16 flex-shrink-0">
           {loading ? (
             <div className="h-3.5 bg-white/8 rounded animate-pulse" />
           ) : error ? (
             <span className="text-[10px] text-white/20">—</span>
           ) : (
-            <p className="text-[12px] md:text-[13px] font-bold text-white/60 tabular-nums">{fmt1(currentProj)}</p>
+            <p className="text-[11px] md:text-[13px] font-bold text-white/60 tabular-nums">{fmt1(currentProj)}</p>
           )}
         </div>
 
-        {/* Improvement */}
-        <div className="text-right w-24 md:w-28 flex-shrink-0">
+        {/* +Pts (Improvement) */}
+        <div className="text-right w-12 md:w-28 flex-shrink-0">
           {loading ? (
             <div className="h-3.5 bg-white/8 rounded animate-pulse" />
           ) : error ? (
             <span className="text-[10px] text-white/20">—</span>
           ) : (
-            <p className={cn("text-[12px] md:text-[13px] font-black tabular-nums", improvColor)}>
+            <p className={cn("text-[11px] md:text-[13px] font-black tabular-nums", improvColor)}>
               {gain > 0.1 ? `+${fmt1(gain)}` : "—"}
             </p>
           )}
         </div>
 
         {/* OUT / IR / BYE */}
-        <div className="w-[72px] md:w-24 flex-shrink-0 flex justify-center">
+        <div className="w-8 md:w-24 flex-shrink-0 flex justify-center">
           {loading ? (
-            <div className="h-4 w-6 bg-white/8 rounded animate-pulse" />
+            <div className="h-4 w-4 bg-white/8 rounded animate-pulse" />
           ) : hardIssues.length === 0 ? (
-            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500/60" />
+            <CheckCircle2 className="w-3 h-3 md:w-3.5 md:h-3.5 text-emerald-500/60" />
           ) : (
-            <span className="text-[13px] md:text-sm font-black tabular-nums text-red-400">
+            <span className="text-[12px] md:text-sm font-black tabular-nums text-red-400">
               {hardIssues.length}
             </span>
           )}
         </div>
 
         {/* QUES / DOUB */}
-        <div className="w-[64px] md:w-20 flex-shrink-0 flex justify-center">
+        <div className="w-8 md:w-20 flex-shrink-0 flex justify-center">
           {loading ? (
-            <div className="h-4 w-6 bg-white/8 rounded animate-pulse" />
+            <div className="h-4 w-4 bg-white/8 rounded animate-pulse" />
           ) : softIssues.length === 0 ? (
-            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500/60" />
+            <CheckCircle2 className="w-3 h-3 md:w-3.5 md:h-3.5 text-emerald-500/60" />
           ) : (
-            <span className="text-[13px] md:text-sm font-black tabular-nums text-yellow-400">
+            <span className="text-[12px] md:text-sm font-black tabular-nums text-yellow-400">
               {softIssues.length}
             </span>
           )}
         </div>
 
         {/* Status */}
-        <div className="w-[96px] md:w-[108px] flex-shrink-0 flex justify-end">
+        <div className="w-[68px] md:w-[108px] flex-shrink-0 flex justify-end">
           {loading ? (
-            <div className="h-7 w-20 bg-white/8 rounded-lg animate-pulse" />
+            <div className="h-6 w-[56px] md:w-20 bg-white/8 rounded-full animate-pulse" />
           ) : error ? (
             <span className="text-[10px] text-white/20">—</span>
           ) : isOptimized ? (
-            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-full px-2.5 py-1">
-              <CheckCircle2 className="w-3 h-3" /> Optimized
+            <span className="inline-flex items-center justify-center gap-1 text-[10px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-full px-2 py-1">
+              <CheckCircle2 className="w-3 h-3 flex-shrink-0" />
+              <span className="hidden md:inline">Optimized</span>
             </span>
           ) : (
             <button
-              className="inline-flex items-center gap-1 text-[10px] font-bold bg-[#d4af37]/15 hover:bg-[#d4af37]/25 border border-[#d4af37]/35 hover:border-[#d4af37]/55 text-[#d4af37] rounded-full px-2.5 py-1 transition-colors"
+              className="inline-flex items-center gap-1 text-[10px] font-bold bg-[#d4af37]/15 hover:bg-[#d4af37]/25 border border-[#d4af37]/35 hover:border-[#d4af37]/55 text-[#d4af37] rounded-full px-2 md:px-2.5 py-1 transition-colors"
               onClick={() => setExpanded(v => !v)}
               data-testid={`button-optimize-${analysis.leagueId}`}
             >
-              <Zap className="w-3 h-3" />
-              Optimize
-              {expanded ? <ChevronUp className="w-2.5 h-2.5 ml-0.5" /> : <ChevronDown className="w-2.5 h-2.5 ml-0.5" />}
+              <Zap className="w-3 h-3 flex-shrink-0" />
+              <span className="hidden md:inline">Optimize</span>
+              {expanded ? <ChevronUp className="w-2.5 h-2.5" /> : <ChevronDown className="w-2.5 h-2.5" />}
             </button>
           )}
         </div>
@@ -1216,11 +1217,11 @@ export function LineupCommand() {
           >
             {/* Scroll container */}
             <div className="overflow-x-auto" style={{ WebkitOverflowScrolling: "touch" }}>
-              <div style={{ minWidth: 640 }}>
+              <div style={{ minWidth: 340 }}>
                 {/* Header */}
-                <div className="flex items-center gap-2 md:gap-3 px-3 md:px-5 py-2 border-b border-white/6 bg-white/[0.02]">
+                <div className="flex items-center gap-1.5 md:gap-3 px-2 md:px-5 py-2 border-b border-white/6 bg-white/[0.02]">
                   {(() => {
-                    function SortBtn({ col, label, className }: { col: typeof sortKey; label: string; className?: string }) {
+                    function SortBtn({ col, label, className }: { col: typeof sortKey; label: React.ReactNode; className?: string }) {
                       const active = sortKey === col;
                       return (
                         <button onClick={() => handleSort(col)} className={cn("flex items-center gap-0.5 text-[9px] font-bold uppercase tracking-widest whitespace-nowrap transition-colors cursor-pointer select-none", active ? "text-[#d4af37]" : "text-white/30 hover:text-white/55", className)}>
@@ -1231,12 +1232,12 @@ export function LineupCommand() {
                     }
                     return (
                       <>
-                        <SortBtn col="league"      label="League"      className="flex-1 min-w-[140px] justify-start" />
-                        <SortBtn col="current"     label="Current"     className="w-14 md:w-16 flex-shrink-0 justify-end" />
-                        <SortBtn col="improvement" label="Improvement" className="w-24 md:w-28 flex-shrink-0 justify-end" />
-                        <SortBtn col="hard"        label="Out/IR/Bye"  className="w-[72px] md:w-24 flex-shrink-0 justify-center" />
-                        <SortBtn col="soft"        label="Ques/Doub"   className="w-[64px] md:w-20 flex-shrink-0 justify-center" />
-                        <SortBtn col="status"      label="Status"      className="w-[96px] md:w-[108px] flex-shrink-0 justify-end" />
+                        <SortBtn col="league"      label="League"      className="flex-1 min-w-0 justify-start" />
+                        <SortBtn col="current"     label={<><span className="md:hidden">Proj</span><span className="hidden md:inline">Current</span></>}     className="w-10 md:w-16 flex-shrink-0 justify-end" />
+                        <SortBtn col="improvement" label={<><span className="md:hidden">+Pts</span><span className="hidden md:inline">Improvement</span></>}  className="w-12 md:w-28 flex-shrink-0 justify-end" />
+                        <SortBtn col="hard"        label={<><span className="md:hidden">OUT</span><span className="hidden md:inline">Out/IR/Bye</span></>}    className="w-8 md:w-24 flex-shrink-0 justify-center" />
+                        <SortBtn col="soft"        label={<><span className="md:hidden">Q/D</span><span className="hidden md:inline">Ques/Doub</span></>}     className="w-8 md:w-20 flex-shrink-0 justify-center" />
+                        <SortBtn col="status"      label="Status"      className="w-[68px] md:w-[108px] flex-shrink-0 justify-end" />
                       </>
                     );
                   })()}
