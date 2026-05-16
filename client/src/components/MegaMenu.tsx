@@ -378,38 +378,19 @@ export function MobileBottomNav({ tabs, activeTab, setActiveTab }: MobileBottomN
         key={tab.id}
         onClick={() => setActiveTab(tab.id)}
         data-testid={`bottom-nav-${tab.id}`}
-        className="flex-1 flex flex-col items-center justify-center relative"
-        style={{ minWidth: 0 }}
+        className="flex-1 flex flex-col items-center justify-center gap-2 transition-all duration-150"
+        style={{ minWidth: 44, minHeight: 44, paddingTop: 8, paddingBottom: 4 }}
       >
-        {/* Active top indicator */}
-        {isActive && (
-          <span
-            className="absolute top-0 left-1/2 -translate-x-1/2 rounded-full"
-            style={{ width: 20, height: 2.5, background: "#d4af37" }}
-          />
-        )}
-        {/* Icon + label pill */}
-        <div
-          className="flex flex-col items-center gap-1.5 px-3 py-2 rounded-[14px] transition-all duration-150"
-          style={undefined}
+        <Icon
+          className="flex-shrink-0"
+          style={{ width: 18, height: 18, color: isActive ? "#d4af37" : "rgba(203,213,225,0.50)" }}
+        />
+        <span
+          className="whitespace-nowrap font-semibold leading-none"
+          style={{ fontSize: 10, letterSpacing: "0.02em", color: isActive ? "#d4af37" : "rgba(203,213,225,0.50)" }}
         >
-          <Icon
-            className="flex-shrink-0"
-            style={{
-              width: 18, height: 18,
-              color: isActive ? "#d4af37" : "rgba(203,213,225,0.55)",
-            }}
-          />
-          <span
-            className="whitespace-nowrap font-semibold tracking-wide leading-none"
-            style={{
-              fontSize: 10,
-              color: isActive ? "#d4af37" : "rgba(203,213,225,0.55)",
-            }}
-          >
-            {label}
-          </span>
-        </div>
+          {label}
+        </span>
       </button>
     );
   };
@@ -433,28 +414,29 @@ export function MobileBottomNav({ tabs, activeTab, setActiveTab }: MobileBottomN
         {leftTabs.map(renderTab)}
 
         {/* Center avatar */}
-        <div className="flex-shrink-0 w-14 flex flex-col items-center justify-center">
-          <div className="flex flex-col items-center gap-1.5 px-2 py-2">
-            {user?.avatar ? (
-              <img
-                src={`https://sleepercdn.com/avatars/thumbs/${user.avatar}`}
-                alt={user.username ?? ""}
-                className="rounded-full object-cover flex-shrink-0"
-                style={{ width: 18, height: 18, boxShadow: "0 0 0 1.5px rgba(212,175,55,0.45)" }}
-              />
-            ) : (
-              <>
-                <img src={logoDark} alt="StatChasers" className="hidden dark:block object-contain flex-shrink-0" style={{ width: 18, height: 18 }} />
-                <img src={logoLight} alt="StatChasers" className="block dark:hidden object-contain flex-shrink-0" style={{ width: 18, height: 18 }} />
-              </>
-            )}
-            <span
-              className="whitespace-nowrap font-semibold tracking-wide leading-none"
-              style={{ fontSize: 10, color: "rgba(203,213,225,0.55)" }}
-            >
-              {user?.username ? user.username.slice(0, 6) : "You"}
-            </span>
-          </div>
+        <div
+          className="flex-shrink-0 flex flex-col items-center justify-center gap-2"
+          style={{ width: 56, minHeight: 44, paddingTop: 8, paddingBottom: 4 }}
+        >
+          {user?.avatar ? (
+            <img
+              src={`https://sleepercdn.com/avatars/thumbs/${user.avatar}`}
+              alt={user.username ?? ""}
+              className="rounded-full object-cover flex-shrink-0"
+              style={{ width: 18, height: 18, boxShadow: "0 0 0 1.5px rgba(212,175,55,0.45)" }}
+            />
+          ) : (
+            <>
+              <img src={logoDark} alt="StatChasers" className="hidden dark:block object-contain flex-shrink-0" style={{ width: 18, height: 18 }} />
+              <img src={logoLight} alt="StatChasers" className="block dark:hidden object-contain flex-shrink-0" style={{ width: 18, height: 18 }} />
+            </>
+          )}
+          <span
+            className="whitespace-nowrap font-semibold leading-none"
+            style={{ fontSize: 10, letterSpacing: "0.02em", color: "rgba(203,213,225,0.50)" }}
+          >
+            {user?.username ? user.username.slice(0, 6) : "You"}
+          </span>
         </div>
 
         {rightTabs.map(renderTab)}

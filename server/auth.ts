@@ -119,6 +119,10 @@ export function verifyToken(token: string): { sleeperId: string } | null {
   }
 }
 
+export function confirmSleeperToken(_token: string): { sleeperId: string } | null {
+  return verifyToken(_token);
+}
+
 export function requireFinanceAuth(req: Request, res: Response, next: NextFunction) {
   const auth = req.headers.authorization;
   if (!auth?.startsWith("Bearer ")) return res.status(401).json({ error: "Unauthorized" });
