@@ -476,21 +476,6 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
             </div>
           </div>
 
-          {/* League selector (mobile) */}
-          {sleeper.isConnected && (
-            <div className="flex items-center gap-2 mt-1.5 md:hidden w-full">
-              <LeagueSelector
-                leagues={sleeperLeaguesAsLeagues}
-                selectedLeagueId={selectedLeagueId}
-                onSelect={handleLeagueSelect}
-              />
-              {isSelectedBestBall && (
-                <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 bg-sky-50 text-sky-700 dark:bg-sky-950/30 dark:text-sky-400 border-sky-300 dark:border-sky-700 flex-shrink-0" data-testid="badge-bestball-mobile">
-                  Best Ball
-                </Badge>
-              )}
-            </div>
-          )}
 
           {/* Bottom strip: sync errors */}
           {sleeper.error && (
