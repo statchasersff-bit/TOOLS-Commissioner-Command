@@ -500,7 +500,7 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Message is required." });
       }
 
-      const webhookUrl = process.env.DISCORD_FEEDBACK_WEBHOOK_URL;
+      const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
 
       if (webhookUrl) {
         const typeEmoji: Record<string, string> = {
