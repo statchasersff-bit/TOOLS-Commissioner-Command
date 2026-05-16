@@ -300,16 +300,40 @@ export async function submitWaiverClaim(
 // These will be implemented once their exact mutation shapes are discovered.
 // Each uses sleeperGraphQLRequest with operationName matching the Sleeper op.
 
-/** @todo Discover submit_lineup mutation shape from sleeper.com/graphql */
+/**
+ * Submit a lineup update via sleeper.com/graphql.
+ *
+ * Uses the `submit_lineup` operation as identified from Sleeper's web app.
+ * league_id and roster_id are embedded as literals (same pattern as waiver/trade mutations).
+ * JWT is NEVER logged.
+ *
+ * Always show a confirmation UI before calling this — never call silently.
+ */
+function buildSubmitLineupMutation(leagueId: string, rosterId: number): string {
+  return `
+    mutation submit_lineup($starters: [String]) {
+      submit_lineup(
+        league_id: "${leagueId}"
+        roster_id: ${rosterId}
+        starters: $starters
+      ) {
+        roster_id
+        starters
+      }
+    }
+  `;
+}
+
 export async function submitLineup(
-  _leagueId: string,
-  _rosterId: number,
-  _starters: string[]
-): Promise<never> {
-  throw new Error(
-    "submit_lineup: mutation shape not yet discovered. " +
-      "Capture from sleeper.com/graphql with x-sleeper-graphql-op: submit_lineup."
-  );
+  leagueId: string,
+  rosterId: number,
+  starters: string[]
+): Promise<void> {
+  await sleeperGraphQLRequest<{ submit_lineup: unknown }>({
+    operationName: "submit_lineup",
+    query: buildSubmitLineupMutation(leagueId, rosterId),
+    variables: { starters },
+  });
 }
 
 // ─── propose_trade ────────────────────────────────────────────────────────────

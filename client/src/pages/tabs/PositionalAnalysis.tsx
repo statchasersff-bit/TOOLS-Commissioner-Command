@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect, useRef } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -15,7 +15,7 @@ import { getSleeperSession } from "@/services/sleeperAuth";
 import { proposeTrade, getDmByMembers, getDmByMembersFull, markDmRead, sendTradeMessage, sendPlainDm, sendDmMessage, fetchDmMessages } from "@/services/sleeperAuthedApi";
 import type { ProposeTradeResult, SleeperTransactionPick, SleeperDmMessage } from "@/services/sleeperAuthedApi";
 import {
-  ArrowRightLeft, Target, TrendingUp, TrendingDown, Zap, RotateCcw, ShieldCheck,
+  ArrowRightLeft, Target, TrendingUp, TrendingDown, Zap, ShieldCheck,
   ChevronRight, Send, Loader2, CheckCircle2, AlertTriangle, X, Pencil, Search
 } from "lucide-react";
 
@@ -144,41 +144,12 @@ interface TeamPosProfile {
   totalPickValue: number;
 }
 
-interface TradeSuggestion {
-  id: string;
-  template: string;
-  headline: string;
-  youGive: { label: string; value: number; pos?: string; age?: number; type: "player" | "pick"; sleeperId?: string }[];
-  youGet: { label: string; value: number; pos?: string; age?: number; type: "player" | "pick"; sleeperId?: string }[];
-  rawSide1: number;
-  rawSide2: number;
-  adjustedSide1: number;
-  adjustedSide2: number;
-  fairness: "Fair" | "Reasonable" | "Aggressive";
-  reasons: string[];
-}
-
 function getStarterCountForPos(pos: PosLabel, rosterPositions?: string[]): number {
   if (!rosterPositions || rosterPositions.length === 0) return DEFAULT_STARTERS[pos] || 1;
   let count = rosterPositions.filter(s => s === pos).length;
   return Math.max(count, DEFAULT_STARTERS[pos] || 1);
 }
 
-function getStatusColor(status: StatusLabel): string {
-  switch (status) {
-    case "Surplus": return "bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 border-emerald-500/30";
-    case "Need": return "bg-red-500/20 text-red-700 dark:text-red-400 border-red-500/30";
-    case "Neutral": return "bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20";
-  }
-}
-
-function getStatusCellBg(status: StatusLabel): string {
-  switch (status) {
-    case "Surplus": return "bg-emerald-500/10";
-    case "Need": return "bg-red-500/10";
-    case "Neutral": return "bg-background";
-  }
-}
 
 const DIMINISHING_WEIGHTS = [1.00, 0.85, 0.72, 0.60, 0.50, 0.42, 0.36, 0.31];
 function getWeight(i: number): number { return i < DIMINISHING_WEIGHTS.length ? DIMINISHING_WEIGHTS[i] : 0.31; }
@@ -690,14 +661,13 @@ interface WinNowIdea {
 // ─── TradeOpportunities — mode selector ──────────────────────────
 
 function TradeOpportunities({ league, userTeam }: { league: League; userTeam: Team }) {
-  const [mode, setMode] = useState<"win-now" | "rebuild" | "build-dynasty">("win-now");
+  const [mode, setMode] = useState<"win-now" | "rebuild">("win-now");
   return (
     <div className="space-y-5">
       <div className="flex w-fit rounded-lg border border-border overflow-hidden">
         {([
-          { id: "win-now"       as const, label: "Win-Now",      desc: "Maximize starters now",       Icon: Zap        },
-          { id: "rebuild"       as const, label: "Rebuild",      desc: "Convert to long-term assets", Icon: RotateCcw  },
-          { id: "build-dynasty" as const, label: "Build Dynasty",desc: "Maximize dynasty value",      Icon: TrendingUp },
+          { id: "win-now" as const, label: "Win-Now",       desc: "Maximize starters now",      Icon: Zap        },
+          { id: "rebuild" as const, label: "Build Dynasty", desc: "Maximize dynasty value",      Icon: TrendingUp },
         ]).map(({ id, label, desc, Icon }) => (
           <button
             key={id}
@@ -717,9 +687,8 @@ function TradeOpportunities({ league, userTeam }: { league: League; userTeam: Te
         ))}
       </div>
 
-      {mode === "win-now"       && <WinNowMode       league={league} userTeam={userTeam} />}
-      {mode === "rebuild"       && <RebuildMode       league={league} userTeam={userTeam} />}
-      {mode === "build-dynasty" && <BuildDynastyMode league={league} userTeam={userTeam} />}
+      {mode === "win-now" && <WinNowMode  league={league} userTeam={userTeam} />}
+      {mode === "rebuild" && <RebuildMode league={league} userTeam={userTeam} />}
     </div>
   );
 }
@@ -2584,6 +2553,7 @@ function RebuildMode({ league, userTeam }: { league: League; userTeam: Team }) {
   const { getPlayerValue, getRedraftValue, getPickValue, optimizeLineup } = useValueModel();
   const [expandedPartners, setExpandedPartners] = useState<Set<string>>(new Set());
   const [sendModal, setSendModal] = useState<{ open: boolean; idea: WinNowIdea | null }>({ open: false, idea: null });
+  const [partnerFilter, setPartnerFilter] = useState<"all" | "contender" | "middle" | "rebuilder">("all");
   const isSleeperAuthed = !!getSleeperSession()?.token;
   const togglePartner = (pid: string) => setExpandedPartners(prev => {
     const next = new Set(prev);
@@ -2614,25 +2584,13 @@ function RebuildMode({ league, userTeam }: { league: League; userTeam: Team }) {
     [rosterData]
   );
 
-  // ── League-wide redraft starter ranks (to identify contenders) ──
-  const isContender = useCallback((teamId: string) => {
-    const tier = tierMap.get(teamId)?.tier;
-    return tier ? isContenderTier(tier) : false;
-  }, [tierMap]);
-
   // ── Generate rebuild trade ideas ────────────────────────────────
   const tradeIdeas = useMemo<RebuildIdea[]>(() => {
     if (sellCandidates.length === 0) return [];
-    const leagueSize = league.teams.length;
     const ideas: RebuildIdea[] = [];
-
-    const myPicks = userTeam.picks
-      .map(p => ({ ...p, val: getPickValue(p) }))
-      .sort((a, b) => b.val - a.val);
 
     for (const partner of league.teams) {
       if (partner.id === userTeam.id) continue;
-      if (!isContender(partner.id)) continue; // only sell to contenders
 
       const partnerTier = tierMap.get(partner.id)?.tier ?? "Balanced";
 
@@ -2747,7 +2705,7 @@ function RebuildMode({ league, userTeam }: { league: League; userTeam: Team }) {
       })
       .sort((a, b) => b.score - a.score)
       .slice(0, 15);
-  }, [league, userTeam, sellCandidates, isContender, tierMap, getPlayerValue, getRedraftValue, getPickValue]);
+  }, [league, userTeam, sellCandidates, tierMap, getPlayerValue, getRedraftValue, getPickValue]);
 
   // Group by partner
   const byPartner = useMemo(() => {
@@ -2761,57 +2719,53 @@ function RebuildMode({ league, userTeam }: { league: League; userTeam: Team }) {
       .sort((a, b) => b.ideas[0].score - a.ideas[0].score);
   }, [tradeIdeas]);
 
-  const tierColors: Record<AssetTier, string> = {
-    "Cornerstone":    "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20",
-    "Hold":           "bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20",
-    "Liquid":         "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20",
-    "Sell High":      "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20",
-    "Emergency Exit": "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20",
-  };
+  const filteredByPartner = useMemo(() => {
+    if (partnerFilter === "all") return byPartner;
+    return byPartner.filter(({ partnerTier }) => {
+      if (partnerFilter === "contender") return isContenderTier(partnerTier);
+      if (partnerFilter === "rebuilder") return isRebuilderTier(partnerTier);
+      return !isContenderTier(partnerTier) && !isRebuilderTier(partnerTier);
+    });
+  }, [byPartner, partnerFilter]);
 
   return (
     <div className="space-y-5">
 
-      {/* ── Asset Classification ── */}
-      <Card className="p-5" data-testid="card-asset-tiers">
-        <div className="mb-4">
-          <h4 className="text-sm font-bold">Asset Classification</h4>
-          <span className="block h-[2px] w-8 bg-[#d4af37] rounded-full mt-1" />
-          <p className="text-[10px] text-muted-foreground mt-1.5">
-            Every player tiered by decay risk vs. dynasty insulation
-          </p>
-        </div>
-        <div className="space-y-0">
-          {rosterData.filter(d => d.dynVal > 200 || d.rdVal > 500).slice(0, 20).map((d, i) => {
-            const sid = d.player.sleeperId ?? d.player.id;
-            return (
-              <div key={sid} className="flex items-center gap-2.5 py-2 border-b border-border/20 last:border-0" data-testid={`asset-row-${sid}`}>
-                <div className="w-6 h-6 rounded-full flex-shrink-0 overflow-hidden bg-muted ring-1 ring-border/20">
-                  <img src={`https://sleepercdn.com/content/nfl/players/thumb/${sid}.jpg`} alt={d.player.name} className="w-full h-full object-cover object-top" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[11px] font-semibold truncate">{d.player.name}</span>
-                    <Badge variant="outline" className={cn("text-[9px] px-1 py-0 h-3.5 flex-shrink-0", getPositionColor(d.player.pos))}>{d.player.pos}</Badge>
-                    <span className="text-[9px] text-muted-foreground flex-shrink-0">Age {d.player.age}</span>
+      {/* ── Assets to Move ── */}
+      {rosterData.filter(d => d.tier === "Liquid" || d.tier === "Sell High" || d.tier === "Emergency Exit").length > 0 && (
+        <Card className="p-5" data-testid="card-assets-to-move">
+          <div className="mb-4">
+            <h4 className="text-sm font-bold">Assets to Move</h4>
+            <span className="block h-[2px] w-8 bg-[#d4af37] rounded-full mt-1" />
+            <p className="text-[10px] text-muted-foreground mt-1.5">
+              Trade currency for rebuild deals — from liquid assets to priority sells
+            </p>
+          </div>
+          <div className="space-y-0">
+            {rosterData.filter(d => d.tier === "Liquid" || d.tier === "Sell High" || d.tier === "Emergency Exit").map((d, i) => {
+              const sid = d.player.sleeperId ?? d.player.id;
+              return (
+                <div key={sid} className="flex items-center gap-3 py-2.5 border-b border-border/20 last:border-0" data-testid={`asset-move-row-${sid}`}>
+                  <span className="text-xs text-muted-foreground w-4 text-right flex-shrink-0">{i + 1}.</span>
+                  <div className="flex-1 min-w-0">
+                    <PlayerAvatar id={sid} name={d.player.name} pos={d.player.pos} team={d.player.team ?? ""} size="sm" />
                   </div>
+                  <Badge
+                    variant="outline"
+                    className={cn("text-[9px] flex-shrink-0",
+                      d.player.starter
+                        ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                        : "bg-slate-500/10 text-slate-400 border-slate-500/20"
+                    )}
+                  >
+                    {d.player.starter ? "Starter" : "Bench"}
+                  </Badge>
                 </div>
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  <span className="text-[10px] font-mono text-muted-foreground">{d.dynVal.toLocaleString()}</span>
-                  <Badge variant="outline" className={cn("text-[9px] px-1.5 py-0", tierColors[d.tier])}>{d.tier}</Badge>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-        <div className="mt-3 pt-3 border-t border-border/20 flex items-center gap-3 flex-wrap">
-          {(["Cornerstone", "Hold", "Liquid", "Sell High", "Emergency Exit"] as AssetTier[]).map(tier => (
-            <div key={tier} className="flex items-center gap-1">
-              <Badge variant="outline" className={cn("text-[9px] px-1.5 py-0", tierColors[tier])}>{tier}</Badge>
-            </div>
-          ))}
-        </div>
-      </Card>
+              );
+            })}
+          </div>
+        </Card>
+      )}
 
       {/* ── Rebuild Trade Ideas ── */}
       <div>
@@ -2822,8 +2776,27 @@ function RebuildMode({ league, userTeam }: { league: League; userTeam: Team }) {
           </h4>
           <span className="block h-[2px] w-8 bg-[#d4af37] rounded-full mt-1" />
           <p className="text-[10px] text-muted-foreground mt-1.5">
-            Sell decay assets to contenders. Score = (dynasty gain + age curve + youth bonus) ÷ decay cost.
+            Find league-wide opportunities to convert aging or short-term production into younger players, picks, and long-term dynasty value.
           </p>
+        </div>
+
+        {/* ── Partner type filter ── */}
+        <div className="flex items-center gap-2 flex-wrap mb-1">
+          <span className="text-[10px] text-muted-foreground font-medium">Partner Type:</span>
+          {(["all", "contender", "middle", "rebuilder"] as const).map(f => (
+            <button
+              key={f}
+              onClick={() => setPartnerFilter(f)}
+              className={cn(
+                "text-[10px] px-2 py-0.5 rounded-full border transition-colors",
+                partnerFilter === f
+                  ? "bg-[#0b3a7a] text-white border-[#0b3a7a]"
+                  : "bg-background text-muted-foreground border-border hover:bg-muted/50"
+              )}
+            >
+              {f === "all" ? "All Teams" : f === "contender" ? "Contenders" : f === "middle" ? "Middle" : "Rebuilders"}
+            </button>
+          ))}
         </div>
 
         {tradeIdeas.length === 0 ? (
@@ -2833,13 +2806,19 @@ function RebuildMode({ league, userTeam }: { league: League; userTeam: Team }) {
               <p className="text-sm text-muted-foreground">
                 {sellCandidates.length === 0
                   ? "No high-decay assets detected — your roster is already well-insulated."
-                  : "No rebuild trades found. Contenders may lack the young assets or picks to offer a fair return."}
+                  : "No rebuild trades found. No partners currently have the young assets or picks to offer a fair return."}
               </p>
+            </CardContent>
+          </Card>
+        ) : filteredByPartner.length === 0 ? (
+          <Card>
+            <CardContent className="py-8 text-center">
+              <p className="text-sm text-muted-foreground">No trade ideas for this partner type. Try a different filter.</p>
             </CardContent>
           </Card>
         ) : (
           <div className="space-y-3" data-testid="rebuild-partner-list">
-            {byPartner.map(({ pid, partnerTeam, partnerTier, ideas }) => {
+            {filteredByPartner.map(({ pid, partnerTeam, partnerTier, ideas }) => {
               const isExpanded = expandedPartners.has(pid);
               return (
                 <Card key={pid} className="overflow-hidden" data-testid={`rebuild-partner-${pid}`}>
@@ -2907,448 +2886,5 @@ function RebuildMode({ league, userTeam }: { league: League; userTeam: Team }) {
       />
     </div>
   );
-}
-
-// ─── Build Dynasty Mode adapter ───────────────────────────────────
-
-function tradeSuggestionToWinNow(sug: TradeSuggestion, partnerTeam: Team, partnerTier: Tier): WinNowIdea {
-  return {
-    id: sug.id, partnerId: partnerTeam.id, partnerTeam, partnerTier,
-    headline: sug.headline, why: sug.reasons.join(" "),
-    youGive: sug.youGive.map(a => ({ label: a.label, value: a.value, pos: a.pos, age: a.age, type: a.type, sleeperId: a.sleeperId })),
-    youGet:  sug.youGet.map(a  => ({ label: a.label, value: a.value, pos: a.pos, age: a.age, type: a.type, sleeperId: a.sleeperId })),
-    gainPos: ((sug.youGet.find(a => a.type === "player")?.pos) ?? "QB") as PosLabel,
-    dynGive: sug.rawSide1, dynGet: sug.rawSide2,
-    rdGive: sug.adjustedSide1, rdGet: sug.adjustedSide2,
-    userRdDelta: sug.rawSide2 - sug.rawSide1,
-    partnerRdDelta: sug.rawSide1 - sug.rawSide2,
-    score: 0,
-    scoreLabel: sug.fairness === "Fair" ? "Elite" : sug.fairness === "Reasonable" ? "Strong" : "Moderate",
-  };
-}
-
-// ─── Build Dynasty Mode (existing logic) ─────────────────────────
-
-function BuildDynastyMode({ league, userTeam }: { league: League; userTeam: Team }) {
-  const { getPlayerValue, getRedraftValue, getPickValue } = useValueModel();
-  const { profiles } = usePositionalProfiles(league, userTeam);
-  const includeStuds = true;
-  const [expandedPartner, setExpandedPartner] = useState<string | null>(null);
-  const [sendModal, setSendModal] = useState<{ open: boolean; idea: WinNowIdea | null }>({ open: false, idea: null });
-  const isSleeperAuthed = !!getSleeperSession()?.token;
-  const tradeBlockTierMap = useMemo(() => getLeagueTeamTiers(league.teams), [league.teams]);
-
-  const fairnessThreshold = 0.12;
-
-  const userProfile = useMemo(() => profiles.find(p => p.teamId === userTeam.id), [profiles, userTeam]);
-
-
-  const partnerOpportunities = useMemo(() => {
-    if (!userProfile) return [];
-
-    return profiles
-      .filter(p => p.teamId !== userTeam.id)
-      .map(partner => {
-        const uSells = POSITIONS.filter(pos =>
-          userProfile.positions[pos].status === "Surplus" && partner.positions[pos].status === "Need"
-        );
-        const uBuys = POSITIONS.filter(pos =>
-          partner.positions[pos].status === "Surplus" && userProfile.positions[pos].status === "Need"
-        );
-
-        const tierMatch = partner.tier !== userProfile.tier;
-        let matchScore = uSells.length * 2 + uBuys.length * 2 + (tierMatch ? 1 : 0);
-
-        let fallbackSells: PosLabel[] = [];
-        let fallbackBuys: PosLabel[] = [];
-        if (uSells.length === 0 && uBuys.length === 0 && tierMatch) {
-          const userTier = tradeBlockTierMap.get(userTeam.id)?.tier ?? "Balanced";
-          if (isContenderTier(userTier)) {
-            fallbackBuys = POSITIONS.filter(pos => partner.positions[pos].rank <= Math.ceil(league.teams.length * 0.4));
-          } else {
-            fallbackSells = POSITIONS.filter(pos => userProfile.positions[pos].rank <= Math.ceil(league.teams.length * 0.4));
-          }
-          if (fallbackSells.length > 0 || fallbackBuys.length > 0) matchScore = 1;
-        }
-
-        const effectiveSells = uSells.length > 0 ? uSells : fallbackSells;
-        const effectiveBuys  = uBuys.length  > 0 ? uBuys  : fallbackBuys;
-
-        const whyBadges: { label: string; type: "surplus" | "need" | "info" }[] = [];
-        uSells.forEach(pos => whyBadges.push({ label: `${pos} Need (#${partner.positions[pos].rank})`, type: "need" }));
-        uBuys.forEach(pos  => whyBadges.push({ label: `${pos} Surplus (#${partner.positions[pos].rank})`, type: "surplus" }));
-        if (uSells.length === 0 && uBuys.length === 0 && tierMatch) {
-          whyBadges.push({ label: "Tier Match", type: "info" });
-        }
-        if (partner.pickStrength === "High") whyBadges.push({ label: "Picks Rich", type: "info" });
-        if (tierMatch) whyBadges.push({ label: partner.tier, type: "info" });
-
-        const suggestions = generateSuggestions(
-          userTeam, partner.team, userProfile, partner,
-          effectiveSells, effectiveBuys, getPlayerValue, getPickValue, includeStuds, fairnessThreshold,
-          tradeBlockTierMap.get(userTeam.id)?.tier ?? "Balanced",
-          tradeBlockTierMap.get(partner.teamId)?.tier ?? "Balanced"
-        );
-
-        return { partner, uSells: effectiveSells, uBuys: effectiveBuys, matchScore, whyBadges, suggestions };
-      })
-      .filter(o => o.matchScore > 0 && o.suggestions.length > 0)
-      .sort((a, b) => b.matchScore - a.matchScore);
-  }, [profiles, userTeam, userProfile, getPlayerValue, getPickValue, league]);
-
-  return (
-    <div className="space-y-5">
-
-      {partnerOpportunities.length === 0 && (
-        <Card>
-          <CardContent className="py-12 text-center">
-            <ArrowRightLeft className="w-10 h-10 mx-auto mb-3 text-muted-foreground/40" />
-            <p className="text-sm text-muted-foreground">No clear market matches found based on current surplus/need profiles.</p>
-          </CardContent>
-        </Card>
-      )}
-
-      <div className="space-y-3" data-testid="partner-opportunities">
-        {partnerOpportunities.map(opp => {
-          const isExpanded = expandedPartner === opp.partner.teamId;
-          return (
-            <Card key={opp.partner.teamId} className="overflow-hidden" data-testid={`partner-card-${opp.partner.teamId}`}>
-              <CardContent className="p-0">
-                <button
-                  className="w-full flex items-center justify-between px-5 py-4 hover:bg-muted/20 transition-colors text-left"
-                  onClick={() => setExpandedPartner(isExpanded ? null : opp.partner.teamId)}
-                  data-testid={`btn-expand-${opp.partner.teamId}`}
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    {opp.partner.team.avatar ? (
-                      <img
-                        src={opp.partner.team.avatar}
-                        alt={opp.partner.team.owner}
-                        className="w-9 h-9 rounded-full object-cover flex-shrink-0 ring-1 ring-border/40"
-                        onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-                      />
-                    ) : (
-                      <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center flex-shrink-0 ring-1 ring-border/30">
-                        <span className="text-sm font-bold text-muted-foreground">{opp.partner.team.owner.charAt(0).toUpperCase()}</span>
-                      </div>
-                    )}
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold text-foreground">{opp.partner.team.owner}</span>
-                        <Badge variant="outline" className={cn("text-[10px]", getTierColor(opp.partner.tier))}>{opp.partner.tier}</Badge>
-                      </div>
-                      <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                        {opp.whyBadges.map((b, i) => (
-                          <Badge
-                            key={i}
-                            variant="outline"
-                            className={cn("text-[9px] py-0",
-                              b.type === "need"    ? "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20" :
-                              b.type === "surplus" ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20" :
-                              "bg-slate-500/10 text-slate-500 border-slate-500/20"
-                            )}
-                          >
-                            {b.label}
-                          </Badge>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground">{opp.suggestions.length} idea{opp.suggestions.length !== 1 ? "s" : ""}</span>
-                    <ChevronRight className={cn("w-4 h-4 text-muted-foreground transition-transform", isExpanded && "rotate-90")} />
-                  </div>
-                </button>
-
-                {isExpanded && (
-                  <div className="border-t border-border/30 px-5 py-4 space-y-3">
-                    {opp.suggestions.length === 0 && (
-                      <p className="text-xs text-muted-foreground text-center py-4">
-                        No trade ideas could be generated for this partner. Try selecting a different league or check back after roster changes.
-                      </p>
-                    )}
-                    {opp.suggestions.map((sug, idx) => (
-                      <WinNowIdeaCard
-                        key={sug.id}
-                        idea={tradeSuggestionToWinNow(sug, opp.partner.team, opp.partner.tier)}
-                        userTeam={userTeam}
-                        isSleeperAuthed={isSleeperAuthed}
-                        onSend={() => setSendModal({ open: true, idea: tradeSuggestionToWinNow(sug, opp.partner.team, opp.partner.tier) })}
-                        testId={`suggestion-${opp.partner.teamId}-${idx}`}
-                      />
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
-
-      <WinNowSendModal
-        open={sendModal.open}
-        onClose={() => setSendModal({ open: false, idea: null })}
-        idea={sendModal.idea}
-        league={league}
-        userTeam={userTeam}
-      />
-    </div>
-  );
-}
-
-
-function generateSuggestions(
-  userTeam: Team,
-  partnerTeam: Team,
-  userProfile: TeamPosProfile,
-  partnerProfile: TeamPosProfile,
-  uSells: PosLabel[],
-  uBuys: PosLabel[],
-  getPlayerValue: (p: Player) => number,
-  getPickValue: (p: Pick) => number,
-  includeStuds: boolean,
-  fairnessThreshold: number,
-  userTier: Tier,
-  partnerTier: Tier,
-): TradeSuggestion[] {
-  const suggestions: TradeSuggestion[] = [];
-
-  const fairBand = 0.05;
-  const reasonableBand = 0.10;
-
-  const mySellCandidates = uSells.flatMap(pos => {
-    const players = [...userTeam.roster]
-      .filter(p => p.pos === pos)
-      .map(p => ({ ...p, val: getPlayerValue(p) }))
-      .sort((a, b) => b.val - a.val);
-    const startIdx = includeStuds ? 1 : 2;
-    return players.slice(startIdx, 6).filter(p => p.val > 100);
-  });
-
-  const theirBuyCandidates = uBuys.flatMap(pos => {
-    const players = [...partnerTeam.roster]
-      .filter(p => p.pos === pos)
-      .map(p => ({ ...p, val: getPlayerValue(p) }))
-      .sort((a, b) => b.val - a.val);
-    const startIdx = includeStuds ? 0 : 1;
-    return players.slice(startIdx, 5).filter(p => p.val > 100);
-  });
-
-  const myPicks = userTeam.picks.map(p => ({ ...p, val: getPickValue(p) })).sort((a, b) => b.val - a.val);
-  const theirPicks = partnerTeam.picks.map(p => ({ ...p, val: getPickValue(p) })).sort((a, b) => b.val - a.val);
-
-  function checkFairness(side1Values: number[], side2Values: number[], applyTierPremium = false): { fair: boolean; fairness: "Fair" | "Reasonable" | "Aggressive"; rawS1: number; rawS2: number; adjS1: number; adjS2: number } {
-    let rawS1 = side1Values.reduce((s, v) => s + v, 0);
-    let rawS2 = side2Values.reduce((s, v) => s + v, 0);
-    const adjS1 = adjustedTotal(side1Values);
-    const adjS2 = adjustedTotal(side2Values);
-
-    if (applyTierPremium && isRebuilderTier(partnerTier)) {
-      const premiumNeeded = rawS2 * 0.05;
-      if (rawS1 < rawS2 + premiumNeeded) {
-        return { fair: false, fairness: "Aggressive", rawS1, rawS2, adjS1, adjS2 };
-      }
-    }
-
-    const maxRaw = Math.max(rawS1, rawS2, 1);
-    const rawDiff = Math.abs(rawS1 - rawS2) / maxRaw;
-    const maxAdj = Math.max(adjS1, adjS2, 1);
-    const adjDiff = Math.abs(adjS1 - adjS2) / maxAdj;
-    const diff = Math.max(rawDiff, adjDiff);
-
-    if (diff <= fairBand) return { fair: true, fairness: "Fair", rawS1, rawS2, adjS1, adjS2 };
-    if (diff <= reasonableBand) return { fair: true, fairness: "Reasonable", rawS1, rawS2, adjS1, adjS2 };
-    if (diff <= fairnessThreshold) return { fair: true, fairness: "Aggressive", rawS1, rawS2, adjS1, adjS2 };
-    return { fair: false, fairness: "Aggressive", rawS1, rawS2, adjS1, adjS2 };
-  }
-
-  for (const sell of mySellCandidates.slice(0, 4)) {
-    for (const buy of theirBuyCandidates.slice(0, 4)) {
-      const isBestPlayer = buy.val >= Math.max(...partnerTeam.roster.map(p => getPlayerValue(p))) * 0.9;
-      const check = checkFairness([sell.val], [buy.val], isBestPlayer);
-      if (check.fair && suggestions.length < 6) {
-        suggestions.push({
-          id: `1for1-${sell.id}-${buy.id}`,
-          template: "1-for-1",
-          headline: `${sell.pos} → ${buy.pos} swap`,
-          youGive: [{ label: sell.name, value: sell.val, pos: sell.pos, age: sell.age, type: "player", sleeperId: sell.sleeperId }],
-          youGet: [{ label: buy.name, value: buy.val, pos: buy.pos, age: buy.age, type: "player", sleeperId: buy.sleeperId }],
-          rawSide1: check.rawS1, rawSide2: check.rawS2,
-          adjustedSide1: check.adjS1, adjustedSide2: check.adjS2,
-          fairness: check.fairness,
-          reasons: [
-            `They need ${sell.pos} (#${partnerProfile.positions[sell.pos as PosLabel]?.rank || "?"})`,
-            `You need ${buy.pos} (#${userProfile.positions[buy.pos as PosLabel]?.rank || "?"})`,
-          ],
-        });
-      }
-    }
-  }
-
-  for (const sell of mySellCandidates.slice(0, 3)) {
-    for (const buy of theirBuyCandidates.slice(0, 3)) {
-      if (buy.val > sell.val) {
-        const gap = buy.val - sell.val;
-        const bestPick = myPicks.find(p => p.val >= gap * 0.5 && p.val <= gap * 1.5);
-        if (bestPick) {
-          const check = checkFairness([sell.val, bestPick.val], [buy.val]);
-          if (check.fair && suggestions.length < 8) {
-            suggestions.push({
-              id: `pickbal-${sell.id}-${buy.id}`,
-              template: "Player + Pick",
-              headline: `${sell.pos} + Pick → ${buy.pos} upgrade`,
-              youGive: [
-                { label: sell.name, value: sell.val, pos: sell.pos, age: sell.age, type: "player", sleeperId: sell.sleeperId },
-                { label: `${bestPick.year} Rd ${bestPick.round} (${bestPick.projectedRange || "Mid"})`, value: bestPick.val, type: "pick" },
-              ],
-              youGet: [{ label: buy.name, value: buy.val, pos: buy.pos, age: buy.age, type: "player", sleeperId: buy.sleeperId }],
-              rawSide1: check.rawS1, rawSide2: check.rawS2,
-              adjustedSide1: check.adjS1, adjustedSide2: check.adjS2,
-              fairness: check.fairness,
-              reasons: [
-                `Upgrade at ${buy.pos}`,
-                `They need ${sell.pos} + capital`,
-              ],
-            });
-          }
-        }
-      }
-    }
-  }
-
-  if (isContenderTier(userTier) && (isRebuilderTier(partnerTier) || partnerTier === "Balanced")) {
-    for (const buy of theirBuyCandidates.slice(0, 2)) {
-      const twoSells = mySellCandidates
-        .filter(s => s.val < buy.val * 0.8)
-        .slice(0, 2);
-      if (twoSells.length === 2) {
-        const check = checkFairness(twoSells.map(s => s.val), [buy.val], true);
-        if (check.fair && suggestions.length < 10) {
-          suggestions.push({
-            id: `consolidation-${buy.id}`,
-            template: "2-for-1",
-            headline: `Consolidate depth → ${buy.pos} stud`,
-            youGive: twoSells.map(s => ({ label: s.name, value: s.val, pos: s.pos, age: s.age, type: "player" as const, sleeperId: s.sleeperId })),
-            youGet: [{ label: buy.name, value: buy.val, pos: buy.pos, age: buy.age, type: "player", sleeperId: buy.sleeperId }],
-            rawSide1: check.rawS1, rawSide2: check.rawS2,
-            adjustedSide1: check.adjS1, adjustedSide2: check.adjS2,
-            fairness: check.fairness,
-            reasons: [
-              `They're ${partnerTier}, want depth`,
-              `You consolidate for a starter`,
-            ],
-          });
-        }
-      }
-    }
-  }
-
-  if ((isRebuilderTier(userTier) || userTier === "Balanced") && isContenderTier(partnerTier)) {
-    const oldSells = mySellCandidates
-      .filter(s => (s.pos === "RB" && s.age >= 26) || (s.pos !== "RB" && s.age >= 27))
-      .slice(0, 3);
-    const youngBuys = theirBuyCandidates
-      .filter(b => (b.pos === "RB" && b.age <= 24) || (b.pos !== "RB" && b.age <= 25))
-      .slice(0, 3);
-
-    for (const sell of oldSells) {
-      for (const buy of youngBuys) {
-        if (sell.val > buy.val * 0.6) {
-          const gap = sell.val - buy.val;
-          const balancePick = gap > 200 ? theirPicks.find(p => p.val >= gap * 0.3 && p.val <= gap * 1.5) : null;
-          const side2: number[] = [buy.val];
-          const getItems: TradeSuggestion["youGet"] = [{ label: buy.name, value: buy.val, pos: buy.pos, age: buy.age, type: "player", sleeperId: buy.sleeperId }];
-          if (balancePick) {
-            side2.push(balancePick.val);
-            getItems.push({ label: `${balancePick.year} Rd ${balancePick.round} (${balancePick.projectedRange || "Mid"})`, value: balancePick.val, type: "pick" });
-          }
-          const check = checkFairness([sell.val], side2);
-          if (check.fair && suggestions.length < 10) {
-            suggestions.push({
-              id: `rebuild-${sell.id}-${buy.id}`,
-              template: "Rebuild Flip",
-              headline: `Sell ${sell.name} → youth + capital`,
-              youGive: [{ label: sell.name, value: sell.val, pos: sell.pos, age: sell.age, type: "player", sleeperId: sell.sleeperId }],
-              youGet: getItems,
-              rawSide1: check.rawS1, rawSide2: check.rawS2,
-              adjustedSide1: check.adjS1, adjustedSide2: check.adjS2,
-              fairness: check.fairness,
-              reasons: [
-                `Sell aging ${sell.pos} (${sell.age})`,
-                `Get younger at ${buy.pos} (${buy.age})`,
-              ],
-            });
-          }
-        }
-      }
-    }
-  }
-
-  if (myPicks.length > 0 && theirPicks.length > 0) {
-    for (const sell of mySellCandidates.slice(0, 3)) {
-      for (const buy of theirBuyCandidates.slice(0, 3)) {
-        const playerDiff = buy.val - sell.val;
-        if (Math.abs(playerDiff) > buy.val * 0.15) {
-          if (playerDiff > 0) {
-            const balancePick = theirPicks.find(p => p.val >= playerDiff * 0.3 && p.val <= playerDiff * 2);
-            if (balancePick) {
-              const check = checkFairness([sell.val], [buy.val, balancePick.val]);
-              if (!check.fair) {
-                const myBalancePick = myPicks.find(p => p.val >= playerDiff * 0.3 && p.val <= playerDiff * 1.5);
-                if (myBalancePick) {
-                  const check2 = checkFairness([sell.val, myBalancePick.val], [buy.val]);
-                  if (check2.fair && suggestions.length < 10) {
-                    suggestions.push({
-                      id: `pickswap-${sell.id}-${buy.id}`,
-                      template: "Pick Swap",
-                      headline: `${sell.pos} + pick → ${buy.pos}`,
-                      youGive: [
-                        { label: sell.name, value: sell.val, pos: sell.pos, age: sell.age, type: "player", sleeperId: sell.sleeperId },
-                        { label: `${myBalancePick.year} Rd ${myBalancePick.round} (${myBalancePick.projectedRange || "Mid"})`, value: myBalancePick.val, type: "pick" },
-                      ],
-                      youGet: [{ label: buy.name, value: buy.val, pos: buy.pos, age: buy.age, type: "player", sleeperId: buy.sleeperId }],
-                      rawSide1: check2.rawS1, rawSide2: check2.rawS2,
-                      adjustedSide1: check2.adjS1, adjustedSide2: check2.adjS2,
-                      fairness: check2.fairness,
-                      reasons: [`Picks balance the value gap`, `${buy.pos} upgrade`],
-                    });
-                  }
-                }
-              }
-            }
-          } else {
-            const balancePick = theirPicks.find(p => p.val >= Math.abs(playerDiff) * 0.3 && p.val <= Math.abs(playerDiff) * 1.5);
-            if (balancePick) {
-              const check = checkFairness([sell.val], [buy.val, balancePick.val]);
-              if (check.fair && suggestions.length < 10) {
-                suggestions.push({
-                  id: `pickswap-${sell.id}-${buy.id}`,
-                  template: "Pick Swap",
-                  headline: `${sell.pos} → ${buy.pos} + pick`,
-                  youGive: [{ label: sell.name, value: sell.val, pos: sell.pos, age: sell.age, type: "player", sleeperId: sell.sleeperId }],
-                  youGet: [
-                    { label: buy.name, value: buy.val, pos: buy.pos, age: buy.age, type: "player", sleeperId: buy.sleeperId },
-                    { label: `${balancePick.year} Rd ${balancePick.round} (${balancePick.projectedRange || "Mid"})`, value: balancePick.val, type: "pick" },
-                  ],
-                  rawSide1: check.rawS1, rawSide2: check.rawS2,
-                  adjustedSide1: check.adjS1, adjustedSide2: check.adjS2,
-                  fairness: check.fairness,
-                  reasons: [`Pick balances value gap`, `${buy.pos} need filled`],
-                });
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-
-  const seen = new Set<string>();
-  return suggestions.filter(s => {
-    const key = [...s.youGive.map(a => a.label), "→", ...s.youGet.map(a => a.label)].join("|");
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  }).slice(0, 6);
 }
 

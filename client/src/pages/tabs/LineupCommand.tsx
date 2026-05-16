@@ -10,7 +10,10 @@ import {
   AlertTriangle, TrendingUp, Zap, Users, CalendarX,
   ChevronDown, ChevronUp, RefreshCw, Lock, CheckCircle2,
   ArrowRight, Activity, ArrowUpDown, Trophy, Shield, Target, Swords,
+  Loader2, Pause,
 } from "lucide-react";
+import { useOptimizeQueue } from "@/services/optimizeQueue";
+import { OptimizeAllModal } from "@/components/OptimizeAllModal";
 import type { SleeperLeagueSummary } from "@/types";
 
 const SLEEPER_API = "https://api.sleeper.app/v1";
@@ -53,6 +56,8 @@ interface LeagueAnalysis {
   format: string;
   scoringFormat: string;
   avatar?: string | null;
+  rosterId: number;
+  optimalStarters: string[];
   currentProj: number;
   optimalProj: number;
   gain: number;
@@ -138,7 +143,7 @@ function analyzeLineup(
   playerDb: Record<string, any>,
   rosterPositions: string[],
   scoringFormat: string,
-): Omit<LeagueAnalysis, "leagueId" | "leagueName" | "format" | "scoringFormat" | "loading" | "error"> {
+): Omit<LeagueAnalysis, "leagueId" | "leagueName" | "format" | "scoringFormat" | "loading" | "error" | "rosterId"> {
   const field = projKey(scoringFormat);
 
   // Build projection map for this league's scoring
@@ -209,7 +214,7 @@ function analyzeLineup(
                                      issues.push({ type: "bye",          playerName: name, pos });
   }
 
-  return { currentProj, optimalProj, gain: optimalProj - currentProj, issues, swaps };
+  return { currentProj, optimalProj, gain: optimalProj - currentProj, issues, swaps, optimalStarters: optimalIds };
 }
 
 // ─── Issue badge ─────────────────────────────────────────────────────────────
@@ -670,6 +675,9 @@ export function LineupCommand() {
   const [mSortKey, setMSortKey]   = useState<"league" | "record" | "myProj" | "oppRecord" | "oppProj" | "winPct">("winPct");
   const [mSortDir, setMSortDir]   = useState<"asc" | "desc">("desc");
 
+  const [optimizeModalOpen, setOptimizeModalOpen] = useState(false);
+  const queue = useOptimizeQueue();
+
   const activeLeagues = leagues.filter(l => l.status !== "archived");
 
   // ── 1. Fetch NFL state + projections + player DB ─────────────────────────
@@ -724,6 +732,8 @@ export function LineupCommand() {
             format:       l.format || "1QB",
             scoringFormat: l.scoringFormat,
             avatar:       l.avatar ? `https://sleepercdn.com/avatars/thumbs/${l.avatar}` : null,
+            rosterId:     0,
+            optimalStarters: [],
             currentProj:  0,
             optimalProj:  0,
             gain:         0,
@@ -771,6 +781,7 @@ export function LineupCommand() {
             [league.leagueId]: {
               ...prev[league.leagueId],
               ...result,
+              rosterId: myRoster.roster_id,
               loading: false,
               error:   false,
             },
@@ -979,6 +990,21 @@ export function LineupCommand() {
   const allLoading = Object.values(analyses).every(a => a.loading);
   const hasAnyData = Object.values(analyses).some(a => !a.loading && !a.error);
 
+  const leaguesToOptimize = useMemo(() =>
+    sortedAnalyses
+      .filter(a => !a.loading && !a.error && a.swaps.length > 0 && a.rosterId > 0)
+      .map(a => ({
+        leagueId:        a.leagueId,
+        leagueName:      a.leagueName,
+        avatar:          a.avatar,
+        rosterId:        a.rosterId,
+        optimalStarters: a.optimalStarters,
+        swapCount:       a.swaps.length,
+        projGain:        a.gain,
+      })),
+    [sortedAnalyses]
+  );
+
   // ── Matchup KPIs ──────────────────────────────────────────────────────────
   const matchupKpis = useMemo(() => {
     const list = Object.values(matchups).filter(m => !m.loading && !m.error && m.opponentRosterId != null);
@@ -1107,6 +1133,31 @@ export function LineupCommand() {
             </div>
           </div>
 
+          {/* ── Optimize All button ────────────────────────────────── */}
+          {leaguesToOptimize.length > 0 && (
+            <div className="flex justify-end">
+              <button
+                onClick={() => setOptimizeModalOpen(true)}
+                disabled={queue.qStatus === "running" || queue.qStatus === "paused"}
+                data-testid="button-optimize-all"
+                className={cn(
+                  "inline-flex items-center gap-1.5 text-[11px] font-bold rounded-full px-4 py-1.5 border transition-all",
+                  queue.qStatus === "running" || queue.qStatus === "paused"
+                    ? "bg-white/4 border-white/8 text-white/25 cursor-not-allowed"
+                    : "bg-[#d4af37]/12 hover:bg-[#d4af37]/22 border-[#d4af37]/30 hover:border-[#d4af37]/50 text-[#d4af37] hover:shadow-[0_0_12px_rgba(212,175,55,0.15)]"
+                )}
+              >
+                {queue.qStatus === "running" ? (
+                  <><Loader2 className="w-3 h-3 animate-spin" /> Optimizing…</>
+                ) : queue.qStatus === "paused" ? (
+                  <><Pause className="w-3 h-3" /> Paused ({queue.completedCount}/{queue.totalCount})</>
+                ) : (
+                  <><Zap className="w-3 h-3" /> Optimize All ({leaguesToOptimize.length})</>
+                )}
+              </button>
+            </div>
+          )}
+
           {/* ── Lineup table ───────────────────────────────────────── */}
           <div
             className="rounded-2xl overflow-hidden border border-white/6"
@@ -1153,6 +1204,32 @@ export function LineupCommand() {
           </p>
         </>
       )}
+
+      {/* ── Optimize All Modal (rendered outside tab conditional) ── */}
+      <OptimizeAllModal
+        open={optimizeModalOpen}
+        onClose={() => {
+          if (queue.qStatus === "idle") setOptimizeModalOpen(false);
+        }}
+        leaguesToOptimize={leaguesToOptimize}
+        nflWeek={nflWeek}
+        qStatus={queue.qStatus}
+        items={queue.items}
+        processingId={queue.processingId}
+        completedCount={queue.completedCount}
+        totalCount={queue.totalCount}
+        estimatedRemainingMs={queue.estimatedRemainingMs}
+        summary={queue.summary}
+        onConfirm={() => queue.start(leaguesToOptimize)}
+        onPause={queue.pause}
+        onResume={queue.resume}
+        onCancel={queue.cancel}
+        onDone={() => {
+          queue.reset();
+          setOptimizeModalOpen(false);
+          refresh();
+        }}
+      />
 
       {/* ══════════════════ MATCHUPS TAB ══════════════════ */}
       {activeTab === "matchups" && (
