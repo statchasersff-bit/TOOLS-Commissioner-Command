@@ -34,6 +34,7 @@ import {
   ArrowDown,
   ArrowUpDown,
   ArrowRightLeft,
+  Coins,
 } from "lucide-react";
 
 export function PortfolioConnect({ onNavigate }: { onNavigate?: (mainTab: string, subTab: string) => void }) {
@@ -586,27 +587,23 @@ export function PortfolioSummary() {
   if (innerTab === "finances") {
     return (
       <div className="space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <SectionHeader title="League Finances" subtitle="Track buy-ins, prizes, and ROI across your leagues" />
-          <div className="flex gap-1 p-1 rounded-xl bg-white/[0.03] border border-white/6 w-fit self-center sm:self-auto">
-            {(["overview", "finances"] as const).map((tab) => (
-              <button
-                key={tab}
-                onClick={() => setInnerTab(tab)}
-                data-testid={`inner-tab-${tab}`}
-                className={cn(
-                  "relative px-4 py-1.5 rounded-lg text-[11px] font-semibold transition-all duration-200",
-                  innerTab === tab
-                    ? "bg-[#0b3a7a]/60 text-white border border-[#d4af37]/25"
-                    : "text-white/35 hover:text-white/60"
-                )}
-              >
-                {tab === "overview" ? "Overview" : "Finances"}
-                {innerTab === tab && (
-                  <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-6 h-[2px] rounded-full bg-[#d4af37]" />
-                )}
-              </button>
-            ))}
+        <SectionHeader title="League Finances" subtitle="Track buy-ins, prizes, and ROI across your leagues" />
+        <div className="flex justify-center sm:justify-start">
+          <div className="grid w-full sm:w-auto" style={{ gridTemplateColumns: "1fr 1fr", maxWidth: 420, height: 48, borderRadius: 16, padding: 4, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", gap: 4 }}>
+            {(["overview", "finances"] as const).map((tab) => {
+              const isActive = innerTab === tab;
+              const Icon = tab === "overview" ? BarChart3 : Coins;
+              const label = tab === "overview" ? "Overview" : "Finances";
+              return (
+                <button key={tab} onClick={() => setInnerTab(tab)} data-testid={`inner-tab-${tab}`}
+                  className="relative flex items-center justify-center gap-2 font-semibold transition-all duration-200"
+                  style={{ borderRadius: 12, fontSize: 13, letterSpacing: "0.01em", background: isActive ? "linear-gradient(135deg, rgba(11,58,122,0.85) 0%, rgba(11,58,122,0.65) 100%)" : "transparent", color: isActive ? "#fff" : "rgba(203,213,225,0.45)", border: isActive ? "1px solid rgba(212,175,55,0.30)" : "1px solid transparent", boxShadow: isActive ? "0 2px 12px rgba(11,58,122,0.40), inset 0 1px 0 rgba(255,255,255,0.06)" : "none" }}>
+                  <Icon style={{ width: 15, height: 15, flexShrink: 0 }} />
+                  {label}
+                  {isActive && <span className="absolute bottom-[3px] left-1/2 -translate-x-1/2 rounded-full" style={{ width: 28, height: 2, background: "#d4af37", opacity: 0.85 }} />}
+                </button>
+              );
+            })}
           </div>
         </div>
         <Suspense fallback={<div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>}>
@@ -618,27 +615,23 @@ export function PortfolioSummary() {
 
   return (
     <div className="space-y-8">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <SectionHeader title="My Portfolio" subtitle="Overview of your dynasty portfolio across all leagues" />
-        <div className="flex gap-1 p-1 rounded-xl bg-white/[0.03] border border-white/6 w-fit self-center sm:self-auto">
-          {(["overview", "finances"] as const).map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setInnerTab(tab)}
-              data-testid={`inner-tab-${tab}`}
-              className={cn(
-                "relative px-4 py-1.5 rounded-lg text-[11px] font-semibold transition-all duration-200",
-                innerTab === tab
-                  ? "bg-[#0b3a7a]/60 text-white border border-[#d4af37]/25"
-                  : "text-white/35 hover:text-white/60"
-              )}
-            >
-              {tab === "overview" ? "Overview" : "Finances"}
-              {innerTab === tab && (
-                <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-6 h-[2px] rounded-full bg-[#d4af37]" />
-              )}
-            </button>
-          ))}
+      <SectionHeader title="My Portfolio" subtitle="Overview of your dynasty portfolio across all leagues" />
+      <div className="flex justify-center sm:justify-start">
+        <div className="grid w-full sm:w-auto" style={{ gridTemplateColumns: "1fr 1fr", maxWidth: 420, height: 48, borderRadius: 16, padding: 4, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", gap: 4 }}>
+          {(["overview", "finances"] as const).map((tab) => {
+            const isActive = innerTab === tab;
+            const Icon = tab === "overview" ? BarChart3 : Coins;
+            const label = tab === "overview" ? "Overview" : "Finances";
+            return (
+              <button key={tab} onClick={() => setInnerTab(tab)} data-testid={`inner-tab-${tab}`}
+                className="relative flex items-center justify-center gap-2 font-semibold transition-all duration-200"
+                style={{ borderRadius: 12, fontSize: 13, letterSpacing: "0.01em", background: isActive ? "linear-gradient(135deg, rgba(11,58,122,0.85) 0%, rgba(11,58,122,0.65) 100%)" : "transparent", color: isActive ? "#fff" : "rgba(203,213,225,0.45)", border: isActive ? "1px solid rgba(212,175,55,0.30)" : "1px solid transparent", boxShadow: isActive ? "0 2px 12px rgba(11,58,122,0.40), inset 0 1px 0 rgba(255,255,255,0.06)" : "none" }}>
+                <Icon style={{ width: 15, height: 15, flexShrink: 0 }} />
+                {label}
+                {isActive && <span className="absolute bottom-[3px] left-1/2 -translate-x-1/2 rounded-full" style={{ width: 28, height: 2, background: "#d4af37", opacity: 0.85 }} />}
+              </button>
+            );
+          })}
         </div>
       </div>
 
