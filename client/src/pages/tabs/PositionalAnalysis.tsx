@@ -662,28 +662,28 @@ function TradeOpportunities({ league, userTeam }: { league: League; userTeam: Te
   const [mode, setMode] = useState<"win-now" | "rebuild">("win-now");
   return (
     <div className="space-y-5">
-      <div className="flex justify-center"><div className="flex w-fit rounded-lg border border-border overflow-hidden">
-        {([
-          { id: "win-now" as const, label: "Win-Now",       desc: "Maximize starters now",      Icon: Zap        },
-          { id: "rebuild" as const, label: "Build Dynasty", desc: "Maximize dynasty value",      Icon: TrendingUp },
-        ]).map(({ id, label, desc, Icon }) => (
-          <button
-            key={id}
-            onClick={() => setMode(id)}
-            className={cn(
-              "flex items-center gap-2 px-4 py-2.5 text-left transition-colors border-r border-border last:border-r-0",
-              mode === id ? "bg-[#0b3a7a] text-white" : "bg-background text-muted-foreground hover:bg-muted/50"
-            )}
-            data-testid={`btn-mode-${id}`}
-          >
-            <Icon className="w-3.5 h-3.5 flex-shrink-0" />
-            <div className="flex flex-col items-start">
-              <span className="text-xs font-semibold leading-tight">{label}</span>
-              <span className={cn("text-[10px] leading-tight", mode === id ? "text-white/70" : "text-muted-foreground/70")}>{desc}</span>
-            </div>
-          </button>
-        ))}
-      </div></div>
+      <div className="flex justify-center sm:justify-start !mt-0 md:!mt-5">
+        <div className="grid w-full sm:w-auto" style={{ gridTemplateColumns: "1fr 1fr", maxWidth: 420, height: 56, borderRadius: 16, padding: 4, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", gap: 4 }}>
+          {([
+            { id: "win-now" as const, label: "Win-Now",       desc: "Maximize starters now",  Icon: Zap        },
+            { id: "rebuild" as const, label: "Build Dynasty", desc: "Maximize dynasty value",  Icon: TrendingUp },
+          ]).map(({ id, label, desc, Icon }) => {
+            const isActive = mode === id;
+            return (
+              <button key={id} onClick={() => setMode(id)} data-testid={`btn-mode-${id}`}
+                className="relative flex items-center justify-center gap-2 transition-all duration-200"
+                style={{ borderRadius: 12, background: isActive ? "linear-gradient(135deg, rgba(11,58,122,0.85) 0%, rgba(11,58,122,0.65) 100%)" : "transparent", border: isActive ? "1px solid rgba(212,175,55,0.30)" : "1px solid transparent", boxShadow: isActive ? "0 2px 12px rgba(11,58,122,0.40), inset 0 1px 0 rgba(255,255,255,0.06)" : "none" }}>
+                <Icon style={{ width: 14, height: 14, flexShrink: 0, color: isActive ? "#fff" : "rgba(203,213,225,0.45)" }} />
+                <div className="flex flex-col items-start">
+                  <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.01em", lineHeight: 1.2, color: isActive ? "#fff" : "rgba(203,213,225,0.45)" }}>{label}</span>
+                  <span style={{ fontSize: 10, lineHeight: 1.2, color: isActive ? "rgba(255,255,255,0.55)" : "rgba(203,213,225,0.28)" }}>{desc}</span>
+                </div>
+                {isActive && <span className="absolute bottom-[3px] left-1/2 -translate-x-1/2 rounded-full" style={{ width: 28, height: 2, background: "#d4af37", opacity: 0.85 }} />}
+              </button>
+            );
+          })}
+        </div>
+      </div>
 
       {mode === "win-now" && <WinNowMode  league={league} userTeam={userTeam} />}
       {mode === "rebuild" && <RebuildMode league={league} userTeam={userTeam} />}
