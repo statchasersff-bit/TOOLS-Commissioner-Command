@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { X, Info, Crosshair, Waves, Users, Share2, Trophy, ArrowLeftRight, Search, Inbox, Calculator, Database, Zap, MessageSquare, Lock, ChevronRight, Package } from "lucide-react";
+import { X, Crosshair, Waves, Users, Share2, Trophy, ArrowLeftRight, Search, Inbox, Calculator, Database, Zap, MessageSquare, Lock, ChevronRight, Package } from "lucide-react";
 import { cn } from "@/lib/utils";
 import logoDark from "@assets/statchasers_logo_transparent_dark_1772764844282.png";
 import logoLight from "@assets/statchasers_logo_transparent_light_1772764844283.png";
@@ -11,8 +11,7 @@ interface FeatureDef {
   icon: React.ElementType;
   description: string;
   bullets: string[];
-  requiresSleeper?: boolean;
-  sleeperNote?: string;
+
   tab?: string;
   sub?: string;
   comingSoon?: boolean;
@@ -45,8 +44,6 @@ const FEATURES: FeatureDef[] = [
       "Projected score and injury/status alerts",
       "Submit lineup changes directly through Sleeper",
     ],
-    requiresSleeper: true,
-    sleeperNote: "Saving lineup changes requires Sleeper login.",
     tab: "portfolio",
     sub: "lineup-command",
   },
@@ -61,8 +58,6 @@ const FEATURES: FeatureDef[] = [
       "Available player rankings by dynasty and redraft value",
       "One-click waiver claim submission via Sleeper",
     ],
-    requiresSleeper: true,
-    sleeperNote: "Submitting waiver claims requires Sleeper login.",
     tab: "portfolio",
     sub: "waiver-command",
   },
@@ -151,8 +146,6 @@ const FEATURES: FeatureDef[] = [
       "Message trade partners directly from the offer view",
       "Full trade history with outcome tracking",
     ],
-    requiresSleeper: true,
-    sleeperNote: "Requires Sleeper login to view and act on offers.",
     tab: "trade-center",
     sub: "trade-sync",
   },
@@ -195,8 +188,6 @@ const FEATURES: FeatureDef[] = [
       "Delayed send queue with review before submission",
       "Reduces repetitive manual offer entry across leagues",
     ],
-    requiresSleeper: true,
-    sleeperNote: "Requires Sleeper login to send offers.",
     comingSoon: true,
   },
   {
@@ -211,8 +202,6 @@ const FEATURES: FeatureDef[] = [
       "Recent picks feed with value tracking",
       "Make picks directly through Sleeper integration",
     ],
-    requiresSleeper: true,
-    sleeperNote: "Sleeper login required for queue updates or making picks.",
     tab: "live-draft",
     sub: "draft-board",
   },
@@ -348,13 +337,6 @@ export function AboutModal({ open, onClose, onNavigate, onOpenFeedback, onOpenCo
                           Coming Soon
                         </span>
                       )}
-                      {feature.requiresSleeper && (
-                        <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold"
-                          style={{ background: "rgba(99,102,241,0.12)", color: "#a5b4fc", border: "1px solid rgba(99,102,241,0.25)" }}>
-                          <Lock className="w-2.5 h-2.5" />
-                          Sleeper Required
-                        </span>
-                      )}
                     </div>
                     <p className="text-[12px] text-white/50 leading-snug mt-1">{feature.description}</p>
                   </div>
@@ -369,15 +351,6 @@ export function AboutModal({ open, onClose, onNavigate, onOpenFeedback, onOpenCo
                     </li>
                   ))}
                 </ul>
-
-                {/* Sleeper note */}
-                {feature.sleeperNote && (
-                  <div className="flex items-start gap-2 mb-3 px-3 py-2 rounded-lg"
-                    style={{ background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.15)" }}>
-                    <Lock className="w-3 h-3 text-indigo-400 flex-shrink-0 mt-0.5" />
-                    <p className="text-[11px] text-indigo-300/80 leading-snug">{feature.sleeperNote}</p>
-                  </div>
-                )}
 
                 {/* Go to page button */}
                 {canNavigate && !feature.comingSoon && (
