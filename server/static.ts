@@ -3,11 +3,12 @@ import fs from "fs";
 import path from "path";
 
 export function serveStatic(app: Express) {
-  const distPath = path.resolve(import.meta.dirname, "public");
+  const distPath = path.resolve(import.meta.dirname, "../dist/public");
   if (!fs.existsSync(distPath)) {
-    throw new Error(
-      `Could not find the build directory: ${distPath}, make sure to build the client first`,
-    );
+    // No static build present — running as API-only backend (e.g. deployed
+    // when the frontend is hosted separately on Bluehost).
+    console.log("[static] No build directory found — serving API only.");
+    return;
   }
 
   app.use(express.static(distPath));
