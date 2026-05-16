@@ -1095,7 +1095,7 @@ export function LineupCommand() {
           {(["lineup", "matchups"] as const).map(tab => {
             const isActive = activeTab === tab;
             const Icon = tab === "lineup" ? Zap : Swords;
-            const label = tab === "lineup" ? "Lineup Command" : "Matchups";
+            const label = tab === "lineup" ? "Lineups" : "Matchups";
             return (
               <button key={tab} onClick={() => setActiveTab(tab)} data-testid={`tab-${tab}`}
                 className="relative flex items-center justify-center gap-2 font-semibold transition-all duration-200"
