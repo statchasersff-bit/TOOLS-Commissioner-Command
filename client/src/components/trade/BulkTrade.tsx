@@ -351,7 +351,7 @@ export function BulkTrade({
 }: {
   league: League;
   userTeam: Team;
-  onBack: () => void;
+  onBack?: () => void;
 }) {
   const { getPlayerValue, getRedraftValue, getPickValue } = useValueModel();
   const isSleeperAuthed = !!getSleeperToken();
@@ -826,13 +826,15 @@ export function BulkTrade({
 
       {/* Top nav */}
       <div className="flex items-start gap-3">
-        <button
-          onClick={onBack}
-          className="text-muted-foreground hover:text-foreground mt-0.5 flex-shrink-0 transition-colors"
-          data-testid="btn-bulk-back"
-        >
-          <ChevronLeft className="w-4 h-4" />
-        </button>
+        {onBack && (
+          <button
+            onClick={onBack}
+            className="text-muted-foreground hover:text-foreground mt-0.5 flex-shrink-0 transition-colors"
+            data-testid="btn-bulk-back"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+        )}
         <div className="flex-1 min-w-0">
           <StepCrumb />
           <p className="text-[10px] text-muted-foreground mt-1.5">
@@ -1485,14 +1487,16 @@ export function BulkTrade({
               >
                 New Bulk Trade
               </Button>
-              <Button
-                variant="outline"
-                onClick={onBack}
-                className="flex-1"
-                data-testid="btn-bulk-done-back"
-              >
-                Back to Finder
-              </Button>
+              {onBack && (
+                <Button
+                  variant="outline"
+                  onClick={onBack}
+                  className="flex-1"
+                  data-testid="btn-bulk-done-back"
+                >
+                  Back to Finder
+                </Button>
+              )}
             </div>
           )}
         </div>
