@@ -5,7 +5,7 @@ import logoDark from "@assets/statchasers_logo_transparent_dark_1772764844282.pn
 
 // ── Shared helpers ────────────────────────────────────────────────────────────
 
-function AuthLayout({ children }: { children: React.ReactNode }) {
+function AuthLayout({ children, onBack }: { children: React.ReactNode; onBack?: () => void }) {
   return (
     <div className="min-h-screen relative flex items-center justify-center p-4 overflow-hidden bg-[#060d1a]">
       <FakeAppBackground />
@@ -19,6 +19,12 @@ function AuthLayout({ children }: { children: React.ReactNode }) {
             boxShadow: "0 32px 80px rgba(0,0,0,0.7), 0 0 0 1px rgba(212,175,55,0.06), inset 0 1px 0 rgba(255,255,255,0.04)",
           }}
         >
+          {onBack && (
+            <button type="button" onClick={onBack}
+              className="flex items-center gap-1.5 text-[12px] text-white/40 hover:text-white/70 transition-colors mb-4">
+              <ArrowLeft className="w-3.5 h-3.5" /> Back
+            </button>
+          )}
           <div className="flex flex-col items-center mb-7">
             <img src={logoDark} alt="StatChasers" className="h-20 mx-auto mb-1.5 object-contain" />
             <div className="flex items-center gap-3 w-full">
@@ -376,8 +382,7 @@ export function LoginScreen({ onNavigate, onLoginSuccess }: ScreenProps) {
   }
 
   return (
-    <AuthLayout>
-      <BackButton onClick={() => onNavigate("landing")} />
+    <AuthLayout onBack={() => onNavigate("landing")}>
       <h2 className="text-xl font-bold text-white">Log in</h2>
       <GoldBar />
       <form onSubmit={handleSubmit} className="space-y-4">
@@ -429,8 +434,7 @@ export function SignupEmailScreen({ onNavigate, state }: ScreenProps) {
   }
 
   return (
-    <AuthLayout>
-      <BackButton onClick={() => onNavigate("landing")} />
+    <AuthLayout onBack={() => onNavigate("landing")}>
       <h2 className="text-xl font-bold text-white">Create account</h2>
       <GoldBar />
       <p className="text-[13px] text-white/50 mb-5">We'll send a 6-digit verification code to your email.</p>
@@ -492,8 +496,7 @@ export function SignupCodeScreen({ onNavigate, state }: ScreenProps) {
   }
 
   return (
-    <AuthLayout>
-      <BackButton onClick={() => onNavigate("signup-email", { email: state.email })} />
+    <AuthLayout onBack={() => onNavigate("signup-email", { email: state.email })}>
       <h2 className="text-xl font-bold text-white">Check your email</h2>
       <GoldBar />
       <div className="flex items-center gap-2 bg-[#0b3a7a]/20 border border-[#d4af37]/15 rounded-lg px-4 py-3 mb-5">
@@ -556,8 +559,7 @@ export function SignupPasswordScreen({ onNavigate, state, onLoginSuccess }: Scre
   const strengthLabel = ["", "Too short", "Good", "Strong"][strength];
 
   return (
-    <AuthLayout>
-      <BackButton onClick={() => onNavigate("signup-code", { email: state.email })} />
+    <AuthLayout onBack={() => onNavigate("signup-code", { email: state.email })}>
       <h2 className="text-xl font-bold text-white">Create password</h2>
       <GoldBar />
       <p className="text-[13px] text-white/50 mb-5">Choose a secure password for <span className="text-white/70">{state.email}</span></p>
@@ -611,8 +613,7 @@ export function ForgotEmailScreen({ onNavigate }: ScreenProps) {
   }
 
   return (
-    <AuthLayout>
-      <BackButton onClick={() => onNavigate("login")} />
+    <AuthLayout onBack={() => onNavigate("login")}>
       <h2 className="text-xl font-bold text-white">Reset password</h2>
       <GoldBar />
       <p className="text-[13px] text-white/50 mb-5">Enter your account email and we'll send a reset code.</p>
@@ -668,8 +669,7 @@ export function ForgotCodeScreen({ onNavigate, state }: ScreenProps) {
   }
 
   return (
-    <AuthLayout>
-      <BackButton onClick={() => onNavigate("forgot-email")} />
+    <AuthLayout onBack={() => onNavigate("forgot-email")}>
       <h2 className="text-xl font-bold text-white">Enter reset code</h2>
       <GoldBar />
       <div className="flex items-center gap-2 bg-[#0b3a7a]/20 border border-[#d4af37]/15 rounded-lg px-4 py-3 mb-5">
