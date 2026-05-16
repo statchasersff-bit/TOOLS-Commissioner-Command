@@ -363,6 +363,33 @@ interface MobileBottomNavProps {
 }
 
 export function MobileBottomNav({ tabs, activeTab, setActiveTab }: MobileBottomNavProps) {
+  const half = Math.floor(tabs.length / 2);
+  const leftTabs  = tabs.slice(0, half);
+  const rightTabs = tabs.slice(half);
+
+  const renderTab = (tab: MainTabConfig) => {
+    const Icon = TAB_ICONS[tab.id] || BarChart2;
+    const isActive = activeTab === tab.id;
+    const label = TAB_SHORT_LABELS[tab.id] ?? tab.label;
+    return (
+      <button
+        key={tab.id}
+        onClick={() => setActiveTab(tab.id)}
+        data-testid={`bottom-nav-${tab.id}`}
+        className={cn(
+          "flex-1 flex flex-col items-center justify-center gap-0.5 py-2.5 transition-all duration-150 active:scale-95 relative",
+          isActive ? "text-[#d4af37]" : "text-white/35 hover:text-white/60"
+        )}
+      >
+        {isActive && (
+          <span className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-[2px] rounded-full bg-[#d4af37]" />
+        )}
+        <Icon className="w-5 h-5 flex-shrink-0" />
+        <span className="text-[9px] font-semibold tracking-wide leading-none">{label}</span>
+      </button>
+    );
+  };
+
   return (
     <nav
       className="fixed bottom-0 left-0 right-0 z-50 md:hidden"
@@ -376,28 +403,15 @@ export function MobileBottomNav({ tabs, activeTab, setActiveTab }: MobileBottomN
       data-testid="mobile-bottom-nav"
     >
       <div className="flex items-stretch">
-        {tabs.map((tab) => {
-          const Icon = TAB_ICONS[tab.id] || BarChart2;
-          const isActive = activeTab === tab.id;
-          const label = TAB_SHORT_LABELS[tab.id] ?? tab.label;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              data-testid={`bottom-nav-${tab.id}`}
-              className={cn(
-                "flex-1 flex flex-col items-center justify-center gap-0.5 py-2.5 transition-all duration-150 active:scale-95 relative",
-                isActive ? "text-[#d4af37]" : "text-white/35 hover:text-white/60"
-              )}
-            >
-              {isActive && (
-                <span className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-[2px] rounded-full bg-[#d4af37]" />
-              )}
-              <Icon className="w-5 h-5 flex-shrink-0" />
-              <span className="text-[9px] font-semibold tracking-wide leading-none">{label}</span>
-            </button>
-          );
-        })}
+        {leftTabs.map(renderTab)}
+
+        {/* Center logo */}
+        <div className="flex-shrink-0 w-14 flex flex-col items-center justify-center py-1.5">
+          <img src={logoDark} alt="StatChasers" className="hidden dark:block w-8 h-8 object-contain" />
+          <img src={logoLight} alt="StatChasers" className="block dark:hidden w-8 h-8 object-contain" />
+        </div>
+
+        {rightTabs.map(renderTab)}
       </div>
     </nav>
   );
