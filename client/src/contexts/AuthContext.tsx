@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from "react";
 import { saveSleeperSession, clearSleeperSession, type SleeperSession } from "@/services/sleeperAuth";
+import { API_BASE } from "@/lib/apiBase";
 
 export interface ScUser {
   id: string;
@@ -40,7 +41,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const checkSession = useCallback(async () => {
     try {
       setStatus("loading");
-      const res = await fetch("/api/sc-auth/me", { credentials: "include" });
+      const res = await fetch(`${API_BASE}/api/sc-auth/me`, { credentials: "include" });
       if (res.status === 401) {
         setUser(null);
         setSleeperInfo(null);
@@ -84,7 +85,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(async () => {
     try {
-      await fetch("/api/sc-auth/logout", { method: "POST", credentials: "include" });
+      await fetch(`${API_BASE}/api/sc-auth/logout`, { method: "POST", credentials: "include" });
     } catch { /* ignore */ }
     clearSleeperSession();
     setUser(null);
@@ -93,7 +94,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const onSleeperConnected = useCallback(async (username: string, userId: string, token: string) => {
-    await fetch("/api/sc-auth/connect-sleeper", {
+    await fetch(`${API_BASE}/api/sc-auth/connect-sleeper`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
@@ -103,7 +104,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [checkSession]);
 
   const onSleeperDisconnected = useCallback(async () => {
-    await fetch("/api/sc-auth/disconnect-sleeper", { method: "DELETE", credentials: "include" });
+    await fetch(`${API_BASE}/api/sc-auth/disconnect-sleeper`, { method: "DELETE", credentials: "include" });
     clearSleeperSession();
     setSleeperInfo(null);
     setStatus("needs-sleeper");

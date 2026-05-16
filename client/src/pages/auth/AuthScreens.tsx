@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { Eye, EyeOff, Loader2, ArrowLeft, Mail, Lock, CheckCircle2, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import logoDark from "@assets/statchasers_logo_transparent_dark_1772764844282.png";
+import { API_BASE } from "@/lib/apiBase";
 
 // ── Shared helpers ────────────────────────────────────────────────────────────
 
@@ -365,7 +366,7 @@ export function LoginScreen({ onNavigate, onLoginSuccess }: ScreenProps) {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch("/api/sc-auth/login", {
+      const res = await fetch(`${API_BASE}/api/sc-auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -418,7 +419,7 @@ export function SignupEmailScreen({ onNavigate, state }: ScreenProps) {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch("/api/sc-auth/request-code", {
+      const res = await fetch(`${API_BASE}/api/sc-auth/request-code`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, purpose: "signup" }),
@@ -466,7 +467,7 @@ export function SignupCodeScreen({ onNavigate, state }: ScreenProps) {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch("/api/sc-auth/verify-code", {
+      const res = await fetch(`${API_BASE}/api/sc-auth/verify-code`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: state.email, code, purpose: "signup" }),
@@ -485,7 +486,7 @@ export function SignupCodeScreen({ onNavigate, state }: ScreenProps) {
     setResending(true);
     setError("");
     try {
-      await fetch("/api/sc-auth/request-code", {
+      await fetch(`${API_BASE}/api/sc-auth/request-code`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: state.email, purpose: "signup" }),
@@ -533,7 +534,7 @@ export function SignupPasswordScreen({ onNavigate, state, onLoginSuccess }: Scre
     setLoading(true);
     setError("");
     try {
-      const res = await fetch("/api/sc-auth/register", {
+      const res = await fetch(`${API_BASE}/api/sc-auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -597,7 +598,7 @@ export function ForgotEmailScreen({ onNavigate }: ScreenProps) {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch("/api/sc-auth/request-code", {
+      const res = await fetch(`${API_BASE}/api/sc-auth/request-code`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, purpose: "password_reset" }),
@@ -640,7 +641,7 @@ export function ForgotCodeScreen({ onNavigate, state }: ScreenProps) {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch("/api/sc-auth/verify-code", {
+      const res = await fetch(`${API_BASE}/api/sc-auth/verify-code`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: state.email, code, purpose: "password_reset" }),
@@ -658,7 +659,7 @@ export function ForgotCodeScreen({ onNavigate, state }: ScreenProps) {
   async function handleResend() {
     setResending(true);
     try {
-      await fetch("/api/sc-auth/request-code", {
+      await fetch(`${API_BASE}/api/sc-auth/request-code`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: state.email, purpose: "password_reset" }),
@@ -706,7 +707,7 @@ export function ForgotPasswordScreen({ onNavigate, state }: ScreenProps) {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch("/api/sc-auth/reset-password", {
+      const res = await fetch(`${API_BASE}/api/sc-auth/reset-password`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

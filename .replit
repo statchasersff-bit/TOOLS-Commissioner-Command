@@ -49,6 +49,7 @@ CORS_ORIGIN = "https://statchasers.com,https://www.statchasers.com,https://dynas
 
 [userenv.shared]
 VITE_BASE_PATH = "/dynasty-command/launch/"
+VITE_API_BASE_URL = "https://dynasty-command.replit.app"
 
 [postMerge]
 path = "scripts/post-merge.sh"
