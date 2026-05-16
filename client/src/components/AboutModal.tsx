@@ -238,9 +238,12 @@ interface AboutModalProps {
   onClose: () => void;
   onNavigate: (tab: string, sub: string) => void;
   onOpenFeedback: () => void;
+  onOpenCookies: () => void;
+  onOpenTerms: () => void;
+  onOpenPrivacy: () => void;
 }
 
-export function AboutModal({ open, onClose, onNavigate, onOpenFeedback }: AboutModalProps) {
+export function AboutModal({ open, onClose, onNavigate, onOpenFeedback, onOpenCookies, onOpenTerms, onOpenPrivacy }: AboutModalProps) {
   const [activeCategory, setActiveCategory] = useState<Category>("All");
 
   if (!open) return null;
@@ -421,9 +424,31 @@ export function AboutModal({ open, onClose, onNavigate, onOpenFeedback }: AboutM
 
           {/* ── Footer ── */}
           {(activeCategory === "All" || activeCategory === "Other") && (
-            <p className="text-center text-[12px] text-white/25 py-4">
-              Dynasty Command is built by <span className="text-[#d4af37]/60 font-semibold">StatChasers</span> for serious dynasty fantasy football managers.
-            </p>
+            <div className="pt-2 pb-6 flex flex-col items-center gap-3">
+              <p className="text-center text-[12px] text-white/25">
+                Dynasty Command is built by <span className="text-[#d4af37]/60 font-semibold">StatChasers</span> for serious dynasty fantasy football managers.
+              </p>
+              <div className="flex items-center gap-1 flex-wrap justify-center">
+                {[
+                  { label: "Terms of Service", action: onOpenTerms, testId: "button-about-terms" },
+                  { label: "Privacy Policy",   action: onOpenPrivacy, testId: "button-about-privacy" },
+                  { label: "Cookies",          action: onOpenCookies, testId: "button-about-cookies" },
+                ].map(({ label, action, testId }, i, arr) => (
+                  <span key={label} className="flex items-center gap-1">
+                    <button
+                      onClick={action}
+                      data-testid={testId}
+                      className="text-[11px] text-white/30 hover:text-[#d4af37]/70 transition-colors underline underline-offset-2"
+                    >
+                      {label}
+                    </button>
+                    {i < arr.length - 1 && (
+                      <span className="text-[11px] text-white/15 select-none">·</span>
+                    )}
+                  </span>
+                ))}
+              </div>
+            </div>
           )}
         </div>
       </div>

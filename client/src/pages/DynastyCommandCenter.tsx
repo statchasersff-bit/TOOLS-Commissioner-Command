@@ -40,6 +40,7 @@ import { CompareRBs } from "./tabs/CompareRBs";
 import { ShareDynastyPopup } from "@/components/ShareDynastyPopup";
 import { FeedbackModal } from "@/components/FeedbackModal";
 import { AboutModal } from "@/components/AboutModal";
+import { CookiesModal, TermsModal, PrivacyModal } from "@/components/LegalModals";
 
 const STORAGE_KEY = "sc-dynasty-state";
 
@@ -77,6 +78,9 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
   const logoMenuRef = useRef<HTMLDivElement>(null);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
+  const [cookiesOpen, setCookiesOpen] = useState(false);
+  const [termsOpen, setTermsOpen] = useState(false);
+  const [privacyOpen, setPrivacyOpen] = useState(false);
 
   const { isRecalculating, isLoading, getPlayerValue, getPickValue, calculateAllTeamMetrics, optimizeLineup } = useValueModel();
   const sleeper = useSleeper();
@@ -639,7 +643,13 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
         onClose={() => setAboutOpen(false)}
         onNavigate={(tab, sub) => { handleMainTabChange(tab); handleSubTabChange(sub); }}
         onOpenFeedback={() => setFeedbackOpen(true)}
+        onOpenCookies={() => { setAboutOpen(false); setCookiesOpen(true); }}
+        onOpenTerms={() => { setAboutOpen(false); setTermsOpen(true); }}
+        onOpenPrivacy={() => { setAboutOpen(false); setPrivacyOpen(true); }}
       />
+      <CookiesModal open={cookiesOpen} onClose={() => setCookiesOpen(false)} />
+      <TermsModal   open={termsOpen}   onClose={() => setTermsOpen(false)} />
+      <PrivacyModal open={privacyOpen} onClose={() => setPrivacyOpen(false)} />
       <MobileBottomNav
         tabs={NAV_CONFIG}
         activeTab={activeMainTab}
