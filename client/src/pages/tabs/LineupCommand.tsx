@@ -909,18 +909,11 @@ export function LineupCommand() {
 
       {/* ── Page header ──────────────────────────────────────────────────── */}
       <SectionHeader title="Lineup Command" subtitle="Review starters, identify lineup issues, and optimize weekly decisions." />
-      <div className="flex items-center justify-between flex-wrap gap-2 -mt-4">
-        <div className="flex items-center gap-2">
-          <Badge variant="outline" className="text-[9px] px-1.5 h-4 border-[#d4af37]/30 text-[#d4af37]/70">
-            Week {nflWeek ?? "—"}
-          </Badge>
-          {(baseLoading || allLoading || mAllLoading) && <RefreshCw className="w-3.5 h-3.5 text-muted-foreground animate-spin" />}
+      {(baseLoading || allLoading || mAllLoading) && (
+        <div className="-mt-4">
+          <RefreshCw className="w-3.5 h-3.5 text-muted-foreground animate-spin" />
         </div>
-        <Button size="sm" variant="outline" onClick={refresh} disabled={baseLoading} data-testid="button-refresh-lineup">
-          <RefreshCw className="w-3.5 h-3.5" />
-          <span className="hidden sm:inline ml-1.5">Refresh</span>
-        </Button>
-      </div>
+      )}
 
       {/* ── Sub-tab switcher ─────────────────────────────────────────────── */}
       <div className="flex gap-1 p-1 rounded-xl bg-white/[0.03] border border-white/6 w-fit">
