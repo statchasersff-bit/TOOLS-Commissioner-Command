@@ -15,7 +15,7 @@ import { NAV_CONFIG } from "@/data/mockData";
 import type { League, Team } from "@/types";
 import { fetchSleeperLeagueFull } from "@/lib/sleeperApi";
 import { DataDiagnostics } from "@/components/DataDiagnostics";
-import { LayoutDashboard, Loader2, Lock, Check, User, RefreshCw, AlertCircle, Wifi, WifiOff, ChevronDown, LogOut, Trophy, ArrowRightLeft, TrendingUp, Zap, X } from "lucide-react";
+import { LayoutDashboard, Loader2, Lock, Check, User, RefreshCw, AlertCircle, Wifi, WifiOff, ChevronDown, LogOut, Trophy, ArrowRightLeft, TrendingUp, Zap, X, MessageSquare } from "lucide-react";
 import { SiDiscord } from "react-icons/si";
 import logoDark from "@assets/statchasers_logo_transparent_dark_1772764844282.png";
 import logoLight from "@assets/statchasers_logo_transparent_light_1772764844283.png";
@@ -38,6 +38,7 @@ import { LineupCommand } from "./tabs/LineupCommand";
 import TradeSync from "./tabs/TradeSync";
 import { CompareRBs } from "./tabs/CompareRBs";
 import { ShareDynastyPopup } from "@/components/ShareDynastyPopup";
+import { FeedbackModal } from "@/components/FeedbackModal";
 
 const STORAGE_KEY = "sc-dynasty-state";
 
@@ -73,6 +74,7 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
   const userDropdownRef = useRef<HTMLDivElement>(null);
   const [logoMenuOpen, setLogoMenuOpen] = useState(false);
   const logoMenuRef = useRef<HTMLDivElement>(null);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
 
   const { isRecalculating, isLoading, getPlayerValue, getPickValue, calculateAllTeamMetrics, optimizeLineup } = useValueModel();
   const sleeper = useSleeper();
@@ -417,6 +419,18 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
                     })}
                   </div>
 
+                  {/* Feedback item */}
+                  <div className="px-1.5 pb-1.5">
+                    <button
+                      onClick={() => { setLogoMenuOpen(false); setFeedbackOpen(true); }}
+                      data-testid="button-logo-feedback"
+                      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-all duration-150 hover:bg-white/5"
+                    >
+                      <MessageSquare style={{ width: 14, height: 14, flexShrink: 0, color: "rgba(212,175,55,0.65)" }} />
+                      <span style={{ fontSize: 13, fontWeight: 500, color: "rgba(203,213,225,0.55)" }}>Feedback</span>
+                    </button>
+                  </div>
+
                   {/* Footer row */}
                   <div className="flex items-center justify-between px-4 py-3" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
                     <a
@@ -629,6 +643,14 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
       </main>
       <DataDiagnostics />
       <ShareDynastyPopup blocked={false} />
+      <FeedbackModal
+        open={feedbackOpen}
+        onClose={() => setFeedbackOpen(false)}
+        currentTab={activeMainTab}
+        currentSubTab={activeSubTab}
+        leagueId={selectedLeagueId}
+        currentRoute={typeof window !== "undefined" ? window.location.pathname + window.location.search : ""}
+      />
       <MobileBottomNav
         tabs={NAV_CONFIG}
         activeTab={activeMainTab}

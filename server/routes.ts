@@ -484,5 +484,83 @@ export async function registerRoutes(
     }
   }).catch(() => {});
 
+  // ── Feedback endpoint ───────────────────────────────────────────────────────
+  app.post("/api/feedback", async (req, res) => {
+    try {
+      const { type, message, email, screenshot, screenshotName, context } = req.body as {
+        type?: string;
+        message?: string;
+        email?: string | null;
+        screenshot?: string | null;
+        screenshotName?: string | null;
+        context?: Record<string, any>;
+      };
+
+      if (!message?.trim()) {
+        return res.status(400).json({ error: "Message is required." });
+      }
+
+      const webhookUrl = process.env.DISCORD_FEEDBACK_WEBHOOK_URL;
+
+      if (webhookUrl) {
+        const typeEmoji: Record<string, string> = {
+          bug: "🐛", feature: "💡", general: "💬", question: "❓",
+        };
+        const typeLabel: Record<string, string> = {
+          bug: "Bug Report", feature: "Feature Request", general: "General Feedback", question: "Question",
+        };
+        const emoji = typeEmoji[type ?? "general"] ?? "💬";
+        const label = typeLabel[type ?? "general"] ?? "Feedback";
+
+        const fields: Array<{ name: string; value: string; inline?: boolean }> = [];
+        if (context?.tab)             fields.push({ name: "📍 Tab",       value: String(context.tab),            inline: true  });
+        if (context?.leagueId)        fields.push({ name: "🏈 League ID", value: `\`${context.leagueId}\``,     inline: true  });
+        if (context?.sleeperUsername) fields.push({ name: "😴 Sleeper",   value: `@${context.sleeperUsername}`, inline: true  });
+        if (email)                    fields.push({ name: "📧 Email",      value: email,                         inline: true  });
+        if (context?.browser)         fields.push({ name: "🖥 Browser",    value: String(context.browser),       inline: true  });
+        if (context?.route)           fields.push({ name: "🔗 Route",      value: `\`${context.route}\``,        inline: false });
+        if (context?.timestamp)       fields.push({ name: "🕐 Time",       value: String(context.timestamp),     inline: false });
+
+        const embed = {
+          title: `${emoji} New ${label}`,
+          description: message.trim(),
+          color: 0xd4af37,
+          fields,
+          footer: { text: "Dynasty Command · StatChasers" },
+        };
+
+        if (screenshot && screenshotName) {
+          const base64Data = screenshot.replace(/^data:image\/\w+;base64,/, "");
+          const mimeMatch = screenshot.match(/^data:(image\/\w+);base64,/);
+          const mimeType = mimeMatch?.[1] ?? "image/png";
+          const buffer = Buffer.from(base64Data, "base64");
+
+          const FormData = (await import("form-data")).default;
+          const form = new FormData();
+          form.append("file", buffer, { filename: screenshotName, contentType: mimeType });
+          form.append("payload_json", JSON.stringify({ embeds: [embed] }));
+
+          const { default: nodeFetch } = await import("node-fetch");
+          const wRes = await nodeFetch(webhookUrl, { method: "POST", body: form as any, headers: form.getHeaders() });
+          if (!wRes.ok) throw new Error(`Discord webhook error: ${wRes.status}`);
+        } else {
+          const wRes = await fetch(webhookUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ embeds: [embed] }),
+          });
+          if (!wRes.ok) throw new Error(`Discord webhook error: ${wRes.status}`);
+        }
+      } else {
+        console.log("[Feedback]", JSON.stringify({ type, message, email, context }, null, 2));
+      }
+
+      res.json({ ok: true });
+    } catch (err: any) {
+      console.error("[feedback] error:", err.message);
+      res.status(500).json({ error: "Failed to submit feedback. Please try again." });
+    }
+  });
+
   return httpServer;
 }
