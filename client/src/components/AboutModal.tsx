@@ -1,8 +1,6 @@
 import { useState } from "react";
-import { X, Crosshair, Waves, Users, Share2, Trophy, ArrowLeftRight, Search, Inbox, Calculator, Database, Zap, MessageSquare, Lock, ChevronRight, Package } from "lucide-react";
+import { Crosshair, Waves, Users, Share2, Trophy, ArrowLeftRight, Search, Inbox, Calculator, Database, Zap, MessageSquare, Lock, ChevronRight, Package } from "lucide-react";
 import { cn } from "@/lib/utils";
-import logoDark from "@assets/statchasers_logo_transparent_dark_1772764844282.png";
-import logoLight from "@assets/statchasers_logo_transparent_light_1772764844283.png";
 
 interface FeatureDef {
   id: string;
@@ -11,7 +9,6 @@ interface FeatureDef {
   icon: React.ElementType;
   description: string;
   bullets: string[];
-
   tab?: string;
   sub?: string;
   comingSoon?: boolean;
@@ -222,9 +219,7 @@ const FEATURES: FeatureDef[] = [
 const CATEGORIES = ["All", "Portfolio", "My Team", "League", "Trade", "Draft", "Other"] as const;
 type Category = typeof CATEGORIES[number];
 
-interface AboutModalProps {
-  open: boolean;
-  onClose: () => void;
+interface AboutPageProps {
   onNavigate: (tab: string, sub: string) => void;
   onOpenFeedback: () => void;
   onOpenCookies: () => void;
@@ -232,59 +227,36 @@ interface AboutModalProps {
   onOpenPrivacy: () => void;
 }
 
-export function AboutModal({ open, onClose, onNavigate, onOpenFeedback, onOpenCookies, onOpenTerms, onOpenPrivacy }: AboutModalProps) {
+export function AboutPage({ onNavigate, onOpenFeedback, onOpenCookies, onOpenTerms, onOpenPrivacy }: AboutPageProps) {
   const [activeCategory, setActiveCategory] = useState<Category>("All");
-
-  if (!open) return null;
 
   const filtered = activeCategory === "All" ? FEATURES : FEATURES.filter(f => f.category === activeCategory);
 
   function handleGoTo(feature: FeatureDef) {
     if (feature.id === "feedback") {
-      onClose();
       onOpenFeedback();
       return;
     }
     if (feature.tab && feature.sub) {
       onNavigate(feature.tab, feature.sub);
-      onClose();
     }
   }
 
   return (
-    <div
-      className="fixed inset-0 z-[80] flex flex-col overflow-hidden"
-      style={{ background: "rgba(4,8,20,0.97)", backdropFilter: "blur(12px)" }}
-    >
-      {/* ── Sticky header ── */}
-      <div
-        className="flex-shrink-0 px-4 md:px-8 py-4 flex items-center justify-between"
-        style={{ borderBottom: "1px solid rgba(255,255,255,0.07)", background: "rgba(5,10,24,0.90)" }}
-      >
-        <div className="flex items-center gap-3">
-          <img src={logoDark} alt="StatChasers" className="w-7 h-7 hidden dark:block" />
-          <img src={logoLight} alt="StatChasers" className="w-7 h-7 block dark:hidden" />
-          <div>
-            <h2 className="text-[15px] md:text-base font-black text-white leading-tight tracking-tight">About Dynasty Command</h2>
-            <p className="text-[11px] text-white/40 leading-tight mt-0.5 hidden sm:block">
-              Learn how each feature works, what requires Sleeper login, and how Dynasty Command helps manage your dynasty leagues.
-            </p>
-          </div>
+    <div>
+      {/* Page header */}
+      <div className="mb-5">
+        <div className="flex items-center gap-2 mb-1">
+          <div className="w-[3px] h-5 rounded-full flex-shrink-0" style={{ background: "#d4af37" }} />
+          <h2 className="text-lg font-bold text-foreground">About Dynasty Command</h2>
         </div>
-        <button
-          onClick={onClose}
-          data-testid="button-about-close"
-          className="flex items-center justify-center w-8 h-8 rounded-full transition-colors hover:bg-white/10 text-white/40 hover:text-white/80 flex-shrink-0"
-        >
-          <X className="w-4 h-4" />
-        </button>
+        <p className="text-sm text-muted-foreground ml-[11px]">
+          Learn how each feature works and how Dynasty Command helps manage your dynasty leagues.
+        </p>
       </div>
 
-      {/* ── Category pills ── */}
-      <div
-        className="flex-shrink-0 px-4 md:px-8 py-3 flex gap-2 overflow-x-auto scrollbar-none"
-        style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}
-      >
+      {/* Category pills */}
+      <div className="flex gap-2 overflow-x-auto scrollbar-none pb-1 mb-5">
         {CATEGORIES.map(cat => (
           <button
             key={cat}
@@ -294,7 +266,7 @@ export function AboutModal({ open, onClose, onNavigate, onOpenFeedback, onOpenCo
               "flex-shrink-0 px-3.5 py-1.5 rounded-full text-[12px] font-semibold transition-all duration-150 border",
               activeCategory === cat
                 ? "text-[#0b3a7a] border-[#d4af37]"
-                : "text-white/40 border-white/10 hover:border-white/25 hover:text-white/60"
+                : "text-muted-foreground border-border hover:border-foreground/30 hover:text-foreground/70"
             )}
             style={activeCategory === cat ? { background: "#d4af37" } : {}}
           >
@@ -303,127 +275,114 @@ export function AboutModal({ open, onClose, onNavigate, onOpenFeedback, onOpenCo
         ))}
       </div>
 
-      {/* ── Scrollable content ── */}
-      <div className="flex-1 overflow-y-auto px-4 md:px-8 py-6">
-        <div className="max-w-4xl mx-auto space-y-4">
-
-          {filtered.map(feature => {
-            const Icon = feature.icon;
-            const canNavigate = (feature.tab && feature.sub) || feature.id === "feedback";
-            return (
-              <div
-                key={feature.id}
-                data-testid={`card-about-${feature.id}`}
-                className="rounded-2xl p-5"
-                style={{
-                  background: "rgba(255,255,255,0.03)",
-                  border: "1px solid rgba(255,255,255,0.07)",
-                }}
-              >
-                {/* Card header */}
-                <div className="flex items-start gap-3 mb-3">
-                  <div
-                    className="flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center"
-                    style={{ background: "rgba(212,175,55,0.10)", border: "1px solid rgba(212,175,55,0.18)" }}
-                  >
-                    <Icon className="w-4 h-4" style={{ color: "#d4af37" }} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <h3 className="text-[14px] font-bold text-white leading-tight">{feature.title}</h3>
-                      {feature.comingSoon && (
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold"
-                          style={{ background: "rgba(212,175,55,0.12)", color: "#d4af37", border: "1px solid rgba(212,175,55,0.25)" }}>
-                          Coming Soon
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-[12px] text-white/50 leading-snug mt-1">{feature.description}</p>
-                  </div>
-                </div>
-
-                {/* Bullets */}
-                <ul className="space-y-1.5 mb-3 pl-1">
-                  {feature.bullets.map((b, i) => (
-                    <li key={i} className="flex items-start gap-2">
-                      <span className="flex-shrink-0 w-1 h-1 rounded-full mt-[7px]" style={{ background: "#d4af37" }} />
-                      <span className="text-[12px] text-white/55 leading-snug">{b}</span>
-                    </li>
-                  ))}
-                </ul>
-
-                {/* Go to page button */}
-                {canNavigate && !feature.comingSoon && (
-                  <button
-                    onClick={() => handleGoTo(feature)}
-                    data-testid={`button-about-goto-${feature.id}`}
-                    className="flex items-center gap-1.5 text-[12px] font-semibold transition-colors"
-                    style={{ color: "#d4af37" }}
-                  >
-                    {feature.id === "feedback" ? "Open Feedback" : "Go to page"}
-                    <ChevronRight className="w-3.5 h-3.5" />
-                  </button>
-                )}
-              </div>
-            );
-          })}
-
-          {/* ── Sleeper / Privacy section ── */}
-          {(activeCategory === "All" || activeCategory === "Other") && (
+      {/* Feature cards */}
+      <div className="space-y-3">
+        {filtered.map(feature => {
+          const Icon = feature.icon;
+          const canNavigate = (feature.tab && feature.sub) || feature.id === "feedback";
+          return (
             <div
-              className="rounded-2xl p-5"
-              style={{ background: "rgba(99,102,241,0.05)", border: "1px solid rgba(99,102,241,0.15)" }}
+              key={feature.id}
+              data-testid={`card-about-${feature.id}`}
+              className="rounded-2xl p-5 bg-card border border-border/60"
             >
-              <div className="flex items-center gap-2.5 mb-3">
-                <Lock className="w-4 h-4 text-indigo-400 flex-shrink-0" />
-                <h3 className="text-[14px] font-bold text-white">Sleeper Login &amp; Privacy</h3>
+              <div className="flex items-start gap-3 mb-3">
+                <div
+                  className="flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center"
+                  style={{ background: "rgba(212,175,55,0.10)", border: "1px solid rgba(212,175,55,0.18)" }}
+                >
+                  <Icon className="w-4 h-4" style={{ color: "#d4af37" }} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="text-[14px] font-bold text-foreground leading-tight">{feature.title}</h3>
+                    {feature.comingSoon && (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold"
+                        style={{ background: "rgba(212,175,55,0.12)", color: "#d4af37", border: "1px solid rgba(212,175,55,0.25)" }}>
+                        Coming Soon
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[12px] text-muted-foreground leading-snug mt-1">{feature.description}</p>
+                </div>
               </div>
-              <ul className="space-y-2">
-                {[
-                  "Your Sleeper credentials go directly to Sleeper — never through StatChasers servers.",
-                  "Dynasty Command uses Sleeper auth tokens only when you choose to perform an action.",
-                  "Tokens stay in your browser unless you explicitly log out or clear your session.",
-                  "StatChasers never logs JWTs, private DMs, or personally identifiable Sleeper data.",
-                  "Trade Database stores only anonymized player and pick asset data — no team names, owner names, or league names.",
-                ].map((line, i) => (
+
+              <ul className="space-y-1.5 mb-3 pl-1">
+                {feature.bullets.map((b, i) => (
                   <li key={i} className="flex items-start gap-2">
-                    <span className="flex-shrink-0 w-1 h-1 rounded-full mt-[7px]" style={{ background: "#a5b4fc" }} />
-                    <span className="text-[12px] text-indigo-200/60 leading-snug">{line}</span>
+                    <span className="flex-shrink-0 w-1 h-1 rounded-full mt-[7px]" style={{ background: "#d4af37" }} />
+                    <span className="text-[12px] text-muted-foreground leading-snug">{b}</span>
                   </li>
                 ))}
               </ul>
-            </div>
-          )}
 
-          {/* ── Footer ── */}
-          {(activeCategory === "All" || activeCategory === "Other") && (
-            <div className="pt-2 pb-6 flex flex-col items-center gap-3">
-              <p className="text-center text-[12px] text-white/25">
-                Dynasty Command is built by <span className="text-[#d4af37]/60 font-semibold">StatChasers</span> for serious dynasty fantasy football managers.
-              </p>
-              <div className="flex items-center gap-1 flex-wrap justify-center">
-                {[
-                  { label: "Terms of Service", action: onOpenTerms, testId: "button-about-terms" },
-                  { label: "Privacy Policy",   action: onOpenPrivacy, testId: "button-about-privacy" },
-                  { label: "Cookies",          action: onOpenCookies, testId: "button-about-cookies" },
-                ].map(({ label, action, testId }, i, arr) => (
-                  <span key={label} className="flex items-center gap-1">
-                    <button
-                      onClick={action}
-                      data-testid={testId}
-                      className="text-[11px] text-white/30 hover:text-[#d4af37]/70 transition-colors underline underline-offset-2"
-                    >
-                      {label}
-                    </button>
-                    {i < arr.length - 1 && (
-                      <span className="text-[11px] text-white/15 select-none">·</span>
-                    )}
-                  </span>
-                ))}
-              </div>
+              {canNavigate && !feature.comingSoon && (
+                <button
+                  onClick={() => handleGoTo(feature)}
+                  data-testid={`button-about-goto-${feature.id}`}
+                  className="flex items-center gap-1.5 text-[12px] font-semibold transition-colors hover:opacity-80"
+                  style={{ color: "#d4af37" }}
+                >
+                  {feature.id === "feedback" ? "Open Feedback" : "Go to page"}
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
-          )}
-        </div>
+          );
+        })}
+
+        {/* Sleeper / Privacy section */}
+        {(activeCategory === "All" || activeCategory === "Other") && (
+          <div className="rounded-2xl p-5 border border-indigo-500/20 bg-indigo-500/5">
+            <div className="flex items-center gap-2.5 mb-3">
+              <Lock className="w-4 h-4 text-indigo-400 flex-shrink-0" />
+              <h3 className="text-[14px] font-bold text-foreground">Sleeper Login &amp; Privacy</h3>
+            </div>
+            <ul className="space-y-2">
+              {[
+                "Your Sleeper credentials go directly to Sleeper — never through StatChasers servers.",
+                "Dynasty Command uses Sleeper auth tokens only when you choose to perform an action.",
+                "Tokens stay in your browser unless you explicitly log out or clear your session.",
+                "StatChasers never logs JWTs, private DMs, or personally identifiable Sleeper data.",
+                "Trade Database stores only anonymized player and pick asset data — no team names, owner names, or league names.",
+              ].map((line, i) => (
+                <li key={i} className="flex items-start gap-2">
+                  <span className="flex-shrink-0 w-1 h-1 rounded-full mt-[7px] bg-indigo-400" />
+                  <span className="text-[12px] text-muted-foreground leading-snug">{line}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* Footer */}
+        {(activeCategory === "All" || activeCategory === "Other") && (
+          <div className="pt-2 pb-4 flex flex-col items-center gap-3">
+            <p className="text-center text-[12px] text-muted-foreground/50">
+              Dynasty Command is built by <span className="font-semibold" style={{ color: "#d4af37" }}>StatChasers</span> for serious dynasty fantasy football managers.
+            </p>
+            <div className="flex items-center gap-1 flex-wrap justify-center">
+              {[
+                { label: "Terms of Service", action: onOpenTerms,   testId: "button-about-terms" },
+                { label: "Privacy Policy",   action: onOpenPrivacy, testId: "button-about-privacy" },
+                { label: "Cookies",          action: onOpenCookies, testId: "button-about-cookies" },
+              ].map(({ label, action, testId }, i, arr) => (
+                <span key={label} className="flex items-center gap-1">
+                  <button
+                    onClick={action}
+                    data-testid={testId}
+                    className="text-[11px] text-muted-foreground/40 hover:text-[#d4af37]/70 transition-colors underline underline-offset-2"
+                  >
+                    {label}
+                  </button>
+                  {i < arr.length - 1 && (
+                    <span className="text-[11px] text-muted-foreground/20 select-none">·</span>
+                  )}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

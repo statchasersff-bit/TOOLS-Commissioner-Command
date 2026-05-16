@@ -38,8 +38,8 @@ import { LineupCommand } from "./tabs/LineupCommand";
 import TradeSync from "./tabs/TradeSync";
 import { CompareRBs } from "./tabs/CompareRBs";
 import { ShareDynastyPopup } from "@/components/ShareDynastyPopup";
-import { FeedbackModal } from "@/components/FeedbackModal";
-import { AboutModal } from "@/components/AboutModal";
+import { AboutPage } from "@/components/AboutModal";
+import { FeedbackPage } from "@/components/FeedbackPage";
 import { CookiesModal, TermsModal, PrivacyModal } from "@/components/LegalModals";
 
 const STORAGE_KEY = "sc-dynasty-state";
@@ -76,8 +76,6 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
   const userDropdownRef = useRef<HTMLDivElement>(null);
   const [logoMenuOpen, setLogoMenuOpen] = useState(false);
   const logoMenuRef = useRef<HTMLDivElement>(null);
-  const [feedbackOpen, setFeedbackOpen] = useState(false);
-  const [aboutOpen, setAboutOpen] = useState(false);
   const [cookiesOpen, setCookiesOpen] = useState(false);
   const [termsOpen, setTermsOpen] = useState(false);
   const [privacyOpen, setPrivacyOpen] = useState(false);
@@ -296,6 +294,22 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
   );
 
   const renderContent = () => {
+    if (activeMainTab === "about") {
+      return (
+        <AboutPage
+          onNavigate={(tab, sub) => { handleMainTabChange(tab); handleSubTabChange(sub); }}
+          onOpenFeedback={() => handleMainTabChange("feedback")}
+          onOpenCookies={() => setCookiesOpen(true)}
+          onOpenTerms={() => setTermsOpen(true)}
+          onOpenPrivacy={() => setPrivacyOpen(true)}
+        />
+      );
+    }
+
+    if (activeMainTab === "feedback") {
+      return <FeedbackPage />;
+    }
+
     if (activeMainTab === "live-draft") {
       return <LiveDraft />;
     }
@@ -401,7 +415,7 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
                   {/* About + Feedback items */}
                   <div className="px-1.5 pb-1.5">
                     <button
-                      onClick={() => { setLogoMenuOpen(false); setAboutOpen(true); }}
+                      onClick={() => { setLogoMenuOpen(false); handleMainTabChange("about"); }}
                       data-testid="button-logo-about"
                       className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-all duration-150 hover:bg-white/5"
                     >
@@ -409,7 +423,7 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
                       <span style={{ fontSize: 13, fontWeight: 500, color: "rgba(203,213,225,0.55)" }}>About</span>
                     </button>
                     <button
-                      onClick={() => { setLogoMenuOpen(false); setFeedbackOpen(true); }}
+                      onClick={() => { setLogoMenuOpen(false); handleMainTabChange("feedback"); }}
                       data-testid="button-logo-feedback"
                       className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-all duration-150 hover:bg-white/5"
                     >
@@ -630,23 +644,6 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
       </main>
       <DataDiagnostics />
       <ShareDynastyPopup blocked={false} />
-      <FeedbackModal
-        open={feedbackOpen}
-        onClose={() => setFeedbackOpen(false)}
-        currentTab={activeMainTab}
-        currentSubTab={activeSubTab}
-        leagueId={selectedLeagueId}
-        currentRoute={typeof window !== "undefined" ? window.location.pathname + window.location.search : ""}
-      />
-      <AboutModal
-        open={aboutOpen}
-        onClose={() => setAboutOpen(false)}
-        onNavigate={(tab, sub) => { handleMainTabChange(tab); handleSubTabChange(sub); }}
-        onOpenFeedback={() => setFeedbackOpen(true)}
-        onOpenCookies={() => { setAboutOpen(false); setCookiesOpen(true); }}
-        onOpenTerms={() => { setAboutOpen(false); setTermsOpen(true); }}
-        onOpenPrivacy={() => { setAboutOpen(false); setPrivacyOpen(true); }}
-      />
       <CookiesModal open={cookiesOpen} onClose={() => setCookiesOpen(false)} />
       <TermsModal   open={termsOpen}   onClose={() => setTermsOpen(false)} />
       <PrivacyModal open={privacyOpen} onClose={() => setPrivacyOpen(false)} />
