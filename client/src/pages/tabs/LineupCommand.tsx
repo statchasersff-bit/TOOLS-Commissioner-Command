@@ -238,12 +238,12 @@ function IssueBadge({ type }: { type: IssueType }) {
 function SkeletonRow() {
   return (
     <div className="flex items-center gap-2 md:gap-3 px-3 md:px-5 py-3 border-b border-white/5 animate-pulse">
-      <div className="flex-1 h-3.5 bg-white/8 rounded" />
-      <div className="w-14 md:w-16 h-3.5 bg-white/8 rounded" />
-      <div className="w-14 md:w-16 h-3.5 bg-white/8 rounded" />
-      <div className="w-[72px] md:w-24 h-4 bg-white/8 rounded" />
-      <div className="w-[64px] md:w-20 h-4 bg-white/8 rounded hidden sm:block" />
-      <div className="w-[96px] md:w-[108px] h-7 bg-white/8 rounded-lg" />
+      <div className="flex-1 min-w-[140px] h-3.5 bg-white/8 rounded" />
+      <div className="w-14 md:w-16 flex-shrink-0 h-3.5 bg-white/8 rounded" />
+      <div className="w-24 md:w-28 flex-shrink-0 h-3.5 bg-white/8 rounded" />
+      <div className="w-[72px] md:w-24 flex-shrink-0 h-4 bg-white/8 rounded" />
+      <div className="w-[64px] md:w-20 flex-shrink-0 h-4 bg-white/8 rounded" />
+      <div className="w-[96px] md:w-[108px] flex-shrink-0 h-7 bg-white/8 rounded-lg" />
     </div>
   );
 }
@@ -356,7 +356,7 @@ function LeagueRow({ analysis }: { analysis: LeagueAnalysis }) {
         </div>
 
         {/* QUES / DOUB */}
-        <div className="w-[64px] md:w-20 flex-shrink-0 justify-center hidden sm:flex">
+        <div className="w-[64px] md:w-20 flex-shrink-0 flex justify-center">
           {loading ? (
             <div className="h-4 w-6 bg-white/8 rounded animate-pulse" />
           ) : softIssues.length === 0 ? (
@@ -1155,47 +1155,60 @@ export function LineupCommand() {
           )}
 
           {/* ── Lineup table ───────────────────────────────────────── */}
-          <div
-            className="rounded-2xl overflow-hidden border border-white/6"
-            style={{ background: "linear-gradient(180deg, rgba(4,13,26,0.9) 0%, rgba(4,10,20,0.95) 100%)" }}
-          >
-            <div className="flex items-center gap-2 md:gap-3 px-3 md:px-5 py-2 border-b border-white/6 bg-white/[0.02]">
-              {(() => {
-                function SortBtn({ col, label, className }: { col: typeof sortKey; label: string; className?: string }) {
-                  const active = sortKey === col;
-                  return (
-                    <button onClick={() => handleSort(col)} className={cn("flex items-center gap-0.5 text-[9px] font-bold uppercase tracking-widest transition-colors cursor-pointer select-none", active ? "text-[#d4af37]" : "text-white/30 hover:text-white/55", className)}>
-                      {label}
-                      {active ? (sortDir === "desc" ? <ChevronDown className="w-2.5 h-2.5 flex-shrink-0" /> : <ChevronUp className="w-2.5 h-2.5 flex-shrink-0" />) : <ArrowUpDown className="w-2.5 h-2.5 flex-shrink-0 opacity-40" />}
-                    </button>
-                  );
-                }
-                return (
-                  <>
-                    <SortBtn col="league"      label="League"      className="flex-1 min-w-0 justify-start" />
-                    <SortBtn col="current"     label="Current"     className="w-14 md:w-16 justify-end" />
-                    <SortBtn col="improvement" label="Improvement" className="w-24 md:w-28 justify-end" />
-                    <SortBtn col="hard"        label="Out/IR/Bye"  className="w-[72px] md:w-24 justify-center" />
-                    <SortBtn col="soft"        label="Ques/Doub"   className="w-[64px] md:w-20 justify-center hidden sm:flex" />
-                    <SortBtn col="status"      label="Status"      className="w-[96px] md:w-[108px] justify-end" />
-                  </>
-                );
-              })()}
-            </div>
-            {baseLoading && sortedAnalyses.length === 0 ? (
-              [...Array(Math.min(activeLeagues.length || 4, 6))].map((_, i) => <SkeletonRow key={i} />)
-            ) : sortedAnalyses.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
-                <Users className="w-8 h-8 text-white/15 mb-3" />
-                <p className="text-sm font-semibold text-white/40">No leagues found</p>
-                <p className="text-xs text-white/25 mt-1">Connect leagues in the Portfolio tab to get started.</p>
-              </div>
-            ) : (
-              sortedAnalyses.map(a => <LeagueRow key={a.leagueId} analysis={a} />)
-            )}
+          {/* Swipe hint — mobile only */}
+          <div className="flex items-center justify-end gap-1.5 md:hidden mb-1 px-1">
+            <span className="text-[10px] text-white/25">Swipe to view</span>
+            <ArrowRight className="w-3 h-3 text-white/20" />
           </div>
 
-          <p className="text-[9px] text-white/20 text-center px-4">
+          <div
+            className="rounded-2xl border border-white/6"
+            style={{ background: "linear-gradient(180deg, rgba(4,13,26,0.9) 0%, rgba(4,10,20,0.95) 100%)" }}
+          >
+            {/* Scroll container */}
+            <div className="overflow-x-auto" style={{ WebkitOverflowScrolling: "touch" }}>
+              <div style={{ minWidth: 640 }}>
+                {/* Header */}
+                <div className="flex items-center gap-2 md:gap-3 px-3 md:px-5 py-2 border-b border-white/6 bg-white/[0.02]">
+                  {(() => {
+                    function SortBtn({ col, label, className }: { col: typeof sortKey; label: string; className?: string }) {
+                      const active = sortKey === col;
+                      return (
+                        <button onClick={() => handleSort(col)} className={cn("flex items-center gap-0.5 text-[9px] font-bold uppercase tracking-widest whitespace-nowrap transition-colors cursor-pointer select-none", active ? "text-[#d4af37]" : "text-white/30 hover:text-white/55", className)}>
+                          {label}
+                          {active ? (sortDir === "desc" ? <ChevronDown className="w-2.5 h-2.5 flex-shrink-0" /> : <ChevronUp className="w-2.5 h-2.5 flex-shrink-0" />) : <ArrowUpDown className="w-2.5 h-2.5 flex-shrink-0 opacity-40" />}
+                        </button>
+                      );
+                    }
+                    return (
+                      <>
+                        <SortBtn col="league"      label="League"      className="flex-1 min-w-[140px] justify-start" />
+                        <SortBtn col="current"     label="Current"     className="w-14 md:w-16 flex-shrink-0 justify-end" />
+                        <SortBtn col="improvement" label="Improvement" className="w-24 md:w-28 flex-shrink-0 justify-end" />
+                        <SortBtn col="hard"        label="Out/IR/Bye"  className="w-[72px] md:w-24 flex-shrink-0 justify-center" />
+                        <SortBtn col="soft"        label="Ques/Doub"   className="w-[64px] md:w-20 flex-shrink-0 justify-center" />
+                        <SortBtn col="status"      label="Status"      className="w-[96px] md:w-[108px] flex-shrink-0 justify-end" />
+                      </>
+                    );
+                  })()}
+                </div>
+                {/* Rows */}
+                {baseLoading && sortedAnalyses.length === 0 ? (
+                  [...Array(Math.min(activeLeagues.length || 4, 6))].map((_, i) => <SkeletonRow key={i} />)
+                ) : sortedAnalyses.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
+                    <Users className="w-8 h-8 text-white/15 mb-3" />
+                    <p className="text-sm font-semibold text-white/40">No leagues found</p>
+                    <p className="text-xs text-white/25 mt-1">Connect leagues in the Portfolio tab to get started.</p>
+                  </div>
+                ) : (
+                  sortedAnalyses.map(a => <LeagueRow key={a.leagueId} analysis={a} />)
+                )}
+              </div>
+            </div>
+          </div>
+
+          <p className="text-[9px] text-white/20 text-center px-4 pb-20 md:pb-0">
             Projections from Sleeper · Updated weekly · Optimal lineup uses projected points, not dynasty values
           </p>
         </>
