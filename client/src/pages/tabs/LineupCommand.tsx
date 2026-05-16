@@ -513,14 +513,13 @@ function MatchupBattleCard({ m }: { m: MatchupAnalysis }) {
   };
 
   return (
-    <div className="border-b border-white/5 last:border-0" data-testid={`card-matchup-${m.leagueId}`}>
+    <div className="border-b border-white/[0.07] last:border-0" data-testid={`card-matchup-${m.leagueId}`}>
 
-      {/* ── Main card ── */}
+      {/* ══════════════ DESKTOP layout (unchanged) ══════════════ */}
       <div
-        className={cn("px-4 md:px-5 py-4 transition-colors", canExpand ? "cursor-pointer hover:bg-white/[0.018]" : "")}
+        className={cn("hidden md:block px-5 py-4 transition-colors", canExpand ? "cursor-pointer hover:bg-white/[0.018]" : "")}
         onClick={() => canExpand && setExpanded(v => !v)}
       >
-        {/* League label row */}
         <div className="flex items-center gap-2 mb-3">
           {m.avatar ? (
             <img src={m.avatar} alt="" className="w-5 h-5 rounded object-cover flex-shrink-0"
@@ -531,58 +530,33 @@ function MatchupBattleCard({ m }: { m: MatchupAnalysis }) {
           <span className="text-[10px] font-bold text-white/40 uppercase tracking-wider truncate">{m.leagueName}</span>
           <span className="ml-auto text-[9px] text-white/20 flex-shrink-0">{m.format} · {m.scoringFormat}</span>
         </div>
-
-        {/* Battle row */}
-        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 md:gap-4">
-
-          {/* Left: My team */}
+        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4">
           <div className="min-w-0">
-            <p className="text-[13px] md:text-sm font-black text-white/90 truncate leading-tight">{m.myTeamName}</p>
+            <p className="text-sm font-black text-white/90 truncate leading-tight">{m.myTeamName}</p>
             <p className="text-[10px] text-white/35 mt-0.5 tabular-nums">{fmtRecord(m.myRecord.wins, m.myRecord.losses, m.myRecord.ties)}</p>
-            <p className={cn("text-2xl md:text-3xl font-black tabular-nums mt-1.5 leading-none", isFav ? theme.txt : "text-white/55")}>
-              {fmt1(m.myProj)}
-            </p>
+            <p className={cn("text-3xl font-black tabular-nums mt-1.5 leading-none", isFav ? theme.txt : "text-white/55")}>{fmt1(m.myProj)}</p>
           </div>
-
-          {/* Center: verdict */}
-          <div className="text-center px-2 md:px-4 flex-shrink-0">
+          <div className="text-center px-4 flex-shrink-0">
             {hasBye ? (
               <div className="text-[10px] font-bold text-white/20 uppercase tracking-widest">Bye Week</div>
             ) : (
               <>
                 <div className="text-[8px] text-white/20 uppercase tracking-[0.2em] font-bold">vs</div>
-                <div className={cn("mt-1 text-[12px] md:text-[13px] font-black tabular-nums", theme.txt)}>
-                  {isClose ? "Pick 'em" : `${isFav ? "+" : "–"}${fmt1(Math.abs(m.spread))}`}
-                </div>
-                <div className={cn("mt-0.5 text-[9px] font-bold border rounded-full px-2 py-0.5 tabular-nums", theme.pill)}>
-                  {Math.round(m.winPct)}%
-                </div>
+                <div className={cn("mt-1 text-[13px] font-black tabular-nums", theme.txt)}>{isClose ? "Pick 'em" : `${isFav ? "+" : "–"}${fmt1(Math.abs(m.spread))}`}</div>
+                <div className={cn("mt-0.5 text-[9px] font-bold border rounded-full px-2 py-0.5 tabular-nums", theme.pill)}>{Math.round(m.winPct)}%</div>
               </>
             )}
           </div>
-
-          {/* Right: Opponent */}
           <div className="min-w-0 text-right">
-            <p className="text-[13px] md:text-sm font-black text-white/50 truncate leading-tight">
-              {hasBye ? "—" : m.opponentTeamName}
-            </p>
-            <p className="text-[10px] text-white/25 mt-0.5 tabular-nums">
-              {hasBye ? "" : fmtRecord(m.opponentRecord.wins, m.opponentRecord.losses, m.opponentRecord.ties)}
-            </p>
-            <p className={cn("text-2xl md:text-3xl font-black tabular-nums mt-1.5 leading-none", !isFav && !hasBye ? "text-red-400/60" : "text-white/30")}>
-              {hasBye ? "—" : fmt1(m.opponentProj)}
-            </p>
+            <p className="text-sm font-black text-white/50 truncate leading-tight">{hasBye ? "—" : m.opponentTeamName}</p>
+            <p className="text-[10px] text-white/25 mt-0.5 tabular-nums">{hasBye ? "" : fmtRecord(m.opponentRecord.wins, m.opponentRecord.losses, m.opponentRecord.ties)}</p>
+            <p className={cn("text-3xl font-black tabular-nums mt-1.5 leading-none", !isFav && !hasBye ? "text-red-400/60" : "text-white/30")}>{hasBye ? "—" : fmt1(m.opponentProj)}</p>
           </div>
         </div>
-
-        {/* Win probability bar */}
         {!hasBye && (
           <div className="mt-3.5">
             <div className="h-1.5 rounded-full bg-white/6 overflow-hidden">
-              <div
-                className="h-full rounded-full transition-all duration-700"
-                style={{ width: `${m.winPct}%`, backgroundColor: theme.bar, opacity: 0.8 }}
-              />
+              <div className="h-full rounded-full transition-all duration-700" style={{ width: `${m.winPct}%`, backgroundColor: theme.bar, opacity: 0.8 }} />
             </div>
             <div className="flex justify-between mt-1">
               <span className="text-[9px] text-white/25">{m.myTeamName}</span>
@@ -590,23 +564,107 @@ function MatchupBattleCard({ m }: { m: MatchupAnalysis }) {
             </div>
           </div>
         )}
-
-        {/* Expand hint */}
         {canExpand && (
           <div className="flex items-center justify-center mt-2 gap-1">
-            {expanded
-              ? <ChevronUp className="w-3 h-3 text-white/15" />
-              : <ChevronDown className="w-3 h-3 text-white/15" />}
+            {expanded ? <ChevronUp className="w-3 h-3 text-white/15" /> : <ChevronDown className="w-3 h-3 text-white/15" />}
           </div>
         )}
       </div>
 
-      {/* ── Expanded starters panel ── */}
+      {/* ══════════════ MOBILE layout ══════════════ */}
+      <div
+        className={cn("md:hidden px-4 py-4 transition-colors", canExpand ? "cursor-pointer active:bg-white/[0.02]" : "")}
+        onClick={() => canExpand && setExpanded(v => !v)}
+      >
+        {/* League header */}
+        <div className="flex items-center gap-2 mb-3">
+          {m.avatar ? (
+            <img src={m.avatar} alt="" className="w-6 h-6 rounded-md object-cover flex-shrink-0"
+              onError={e => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
+          ) : (
+            <div className="w-6 h-6 rounded-md flex-shrink-0 bg-[#0b3a7a]/40" />
+          )}
+          <span className="text-[11px] font-bold text-white/50 truncate flex-1">{m.leagueName}</span>
+          <span className="flex-shrink-0 text-[9px] font-semibold px-2 py-0.5 rounded-full" style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", color: "rgba(203,213,225,0.40)" }}>
+            {m.format} · {m.scoringFormat}
+          </span>
+        </div>
+
+        {hasBye ? (
+          /* ── BYE WEEK layout ── */
+          <div className="space-y-3">
+            <div className="flex items-center gap-3">
+              <div className="flex-1 min-w-0">
+                <p className="text-[15px] font-black text-white/90 truncate leading-tight">{m.myTeamName}</p>
+                <p className="text-[11px] text-white/35 mt-0.5 tabular-nums">{fmtRecord(m.myRecord.wins, m.myRecord.losses, m.myRecord.ties)}</p>
+              </div>
+              <p className={cn("text-2xl font-black tabular-nums leading-none flex-shrink-0", "text-white/30")}>{fmt1(m.myProj)}</p>
+            </div>
+            <div className="flex items-center justify-center py-2">
+              <span className="text-[10px] font-bold uppercase tracking-[0.18em] px-4 py-1.5 rounded-full" style={{ background: "rgba(148,163,184,0.08)", border: "1px solid rgba(148,163,184,0.18)", color: "rgba(148,163,184,0.55)" }}>
+                Bye Week
+              </span>
+            </div>
+          </div>
+        ) : (
+          /* ── Normal matchup layout ── */
+          <div className="space-y-0">
+            {/* My team row */}
+            <div className="flex items-center gap-3 py-2.5 border-b border-white/[0.05]">
+              <div className="flex-1 min-w-0">
+                <p className="text-[15px] font-black text-white/90 truncate leading-tight">{m.myTeamName}</p>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="text-[10px] text-white/35 tabular-nums">{fmtRecord(m.myRecord.wins, m.myRecord.losses, m.myRecord.ties)}</span>
+                  <span className={cn("text-[9px] font-bold px-2 py-0.5 rounded-full border tabular-nums", theme.pill)}>{Math.round(m.winPct)}%</span>
+                </div>
+              </div>
+              <div className="flex-shrink-0 text-right">
+                <p className="text-[10px] text-white/25 uppercase tracking-wider font-semibold">Proj</p>
+                <p className={cn("text-2xl font-black tabular-nums leading-tight", isFav ? theme.txt : "text-white/50")}>{fmt1(m.myProj)}</p>
+              </div>
+            </div>
+
+            {/* VS divider */}
+            <div className="flex items-center gap-3 py-1.5">
+              <div className="flex-1 h-px bg-white/[0.04]" />
+              <span className="text-[9px] font-bold text-white/20 uppercase tracking-[0.2em] flex-shrink-0">
+                {isClose ? "Pick 'em" : `${isFav ? "fav" : "dog"} ${fmt1(Math.abs(m.spread))}`}
+              </span>
+              <div className="flex-1 h-px bg-white/[0.04]" />
+            </div>
+
+            {/* Opponent row */}
+            <div className="flex items-center gap-3 py-2.5">
+              <div className="flex-1 min-w-0">
+                <p className="text-[14px] font-bold text-white/55 truncate leading-tight">{m.opponentTeamName}</p>
+                <span className="text-[10px] text-white/25 tabular-nums mt-0.5 block">{fmtRecord(m.opponentRecord.wins, m.opponentRecord.losses, m.opponentRecord.ties)}</span>
+              </div>
+              <div className="flex-shrink-0 text-right">
+                <p className="text-[10px] text-white/20 uppercase tracking-wider font-semibold">Proj</p>
+                <p className={cn("text-2xl font-black tabular-nums leading-tight", !isFav ? "text-red-400/55" : "text-white/25")}>{fmt1(m.opponentProj)}</p>
+              </div>
+            </div>
+
+            {/* Win prob bar */}
+            <div className="pt-1 pb-0.5">
+              <div className="h-1.5 rounded-full bg-white/6 overflow-hidden">
+                <div className="h-full rounded-full transition-all duration-700" style={{ width: `${m.winPct}%`, backgroundColor: theme.bar, opacity: 0.75 }} />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {canExpand && (
+          <div className="flex items-center justify-center mt-2.5 gap-1">
+            {expanded ? <ChevronUp className="w-3.5 h-3.5 text-white/20" /> : <ChevronDown className="w-3.5 h-3.5 text-white/20" />}
+          </div>
+        )}
+      </div>
+
+      {/* ── Expanded starters panel (shared) ── */}
       {expanded && (
         <div className="px-4 md:px-5 pb-4 pt-3 border-t border-white/4 bg-white/[0.01]">
           <div className="grid grid-cols-2 gap-4">
-
-            {/* My starters */}
             <div>
               <p className="text-[8px] font-bold uppercase tracking-[0.2em] text-[#d4af37]/50 mb-2">{m.myTeamName}</p>
               <div className="space-y-1.5">
@@ -616,18 +674,13 @@ function MatchupBattleCard({ m }: { m: MatchupAnalysis }) {
                     <div key={i} className="flex items-center gap-1.5">
                       <span className="text-[8px] font-bold text-white/25 w-7 flex-shrink-0">{s.pos}</span>
                       <span className="text-[11px] text-white/75 flex-1 truncate">{s.name}</span>
-                      {inj && (
-                        <span className={cn("text-[7px] font-bold flex-shrink-0",
-                          inj === "OUT" ? "text-red-400" : "text-yellow-400")}>{inj}</span>
-                      )}
+                      {inj && <span className={cn("text-[7px] font-bold flex-shrink-0", inj === "OUT" ? "text-red-400" : "text-yellow-400")}>{inj}</span>}
                       <span className="text-[11px] font-bold text-white/50 tabular-nums flex-shrink-0 ml-1">{fmt1(s.proj)}</span>
                     </div>
                   );
                 })}
               </div>
             </div>
-
-            {/* Their starters */}
             <div>
               <p className="text-[8px] font-bold uppercase tracking-[0.2em] text-white/25 mb-2">{m.opponentTeamName}</p>
               <div className="space-y-1.5">
@@ -637,17 +690,13 @@ function MatchupBattleCard({ m }: { m: MatchupAnalysis }) {
                     <div key={i} className="flex items-center gap-1.5">
                       <span className="text-[8px] font-bold text-white/20 w-7 flex-shrink-0">{s.pos}</span>
                       <span className="text-[11px] text-white/45 flex-1 truncate">{s.name}</span>
-                      {inj && (
-                        <span className={cn("text-[7px] font-bold flex-shrink-0",
-                          inj === "OUT" ? "text-red-400/70" : "text-yellow-400/70")}>{inj}</span>
-                      )}
+                      {inj && <span className={cn("text-[7px] font-bold flex-shrink-0", inj === "OUT" ? "text-red-400/70" : "text-yellow-400/70")}>{inj}</span>}
                       <span className="text-[11px] font-bold text-white/30 tabular-nums flex-shrink-0 ml-1">{fmt1(s.proj)}</span>
                     </div>
                   );
                 })}
               </div>
             </div>
-
           </div>
         </div>
       )}
