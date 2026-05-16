@@ -2,6 +2,7 @@ import { useState, useRef, useCallback, type FormEvent, type ChangeEvent } from 
 import { X, MessageSquare, Bug, Lightbulb, HelpCircle, ChevronDown, Image, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
+import { API_BASE } from "@/lib/apiBase";
 
 const FEEDBACK_TYPES = [
   { value: "bug",     label: "Bug Report",      Icon: Bug,            color: "text-red-400" },
@@ -117,7 +118,7 @@ export function FeedbackModal({ open, onClose, currentTab = "", currentSubTab = 
           timestamp: new Date().toISOString(),
         },
       };
-      const res = await fetch("/api/feedback", {
+      const res = await fetch(`${API_BASE}/api/feedback`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
