@@ -479,7 +479,7 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
 
           {/* League selector (mobile) */}
           {sleeper.isConnected && (
-            <div className="flex items-center justify-center gap-2 mt-1.5 md:hidden w-full">
+            <div className="flex items-center gap-2 mt-1.5 md:hidden mx-auto" style={{ maxWidth: 280 }}>
               <LeagueSelector
                 leagues={sleeperLeaguesAsLeagues}
                 selectedLeagueId={selectedLeagueId}
