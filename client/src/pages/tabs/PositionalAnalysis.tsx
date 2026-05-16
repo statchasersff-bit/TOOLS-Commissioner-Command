@@ -664,7 +664,7 @@ function TradeOpportunities({ league, userTeam }: { league: League; userTeam: Te
   const [mode, setMode] = useState<"win-now" | "rebuild">("win-now");
   return (
     <div className="space-y-5">
-      <div className="flex w-fit rounded-lg border border-border overflow-hidden">
+      <div className="flex justify-center"><div className="flex w-fit rounded-lg border border-border overflow-hidden">
         {([
           { id: "win-now" as const, label: "Win-Now",       desc: "Maximize starters now",      Icon: Zap        },
           { id: "rebuild" as const, label: "Build Dynasty", desc: "Maximize dynasty value",      Icon: TrendingUp },
@@ -685,7 +685,7 @@ function TradeOpportunities({ league, userTeam }: { league: League; userTeam: Te
             </div>
           </button>
         ))}
-      </div>
+      </div></div>
 
       {mode === "win-now" && <WinNowMode  league={league} userTeam={userTeam} />}
       {mode === "rebuild" && <RebuildMode league={league} userTeam={userTeam} />}
