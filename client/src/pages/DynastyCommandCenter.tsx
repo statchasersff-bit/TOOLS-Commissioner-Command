@@ -25,7 +25,7 @@ import { DashboardOverview, DashboardSnapshot, MyTeam } from "./tabs/Dashboard";
 import { RosterComparison } from "./tabs/LeagueAnalyzer";
 import { FieldView } from "./tabs/FieldView";
 import { ShareTeam } from "./tabs/ShareTeam";
-import { TradeBlockScanner, TradeCalculator, TradeDatabase } from "./tabs/TradeCenter";
+import { TradeBlockScanner, TradeCalculator, TradeDatabase, TradeFinder } from "./tabs/TradeCenter";
 import { PositionalAnalysis } from "./tabs/PositionalAnalysis";
 import { MarketValue } from "./tabs/LeagueMarket";
 import Analysis from "./tabs/Analysis";
@@ -360,7 +360,7 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
       case "league-analyzer:transactions": return <Transactions leagueId={selectedLeagueId!} />;
       case "trade-center:trade-database": return <TradeDatabase league={league} />;
       case "trade-center:trade-calculator": return <TradeCalculator league={league} userTeam={userTeam} />;
-      case "trade-center:positional-analysis": return <PositionalAnalysis league={league} userTeam={userTeam} />;
+      case "trade-center:positional-analysis": return <TradeFinder league={league} userTeam={userTeam} />;
       case "trade-center:trade-block": return <TradeBlockScanner league={league} />;
       case "league-market:market-value": return <MarketValue league={league} />;
       case "league-market:analysis": return <Analysis />;
