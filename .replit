@@ -47,6 +47,9 @@ waitForPort = 5000
 [userenv.production]
 CORS_ORIGIN = "https://statchasers.com,https://www.statchasers.com,https://dynasty-command.pages.dev"
 
+[userenv.shared]
+VITE_BASE_PATH = "/dynasty-command/launch/"
+
 [postMerge]
 path = "scripts/post-merge.sh"
 timeoutMs = 20000
