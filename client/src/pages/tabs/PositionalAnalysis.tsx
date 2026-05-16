@@ -2777,7 +2777,10 @@ function RebuildMode({ league, userTeam }: { league: League; userTeam: Team }) {
             </p>
           </div>
           <div className="space-y-0">
-            {rosterData.filter(d => d.tier === "Liquid" || d.tier === "Sell High" || d.tier === "Emergency Exit").map((d, i) => {
+            {rosterData
+              .filter(d => d.tier === "Liquid" || d.tier === "Sell High" || d.tier === "Emergency Exit")
+              .sort((a, b) => (a.tier === "Liquid" ? 1 : 0) - (b.tier === "Liquid" ? 1 : 0))
+              .map((d, i) => {
               const sid = d.player.sleeperId ?? d.player.id;
               return (
                 <div key={sid} className="flex items-center gap-3 py-2.5 border-b border-border/20 last:border-0" data-testid={`asset-move-row-${sid}`}>

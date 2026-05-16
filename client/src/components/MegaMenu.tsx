@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 import {
   BarChart2, LayoutDashboard, Users, Share2,
   Trophy, GitCompare, Coins, ArrowLeftRight, Database, Search,
-  Calculator, Eye, LineChart, TrendingUp, Zap, ChevronDown,
+  Calculator, Eye, LineChart, TrendingUp, ChevronDown,
   LucideIcon, Waves, Crosshair, LayoutGrid, Inbox, MessageCircle,
 } from "lucide-react";
 import type { MainTabConfig } from "../types";
@@ -75,14 +75,6 @@ const MEGA_DATA: Record<string, MegaSection[]> = {
         { subId: "analysis",        label: "Analysis",        description: "League trends & positional insights",           icon: LineChart  },
         { subId: "market-value",    label: "Market Value",    description: "Player market values across formats",           icon: TrendingUp },
         { subId: "compare-players", label: "Compare Players", description: "Side-by-side player value comparison",          icon: GitCompare },
-      ],
-    },
-  ],
-  "live-draft": [
-    {
-      title: "Draft Tools",
-      items: [
-        { subId: "draft-board", label: "Draft Board", description: "Dynasty rankings board & live draft integration",  icon: Zap },
       ],
     },
   ],
@@ -343,7 +335,6 @@ const TAB_ICONS: Record<string, typeof BarChart2> = {
   "league-analyzer": Trophy,
   "trade-center": ArrowLeftRight,
   "league-market": LineChart,
-  "live-draft": Zap,
 };
 
 const TAB_SHORT_LABELS: Record<string, string> = {
@@ -352,7 +343,6 @@ const TAB_SHORT_LABELS: Record<string, string> = {
   "league-analyzer": "League",
   "trade-center": "Trades",
   "league-market": "Research",
-  "live-draft": "Draft",
 };
 
 // ── MobileBottomNav ────────────────────────────────────────────────────────────

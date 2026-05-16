@@ -1,4 +1,4 @@
-import { Crosshair, Waves, Users, Share2, Trophy, ArrowLeftRight, Search, Inbox, Calculator, Database, Zap, MessageSquare, Lock, ChevronRight, Package } from "lucide-react";
+import { Crosshair, Waves, Users, Share2, Trophy, ArrowLeftRight, Search, Inbox, Calculator, Database, MessageSquare, Lock, ChevronRight, Package } from "lucide-react";
 
 interface FeatureDef {
   id: string;
@@ -184,21 +184,6 @@ const FEATURES: FeatureDef[] = [
       "Reduces repetitive manual offer entry across leagues",
     ],
     comingSoon: true,
-  },
-  {
-    id: "live-draft",
-    category: "Draft",
-    title: "Live Draft",
-    icon: Zap,
-    description: "View draft boards, pick history, draft queues, and recent selections with live draft state tracking.",
-    bullets: [
-      "Live dynasty rankings board synced to your draft",
-      "Draft queue management and pick history",
-      "Recent picks feed with value tracking",
-      "Make picks directly through Sleeper integration",
-    ],
-    tab: "live-draft",
-    sub: "draft-board",
   },
   {
     id: "feedback",

@@ -470,7 +470,7 @@ export function RosterBreakdown({ league, userTeam }: TeamProps) {
         {!sleeperJwt && (
           <Card className="p-6 flex items-center gap-3 text-muted-foreground" data-testid="picks-no-auth">
             <PackageOpen className="w-4 h-4 flex-shrink-0" />
-            <p className="text-sm">Connect Sleeper (via Live Draft tab) to view future draft picks.</p>
+            <p className="text-sm">Connect Sleeper (via Command Center) to view future draft picks.</p>
           </Card>
         )}
 

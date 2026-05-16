@@ -277,7 +277,7 @@ export default function Transactions({ leagueId }: { leagueId: string }) {
             <Card className="p-4 border-amber-500/20 bg-amber-500/5">
               <div className="flex items-center gap-2 text-xs text-amber-600 dark:text-amber-400">
                 <Key className="w-3.5 h-3.5 flex-shrink-0" />
-                <span>Set your Sleeper auth token in the <strong>Live Draft</strong> tab to accept or reject trades.</span>
+                <span>Set your Sleeper auth token in <strong>Command Center</strong> → Sleeper Actions to accept or reject trades.</span>
               </div>
             </Card>
           )}
@@ -610,7 +610,7 @@ function PendingTradeCard({
               {rejectIcon}{rejectLabel}
             </Button>
             {!sleeperJwt && (
-              <span className="text-[10px] text-muted-foreground">Token required (set in Live Draft tab)</span>
+              <span className="text-[10px] text-muted-foreground">Token required (set in Command Center)</span>
             )}
           </div>
         )}

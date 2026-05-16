@@ -31,7 +31,6 @@ import { PositionalAnalysis } from "./tabs/PositionalAnalysis";
 import { MarketValue } from "./tabs/LeagueMarket";
 import Analysis from "./tabs/Analysis";
 import { LeagueEconomy } from "./tabs/LeagueEconomy";
-import LiveDraft from "./tabs/LiveDraft";
 import { API_BASE } from "@/lib/apiBase";
 import Transactions from "./tabs/Transactions";
 import { LineupCommand } from "./tabs/LineupCommand";
@@ -54,10 +53,16 @@ function loadSavedState() {
 
 function getInitialState(pathTab?: string, pathSub?: string) {
   const saved = loadSavedState();
+  const requestedTab = pathTab || saved?.tab || "portfolio";
+  const requestedSub = pathSub || saved?.sub || "portfolio-summary";
+
+  if (requestedTab === "live-draft") {
+    return { tab: "portfolio", sub: "portfolio-summary", leagueId: saved?.leagueId || null };
+  }
 
   return {
-    tab: pathTab || saved?.tab || "portfolio",
-    sub: pathSub || saved?.sub || "portfolio-summary",
+    tab: requestedTab,
+    sub: requestedSub,
     leagueId: saved?.leagueId || null,
   };
 }
@@ -317,10 +322,6 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
 
     if (activeMainTab === "cookies") {
       return <CookiesPage onNavigate={handleMainTabChange} />;
-    }
-
-    if (activeMainTab === "live-draft") {
-      return <LiveDraft />;
     }
 
     if (activeMainTab === "portfolio") {

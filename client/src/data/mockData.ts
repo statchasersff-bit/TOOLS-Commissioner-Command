@@ -567,11 +567,4 @@ export const NAV_CONFIG: MainTabConfig[] = [
       { id: "compare-players", label: "Compare Players" },
     ],
   },
-  {
-    id: "live-draft",
-    label: "Live Draft",
-    subTabs: [
-      { id: "draft-board", label: "Draft Board" },
-    ],
-  },
 ];
