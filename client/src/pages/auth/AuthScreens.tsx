@@ -11,14 +11,6 @@ function AuthLayout({ children }: { children: React.ReactNode }) {
       <FakeAppBackground />
       <div className="absolute inset-0 bg-[#060d1a]/45" />
       <div className="relative z-10 w-full max-w-[460px]">
-        <div className="flex flex-col items-center mb-5">
-          <img src={logoDark} alt="StatChasers" className="h-20 mx-auto mb-1.5 object-contain" />
-          <div className="flex items-center gap-3 w-full max-w-[280px]">
-            <span className="flex-1 h-px" style={{ background: "linear-gradient(to right, transparent, rgba(212,175,55,0.35))" }} />
-            <span className="text-[#d4af37] text-[11px] font-bold tracking-[0.18em] uppercase whitespace-nowrap">Dynasty Command</span>
-            <span className="flex-1 h-px" style={{ background: "linear-gradient(to left, transparent, rgba(212,175,55,0.35))" }} />
-          </div>
-        </div>
         <div
           className="rounded-2xl p-8 shadow-2xl"
           style={{
@@ -27,6 +19,14 @@ function AuthLayout({ children }: { children: React.ReactNode }) {
             boxShadow: "0 32px 80px rgba(0,0,0,0.7), 0 0 0 1px rgba(212,175,55,0.06), inset 0 1px 0 rgba(255,255,255,0.04)",
           }}
         >
+          <div className="flex flex-col items-center mb-7">
+            <img src={logoDark} alt="StatChasers" className="h-20 mx-auto mb-1.5 object-contain" />
+            <div className="flex items-center gap-3 w-full">
+              <span className="flex-1 h-px" style={{ background: "linear-gradient(to right, transparent, rgba(212,175,55,0.35))" }} />
+              <span className="text-[#d4af37] text-[11px] font-bold tracking-[0.18em] uppercase whitespace-nowrap">Dynasty Command</span>
+              <span className="flex-1 h-px" style={{ background: "linear-gradient(to left, transparent, rgba(212,175,55,0.35))" }} />
+            </div>
+          </div>
           {children}
         </div>
       </div>
