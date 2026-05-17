@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 import type { League, Team, Player, Pick, Tier } from "@/types";
 import { formatPickLabel } from "@/types";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { getSleeperSession } from "@/services/sleeperAuth";
 import { proposeTrade, getDmByMembers, getDmByMembersFull, markDmRead, sendTradeMessage, sendDmMessage, fetchDmMessages } from "@/services/sleeperAuthedApi";
 import type { ProposeTradeResult, SleeperTransactionPick, SleeperDmMessage } from "@/services/sleeperAuthedApi";
@@ -947,6 +948,8 @@ interface SendTradeModalProps {
 }
 
 function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeModalProps) {
+  const isMobile = useIsMobile();
+  const [mobileEditSide, setMobileEditSide] = useState<"sending" | "receiving">("sending");
   const [status, setStatus]           = useState<SendStatus>("idle");
   const [errorMsg, setErrorMsg]       = useState<string>("");
   const [selectedPick, setSelectedPick] = useState<Pick | null>(null);
