@@ -989,7 +989,7 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
     <div className="grid flex-shrink-0" style={{ gridTemplateColumns: "repeat(4, 1fr)", height: 48, borderRadius: 16, padding: 4, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", gap: 4, minWidth: 0 }}>
       {([
         { id: "table",   icon: List,      label: "Table"    },
-        { id: "economy", icon: Coins,     label: "Dynasty"  },
+        { id: "economy", icon: Coins,     label: "Plot"     },
         { id: "chart",   icon: BarChart2, label: "Chart"    },
         { id: "heatmap", icon: Grid3X3,   label: "Heatmap"  },
       ] as const).map(({ id, icon: Icon, label }) => {
@@ -1004,7 +1004,7 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
             style={{ borderRadius: 12, fontSize: 12, letterSpacing: "0.01em", background: isActive ? "linear-gradient(135deg, rgba(11,58,122,0.85) 0%, rgba(11,58,122,0.65) 100%)" : "transparent", color: isActive ? "#fff" : "rgba(203,213,225,0.45)", border: isActive ? "1px solid rgba(212,175,55,0.30)" : "1px solid transparent", boxShadow: isActive ? "0 2px 12px rgba(11,58,122,0.40), inset 0 1px 0 rgba(255,255,255,0.06)" : "none", paddingLeft: 8, paddingRight: 8 }}
           >
             <Icon style={{ width: 14, height: 14, flexShrink: 0 }} />
-            <span className="hidden sm:inline">{label}</span>
+            <span>{label}</span>
             {isActive && <span className="absolute bottom-[3px] left-1/2 -translate-x-1/2 rounded-full" style={{ width: 24, height: 2, background: "#d4af37", opacity: 0.85 }} />}
           </button>
         );

@@ -6,6 +6,7 @@ import {
   Trophy, GitCompare, Coins, ArrowLeftRight, Database, Search,
   Calculator, Eye, LineChart, TrendingUp, ChevronDown,
   LucideIcon, Waves, Crosshair, LayoutGrid, Inbox, MessageCircle,
+  Hexagon, ClipboardList,
 } from "lucide-react";
 import type { MainTabConfig } from "../types";
 import logoDark from "@assets/statchasers_logo_transparent_dark_1772764844282.png";
@@ -75,6 +76,14 @@ const MEGA_DATA: Record<string, MegaSection[]> = {
         { subId: "analysis",        label: "Analysis",        description: "League trends & positional insights",           icon: LineChart  },
         { subId: "market-value",    label: "Market Value",    description: "Player market values across formats",           icon: TrendingUp },
         { subId: "compare-players", label: "Compare Players", description: "Side-by-side player value comparison",          icon: GitCompare },
+      ],
+    },
+  ],
+  draft: [
+    {
+      title: "Draft",
+      items: [
+        { subId: "adp-explorer", label: "ADP Explorer", description: "Sleeper startup ADP, rookie picks & market trends", icon: ClipboardList },
       ],
     },
   ],
@@ -335,6 +344,7 @@ const TAB_ICONS: Record<string, typeof BarChart2> = {
   "league-analyzer": Trophy,
   "trade-center": ArrowLeftRight,
   "league-market": LineChart,
+  draft: ClipboardList,
 };
 
 const TAB_SHORT_LABELS: Record<string, string> = {
@@ -343,6 +353,7 @@ const TAB_SHORT_LABELS: Record<string, string> = {
   "league-analyzer": "League",
   "trade-center": "Trades",
   "league-market": "Research",
+  draft: "Draft",
 };
 
 // ── MobileBottomNav ────────────────────────────────────────────────────────────

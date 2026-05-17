@@ -568,4 +568,11 @@ export const NAV_CONFIG: MainTabConfig[] = [
       { id: "compare-players", label: "Compare Players" },
     ],
   },
+  {
+    id: "draft",
+    label: "Draft",
+    subTabs: [
+      { id: "adp-explorer", label: "ADP Explorer" },
+    ],
+  },
 ];

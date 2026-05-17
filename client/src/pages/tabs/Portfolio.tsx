@@ -538,7 +538,7 @@ function MobileLeagueRow({ rec, rankCell }: { rec: any; rankCell: (rank: number,
         </div>
         <div className="flex items-center gap-2 mt-1.5 text-[11px]">
           <span className="flex items-center gap-1">
-            <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">WN</span>
+            <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Win-Now</span>
             {rankCell(rec.redraftRank, rec.totalRosters)}
           </span>
           <span className="text-border/60">·</span>
@@ -776,8 +776,8 @@ export function PortfolioSummary() {
             <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 mb-4">
               {([
                 { key: "all",       label: "All",                count: summaryData.leagueRecords.length, icon: null,                                  inactive: "bg-muted/40 text-muted-foreground border-border hover:border-[#0b3a7a]/40" },
-                { key: "contender", label: "Contenders (Top 3)", count: summaryData.contenderCount,       icon: <Crown className="w-3.5 h-3.5" />,     inactive: "bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 border-emerald-200/50 dark:border-emerald-800/30 hover:border-emerald-500" },
-                { key: "middle",    label: "Middle",             count: summaryData.middleCount,          icon: <BarChart3 className="w-3.5 h-3.5" />, inactive: "bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-400 border-blue-200/50 dark:border-blue-800/30 hover:border-blue-500" },
+                { key: "contender", label: "Contenders",         count: summaryData.contenderCount,       icon: <Crown className="w-3.5 h-3.5" />,     inactive: "bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 border-emerald-200/50 dark:border-emerald-800/30 hover:border-emerald-500" },
+                { key: "middle",    label: "Bubble",             count: summaryData.middleCount,          icon: <BarChart3 className="w-3.5 h-3.5" />, inactive: "bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-400 border-blue-200/50 dark:border-blue-800/30 hover:border-blue-500" },
                 { key: "rebuild",   label: "Rebuilding",         count: summaryData.rebuildCount,         icon: <Target className="w-3.5 h-3.5" />,    inactive: "bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-400 border-red-200/50 dark:border-red-800/30 hover:border-red-500" },
               ] as const).map(({ key, label, count, icon, inactive }) => {
                 const isActive = leagueFilter === key;
@@ -796,12 +796,17 @@ export function PortfolioSummary() {
             </div>
 
             {summaryData.leagueRecords.length > 0 && (() => {
+              // Bucket by win-now starter rank percentile (mirrors the counts in
+              // sleeperApi.ts/fetchPortfolioSummary). Leagues without a win-now
+              // rank yet are silently dropped from the bucketed views.
               const filtered = leagueFilter === "all"
                 ? summaryData.leagueRecords
                 : summaryData.leagueRecords.filter((r: any) => {
-                    if (leagueFilter === "contender") return r.standing <= 3;
-                    if (leagueFilter === "middle")    return r.standing > 3 && r.standing <= Math.ceil(r.totalRosters * 0.7);
-                    return r.standing > Math.ceil(r.totalRosters * 0.7);
+                    if (!r.redraftRank || r.redraftRank <= 0 || !r.totalRosters) return false;
+                    const pct = r.redraftRank / r.totalRosters;
+                    if (leagueFilter === "contender") return pct <= 0.30;
+                    if (leagueFilter === "middle")    return pct > 0.30 && pct <= 0.70;
+                    return pct > 0.70;
                   });
               return <SortableLeagueRecords records={filtered} />;
             })()}

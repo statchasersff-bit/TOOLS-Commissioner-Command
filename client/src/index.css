@@ -332,4 +332,48 @@
     0% { background-position: 200% 0; }
     100% { background-position: -200% 0; }
   }
+
+  /* ── Dynasty Command HUD utilities ────────────────────────────────────── */
+  /* Tactical hex-grid background — sits behind the honeycomb board. */
+  .hex-tactical-bg {
+    background-color: #060c18;
+    background-image:
+      radial-gradient(ellipse 80% 60% at 50% 0%, rgba(11, 58, 122, 0.35), transparent 60%),
+      radial-gradient(ellipse 60% 40% at 90% 100%, rgba(212, 175, 55, 0.06), transparent 70%),
+      linear-gradient(rgba(120, 170, 255, 0.05) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(120, 170, 255, 0.05) 1px, transparent 1px);
+    background-size: auto, auto, 28px 28px, 28px 28px;
+  }
+  .hex-tactical-bg::before {
+    content: "";
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(transparent 0px, transparent 2px, rgba(255,255,255,0.012) 3px, transparent 4px);
+    background-size: 100% 4px;
+    pointer-events: none;
+    mix-blend-mode: overlay;
+  }
+
+  /* Elite-tile golden pulse — subtle premium beacon. */
+  @keyframes hex-elite-pulse {
+    0%, 100% { opacity: .55; transform: translate(-50%, 0) scale(1); }
+    50%      { opacity: 1;   transform: translate(-50%, 0) scale(1.18); }
+  }
+  .hex-elite-pulse { animation: hex-elite-pulse 2.4s ease-in-out infinite; }
+
+  /* Slow rotating shimmer used as a conic-gradient border highlight. */
+  @keyframes hex-shimmer-rotate {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+  }
+  .hex-shimmer-rotate { animation: hex-shimmer-rotate 6s linear infinite; }
+
+  /* Scan line that sweeps the board top→bottom — extremely low-opacity. */
+  @keyframes hex-scan {
+    0%   { transform: translateY(-100%); opacity: 0; }
+    8%   { opacity: 1; }
+    92%  { opacity: 1; }
+    100% { transform: translateY(900%); opacity: 0; }
+  }
+  .hex-scan-line { animation: hex-scan 9s linear infinite; }
 }

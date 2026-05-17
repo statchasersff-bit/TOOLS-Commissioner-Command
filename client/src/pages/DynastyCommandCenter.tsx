@@ -38,6 +38,7 @@ import TradeSync from "./tabs/TradeSync";
 import { CompareRBs } from "./tabs/CompareRBs";
 import { ShareDynastyPopup } from "@/components/ShareDynastyPopup";
 import { WhatsNewModal } from "@/components/WhatsNewModal";
+import { DraftCommand } from "./tabs/DraftCommand";
 import { AboutPage } from "@/components/AboutModal";
 import { FeedbackPage } from "@/components/FeedbackPage";
 import { TermsPage, PrivacyPage, CookiesPage } from "@/components/LegalModals";
@@ -358,6 +359,13 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
         default:
           return <PortfolioConnect onNavigate={navigateToSubTab} />;
       }
+    }
+
+    // Draft Command runs on public Sleeper ADP data — no league connection
+    // required. Render BEFORE the sleeper-connected gate so it's accessible
+    // for logged-in users who haven't linked Sleeper yet.
+    if (activeMainTab === "draft") {
+      return <DraftCommand />;
     }
 
     if (!sleeper.isConnected) {

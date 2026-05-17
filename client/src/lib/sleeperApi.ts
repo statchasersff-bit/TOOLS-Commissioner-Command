@@ -720,9 +720,16 @@ export async function fetchPortfolioSummary(
       totalTies += ties;
       totalRank += standing;
 
-      if (standing <= 3) contenderCount++;
-      else if (standing <= Math.ceil(total * 0.7)) middleCount++;
-      else rebuildCount++;
+      // Bucket leagues by win-now starter rank percentile, not standing.
+      // Top 30% = contender, middle 31–69% = middle, bottom 30% = rebuild.
+      // Leagues without a win-now rank yet (redraftRank=0) are excluded
+      // from all three buckets so totals never lie.
+      if (redraftRank > 0 && total > 0) {
+        const winNowPct = redraftRank / total;
+        if (winNowPct <= 0.30) contenderCount++;
+        else if (winNowPct <= 0.70) middleCount++;
+        else rebuildCount++;
+      }
 
       if (standing <= playoffSlots) playoffTeams++;
 

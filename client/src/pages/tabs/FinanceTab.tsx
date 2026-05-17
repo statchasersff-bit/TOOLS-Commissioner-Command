@@ -126,21 +126,19 @@ function plBg(pl: number) {
 const DEFAULT_FINANCE: LeagueFinanceData = { leagueId: "", buyIn: 0, prizes: [], notes: "", isFree: false, ignored: false, leagueSafeUrl: "" };
 function tokenKey(userId: string) { return `dc-finance-token-${userId}`; }
 
-type Tier = "elite" | "bubble" | "rebuild";
+type Tier = "contender" | "bubble" | "rebuild";
 
+// Bucket leagues by win-now starter rank percentile — same rule the Portfolio
+// "League Breakdown" pills use (top 30% / middle 31–69% / bottom 30%).
+// Leagues without a win-now value rank yet (valueRank=0) are reported as
+// "unknown" so we don't bucket them on stale data.
 function classifyTeam(s: LeagueStanding | undefined): Tier | "unknown" {
-  if (!s || s.loading || s.error || s.rank < 1 || s.totalTeams < 2) return "unknown";
-  const { playoffSpots, totalTeams } = s;
-  const gamesPlayed = s.wins + s.losses + s.ties;
-  const effectiveRank = gamesPlayed === 0
-    ? (s.valueRank > 0 ? s.valueRank : -1)
-    : s.rank;
-  if (effectiveRank < 1) return "unknown";
-  const rankPct = effectiveRank / totalTeams;
-  if (effectiveRank <= playoffSpots) {
-    return rankPct <= 0.30 ? "elite" : "bubble";
-  }
-  return effectiveRank - playoffSpots <= 2 ? "bubble" : "rebuild";
+  if (!s || s.loading || s.error || s.totalTeams < 2) return "unknown";
+  if (s.valueRank <= 0) return "unknown";
+  const pct = s.valueRank / s.totalTeams;
+  if (pct <= 0.30) return "contender";
+  if (pct <= 0.70) return "bubble";
+  return "rebuild";
 }
 
 function approxPlayoffPct(s: LeagueStanding): number {
@@ -203,26 +201,26 @@ const TIER_CONFIG: Record<Tier, {
   label: string; short: string; desc: string;
   headerCls: string; bgCls: string; badgeCls: string;
 }> = {
-  elite: {
-    label: "Elite Contenders",
-    short: "Elite",
-    desc: "Strong playoff position. Maximize focus here.",
+  contender: {
+    label: "Contenders",
+    short: "Contender",
+    desc: "Top 30% by win-now value. Maximize focus here.",
     headerCls: "text-emerald-600 dark:text-emerald-400",
     bgCls: "bg-emerald-50/70 dark:bg-emerald-950/20 border-emerald-200/50 dark:border-emerald-800/30",
     badgeCls: "border-emerald-500/50 text-emerald-600 dark:text-emerald-400",
   },
   bubble: {
-    label: "At-Risk & Bubble",
+    label: "Bubble",
     short: "Bubble",
-    desc: "On the playoff edge. Needs your attention.",
+    desc: "Middle 40% by win-now value. On the playoff edge.",
     headerCls: "text-amber-600 dark:text-amber-400",
     bgCls: "bg-amber-50/70 dark:bg-amber-950/20 border-amber-200/50 dark:border-amber-800/30",
     badgeCls: "border-amber-500/50 text-amber-600 dark:text-amber-400",
   },
   rebuild: {
-    label: "Rebuilds / Longshots",
+    label: "Rebuilds",
     short: "Rebuild",
-    desc: "Low playoff odds. Buy-in likely sunk cost.",
+    desc: "Bottom 30% by win-now value. Buy-in likely sunk cost.",
     headerCls: "text-slate-500 dark:text-slate-400",
     bgCls: "bg-muted/30 border-border/40",
     badgeCls: "border-border/50 text-slate-500 dark:text-slate-400",
@@ -464,8 +462,8 @@ export function FinanceTab() {
 
       {/* Focus Zones Summary */}
       {visibleLeagues.length > 1 && (() => {
-        const ORDER: (Tier | "unknown")[] = ["elite", "bubble", "rebuild", "unknown"];
-        const groups: Record<Tier | "unknown", string[]> = { elite: [], bubble: [], rebuild: [], unknown: [] };
+        const ORDER: (Tier | "unknown")[] = ["contender", "bubble", "rebuild", "unknown"];
+        const groups: Record<Tier | "unknown", string[]> = { contender: [], bubble: [], rebuild: [], unknown: [] };
         visibleLeagues.forEach(l => groups[classifyTeam(standings[l.leagueId])].push(l.name));
         const readyCount = visibleLeagues.length - groups.unknown.length;
         if (readyCount === 0) return null;
@@ -478,10 +476,10 @@ export function FinanceTab() {
               <span className="text-[10px] text-muted-foreground">which leagues to prioritize this season</span>
             </div>
             <div className="grid grid-cols-3 gap-2">
-              {(["elite", "bubble", "rebuild"] as Tier[]).map(tier => {
+              {(["contender", "bubble", "rebuild"] as Tier[]).map(tier => {
                 const cfg = TIER_CONFIG[tier];
                 const names = groups[tier];
-                const Icon = tier === "elite" ? Flame : tier === "bubble" ? Target : Wrench;
+                const Icon = tier === "contender" ? Flame : tier === "bubble" ? Target : Wrench;
                 return (
                   <div key={tier} className={`rounded-xl border p-3 space-y-2 ${cfg.bgCls}`}>
                     <div className="flex items-center justify-between">
@@ -514,7 +512,7 @@ export function FinanceTab() {
 
       {/* Per-League Table */}
       {visibleLeagues.length > 0 && (() => {
-        const ORDER: (Tier | "unknown")[] = ["elite", "bubble", "rebuild", "unknown"];
+        const ORDER: (Tier | "unknown")[] = ["contender", "bubble", "rebuild", "unknown"];
         const ignoredLeagues: typeof visibleLeagues = [];
         const activeLeagues = visibleLeagues.filter(l => {
           const f = getFinance(l.leagueId);
