@@ -1448,9 +1448,11 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
             <ManagerAvatar team={teamData} />
             <div className="min-w-0 flex-1">
               <p className={cn("font-bold text-white leading-tight truncate", mobile ? "text-[14px]" : "text-[13px]")}>{teamData.owner}</p>
-              <p className="text-[10px] text-white/35 uppercase tracking-widest font-semibold leading-tight mt-0.5">
-                {isMyRoster ? "Sending" : "Receiving"}
-              </p>
+              {!mobile && (
+                <p className="text-[10px] text-white/35 uppercase tracking-widest font-semibold leading-tight mt-0.5">
+                  {isMyRoster ? "Sending" : "Receiving"}
+                </p>
+              )}
             </div>
           </div>
           {/* Search */}
@@ -1625,10 +1627,26 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-[820px] w-full bg-[#07111f] border border-white/[0.10] p-0 overflow-hidden max-h-[calc(90dvh-72px)] sm:max-h-[90vh] flex flex-col">
+      <DialogContent
+        className="max-w-[820px] w-full bg-[#07111f] border border-white/[0.10] p-0 overflow-hidden max-h-[calc(90dvh-72px)] sm:max-h-[90vh] flex flex-col"
+        style={isMobile ? {
+          position: "fixed",
+          top: "env(safe-area-inset-top, 0px)",
+          left: 0,
+          right: 0,
+          bottom: 0,
+          width: "100vw",
+          maxWidth: "100vw",
+          height: "auto",
+          maxHeight: "none",
+          transform: "none",
+          borderRadius: 0,
+          borderWidth: 0,
+        } : undefined}
+      >
 
         {/* ── Header ── */}
-        <div className="px-4 sm:px-6 pt-4 sm:pt-6 pb-4 flex-shrink-0">
+        <div className="px-4 sm:px-6 pt-4 sm:pt-6 pb-3 sm:pb-4 flex-shrink-0">
           <div className="flex items-center gap-2 mb-1">
             <Send className="w-4 h-4 text-[#d4af37] flex-shrink-0" />
             <DialogTitle className="text-[15px] font-bold text-white leading-none">
@@ -1672,8 +1690,50 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
           </div>
         )}
 
-        {/* ── Review / Edit content (unified scrollable body) ── */}
-        {activeTab !== "messages" && (
+        {/* ── Edit mode on mobile: segmented switch + single side panel (no outer scroll) ── */}
+        {activeTab !== "messages" && editMode && isMobile && (
+          <div className="flex-1 flex flex-col min-h-0 overflow-hidden px-3 pt-3 pb-3">
+            {/* Segmented side switch */}
+            <div className="flex-shrink-0 grid grid-cols-2 gap-1.5 p-1 bg-white/[0.04] border border-white/[0.08] rounded-xl mb-3">
+              {([
+                { id: "sending"   as const, label: "Sending",   count: editState.sending.playerIds.size + editState.sending.picks.size },
+                { id: "receiving" as const, label: "Receiving", count: editState.receiving.playerIds.size + editState.receiving.picks.size },
+              ]).map(({ id, label, count }) => (
+                <button
+                  key={id}
+                  onClick={() => setMobileEditSide(id)}
+                  data-testid={`mobile-side-${id}`}
+                  className={cn(
+                    "relative flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-[13px] font-semibold transition-all",
+                    mobileEditSide === id
+                      ? "bg-[#0b3a7a] text-white shadow-[0_0_0_1px_rgba(59,130,246,0.35)]"
+                      : "bg-transparent text-white/55"
+                  )}
+                >
+                  {label}
+                  <span className={cn(
+                    "inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold tabular-nums",
+                    mobileEditSide === id
+                      ? "bg-white/20 text-white"
+                      : "bg-white/10 text-white/70"
+                  )}>
+                    {count}
+                  </span>
+                </button>
+              ))}
+            </div>
+
+            {/* Active side's panel — only this scrolls */}
+            {mobileEditSide === "sending" ? (
+              <RosterEditPanel teamData={userTeam}         isMyRoster={true}  mobile />
+            ) : (
+              <RosterEditPanel teamData={idea.partnerTeam} isMyRoster={false} mobile />
+            )}
+          </div>
+        )}
+
+        {/* ── Review / Edit content (unified scrollable body — desktop edit + all review) ── */}
+        {activeTab !== "messages" && !(editMode && isMobile) && (
           <div className="flex-1 overflow-y-auto min-h-0">
 
             {/* Trade columns / Edit panel */}
@@ -1928,34 +1988,41 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
           </div>
         )}
 
-        {/* ── Footer ── */}
-        <div className={cn(
-          "flex items-center gap-2 sm:gap-3 px-3 sm:px-6 py-3 sm:py-5 border-t border-white/[0.08] flex-shrink-0 mt-auto flex-wrap",
-          editMode ? "justify-between" : "justify-end"
-        )}>
+        {/* ── Footer (sticky on mobile via flex-col, safe-area aware) ── */}
+        <div
+          className={cn(
+            "flex items-center gap-2 sm:gap-3 px-3 sm:px-6 py-3 sm:py-5 border-t border-white/[0.08] flex-shrink-0 mt-auto flex-wrap bg-[#07111f]",
+            editMode ? "justify-between" : "justify-end"
+          )}
+          style={isMobile ? { paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 12px)" } : undefined}
+        >
           {editMode ? (
             <>
+              {(editBothEmpty || editSendEmpty || editRecvEmpty) && (
+                <span className={cn(
+                  "text-[11px] text-yellow-400/70 px-2 text-center",
+                  isMobile ? "basis-full order-first pb-1" : "flex-1"
+                )}>
+                  {editBothEmpty ? "Add at least one asset to each side." : "One side has no assets. Continue?"}
+                </span>
+              )}
               <Button
                 variant="ghost"
                 data-testid="btn-cancel-edits"
-                className="h-10 px-5 text-[13px] font-semibold text-white/40 hover:text-white/70"
+                className={cn(
+                  "font-semibold text-white/55 hover:text-white/85 border border-white/[0.10] hover:border-white/25 bg-white/[0.03]",
+                  isMobile ? "flex-1 h-11 text-[14px]" : "h-10 px-5 text-[13px]"
+                )}
                 onClick={cancelEdits}
               >
-                Cancel Edits
+                {isMobile ? "Cancel" : "Cancel Edits"}
               </Button>
-              {editBothEmpty && (
-                <span className="text-[11px] text-yellow-400/70 flex-1 text-center px-2">
-                  Add at least one asset to each side.
-                </span>
-              )}
-              {!editBothEmpty && (editSendEmpty || editRecvEmpty) && (
-                <span className="text-[11px] text-yellow-400/70 flex-1 text-center px-2">
-                  One side has no assets. Continue?
-                </span>
-              )}
               <Button
                 data-testid="btn-apply-edits"
-                className="h-10 px-6 text-[13px] font-bold bg-[#0b3a7a] hover:bg-[#0d4499] text-white border border-[#0b3a7a]/80 transition-all disabled:opacity-40"
+                className={cn(
+                  "font-bold bg-[#0b3a7a] hover:bg-[#0d4499] text-white border border-[#0b3a7a]/80 transition-all disabled:opacity-40 shadow-[0_0_18px_rgba(11,58,122,0.35)]",
+                  isMobile ? "flex-[2] h-11 text-[14px]" : "h-10 px-6 text-[13px]"
+                )}
                 onClick={() => handleTabChange("review")}
                 disabled={editBothEmpty}
               >
@@ -1965,7 +2032,10 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
           ) : status === "success" ? (
             <Button
               variant="outline"
-              className="h-10 px-5 text-[13px] font-semibold border-white/20 text-white/70 hover:text-white hover:border-white/40 bg-transparent"
+              className={cn(
+                "font-semibold border-white/20 text-white/70 hover:text-white hover:border-white/40 bg-transparent",
+                isMobile ? "w-full h-11 text-[14px]" : "h-10 px-5 text-[13px]"
+              )}
               onClick={handleClose}
             >
               Close
@@ -1974,14 +2044,20 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
             <>
               <Button
                 variant="ghost"
-                className="h-10 px-5 text-[13px] font-semibold text-white/40 hover:text-white/70"
+                className={cn(
+                  "font-semibold text-white/55 hover:text-white/85 border border-white/[0.10] hover:border-white/25 bg-white/[0.03]",
+                  isMobile ? "flex-1 h-11 text-[14px]" : "h-10 px-5 text-[13px]"
+                )}
                 onClick={handleClose}
                 disabled={status === "sending"}
               >
                 Cancel
               </Button>
               <Button
-                className="h-10 px-6 text-[13px] font-bold bg-emerald-600 hover:bg-emerald-500 text-white gap-2 shadow-[0_0_20px_rgba(16,185,129,0.25)] hover:shadow-[0_0_24px_rgba(16,185,129,0.35)] transition-all"
+                className={cn(
+                  "font-bold bg-emerald-600 hover:bg-emerald-500 text-white gap-2 shadow-[0_0_20px_rgba(16,185,129,0.25)] hover:shadow-[0_0_24px_rgba(16,185,129,0.35)] transition-all",
+                  isMobile ? "flex-[2] h-11 text-[14px]" : "h-10 px-6 text-[13px]"
+                )}
                 onClick={handleConfirm}
                 disabled={status === "sending"}
                 data-testid="btn-confirm-send-trade"
@@ -1989,7 +2065,7 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
                 {status === "sending" ? (
                   <><Loader2 className="w-4 h-4 animate-spin" />Sending…</>
                 ) : (
-                  <><Send className="w-4 h-4" />Confirm Send Trade</>
+                  <><Send className="w-4 h-4" />{isMobile ? "Confirm Trade" : "Confirm Send Trade"}</>
                 )}
               </Button>
             </>

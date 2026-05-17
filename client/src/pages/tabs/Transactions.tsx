@@ -353,6 +353,29 @@ export default function Transactions({ leagueId }: { leagueId: string }) {
                           <span className="text-[11px] font-medium text-foreground truncate">{involved.teamName}</span>
                         </div>
                       )}
+                      {txn.type === "trade" && txn.involvedTeams.length > 0 && (
+                        <div className="flex items-center gap-1.5 min-w-0" data-testid="transaction-trade-teams">
+                          <span className="text-border/60">·</span>
+                          <div className="flex items-center flex-shrink-0">
+                            {txn.involvedTeams.slice(0, 3).map((team, i) => (
+                              <div key={team.rosterId} style={{ marginLeft: i > 0 ? -5 : 0 }} className="ring-[1.5px] ring-background rounded-full">
+                                <TeamAvatar rosterId={team.rosterId} teamName={team.teamName} avatar={team.avatar} size="sm" />
+                              </div>
+                            ))}
+                          </div>
+                          {txn.involvedTeams.length === 2 ? (
+                            <span className="text-[11px] font-medium text-foreground truncate">
+                              {txn.involvedTeams[0].teamName}
+                              <span className="text-muted-foreground mx-1">↔</span>
+                              {txn.involvedTeams[1].teamName}
+                            </span>
+                          ) : (
+                            <span className="text-[11px] font-medium text-foreground shrink-0">
+                              {txn.involvedTeams.length} teams
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </div>
                     <span className="text-[10px] text-muted-foreground whitespace-nowrap shrink-0">{formatDate(txn.timestamp)}</span>
                   </div>
