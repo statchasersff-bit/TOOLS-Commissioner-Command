@@ -1014,12 +1014,14 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
         <SectionHeader
           title="League Power Rankings"
           subtitle="League-wide roster rankings by redraft value, dynasty value, and draft capital."
         />
-        {viewToggle}
+        <div className="flex justify-center sm:justify-end">
+          {viewToggle}
+        </div>
       </div>
 
       {/* ── League format pills ───────────────────────────────────── */}
