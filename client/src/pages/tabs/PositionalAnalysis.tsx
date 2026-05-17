@@ -1017,6 +1017,7 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
     setExpiry("24h");
     setActiveTab("review");
     setHasCustomEdits(false);
+    setMobileEditSide("sending");
     setMySearch("");
     setMyPosFilter("All");
     setPartnerSearch("");
@@ -1399,7 +1400,7 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
 
   const POS_FILTERS = ["All", "QB", "RB", "WR", "TE", "Picks"] as const;
 
-  const RosterEditPanel = ({ teamData, isMyRoster }: { teamData: Team; isMyRoster: boolean }) => {
+  const RosterEditPanel = ({ teamData, isMyRoster, mobile = false }: { teamData: Team; isMyRoster: boolean; mobile?: boolean }) => {
     const search       = isMyRoster ? mySearch       : partnerSearch;
     const posFilter    = isMyRoster ? myPosFilter    : partnerPosFilter;
     const setSearch    = isMyRoster ? setMySearch    : setPartnerSearch;
@@ -1437,13 +1438,16 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
     );
 
     return (
-      <div className="flex flex-col bg-white/[0.025] border border-white/[0.08] rounded-xl overflow-hidden">
+      <div className={cn(
+        "flex flex-col bg-white/[0.025] border border-white/[0.08] rounded-xl overflow-hidden",
+        mobile && "flex-1 min-h-0"
+      )}>
         {/* Panel header */}
-        <div className="px-4 pt-4 pb-3 border-b border-white/[0.06]">
-          <div className="flex items-center gap-2 mb-3">
+        <div className={cn("border-b border-white/[0.06] flex-shrink-0", mobile ? "px-3 pt-3 pb-2.5" : "px-4 pt-4 pb-3")}>
+          <div className={cn("flex items-center gap-2", mobile ? "mb-2.5" : "mb-3")}>
             <ManagerAvatar team={teamData} />
-            <div className="min-w-0">
-              <p className="text-[13px] font-bold text-white leading-tight truncate">{teamData.owner}</p>
+            <div className="min-w-0 flex-1">
+              <p className={cn("font-bold text-white leading-tight truncate", mobile ? "text-[14px]" : "text-[13px]")}>{teamData.owner}</p>
               <p className="text-[10px] text-white/35 uppercase tracking-widest font-semibold leading-tight mt-0.5">
                 {isMyRoster ? "Sending" : "Receiving"}
               </p>
@@ -1451,27 +1455,31 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
           </div>
           {/* Search */}
           <div className="relative mb-2">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/30 pointer-events-none" />
+            <Search className={cn("absolute left-2.5 top-1/2 -translate-y-1/2 text-white/30 pointer-events-none", mobile ? "w-4 h-4" : "w-3.5 h-3.5")} />
             <input
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Search players or picks…"
               data-testid={`search-${isMyRoster ? "my" : "partner"}-roster`}
-              className="w-full bg-white/[0.05] border border-white/[0.08] rounded-lg pl-8 pr-3 py-1.5 text-[12px] text-white/70 placeholder:text-white/25 focus:outline-none focus:border-white/25 transition-colors"
+              className={cn(
+                "w-full bg-white/[0.05] border border-white/[0.08] rounded-lg pl-8 pr-3 text-white/80 placeholder:text-white/25 focus:outline-none focus:border-white/25 transition-colors",
+                mobile ? "py-2 text-[13px]" : "py-1.5 text-[12px]"
+              )}
             />
           </div>
           {/* Pos filters */}
-          <div className="flex gap-1 flex-wrap">
+          <div className={cn("flex flex-wrap", mobile ? "gap-1.5" : "gap-1")}>
             {POS_FILTERS.map(f => (
               <button
                 key={f}
                 onClick={() => setPosFilter(f)}
                 data-testid={`filter-${isMyRoster ? "my" : "partner"}-${f.toLowerCase()}`}
                 className={cn(
-                  "px-2 py-0.5 rounded-full text-[10px] font-semibold border transition-all",
+                  "rounded-full font-semibold border transition-all",
+                  mobile ? "px-2.5 py-1 text-[11px]" : "px-2 py-0.5 text-[10px]",
                   posFilter === f
                     ? "bg-[#0b3a7a]/60 border-blue-500/40 text-blue-300"
-                    : "bg-white/[0.04] border-white/[0.08] text-white/40 hover:text-white/65 hover:border-white/20"
+                    : "bg-white/[0.04] border-white/[0.08] text-white/50 hover:text-white/75 hover:border-white/20"
                 )}
               >
                 {f}
@@ -1481,7 +1489,10 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
         </div>
 
         {/* Scrollable list */}
-        <div className="overflow-y-auto px-3 py-2 space-y-0.5" style={{ maxHeight: 272 }}>
+        <div
+          className={cn("overflow-y-auto px-3 py-2 space-y-0.5", mobile ? "flex-1 min-h-0" : "")}
+          style={mobile ? undefined : { maxHeight: 272 }}
+        >
           {/* Players */}
           {posFilter !== "Picks" && filteredPlayers.map(p => {
             const isSel = selPlayers.has(p.sleeperId!);
@@ -1491,7 +1502,8 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
                 data-testid={`toggle-player-${p.sleeperId}`}
                 onClick={() => togglePlayer(p.sleeperId!)}
                 className={cn(
-                  "w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg border transition-all text-left",
+                  "w-full flex items-center gap-2.5 rounded-lg border transition-all text-left",
+                  mobile ? "px-2.5 py-2.5" : "px-2.5 py-2",
                   isSel
                     ? "bg-emerald-500/10 border-emerald-500/30"
                     : "bg-transparent border-transparent hover:bg-white/[0.04] hover:border-white/[0.08]"
@@ -1499,18 +1511,27 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
               >
                 <PlayerAvatar id={p.sleeperId!} name={p.name} pos={p.pos} team={p.team} size="sm" compact />
                 <div className="flex-1 min-w-0">
-                  <p className="text-[12px] font-semibold text-white leading-tight truncate">{p.name}</p>
+                  <p className={cn(
+                    "font-semibold text-white leading-tight",
+                    mobile ? "text-[13px] break-words" : "text-[12px] truncate"
+                  )}>{p.name}</p>
                   <div className="flex items-center gap-1.5 mt-0.5">
-                    <span className={cn("text-[10px] font-bold", posTextColor(p.pos))}>{p.pos}</span>
-                    {p.team && p.team !== "FA" && <span className="text-[10px] text-white/35">{p.team}</span>}
-                    {p.age > 0 && <span className="text-[10px] text-white/25">Age {p.age}</span>}
+                    <span className={cn(mobile ? "text-[11px]" : "text-[10px]", "font-bold", posTextColor(p.pos))}>{p.pos}</span>
+                    {p.team && p.team !== "FA" && <span className={cn(mobile ? "text-[11px]" : "text-[10px]", "text-white/40")}>{p.team}</span>}
+                    {p.age > 0 && <span className={cn(mobile ? "text-[11px]" : "text-[10px]", "text-white/30")}>Age {p.age}</span>}
                   </div>
                 </div>
-                {isSel ? (
-                  <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/15 border border-emerald-500/25 rounded-full px-2 py-0.5 flex-shrink-0 whitespace-nowrap">Included</span>
-                ) : (
-                  <span className="text-[10px] text-white/20 tabular-nums flex-shrink-0">{Math.round(p.value).toLocaleString()}</span>
-                )}
+                <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                  <span className={cn(mobile ? "text-[11px]" : "text-[10px]", "text-white/45 tabular-nums font-semibold")}>{Math.round(p.value).toLocaleString()}</span>
+                  {isSel && (
+                    <span className={cn(
+                      "font-bold text-emerald-400 bg-emerald-500/15 border border-emerald-500/25 rounded-full whitespace-nowrap",
+                      mobile ? "text-[10px] px-2 py-0.5" : "text-[9px] px-1.5 py-px"
+                    )}>
+                      Included
+                    </span>
+                  )}
+                </div>
               </button>
             );
           })}
@@ -1525,7 +1546,7 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
               {posFilter === "All" && (
                 <p className="text-[9px] text-white/25 uppercase tracking-widest font-semibold px-2 pt-2 pb-1.5">Draft Picks</p>
               )}
-              <div className="flex flex-wrap gap-1.5 px-1 pb-1">
+              <div className={cn(mobile ? "flex flex-col gap-1.5 px-0.5 pb-1" : "flex flex-wrap gap-1.5 px-1 pb-1")}>
                 {filteredPicks.map((p, i) => {
                   const key   = pickKey(p);
                   const isSel = selPicks.has(key);
@@ -1536,21 +1557,41 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
                       data-testid={`toggle-pick-${key}`}
                       onClick={() => togglePick(key)}
                       className={cn(
-                        "flex flex-col items-start px-2.5 py-1.5 rounded-lg border transition-all text-left",
+                        "rounded-lg border transition-all text-left",
+                        mobile
+                          ? "flex items-center justify-between gap-2 px-3 py-2.5 w-full"
+                          : "flex flex-col items-start px-2.5 py-1.5",
                         isSel
                           ? "bg-emerald-500/10 border-emerald-500/30"
                           : "bg-white/[0.04] border-white/[0.08] hover:border-white/20 hover:bg-white/[0.06]"
                       )}
                     >
-                      <span className={cn("text-[11px] font-bold leading-tight", isSel ? "text-emerald-300" : "text-white/80")}>
-                        {p.year} Rd {p.round}
-                      </span>
-                      {orig && (
-                        <span className={cn("text-[9px] leading-tight mt-0.5", isSel ? "text-emerald-400/60" : "text-white/30")}>
-                          via {orig.owner}
+                      <div className={cn("flex min-w-0", mobile ? "flex-col" : "flex-col items-start")}>
+                        <span className={cn(
+                          "font-bold leading-tight",
+                          mobile ? "text-[13px]" : "text-[11px]",
+                          isSel ? "text-emerald-300" : "text-white/85"
+                        )}>
+                          {p.year} Rd {p.round}
+                        </span>
+                        {orig && (
+                          <span className={cn(
+                            "leading-tight mt-0.5",
+                            mobile ? "text-[11px]" : "text-[9px]",
+                            isSel ? "text-emerald-400/70" : "text-white/35"
+                          )}>
+                            via {orig.owner}
+                          </span>
+                        )}
+                      </div>
+                      {isSel && (
+                        <span className={cn(
+                          "font-bold text-emerald-400 bg-emerald-500/15 border border-emerald-500/25 rounded-full whitespace-nowrap flex-shrink-0",
+                          mobile ? "text-[10px] px-2 py-0.5" : "text-[9px] mt-0.5"
+                        )}>
+                          Included
                         </span>
                       )}
-                      {isSel && <span className="text-[9px] text-emerald-400 font-bold mt-0.5">Included</span>}
                     </button>
                   );
                 })}
