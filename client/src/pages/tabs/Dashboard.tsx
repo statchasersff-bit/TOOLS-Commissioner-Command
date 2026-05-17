@@ -1265,7 +1265,7 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
               const isUser = team.id === userTeam.id;
               const barWidthPct = (total / chartMax) * 100;
               return (
-                <div key={team.id} className="flex items-center gap-1 sm:gap-3" data-testid={`chart-row-${team.id}`}>
+                <div key={team.id} className="flex items-center gap-3" data-testid={`chart-row-${team.id}`}>
                   {/* Rank + Team label */}
                   <div className="flex items-center gap-2 w-36 sm:w-44 flex-shrink-0">
                     <span className="text-[10px] font-bold text-muted-foreground w-5 text-right">#{idx + 1}</span>

@@ -1633,6 +1633,7 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
   const [faabOpen, setFaabOpen] = useState(false);
   const [faabASends, setFaabASends] = useState("");
   const [faabBSends, setFaabBSends] = useState("");
+  const [showFullImpact, setShowFullImpact] = useState(false);
   const [proposing, setProposing] = useState(false);
   const [proposedTrade, setProposedTrade] = useState<ProposeTradeResult | null>(null);
   const [proposeError, setProposeError] = useState<string | null>(null);
