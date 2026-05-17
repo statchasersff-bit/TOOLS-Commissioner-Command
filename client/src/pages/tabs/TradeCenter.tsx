@@ -1197,7 +1197,12 @@ export function TradeBlockScanner({ league }: { league: League }) {
   const [sleeperJwt, setSleeperJwt] = useState<string | null>(() => getSleeperToken() ?? localStorage.getItem(SLEEPER_JWT_KEY));
   useEffect(() => {
     const refresh = () => setSleeperJwt(getSleeperToken() ?? localStorage.getItem(SLEEPER_JWT_KEY));
-    const onStorage = (e: StorageEvent) => { if (e.key === SLEEPER_JWT_KEY || e.key === "statchasers_sleeper_auth") refresh(); };
+    const onStorage = (e: StorageEvent) => {
+      // Match the legacy global key AND any of the scoped per-DC-user keys
+      // (statchasers_sleeper_auth:<dcUserId>) so cross-tab session changes
+      // still trigger a refresh.
+      if (e.key === SLEEPER_JWT_KEY || (e.key && e.key.startsWith("statchasers_sleeper_auth"))) refresh();
+    };
     window.addEventListener("storage", onStorage);
     window.addEventListener("sleeper-jwt-changed", refresh);
     window.addEventListener("sleeper-session-changed", refresh);
@@ -1481,7 +1486,12 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
   };
   useEffect(() => {
     const refresh = () => setSleeperJwt(getSleeperToken() ?? localStorage.getItem(SLEEPER_JWT_KEY));
-    const onStorage = (e: StorageEvent) => { if (e.key === SLEEPER_JWT_KEY || e.key === "statchasers_sleeper_auth") refresh(); };
+    const onStorage = (e: StorageEvent) => {
+      // Match the legacy global key AND any of the scoped per-DC-user keys
+      // (statchasers_sleeper_auth:<dcUserId>) so cross-tab session changes
+      // still trigger a refresh.
+      if (e.key === SLEEPER_JWT_KEY || (e.key && e.key.startsWith("statchasers_sleeper_auth"))) refresh();
+    };
     const onJwtChanged = () => refresh();
     window.addEventListener("storage", onStorage);
     window.addEventListener("sleeper-jwt-changed", onJwtChanged);

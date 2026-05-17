@@ -3,7 +3,11 @@ import type { SleeperUser, SleeperLeagueSummary } from "../types";
 import { fetchSleeperUser, fetchSleeperLeagues } from "@/lib/sleeperApi";
 import { useAuth } from "@/contexts/AuthContext";
 
-const STORAGE_KEY = "sc-sleeper-connection";
+// IMPORTANT: there is intentionally no localStorage key for the Sleeper
+// connection. The connection is derived from useAuth().sleeperInfo, which is
+// itself driven by the server-canonical /api/sc-auth/me response. Auto-loading
+// a username from localStorage caused a critical account-isolation bug where
+// DC user B inherited DC user A's Sleeper @username.
 
 interface SleeperState {
   isConnected: boolean;
@@ -22,7 +26,6 @@ interface SleeperState {
 const SleeperContext = createContext<SleeperState | null>(null);
 
 export function SleeperProvider({ children }: { children: React.ReactNode }) {
-  useEffect(() => { console.log("[app] SleeperProvider mounted"); }, []);
   const { sleeperInfo } = useAuth();
   const [user, setUser] = useState<SleeperUser | null>(null);
   const [leagues, setLeagues] = useState<SleeperLeagueSummary[]>([]);
@@ -30,8 +33,9 @@ export function SleeperProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
-  // Track the username we last auto-connected so we don't loop on every render.
-  const lastAutoConnectedUsernameRef = useRef<string | null>(null);
+  // Track which username we've already auto-loaded leagues for, scoped to the
+  // current sleeperInfo identity. Reset whenever the linked Sleeper changes.
+  const lastAutoLoadedUsernameRef = useRef<string | null>(null);
 
   const isConnected = user !== null;
 
@@ -51,8 +55,6 @@ export function SleeperProvider({ children }: { children: React.ReactNode }) {
       const leaguesData = await fetchSleeperLeagues(userData.userId, "2026");
       setLeagues(leaguesData);
       setLastSyncTime(new Date().toISOString());
-
-      localStorage.setItem(STORAGE_KEY, username);
     } catch (err: any) {
       setError(err.message || "Connection failed");
       // When auth-derived, keep the stub user so the UI stays in "connected" state
@@ -60,7 +62,6 @@ export function SleeperProvider({ children }: { children: React.ReactNode }) {
       if (!opts.preserveStubOnError) {
         setUser(null);
         setLeagues([]);
-        localStorage.removeItem(STORAGE_KEY);
       }
     } finally {
       setIsLoading(false);
@@ -77,7 +78,7 @@ export function SleeperProvider({ children }: { children: React.ReactNode }) {
     setActiveLeagueId(null);
     setError(null);
     setLastSyncTime(null);
-    localStorage.removeItem(STORAGE_KEY);
+    lastAutoLoadedUsernameRef.current = null;
   }, []);
 
   const setActiveLeague = useCallback((leagueId: string) => {
@@ -89,12 +90,33 @@ export function SleeperProvider({ children }: { children: React.ReactNode }) {
     await fetchUserAndLeagues(user.username);
   }, [user, fetchUserAndLeagues]);
 
+  // ── Connection source of truth: useAuth().sleeperInfo ─────────────────────
+  // When the DC user is unauthenticated or has not linked a Sleeper account,
+  // this resets to disconnected. When the linked Sleeper changes (e.g. the
+  // user signed out of DC and a different DC user signed in), this re-syncs
+  // to the new account. No localStorage lookup of a Sleeper username — that
+  // path leaked across DC accounts and is intentionally gone.
   useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) {
-      fetchUserAndLeagues(stored);
+    const linkedUsername = sleeperInfo?.username ?? null;
+    if (!linkedUsername) {
+      setUser(null);
+      setLeagues([]);
+      setActiveLeagueId(null);
+      setError(null);
+      setLastSyncTime(null);
+      lastAutoLoadedUsernameRef.current = null;
+      return;
     }
-  }, [fetchUserAndLeagues]);
+    if (lastAutoLoadedUsernameRef.current === linkedUsername) return;
+    lastAutoLoadedUsernameRef.current = linkedUsername;
+    // eslint-disable-next-line no-console
+    console.info(
+      "[sleeper] loading leagues for linked Sleeper user:",
+      linkedUsername,
+      "(sleeper_user_id:", sleeperInfo?.userId ?? "(none)", "source: auth-context)"
+    );
+    fetchUserAndLeagues(linkedUsername);
+  }, [sleeperInfo?.username, sleeperInfo?.userId, fetchUserAndLeagues]);
 
   return (
     <SleeperContext.Provider

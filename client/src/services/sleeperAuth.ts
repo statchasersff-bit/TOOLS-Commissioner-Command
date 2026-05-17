@@ -8,7 +8,82 @@
 
 import { SLEEPER_GQL_URL } from "@/config/sleeperAuthEndpoints";
 
-const STORAGE_KEY = "statchasers_sleeper_auth";
+// ─── Storage keys ─────────────────────────────────────────────────────────────
+//
+// Sleeper sessions MUST be scoped to the currently authenticated Dynasty
+// Command user. Storing under a global key leaks sessions across DC accounts
+// when the same browser is reused (severe account-isolation bug).
+//
+//   New keys: statchasers_sleeper_auth:<dcUserId>
+//   Legacy:   statchasers_sleeper_auth (global) — purged on logout, never written
+//
+// activeDcUserId is set by AuthContext as soon as the DC session resolves.
+// While it is null, every getter returns null and every setter refuses to
+// persist. This makes it impossible to read or write a Sleeper session in a
+// context where the DC user is unknown.
+
+const SCOPED_KEY_PREFIX = "statchasers_sleeper_auth:";
+const LEGACY_GLOBAL_KEY = "statchasers_sleeper_auth";
+/** Legacy username cache from SleeperContext — purged on logout. */
+const LEGACY_SC_USERNAME_KEY = "sc-sleeper-connection";
+/** Legacy paste-JWT cache used by LiveDraft/TradeCenter/etc. */
+const LEGACY_DRAFT_JWT_KEY = "dc-sleeper-draft-jwt";
+/** Per-Sleeper-user finance token cache prefix from FinanceTab. */
+const FINANCE_TOKEN_PREFIX = "dc-finance-token-";
+
+let activeDcUserId: string | null = null;
+
+function scopedKey(dcUserId: string): string {
+  return `${SCOPED_KEY_PREFIX}${dcUserId}`;
+}
+
+/**
+ * Bind the Sleeper auth store to a Dynasty Command user. Pass the DC user's
+ * id as soon as the DC session is known; pass null after logout. While
+ * null, reads return null and writes are refused — so no Sleeper session
+ * can be loaded or persisted in a context where the DC user is unknown.
+ *
+ * Dispatches a window event so listening components can resync.
+ */
+export function setActiveDcUser(dcUserId: string | null): void {
+  if (activeDcUserId === dcUserId) return;
+  activeDcUserId = dcUserId;
+  try {
+    window.dispatchEvent(new CustomEvent("sleeper-session-changed"));
+  } catch { /* SSR / no window */ }
+}
+
+export function getActiveDcUserId(): string | null {
+  return activeDcUserId;
+}
+
+/**
+ * Purge every Sleeper-related localStorage entry across all DC users.
+ * Call on full DC logout so a future sign-in cannot inherit prior state.
+ */
+export function purgeAllSleeperLocalState(): void {
+  const toDelete: string[] = [];
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (!k) continue;
+      if (
+        k === LEGACY_GLOBAL_KEY ||
+        k === LEGACY_SC_USERNAME_KEY ||
+        k === LEGACY_DRAFT_JWT_KEY ||
+        k.startsWith(SCOPED_KEY_PREFIX) ||
+        k.startsWith(FINANCE_TOKEN_PREFIX)
+      ) {
+        toDelete.push(k);
+      }
+    }
+    for (const k of toDelete) localStorage.removeItem(k);
+  } catch { /* ignore quota / privacy mode */ }
+  activeDcUserId = null;
+  try {
+    window.dispatchEvent(new CustomEvent("sleeper-session-changed"));
+  } catch { /* SSR / no window */ }
+}
 
 // ─── Session shape ────────────────────────────────────────────────────────────
 // Matches the JWT payload fields exactly. Do NOT add server-derived fields here.
@@ -71,11 +146,17 @@ export function isSessionExpired(session: SleeperSession): boolean {
   return Date.now() >= session.exp * 1000;
 }
 
-// ─── Storage ─────────────────────────────────────────────────────────────────
+// ─── Storage (DC-user-scoped) ────────────────────────────────────────────────
 
+/**
+ * Returns the Sleeper session for the currently-bound DC user, or null if no
+ * DC user is bound (e.g. before AuthContext has resolved). Never returns
+ * another DC user's session even if leftover data exists in localStorage.
+ */
 export function getSleeperSession(): SleeperSession | null {
+  if (!activeDcUserId) return null;
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(scopedKey(activeDcUserId));
     if (!raw) return null;
     return JSON.parse(raw) as SleeperSession;
   } catch {
@@ -88,16 +169,31 @@ export function getSleeperSession(): SleeperSession | null {
  * Never log the return value.
  */
 export function getSleeperToken(): string | null {
-  const session = getSleeperSession();
-  return session?.token ?? null;
+  return getSleeperSession()?.token ?? null;
 }
 
 export function saveSleeperSession(session: SleeperSession): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
+  if (!activeDcUserId) {
+    if (import.meta.env.DEV) {
+      // eslint-disable-next-line no-console
+      console.error(
+        "[sleeper-auth] saveSleeperSession called without an active DC user; refusing to persist."
+      );
+    }
+    return;
+  }
+  try {
+    localStorage.setItem(scopedKey(activeDcUserId), JSON.stringify(session));
+    window.dispatchEvent(new CustomEvent("sleeper-session-changed"));
+  } catch { /* ignore */ }
 }
 
 export function clearSleeperSession(): void {
-  localStorage.removeItem(STORAGE_KEY);
+  if (!activeDcUserId) return;
+  try {
+    localStorage.removeItem(scopedKey(activeDcUserId));
+    window.dispatchEvent(new CustomEvent("sleeper-session-changed"));
+  } catch { /* ignore */ }
 }
 
 // ─── GraphQL transport (api.sleeper.app — auth operations only) ───────────────

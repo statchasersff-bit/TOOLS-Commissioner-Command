@@ -1,5 +1,12 @@
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from "react";
-import { saveSleeperSession, clearSleeperSession, type SleeperSession } from "@/services/sleeperAuth";
+import {
+  saveSleeperSession,
+  clearSleeperSession,
+  getSleeperSession,
+  setActiveDcUser,
+  purgeAllSleeperLocalState,
+  type SleeperSession,
+} from "@/services/sleeperAuth";
 import { API_BASE } from "@/lib/apiBase";
 
 const SC_TOKEN_KEY = "sc_auth_token";
@@ -60,27 +67,54 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setStatus("loading");
       const storedToken = getStoredToken();
       const headers = { "Content-Type": "application/json", ...authHeaders() };
-      console.log("[sc-auth] checkSession — token in localStorage:", !!storedToken, "Authorization header set:", !!headers.Authorization);
+      // Unauthenticated path: clear ALL Sleeper state so a future sign-in
+      // can't inherit anything from this browser session.
+      const failClosed = (reason: string) => {
+        // eslint-disable-next-line no-console
+        console.warn(`[sc-auth] checkSession failed: ${reason} — purging all Sleeper local state`);
+        clearToken();
+        purgeAllSleeperLocalState();
+        setUser(null);
+        setSleeperInfo(null);
+        setStatus("unauthenticated");
+      };
+
       const res = await fetch(`${API_BASE}/api/sc-auth/me`, {
         credentials: "include",
         headers,
       });
-      console.log("[sc-auth] /me response status:", res.status);
-      if (res.status === 401) {
-        clearToken();
-        setUser(null);
-        setSleeperInfo(null);
-        setStatus("unauthenticated");
-        return;
-      }
+      if (res.status === 401) return failClosed("401 from /me");
+
       const data = await res.json();
-      if (!data.user) {
-        clearToken();
-        setUser(null);
-        setSleeperInfo(null);
-        setStatus("unauthenticated");
-        return;
+      if (!data.user) return failClosed("/me returned no user");
+
+      // ── Bind the Sleeper auth store to this DC user BEFORE any read/write.
+      // While bound, getSleeperSession() only ever returns this user's session.
+      setActiveDcUser(data.user.id);
+
+      // Account-isolation gate: if a leftover scoped session exists from a
+      // prior browser state and its sleeper user_id doesn't match what the
+      // server reports for this DC user, drop it and force re-derivation
+      // from the server-canonical token.
+      const localSession = getSleeperSession();
+      const serverSleeperUserId: string | null = data.sleeper?.userId ?? null;
+      if (
+        localSession &&
+        serverSleeperUserId &&
+        localSession.user_id &&
+        localSession.user_id !== serverSleeperUserId
+      ) {
+        // eslint-disable-next-line no-console
+        console.warn(
+          "[sc-auth] sleeper user mismatch for DC user",
+          data.user.id,
+          "— local:", localSession.user_id,
+          "server:", serverSleeperUserId,
+          "— clearing local session"
+        );
+        clearSleeperSession();
       }
+
       setUser(data.user);
       if (data.sleeper?.token) {
         const session: SleeperSession = {
@@ -93,14 +127,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         };
         saveSleeperSession(session);
         setSleeperInfo(data.sleeper);
-        console.log("[auth] status -> ready");
+        // eslint-disable-next-line no-console
+        console.info(
+          "[auth] ready — DC user:", data.user.id,
+          "Sleeper user:", session.user_id || "(none)",
+          "linked Sleeper:", data.sleeper.username || "(none)",
+          "source: server"
+        );
         setStatus("ready");
       } else {
+        // No linked Sleeper for this DC user — make sure no stale scoped
+        // session lingers for them either.
+        clearSleeperSession();
         setSleeperInfo(null);
-        console.log("[auth] status -> needs-sleeper");
+        // eslint-disable-next-line no-console
+        console.info(
+          "[auth] needs-sleeper — DC user:", data.user.id,
+          "Sleeper user: (none) linked Sleeper: (none) source: server"
+        );
         setStatus("needs-sleeper");
       }
-    } catch {
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn("[sc-auth] checkSession threw — purging all Sleeper local state", err);
+      clearToken();
+      purgeAllSleeperLocalState();
       setUser(null);
       setSleeperInfo(null);
       setStatus("unauthenticated");
@@ -125,7 +176,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
     } catch { /* ignore */ }
     clearToken();
-    clearSleeperSession();
+    // Wipe every Sleeper-related localStorage entry (scoped sessions for any
+    // DC user, legacy global keys, draft-JWT cache, finance-token cache) so a
+    // future sign-in on this browser cannot inherit prior Sleeper state.
+    purgeAllSleeperLocalState();
+    // eslint-disable-next-line no-console
+    console.info("[auth] logout — DC session cleared, all Sleeper local state purged");
     setUser(null);
     setSleeperInfo(null);
     setStatus("unauthenticated");
@@ -147,10 +203,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       credentials: "include",
       headers: authHeaders(),
     });
-    clearSleeperSession();
+    // Purge ALL Sleeper local state, not just the scoped session, so legacy
+    // global keys (sc-sleeper-connection, dc-sleeper-draft-jwt, finance
+    // token cache) don't survive a Sleeper disconnect.
+    purgeAllSleeperLocalState();
+    // Re-bind the active DC user since the purge nulls it.
+    if (user?.id) setActiveDcUser(user.id);
     setSleeperInfo(null);
     setStatus("needs-sleeper");
-  }, []);
+  }, [user?.id]);
 
   return (
     <AuthContext.Provider value={{ status, user, sleeperInfo, checkSession, logout, onLoginSuccess, onSleeperConnected, onSleeperDisconnected }}>

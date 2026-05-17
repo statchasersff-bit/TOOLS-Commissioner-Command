@@ -7,7 +7,9 @@
  *
  * The request body always includes { operationName, query, variables }.
  *
- * JWT is read from localStorage["statchasers_sleeper_auth"].token.
+ * JWT is read via getSleeperToken() from services/sleeperAuth.ts, which
+ * scopes storage per Dynasty Command user — see that module for the
+ * account-isolation contract.
  * JWT is NEVER logged, exposed in UI, or sent to our backend.
  */
 
