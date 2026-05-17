@@ -83,6 +83,9 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
   const [logoMenuOpen, setLogoMenuOpen] = useState(false);
   const logoMenuRef = useRef<HTMLDivElement>(null);
   const [forceOpenShare, setForceOpenShare] = useState(false);
+  const [hasSeenAbout, setHasSeenAbout] = useState(() => {
+    try { return localStorage.getItem("sc-seen-about") === "1"; } catch { return false; }
+  });
 
   const { isRecalculating, isLoading, getPlayerValue, getPickValue, calculateAllTeamMetrics, optimizeLineup } = useValueModel();
   const sleeper = useSleeper();
@@ -103,6 +106,13 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
     sleeper.leagues.find((l) => l.leagueId === selectedLeagueId) ?? null,
   [sleeper.leagues, selectedLeagueId]);
   const isSelectedBestBall = selectedLeagueSummary?.isBestBall ?? false;
+
+  useEffect(() => {
+    if (activeMainTab === "about" && !hasSeenAbout) {
+      setHasSeenAbout(true);
+      try { localStorage.setItem("sc-seen-about", "1"); } catch { /* ignore */ }
+    }
+  }, [activeMainTab, hasSeenAbout]);
 
   useEffect(() => {
     if (!selectedLeagueId || !sleeper.isConnected || !sleeper.user) return;
@@ -394,9 +404,15 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
               <button
                 onClick={() => setLogoMenuOpen(v => !v)}
                 data-testid="button-logo-menu"
-                className="flex items-center gap-2.5 rounded-xl transition-all duration-200 group"
+                className="relative flex items-center gap-2.5 rounded-xl transition-all duration-200 group"
                 style={{ padding: "4px 8px 4px 4px", background: logoMenuOpen ? "rgba(212,175,55,0.07)" : "transparent", border: logoMenuOpen ? "1px solid rgba(212,175,55,0.20)" : "1px solid transparent" }}
               >
+                {!hasSeenAbout && (
+                  <span className="absolute -top-0.5 -right-0.5 flex h-2.5 w-2.5 pointer-events-none">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-70" />
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500" />
+                  </span>
+                )}
                 <div className="w-8 h-8 md:w-9 md:h-9 rounded-lg flex items-center justify-center flex-shrink-0">
                   <img src={logoDark} alt="StatChasers" className="w-8 h-8 md:w-9 md:h-9 hidden dark:block" />
                   <img src={logoLight} alt="StatChasers" className="w-8 h-8 md:w-9 md:h-9 block dark:hidden" />
@@ -435,6 +451,12 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
                     >
                       <HelpCircle style={{ width: 14, height: 14, flexShrink: 0, color: "rgba(212,175,55,0.65)" }} />
                       <span style={{ fontSize: 13, fontWeight: 500, color: "rgba(203,213,225,0.55)" }}>About</span>
+                      {!hasSeenAbout && (
+                        <span className="ml-auto flex h-2 w-2 flex-shrink-0">
+                          <span className="animate-ping absolute inline-flex h-2 w-2 rounded-full bg-red-500 opacity-70" />
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500" />
+                        </span>
+                      )}
                     </button>
                     <button
                       onClick={() => { setLogoMenuOpen(false); handleMainTabChange("feedback"); }}

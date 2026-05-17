@@ -749,6 +749,7 @@ export function buildTradeAttachment(
 import {
   validateTradeAttachmentPayload,
   assertValidTradeAttachmentPayload,
+  type TradeCardValidationIssue,
 } from "./tradeAttachmentSchema";
 
 export {
@@ -774,6 +775,18 @@ export interface SendTradeMessageResult {
   text_map?: string;
   user_reactions?: string;
   client_id?: string;
+  /**
+   * True when the trade_dm attachment was actually included in the send.
+   * False when the message was downgraded to plain text — either because
+   * `attachTradeCard` was false, or because the safe-mode fallback engaged
+   * after the payload failed schema validation.
+   */
+  attachment_sent?: boolean;
+  /**
+   * Reason the safe-mode fallback engaged (validation issues joined by `; `).
+   * Only set when `attachment_sent === false` AND `attachTradeCard` was true.
+   */
+  attachment_skipped_reason?: string;
 }
 
 /**
@@ -782,9 +795,13 @@ export interface SendTradeMessageResult {
  * Generates a fresh client_id via crypto.randomUUID() on every call to
  * prevent duplicate messages on retry.
  *
- * When attachTradeCard=true the trade metadata is sent as attachment_data so
- * Sleeper can render an inline trade card inside the DM thread.
- * When false, a plain text message is sent with empty attachment arrays.
+ * Safe-mode contract (PERMANENT, do not remove):
+ *   When attachTradeCard=true, the payload is validated against the native
+ *   Sleeper trade_dm schema before send. If validation fails for ANY reason
+ *   (schema mismatch, thrown error inside the validator, anything), the
+ *   message is automatically downgraded to a plain-text DM via sendPlainDm
+ *   and the result carries `attachment_sent: false`. The malformed payload
+ *   is NEVER transmitted. Fail safe, not fail open.
  *
  * NEVER log the JWT or the raw message text.
  */
@@ -796,27 +813,59 @@ export async function sendTradeMessage(
     transactionsByRoster, usersInLeagueMap, attachTradeCard,
   } = params;
 
-  // Hard gate: never let a malformed trade card reach Sleeper. The desktop
-  // renderer crashes on missing arrays / null user, which then breaks the DM
-  // thread for the recipient. Validate before issuing the mutation.
-  if (attachTradeCard) {
-    assertValidTradeAttachmentPayload({ status, transactionsByRoster, usersInLeagueMap });
+  // ── Safe-mode gate ─────────────────────────────────────────────────────────
+  // Validate (non-throwing) before considering the attachment send. If
+  // validation fails or throws, downgrade to plain-text via sendPlainDm so
+  // a malformed trade_dm can never reach Sleeper's desktop renderer.
+  let attach = attachTradeCard;
+  let skippedReason: string | undefined;
+  if (attach) {
+    let issues: TradeCardValidationIssue[] = [];
+    try {
+      const result = validateTradeAttachmentPayload({
+        status, transactionsByRoster, usersInLeagueMap,
+      });
+      if (!result.ok) issues = result.issues;
+    } catch (err) {
+      issues = [{
+        path: "(validator)",
+        message: err instanceof Error ? err.message : String(err),
+      }];
+    }
+    if (issues.length > 0) {
+      attach = false;
+      skippedReason = issues.map(i => `${i.path} ${i.message}`).join("; ");
+      if (import.meta.env.DEV) {
+        // eslint-disable-next-line no-console
+        console.error(
+          "[trade-attachment] safe-mode fallback engaged — sending plain text only",
+          issues
+        );
+      } else {
+        // eslint-disable-next-line no-console
+        console.warn("[trade-attachment] safe-mode fallback engaged — sending plain text only");
+      }
+    }
   }
 
-  const clientId = crypto.randomUUID();
+  if (!attach) {
+    const plain = await sendPlainDm(dmId, text);
+    return {
+      message_id: plain.message_id,
+      text: plain.text,
+      parent_id: plain.parent_id,
+      parent_type: plain.parent_type,
+      created: plain.created,
+      client_id: plain.client_id,
+      attachment_sent: false,
+      ...(skippedReason ? { attachment_skipped_reason: skippedReason } : {}),
+    };
+  }
 
-  const kData = attachTradeCard
-    ? ["status", "transactions_by_roster", "transaction_id", "league_id", "users_in_league_map"]
-    : [];
-  const vData = attachTradeCard
-    ? [
-        status,
-        JSON.stringify(transactionsByRoster),
-        transactionId,
-        leagueId,
-        JSON.stringify(usersInLeagueMap),
-      ]
-    : [];
+  // Reaching here means safe-mode passed and we're sending the full trade_dm
+  // attachment. The k/v_attachment_data order is fixed to match the native
+  // Sleeper payload exactly.
+  const clientId = crypto.randomUUID();
 
   const data = await sleeperGraphQLRequest<{
     create_message: SendTradeMessageResult;
@@ -856,11 +905,17 @@ export async function sendTradeMessage(
     `,
     variables: {
       text,
-      k_attachment_data: kData,
-      v_attachment_data: vData,
+      k_attachment_data: ["status", "transactions_by_roster", "transaction_id", "league_id", "users_in_league_map"],
+      v_attachment_data: [
+        status,
+        JSON.stringify(transactionsByRoster),
+        transactionId,
+        leagueId,
+        JSON.stringify(usersInLeagueMap),
+      ],
     },
   });
-  return data.create_message;
+  return { ...data.create_message, attachment_sent: true };
 }
 
 // ─── sendPlainDm — plain-text only, no attachment ─────────────────────────────
