@@ -30,3 +30,9 @@ id = "KJqu1P4-2pJdPwNiiBv45"
 uri = "file://dynasty-command-frontend.zip"
 type = "unspecified"
 title = "Dynasty Command — Popup centering fix"
+
+[[outputs]]
+id = "3hP7KkiAfrEjUWfaCe9lX"
+uri = "file://dynasty-command-deploy.zip"
+type = "unspecified"
+title = "dynasty-command-deploy.zip — upload to Bluehost"
