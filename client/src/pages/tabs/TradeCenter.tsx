@@ -15,7 +15,7 @@ import { getStaticPickValue } from "@/data/pickValues";
 import { API_BASE } from "@/lib/apiBase";
 import { fetchRosterDraftPicks, fetchLeaguePlayerSettings } from "@/lib/sleeperApi";
 import { getSleeperToken, getSleeperSession } from "@/services/sleeperAuth";
-import { proposeTrade as proposeTradeAuthed, rejectTrade, getDmByMembersFull, sendTradeMessage, type ProposeTradeResult } from "@/services/sleeperAuthedApi";
+import { proposeTrade as proposeTradeAuthed, rejectTrade, getDmByMembersFull, sendTradeMessage, buildTradeAttachment, makeTradeAttachmentUser, type ProposeTradeResult } from "@/services/sleeperAuthedApi";
 import type { League, Team, Tier, Player, Pick, TradeRecord, TradeSide, CrawlStatus } from "@/types";
 import { cn } from "@/lib/utils";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
@@ -1735,39 +1735,110 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
       const session = getSleeperSession();
       const myUserId = session?.user_id ?? "";
       const myName = session?.display_name || userTeam.owner;
+      const myRosterId = parseInt(userTeam.id.replace("roster_", ""), 10);
+      const partnerName = sideBTeam?.owner || sideBTeam?.name || "Partner";
+      const partnerRosterId = sideBTeam ? parseInt(sideBTeam.id.replace("roster_", ""), 10) : NaN;
 
-      // Build transactionsByRoster as flat pid→rosterId maps — the format
-      // Sleeper's mobile app requires to render the trade card correctly.
-      const txByRoster: Record<string, { adds: Record<string, number>; drops: Record<string, number> }> = {};
+      // Bucket adds/drops by roster as arrays of player objects so Sleeper's
+      // desktop renderer can call .map() on them. player_map may not include
+      // every player; fall back to a minimal { player_id } object so the entry
+      // is still iterable.
+      const playerMap = (trade.player_map as Record<string, unknown> | null) ?? {};
+      const rosterAdds: Record<string, unknown[]> = {};
+      const rosterDrops: Record<string, unknown[]> = {};
       for (const [pid, rid] of Object.entries(trade.adds ?? {})) {
         const r = String(rid);
-        if (!txByRoster[r]) txByRoster[r] = { adds: {}, drops: {} };
-        txByRoster[r].adds[pid] = rid as number;
+        if (!rosterAdds[r]) rosterAdds[r] = [];
+        rosterAdds[r].push(playerMap[pid] ?? { player_id: pid });
       }
       for (const [pid, rid] of Object.entries(trade.drops ?? {})) {
         const r = String(rid);
-        if (!txByRoster[r]) txByRoster[r] = { adds: {}, drops: {} };
-        txByRoster[r].drops[pid] = rid as number;
+        if (!rosterDrops[r]) rosterDrops[r] = [];
+        rosterDrops[r].push(playerMap[pid] ?? { player_id: pid });
       }
 
-      // usersInLeagueMap only needs the two involved parties for mobile rendering
-      const usersInLeagueMap: Record<string, { display_name: string; user_id: string }> = {
-        [myUserId]: { display_name: myName, user_id: myUserId },
-        [partnerUserId]: { display_name: sideBTeam?.owner || sideBTeam?.name || "Partner", user_id: partnerUserId },
+      // Picks: keep stringified or parsed picks under the receiving roster.
+      const rosterAddedPicks: Record<string, unknown[]> = {};
+      if (Array.isArray(trade.draft_picks)) {
+        for (const pick of trade.draft_picks) {
+          if (typeof pick === "string") {
+            const parts = pick.split(",");
+            const recvRid = Number(parts[3]);
+            const r = String(recvRid);
+            if (!rosterAddedPicks[r]) rosterAddedPicks[r] = [];
+            rosterAddedPicks[r].push({
+              roster_id: Number(parts[0]),
+              season: parts[1],
+              round: Number(parts[2]),
+              owner_id: Number(parts[3]),
+              previous_owner_id: Number(parts[4]),
+            });
+          } else if (pick && typeof pick === "object") {
+            const obj = pick as Record<string, unknown>;
+            const recvRid = Number(obj.owner_id);
+            const r = String(recvRid);
+            if (!rosterAddedPicks[r]) rosterAddedPicks[r] = [];
+            rosterAddedPicks[r].push(obj);
+          }
+        }
+      }
+
+      const involvedRids = new Set<number>([
+        ...Object.values(trade.adds ?? {}).map(Number),
+        ...Object.values(trade.drops ?? {}).map(Number),
+      ]);
+      if (Number.isFinite(myRosterId)) involvedRids.add(myRosterId);
+      if (Number.isFinite(partnerRosterId)) involvedRids.add(partnerRosterId);
+
+      const userForRid = (rid: number) => {
+        if (rid === myRosterId) {
+          return makeTradeAttachmentUser(myUserId, myName, trade.league_id);
+        }
+        if (rid === partnerRosterId) {
+          return makeTradeAttachmentUser(partnerUserId, partnerName, trade.league_id);
+        }
+        return makeTradeAttachmentUser("", `Roster ${rid}`, trade.league_id);
       };
+
+      const rosters = Array.from(involvedRids).map(rid => ({
+        rosterId: rid,
+        user: userForRid(rid),
+        adds: rosterAdds[String(rid)] ?? [],
+        drops: rosterDrops[String(rid)] ?? [],
+        added_picks: rosterAddedPicks[String(rid)] ?? [],
+        dropped_picks: [],
+        added_budget: [],
+        dropped_budget: [],
+      }));
+
+      const { transactionsByRoster, usersInLeagueMap } = buildTradeAttachment({
+        status: trade.status || "proposed",
+        rosters,
+        users: [
+          makeTradeAttachmentUser(myUserId, myName, trade.league_id),
+          makeTradeAttachmentUser(partnerUserId, partnerName, trade.league_id),
+        ],
+      });
 
       const dmInfo = await getDmByMembersFull(partnerUserId);
       if (!dmInfo) throw new Error("No DM thread found with this manager.");
 
+      // Trade-card attachment is intentionally disabled until our generator
+      // matches the native Sleeper trade_dm payload exactly. See
+      // tradeAttachmentSchema.ts for the required shape. Mismatches today:
+      // bare { player_id } fallbacks for unmapped players, no dropped_picks on
+      // the sending side, no per-roster added_budget/dropped_budget, and
+      // placeholder {} metadata/settings on user objects. A plain-text DM is
+      // still delivered so the partner gets notified.
       await sendTradeMessage({
         dmId: dmInfo.dm_id,
-        text: `@${myName} has proposed a trade in ${league.name} via Dynasty Command — statchasers.com/dynasty-command-tool`,
+        text: `@${myName} has proposed a trade in ${league.name}`,
         transactionId: trade.transaction_id,
         leagueId: trade.league_id,
         status: trade.status || "proposed",
-        transactionsByRoster: txByRoster,
+        transactionsByRoster,
         usersInLeagueMap,
-        attachTradeCard: true,
+        attachTradeCard: false,
       });
       setDmStatus("sent");
     } catch (e: any) {

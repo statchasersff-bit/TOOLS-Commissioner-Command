@@ -1,6 +1,7 @@
-import { createContext, useContext, useState, useCallback, useEffect } from "react";
+import { createContext, useContext, useState, useCallback, useEffect, useRef } from "react";
 import type { SleeperUser, SleeperLeagueSummary } from "../types";
 import { fetchSleeperUser, fetchSleeperLeagues } from "@/lib/sleeperApi";
+import { useAuth } from "@/contexts/AuthContext";
 
 const STORAGE_KEY = "sc-sleeper-connection";
 
@@ -21,18 +22,27 @@ interface SleeperState {
 const SleeperContext = createContext<SleeperState | null>(null);
 
 export function SleeperProvider({ children }: { children: React.ReactNode }) {
+  useEffect(() => { console.log("[app] SleeperProvider mounted"); }, []);
+  const { sleeperInfo } = useAuth();
   const [user, setUser] = useState<SleeperUser | null>(null);
   const [leagues, setLeagues] = useState<SleeperLeagueSummary[]>([]);
   const [activeLeagueId, setActiveLeagueId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
+  // Track the username we last auto-connected so we don't loop on every render.
+  const lastAutoConnectedUsernameRef = useRef<string | null>(null);
 
   const isConnected = user !== null;
 
-  const fetchUserAndLeagues = useCallback(async (username: string) => {
+  const fetchUserAndLeagues = useCallback(async (
+    username: string,
+    opts: { preserveStubOnError?: boolean; stub?: SleeperUser | null } = {}
+  ) => {
     setIsLoading(true);
     setError(null);
+    // Show the stub immediately so UI flips to "connected" while the network call runs.
+    if (opts.stub) setUser(opts.stub);
 
     try {
       const userData = await fetchSleeperUser(username);
@@ -45,9 +55,13 @@ export function SleeperProvider({ children }: { children: React.ReactNode }) {
       localStorage.setItem(STORAGE_KEY, username);
     } catch (err: any) {
       setError(err.message || "Connection failed");
-      setUser(null);
-      setLeagues([]);
-      localStorage.removeItem(STORAGE_KEY);
+      // When auth-derived, keep the stub user so the UI stays in "connected" state
+      // and a transient network blip doesn't kick the user back to the connect form.
+      if (!opts.preserveStubOnError) {
+        setUser(null);
+        setLeagues([]);
+        localStorage.removeItem(STORAGE_KEY);
+      }
     } finally {
       setIsLoading(false);
     }

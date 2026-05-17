@@ -93,9 +93,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         };
         saveSleeperSession(session);
         setSleeperInfo(data.sleeper);
+        console.log("[auth] status -> ready");
         setStatus("ready");
       } else {
         setSleeperInfo(null);
+        console.log("[auth] status -> needs-sleeper");
         setStatus("needs-sleeper");
       }
     } catch {

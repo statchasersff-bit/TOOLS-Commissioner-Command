@@ -221,6 +221,16 @@ export function AboutPage({ onNavigate, onOpenFeedback, onOpenCookies, onOpenTer
 
   return (
     <div>
+      <style>{`
+        @keyframes sc-nudge {
+          0%, 100% { transform: translateX(0px); opacity: 0.65; }
+          55%       { transform: translateX(5px); opacity: 1;    }
+        }
+        @media (prefers-reduced-motion: no-preference) {
+          .sc-nudge-arrow { animation: sc-nudge 1.8s ease-in-out infinite; }
+        }
+      `}</style>
+
       {/* Support / Share banner */}
       <div
         className="mb-5 rounded-2xl overflow-hidden border"
@@ -248,15 +258,23 @@ export function AboutPage({ onNavigate, onOpenFeedback, onOpenCookies, onOpenTer
               <p className="text-[12px] text-muted-foreground leading-snug mb-3">
                 If Dynasty Command has helped you, share it with your dynasty leagues. It helps StatChasers grow and keeps the tool free for more managers.
               </p>
-              <button
-                onClick={onShareWithLeagues}
-                data-testid="button-about-share-leagues"
-                className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-[12px] font-bold transition-opacity hover:opacity-90 active:opacity-75"
-                style={{ background: "linear-gradient(90deg, #d4af37 0%, #b8962e 100%)", color: "#0a1428" }}
-              >
-                <Share2 className="w-3.5 h-3.5" />
-                Share with My Leagues
-              </button>
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+                <button
+                  onClick={onShareWithLeagues}
+                  data-testid="button-about-share-leagues"
+                  className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-[12px] font-bold transition-opacity hover:opacity-90 active:opacity-75 self-start"
+                  style={{ background: "linear-gradient(90deg, #d4af37 0%, #b8962e 100%)", color: "#0a1428" }}
+                >
+                  <Share2 className="w-3.5 h-3.5" />
+                  Share with My Leagues
+                </button>
+                <div className="flex items-center gap-1.5">
+                  <ChevronRight className="sc-nudge-arrow w-3.5 h-3.5 flex-shrink-0" style={{ color: "#d4af37" }} />
+                  <span className="text-[11px] font-medium leading-tight" style={{ color: "rgba(212,175,55,0.82)" }}>
+                    One click. We'll handle the rest.
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
         </div>

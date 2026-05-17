@@ -65,6 +65,7 @@ const PICK_RANGE_MULTIPLIERS: Record<number, Record<string, number>> = {
 };
 
 export function ValueModelProvider({ children }: { children: React.ReactNode }) {
+  useEffect(() => { console.log("[app] ValueModelProvider mounted"); }, []);
   const [sourceId, setSourceIdRaw] = useState<ValueSourceId>("fantasycalc");
   const [isRecalculating, setIsRecalculating] = useState(false);
   const [isLoading, setIsLoading] = useState(true);

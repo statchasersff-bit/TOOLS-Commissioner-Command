@@ -1068,6 +1068,18 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
           const rid = parseInt(team.id.replace("roster_", ""), 10);
           if (team.ownerId && userIdToInfo.has(team.ownerId)) {
             rosterUserMap.set(rid, userIdToInfo.get(team.ownerId));
+          } else {
+            // Placeholder so Sleeper's desktop renderer never reads `user: null`.
+            rosterUserMap.set(rid, {
+              avatar: null,
+              display_name: team.owner || team.name || `Roster ${rid}`,
+              is_bot: false,
+              is_owner: false,
+              league_id: trade.league_id,
+              metadata: {},
+              settings: {},
+              user_id: team.ownerId || "",
+            });
           }
         }
 
@@ -1089,7 +1101,13 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
               if (typeof pick === "string") {
                 const parts = pick.split(",");
                 if (Number(parts[3]) === rosterId) {
-                  rosterPicks.push({ roster_id: Number(parts[0]), season: parts[1], round: Number(parts[2]) });
+                  rosterPicks.push({
+                    roster_id: Number(parts[0]),
+                    season: parts[1],
+                    round: Number(parts[2]),
+                    owner_id: Number(parts[3]),
+                    previous_owner_id: Number(parts[4]),
+                  });
                 }
               } else if (pick && typeof pick === "object" && (pick as any).owner_id === rosterId) {
                 rosterPicks.push(pick);
@@ -1104,24 +1122,31 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
             added_budget: [],
             dropped_budget: [],
             status: trade.status || "proposed",
-            user: rosterUserMap.get(rosterId) ?? null,
+            user: rosterUserMap.get(rosterId),
           };
         }
 
         dmId = await getDmByMembers(partnerUserId);
         if (!dmId) throw new Error("No DM thread found with this manager.");
 
+        // Trade-card attachment is intentionally disabled until our generator
+        // matches the native Sleeper trade_dm payload exactly. See
+        // tradeAttachmentSchema.ts for the required shape. Mismatches today
+        // in this code path: drops is always [] (sending side never populated),
+        // dropped_picks is always [], no per-roster added_budget/dropped_budget,
+        // and player fallback to bare { player_id }. A plain-text DM is still
+        // delivered so the partner gets notified.
         const session = getSleeperSession();
         const myName = session?.display_name || userTeam.owner;
         await sendTradeMessage({
           dmId,
-          text: `@${myName} has proposed a trade in ${league.name} via Dynasty Command — statchasers.com/dynasty-command-tool`,
+          text: `@${myName} has proposed a trade in ${league.name}`,
           transactionId: txId,
           leagueId: trade.league_id,
           status: trade.status || "proposed",
           transactionsByRoster,
           usersInLeagueMap,
-          attachTradeCard: true,
+          attachTradeCard: false,
         });
 
         dmTradeCardSentMap.set(txId, true);

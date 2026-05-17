@@ -471,10 +471,6 @@ export async function proposeTrade(params: ProposeTradeParams): Promise<ProposeT
     rejectTransactionLeg,
     waiverBudget
   );
-  console.log("[proposeTrade] draftPicks raw:", JSON.stringify(draftPicks));
-  console.log("[proposeTrade] picksCsv:", JSON.stringify(picksCsv));
-  console.log("[proposeTrade] mutation:", mutation);
-  console.log("[proposeTrade] variables:", { k_adds, v_adds, k_drops, v_drops });
 
   const data = await sleeperGraphQLRequest<{ propose_trade: ProposeTradeResult }>({
     operationName: "propose_trade",
@@ -653,6 +649,118 @@ export interface SendTradeMessageParams {
   attachTradeCard: boolean;
 }
 
+/**
+ * The user object Sleeper expects inside each `transactions_by_roster[rid].user`
+ * slot and inside `users_in_league_map[user_id]`. Required fields only.
+ */
+export interface TradeAttachmentUser {
+  user_id: string;
+  display_name: string;
+  avatar: string | null;
+  is_bot: boolean;
+  is_owner: boolean;
+  league_id: string;
+  metadata: Record<string, unknown>;
+  settings: Record<string, unknown>;
+}
+
+/**
+ * Build a Sleeper-compatible placeholder user. Use whenever a real user object
+ * is unavailable. Never return null — Sleeper's desktop trade-DM renderer
+ * crashes (`r.map is not a function`) on null/undefined access.
+ */
+export function makeTradeAttachmentUser(
+  userId: string | null | undefined,
+  displayName: string | null | undefined,
+  leagueId: string,
+  avatar: string | null = null
+): TradeAttachmentUser {
+  return {
+    user_id: userId || "",
+    display_name: displayName || "Unknown Manager",
+    avatar,
+    is_bot: false,
+    is_owner: false,
+    league_id: leagueId,
+    metadata: {},
+    settings: {},
+  };
+}
+
+/**
+ * Build the per-roster trade-card payload Sleeper renders inside DM threads.
+ * Every list field is guaranteed to be an array, `user` is guaranteed non-null,
+ * and `status` is always a string. Pass empty arrays for slots you don't have
+ * data for — never undefined. This prevents `TypeError: r.map is not a function`
+ * in Sleeper's desktop renderer when it iterates the lists.
+ */
+export interface TradeAttachmentRosterInput {
+  rosterId: number;
+  user: TradeAttachmentUser;
+  adds?: unknown[];           // array of player objects, e.g. { player_id, full_name, position, team }
+  drops?: unknown[];          // array of player objects
+  added_picks?: unknown[];    // array of { season, round, roster_id, owner_id, previous_owner_id }
+  dropped_picks?: unknown[];  // same shape
+  added_budget?: unknown[];   // array of { sender, receiver, amount }
+  dropped_budget?: unknown[]; // same shape
+}
+
+export interface BuildTradeAttachmentInput {
+  status: string;
+  rosters: TradeAttachmentRosterInput[];
+  users: TradeAttachmentUser[];
+}
+
+export interface BuildTradeAttachmentResult {
+  transactionsByRoster: Record<string, unknown>;
+  usersInLeagueMap: Record<string, unknown>;
+}
+
+export function buildTradeAttachment(
+  input: BuildTradeAttachmentInput
+): BuildTradeAttachmentResult {
+  const transactionsByRoster: Record<string, unknown> = {};
+  for (const r of input.rosters) {
+    transactionsByRoster[String(r.rosterId)] = {
+      adds:           Array.isArray(r.adds)           ? r.adds           : [],
+      drops:          Array.isArray(r.drops)          ? r.drops          : [],
+      added_picks:    Array.isArray(r.added_picks)    ? r.added_picks    : [],
+      dropped_picks:  Array.isArray(r.dropped_picks)  ? r.dropped_picks  : [],
+      added_budget:   Array.isArray(r.added_budget)   ? r.added_budget   : [],
+      dropped_budget: Array.isArray(r.dropped_budget) ? r.dropped_budget : [],
+      status:         input.status || "proposed",
+      user:           r.user, // guaranteed non-null by TradeAttachmentUser type
+    };
+  }
+  const usersInLeagueMap: Record<string, unknown> = {};
+  for (const u of input.users) {
+    if (u.user_id) usersInLeagueMap[u.user_id] = u;
+  }
+  return { transactionsByRoster, usersInLeagueMap };
+}
+
+// ─── Trade-card payload validation ───────────────────────────────────────────
+//
+// Schemas live in ./tradeAttachmentSchema.ts and are modeled on a captured
+// native Sleeper trade_dm payload. Re-exported here for backwards compat with
+// existing internal callers. Any deviation from the native shape risks
+// crashing Sleeper's desktop renderer.
+
+import {
+  validateTradeAttachmentPayload,
+  assertValidTradeAttachmentPayload,
+} from "./tradeAttachmentSchema";
+
+export {
+  validateTradeAttachmentPayload,
+  assertValidTradeAttachmentPayload,
+} from "./tradeAttachmentSchema";
+export type {
+  TradeCardAttachment,
+  TradeCardValidationIssue,
+  TradeCardValidationResult,
+} from "./tradeAttachmentSchema";
+
 export interface SendTradeMessageResult {
   message_id: string;
   text: string;
@@ -687,6 +795,13 @@ export async function sendTradeMessage(
     dmId, text, transactionId, leagueId, status,
     transactionsByRoster, usersInLeagueMap, attachTradeCard,
   } = params;
+
+  // Hard gate: never let a malformed trade card reach Sleeper. The desktop
+  // renderer crashes on missing arrays / null user, which then breaks the DM
+  // thread for the recipient. Validate before issuing the mutation.
+  if (attachTradeCard) {
+    assertValidTradeAttachmentPayload({ status, transactionsByRoster, usersInLeagueMap });
+  }
 
   const clientId = crypto.randomUUID();
 

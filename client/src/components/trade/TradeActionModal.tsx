@@ -11,6 +11,7 @@ import {
   getDmByMembersFull, markDmRead, fetchDmMessages, sendDmMessage,
   sendTradeMessage, sendPlainDm,
   acceptTrade, rejectTrade, proposeTrade,
+  buildTradeAttachment, makeTradeAttachmentUser,
 } from "@/services/sleeperAuthedApi";
 import type { SleeperDmMessage, SleeperTransactionPick, ProposeTradeResult } from "@/services/sleeperAuthedApi";
 import { TradeEditTab, type EditAssetsWithFaab } from "./TradeEditTab";
@@ -85,6 +86,97 @@ export interface TradeActionModalProps {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/**
+ * Build a Sleeper-compatible trade-card payload from a ProposeTradeResult.
+ * Every list field is an array (never undefined), `user` is never null, and
+ * `status` is always set. This prevents `TypeError: r.map is not a function`
+ * in Sleeper's desktop renderer.
+ */
+function buildCounterTradeAttachment(args: {
+  result: ProposeTradeResult;
+  leagueId: string;
+  myUserId: string;
+  myUsername: string;
+  myRosterId: number;
+  partnerUserId: string;
+  partnerName: string;
+  partnerRosterId: number;
+}): { transactionsByRoster: Record<string, unknown>; usersInLeagueMap: Record<string, unknown> } {
+  const { result, leagueId, myUserId, myUsername, myRosterId, partnerUserId, partnerName, partnerRosterId } = args;
+  const playerMap = (result.player_map as Record<string, unknown> | null) ?? {};
+
+  const rosterAdds: Record<string, unknown[]> = {};
+  const rosterDrops: Record<string, unknown[]> = {};
+  for (const [pid, rid] of Object.entries(result.adds ?? {})) {
+    const r = String(rid);
+    if (!rosterAdds[r]) rosterAdds[r] = [];
+    rosterAdds[r].push(playerMap[pid] ?? { player_id: pid });
+  }
+  for (const [pid, rid] of Object.entries(result.drops ?? {})) {
+    const r = String(rid);
+    if (!rosterDrops[r]) rosterDrops[r] = [];
+    rosterDrops[r].push(playerMap[pid] ?? { player_id: pid });
+  }
+
+  const rosterAddedPicks: Record<string, unknown[]> = {};
+  if (Array.isArray(result.draft_picks)) {
+    for (const pick of result.draft_picks) {
+      if (typeof pick === "string") {
+        const parts = pick.split(",");
+        const r = String(Number(parts[3]));
+        if (!rosterAddedPicks[r]) rosterAddedPicks[r] = [];
+        rosterAddedPicks[r].push({
+          roster_id: Number(parts[0]),
+          season: parts[1],
+          round: Number(parts[2]),
+          owner_id: Number(parts[3]),
+          previous_owner_id: Number(parts[4]),
+        });
+      } else if (pick && typeof pick === "object") {
+        const obj = pick as Record<string, unknown>;
+        const r = String(Number(obj.owner_id));
+        if (!rosterAddedPicks[r]) rosterAddedPicks[r] = [];
+        rosterAddedPicks[r].push(obj);
+      }
+    }
+  }
+
+  const involvedRids = new Set<number>([
+    ...Object.values(result.adds ?? {}).map(Number),
+    ...Object.values(result.drops ?? {}).map(Number),
+    myRosterId,
+    partnerRosterId,
+  ]);
+
+  const userForRid = (rid: number) => {
+    if (rid === myRosterId) return makeTradeAttachmentUser(myUserId, myUsername, leagueId);
+    if (rid === partnerRosterId) return makeTradeAttachmentUser(partnerUserId, partnerName, leagueId);
+    return makeTradeAttachmentUser("", `Roster ${rid}`, leagueId);
+  };
+
+  const rosters = Array.from(involvedRids)
+    .filter(rid => Number.isFinite(rid))
+    .map(rid => ({
+      rosterId: rid,
+      user: userForRid(rid),
+      adds: rosterAdds[String(rid)] ?? [],
+      drops: rosterDrops[String(rid)] ?? [],
+      added_picks: rosterAddedPicks[String(rid)] ?? [],
+      dropped_picks: [],
+      added_budget: [],
+      dropped_budget: [],
+    }));
+
+  return buildTradeAttachment({
+    status: result.status || "proposed",
+    rosters,
+    users: [
+      makeTradeAttachmentUser(myUserId, myUsername, leagueId),
+      makeTradeAttachmentUser(partnerUserId, partnerName, leagueId),
+    ],
+  });
+}
 
 function formatExpiryLabel(ts: number | null): string {
   if (!ts) return "—";
@@ -626,24 +718,23 @@ export function TradeActionModal({
         try {
           const dmInfo = await getDmByMembersFull(trade.partnerUserId);
           if (dmInfo?.dm_id) {
-            const txByRoster: Record<string, { adds: Record<string, number>; drops: Record<string, number> }> = {};
-            for (const [pid, rid] of Object.entries(result.adds ?? {})) {
-              const r = String(rid); if (!txByRoster[r]) txByRoster[r] = { adds: {}, drops: {} }; txByRoster[r].adds[pid] = rid;
-            }
-            for (const [pid, rid] of Object.entries(result.drops ?? {})) {
-              const r = String(rid); if (!txByRoster[r]) txByRoster[r] = { adds: {}, drops: {} }; txByRoster[r].drops[pid] = rid;
-            }
-            const usersInLeagueMap: Record<string, { display_name: string; user_id: string }> = {
-              [myUserId]: { display_name: myUsername, user_id: myUserId },
-              [trade.partnerUserId]: { display_name: trade.partnerName, user_id: trade.partnerUserId },
-            };
+            const { transactionsByRoster, usersInLeagueMap } = buildCounterTradeAttachment({
+              result,
+              leagueId: trade.leagueId,
+              myUserId,
+              myUsername,
+              myRosterId: trade.userRosterId,
+              partnerUserId: trade.partnerUserId,
+              partnerName: trade.partnerName,
+              partnerRosterId: trade.partnerRosterId,
+            });
             await sendTradeMessage({
               dmId: dmInfo.dm_id,
               text: `@${myUsername} has sent a counter offer in ${trade.leagueName}`,
               transactionId: result.transaction_id,
               leagueId: trade.leagueId,
               status: result.status,
-              transactionsByRoster: txByRoster,
+              transactionsByRoster,
               usersInLeagueMap,
               attachTradeCard: true,
             });
@@ -719,24 +810,23 @@ export function TradeActionModal({
         try {
           const dmInfo = await getDmByMembersFull(trade.partnerUserId);
           if (dmInfo?.dm_id) {
-            const txByRoster: Record<string, { adds: Record<string, number>; drops: Record<string, number> }> = {};
-            for (const [pid, rid] of Object.entries(result.adds ?? {})) {
-              const r = String(rid); if (!txByRoster[r]) txByRoster[r] = { adds: {}, drops: {} }; txByRoster[r].adds[pid] = rid;
-            }
-            for (const [pid, rid] of Object.entries(result.drops ?? {})) {
-              const r = String(rid); if (!txByRoster[r]) txByRoster[r] = { adds: {}, drops: {} }; txByRoster[r].drops[pid] = rid;
-            }
-            const usersInLeagueMap: Record<string, { display_name: string; user_id: string }> = {
-              [myUserId]: { display_name: myUsername, user_id: myUserId },
-              [trade.partnerUserId]: { display_name: trade.partnerName, user_id: trade.partnerUserId },
-            };
+            const { transactionsByRoster, usersInLeagueMap } = buildCounterTradeAttachment({
+              result,
+              leagueId: trade.leagueId,
+              myUserId,
+              myUsername,
+              myRosterId: trade.userRosterId,
+              partnerUserId: trade.partnerUserId,
+              partnerName: trade.partnerName,
+              partnerRosterId: trade.partnerRosterId,
+            });
             await sendTradeMessage({
               dmId: dmInfo.dm_id,
               text: `@${myUsername} has updated a trade offer in ${trade.leagueName}`,
               transactionId: result.transaction_id,
               leagueId: trade.leagueId,
               status: result.status,
-              transactionsByRoster: txByRoster,
+              transactionsByRoster,
               usersInLeagueMap,
               attachTradeCard: true,
             });
