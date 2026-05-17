@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { SectionHeader } from "@/components/SectionHeader";
 import { getLeagueTeamTiers, getTierColor, getTierEmoji, computeNowScore, computeFutureScore, getDynastyWindowLabel as getQuadrantLabel } from "@/data/mockData";
 import { useValueModel } from "@/contexts/ValueModelContext";
+import { useIsMobile } from "@/hooks/use-mobile";
 import type { League, Team, Tier } from "@/types";
 import { formatPickLabel } from "@/types";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -52,6 +53,20 @@ function DynastyWindowTooltip({ active, payload }: any) {
 function EconomyOverview({ league }: { league: League }) {
   const { getPickValue } = useValueModel();
   const tierMap = useMemo(() => getLeagueTeamTiers(league.teams), [league.teams]);
+  const isMobile = useIsMobile();
+
+  // Mobile-specific chart geometry. The default recharts margins (especially
+  // bottom: 36, left: 16) plus the 56px YAxis width steal ~90px from the plot
+  // area on a 375px viewport. Tightening these on mobile lets the data points
+  // use the card's full width while still leaving room for the axis labels.
+  const chartMargin = isMobile
+    ? { top: 8, right: 8, bottom: 22, left: 0 }
+    : { top: 20, right: 20, bottom: 36, left: 16 };
+  const yAxisWidth = isMobile ? 32 : 56;
+  const axisFontSize = isMobile ? 10 : 11;
+  const xLabelOffset = isMobile ? -8 : -18;
+  const yLabelOffset = isMobile ? 4 : 10;
+  const axisTickCount = isMobile ? 4 : 6;
 
   const quadrantTeams: QuadrantTeam[] = useMemo(() => {
     const byRedraft = [...league.teams].sort((a, b) => (b.metrics?.starters ?? 0) - (a.metrics?.starters ?? 0));
@@ -123,31 +138,35 @@ function EconomyOverview({ league }: { league: League }) {
 
   return (
     <div className="space-y-6">
-      <Card className="p-4 md:p-6 rounded-2xl bg-[#0a1628] border-[#1e3a5f]" data-testid="dynasty-window-chart">
-        <div className="h-[300px] md:h-[380px]">
+      <Card className="p-3 md:p-6 rounded-2xl bg-[#0a1628] border-[#1e3a5f]" data-testid="dynasty-window-chart">
+        {/* Mobile bumps chart height from 300 → 380 so the plot fills the card
+            rather than fighting with axis margins for visible space. */}
+        <div className="h-[380px] md:h-[380px]">
         <ResponsiveContainer width="100%" height="100%">
-          <ScatterChart margin={{ top: 20, right: 20, bottom: 36, left: 16 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#1e3a5f" strokeOpacity={0.5} />
+          <ScatterChart margin={chartMargin}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#1e3a5f" strokeOpacity={isMobile ? 0.35 : 0.5} />
             <XAxis
               type="number"
               dataKey="x"
               domain={[0, 100]}
-              tick={{ fill: "#94a3b8", fontSize: 11 }}
+              tickCount={axisTickCount}
+              tick={{ fill: "#94a3b8", fontSize: axisFontSize }}
               tickLine={{ stroke: "#334155" }}
               axisLine={{ stroke: "#334155" }}
             >
-              <Label value="Current Power →" position="insideBottom" offset={-18} style={{ fill: "#94a3b8", fontSize: 11, fontWeight: 600 }} />
+              <Label value="Current Power →" position="insideBottom" offset={xLabelOffset} style={{ fill: "#94a3b8", fontSize: axisFontSize, fontWeight: 600 }} />
             </XAxis>
             <YAxis
               type="number"
               dataKey="y"
               domain={[0, 100]}
-              width={56}
-              tick={{ fill: "#94a3b8", fontSize: 11 }}
+              width={yAxisWidth}
+              tickCount={axisTickCount}
+              tick={{ fill: "#94a3b8", fontSize: axisFontSize }}
               tickLine={{ stroke: "#334155" }}
               axisLine={{ stroke: "#334155" }}
             >
-              <Label value="Future Strength →" angle={-90} position="insideLeft" offset={10} style={{ fill: "#94a3b8", fontSize: 11, fontWeight: 600, textAnchor: "middle" }} />
+              <Label value="Future Strength →" angle={-90} position="insideLeft" offset={yLabelOffset} style={{ fill: "#94a3b8", fontSize: axisFontSize, fontWeight: 600, textAnchor: "middle" }} />
             </YAxis>
             <ReferenceArea x1={avgNow} x2={100} y1={avgFuture} y2={100} fill="#d4af37" fillOpacity={0.07} />
             <ReferenceArea x1={avgNow} x2={100} y1={0} y2={avgFuture} fill="#ef4444" fillOpacity={0.06} />
@@ -197,18 +216,21 @@ function EconomyOverview({ league }: { league: League }) {
           </ScatterChart>
         </ResponsiveContainer>
         </div>
-        <div className="grid grid-cols-2 gap-2 mt-3">
-          <div className="text-center py-1.5 rounded-lg bg-[#10b981]/10 border border-[#10b981]/20">
-            <span className="text-[10px] text-emerald-400 font-semibold">↑ Rebuild With Ammo</span>
+        {/* Compact quadrant legend. Mobile uses smaller text + tighter padding
+            so the pill row stops competing with the chart for vertical space.
+            Long labels collapse to abbreviations on the narrowest viewports. */}
+        <div className="grid grid-cols-2 gap-1.5 md:gap-2 mt-2 md:mt-3">
+          <div className="text-center px-1.5 py-1 md:py-1.5 rounded-lg bg-[#10b981]/10 border border-[#10b981]/20">
+            <span className="text-[9px] md:text-[10px] text-emerald-400 font-semibold whitespace-nowrap">↑ <span className="hidden min-[360px]:inline">Rebuild With </span>Ammo</span>
           </div>
-          <div className="text-center py-1.5 rounded-lg bg-[#d4af37]/10 border border-[#d4af37]/20">
-            <span className="text-[10px] text-[#d4af37] font-semibold">↗ Dynasty Death Star</span>
+          <div className="text-center px-1.5 py-1 md:py-1.5 rounded-lg bg-[#d4af37]/10 border border-[#d4af37]/20">
+            <span className="text-[9px] md:text-[10px] text-[#d4af37] font-semibold whitespace-nowrap">↗ <span className="hidden min-[360px]:inline">Dynasty </span>Death Star</span>
           </div>
-          <div className="text-center py-1.5 rounded-lg bg-[#64748b]/10 border border-[#64748b]/20">
-            <span className="text-[10px] text-slate-400 font-semibold">↙ Rebuild Hell</span>
+          <div className="text-center px-1.5 py-1 md:py-1.5 rounded-lg bg-[#64748b]/10 border border-[#64748b]/20">
+            <span className="text-[9px] md:text-[10px] text-slate-400 font-semibold whitespace-nowrap">↙ Rebuild<span className="hidden min-[360px]:inline"> Hell</span></span>
           </div>
-          <div className="text-center py-1.5 rounded-lg bg-[#ef4444]/10 border border-[#ef4444]/20">
-            <span className="text-[10px] text-red-400 font-semibold">→ Win-Now Kings</span>
+          <div className="text-center px-1.5 py-1 md:py-1.5 rounded-lg bg-[#ef4444]/10 border border-[#ef4444]/20">
+            <span className="text-[9px] md:text-[10px] text-red-400 font-semibold whitespace-nowrap">→ Win-Now<span className="hidden min-[360px]:inline"> Kings</span></span>
           </div>
         </div>
       </Card>

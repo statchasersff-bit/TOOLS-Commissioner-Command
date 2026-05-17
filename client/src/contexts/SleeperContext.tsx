@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, useEffect, useRef } from "react";
+import { createContext, useContext, useState, useCallback, useEffect, useMemo, useRef } from "react";
 import type { SleeperUser, SleeperLeagueSummary } from "../types";
 import { fetchSleeperUser, fetchSleeperLeagues } from "@/lib/sleeperApi";
 import { useAuth } from "@/contexts/AuthContext";
@@ -9,17 +9,33 @@ import { useAuth } from "@/contexts/AuthContext";
 // a username from localStorage caused a critical account-isolation bug where
 // DC user B inherited DC user A's Sleeper @username.
 
+// activeLeagueId IS persisted, but scoped to the sleeper userId so accounts
+// can't inherit each other's selection. Key shape: sc-active-league:<userId>.
+const ACTIVE_LEAGUE_KEY_PREFIX = "sc-active-league:";
+function activeLeagueKey(userId: string) { return `${ACTIVE_LEAGUE_KEY_PREFIX}${userId}`; }
+function readPersistedLeague(userId: string): string | null {
+  try { return localStorage.getItem(activeLeagueKey(userId)); } catch { return null; }
+}
+function writePersistedLeague(userId: string, leagueId: string | null) {
+  try {
+    if (leagueId) localStorage.setItem(activeLeagueKey(userId), leagueId);
+    else localStorage.removeItem(activeLeagueKey(userId));
+  } catch { /* ignore */ }
+}
+
 interface SleeperState {
   isConnected: boolean;
   user: SleeperUser | null;
   leagues: SleeperLeagueSummary[];
   activeLeagueId: string | null;
+  activeLeague: SleeperLeagueSummary | null;
   isLoading: boolean;
   error: string | null;
   lastSyncTime: string | null;
   connect: (username: string) => Promise<void>;
   disconnect: () => void;
   setActiveLeague: (leagueId: string) => void;
+  setActiveLeagueById: (leagueId: string | null) => void;
   refresh: () => Promise<void>;
 }
 
@@ -55,6 +71,19 @@ export function SleeperProvider({ children }: { children: React.ReactNode }) {
       const leaguesData = await fetchSleeperLeagues(userData.userId, "2026");
       setLeagues(leaguesData);
       setLastSyncTime(new Date().toISOString());
+
+      // Restore the user's last-selected league (per-user, never cross-account).
+      const persisted = readPersistedLeague(userData.userId);
+      if (persisted && leaguesData.some((l) => l.leagueId === persisted)) {
+        setActiveLeagueId(persisted);
+      } else if (leaguesData.length > 0) {
+        // Sensible default so league-specific views aren't perma-empty on first load.
+        const fallback = leaguesData[0].leagueId;
+        setActiveLeagueId(fallback);
+        writePersistedLeague(userData.userId, fallback);
+      } else {
+        setActiveLeagueId(null);
+      }
     } catch (err: any) {
       setError(err.message || "Connection failed");
       // When auth-derived, keep the stub user so the UI stays in "connected" state
@@ -83,7 +112,20 @@ export function SleeperProvider({ children }: { children: React.ReactNode }) {
 
   const setActiveLeague = useCallback((leagueId: string) => {
     setActiveLeagueId(leagueId);
-  }, []);
+    if (user?.userId) writePersistedLeague(user.userId, leagueId);
+  }, [user?.userId]);
+
+  // Same as setActiveLeague but accepts null to clear (used by route handlers
+  // that may not have a leagueId yet).
+  const setActiveLeagueById = useCallback((leagueId: string | null) => {
+    setActiveLeagueId(leagueId);
+    if (user?.userId) writePersistedLeague(user.userId, leagueId);
+  }, [user?.userId]);
+
+  const activeLeague = useMemo(
+    () => leagues.find((l) => l.leagueId === activeLeagueId) ?? null,
+    [leagues, activeLeagueId]
+  );
 
   const refresh = useCallback(async () => {
     if (!user) return;
@@ -125,12 +167,14 @@ export function SleeperProvider({ children }: { children: React.ReactNode }) {
         user,
         leagues,
         activeLeagueId,
+        activeLeague,
         isLoading,
         error,
         lastSyncTime,
         connect,
         disconnect,
         setActiveLeague,
+        setActiveLeagueById,
         refresh,
       }}
     >

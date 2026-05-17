@@ -262,7 +262,7 @@ function getTierAccent(tier: "Contender" | "Bubble" | "Rebuild") {
 
 
 export default function WaiverCommand() {
-  const { isConnected, user, leagues } = useSleeper();
+  const { isConnected, user, leagues, activeLeagueId, setActiveLeague } = useSleeper();
   const { valuesBySleeperId, dynastyPlayerList, isLoading: valuesLoading } = useValueModel();
 
   const [rows, setRows] = useState<WaiverRow[]>([]);
@@ -273,8 +273,16 @@ export default function WaiverCommand() {
   const [lastFetched, setLastFetched] = useState<number | null>(null);
   const [claimRow, setClaimRow] = useState<WaiverRow | null>(null);
   const [claimPreAddId, setClaimPreAddId] = useState<string | null>(null);
-  const [detailRow, setDetailRow] = useState<WaiverRow | null>(null);
   const [activeView, setActiveView] = useState<WaiverView>("overview");
+
+  // The "League View" sub-screen displays whichever league is currently active
+  // in the shared SleeperContext. Deriving (instead of holding local state)
+  // means header dropdown changes flow through automatically AND clicking a
+  // row from Overview just needs setActiveLeague(...).
+  const detailRow = useMemo(
+    () => (activeLeagueId ? rows.find((r) => r.leagueId === activeLeagueId) ?? null : null),
+    [rows, activeLeagueId]
+  );
 
   const openClaim = useCallback((row: WaiverRow, preAddId?: string) => {
     setClaimRow(row);
@@ -531,9 +539,13 @@ export default function WaiverCommand() {
                 key={id}
                 onClick={() => {
                   setActiveView(id);
+                  // If switching to League View with no league selected yet,
+                  // default to the first usable row so the user lands on data
+                  // instead of an empty state. We write through to the shared
+                  // context so the header dropdown reflects the same league.
                   if (id === "league" && !detailRow) {
                     const first = rows.find(r => !r.loading && !r.error);
-                    if (first) setDetailRow(first);
+                    if (first) setActiveLeague(first.leagueId);
                   }
                 }}
                 data-testid={`view-toggle-${id}-desktop`}
@@ -573,9 +585,13 @@ export default function WaiverCommand() {
                 key={id}
                 onClick={() => {
                   setActiveView(id);
+                  // If switching to League View with no league selected yet,
+                  // default to the first usable row so the user lands on data
+                  // instead of an empty state. We write through to the shared
+                  // context so the header dropdown reflects the same league.
                   if (id === "league" && !detailRow) {
                     const first = rows.find(r => !r.loading && !r.error);
-                    if (first) setDetailRow(first);
+                    if (first) setActiveLeague(first.leagueId);
                   }
                 }}
                 data-testid={`view-toggle-${id}`}
@@ -686,7 +702,7 @@ export default function WaiverCommand() {
                 </tr>
               )}
               {sorted.map((row) => (
-                <WaiverTableRow key={row.leagueId} row={row} onClaim={() => openClaim(row)} onView={() => { setDetailRow(row); setActiveView("league"); }} />
+                <WaiverTableRow key={row.leagueId} row={row} onClaim={() => openClaim(row)} onView={() => { setActiveLeague(row.leagueId); setActiveView("league"); }} />
               ))}
             </tbody>
           </table>
@@ -697,7 +713,7 @@ export default function WaiverCommand() {
 
       {activeView === "league" && (
         <div className="space-y-4">
-          {detailRow ? (
+          {detailRow && !detailRow.loading && !detailRow.error ? (
             <LeagueWaiverDetail
               row={detailRow}
               allRows={rows}
@@ -705,14 +721,14 @@ export default function WaiverCommand() {
               onClaim={(preAddId) => openClaim(detailRow, preAddId)}
               claimModal={<ClaimPlayerModal row={claimRow} preAddId={claimPreAddId} onClose={() => { setClaimRow(null); setClaimPreAddId(null); }} />}
             />
-          ) : isFetching ? (
+          ) : (detailRow?.loading || isFetching) ? (
             <div className="flex items-center justify-center py-16 text-muted-foreground text-sm gap-2">
               <RefreshCw className="w-4 h-4 animate-spin text-[#d4af37]" />
-              <span>Loading leagues…</span>
+              <span>Loading league data…</span>
             </div>
           ) : (
             <div className="flex items-center justify-center py-16 text-muted-foreground text-sm">
-              Select a league above to view its detail.
+              Select a league from the header dropdown or the Overview table to view its detail.
             </div>
           )}
         </div>

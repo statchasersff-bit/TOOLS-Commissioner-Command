@@ -527,7 +527,11 @@ export function FinanceTab() {
           return ta - tb;
         });
 
-        const COL = "grid grid-cols-[minmax(160px,1fr)_72px_60px_72px_56px_68px_60px_52px_52px_52px_88px_28px]";
+        // Desktop-only grid template. Mobile uses a separate flex-based row
+        // (see the md:hidden button below); applying `grid` here unconditionally
+        // would race with `hidden md:grid` for the `display` property, so we
+        // keep only the column template here and apply `md:grid` at use sites.
+        const COL = "grid-cols-[minmax(160px,1fr)_72px_60px_72px_56px_68px_60px_52px_52px_52px_88px_28px]";
 
         const ExpandedRow = ({ league }: { league: typeof visibleLeagues[0] }) => {
           const f = getFinance(league.leagueId);
@@ -722,10 +726,13 @@ export function FinanceTab() {
         return (
           <>
             <Card className="overflow-hidden">
-              <div className="overflow-x-auto">
-              <div className="min-w-[820px]">
-              {/* Table header */}
-              <div className={`${COL} gap-x-2 px-4 py-2.5 border-b border-border/50 bg-muted/30 items-center`}>
+              {/* On mobile the rows render as a flex list (no horizontal scroll);
+                  the desktop grid + min-width only kicks in at md and up. */}
+              <div className="md:overflow-x-auto">
+              <div className="md:min-w-[820px]">
+              {/* Table header — desktop only. Mobile uses a card-list layout
+                  that doesn't need a header row. */}
+              <div className={`hidden md:grid ${COL} gap-x-2 px-4 py-2.5 border-b border-border/50 bg-muted/30 items-center`}>
                 <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">League</span>
                 <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Tier</span>
                 <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground text-center">RNK</span>
@@ -754,10 +761,74 @@ export function FinanceTab() {
                 const prize1 = f.prizes.find(p => p.place === 1)?.amount;
                 const prize2 = f.prizes.find(p => p.place === 2)?.amount;
                 const prize3 = f.prizes.find(p => p.place === 3)?.amount;
+                const recordLabel = s && !s.loading && !s.error && gamesPlayed > 0
+                  ? `${s.wins}-${s.losses}${s.ties > 0 ? `-${s.ties}` : ""}`
+                  : null;
+                const rankLabel = s && !s.loading && !s.error && s.rank > 0 && gamesPlayed > 0
+                  ? `#${s.rank}/${s.totalTeams}`
+                  : null;
+                const plDisplay = calc
+                  ? `${calc.pl >= 0 ? "+" : ""}${fmtDollar(Math.round(calc.pl))}`
+                  : null;
                 return (
                   <div key={league.leagueId} className={`border-b border-border/20 last:border-b-0 ${isExpanded ? "bg-muted/10" : ""}`} data-testid={`finance-card-${league.leagueId}`}>
+                    {/* ── Mobile row (compact list, no horizontal scroll) ──
+                        Avatar + name/sub-line take the bulk of the width; the
+                        right cluster shows tier pill + P&L + chevron. Record
+                        hides under 430px so the row stays single-line. */}
                     <button
-                      className={`w-full ${COL} gap-x-2 px-4 py-3 hover:bg-muted/30 transition-colors text-left items-center`}
+                      className="md:hidden w-full flex items-center gap-2.5 px-3 py-2.5 hover:bg-muted/30 transition-colors text-left"
+                      onClick={() => setExpanded(isExpanded ? null : league.leagueId)}
+                      data-testid={`toggle-finance-mobile-${league.leagueId}`}
+                    >
+                      <div className="w-9 h-9 rounded-lg overflow-hidden flex-shrink-0 bg-[#0b3a7a]/10 dark:bg-blue-400/10 flex items-center justify-center relative">
+                        <Trophy className="w-4 h-4 text-[#0b3a7a] dark:text-blue-400" />
+                        {league.avatar && (
+                          <img src={`https://sleepercdn.com/avatars/thumbs/${league.avatar}`} alt={league.name}
+                            className="absolute inset-0 w-full h-full object-cover"
+                            onError={e => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-[13px] leading-tight truncate">{league.name}</p>
+                        <div className="flex items-center gap-1 text-[10px] text-muted-foreground leading-tight mt-0.5 min-w-0">
+                          <span className="truncate">{league.totalRosters}T · {league.scoringFormat} {league.format}</span>
+                          {rankLabel && (
+                            <>
+                              <span className="flex-shrink-0">·</span>
+                              <span className={`flex-shrink-0 font-medium ${s.inPlayoffs ? "text-emerald-500 dark:text-emerald-400" : "text-foreground/70"}`}>{rankLabel}</span>
+                            </>
+                          )}
+                          {recordLabel && (
+                            <>
+                              <span className="flex-shrink-0 hidden min-[430px]:inline">·</span>
+                              <span className="flex-shrink-0 hidden min-[430px]:inline font-medium text-foreground/70">{recordLabel}</span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                        {tierCfg ? (
+                          <span className={`text-[10px] font-bold leading-none px-1.5 py-1 rounded-full border whitespace-nowrap ${tierCfg.badgeCls}`}>{tierCfg.short}</span>
+                        ) : s?.loading ? (
+                          <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />
+                        ) : null}
+                        {plDisplay ? (
+                          <span className={`text-[13px] font-bold whitespace-nowrap ${plColor(calc!.pl)}`}>{plDisplay}</span>
+                        ) : f.isFree ? (
+                          <span className="text-[10px] font-semibold text-sky-500 whitespace-nowrap">Free</span>
+                        ) : f.buyIn > 0 ? (
+                          <span className="text-[11px] font-medium text-muted-foreground whitespace-nowrap">{fmtDollar(f.buyIn)}</span>
+                        ) : null}
+                        {isExpanded
+                          ? <ChevronUp className="w-3.5 h-3.5 text-muted-foreground" />
+                          : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />}
+                      </div>
+                    </button>
+
+                    {/* ── Desktop row (existing grid layout, md+ only) ── */}
+                    <button
+                      className={`hidden md:grid w-full ${COL} gap-x-2 px-4 py-3 hover:bg-muted/30 transition-colors text-left items-center`}
                       onClick={() => setExpanded(isExpanded ? null : league.leagueId)}
                       data-testid={`toggle-finance-${league.leagueId}`}
                     >

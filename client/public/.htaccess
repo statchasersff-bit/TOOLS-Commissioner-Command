@@ -1,5 +1,58 @@
+# Dynasty Command — Apache config for Bluehost sub-directory deployment.
+#
+# Deployed path: public_html/dynasty-command/launch/
+# Built by Vite with base: /dynasty-command/launch/
+#
+# Vite copies this file from client/public/.htaccess into dist/public/.htaccess
+# at build time. Upload the contents of dist/public/ into the deployed
+# directory above.
+
 RewriteEngine On
 RewriteBase /dynasty-command/launch/
+
+# ── SAFETY: never let the SPA fallback catch /assets/ requests. ───────────────
+# If a hashed asset is missing (e.g. stale upload where index.html references
+# a hash that wasn't shipped), Apache MUST return 404, not the index.html
+# HTML. Returning HTML for a .js request triggers Firefox's
+# "Loading module … was blocked because of a disallowed MIME type 'text/html'"
+# and gives no clue that the real problem is a missing file.
+#
+# `- [L]` = no substitution, stop processing further rewrite rules. Apache
+# then tries to serve the file from disk and 404s if it's not there.
+RewriteRule ^assets/ - [L]
+
+# ── SPA fallback ──────────────────────────────────────────────────────────────
+# Anything that is NOT a real file and NOT a real directory gets index.html.
+# (Real files / dirs — favicon.png, _redirects, etc. — are served as-is.)
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
 RewriteRule ^ index.html [L]
+
+# ── Force correct MIME types ─────────────────────────────────────────────────
+# Bluehost's default mime.types usually has these, but we set them explicitly
+# so a misconfigured host can never serve modules as text/plain or
+# application/octet-stream.
+<IfModule mod_mime.c>
+  AddType application/javascript .js .mjs
+  AddType text/css              .css
+  AddType application/json      .json
+  AddType application/wasm      .wasm
+  AddType image/svg+xml         .svg
+  AddType font/woff             .woff
+  AddType font/woff2            .woff2
+</IfModule>
+
+# ── Caching ──────────────────────────────────────────────────────────────────
+# Hashed assets are immutable — cache hard. index.html must never be cached
+# or users will load old HTML referencing JS hashes that no longer exist on
+# disk (exactly the failure mode that produced the MIME error).
+<IfModule mod_headers.c>
+  <FilesMatch "\.(js|mjs|css|woff2?|png|jpg|jpeg|gif|svg|ico)$">
+    Header set Cache-Control "public, max-age=31536000, immutable"
+  </FilesMatch>
+  <FilesMatch "^index\.html$">
+    Header set Cache-Control "no-cache, no-store, must-revalidate"
+    Header set Pragma        "no-cache"
+    Header set Expires       "0"
+  </FilesMatch>
+</IfModule>

@@ -405,70 +405,85 @@ function SortableLeagueRecords({ records }: { records: any[] }) {
       ? <span className={`font-semibold tabular-nums ${rank <= 3 ? "text-emerald-600 dark:text-emerald-400" : rank <= Math.ceil(total * 0.7) ? "text-foreground" : "text-red-500 dark:text-red-400"}`}>#{rank}</span>
       : <span className="text-muted-foreground text-[11px]">N/A</span>;
 
+  const visible = showAll ? sorted : sorted.slice(0, 10);
+
   return (
-    <div className="overflow-x-auto rounded-md border border-border/40">
-      <table className="w-full text-xs">
-        <thead>
-          <tr className="border-b border-border bg-muted/30">
-            <PortfolioSortHeader label="League" sortKey="leagueName" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} align="left" />
-            <PortfolioSortHeader label="Rec" sortKey="wins" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-            <PortfolioSortHeader label="W-N" sortKey="redraftRank" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-            <PortfolioSortHeader label="DYN" sortKey="dynastyRank" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-            <PortfolioSortHeader label="PLYF%" sortKey="playoffOdds" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-            <PortfolioSortHeader label="PF Rk" sortKey="pfRank" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-            <PortfolioSortHeader label="Max PF" sortKey="maxPfRank" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-            <PortfolioSortHeader label="Stnd" sortKey="standing" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-          </tr>
-        </thead>
-        <tbody>
-          {(showAll ? sorted : sorted.slice(0, 10)).map((rec: any, idx: number) => (
-            <tr key={`${rec.leagueId}-${idx}`} className="border-b border-border/20 hover:bg-muted/10" data-testid={`league-record-${rec.leagueId}`}>
-              <td className="px-1.5 md:px-3 py-2">
-                <div className="flex items-center gap-1.5 md:gap-2.5 min-w-0">
-                  {rec.avatar ? (
-                    <img src={rec.avatar} alt="" className="w-6 h-6 md:w-9 md:h-9 rounded-full flex-shrink-0 object-cover bg-muted ring-1 ring-border/40" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
-                  ) : (
-                    <div className="w-6 h-6 md:w-9 md:h-9 rounded-full flex-shrink-0 bg-[#0b3a7a]/20 dark:bg-blue-900/40 flex items-center justify-center ring-1 ring-border/40">
-                      <span className="text-[9px] md:text-xs font-bold text-[#0b3a7a] dark:text-blue-400 uppercase">{rec.leagueName?.[0] ?? "?"}</span>
-                    </div>
-                  )}
-                  <div className="min-w-0">
-                    <div className="font-semibold text-[10px] md:text-sm text-foreground break-words line-clamp-2" title={rec.leagueName}>{rec.leagueName}</div>
-                    <div className="hidden md:flex items-center gap-1 mt-0.5 flex-wrap">
-                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-muted/60 text-muted-foreground">{rec.scoringFormat === "Half" ? "Half-PPR" : rec.scoringFormat}</span>
-                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-muted/60 text-muted-foreground">{rec.totalRosters} Teams</span>
-                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-muted/60 text-muted-foreground">{rec.format}</span>
-                      {rec.isBestBall && (
-                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-sky-100 dark:bg-sky-950/40 text-sky-700 dark:text-sky-400">Best Ball</span>
-                      )}
-                    </div>
-                    <div className="flex md:hidden items-center gap-0.5 mt-0.5">
-                      <span className="text-[8px] text-muted-foreground">{rec.totalRosters}T · {rec.format}{rec.isBestBall ? " · BB" : ""}</span>
+    <div className="rounded-md border border-border/40 overflow-hidden">
+      {/* ── Mobile list (cards, no horizontal scroll) ──
+          League name is the highest-priority info: two-line wrap, decent size,
+          and the avatar+name take the bulk of the row. WN/DYN ranks live in a
+          compact stat row below the name; playoff% is folded into the metadata
+          line. PF Rk / Max PF / Standing are hidden — see desktop for those. */}
+      <div className="md:hidden divide-y divide-border/20">
+        {visible.map((rec: any, idx: number) => (
+          <MobileLeagueRow key={`m-${rec.leagueId}-${idx}`} rec={rec} rankCell={rankCell} />
+        ))}
+      </div>
+
+      {/* ── Desktop table (md+) ── */}
+      <div className="hidden md:block overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="border-b border-border bg-muted/30">
+              <PortfolioSortHeader label="League" sortKey="leagueName" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} align="left" />
+              <PortfolioSortHeader label="Rec" sortKey="wins" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+              <PortfolioSortHeader label="W-N" sortKey="redraftRank" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+              <PortfolioSortHeader label="DYN" sortKey="dynastyRank" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+              <PortfolioSortHeader label="PLYF%" sortKey="playoffOdds" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+              <PortfolioSortHeader label="PF Rk" sortKey="pfRank" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+              <PortfolioSortHeader label="Max PF" sortKey="maxPfRank" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+              <PortfolioSortHeader label="Stnd" sortKey="standing" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+            </tr>
+          </thead>
+          <tbody>
+            {visible.map((rec: any, idx: number) => (
+              <tr key={`${rec.leagueId}-${idx}`} className="border-b border-border/20 hover:bg-muted/10" data-testid={`league-record-${rec.leagueId}`}>
+                <td className="px-3 py-2">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    {rec.avatar ? (
+                      <img src={rec.avatar} alt="" className="w-9 h-9 rounded-full flex-shrink-0 object-cover bg-muted ring-1 ring-border/40" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                    ) : (
+                      <div className="w-9 h-9 rounded-full flex-shrink-0 bg-[#0b3a7a]/20 dark:bg-blue-900/40 flex items-center justify-center ring-1 ring-border/40">
+                        <span className="text-xs font-bold text-[#0b3a7a] dark:text-blue-400 uppercase">{rec.leagueName?.[0] ?? "?"}</span>
+                      </div>
+                    )}
+                    <div className="min-w-0">
+                      <div className="font-semibold text-sm text-foreground break-words line-clamp-2" title={rec.leagueName}>{rec.leagueName}</div>
+                      <div className="flex items-center gap-1 mt-0.5 flex-wrap">
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-muted/60 text-muted-foreground">{rec.scoringFormat === "Half" ? "Half-PPR" : rec.scoringFormat}</span>
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-muted/60 text-muted-foreground">{rec.totalRosters} Teams</span>
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-muted/60 text-muted-foreground">{rec.format}</span>
+                        {rec.isBestBall && (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-sky-100 dark:bg-sky-950/40 text-sky-700 dark:text-sky-400">Best Ball</span>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
-              </td>
-              <td className="px-1 md:px-2 py-2 text-center font-semibold tabular-nums whitespace-nowrap">{rec.wins}-{rec.losses}{rec.ties > 0 ? `-${rec.ties}` : ""}</td>
-              <td className="px-1 md:px-2 py-2 text-center">{rankCell(rec.redraftRank, rec.totalRosters)}</td>
-              <td className="px-1 md:px-2 py-2 text-center">{rankCell(rec.dynastyRank, rec.totalRosters)}</td>
-              <td className="px-1 md:px-2 py-2 text-center" data-testid={`text-playoff-odds-${rec.leagueId}`}>
-                {rec.playoffOdds != null
-                  ? <span className={`font-semibold tabular-nums ${rec.playoffOdds >= 70 ? "text-emerald-600 dark:text-emerald-400" : rec.playoffOdds >= 40 ? "text-foreground" : "text-red-500 dark:text-red-400"}`}>{rec.playoffOdds}%</span>
-                  : <span className="text-muted-foreground text-[11px]">N/A</span>}
-              </td>
-              <td className="px-1 md:px-2 py-2 text-center" data-testid={`text-pf-rank-${rec.leagueId}`}>{rankCell(rec.pfRank, rec.totalRosters)}</td>
-              <td className="px-1 md:px-2 py-2 text-center">
-                {rec.maxPfRank > 0
-                  ? <span className={`font-semibold tabular-nums ${rec.maxPfRank <= 3 ? "text-emerald-600 dark:text-emerald-400" : rec.maxPfRank <= Math.ceil(rec.totalRosters * 0.7) ? "text-foreground" : "text-red-500 dark:text-red-400"}`}>#{rec.maxPfRank}<span className="text-muted-foreground font-normal">/{rec.totalRosters}</span></span>
-                  : <span className="text-muted-foreground text-[11px]">N/A</span>}
-              </td>
-              <td className="px-1 md:px-2 py-2 text-center" data-testid={`text-standing-${rec.leagueId}`}>
-                {rec.totalGamesPlayed > 0 && rec.standing > 0 ? rankCell(rec.standing, rec.totalRosters) : <span className="text-muted-foreground text-[11px]">N/A</span>}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+                </td>
+                <td className="px-2 py-2 text-center font-semibold tabular-nums whitespace-nowrap">{rec.wins}-{rec.losses}{rec.ties > 0 ? `-${rec.ties}` : ""}</td>
+                <td className="px-2 py-2 text-center">{rankCell(rec.redraftRank, rec.totalRosters)}</td>
+                <td className="px-2 py-2 text-center">{rankCell(rec.dynastyRank, rec.totalRosters)}</td>
+                <td className="px-2 py-2 text-center" data-testid={`text-playoff-odds-${rec.leagueId}`}>
+                  {rec.playoffOdds != null
+                    ? <span className={`font-semibold tabular-nums ${rec.playoffOdds >= 70 ? "text-emerald-600 dark:text-emerald-400" : rec.playoffOdds >= 40 ? "text-foreground" : "text-red-500 dark:text-red-400"}`}>{rec.playoffOdds}%</span>
+                    : <span className="text-muted-foreground text-[11px]">N/A</span>}
+                </td>
+                <td className="px-2 py-2 text-center" data-testid={`text-pf-rank-${rec.leagueId}`}>{rankCell(rec.pfRank, rec.totalRosters)}</td>
+                <td className="px-2 py-2 text-center">
+                  {rec.maxPfRank > 0
+                    ? <span className={`font-semibold tabular-nums ${rec.maxPfRank <= 3 ? "text-emerald-600 dark:text-emerald-400" : rec.maxPfRank <= Math.ceil(rec.totalRosters * 0.7) ? "text-foreground" : "text-red-500 dark:text-red-400"}`}>#{rec.maxPfRank}<span className="text-muted-foreground font-normal">/{rec.totalRosters}</span></span>
+                    : <span className="text-muted-foreground text-[11px]">N/A</span>}
+                </td>
+                <td className="px-2 py-2 text-center" data-testid={`text-standing-${rec.leagueId}`}>
+                  {rec.totalGamesPlayed > 0 && rec.standing > 0 ? rankCell(rec.standing, rec.totalRosters) : <span className="text-muted-foreground text-[11px]">N/A</span>}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Shared "Show all" toggle — drives both mobile list and desktop table. */}
       {sorted.length > 10 && (
         <button
           onClick={() => setShowAll(prev => !prev)}
@@ -478,6 +493,64 @@ function SortableLeagueRecords({ records }: { records: any[] }) {
           {showAll ? "Show Less" : `Show All ${sorted.length} Leagues`}
         </button>
       )}
+    </div>
+  );
+}
+
+// ── Mobile league-record card ────────────────────────────────────────────────
+// Layout target (≥320px viewports):
+//   [Avatar] League Name (≤2 lines)
+//            12T SF · 95% PLYF
+//            WN #1 · DYN #3 · 8-5
+// Row height lands ~76-88px depending on whether the name wraps to 2 lines.
+function MobileLeagueRow({ rec, rankCell }: { rec: any; rankCell: (rank: number, total: number) => JSX.Element }) {
+  const recordLabel = rec.totalGamesPlayed > 0
+    ? `${rec.wins}-${rec.losses}${rec.ties > 0 ? `-${rec.ties}` : ""}`
+    : null;
+  const scoring = rec.scoringFormat === "Half" ? "½PPR" : rec.scoringFormat;
+  const playoffCls = rec.playoffOdds == null
+    ? "text-muted-foreground"
+    : rec.playoffOdds >= 70 ? "text-emerald-600 dark:text-emerald-400"
+    : rec.playoffOdds >= 40 ? "text-foreground"
+    : "text-red-500 dark:text-red-400";
+
+  return (
+    <div className="flex items-start gap-2.5 px-3 py-3 hover:bg-muted/10 transition-colors" data-testid={`league-record-mobile-${rec.leagueId}`}>
+      {rec.avatar ? (
+        <img src={rec.avatar} alt="" className="w-9 h-9 rounded-full flex-shrink-0 object-cover bg-muted ring-1 ring-border/40 mt-0.5" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+      ) : (
+        <div className="w-9 h-9 rounded-full flex-shrink-0 bg-[#0b3a7a]/20 dark:bg-blue-900/40 flex items-center justify-center ring-1 ring-border/40 mt-0.5">
+          <span className="text-xs font-bold text-[#0b3a7a] dark:text-blue-400 uppercase">{rec.leagueName?.[0] ?? "?"}</span>
+        </div>
+      )}
+      <div className="flex-1 min-w-0">
+        <div className="font-semibold text-[13px] leading-tight line-clamp-2 break-words text-foreground" title={rec.leagueName}>
+          {rec.leagueName}
+        </div>
+        <div className="flex items-center gap-1 text-[10px] text-muted-foreground mt-1 min-w-0">
+          <span className="truncate">{rec.totalRosters}T · {rec.format} · {scoring}{rec.isBestBall ? " · BB" : ""}</span>
+          {rec.playoffOdds != null && (
+            <>
+              <span className="flex-shrink-0">·</span>
+              <span className={`flex-shrink-0 font-semibold tabular-nums ${playoffCls}`} data-testid={`text-playoff-odds-mobile-${rec.leagueId}`}>{rec.playoffOdds}% PLYF</span>
+            </>
+          )}
+        </div>
+        <div className="flex items-center gap-2 mt-1.5 text-[11px]">
+          <span className="flex items-center gap-1">
+            <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">WN</span>
+            {rankCell(rec.redraftRank, rec.totalRosters)}
+          </span>
+          <span className="text-border/60">·</span>
+          <span className="flex items-center gap-1">
+            <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">DYN</span>
+            {rankCell(rec.dynastyRank, rec.totalRosters)}
+          </span>
+          {recordLabel && (
+            <span className="ml-auto text-muted-foreground font-medium tabular-nums">{recordLabel}</span>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

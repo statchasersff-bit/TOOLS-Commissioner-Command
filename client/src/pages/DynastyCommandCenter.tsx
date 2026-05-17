@@ -37,16 +37,20 @@ import { LineupCommand } from "./tabs/LineupCommand";
 import TradeSync from "./tabs/TradeSync";
 import { CompareRBs } from "./tabs/CompareRBs";
 import { ShareDynastyPopup } from "@/components/ShareDynastyPopup";
+import { WhatsNewModal } from "@/components/WhatsNewModal";
 import { AboutPage } from "@/components/AboutModal";
 import { FeedbackPage } from "@/components/FeedbackPage";
 import { TermsPage, PrivacyPage, CookiesPage } from "@/components/LegalModals";
 
 const STORAGE_KEY = "sc-dynasty-state";
 
+// NOTE: leagueId is no longer persisted here — it lives in SleeperContext's
+// own per-user storage (`sc-active-league:<userId>`) so accounts can't inherit
+// each other's selection. Any legacy `leagueId` key in this payload is ignored.
 function loadSavedState() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return JSON.parse(raw) as { tab?: string; sub?: string; leagueId?: string };
+    if (raw) return JSON.parse(raw) as { tab?: string; sub?: string };
   } catch {}
   return null;
 }
@@ -57,13 +61,12 @@ function getInitialState(pathTab?: string, pathSub?: string) {
   const requestedSub = pathSub || saved?.sub || "portfolio-summary";
 
   if (requestedTab === "live-draft") {
-    return { tab: "portfolio", sub: "portfolio-summary", leagueId: saved?.leagueId || null };
+    return { tab: "portfolio", sub: "portfolio-summary" };
   }
 
   return {
     tab: requestedTab,
     sub: requestedSub,
-    leagueId: saved?.leagueId || null,
   };
 }
 
@@ -72,7 +75,6 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
   useEffect(() => { console.log("[app] DynastyCommandCenter mounted"); }, []);
   const [, setLocation] = useLocation();
   const initial = getInitialState(params?.tab, params?.sub);
-  const [selectedLeagueId, setSelectedLeagueId] = useState<string | null>(initial.leagueId);
   const [activeMainTab, setActiveMainTab] = useState(initial.tab);
   const [activeSubTab, setActiveSubTab] = useState(initial.sub);
   const [isTransitioning, setIsTransitioning] = useState(false);
@@ -90,6 +92,13 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
   const { isRecalculating, isLoading, getPlayerValue, getPickValue, calculateAllTeamMetrics, optimizeLineup } = useValueModel();
   const sleeper = useSleeper();
   const { user: scUser, logout: scLogout } = useAuth();
+
+  // Single source of truth for "which league are we looking at?" — lives in
+  // SleeperContext so the header, every module page, and any future
+  // league-specific tool all read the same value. The header dropdown writes
+  // to it; modules (e.g. WaiverCommand) also write to it on row clicks via
+  // useActiveLeagueNavigation. Persistence is handled inside SleeperContext.
+  const selectedLeagueId = sleeper.activeLeagueId;
 
   const sleeperLeaguesAsLeagues = useMemo(() => {
     return sleeper.leagues.map((sl) => ({
@@ -197,10 +206,9 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
       localStorage.setItem(STORAGE_KEY, JSON.stringify({
         tab: activeMainTab,
         sub: activeSubTab,
-        leagueId: selectedLeagueId,
       }));
     } catch {}
-  }, [activeMainTab, activeSubTab, selectedLeagueId, setLocation]);
+  }, [activeMainTab, activeSubTab, setLocation]);
 
   useEffect(() => {
     if (!userDropdownOpen) return;
@@ -225,7 +233,6 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
   }, [logoMenuOpen]);
 
   const handleLeagueSelect = useCallback((id: string) => {
-    setSelectedLeagueId(id);
     sleeper.setActiveLeague(id);
   }, [sleeper]);
 
@@ -660,6 +667,13 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
         blocked={false}
         forceOpen={forceOpenShare}
         onForceOpenConsumed={() => setForceOpenShare(false)}
+      />
+      {/* DCC mounts only after AuthGate clears, so a non-null scUser is the
+          authoritative signal that the user is signed in. The modal handles
+          its own per-version localStorage gating. */}
+      <WhatsNewModal
+        isAuthenticated={!!scUser}
+        onViewChangelog={() => handleMainTabChange("about")}
       />
       <MobileBottomNav
         tabs={NAV_CONFIG}
