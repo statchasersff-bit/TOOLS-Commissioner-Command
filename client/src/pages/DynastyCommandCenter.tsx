@@ -69,7 +69,6 @@ function getInitialState(pathTab?: string, pathSub?: string) {
 
 
 export default function DynastyCommandCenter({ params }: { params?: { tab?: string; sub?: string } }) {
-  useEffect(() => { console.log("[trace] DynastyCommandCenter mounted OK"); }, []);
   const [, setLocation] = useLocation();
   const initial = getInitialState(params?.tab, params?.sub);
   const [selectedLeagueId, setSelectedLeagueId] = useState<string | null>(initial.leagueId);
