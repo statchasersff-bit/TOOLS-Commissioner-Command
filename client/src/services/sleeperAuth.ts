@@ -58,6 +58,32 @@ export function getActiveDcUserId(): string | null {
 }
 
 /**
+ * Detect and remove pre-scoping legacy Sleeper keys. Returns the list of keys
+ * that were found and removed, so the caller can flag the bootstrap source
+ * as "legacy-cache-removed" for diagnostics.
+ *
+ * Call at the START of every bootstrap (checkSession) — before reading any
+ * scoped session — so that no code path can ever observe a legacy global key.
+ */
+export function detectAndRemoveLegacySleeperKeys(): string[] {
+  const removed: string[] = [];
+  try {
+    const legacyKeys = [
+      LEGACY_GLOBAL_KEY,
+      LEGACY_SC_USERNAME_KEY,
+      LEGACY_DRAFT_JWT_KEY,
+    ];
+    for (const k of legacyKeys) {
+      if (localStorage.getItem(k) !== null) {
+        localStorage.removeItem(k);
+        removed.push(k);
+      }
+    }
+  } catch { /* ignore */ }
+  return removed;
+}
+
+/**
  * Purge every Sleeper-related localStorage entry across all DC users.
  * Call on full DC logout so a future sign-in cannot inherit prior state.
  */
