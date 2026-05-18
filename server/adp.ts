@@ -112,23 +112,69 @@ async function fetchJson<T>(url: string): Promise<T | null> {
   }
 }
 
+// ── League scoring (for TEP / scoring / superflex / pass_td detection) ───────
+// Draft payloads do *not* expose scoring overrides — TE Premium in particular
+// only lives on the league's scoring_settings. We fetch the league once per
+// process and cache it; leagues' scoring is effectively immutable in-season,
+// and the cache resets on each server restart.
+
+interface SleeperLeagueScoring {
+  scoring_settings?: {
+    rec?: number;
+    bonus_rec_te?: number;
+    rec_te?: number;
+    pass_td?: number;
+    [k: string]: any;
+  };
+  roster_positions?: string[];
+  settings?: { pass_td?: number; [k: string]: any };
+}
+
+const leagueScoringCache = new Map<string, SleeperLeagueScoring | null>();
+
+async function fetchLeagueScoring(leagueId: string | null | undefined): Promise<SleeperLeagueScoring | null> {
+  if (!leagueId) return null;
+  if (leagueScoringCache.has(leagueId)) return leagueScoringCache.get(leagueId) ?? null;
+  const data = await fetchJson<SleeperLeagueScoring>(`${SLEEPER_API}/league/${leagueId}`);
+  leagueScoringCache.set(leagueId, data ?? null);
+  return data ?? null;
+}
+
 // ── Sleeper → normalized draft ───────────────────────────────────────────────
 
-function deriveScoringType(d: SleeperDraftRaw): "ppr" | "half" | "standard" {
-  const rec = d.settings?.rec ?? 0;
-  if (rec === 1) return "ppr";
-  if (rec === 0.5) return "half";
+function deriveScoringType(d: SleeperDraftRaw, league: SleeperLeagueScoring | null): "ppr" | "half" | "standard" {
+  // Prefer the league's scoring_settings.rec when present — draft.settings.rec
+  // is sometimes missing for older drafts.
+  const rec = league?.scoring_settings?.rec ?? d.settings?.rec ?? 0;
+  if (rec >= 0.99) return "ppr";
+  if (rec >= 0.4) return "half";
   return "standard";
 }
 
-function deriveSuperflex(d: SleeperDraftRaw): boolean {
-  return (d.settings?.slots_super_flex ?? 0) > 0;
+function deriveSuperflex(d: SleeperDraftRaw, league: SleeperLeagueScoring | null): boolean {
+  if ((d.settings?.slots_super_flex ?? 0) > 0) return true;
+  const rp = league?.roster_positions ?? [];
+  return rp.includes("SUPER_FLEX");
 }
 
-function deriveTePremium(d: SleeperDraftRaw): boolean {
-  // Sleeper exposes TE premium via scoring overrides on the league, not the
-  // draft. We don't have those here, so the flag stays false unless we
-  // explicitly pull league scoring. Defensive default keeps filters honest.
+function derivePassTd(d: SleeperDraftRaw, league: SleeperLeagueScoring | null): number {
+  const fromLeague = league?.scoring_settings?.pass_td;
+  if (typeof fromLeague === "number") return fromLeague >= 5 ? 6 : 4;
+  return d.settings?.pass_td === 6 ? 6 : 4;
+}
+
+function deriveTePremium(league: SleeperLeagueScoring | null): boolean {
+  // TEP is encoded as a TE-only reception bonus on top of the base PPR. The
+  // canonical Sleeper field is bonus_rec_te (additional points per TE
+  // reception); some leagues use rec_te (full override). Either signal that
+  // breaks the WR/TE reception parity counts as TEP.
+  const s = league?.scoring_settings;
+  if (!s) return false;
+  const bonus = Number(s.bonus_rec_te ?? 0);
+  if (bonus > 0) return true;
+  const recTe = s.rec_te;
+  const baseRec = Number(s.rec ?? 0);
+  if (typeof recTe === "number" && recTe > baseRec) return true;
   return false;
 }
 
@@ -205,12 +251,19 @@ export async function ingestDraftById(draftId: string): Promise<{ ok: boolean; s
   const hasPicks = Array.isArray(picksRaw) && picksRaw.some((p) => p.player_id);
   const completed = isCompletedStatus(draftRaw.status, hasPicks);
 
-  console.log(`[ADP ingestDraftById] ${draftId} status="${draftRaw.status}" picks=${picksRaw?.length ?? 0} completed=${completed}`);
+  // Pull league scoring once per draft. This is the only way to detect TE
+  // Premium, and the most reliable source for rec / superflex / pass_td.
+  const league = await fetchLeagueScoring(draftRaw.league_id);
+
+  console.log(
+    `[ADP ingestDraftById] ${draftId} status="${draftRaw.status}" picks=${picksRaw?.length ?? 0} ` +
+    `completed=${completed} tep=${deriveTePremium(league)} rec=${league?.scoring_settings?.rec ?? "?"}`
+  );
 
   // Per spec: only completed drafts go into ADP by default. We still record
   // their existence so the admin tools can see in-progress drafts.
   if (!completed) {
-    await upsertDraftRow(draftRaw, /* directlyDraftedRookies */ false, completed);
+    await upsertDraftRow(draftRaw, /* directlyDraftedRookies */ false, completed, league);
     return { ok: true, status: draftRaw.status, picks: 0, reason: "not complete" };
   }
 
@@ -226,7 +279,7 @@ export async function ingestDraftById(draftId: string): Promise<{ ok: boolean; s
   const directlyDraftedRookies = draftType !== "startup"
     && picksRaw.some((p) => p.player_id && (p.metadata?.position || "").length > 0);
 
-  await upsertDraftRow(draftRaw, directlyDraftedRookies, completed);
+  await upsertDraftRow(draftRaw, directlyDraftedRookies, completed, league);
 
   // Replace picks atomically (cheap — they're small per draft).
   await db.delete(draftPicks).where(eq(draftPicks.draftId, draftId));
@@ -275,7 +328,12 @@ export async function ingestDraftById(draftId: string): Promise<{ ok: boolean; s
   return { ok: true, status: draftRaw.status, picks: rows.length };
 }
 
-async function upsertDraftRow(draftRaw: SleeperDraftRaw, directlyDraftedRookies: boolean, completed: boolean) {
+async function upsertDraftRow(
+  draftRaw: SleeperDraftRaw,
+  directlyDraftedRookies: boolean,
+  completed: boolean,
+  league: SleeperLeagueScoring | null,
+) {
   const dates = pickDraftDate(draftRaw, completed);
   const draftType = deriveDraftType(draftRaw);
   const draftFormat = deriveDraftFormat(draftRaw);
@@ -291,12 +349,12 @@ async function upsertDraftRow(draftRaw: SleeperDraftRaw, directlyDraftedRookies:
     draftFormat,
     teams: draftRaw.settings?.teams ?? 12,
     rounds: draftRaw.settings?.rounds ?? 0,
-    scoringType: deriveScoringType(draftRaw),
+    scoringType: deriveScoringType(draftRaw, league),
     leagueMode: "dynasty" as const,
-    superflex: deriveSuperflex(draftRaw),
-    tePremium: deriveTePremium(draftRaw),
+    superflex: deriveSuperflex(draftRaw, league),
+    tePremium: deriveTePremium(league),
     bestBall: (draftRaw.settings?.best_ball ?? 0) === 1,
-    passTd: draftRaw.settings?.pass_td === 6 ? 6 : 4,
+    passTd: derivePassTd(draftRaw, league),
     rosterSize:
       (draftRaw.settings?.slots_qb ?? 0) +
       (draftRaw.settings?.slots_rb ?? 0) +
@@ -329,6 +387,50 @@ async function upsertDraftRow(draftRaw: SleeperDraftRaw, directlyDraftedRookies:
       target: drafts.draftId,
       set: values,
     });
+}
+
+/**
+ * Walk every league we've already stored a draft for, fetch each league's
+ * scoring once, and update its drafts' tePremium / scoringType / superflex /
+ * passTd flags in place. Avoids re-fetching draft payloads or picks — useful
+ * after adding a new league-derived field.
+ */
+export async function backfillLeagueScoring(): Promise<{ leagues: number; drafts: number; tePremium: number }> {
+  const distinct = await db
+    .selectDistinct({ leagueId: drafts.leagueId })
+    .from(drafts);
+
+  const leagueIds = distinct
+    .map((d) => d.leagueId)
+    .filter((id): id is string => typeof id === "string" && id.length > 0);
+
+  let updated = 0;
+  let tepCount = 0;
+
+  for (const leagueId of leagueIds) {
+    const league = await fetchLeagueScoring(leagueId);
+    if (!league) continue;
+
+    // Read each draft once so we can use deriveScoringType / deriveSuperflex
+    // which want the raw SleeperDraftRaw — but for the backfill we only need
+    // the league-derived flags, so we synthesize a minimal stand-in.
+    const fakeDraft = { settings: {}, type: "snake", season: "" } as unknown as SleeperDraftRaw;
+    const tep = deriveTePremium(league);
+    const sf = deriveSuperflex(fakeDraft, league);
+    const scoring = deriveScoringType(fakeDraft, league);
+    const passTd = derivePassTd(fakeDraft, league);
+
+    await db
+      .update(drafts)
+      .set({ tePremium: tep, superflex: sf, scoringType: scoring, passTd })
+      .where(eq(drafts.leagueId, leagueId));
+
+    updated++;
+    if (tep) tepCount++;
+  }
+
+  console.log(`[ADP backfillLeagueScoring] leagues=${leagueIds.length} updated=${updated} tep=${tepCount}`);
+  return { leagues: leagueIds.length, drafts: updated, tePremium: tepCount };
 }
 
 export async function ingestLeagueDrafts(leagueId: string): Promise<{ ok: boolean; drafts: number; completed: number }> {
@@ -678,7 +780,10 @@ const INGEST_BATCH = 100;
 
 export function startAdpScheduler() {
   // Don't block server startup — kick the first refresh off-thread.
-  refreshDefaultSnapshots()
+  // Backfill league-derived flags first so the snapshot refresh sees correct
+  // tePremium / scoringType values when keying snapshots.
+  backfillLeagueScoring()
+    .then(() => refreshDefaultSnapshots())
     .then((r) => console.log(`[ADP] Initial snapshot refresh: ${r.combos} combos, ${r.rows} total rows`))
     .catch((err) => console.error("[ADP] Initial snapshot refresh failed:", err));
 

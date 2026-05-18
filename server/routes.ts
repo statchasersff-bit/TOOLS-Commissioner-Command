@@ -39,6 +39,7 @@ import {
   refreshDefaultSnapshots,
   getAdp,
   startAdpScheduler,
+  backfillLeagueScoring,
   type AdpFilters,
 } from "./adp";
 import {
@@ -788,6 +789,17 @@ export async function registerRoutes(
     } catch (err: any) {
       console.error("[Admin] adp/ingest-crawled error:", err);
       res.status(500).json({ error: err.message || "Ingest failed" });
+    }
+  });
+
+  app.post("/api/admin/adp/backfill-league-scoring", async (req, res) => {
+    if (!requireAdmin(req, res)) return;
+    try {
+      const result = await backfillLeagueScoring();
+      res.json(result);
+    } catch (err: any) {
+      console.error("[Admin] adp/backfill-league-scoring error:", err);
+      res.status(500).json({ error: err.message || "Backfill failed" });
     }
   });
 

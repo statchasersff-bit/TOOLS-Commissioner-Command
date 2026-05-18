@@ -1391,12 +1391,6 @@ function FilterSheet({
             ]} />
           </FilterGroup>
 
-          <FilterGroup label="League Mode">
-            <SelectField value={filters.leagueMode} onChange={(v) => update("leagueMode", v as DraftFilters["leagueMode"])} options={[
-              { value: "dynasty", label: "Dynasty" }, { value: "keeper", label: "Keeper" },
-              { value: "redraft", label: "Redraft" }, { value: "all", label: "All" },
-            ]} />
-          </FilterGroup>
         </div>
 
         <div className="flex items-center gap-2 mt-6 pb-4">
@@ -1509,7 +1503,6 @@ function countActiveFilters(f: DraftFilters): number {
   if (f.superflex   !== DEFAULT_FILTERS.superflex)   n++;
   if (f.starters    !== DEFAULT_FILTERS.starters)    n++;
   if (f.rosterSize  !== DEFAULT_FILTERS.rosterSize)  n++;
-  if (f.leagueMode  !== DEFAULT_FILTERS.leagueMode)  n++;
   return n;
 }
 
