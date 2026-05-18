@@ -250,3 +250,42 @@ export const adpSnapshots = pgTable("adp_snapshots", {
 export type Draft = typeof drafts.$inferSelect;
 export type DraftPick = typeof draftPicks.$inferSelect;
 export type AdpSnapshot = typeof adpSnapshots.$inferSelect;
+
+// ── Custom value sets (Value Source Manager) ─────────────────────────────────
+// One row per uploaded value set. value_type partitions dynasty vs redraft;
+// only one row per (user_id, value_type) should be is_active=true at a time
+// — the application enforces this rather than a partial-unique index so
+// activating a set just flips the previous active row off.
+
+export const userValueSets = pgTable("user_value_sets", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull(),
+  valueType: varchar("value_type", { length: 10 }).notNull(),
+  name: text("name").notNull(),
+  source: varchar("source", { length: 30 }).notNull().default("custom_upload"),
+  isActive: boolean("is_active").notNull().default(false),
+  totalRows: integer("total_rows").notNull().default(0),
+  matchedRows: integer("matched_rows").notNull().default(0),
+  unmatchedRows: integer("unmatched_rows").notNull().default(0),
+  invalidRows: integer("invalid_rows").notNull().default(0),
+  duplicateRows: integer("duplicate_rows").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const userPlayerValues = pgTable("user_player_values", {
+  id: serial("id").primaryKey(),
+  valueSetId: integer("value_set_id").notNull(),
+  // Sleeper ID when matched, otherwise null + matched=false. We still store
+  // unmatched rows so the user can review them in the manage screen.
+  playerId: varchar("player_id"),
+  playerName: text("player_name").notNull(),
+  position: varchar("position", { length: 5 }),
+  team: varchar("team", { length: 10 }),
+  value: integer("value").notNull().default(0),
+  matched: boolean("matched").notNull().default(false),
+  matchMethod: varchar("match_method", { length: 20 }),
+});
+
+export type UserValueSet = typeof userValueSets.$inferSelect;
+export type UserPlayerValue = typeof userPlayerValues.$inferSelect;

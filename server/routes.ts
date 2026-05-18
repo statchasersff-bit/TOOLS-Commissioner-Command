@@ -41,6 +41,18 @@ import {
   startAdpScheduler,
   type AdpFilters,
 } from "./adp";
+import {
+  previewCsv,
+  saveValueSet,
+  listValueSets,
+  activateValueSet,
+  deactivateValueSet,
+  deleteValueSet,
+  getResolvedValues,
+  type ValueType,
+  type ParsedRow,
+} from "./customValues";
+import { getUserIdFromRequest } from "./scAuthRoutes";
 import { getFinancesForUser, upsertLeagueFinance } from "./finances";
 import { registerScAuthRoutes } from "./scAuthRoutes";
 import {
@@ -457,6 +469,175 @@ export async function registerRoutes(
       res.json({ token: signToken(sleeperId) });
     } catch (err: any) {
       res.status(500).json({ error: err.message || "Exchange failed" });
+    }
+  });
+
+  // ── Custom value sets (Value Source Manager) ──────────────────────────────
+  // Preview parses + matches without persisting; the parsed rows are kept in
+  // a short-lived in-memory cache keyed by a token so the save call doesn't
+  // re-upload the CSV.
+
+  const previewCache = new Map<string, { userId: string; rows: ParsedRow[]; expiresAt: number }>();
+  const PREVIEW_TTL_MS = 10 * 60 * 1000;
+  setInterval(() => {
+    const now = Date.now();
+    for (const [k, v] of previewCache.entries()) {
+      if (v.expiresAt < now) previewCache.delete(k);
+    }
+  }, 60 * 1000).unref?.();
+
+  const MAX_CSV_BYTES = 4 * 1024 * 1024;
+  const isValueType = (s: unknown): s is ValueType => s === "dynasty" || s === "redraft";
+
+  const requireScUser = (req: any, res: any): string | null => {
+    const uid = getUserIdFromRequest(req);
+    if (!uid) { res.status(401).json({ error: "Not authenticated" }); return null; }
+    return uid;
+  };
+
+  app.post("/api/values/custom/preview", async (req, res) => {
+    const userId = requireScUser(req, res);
+    if (!userId) return;
+    try {
+      const { csv, valueType } = req.body as { csv?: string; valueType?: string };
+      if (!isValueType(valueType)) {
+        return res.status(400).json({ error: "valueType must be 'dynasty' or 'redraft'" });
+      }
+      if (typeof csv !== "string" || csv.length === 0) {
+        return res.status(400).json({ error: "csv body is required" });
+      }
+      if (csv.length > MAX_CSV_BYTES) {
+        return res.status(413).json({ error: `CSV exceeds ${MAX_CSV_BYTES} byte limit` });
+      }
+
+      const preview = await previewCsv(csv);
+      const token = `${userId}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+      previewCache.set(token, {
+        userId,
+        rows: preview.rows,
+        expiresAt: Date.now() + PREVIEW_TTL_MS,
+      });
+
+      res.json({
+        token,
+        valueType,
+        totalRows: preview.totalRows,
+        matchedCount: preview.matchedCount,
+        unmatchedCount: preview.unmatchedCount,
+        invalidCount: preview.invalidCount,
+        duplicateCount: preview.duplicateCount,
+        matchRate: preview.matchRate,
+        sample: preview.sample,
+        unmatchedSample: preview.unmatchedSample,
+        invalidSample: preview.invalidSample,
+      });
+    } catch (err: any) {
+      console.error("[custom-values/preview] error:", err.message);
+      res.status(400).json({ error: err.message || "Failed to parse CSV" });
+    }
+  });
+
+  app.post("/api/values/custom/save", async (req, res) => {
+    const userId = requireScUser(req, res);
+    if (!userId) return;
+    try {
+      const { token, valueType, name, activate } = req.body as {
+        token?: string;
+        valueType?: string;
+        name?: string;
+        activate?: boolean;
+      };
+      if (!isValueType(valueType)) return res.status(400).json({ error: "valueType must be 'dynasty' or 'redraft'" });
+      if (!token) return res.status(400).json({ error: "token is required" });
+
+      const cached = previewCache.get(token);
+      if (!cached || cached.userId !== userId) {
+        return res.status(404).json({ error: "Preview expired. Please re-upload the CSV." });
+      }
+
+      const result = await saveValueSet({
+        userId,
+        valueType,
+        name: (name && name.trim()) || `Custom ${valueType} values`,
+        rows: cached.rows,
+        activate: activate !== false,
+      });
+
+      previewCache.delete(token);
+      res.json({ ok: true, ...result });
+    } catch (err: any) {
+      console.error("[custom-values/save] error:", err.message);
+      res.status(500).json({ error: err.message || "Failed to save value set" });
+    }
+  });
+
+  app.get("/api/values/custom/sets", async (req, res) => {
+    const userId = requireScUser(req, res);
+    if (!userId) return;
+    try {
+      const sets = await listValueSets(userId);
+      res.json({ sets });
+    } catch (err: any) {
+      console.error("[custom-values/sets] error:", err.message);
+      res.status(500).json({ error: err.message || "Failed to list value sets" });
+    }
+  });
+
+  app.post("/api/values/custom/sets/:id/activate", async (req, res) => {
+    const userId = requireScUser(req, res);
+    if (!userId) return;
+    try {
+      const id = parseInt(req.params.id, 10);
+      if (!Number.isFinite(id)) return res.status(400).json({ error: "invalid id" });
+      await activateValueSet(userId, id);
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || "Failed to activate value set" });
+    }
+  });
+
+  app.post("/api/values/custom/deactivate", async (req, res) => {
+    const userId = requireScUser(req, res);
+    if (!userId) return;
+    try {
+      const { valueType } = req.body as { valueType?: string };
+      if (!isValueType(valueType)) return res.status(400).json({ error: "valueType must be 'dynasty' or 'redraft'" });
+      await deactivateValueSet(userId, valueType);
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || "Failed to deactivate" });
+    }
+  });
+
+  app.delete("/api/values/custom/sets/:id", async (req, res) => {
+    const userId = requireScUser(req, res);
+    if (!userId) return;
+    try {
+      const id = parseInt(req.params.id, 10);
+      if (!Number.isFinite(id)) return res.status(400).json({ error: "invalid id" });
+      await deleteValueSet(userId, id);
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || "Failed to delete value set" });
+    }
+  });
+
+  // Resolved view for the client-side context — returns the active dynasty
+  // and redraft maps (if any) keyed by sleeper id and by name+pos so the
+  // context can layer them over FantasyCalc.
+  app.get("/api/values/custom/resolved", async (req, res) => {
+    const userId = getUserIdFromRequest(req);
+    if (!userId) {
+      // Not authenticated: behave like an empty set so unauthenticated UIs
+      // still render with pure FantasyCalc.
+      return res.json({ dynasty: null, redraft: null });
+    }
+    try {
+      const resolved = await getResolvedValues(userId);
+      res.json(resolved);
+    } catch (err: any) {
+      console.error("[custom-values/resolved] error:", err.message);
+      res.status(500).json({ error: err.message || "Failed to resolve values" });
     }
   });
 

@@ -2,6 +2,22 @@ import { createContext, useContext, useState, useCallback, useMemo, useEffect } 
 import type { ValueSourceId, ValueSourceOption, Player, Pick, Team, TeamMetrics } from "../types";
 import { getStaticPickValue } from "../data/pickValues";
 import { getFantasyCalcValues, getFantasyCalcRedraftValues } from "@/lib/fantasycalcApi";
+import { scAuthFetch } from "@/lib/scAuthFetch";
+
+// Server-resolved custom value sets — see server/customValues.ts.
+interface ResolvedCustomSet {
+  setId: number;
+  name: string;
+  valuesBySleeperId: Record<string, number>;
+  valuesByNamePos: Record<string, number>;
+  matchedCount: number;
+  unmatchedCount: number;
+  updatedAt: string | null;
+}
+interface ResolvedCustomValuesResponse {
+  dynasty: ResolvedCustomSet | null;
+  redraft: ResolvedCustomSet | null;
+}
 
 const VALUE_SOURCES: ValueSourceOption[] = [
   { id: "fantasycalc", label: "FantasyCalc", description: "FantasyCalc values update daily. StatChasers caches values once per day.", active: true },
@@ -35,6 +51,15 @@ export interface RankedPlayer {
   age: number;
 }
 
+export interface CustomSourceStatus {
+  active: boolean;
+  setId: number | null;
+  name: string | null;
+  matchedCount: number;
+  unmatchedCount: number;
+  updatedAt: string | null;
+}
+
 interface ValueModel {
   sourceId: ValueSourceId;
   sources: ValueSourceOption[];
@@ -44,8 +69,22 @@ interface ValueModel {
   isSnapshot: boolean;
   unmatchedCount: number;
   diagnostics: ValueDiagnostics;
+  // Per-type source labels for the header UI. "custom" when a user-uploaded
+  // set is active, otherwise "fantasycalc".
+  dynastySource: "custom" | "fantasycalc";
+  redraftSource: "custom" | "fantasycalc";
+  dynastyCustom: CustomSourceStatus;
+  redraftCustom: CustomSourceStatus;
+  /** Force-reload custom values from the server — call after upload/activate. */
+  refreshCustomValues: () => Promise<void>;
   getPlayerValue: (player: Player) => number;
   getRedraftValue: (player: Player) => number;
+  /**
+   * Like getPlayerValue but also returns the source. Useful for UI badges
+   * that want to show "Custom" / "FC" per row.
+   */
+  getPlayerValueWithSource: (player: Player) => { value: number; source: "custom" | "fantasycalc" };
+  getRedraftValueWithSource: (player: Player) => { value: number; source: "custom" | "fantasycalc" };
   getPickValue: (pick: Pick) => number;
   calculateTeamValue: (team: Team) => number;
   calculateAllTeamMetrics: (teams: Team[], rosterPositions?: string[]) => Map<string, TeamMetrics>;
@@ -76,6 +115,8 @@ export function ValueModelProvider({ children }: { children: React.ReactNode }) 
   const [redraftValuesBySleeperId, setRedraftValuesBySleeperId] = useState<Record<string, number>>({});
   const [redraftNameValueMap, setRedraftNameValueMap] = useState<Record<string, number>>({});
   const [dynastyPlayerList, setDynastyPlayerList] = useState<RankedPlayer[]>([]);
+  const [customDynasty, setCustomDynasty] = useState<ResolvedCustomSet | null>(null);
+  const [customRedraft, setCustomRedraft] = useState<ResolvedCustomSet | null>(null);
   const [diagnostics, setDiagnostics] = useState<ValueDiagnostics>({
     updatedAt: "",
     mappedCount: 0,
@@ -83,6 +124,39 @@ export function ValueModelProvider({ children }: { children: React.ReactNode }) 
     unmatchedRows: [],
     fetchedAt: null,
   });
+
+  // Pull the user's active custom value sets. We don't gate this on auth
+  // because the endpoint returns nulls for unauthenticated callers, which
+  // means "no overrides — pure FantasyCalc". Re-fetched after upload via
+  // refreshCustomValues().
+  const refreshCustomValues = useCallback(async () => {
+    try {
+      const r = await scAuthFetch("/api/values/custom/resolved");
+      if (!r.ok) {
+        setCustomDynasty(null);
+        setCustomRedraft(null);
+        return;
+      }
+      const body = (await r.json()) as ResolvedCustomValuesResponse;
+      setCustomDynasty(body.dynasty ?? null);
+      setCustomRedraft(body.redraft ?? null);
+    } catch (err) {
+      console.warn("[ValueModel] resolve custom values failed:", err);
+      setCustomDynasty(null);
+      setCustomRedraft(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshCustomValues();
+    // Re-pull when the auth token changes (login/logout) so the resolver
+    // never serves stale overrides from a previous account.
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === "sc_auth_token") void refreshCustomValues();
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, [refreshCustomValues]);
 
   useEffect(() => {
     if (sourceId !== "fantasycalc") return;
@@ -160,31 +234,62 @@ export function ValueModelProvider({ children }: { children: React.ReactNode }) 
     }, 400);
   }, []);
 
-  const getPlayerValue = useCallback((player: Player): number => {
+  // Custom-set lookup is the first cascade step: if the active user-uploaded
+  // set has a value for this player (by sleeper id, then by normalized name+
+  // position), return it. Otherwise fall through to FantasyCalc, then to the
+  // raw player.value. This is the single source of truth — every downstream
+  // consumer (Trade Calculator, Team Value, Rankings, etc.) goes through it.
+  const lookupCustom = (custom: ResolvedCustomSet | null, player: Player): number | null => {
+    if (!custom) return null;
+    if (player.sleeperId && custom.valuesBySleeperId[player.sleeperId] !== undefined) {
+      return custom.valuesBySleeperId[player.sleeperId];
+    }
+    const nameKey = `${player.name.toLowerCase().trim()}|${player.pos}`;
+    if (custom.valuesByNamePos[nameKey] !== undefined) {
+      return custom.valuesByNamePos[nameKey];
+    }
+    return null;
+  };
+
+  const getPlayerValueWithSource = useCallback((player: Player): { value: number; source: "custom" | "fantasycalc" } => {
+    const customVal = lookupCustom(customDynasty, player);
+    if (customVal !== null) return { value: customVal, source: "custom" };
+
     if (sourceId === "fantasycalc" && valuesBySleeperId && Object.keys(valuesBySleeperId).length > 0) {
       if (player.sleeperId && valuesBySleeperId[player.sleeperId] !== undefined) {
-        return valuesBySleeperId[player.sleeperId];
+        return { value: valuesBySleeperId[player.sleeperId], source: "fantasycalc" };
       }
       const nameKey = `${player.name.toLowerCase().trim()}|${player.pos}`;
       if (nameValueMap && nameValueMap[nameKey] !== undefined) {
-        return nameValueMap[nameKey];
+        return { value: nameValueMap[nameKey], source: "fantasycalc" };
       }
     }
-    return player.value;
-  }, [sourceId, valuesBySleeperId, nameValueMap]);
+    return { value: player.value, source: "fantasycalc" };
+  }, [customDynasty, sourceId, valuesBySleeperId, nameValueMap]);
 
-  const getRedraftValue = useCallback((player: Player): number => {
+  const getPlayerValue = useCallback((player: Player): number => {
+    return getPlayerValueWithSource(player).value;
+  }, [getPlayerValueWithSource]);
+
+  const getRedraftValueWithSource = useCallback((player: Player): { value: number; source: "custom" | "fantasycalc" } => {
+    const customVal = lookupCustom(customRedraft, player);
+    if (customVal !== null) return { value: customVal, source: "custom" };
+
     if (sourceId === "fantasycalc" && redraftValuesBySleeperId && Object.keys(redraftValuesBySleeperId).length > 0) {
       if (player.sleeperId && redraftValuesBySleeperId[player.sleeperId] !== undefined) {
-        return redraftValuesBySleeperId[player.sleeperId];
+        return { value: redraftValuesBySleeperId[player.sleeperId], source: "fantasycalc" };
       }
       const nameKey = `${player.name.toLowerCase().trim()}|${player.pos}`;
       if (redraftNameValueMap && redraftNameValueMap[nameKey] !== undefined) {
-        return redraftNameValueMap[nameKey];
+        return { value: redraftNameValueMap[nameKey], source: "fantasycalc" };
       }
     }
-    return getPlayerValue(player);
-  }, [sourceId, redraftValuesBySleeperId, redraftNameValueMap, getPlayerValue]);
+    return getPlayerValueWithSource(player);
+  }, [customRedraft, sourceId, redraftValuesBySleeperId, redraftNameValueMap, getPlayerValueWithSource]);
+
+  const getRedraftValue = useCallback((player: Player): number => {
+    return getRedraftValueWithSource(player).value;
+  }, [getRedraftValueWithSource]);
 
   const getPickValue = useCallback((pick: Pick, totalRosters?: number): number => {
     const range = (pick.projectedRange || "mid").toLowerCase() as "early" | "mid" | "late";
@@ -364,6 +469,23 @@ export function ValueModelProvider({ children }: { children: React.ReactNode }) 
     return result;
   }, [getPlayerValue, getRedraftValue, getPickValue, optimizeLineup]);
 
+  const dynastyCustom: CustomSourceStatus = {
+    active: !!customDynasty,
+    setId: customDynasty?.setId ?? null,
+    name: customDynasty?.name ?? null,
+    matchedCount: customDynasty?.matchedCount ?? 0,
+    unmatchedCount: customDynasty?.unmatchedCount ?? 0,
+    updatedAt: customDynasty?.updatedAt ?? null,
+  };
+  const redraftCustom: CustomSourceStatus = {
+    active: !!customRedraft,
+    setId: customRedraft?.setId ?? null,
+    name: customRedraft?.name ?? null,
+    matchedCount: customRedraft?.matchedCount ?? 0,
+    unmatchedCount: customRedraft?.unmatchedCount ?? 0,
+    updatedAt: customRedraft?.updatedAt ?? null,
+  };
+
   const value = useMemo<ValueModel>(() => ({
     sourceId,
     sources: VALUE_SOURCES,
@@ -373,8 +495,15 @@ export function ValueModelProvider({ children }: { children: React.ReactNode }) 
     isSnapshot,
     unmatchedCount,
     diagnostics,
+    dynastySource: customDynasty ? "custom" : "fantasycalc",
+    redraftSource: customRedraft ? "custom" : "fantasycalc",
+    dynastyCustom,
+    redraftCustom,
+    refreshCustomValues,
     getPlayerValue,
     getRedraftValue,
+    getPlayerValueWithSource,
+    getRedraftValueWithSource,
     getPickValue,
     calculateTeamValue,
     calculateAllTeamMetrics,
@@ -382,7 +511,7 @@ export function ValueModelProvider({ children }: { children: React.ReactNode }) 
     valuesBySleeperId,
     redraftValuesBySleeperId,
     dynastyPlayerList,
-  }), [sourceId, setSourceId, isRecalculating, isLoading, isSnapshot, unmatchedCount, diagnostics, getPlayerValue, getRedraftValue, getPickValue, calculateTeamValue, calculateAllTeamMetrics, optimizeLineup, valuesBySleeperId, redraftValuesBySleeperId, dynastyPlayerList]);
+  }), [sourceId, setSourceId, isRecalculating, isLoading, isSnapshot, unmatchedCount, diagnostics, customDynasty, customRedraft, refreshCustomValues, getPlayerValue, getRedraftValue, getPlayerValueWithSource, getRedraftValueWithSource, getPickValue, calculateTeamValue, calculateAllTeamMetrics, optimizeLineup, valuesBySleeperId, redraftValuesBySleeperId, dynastyPlayerList]);
 
   return (
     <ValueModelContext.Provider value={value}>

@@ -56,13 +56,16 @@ declare module "http" {
 
 app.use(
   express.json({
+    // 5MB ceiling covers CSV uploads for the Value Source Manager (largest
+    // realistic upload is ~10k players × ~80 chars ≈ 800KB).
+    limit: "5mb",
     verify: (req, _res, buf) => {
       req.rawBody = buf;
     },
   }),
 );
 
-app.use(express.urlencoded({ extended: false }));
+app.use(express.urlencoded({ extended: false, limit: "5mb" }));
 
 // ── Session middleware ─────────────────────────────────────────────────────────
 declare module "express-session" {

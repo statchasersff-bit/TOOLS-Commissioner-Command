@@ -30,7 +30,7 @@ type SortKey = "name" | "pos" | "dynastyValue" | "redraftValue";
 type SortDir = "asc" | "desc";
 
 export function MarketValue({ league }: MarketProps) {
-  const { sourceId, sources, valuesBySleeperId, redraftValuesBySleeperId, dynastyPlayerList } = useValueModel();
+  const { sourceId, sources, valuesBySleeperId, redraftValuesBySleeperId, dynastyPlayerList, getPickValue } = useValueModel();
   const [search, setSearch] = useState("");
   const [posFilter, setPosFilter] = useState("all");
   const [sortKey, setSortKey] = useState<SortKey>("dynastyValue");
@@ -61,6 +61,28 @@ export function MarketValue({ league }: MarketProps) {
     return rows;
   }, [league, valuesBySleeperId, redraftValuesBySleeperId]);
 
+  const pickRows = useMemo<PlayerRow[]>(() => {
+    const seen = new Set<string>();
+    const rows: PlayerRow[] = [];
+    const ordinal = (r: number) => r === 1 ? "1st" : r === 2 ? "2nd" : r === 3 ? "3rd" : "4th";
+    for (const team of league.teams) {
+      for (const pick of team.picks) {
+        const key = `${pick.year}_${pick.round}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        rows.push({
+          name: `${pick.year} ${ordinal(pick.round)}`,
+          pos: "PICK",
+          team: "—",
+          sleeperId: `FP_${pick.year}_${pick.round}`,
+          dynastyValue: getPickValue({ ...pick, projectedRange: "Mid" }),
+          redraftValue: 0,
+        });
+      }
+    }
+    return rows.sort((a, b) => b.dynastyValue - a.dynastyValue);
+  }, [league, getPickValue]);
+
   const rookieRows = useMemo<PlayerRow[]>(() => {
     // Build a name|pos → RankedPlayer lookup from the live FantasyCalc data so we
     // can resolve real Sleeper IDs (for photos), real NFL teams, and redraft values.
@@ -86,8 +108,17 @@ export function MarketValue({ league }: MarketProps) {
     });
   }, [dynastyPlayerList, redraftValuesBySleeperId]);
 
+  const mergedAllRows = useMemo<PlayerRow[]>(() => {
+    const seen = new Set(allPlayers.map((r) => r.sleeperId));
+    const extra: PlayerRow[] = [];
+    for (const r of rookieRows) {
+      if (!seen.has(r.sleeperId)) { seen.add(r.sleeperId); extra.push(r); }
+    }
+    return [...allPlayers, ...extra, ...pickRows];
+  }, [allPlayers, rookieRows, pickRows]);
+
   const filtered = useMemo(() => {
-    let rows = posFilter === "rookies" ? rookieRows : allPlayers;
+    let rows = posFilter === "rookies" ? rookieRows : posFilter === "all" ? mergedAllRows : allPlayers;
 
     if (search.trim()) {
       const q = search.toLowerCase().trim();

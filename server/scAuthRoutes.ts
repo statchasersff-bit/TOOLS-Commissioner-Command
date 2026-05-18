@@ -21,7 +21,7 @@ function signUserJwt(userId: string): string {
   return jwt.sign({ scUserId: userId }, JWT_SECRET, { expiresIn: JWT_EXPIRES });
 }
 
-function getUserIdFromRequest(req: Request): string | null {
+export function getUserIdFromRequest(req: Request): string | null {
   const auth = req.headers.authorization;
   if (auth?.startsWith("Bearer ")) {
     try {
