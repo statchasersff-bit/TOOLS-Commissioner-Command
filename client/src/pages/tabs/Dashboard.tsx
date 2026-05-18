@@ -1188,76 +1188,84 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
                         return <span className={`text-[9px] font-bold px-1 py-0.5 rounded ${cls}`}>#{rank}</span>;
                       }
 
+                      // Compact expansion: 5 equal cards on desktop, 2 cols on
+                      // mobile. No value labels — just rank + name. Cap each card
+                      // at 4 players and append a "+N more" line.
+                      const MAX_PER_CARD = 4;
+                      const MAX_PICKS_IN_CARD = 4;
                       return (
                         <tr className={`border-b border-border/20 ${rowBg}`} data-testid={`expanded-${team.id}`}>
-                          <td colSpan={colCount} className="px-3 sm:px-5 py-4">
-                            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
+                          <td colSpan={colCount} className="px-3 sm:px-5 py-2">
+                            <div className="grid gap-1.5 lg:gap-2 grid-cols-2 sm:grid-cols-3 lg:[grid-template-columns:repeat(5,minmax(0,1fr))]">
 
                               {POS_CONFIG.map(({ pos, textColor, border, bg }) => {
                                 const dynRank = dRanks[pos] ?? total;
                                 const wnRank  = rRanks[pos]  ?? total;
-                                const players = [...team.roster]
+                                const allPlayers = [...team.roster]
                                   .filter(p => p.pos === pos)
-                                  .sort((a, b) => getPlayerValue(b) - getPlayerValue(a))
-                                  .slice(0, 5);
+                                  .sort((a, b) => getPlayerValue(b) - getPlayerValue(a));
+                                const visible = allPlayers.slice(0, MAX_PER_CARD);
+                                const overflow = Math.max(0, allPlayers.length - visible.length);
                                 return (
-                                  <div key={pos} className={`rounded-lg border ${border} ${bg} p-2.5`} data-testid={`pos-col-${team.id}-${pos.toLowerCase()}`}>
+                                  <div key={pos} className={`rounded-md border ${border} ${bg} px-2 py-1.5`} data-testid={`pos-col-${team.id}-${pos.toLowerCase()}`}>
                                     {/* Position header */}
-                                    <div className="flex items-center justify-between mb-2">
-                                      <span className={`text-xs font-black ${textColor}`}>{pos}</span>
-                                      <div className="flex items-center gap-1">
-                                        <span className="text-[9px] text-muted-foreground/60 font-medium">WN</span>
+                                    <div className="flex items-center justify-between mb-1">
+                                      <span className={`text-[11px] font-black ${textColor}`}>{pos}</span>
+                                      <div className="flex items-center gap-0.5">
+                                        <span className="text-[8px] text-muted-foreground/60 font-medium">WN</span>
                                         {rankBadge(wnRank)}
-                                        <span className="text-[9px] text-muted-foreground/60 font-medium ml-0.5">DYN</span>
+                                        <span className="text-[8px] text-muted-foreground/60 font-medium ml-0.5">DYN</span>
                                         {rankBadge(dynRank)}
                                       </div>
                                     </div>
-                                    {/* Player list */}
-                                    <div className="space-y-1">
-                                      {players.map((p, i) => (
-                                        <div key={p.sleeperId ?? i} className="flex items-center gap-1.5 min-w-0">
-                                          <span className="text-[10px] text-muted-foreground/40 w-3 flex-shrink-0">{i + 1}</span>
-                                          <span className="text-[11px] text-foreground truncate flex-1 font-medium">{p.name}</span>
-                                          <span className="text-[10px] font-mono text-muted-foreground/70 flex-shrink-0">{(getPlayerValue(p) / 1000).toFixed(1)}k</span>
-                                        </div>
+                                    {/* Compact player list — no value column */}
+                                    <ul className="space-y-[1px] leading-tight">
+                                      {visible.map((p, i) => (
+                                        <li key={p.sleeperId ?? i} className="flex items-center gap-1 min-w-0" title={`${p.name} · ${(getPlayerValue(p) / 1000).toFixed(1)}k`}>
+                                          <span className="text-[9px] text-muted-foreground/40 w-3 flex-shrink-0 tabular-nums">{i + 1}</span>
+                                          <span className="text-[11px] text-foreground truncate flex-1">{p.name}</span>
+                                        </li>
                                       ))}
-                                      {players.length === 0 && (
-                                        <p className="text-[10px] text-muted-foreground/50 italic">None rostered</p>
+                                      {overflow > 0 && (
+                                        <li className="text-[9px] text-muted-foreground/60 pl-4">+{overflow} more</li>
                                       )}
-                                    </div>
+                                      {visible.length === 0 && (
+                                        <li className="text-[9px] text-muted-foreground/50 italic">None rostered</li>
+                                      )}
+                                    </ul>
                                   </div>
                                 );
                               })}
 
                               {/* Picks column */}
-                              <div className="rounded-lg border border-purple-500/25 bg-purple-500/5 p-2.5" data-testid={`pos-col-${team.id}-picks`}>
-                                <div className="flex items-center justify-between mb-2">
-                                  <span className="text-xs font-black text-purple-500 dark:text-purple-400">Picks</span>
-                                  <div className="flex items-center gap-1">
-                                    <span className="text-[9px] text-muted-foreground/60 font-medium">RANK</span>
+                              <div className="rounded-md border border-purple-500/25 bg-purple-500/5 px-2 py-1.5" data-testid={`pos-col-${team.id}-picks`}>
+                                <div className="flex items-center justify-between mb-1">
+                                  <span className="text-[11px] font-black text-purple-500 dark:text-purple-400">Picks</span>
+                                  <div className="flex items-center gap-0.5">
+                                    <span className="text-[8px] text-muted-foreground/60 font-medium">RANK</span>
                                     {rankBadge(picksRank)}
                                   </div>
                                 </div>
-                                <div className="space-y-1">
-                                  {team.picks.slice(0, 8).map((pick, i) => {
+                                <ul className="space-y-[1px] leading-tight">
+                                  {team.picks.slice(0, MAX_PICKS_IN_CARD).map((pick, i) => {
                                     const rd = pick.round === 1 ? "1st" : pick.round === 2 ? "2nd" : pick.round === 3 ? "3rd" : `${pick.round}th`;
                                     return (
-                                      <div key={i} className="flex items-center gap-1.5 min-w-0">
-                                        <span className="text-[11px] text-foreground font-medium flex-shrink-0">{pick.year}</span>
-                                        <span className="text-[11px] text-muted-foreground font-medium flex-shrink-0">{rd}</span>
+                                      <li key={i} className="flex items-center gap-1 min-w-0">
+                                        <span className="text-[11px] text-foreground flex-shrink-0">{pick.year}</span>
+                                        <span className="text-[11px] text-muted-foreground flex-shrink-0">{rd}</span>
                                         {pick.projectedRange && (
-                                          <span className="text-[10px] text-muted-foreground/60 truncate ml-auto">{pick.projectedRange}</span>
+                                          <span className="text-[9px] text-muted-foreground/60 truncate ml-auto">{pick.projectedRange}</span>
                                         )}
-                                      </div>
+                                      </li>
                                     );
                                   })}
-                                  {team.picks.length > 8 && (
-                                    <p className="text-[10px] text-muted-foreground/60">+{team.picks.length - 8} more</p>
+                                  {team.picks.length > MAX_PICKS_IN_CARD && (
+                                    <li className="text-[9px] text-muted-foreground/60">+{team.picks.length - MAX_PICKS_IN_CARD} more</li>
                                   )}
                                   {team.picks.length === 0 && (
-                                    <p className="text-[10px] text-muted-foreground/50 italic">No picks</p>
+                                    <li className="text-[9px] text-muted-foreground/50 italic">No picks</li>
                                   )}
-                                </div>
+                                </ul>
                               </div>
 
                             </div>
@@ -1562,10 +1570,15 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
                             : "text-amber-600 dark:text-amber-400 bg-amber-500/10";
                           return <span className={`text-[9px] font-bold px-1 py-0.5 rounded ${cls}`}>#{rank}</span>;
                         }
+                        // Compact expansion mirrors the Table view: 5 equal
+                        // cards on desktop, no per-player value column, top 4
+                        // players + "+N more". Player values still show on hover.
+                        const HM_MAX_PER_CARD = 4;
+                        const HM_MAX_PICKS = 4;
                         return (
                           <tr className={cn("border-b border-border/20", rowBase)} data-testid={`heatmap-expanded-${team.id}`}>
-                            <td colSpan={12} className="px-3 sm:px-5 py-4">
-                              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
+                            <td colSpan={12} className="px-3 sm:px-5 py-2">
+                              <div className="grid gap-1.5 lg:gap-2 grid-cols-2 sm:grid-cols-3 lg:[grid-template-columns:repeat(5,minmax(0,1fr))]">
                                 {([
                                   { pos: "QB", players: hmRoster.qbs, textColor: "text-rose-500 dark:text-rose-400",      border: "border-rose-500/25",    bg: "bg-rose-500/5"    },
                                   { pos: "RB", players: hmRoster.rbs, textColor: "text-emerald-500 dark:text-emerald-400", border: "border-emerald-500/25", bg: "bg-emerald-500/5" },
@@ -1574,64 +1587,68 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
                                 ] as const).map(({ pos, players, textColor, border, bg }) => {
                                   const wnRank  = rRanks[pos] ?? total;
                                   const dynRank = dRanks[pos] ?? total;
+                                  const visible = players.slice(0, HM_MAX_PER_CARD);
+                                  const overflow = Math.max(0, players.length - visible.length);
                                   return (
-                                    <div key={pos} className={`rounded-lg border ${border} ${bg} p-2.5`} data-testid={`hm-pos-col-${team.id}-${pos.toLowerCase()}`}>
-                                      <div className="flex items-center justify-between mb-2">
-                                        <span className={`text-xs font-black ${textColor}`}>{pos}</span>
-                                        <div className="flex items-center gap-1">
-                                          <span className="text-[9px] text-muted-foreground/60 font-medium">WN</span>
+                                    <div key={pos} className={`rounded-md border ${border} ${bg} px-2 py-1.5`} data-testid={`hm-pos-col-${team.id}-${pos.toLowerCase()}`}>
+                                      <div className="flex items-center justify-between mb-1">
+                                        <span className={`text-[11px] font-black ${textColor}`}>{pos}</span>
+                                        <div className="flex items-center gap-0.5">
+                                          <span className="text-[8px] text-muted-foreground/60 font-medium">WN</span>
                                           {hmRankBadge(wnRank)}
-                                          <span className="text-[9px] text-muted-foreground/60 font-medium ml-0.5">DYN</span>
+                                          <span className="text-[8px] text-muted-foreground/60 font-medium ml-0.5">DYN</span>
                                           {hmRankBadge(dynRank)}
                                         </div>
                                       </div>
-                                      <div className="space-y-1">
-                                        {players.length === 0 ? (
-                                          <p className="text-[10px] text-muted-foreground/50 italic">None rostered</p>
+                                      <ul className="space-y-[1px] leading-tight">
+                                        {visible.length === 0 ? (
+                                          <li className="text-[9px] text-muted-foreground/50 italic">None rostered</li>
                                         ) : (
-                                          players.slice(0, 5).map((p, i) => (
-                                            <div key={p.sleeperId ?? i} className="flex items-center gap-1.5 min-w-0">
-                                              <span className="text-[10px] text-muted-foreground/40 w-3 flex-shrink-0">{i + 1}</span>
-                                              <span className="text-[11px] text-foreground truncate flex-1 font-medium">{p.name}</span>
-                                              <span className="text-[10px] font-mono text-muted-foreground/70 flex-shrink-0">{(getPlayerValue(p) / 1000).toFixed(1)}k</span>
-                                            </div>
+                                          visible.map((p, i) => (
+                                            <li key={p.sleeperId ?? i} className="flex items-center gap-1 min-w-0" title={`${p.name} · ${(getPlayerValue(p) / 1000).toFixed(1)}k`}>
+                                              <span className="text-[9px] text-muted-foreground/40 w-3 flex-shrink-0 tabular-nums">{i + 1}</span>
+                                              <span className="text-[11px] text-foreground truncate flex-1">{p.name}</span>
+                                            </li>
                                           ))
                                         )}
-                                      </div>
+                                        {overflow > 0 && (
+                                          <li className="text-[9px] text-muted-foreground/60 pl-4">+{overflow} more</li>
+                                        )}
+                                      </ul>
                                     </div>
                                   );
                                 })}
 
                                 {/* Picks column */}
-                                <div className="rounded-lg border border-purple-500/25 bg-purple-500/5 p-2.5" data-testid={`hm-pos-col-${team.id}-picks`}>
-                                  <div className="flex items-center justify-between mb-2">
-                                    <span className="text-xs font-black text-purple-500 dark:text-purple-400">Picks</span>
-                                    <div className="flex items-center gap-1">
-                                      <span className="text-[9px] text-muted-foreground/60 font-medium">RANK</span>
+                                <div className="rounded-md border border-purple-500/25 bg-purple-500/5 px-2 py-1.5" data-testid={`hm-pos-col-${team.id}-picks`}>
+                                  <div className="flex items-center justify-between mb-1">
+                                    <span className="text-[11px] font-black text-purple-500 dark:text-purple-400">Picks</span>
+                                    <div className="flex items-center gap-0.5">
+                                      <span className="text-[8px] text-muted-foreground/60 font-medium">RANK</span>
                                       {hmRankBadge(pksRank)}
                                     </div>
                                   </div>
-                                  <div className="space-y-1">
+                                  <ul className="space-y-[1px] leading-tight">
                                     {hmRoster.picks.length === 0 ? (
-                                      <p className="text-[10px] text-muted-foreground/50 italic">No picks</p>
+                                      <li className="text-[9px] text-muted-foreground/50 italic">No picks</li>
                                     ) : (
-                                      hmRoster.picks.slice(0, 8).map((pick, i) => {
+                                      hmRoster.picks.slice(0, HM_MAX_PICKS).map((pick, i) => {
                                         const rd = pick.round === 1 ? "1st" : pick.round === 2 ? "2nd" : pick.round === 3 ? "3rd" : `${pick.round}th`;
                                         return (
-                                          <div key={i} className="flex items-center gap-1.5 min-w-0">
-                                            <span className="text-[11px] text-foreground font-medium flex-shrink-0">{pick.year}</span>
-                                            <span className="text-[11px] text-muted-foreground font-medium flex-shrink-0">{rd}</span>
+                                          <li key={i} className="flex items-center gap-1 min-w-0">
+                                            <span className="text-[11px] text-foreground flex-shrink-0">{pick.year}</span>
+                                            <span className="text-[11px] text-muted-foreground flex-shrink-0">{rd}</span>
                                             {pick.projectedRange && (
-                                              <span className="text-[10px] text-muted-foreground/60 truncate ml-auto">{pick.projectedRange}</span>
+                                              <span className="text-[9px] text-muted-foreground/60 truncate ml-auto">{pick.projectedRange}</span>
                                             )}
-                                          </div>
+                                          </li>
                                         );
                                       })
                                     )}
-                                    {hmRoster.picks.length > 8 && (
-                                      <p className="text-[10px] text-muted-foreground/60">+{hmRoster.picks.length - 8} more</p>
+                                    {hmRoster.picks.length > HM_MAX_PICKS && (
+                                      <li className="text-[9px] text-muted-foreground/60">+{hmRoster.picks.length - HM_MAX_PICKS} more</li>
                                     )}
-                                  </div>
+                                  </ul>
                                 </div>
                               </div>
                             </td>

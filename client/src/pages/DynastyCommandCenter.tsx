@@ -403,14 +403,9 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
   const showLoadingOverlay = isLeagueLoading || isRecalculating || (isLoading && selectedLeagueId && sleeper.isConnected);
 
   return (
-    <div className="min-h-screen bg-background blueprint-bg">
+    <div className="min-h-screen sc-page-bg">
       <header
-        className="sticky top-0 z-50 md:border-b md:border-border/60 md:bg-background/95 md:backdrop-blur-sm md:shadow-none"
-        style={{
-          background: "rgba(5, 10, 24, 0.98)",
-          borderBottom: "1px solid rgba(212, 175, 55, 0.16)",
-          boxShadow: "0 10px 24px rgba(0,0,0,0.30)",
-        }}
+        className="sticky top-0 z-50 backdrop-blur-sm dark:bg-[rgba(5,10,24,0.98)] dark:border-b dark:border-[rgba(212,175,55,0.16)] dark:shadow-[0_10px_24px_rgba(0,0,0,0.30)] bg-[var(--sc-nav-bg-translucent)] border-b border-[var(--sc-border)] shadow-[var(--sc-shadow-sm)]"
       >
         <div className="max-w-7xl mx-auto px-4 md:px-3 py-[14px] md:py-3">
           <div className="flex items-center gap-3">
@@ -437,7 +432,7 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
                   <h1 className="text-sm md:text-base font-bold text-foreground leading-tight tracking-tight" data-testid="text-app-title">StatChasers</h1>
                   <p className="text-[10px] md:text-xs text-[#d4af37] font-semibold tracking-wide leading-tight mt-0.5">Dynasty Command</p>
                 </div>
-                <ChevronDown className={`w-3 h-3 text-white/30 group-hover:text-white/55 transition-transform duration-200 hidden md:block ${logoMenuOpen ? "rotate-180" : ""}`} />
+                <ChevronDown className={`w-3 h-3 text-muted-foreground/60 group-hover:text-foreground transition-transform duration-200 hidden md:block ${logoMenuOpen ? "rotate-180" : ""}`} />
               </button>
 
               {/* Logo dropdown menu */}

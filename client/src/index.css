@@ -2,47 +2,87 @@
 @tailwind components;
 @tailwind utilities;
 
-/* LIGHT MODE */
+/* ── LIGHT MODE — StatChasers brand ─────────────────────────────────────────
+ * Light theme rebuilt to feel like statchasers.com: off-white canvas,
+ * white cards, deep-navy text, gold accents. Tokens come in two layers:
+ *   1) shadcn vars (--background, --foreground, etc.) — wired into Tailwind
+ *      so existing `bg-card / text-foreground / border-border` classes
+ *      pick up the new palette automatically.
+ *   2) StatChasers brand vars (--sc-*) — opt-in semantic names for the
+ *      surfaces the website uses (page bg, navy headers, gold pills,
+ *      card shadow). Components that need brand-specific styling reach
+ *      for these instead of inventing hex values.
+ *
+ * Dark mode is unchanged — see the `.dark` block below.
+ */
 :root {
-  --button-outline: rgba(0,0,0, .10);
-  --badge-outline: rgba(0,0,0, .05);
+  --button-outline: rgba(15, 23, 42, .10);
+  --badge-outline: rgba(15, 23, 42, .06);
   --opaque-button-border-intensity: -8;
-  --elevate-1: rgba(0,0,0, .03);
-  --elevate-2: rgba(0,0,0, .08);
-  --background: 0 0% 100%;
-  --foreground: 215 100% 12%;
-  --border: 0 0% 90%;
-  --card: 0 0% 98%;
-  --card-foreground: 215 100% 12%;
-  --card-border: 0 0% 94%;
-  --sidebar: 0 0% 96%;
-  --sidebar-foreground: 215 100% 12%;
-  --sidebar-border: 0 0% 92%;
-  --sidebar-primary: 215 100% 24%;
-  --sidebar-primary-foreground: 43 75% 92%;
-  --sidebar-accent: 0 0% 92%;
-  --sidebar-accent-foreground: 215 100% 12%;
-  --sidebar-ring: 43 70% 55%;
-  --popover: 0 0% 94%;
-  --popover-foreground: 215 100% 12%;
-  --popover-border: 0 0% 90%;
-  --primary: 215 100% 24%;
-  --primary-foreground: 43 75% 92%;
-  --secondary: 0 0% 90%;
-  --secondary-foreground: 215 100% 12%;
-  --muted: 0 0% 92%;
-  --muted-foreground: 215 60% 25%;
-  --accent: 43 15% 92%;
-  --accent-foreground: 215 80% 16%;
-  --destructive: 0 84% 32%;
-  --destructive-foreground: 0 86% 97%;
-  --input: 0 0% 75%;
-  --ring: 43 70% 55%;
-  --chart-1: 215 100% 28%;
-  --chart-2: 43 85% 45%;
-  --chart-3: 200 70% 35%;
-  --chart-4: 25 75% 40%;
-  --chart-5: 280 60% 38%;
+  --elevate-1: rgba(15, 23, 42, .03);
+  --elevate-2: rgba(15, 23, 42, .07);
+
+  /* Surfaces */
+  --background: 210 40% 98%;            /* #F8FAFC — off-white page */
+  --foreground: 215 60% 14%;            /* deep navy text           */
+  --border: 214 32% 91%;                /* #E2E8F0 pale slate       */
+  --card: 0 0% 100%;                    /* pure white cards         */
+  --card-foreground: 215 60% 14%;
+  --card-border: 214 32% 91%;
+  --sidebar: 0 0% 100%;
+  --sidebar-foreground: 215 60% 14%;
+  --sidebar-border: 214 32% 91%;
+  --sidebar-primary: 215 60% 14%;
+  --sidebar-primary-foreground: 43 75% 96%;
+  --sidebar-accent: 214 32% 95%;
+  --sidebar-accent-foreground: 215 60% 14%;
+  --sidebar-ring: 43 65% 49%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 215 60% 14%;
+  --popover-border: 214 32% 91%;
+
+  /* Primary = gold (per spec: gold primary buttons with navy text).      */
+  --primary: 43 65% 49%;                /* #D4AF37 — StatChasers gold     */
+  --primary-foreground: 215 70% 12%;    /* navy text on gold              */
+  --secondary: 214 32% 96%;             /* near-white slate               */
+  --secondary-foreground: 215 60% 14%;
+  --muted: 214 32% 95%;
+  --muted-foreground: 215 16% 45%;      /* readable slate-gray            */
+  --accent: 43 90% 95%;                 /* very soft gold tint            */
+  --accent-foreground: 215 70% 12%;
+  --destructive: 0 75% 42%;
+  --destructive-foreground: 0 0% 100%;
+  --input: 214 32% 91%;
+  --ring: 43 65% 49%;                   /* gold focus ring                */
+
+  /* Chart hues tuned for white background (red QB, emerald RB,
+   * royal-blue WR, orange TE, purple picks per spec).                    */
+  --chart-1: 0 75% 50%;
+  --chart-2: 152 65% 38%;
+  --chart-3: 222 75% 47%;
+  --chart-4: 30 90% 50%;
+  --chart-5: 270 60% 50%;
+
+  /* ── StatChasers brand surfaces ─────────────────────────────────────── */
+  --sc-page-bg: #F8FAFC;
+  --sc-card-bg: #FFFFFF;
+  --sc-navy: #0F2447;
+  --sc-navy-soft: #1E3A6B;
+  --sc-text-primary: #0F2447;
+  --sc-text-secondary: #475569;
+  --sc-text-muted: #64748B;
+  --sc-border: #E2E8F0;
+  --sc-border-strong: #CBD5E1;
+  --sc-gold: #D4AF37;
+  --sc-gold-deep: #B8941F;
+  --sc-gold-soft: #FBF5E1;
+  --sc-shadow-card: 0 8px 24px rgba(15, 23, 42, 0.06);
+  --sc-shadow-card-hover: 0 12px 32px rgba(15, 23, 42, 0.10);
+  --sc-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.05);
+  --sc-nav-bg: #FFFFFF;
+  --sc-nav-bg-translucent: rgba(255, 255, 255, 0.85);
+  --sc-table-header-bg: #F1F5F9;
+  --sc-table-row-hover: #F8FAFC;
   --font-sans: Inter, sans-serif;
   --font-serif: Georgia, serif;
   --font-mono: Menlo, monospace;
@@ -136,6 +176,29 @@
   --shadow-xl: 0px 2px 0px 0px hsl(0 0% 0% / 0.40), 0px 8px 10px -1px hsl(0 0% 0% / 0.70);
   --shadow-2xl: 0px 2px 0px 0px hsl(0 0% 0% / 0.75);
 
+  /* StatChasers brand surfaces — dark-mode counterparts. Mostly used by
+   * components that opt-in to the brand tokens; existing dark surfaces
+   * continue to work via the shadcn vars above. */
+  --sc-page-bg: #0a1424;
+  --sc-card-bg: #0e1c33;
+  --sc-navy: #0F2447;
+  --sc-navy-soft: #1E3A6B;
+  --sc-text-primary: #E6EDF7;
+  --sc-text-secondary: #94A3B8;
+  --sc-text-muted: #64748B;
+  --sc-border: rgba(148, 163, 184, 0.18);
+  --sc-border-strong: rgba(148, 163, 184, 0.32);
+  --sc-gold: #D4AF37;
+  --sc-gold-deep: #B8941F;
+  --sc-gold-soft: rgba(212, 175, 55, 0.12);
+  --sc-shadow-card: 0 8px 24px rgba(0, 0, 0, 0.4);
+  --sc-shadow-card-hover: 0 12px 32px rgba(0, 0, 0, 0.55);
+  --sc-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --sc-nav-bg: #0e1c33;
+  --sc-nav-bg-translucent: rgba(14, 28, 51, 0.85);
+  --sc-table-header-bg: rgba(148, 163, 184, 0.06);
+  --sc-table-row-hover: rgba(148, 163, 184, 0.04);
+
 /* Fallback for older browsers */
   --sidebar-primary-border: hsl(var(--sidebar-primary));
   --sidebar-primary-border: hsl(from hsl(var(--sidebar-primary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
@@ -171,8 +234,18 @@
   }
 
   body {
-    @apply font-sans antialiased bg-background text-foreground;
+    @apply font-sans antialiased text-foreground;
+    background-color: hsl(var(--background));
+    /* Light mode: subtle pale-navy grid à la statchasers.com.
+     * Dark mode: plain background (existing dark canvas is busy enough). */
+    background-image:
+      linear-gradient(rgba(15, 36, 71, 0.025) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(15, 36, 71, 0.025) 1px, transparent 1px);
+    background-size: 32px 32px;
     overflow-x: hidden;
+  }
+  .dark body {
+    background-image: none;
   }
 
   #root {
@@ -311,6 +384,77 @@
       linear-gradient(90deg, rgba(100, 160, 255, 0.04) 1px, transparent 1px);
     background-size: 24px 24px;
   }
+
+  /* ── StatChasers brand utilities ─────────────────────────────────────────
+   * Opt-in helpers components reach for when they need brand-specific
+   * styling (page background, premium card, gold accents). They use the
+   * --sc-* tokens so they stay correct in dark mode too. */
+
+  /* Off-white page canvas with a very low-opacity navy grid — mirrors the
+   * website's "sports media" base layer. */
+  .sc-page-bg {
+    background-color: var(--sc-page-bg);
+    background-image:
+      linear-gradient(rgba(15, 36, 71, 0.025) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(15, 36, 71, 0.025) 1px, transparent 1px);
+    background-size: 32px 32px;
+  }
+  .dark .sc-page-bg {
+    background-color: var(--sc-page-bg);
+    background-image: none;
+  }
+
+  /* Premium content card: white surface, soft slate border, soft shadow. */
+  .sc-card {
+    background-color: var(--sc-card-bg);
+    border: 1px solid var(--sc-border);
+    border-radius: 0.75rem;
+    box-shadow: var(--sc-shadow-card);
+  }
+  .sc-card:hover {
+    box-shadow: var(--sc-shadow-card-hover);
+  }
+
+  /* Section title rule — gold underline aligned with the website. Use as
+   * `<span className="sc-section-rule" />` after the heading text. */
+  .sc-section-rule {
+    display: block;
+    height: 3px;
+    width: 2.5rem;
+    background: var(--sc-gold);
+    border-radius: 9999px;
+    margin-top: 0.625rem;
+  }
+
+  /* Brand text utilities — semantic synonyms for the three text levels. */
+  .sc-text-primary   { color: var(--sc-text-primary); }
+  .sc-text-secondary { color: var(--sc-text-secondary); }
+  .sc-text-muted     { color: var(--sc-text-muted); }
+  .sc-gold-text      { color: var(--sc-gold); }
+
+  /* Header surface (top nav + mobile bottom nav). White in light, navy in
+   * dark, with a subtle bottom border and shadow. */
+  .sc-nav-surface {
+    background-color: var(--sc-nav-bg);
+    border-color: var(--sc-border);
+    box-shadow: var(--sc-shadow-sm);
+  }
+
+  /* Gold pill button — primary action in light mode (navy text on gold). */
+  .sc-btn-gold {
+    background-color: var(--sc-gold);
+    color: var(--sc-navy);
+    border: 1px solid var(--sc-gold-deep);
+  }
+  .sc-btn-gold:hover { background-color: var(--sc-gold-deep); color: #fff; }
+
+  /* Navy outline button — secondary action in light mode. */
+  .sc-btn-navy-outline {
+    background-color: transparent;
+    color: var(--sc-navy);
+    border: 1px solid var(--sc-border-strong);
+  }
+  .sc-btn-navy-outline:hover { background-color: var(--sc-gold-soft); border-color: var(--sc-gold); }
 
   /* Mobile table utility: wrap any table for horizontal scroll without full-page overflow */
   .table-scroll-x {

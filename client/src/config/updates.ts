@@ -16,7 +16,7 @@
 // Version key shape: "YYYY-MM-DD-<slug>-vX.Y". Any change to the string
 // triggers the modal for every user on their next dashboard load.
 
-export const CURRENT_UPDATE_VERSION = "2026-05-17-dynasty-command-v1.4";
+export const CURRENT_UPDATE_VERSION = "2026-05-18-dynasty-command-v1.5";
 
 export interface UpdateSection {
   heading: string;
@@ -33,22 +33,21 @@ export interface UpdateNotes {
 
 export const CURRENT_UPDATE_NOTES: UpdateNotes = {
   version: CURRENT_UPDATE_VERSION,
-  title: "What’s New in Dynasty Command",
+  title: "What's New in Dynasty Command",
   subtitle: "Recent updates are now live.",
-  date: "May 17, 2026",
+  date: "May 18, 2026",
   sections: [
     {
       heading: "New Features",
       items: [
-        "Implemented plans for a global shared activeLeagueId system across Dynasty Command.",
-        "Synced header league selector with league-specific module pages.",
+        "Research - Market Value: now includes 2026 rookies and future draft picks under the \"All Pos\" filter.",
+        "Player/Pick Values: Updated option to enter custom values.",
       ],
     },
     {
       heading: "Improvements",
       items: [
-        "Redesigned Finance tables to reduce horizontal scrolling on mobile.",
-        "Improved mobile scatter plot layout for Power Rankings.",
+        "Command Center - My Portfolio: Mobile improvements to League Breakdown tab and Finance tab.",
       ],
     },
   ],
@@ -56,6 +55,29 @@ export const CURRENT_UPDATE_NOTES: UpdateNotes = {
 
 // Past releases shown in the in-app changelog. Newest first. Append the
 // previous CURRENT_UPDATE_NOTES here when bumping CURRENT_UPDATE_VERSION.
-export const CHANGELOG_HISTORY: UpdateNotes[] = [];
+export const CHANGELOG_HISTORY: UpdateNotes[] = [
+  {
+    version: "2026-05-17-dynasty-command-v1.4",
+    title: "What's New in Dynasty Command",
+    subtitle: "Recent updates are now live.",
+    date: "May 17, 2026",
+    sections: [
+      {
+        heading: "New Features",
+        items: [
+          "Implemented plans for a global shared activeLeagueId system across Dynasty Command.",
+          "Synced header league selector with league-specific module pages.",
+        ],
+      },
+      {
+        heading: "Improvements",
+        items: [
+          "Redesigned Finance tables to reduce horizontal scrolling on mobile.",
+          "Improved mobile scatter plot layout for Power Rankings.",
+        ],
+      },
+    ],
+  },
+];
 
 export const SEEN_UPDATE_STORAGE_KEY = "dc_seen_update_version";
