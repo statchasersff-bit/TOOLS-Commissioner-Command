@@ -5,14 +5,55 @@ import connectPgSimple from "connect-pg-simple";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
-import { execSync } from "child_process";
+import { readFileSync, readdirSync, readlinkSync } from "fs";
 
-function freePort(port: number): void {
+/**
+ * Kill any process listening on `port` using the Linux /proc filesystem.
+ * No external binaries (lsof, fuser, ss) required — they're not reliably
+ * in PATH when Node spawns a /bin/sh subprocess.
+ */
+async function freePort(port: number): Promise<void> {
   try {
-    execSync(`fuser -k ${port}/tcp`, { stdio: "ignore" });
-  } catch {
-    // fuser exits non-zero when nothing is listening — that's fine
-  }
+    const hexPort = port.toString(16).toUpperCase().padStart(4, "0");
+    const inodes = new Set<string>();
+
+    for (const file of ["/proc/net/tcp", "/proc/net/tcp6"]) {
+      try {
+        for (const line of readFileSync(file, "utf8").split("\n").slice(1)) {
+          const cols = line.trim().split(/\s+/);
+          if (cols.length < 10) continue;
+          if (cols[1]?.split(":")[1] === hexPort) inodes.add(cols[9]);
+        }
+      } catch { /* file may not exist on some systems */ }
+    }
+
+    if (inodes.size === 0) return;
+
+    const self = process.pid;
+    let killed = 0;
+    for (const pidStr of readdirSync("/proc").filter(d => /^\d+$/.test(d))) {
+      const pid = parseInt(pidStr, 10);
+      if (pid === self) continue;
+      try {
+        for (const fd of readdirSync(`/proc/${pidStr}/fd`)) {
+          try {
+            const link = readlinkSync(`/proc/${pidStr}/fd/${fd}`);
+            const m = link.match(/socket:\[(\d+)\]/);
+            if (m && inodes.has(m[1])) {
+              process.kill(pid, "SIGKILL");
+              killed++;
+              break;
+            }
+          } catch { /* fd unreadable */ }
+        }
+      } catch { /* proc entry gone */ }
+    }
+
+    if (killed > 0) {
+      console.log(`[server] killed ${killed} process(es) on port ${port}, waiting for release…`);
+      await new Promise(r => setTimeout(r, 800));
+    }
+  } catch { /* best-effort */ }
 }
 
 const app = express();
@@ -184,21 +225,17 @@ app.use((req, res, next) => {
   // It is the only port that is not firewalled.
   const port = parseInt(process.env.PORT || "5000", 10);
 
-  function startListening(attempt = 1): void {
-    httpServer.listen({ port, host: "0.0.0.0", reusePort: true }, () => {
-      log(`serving on port ${port}`);
-    });
-    httpServer.once("error", (err: NodeJS.ErrnoException) => {
-      if (err.code === "EADDRINUSE" && attempt <= 3) {
-        console.warn(`[server] port ${port} in use (attempt ${attempt}), freeing and retrying…`);
-        freePort(port);
-        setTimeout(() => startListening(attempt + 1), 500 * attempt);
-      } else {
-        console.error("[server] fatal listen error:", err);
-        process.exit(1);
-      }
-    });
-  }
+  // Evict any stale process on the port before we try to bind.
+  // This handles the common case where a previous workflow run didn't
+  // fully terminate before the new one started.
+  await freePort(port);
 
-  startListening();
+  httpServer.on("error", (err: NodeJS.ErrnoException) => {
+    console.error("[server] fatal listen error:", err);
+    process.exit(1);
+  });
+
+  httpServer.listen({ port, host: "0.0.0.0", reusePort: true }, () => {
+    log(`serving on port ${port}`);
+  });
 })();

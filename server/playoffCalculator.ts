@@ -95,6 +95,7 @@ interface TeamState {
   pointsAgainst: number;
   winNowScore: number;     // raw FC redraft starter total
   teamRating: number;      // 0-100 normalized rating
+  ratingSource: "fantasycalc" | "fallback";
   remainingOpponents: number[]; // roster_id list, in week order
   // simulation accumulators
   finalWinsTotal: number;
@@ -119,7 +120,9 @@ export interface PlayoffCalcTeamResult {
   points_against: number;
   win_now_score: number;
   team_rating: number;
+  rating_source: "fantasycalc" | "fallback";
   remaining_opponents: number[];
+  remaining_games: number;
   projected_record: string;
   projected_wins: number;
   projected_losses: number;
@@ -132,6 +135,23 @@ export interface PlayoffCalcTeamResult {
   finals_pct: number;
   championship_pct: number;
   change_since_last_run: number; // server returns 0; client diffs vs localStorage
+}
+
+export interface PlayoffCalcMeta {
+  totalTeams: number;
+  playoffTeams: number;
+  byeTeams: number;
+  currentWeek: number;
+  regularSeasonEndWeek: number;
+  remainingGames: number;        // total remaining matchups (pairs, not team-weeks)
+  simulations: number;
+  scheduleSource: "sleeper" | "synthetic" | "none";
+  // Sanity-check sums — should match the expected totals (playoffTeams*100,
+  // byeTeams*100, 100) within rounding noise. Returned for the UI/logs.
+  playoffPctSum: number;
+  byePctSum: number;
+  championshipPctSum: number;
+  warnings: string[];
 }
 
 export interface PlayoffCalcSettings {
@@ -153,6 +173,37 @@ export interface PlayoffCalcResponse {
   simulationCount: number;
   lastUpdated: string;
   teams: PlayoffCalcTeamResult[];
+  meta: PlayoffCalcMeta;
+}
+
+/**
+ * Standard round-robin (circle method) schedule generator. Used when Sleeper
+ * hasn't published matchups for the league yet (common pre-season). For an
+ * even N, every team plays exactly once per round; for odd N, one team rests
+ * each round. We cycle the base rounds if `weeks > N - 1`.
+ */
+function synthesizeRoundRobin(teamIds: number[], weeks: number): [number, number][][] {
+  if (teamIds.length < 2 || weeks <= 0) return [];
+  const ids = [...teamIds];
+  if (ids.length % 2 === 1) ids.push(-1); // sentinel = bye
+  const n = ids.length;
+  const baseRounds: [number, number][][] = [];
+  for (let r = 0; r < n - 1; r++) {
+    const pairs: [number, number][] = [];
+    for (let i = 0; i < n / 2; i++) {
+      const a = ids[i];
+      const b = ids[n - 1 - i];
+      if (a !== -1 && b !== -1) pairs.push([a, b]);
+    }
+    baseRounds.push(pairs);
+    // Rotate everyone except the fixed first element.
+    const rest = ids.slice(1);
+    rest.unshift(rest.pop()!);
+    for (let i = 1; i < n; i++) ids[i] = rest[i - 1];
+  }
+  const out: [number, number][][] = [];
+  for (let w = 0; w < weeks; w++) out.push(baseRounds[w % baseRounds.length]);
+  return out;
 }
 
 function deriveFormat(rosterPositions: string[]): "SF" | "1QB" {
@@ -413,8 +464,16 @@ export async function computePlayoffCalculator(
 
   const playoffWeekStart: number = leagueRaw.settings?.playoff_week_start ?? 15;
   const regularSeasonWeeks: number = Math.max(1, playoffWeekStart - 1);
-  const playoffTeams: number = leagueRaw.settings?.playoff_teams
-    ?? (totalRosters >= 12 ? 6 : Math.max(2, Math.round(totalRosters / 2)));
+  // Defaults per spec:
+  //   12-team → 6 playoffs, 10-team → 6 playoffs (not 5), 8-team → 4 playoffs.
+  // Always trust an explicit league.settings.playoff_teams when present.
+  let playoffTeams: number = Number(leagueRaw.settings?.playoff_teams) || 0;
+  if (!playoffTeams || playoffTeams < 2) {
+    if (totalRosters >= 10) playoffTeams = 6;
+    else if (totalRosters >= 8) playoffTeams = 4;
+    else playoffTeams = Math.max(2, Math.round(totalRosters / 2));
+  }
+  playoffTeams = Math.min(playoffTeams, totalRosters);
   // Sleeper exposes `playoff_round_type` but byes are derived from playoff_teams.
   // Common case: 6 teams -> top 2 byes. We default by parity unless setting hints otherwise.
   let byes = 0;
@@ -454,6 +513,7 @@ export async function computePlayoffCalculator(
       pointsAgainst: fptsAgainst,
       winNowScore: winNow,
       teamRating: 50, // filled in below
+      ratingSource: "fantasycalc",
       remainingOpponents: [],
       finalWinsTotal: 0,
       finalPointsForTotal: 0,
@@ -465,14 +525,31 @@ export async function computePlayoffCalculator(
     };
   });
 
-  // Convert win-now -> 0-100 rating, normalized to league
-  const minWN = Math.min(...winNowScores);
-  const maxWN = Math.max(...winNowScores);
+  // Convert win-now -> 0-100 rating, normalized to league. Teams with no
+  // win-now score (FantasyCalc miss, empty roster, etc.) fall back to the
+  // league-average rating so they still participate fairly in simulations —
+  // never silently treated as the league's worst team.
+  const validWN = winNowScores.filter((s) => s > 0);
+  const minWN = validWN.length > 0 ? Math.min(...validWN) : 0;
+  const maxWN = validWN.length > 0 ? Math.max(...validWN) : 0;
   const spanWN = Math.max(1, maxWN - minWN);
+  const ratedTeamRatings: number[] = [];
   for (const t of teams) {
-    // Linear scale to roughly 20-90; bias toward middle so middling teams aren't crushed
-    const norm = (t.winNowScore - minWN) / spanWN;
-    t.teamRating = Math.round(20 + norm * 70);
+    if (t.winNowScore > 0 && validWN.length > 0) {
+      const norm = (t.winNowScore - minWN) / spanWN;
+      t.teamRating = Math.round(20 + norm * 70);
+      t.ratingSource = "fantasycalc";
+      ratedTeamRatings.push(t.teamRating);
+    } else {
+      // Mark for fallback — assigned below once we know the average.
+      t.ratingSource = "fallback";
+    }
+  }
+  const fallbackRating = ratedTeamRatings.length > 0
+    ? Math.round(ratedTeamRatings.reduce((s, r) => s + r, 0) / ratedTeamRatings.length)
+    : 50;
+  for (const t of teams) {
+    if (t.ratingSource === "fallback") t.teamRating = fallbackRating;
   }
   const averageRating = teams.reduce((s, t) => s + t.teamRating, 0) / teams.length;
 

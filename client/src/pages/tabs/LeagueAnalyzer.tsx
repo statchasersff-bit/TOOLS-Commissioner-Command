@@ -1,16 +1,18 @@
 import { useState, useMemo } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DataTable } from "@/components/DataTable";
 import { SectionHeader } from "@/components/SectionHeader";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { getLeagueTeamTiers, getTierColor, getTierBg, getTierEmoji, getTierTooltip } from "@/data/mockData";
 import { useValueModel } from "@/contexts/ValueModelContext";
 import { formatPickLabel } from "@/types";
-import type { League, Team, Tier } from "@/types";
+import type { League, Team, Tier, Player, Pick } from "@/types";
 import { cn } from "@/lib/utils";
-import { Info, ChevronDown, ChevronRight, TrendingUp, TrendingDown } from "lucide-react";
+import { Info, ChevronDown, ChevronRight, TrendingUp, TrendingDown, Plus, X, Sparkles, Crown } from "lucide-react";
 
 interface AnalyzerProps {
   league: League;
@@ -403,332 +405,811 @@ export function TierBreakdown({ league }: AnalyzerProps) {
   );
 }
 
+// ── Compare Teams ──────────────────────────────────────────────────────────
+// Side-by-side comparison of 2–3 managers from the active Sleeper league.
+//
+// Spec highlights:
+//   - 2 to 3 columns; user picks managers via a per-column select.
+//   - Each column shows: header (name/owner/totals/avgAge/league rank),
+//     position cards (QB/RB/WR/TE sorted by dynasty value), Picks, optional
+//     Taxi/IR sections (only when the league has those slots).
+//   - "Edge" highlighting: the strongest position group across the selected
+//     subset gets a gold border + "EDGE" badge.
+//   - Summary metric strip + automated insight bullets at the top.
+//   - Dynasty / Win-Now / Both value toggle.
+
+const COMPARE_MAX = 3;
+const POSITIONS = ["QB", "RB", "WR", "TE"] as const;
+type PositionKey = (typeof POSITIONS)[number];
+
+type ValueMode = "dynasty" | "redraft" | "both";
+
+const POS_THEME: Record<
+  PositionKey,
+  { chip: string; text: string; accent: string }
+> = {
+  QB: { chip: "bg-rose-500/15 text-rose-700 dark:text-rose-400 border-rose-500/30",     text: "text-rose-600 dark:text-rose-400",       accent: "border-rose-500/40" },
+  RB: { chip: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30", text: "text-emerald-600 dark:text-emerald-400", accent: "border-emerald-500/40" },
+  WR: { chip: "bg-sky-500/15 text-sky-700 dark:text-sky-400 border-sky-500/30",         text: "text-sky-600 dark:text-sky-400",         accent: "border-sky-500/40" },
+  TE: { chip: "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30", text: "text-amber-600 dark:text-amber-400",     accent: "border-amber-500/40" },
+};
+
+const POS_COLORS: Record<string, string> = {
+  QB: POS_THEME.QB.chip,
+  RB: POS_THEME.RB.chip,
+  WR: POS_THEME.WR.chip,
+  TE: POS_THEME.TE.chip,
+};
+
+function compactValue(n: number): string {
+  const v = Math.round(n);
+  if (Math.abs(v) >= 1000) return `${(v / 1000).toFixed(1).replace(/\.0$/, "")}k`;
+  return String(v);
+}
+
+function ordinal(n: number): string {
+  const s = ["th", "st", "nd", "rd"];
+  const v = n % 100;
+  return `${n}${s[(v - 20) % 10] || s[v] || s[0]}`;
+}
+
+interface TeamBreakdown {
+  team: Team;
+  byPos: Record<PositionKey, Player[]>;
+  posDyn: Record<PositionKey, number>;
+  posRed: Record<PositionKey, number>;
+  taxi: Player[];
+  ir: Player[];
+  picks: Pick[];
+  picksValue: number;
+  totalDyn: number;
+  totalRed: number;
+  starterValue: number;
+  avgAge: number;
+  leagueDynRank: number;
+  leagueDynTotal: number;
+}
+
 export function RosterComparison({ league }: AnalyzerProps) {
-  const [teamAId, setTeamAId] = useState(league.teams[0]?.id || "");
-  const [teamBId, setTeamBId] = useState(league.teams[1]?.id || "");
-  const { getPlayerValue, getRedraftValue, optimizeLineup } = useValueModel();
+  const initialIds = useMemo(() => {
+    const ids: string[] = [];
+    if (league.teams[0]) ids.push(league.teams[0].id);
+    if (league.teams[1]) ids.push(league.teams[1].id);
+    return ids;
+  }, [league.id]); // re-seed when the league changes
+  const [selectedIds, setSelectedIds] = useState<string[]>(initialIds);
+  const [valueMode, setValueMode] = useState<ValueMode>("dynasty");
+  const [includePicks, setIncludePicks] = useState(true);
+  const [includeBench, setIncludeBench] = useState(true);
+  const [limitMsg, setLimitMsg] = useState<string | null>(null);
+  const { getPlayerValue, getRedraftValue, getPickValue, optimizeLineup } = useValueModel();
 
-  const teamA = league.teams.find((t) => t.id === teamAId);
-  const teamB = league.teams.find((t) => t.id === teamBId);
-
-  const teamTiers = useMemo(() => getLeagueTeamTiers(league.teams), [league.teams]);
-
-  const posStats = useMemo(() => {
-    const positions = ["QB", "RB", "WR", "TE"] as const;
-    const rp = league.rosterPositions || [];
-    const optRosters = new Map(league.teams.map(t => [t.id, optimizeLineup(t.roster, rp)]));
-    const result: Record<string, {
-      dynTotals: Record<string, number>;
-      redTotals: Record<string, number>;
-      dynRanks: Record<string, number>;
-      redRanks: Record<string, number>;
-    }> = {};
-    positions.forEach(pos => {
-      const dynTotals: Record<string, number> = {};
-      const redTotals: Record<string, number> = {};
-      league.teams.forEach(team => {
-        dynTotals[team.id] = team.roster
-          .filter(p => p.pos === pos)
-          .reduce((s, p) => s + getPlayerValue(p), 0);
-        redTotals[team.id] = (optRosters.get(team.id) || team.roster)
-          .filter(p => p.pos === pos && p.starter)
-          .reduce((s, p) => s + getRedraftValue(p), 0);
-      });
-      const dynSorted = [...league.teams].sort((a, b) => (dynTotals[b.id] ?? 0) - (dynTotals[a.id] ?? 0));
-      const redSorted = [...league.teams].sort((a, b) => (redTotals[b.id] ?? 0) - (redTotals[a.id] ?? 0));
-      const dynRanks: Record<string, number> = {};
-      const redRanks: Record<string, number> = {};
-      dynSorted.forEach((t, i) => { dynRanks[t.id] = i + 1; });
-      redSorted.forEach((t, i) => { redRanks[t.id] = i + 1; });
-      result[pos] = { dynTotals, redTotals, dynRanks, redRanks };
+  // Re-seed selected teams whenever the active league changes; otherwise
+  // stale team IDs would silently hide all columns.
+  useMemo(() => {
+    setSelectedIds((prev) => {
+      const valid = prev.filter((id) => league.teams.some((t) => t.id === id));
+      if (valid.length >= 2) return valid;
+      // Fill up to 2 with the first available teams that aren't already in.
+      const fillers = league.teams
+        .map((t) => t.id)
+        .filter((id) => !valid.includes(id))
+        .slice(0, 2 - valid.length);
+      return [...valid, ...fillers];
     });
-    return result;
-  }, [league.teams, league.rosterPositions, getPlayerValue, getRedraftValue, optimizeLineup]);
-  const getTeamTier = (teamId: string): Tier | null => {
-    return teamTiers.get(teamId)?.tier ?? null;
+  }, [league.id, league.teams]);
+
+  const selectedTeams = selectedIds
+    .map((id) => league.teams.find((t) => t.id === id))
+    .filter((t): t is Team => Boolean(t));
+
+  // ── Per-team breakdown (positions / picks / totals / averages) ────────────
+  const breakdowns: TeamBreakdown[] = useMemo(() => {
+    const out: TeamBreakdown[] = [];
+    for (const team of selectedTeams) {
+      const active = team.roster.filter((p) => !p.onTaxi && !p.onReserve);
+      const taxi = team.roster.filter((p) => p.onTaxi);
+      const ir = team.roster.filter((p) => p.onReserve);
+
+      const byPos: Record<PositionKey, Player[]> = { QB: [], RB: [], WR: [], TE: [] };
+      for (const p of active) {
+        if (p.pos === "QB" || p.pos === "RB" || p.pos === "WR" || p.pos === "TE") {
+          byPos[p.pos].push(p);
+        }
+      }
+      for (const pos of POSITIONS) {
+        byPos[pos].sort((a, b) => getPlayerValue(b) - getPlayerValue(a));
+      }
+
+      const posDyn = { QB: 0, RB: 0, WR: 0, TE: 0 } as Record<PositionKey, number>;
+      const posRed = { QB: 0, RB: 0, WR: 0, TE: 0 } as Record<PositionKey, number>;
+      for (const pos of POSITIONS) {
+        for (const p of byPos[pos]) {
+          posDyn[pos] += getPlayerValue(p);
+          posRed[pos] += getRedraftValue(p);
+        }
+      }
+
+      const totalDyn = active.reduce((s, p) => s + getPlayerValue(p), 0);
+      const totalRed = active.reduce((s, p) => s + getRedraftValue(p), 0);
+
+      const starters = optimizeLineup(team.roster, league.rosterPositions || []);
+      const starterValue = starters.filter((p) => p.starter).reduce((s, p) => s + getRedraftValue(p), 0);
+
+      const ages = active.map((p) => p.age).filter((a) => a > 0);
+      const avgAge = ages.length > 0 ? ages.reduce((s, a) => s + a, 0) / ages.length : 0;
+
+      const picks = [...team.picks].sort((a, b) => a.year - b.year || a.round - b.round);
+      const picksValue = picks.reduce((s, p) => s + getPickValue(p), 0);
+
+      out.push({
+        team,
+        byPos,
+        posDyn,
+        posRed,
+        taxi,
+        ir,
+        picks,
+        picksValue,
+        totalDyn,
+        totalRed,
+        starterValue,
+        avgAge,
+        leagueDynRank: 0, // filled in below
+        leagueDynTotal: 0,
+      });
+    }
+    return out;
+  }, [selectedTeams, getPlayerValue, getRedraftValue, getPickValue, optimizeLineup, league.rosterPositions]);
+
+  // League-wide dynasty rank (1 = highest total active dynasty value).
+  const leagueRanks = useMemo(() => {
+    const totals = league.teams.map((t) => {
+      const total = t.roster
+        .filter((p) => !p.onTaxi && !p.onReserve)
+        .reduce((s, p) => s + getPlayerValue(p), 0);
+      return { id: t.id, total };
+    });
+    totals.sort((a, b) => b.total - a.total);
+    const map = new Map<string, { rank: number; total: number }>();
+    totals.forEach((t, i) => map.set(t.id, { rank: i + 1, total: t.total }));
+    return map;
+  }, [league.teams, getPlayerValue]);
+  for (const b of breakdowns) {
+    const r = leagueRanks.get(b.team.id);
+    if (r) {
+      b.leagueDynRank = r.rank;
+      b.leagueDynTotal = r.total;
+    }
+  }
+
+  // Position edges within the selected subset (highest dyn value wins).
+  const posEdge = useMemo(() => {
+    const edge: Record<PositionKey, { teamId: string | null; value: number }> = {
+      QB: { teamId: null, value: -Infinity },
+      RB: { teamId: null, value: -Infinity },
+      WR: { teamId: null, value: -Infinity },
+      TE: { teamId: null, value: -Infinity },
+    };
+    for (const pos of POSITIONS) {
+      for (const b of breakdowns) {
+        const v = valueMode === "redraft" ? b.posRed[pos] : b.posDyn[pos];
+        if (v > edge[pos].value) edge[pos] = { teamId: b.team.id, value: v };
+      }
+    }
+    return edge;
+  }, [breakdowns, valueMode]);
+
+  // Position-rank within the selected subset (1 = best).
+  const posRankWithin = useMemo(() => {
+    const ranks: Record<PositionKey, Map<string, number>> = {
+      QB: new Map(), RB: new Map(), WR: new Map(), TE: new Map(),
+    };
+    for (const pos of POSITIONS) {
+      const ordered = [...breakdowns].sort((a, b) => {
+        const av = valueMode === "redraft" ? a.posRed[pos] : a.posDyn[pos];
+        const bv = valueMode === "redraft" ? b.posRed[pos] : b.posDyn[pos];
+        return bv - av;
+      });
+      ordered.forEach((b, i) => ranks[pos].set(b.team.id, i + 1));
+    }
+    return ranks;
+  }, [breakdowns, valueMode]);
+
+  // Auto-generated insights — one line per noteworthy fact.
+  const insights = useMemo(() => {
+    if (breakdowns.length < 2) return [] as string[];
+    const lines: string[] = [];
+
+    const strongest = (pos: PositionKey) => {
+      const sorted = [...breakdowns].sort((a, b) => b.posDyn[pos] - a.posDyn[pos]);
+      if (sorted.length === 0) return;
+      const top = sorted[0];
+      lines.push(`${top.team.owner || top.team.name} has the strongest ${pos} room.`);
+    };
+    for (const pos of POSITIONS) strongest(pos);
+
+    const youngest = [...breakdowns].sort((a, b) => a.avgAge - b.avgAge)[0];
+    if (youngest && youngest.avgAge > 0) {
+      lines.push(`${youngest.team.owner || youngest.team.name} has the youngest roster (avg age ${youngest.avgAge.toFixed(1)}).`);
+    }
+
+    const mostPicks = [...breakdowns].sort((a, b) => b.picksValue - a.picksValue)[0];
+    if (mostPicks && mostPicks.picksValue > 0) {
+      lines.push(`${mostPicks.team.owner || mostPicks.team.name} has the most future pick value (${compactValue(mostPicks.picksValue)}).`);
+    }
+
+    const winNow = [...breakdowns].sort((a, b) => b.starterValue - a.starterValue)[0];
+    if (winNow && winNow.starterValue > 0) {
+      lines.push(`${winNow.team.owner || winNow.team.name} has the best win-now starter profile.`);
+    }
+
+    return lines;
+  }, [breakdowns]);
+
+  // ── Control handlers ──────────────────────────────────────────────────────
+  const updateSlot = (slotIndex: number, newId: string) => {
+    setLimitMsg(null);
+    setSelectedIds((prev) => {
+      // Don't allow the same team in two slots
+      if (prev.some((id, i) => id === newId && i !== slotIndex)) return prev;
+      const next = [...prev];
+      next[slotIndex] = newId;
+      return next;
+    });
+  };
+  const removeSlot = (slotIndex: number) => {
+    setLimitMsg(null);
+    setSelectedIds((prev) => prev.filter((_, i) => i !== slotIndex));
+  };
+  const addSlot = () => {
+    if (selectedIds.length >= COMPARE_MAX) {
+      setLimitMsg("You can compare up to 3 teams at once.");
+      return;
+    }
+    const next = league.teams.find((t) => !selectedIds.includes(t.id));
+    if (next) setSelectedIds((prev) => [...prev, next.id]);
+  };
+  const clearAll = () => {
+    setLimitMsg(null);
+    setSelectedIds([]);
   };
 
-  const tierA = teamA ? getTeamTier(teamA.id) : null;
-  const tierB = teamB ? getTeamTier(teamB.id) : null;
+  const showTaxi = includeBench && (league.taxiSlots ?? 0) > 0 && breakdowns.some((b) => b.taxi.length > 0);
+  const showIR = includeBench && (league.irSlots ?? 0) > 0 && breakdowns.some((b) => b.ir.length > 0);
 
-  const categories = [
-    { key: "overall", label: "Overall" },
-    { key: "starters", label: "Win-Now" },
-    { key: "depth", label: "Dynasty" },
-    { key: "youth", label: "Youth" },
-    { key: "qb", label: "QB" },
-    { key: "rb", label: "RB" },
-    { key: "wr", label: "WR" },
-    { key: "te", label: "TE" },
-    { key: "picks", label: "Picks" },
-  ];
-
-  const TeamCard = ({
-    team,
-    tier,
-    selectId,
-    onSelect,
-    side,
-  }: {
-    team: Team | undefined;
-    tier: Tier | null;
-    selectId: string;
-    onSelect: (id: string) => void;
-    side: "A" | "B";
-  }) => {
-    const isA = side === "A";
-    const ringColor = isA ? "ring-[#0b3a7a]/70 dark:ring-blue-400/70" : "ring-[#d4af37]/70";
-    const nameColor = isA ? "text-[#0b3a7a] dark:text-blue-400" : "text-[#d4af37]";
-    const scoreColor = isA ? "text-[#0b3a7a] dark:text-blue-400" : "text-[#d4af37]";
-    const glowBg = isA
-      ? "bg-[#0b3a7a]/10 dark:bg-blue-400/5"
-      : "bg-[#d4af37]/10 dark:bg-[#d4af37]/5";
-
+  // ── Empty states ──────────────────────────────────────────────────────────
+  if (!league.teams || league.teams.length === 0) {
     return (
-      <div className={cn("flex flex-col items-center gap-2 p-3 sm:p-4 rounded-xl", glowBg)}>
-        <div className={cn("w-12 h-12 rounded-full ring-2 overflow-hidden flex-shrink-0", ringColor, "bg-muted shadow-md")}>
-          {team?.avatar ? (
-            <img src={team.avatar} alt={team.name} className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
-          ) : (
-            <div className={cn("w-full h-full flex items-center justify-center text-lg font-black", nameColor)}>
-              {(team?.owner || "?").charAt(0).toUpperCase()}
-            </div>
-          )}
-        </div>
-
-        <div className="text-center min-w-0 w-full">
-          <p className={cn("text-sm font-bold truncate leading-tight", nameColor)} data-testid={`text-matchup-name-${side}`}>
-            {team?.name || `Team ${side}`}
-          </p>
-          {team?.owner && team.owner !== team.name && (
-            <p className="text-[10px] text-muted-foreground truncate">{team.owner}</p>
-          )}
-          {tier && (
-            <Badge variant="outline" className={cn("text-[9px] border-current mt-0.5", getTierColor(tier))}>
-              {tier}
-            </Badge>
-          )}
-          <div className="flex items-baseline justify-center gap-1 mt-1">
-            <p className={cn("text-2xl font-black tabular-nums", scoreColor)} data-testid={`text-matchup-score-${side}`}>
-              {team?.metrics.overall ?? 0}
-            </p>
-            <p className="text-[9px] text-muted-foreground uppercase tracking-widest">pts</p>
-          </div>
-        </div>
-
-        <Select value={selectId} onValueChange={onSelect}>
-          <SelectTrigger className="w-full max-w-[150px] text-[11px] h-6" data-testid={`select-team-${side}`}>
-            <SelectValue placeholder={`Team ${side}`} />
-          </SelectTrigger>
-          <SelectContent>
-            {league.teams.map((t) => (
-              <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      <div className="space-y-6">
+        <SectionHeader title="Compare Teams" subtitle="Side-by-side roster, value, and pick comparison" />
+        <Card className="p-8 text-center text-muted-foreground">Roster data could not be loaded.</Card>
       </div>
     );
-  };
+  }
 
   return (
-    <div className="space-y-8">
-      <SectionHeader title="Roster Comparison" subtitle="Compare two teams head-to-head" />
+    <div className="space-y-5" data-testid="compare-teams">
+      <SectionHeader
+        title="Compare Teams"
+        subtitle="Stack up to 3 rosters in this league side-by-side: position values, picks, taxi, and IR."
+      />
 
-      <div className="relative rounded-2xl overflow-hidden border border-border/30 bg-card shadow-md">
-        <div className="absolute inset-0 bg-gradient-to-r from-[#0b3a7a]/10 via-transparent to-[#d4af37]/10 dark:from-[#0b3a7a]/20 dark:to-[#d4af37]/15 pointer-events-none" />
-        <div className="relative grid grid-cols-[1fr_auto_1fr]">
-          <TeamCard team={teamA} tier={tierA} selectId={teamAId} onSelect={setTeamAId} side="A" />
-
-          <div className="flex flex-col items-center justify-center px-2 sm:px-4 py-6 relative">
-            <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-gradient-to-b from-transparent via-border/60 to-transparent" />
-            <div className="relative z-10 flex flex-col items-center gap-1.5">
-              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-background border-2 border-[#d4af37] shadow-lg flex items-center justify-center">
-                <span className="text-[10px] sm:text-xs font-black text-[#d4af37] tracking-tighter">VS</span>
+      {/* ── Controls strip ───────────────────────────────────────────────── */}
+      <Card className="p-3 md:p-4">
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Team selectors */}
+          <div className="flex flex-wrap items-center gap-2">
+            {selectedIds.map((id, idx) => (
+              <div key={`slot-${idx}`} className="flex items-center gap-1">
+                <Select value={id} onValueChange={(v) => updateSlot(idx, v)}>
+                  <SelectTrigger className="h-8 w-[170px] text-xs" data-testid={`compare-team-select-${idx}`}>
+                    <SelectValue placeholder="Pick a manager" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {league.teams.map((t) => (
+                      <SelectItem key={t.id} value={t.id} disabled={selectedIds.includes(t.id) && selectedIds[idx] !== t.id}>
+                        {t.owner || t.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {selectedIds.length > 2 && (
+                  <button
+                    type="button"
+                    onClick={() => removeSlot(idx)}
+                    className="text-muted-foreground hover:text-foreground p-1 rounded-md hover:bg-muted/40"
+                    aria-label={`Remove team ${idx + 1}`}
+                    data-testid={`compare-team-remove-${idx}`}
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
               </div>
-            </div>
+            ))}
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 gap-1.5"
+              onClick={addSlot}
+              disabled={selectedIds.length >= COMPARE_MAX}
+              data-testid="compare-add-team"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Add manager
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 text-muted-foreground"
+              onClick={clearAll}
+              data-testid="compare-clear"
+            >
+              Clear all
+            </Button>
           </div>
 
-          <TeamCard team={teamB} tier={tierB} selectId={teamBId} onSelect={setTeamBId} side="B" />
+          <div className="flex-1" />
+
+          {/* Value mode + include toggles */}
+          <div className="flex items-center gap-1 rounded-md border border-border/60 p-0.5">
+            {(["dynasty", "redraft", "both"] as const).map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => setValueMode(mode)}
+                className={cn(
+                  "text-[11px] px-2.5 py-1 rounded-sm font-semibold transition-colors",
+                  valueMode === mode
+                    ? "bg-[#d4af37] text-[#060d1a]"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+                data-testid={`compare-value-mode-${mode}`}
+              >
+                {mode === "dynasty" ? "Dynasty" : mode === "redraft" ? "Win-Now" : "Both"}
+              </button>
+            ))}
+          </div>
+
+          <label className="inline-flex items-center gap-1.5 text-[11px] cursor-pointer">
+            <input
+              type="checkbox"
+              checked={includePicks}
+              onChange={(e) => setIncludePicks(e.target.checked)}
+              className="w-3.5 h-3.5"
+              data-testid="compare-include-picks"
+            />
+            <span>Picks</span>
+          </label>
+          <label className="inline-flex items-center gap-1.5 text-[11px] cursor-pointer">
+            <input
+              type="checkbox"
+              checked={includeBench}
+              onChange={(e) => setIncludeBench(e.target.checked)}
+              className="w-3.5 h-3.5"
+              data-testid="compare-include-bench"
+            />
+            <span>Taxi / IR</span>
+          </label>
         </div>
-      </div>
 
-      {teamA && teamB && (
-        <Card className="p-6">
-          <div className="space-y-5">
-            {categories.map((cat) => {
-              const valA = teamA.metrics[cat.key as keyof typeof teamA.metrics] as number;
-              const valB = teamB.metrics[cat.key as keyof typeof teamB.metrics] as number;
-              const maxVal = 100;
-              return (
-                <div key={cat.key} className="space-y-1.5">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className={cn("font-bold", valA >= valB ? "text-[#0b3a7a] dark:text-blue-400" : "text-muted-foreground")}>{valA}</span>
-                    <span className="font-semibold text-muted-foreground uppercase tracking-wider text-[11px]">{cat.label}</span>
-                    <span className={cn("font-bold", valB >= valA ? "text-[#d4af37]" : "text-muted-foreground")}>{valB}</span>
-                  </div>
-                  <div className="flex gap-1 h-3.5">
-                    <div className="flex-1 flex justify-end">
-                      <div
-                        className="h-full rounded-l-full bg-[#0b3a7a] dark:bg-blue-500 transition-all"
-                        style={{ width: `${(valA / maxVal) * 100}%` }}
-                      />
-                    </div>
-                    <div className="flex-1">
-                      <div
-                        className="h-full rounded-r-full bg-[#d4af37] transition-all"
-                        style={{ width: `${(valB / maxVal) * 100}%` }}
-                      />
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+        {limitMsg && (
+          <div className="mt-2 text-[11px] text-amber-500" data-testid="compare-limit-msg">{limitMsg}</div>
+        )}
+      </Card>
+
+      {/* ── Empty-state messages once controls are visible ───────────────── */}
+      {selectedTeams.length < 2 && (
+        <Card className="p-6 text-center text-muted-foreground" data-testid="compare-need-more">
+          Add at least 2 managers to start comparing.
         </Card>
       )}
 
-      {teamA && teamB && (() => {
-        const positions = ["QB", "RB", "WR", "TE"] as const;
-        const getPlayers = (team: typeof teamA, pos: string) =>
-          [...team.roster].filter(p => p.pos === pos).sort((a, b) => b.value - a.value);
-        const teamConfig = [
-          { team: teamA, color: "text-[#0b3a7a] dark:text-blue-400", accent: "border-[#0b3a7a]/20 dark:border-blue-400/20" },
-          { team: teamB, color: "text-[#d4af37]", accent: "border-[#d4af37]/20" },
-        ];
+      {selectedTeams.length >= 2 && (
+        <>
+          {/* ── Summary metric strip ───────────────────────────────────────── */}
+          <SummaryStrip
+            breakdowns={breakdowns}
+            valueMode={valueMode}
+            includePicks={includePicks}
+          />
 
-        return (
-          <div className="space-y-4 sm:space-y-5">
-            <div className="grid grid-cols-2 gap-2 sm:gap-5">
-              {teamConfig.map(({ team, color }) => (
-                <div key={team.id} className="px-1 sm:px-2">
-                  <h3 className={`text-xs sm:text-sm font-bold ${color} truncate`}>{team.name}</h3>
-                  {team.owner && team.owner !== team.name && (
-                    <p className="text-[10px] sm:text-xs text-muted-foreground truncate">{team.owner}</p>
-                  )}
-                  <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
-                </div>
+          {/* ── Insights ───────────────────────────────────────────────────── */}
+          {insights.length > 0 && (
+            <Card className="p-3 md:p-4 border-[#d4af37]/30 bg-[#d4af37]/5" data-testid="compare-insights">
+              <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-[#d4af37] mb-2">
+                <Sparkles className="w-3.5 h-3.5" />
+                Quick insights
+              </div>
+              <ul className="space-y-1 text-[12px] text-foreground/90">
+                {insights.map((line, i) => (
+                  <li key={i} className="flex items-start gap-1.5">
+                    <span className="text-[#d4af37] mt-0.5">•</span>
+                    <span>{line}</span>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          )}
+
+          {/* ── Team columns ───────────────────────────────────────────────── */}
+          {/* Mobile: horizontal scroll. Desktop: equal columns 2 or 3 wide. */}
+          <div className="overflow-x-auto -mx-2 px-2 pb-2">
+            <div
+              className={cn(
+                "grid gap-3 md:gap-4",
+                breakdowns.length === 2 ? "md:grid-cols-2" : "md:grid-cols-3"
+              )}
+              style={{
+                gridTemplateColumns: `repeat(${breakdowns.length}, minmax(280px, 1fr))`,
+              }}
+            >
+              {breakdowns.map((b) => (
+                <TeamColumn
+                  key={b.team.id}
+                  breakdown={b}
+                  valueMode={valueMode}
+                  includePicks={includePicks}
+                  showTaxi={showTaxi}
+                  showIR={showIR}
+                  posEdge={posEdge}
+                  posRankWithin={posRankWithin}
+                  comparedCount={breakdowns.length}
+                  totalLeagueTeams={league.teams.length}
+                  getPlayerValue={getPlayerValue}
+                  getRedraftValue={getRedraftValue}
+                  getPickValue={getPickValue}
+                />
               ))}
             </div>
-
-            {positions.map(pos => {
-              const playersA = getPlayers(teamA, pos);
-              const playersB = getPlayers(teamB, pos);
-              const maxRows = Math.max(playersA.length, playersB.length, 1);
-              const ps = posStats[pos];
-              const teamsForPos = [teamA, teamB] as const;
-              const posColors = ["text-[#0b3a7a] dark:text-blue-400", "text-[#d4af37]"] as const;
-
-              return (
-                <Card key={pos} className="p-2.5 sm:p-4">
-                  <div className="flex items-center gap-1.5 sm:gap-2 mb-2">
-                    <Badge variant="outline" className={`text-[9px] sm:text-[10px] w-6 sm:w-7 justify-center ${POS_COLORS[pos]}`}>{pos}</Badge>
-                    <span className="text-[9px] sm:text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">
-                      {playersA.length} vs {playersB.length}
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2 sm:gap-5">
-                    {[playersA, playersB].map((players, colIdx) => (
-                      <div key={colIdx} className="space-y-0.5">
-                        {Array.from({ length: maxRows }).map((_, rowIdx) => {
-                          const p = players[rowIdx];
-                          if (!p) return <div key={rowIdx} className="py-0.5 sm:py-1 px-1 sm:px-2 h-[22px] sm:h-[28px]" />;
-                          return (
-                            <div key={p.id} className="flex items-center justify-between py-0.5 sm:py-1 px-1 sm:px-2 rounded-md hover:bg-muted/30 transition-colors" data-testid={`roster-player-${p.id}`}>
-                              <div className="flex items-center gap-1 sm:gap-2 min-w-0">
-                                <span className="text-[10px] sm:text-xs truncate text-foreground">{p.name}</span>
-                              </div>
-                              <span className="text-[10px] sm:text-xs font-mono font-semibold text-muted-foreground ml-1 flex-shrink-0">{p.value > 0 ? p.value.toLocaleString() : "0"}</span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    ))}
-                  </div>
-
-                  {ps && (
-                    <div className="grid grid-cols-2 gap-2 sm:gap-5 mt-2 sm:mt-3 pt-2 border-t border-border/25">
-                      {teamsForPos.map((team, ci) => {
-                        const dynVal = ps.dynTotals[team.id] ?? 0;
-                        const redVal = ps.redTotals[team.id] ?? 0;
-                        const dynRank = ps.dynRanks[team.id] ?? league.teams.length;
-                        const redRank = ps.redRanks[team.id] ?? league.teams.length;
-                        const col = posColors[ci];
-                        return (
-                          <div key={team.id} className="space-y-0.5">
-                            <div className="flex items-center justify-between">
-                              <span className="text-[9px] text-muted-foreground">Dynasty</span>
-                              <span className={`text-[10px] font-bold tabular-nums ${col}`}>
-                                {Math.round(dynVal).toLocaleString()}
-                                <span className="text-muted-foreground font-normal ml-1">#{dynRank}</span>
-                              </span>
-                            </div>
-                            <div className="flex items-center justify-between">
-                              <span className="text-[9px] text-muted-foreground">Win-Now</span>
-                              <span className={`text-[10px] font-bold tabular-nums ${col}`}>
-                                {Math.round(redVal).toLocaleString()}
-                                <span className="text-muted-foreground font-normal ml-1">#{redRank}</span>
-                              </span>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </Card>
-              );
-            })}
-
-            {(() => {
-              const getPicks = (team: typeof teamA) =>
-                [...team.picks].sort((a, b) => a.year - b.year || a.round - b.round);
-              const picksA = getPicks(teamA);
-              const picksB = getPicks(teamB);
-              const maxPickRows = Math.max(picksA.length, picksB.length, 1);
-              const totalValueA = picksA.reduce((s, p) => s + p.value, 0);
-              const totalValueB = picksB.reduce((s, p) => s + p.value, 0);
-
-              return (
-                <Card className="p-2.5 sm:p-4" data-testid="draft-capital-comparison">
-                  <div className="flex items-center gap-1.5 sm:gap-2 mb-2 sm:mb-3">
-                    <Badge variant="outline" className="text-[9px] sm:text-[10px] bg-purple-500/15 text-purple-700 dark:text-purple-400 border-purple-500/30 justify-center">PICKS</Badge>
-                    <span className="text-[9px] sm:text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">
-                      {picksA.length} vs {picksB.length}
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2 sm:gap-5">
-                    {[picksA, picksB].map((picks, colIdx) => (
-                      <div key={colIdx} className="space-y-0.5">
-                        {Array.from({ length: maxPickRows }).map((_, rowIdx) => {
-                          const pk = picks[rowIdx];
-                          if (!pk) return <div key={rowIdx} className="py-0.5 sm:py-1 px-1 sm:px-2 h-[22px] sm:h-[28px]" />;
-                          return (
-                            <div key={`${pk.year}-${pk.round}-${rowIdx}`} className="flex items-center justify-between py-0.5 sm:py-1 px-1 sm:px-2 rounded-md hover:bg-muted/30 transition-colors">
-                              <span className="text-[10px] sm:text-xs font-semibold text-foreground">{formatPickLabel(pk)}</span>
-                              <span className="text-[10px] sm:text-xs font-mono font-semibold text-muted-foreground ml-1 flex-shrink-0">{pk.value > 0 ? pk.value.toLocaleString() : "0"}</span>
-                            </div>
-                          );
-                        })}
-                        <div className="flex items-center justify-between py-1 px-1 sm:px-2 border-t border-border/40 mt-1">
-                          <span className="text-[10px] sm:text-xs font-bold text-muted-foreground">Total</span>
-                          <span className="text-[10px] sm:text-xs font-mono font-bold text-foreground">{(colIdx === 0 ? totalValueA : totalValueB).toLocaleString()}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </Card>
-              );
-            })()}
           </div>
-        );
-      })()}
+        </>
+      )}
     </div>
   );
 }
 
-const POS_COLORS: Record<string, string> = {
-  QB: "bg-red-500/15 text-red-700 dark:text-red-400 border-red-500/30",
-  RB: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30",
-  WR: "bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/30",
-  TE: "bg-orange-500/15 text-orange-700 dark:text-orange-400 border-orange-500/30",
-};
+// ── Sub-components ─────────────────────────────────────────────────────────
+
+function SummaryStrip({
+  breakdowns,
+  valueMode,
+  includePicks,
+}: {
+  breakdowns: TeamBreakdown[];
+  valueMode: ValueMode;
+  includePicks: boolean;
+}) {
+  const showDyn = valueMode === "dynasty" || valueMode === "both";
+  const showRed = valueMode === "redraft" || valueMode === "both";
+
+  const rows: Array<{ key: string; label: string; value: (b: TeamBreakdown) => string; higherIsBetter: boolean; numeric: (b: TeamBreakdown) => number }> = [];
+  if (showDyn) rows.push({ key: "totalDyn", label: "Total Dynasty", value: (b) => compactValue(b.totalDyn), higherIsBetter: true, numeric: (b) => b.totalDyn });
+  if (showRed) rows.push({ key: "starter",  label: "Starter Value", value: (b) => compactValue(b.starterValue), higherIsBetter: true, numeric: (b) => b.starterValue });
+  rows.push({ key: "age", label: "Avg Age", value: (b) => b.avgAge > 0 ? b.avgAge.toFixed(1) : "—", higherIsBetter: false, numeric: (b) => b.avgAge || 99 });
+  for (const pos of POSITIONS) {
+    rows.push({
+      key: `pos-${pos}`,
+      label: `${pos} Value`,
+      value: (b) => compactValue(valueMode === "redraft" ? b.posRed[pos] : b.posDyn[pos]),
+      higherIsBetter: true,
+      numeric: (b) => valueMode === "redraft" ? b.posRed[pos] : b.posDyn[pos],
+    });
+  }
+  if (includePicks) {
+    rows.push({ key: "picks", label: "Picks Value", value: (b) => compactValue(b.picksValue), higherIsBetter: true, numeric: (b) => b.picksValue });
+  }
+
+  return (
+    <Card className="p-3 md:p-4 overflow-x-auto" data-testid="compare-summary">
+      <table className="w-full text-[12px]">
+        <thead>
+          <tr className="border-b border-border/40">
+            <th className="text-left font-semibold uppercase tracking-wide text-[10px] text-muted-foreground py-1.5 pr-3">Metric</th>
+            {breakdowns.map((b) => (
+              <th key={b.team.id} className="text-right font-semibold py-1.5 pl-3 min-w-[90px]">
+                <div className="truncate max-w-[160px]" title={b.team.owner || b.team.name}>
+                  {b.team.owner || b.team.name}
+                </div>
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => {
+            // Highlight the best value in the row.
+            const winnerIdx = breakdowns.reduce(
+              (best, b, i) => {
+                const v = row.numeric(b);
+                if (best.idx === -1) return { idx: i, v };
+                if (row.higherIsBetter ? v > best.v : v < best.v) return { idx: i, v };
+                return best;
+              },
+              { idx: -1, v: 0 }
+            ).idx;
+            return (
+              <tr key={row.key} className="border-b border-border/20 last:border-0">
+                <td className="py-1.5 pr-3 text-muted-foreground">{row.label}</td>
+                {breakdowns.map((b, i) => (
+                  <td
+                    key={b.team.id}
+                    className={cn(
+                      "text-right py-1.5 pl-3 tabular-nums font-mono",
+                      i === winnerIdx ? "text-[#d4af37] font-bold" : "text-foreground"
+                    )}
+                  >
+                    {row.value(b)}
+                  </td>
+                ))}
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </Card>
+  );
+}
+
+function TeamColumn({
+  breakdown,
+  valueMode,
+  includePicks,
+  showTaxi,
+  showIR,
+  posEdge,
+  posRankWithin,
+  comparedCount,
+  totalLeagueTeams,
+  getPlayerValue,
+  getRedraftValue,
+  getPickValue,
+}: {
+  breakdown: TeamBreakdown;
+  valueMode: ValueMode;
+  includePicks: boolean;
+  showTaxi: boolean;
+  showIR: boolean;
+  posEdge: Record<PositionKey, { teamId: string | null; value: number }>;
+  posRankWithin: Record<PositionKey, Map<string, number>>;
+  comparedCount: number;
+  totalLeagueTeams: number;
+  getPlayerValue: (p: Player) => number;
+  getRedraftValue: (p: Player) => number;
+  getPickValue: (p: Pick) => number;
+}) {
+  const { team, byPos, posDyn, posRed, taxi, ir, picks, picksValue, totalDyn, totalRed, avgAge, leagueDynRank } = breakdown;
+
+  return (
+    <div className="flex flex-col gap-2 min-w-0">
+      {/* Sticky header (desktop) so the team identity stays visible as the
+          user scrolls long position lists. */}
+      <Card className="p-3 sticky top-0 z-10 bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/70 border-border/60">
+        <div className="flex items-center gap-2 min-w-0">
+          {team.avatar ? (
+            <img
+              src={team.avatar}
+              alt={team.name}
+              className="w-9 h-9 rounded-full object-cover flex-shrink-0 ring-1 ring-border/40"
+              onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+            />
+          ) : (
+            <div className="w-9 h-9 rounded-full bg-[#0b3a7a]/20 dark:bg-blue-400/20 flex items-center justify-center text-sm font-bold text-[#0b3a7a] dark:text-blue-400 flex-shrink-0">
+              {(team.owner || team.name || "?").charAt(0).toUpperCase()}
+            </div>
+          )}
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-bold truncate" data-testid={`compare-team-name-${team.id}`}>{team.name}</p>
+            <p className="text-[11px] text-muted-foreground truncate">{team.owner}</p>
+          </div>
+          {leagueDynRank > 0 && (
+            <Badge variant="outline" className="text-[9px] font-semibold flex items-center gap-0.5">
+              {leagueDynRank === 1 && <Crown className="w-2.5 h-2.5 text-[#d4af37]" />}
+              #{leagueDynRank}/{totalLeagueTeams}
+            </Badge>
+          )}
+        </div>
+        <div className="grid grid-cols-3 gap-2 mt-2 text-[10px]">
+          <div className="flex flex-col">
+            <span className="text-muted-foreground uppercase tracking-wider">Dynasty</span>
+            <span className="font-bold tabular-nums">{compactValue(totalDyn)}</span>
+          </div>
+          <div className="flex flex-col">
+            <span className="text-muted-foreground uppercase tracking-wider">Win-Now</span>
+            <span className="font-bold tabular-nums">{compactValue(totalRed)}</span>
+          </div>
+          <div className="flex flex-col">
+            <span className="text-muted-foreground uppercase tracking-wider">Avg Age</span>
+            <span className="font-bold tabular-nums">{avgAge > 0 ? avgAge.toFixed(1) : "—"}</span>
+          </div>
+        </div>
+      </Card>
+
+      {/* Position cards */}
+      {POSITIONS.map((pos) => {
+        const players = byPos[pos];
+        const rank = posRankWithin[pos].get(team.id) ?? 0;
+        const isEdge = posEdge[pos].teamId === team.id && comparedCount > 1 && players.length > 0;
+        const posVal = valueMode === "redraft" ? posRed[pos] : posDyn[pos];
+
+        return (
+          <Card
+            key={pos}
+            className={cn(
+              "p-2.5",
+              isEdge && "border-[#d4af37]/60 ring-1 ring-[#d4af37]/30"
+            )}
+            data-testid={`compare-pos-${team.id}-${pos}`}
+          >
+            <div className="flex items-center justify-between gap-2 mb-2">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <Badge variant="outline" className={cn("text-[10px] w-7 justify-center", POS_THEME[pos].chip)}>
+                  {pos}
+                </Badge>
+                <span className="text-[10px] text-muted-foreground tabular-nums">
+                  {compactValue(posVal)} · {rank > 0 ? `${ordinal(rank)} of ${comparedCount}` : "—"}
+                </span>
+              </div>
+              {isEdge && (
+                <Badge variant="outline" className="text-[9px] bg-[#d4af37]/15 text-[#d4af37] border-[#d4af37]/40 font-bold tracking-wider">
+                  EDGE
+                </Badge>
+              )}
+            </div>
+
+            {players.length === 0 ? (
+              <div className="text-[11px] text-muted-foreground/70 italic px-1 py-1">No {pos}s.</div>
+            ) : (
+              <div className="space-y-0.5">
+                {players.map((p, i) => (
+                  <PlayerRow
+                    key={p.id}
+                    player={p}
+                    index={i + 1}
+                    valueMode={valueMode}
+                    dyn={getPlayerValue(p)}
+                    red={getRedraftValue(p)}
+                  />
+                ))}
+              </div>
+            )}
+          </Card>
+        );
+      })}
+
+      {/* Picks */}
+      {includePicks && (
+        <Card className="p-2.5" data-testid={`compare-picks-${team.id}`}>
+          <div className="flex items-center gap-1.5 mb-2">
+            <Badge variant="outline" className="text-[10px] bg-purple-500/15 text-purple-700 dark:text-purple-400 border-purple-500/30">
+              PICKS
+            </Badge>
+            <span className="text-[10px] text-muted-foreground tabular-nums">
+              {compactValue(picksValue)} · {picks.length} {picks.length === 1 ? "pick" : "picks"}
+            </span>
+          </div>
+          {picks.length === 0 ? (
+            <div className="text-[11px] text-muted-foreground/70 italic px-1 py-1">No future picks.</div>
+          ) : (
+            <div className="space-y-0.5">
+              {picks.map((pk, i) => (
+                <div
+                  key={`${pk.year}-${pk.round}-${i}`}
+                  className="flex items-center justify-between py-1 px-1 rounded-md hover:bg-muted/30"
+                >
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="text-[10px] text-muted-foreground w-4 tabular-nums">{i + 1}.</span>
+                    <span className="text-[11px] font-medium truncate">{formatPickLabel(pk)}</span>
+                    {pk.projectedRange && (
+                      <span className="text-[9px] text-muted-foreground/70">({pk.projectedRange})</span>
+                    )}
+                  </div>
+                  <span className="text-[11px] font-mono font-semibold text-muted-foreground tabular-nums">
+                    {compactValue(getPickValue(pk))}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+      )}
+
+      {/* Taxi */}
+      {showTaxi && (
+        <Card className="p-2.5" data-testid={`compare-taxi-${team.id}`}>
+          <div className="flex items-center gap-1.5 mb-2">
+            <Badge variant="outline" className="text-[10px] bg-cyan-500/15 text-cyan-700 dark:text-cyan-400 border-cyan-500/30">
+              TAXI
+            </Badge>
+            <span className="text-[10px] text-muted-foreground tabular-nums">
+              {taxi.length} {taxi.length === 1 ? "player" : "players"}
+            </span>
+          </div>
+          {taxi.length === 0 ? (
+            <div className="text-[11px] text-muted-foreground/70 italic px-1 py-1">Empty.</div>
+          ) : (
+            <div className="space-y-0.5">
+              {[...taxi].sort((a, b) => getPlayerValue(b) - getPlayerValue(a)).map((p, i) => (
+                <PlayerRow
+                  key={p.id}
+                  player={p}
+                  index={i + 1}
+                  valueMode={valueMode}
+                  dyn={getPlayerValue(p)}
+                  red={getRedraftValue(p)}
+                />
+              ))}
+            </div>
+          )}
+        </Card>
+      )}
+
+      {/* IR */}
+      {showIR && (
+        <Card className="p-2.5" data-testid={`compare-ir-${team.id}`}>
+          <div className="flex items-center gap-1.5 mb-2">
+            <Badge variant="outline" className="text-[10px] bg-orange-500/15 text-orange-700 dark:text-orange-400 border-orange-500/30">
+              IR
+            </Badge>
+            <span className="text-[10px] text-muted-foreground tabular-nums">
+              {ir.length} {ir.length === 1 ? "player" : "players"}
+            </span>
+          </div>
+          {ir.length === 0 ? (
+            <div className="text-[11px] text-muted-foreground/70 italic px-1 py-1">Empty.</div>
+          ) : (
+            <div className="space-y-0.5">
+              {[...ir].sort((a, b) => getPlayerValue(b) - getPlayerValue(a)).map((p, i) => (
+                <PlayerRow
+                  key={p.id}
+                  player={p}
+                  index={i + 1}
+                  valueMode={valueMode}
+                  dyn={getPlayerValue(p)}
+                  red={getRedraftValue(p)}
+                />
+              ))}
+            </div>
+          )}
+        </Card>
+      )}
+    </div>
+  );
+}
+
+function PlayerRow({
+  player,
+  index,
+  valueMode,
+  dyn,
+  red,
+}: {
+  player: Player;
+  index: number;
+  valueMode: ValueMode;
+  dyn: number;
+  red: number;
+}) {
+  const showDyn = valueMode === "dynasty" || valueMode === "both";
+  const showRed = valueMode === "redraft" || valueMode === "both";
+  return (
+    <div className="flex items-center gap-2 py-1 px-1 rounded-md hover:bg-muted/30" data-testid={`compare-player-${player.id}`}>
+      <span className="text-[10px] text-muted-foreground w-4 tabular-nums flex-shrink-0">{index}.</span>
+      <PlayerAvatar id={player.sleeperId || player.id} name={player.name} pos={player.pos} team={player.team} size="xs" compact />
+      <div className="min-w-0 flex-1">
+        <p className="text-[11px] font-semibold truncate leading-tight">{player.name}</p>
+        <p className="text-[9px] text-muted-foreground leading-tight">
+          {player.pos}{player.team ? ` · ${player.team}` : ""}{player.age > 0 ? ` · ${player.age}` : ""}
+        </p>
+      </div>
+      <div className="flex flex-col items-end gap-0 flex-shrink-0">
+        {showDyn && (
+          <span className="text-[11px] font-mono font-semibold tabular-nums">{compactValue(dyn)}</span>
+        )}
+        {showRed && (
+          <span className={cn("text-[9px] font-mono tabular-nums text-muted-foreground", showDyn && "leading-tight")}>{compactValue(red)}</span>
+        )}
+      </div>
+    </div>
+  );
+}
+

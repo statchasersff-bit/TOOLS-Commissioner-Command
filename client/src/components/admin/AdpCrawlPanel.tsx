@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { API_BASE } from "@/lib/apiBase";
 
 /**
@@ -34,6 +34,24 @@ interface CrawlResult {
   capsHit: string[];
   requestCount: number;
   durationMs: number;
+}
+
+/** Live progress shape returned by the /crawl-network/progress endpoint.
+ *  Superset of CrawlResult — adds phase/activity/% so the panel can render
+ *  a live progress bar while the server-side crawl runs. */
+interface CrawlLiveState extends CrawlResult {
+  jobId: string;
+  status: "idle" | "running" | "completed" | "failed";
+  startedAt: number | null;
+  completedAt: number | null;
+  seedUsername: string;
+  draftCategories: string[];
+  phase: "seed" | "depth" | "snapshots" | "done";
+  phaseLabel: string;
+  currentActivity: string;
+  currentDepth: number;
+  depthProgress: Array<{ depth: number; totalUsers: number; processedUsers: number }>;
+  overallPct: number;
 }
 
 /** Defaults applied client-side so the payload is never sent with empty arrays. */
@@ -135,6 +153,10 @@ export function AdpCrawlPanel() {
   const [result, setResult] = useState<CrawlResult | null>(null);
   const [error, setError] = useState<string>("");
   const [rawResponse, setRawResponse] = useState<string>("");
+  // Live progress for the in-flight server-side crawl. Populated by the
+  // initial POST response and refreshed every ~1.5s by the polling effect.
+  const [liveProgress, setLiveProgress] = useState<CrawlLiveState | null>(null);
+  const pollRef = useRef<number | null>(null);
   const running = runState === "running";
 
   // ── Status state ────────────────────────────────────────────────────────
@@ -196,21 +218,86 @@ export function AdpCrawlPanel() {
         setRunState("error");
         return;
       }
-      // Sanity check the response shape — guard against the empty-object case.
-      if (typeof json !== "object" || typeof json.requestCount !== "number") {
-        setError("Response did not match the expected crawl-result shape. See raw response below.");
+      // New response shape: { jobId, state }. The crawl now runs in the
+      // background on the server; we hold "running" UI state and poll the
+      // /progress endpoint for live updates.
+      const state = (json && typeof json === "object" && json.state) ? json.state as CrawlLiveState : null;
+      if (!state || typeof state.status !== "string") {
+        setError("Response did not match the expected crawl-state shape. See raw response below.");
         setRunState("error");
         return;
       }
-      setResult(json as CrawlResult);
-      setRunState("success");
+      setLiveProgress(state);
+      // The polling effect (below) will pick up "running" status and start
+      // refreshing. If the server returned a state that's already terminal
+      // (rare — caps tripped, snapshot-only paths), reflect that here.
+      if (state.status === "completed" || state.status === "failed") {
+        setResult(state);
+        setRunState(state.status === "completed" ? "success" : "error");
+        if (state.status === "failed") setError(state.errors[0] ?? "Crawl failed");
+      }
     } catch (err: any) {
       setError(err?.message || "Request failed");
       setRunState("error");
-    } finally {
       setRunStartedAt(null);
     }
+    // NOTE: we intentionally do NOT clear runStartedAt on success here — the
+    // server-side crawl is still running. The polling effect keeps the badge
+    // ticking from state.startedAt, and clears it when the crawl terminates.
   }, [seedUsername, seasons, categories, refreshSnapshots, maxUsers, maxLeagues, maxDrafts, adminSecretOverride]);
+
+  // ── Live-progress polling ───────────────────────────────────────────────
+  // Single long-lived poller. Fires once on mount (so a crawl started in a
+  // previous tab/component instance is picked up) and then every 1.5s while
+  // the panel is mounted. All state transitions go through functional
+  // setters so the closure doesn't capture stale runState. The interval
+  // does NOT clear on terminal — that way clicking "Run" again immediately
+  // resumes live updates without needing to re-create the effect.
+  useEffect(() => {
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/admin/adp/crawl-network/progress`, {
+          credentials: "include",
+          headers: buildAdminHeaders(adminSecretOverride),
+        });
+        if (!res.ok) return; // 403 / 404 silent — usually means signed out
+        const ct = res.headers.get("content-type") || "";
+        if (!ct.includes("application/json")) return;
+        const state = (await res.json()) as CrawlLiveState;
+        if (cancelled) return;
+
+        setLiveProgress(state);
+
+        if (state.status === "running") {
+          setRunState((prev) => (prev === "running" ? prev : "running"));
+          setRunStartedAt(state.startedAt);
+        } else if (state.status === "completed") {
+          setResult(state);
+          setRunState((prev) => (prev === "success" ? prev : "success"));
+        } else if (state.status === "failed") {
+          setResult(state);
+          setRunState((prev) => (prev === "error" ? prev : "error"));
+          if (state.errors.length > 0) {
+            setError((prev) => prev || state.errors[state.errors.length - 1]);
+          }
+        }
+      } catch {
+        /* transient — ignore and let the next tick retry */
+      }
+    };
+
+    tick();
+    pollRef.current = window.setInterval(tick, 1500);
+
+    return () => {
+      cancelled = true;
+      if (pollRef.current !== null) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
+    };
+  }, [adminSecretOverride]);
 
   const refreshStatus = useCallback(async () => {
     setStatusLoading(true);
@@ -371,6 +458,90 @@ export function AdpCrawlPanel() {
           className="mt-3 px-3 py-2 rounded-md border border-red-500/30 bg-red-500/10 text-[12px] text-red-500"
         >
           {error}
+        </div>
+      )}
+
+      {liveProgress && liveProgress.status === "running" && (
+        <div
+          className="mt-4 border border-amber-500/40 rounded-md p-3 bg-amber-500/5"
+          data-testid="crawl-live-progress"
+        >
+          <div className="flex items-center justify-between gap-2 mb-2">
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-amber-500">
+              Live progress
+            </div>
+            <div className="text-[10px] text-muted-foreground">
+              Running in background — safe to switch tabs
+            </div>
+          </div>
+
+          {/* Progress bar */}
+          <div className="mb-2">
+            <div className="flex items-center justify-between text-[11px] text-muted-foreground mb-1">
+              <span className="font-semibold text-foreground">{liveProgress.phaseLabel || "Working…"}</span>
+              <span className="tabular-nums">{liveProgress.overallPct.toFixed(1)}%</span>
+            </div>
+            <div className="w-full h-2 rounded-full bg-muted/40 overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-amber-500 to-amber-400 transition-all duration-500"
+                style={{ width: `${Math.min(100, Math.max(0, liveProgress.overallPct))}%` }}
+              />
+            </div>
+            {liveProgress.currentActivity && (
+              <div className="mt-1.5 text-[11px] text-muted-foreground truncate" title={liveProgress.currentActivity}>
+                {liveProgress.currentActivity}
+              </div>
+            )}
+          </div>
+
+          {/* Live counters */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-[12px] mt-3">
+            <Stat label="Seed" value={liveProgress.seedUser?.username ?? liveProgress.seedUsername ?? "—"} />
+            <Stat label="Elapsed" value={formatDuration(Date.now() - (liveProgress.startedAt ?? Date.now()))} />
+            <Stat label="Requests" value={formatNum(liveProgress.requestCount)} />
+            <Stat label="Users processed" value={formatNum(liveProgress.usersProcessed)} />
+            <Stat label="Leagues processed" value={formatNum(liveProgress.leaguesProcessed)} />
+            <Stat label="Drafts found" value={formatNum(liveProgress.draftsFound)} />
+            <Stat label="Drafts ingested" value={formatNum(liveProgress.draftsIngested)} />
+            <Stat label="Picks ingested" value={formatNum(liveProgress.picksIngested)} />
+          </div>
+
+          {/* Per-depth progress */}
+          {liveProgress.depthProgress.length > 0 && (
+            <div className="mt-3 space-y-1.5">
+              <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">
+                Depth progress
+              </div>
+              {liveProgress.depthProgress.map((dp) => {
+                const pct = dp.totalUsers > 0 ? (dp.processedUsers / dp.totalUsers) * 100 : 0;
+                const isCurrent = dp.depth === liveProgress.currentDepth;
+                return (
+                  <div key={dp.depth} className={isCurrent ? "" : "opacity-60"}>
+                    <div className="flex items-center justify-between text-[10px] mb-0.5">
+                      <span>
+                        Depth {dp.depth}{isCurrent ? " (current)" : ""}
+                      </span>
+                      <span className="tabular-nums text-muted-foreground">
+                        {dp.processedUsers} / {dp.totalUsers} users
+                      </span>
+                    </div>
+                    <div className="w-full h-1 rounded-full bg-muted/40 overflow-hidden">
+                      <div
+                        className={`h-full ${isCurrent ? "bg-amber-500" : "bg-emerald-500/60"} transition-all duration-500`}
+                        style={{ width: `${Math.min(100, pct)}%` }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {liveProgress.capsHit.length > 0 && (
+            <div className="mt-2 text-[10px] text-amber-500/80">
+              Caps hit: {liveProgress.capsHit.join(", ")}
+            </div>
+          )}
         </div>
       )}
 
