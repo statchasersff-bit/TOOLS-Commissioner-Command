@@ -21,6 +21,7 @@ const norm = (s: string | undefined | null): string => (s ?? "").trim().toLowerC
 
 export const ADMIN_EMAILS: readonly string[] = [
   "maklovric@gmail.com",
+  "mak@statchasers.com",
 ];
 
 export const ADMIN_SLEEPER_USERNAMES: readonly string[] = [
