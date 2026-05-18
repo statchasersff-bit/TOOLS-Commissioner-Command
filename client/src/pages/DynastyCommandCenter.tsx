@@ -27,6 +27,7 @@ import { PortfolioConnect, PortfolioSummary } from "./tabs/Portfolio";
 import WaiverCommand from "./tabs/WaiverCommand";
 import { DashboardOverview, DashboardSnapshot, MyTeam } from "./tabs/Dashboard";
 import { RosterComparison } from "./tabs/LeagueAnalyzer";
+import { PlayoffCalculator } from "./tabs/PlayoffCalculator";
 import { FieldView } from "./tabs/FieldView";
 import { ShareTeam } from "./tabs/ShareTeam";
 import { TradeBlockScanner, TradeCalculator, TradeDatabase, TradeFinder } from "./tabs/TradeCenter";
@@ -388,6 +389,7 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
       case "dashboard:share-team":               return <ShareTeam league={league} userTeam={userTeam} />;
       case "league-analyzer:power-rankings":     return <DashboardSnapshot league={league} userTeam={userTeam} />;
       case "league-analyzer:roster-comparison":  return <RosterComparison league={league} />;
+      case "league-analyzer:playoff-calculator": return <PlayoffCalculator />;
       case "league-analyzer:transactions":       return <Transactions leagueId={selectedLeagueId!} />;
       case "trade-center:trade-database":        return <TradeDatabase league={league} />;
       case "trade-center:trade-calculator":      return <TradeCalculator league={league} userTeam={userTeam} />;

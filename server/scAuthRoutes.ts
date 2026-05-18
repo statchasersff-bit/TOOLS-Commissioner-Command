@@ -14,6 +14,7 @@ import {
   decryptToken,
 } from "./scAuth";
 import { enqueueSleeperUser } from "./adpCrawler";
+import { isAdminByEmail } from "@shared/admin";
 
 const JWT_SECRET = process.env.SESSION_SECRET || "fallback-dev-secret";
 const JWT_EXPIRES = "30d";
@@ -143,6 +144,7 @@ export function registerScAuthRoutes(app: Express): void {
       res.json({
         user: { id: user.id, email: user.email },
         sleeper: sleeperInfo,
+        isAdmin: isAdminByEmail(user.email),
       });
     } catch (err: any) {
       console.error("[sc-auth] me error:", err.message);

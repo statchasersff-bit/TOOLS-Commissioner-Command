@@ -6,7 +6,7 @@ import {
   Trophy, GitCompare, Coins, ArrowLeftRight, Database, Search,
   Calculator, Eye, LineChart, TrendingUp, ChevronDown,
   LucideIcon, Waves, Crosshair, LayoutGrid, Inbox, MessageCircle,
-  Hexagon, ClipboardList,
+  Hexagon, ClipboardList, Target,
 } from "lucide-react";
 import type { MainTabConfig } from "../types";
 import logoDark from "@assets/statchasers_logo_transparent_dark_1772764844282.png";
@@ -51,9 +51,10 @@ const MEGA_DATA: Record<string, MegaSection[]> = {
     {
       title: "League Analysis",
       items: [
-        { subId: "power-rankings",    label: "Rankings",     description: "Power rankings, tiers & scouting reports",   icon: Trophy         },
-        { subId: "roster-comparison", label: "Compare",      description: "Head-to-head roster comparison",             icon: GitCompare     },
-        { subId: "transactions",      label: "Transactions", description: "Recent adds, drops & trades league-wide",    icon: ArrowLeftRight },
+        { subId: "power-rankings",     label: "Rankings",           description: "Power rankings, tiers & scouting reports",        icon: Trophy         },
+        { subId: "roster-comparison",  label: "Compare",            description: "Head-to-head roster comparison",                  icon: GitCompare     },
+        { subId: "playoff-calculator", label: "Playoff Calculator", description: "Monte Carlo playoff odds, byes & championship %", icon: Target         },
+        { subId: "transactions",       label: "Transactions",       description: "Recent adds, drops & trades league-wide",         icon: ArrowLeftRight },
       ],
     },
   ],

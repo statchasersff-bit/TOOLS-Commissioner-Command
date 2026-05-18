@@ -1,6 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { getFantasyCalcValues, getFantasyCalcRedraftValues } from "./fantasycalc";
+import { computePlayoffCalculator } from "./playoffCalculator";
 import {
   fetchSleeperUser,
   fetchSleeperLeagues,
@@ -64,6 +65,9 @@ import { getUserIdFromRequest } from "./scAuthRoutes";
 import { getFinancesForUser, upsertLeagueFinance } from "./finances";
 import { registerScAuthRoutes } from "./scAuthRoutes";
 import { requireReadOnlySleeperContext } from "./accessMiddleware";
+import { runNetworkCrawl, type DraftCategory } from "./adpNetworkCrawl";
+import { getUser } from "./scAuth";
+import { isAdminByEmail } from "@shared/admin";
 import {
   confirmSleeperToken,
   createChallenge,
@@ -93,6 +97,7 @@ function makeCache<T>(ttlMs: number) {
 
 const statsCache   = makeCache<any>(5 * 60 * 1000);   // 5-min TTL
 const searchCache  = makeCache<any>(2 * 60 * 1000);   // 2-min TTL
+const playoffCalcCache = makeCache<any>(10 * 60 * 1000); // 10-min TTL
 
 export async function registerRoutes(
   httpServer: Server,
@@ -199,6 +204,29 @@ export async function registerRoutes(
     } catch (err: any) {
       console.error("Live draft detection error:", err);
       res.status(500).json({ error: err.message || "Failed to detect live drafts" });
+    }
+  });
+
+  app.get("/api/leagues/:leagueId/playoff-calculator", async (req, res) => {
+    try {
+      const { leagueId } = req.params;
+      const simsRaw = req.query.simulations;
+      const simulations = Math.max(100, Math.min(25000,
+        parseInt(typeof simsRaw === "string" ? simsRaw : "10000", 10) || 10000
+      ));
+      const cacheKey = `${leagueId}:${simulations}`;
+      const cached = playoffCalcCache.get(cacheKey);
+      if (cached) {
+        res.setHeader("Cache-Control", "public, max-age=600");
+        return res.json(cached);
+      }
+      const result = await computePlayoffCalculator(leagueId, simulations);
+      playoffCalcCache.set(cacheKey, result);
+      res.setHeader("Cache-Control", "public, max-age=600");
+      res.json(result);
+    } catch (err: any) {
+      console.error("Playoff calculator error:", err);
+      res.status(500).json({ error: err.message || "Failed to compute playoff odds" });
     }
   });
 
@@ -743,18 +771,36 @@ export async function registerRoutes(
     }
   });
 
-  const requireAdmin = (req: any, res: any): boolean => {
+  /**
+   * Admin authorization gate — passes if EITHER:
+   *   1. `x-admin-secret` header matches `process.env.ADMIN_SECRET`, OR
+   *   2. The request has a valid DC session whose email is in the
+   *      ADMIN_EMAILS allowlist (see shared/admin.ts).
+   * Replies 403 and returns false on failure so callers can early-return.
+   */
+  const requireAdmin = async (req: any, res: any): Promise<boolean> => {
     const secret = process.env.ADMIN_SECRET;
     const provided = req.headers["x-admin-secret"];
-    if (!secret || provided !== secret) {
-      res.status(403).json({ error: "Forbidden" });
-      return false;
+    if (secret && typeof provided === "string" && provided === secret) return true;
+
+    try {
+      const userId = getUserIdFromRequest(req);
+      if (userId) {
+        const user = await getUser(userId);
+        if (user && isAdminByEmail(user.email)) {
+          req.adminEmail = user.email;
+          return true;
+        }
+      }
+    } catch (err: any) {
+      console.error("[requireAdmin] auth check threw:", err?.message);
     }
-    return true;
+    res.status(403).json({ error: "Forbidden" });
+    return false;
   };
 
   app.post("/api/admin/adp/ingest-draft/:draftId", async (req, res) => {
-    if (!requireAdmin(req, res)) return;
+    if (!(await requireAdmin(req, res))) return;
     try {
       const result = await ingestDraftById(req.params.draftId);
       res.json(result);
@@ -765,7 +811,7 @@ export async function registerRoutes(
   });
 
   app.post("/api/admin/adp/ingest-league/:leagueId", async (req, res) => {
-    if (!requireAdmin(req, res)) return;
+    if (!(await requireAdmin(req, res))) return;
     try {
       const result = await ingestLeagueDrafts(req.params.leagueId);
       res.json(result);
@@ -776,7 +822,7 @@ export async function registerRoutes(
   });
 
   app.post("/api/admin/adp/ingest-user", async (req, res) => {
-    if (!requireAdmin(req, res)) return;
+    if (!(await requireAdmin(req, res))) return;
     try {
       const { username, season } = req.body || {};
       if (!username) return res.status(400).json({ error: "username is required" });
@@ -789,7 +835,7 @@ export async function registerRoutes(
   });
 
   app.post("/api/admin/adp/ingest-crawled", async (req, res) => {
-    if (!requireAdmin(req, res)) return;
+    if (!(await requireAdmin(req, res))) return;
     try {
       const limit = parseInt((req.body?.limit ?? req.query?.limit ?? "100") as string, 10) || 100;
       const result = await ingestCrawledLeagueDrafts(limit);
@@ -802,7 +848,7 @@ export async function registerRoutes(
 
   // ── ADP crawler admin endpoints ───────────────────────────────────────────
   app.post("/api/admin/adp/seed", async (req, res) => {
-    if (!requireAdmin(req, res)) return;
+    if (!(await requireAdmin(req, res))) return;
     try {
       const body = (req.body ?? {}) as SeedInput;
       if (!body.text && !(body.items && body.items.length > 0)) {
@@ -818,7 +864,7 @@ export async function registerRoutes(
   });
 
   app.get("/api/admin/adp/crawl-status", async (req, res) => {
-    if (!requireAdmin(req, res)) return;
+    if (!(await requireAdmin(req, res))) return;
     try {
       const status = await getAdpCrawlStatus();
       res.json(status);
@@ -829,7 +875,7 @@ export async function registerRoutes(
   });
 
   app.post("/api/admin/adp/crawl-retry-failed", async (req, res) => {
-    if (!requireAdmin(req, res)) return;
+    if (!(await requireAdmin(req, res))) return;
     try {
       const result = await resetFailedQueueItems();
       startCrawlWorker();
@@ -840,7 +886,7 @@ export async function registerRoutes(
   });
 
   app.post("/api/admin/adp/backfill-league-scoring", async (req, res) => {
-    if (!requireAdmin(req, res)) return;
+    if (!(await requireAdmin(req, res))) return;
     try {
       const result = await backfillLeagueScoring();
       res.json(result);
@@ -851,7 +897,7 @@ export async function registerRoutes(
   });
 
   app.post("/api/admin/adp/refresh", async (req, res) => {
-    if (!requireAdmin(req, res)) return;
+    if (!(await requireAdmin(req, res))) return;
     try {
       // If a filter set is provided, refresh just that key; otherwise refresh
       // every default snapshot combo.
@@ -867,12 +913,82 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/admin/cleanup-one-sided-trades", async (req, res) => {
-    const secret = process.env.ADMIN_SECRET;
-    const provided = req.headers["x-admin-secret"];
-    if (!secret || provided !== secret) {
-      return res.status(403).json({ error: "Forbidden" });
+  /**
+   * POST /api/admin/adp/crawl-network
+   *
+   * 2-hop ADP discovery crawl starting from a seed Sleeper username. Uses
+   * only public/read-only Sleeper endpoints. Bounded by safety caps; cannot
+   * exceed depth 2 without a code change. Refreshes default ADP snapshots
+   * on completion so the Draft Command UI picks up the new data.
+   *
+   * Body:
+   *   {
+   *     "seedUsername":    string,                   // required
+   *     "seasons":         string[],                 // default ["2026","2025","2024"]
+   *     "maxDepth":        0 | 1 | 2,                // default 2
+   *     "draftCategories": ("startup"|"rookie")[],   // optional filter
+   *     "refreshSnapshots": boolean,                 // default true
+   *     "maxUsers":        number,                   // default 500
+   *     "maxLeagues":      number,                   // default 2500
+   *     "maxDrafts":       number,                   // default 1000
+   *     "maxRequests":     number                    // default 25000
+   *   }
+   *
+   * Runs synchronously — for large depth-2 crawls expect minutes of wall time.
+   * Consider invoking from a controlled script rather than a UI button.
+   */
+  app.post("/api/admin/adp/crawl-network", async (req, res) => {
+    if (!(await requireAdmin(req, res))) return;
+    try {
+      const body = (req.body ?? {}) as {
+        seedUsername?: string;
+        seasons?: unknown;
+        maxDepth?: unknown;
+        draftCategories?: unknown;
+        refreshSnapshots?: unknown;
+        maxUsers?: unknown;
+        maxLeagues?: unknown;
+        maxDrafts?: unknown;
+        maxRequests?: unknown;
+      };
+
+      if (!body.seedUsername || typeof body.seedUsername !== "string") {
+        return res.status(400).json({ error: "seedUsername is required" });
+      }
+
+      const seasons = Array.isArray(body.seasons)
+        ? body.seasons.filter((s): s is string => typeof s === "string" && /^\d{4}$/.test(s))
+        : undefined;
+
+      const rawDepth = Number(body.maxDepth);
+      const maxDepth = Number.isFinite(rawDepth) ? Math.min(2, Math.max(0, Math.floor(rawDepth))) : 2;
+
+      const validCats: DraftCategory[] = ["startup", "rookie", "unknown"];
+      const draftCategories = Array.isArray(body.draftCategories)
+        ? body.draftCategories.filter((c: any): c is DraftCategory => validCats.includes(c))
+        : undefined;
+
+      const result = await runNetworkCrawl({
+        seedUsername: body.seedUsername,
+        seasons: seasons && seasons.length > 0 ? seasons : ["2026", "2025", "2024"],
+        maxDepth,
+        draftCategories: draftCategories && draftCategories.length > 0 ? draftCategories : undefined,
+        refreshSnapshots: body.refreshSnapshots !== false,
+        maxUsers: typeof body.maxUsers === "number" ? body.maxUsers : undefined,
+        maxLeagues: typeof body.maxLeagues === "number" ? body.maxLeagues : undefined,
+        maxDrafts: typeof body.maxDrafts === "number" ? body.maxDrafts : undefined,
+        maxRequests: typeof body.maxRequests === "number" ? body.maxRequests : undefined,
+      });
+
+      res.json(result);
+    } catch (err: any) {
+      console.error("[Admin] adp/crawl-network error:", err);
+      res.status(500).json({ error: err?.message || "Crawl failed" });
     }
+  });
+
+  app.post("/api/admin/cleanup-one-sided-trades", async (req, res) => {
+    if (!(await requireAdmin(req, res))) return;
     try {
       const result = await cleanupOneSidedTrades();
       console.log(`[Admin] Cleaned up ${result.deleted} one-sided trades`);

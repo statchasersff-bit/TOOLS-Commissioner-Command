@@ -39,6 +39,7 @@ export const MODULE_ACCESS: Record<string, AccessRequirement> = {
   // League Analyzer
   "league-analyzer:power-rankings": "readonly",
   "league-analyzer:roster-comparison": "readonly",
+  "league-analyzer:playoff-calculator": "readonly",
   "league-analyzer:transactions": "readonly",
 
   // Trade Center — entire module is full per spec

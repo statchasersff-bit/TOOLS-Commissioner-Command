@@ -1,4 +1,5 @@
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useState, useMemo, useCallback, useEffect, Component } from "react";
+import type { ReactNode } from "react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -21,6 +22,8 @@ import {
   DEFAULT_FILTERS, toIsoDate,
   type ADPResult, type DraftFilters, type Position, type RookieMode,
 } from "@/types/draft";
+import { AdpCrawlPanel } from "@/components/admin/AdpCrawlPanel";
+import { useAuth } from "@/contexts/AuthContext";
 
 // The frontend never queries Sleeper for ADP — it reads our cached endpoint
 // which serves the most recent adp_snapshots row for the active filter set.
@@ -352,7 +355,47 @@ export function DraftCommand() {
         update={updateFilter}
         onReset={() => setFilters(DEFAULT_FILTERS)}
       />
+
+      {/* ── Admin-only "ADP Data Crawl" tools (see shared/admin.ts) ───────── */}
+      {/* useAuth().isAdmin is server-derived for DC users and locally derived
+          for Sleeper-username matches. Backend routes do their own strict
+          email-based check — this gate only governs UI visibility. */}
+      <AdminAdpTools />
     </div>
+  );
+}
+
+class AdminToolsBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
+  constructor(props: { children: ReactNode }) {
+    super(props);
+    this.state = { error: null };
+  }
+  static getDerivedStateFromError(error: Error) { return { error }; }
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="mt-4 rounded-md border border-red-500/30 bg-red-500/10 p-3 text-[12px] text-red-400">
+          Admin tools crashed: {this.state.error.message}
+          <button
+            className="ml-3 underline opacity-70 hover:opacity-100"
+            onClick={() => this.setState({ error: null })}
+          >
+            retry
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+function AdminAdpTools() {
+  const { isAdmin } = useAuth();
+  if (!isAdmin) return null;
+  return (
+    <AdminToolsBoundary>
+      <AdpCrawlPanel />
+    </AdminToolsBoundary>
   );
 }
 

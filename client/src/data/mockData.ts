@@ -544,6 +544,7 @@ export const NAV_CONFIG: MainTabConfig[] = [
     subTabs: [
       { id: "power-rankings", label: "Rankings" },
       { id: "roster-comparison", label: "Compare" },
+      { id: "playoff-calculator", label: "Playoff Calculator" },
       { id: "transactions", label: "Transactions" },
     ],
   },
@@ -568,13 +569,11 @@ export const NAV_CONFIG: MainTabConfig[] = [
       { id: "compare-players", label: "Compare Players" },
     ],
   },
-  // Draft module temporarily hidden — ADP pipeline still ingests in the
-  // background; flip this back on when the dataset is large enough to ship.
-  // {
-  //   id: "draft",
-  //   label: "Draft",
-  //   subTabs: [
-  //     { id: "adp-explorer", label: "ADP Explorer" },
-  //   ],
-  // },
+  {
+    id: "draft",
+    label: "Draft",
+    subTabs: [
+      { id: "adp-explorer", label: "ADP Explorer" },
+    ],
+  },
 ];

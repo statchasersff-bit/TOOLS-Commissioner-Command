@@ -16,6 +16,7 @@ import {
   type ReadOnlySleeperIdentity,
 } from "@/services/readOnlySleeper";
 import { API_BASE } from "@/lib/apiBase";
+import { isAdminUser } from "@shared/admin";
 
 const SC_TOKEN_KEY = "sc_auth_token";
 
@@ -85,6 +86,13 @@ interface AuthContextValue {
   isReadOnlyConnected: boolean;
   isAuthenticatedUser: boolean;
   hasSleeperToken: boolean;
+  /**
+   * True if the current user matches the admin allowlist (see
+   * shared/admin.ts). Permissive — matches either DC email (authoritative,
+   * set server-side via /me) or Sleeper username (frontend UI hint only).
+   * Backend admin routes do their own strict server-side check.
+   */
+  isAdmin: boolean;
 
   // ── Actions ────────────────────────────────────────────────────────────
   checkSession: () => Promise<void>;
@@ -111,6 +119,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [sleeperSource, setSleeperSource] = useState<SleeperSource>("none");
   const [legacyKeysRemoved, setLegacyKeysRemoved] = useState<string[]>([]);
   const [readOnlySleeperUser, setReadOnlySleeperUser] = useState<ReadOnlySleeperIdentity | null>(null);
+  // Server-derived admin flag — only true when /me reports the DC user's
+  // email matches the allowlist. Stays false for read-only / guest users
+  // even if they enter an admin Sleeper username, since the server can't
+  // verify that claim. We additionally OR with the local admin helper
+  // below so a connected-but-unauthenticated Mak (Sleeper username match)
+  // still sees the admin UI — backend will still gate the API.
+  const [serverIsAdmin, setServerIsAdmin] = useState<boolean>(false);
 
   const checkSession = useCallback(async () => {
     // ── Step 0: ALWAYS clean up legacy global keys before any read. ──────────
@@ -142,6 +157,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         clearToken();
         setUser(null);
         setSleeperInfo(null);
+        setServerIsAdmin(false);
         setSleeperSource(readOnly ? "read-only" : "none");
         setStatus("unauthenticated");
       };
@@ -178,6 +194,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       setUser(data.user);
+      setServerIsAdmin(!!data.isAdmin);
       let source: SleeperSource;
       if (data.sleeper?.token) {
         // ── Server-linked path: full mode.
@@ -231,6 +248,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       clearToken();
       setUser(null);
       setSleeperInfo(null);
+      setServerIsAdmin(false);
       setSleeperSource(readOnly ? "read-only" : "none");
       setStatus("unauthenticated");
     }
@@ -260,6 +278,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
     setSleeperInfo(null);
     setReadOnlySleeperUser(null);
+    setServerIsAdmin(false);
     setSleeperSource("none");
     setLegacyKeysRemoved([]);
     setStatus("unauthenticated");
@@ -321,6 +340,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const isReadOnlyConnected =
     accessLevel === "readonly" || accessLevel === "full" || (!!readOnlySleeperUser && !sleeperInfo?.token);
 
+  // Server-derived admin (email-matched) OR local admin hint (Sleeper
+  // username match) — the latter only surfaces the UI; backend gates
+  // requests independently. See shared/admin.ts.
+  const isAdmin = useMemo(() => {
+    if (serverIsAdmin) return true;
+    return isAdminUser({
+      email: user?.email,
+      sleeperUsername: sleeperInfo?.username ?? readOnlySleeperUser?.username,
+    });
+  }, [serverIsAdmin, user?.email, sleeperInfo?.username, readOnlySleeperUser?.username]);
+
   // ── Debug helper exposed on window ─────────────────────────────────────
   useEffect(() => {
     try {
@@ -350,6 +380,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isReadOnlyConnected,
       isAuthenticatedUser,
       hasSleeperToken,
+      isAdmin,
       checkSession, logout, onLoginSuccess, onSleeperConnected, onSleeperDisconnected,
       connectReadOnlySleeper, disconnectReadOnlySleeper,
     }}>
