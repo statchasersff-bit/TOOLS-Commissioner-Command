@@ -18,7 +18,7 @@ import { useAuth } from "@/contexts/AuthContext";
 
 export function ConnectSleeperUsername({
   title = "Connect your Sleeper username",
-  subtitle = "No login required. We'll fetch your leagues using public Sleeper data — you can upgrade to a StatChasers account later when you want trade, waiver, or lineup tools.",
+  subtitle = "No login required. We'll fetch your leagues using public Sleeper data. You can create a free StatChasers account later when you want trade, waiver, or lineup tools.",
   onConnected,
 }: {
   title?: string;
