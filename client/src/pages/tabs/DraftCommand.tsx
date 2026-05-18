@@ -308,6 +308,19 @@ export function DraftCommand() {
       {isEmpty   && <EmptyState message={meta?.message} />}
       {!isLoading && !hasError && !isEmpty && (
         <>
+          {/* Confidence banner — under ~25 drafts ADP swings hard, so we
+              call it out instead of letting users read noisy numbers. */}
+          {meta && meta.draft_count > 0 && meta.draft_count < 25 && (
+            <div className="rounded-md border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-[11px] text-amber-300 flex items-center gap-2" data-testid="adp-small-sample-warning">
+              <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+              <span>
+                <span className="font-semibold">Small sample size.</span>{" "}
+                Only {meta.draft_count} draft{meta.draft_count === 1 ? "" : "s"} match these filters
+                ({meta.pick_count.toLocaleString()} picks). Expand the date range or relax filters for more reliable ADP.
+              </span>
+            </div>
+          )}
+
           {view === "list" && <ListView rows={filtered} />}
           {view === "box"  && <BoxView  rows={filtered} teams={typeof filters.teams === "number" ? filters.teams : 12} />}
           {view === "hex"  && <HexView  rows={filtered} teams={typeof filters.teams === "number" ? filters.teams : 12} />}

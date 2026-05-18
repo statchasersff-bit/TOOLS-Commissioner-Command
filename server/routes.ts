@@ -43,6 +43,13 @@ import {
   type AdpFilters,
 } from "./adp";
 import {
+  enqueueSeeds,
+  startCrawlWorker,
+  getCrawlStatus as getAdpCrawlStatus,
+  resetFailedQueueItems,
+  type SeedInput,
+} from "./adpCrawler";
+import {
   previewCsv,
   saveValueSet,
   listValueSets,
@@ -792,6 +799,45 @@ export async function registerRoutes(
     }
   });
 
+  // ── ADP crawler admin endpoints ───────────────────────────────────────────
+  app.post("/api/admin/adp/seed", async (req, res) => {
+    if (!requireAdmin(req, res)) return;
+    try {
+      const body = (req.body ?? {}) as SeedInput;
+      if (!body.text && !(body.items && body.items.length > 0)) {
+        return res.status(400).json({ error: "Provide 'text' (paste) or 'items' (structured list)" });
+      }
+      const result = await enqueueSeeds(body);
+      startCrawlWorker();
+      res.json({ ok: true, ...result, message: `Queued ${result.queueAdded} crawl items from ${result.seedsAdded} seeds.` });
+    } catch (err: any) {
+      console.error("[Admin] adp/seed error:", err);
+      res.status(500).json({ error: err.message || "Seed enqueue failed" });
+    }
+  });
+
+  app.get("/api/admin/adp/crawl-status", async (req, res) => {
+    if (!requireAdmin(req, res)) return;
+    try {
+      const status = await getAdpCrawlStatus();
+      res.json(status);
+    } catch (err: any) {
+      console.error("[Admin] adp/crawl-status error:", err);
+      res.status(500).json({ error: err.message || "Status failed" });
+    }
+  });
+
+  app.post("/api/admin/adp/crawl-retry-failed", async (req, res) => {
+    if (!requireAdmin(req, res)) return;
+    try {
+      const result = await resetFailedQueueItems();
+      startCrawlWorker();
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || "Retry failed" });
+    }
+  });
+
   app.post("/api/admin/adp/backfill-league-scoring", async (req, res) => {
     if (!requireAdmin(req, res)) return;
     try {
@@ -838,6 +884,7 @@ export async function registerRoutes(
 
   startSnapshotScheduler();
   startAdpScheduler();
+  startCrawlWorker();
 
   // One-time cleanup: remove one-sided trades stored before the UNNEST query fix.
   // Disable by setting SKIP_ONESIDED_CLEANUP=true once production confirms remaining=0.

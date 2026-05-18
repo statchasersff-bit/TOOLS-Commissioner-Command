@@ -13,6 +13,7 @@ import {
   disconnectSleeper,
   decryptToken,
 } from "./scAuth";
+import { enqueueSleeperUser } from "./adpCrawler";
 
 const JWT_SECRET = process.env.SESSION_SECRET || "fallback-dev-secret";
 const JWT_EXPIRES = "30d";
@@ -182,6 +183,12 @@ export function registerScAuthRoutes(app: Express): void {
         return res.status(400).json({ error: "sleeperUsername, sleeperUserId, and token are required" });
       }
       await connectSleeper(userId, sleeperUsername, sleeperUserId, token);
+      // Fire-and-forget: enqueue this Sleeper user_id for the ADP crawler so
+      // their leagues' drafts feed into the dataset. We never block the
+      // connection request on this.
+      void enqueueSleeperUser(sleeperUserId).catch((err) =>
+        console.warn("[sc-auth] adp enqueue failed:", err?.message)
+      );
       res.json({ ok: true });
     } catch (err: any) {
       console.error("[sc-auth] connect-sleeper error:", err.message);
