@@ -36,3 +36,9 @@ id = "3hP7KkiAfrEjUWfaCe9lX"
 uri = "file://dynasty-command-deploy.zip"
 type = "unspecified"
 title = "dynasty-command-deploy.zip — upload to Bluehost"
+
+[[outputs]]
+id = "txyDBVkqMd2Sz82LNjOR9"
+uri = "file://dynasty-command-v1.5.zip"
+type = "unspecified"
+title = "Dynasty Command v1.5 — Bluehost Deploy"
