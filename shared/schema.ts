@@ -251,6 +251,53 @@ export type Draft = typeof drafts.$inferSelect;
 export type DraftPick = typeof draftPicks.$inferSelect;
 export type AdpSnapshot = typeof adpSnapshots.$inferSelect;
 
+// ── ADP crawl pipeline ───────────────────────────────────────────────────────
+// Seeds are the operator's "I trust this entry point" list — usernames /
+// user_ids / league_ids / draft_ids that we explicitly want to expand from.
+// adp_crawl_queue is the work-in-progress: every seed fans out into a handful
+// of queue rows (one per league, one per draft, etc.) which the worker
+// drains under the global rate limit. adp_crawl_log keeps an audit trail so
+// the admin tools can show "how much did the last run pull in".
+
+export const adpCrawlSeeds = pgTable("adp_crawl_seeds", {
+  id: serial("id").primaryKey(),
+  seedType: varchar("seed_type", { length: 20 }).notNull(),
+  seedValue: text("seed_value").notNull(),
+  status: varchar("status", { length: 20 }).notNull().default("pending"),
+  note: text("note"),
+  createdAt: timestamp("created_at").defaultNow(),
+  lastCrawledAt: timestamp("last_crawled_at"),
+});
+
+export const adpCrawlQueue = pgTable("adp_crawl_queue", {
+  id: serial("id").primaryKey(),
+  targetType: varchar("target_type", { length: 20 }).notNull(),
+  targetId: text("target_id").notNull(),
+  season: varchar("season", { length: 10 }),
+  priority: integer("priority").notNull().default(50),
+  status: varchar("status", { length: 20 }).notNull().default("pending"),
+  attempts: integer("attempts").notNull().default(0),
+  lastError: text("last_error"),
+  createdAt: timestamp("created_at").defaultNow(),
+  processedAt: timestamp("processed_at"),
+});
+
+export const adpCrawlLog = pgTable("adp_crawl_log", {
+  id: serial("id").primaryKey(),
+  jobType: varchar("job_type", { length: 30 }).notNull(),
+  status: varchar("status", { length: 20 }).notNull().default("running"),
+  message: text("message"),
+  draftsFound: integer("drafts_found").notNull().default(0),
+  draftsIngested: integer("drafts_ingested").notNull().default(0),
+  picksIngested: integer("picks_ingested").notNull().default(0),
+  startedAt: timestamp("started_at").defaultNow(),
+  completedAt: timestamp("completed_at"),
+});
+
+export type AdpCrawlSeed = typeof adpCrawlSeeds.$inferSelect;
+export type AdpCrawlQueueItem = typeof adpCrawlQueue.$inferSelect;
+export type AdpCrawlLogEntry = typeof adpCrawlLog.$inferSelect;
+
 // ── Custom value sets (Value Source Manager) ─────────────────────────────────
 // One row per uploaded value set. value_type partitions dynasty vs redraft;
 // only one row per (user_id, value_type) should be is_active=true at a time

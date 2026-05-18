@@ -791,6 +791,12 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [viewMode, setViewMode] = useState<"table" | "economy" | "chart" | "heatmap">("table");
+  // Active positions for the stacked chart legend. At least one must remain
+  // selected; clicking the last enabled pill is a no-op so the chart never
+  // collapses to a totals-less state.
+  const [chartActivePos, setChartActivePos] = useState<Set<typeof POS_LABELS[number]>>(
+    () => new Set(POS_LABELS),
+  );
   const [hmSortKey, setHmSortKey] = useState<HmSortKey>("dynOverall");
   const [hmSortDir, setHmSortDir] = useState<"asc" | "desc">("asc");
   const [hmExpandedRow, setHmExpandedRow] = useState<string | null>(null);
@@ -925,15 +931,44 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
   const colCount = 7;
 
   // ── Chart view data ──────────────────────────────────────────────
+  // Totals and team rank are computed over the *active* position set so
+  // deselecting QB reranks teams by RB+WR+TE value etc.
   const chartTeams = useMemo(() => {
     return [...teams].map(t => {
       const vals = strengthProfiles.dynastyByTeam[t.id] || {};
-      const total = POS_LABELS.reduce((s, p) => s + (vals[p] ?? 0), 0);
+      const total = POS_LABELS.reduce(
+        (s, p) => s + (chartActivePos.has(p) ? (vals[p] ?? 0) : 0),
+        0,
+      );
       return { team: t, vals, total };
     }).sort((a, b) => b.total - a.total);
-  }, [teams, strengthProfiles.dynastyByTeam]);
+  }, [teams, strengthProfiles.dynastyByTeam, chartActivePos]);
 
   const chartMax = useMemo(() => Math.max(...chartTeams.map(c => c.total), 1), [chartTeams]);
+
+  // Subtitle text reflecting the active filter, per spec: "QB Only",
+  // "RB + WR", "All Positions", etc.
+  const chartFilterLabel = useMemo(() => {
+    const active = POS_LABELS.filter(p => chartActivePos.has(p));
+    if (active.length === POS_LABELS.length) return "All Positions";
+    if (active.length === 1) return `${active[0]} Only`;
+    return active.join(" + ");
+  }, [chartActivePos]);
+
+  const togglePos = (pos: typeof POS_LABELS[number]) => {
+    setChartActivePos(prev => {
+      const next = new Set(prev);
+      if (next.has(pos)) {
+        // Refuse to drop the last enabled position so the chart never empties.
+        if (next.size === 1) return prev;
+        next.delete(pos);
+      } else {
+        next.add(pos);
+      }
+      return next;
+    });
+  };
+  const resetChartPos = () => setChartActivePos(new Set(POS_LABELS));
 
   const heatmapTeams = useMemo(() => {
     const tr = teamRanks.ranks;
@@ -1248,16 +1283,56 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
       {/* ── VIEW 2: Stacked Position Value Chart ──────────────────── */}
       {viewMode === "chart" && (
         <div className="rounded-md border border-border/60 bg-card p-4 sm:p-6" data-testid="power-rankings-chart">
-          {/* Legend */}
-          <div className="flex flex-wrap items-center gap-4 mb-5">
-            {POS_LABELS.map(pos => (
-              <div key={pos} className="flex items-center gap-1.5">
-                <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: POS_COLORS[pos] }} />
-                <span className="text-xs font-semibold text-muted-foreground">{pos}</span>
-              </div>
-            ))}
-            <span className="ml-auto text-[10px] text-muted-foreground">Dynasty Roster Value by Position</span>
+          {/* Interactive legend — pills toggle each position. The chart
+              rerank/total recompute when the active set changes. */}
+          <div className="flex flex-wrap items-center gap-2 mb-2">
+            {POS_LABELS.map(pos => {
+              const active = chartActivePos.has(pos);
+              const isLast = active && chartActivePos.size === 1;
+              return (
+                <button
+                  key={pos}
+                  type="button"
+                  onClick={() => togglePos(pos)}
+                  disabled={isLast}
+                  title={isLast ? "At least one position must stay selected" : active ? `Hide ${pos}` : `Show ${pos}`}
+                  data-testid={`chart-pos-pill-${pos}`}
+                  data-active={active}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-all",
+                    active
+                      ? "bg-white/[0.04] border-current"
+                      : "bg-transparent border-border/40 text-muted-foreground/50 opacity-60 hover:opacity-80",
+                    isLast && "cursor-not-allowed",
+                  )}
+                  style={
+                    active
+                      ? { color: POS_COLORS[pos], borderColor: `${POS_COLORS[pos]}55`, boxShadow: `0 0 0 1px ${POS_COLORS[pos]}33 inset` }
+                      : undefined
+                  }
+                >
+                  <span
+                    className="w-2 h-2 rounded-full flex-shrink-0"
+                    style={{ backgroundColor: active ? POS_COLORS[pos] : "currentColor", opacity: active ? 1 : 0.5 }}
+                  />
+                  <span className={cn(!active && "line-through")}>{pos}</span>
+                </button>
+              );
+            })}
+            <button
+              type="button"
+              onClick={resetChartPos}
+              disabled={chartActivePos.size === POS_LABELS.length}
+              data-testid="chart-pos-reset"
+              className="ml-1 px-2 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground border border-border/40 hover:border-border/70 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Reset
+            </button>
+            <span className="ml-auto text-[10px] text-muted-foreground">
+              Dynasty Roster Value · <span className="text-foreground/80 font-semibold">{chartFilterLabel}</span>
+            </span>
           </div>
+          <p className="text-[10px] text-muted-foreground/70 mb-4">Click positions to filter rankings</p>
 
           {/* Bars */}
           <div className="space-y-2">
@@ -1297,7 +1372,7 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
                   <div className="relative flex-1 h-6 min-w-0">
                     <div className="absolute inset-0 bg-muted/40 rounded-md overflow-hidden">
                       <div className="h-full flex" style={{ width: `${barWidthPct}%` }}>
-                        {POS_LABELS.map(pos => {
+                        {POS_LABELS.filter(pos => chartActivePos.has(pos)).map(pos => {
                           const val = vals[pos] ?? 0;
                           const segPct = total > 0 ? (val / total) * 100 : 0;
                           return (

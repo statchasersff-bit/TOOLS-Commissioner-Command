@@ -101,8 +101,19 @@ export type AdpRow = {
 };
 
 // ── Fetch helpers ────────────────────────────────────────────────────────────
+// Global rate limiter for every Sleeper request the ADP pipeline makes —
+// keeps us well below Sleeper's published 1000/min ceiling and avoids the
+// "live page load fetches the world" trap. Exported so the crawler reuses
+// the same gate: there's exactly one shared queue per process.
+const MIN_GAP_MS = 400; // ≈150 req/min, leaves headroom for retries
+let lastFetchAt = 0;
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-async function fetchJson<T>(url: string): Promise<T | null> {
+export async function rateLimitedFetchJson<T>(url: string): Promise<T | null> {
+  const now = Date.now();
+  const wait = Math.max(0, MIN_GAP_MS - (now - lastFetchAt));
+  if (wait > 0) await sleep(wait);
+  lastFetchAt = Date.now();
   try {
     const r = await fetch(url);
     if (!r.ok) return null;
@@ -110,6 +121,10 @@ async function fetchJson<T>(url: string): Promise<T | null> {
   } catch {
     return null;
   }
+}
+
+async function fetchJson<T>(url: string): Promise<T | null> {
+  return rateLimitedFetchJson<T>(url);
 }
 
 // ── League scoring (for TEP / scoring / superflex / pass_td detection) ───────
@@ -241,7 +256,30 @@ function rookiePickLabelFromMetadata(meta: SleeperDraftPickRaw["metadata"], roun
 
 // ── Ingestion ────────────────────────────────────────────────────────────────
 
-export async function ingestDraftById(draftId: string): Promise<{ ok: boolean; status: string; picks: number; reason?: string }> {
+export async function ingestDraftById(
+  draftId: string,
+  opts: { force?: boolean } = {},
+): Promise<{ ok: boolean; status: string; picks: number; reason?: string; skipped?: boolean }> {
+  // Dedup: if we've already stored picks for this draft and the caller hasn't
+  // asked for a forced refresh, skip the API calls entirely.
+  if (!opts.force) {
+    const existing = await db
+      .select({ id: drafts.draftId, status: drafts.status })
+      .from(drafts)
+      .where(eq(drafts.draftId, draftId))
+      .limit(1);
+    if (existing.length > 0 && existing[0].status === "complete") {
+      const pickCount = await db
+        .select({ c: sql<number>`count(*)` })
+        .from(draftPicks)
+        .where(eq(draftPicks.draftId, draftId));
+      const picksStored = Number(pickCount[0]?.c ?? 0);
+      if (picksStored > 0) {
+        return { ok: true, status: "complete", picks: picksStored, skipped: true, reason: "already ingested" };
+      }
+    }
+  }
+
   const draftRaw = await fetchJson<SleeperDraftRaw>(`${SLEEPER_API}/draft/${draftId}`);
   if (!draftRaw) return { ok: false, status: "missing", picks: 0, reason: "draft not found" };
 
@@ -278,6 +316,24 @@ export async function ingestDraftById(draftId: string): Promise<{ ok: boolean; s
   const draftType = deriveDraftType(draftRaw);
   const directlyDraftedRookies = draftType !== "startup"
     && picksRaw.some((p) => p.player_id && (p.metadata?.position || "").length > 0);
+
+  // Quality filters: keep the dataset honest by dropping obvious mock /
+  // micro-leagues. Startup drafts must look like a real league bench-deep
+  // draft (≥8 rounds); rookie drafts only need to cover the standard 3
+  // rookie rounds. Below the floor we still upsert the metadata so admin
+  // tools can see why it was rejected, but we don't store picks.
+  const minTeams = 8;
+  const minRounds = draftType === "startup" ? 8 : 3;
+  const enoughPicks = picksRaw.filter((p) => p.player_id).length >= minTeams * minRounds * 0.6;
+  if (teams < minTeams || rounds < minRounds || !enoughPicks) {
+    await upsertDraftRow(draftRaw, directlyDraftedRookies, /* completed */ false, league);
+    return {
+      ok: true,
+      status: draftRaw.status,
+      picks: 0,
+      reason: `quality filter (teams=${teams} rounds=${rounds} picks=${picksRaw.length})`,
+    };
+  }
 
   await upsertDraftRow(draftRaw, directlyDraftedRookies, completed, league);
 
