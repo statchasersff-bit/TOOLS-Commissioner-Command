@@ -5,6 +5,15 @@ import connectPgSimple from "connect-pg-simple";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
+import { execSync } from "child_process";
+
+function freePort(port: number): void {
+  try {
+    execSync(`fuser -k ${port}/tcp`, { stdio: "ignore" });
+  } catch {
+    // fuser exits non-zero when nothing is listening — that's fine
+  }
+}
 
 const app = express();
 const httpServer = createServer(app);
@@ -174,14 +183,22 @@ app.use((req, res, next) => {
   // this serves both the API and the client.
   // It is the only port that is not firewalled.
   const port = parseInt(process.env.PORT || "5000", 10);
-  httpServer.listen(
-    {
-      port,
-      host: "0.0.0.0",
-      reusePort: true,
-    },
-    () => {
+
+  function startListening(attempt = 1): void {
+    httpServer.listen({ port, host: "0.0.0.0", reusePort: true }, () => {
       log(`serving on port ${port}`);
-    },
-  );
+    });
+    httpServer.once("error", (err: NodeJS.ErrnoException) => {
+      if (err.code === "EADDRINUSE" && attempt <= 3) {
+        console.warn(`[server] port ${port} in use (attempt ${attempt}), freeing and retrying…`);
+        freePort(port);
+        setTimeout(() => startListening(attempt + 1), 500 * attempt);
+      } else {
+        console.error("[server] fatal listen error:", err);
+        process.exit(1);
+      }
+    });
+  }
+
+  startListening();
 })();

@@ -66,7 +66,11 @@ import { getUserIdFromRequest } from "./scAuthRoutes";
 import { getFinancesForUser, upsertLeagueFinance } from "./finances";
 import { registerScAuthRoutes } from "./scAuthRoutes";
 import { requireReadOnlySleeperContext } from "./accessMiddleware";
-import { runNetworkCrawl, type DraftCategory } from "./adpNetworkCrawl";
+import {
+  startCrawlInBackground,
+  getCrawlLiveState,
+  type DraftCategory,
+} from "./adpNetworkCrawl";
 import { getUser } from "./scAuth";
 import { isAdminByEmail } from "@shared/admin";
 import {
@@ -1037,7 +1041,12 @@ export async function registerRoutes(
         maxDrafts: typeof body.maxDrafts === "number" ? body.maxDrafts : "default",
       });
 
-      const result = await runNetworkCrawl({
+      // Kick off the crawl as a server-side background job and return the
+      // initial live-state immediately. The HTTP handler does NOT await the
+      // crawl — that's what kept the previous request open for the full
+      // duration and made tab-switching look like the work had stopped.
+      // The UI polls /api/admin/adp/crawl-network/progress for updates.
+      const state = startCrawlInBackground({
         seedUsername: body.seedUsername.trim(),
         seasons: rawSeasons,
         maxDepth,
@@ -1049,11 +1058,21 @@ export async function registerRoutes(
         maxRequests: typeof body.maxRequests === "number" ? body.maxRequests : undefined,
       });
 
-      res.json(result);
+      res.json({ jobId: state.jobId, state });
     } catch (err: any) {
       console.error("[Admin] adp/crawl-network error:", err);
       res.status(500).json({ error: err?.message || "Crawl failed" });
     }
+  });
+
+  /**
+   * Live progress for the most recent network crawl. UI polls this every
+   * ~1.5s while a crawl is running, and once on mount to detect a crawl
+   * that was started before the panel was opened.
+   */
+  app.get("/api/admin/adp/crawl-network/progress", async (req, res) => {
+    if (!(await requireAdmin(req, res))) return;
+    res.json(getCrawlLiveState());
   });
 
   app.post("/api/admin/cleanup-one-sided-trades", async (req, res) => {
