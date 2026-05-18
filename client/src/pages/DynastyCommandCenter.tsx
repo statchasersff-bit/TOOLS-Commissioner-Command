@@ -677,7 +677,6 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
           its own per-version localStorage gating. */}
       <WhatsNewModal
         isAuthenticated={!!scUser}
-        onViewChangelog={() => handleMainTabChange("about")}
       />
       <MobileBottomNav
         tabs={NAV_CONFIG}
