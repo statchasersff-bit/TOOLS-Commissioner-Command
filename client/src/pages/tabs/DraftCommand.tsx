@@ -59,12 +59,25 @@ interface AdpResponse {
 }
 
 // ── Visual tokens shared by all views ────────────────────────────────────────
+// Hex anchors per position — used in the List/Box chip styling and mirrored
+// (in richer form) by HEX_POS_THEME for the hex view. QB=red, RB=green,
+// WR=blue, TE=yellow, K=purple, PICK keeps the StatChasers gold.
+const POS_HEX: Record<Position, string> = {
+  QB:   "#ef4444",
+  RB:   "#22c55e",
+  WR:   "#3b82f6",
+  TE:   "#eab308",
+  K:    "#a855f7",
+  PICK: "#d4af37",
+};
+
 const POS_COLOR: Record<Position, { bg: string; text: string; ring: string; chip: string }> = {
-  QB:   { bg: "bg-rose-500/15",    text: "text-rose-400",    ring: "ring-rose-500/30",    chip: "bg-rose-500/10 text-rose-400 border-rose-500/30" },
-  RB:   { bg: "bg-emerald-500/15", text: "text-emerald-400", ring: "ring-emerald-500/30", chip: "bg-emerald-500/10 text-emerald-400 border-emerald-500/30" },
-  WR:   { bg: "bg-sky-500/15",     text: "text-sky-400",     ring: "ring-sky-500/30",     chip: "bg-sky-500/10 text-sky-400 border-sky-500/30" },
-  TE:   { bg: "bg-yellow-500/15",  text: "text-yellow-400",  ring: "ring-yellow-500/30",  chip: "bg-yellow-500/10 text-yellow-400 border-yellow-500/30" },
-  PICK: { bg: "bg-[#d4af37]/15",   text: "text-[#d4af37]",   ring: "ring-[#d4af37]/30",   chip: "bg-[#d4af37]/10 text-[#d4af37] border-[#d4af37]/30" },
+  QB:   { bg: "bg-[#ef4444]/15", text: "text-[#ef4444]", ring: "ring-[#ef4444]/30", chip: "bg-[#ef4444]/10 text-[#ef4444] border-[#ef4444]/30" },
+  RB:   { bg: "bg-[#22c55e]/15", text: "text-[#22c55e]", ring: "ring-[#22c55e]/30", chip: "bg-[#22c55e]/10 text-[#22c55e] border-[#22c55e]/30" },
+  WR:   { bg: "bg-[#3b82f6]/15", text: "text-[#3b82f6]", ring: "ring-[#3b82f6]/30", chip: "bg-[#3b82f6]/10 text-[#3b82f6] border-[#3b82f6]/30" },
+  TE:   { bg: "bg-[#eab308]/15", text: "text-[#eab308]", ring: "ring-[#eab308]/30", chip: "bg-[#eab308]/10 text-[#eab308] border-[#eab308]/30" },
+  K:    { bg: "bg-[#a855f7]/15", text: "text-[#a855f7]", ring: "ring-[#a855f7]/30", chip: "bg-[#a855f7]/10 text-[#a855f7] border-[#a855f7]/30" },
+  PICK: { bg: "bg-[#d4af37]/15", text: "text-[#d4af37]", ring: "ring-[#d4af37]/30", chip: "bg-[#d4af37]/10 text-[#d4af37] border-[#d4af37]/30" },
 };
 
 type ViewMode = "list" | "box" | "hex";
@@ -712,36 +725,44 @@ type PosTheme = {
 
 const HEX_POS_THEME: Record<Position, PosTheme> = {
   QB: {
+    base: "#ef4444",
+    shell: ["#f87171", "#dc2626", "#3a0a0a"],
+    glow:  "rgba(239, 68, 68, 0.55)",
+    ring:  "rgba(248, 113, 113, 0.85)",
+    text:  "#fecaca",
+    chipBg: "rgba(220, 38, 38, 0.35)",
+  },
+  RB: {
+    base: "#22c55e",
+    shell: ["#4ade80", "#16a34a", "#062a1f"],
+    glow:  "rgba(34, 197, 94, 0.55)",
+    ring:  "rgba(74, 222, 128, 0.85)",
+    text:  "#bbf7d0",
+    chipBg: "rgba(22, 163, 74, 0.35)",
+  },
+  WR: {
+    base: "#3b82f6",
+    shell: ["#60a5fa", "#1d4ed8", "#0a1d3a"],
+    glow:  "rgba(59, 130, 246, 0.55)",
+    ring:  "rgba(96, 165, 250, 0.85)",
+    text:  "#bfdbfe",
+    chipBg: "rgba(29, 78, 216, 0.35)",
+  },
+  TE: {
+    base: "#eab308",
+    shell: ["#facc15", "#ca8a04", "#3a2a06"],
+    glow:  "rgba(234, 179, 8, 0.55)",
+    ring:  "rgba(250, 204, 21, 0.85)",
+    text:  "#fef08a",
+    chipBg: "rgba(202, 138, 4, 0.35)",
+  },
+  K: {
     base: "#a855f7",
     shell: ["#c084fc", "#7c3aed", "#2a0e4a"],
     glow:  "rgba(168, 85, 247, 0.55)",
     ring:  "rgba(192, 132, 252, 0.85)",
     text:  "#e9d5ff",
     chipBg: "rgba(124, 58, 237, 0.35)",
-  },
-  RB: {
-    base: "#10b981",
-    shell: ["#34d399", "#0d9c70", "#062a1f"],
-    glow:  "rgba(16, 185, 129, 0.55)",
-    ring:  "rgba(52, 211, 153, 0.85)",
-    text:  "#a7f3d0",
-    chipBg: "rgba(13, 156, 112, 0.35)",
-  },
-  WR: {
-    base: "#f59e0b",
-    shell: ["#fbbf24", "#d97706", "#3a200a"],
-    glow:  "rgba(245, 158, 11, 0.55)",
-    ring:  "rgba(251, 191, 36, 0.85)",
-    text:  "#fde68a",
-    chipBg: "rgba(217, 119, 6, 0.35)",
-  },
-  TE: {
-    base: "#22d3ee",
-    shell: ["#67e8f9", "#0891b2", "#062a3a"],
-    glow:  "rgba(34, 211, 238, 0.55)",
-    ring:  "rgba(103, 232, 249, 0.85)",
-    text:  "#cffafe",
-    chipBg: "rgba(8, 145, 178, 0.35)",
   },
   PICK: {
     base: "#d4af37",
@@ -1187,7 +1208,8 @@ function StatCell({ label, value, accent, mono }: { label: string; value: number
 function HexLegend() {
   const entries: Array<[string, PosTheme]> = [
     ["QB", HEX_POS_THEME.QB], ["RB", HEX_POS_THEME.RB],
-    ["WR", HEX_POS_THEME.WR], ["TE", HEX_POS_THEME.TE], ["RP", HEX_POS_THEME.PICK],
+    ["WR", HEX_POS_THEME.WR], ["TE", HEX_POS_THEME.TE],
+    ["K", HEX_POS_THEME.K], ["RP", HEX_POS_THEME.PICK],
   ];
   return (
     <div className="hidden sm:flex items-center gap-1.5 flex-shrink-0">

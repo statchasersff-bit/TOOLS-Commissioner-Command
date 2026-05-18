@@ -9,7 +9,7 @@ export type DraftFormat = "snake" | "auction" | "linear";
 export type ScoringType = "ppr" | "half" | "standard";
 export type LeagueMode = "dynasty" | "keeper" | "redraft";
 export type PassTd = 4 | 6;
-export type Position = "QB" | "RB" | "WR" | "TE" | "PICK";
+export type Position = "QB" | "RB" | "WR" | "TE" | "K" | "PICK";
 
 // Rookie mode the user has selected. Drives which rows are included.
 export type RookieMode = "picks" | "direct";

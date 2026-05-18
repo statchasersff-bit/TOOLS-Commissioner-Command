@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { MegaMenuNav, MobileBottomNav } from "@/components/MegaMenu";
 import { LeagueSelector } from "@/components/LeagueSelector";
 import { HeaderValueSourceBadge } from "@/components/ValueSourceSelector";
+import { ValueSourceManager } from "@/components/ValueSourceManager";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useValueModel } from "@/contexts/ValueModelContext";
 import { useSleeper } from "@/contexts/SleeperContext";
@@ -535,7 +536,7 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
               )}
 
 
-              <HeaderValueSourceBadge />
+              <ValueSourceManager />
 
               {/* User dropdown (when connected) — contains Discord + ThemeToggle */}
               {sleeper.isConnected && sleeper.user ? (

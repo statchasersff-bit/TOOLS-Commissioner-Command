@@ -84,7 +84,7 @@ export type AdpFilters = {
 export type AdpRow = {
   player_id: string;
   player_name: string;
-  position: "QB" | "RB" | "WR" | "TE" | "PICK";
+  position: "QB" | "RB" | "WR" | "TE" | "K" | "PICK";
   team: string;
   is_rookie_placeholder: boolean;
   rookie_pick_label: string | null;
@@ -519,7 +519,7 @@ export async function computeAdp(f: AdpFilters): Promise<{ rows: AdpRow[]; draft
     const trend7 = Math.round(meanOr(last7) - meanOr(last30));
     const trend30 = Math.round(meanOr(last30) - meanOr(prior30));
 
-    const validPos = (["QB", "RB", "WR", "TE", "PICK"] as const).includes(a.position as any)
+    const validPos = (["QB", "RB", "WR", "TE", "K", "PICK"] as const).includes(a.position as any)
       ? (a.position as AdpRow["position"])
       : "QB";
 
@@ -544,7 +544,7 @@ export async function computeAdp(f: AdpFilters): Promise<{ rows: AdpRow[]; draft
   });
 
   rows.sort((a, b) => a.avg_pick - b.avg_pick);
-  const posCounters: Record<string, number> = { QB: 0, RB: 0, WR: 0, TE: 0, PICK: 0 };
+  const posCounters: Record<string, number> = { QB: 0, RB: 0, WR: 0, TE: 0, K: 0, PICK: 0 };
   rows.forEach((r, idx) => {
     r.overall_rank = idx + 1;
     posCounters[r.position] = (posCounters[r.position] ?? 0) + 1;
