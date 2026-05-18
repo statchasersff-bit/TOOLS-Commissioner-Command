@@ -63,6 +63,7 @@ import {
 import { getUserIdFromRequest } from "./scAuthRoutes";
 import { getFinancesForUser, upsertLeagueFinance } from "./finances";
 import { registerScAuthRoutes } from "./scAuthRoutes";
+import { requireReadOnlySleeperContext } from "./accessMiddleware";
 import {
   confirmSleeperToken,
   createChallenge,
@@ -131,7 +132,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/sleeper/user/:username", async (req, res) => {
+  app.get("/api/sleeper/user/:username", requireReadOnlySleeperContext, async (req, res) => {
     try {
       const user = await fetchSleeperUser(req.params.username);
       res.json(user);
@@ -142,7 +143,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/sleeper/user/:userId/leagues", async (req, res) => {
+  app.get("/api/sleeper/user/:userId/leagues", requireReadOnlySleeperContext, async (req, res) => {
     try {
       const season = (req.query.season as string) || "2026";
       const leagues = await fetchSleeperLeagues(req.params.userId, season);
@@ -167,7 +168,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/sleeper/user/:userId/portfolio-summary", async (req, res) => {
+  app.get("/api/sleeper/user/:userId/portfolio-summary", requireReadOnlySleeperContext, async (req, res) => {
     try {
       const season = (req.query.season as string) || "2026";
       const leagues = await fetchSleeperLeagues(req.params.userId, season);
@@ -190,7 +191,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/sleeper/live-drafts/:userId", async (req, res) => {
+  app.get("/api/sleeper/live-drafts/:userId", requireReadOnlySleeperContext, async (req, res) => {
     try {
       const { userId } = req.params;
       const results = await detectLiveDrafts(userId);

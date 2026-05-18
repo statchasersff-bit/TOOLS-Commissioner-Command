@@ -30,6 +30,8 @@ const LEGACY_SC_USERNAME_KEY = "sc-sleeper-connection";
 const LEGACY_DRAFT_JWT_KEY = "dc-sleeper-draft-jwt";
 /** Per-Sleeper-user finance token cache prefix from FinanceTab. */
 const FINANCE_TOKEN_PREFIX = "dc-finance-token-";
+/** Read-only Sleeper identity (public API, no token, no DC user). */
+const READONLY_SLEEPER_KEY = "sc_readonly_sleeper";
 
 let activeDcUserId: string | null = null;
 
@@ -97,6 +99,7 @@ export function purgeAllSleeperLocalState(): void {
         k === LEGACY_GLOBAL_KEY ||
         k === LEGACY_SC_USERNAME_KEY ||
         k === LEGACY_DRAFT_JWT_KEY ||
+        k === READONLY_SLEEPER_KEY ||
         k.startsWith(SCOPED_KEY_PREFIX) ||
         k.startsWith(FINANCE_TOKEN_PREFIX)
       ) {

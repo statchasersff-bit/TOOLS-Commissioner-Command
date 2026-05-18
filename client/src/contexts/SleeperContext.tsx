@@ -42,7 +42,7 @@ interface SleeperState {
 const SleeperContext = createContext<SleeperState | null>(null);
 
 export function SleeperProvider({ children }: { children: React.ReactNode }) {
-  const { sleeperInfo } = useAuth();
+  const { sleeperInfo, readOnlySleeperUser } = useAuth();
   const [user, setUser] = useState<SleeperUser | null>(null);
   const [leagues, setLeagues] = useState<SleeperLeagueSummary[]>([]);
   const [activeLeagueId, setActiveLeagueId] = useState<string | null>(null);
@@ -132,14 +132,18 @@ export function SleeperProvider({ children }: { children: React.ReactNode }) {
     await fetchUserAndLeagues(user.username);
   }, [user, fetchUserAndLeagues]);
 
-  // ── Connection source of truth: useAuth().sleeperInfo ─────────────────────
-  // When the DC user is unauthenticated or has not linked a Sleeper account,
-  // this resets to disconnected. When the linked Sleeper changes (e.g. the
-  // user signed out of DC and a different DC user signed in), this re-syncs
-  // to the new account. No localStorage lookup of a Sleeper username — that
-  // path leaked across DC accounts and is intentionally gone.
+  // ── Connection source of truth ────────────────────────────────────────────
+  // Prefer the DC-server-linked Sleeper (full mode), fall back to the
+  // read-only Sleeper identity. Both paths use the same public read
+  // endpoints to load leagues — the only difference is whether an auth
+  // token is available for downstream action mutations.
+  //
+  // Account-isolation: when DC is logged in, sleeperInfo is canonical. When
+  // not, readOnlySleeperUser is used. AuthContext is responsible for
+  // reconciling the two on sign-in (read-only is cleared if it conflicts).
   useEffect(() => {
-    const linkedUsername = sleeperInfo?.username ?? null;
+    const linkedUsername = sleeperInfo?.username ?? readOnlySleeperUser?.username ?? null;
+    const linkedUserId = sleeperInfo?.userId ?? readOnlySleeperUser?.userId ?? null;
     if (!linkedUsername) {
       setUser(null);
       setLeagues([]);
@@ -153,12 +157,14 @@ export function SleeperProvider({ children }: { children: React.ReactNode }) {
     lastAutoLoadedUsernameRef.current = linkedUsername;
     // eslint-disable-next-line no-console
     console.info(
-      "[sleeper] loading leagues for linked Sleeper user:",
+      "[sleeper] loading leagues for Sleeper user:",
       linkedUsername,
-      "(sleeper_user_id:", sleeperInfo?.userId ?? "(none)", "source: auth-context)"
+      "(sleeper_user_id:", linkedUserId ?? "(none)",
+      "source:", sleeperInfo?.username ? "auth-context" : "read-only",
+      ")"
     );
     fetchUserAndLeagues(linkedUsername);
-  }, [sleeperInfo?.username, sleeperInfo?.userId, fetchUserAndLeagues]);
+  }, [sleeperInfo?.username, sleeperInfo?.userId, readOnlySleeperUser?.username, readOnlySleeperUser?.userId, fetchUserAndLeagues]);
 
   return (
     <SleeperContext.Provider

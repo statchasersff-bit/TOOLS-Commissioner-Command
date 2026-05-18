@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from "react";
+import { createContext, useContext, useState, useCallback, useEffect, useMemo, type ReactNode } from "react";
 import {
   saveSleeperSession,
   clearSleeperSession,
@@ -9,6 +9,12 @@ import {
   getActiveDcUserId,
   type SleeperSession,
 } from "@/services/sleeperAuth";
+import {
+  connectReadOnlySleeperByUsername,
+  getReadOnlySleeper,
+  clearReadOnlySleeper,
+  type ReadOnlySleeperIdentity,
+} from "@/services/readOnlySleeper";
 import { API_BASE } from "@/lib/apiBase";
 
 const SC_TOKEN_KEY = "sc_auth_token";
@@ -38,40 +44,56 @@ export interface SleeperInfo {
   token: string | null;
 }
 
+/**
+ * Legacy status field. Kept for any external consumer (e.g. tests) that may
+ * still depend on it. New code should use `accessLevel` instead.
+ *
+ *   "loading"          — initial bootstrap in progress.
+ *   "unauthenticated"  — no DC session.
+ *   "needs-sleeper"    — DC session, no Sleeper linked. (Used by full-mode
+ *                        upgrade flow only; no longer blocks the whole app.)
+ *   "ready"            — DC + Sleeper both present (full mode).
+ */
 export type AuthStatus = "loading" | "unauthenticated" | "needs-sleeper" | "ready";
 
 /**
- * Where the currently-active Sleeper session came from on the most recent
- * bootstrap. Use this for diagnostics and as a verification handle.
+ * Four-tier access level — the canonical handle for module gating.
  *
- *   "server-linked"  — DC user has Sleeper linked on the server; token came
- *                      from /api/sc-auth/me. This is the only "trusted"
- *                      auto-auth source.
- *   "local-scoped"   — A scoped-per-DC-user session in localStorage was used
- *                      because the server didn't provide one. Currently
- *                      checkSession always prefers server, so this should
- *                      not occur in normal flow; if it does, investigate.
- *   "legacy-cache-removed" — Pre-scoping global keys (e.g. statchasers_sleeper_auth
- *                      without a DC-user suffix) were detected and removed.
- *                      They were NOT used for auth. Surfaced so a UI badge
- *                      can flag the cleanup happened.
- *   "none"           — No Sleeper auth active.
+ *   guest         — no Sleeper connected of any kind.
+ *   readonly      — Sleeper username connected via public API (no DC login).
+ *   authenticated — DC login exists but no Sleeper auth token. Module access
+ *                   equal to readonly. Action tools still require a Sleeper
+ *                   token, which the upgrade flow asks for next.
+ *   full          — DC login + Sleeper auth token.
+ *
+ * See client/src/config/moduleAccess.ts for which modules require which level.
  */
-export type SleeperSource = "server-linked" | "local-scoped" | "legacy-cache-removed" | "none";
+export type AccessLevel = "guest" | "readonly" | "authenticated" | "full";
+
+export type SleeperSource = "server-linked" | "local-scoped" | "legacy-cache-removed" | "none" | "read-only";
 
 interface AuthContextValue {
   status: AuthStatus;
   user: ScUser | null;
   sleeperInfo: SleeperInfo | null;
-  /** Source of the active Sleeper session — see SleeperSource for semantics. */
   sleeperSource: SleeperSource;
-  /** Legacy global keys that were detected and removed on the last bootstrap. */
   legacyKeysRemoved: string[];
+
+  // ── Access level handles ───────────────────────────────────────────────
+  accessLevel: AccessLevel;
+  readOnlySleeperUser: ReadOnlySleeperIdentity | null;
+  isReadOnlyConnected: boolean;
+  isAuthenticatedUser: boolean;
+  hasSleeperToken: boolean;
+
+  // ── Actions ────────────────────────────────────────────────────────────
   checkSession: () => Promise<void>;
   logout: () => Promise<void>;
   onLoginSuccess: (token: string) => Promise<void>;
   onSleeperConnected: (username: string, userId: string, token: string) => Promise<void>;
   onSleeperDisconnected: () => Promise<void>;
+  connectReadOnlySleeper: (username: string) => Promise<void>;
+  disconnectReadOnlySleeper: () => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -88,11 +110,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [sleeperInfo, setSleeperInfo] = useState<SleeperInfo | null>(null);
   const [sleeperSource, setSleeperSource] = useState<SleeperSource>("none");
   const [legacyKeysRemoved, setLegacyKeysRemoved] = useState<string[]>([]);
+  const [readOnlySleeperUser, setReadOnlySleeperUser] = useState<ReadOnlySleeperIdentity | null>(null);
 
   const checkSession = useCallback(async () => {
     // ── Step 0: ALWAYS clean up legacy global keys before any read. ──────────
-    // This runs at the start of every bootstrap so a legacy global key can
-    // never influence the source decision below.
     const removed = detectAndRemoveLegacySleeperKeys();
     setLegacyKeysRemoved(removed);
     if (removed.length > 0) {
@@ -103,19 +124,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       );
     }
 
+    // ── Step 1: pick up any read-only Sleeper identity from localStorage.
+    // This is independent of DC auth; a guest visitor with a saved read-only
+    // username will see it restored here.
+    const readOnly = getReadOnlySleeper();
+    setReadOnlySleeperUser(readOnly);
+
     try {
       setStatus("loading");
       const headers = { "Content-Type": "application/json", ...authHeaders() };
-      // Unauthenticated path: clear ALL Sleeper state so a future sign-in
-      // can't inherit anything from this browser session.
-      const failClosed = (reason: string) => {
+
+      // Failure path: no DC session. Do NOT purge read-only Sleeper here —
+      // a guest visitor is a valid state now.
+      const failClosedNoDc = (reason: string) => {
         // eslint-disable-next-line no-console
-        console.warn(`[sc-auth] checkSession failed: ${reason} — purging all Sleeper local state`);
+        console.info(`[sc-auth] no DC session (${reason}) — proceeding without StatChasers account`);
         clearToken();
-        purgeAllSleeperLocalState();
         setUser(null);
         setSleeperInfo(null);
-        setSleeperSource("none");
+        setSleeperSource(readOnly ? "read-only" : "none");
         setStatus("unauthenticated");
       };
 
@@ -123,19 +150,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         credentials: "include",
         headers,
       });
-      if (res.status === 401) return failClosed("401 from /me");
+      if (res.status === 401) return failClosedNoDc("401 from /me");
 
       const data = await res.json();
-      if (!data.user) return failClosed("/me returned no user");
+      if (!data.user) return failClosedNoDc("/me returned no user");
 
       // ── Bind the Sleeper auth store to this DC user BEFORE any read/write.
-      // While bound, getSleeperSession() only ever returns this user's session.
       setActiveDcUser(data.user.id);
 
-      // Account-isolation gate: if a leftover scoped session exists from a
-      // prior browser state and its sleeper user_id doesn't match what the
-      // server reports for this DC user, drop it and force re-derivation
-      // from the server-canonical token.
       const preLocalSession = getSleeperSession();
       const serverSleeperUserId: string | null = data.sleeper?.userId ?? null;
       if (
@@ -158,8 +180,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(data.user);
       let source: SleeperSource;
       if (data.sleeper?.token) {
-        // ── Server-linked path: server provided a canonical token for this
-        // DC user. Persist into the scoped key and use that as the source.
+        // ── Server-linked path: full mode.
         const session: SleeperSession = {
           token: data.sleeper.token,
           user_id: data.sleeper.userId ?? "",
@@ -170,16 +191,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         };
         saveSleeperSession(session);
         setSleeperInfo(data.sleeper);
+
+        // Reconcile read-only: if the DC user's linked Sleeper differs from
+        // the read-only key, drop the read-only key so it doesn't shadow
+        // the canonical identity.
+        if (readOnly && readOnly.userId !== data.sleeper.userId) {
+          clearReadOnlySleeper();
+          setReadOnlySleeperUser(null);
+        }
+
         source = "server-linked";
         setStatus("ready");
       } else {
-        // ── Server says no Sleeper linked. Be authoritative: clear any
-        // local-scoped session that lingered. Never fall back to local.
+        // ── DC user logged in but no Sleeper linked: authenticated tier.
+        // Keep the read-only Sleeper identity if present — gives them
+        // readonly module access without re-typing the username.
         clearSleeperSession();
         setSleeperInfo(null);
-        // If the legacy-key cleanup found anything, surface that label so a
-        // human reading the badge knows cleanup happened on this bootstrap.
-        source = removed.length > 0 ? "legacy-cache-removed" : "none";
+        if (readOnly) {
+          source = "read-only";
+        } else {
+          source = removed.length > 0 ? "legacy-cache-removed" : "none";
+        }
         setStatus("needs-sleeper");
       }
 
@@ -188,18 +221,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.info(
         `[auth] Sleeper source: ${source}`,
         "| DC user:", data.user.id,
-        "| Sleeper user:", data.sleeper?.userId || "(none)",
-        "| linked Sleeper:", data.sleeper?.username || "(none)",
+        "| Sleeper user:", data.sleeper?.userId || readOnly?.userId || "(none)",
+        "| linked Sleeper:", data.sleeper?.username || readOnly?.username || "(none)",
         ...(removed.length > 0 ? ["| legacy removed:", removed] : []),
       );
     } catch (err) {
       // eslint-disable-next-line no-console
-      console.warn("[sc-auth] checkSession threw — purging all Sleeper local state", err);
+      console.warn("[sc-auth] checkSession threw — DC unavailable, falling back to guest/read-only", err);
       clearToken();
-      purgeAllSleeperLocalState();
       setUser(null);
       setSleeperInfo(null);
-      setSleeperSource("none");
+      setSleeperSource(readOnly ? "read-only" : "none");
       setStatus("unauthenticated");
     }
   }, []);
@@ -222,14 +254,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
     } catch { /* ignore */ }
     clearToken();
-    // Wipe every Sleeper-related localStorage entry (scoped sessions for any
-    // DC user, legacy global keys, draft-JWT cache, finance-token cache) so a
-    // future sign-in on this browser cannot inherit prior Sleeper state.
     purgeAllSleeperLocalState();
     // eslint-disable-next-line no-console
-    console.info("[auth] logout — DC session cleared, all Sleeper local state purged");
+    console.info("[auth] logout — DC session cleared, all Sleeper local state purged (read-only included)");
     setUser(null);
     setSleeperInfo(null);
+    setReadOnlySleeperUser(null);
     setSleeperSource("none");
     setLegacyKeysRemoved([]);
     setStatus("unauthenticated");
@@ -242,6 +272,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       credentials: "include",
       body: JSON.stringify({ sleeperUsername: username, sleeperUserId: userId, token }),
     });
+    // After server-linking, the read-only identity is redundant.
+    clearReadOnlySleeper();
+    setReadOnlySleeperUser(null);
     await checkSession();
   }, [checkSession]);
 
@@ -251,20 +284,44 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       credentials: "include",
       headers: authHeaders(),
     });
-    // Purge ALL Sleeper local state, not just the scoped session, so legacy
-    // global keys (sc-sleeper-connection, dc-sleeper-draft-jwt, finance
-    // token cache) don't survive a Sleeper disconnect.
     purgeAllSleeperLocalState();
-    // Re-bind the active DC user since the purge nulls it.
     if (user?.id) setActiveDcUser(user.id);
     setSleeperInfo(null);
+    setReadOnlySleeperUser(null);
     setSleeperSource("none");
     setStatus("needs-sleeper");
   }, [user?.id]);
 
-  // ── Debug helper exposed on window so the source label can be inspected
-  // from DevTools without rendering it in the UI. Updated on every render
-  // so it always reflects the latest state.
+  const connectReadOnlySleeper = useCallback(async (username: string) => {
+    const identity = await connectReadOnlySleeperByUsername(username);
+    setReadOnlySleeperUser(identity);
+    // If we have no server-linked Sleeper, surface this as the active source.
+    setSleeperSource(prev => (prev === "server-linked" ? prev : "read-only"));
+  }, []);
+
+  const disconnectReadOnlySleeper = useCallback(() => {
+    clearReadOnlySleeper();
+    setReadOnlySleeperUser(null);
+    setSleeperSource(prev => (prev === "server-linked" ? prev : "none"));
+  }, []);
+
+  // ── Derived access level ───────────────────────────────────────────────
+  const accessLevel: AccessLevel = useMemo(() => {
+    const hasDc = !!user;
+    const hasSleeperToken = !!sleeperInfo?.token;
+    const hasSleeperUser = !!(sleeperInfo?.userId || readOnlySleeperUser?.userId);
+    if (hasDc && hasSleeperToken) return "full";
+    if (hasDc) return "authenticated";
+    if (hasSleeperUser) return "readonly";
+    return "guest";
+  }, [user, sleeperInfo, readOnlySleeperUser]);
+
+  const isAuthenticatedUser = !!user;
+  const hasSleeperToken = !!sleeperInfo?.token;
+  const isReadOnlyConnected =
+    accessLevel === "readonly" || accessLevel === "full" || (!!readOnlySleeperUser && !sleeperInfo?.token);
+
+  // ── Debug helper exposed on window ─────────────────────────────────────
   useEffect(() => {
     try {
       (window as unknown as { __dcAuthDebug?: () => void }).__dcAuthDebug = () => {
@@ -275,16 +332,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           activeDcUserIdInStore: getActiveDcUserId(),
           sleeperUserId: sleeperInfo?.userId ?? null,
           linkedSleeperUsername: sleeperInfo?.username ?? null,
+          readOnlySleeperUser,
+          accessLevel,
           sleeperSource,
           legacyKeysRemovedOnLastBootstrap: legacyKeysRemoved,
           status,
         });
       };
     } catch { /* SSR / no window */ }
-  }, [user, sleeperInfo, sleeperSource, legacyKeysRemoved, status]);
+  }, [user, sleeperInfo, readOnlySleeperUser, accessLevel, sleeperSource, legacyKeysRemoved, status]);
 
   return (
-    <AuthContext.Provider value={{ status, user, sleeperInfo, sleeperSource, legacyKeysRemoved, checkSession, logout, onLoginSuccess, onSleeperConnected, onSleeperDisconnected }}>
+    <AuthContext.Provider value={{
+      status, user, sleeperInfo, sleeperSource, legacyKeysRemoved,
+      accessLevel,
+      readOnlySleeperUser,
+      isReadOnlyConnected,
+      isAuthenticatedUser,
+      hasSleeperToken,
+      checkSession, logout, onLoginSuccess, onSleeperConnected, onSleeperDisconnected,
+      connectReadOnlySleeper, disconnectReadOnlySleeper,
+    }}>
       {children}
     </AuthContext.Provider>
   );

@@ -1188,42 +1188,51 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
                         return <span className={`text-[9px] font-bold px-1 py-0.5 rounded ${cls}`}>#{rank}</span>;
                       }
 
-                      // Compact expansion: 5 equal cards on desktop, 2 cols on
-                      // mobile. No value labels — just rank + name. Cap each card
-                      // at 4 players and append a "+N more" line.
-                      const MAX_PER_CARD = 4;
-                      const MAX_PICKS_IN_CARD = 4;
+                      // Expansion: 5 equal cards on desktop in one row; mobile
+                      // scrolls horizontally so cards stay readable. Position
+                      // cards show top 7 players with compact dynasty value
+                      // alongside each name and an avg age in the header.
+                      const MAX_PER_CARD = 7;
+                      const MAX_PICKS_IN_CARD = 7;
+                      const formatVal = (v: number) =>
+                        v >= 1000 ? `${(v / 1000).toFixed(1)}k` : String(Math.round(v));
                       return (
                         <tr className={`border-b border-border/20 ${rowBg}`} data-testid={`expanded-${team.id}`}>
                           <td colSpan={colCount} className="px-3 sm:px-5 py-2">
-                            <div className="grid gap-1.5 lg:gap-2 grid-cols-2 sm:grid-cols-3 lg:[grid-template-columns:repeat(5,minmax(0,1fr))]">
+                            <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1 lg:mx-0 lg:px-0 lg:pb-0 lg:gap-2 lg:overflow-visible lg:grid lg:[grid-template-columns:repeat(5,minmax(0,1fr))]">
 
                               {POS_CONFIG.map(({ pos, textColor, border, bg }) => {
                                 const dynRank = dRanks[pos] ?? total;
-                                const wnRank  = rRanks[pos]  ?? total;
                                 const allPlayers = [...team.roster]
                                   .filter(p => p.pos === pos)
                                   .sort((a, b) => getPlayerValue(b) - getPlayerValue(a));
                                 const visible = allPlayers.slice(0, MAX_PER_CARD);
                                 const overflow = Math.max(0, allPlayers.length - visible.length);
+                                const avgAge = allPlayers.length > 0
+                                  ? allPlayers.reduce((s, p) => s + (p.age ?? 0), 0) / allPlayers.length
+                                  : null;
                                 return (
-                                  <div key={pos} className={`rounded-md border ${border} ${bg} px-2 py-1.5`} data-testid={`pos-col-${team.id}-${pos.toLowerCase()}`}>
-                                    {/* Position header */}
-                                    <div className="flex items-center justify-between mb-1">
+                                  <div key={pos} className={`rounded-md border ${border} ${bg} px-2 py-1.5 min-w-[170px] flex-shrink-0 lg:min-w-0 lg:flex-shrink`} data-testid={`pos-col-${team.id}-${pos.toLowerCase()}`}>
+                                    {/* Position header — POS · Avg Age · DYN rank */}
+                                    <div className="flex items-center mb-1 gap-1">
                                       <span className={`text-[11px] font-black ${textColor}`}>{pos}</span>
-                                      <div className="flex items-center gap-0.5">
-                                        <span className="text-[8px] text-muted-foreground/60 font-medium">WN</span>
-                                        {rankBadge(wnRank)}
-                                        <span className="text-[8px] text-muted-foreground/60 font-medium ml-0.5">DYN</span>
-                                        {rankBadge(dynRank)}
-                                      </div>
+                                      {avgAge !== null && (
+                                        <span className="text-[8px] text-muted-foreground/60 font-medium ml-auto tabular-nums whitespace-nowrap" data-testid={`pos-avg-age-${team.id}-${pos.toLowerCase()}`}>
+                                          Avg {avgAge.toFixed(1)}
+                                        </span>
+                                      )}
+                                      <span className={`text-[8px] text-muted-foreground/60 font-medium ${avgAge !== null ? "ml-1" : "ml-auto"}`}>DYN</span>
+                                      {rankBadge(dynRank)}
                                     </div>
-                                    {/* Compact player list — no value column */}
+                                    {/* Player list — top 7 with compact dynasty value */}
                                     <ul className="space-y-[1px] leading-tight">
                                       {visible.map((p, i) => (
                                         <li key={p.sleeperId ?? i} className="flex items-center gap-1 min-w-0" title={`${p.name} · ${(getPlayerValue(p) / 1000).toFixed(1)}k`}>
                                           <span className="text-[9px] text-muted-foreground/40 w-3 flex-shrink-0 tabular-nums">{i + 1}</span>
                                           <span className="text-[11px] text-foreground truncate flex-1">{p.name}</span>
+                                          <span className="text-[9px] text-muted-foreground/60 flex-shrink-0 tabular-nums" data-testid={`pos-player-value-${team.id}-${pos.toLowerCase()}-${i}`}>
+                                            {formatVal(getPlayerValue(p))}
+                                          </span>
                                         </li>
                                       ))}
                                       {overflow > 0 && (
@@ -1237,8 +1246,8 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
                                 );
                               })}
 
-                              {/* Picks column */}
-                              <div className="rounded-md border border-purple-500/25 bg-purple-500/5 px-2 py-1.5" data-testid={`pos-col-${team.id}-picks`}>
+                              {/* Picks column — Rank only, no age */}
+                              <div className="rounded-md border border-purple-500/25 bg-purple-500/5 px-2 py-1.5 min-w-[170px] flex-shrink-0 lg:min-w-0 lg:flex-shrink" data-testid={`pos-col-${team.id}-picks`}>
                                 <div className="flex items-center justify-between mb-1">
                                   <span className="text-[11px] font-black text-purple-500 dark:text-purple-400">Picks</span>
                                   <div className="flex items-center gap-0.5">
@@ -1570,35 +1579,40 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
                             : "text-amber-600 dark:text-amber-400 bg-amber-500/10";
                           return <span className={`text-[9px] font-bold px-1 py-0.5 rounded ${cls}`}>#{rank}</span>;
                         }
-                        // Compact expansion mirrors the Table view: 5 equal
-                        // cards on desktop, no per-player value column, top 4
-                        // players + "+N more". Player values still show on hover.
-                        const HM_MAX_PER_CARD = 4;
-                        const HM_MAX_PICKS = 4;
+                        // Mirror the Table view: 5 cards in one row on desktop,
+                        // mobile scrolls horizontally. Position cards show top 7
+                        // players with compact dynasty values and an avg age.
+                        const HM_MAX_PER_CARD = 7;
+                        const HM_MAX_PICKS = 7;
+                        const hmFormatVal = (v: number) =>
+                          v >= 1000 ? `${(v / 1000).toFixed(1)}k` : String(Math.round(v));
                         return (
                           <tr className={cn("border-b border-border/20", rowBase)} data-testid={`heatmap-expanded-${team.id}`}>
                             <td colSpan={12} className="px-3 sm:px-5 py-2">
-                              <div className="grid gap-1.5 lg:gap-2 grid-cols-2 sm:grid-cols-3 lg:[grid-template-columns:repeat(5,minmax(0,1fr))]">
+                              <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1 lg:mx-0 lg:px-0 lg:pb-0 lg:gap-2 lg:overflow-visible lg:grid lg:[grid-template-columns:repeat(5,minmax(0,1fr))]">
                                 {([
                                   { pos: "QB", players: hmRoster.qbs, textColor: "text-rose-500 dark:text-rose-400",      border: "border-rose-500/25",    bg: "bg-rose-500/5"    },
                                   { pos: "RB", players: hmRoster.rbs, textColor: "text-emerald-500 dark:text-emerald-400", border: "border-emerald-500/25", bg: "bg-emerald-500/5" },
                                   { pos: "WR", players: hmRoster.wrs, textColor: "text-sky-500 dark:text-sky-400",        border: "border-sky-500/25",     bg: "bg-sky-500/5"     },
                                   { pos: "TE", players: hmRoster.tes, textColor: "text-orange-500 dark:text-orange-400",  border: "border-orange-500/25",  bg: "bg-orange-500/5"  },
                                 ] as const).map(({ pos, players, textColor, border, bg }) => {
-                                  const wnRank  = rRanks[pos] ?? total;
                                   const dynRank = dRanks[pos] ?? total;
                                   const visible = players.slice(0, HM_MAX_PER_CARD);
                                   const overflow = Math.max(0, players.length - visible.length);
+                                  const avgAge = players.length > 0
+                                    ? players.reduce((s, p: any) => s + (p.age ?? 0), 0) / players.length
+                                    : null;
                                   return (
-                                    <div key={pos} className={`rounded-md border ${border} ${bg} px-2 py-1.5`} data-testid={`hm-pos-col-${team.id}-${pos.toLowerCase()}`}>
-                                      <div className="flex items-center justify-between mb-1">
+                                    <div key={pos} className={`rounded-md border ${border} ${bg} px-2 py-1.5 min-w-[170px] flex-shrink-0 lg:min-w-0 lg:flex-shrink`} data-testid={`hm-pos-col-${team.id}-${pos.toLowerCase()}`}>
+                                      <div className="flex items-center mb-1 gap-1">
                                         <span className={`text-[11px] font-black ${textColor}`}>{pos}</span>
-                                        <div className="flex items-center gap-0.5">
-                                          <span className="text-[8px] text-muted-foreground/60 font-medium">WN</span>
-                                          {hmRankBadge(wnRank)}
-                                          <span className="text-[8px] text-muted-foreground/60 font-medium ml-0.5">DYN</span>
-                                          {hmRankBadge(dynRank)}
-                                        </div>
+                                        {avgAge !== null && avgAge > 0 && (
+                                          <span className="text-[8px] text-muted-foreground/60 font-medium ml-auto tabular-nums whitespace-nowrap" data-testid={`hm-pos-avg-age-${team.id}-${pos.toLowerCase()}`}>
+                                            Avg {avgAge.toFixed(1)}
+                                          </span>
+                                        )}
+                                        <span className={`text-[8px] text-muted-foreground/60 font-medium ${avgAge !== null && avgAge > 0 ? "ml-1" : "ml-auto"}`}>DYN</span>
+                                        {hmRankBadge(dynRank)}
                                       </div>
                                       <ul className="space-y-[1px] leading-tight">
                                         {visible.length === 0 ? (
@@ -1608,6 +1622,9 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
                                             <li key={p.sleeperId ?? i} className="flex items-center gap-1 min-w-0" title={`${p.name} · ${(getPlayerValue(p) / 1000).toFixed(1)}k`}>
                                               <span className="text-[9px] text-muted-foreground/40 w-3 flex-shrink-0 tabular-nums">{i + 1}</span>
                                               <span className="text-[11px] text-foreground truncate flex-1">{p.name}</span>
+                                              <span className="text-[9px] text-muted-foreground/60 flex-shrink-0 tabular-nums" data-testid={`hm-pos-player-value-${team.id}-${pos.toLowerCase()}-${i}`}>
+                                                {hmFormatVal(getPlayerValue(p))}
+                                              </span>
                                             </li>
                                           ))
                                         )}
@@ -1619,8 +1636,8 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
                                   );
                                 })}
 
-                                {/* Picks column */}
-                                <div className="rounded-md border border-purple-500/25 bg-purple-500/5 px-2 py-1.5" data-testid={`hm-pos-col-${team.id}-picks`}>
+                                {/* Picks column — Rank only, no age */}
+                                <div className="rounded-md border border-purple-500/25 bg-purple-500/5 px-2 py-1.5 min-w-[170px] flex-shrink-0 lg:min-w-0 lg:flex-shrink" data-testid={`hm-pos-col-${team.id}-picks`}>
                                   <div className="flex items-center justify-between mb-1">
                                     <span className="text-[11px] font-black text-purple-500 dark:text-purple-400">Picks</span>
                                     <div className="flex items-center gap-0.5">
@@ -2102,114 +2119,6 @@ export function MyTeam({ league, userTeam, onNavigate }: DashboardOverviewProps)
         </Card>
       </div>
 
-      {/* ── 3. TEAM DNA ────────────────────────────────────────────────────── */}
-      <div data-testid="myteam-dna">
-        <div className="mb-4">
-          <h3 className="text-base font-bold text-foreground">Team DNA</h3>
-          <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
-        </div>
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-
-          {/* Identity bars */}
-          <Card className="p-5" data-testid="dna-identity">
-            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-4">Team Identity</p>
-            <div className="space-y-4">
-              {[
-                { label: "Win-Now", icon: Flame, value: winNow, color: "bg-orange-500", iconColor: "text-orange-500" },
-                { label: "Long-Term", icon: Sprout, value: youth, color: "bg-emerald-500", iconColor: "text-emerald-500" },
-                { label: "Draft Capital", icon: Archive, value: capital, color: "bg-[#0b3a7a] dark:bg-blue-500", iconColor: "text-[#0b3a7a] dark:text-blue-400" },
-              ].map(({ label, icon: Icon, value, color, iconColor }) => (
-                <div key={label}>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <div className="flex items-center gap-2">
-                      <Icon className={cn("w-4 h-4", iconColor)} />
-                      <span className="text-sm font-semibold text-foreground">{label}</span>
-                    </div>
-                    <span className="text-sm font-bold text-foreground">{value}<span className="text-xs text-muted-foreground font-normal"> / 10</span></span>
-                  </div>
-                  <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
-                    <div className={cn("h-full rounded-full transition-all", color)} style={{ width: `${value * 10}%` }} />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </Card>
-
-          {/* Strengths & Weaknesses */}
-          <Card className="p-5" data-testid="dna-strengths-weaknesses">
-            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-4">Strengths & Needs</p>
-            <div className="space-y-4">
-              <div>
-                <div className="flex items-center gap-1.5 mb-2">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-                  <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Strengths</span>
-                </div>
-                {strengths.length > 0 ? (
-                  <ul className="space-y-1.5">
-                    {strengths.slice(0, 4).map((s, i) => (
-                      <li key={i} className="flex items-start gap-1.5 text-sm text-foreground">
-                        <span className="text-emerald-500 mt-0.5 flex-shrink-0">•</span>{s}
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="text-xs text-muted-foreground italic">No standout strengths detected</p>
-                )}
-              </div>
-              <div className="border-t border-border/40 pt-4">
-                <div className="flex items-center gap-1.5 mb-2">
-                  <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
-                  <span className="text-xs font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider">Weaknesses</span>
-                </div>
-                {weaknesses.length > 0 ? (
-                  <ul className="space-y-1.5">
-                    {weaknesses.slice(0, 4).map((w, i) => (
-                      <li key={i} className="flex items-start gap-1.5 text-sm text-foreground">
-                        <span className="text-amber-500 mt-0.5 flex-shrink-0">•</span>{w}
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="text-xs text-muted-foreground italic">No major weaknesses detected</p>
-                )}
-              </div>
-            </div>
-          </Card>
-
-          {/* Strategy */}
-          <Card className="p-5 flex flex-col gap-4" data-testid="dna-strategy">
-            <div>
-              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-3">Strategy</p>
-              <div className="flex items-start gap-2 mb-3">
-                <Compass className="w-4 h-4 text-[#d4af37] flex-shrink-0 mt-0.5" />
-                <p className="text-sm font-semibold text-foreground leading-relaxed">"{suggestedDirection}"</p>
-              </div>
-            </div>
-            <div className="border-t border-border/40 pt-4">
-              <div className="flex items-center gap-2 mb-2">
-                <MapPin className="w-3.5 h-3.5 text-[#d4af37]" />
-                <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Dynasty Window</span>
-              </div>
-              <p className={cn("text-lg font-bold leading-tight", dynastyWindowColor)} data-testid="dna-window-label">{dynastyWindowLabel}</p>
-              <div className="flex gap-1 mt-3">
-                {[0, 1, 2, 3, 4].map((offset) => {
-                  const year = new Date().getFullYear() + offset;
-                  const isInWindow = offset >= userTeam.metrics.windowStartOffset &&
-                    offset < userTeam.metrics.windowStartOffset + userTeam.metrics.contenderWindowYears;
-                  return (
-                    <div key={offset} className={cn(
-                      "flex-1 h-7 rounded-md flex items-center justify-center text-[10px] font-semibold",
-                      isInWindow ? "bg-[#0b3a7a] dark:bg-blue-600 text-white" : "bg-muted text-muted-foreground"
-                    )}>
-                      {year}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </Card>
-        </div>
-      </div>
 
     </div>
   );
