@@ -333,33 +333,6 @@ export function PlayoffCalculator() {
         );
       },
     },
-    {
-      key: "remaining_sos",
-      header: "Rem SOS",
-      sortable: true,
-      sortAccessor: (r: PlayoffTeam & { change: number }) => r.remaining_sos,
-      render: (r: PlayoffTeam & { change: number }) => (
-        <span className="text-xs tabular-nums text-muted-foreground">{r.remaining_sos > 0 ? r.remaining_sos.toFixed(1) : "—"}</span>
-      ),
-    },
-    {
-      key: "expected_wins_remaining",
-      header: "xW Rem",
-      sortable: true,
-      sortAccessor: (r: PlayoffTeam & { change: number }) => r.expected_wins_remaining,
-      render: (r: PlayoffTeam & { change: number }) => (
-        <span className="text-xs tabular-nums text-muted-foreground">{r.expected_wins_remaining.toFixed(1)}</span>
-      ),
-    },
-    {
-      key: "projected_points_for",
-      header: "Proj PF",
-      sortable: true,
-      sortAccessor: (r: PlayoffTeam & { change: number }) => r.projected_points_for,
-      render: (r: PlayoffTeam & { change: number }) => (
-        <span className="text-xs tabular-nums text-muted-foreground">{r.projected_points_for.toLocaleString()}</span>
-      ),
-    },
   ], []);
 
   const handleRefresh = useCallback(() => {

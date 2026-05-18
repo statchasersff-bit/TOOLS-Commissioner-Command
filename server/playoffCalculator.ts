@@ -14,7 +14,13 @@ import { getSleeperPlayers } from "./sleeper";
 const SLEEPER_API = "https://api.sleeper.app/v1";
 
 // ── Tunables ─────────────────────────────────────────────────────────────────
-const RATING_TO_POINTS = 35;       // larger = teams converge to mean; tuned for FC redraft scale
+// RATING_TO_POINTS controls how strongly the 0-100 team rating maps to weekly
+// expected points. Larger value = teams converge toward the league-average
+// point output, so upsets are more common. Calibrated so that a 40-point
+// rating gap (roughly top-tier vs league-average) yields a ~70% per-game win
+// probability with the default weekly σ — matches the spec's "favored but
+// still upsettable" target.
+const RATING_TO_POINTS = 280;
 const DEFAULT_STD_DEV = 22;        // per-team per-week σ (PPR baseline)
 const SF_STD_DEV_BUMP = 2;         // superflex variance bump
 const BESTBALL_STD_DEV_PENALTY = -3;
@@ -329,61 +335,52 @@ function simulateOnce(
     return sA >= sB ? a : b;
   };
 
-  // Build round 1 bracket. Typical seeding: top seed plays lowest, etc.
-  // If byes exist, top `byes` seeds skip round 1.
-  let alive: TeamState[] = [];
-  if (playoffSeeds.length === 0) {
-    // No-op
-  } else {
-    const seeded = playoffSeeds;
-    const byeTeams = byeSeeds;
-    const round1Teams = seeded.slice(byes); // teams without byes
-    // Pair high vs low among round1Teams
-    const round1Winners: TeamState[] = [];
-    let lo = 0, hi = round1Teams.length - 1;
-    while (lo < hi) {
-      round1Winners.push(advance(round1Teams[lo], round1Teams[hi]));
-      lo++; hi--;
-    }
-    if (lo === hi) round1Winners.push(round1Teams[lo]); // odd man out: free pass
+  // Bracket simulation.
+  //
+  // The "semifinal round" is defined as the round-of-4: the round in which
+  // exactly four teams remain. For a 4-team playoff that's the opening round,
+  // so all four seeds are semifinalists (matching the spec rule that for a
+  // 4-team format, make_playoffs_pct == semifinals_pct). For a 6-team playoff
+  // with 2 byes, one wildcard round reduces 4 non-bye teams to 2; combined
+  // with the 2 bye teams, the round-of-4 is bye_teams + wildcard_winners.
+  // For larger brackets we keep reducing the non-bye field one wildcard round
+  // at a time until total alive ≤ 4.
+  if (playoffSeeds.length > 0) {
+    let alive: TeamState[] = playoffSeeds.slice(byes); // non-bye seeds
 
-    // Semifinalists = bye teams + round1 winners
-    const semiTeams = [...byeTeams, ...round1Winners];
-    // Re-sort semifinalists by original seed (so brackets re-seed)
-    semiTeams.sort((a, b) => {
-      const aSeed = standings.indexOf(a);
-      const bSeed = standings.indexOf(b);
-      return aSeed - bSeed;
-    });
-
-    // Record semifinals participation
-    for (const t of semiTeams) t.semifinals += 1;
-
-    // Semis: 1v4, 2v3 (or generic high-vs-low)
-    const semiWinners: TeamState[] = [];
-    lo = 0; hi = semiTeams.length - 1;
-    while (lo < hi) {
-      semiWinners.push(advance(semiTeams[lo], semiTeams[hi]));
-      lo++; hi--;
-    }
-    if (lo === hi) semiWinners.push(semiTeams[lo]);
-
-    // Finals: record participation
-    for (const t of semiWinners) t.finals += 1;
-
-    // Determine champion: pair up; if more than 2, recursive until 1
-    alive = semiWinners;
-    while (alive.length > 1) {
-      const nextRound: TeamState[] = [];
-      lo = 0; hi = alive.length - 1;
+    const playRound = (field: TeamState[]): TeamState[] => {
+      const winners: TeamState[] = [];
+      let lo = 0, hi = field.length - 1;
       while (lo < hi) {
-        nextRound.push(advance(alive[lo], alive[hi]));
+        winners.push(advance(field[lo], field[hi]));
         lo++; hi--;
       }
-      if (lo === hi) nextRound.push(alive[lo]);
-      alive = nextRound;
+      if (lo === hi) winners.push(field[lo]); // odd man out gets a free pass
+      return winners;
+    };
+
+    // Wildcard rounds: reduce until bye + alive ≤ 4
+    while (byeSeeds.length + alive.length > 4) {
+      alive = playRound(alive);
     }
-    if (alive[0]) alive[0].championship += 1;
+
+    // The round-of-4 is the semifinal round.
+    const semifinalists = [...byeSeeds, ...alive];
+    for (const t of semifinalists) t.semifinals += 1;
+
+    // Re-seed semifinalists by original standings (top seed vs lowest, etc.)
+    const semiBracket = [...semifinalists].sort(
+      (a, b) => standings.indexOf(a) - standings.indexOf(b)
+    );
+    const finalists = playRound(semiBracket);
+    for (const t of finalists) t.finals += 1;
+
+    // Championship round(s) — reduce until one team remains.
+    let remaining = finalists;
+    while (remaining.length > 1) {
+      remaining = playRound(remaining);
+    }
+    if (remaining[0]) remaining[0].championship += 1;
   }
 
   // Record made-playoffs / bye / final-record accumulators
