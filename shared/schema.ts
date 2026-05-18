@@ -179,3 +179,74 @@ export const scConnectedAccounts = pgTable("sc_connected_accounts", {
 export type ScUser = typeof scUsers.$inferSelect;
 export type EmailVerificationCode = typeof emailVerificationCodes.$inferSelect;
 export type ScConnectedAccount = typeof scConnectedAccounts.$inferSelect;
+
+// ── ADP pipeline ─────────────────────────────────────────────────────────────
+// Normalized store of completed Sleeper drafts. We collect drafts in the
+// background, persist the picks once, and compute cached ADP snapshots from
+// our own database rather than hitting Sleeper on every page load.
+
+export const drafts = pgTable("drafts", {
+  draftId: varchar("draft_id").primaryKey(),
+  leagueId: varchar("league_id"),
+  season: varchar("season", { length: 10 }).notNull(),
+  status: varchar("status", { length: 20 }).notNull(),
+  draftType: varchar("draft_type", { length: 20 }).notNull().default("startup"),
+  draftFormat: varchar("draft_format", { length: 20 }).notNull().default("snake"),
+  teams: integer("teams").notNull().default(12),
+  rounds: integer("rounds").notNull().default(0),
+  scoringType: varchar("scoring_type", { length: 10 }).notNull().default("ppr"),
+  leagueMode: varchar("league_mode", { length: 12 }).notNull().default("dynasty"),
+  superflex: boolean("superflex").notNull().default(false),
+  tePremium: boolean("te_premium").notNull().default(false),
+  bestBall: boolean("best_ball").notNull().default(false),
+  passTd: integer("pass_td").notNull().default(4),
+  rosterSize: integer("roster_size").notNull().default(0),
+  starterCount: integer("starter_count").notNull().default(0),
+  // Sleeper timestamps are unix millis. We pick the canonical draft date as
+  // completed_at ?? start_time ?? created_at when ingesting.
+  draftDate: timestamp("draft_date"),
+  completedAt: bigint("completed_at", { mode: "number" }),
+  startTime: bigint("start_time", { mode: "number" }),
+  createdAt: bigint("created_at", { mode: "number" }),
+  // True when picks include actual rookies (drafted directly), false when the
+  // draft enumerates rookie placeholder slots (e.g. "2026 Rookie 1.01").
+  directlyDraftedRookies: boolean("directly_drafted_rookies").notNull().default(false),
+  ingestedAt: timestamp("ingested_at").defaultNow(),
+});
+
+export const draftPicks = pgTable("draft_picks", {
+  id: serial("id").primaryKey(),
+  draftId: varchar("draft_id").notNull(),
+  // Sleeper's pick_no is the canonical 1-based overall pick. This is our
+  // ordering source of truth — we never derive it from round*slot.
+  pickNo: integer("pick_no").notNull(),
+  round: integer("round").notNull(),
+  pickInRound: integer("pick_in_round").notNull(),
+  draftSlot: integer("draft_slot"),
+  rosterId: integer("roster_id"),
+  pickedBy: varchar("picked_by"),
+  playerId: varchar("player_id"),
+  playerName: text("player_name"),
+  position: varchar("position", { length: 5 }),
+  team: varchar("team", { length: 10 }),
+  isRookie: boolean("is_rookie").notNull().default(false),
+  isRookiePlaceholder: boolean("is_rookie_placeholder").notNull().default(false),
+  rookiePickLabel: text("rookie_pick_label"),
+});
+
+// One row per (filter_key, snapshot_date). Stored as a JSON blob so the
+// expensive aggregation runs once per refresh and the read path is a single
+// keyed lookup.
+export const adpSnapshots = pgTable("adp_snapshots", {
+  id: serial("id").primaryKey(),
+  filterKey: text("filter_key").notNull(),
+  filters: jsonb("filters").notNull().default({}),
+  rows: jsonb("rows").notNull().default([]),
+  draftCount: integer("draft_count").notNull().default(0),
+  snapshotDate: varchar("snapshot_date", { length: 10 }).notNull(),
+  computedAt: timestamp("computed_at").defaultNow(),
+});
+
+export type Draft = typeof drafts.$inferSelect;
+export type DraftPick = typeof draftPicks.$inferSelect;
+export type AdpSnapshot = typeof adpSnapshots.$inferSelect;

@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -17,11 +17,46 @@ import {
   TrendingUp, TrendingDown, Minus, AlertCircle, RefreshCw, ChevronUp, ChevronDown,
   Calendar, X,
 } from "lucide-react";
-import { MOCK_ADP, MOCK_LAST_UPDATED } from "@/data/mockDraftAdp";
 import {
   DEFAULT_FILTERS, toIsoDate,
   type ADPResult, type DraftFilters, type Position, type RookieMode,
 } from "@/types/draft";
+
+// The frontend never queries Sleeper for ADP — it reads our cached endpoint
+// which serves the most recent adp_snapshots row for the active filter set.
+function buildAdpUrl(filters: DraftFilters): string {
+  const p = new URLSearchParams();
+  p.set("draftType", filters.draftType);
+  p.set("draftFormat", filters.draftFormat);
+  p.set("rookieMode", filters.rookieMode);
+  p.set("leagueMode", filters.leagueMode);
+  if (filters.scoring !== "all") p.set("scoring", filters.scoring);
+  if (filters.superflex !== "all") p.set("superflex", filters.superflex);
+  if (filters.tePremium !== "all") p.set("tePremium", filters.tePremium);
+  if (filters.bestBall !== "all") p.set("bestBall", filters.bestBall);
+  if (filters.teams !== "all") p.set("teams", String(filters.teams));
+  if (filters.passTd !== "all") p.set("passTd", String(filters.passTd));
+  if (filters.dateRange.start) p.set("startDate", filters.dateRange.start);
+  if (filters.dateRange.end) p.set("endDate", filters.dateRange.end);
+  return `/api/adp?${p.toString()}`;
+}
+
+interface AdpResponseMeta {
+  computed_at: string | null;
+  draft_count: number;
+  pick_count: number;
+  filter_key: string | null;
+  is_empty: boolean;
+  cached: boolean;
+  snapshot_date: string | null;
+  message?: string;
+  error?: boolean;
+}
+
+interface AdpResponse {
+  items: ADPResult[];
+  meta: AdpResponseMeta;
+}
 
 // ── Visual tokens shared by all views ────────────────────────────────────────
 const POS_COLOR: Record<Position, { bg: string; text: string; ring: string; chip: string }> = {
@@ -57,13 +92,63 @@ export function DraftCommand() {
   const [view, setView] = useState<ViewMode>("list");
   const [filterSheetOpen, setFilterSheetOpen] = useState(false);
 
-  // For the first milestone the dataset is static mock data. Wire to backend
-  // when the Sleeper draft adapter is ready; the rest of the UI doesn't need
-  // to change because everything flows through filterAdp(MOCK_ADP, filters).
-  const filtered = useMemo(() => filterAdp(MOCK_ADP, filters), [filters]);
-  const isLoading = false;
-  const hasError  = false;
-  const isEmpty   = !isLoading && !hasError && filtered.length === 0;
+  const [rows, setRows] = useState<ADPResult[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [meta, setMeta] = useState<AdpResponseMeta | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setIsLoading(true);
+    setErrorMessage(null);
+
+    const url = buildAdpUrl(filters);
+    fetch(url)
+      .then(async (r) => {
+        const ct = r.headers.get("content-type") || "";
+        if (!ct.includes("application/json")) {
+          // Server returned HTML / non-JSON — definitely an error case, not
+          // an empty data set. Surface this distinctly.
+          throw new Error(`Non-JSON response (${r.status}, content-type=${ct})`);
+        }
+        const body = (await r.json()) as AdpResponse;
+        // Even on a 500, our server returns the {items, meta} shape so we
+        // can render an error message inline. Detect that here.
+        if (!r.ok && body?.meta?.error) {
+          throw new Error(body.meta.message || `HTTP ${r.status}`);
+        }
+        return body;
+      })
+      .then((data) => {
+        if (cancelled) return;
+        setRows(Array.isArray(data.items) ? data.items : []);
+        setMeta(data.meta ?? null);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        console.error("[DraftCommand] /api/adp fetch failed:", err);
+        setErrorMessage(err?.message || "Failed to load ADP");
+        setRows([]);
+        setMeta(null);
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [filters]);
+
+  // Search runs client-side over whatever the server returned so typing is
+  // instant; everything else is already filtered by the API.
+  const filtered = useMemo(() => filterAdp(rows, filters), [rows, filters]);
+  // Two distinct empty states: dataset legitimately empty (no ingest yet, or
+  // current filters match no drafts) vs. fetch failure. The latter shows the
+  // error card; the former shows a friendly "no data yet" message.
+  const hasError = errorMessage !== null;
+  const isEmpty = !isLoading && !hasError && filtered.length === 0;
+  const lastUpdated = meta?.computed_at ?? null;
 
   const updateFilter = useCallback(<K extends keyof DraftFilters>(key: K, value: DraftFilters[K]) => {
     setFilters((prev) => ({ ...prev, [key]: value }));
@@ -199,21 +284,38 @@ export function DraftCommand() {
           {/* Last updated — pushes right on wide viewports */}
           <div className="ml-auto flex items-center gap-1.5 text-[10px] text-muted-foreground">
             <RefreshCw className="w-3 h-3" />
-            <span>Last updated {formatRelative(MOCK_LAST_UPDATED)}</span>
+            <span>{lastUpdated ? `Last updated ${formatRelative(lastUpdated)}` : "Loading…"}</span>
           </div>
         </div>
       </div>
 
       {/* ── Main body ─────────────────────────────────────────────────────── */}
       {isLoading && <LoadingState />}
-      {hasError  && <ErrorState />}
-      {isEmpty   && <EmptyState />}
+      {hasError  && <ErrorState message={errorMessage} />}
+      {isEmpty   && <EmptyState message={meta?.message} />}
       {!isLoading && !hasError && !isEmpty && (
         <>
           {view === "list" && <ListView rows={filtered} />}
           {view === "box"  && <BoxView  rows={filtered} teams={typeof filters.teams === "number" ? filters.teams : 12} />}
           {view === "hex"  && <HexView  rows={filtered} teams={typeof filters.teams === "number" ? filters.teams : 12} />}
         </>
+      )}
+
+      {/* Dev-only debug panel — surfaces what the API actually returned so
+          we can spot empty-vs-error issues without opening DevTools. */}
+      {import.meta.env.DEV && meta && (
+        <div className="mt-3 rounded-lg border border-dashed border-border/50 bg-white/[0.02] px-3 py-2 text-[10px] font-mono text-muted-foreground/80">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-0.5">
+            <span>filter_key: <span className="text-foreground/80">{meta.filter_key ?? "—"}</span></span>
+            <span>cached: <span className="text-foreground/80">{String(meta.cached)}</span></span>
+            <span>is_empty: <span className="text-foreground/80">{String(meta.is_empty)}</span></span>
+            <span>draft_count: <span className="text-foreground/80">{meta.draft_count}</span></span>
+            <span>pick_count: <span className="text-foreground/80">{meta.pick_count}</span></span>
+            <span>rows: <span className="text-foreground/80">{rows.length}</span></span>
+            <span className="col-span-2 md:col-span-3">computed_at: <span className="text-foreground/80">{meta.computed_at ?? "—"}</span></span>
+            {meta.message && <span className="col-span-2 md:col-span-3">message: <span className="text-foreground/80">{meta.message}</span></span>}
+          </div>
+        </div>
       )}
 
       {/* ── Filter sheet (right side, mobile + desktop) ───────────────────── */}
@@ -1333,22 +1435,31 @@ function LoadingState() {
   );
 }
 
-function ErrorState() {
+function ErrorState({ message }: { message: string | null }) {
   return (
     <Card className="flex flex-col items-center justify-center py-16 px-6 text-center border-border/60 dark:border-[#1a2d4a]/80">
       <AlertCircle className="w-8 h-8 text-red-500 mb-2" />
       <h3 className="text-sm font-bold mb-1">Couldn’t load draft data</h3>
-      <p className="text-xs text-muted-foreground max-w-xs">Something went wrong while fetching ADP. Try refreshing or come back in a moment.</p>
+      <p className="text-xs text-muted-foreground max-w-xs">
+        {message || "Something went wrong while fetching ADP. Try refreshing or come back in a moment."}
+      </p>
     </Card>
   );
 }
 
-function EmptyState() {
+function EmptyState({ message }: { message?: string }) {
+  const isFresh = message && message.toLowerCase().includes("no adp data");
   return (
     <Card className="flex flex-col items-center justify-center py-16 px-6 text-center border-border/60 dark:border-[#1a2d4a]/80">
       <Search className="w-8 h-8 text-muted-foreground mb-2" />
-      <h3 className="text-sm font-bold mb-1">No matching drafts found</h3>
-      <p className="text-xs text-muted-foreground max-w-xs">Try expanding your date range or relaxing filters.</p>
+      <h3 className="text-sm font-bold mb-1">
+        {isFresh ? "No draft data available yet" : "No matching drafts found"}
+      </h3>
+      <p className="text-xs text-muted-foreground max-w-xs">
+        {isFresh
+          ? "Ingest drafts from the admin tools to populate ADP."
+          : (message || "Try expanding your date range or relaxing filters.")}
+      </p>
     </Card>
   );
 }

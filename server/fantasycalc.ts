@@ -75,7 +75,14 @@ function normalizeApiResponse(
   const unmatched: UnmatchedPlayer[] = [];
 
   for (const row of raw) {
-    if (row.player.sleeperId && row.player.position !== "PICK") {
+    if (row.player.position === "PICK") {
+      // Include pick values keyed by their sleeperId (e.g. "FP_2027_1", "FP_2026_2", "DP_0_0").
+      // The client's getPickValue() looks up FP_{year}_{round} for generic round picks, so
+      // "2027 1st" → FP_2027_1 → 3057 lands correctly as the mid-round baseline value.
+      if (row.player.sleeperId) {
+        valuesBySleeperId[row.player.sleeperId] = row.value;
+      }
+    } else if (row.player.sleeperId) {
       valuesBySleeperId[row.player.sleeperId] = row.value;
       players.push({
         sleeperId: row.player.sleeperId,
@@ -86,7 +93,7 @@ function normalizeApiResponse(
         age: row.player.maybeAge || 0,
         overallRank: row.overallRank,
       });
-    } else if (row.player.position !== "PICK") {
+    } else {
       unmatched.push({
         name: row.player.name,
         pos: row.player.position,

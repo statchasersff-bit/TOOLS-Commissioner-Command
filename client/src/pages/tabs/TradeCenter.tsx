@@ -2494,453 +2494,444 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
     );
   };
 
+  // ── Shared helpers used by the verdict/action panel ──────────────────────
+  // posBorder/posColor/posBg are the same palette previously inlined inside
+  // each IIFE — lifted here so the verdict, asset chips, FAAB panel, and
+  // position-impact preview all share a single source of truth.
+  const posBorder = (pos?: string) =>
+    pos === "QB" ? "border-rose-500" :
+    pos === "RB" ? "border-emerald-500" :
+    pos === "WR" ? "border-sky-500" :
+    pos === "TE" ? "border-yellow-500" :
+    "border-border/30";
+  const posColor = (pos?: string) =>
+    pos === "QB" ? "text-rose-400" :
+    pos === "RB" ? "text-emerald-400" :
+    pos === "WR" ? "text-sky-400" :
+    pos === "TE" ? "text-yellow-400" :
+    "text-muted-foreground";
+  const posBg = (pos?: string) =>
+    pos === "QB" ? "bg-rose-500/15 border-rose-500/25" :
+    pos === "RB" ? "bg-emerald-500/15 border-emerald-500/25" :
+    pos === "WR" ? "bg-sky-500/15 border-sky-500/25" :
+    pos === "TE" ? "bg-yellow-500/15 border-yellow-500/25" :
+    "bg-muted/30 border-border/40";
+  const ordRound = (r: number) =>
+    r === 1 ? "1st" : r === 2 ? "2nd" : r === 3 ? "3rd" : `${r}th`;
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 md:space-y-5">
       <SectionHeader title="Trade Calculator" subtitle="Evaluate trades with dynasty values and diminishing returns" />
 
-
-      <Card className="p-5" ref={verdictCardRef}>
-        {(sideA.length > 0 && sideB.length > 0) && (
-          <>
-          <div className="mb-5">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-bold flex items-center gap-2">
-                <ArrowRightLeft className="w-4 h-4 text-[#0b3a7a] dark:text-blue-400" />
-                Trade Verdict
-              </h3>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={saveVerdictPng}
-                disabled={savingPng}
-                className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground gap-1.5"
-                data-testid="button-save-verdict-png"
-              >
-                {savingPng
-                  ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  : <Download className="w-3.5 h-3.5" />}
-                Save PNG
-              </Button>
-            </div>
-            <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
-          </div>
-
-          <div className="space-y-3">
-
-            {/* 1. VERDICT FRONT AND CENTER */}
-            <div className="text-center space-y-1.5 py-0">
-              <p className="text-sm sm:text-base font-extrabold tracking-tight text-foreground uppercase leading-tight" data-testid="text-verdict-headline">
-                {diffPct <= 6 ? "Dead Even Trade" : userIsInTrade
-                  ? (userIsWinning ? "You Win The Trade" : `${winnerLabel} Wins The Trade`)
-                  : `${winnerLabel} Wins The Trade`}
-              </p>
-              <div className="flex justify-center pt-1">
-                <Badge className={`text-xs px-4 py-1.5 font-bold border ${getVerdictStyle()}`} data-testid="badge-verdict">
-                  {getVerdictLabel()}
-                </Badge>
-              </div>
-            </div>
-
-            {/* 2. ADVANTAGE METER */}
-            {(() => {
-              const fillPct = finalA === 0 && finalB === 0 ? 50 : finalB === 0 ? 100 : finalA === 0 ? 0 : Math.max(5, Math.min(95, 100 - meterPosition));
-              const iLose = fillPct > 50;
-              const barColor = diffPct <= 6
-                ? "linear-gradient(90deg, #b8932a 0%, #d4af37 100%)"
-                : iLose
-                  ? diffPct <= 20
-                    ? "linear-gradient(90deg, #c2410c 0%, #f97316 100%)"
-                    : "linear-gradient(90deg, #dc2626 0%, #ef4444 100%)"
-                  : diffPct <= 20
-                    ? "linear-gradient(90deg, #059669 0%, #10b981 100%)"
-                    : "linear-gradient(90deg, #1d4ed8 0%, #3b82f6 100%)";
-              return (
-                <div className="space-y-1.5 px-1">
-                  <div className="flex items-center justify-between text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-                    <span>{sideATeam?.owner || "Side A"}</span>
-                    <span>{sideBTeam?.owner || "Side B"}</span>
-                  </div>
-                  <div className="relative h-4 rounded-full overflow-hidden" style={{ background: "#12284a" }}>
-                    <div
-                      className="absolute inset-y-0 left-0 rounded-l-full transition-all duration-700"
-                      style={{ width: `${fillPct}%`, background: barColor }}
-                    />
-                    <div className="absolute top-0 bottom-0 w-0.5 bg-white/30 z-10" style={{ left: "50%" }} />
-                  </div>
-                  <div className="flex justify-center">
-                    <span className="text-[9px] text-muted-foreground/50 font-medium">Fair</span>
-                  </div>
-                </div>
-              );
-            })()}
-
-            {/* 3. PLAYER CARDS */}
-            {(() => {
-              const posBorder: Record<string, string> = {
-                QB: "border-rose-500",
-                RB: "border-emerald-500",
-                WR: "border-sky-500",
-                TE: "border-yellow-500",
-              };
-              const renderCards = (assets: TradeAsset[], side: "a" | "b") => (
-                <div className="flex flex-wrap gap-2 justify-center">
-                  {assets.map((asset) => {
-                    const lastName = asset.type === "player" && asset.player
-                      ? asset.player.name.split(" ").slice(1).join(" ") || asset.player.name
-                      : asset.label;
-                    const team = (asset.player as any)?.team ?? "";
-                    const borderColor = asset.type === "pick"
-                      ? "border-purple-500"
-                      : posBorder[asset.pos || ""] || "border-border/30";
-                    return (
-                      <div
-                        key={asset.id}
-                        className={`relative flex flex-col items-center gap-1 pt-2 pb-2 px-2 rounded-xl bg-muted/20 border min-w-[68px] cursor-pointer hover:bg-red-500/10 hover:border-red-500/40 transition-colors ${borderColor}`}
-                        onClick={() => removeAsset(side, asset.id)}
-                      >
-                        {asset.type === "player" && asset.player ? (
-                          <PlayerAvatar
-                            id={asset.player.sleeperId || asset.player.id}
-                            name={asset.player.name}
-                            pos={asset.player.pos}
-                            team={team}
-                            size="md"
-                            compact
-                          />
-                        ) : (
-                          <div className="w-11 h-11 rounded-full bg-purple-900/40 border border-purple-700/40 flex items-center justify-center flex-shrink-0">
-                            <span className="text-[11px] font-bold text-purple-400">
-                              {asset.pickRound === 1 ? "1st" : asset.pickRound === 2 ? "2nd" : asset.pickRound === 3 ? "3rd" : `${asset.pickRound}th`}
-                            </span>
-                          </div>
-                        )}
-                        <p className="text-[11px] font-bold text-foreground text-center leading-tight max-w-[68px] truncate">{lastName}</p>
-                        {team && <p className="text-[10px] text-muted-foreground text-center leading-none">{team}</p>}
-                        {!team && asset.type === "pick" && <p className="text-[10px] text-muted-foreground text-center leading-none">{asset.value.toLocaleString()}</p>}
-                      </div>
-                    );
-                  })}
-                </div>
-              );
-              return (
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    {sideA.length > 0 ? renderCards(sideA, "a") : <p className="text-[10px] text-muted-foreground text-center py-2">Nothing yet</p>}
-                  </div>
-                  <div>
-                    {sideB.length > 0 ? renderCards(sideB, "b") : <p className="text-[10px] text-muted-foreground text-center py-2">Nothing yet</p>}
-                  </div>
-                </div>
-              );
-            })()}
-
-
-          </div>
-          <hr className="border-border/40 my-5" />
-          </>
-        )}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-          {renderSide("a", sideA, rawA)}
-          {renderSide("b", sideB, rawB)}
-        </div>
-      </Card>
-
-      {/* ── Propose Trade Panel ─────────────────────────────── */}
+      {/* ── Compact Trade Verdict + Action panel ─────────────────────────
+         One card that fuses the four old sections (verdict / proposal /
+         position impact / save) so the user can read the trade and act on
+         it without scrolling. Only renders once at least one asset is
+         picked; before that, the user just sees the roster selectors.    */}
       {(sideA.length > 0 || sideB.length > 0) && (() => {
-        const ordRound = (r: number) => r === 1 ? "1st" : r === 2 ? "2nd" : r === 3 ? "3rd" : `${r}th`;
-        const posColor = (pos?: string) =>
-          pos === "QB" ? "text-rose-400" : pos === "RB" ? "text-emerald-400" :
-          pos === "WR" ? "text-sky-400"  : pos === "TE" ? "text-yellow-400" : "text-muted-foreground";
-        const posBg = (pos?: string) =>
-          pos === "QB" ? "bg-rose-500/15 border-rose-500/25" :
-          pos === "RB" ? "bg-emerald-500/15 border-emerald-500/25" :
-          pos === "WR" ? "bg-sky-500/15 border-sky-500/25" :
-          pos === "TE" ? "bg-yellow-500/15 border-yellow-500/25" :
-          "bg-muted/30 border-border/40";
+        const bothSidesSelected = sideA.length > 0 && sideB.length > 0;
         const missingIds = [...sideA, ...sideB].some(a => a.type === "player" && !a.player?.sleeperId);
         const canSubmit = !!sleeperJwt && !!sideBRosterId && !missingIds && (sideA.length > 0 || sideB.length > 0) && !proposing && !proposedTrade;
         const issues: string[] = [];
         if (!proposedTrade && !!sleeperJwt && !sideBRosterId) issues.push("Select a trade partner (Side B) to enable submit");
         if (!proposedTrade && !!sleeperJwt && missingIds) issues.push("Some players are missing Sleeper IDs. Add them via the roster picker.");
+
+        // Value-bar fill — compressed height vs the old panel.
+        const fillPct = finalA === 0 && finalB === 0
+          ? 50
+          : finalB === 0 ? 100
+          : finalA === 0 ? 0
+          : Math.max(5, Math.min(95, 100 - meterPosition));
+        const iLose = fillPct > 50;
+        const barColor = diffPct <= 6
+          ? "linear-gradient(90deg, #b8932a 0%, #d4af37 100%)"
+          : iLose
+            ? (diffPct <= 20 ? "linear-gradient(90deg, #c2410c 0%, #f97316 100%)" : "linear-gradient(90deg, #dc2626 0%, #ef4444 100%)")
+            : (diffPct <= 20 ? "linear-gradient(90deg, #059669 0%, #10b981 100%)" : "linear-gradient(90deg, #1d4ed8 0%, #3b82f6 100%)");
+
+        // Compact asset chip — used in the central "assets summary" column.
+        const renderAssetChip = (asset: TradeAsset, side: "a" | "b") => {
+          const team = (asset.player as any)?.team ?? "";
+          const ringColor = asset.type === "pick" ? "border-purple-500/40" : posBorder(asset.pos);
+          return (
+            <button
+              type="button"
+              key={asset.id}
+              onClick={() => removeAsset(side, asset.id)}
+              className={cn(
+                "group flex items-center gap-2 pl-1 pr-2.5 py-1 rounded-full border bg-muted/20 hover:bg-red-500/10 hover:border-red-500/40 transition-colors max-w-full",
+                ringColor,
+              )}
+              data-testid={`chip-asset-${side}-${asset.id}`}
+            >
+              {asset.type === "player" && asset.player ? (
+                <PlayerAvatar
+                  id={asset.player.sleeperId || asset.player.id}
+                  name={asset.player.name}
+                  pos={asset.player.pos}
+                  team={team}
+                  size="sm"
+                  compact
+                />
+              ) : (
+                <span className="w-7 h-7 rounded-full bg-purple-900/40 border border-purple-700/40 flex items-center justify-center flex-shrink-0 text-[10px] font-bold text-purple-400">
+                  {asset.pickRound === 1 ? "1st" : asset.pickRound === 2 ? "2nd" : asset.pickRound === 3 ? "3rd" : `${asset.pickRound}th`}
+                </span>
+              )}
+              <div className="flex flex-col items-start leading-tight min-w-0">
+                <span className="text-[11px] font-semibold text-foreground truncate max-w-[110px]">
+                  {asset.type === "player" && asset.player ? asset.player.name : `${asset.pickYear} ${ordRound(asset.pickRound!)} (${asset.pickRange})`}
+                </span>
+                <span className="text-[9px] text-muted-foreground/80 tabular-nums">
+                  {asset.type === "player" ? `${asset.pos ?? ""}${team ? " · " + team : ""}` : "Pick"}
+                  {asset.value > 0 && <span className="ml-1 text-[#d4af37]/90">{asset.value.toLocaleString()}</span>}
+                </span>
+              </div>
+              <X className="w-3 h-3 text-muted-foreground/30 group-hover:text-red-400 transition-colors flex-shrink-0" />
+            </button>
+          );
+        };
+
         return (
-          <Card className="p-5" data-testid="card-propose-trade">
-            <div className="mb-4">
-              <h3 className="text-sm font-bold flex items-center gap-2">
-                <Send className="w-4 h-4 text-[#0b3a7a] dark:text-blue-400" />
-                Propose Trade on Sleeper
-              </h3>
-              <span className="block h-[2px] w-8 bg-[#d4af37] rounded-full mt-1" />
+          <Card className="p-4 md:p-5" ref={verdictCardRef} data-testid="card-trade-verdict-action">
+            {/* Header — title + Save PNG icon button (secondary). */}
+            <div className="flex items-start justify-between mb-3">
+              <div>
+                <h3 className="text-sm font-bold flex items-center gap-2">
+                  <ArrowRightLeft className="w-4 h-4 text-[#0b3a7a] dark:text-blue-400" />
+                  Trade Verdict
+                </h3>
+                <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1" />
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={saveVerdictPng}
+                disabled={savingPng}
+                title="Save verdict as PNG"
+                className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
+                data-testid="button-save-verdict-png"
+              >
+                {savingPng ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+              </Button>
             </div>
 
-            <div className="space-y-4">
-              {!sleeperJwt ? (
-                <div className="space-y-3">
-                  <p className="text-xs text-muted-foreground">Connect your Sleeper account to propose trades directly from Dynasty Command.</p>
-                  <div className="flex gap-2">
+            {/* Top grid — verdict / assets / actions.
+               Desktop: 12-col split (4 / 5 / 3). Mobile: stacked.       */}
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-4 md:gap-5">
+
+              {/* ── LEFT: verdict label + badge + compact value bar ─── */}
+              <div className="md:col-span-4 space-y-2.5">
+                {bothSidesSelected ? (
+                  <>
+                    <div className="space-y-1.5 text-center">
+                      <p className="text-[15px] font-extrabold tracking-tight text-foreground uppercase leading-tight" data-testid="text-verdict-headline">
+                        {diffPct <= 6 ? "Dead Even Trade" : userIsInTrade
+                          ? (userIsWinning ? "You Win The Trade" : `${winnerLabel} Wins The Trade`)
+                          : `${winnerLabel} Wins The Trade`}
+                      </p>
+                      <Badge className={`text-[11px] px-2.5 py-0.5 font-bold border ${getVerdictStyle()}`} data-testid="badge-verdict">
+                        {getVerdictLabel()}
+                      </Badge>
+                    </div>
+
+                    {/* Compact value bar — h-3 (was h-4) + tighter labels. */}
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between text-[9px] font-bold text-muted-foreground uppercase tracking-wider">
+                        <span className="truncate max-w-[45%]">{sideATeam?.owner || "Side A"}</span>
+                        <span className="text-muted-foreground/40">Fair</span>
+                        <span className="truncate max-w-[45%] text-right">{sideBTeam?.owner || "Side B"}</span>
+                      </div>
+                      <div className="relative h-3 rounded-full overflow-hidden" style={{ background: "#12284a" }}>
+                        <div
+                          className="absolute inset-y-0 left-0 rounded-l-full transition-all duration-700"
+                          style={{ width: `${fillPct}%`, background: barColor }}
+                        />
+                        <div className="absolute top-0 bottom-0 w-0.5 bg-white/30 z-10" style={{ left: "50%" }} />
+                      </div>
+                      <div className="flex justify-between text-[10px] tabular-nums text-muted-foreground/80">
+                        <span>{finalA.toLocaleString()}</span>
+                        <span>{finalB.toLocaleString()}</span>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <div className="rounded-lg border border-dashed border-border/50 px-3 py-3">
+                    <p className="text-xs font-semibold text-foreground">Trade not yet complete</p>
+                    <p className="text-[11px] text-muted-foreground mt-1">Add at least one asset to each side to see the verdict.</p>
+                  </div>
+                )}
+              </div>
+
+              {/* ── CENTER: per-side asset summaries (chips) ──────────── */}
+              <div className="md:col-span-5 space-y-2.5">
+                {(["a", "b"] as const).map((side) => {
+                  const assets = side === "a" ? sideA : sideB;
+                  const team   = side === "a" ? sideATeam : sideBTeam;
+                  const label  = `${team?.owner || team?.name || (side === "a" ? "You" : "Partner")} sends`;
+                  const sideAccent = side === "a" ? "text-rose-500 dark:text-rose-400" : "text-emerald-600 dark:text-emerald-400";
+                  return (
+                    <div key={side} className="rounded-lg border border-border/60 bg-muted/10 overflow-hidden">
+                      <div className="px-2.5 py-1.5 flex items-center gap-2 border-b border-border/40 bg-background/30">
+                        {team?.avatar ? (
+                          <img src={team.avatar} alt="" className="w-4 h-4 rounded-full object-cover flex-shrink-0 ring-1 ring-border/40" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                        ) : (
+                          <div className="w-4 h-4 rounded-full bg-muted flex-shrink-0" />
+                        )}
+                        <span className={cn("text-[11px] font-bold tracking-wide truncate", sideAccent)}>{label}</span>
+                      </div>
+                      <div className="px-2.5 py-2 flex flex-wrap gap-1.5 min-h-[44px] items-center">
+                        {assets.length === 0
+                          ? <p className="text-[11px] text-muted-foreground/60 italic">Nothing added yet</p>
+                          : assets.map(a => renderAssetChip(a, side))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* ── RIGHT: send-trade controls / connect form / success ─ */}
+              <div className="md:col-span-3 space-y-2">
+                {!sleeperJwt ? (
+                  // Not connected — compact connect input.
+                  <div className="space-y-2">
+                    <p className="text-[11px] text-muted-foreground leading-snug">
+                      Connect Sleeper to send trade offers directly.
+                    </p>
                     <Input
                       type="password"
-                      placeholder="eyJhbGci…"
+                      placeholder="Sleeper JWT…"
                       value={jwtInput}
                       onChange={e => setJwtInput(e.target.value)}
                       onKeyDown={e => e.key === "Enter" && handleSaveJwt()}
-                      className="font-mono text-xs flex-1"
+                      className="font-mono text-xs h-8"
                       data-testid="input-trade-calc-jwt"
                     />
-                    <Button size="sm" onClick={handleSaveJwt} disabled={!jwtInput.trim()} data-testid="button-trade-calc-jwt-save">Connect</Button>
+                    <Button size="sm" onClick={handleSaveJwt} disabled={!jwtInput.trim()} className="w-full h-8 text-xs" data-testid="button-trade-calc-jwt-save">
+                      Connect Sleeper
+                    </Button>
                   </div>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {/* Two-column trade preview */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {(["a", "b"] as const).map(side => {
-                      const assets = side === "a" ? sideA : sideB;
-                      const team   = side === "a" ? sideATeam : sideBTeam;
-                      const label  = side === "a"
-                        ? `${sideATeam?.owner || "You"} Sends`
-                        : `${sideBTeam?.owner || "Partner"} Sends`;
-                      return (
-                        <div key={side} className="rounded-lg border border-border overflow-hidden">
-                          <div className="px-3 py-2 bg-muted/30 border-b border-border/50 flex items-center gap-2">
-                            {team?.avatar ? (
-                              <img src={team.avatar} alt="" className="w-4 h-4 rounded-full object-cover flex-shrink-0 ring-1 ring-border/40" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
-                            ) : (
-                              <div className="w-4 h-4 rounded-full bg-muted flex-shrink-0" />
-                            )}
-                            <span className={cn("text-[11px] font-bold tracking-wide", side === "a" ? "text-rose-500 dark:text-rose-400" : "text-emerald-600 dark:text-emerald-400")}>{label}</span>
-                            <span className="text-[10px] text-muted-foreground ml-auto truncate max-w-[80px]">{team?.owner || team?.name || (side === "a" ? "Side A" : "Side B")}</span>
-                          </div>
-                          <div className="px-3 py-2.5 space-y-2 min-h-[60px]">
-                            {assets.length === 0 ? (
-                              <p className="text-[11px] text-muted-foreground/50 italic py-1">Nothing added yet</p>
-                            ) : assets.map(a => (
-                              <div key={a.id} className="flex items-center gap-2 min-w-0">
-                                {a.type === "player" ? (
-                                  <>
-                                    <div className="w-7 h-7 rounded-full overflow-hidden bg-muted flex-shrink-0 ring-1 ring-border/30">
-                                      {a.player?.sleeperId && (
-                                        <img src={`https://sleepercdn.com/content/nfl/players/thumb/${a.player.sleeperId}.jpg`} alt={a.player.name} className="w-full h-full object-cover object-top" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
-                                      )}
-                                    </div>
-                                    <div className="flex-1 min-w-0">
-                                      <p className="text-[12px] font-semibold text-foreground truncate leading-tight">{a.player?.name}</p>
-                                      <div className="flex items-center gap-1.5 mt-0.5">
-                                        <span className={cn("text-[9px] font-bold px-1 py-px rounded border", posColor(a.player?.pos), posBg(a.player?.pos))}>{a.player?.pos}</span>
-                                        {a.player?.team && <span className="text-[10px] text-muted-foreground">{a.player.team}</span>}
-                                      </div>
-                                    </div>
-                                    {a.value > 0 && <span className="text-[11px] text-muted-foreground tabular-nums flex-shrink-0">{a.value.toLocaleString()}</span>}
-                                  </>
-                                ) : (
-                                  <>
-                                    <div className="w-7 h-7 rounded-full bg-purple-500/15 border border-purple-500/25 flex items-center justify-center flex-shrink-0 text-[9px] font-bold text-purple-400">R{a.pickRound}</div>
-                                    <span className="text-[12px] text-foreground flex-1 truncate">{a.pickYear} {ordRound(a.pickRound!)}<span className="text-muted-foreground"> ({a.pickRange})</span></span>
-                                    {a.value > 0 && <span className="text-[11px] text-muted-foreground tabular-nums flex-shrink-0">{a.value.toLocaleString()}</span>}
-                                  </>
+                ) : proposedTrade ? (
+                  // Sent state — sits in place of the Send button.
+                  <div className="rounded-lg bg-emerald-500/8 border border-emerald-500/20 p-3 space-y-2" data-testid="card-propose-success">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                      <p className="text-[12px] font-semibold text-emerald-400">Trade offer sent</p>
+                    </div>
+                    <p className="text-[9px] text-emerald-400/50 font-mono break-all">ID: {proposedTrade.transaction_id}</p>
+                    <Button size="sm" variant="outline" className="w-full h-7 text-[11px] border-red-500/30 text-red-400 hover:bg-red-500/10 gap-1.5 rounded-full" onClick={handleWithdraw} disabled={withdrawing} data-testid="button-withdraw-trade">
+                      {withdrawing ? <Loader2 className="w-3 h-3 animate-spin" /> : <Undo2 className="w-3 h-3" />}
+                      Withdraw
+                    </Button>
+                    {withdrawError && <p className="text-[10px] text-red-400">{withdrawError}</p>}
+                    {dmStatus === "sending" && <div className="flex items-center gap-1.5 text-[10px] text-emerald-400/60"><Loader2 className="w-3 h-3 animate-spin" />Sending DM…</div>}
+                    {dmStatus === "sent"    && <div className="flex items-center gap-1.5 text-[10px] text-emerald-400"><CheckCircle2 className="w-3 h-3" />DM delivered</div>}
+                    {dmStatus === "failed"  && (
+                      <div>
+                        <p className="text-[10px] text-amber-400">DM not delivered.</p>
+                        {dmError && <p className="text-[9px] text-red-400/70 break-all">{dmError}</p>}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  // Send + secondary controls.
+                  <>
+                    <Button
+                      onClick={handleProposeTrade}
+                      disabled={!canSubmit}
+                      className="w-full h-10 px-4 bg-gradient-to-r from-[#0b3a7a] to-[#1151a8] hover:from-[#0d4a9e] hover:to-[#1362c8] text-white font-semibold gap-2 rounded-full shadow-md shadow-[#0b3a7a]/25 disabled:opacity-40 disabled:shadow-none text-sm"
+                      data-testid="button-propose-trade"
+                    >
+                      {proposing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                      {proposing ? "Sending…" : "Send Trade Offer"}
+                    </Button>
+
+                    {/* Expiry + FAAB row — tight, single line. */}
+                    <div className="flex items-center gap-1.5">
+                      <Select value={expiry} onValueChange={setExpiry}>
+                        <SelectTrigger className="h-7 flex-1 text-[10px] rounded-full border-border/50 bg-background/60" data-testid="select-trade-expiry">
+                          <Clock className="w-3 h-3 mr-1 opacity-60" />
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {EXPIRY_OPTIONS.map(opt => (
+                            <SelectItem key={opt.value} value={opt.value} className="text-xs">{opt.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <button
+                        type="button"
+                        onClick={() => setFaabOpen(v => !v)}
+                        data-testid="button-toggle-faab"
+                        className={cn(
+                          "flex items-center gap-1 text-[10px] rounded-full px-2 h-7 border transition-colors flex-shrink-0",
+                          faabOpen ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400" : "bg-muted/30 border-border/50 text-muted-foreground hover:text-foreground hover:border-border",
+                        )}
+                      >
+                        <DollarSign className="w-3 h-3" />
+                        FAAB
+                      </button>
+                    </div>
+
+                    {faabOpen && (
+                      <div className="rounded-md bg-muted/20 border border-border/40 p-2 space-y-1.5">
+                        <p className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Include FAAB</p>
+                        {(["a", "b"] as const).map(side => {
+                          const team = side === "a" ? sideATeam : sideBTeam;
+                          const val  = side === "a" ? faabASends : faabBSends;
+                          const setv = side === "a" ? setFaabASends : setFaabBSends;
+                          return (
+                            <div key={side} className="flex items-center gap-2">
+                              <span className="text-[10px] text-muted-foreground flex-1 truncate">{team?.owner || (side === "a" ? "You" : "Partner")}</span>
+                              <div className="relative">
+                                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground pointer-events-none">$</span>
+                                <Input type="number" min={0} className="w-16 h-6 text-[11px] pl-4" value={val} onChange={e => setv(e.target.value)} placeholder="0" data-testid={`input-faab-${side}`} />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {issues.length > 0 && (
+                      <div className="rounded-md bg-amber-500/8 border border-amber-500/20 px-2 py-1.5 space-y-0.5">
+                        {issues.map((msg, i) => (
+                          <p key={i} className="text-[10px] text-amber-400 leading-snug flex items-start gap-1"><span className="shrink-0">⚠</span>{msg}</p>
+                        ))}
+                      </div>
+                    )}
+                    {proposeError && (
+                      <div className="rounded-md bg-red-500/8 border border-red-500/20 px-2 py-1.5 text-[10px] text-red-400" data-testid="text-propose-error">{proposeError}</div>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* ── Position Impact preview (full width, bottom of card) ── */}
+            {league && userTeam && bothSidesSelected && positionImpact && (() => {
+              const sides = [
+                { key: "sideA", label: sideATeam?.owner || sideATeam?.name || "Side A", data: positionImpact.sideA, testId: "table-position-impact-a" },
+                { key: "sideB", label: sideBTeam?.owner || sideBTeam?.name || "Side B", data: positionImpact.sideB, testId: "table-position-impact-b" },
+              ] as const;
+              return (
+                <>
+                  <hr className="my-3 md:my-4 border-border/40" />
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-1.5">
+                      <Target className="w-3.5 h-3.5 text-[#0b3a7a] dark:text-blue-400" />
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-foreground">Position Impact</span>
+                      <span className="text-[10px] text-muted-foreground/70">(win-now rank)</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowFullImpact(v => !v)}
+                      className="text-[10px] font-semibold text-[#0b3a7a] dark:text-blue-400 hover:underline flex items-center gap-0.5"
+                      data-testid="button-toggle-full-impact"
+                    >
+                      {showFullImpact ? "Hide detail" : "View full impact"}
+                      <ChevronDown className={cn("w-3 h-3 transition-transform", showFullImpact && "rotate-180")} />
+                    </button>
+                  </div>
+
+                  {/* Compact preview: one row per side, position deltas inline. */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    {sides.map(({ key, label, data, testId }) => (
+                      <div key={key} className="rounded-md border border-border/40 bg-muted/10 px-2.5 py-2" data-testid={testId}>
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1 truncate" data-testid={`text-impact-label-${key}`}>{label}</p>
+                        {data && data.length > 0 ? (
+                          <div className="flex flex-wrap gap-x-3 gap-y-0.5">
+                            {data.map((row) => (
+                              <div key={row.pos} className="flex items-center gap-1 text-[11px] tabular-nums">
+                                <span className={cn("font-bold text-[10px]", posColor(row.pos))}>{row.pos}</span>
+                                <span className="text-muted-foreground">#{row.redraftBefore}</span>
+                                <span className="text-muted-foreground/50">→</span>
+                                <span className="font-semibold text-foreground">#{row.redraftAfter}</span>
+                                {row.redraftChange !== 0 && (
+                                  <span className={cn("text-[10px] font-bold", row.redraftChange > 0 ? "text-emerald-500 dark:text-emerald-400" : "text-red-500 dark:text-red-400")}>
+                                    {row.redraftChange > 0 ? `↑${row.redraftChange}` : `↓${Math.abs(row.redraftChange)}`}
+                                  </span>
                                 )}
                               </div>
                             ))}
                           </div>
-                        </div>
-                      );
-                    })}
+                        ) : (
+                          <p className="text-[10px] text-muted-foreground italic">Select a trade partner to see impact</p>
+                        )}
+                      </div>
+                    ))}
                   </div>
 
-                  {!proposedTrade ? (
-                    <>
-                      {/* Controls row */}
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <div className="flex items-center gap-2">
-                          <span className="text-[11px] text-muted-foreground font-medium">Expires</span>
-                          <Select value={expiry} onValueChange={setExpiry}>
-                            <SelectTrigger className="h-7 w-36 text-[11px] rounded-full border-border/50 bg-background/60" data-testid="select-trade-expiry">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {EXPIRY_OPTIONS.map(opt => (
-                                <SelectItem key={opt.value} value={opt.value} className="text-xs">{opt.label}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => setFaabOpen(v => !v)}
-                          data-testid="button-toggle-faab"
-                          className={cn("flex items-center gap-1.5 text-[11px] rounded-full px-2.5 py-1 border transition-colors", faabOpen ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400" : "bg-muted/30 border-border/50 text-muted-foreground hover:text-foreground hover:border-border")}
-                        >
-                          <DollarSign className="w-3 h-3" />
-                          FAAB
-                          <ChevronDown className={cn("w-3 h-3 transition-transform duration-200", faabOpen && "rotate-180")} />
-                        </button>
-                      </div>
-
-                      {/* FAAB panel */}
-                      {faabOpen && (
-                        <div className="rounded-lg bg-muted/20 border border-border/40 p-3 space-y-2.5">
-                          <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Include FAAB</p>
-                          <div className="flex flex-wrap gap-4">
-                            <div className="flex items-center gap-2">
-                              <span className="text-[11px] text-muted-foreground shrink-0">{sideATeam?.owner || "Side A"}</span>
-                              <div className="relative">
-                                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[11px] text-muted-foreground pointer-events-none">$</span>
-                                <Input type="number" min={0} className="w-20 h-7 text-xs pl-5" value={faabASends} onChange={e => setFaabASends(e.target.value)} placeholder="0" data-testid="input-faab-a" />
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <span className="text-[11px] text-muted-foreground shrink-0">{sideBTeam?.owner || "Side B"}</span>
-                              <div className="relative">
-                                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[11px] text-muted-foreground pointer-events-none">$</span>
-                                <Input type="number" min={0} className="w-20 h-7 text-xs pl-5" value={faabBSends} onChange={e => setFaabBSends(e.target.value)} placeholder="0" data-testid="input-faab-b" />
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Validation warnings */}
-                      {issues.length > 0 && (
-                        <div className="rounded-lg bg-amber-500/8 border border-amber-500/20 px-3 py-2 space-y-1">
-                          {issues.map((msg, i) => (
-                            <p key={i} className="text-[11px] text-amber-400 flex items-start gap-1.5"><span className="shrink-0 mt-px">⚠</span>{msg}</p>
-                          ))}
-                        </div>
-                      )}
-
-                      {/* Error */}
-                      {proposeError && (
-                        <div className="rounded-lg bg-red-500/8 border border-red-500/20 px-3 py-2 text-[11px] text-red-400" data-testid="text-propose-error">{proposeError}</div>
-                      )}
-
-                      {/* Send button */}
-                      <div className="flex justify-center sm:justify-end pt-1">
-                        <Button
-                          onClick={handleProposeTrade}
-                          disabled={!canSubmit}
-                          className="h-10 px-6 bg-gradient-to-r from-[#0b3a7a] to-[#1151a8] hover:from-[#0d4a9e] hover:to-[#1362c8] text-white font-semibold gap-2.5 rounded-full shadow-lg shadow-[#0b3a7a]/25 disabled:opacity-40 disabled:shadow-none transition-all duration-200 text-sm"
-                          data-testid="button-propose-trade"
-                        >
-                          {proposing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                          {proposing ? "Sending…" : "Send Trade Offer"}
-                        </Button>
-                      </div>
-                    </>
-                  ) : (
-                    /* Success state */
-                    <div className="rounded-xl bg-emerald-500/8 border border-emerald-500/20 p-4 space-y-3" data-testid="card-propose-success">
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="flex items-center gap-2.5">
-                          <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
-                          <div>
-                            <p className="text-sm font-semibold text-emerald-400">Trade offer sent!</p>
-                            <p className="text-[10px] text-emerald-400/50 font-mono mt-0.5">ID: {proposedTrade.transaction_id}</p>
-                          </div>
-                        </div>
-                        <Button size="sm" variant="outline" className="h-7 text-[11px] border-red-500/30 text-red-400 hover:bg-red-500/10 gap-1.5 shrink-0 rounded-full" onClick={handleWithdraw} disabled={withdrawing} data-testid="button-withdraw-trade">
-                          {withdrawing ? <Loader2 className="w-3 h-3 animate-spin" /> : <Undo2 className="w-3 h-3" />}
-                          Withdraw
-                        </Button>
-                      </div>
-                      {withdrawError && <p className="text-[11px] text-red-400">{withdrawError}</p>}
-                      {dmStatus !== "idle" && (
-                        <div className="border-t border-emerald-500/15 pt-2.5">
-                          {dmStatus === "sending" && <div className="flex items-center gap-2 text-[11px] text-emerald-400/60"><Loader2 className="w-3 h-3 animate-spin" />Sending trade card to partner…</div>}
-                          {dmStatus === "sent" && <div className="flex items-center gap-1.5 text-[11px] text-emerald-400"><CheckCircle2 className="w-3 h-3" />Trade card + tool link sent via Sleeper DM</div>}
-                          {dmStatus === "failed" && (
-                            <div className="space-y-1">
-                              <p className="text-[11px] text-amber-400">DM could not be delivered automatically.</p>
-                              {dmError && <p className="text-[10px] text-red-400/70">{dmError}</p>}
-                            </div>
+                  {/* Expanded detailed table — keeps Win-Now + Dynasty side-by-side. */}
+                  {showFullImpact && (
+                    <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {sides.map(({ key, label, data, testId }) => (
+                        <div key={`${key}-full`}>
+                          <p className="text-[11px] font-semibold text-muted-foreground mb-1 uppercase tracking-wider">{label}</p>
+                          {data ? (
+                            <table className="w-full text-sm" data-testid={`${testId}-full`}>
+                              <thead>
+                                <tr className="border-b border-border bg-muted/20">
+                                  <th className="px-2 py-1.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Pos</th>
+                                  <th className="px-1 py-1.5 text-center text-[10px] font-semibold text-muted-foreground uppercase tracking-wider" colSpan={2}>Win-Now</th>
+                                  <th className="px-1 py-1.5 text-center text-[10px] font-semibold text-muted-foreground uppercase tracking-wider border-l border-border/30" colSpan={2}>Dynasty</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {data.map((row) => {
+                                  const renderRankChange = (before: number, after: number, change: number) => (
+                                    <div className="flex items-center gap-1 justify-center">
+                                      <span className="text-[11px] text-muted-foreground">#{before}</span>
+                                      <span className="text-[10px] text-muted-foreground/60">→</span>
+                                      <span className="text-[11px] font-semibold">{`#${after}`}</span>
+                                      {change !== 0 && (
+                                        <span className={cn(
+                                          "text-[10px] font-bold ml-0.5",
+                                          change > 0 && "text-emerald-600 dark:text-emerald-400",
+                                          change < 0 && "text-red-600 dark:text-red-400",
+                                        )}>
+                                          {change > 0 ? `↑${change}` : `↓${Math.abs(change)}`}
+                                        </span>
+                                      )}
+                                    </div>
+                                  );
+                                  return (
+                                    <tr key={row.pos} className="border-b border-border/20">
+                                      <td className="px-2 py-1.5">
+                                        <Badge variant="outline" className={`text-[10px] w-7 justify-center ${getPositionColor(row.pos)}`}>{row.pos}</Badge>
+                                      </td>
+                                      <td className="px-1 py-1.5" colSpan={2}>
+                                        {renderRankChange(row.redraftBefore, row.redraftAfter, row.redraftChange)}
+                                      </td>
+                                      <td className="px-1 py-1.5 border-l border-border/20" colSpan={2}>
+                                        {renderRankChange(row.dynastyBefore, row.dynastyAfter, row.dynastyChange)}
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          ) : (
+                            <p className="text-xs text-muted-foreground py-3 text-center">Select a trade partner to see impact</p>
                           )}
                         </div>
-                      )}
+                      ))}
                     </div>
                   )}
-                </div>
-              )}
-            </div>
+                </>
+              );
+            })()}
           </Card>
         );
       })()}
 
-      <Card className="p-5">
-        <div className="mb-4">
-          <h3 className="text-sm font-bold flex items-center gap-2">
-            <Target className="w-4 h-4 text-[#0b3a7a] dark:text-blue-400" />
-            Position Impact
-          </h3>
-          <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
+      {/* ── Roster selectors (always visible) ─────────────────────────── */}
+      <Card className="p-4 md:p-5" data-testid="card-roster-selectors">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
+          {renderSide("a", sideA, rawA)}
+          {renderSide("b", sideB, rawB)}
         </div>
-
-        {!league || !userTeam ? (
-          <p className="text-xs text-muted-foreground py-4 text-center" data-testid="text-no-league-impact">
-            Load a league to see position impact analysis
-          </p>
-        ) : positionImpact && (sideA.length > 0 || sideB.length > 0) ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {([
-              { key: "sideA", label: sideATeam?.owner || sideATeam?.name || "Side A", data: positionImpact.sideA, testId: "table-position-impact-a" },
-              { key: "sideB", label: sideBTeam?.owner || sideBTeam?.name || "Side B", data: positionImpact.sideB, testId: "table-position-impact-b" },
-            ] as const).map(({ key, label, data, testId }) => (
-              <div key={key}>
-                <p className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wider" data-testid={`text-impact-label-${key}`}>{label}</p>
-                {data ? (
-                  <table className="w-full text-sm" data-testid={testId}>
-                    <thead>
-                      <tr className="border-b border-border bg-muted/20">
-                        <th className="px-2 py-2 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Pos</th>
-                        <th className="px-1 py-2 text-center text-[10px] font-semibold text-muted-foreground uppercase tracking-wider" colSpan={2}>Win-Now</th>
-                        <th className="px-1 py-2 text-center text-[10px] font-semibold text-muted-foreground uppercase tracking-wider border-l border-border/30" colSpan={2}>Dynasty</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {data.map((row) => {
-                        const renderRankChange = (before: number, after: number, change: number) => (
-                          <div className="flex items-center gap-1 justify-center">
-                            <span className="text-[11px] text-muted-foreground">#{before}</span>
-                            <span className="text-[10px] text-muted-foreground/60">→</span>
-                            <span className="text-[11px] font-semibold">{`#${after}`}</span>
-                            {change !== 0 && (
-                              <span className={cn(
-                                "text-[10px] font-bold ml-0.5",
-                                change > 0 && "text-emerald-600 dark:text-emerald-400",
-                                change < 0 && "text-red-600 dark:text-red-400",
-                              )}>
-                                {change > 0 ? `↑${change}` : `↓${Math.abs(change)}`}
-                              </span>
-                            )}
-                          </div>
-                        );
-
-                        return (
-                          <tr key={row.pos} className="border-b border-border/20">
-                            <td className="px-2 py-2">
-                              <Badge variant="outline" className={`text-[10px] w-7 justify-center ${getPositionColor(row.pos)}`}>{row.pos}</Badge>
-                            </td>
-                            <td className="px-1 py-2" colSpan={2}>
-                              {renderRankChange(row.redraftBefore, row.redraftAfter, row.redraftChange)}
-                            </td>
-                            <td className="px-1 py-2 border-l border-border/20" colSpan={2}>
-                              {renderRankChange(row.dynastyBefore, row.dynastyAfter, row.dynastyChange)}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                ) : (
-                  <p className="text-xs text-muted-foreground py-3 text-center">Select a trade partner to see impact</p>
-                )}
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p className="text-xs text-muted-foreground py-4 text-center" data-testid="text-empty-impact">
-            Add assets to both sides to see position impact
-          </p>
-        )}
       </Card>
-
     </div>
   );
 }

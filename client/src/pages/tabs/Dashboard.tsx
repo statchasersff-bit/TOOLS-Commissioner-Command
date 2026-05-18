@@ -1263,11 +1263,22 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
           <div className="space-y-2">
             {chartTeams.map(({ team, vals, total }, idx) => {
               const isUser = team.id === userTeam.id;
-              const barWidthPct = (total / chartMax) * 100;
+              const barWidthPct = Math.max((total / chartMax) * 100, 1);
+              // Value label rides the bar end. It sits 6px past the colored
+              // segment when there's room; for the longest bars it slides
+              // inside the bar near the right edge so it never overflows
+              // the row (clamp keeps it ≥40px from the container's right
+              // edge — enough to fit "###k" comfortably).
+              const valueText = total >= 1000
+                ? `${(total / 1000).toFixed(0)}k`
+                : total.toLocaleString();
+              // When the value ends up sitting over a colored segment we
+              // bump it brighter so it stays legible against any backdrop.
+              const valueOverlaps = barWidthPct > 88;
               return (
-                <div key={team.id} className="flex items-center gap-3" data-testid={`chart-row-${team.id}`}>
+                <div key={team.id} className="flex items-center gap-2 sm:gap-3" data-testid={`chart-row-${team.id}`}>
                   {/* Rank + Team label */}
-                  <div className="flex items-center gap-2 w-36 sm:w-44 flex-shrink-0">
+                  <div className="flex items-center gap-2 w-32 sm:w-44 flex-shrink-0">
                     <span className="text-[10px] font-bold text-muted-foreground w-5 text-right">#{idx + 1}</span>
                     {team.avatar ? (
                       <img src={team.avatar} alt={team.owner} className="w-5 h-5 rounded-full object-cover flex-shrink-0" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
@@ -1282,42 +1293,58 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
                     {isUser && <div className="w-1.5 h-1.5 rounded-full bg-[#d4af37] flex-shrink-0" />}
                   </div>
 
-                  {/* Stacked bar */}
-                  <div className="flex-1 h-6 bg-muted/40 rounded-md overflow-hidden relative">
-                    <div className="h-full flex rounded-md overflow-hidden" style={{ width: `${Math.max(barWidthPct, 1)}%` }}>
-                      {POS_LABELS.map(pos => {
-                        const val = vals[pos] ?? 0;
-                        const segPct = total > 0 ? (val / total) * 100 : 0;
-                        return (
-                          <Tooltip key={pos}>
-                            <TooltipTrigger asChild>
-                              <div
-                                className="h-full transition-all"
-                                style={{ width: `${segPct}%`, backgroundColor: POS_COLORS[pos] }}
-                              />
-                            </TooltipTrigger>
-                            <TooltipContent side="top" className="text-xs">
-                              <p className="font-semibold">{team.owner}: {pos}</p>
-                              <p>Dynasty value: {Math.round(val).toLocaleString()}</p>
-                              <p>League rank #{strengthProfiles.dynastyRanks[team.id]?.[pos] ?? "N/A"}</p>
-                            </TooltipContent>
-                          </Tooltip>
-                        );
-                      })}
+                  {/* Stacked bar + value anchored to bar end */}
+                  <div className="relative flex-1 h-6 min-w-0">
+                    <div className="absolute inset-0 bg-muted/40 rounded-md overflow-hidden">
+                      <div className="h-full flex" style={{ width: `${barWidthPct}%` }}>
+                        {POS_LABELS.map(pos => {
+                          const val = vals[pos] ?? 0;
+                          const segPct = total > 0 ? (val / total) * 100 : 0;
+                          return (
+                            <Tooltip key={pos}>
+                              <TooltipTrigger asChild>
+                                <div
+                                  className="h-full transition-all"
+                                  style={{ width: `${segPct}%`, backgroundColor: POS_COLORS[pos] }}
+                                />
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="text-xs">
+                                <p className="font-semibold">{team.owner}: {pos}</p>
+                                <p>Dynasty value: {Math.round(val).toLocaleString()}</p>
+                                <p>League rank #{strengthProfiles.dynastyRanks[team.id]?.[pos] ?? "N/A"}</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          );
+                        })}
+                      </div>
                     </div>
+                    <span
+                      className={cn(
+                        "absolute top-1/2 -translate-y-1/2 text-[11px] font-mono font-bold tabular-nums leading-none pointer-events-none whitespace-nowrap",
+                        valueOverlaps
+                          ? "text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.65)]"
+                          : "text-foreground",
+                      )}
+                      style={{
+                        // clamp keeps the label inside the row regardless of
+                        // bar length — short bars: hugs the bar end; long
+                        // bars: slides into the colored end of the bar.
+                        left: `clamp(0px, calc(${barWidthPct}% + 6px), calc(100% - 2.6rem))`,
+                      }}
+                      data-testid={`chart-value-${team.id}`}
+                    >
+                      {valueText}
+                    </span>
                   </div>
-
-                  {/* Total label */}
-                  <span className="text-[11px] font-mono text-muted-foreground w-14 text-right flex-shrink-0">
-                    {total >= 1000 ? `${(total / 1000).toFixed(0)}k` : total.toLocaleString()}
-                  </span>
                 </div>
               );
             })}
           </div>
 
-          {/* X-axis legend */}
-          <div className="mt-4 flex justify-between text-[10px] text-muted-foreground pl-[152px] sm:pl-[188px] pr-[60px]">
+          {/* X-axis legend — paddings match the new (tighter) layout: team
+              column w-32/w-44 + gap-2/gap-3 on the left, no value reserve
+              on the right since the value rides the bar end. */}
+          <div className="mt-4 flex justify-between text-[10px] text-muted-foreground pl-[136px] sm:pl-[188px] pr-1">
             <span>0</span>
             <span>{Math.round(chartMax / 2 / 1000)}k</span>
             <span>{Math.round(chartMax / 1000)}k</span>

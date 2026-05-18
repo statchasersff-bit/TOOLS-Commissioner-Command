@@ -30,6 +30,17 @@ import {
   getAvailableSnapshotDates,
   startSnapshotScheduler,
 } from "./valueSnapshots";
+import {
+  ingestDraftById,
+  ingestLeagueDrafts,
+  ingestUserDrafts,
+  ingestCrawledLeagueDrafts,
+  refreshAdpSnapshot,
+  refreshDefaultSnapshots,
+  getAdp,
+  startAdpScheduler,
+  type AdpFilters,
+} from "./adp";
 import { getFinancesForUser, upsertLeagueFinance } from "./finances";
 import { registerScAuthRoutes } from "./scAuthRoutes";
 import {
@@ -449,6 +460,173 @@ export async function registerRoutes(
     }
   });
 
+  // ── ADP: cached read endpoint ─────────────────────────────────────────────
+  // Filters arrive as query params and map 1:1 onto AdpFilters. The handler
+  // never reaches out to Sleeper — it serves the most recent adp_snapshots
+  // row for the keyed filter set, with a fallback to computing live against
+  // our own draft_picks table when no snapshot exists yet.
+  //
+  // Response shape:
+  //   { items: AdpRow[],
+  //     meta: { computed_at, draft_count, pick_count, filter_key,
+  //             is_empty, cached, snapshot_date, message?, filters } }
+  //
+  // We never 500 for "no data ingested yet" — that case returns 200 with
+  // is_empty=true so the frontend can render an empty state instead of an
+  // error banner.
+  app.get("/api/adp", async (req, res) => {
+    const startMs = Date.now();
+    try {
+      const q = req.query;
+      const num = (v: unknown) => {
+        if (v === undefined || v === null || v === "" || v === "all") return undefined;
+        const n = parseInt(String(v), 10);
+        return Number.isFinite(n) ? n : undefined;
+      };
+      const str = <T extends string>(v: unknown, allowed: readonly T[]): T | "all" | undefined => {
+        if (v === undefined || v === null || v === "") return undefined;
+        const s = String(v);
+        if (s === "all") return "all";
+        return (allowed as readonly string[]).includes(s) ? (s as T) : undefined;
+      };
+
+      const filters: AdpFilters = {
+        draftType: str(q.draftType, ["startup", "rookie", "supplemental"] as const) ?? "startup",
+        draftFormat: str(q.draftFormat, ["snake", "auction", "linear"] as const) ?? "snake",
+        scoring: str(q.scoring, ["ppr", "half", "standard"] as const) ?? "all",
+        superflex: str(q.superflex, ["yes", "no"] as const) ?? "all",
+        tePremium: str(q.tePremium, ["yes", "no"] as const) ?? "all",
+        bestBall: str(q.bestBall, ["yes", "no"] as const) ?? "all",
+        leagueMode: str(q.leagueMode, ["dynasty", "keeper", "redraft"] as const) ?? "dynasty",
+        teams: num(q.teams) ?? "all",
+        rookieMode: str(q.rookieMode, ["picks", "direct"] as const) === "picks" ? "picks" : "direct",
+        passTd: (num(q.passTd) === 6 ? 6 : num(q.passTd) === 4 ? 4 : "all") as AdpFilters["passTd"],
+        startDate: typeof q.startDate === "string" ? q.startDate : undefined,
+        endDate: typeof q.endDate === "string" ? q.endDate : undefined,
+      };
+
+      console.log("[ADP /api/adp] query:", q);
+      console.log("[ADP /api/adp] filters:", filters);
+
+      const result = await getAdp(filters);
+
+      console.log(
+        `[ADP /api/adp] key=${result.filterKey} cached=${result.cached} ` +
+        `drafts=${result.draftCount} picks=${result.pickCount} rows=${result.rows.length} ` +
+        `in ${Date.now() - startMs}ms`
+      );
+
+      const isEmpty = result.rows.length === 0;
+      res.setHeader("Cache-Control", "public, max-age=300");
+      res.json({
+        items: result.rows,
+        meta: {
+          computed_at: isEmpty && result.draftCount === 0 ? null : result.computedAt,
+          draft_count: result.draftCount,
+          pick_count: result.pickCount,
+          filter_key: result.filterKey,
+          is_empty: isEmpty,
+          cached: result.cached,
+          snapshot_date: result.snapshotDate,
+          message: isEmpty && result.draftCount === 0
+            ? "No ADP data has been ingested yet."
+            : undefined,
+          filters,
+        },
+      });
+    } catch (err: any) {
+      console.error("[ADP /api/adp] error:", err?.stack || err);
+      res.status(500).json({
+        items: [],
+        meta: {
+          computed_at: null,
+          draft_count: 0,
+          pick_count: 0,
+          filter_key: null,
+          is_empty: true,
+          cached: false,
+          snapshot_date: null,
+          message: err?.message || "Failed to fetch ADP",
+          error: true,
+        },
+      });
+    }
+  });
+
+  const requireAdmin = (req: any, res: any): boolean => {
+    const secret = process.env.ADMIN_SECRET;
+    const provided = req.headers["x-admin-secret"];
+    if (!secret || provided !== secret) {
+      res.status(403).json({ error: "Forbidden" });
+      return false;
+    }
+    return true;
+  };
+
+  app.post("/api/admin/adp/ingest-draft/:draftId", async (req, res) => {
+    if (!requireAdmin(req, res)) return;
+    try {
+      const result = await ingestDraftById(req.params.draftId);
+      res.json(result);
+    } catch (err: any) {
+      console.error("[Admin] adp/ingest-draft error:", err);
+      res.status(500).json({ error: err.message || "Ingest failed" });
+    }
+  });
+
+  app.post("/api/admin/adp/ingest-league/:leagueId", async (req, res) => {
+    if (!requireAdmin(req, res)) return;
+    try {
+      const result = await ingestLeagueDrafts(req.params.leagueId);
+      res.json(result);
+    } catch (err: any) {
+      console.error("[Admin] adp/ingest-league error:", err);
+      res.status(500).json({ error: err.message || "Ingest failed" });
+    }
+  });
+
+  app.post("/api/admin/adp/ingest-user", async (req, res) => {
+    if (!requireAdmin(req, res)) return;
+    try {
+      const { username, season } = req.body || {};
+      if (!username) return res.status(400).json({ error: "username is required" });
+      const result = await ingestUserDrafts(username, season || "2026");
+      res.json(result);
+    } catch (err: any) {
+      console.error("[Admin] adp/ingest-user error:", err);
+      res.status(500).json({ error: err.message || "Ingest failed" });
+    }
+  });
+
+  app.post("/api/admin/adp/ingest-crawled", async (req, res) => {
+    if (!requireAdmin(req, res)) return;
+    try {
+      const limit = parseInt((req.body?.limit ?? req.query?.limit ?? "100") as string, 10) || 100;
+      const result = await ingestCrawledLeagueDrafts(limit);
+      res.json(result);
+    } catch (err: any) {
+      console.error("[Admin] adp/ingest-crawled error:", err);
+      res.status(500).json({ error: err.message || "Ingest failed" });
+    }
+  });
+
+  app.post("/api/admin/adp/refresh", async (req, res) => {
+    if (!requireAdmin(req, res)) return;
+    try {
+      // If a filter set is provided, refresh just that key; otherwise refresh
+      // every default snapshot combo.
+      if (req.body && Object.keys(req.body).length > 0) {
+        const result = await refreshAdpSnapshot(req.body as AdpFilters);
+        return res.json(result);
+      }
+      const result = await refreshDefaultSnapshots();
+      res.json(result);
+    } catch (err: any) {
+      console.error("[Admin] adp/refresh error:", err);
+      res.status(500).json({ error: err.message || "Refresh failed" });
+    }
+  });
+
   app.post("/api/admin/cleanup-one-sided-trades", async (req, res) => {
     const secret = process.env.ADMIN_SECRET;
     const provided = req.headers["x-admin-secret"];
@@ -466,6 +644,7 @@ export async function registerRoutes(
   });
 
   startSnapshotScheduler();
+  startAdpScheduler();
 
   // One-time cleanup: remove one-sided trades stored before the UNNEST query fix.
   // Disable by setting SKIP_ONESIDED_CLEANUP=true once production confirms remaining=0.
