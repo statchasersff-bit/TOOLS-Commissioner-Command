@@ -24,6 +24,7 @@ import {
 } from "@/types/draft";
 import { AdpCrawlPanel } from "@/components/admin/AdpCrawlPanel";
 import { useAuth } from "@/contexts/AuthContext";
+import { PlayerProfileDrawer } from "@/components/PlayerProfileDrawer";
 
 // The frontend never queries Sleeper for ADP — it reads our cached endpoint
 // which serves the most recent adp_snapshots row for the active filter set.
@@ -113,19 +114,31 @@ export function DraftCommand() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [meta, setMeta] = useState<AdpResponseMeta | null>(null);
 
+  const [profilePlayer, setProfilePlayer] = useState<ADPResult | null>(null);
+  const handlePlayerClick = useCallback((row: ADPResult) => setProfilePlayer(row), []);
+
   useEffect(() => {
     let cancelled = false;
     setIsLoading(true);
     setErrorMessage(null);
 
     const url = buildAdpUrl(filters);
+    console.log("[ADP] fetch URL:", url);
     fetch(url)
       .then(async (r) => {
         const ct = r.headers.get("content-type") || "";
         if (!ct.includes("application/json")) {
-          // Server returned HTML / non-JSON — definitely an error case, not
-          // an empty data set. Surface this distinctly.
-          throw new Error(`Non-JSON response (${r.status}, content-type=${ct})`);
+          // Server returned HTML / non-JSON. The /api JSON-404 fallback should
+          // make this impossible — if you hit it, the catch-all SPA route is
+          // shadowing /api. Distinguish HTML from other non-JSON so the error
+          // points at the right cause.
+          const text = await r.text().catch(() => "");
+          const looksLikeHtml = /^\s*<!doctype|^\s*<html/i.test(text);
+          throw new Error(
+            looksLikeHtml
+              ? "API route returned app HTML. Check server route registration."
+              : `Non-JSON response (${r.status}, content-type=${ct})`
+          );
         }
         const body = (await r.json()) as AdpResponse;
         // Even on a 500, our server returns the {items, meta} shape so we
@@ -324,9 +337,9 @@ export function DraftCommand() {
             </div>
           )}
 
-          {view === "list" && <ListView rows={filtered} />}
-          {view === "box"  && <BoxView  rows={filtered} teams={typeof filters.teams === "number" ? filters.teams : 12} />}
-          {view === "hex"  && <HexView  rows={filtered} teams={typeof filters.teams === "number" ? filters.teams : 12} />}
+          {view === "list" && <ListView rows={filtered} onPlayerClick={handlePlayerClick} />}
+          {view === "box"  && <BoxView  rows={filtered} teams={typeof filters.teams === "number" ? filters.teams : 12} onPlayerClick={handlePlayerClick} />}
+          {view === "hex"  && <HexView  rows={filtered} teams={typeof filters.teams === "number" ? filters.teams : 12} onPlayerClick={handlePlayerClick} />}
         </>
       )}
 
@@ -361,6 +374,14 @@ export function DraftCommand() {
           for Sleeper-username matches. Backend routes do their own strict
           email-based check — this gate only governs UI visibility. */}
       <AdminAdpTools />
+
+      {/* Player profile drawer — opened from any of List/Box/Hex tiles. */}
+      <PlayerProfileDrawer
+        open={profilePlayer != null}
+        adp={profilePlayer}
+        teams={typeof filters.teams === "number" ? filters.teams : 12}
+        onClose={() => setProfilePlayer(null)}
+      />
     </div>
   );
 }
@@ -402,7 +423,7 @@ function AdminAdpTools() {
 // ── List View ────────────────────────────────────────────────────────────────
 type ListSortKey = "overall_rank" | "avg_pick" | "min_pick" | "max_pick" | "draft_count" | "trend_30d" | "positional_rank";
 
-function ListView({ rows }: { rows: ADPResult[] }) {
+function ListView({ rows, onPlayerClick }: { rows: ADPResult[]; onPlayerClick?: (row: ADPResult) => void }) {
   const [sortKey, setSortKey] = useState<ListSortKey>("overall_rank");
   const [sortAsc, setSortAsc] = useState(true);
 
@@ -432,7 +453,7 @@ function ListView({ rows }: { rows: ADPResult[] }) {
       {/* Mobile: card-list */}
       <div className="md:hidden divide-y divide-border/20">
         {sorted.map((r) => (
-          <MobileListRow key={r.player_id} row={r} />
+          <MobileListRow key={r.player_id} row={r} onPlayerClick={onPlayerClick} />
         ))}
       </div>
 
@@ -467,7 +488,12 @@ function ListView({ rows }: { rows: ADPResult[] }) {
           </thead>
           <tbody className="divide-y divide-border/20">
             {sorted.map((r) => (
-              <tr key={r.player_id} className="hover:bg-muted/20" data-testid={`row-adp-${r.player_id}`}>
+              <tr
+                key={r.player_id}
+                className={cn("hover:bg-muted/20", onPlayerClick && "cursor-pointer")}
+                data-testid={`row-adp-${r.player_id}`}
+                onClick={() => onPlayerClick?.(r)}
+              >
                 <td className="px-3 py-2.5">
                   <PlayerCell row={r} />
                 </td>
@@ -495,9 +521,13 @@ function ListView({ rows }: { rows: ADPResult[] }) {
   );
 }
 
-function MobileListRow({ row }: { row: ADPResult }) {
+function MobileListRow({ row, onPlayerClick }: { row: ADPResult; onPlayerClick?: (row: ADPResult) => void }) {
   return (
-    <div className="flex items-center gap-2.5 px-3 py-2.5" data-testid={`row-adp-mobile-${row.player_id}`}>
+    <div
+      className={cn("flex items-center gap-2.5 px-3 py-2.5", onPlayerClick && "cursor-pointer hover:bg-muted/20")}
+      data-testid={`row-adp-mobile-${row.player_id}`}
+      onClick={() => onPlayerClick?.(row)}
+    >
       <PositionTile pos={row.position} text={row.position === "PICK" ? "RP" : row.position} />
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5">
@@ -557,7 +587,7 @@ function PlayerCell({ row }: { row: ADPResult }) {
 // - HEX_POS_THEME (defined further down) is the single source of truth for
 //   board palette — shared between Hex and Box for visual consistency.
 
-function BoxView({ rows, teams }: { rows: ADPResult[]; teams: number }) {
+function BoxView({ rows, teams, onPlayerClick }: { rows: ADPResult[]; teams: number; onPlayerClick?: (row: ADPResult) => void }) {
   const isMobile = useIsMobile();
   // Each row = round; each column = team slot. Cell tile is narrower on mobile
   // so the board can still show all 12 columns within a comfortable horizontal
@@ -640,6 +670,7 @@ function BoxView({ rows, teams }: { rows: ADPResult[]; teams: number }) {
                     round={round}
                     pickInRound={isOdd ? slotIdx + 1 : teams - slotIdx}
                     width={cellW}
+                    onPlayerClick={onPlayerClick}
                   />
                 ))}
               </div>
@@ -671,12 +702,13 @@ function RoundLabel({ round, isOdd, width }: { round: number; isOdd: boolean; wi
 }
 
 function DraftPickCell({
-  pick, round, pickInRound, width,
+  pick, round, pickInRound, width, onPlayerClick,
 }: {
   pick: ADPResult | null;
   round: number;
   pickInRound: number;
   width: number;
+  onPlayerClick?: (row: ADPResult) => void;
 }) {
   const pickLabel = `${round}.${String(pickInRound).padStart(2, "0")}`;
   if (!pick) {
@@ -700,6 +732,7 @@ function DraftPickCell({
       style={{ width, minHeight: 76, flexShrink: 0 }}
       title={`${pickLabel} · ${pick.player_name} · ${pick.position}${pick.positional_rank} · ADP ${pick.avg_pick.toFixed(1)} · ${pick.draft_count} drafts`}
       data-testid={`board-cell-${round}-${pickInRound}`}
+      onClick={() => onPlayerClick?.(pick)}
     >
       {/* Top position-color stripe — the dominant scan cue. */}
       <div
@@ -832,23 +865,36 @@ const HEX_POS_THEME: Record<Position, PosTheme> = {
 
 const ELITE_RANK_CUTOFF = 12;
 
-function HexView({ rows, teams }: { rows: ADPResult[]; teams: number }) {
+function HexView({ rows, teams, onPlayerClick }: { rows: ADPResult[]; teams: number; onPlayerClick?: (row: ADPResult) => void }) {
   const isMobile = useIsMobile();
-  // Slightly larger tiles than before — the redesign needs room for the
-  // headshot circle plus typography hierarchy. Mobile still shrinks but
-  // keeps enough breathing room that the board reads on a phone.
-  const tileW = isMobile ? 92 : 116;
+  // Larger tiles than before — the redesign uses a prominent square headshot
+  // so we give it more room. Mobile still shrinks but keeps a readable layout.
+  const tileW = isMobile ? 104 : 132;
   const tileH = Math.round(tileW * 2 / Math.sqrt(3));
 
-  const grouped = useMemo<Array<[number, ADPResult[]]>>(() => {
-    const map = new Map<number, ADPResult[]>();
+  // Group rows into rounds, placing each at its (round, pickInRound) slot
+  // derived from rounded ADP. Each round row is exactly `teams` slots wide;
+  // empty slots get a placeholder tile so the visual layout always reflects
+  // the draft size setting (12 slots when teams=12, 10 when teams=10, etc.).
+  const grouped = useMemo(() => {
+    const byRound = new Map<number, Array<ADPResult | null>>();
     for (const r of rows) {
-      const round = Math.max(1, Math.ceil(r.avg_pick / teams));
-      if (!map.has(round)) map.set(round, []);
-      map.get(round)!.push(r);
+      const visualPick = Math.max(1, Math.round(r.avg_pick));
+      const round = Math.ceil(visualPick / teams);
+      const pickInRound = ((visualPick - 1) % teams) + 1;
+      if (!byRound.has(round)) byRound.set(round, Array.from({ length: teams }, () => null));
+      const slots = byRound.get(round)!;
+      // First player at this slot wins; collisions push to the next empty
+      // slot in the same round so we never lose data due to ADP rounding ties.
+      if (slots[pickInRound - 1] == null) {
+        slots[pickInRound - 1] = r;
+      } else {
+        for (let i = 0; i < teams; i++) {
+          if (slots[i] == null) { slots[i] = r; break; }
+        }
+      }
     }
-    Array.from(map.values()).forEach((arr) => arr.sort((a, b) => a.avg_pick - b.avg_pick));
-    return Array.from(map.entries()).sort((a, b) => a[0] - b[0]);
+    return Array.from(byRound.entries()).sort((a, b) => a[0] - b[0]);
   }, [rows, teams]);
 
   return (
@@ -889,8 +935,8 @@ function HexView({ rows, teams }: { rows: ADPResult[]; teams: number }) {
           className="relative inline-block py-5 pl-1 pr-6"
           style={{ "--hex-w": `${tileW}px`, "--hex-h": `${tileH}px` } as React.CSSProperties}
         >
-          {grouped.map(([round, players], rowIdx) => (
-            <HexRow key={round} round={round} players={players} rowIdx={rowIdx} />
+          {grouped.map(([round, slots], rowIdx) => (
+            <HexRow key={round} round={round} slots={slots} rowIdx={rowIdx} onPlayerClick={onPlayerClick} />
           ))}
         </div>
       </div>
@@ -898,7 +944,14 @@ function HexView({ rows, teams }: { rows: ADPResult[]; teams: number }) {
   );
 }
 
-function HexRow({ round, players, rowIdx }: { round: number; players: ADPResult[]; rowIdx: number }) {
+function HexRow({
+  round, slots, rowIdx, onPlayerClick,
+}: {
+  round: number;
+  slots: Array<ADPResult | null>;
+  rowIdx: number;
+  onPlayerClick?: (row: ADPResult) => void;
+}) {
   const isOffsetRow = rowIdx % 2 === 1;
   return (
     <div
@@ -929,13 +982,38 @@ function HexRow({ round, players, rowIdx }: { round: number; players: ADPResult[
       </div>
 
       <div
-        className="flex"
+        className="flex flex-nowrap"
         style={{ paddingLeft: isOffsetRow ? "calc(var(--hex-w) * 0.5)" : 0 }}
       >
-        {players.map((p, i) => (
-          <HexTile key={p.player_id} row={p} pickInRound={i + 1} />
+        {slots.map((p, i) => (
+          p
+            ? <HexTile key={`${round}-${i}-${p.player_id}`} row={p} pickInRound={i + 1} onClick={onPlayerClick} />
+            : <HexEmpty key={`${round}-${i}-empty`} pickInRound={i + 1} />
         ))}
       </div>
+    </div>
+  );
+}
+
+/** Placeholder hex shown when no player's ADP rounds to this slot. Keeps the
+ *  row at exactly `teams` slots wide regardless of how sparse the data is. */
+function HexEmpty({ pickInRound }: { pickInRound: number }) {
+  return (
+    <div
+      className="relative"
+      style={{ width: "var(--hex-w)", height: "var(--hex-h)", flexShrink: 0 }}
+    >
+      <div
+        className="absolute inset-0"
+        style={{
+          clipPath: HEX_CLIP,
+          background: "rgba(255,255,255,0.015)",
+          boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.04)",
+        }}
+      />
+      <span className="absolute top-[8%] left-1/2 -translate-x-1/2 text-[8px] font-bold tabular-nums text-white/20">
+        {String(pickInRound).padStart(2, "0")}
+      </span>
     </div>
   );
 }
@@ -943,7 +1021,7 @@ function HexRow({ round, players, rowIdx }: { round: number; players: ADPResult[
 // Pointy-top hex clip — shared between the tile shell and the inner highlight.
 const HEX_CLIP = "polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)";
 
-function HexTile({ row, pickInRound }: { row: ADPResult; pickInRound: number }) {
+function HexTile({ row, pickInRound, onClick }: { row: ADPResult; pickInRound: number; onClick?: (row: ADPResult) => void }) {
   const theme = HEX_POS_THEME[row.position];
   const isElite = row.overall_rank <= ELITE_RANK_CUTOFF && !row.is_rookie_placeholder;
   const isPick = row.is_rookie_placeholder;
@@ -957,6 +1035,10 @@ function HexTile({ row, pickInRound }: { row: ADPResult; pickInRound: number }) 
       className="relative group cursor-pointer"
       style={{ width: "var(--hex-w)", height: "var(--hex-h)", flexShrink: 0 }}
       data-testid={`hex-${row.player_id}`}
+      onClick={() => onClick?.(row)}
+      role={onClick ? "button" : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={onClick ? (e) => { if (e.key === "Enter" || e.key === " ") onClick(row); } : undefined}
     >
       {/* Inner transform layer — handles lift + glow intensification. */}
       <div
@@ -1025,13 +1107,21 @@ function HexTile({ row, pickInRound }: { row: ADPResult; pickInRound: number }) 
         />
 
         {/* ── Content stack ────────────────────────────────────────────── */}
-        <div className="absolute inset-0 flex flex-col items-center justify-between px-1.5 pt-[14%] pb-[12%]">
-          {/* Pick coordinate at the top tip — tiny tactical readout. */}
-          <span className="text-[8px] font-bold tabular-nums tracking-[0.15em] text-white/45 leading-none pointer-events-none">
-            {String(pickInRound).padStart(2, "0")}
-          </span>
+        <div className="absolute inset-0 flex flex-col items-center px-1.5 pt-[10%] pb-[10%]">
+          {/* Top header row — pick coordinate + position rank chip side by side. */}
+          <div className="w-full flex items-center justify-between px-1 mb-1">
+            <span className="text-[8px] font-bold tabular-nums tracking-[0.1em] text-white/55 leading-none pointer-events-none">
+              {String(pickInRound).padStart(2, "0")}
+            </span>
+            <span
+              className="px-1 py-px rounded text-[8px] font-bold uppercase tracking-wider border leading-none"
+              style={{ background: theme.chipBg, color: theme.text, borderColor: `${theme.ring}aa` }}
+            >
+              {isPick ? "RP" : `${row.position}${row.positional_rank}`}
+            </span>
+          </div>
 
-          {/* Headshot + position badge cluster. */}
+          {/* Player image — large square crop, the dominant visual element. */}
           {isPick ? (
             <PickGlyph theme={theme} label={row.rookie_pick_label} />
           ) : (
@@ -1039,14 +1129,12 @@ function HexTile({ row, pickInRound }: { row: ADPResult; pickInRound: number }) 
               playerId={row.player_id}
               name={row.player_name}
               theme={theme}
-              position={row.position}
-              positionalRank={row.positional_rank}
             />
           )}
 
           {/* Name + ADP. */}
-          <div className="w-full text-center -mt-0.5">
-            <div className="text-[11px] font-bold text-white leading-[1.05] line-clamp-1 drop-shadow-[0_1px_2px_rgba(0,0,0,0.95)] tracking-tight">
+          <div className="w-full text-center mt-1">
+            <div className="text-[11px] font-bold text-white leading-[1.05] line-clamp-1 drop-shadow-[0_1px_2px_rgba(0,0,0,0.95)] tracking-tight px-0.5">
               {shortenName(row.player_name)}
             </div>
             <div className="mt-0.5 inline-flex items-center gap-1 text-[10px] leading-none">
@@ -1083,36 +1171,33 @@ function HexTile({ row, pickInRound }: { row: ADPResult; pickInRound: number }) 
 }
 
 /**
- * Circular headshot for the hex board. Uses Sleeper's CDN; falls back to a
- * positional-tinted initial avatar when the image fails (also covers the case
+ * Headshot for the hex board. Larger, slightly-rounded square crop — the
+ * dominant visual element of the tile. Uses Sleeper's CDN; falls back to a
+ * positional-tinted initial avatar when the image fails (covers the case
  * where mock data uses synthesized ids that don't resolve).
  */
 function PlayerHeadshotHex({
-  playerId, name, theme, position, positionalRank,
+  playerId, name, theme,
 }: {
   playerId: string;
   name: string;
   theme: PosTheme;
-  position: Position;
-  positionalRank: number;
 }) {
   const [errored, setErrored] = useState(false);
-  // Real Sleeper ids are numeric. Mock ids are prefixed; skip the CDN call
-  // entirely for those so we don't burn 404s into devtools.
   const looksLikeSleeperId = /^\d+$/.test(playerId);
   const showImage = looksLikeSleeperId && !errored;
 
   return (
     <div className="relative flex items-center justify-center">
-      {/* Outer ring with a soft glow halo behind the headshot. */}
+      {/* Soft glow halo behind the headshot. */}
       <div
-        className="absolute inset-0 rounded-full blur-[6px]"
+        className="absolute -inset-1 rounded-xl blur-md opacity-80"
         style={{ background: theme.glow }}
       />
       <div
-        className="relative w-9 h-9 rounded-full overflow-hidden flex items-center justify-center"
+        className="relative w-14 h-14 sm:w-16 sm:h-16 rounded-md overflow-hidden flex items-center justify-center"
         style={{
-          boxShadow: `0 0 0 1.5px ${theme.ring}, inset 0 0 0 1px rgba(255,255,255,0.15)`,
+          boxShadow: `0 0 0 2px ${theme.ring}, inset 0 0 0 1px rgba(255,255,255,0.15)`,
           background: `linear-gradient(180deg, ${theme.shell[1]}, ${theme.shell[2]})`,
         }}
       >
@@ -1124,46 +1209,34 @@ function PlayerHeadshotHex({
             onError={() => setErrored(true)}
           />
         ) : (
-          <span className="text-[11px] font-bold text-white/95 drop-shadow-[0_1px_1px_rgba(0,0,0,0.7)]">
+          <span className="text-base font-black text-white/95 drop-shadow-[0_1px_1px_rgba(0,0,0,0.7)]">
             {initialsOf(name)}
           </span>
         )}
       </div>
-      {/* Position-rank chip nested at the headshot's lower edge. */}
-      <span
-        className="absolute -bottom-1 left-1/2 -translate-x-1/2 px-1.5 py-px rounded-full text-[8px] font-bold uppercase tracking-wider whitespace-nowrap border"
-        style={{
-          background: theme.chipBg,
-          color: theme.text,
-          borderColor: `${theme.ring}`,
-        }}
-      >
-        {position}{positionalRank}
-      </span>
     </div>
   );
 }
 
-/** Rookie-pick glyph — gold hexagon emblem instead of a headshot. */
+/** Rookie-pick glyph — gold hexagon emblem sized to match the square headshot. */
 function PickGlyph({ theme, label }: { theme: PosTheme; label?: string | null }) {
   return (
     <div className="relative flex items-center justify-center">
-      <div className="absolute inset-0 rounded-full blur-[6px]" style={{ background: theme.glow }} />
+      <div className="absolute -inset-1 rounded-xl blur-md opacity-80" style={{ background: theme.glow }} />
       <div
-        className="relative w-9 h-9 flex items-center justify-center"
+        className="relative w-14 h-14 sm:w-16 sm:h-16 rounded-md flex items-center justify-center"
         style={{
-          clipPath: HEX_CLIP,
           background: `linear-gradient(165deg, ${theme.shell[0]}, ${theme.shell[1]}, ${theme.shell[2]})`,
-          boxShadow: "inset 0 1px 0 rgba(255,255,255,0.3)",
+          boxShadow: `0 0 0 2px ${theme.ring}, inset 0 1px 0 rgba(255,255,255,0.3)`,
         }}
       >
-        <Hexagon className="w-4 h-4 text-[#1a1300]" strokeWidth={2.5} />
+        <Hexagon className="w-7 h-7 text-[#1a1300]" strokeWidth={2.5} />
+        {label && (
+          <span className="absolute bottom-0.5 left-1/2 -translate-x-1/2 px-1 py-px rounded text-[8px] font-bold uppercase tracking-wider whitespace-nowrap bg-black/40 text-[#fde68a] leading-none">
+            {label.replace(/^\d{4}\s+Rookie\s+/i, "")}
+          </span>
+        )}
       </div>
-      <span
-        className="absolute -bottom-1 left-1/2 -translate-x-1/2 px-1.5 py-px rounded-full text-[8px] font-bold uppercase tracking-wider whitespace-nowrap border bg-[#d4af37]/25 text-[#fde68a] border-[#d4af37]/60"
-      >
-        {label ? label.replace(/^\d{4}\s+Rookie\s+/i, "") : "RP"}
-      </span>
     </div>
   );
 }

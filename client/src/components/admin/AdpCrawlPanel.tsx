@@ -17,6 +17,7 @@ import { API_BASE } from "@/lib/apiBase";
 
 type DraftCategory = "startup" | "rookie";
 type Depth = 0 | 1 | 2;
+type RunState = "idle" | "running" | "success" | "error";
 
 interface CrawlResult {
   seedUser: { username: string; userId: string } | null;
@@ -33,6 +34,44 @@ interface CrawlResult {
   capsHit: string[];
   requestCount: number;
   durationMs: number;
+}
+
+/** Defaults applied client-side so the payload is never sent with empty arrays. */
+const DEFAULT_SEASONS = ["2026", "2025", "2024"] as const;
+const DEFAULT_CATEGORIES: DraftCategory[] = ["startup", "rookie"];
+
+/** Read the body once; try to parse JSON, otherwise return the raw text so the
+ *  caller can detect HTML / Vite catch-all / empty responses and surface a
+ *  clear error instead of silently degrading to `{}`. */
+async function readResponse(res: Response): Promise<{ json: any | null; text: string; isHtml: boolean }> {
+  const text = await res.text();
+  const isHtml = /^\s*<(!doctype|html)/i.test(text);
+  let json: any | null = null;
+  if (!isHtml && text.trim().length > 0) {
+    try { json = JSON.parse(text); } catch { json = null; }
+  }
+  return { json, text, isHtml };
+}
+
+/** Map common HTTP failure modes to readable admin-facing messages. */
+function describeFailure(status: number, isHtml: boolean, json: any | null, text: string): string {
+  if (isHtml) {
+    return "Server returned app HTML instead of API JSON. Restart server or check route registration.";
+  }
+  if (status === 401 || status === 403) {
+    return json?.error
+      ? `Admin authorization failed: ${json.error}`
+      : "Admin authorization failed. Add ADMIN_SECRET in Replit Secrets or enter override secret.";
+  }
+  if (status === 404) {
+    return "Crawl route not registered. Restart dev server.";
+  }
+  if (status === 400 && json?.error) {
+    return `Bad request: ${json.error}`;
+  }
+  if (json?.error) return `${json.error} (HTTP ${status})`;
+  if (text.trim().length > 0) return `HTTP ${status}: ${text.slice(0, 240)}`;
+  return `HTTP ${status}`;
 }
 
 interface CrawlStatus {
@@ -91,23 +130,47 @@ export function AdpCrawlPanel() {
   const [adminSecretOverride, setAdminSecretOverride] = useState("");
 
   // ── Run state ───────────────────────────────────────────────────────────
-  const [running, setRunning] = useState(false);
+  const [runState, setRunState] = useState<RunState>("idle");
   const [runStartedAt, setRunStartedAt] = useState<number | null>(null);
   const [result, setResult] = useState<CrawlResult | null>(null);
   const [error, setError] = useState<string>("");
+  const [rawResponse, setRawResponse] = useState<string>("");
+  const running = runState === "running";
 
   // ── Status state ────────────────────────────────────────────────────────
   const [statusLoading, setStatusLoading] = useState(false);
   const [status, setStatus] = useState<CrawlStatus | null>(null);
 
   const runCrawl = useCallback(async (depth: Depth) => {
-    if (!seedUsername.trim()) { setError("Seed username required."); return; }
-    if (seasons.size === 0) { setError("Pick at least one season."); return; }
+    const trimmedSeed = seedUsername.trim();
+    if (!trimmedSeed) { setError("Seed username required."); setRunState("error"); return; }
 
-    setRunning(true);
+    // Defensive: never POST an empty seasons/categories array — fall back to spec
+    // defaults so the server sees a valid payload even if the user un-checks
+    // every box.
+    const seasonsPayload = seasons.size > 0
+      ? Array.from(seasons).sort().reverse()
+      : [...DEFAULT_SEASONS];
+    const categoriesPayload = categories.size > 0
+      ? Array.from(categories)
+      : [...DEFAULT_CATEGORIES];
+
+    setRunState("running");
     setRunStartedAt(Date.now());
     setError("");
     setResult(null);
+    setRawResponse("");
+
+    const payload = {
+      seedUsername: trimmedSeed,
+      seasons: seasonsPayload,
+      maxDepth: depth,
+      draftCategories: categoriesPayload,
+      refreshSnapshots,
+      maxUsers,
+      maxLeagues,
+      maxDrafts,
+    };
 
     try {
       const res = await fetch(`${API_BASE}/api/admin/adp/crawl-network`, {
@@ -117,28 +180,34 @@ export function AdpCrawlPanel() {
           "Content-Type": "application/json",
           ...buildAdminHeaders(adminSecretOverride),
         },
-        body: JSON.stringify({
-          seedUsername: seedUsername.trim(),
-          seasons: Array.from(seasons).sort().reverse(),
-          maxDepth: depth,
-          draftCategories: Array.from(categories),
-          refreshSnapshots,
-          maxUsers,
-          maxLeagues,
-          maxDrafts,
-        }),
+        body: JSON.stringify(payload),
       });
 
-      const data = await res.json().catch(() => ({}));
+      const { json, text, isHtml } = await readResponse(res);
+      setRawResponse(text.slice(0, 4000));
+
       if (!res.ok) {
-        setError(data?.error || `HTTP ${res.status}`);
-      } else {
-        setResult(data as CrawlResult);
+        setError(describeFailure(res.status, isHtml, json, text));
+        setRunState("error");
+        return;
       }
+      if (isHtml || json === null) {
+        setError("Server returned a non-JSON response (likely HTML). The API route may not be registered — restart the dev server.");
+        setRunState("error");
+        return;
+      }
+      // Sanity check the response shape — guard against the empty-object case.
+      if (typeof json !== "object" || typeof json.requestCount !== "number") {
+        setError("Response did not match the expected crawl-result shape. See raw response below.");
+        setRunState("error");
+        return;
+      }
+      setResult(json as CrawlResult);
+      setRunState("success");
     } catch (err: any) {
       setError(err?.message || "Request failed");
+      setRunState("error");
     } finally {
-      setRunning(false);
       setRunStartedAt(null);
     }
   }, [seedUsername, seasons, categories, refreshSnapshots, maxUsers, maxLeagues, maxDrafts, adminSecretOverride]);
@@ -151,12 +220,16 @@ export function AdpCrawlPanel() {
         credentials: "include",
         headers: buildAdminHeaders(adminSecretOverride),
       });
-      const data = await res.json().catch(() => ({}));
+      const { json, text, isHtml } = await readResponse(res);
       if (!res.ok) {
-        setError(data?.error || `HTTP ${res.status}`);
-      } else {
-        setStatus(data as CrawlStatus);
+        setError(describeFailure(res.status, isHtml, json, text));
+        return;
       }
+      if (isHtml || json === null) {
+        setError("Status endpoint returned a non-JSON response.");
+        return;
+      }
+      setStatus(json as CrawlStatus);
     } catch (err: any) {
       setError(err?.message || "Status request failed");
     } finally {
@@ -301,22 +374,22 @@ export function AdpCrawlPanel() {
         </div>
       )}
 
-      {result && (
+      {runState === "success" && result && (
         <div className="mt-4 border border-border/60 rounded-md p-3 bg-background/40" data-testid="crawl-result-summary">
           <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-2">Last crawl result</div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-[12px]">
-            <Stat label="Seed" value={result.seedUser ? `${result.seedUser.username}` : "(unresolved)"} />
-            <Stat label="Depth" value={String(result.maxDepth)} />
-            <Stat label="Duration" value={`${Math.round(result.durationMs / 1000)}s`} />
-            <Stat label="Requests" value={String(result.requestCount)} />
-            <Stat label="Users processed" value={String(result.usersProcessed)} testId="stat-users-processed" />
-            <Stat label="Leagues processed" value={String(result.leaguesProcessed)} testId="stat-leagues-processed" />
-            <Stat label="Drafts found" value={String(result.draftsFound)} testId="stat-drafts-found" />
-            <Stat label="Drafts ingested" value={String(result.draftsIngested)} testId="stat-drafts-ingested" />
-            <Stat label="Picks ingested" value={String(result.picksIngested)} testId="stat-picks-ingested" />
-            <Stat label="Dup skipped" value={String(result.duplicatesSkipped)} testId="stat-duplicates-skipped" />
+            <Stat label="Seed" value={result.seedUser?.username ?? "—"} />
+            <Stat label="Depth" value={formatNum(result.maxDepth)} />
+            <Stat label="Duration" value={formatDuration(result.durationMs)} />
+            <Stat label="Requests" value={formatNum(result.requestCount)} />
+            <Stat label="Users processed" value={formatNum(result.usersProcessed)} testId="stat-users-processed" />
+            <Stat label="Leagues processed" value={formatNum(result.leaguesProcessed)} testId="stat-leagues-processed" />
+            <Stat label="Drafts found" value={formatNum(result.draftsFound)} testId="stat-drafts-found" />
+            <Stat label="Drafts ingested" value={formatNum(result.draftsIngested)} testId="stat-drafts-ingested" />
+            <Stat label="Picks ingested" value={formatNum(result.picksIngested)} testId="stat-picks-ingested" />
+            <Stat label="Dup skipped" value={formatNum(result.duplicatesSkipped)} testId="stat-duplicates-skipped" />
             <Stat label="Caps hit" value={(result.capsHit ?? []).length === 0 ? "none" : (result.capsHit ?? []).join(", ")} testId="stat-caps-hit" />
-            <Stat label="Errors" value={String((result.errors ?? []).length)} testId="stat-errors-count" />
+            <Stat label="Errors" value={formatNum((result.errors ?? []).length)} testId="stat-errors-count" />
           </div>
 
           {Object.keys(result.usersDiscoveredByDepth ?? {}).length > 0 && (
@@ -340,6 +413,19 @@ export function AdpCrawlPanel() {
         </div>
       )}
 
+      {/* Raw response dev box — shown after any run that produced bytes. Useful
+          for diagnosing HTML / empty / shape-mismatch responses. */}
+      {rawResponse && (
+        <details className="mt-3" data-testid="raw-response-details">
+          <summary className="text-[11px] cursor-pointer text-muted-foreground hover:text-foreground">
+            Raw response ({rawResponse.length} bytes)
+          </summary>
+          <pre className="mt-1 text-[10px] font-mono text-muted-foreground/80 max-h-60 overflow-auto whitespace-pre-wrap p-2 bg-background/40 border border-border/40 rounded">
+            {rawResponse}
+          </pre>
+        </details>
+      )}
+
       {status && (
         <div className="mt-4 border border-border/60 rounded-md p-3 bg-background/40" data-testid="crawl-status-panel">
           <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-2">
@@ -351,19 +437,19 @@ export function AdpCrawlPanel() {
 
           {status.totals && (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-[12px] mb-2">
-              <Stat label="Total drafts" value={String(status.totals.drafts ?? 0)} />
-              <Stat label="Completed" value={String(status.totals.completedDrafts ?? 0)} />
-              <Stat label="Picks" value={String(status.totals.picks ?? 0)} />
-              <Stat label="Seeds" value={String(status.totals.seeds ?? 0)} />
+              <Stat label="Total drafts" value={formatNum(status.totals.drafts ?? 0)} />
+              <Stat label="Completed" value={formatNum(status.totals.completedDrafts ?? 0)} />
+              <Stat label="Picks" value={formatNum(status.totals.picks ?? 0)} />
+              <Stat label="Seeds" value={formatNum(status.totals.seeds ?? 0)} />
             </div>
           )}
 
           {status.queue && (
             <div className="grid grid-cols-4 gap-2 text-[12px] mb-2">
-              <Stat label="Queue pending" value={String(status.queue.pending ?? 0)} />
-              <Stat label="Processing" value={String(status.queue.processing ?? 0)} />
-              <Stat label="Failed" value={String(status.queue.failed ?? 0)} />
-              <Stat label="Completed" value={String(status.queue.completed ?? 0)} />
+              <Stat label="Queue pending" value={formatNum(status.queue.pending ?? 0)} />
+              <Stat label="Processing" value={formatNum(status.queue.processing ?? 0)} />
+              <Stat label="Failed" value={formatNum(status.queue.failed ?? 0)} />
+              <Stat label="Completed" value={formatNum(status.queue.completed ?? 0)} />
             </div>
           )}
 
@@ -498,6 +584,18 @@ function RunningBadge({ startedAt }: { startedAt: number | null }) {
       Running {elapsed > 0 ? `(${elapsed}s)` : "…"}
     </span>
   );
+}
+
+/** Render a number safely. undefined/null/NaN/non-finite → "—". */
+function formatNum(n: unknown): string {
+  if (typeof n !== "number" || !Number.isFinite(n)) return "—";
+  return n.toLocaleString();
+}
+
+/** Format a duration in ms. Missing/invalid → "—". */
+function formatDuration(ms: unknown): string {
+  if (typeof ms !== "number" || !Number.isFinite(ms)) return "—";
+  return `${(ms / 1000).toFixed(1)}s`;
 }
 
 function statusColor(s: string): string {

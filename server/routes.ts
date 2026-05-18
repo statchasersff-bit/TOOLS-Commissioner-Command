@@ -2,6 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { getFantasyCalcValues, getFantasyCalcRedraftValues } from "./fantasycalc";
 import { computePlayoffCalculator } from "./playoffCalculator";
+import { getAdpHistory, getAdpAvailability } from "./adpPlayerProfile";
 import {
   fetchSleeperUser,
   fetchSleeperLeagues,
@@ -207,13 +208,53 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/leagues/:leagueId/playoff-calculator", async (req, res) => {
+  // Player profile analytics for the ADP Explorer drawer.
+  app.get("/api/adp/player/:playerId/history", async (req, res) => {
     try {
-      const { leagueId } = req.params;
-      const simsRaw = req.query.simulations;
-      const simulations = Math.max(100, Math.min(25000,
-        parseInt(typeof simsRaw === "string" ? simsRaw : "10000", 10) || 10000
-      ));
+      const { playerId } = req.params;
+      if (!playerId) return res.status(400).json({ error: "playerId is required" });
+      const data = await getAdpHistory(playerId);
+      res.setHeader("Cache-Control", "public, max-age=300");
+      res.json(data);
+    } catch (err: any) {
+      console.error("[AdpPlayerProfile/history] error:", err);
+      res.status(500).json({ error: err?.message || "Failed to load ADP history" });
+    }
+  });
+
+  app.get("/api/adp/player/:playerId/availability", async (req, res) => {
+    try {
+      const { playerId } = req.params;
+      const teams = Math.max(4, Math.min(20, parseInt(String(req.query.teams ?? "12"), 10) || 12));
+      const rounds = Math.max(1, Math.min(20, parseInt(String(req.query.rounds ?? "5"), 10) || 5));
+      if (!playerId) return res.status(400).json({ error: "playerId is required" });
+      const data = await getAdpAvailability(playerId, teams, rounds);
+      res.setHeader("Cache-Control", "public, max-age=300");
+      res.json(data);
+    } catch (err: any) {
+      console.error("[AdpPlayerProfile/availability] error:", err);
+      res.status(500).json({ error: err?.message || "Failed to load availability" });
+    }
+  });
+
+  // Health probe so we can sanity-check that /api routes are reachable
+  // without invoking the Sleeper/FantasyCalc chain. If this returns HTML,
+  // the SPA catch-all is shadowing the API.
+  app.get("/api/playoff-calculator/health", (_req, res) => {
+    res.json({ ok: true, ts: Date.now() });
+  });
+
+  app.get("/api/leagues/:leagueId/playoff-calculator", async (req, res) => {
+    const { leagueId } = req.params;
+    const simsRaw = req.query.simulations;
+    const simulations = Math.max(100, Math.min(25000,
+      parseInt(typeof simsRaw === "string" ? simsRaw : "10000", 10) || 10000
+    ));
+    console.log("[PlayoffCalculator] request received", { leagueId, simulations });
+    if (!leagueId) {
+      return res.status(400).json({ error: "leagueId is required" });
+    }
+    try {
       const cacheKey = `${leagueId}:${simulations}`;
       const cached = playoffCalcCache.get(cacheKey);
       if (cached) {
@@ -225,8 +266,11 @@ export async function registerRoutes(
       res.setHeader("Cache-Control", "public, max-age=600");
       res.json(result);
     } catch (err: any) {
-      console.error("Playoff calculator error:", err);
-      res.status(500).json({ error: err.message || "Failed to compute playoff odds" });
+      console.error("[PlayoffCalculator] error:", err);
+      const msg = err?.message || "Failed to compute playoff odds";
+      // Upstream Sleeper / FantasyCalc failure → 502; otherwise 500.
+      const status = /sleeper|fantasycalc|fetch/i.test(msg) ? 502 : 500;
+      res.status(status).json({ error: msg });
     }
   });
 
@@ -678,6 +722,13 @@ export async function registerRoutes(
     }
   });
 
+  // Health probe matching the playoff-calculator one — confirms /api/adp/*
+  // is reachable independent of the snapshot/Sleeper chain. Must be defined
+  // before /api/adp so it isn't shadowed by the catch-all query handler.
+  app.get("/api/adp/health", (_req, res) => {
+    res.json({ ok: true, route: "adp", ts: Date.now() });
+  });
+
   // ── ADP: cached read endpoint ─────────────────────────────────────────────
   // Filters arrive as query params and map 1:1 onto AdpFilters. The handler
   // never reaches out to Sleeper — it serves the most recent adp_snapshots
@@ -952,27 +1003,45 @@ export async function registerRoutes(
         maxRequests?: unknown;
       };
 
-      if (!body.seedUsername || typeof body.seedUsername !== "string") {
+      // ── Validation ────────────────────────────────────────────────────────
+      if (!body.seedUsername || typeof body.seedUsername !== "string" || !body.seedUsername.trim()) {
         return res.status(400).json({ error: "seedUsername is required" });
       }
 
-      const seasons = Array.isArray(body.seasons)
+      const rawSeasons = Array.isArray(body.seasons)
         ? body.seasons.filter((s): s is string => typeof s === "string" && /^\d{4}$/.test(s))
-        : undefined;
+        : [];
+      if (rawSeasons.length === 0) {
+        return res.status(400).json({ error: "At least one season is required" });
+      }
+
+      const validCats: DraftCategory[] = ["startup", "rookie", "unknown"];
+      const rawCats = Array.isArray(body.draftCategories)
+        ? body.draftCategories.filter((c: any): c is DraftCategory => validCats.includes(c))
+        : [];
+      if (rawCats.length === 0) {
+        return res.status(400).json({ error: "At least one draft category is required" });
+      }
 
       const rawDepth = Number(body.maxDepth);
       const maxDepth = Number.isFinite(rawDepth) ? Math.min(2, Math.max(0, Math.floor(rawDepth))) : 2;
 
-      const validCats: DraftCategory[] = ["startup", "rookie", "unknown"];
-      const draftCategories = Array.isArray(body.draftCategories)
-        ? body.draftCategories.filter((c: any): c is DraftCategory => validCats.includes(c))
-        : undefined;
+      // ── Start log ─────────────────────────────────────────────────────────
+      console.log("[NetworkCrawl] request received", {
+        seedUsername: body.seedUsername.trim(),
+        seasons: rawSeasons,
+        maxDepth,
+        draftCategories: rawCats,
+        maxUsers: typeof body.maxUsers === "number" ? body.maxUsers : "default",
+        maxLeagues: typeof body.maxLeagues === "number" ? body.maxLeagues : "default",
+        maxDrafts: typeof body.maxDrafts === "number" ? body.maxDrafts : "default",
+      });
 
       const result = await runNetworkCrawl({
-        seedUsername: body.seedUsername,
-        seasons: seasons && seasons.length > 0 ? seasons : ["2026", "2025", "2024"],
+        seedUsername: body.seedUsername.trim(),
+        seasons: rawSeasons,
         maxDepth,
-        draftCategories: draftCategories && draftCategories.length > 0 ? draftCategories : undefined,
+        draftCategories: rawCats,
         refreshSnapshots: body.refreshSnapshots !== false,
         maxUsers: typeof body.maxUsers === "number" ? body.maxUsers : undefined,
         maxLeagues: typeof body.maxLeagues === "number" ? body.maxLeagues : undefined,

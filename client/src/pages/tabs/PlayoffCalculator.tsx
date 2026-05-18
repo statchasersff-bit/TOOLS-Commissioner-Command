@@ -153,25 +153,45 @@ export function PlayoffCalculator() {
     setLoading(true);
     setError(null);
 
-    fetch(`${API_BASE}/api/leagues/${leagueId}/playoff-calculator?simulations=${simCount}`)
-      .then(async (r) => {
-        if (!r.ok) {
-          const body = await r.json().catch(() => ({}));
-          throw new Error(body.error || `Request failed (${r.status})`);
+    (async () => {
+      try {
+        const url = `${API_BASE}/api/leagues/${leagueId}/playoff-calculator?simulations=${simCount}`;
+        console.log("[PlayoffCalculator] fetch URL:", url);
+        const res = await fetch(url, { credentials: "include" });
+        const contentType = res.headers.get("content-type") || "";
+        if (!res.ok) {
+          const errorText = await res.text();
+          // Try to surface a JSON error message if it's there; otherwise
+          // include a snippet of the body so HTML/empty responses are obvious.
+          let msg = `Playoff API failed (${res.status})`;
+          try {
+            const j = JSON.parse(errorText);
+            if (j?.error) msg = `Playoff API failed (${res.status}): ${j.error}`;
+          } catch {
+            if (errorText.trim()) msg = `Playoff API failed (${res.status}): ${errorText.slice(0, 240)}`;
+          }
+          throw new Error(msg);
         }
-        return r.json() as Promise<PlayoffResponse>;
-      })
-      .then((res) => {
+        if (!contentType.includes("application/json")) {
+          const text = await res.text();
+          const looksLikeHtml = /^\s*<!doctype|^\s*<html/i.test(text);
+          throw new Error(
+            looksLikeHtml
+              ? "API route returned app HTML. Check server route registration."
+              : `Expected JSON but received ${contentType || "no content-type"}: ${text.slice(0, 240)}`
+          );
+        }
+        const json = (await res.json()) as PlayoffResponse;
         if (cancelled) return;
-        setData(res);
-        setLoading(false);
-      })
-      .catch((err) => {
+        setData(json);
+      } catch (err: any) {
         if (cancelled) return;
         console.error("[PlayoffCalculator]", err);
-        setError(err.message || "Failed to load playoff odds");
-        setLoading(false);
-      });
+        setError(err?.message || "Failed to load playoff odds");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
 
     return () => { cancelled = true; };
   }, [leagueId, simCount, reqNonce]);

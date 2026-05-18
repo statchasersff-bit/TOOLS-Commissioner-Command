@@ -135,6 +135,17 @@ app.use((req, res, next) => {
 (async () => {
   await registerRoutes(httpServer, app);
 
+  // Any /api request that falls through here did not match an Express route.
+  // Without this, the SPA catch-all would respond with index.html, which the
+  // frontend can't parse and which masks the missing route as "Expected JSON
+  // but received text/html". Returning a JSON 404 makes the failure obvious.
+  app.use("/api", (req, res) => {
+    res.status(404).json({
+      error: "API route not found",
+      path: req.originalUrl,
+    });
+  });
+
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
