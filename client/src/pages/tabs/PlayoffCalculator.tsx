@@ -40,6 +40,21 @@ interface PlayoffTeam {
   change_since_last_run: number;
 }
 
+interface PlayoffMeta {
+  totalTeams: number;
+  playoffTeams: number;
+  byeTeams: number;
+  currentWeek: number;
+  regularSeasonEndWeek: number;
+  remainingGames: number;
+  simulations: number;
+  scheduleSource: "sleeper" | "synthetic" | "none";
+  playoffPctSum: number;
+  byePctSum: number;
+  championshipPctSum: number;
+  warnings: string[];
+}
+
 interface PlayoffResponse {
   league: { id: string; name: string; season: string; totalRosters: number };
   settings: {
@@ -57,6 +72,7 @@ interface PlayoffResponse {
   simulationCount: number;
   lastUpdated: string;
   teams: PlayoffTeam[];
+  meta?: PlayoffMeta;
 }
 
 const SIM_OPTIONS = [
@@ -65,30 +81,50 @@ const SIM_OPTIONS = [
   { value: "10000", label: "10,000 sims (recommended)" },
 ];
 
+// Display clamp — pct values are stored 0..100; we only soften the extremes
+// at render time so the UI never shows "100.0%" or "0.0%" unless the team is
+// truly locked in or eliminated.
+function pctLabel(pct: number): string {
+  const v = Math.max(0, Math.min(100, pct));
+  if (v >= 99.5) return ">99%";
+  if (v > 0 && v < 0.5) return "<1%";
+  if (v === 0) return "0%";
+  return `${v.toFixed(1)}%`;
+}
+
 function pctCell(pct: number): { className: string; label: string } {
   // Blue heatmap; brighter = higher
   const v = Math.max(0, Math.min(100, pct));
-  if (v === 0) return { className: "text-muted-foreground/60", label: "0%" };
-  if (v >= 99) return { className: "font-bold text-emerald-300 bg-emerald-500/40", label: ">99%" };
-  if (v >= 75) return { className: "font-bold text-blue-50 bg-blue-500/70", label: `${v.toFixed(1)}%` };
-  if (v >= 50) return { className: "font-semibold text-blue-50 bg-blue-500/50", label: `${v.toFixed(1)}%` };
-  if (v >= 25) return { className: "font-medium text-blue-100 bg-blue-500/30", label: `${v.toFixed(1)}%` };
-  if (v >= 10) return { className: "text-blue-200 bg-blue-500/15", label: `${v.toFixed(1)}%` };
-  return { className: "text-blue-200/70 bg-blue-500/5", label: `${v.toFixed(1)}%` };
+  const label = pctLabel(pct);
+  if (v === 0) return { className: "text-muted-foreground/60", label };
+  if (v >= 99) return { className: "font-bold text-emerald-300 bg-emerald-500/40", label };
+  if (v >= 75) return { className: "font-bold text-blue-50 bg-blue-500/70", label };
+  if (v >= 50) return { className: "font-semibold text-blue-50 bg-blue-500/50", label };
+  if (v >= 25) return { className: "font-medium text-blue-100 bg-blue-500/30", label };
+  if (v >= 10) return { className: "text-blue-200 bg-blue-500/15", label };
+  return { className: "text-blue-200/70 bg-blue-500/5", label };
 }
 
-function changeCell(delta: number) {
-  if (Math.abs(delta) < 0.1) {
+// Change column. `delta` is null when there's no prior run for this team
+// (first visit) — show an em-dash instead of fabricating a number. We also
+// clamp the absolute delta to ±100% so a corrupted snapshot from a previous
+// (buggy) build can't render "+1000000.0%".
+function changeCell(delta: number | null) {
+  if (delta === null) {
+    return <span className="text-muted-foreground text-xs">—</span>;
+  }
+  const clamped = Math.max(-100, Math.min(100, delta));
+  if (Math.abs(clamped) < 0.1) {
     return <span className="text-muted-foreground text-xs">0%</span>;
   }
-  const up = delta > 0;
+  const up = clamped > 0;
   return (
     <span className={cn(
       "inline-flex items-center gap-0.5 text-xs font-semibold tabular-nums",
       up ? "text-emerald-500 dark:text-emerald-400" : "text-rose-500 dark:text-rose-400",
     )}>
       {up ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-      {up ? "+" : ""}{delta.toFixed(1)}%
+      {up ? "+" : ""}{clamped.toFixed(1)}%
     </span>
   );
 }
@@ -211,17 +247,21 @@ export function PlayoffCalculator() {
   }, [data, leagueId]);
 
   const enrichedTeams = useMemo(() => {
-    if (!data) return [] as (PlayoffTeam & { change: number })[];
+    if (!data) return [] as (PlayoffTeam & { change: number | null })[];
     return data.teams.map((t) => ({
       ...t,
-      change: t.roster_id in prevMap ? t.make_playoffs_pct - prevMap[t.roster_id] : 0,
+      // null when there's no prior run for this team — render as "—" instead
+      // of fabricating a number. Defensive clamp inside changeCell guards
+      // against corrupted localStorage snapshots from earlier builds.
+      change: t.roster_id in prevMap ? t.make_playoffs_pct - prevMap[t.roster_id] : null,
     }));
   }, [data, prevMap]);
 
   const insights = useMemo(() => {
     if (enrichedTeams.length === 0) return null;
     const favorite = [...enrichedTeams].sort((a, b) => b.make_playoffs_pct - a.make_playoffs_pct)[0];
-    const valueRiser = [...enrichedTeams].sort((a, b) => b.change - a.change)[0];
+    const changeOf = (t: PlayoffTeam & { change: number | null }) => t.change ?? Number.NEGATIVE_INFINITY;
+    const valueRiser = [...enrichedTeams].sort((a, b) => changeOf(b) - changeOf(a))[0];
     const hardSos = [...enrichedTeams]
       .filter((t) => t.remaining_opponents.length > 0)
       .sort((a, b) => b.remaining_sos - a.remaining_sos)[0];
@@ -239,8 +279,8 @@ export function PlayoffCalculator() {
       key: "team_rating",
       header: "Team Rating",
       sortable: true,
-      sortAccessor: (r: PlayoffTeam & { change: number }) => r.team_rating,
-      render: (r: PlayoffTeam & { change: number }) => (
+      sortAccessor: (r: PlayoffTeam & { change: number | null }) => r.team_rating,
+      render: (r: PlayoffTeam & { change: number | null }) => (
         <span className="font-bold text-foreground tabular-nums">{r.team_rating}</span>
       ),
     },
@@ -248,16 +288,18 @@ export function PlayoffCalculator() {
       key: "change",
       header: "Change",
       sortable: true,
-      sortAccessor: (r: PlayoffTeam & { change: number }) => r.change,
-      render: (r: PlayoffTeam & { change: number }) => changeCell(r.change),
+      // null "no prior run" entries sort to the bottom so columns ranked by
+      // change still surface teams with real movement first.
+      sortAccessor: (r: PlayoffTeam & { change: number | null }) => r.change ?? Number.NEGATIVE_INFINITY,
+      render: (r: PlayoffTeam & { change: number | null }) => changeCell(r.change),
     },
     {
       key: "team",
       header: "Team",
       sticky: true,
       sortable: true,
-      sortAccessor: (r: PlayoffTeam & { change: number }) => r.team_name.toLowerCase(),
-      render: (r: PlayoffTeam & { change: number }) => (
+      sortAccessor: (r: PlayoffTeam & { change: number | null }) => r.team_name.toLowerCase(),
+      render: (r: PlayoffTeam & { change: number | null }) => (
         <div className="flex items-center gap-2 min-w-[180px]">
           {teamAvatar(r, "w-7 h-7")}
           <div className="flex flex-col leading-tight">
@@ -271,8 +313,8 @@ export function PlayoffCalculator() {
       key: "projected_record",
       header: "Projected Record",
       sortable: true,
-      sortAccessor: (r: PlayoffTeam & { change: number }) => r.projected_wins,
-      render: (r: PlayoffTeam & { change: number }) => (
+      sortAccessor: (r: PlayoffTeam & { change: number | null }) => r.projected_wins,
+      render: (r: PlayoffTeam & { change: number | null }) => (
         <div className="flex flex-col leading-tight">
           <span className="text-sm font-semibold tabular-nums">{r.projected_record}</span>
           <span className="text-[10px] text-muted-foreground">Now {r.current_wins}-{r.current_losses}{r.current_ties > 0 ? `-${r.current_ties}` : ""}</span>
@@ -283,8 +325,8 @@ export function PlayoffCalculator() {
       key: "make_playoffs_pct",
       header: "Make Playoffs",
       sortable: true,
-      sortAccessor: (r: PlayoffTeam & { change: number }) => r.make_playoffs_pct,
-      render: (r: PlayoffTeam & { change: number }) => {
+      sortAccessor: (r: PlayoffTeam & { change: number | null }) => r.make_playoffs_pct,
+      render: (r: PlayoffTeam & { change: number | null }) => {
         const c = pctCell(r.make_playoffs_pct);
         return <span className={cn("inline-block px-2.5 py-1 rounded-md text-xs tabular-nums", c.className)}>{c.label}</span>;
       },
@@ -293,8 +335,8 @@ export function PlayoffCalculator() {
       key: "first_round_bye_pct",
       header: "1st-Round Bye",
       sortable: true,
-      sortAccessor: (r: PlayoffTeam & { change: number }) => r.first_round_bye_pct,
-      render: (r: PlayoffTeam & { change: number }) => {
+      sortAccessor: (r: PlayoffTeam & { change: number | null }) => r.first_round_bye_pct,
+      render: (r: PlayoffTeam & { change: number | null }) => {
         const c = pctCell(r.first_round_bye_pct);
         return <span className={cn("inline-block px-2.5 py-1 rounded-md text-xs tabular-nums", c.className)}>{c.label}</span>;
       },
@@ -303,8 +345,8 @@ export function PlayoffCalculator() {
       key: "semifinals_pct",
       header: "Make Semi-Finals",
       sortable: true,
-      sortAccessor: (r: PlayoffTeam & { change: number }) => r.semifinals_pct,
-      render: (r: PlayoffTeam & { change: number }) => {
+      sortAccessor: (r: PlayoffTeam & { change: number | null }) => r.semifinals_pct,
+      render: (r: PlayoffTeam & { change: number | null }) => {
         const c = pctCell(r.semifinals_pct);
         return <span className={cn("inline-block px-2.5 py-1 rounded-md text-xs tabular-nums", c.className)}>{c.label}</span>;
       },
@@ -313,8 +355,8 @@ export function PlayoffCalculator() {
       key: "finals_pct",
       header: "Make Finals",
       sortable: true,
-      sortAccessor: (r: PlayoffTeam & { change: number }) => r.finals_pct,
-      render: (r: PlayoffTeam & { change: number }) => {
+      sortAccessor: (r: PlayoffTeam & { change: number | null }) => r.finals_pct,
+      render: (r: PlayoffTeam & { change: number | null }) => {
         const c = pctCell(r.finals_pct);
         return <span className={cn("inline-block px-2.5 py-1 rounded-md text-xs tabular-nums", c.className)}>{c.label}</span>;
       },
@@ -323,8 +365,8 @@ export function PlayoffCalculator() {
       key: "championship_pct",
       header: "Win Finals",
       sortable: true,
-      sortAccessor: (r: PlayoffTeam & { change: number }) => r.championship_pct,
-      render: (r: PlayoffTeam & { change: number }) => {
+      sortAccessor: (r: PlayoffTeam & { change: number | null }) => r.championship_pct,
+      render: (r: PlayoffTeam & { change: number | null }) => {
         const c = pctCell(r.championship_pct);
         return (
           <span className={cn("inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs tabular-nums", c.className)}>
@@ -427,6 +469,22 @@ export function PlayoffCalculator() {
         </Card>
       )}
 
+      {/* Server-side data warnings (e.g. synthesized schedule, sum
+          deviation). Yellow rather than red since the calculator still
+          returned numbers — the warnings just qualify them. */}
+      {data?.meta?.warnings && data.meta.warnings.length > 0 && (
+        <Card className="p-3 border-amber-500/40 bg-amber-500/5" data-testid="pc-warnings">
+          <div className="flex items-start gap-2 text-amber-600 dark:text-amber-400">
+            <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+            <ul className="text-[12px] space-y-1">
+              {data.meta.warnings.map((w, i) => (
+                <li key={i}>{w}</li>
+              ))}
+            </ul>
+          </div>
+        </Card>
+      )}
+
       {/* Info cards */}
       {data && insights && !error && (
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-3" data-testid="pc-insights">
@@ -441,7 +499,7 @@ export function PlayoffCalculator() {
             icon={<TrendingUp className="w-4 h-4 text-emerald-500" />}
             label="Best Value Riser"
             value={insights.valueRiser.team_name}
-            sub={insights.valueRiser.change > 0 ? `+${insights.valueRiser.change.toFixed(1)}% vs last run` : "no prior run"}
+            sub={(insights.valueRiser.change ?? 0) > 0 ? `+${(insights.valueRiser.change ?? 0).toFixed(1)}% vs last run` : "no prior run"}
             avatarTeam={insights.valueRiser}
           />
           {insights.hardSos && (

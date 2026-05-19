@@ -5,55 +5,28 @@ import connectPgSimple from "connect-pg-simple";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
-import { readFileSync, readdirSync, readlinkSync } from "fs";
 
 /**
- * Kill any process listening on `port` using the Linux /proc filesystem.
- * No external binaries (lsof, fuser, ss) required — they're not reliably
- * in PATH when Node spawns a /bin/sh subprocess.
+ * Wait up to `maxWaitMs` for `port` to become available.
+ * Polls using a lightweight TCP probe — no process killing required.
+ * The workflow manager will SIGKILL the old process eventually; we just
+ * need to be patient until it does.
  */
-async function freePort(port: number): Promise<void> {
-  try {
-    const hexPort = port.toString(16).toUpperCase().padStart(4, "0");
-    const inodes = new Set<string>();
+async function waitForPort(port: number, maxWaitMs = 15000): Promise<void> {
+  const { createConnection } = await import("net");
+  const deadline = Date.now() + maxWaitMs;
 
-    for (const file of ["/proc/net/tcp", "/proc/net/tcp6"]) {
-      try {
-        for (const line of readFileSync(file, "utf8").split("\n").slice(1)) {
-          const cols = line.trim().split(/\s+/);
-          if (cols.length < 10) continue;
-          if (cols[1]?.split(":")[1] === hexPort) inodes.add(cols[9]);
-        }
-      } catch { /* file may not exist on some systems */ }
-    }
-
-    if (inodes.size === 0) return;
-
-    const self = process.pid;
-    let killed = 0;
-    for (const pidStr of readdirSync("/proc").filter(d => /^\d+$/.test(d))) {
-      const pid = parseInt(pidStr, 10);
-      if (pid === self) continue;
-      try {
-        for (const fd of readdirSync(`/proc/${pidStr}/fd`)) {
-          try {
-            const link = readlinkSync(`/proc/${pidStr}/fd/${fd}`);
-            const m = link.match(/socket:\[(\d+)\]/);
-            if (m && inodes.has(m[1])) {
-              process.kill(pid, "SIGKILL");
-              killed++;
-              break;
-            }
-          } catch { /* fd unreadable */ }
-        }
-      } catch { /* proc entry gone */ }
-    }
-
-    if (killed > 0) {
-      console.log(`[server] killed ${killed} process(es) on port ${port}, waiting for release…`);
-      await new Promise(r => setTimeout(r, 800));
-    }
-  } catch { /* best-effort */ }
+  while (Date.now() < deadline) {
+    const inUse = await new Promise<boolean>(resolve => {
+      const sock = createConnection({ port, host: "127.0.0.1" });
+      sock.once("connect", () => { sock.destroy(); resolve(true); });
+      sock.once("error", () => resolve(false));
+    });
+    if (!inUse) return; // port is free
+    console.log(`[server] port ${port} still occupied, waiting…`);
+    await new Promise(r => setTimeout(r, 1500));
+  }
+  console.warn(`[server] port ${port} did not free within ${maxWaitMs}ms, attempting bind anyway`);
 }
 
 const app = express();
@@ -182,6 +155,11 @@ app.use((req, res, next) => {
   next();
 });
 
+process.on("unhandledRejection", (reason) => {
+  console.error("[server] unhandledRejection:", reason);
+  process.exit(1);
+});
+
 (async () => {
   await registerRoutes(httpServer, app);
 
@@ -225,10 +203,9 @@ app.use((req, res, next) => {
   // It is the only port that is not firewalled.
   const port = parseInt(process.env.PORT || "5000", 10);
 
-  // Evict any stale process on the port before we try to bind.
-  // This handles the common case where a previous workflow run didn't
-  // fully terminate before the new one started.
-  await freePort(port);
+  // Wait for the port to be free before binding (the workflow manager
+  // will SIGKILL the old process; we just need to give it time).
+  await waitForPort(port);
 
   httpServer.on("error", (err: NodeJS.ErrnoException) => {
     console.error("[server] fatal listen error:", err);

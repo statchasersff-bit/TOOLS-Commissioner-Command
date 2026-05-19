@@ -556,8 +556,9 @@ export async function computePlayoffCalculator(
   // Fetch all weekly matchups, build remaining schedule
   const matchupsByWeek = await fetchAllMatchups(leagueId, regularSeasonWeeks);
   const currentWeek = deriveCurrentWeek(matchupsByWeek);
+  const warnings: string[] = [];
 
-  const remainingSchedule: { week: number; pairs: [number, number][] }[] = [];
+  let remainingSchedule: { week: number; pairs: [number, number][] }[] = [];
   for (let w = currentWeek; w <= regularSeasonWeeks; w++) {
     const ms = matchupsByWeek.get(w) || [];
     const byMatchup = new Map<number, number[]>();
@@ -572,6 +573,31 @@ export async function computePlayoffCalculator(
       if (arr.length === 2) pairs.push([arr[0], arr[1]]);
     });
     if (pairs.length > 0) remainingSchedule.push({ week: w, pairs });
+  }
+
+  // ── Schedule source bookkeeping ───────────────────────────────────────────
+  // If Sleeper hasn't published the matchup schedule yet (common for leagues
+  // that just finished drafting), synthesize a round-robin for the remaining
+  // weeks rather than degrading to the binary "season over" branch — which
+  // would assign 100%/0% odds based on a 0-0 record sort.
+  const anyGamesPlayed = teams.some((t) => t.currentWins + t.currentLosses + t.currentTies > 0);
+  let scheduleSource: "sleeper" | "synthetic" | "none" = remainingSchedule.length > 0 ? "sleeper" : "none";
+  if (remainingSchedule.length === 0 && !anyGamesPlayed && currentWeek <= regularSeasonWeeks) {
+    const teamIds = teams.map((t) => t.rosterId);
+    const weeksNeeded = regularSeasonWeeks - currentWeek + 1;
+    const synthRounds = synthesizeRoundRobin(teamIds, weeksNeeded);
+    remainingSchedule = synthRounds.map((pairs, i) => ({ week: currentWeek + i, pairs }));
+    scheduleSource = remainingSchedule.length > 0 ? "synthetic" : "none";
+    if (scheduleSource === "synthetic") {
+      warnings.push(
+        `Sleeper has not published the regular-season schedule yet; using a synthesized round-robin for weeks ${currentWeek}–${regularSeasonWeeks}.`
+      );
+    }
+  }
+  if (scheduleSource === "none" && currentWeek <= regularSeasonWeeks) {
+    warnings.push(
+      `No remaining-schedule data is available for weeks ${currentWeek}–${regularSeasonWeeks}; odds are estimated from current standings only.`
+    );
   }
 
   // Track each team's remaining opponents list for SOS
@@ -606,31 +632,22 @@ export async function computePlayoffCalculator(
   if (format === "SF") weeklyStdDev += SF_STD_DEV_BUMP;
   if (isBestBall) weeklyStdDev += BESTBALL_STD_DEV_PENALTY;
 
-  // Run Monte Carlo
-  if (remainingSchedule.length > 0) {
-    for (let i = 0; i < simCount; i++) {
-      simulateOnce(teams, remainingSchedule, weeklyStdDev, averageRating, averagePoints, playoffTeams, byes);
-    }
-  } else {
-    // Season is over: use current standings to seed playoff outcomes deterministically.
-    const standings = [...teams].sort((a, b) => {
-      const wDiff = (b.currentWins + 0.5 * b.currentTies) - (a.currentWins + 0.5 * a.currentTies);
-      if (wDiff !== 0) return wDiff;
-      const pfDiff = b.pointsFor - a.pointsFor;
-      if (pfDiff !== 0) return pfDiff;
-      return b.teamRating - a.teamRating;
-    });
-    standings.slice(0, playoffTeams).forEach((t) => (t.madePlayoffs = simCount));
-    standings.slice(0, byes).forEach((t) => (t.firstRoundBye = simCount));
-    // Run only playoff bracket sims to fill semis/finals/champ
-    for (let i = 0; i < simCount; i++) {
-      simulateOnce(teams, [], weeklyStdDev, averageRating, averagePoints, playoffTeams, byes);
-    }
+  // Run Monte Carlo — always simCount iterations, always divide by simCount.
+  // When there are no remaining matchups (truly season-over: schedule empty
+  // AND games have been played), simulateOnce still runs the playoff bracket
+  // from locked standings, so byes/semis/finals/champ are populated normally.
+  for (let i = 0; i < simCount; i++) {
+    simulateOnce(teams, remainingSchedule, weeklyStdDev, averageRating, averagePoints, playoffTeams, byes);
   }
+  const divisor = simCount;
 
-  // Build response
-  const divisor = remainingSchedule.length > 0 ? simCount : 1;
+  // Sanity sums for the meta payload + server log. These are computed from
+  // raw counters before the per-team rounding below.
+  const playoffPctSum = (teams.reduce((s, t) => s + t.madePlayoffs, 0) / divisor) * 100;
+  const byePctSum = (teams.reduce((s, t) => s + t.firstRoundBye, 0) / divisor) * 100;
+  const championshipPctSum = (teams.reduce((s, t) => s + t.championship, 0) / divisor) * 100;
 
+  // Build per-team results
   const teamResults: PlayoffCalcTeamResult[] = teams.map((t) => {
     const projectedWins = remainingSchedule.length > 0
       ? t.finalWinsTotal / simCount
@@ -638,7 +655,7 @@ export async function computePlayoffCalculator(
     const projectedPF = remainingSchedule.length > 0
       ? t.finalPointsForTotal / simCount
       : t.pointsFor;
-    const totalGames = t.currentWins + t.currentLosses + t.currentTies + (t.remainingOpponents.length);
+    const totalGames = t.currentWins + t.currentLosses + t.currentTies + t.remainingOpponents.length;
     const projectedLosses = Math.max(0, totalGames - projectedWins - t.currentTies);
     const expectedWinsRemaining = projectedWins - t.currentWins;
     const remainingSos = t.remainingOpponents.length > 0
@@ -661,7 +678,9 @@ export async function computePlayoffCalculator(
       points_against: Math.round(t.pointsAgainst * 100) / 100,
       win_now_score: Math.round(t.winNowScore),
       team_rating: t.teamRating,
+      rating_source: t.ratingSource,
       remaining_opponents: t.remainingOpponents,
+      remaining_games: t.remainingOpponents.length,
       projected_record: `${projectedWins.toFixed(1)}-${projectedLosses.toFixed(1)}${t.currentTies > 0 ? `-${t.currentTies}` : ""}`,
       projected_wins: Math.round(projectedWins * 10) / 10,
       projected_losses: Math.round(projectedLosses * 10) / 10,
@@ -670,14 +689,46 @@ export async function computePlayoffCalculator(
       projected_points_for: Math.round(projectedPF),
       make_playoffs_pct: Math.round((t.madePlayoffs / divisor) * 1000) / 10,
       first_round_bye_pct: Math.round((t.firstRoundBye / divisor) * 1000) / 10,
-      semifinals_pct: Math.round((t.semifinals / simCount) * 1000) / 10,
-      finals_pct: Math.round((t.finals / simCount) * 1000) / 10,
-      championship_pct: Math.round((t.championship / simCount) * 1000) / 10,
+      semifinals_pct: Math.round((t.semifinals / divisor) * 1000) / 10,
+      finals_pct: Math.round((t.finals / divisor) * 1000) / 10,
+      championship_pct: Math.round((t.championship / divisor) * 1000) / 10,
       change_since_last_run: 0,
     };
   });
 
   teamResults.sort((a, b) => b.make_playoffs_pct - a.make_playoffs_pct);
+
+  // ── Sanity checks + debug log ─────────────────────────────────────────────
+  // Sums should be very close to playoffTeams*100 / byes*100 / 100 — any large
+  // deviation indicates a bracket/seeding bug.
+  const remainingGames = remainingSchedule.reduce((s, w) => s + w.pairs.length, 0);
+  console.log(
+    `[PlayoffCalc] league=${leagueRaw.league_id} teams=${teams.length} playoffTeams=${playoffTeams} byes=${byes} ` +
+    `currentWeek=${currentWeek} regSeasonWeeks=${regularSeasonWeeks} remainingGames=${remainingGames} ` +
+    `scheduleSource=${scheduleSource} simCount=${simCount}`
+  );
+  console.log(
+    `[PlayoffCalc] sums: mp=${playoffPctSum.toFixed(1)} (expect ${playoffTeams * 100}) ` +
+    `bye=${byePctSum.toFixed(1)} (expect ${byes * 100}) ch=${championshipPctSum.toFixed(1)} (expect 100)`
+  );
+  const sumDeviation = Math.abs(playoffPctSum - playoffTeams * 100);
+  if (sumDeviation > 1) {
+    warnings.push(`Playoff-odds sum (${playoffPctSum.toFixed(1)}) deviates from expected (${playoffTeams * 100}).`);
+  }
+  if (process.env.PLAYOFF_CALC_DEBUG === "true") {
+    for (const t of teams) {
+      console.log(
+        `[PlayoffCalc]   ${t.teamName.padEnd(24)} rating=${t.teamRating}(${t.ratingSource}) ` +
+        `wn=${Math.round(t.winNowScore).toString().padStart(5)} ` +
+        `record=${t.currentWins}-${t.currentLosses}-${t.currentTies} ` +
+        `remGames=${t.remainingOpponents.length} ` +
+        `avgSimWins=${(t.finalWinsTotal / simCount).toFixed(2)} ` +
+        `mp=${(t.madePlayoffs / divisor * 100).toFixed(1)}% ` +
+        `bye=${(t.firstRoundBye / divisor * 100).toFixed(1)}% ` +
+        `ch=${(t.championship / divisor * 100).toFixed(1)}%`
+      );
+    }
+  }
 
   return {
     league: {
@@ -701,5 +752,19 @@ export async function computePlayoffCalculator(
     simulationCount: simCount,
     lastUpdated: new Date().toISOString(),
     teams: teamResults,
+    meta: {
+      totalTeams: teams.length,
+      playoffTeams,
+      byeTeams: byes,
+      currentWeek,
+      regularSeasonEndWeek: regularSeasonWeeks,
+      remainingGames,
+      simulations: simCount,
+      scheduleSource,
+      playoffPctSum: Math.round(playoffPctSum * 10) / 10,
+      byePctSum: Math.round(byePctSum * 10) / 10,
+      championshipPctSum: Math.round(championshipPctSum * 10) / 10,
+      warnings,
+    },
   };
 }
