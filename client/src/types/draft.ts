@@ -12,7 +12,7 @@ export type PassTd = 4 | 6;
 export type Position = "QB" | "RB" | "WR" | "TE" | "K" | "PICK";
 
 // Rookie mode the user has selected. Drives which rows are included.
-export type RookieMode = "picks" | "direct";
+export type RookieMode = "picks" | "direct" | "both";
 
 export interface DraftRecord {
   draft_id: string;

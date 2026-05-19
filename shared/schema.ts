@@ -240,7 +240,13 @@ export const drafts = pgTable("drafts", {
   createdAt: bigint("created_at", { mode: "number" }),
   // True when picks include actual rookies (drafted directly), false when the
   // draft enumerates rookie placeholder slots (e.g. "2026 Rookie 1.01").
+  // Kept for backward compat; the authoritative classification now lives in
+  // the `rookieMode` column below.
   directlyDraftedRookies: boolean("directly_drafted_rookies").notNull().default(false),
+  // "direct_rookies" | "rookie_picks" | "mixed" | "unknown". Computed at
+  // ingestion from the pick mix (see classifyDraftRookieMode). Drives the
+  // Rookie Picks vs Direct Rookies filter on the ADP Explorer.
+  rookieMode: text("rookie_mode").notNull().default("unknown"),
   ingestedAt: timestamp("ingested_at").defaultNow(),
 });
 

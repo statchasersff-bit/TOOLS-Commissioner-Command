@@ -75,7 +75,7 @@ export type AdpFilters = {
   bestBall?: "yes" | "no" | "all";
   leagueMode?: "dynasty" | "keeper" | "redraft" | "all";
   teams?: number | "all";
-  rookieMode?: "picks" | "direct";
+  rookieMode?: "picks" | "direct" | "both";
   passTd?: 4 | 6 | "all";
   startDate?: string; // YYYY-MM-DD
   endDate?: string;   // YYYY-MM-DD
@@ -254,6 +254,98 @@ function rookiePickLabelFromMetadata(meta: SleeperDraftPickRaw["metadata"], roun
   return `${season} Rookie ${round}.${pr}`;
 }
 
+// ── Rookie / rookie-pick classification ──────────────────────────────────────
+// Sleeper rookie-pick *placeholders* aren't always nullable player_ids — some
+// leagues attach a real kicker player_id with metadata that names the slot
+// (e.g. "Rookie 1.01"). The old "if !player_id → placeholder" heuristic put
+// those kickers into the Direct Rookies bucket. These helpers detect that
+// case from the pick metadata so each pick can be classified correctly.
+
+const ROOKIE_PICK_NAME_PATTERNS: RegExp[] = [
+  /\brookie\s*pick\b/i,
+  /\brookie\b/i,
+  /\b\d\.\d{1,2}\b/,             // 1.01, 2.04, etc.
+  /\b(?:1st|2nd|3rd|4th|5th)\b/i,
+  /\b20\d{2}\s+(?:1st|2nd|3rd|4th)/i, // "2026 1st"
+];
+
+function metaStr(meta: SleeperDraftPickRaw["metadata"] | undefined, key: string): string {
+  const v = meta?.[key as keyof typeof meta];
+  return typeof v === "string" ? v : "";
+}
+
+function pickDisplayName(pick: SleeperDraftPickRaw): string {
+  const first = metaStr(pick.metadata, "first_name");
+  const last = metaStr(pick.metadata, "last_name");
+  return `${first} ${last}`.trim();
+}
+
+/**
+ * True when a pick is a rookie-pick *placeholder slot* — i.e. it occupies the
+ * draft board but doesn't represent an actual NFL player selection. Catches:
+ *   1) Null player_id (Sleeper's canonical encoding).
+ *   2) Position == "K" *and* the name/metadata pattern-matches a rookie pick
+ *      label (Sleeper's "use a kicker as a placeholder" encoding seen on some
+ *      league formats).
+ */
+export function isRookiePickPlaceholder(pick: SleeperDraftPickRaw): boolean {
+  if (!pick.player_id) return true;
+
+  const pos = (pick.metadata?.position ?? "").toUpperCase();
+  if (pos !== "K") return false;
+
+  const display = pickDisplayName(pick);
+  if (!display) return false;
+  return ROOKIE_PICK_NAME_PATTERNS.some((re) => re.test(display));
+}
+
+/**
+ * True when a pick represents a real NFL rookie player selection (the
+ * inverse of placeholder, requiring a real player_id + position).
+ */
+export function isActualRookiePlayer(pick: SleeperDraftPickRaw): boolean {
+  if (!pick.player_id) return false;
+  if (isRookiePickPlaceholder(pick)) return false;
+  const pos = (pick.metadata?.position ?? "").toUpperCase();
+  return pos.length > 0;
+}
+
+export type DraftRookieMode = "direct_rookies" | "rookie_picks" | "mixed" | "unknown";
+
+/**
+ * Per-draft classification driven by the per-pick counts. A draft counts as
+ *   - rookie_picks   when most signal comes from placeholder slots
+ *   - direct_rookies when most signal comes from real rookie players
+ *   - mixed          when both are meaningfully represented
+ *   - unknown        when there isn't enough signal to tell
+ */
+export function classifyDraftRookieMode(
+  picks: SleeperDraftPickRaw[],
+  draftType: string,
+): DraftRookieMode {
+  if (draftType === "startup") return "direct_rookies";
+
+  let placeholders = 0;
+  let actual = 0;
+  for (const p of picks) {
+    if (isRookiePickPlaceholder(p)) placeholders++;
+    else if (isActualRookiePlayer(p)) actual++;
+  }
+  const total = placeholders + actual;
+  if (total < 3) return "unknown";
+
+  // Treat a side as meaningful when it accounts for at least 25% of the
+  // classified picks. Real-world Sleeper rookie drafts are essentially all
+  // one mode or the other, so this threshold is generous.
+  const placeholderShare = placeholders / total;
+  const actualShare = actual / total;
+
+  if (placeholderShare >= 0.75) return "rookie_picks";
+  if (actualShare >= 0.75) return "direct_rookies";
+  if (placeholderShare >= 0.25 && actualShare >= 0.25) return "mixed";
+  return placeholderShare > actualShare ? "rookie_picks" : "direct_rookies";
+}
+
 // ── Ingestion ────────────────────────────────────────────────────────────────
 
 export async function ingestDraftById(
@@ -301,7 +393,7 @@ export async function ingestDraftById(
   // Per spec: only completed drafts go into ADP by default. We still record
   // their existence so the admin tools can see in-progress drafts.
   if (!completed) {
-    await upsertDraftRow(draftRaw, /* directlyDraftedRookies */ false, completed, league);
+    await upsertDraftRow(draftRaw, /* directlyDraftedRookies */ false, "unknown", completed, league);
     return { ok: true, status: draftRaw.status, picks: 0, reason: "not complete" };
   }
 
@@ -310,12 +402,14 @@ export async function ingestDraftById(
   const teams = draftRaw.settings?.teams ?? 12;
   const rounds = draftRaw.settings?.rounds ?? Math.ceil(picksRaw.length / Math.max(teams, 1));
 
-  // Classify rookie drafts: if any pick has a non-null player_id AND its
-  // position is a real NFL position, this is a "directly drafted rookies"
-  // draft. Otherwise the draft enumerates rookie pick placeholders.
+  // Classify the draft from its picks. The per-pick helpers handle the
+  // kicker-as-placeholder case Sleeper sometimes uses.
   const draftType = deriveDraftType(draftRaw);
-  const directlyDraftedRookies = draftType !== "startup"
-    && picksRaw.some((p) => p.player_id && (p.metadata?.position || "").length > 0);
+  const rookieMode = classifyDraftRookieMode(picksRaw, draftType);
+  // Back-compat boolean — keeps consumers reading the legacy column working
+  // while we migrate them onto rookieMode.
+  const directlyDraftedRookies =
+    rookieMode === "direct_rookies" || (draftType === "startup");
 
   // Quality filters: keep the dataset honest by dropping obvious mock /
   // micro-leagues. Startup drafts must look like a real league bench-deep
@@ -326,7 +420,7 @@ export async function ingestDraftById(
   const minRounds = draftType === "startup" ? 8 : 3;
   const enoughPicks = picksRaw.filter((p) => p.player_id).length >= minTeams * minRounds * 0.6;
   if (teams < minTeams || rounds < minRounds || !enoughPicks) {
-    await upsertDraftRow(draftRaw, directlyDraftedRookies, /* completed */ false, league);
+    await upsertDraftRow(draftRaw, directlyDraftedRookies, rookieMode, /* completed */ false, league);
     return {
       ok: true,
       status: draftRaw.status,
@@ -335,7 +429,7 @@ export async function ingestDraftById(
     };
   }
 
-  await upsertDraftRow(draftRaw, directlyDraftedRookies, completed, league);
+  await upsertDraftRow(draftRaw, directlyDraftedRookies, rookieMode, completed, league);
 
   // Replace picks atomically (cheap — they're small per draft).
   await db.delete(draftPicks).where(eq(draftPicks.draftId, draftId));
@@ -346,8 +440,10 @@ export async function ingestDraftById(
 
   const rows = picksRaw.map((p) => {
     const pickInRound = ((p.pick_no - 1) % Math.max(teams, 1)) + 1;
-    const isPlaceholder = draftType !== "startup" && !p.player_id;
-    const isRookie = draftType !== "startup" && !!p.player_id;
+    // New: placeholder detection covers null player_id AND the kicker-as-
+    // placeholder case Sleeper uses on some league formats.
+    const isPlaceholder = draftType !== "startup" && isRookiePickPlaceholder(p);
+    const isRookie = draftType !== "startup" && isActualRookiePlayer(p);
     const playerName = p.metadata?.first_name && p.metadata?.last_name
       ? `${p.metadata.first_name} ${p.metadata.last_name}`.trim()
       : null;
@@ -387,6 +483,7 @@ export async function ingestDraftById(
 async function upsertDraftRow(
   draftRaw: SleeperDraftRaw,
   directlyDraftedRookies: boolean,
+  rookieMode: DraftRookieMode,
   completed: boolean,
   league: SleeperLeagueScoring | null,
 ) {
@@ -433,6 +530,7 @@ async function upsertDraftRow(
     startTime: dates.startTime,
     createdAt: dates.createdAt,
     directlyDraftedRookies,
+    rookieMode,
     ingestedAt: new Date(),
   };
 
@@ -586,6 +684,18 @@ function buildDraftWhere(f: AdpFilters) {
   if (f.passTd && f.passTd !== "all") conds.push(eq(drafts.passTd, f.passTd as number));
   if (f.startDate) conds.push(sql`${drafts.draftDate} >= ${f.startDate}::timestamp`);
   if (f.endDate) conds.push(sql`${drafts.draftDate} < (${f.endDate}::timestamp + interval '1 day')`);
+
+  // Rookie-mode filter at the draft level. Only applies to rookie drafts —
+  // startup drafts always count as "direct" since they're full-roster picks.
+  // "Mixed" drafts surface in both buckets so they aren't dropped.
+  if (f.draftType === "rookie") {
+    if (f.rookieMode === "direct") {
+      conds.push(inArray(drafts.rookieMode, ["direct_rookies", "mixed"]));
+    } else if (f.rookieMode === "picks") {
+      conds.push(inArray(drafts.rookieMode, ["rookie_picks", "mixed"]));
+    }
+    // "both" or undefined → no draft-level filter, all rookie drafts.
+  }
   return and(...conds);
 }
 
@@ -603,9 +713,13 @@ export async function computeAdp(f: AdpFilters): Promise<{ rows: AdpRow[]; draft
   const draftDateById = new Map(eligibleDrafts.map((d) => [d.draftId, d.draftDate]));
 
   // Picks filtered by rookie mode.
+  //   direct → exclude placeholder picks (show only real rookie players)
+  //   picks  → include only placeholder picks
+  //   both   → include everything
   const rookieMode = f.rookieMode ?? "direct";
-  const placeholderCond = rookieMode === "picks"
-    ? sql`true`
+  const placeholderCond =
+    rookieMode === "picks" ? eq(draftPicks.isRookiePlaceholder, true)
+    : rookieMode === "both" ? sql`true`
     : eq(draftPicks.isRookiePlaceholder, false);
 
   const picks = await db
@@ -710,6 +824,122 @@ export async function computeAdp(f: AdpFilters): Promise<{ rows: AdpRow[]; draft
   });
 
   return { rows, draftCount: eligibleDrafts.length, pickCount: picks.length };
+}
+
+// ── Reclassify already-ingested drafts ────────────────────────────────────
+// Walks the stored draft_picks, recomputes per-pick isRookiePlaceholder
+// using the new helpers, and recomputes per-draft rookieMode. Doesn't touch
+// Sleeper — works entirely off the columns we already persisted.
+
+/** Stored-column version of `isRookiePickPlaceholder`. Same logic, but reads
+ *  from the normalized fields the ingester wrote into draft_picks. */
+function isPlaceholderFromStoredPick(p: {
+  playerId: string | null;
+  playerName: string | null;
+  position: string | null;
+}): boolean {
+  // Already encoded as a synthetic placeholder id by ingestion → trust it.
+  if (p.playerId && p.playerId.startsWith("rookie_pick_")) return true;
+  // Nulls are the canonical Sleeper-side placeholder shape.
+  if (!p.playerId) return true;
+
+  const pos = (p.position ?? "").toUpperCase();
+  if (pos !== "K") return false;
+
+  const name = (p.playerName ?? "").trim();
+  if (!name) return false;
+  return ROOKIE_PICK_NAME_PATTERNS.some((re) => re.test(name));
+}
+
+export async function reclassifyAdpDrafts(): Promise<{
+  drafts: number;
+  picksReclassified: number;
+  byMode: Record<DraftRookieMode, number>;
+}> {
+  const allDrafts = await db
+    .select({ draftId: drafts.draftId, draftType: drafts.draftType })
+    .from(drafts);
+
+  let picksReclassified = 0;
+  const byMode: Record<DraftRookieMode, number> = {
+    direct_rookies: 0, rookie_picks: 0, mixed: 0, unknown: 0,
+  };
+
+  for (const d of allDrafts) {
+    const stored = await db
+      .select({
+        id: draftPicks.id,
+        round: draftPicks.round,
+        pickInRound: draftPicks.pickInRound,
+        playerId: draftPicks.playerId,
+        playerName: draftPicks.playerName,
+        position: draftPicks.position,
+        isRookiePlaceholder: draftPicks.isRookiePlaceholder,
+        isRookie: draftPicks.isRookie,
+      })
+      .from(draftPicks)
+      .where(eq(draftPicks.draftId, d.draftId));
+
+    let placeholderCount = 0;
+    let actualCount = 0;
+    const updates: Array<{ id: number; isRookiePlaceholder: boolean; isRookie: boolean }> = [];
+
+    for (const p of stored) {
+      const isPlaceholder = d.draftType !== "startup" && isPlaceholderFromStoredPick(p);
+      const isReal = d.draftType !== "startup" && !isPlaceholder && !!p.playerId && (p.position ?? "").length > 0;
+
+      if (isPlaceholder !== p.isRookiePlaceholder || isReal !== p.isRookie) {
+        updates.push({ id: p.id, isRookiePlaceholder: isPlaceholder, isRookie: isReal });
+      }
+      if (isPlaceholder) placeholderCount++;
+      else if (isReal) actualCount++;
+    }
+
+    // Apply pick-level updates.
+    for (const u of updates) {
+      await db
+        .update(draftPicks)
+        .set({ isRookiePlaceholder: u.isRookiePlaceholder, isRookie: u.isRookie })
+        .where(eq(draftPicks.id, u.id));
+    }
+    picksReclassified += updates.length;
+
+    // Compute draft-level rookieMode from the fresh counts.
+    let newMode: DraftRookieMode;
+    if (d.draftType === "startup") {
+      newMode = "direct_rookies";
+    } else {
+      const total = placeholderCount + actualCount;
+      if (total < 3) newMode = "unknown";
+      else {
+        const placeholderShare = placeholderCount / total;
+        const actualShare = actualCount / total;
+        if (placeholderShare >= 0.75) newMode = "rookie_picks";
+        else if (actualShare >= 0.75) newMode = "direct_rookies";
+        else if (placeholderShare >= 0.25 && actualShare >= 0.25) newMode = "mixed";
+        else newMode = placeholderShare > actualShare ? "rookie_picks" : "direct_rookies";
+      }
+    }
+    byMode[newMode]++;
+
+    await db
+      .update(drafts)
+      .set({
+        rookieMode: newMode,
+        directlyDraftedRookies: newMode === "direct_rookies" || d.draftType === "startup",
+      })
+      .where(eq(drafts.draftId, d.draftId));
+  }
+
+  // Existing snapshots reflect the OLD classification. Clear them so callers
+  // get a fresh aggregation on the next read.
+  await db.delete(adpSnapshots);
+
+  return {
+    drafts: allDrafts.length,
+    picksReclassified,
+    byMode,
+  };
 }
 
 // ── Snapshot cache ───────────────────────────────────────────────────────────

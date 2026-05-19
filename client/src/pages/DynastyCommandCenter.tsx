@@ -38,7 +38,6 @@ import { PositionalAnalysis } from "./tabs/PositionalAnalysis";
 import { MarketValue } from "./tabs/LeagueMarket";
 import Analysis from "./tabs/Analysis";
 import { LeagueEconomy } from "./tabs/LeagueEconomy";
-import LiveDraft from "./tabs/LiveDraft";
 import { API_BASE } from "@/lib/apiBase";
 import Transactions from "./tabs/Transactions";
 import { LineupCommand } from "./tabs/LineupCommand";
@@ -46,7 +45,6 @@ import TradeSync from "./tabs/TradeSync";
 import { CompareRBs } from "./tabs/CompareRBs";
 import { ShareDynastyPopup } from "@/components/ShareDynastyPopup";
 import { WhatsNewModal } from "@/components/WhatsNewModal";
-import { DraftCommand } from "./tabs/DraftCommand";
 import { AboutPage } from "@/components/AboutModal";
 import { FeedbackPage } from "@/components/FeedbackPage";
 import { TermsPage, PrivacyPage, CookiesPage } from "@/components/LegalModals";
@@ -68,6 +66,12 @@ function getInitialState(pathTab?: string, pathSub?: string) {
   const saved = loadSavedState();
   const requestedTab = pathTab || saved?.tab || "portfolio";
   const requestedSub = pathSub || saved?.sub || "portfolio-summary";
+
+  // Temporarily hidden modules — redirect any stored URL / saved-state pointer
+  // away from them so users don't strand on a tab with no nav entry.
+  if (requestedTab === "live-draft" || requestedTab === "draft") {
+    return { tab: "portfolio", sub: "portfolio-summary" };
+  }
 
   return {
     tab: requestedTab,
@@ -357,13 +361,6 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
     if (activeMainTab === "terms") return <TermsPage onNavigate={handleMainTabChange} />;
     if (activeMainTab === "privacy") return <PrivacyPage onNavigate={handleMainTabChange} />;
     if (activeMainTab === "cookies") return <CookiesPage onNavigate={handleMainTabChange} />;
-
-    if (activeMainTab === "live-draft") {
-      return <LiveDraft />;
-    }
-
-    // Draft Command runs on public ADP data — no Sleeper or league required.
-    if (activeMainTab === "draft") return <DraftCommand />;
 
     if (activeMainTab === "portfolio") {
       const key = `portfolio:${activeSubTab}`;

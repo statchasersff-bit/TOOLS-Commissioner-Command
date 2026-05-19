@@ -39,6 +39,7 @@ import {
   ingestCrawledLeagueDrafts,
   refreshAdpSnapshot,
   refreshDefaultSnapshots,
+  reclassifyAdpDrafts,
   getAdp,
   startAdpScheduler,
   backfillLeagueScoring,
@@ -846,7 +847,7 @@ export async function registerRoutes(
         bestBall: str(q.bestBall, ["yes", "no"] as const) ?? "all",
         leagueMode: str(q.leagueMode, ["dynasty", "keeper", "redraft"] as const) ?? "dynasty",
         teams: num(q.teams) ?? "all",
-        rookieMode: str(q.rookieMode, ["picks", "direct"] as const) === "picks" ? "picks" : "direct",
+        rookieMode: (str(q.rookieMode, ["picks", "direct", "both"] as const) ?? "direct") as AdpFilters["rookieMode"],
         passTd: (num(q.passTd) === 6 ? 6 : num(q.passTd) === 4 ? 4 : "all") as AdpFilters["passTd"],
         startDate: typeof q.startDate === "string" ? q.startDate : undefined,
         endDate: typeof q.endDate === "string" ? q.endDate : undefined,
@@ -1022,6 +1023,25 @@ export async function registerRoutes(
     } catch (err: any) {
       console.error("[Admin] adp/backfill-league-scoring error:", err);
       res.status(500).json({ error: err.message || "Backfill failed" });
+    }
+  });
+
+  /**
+   * POST /api/admin/adp/reclassify
+   *
+   * Walks every stored draft, recomputes per-pick isRookiePlaceholder and
+   * per-draft rookieMode using the new helpers in adp.ts, and clears the
+   * snapshot cache so the next read sees fresh aggregations. Use this after
+   * the rookie-mode classification bug fix to repair existing data.
+   */
+  app.post("/api/admin/adp/reclassify", async (req, res) => {
+    if (!(await requireAdmin(req, res))) return;
+    try {
+      const result = await reclassifyAdpDrafts();
+      res.json(result);
+    } catch (err: any) {
+      console.error("[Admin] adp/reclassify error:", err);
+      res.status(500).json({ error: err.message || "Reclassify failed" });
     }
   });
 
