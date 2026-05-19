@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { useOptimizeQueue } from "@/services/optimizeQueue";
 import { OptimizeAllModal } from "@/components/OptimizeAllModal";
+import { StartSitCompareTab } from "@/components/start-sit/StartSitCompareTab";
 import type { SleeperLeagueSummary } from "@/types";
 
 const SLEEPER_API = "https://api.sleeper.app/v1";
@@ -741,7 +742,7 @@ function MatchupBattleCard({ m, preseason }: { m: MatchupAnalysis; preseason?: b
 export function LineupCommand() {
   const { isConnected, user, leagues } = useSleeper();
 
-  const [activeTab, setActiveTab] = useState<"lineup" | "matchups">("lineup");
+  const [activeTab, setActiveTab] = useState<"lineup" | "matchups" | "startsit">("lineup");
 
   const [nflWeek, setNflWeek]     = useState<number | null>(null);
   const [season, setSeason]       = useState("2025");
@@ -1173,11 +1174,11 @@ export function LineupCommand() {
           {(baseLoading || allLoading || mAllLoading) && (
             <RefreshCw className="w-3.5 h-3.5 text-muted-foreground animate-spin" />
           )}
-          <div className="grid flex-shrink-0" style={{ gridTemplateColumns: "1fr 1fr", height: 48, borderRadius: 16, padding: 4, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", gap: 4, width: 260 }}>
-            {(["lineup", "matchups"] as const).map(tab => {
+          <div className="grid flex-shrink-0" style={{ gridTemplateColumns: "1fr 1fr 1fr", height: 48, borderRadius: 16, padding: 4, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", gap: 4, width: 390 }}>
+            {(["lineup", "matchups", "startsit"] as const).map(tab => {
               const isActive = activeTab === tab;
-              const Icon = tab === "lineup" ? Zap : Swords;
-              const label = tab === "lineup" ? "Lineups" : "Matchups";
+              const Icon = tab === "lineup" ? Zap : tab === "matchups" ? Swords : Users;
+              const label = tab === "lineup" ? "Lineups" : tab === "matchups" ? "Matchups" : "Start/Sit";
               return (
                 <button key={tab} onClick={() => setActiveTab(tab)} data-testid={`tab-${tab}-desktop`}
                   className="relative flex items-center justify-center gap-2 font-semibold transition-all duration-200"
@@ -1207,11 +1208,11 @@ export function LineupCommand() {
         {(baseLoading || allLoading || mAllLoading) && (
           <RefreshCw className="w-3.5 h-3.5 text-muted-foreground animate-spin absolute right-4 top-4" />
         )}
-        <div className="grid w-full sm:w-auto" style={{ gridTemplateColumns: "1fr 1fr", maxWidth: 420, height: 48, borderRadius: 16, padding: 4, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", gap: 4 }}>
-          {(["lineup", "matchups"] as const).map(tab => {
+        <div className="grid w-full sm:w-auto" style={{ gridTemplateColumns: "1fr 1fr 1fr", maxWidth: 520, height: 48, borderRadius: 16, padding: 4, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", gap: 4 }}>
+          {(["lineup", "matchups", "startsit"] as const).map(tab => {
             const isActive = activeTab === tab;
-            const Icon = tab === "lineup" ? Zap : Swords;
-            const label = tab === "lineup" ? "Lineups" : "Matchups";
+            const Icon = tab === "lineup" ? Zap : tab === "matchups" ? Swords : Users;
+            const label = tab === "lineup" ? "Lineups" : tab === "matchups" ? "Matchups" : "Start/Sit";
             return (
               <button key={tab} onClick={() => setActiveTab(tab)} data-testid={`tab-${tab}`}
                 className="relative flex items-center justify-center gap-2 font-semibold transition-all duration-200"
@@ -1445,6 +1446,11 @@ export function LineupCommand() {
             Matchup projections from Sleeper starters · Win % = projected pts / combined projected pts · Records from current standings
           </p>
         </>
+      )}
+
+      {/* ══════════════════ START/SIT COMPARE TAB ══════════════════ */}
+      {activeTab === "startsit" && (
+        <StartSitCompareTab defaultWeek={nflWeek ?? 1} />
       )}
     </div>
   );

@@ -49,7 +49,7 @@ export function PlayerAvatar({
   const metaSize   = size === "md" ? "text-[13px]" : size === "xs" ? "text-[10px]" : "text-[11px]";
   const initSize   = size === "md" ? "text-[15px]" : size === "xs" ? "text-[11px]" : "text-[13px]";
 
-  const isSyntheticId = !id || id.startsWith("rookie_") || id.startsWith("pick_");
+  const isSyntheticId = !id || id.startsWith("rookie_") || id.startsWith("pick_") || id.startsWith("mock_");
   const showFallback  = imgErr || isSyntheticId;
 
   const initials = (name || "?")

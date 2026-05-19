@@ -4,6 +4,8 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ValueModelProvider } from "@/contexts/ValueModelContext";
+import { PlayerProfileProvider } from "@/contexts/PlayerProfileContext";
+import { GlobalPlayerProfileDrawer } from "@/components/GlobalPlayerProfileDrawer";
 import { SleeperProvider } from "@/contexts/SleeperContext";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { FavoriteTeamProvider } from "@/contexts/FavoriteTeamContext";
@@ -129,10 +131,13 @@ function AuthenticatedTree({ probe }: { probe: Probe }) {
   return (
     <SleeperProvider>
       <ValueModelProvider>
-        <Toaster />
-        <ErrorBoundary label="Router/DynastyCommandCenter">
-          <Router />
-        </ErrorBoundary>
+        <PlayerProfileProvider>
+          <Toaster />
+          <ErrorBoundary label="Router/DynastyCommandCenter">
+            <Router />
+          </ErrorBoundary>
+          <GlobalPlayerProfileDrawer />
+        </PlayerProfileProvider>
       </ValueModelProvider>
     </SleeperProvider>
   );

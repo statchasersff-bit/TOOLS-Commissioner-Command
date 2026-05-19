@@ -9,6 +9,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { getLeagueTeamTiers, getTierColor, getTierBg, getTierEmoji, getTierTooltip } from "@/data/mockData";
 import { useValueModel } from "@/contexts/ValueModelContext";
+import { usePlayerProfile } from "@/contexts/PlayerProfileContext";
 import { formatPickLabel } from "@/types";
 import type { League, Team, Tier, Player, Pick } from "@/types";
 import { cn } from "@/lib/utils";
@@ -1191,8 +1192,16 @@ function PlayerRow({
 }) {
   const showDyn = valueMode === "dynasty" || valueMode === "both";
   const showRed = valueMode === "redraft" || valueMode === "both";
+  const { openPlayerProfile } = usePlayerProfile();
   return (
-    <div className="flex items-center gap-2 py-1 px-1 rounded-md hover:bg-muted/30" data-testid={`compare-player-${player.id}`}>
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={() => openPlayerProfile(player.sleeperId || player.id)}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openPlayerProfile(player.sleeperId || player.id); } }}
+      className="flex items-center gap-2 py-1 px-1 rounded-md hover:bg-muted/40 cursor-pointer transition-colors"
+      data-testid={`compare-player-${player.id}`}
+    >
       <span className="text-[10px] text-muted-foreground w-4 tabular-nums flex-shrink-0">{index}.</span>
       <PlayerAvatar id={player.sleeperId || player.id} name={player.name} pos={player.pos} team={player.team} size="xs" compact />
       <div className="min-w-0 flex-1">

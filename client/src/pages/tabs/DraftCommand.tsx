@@ -423,9 +423,12 @@ function AdminAdpTools() {
 // ── List View ────────────────────────────────────────────────────────────────
 type ListSortKey = "overall_rank" | "avg_pick" | "min_pick" | "max_pick" | "draft_count" | "trend_30d" | "positional_rank";
 
+const LIST_PAGE_SIZE = 50;
+
 function ListView({ rows, onPlayerClick }: { rows: ADPResult[]; onPlayerClick?: (row: ADPResult) => void }) {
   const [sortKey, setSortKey] = useState<ListSortKey>("overall_rank");
   const [sortAsc, setSortAsc] = useState(true);
+  const [visibleCount, setVisibleCount] = useState(LIST_PAGE_SIZE);
 
   const sorted = useMemo(() => {
     const arr = [...rows];
@@ -437,6 +440,16 @@ function ListView({ rows, onPlayerClick }: { rows: ADPResult[]; onPlayerClick?: 
     });
     return arr;
   }, [rows, sortKey, sortAsc]);
+
+  // Reset pagination when the dataset or sort changes so the user isn't
+  // stranded inside a re-sorted list.
+  useEffect(() => {
+    setVisibleCount(LIST_PAGE_SIZE);
+  }, [rows, sortKey, sortAsc]);
+
+  const visible = sorted.slice(0, visibleCount);
+  const hasMore = visibleCount < sorted.length;
+  const nextChunk = Math.min(LIST_PAGE_SIZE, sorted.length - visibleCount);
 
   const handleSort = (key: ListSortKey) => {
     if (sortKey === key) setSortAsc(!sortAsc);
@@ -452,7 +465,7 @@ function ListView({ rows, onPlayerClick }: { rows: ADPResult[]; onPlayerClick?: 
     <Card className="overflow-hidden border-border/60 dark:border-[#1a2d4a]/80">
       {/* Mobile: card-list */}
       <div className="md:hidden divide-y divide-border/20">
-        {sorted.map((r) => (
+        {visible.map((r) => (
           <MobileListRow key={r.player_id} row={r} onPlayerClick={onPlayerClick} />
         ))}
       </div>
@@ -487,7 +500,7 @@ function ListView({ rows, onPlayerClick }: { rows: ADPResult[]; onPlayerClick?: 
             </tr>
           </thead>
           <tbody className="divide-y divide-border/20">
-            {sorted.map((r) => (
+            {visible.map((r) => (
               <tr
                 key={r.player_id}
                 className={cn("hover:bg-muted/20", onPlayerClick && "cursor-pointer")}
@@ -516,6 +529,25 @@ function ListView({ rows, onPlayerClick }: { rows: ADPResult[]; onPlayerClick?: 
             ))}
           </tbody>
         </table>
+      </div>
+
+      {/* Pagination footer */}
+      <div className="border-t border-border/40 bg-muted/20 dark:bg-white/[0.015] px-3 py-2.5 flex items-center justify-between gap-3 text-[11px] text-muted-foreground">
+        <span className="tabular-nums" data-testid="list-pagination-count">
+          Showing <span className="font-semibold text-foreground">{visible.length}</span> of{" "}
+          <span className="font-semibold text-foreground">{sorted.length}</span>
+        </span>
+        {hasMore && (
+          <button
+            type="button"
+            onClick={() => setVisibleCount((c) => c + LIST_PAGE_SIZE)}
+            data-testid="button-list-show-more"
+            className="inline-flex items-center gap-1.5 rounded-md border border-[#d4af37]/30 bg-[#d4af37]/8 hover:bg-[#d4af37]/15 px-3 py-1 text-[11px] font-semibold text-[#d4af37] transition-colors"
+          >
+            Show next {nextChunk}
+            <ChevronDown className="w-3 h-3" />
+          </button>
+        )}
       </div>
     </Card>
   );
@@ -869,7 +901,10 @@ function HexView({ rows, teams, onPlayerClick }: { rows: ADPResult[]; teams: num
   const isMobile = useIsMobile();
   // Larger tiles than before — the redesign uses a prominent square headshot
   // so we give it more room. Mobile still shrinks but keeps a readable layout.
-  const tileW = isMobile ? 104 : 132;
+  // Roomier than the previous pass — the larger headshot + prominent
+  // position-rank glyph need a touch more horizontal space. Mobile shrinks
+  // but stays scannable; horizontal scroll handles the rest.
+  const tileW = isMobile ? 110 : 144;
   const tileH = Math.round(tileW * 2 / Math.sqrt(3));
 
   // Group rows into rounds, placing each at its (round, pickInRound) slot
@@ -1025,8 +1060,6 @@ function HexTile({ row, pickInRound, onClick }: { row: ADPResult; pickInRound: n
   const theme = HEX_POS_THEME[row.position];
   const isElite = row.overall_rank <= ELITE_RANK_CUTOFF && !row.is_rookie_placeholder;
   const isPick = row.is_rookie_placeholder;
-  const isRising = row.trend_30d < -2;
-  const isFalling = row.trend_30d > 2;
 
   return (
     // Outer wrapper is NOT clipped — so the hover panel + drop-shadow glow
@@ -1042,11 +1075,11 @@ function HexTile({ row, pickInRound, onClick }: { row: ADPResult; pickInRound: n
     >
       {/* Inner transform layer — handles lift + glow intensification. */}
       <div
-        className="absolute inset-0 transition-all duration-200 ease-out group-hover:-translate-y-0.5 group-hover:scale-[1.06] group-hover:z-30"
+        className="absolute inset-0 transition-all duration-200 ease-out group-hover:-translate-y-1 group-hover:scale-[1.07] group-hover:z-30"
         style={{
           filter: isElite
-            ? `drop-shadow(0 0 10px rgba(212,175,55,0.55)) drop-shadow(0 0 4px ${theme.glow})`
-            : `drop-shadow(0 6px 10px rgba(0,0,0,0.45))`,
+            ? `drop-shadow(0 0 14px rgba(212,175,55,0.6)) drop-shadow(0 0 6px ${theme.glow})`
+            : `drop-shadow(0 8px 14px rgba(0,0,0,0.55))`,
         }}
       >
         {/* Soft "halo" — sits just behind the tile and brightens on hover.
@@ -1060,16 +1093,17 @@ function HexTile({ row, pickInRound, onClick }: { row: ADPResult; pickInRound: n
           }}
         />
 
-        {/* ── Tile shell (the hex). ─────────────────────────────────────── */}
+        {/* ── Tile shell (the hex). Richer 3-stop gradient with a wider
+             specular and a hotter equator for more depth. ───────────── */}
         <div
           className="absolute inset-0"
           style={{
             clipPath: HEX_CLIP,
             background: [
-              // Top edge specular highlight.
-              "linear-gradient(180deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 18%)",
+              // Specular highlight at the top edge — softer and longer.
+              "linear-gradient(180deg, rgba(255,255,255,0.22) 0%, rgba(255,255,255,0.06) 10%, rgba(255,255,255,0) 26%)",
               // Positional gradient — light → saturated → deep base.
-              `linear-gradient(165deg, ${theme.shell[0]} 0%, ${theme.shell[1]} 50%, ${theme.shell[2]} 100%)`,
+              `linear-gradient(160deg, ${theme.shell[0]} 0%, ${theme.shell[1]} 45%, ${theme.shell[2]} 100%)`,
             ].join(", "),
           }}
         />
@@ -1080,19 +1114,42 @@ function HexTile({ row, pickInRound, onClick }: { row: ADPResult; pickInRound: n
           className="absolute inset-[1px]"
           style={{
             clipPath: HEX_CLIP,
-            background: `linear-gradient(165deg, ${theme.shell[0]} 0%, ${theme.shell[1]} 50%, ${theme.shell[2]} 100%)`,
-            boxShadow: "inset 0 1px 0 rgba(255,255,255,0.15)",
+            background: `linear-gradient(160deg, ${theme.shell[0]} 0%, ${theme.shell[1]} 45%, ${theme.shell[2]} 100%)`,
+            boxShadow: "inset 0 1px 0 rgba(255,255,255,0.22), inset 0 -1px 0 rgba(0,0,0,0.4)",
           }}
         />
 
+        {/* Team-logo watermark — sits behind the player image as a
+             team-branded ghost. Centered, low opacity, slightly blurred.
+             Picks (rookies) and players without a team skip this. */}
+        {!isPick && row.team && (
+          <div
+            className="absolute inset-0 flex items-center justify-center pointer-events-none"
+            style={{ clipPath: HEX_CLIP }}
+          >
+            <img
+              src={`https://sleepercdn.com/images/team_logos/nfl/${row.team.toLowerCase()}.png`}
+              alt=""
+              aria-hidden="true"
+              className="w-[78%] h-[78%] object-contain"
+              style={{
+                opacity: 0.08,
+                filter: "blur(0.6px) saturate(1.1)",
+              }}
+              onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+            />
+          </div>
+        )}
+
         {/* Bottom vignette — darkens lower 60% so player name is legible
-            over the loudest position colors (amber WR, gold PICK).      */}
+            over the loudest position colors (amber WR, gold PICK). Boosted
+            slightly to keep contrast with the new watermark layer.       */}
         <div
           className="absolute inset-0 pointer-events-none"
           style={{
             clipPath: HEX_CLIP,
             background:
-              "radial-gradient(ellipse 110% 75% at 50% 110%, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0.25) 45%, transparent 70%)",
+              "radial-gradient(ellipse 115% 80% at 50% 110%, rgba(0,0,0,0.78) 0%, rgba(0,0,0,0.32) 45%, transparent 72%)",
           }}
         />
 
@@ -1102,26 +1159,43 @@ function HexTile({ row, pickInRound, onClick }: { row: ADPResult; pickInRound: n
           style={{
             clipPath: HEX_CLIP,
             background:
-              "linear-gradient(115deg, transparent 35%, rgba(255,255,255,0.12) 50%, transparent 65%)",
+              "linear-gradient(115deg, transparent 32%, rgba(255,255,255,0.14) 50%, transparent 68%)",
+          }}
+        />
+
+        {/* Inner glow — soft radial light from upper centre, hover-only.
+             Reads as ambient lighting hitting the tile face.            */}
+        <div
+          className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"
+          style={{
+            clipPath: HEX_CLIP,
+            background:
+              "radial-gradient(ellipse 80% 50% at 50% 10%, rgba(255,255,255,0.18) 0%, transparent 65%)",
           }}
         />
 
         {/* ── Content stack ────────────────────────────────────────────── */}
-        <div className="absolute inset-0 flex flex-col items-center px-1.5 pt-[10%] pb-[10%]">
-          {/* Top header row — pick coordinate + position rank chip side by side. */}
-          <div className="w-full flex items-center justify-between px-1 mb-1">
-            <span className="text-[8px] font-bold tabular-nums tracking-[0.1em] text-white/55 leading-none pointer-events-none">
+        <div className="absolute inset-0 flex flex-col items-center px-1.5 pt-[7%] pb-[8%]">
+          {/* Top header row — prominent position rank chip front and centre.
+               Pick coordinate sits in the corner as a subtle HUD garnish. */}
+          <div className="w-full flex items-center justify-between px-1 mb-0.5">
+            <span className="text-[8px] font-bold tabular-nums tracking-[0.1em] text-white/40 leading-none pointer-events-none">
               {String(pickInRound).padStart(2, "0")}
             </span>
-            <span
-              className="px-1 py-px rounded text-[8px] font-bold uppercase tracking-wider border leading-none"
-              style={{ background: theme.chipBg, color: theme.text, borderColor: `${theme.ring}aa` }}
-            >
-              {isPick ? "RP" : `${row.position}${row.positional_rank}`}
-            </span>
+            <span className="text-[8px] font-bold tabular-nums tracking-[0.1em] text-white/0 leading-none">·</span>
           </div>
 
-          {/* Player image — large square crop, the dominant visual element. */}
+          {/* Large position rank — the new dominant text element. */}
+          <div
+            className="text-[15px] sm:text-[16px] font-black tracking-tight leading-none mb-1 drop-shadow-[0_1px_2px_rgba(0,0,0,0.85)]"
+            style={{ color: theme.text, textShadow: `0 0 10px ${theme.glow}` }}
+            data-testid={`hex-posrank-${row.player_id}`}
+          >
+            {isPick ? "RP" : `${row.position}${row.positional_rank}`}
+          </div>
+
+          {/* Player image — the dominant visual element, layered above the
+               team watermark. ~18% larger than before.                   */}
           {isPick ? (
             <PickGlyph theme={theme} label={row.rookie_pick_label} />
           ) : (
@@ -1132,35 +1206,22 @@ function HexTile({ row, pickInRound, onClick }: { row: ADPResult; pickInRound: n
             />
           )}
 
-          {/* Name + ADP. */}
-          <div className="w-full text-center mt-1">
-            <div className="text-[11px] font-bold text-white leading-[1.05] line-clamp-1 drop-shadow-[0_1px_2px_rgba(0,0,0,0.95)] tracking-tight px-0.5">
+          {/* Name only — the gold ADP number was removed; ADP still lives
+               in the hover panel. The empty slot beneath reserves space
+               for future trend indicators (rising / falling / stable). */}
+          <div className="w-full text-center mt-1.5 flex-1 flex flex-col justify-end">
+            <div className="text-[11px] sm:text-[12px] font-bold text-white leading-[1.05] line-clamp-1 drop-shadow-[0_1px_2px_rgba(0,0,0,0.95)] tracking-tight px-0.5">
               {shortenName(row.player_name)}
             </div>
-            <div className="mt-0.5 inline-flex items-center gap-1 text-[10px] leading-none">
-              <span className="font-bold tabular-nums text-[#d4af37] drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)]">
-                {row.avg_pick.toFixed(1)}
-              </span>
-              {isRising && (
-                <TrendingUp className="w-2.5 h-2.5 text-emerald-300 drop-shadow-[0_0_4px_rgba(52,211,153,0.7)]" />
-              )}
-              {isFalling && (
-                <TrendingDown className="w-2.5 h-2.5 text-red-300 drop-shadow-[0_0_4px_rgba(248,113,113,0.7)]" />
-              )}
-            </div>
+            {/* Reserved trend indicator slot — kept empty until real data
+                 lands. Sized so removal/addition doesn't shift layout. */}
+            <div className="h-2.5 mt-0.5" data-testid={`hex-trend-slot-${row.player_id}`} />
           </div>
         </div>
 
         {/* Elite indicator — pulsing gold beacon at top tip. */}
         {isElite && (
           <div className="absolute top-[3%] left-1/2 w-1.5 h-1.5 rounded-full bg-[#d4af37] shadow-[0_0_10px_rgba(212,175,55,1)] hex-elite-pulse pointer-events-none" />
-        )}
-
-        {/* Sample-size warning. */}
-        {row.sample_size_warning && (
-          <AlertCircle
-            className="absolute top-[16%] right-[14%] w-3 h-3 text-amber-300 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] pointer-events-none"
-          />
         )}
       </div>
 
@@ -1189,15 +1250,20 @@ function PlayerHeadshotHex({
 
   return (
     <div className="relative flex items-center justify-center">
-      {/* Soft glow halo behind the headshot. */}
+      {/* Soft glow halo behind the headshot — wider + stronger so the
+           image reads as floating above the team watermark.            */}
       <div
-        className="absolute -inset-1 rounded-xl blur-md opacity-80"
+        className="absolute -inset-1.5 rounded-2xl blur-lg opacity-85"
         style={{ background: theme.glow }}
       />
       <div
-        className="relative w-14 h-14 sm:w-16 sm:h-16 rounded-md overflow-hidden flex items-center justify-center"
+        className="relative w-[68px] h-[68px] sm:w-[78px] sm:h-[78px] rounded-md overflow-hidden flex items-center justify-center"
         style={{
-          boxShadow: `0 0 0 2px ${theme.ring}, inset 0 0 0 1px rgba(255,255,255,0.15)`,
+          boxShadow: [
+            `0 0 0 2px ${theme.ring}`,
+            "inset 0 0 0 1px rgba(255,255,255,0.18)",
+            "0 6px 12px rgba(0,0,0,0.55)",
+          ].join(", "),
           background: `linear-gradient(180deg, ${theme.shell[1]}, ${theme.shell[2]})`,
         }}
       >
@@ -1209,7 +1275,7 @@ function PlayerHeadshotHex({
             onError={() => setErrored(true)}
           />
         ) : (
-          <span className="text-base font-black text-white/95 drop-shadow-[0_1px_1px_rgba(0,0,0,0.7)]">
+          <span className="text-lg font-black text-white/95 drop-shadow-[0_1px_1px_rgba(0,0,0,0.7)]">
             {initialsOf(name)}
           </span>
         )}
@@ -1222,15 +1288,15 @@ function PlayerHeadshotHex({
 function PickGlyph({ theme, label }: { theme: PosTheme; label?: string | null }) {
   return (
     <div className="relative flex items-center justify-center">
-      <div className="absolute -inset-1 rounded-xl blur-md opacity-80" style={{ background: theme.glow }} />
+      <div className="absolute -inset-1.5 rounded-2xl blur-lg opacity-85" style={{ background: theme.glow }} />
       <div
-        className="relative w-14 h-14 sm:w-16 sm:h-16 rounded-md flex items-center justify-center"
+        className="relative w-[68px] h-[68px] sm:w-[78px] sm:h-[78px] rounded-md flex items-center justify-center"
         style={{
           background: `linear-gradient(165deg, ${theme.shell[0]}, ${theme.shell[1]}, ${theme.shell[2]})`,
           boxShadow: `0 0 0 2px ${theme.ring}, inset 0 1px 0 rgba(255,255,255,0.3)`,
         }}
       >
-        <Hexagon className="w-7 h-7 text-[#1a1300]" strokeWidth={2.5} />
+        <Hexagon className="w-8 h-8 sm:w-9 sm:h-9 text-[#1a1300]" strokeWidth={2.5} />
         {label && (
           <span className="absolute bottom-0.5 left-1/2 -translate-x-1/2 px-1 py-px rounded text-[8px] font-bold uppercase tracking-wider whitespace-nowrap bg-black/40 text-[#fde68a] leading-none">
             {label.replace(/^\d{4}\s+Rookie\s+/i, "")}

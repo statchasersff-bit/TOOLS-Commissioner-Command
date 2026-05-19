@@ -8,6 +8,7 @@ import { InsightCallout } from "@/components/InsightCallout";
 import { SectionHeader } from "@/components/SectionHeader";
 import { getLeagueTeamTiers, getTierColor, getTierEmoji, getTierTooltip, isContenderTier, isRebuilderTier, generateInsights, computeNowScore, computeFutureScore, getDynastyWindowLabel, getDynastyWindowSubtitle, getDynastyWindowColor } from "@/data/mockData";
 import { useValueModel } from "@/contexts/ValueModelContext";
+import { usePlayerProfile } from "@/contexts/PlayerProfileContext";
 import type { League, Team, Player, Pick } from "@/types";
 import { formatPickLabel } from "@/types";
 import { cn } from "@/lib/utils";
@@ -796,6 +797,7 @@ function ScoringSettingsTable({ settings }: { settings: Record<string, number> }
 export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
   const teams = league.teams;
   const { getPlayerValue, getRedraftValue, optimizeLineup } = useValueModel();
+  const { openPlayerProfile } = usePlayerProfile();
   const [sortKey, setSortKey] = useState<SortKey>("overall");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
@@ -1236,7 +1238,12 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
                                     {/* Player list — top 7 with compact dynasty value */}
                                     <ul className="space-y-[1px] leading-tight">
                                       {visible.map((p, i) => (
-                                        <li key={p.sleeperId ?? i} className="flex items-center gap-1 min-w-0" title={`${p.name} · ${(getPlayerValue(p) / 1000).toFixed(1)}k`}>
+                                        <li
+                                          key={p.sleeperId ?? i}
+                                          onClick={(e) => { e.stopPropagation(); openPlayerProfile(p.sleeperId ?? p.id); }}
+                                          className="flex items-center gap-1 min-w-0 cursor-pointer hover:bg-muted/30 rounded px-0.5 transition-colors"
+                                          title={`${p.name} · ${(getPlayerValue(p) / 1000).toFixed(1)}k`}
+                                        >
                                           <span className="text-[9px] text-muted-foreground/40 w-3 flex-shrink-0 tabular-nums">{i + 1}</span>
                                           <span className="text-[11px] text-foreground truncate flex-1">{p.name}</span>
                                           <span className="text-[9px] text-muted-foreground/60 flex-shrink-0 tabular-nums" data-testid={`pos-player-value-${team.id}-${pos.toLowerCase()}-${i}`}>
@@ -1628,7 +1635,12 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
                                           <li className="text-[9px] text-muted-foreground/50 italic">None rostered</li>
                                         ) : (
                                           visible.map((p, i) => (
-                                            <li key={p.sleeperId ?? i} className="flex items-center gap-1 min-w-0" title={`${p.name} · ${(getPlayerValue(p) / 1000).toFixed(1)}k`}>
+                                            <li
+                                              key={p.sleeperId ?? i}
+                                              onClick={(e) => { e.stopPropagation(); openPlayerProfile(p.sleeperId ?? p.id); }}
+                                              className="flex items-center gap-1 min-w-0 cursor-pointer hover:bg-muted/30 rounded px-0.5 transition-colors"
+                                              title={`${p.name} · ${(getPlayerValue(p) / 1000).toFixed(1)}k`}
+                                            >
                                               <span className="text-[9px] text-muted-foreground/40 w-3 flex-shrink-0 tabular-nums">{i + 1}</span>
                                               <span className="text-[11px] text-foreground truncate flex-1">{p.name}</span>
                                               <span className="text-[9px] text-muted-foreground/60 flex-shrink-0 tabular-nums" data-testid={`hm-pos-player-value-${team.id}-${pos.toLowerCase()}-${i}`}>
@@ -1768,6 +1780,7 @@ function percentileLabel(rank: number, total: number): string {
 
 export function MyTeam({ league, userTeam, onNavigate }: DashboardOverviewProps) {
   const { getPlayerValue, getRedraftValue, optimizeLineup } = useValueModel();
+  const { openPlayerProfile } = usePlayerProfile();
   const [posGroupOpen, setPosGroupOpen] = useState(true);
 
   const total = league.teams.length;
@@ -2044,7 +2057,15 @@ export function MyTeam({ league, userTeam, onNavigate }: DashboardOverviewProps)
                               <>
                                 <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider pt-1 pb-1">Starters</p>
                                 {starters.map(p => (
-                                  <div key={p.id} className="flex items-center justify-between py-1.5 border-b border-border/10 last:border-0" data-testid={`group-player-${p.id}`}>
+                                  <div
+                                    key={p.id}
+                                    role="button"
+                                    tabIndex={0}
+                                    onClick={() => openPlayerProfile(p.sleeperId ?? p.id)}
+                                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openPlayerProfile(p.sleeperId ?? p.id); } }}
+                                    className="flex items-center justify-between py-1.5 border-b border-border/10 last:border-0 cursor-pointer rounded -mx-1 px-1 hover:bg-muted/40 transition-colors"
+                                    data-testid={`group-player-${p.id}`}
+                                  >
                                     <div className="flex items-center gap-1.5 min-w-0">
                                       <PlayerAvatar id={p.sleeperId ?? p.id} name={p.name} pos={p.pos} team={p.team ?? ""} size="sm" compact />
                                       <div className="min-w-0">
@@ -2061,7 +2082,15 @@ export function MyTeam({ league, userTeam, onNavigate }: DashboardOverviewProps)
                               <>
                                 <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider pt-2 pb-1">Bench</p>
                                 {bench.map(p => (
-                                  <div key={p.id} className="flex items-center justify-between py-1.5 border-b border-border/10 last:border-0" data-testid={`group-bench-${p.id}`}>
+                                  <div
+                                    key={p.id}
+                                    role="button"
+                                    tabIndex={0}
+                                    onClick={() => openPlayerProfile(p.sleeperId ?? p.id)}
+                                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openPlayerProfile(p.sleeperId ?? p.id); } }}
+                                    className="flex items-center justify-between py-1.5 border-b border-border/10 last:border-0 cursor-pointer rounded -mx-1 px-1 hover:bg-muted/40 transition-colors"
+                                    data-testid={`group-bench-${p.id}`}
+                                  >
                                     <div className="flex items-center gap-1.5 min-w-0">
                                       <PlayerAvatar id={p.sleeperId ?? p.id} name={p.name} pos={p.pos} team={p.team ?? ""} size="sm" compact />
                                       <div className="min-w-0">

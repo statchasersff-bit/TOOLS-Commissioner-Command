@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { InsightCallout } from "@/components/InsightCallout";
 import { SectionHeader } from "@/components/SectionHeader";
 import { useValueModel } from "@/contexts/ValueModelContext";
+import { usePlayerProfile } from "@/contexts/PlayerProfileContext";
 import { getPositionColor } from "@/data/mockData";
 import { ROOKIE_BOARD_2026_SF } from "@/data/rookieBoard2026";
 import type { League } from "@/types";
@@ -31,6 +32,7 @@ type SortDir = "asc" | "desc";
 
 export function MarketValue({ league }: MarketProps) {
   const { sourceId, sources, valuesBySleeperId, redraftValuesBySleeperId, dynastyPlayerList, getPickValue } = useValueModel();
+  const { openPlayerProfile } = usePlayerProfile();
   const [search, setSearch] = useState("");
   const [posFilter, setPosFilter] = useState("all");
   const [sortKey, setSortKey] = useState<SortKey>("dynastyValue");
@@ -231,10 +233,13 @@ export function MarketValue({ league }: MarketProps) {
                 </td>
               </tr>
             )}
-            {filtered.map((row) => (
+            {filtered.map((row) => {
+              const isPick = row.sleeperId.startsWith("FP_") || row.pos === "PICK";
+              return (
               <tr
                 key={row.sleeperId}
-                className="border-b border-border/30 hover:bg-muted/20 transition-colors"
+                onClick={isPick ? undefined : () => openPlayerProfile(row.sleeperId)}
+                className={`border-b border-border/30 hover:bg-muted/20 transition-colors ${isPick ? "" : "cursor-pointer"}`}
                 data-testid={`row-player-${row.sleeperId}`}
               >
                 <td className="px-2 md:px-4 py-2">
@@ -258,7 +263,8 @@ export function MarketValue({ league }: MarketProps) {
                   {row.dynastyValue.toLocaleString()}
                 </td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
         </div>
