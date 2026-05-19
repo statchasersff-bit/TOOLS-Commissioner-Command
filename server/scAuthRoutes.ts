@@ -25,13 +25,18 @@ function signUserJwt(userId: string): string {
 }
 
 export function getUserIdFromRequest(req: Request): string | null {
+  // Prefer a valid Bearer token, but if it fails to verify (e.g. the server
+  // restarted with a new SESSION_SECRET, invalidating an older token still
+  // sitting in localStorage) fall through to the session cookie instead of
+  // returning null — otherwise a stale localStorage token can wedge a user
+  // out of admin routes even when their cookie session is fine.
   const auth = req.headers.authorization;
   if (auth?.startsWith("Bearer ")) {
     try {
       const payload = jwt.verify(auth.slice(7), JWT_SECRET) as any;
-      return payload.scUserId ?? null;
-    } catch {
-      return null;
+      if (payload.scUserId) return payload.scUserId;
+    } catch (err: any) {
+      console.warn("[sc-auth] Bearer token verify failed, falling back to session:", err?.message);
     }
   }
   return (req.session as any).scUserId ?? null;

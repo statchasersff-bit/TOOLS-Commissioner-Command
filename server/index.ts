@@ -5,28 +5,23 @@ import connectPgSimple from "connect-pg-simple";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
+import { execSync } from "child_process";
 
 /**
- * Wait up to `maxWaitMs` for `port` to become available.
- * Polls using a lightweight TCP probe — no process killing required.
- * The workflow manager will SIGKILL the old process eventually; we just
- * need to be patient until it does.
+ * Forcefully free `port` so we can bind to it.
+ * Uses `fuser -k <port>/tcp` to send SIGKILL to whatever process is currently
+ * holding the port (e.g. the previous tsx-watch child), then waits up to
+ * `graceMs` for the OS to reclaim it before proceeding.
  */
-async function waitForPort(port: number, maxWaitMs = 15000): Promise<void> {
-  const { createConnection } = await import("net");
-  const deadline = Date.now() + maxWaitMs;
-
-  while (Date.now() < deadline) {
-    const inUse = await new Promise<boolean>(resolve => {
-      const sock = createConnection({ port, host: "127.0.0.1" });
-      sock.once("connect", () => { sock.destroy(); resolve(true); });
-      sock.once("error", () => resolve(false));
-    });
-    if (!inUse) return; // port is free
-    console.log(`[server] port ${port} still occupied, waiting…`);
-    await new Promise(r => setTimeout(r, 1500));
+async function freePort(port: number, graceMs = 2000): Promise<void> {
+  try {
+    execSync(`fuser -k ${port}/tcp`, { stdio: "ignore" });
+    console.log(`[server] freed port ${port} via fuser`);
+    // Give the OS a moment to reclaim the port
+    await new Promise(r => setTimeout(r, graceMs));
+  } catch {
+    // fuser exits non-zero when nothing is using the port — that's fine
   }
-  console.warn(`[server] port ${port} did not free within ${maxWaitMs}ms, attempting bind anyway`);
 }
 
 const app = express();
@@ -203,9 +198,8 @@ process.on("unhandledRejection", (reason) => {
   // It is the only port that is not firewalled.
   const port = parseInt(process.env.PORT || "5000", 10);
 
-  // Wait for the port to be free before binding (the workflow manager
-  // will SIGKILL the old process; we just need to give it time).
-  await waitForPort(port);
+  // Kill whatever is currently holding the port, then bind.
+  await freePort(port);
 
   httpServer.on("error", (err: NodeJS.ErrnoException) => {
     console.error("[server] fatal listen error:", err);

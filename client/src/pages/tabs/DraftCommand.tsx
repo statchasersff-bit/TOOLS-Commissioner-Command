@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { SectionHeader } from "@/components/SectionHeader";
+import { PlayerAvatar } from "@/components/PlayerAvatar";
 import {
   Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription,
 } from "@/components/ui/sheet";
@@ -15,7 +16,7 @@ import {
 import { cn } from "@/lib/utils";
 import {
   Search, SlidersHorizontal, List, LayoutGrid, Hexagon,
-  TrendingUp, TrendingDown, Minus, AlertCircle, RefreshCw, ChevronUp, ChevronDown,
+  TrendingUp, TrendingDown, Minus, AlertCircle, RefreshCw, ChevronUp, ChevronDown, ChevronRight,
   Calendar, X,
 } from "lucide-react";
 import {
@@ -338,7 +339,7 @@ export function DraftCommand() {
             </div>
           )}
 
-          {view === "list" && <ListView rows={filtered} onPlayerClick={handlePlayerClick} />}
+          {view === "list" && <ListView rows={filtered} filters={filters} onPlayerClick={handlePlayerClick} />}
           {view === "box"  && <BoxView  rows={filtered} teams={typeof filters.teams === "number" ? filters.teams : 12} onPlayerClick={handlePlayerClick} />}
           {view === "hex"  && <HexView  rows={filtered} teams={typeof filters.teams === "number" ? filters.teams : 12} onPlayerClick={handlePlayerClick} />}
         </>
@@ -502,7 +503,40 @@ type ListSortKey = "overall_rank" | "avg_pick" | "min_pick" | "max_pick" | "draf
 
 const LIST_PAGE_SIZE = 50;
 
-function ListView({ rows, onPlayerClick }: { rows: ADPResult[]; onPlayerClick?: (row: ADPResult) => void }) {
+/** Human-readable summary of the active filter set — e.g. "12-team · Snake ·
+ *  PPR · SF · TEP". Drops segments that are "all" or otherwise unset so the
+ *  badge only shows what the user actually constrained. */
+function formatDraftLabel(f: DraftFilters): string {
+  const parts: string[] = [];
+  if (f.teams !== "all") parts.push(`${f.teams}-team`);
+  if (f.draftFormat !== "all") {
+    parts.push(
+      f.draftFormat === "snake" ? "Snake"
+        : f.draftFormat === "auction" ? "Auction"
+        : "Linear",
+    );
+  }
+  if (f.scoring !== "all") {
+    parts.push(
+      f.scoring === "ppr" ? "PPR"
+        : f.scoring === "half" ? "Half PPR"
+        : "Standard",
+    );
+  }
+  if (f.superflex === "yes") parts.push("SF");
+  else if (f.superflex === "no") parts.push("1QB");
+  if (f.tePremium === "yes") parts.push("TEP");
+  if (f.bestBall === "yes") parts.push("Best Ball");
+  if (f.passTd === 6) parts.push("6pt TD");
+  if (f.leagueMode === "redraft") parts.push("Redraft");
+  else if (f.leagueMode === "keeper") parts.push("Keeper");
+  if (f.draftType !== "all") {
+    parts.push(f.draftType === "rookie" ? "Rookie Draft" : "Startup");
+  }
+  return parts.join(" · ");
+}
+
+function ListView({ rows, filters, onPlayerClick }: { rows: ADPResult[]; filters: DraftFilters; onPlayerClick?: (row: ADPResult) => void }) {
   const [sortKey, setSortKey] = useState<ListSortKey>("overall_rank");
   const [sortAsc, setSortAsc] = useState(true);
   const [visibleCount, setVisibleCount] = useState(LIST_PAGE_SIZE);
@@ -538,8 +572,26 @@ function ListView({ rows, onPlayerClick }: { rows: ADPResult[]; onPlayerClick?: 
     return sortAsc ? <ChevronUp className="w-3 h-3 text-[#d4af37]" /> : <ChevronDown className="w-3 h-3 text-[#d4af37]" />;
   };
 
+  const draftLabel = formatDraftLabel(filters);
+
   return (
     <Card className="overflow-hidden border-border/60 dark:border-[#1a2d4a]/80">
+      {/* Active-filter summary — surfaces what kind of draft these ADPs come
+           from at a glance. Hidden when no constraints are active. */}
+      {draftLabel && (
+        <div className="px-3 md:px-4 py-2 border-b border-border/40 bg-muted/20 dark:bg-white/[0.02] flex items-center gap-2">
+          <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
+            Draft Type
+          </span>
+          <span
+            className="inline-flex items-center px-2 py-0.5 rounded-md border border-[#d4af37]/30 bg-[#d4af37]/10 text-[#d4af37] text-[11px] font-bold tabular-nums"
+            data-testid="list-draft-label"
+          >
+            {draftLabel}
+          </span>
+        </div>
+      )}
+
       {/* Mobile: card-list */}
       <div className="md:hidden divide-y divide-border/20">
         {visible.map((r) => (
@@ -661,23 +713,16 @@ function MobileListRow({ row, onPlayerClick }: { row: ADPResult; onPlayerClick?:
 }
 
 function PlayerCell({ row }: { row: ADPResult }) {
+  // Mirrors the Market Value tab's Player column: circular headshot with
+  // team-logo badge, name, and pos/team text — provided by PlayerAvatar.
   return (
-    <div className="flex items-center gap-2.5 min-w-0">
-      <PositionTile pos={row.position} text={row.position === "PICK" ? "RP" : row.position} />
-      <div className="min-w-0">
-        <div className="font-semibold text-sm truncate flex items-center gap-1.5">
-          {row.player_name}
-          {row.sample_size_warning && (
-            <span title="Small sample size — ADP may be volatile">
-              <AlertCircle className="w-3 h-3 text-amber-500" />
-            </span>
-          )}
-        </div>
-        <div className="text-[10px] text-muted-foreground truncate">
-          {row.team || (row.is_rookie_placeholder ? "Rookie pick" : "—")}
-        </div>
-      </div>
-    </div>
+    <PlayerAvatar
+      id={row.player_id}
+      name={row.player_name}
+      pos={row.position}
+      team={row.team}
+      size="sm"
+    />
   );
 }
 
@@ -698,11 +743,12 @@ function PlayerCell({ row }: { row: ADPResult }) {
 
 function BoxView({ rows, teams, onPlayerClick }: { rows: ADPResult[]; teams: number; onPlayerClick?: (row: ADPResult) => void }) {
   const isMobile = useIsMobile();
-  // Cards are wider/taller than the old text-heavy cells so the circular
-  // player image dominates and the layout has breathing room.
-  const cellW = isMobile ? 100 : 124;
-  const cellH = isMobile ? 132 : 148;
-  const labelColW = isMobile ? 48 : 64;
+  // Tighter draft-room tiles — the player name is the dominant element and
+  // the headshot anchors the bottom-right corner. Smaller than the previous
+  // pass so more of the board fits on one screen.
+  const cellW = isMobile ? 112 : 132;
+  const cellH = isMobile ? 86 : 92;
+  const labelColW = isMobile ? 44 : 56;
 
   // Build the snake-layout grid. We sort by ADP ascending and assign each
   // entry a (round, slot) coordinate so the resulting grid reads exactly like
@@ -807,13 +853,15 @@ function RoundLabel({ round, isOdd, width, height }: { round: number; isOdd: boo
 }
 
 // Soft, flat per-position card palette — fill + border. No gradients or glow.
-const BOX_POS_PALETTE: Record<Position, { bg: string; border: string; badgeBg: string; badgeText: string; badgeBorder: string }> = {
-  QB:   { bg: "bg-rose-500/8",       border: "border-rose-500/25",    badgeBg: "bg-rose-500/15",    badgeText: "text-rose-200",    badgeBorder: "border-rose-500/40"   },
-  RB:   { bg: "bg-emerald-500/8",    border: "border-emerald-500/25", badgeBg: "bg-emerald-500/15", badgeText: "text-emerald-200", badgeBorder: "border-emerald-500/40" },
-  WR:   { bg: "bg-sky-500/8",        border: "border-sky-500/25",     badgeBg: "bg-sky-500/15",     badgeText: "text-sky-200",     badgeBorder: "border-sky-500/40"    },
-  TE:   { bg: "bg-amber-500/8",      border: "border-amber-500/25",   badgeBg: "bg-amber-500/15",   badgeText: "text-amber-200",   badgeBorder: "border-amber-500/40"  },
-  K:    { bg: "bg-purple-500/8",     border: "border-purple-500/25",  badgeBg: "bg-purple-500/15",  badgeText: "text-purple-200",  badgeBorder: "border-purple-500/40" },
-  PICK: { bg: "bg-[#d4af37]/8",      border: "border-[#d4af37]/25",   badgeBg: "bg-[#d4af37]/15",   badgeText: "text-[#fde68a]",   badgeBorder: "border-[#d4af37]/40"  },
+// Slightly more colour presence than the prior pass so the position identity
+// reads at a glance, but still muted (no neon).
+const BOX_POS_PALETTE: Record<Position, { bg: string; border: string; badgeBg: string; badgeText: string; badgeBorder: string; posText: string }> = {
+  QB:   { bg: "bg-rose-500/12",      border: "border-rose-500/30",    badgeBg: "bg-rose-500/20",    badgeText: "text-rose-200",    badgeBorder: "border-rose-500/45",   posText: "text-rose-300/85"    },
+  RB:   { bg: "bg-emerald-500/12",   border: "border-emerald-500/30", badgeBg: "bg-emerald-500/20", badgeText: "text-emerald-200", badgeBorder: "border-emerald-500/45", posText: "text-emerald-300/85" },
+  WR:   { bg: "bg-sky-500/12",       border: "border-sky-500/30",     badgeBg: "bg-sky-500/20",     badgeText: "text-sky-200",     badgeBorder: "border-sky-500/45",    posText: "text-sky-300/85"     },
+  TE:   { bg: "bg-amber-500/12",     border: "border-amber-500/30",   badgeBg: "bg-amber-500/20",   badgeText: "text-amber-200",   badgeBorder: "border-amber-500/45",  posText: "text-amber-300/85"   },
+  K:    { bg: "bg-purple-500/12",    border: "border-purple-500/30",  badgeBg: "bg-purple-500/20",  badgeText: "text-purple-200",  badgeBorder: "border-purple-500/45", posText: "text-purple-300/85"  },
+  PICK: { bg: "bg-[#d4af37]/12",     border: "border-[#d4af37]/30",   badgeBg: "bg-[#d4af37]/20",   badgeText: "text-[#fde68a]",   badgeBorder: "border-[#d4af37]/45",  posText: "text-[#fde68a]/90"   },
 };
 
 function DraftPickCell({
@@ -827,56 +875,93 @@ function DraftPickCell({
   onPlayerClick?: (row: ADPResult) => void;
 }) {
   const pickLabel = `${round}.${String(pickInRound).padStart(2, "0")}`;
+
+  // Empty future-pick slot — minimal placeholder with the pick number and a
+  // faint chevron, framed like a draft slot so the board still reads as a
+  // continuous grid.
   if (!pick) {
     return (
       <div
-        className="flex items-center justify-center text-[9px] text-white/15 border-r border-white/5 bg-black/10"
+        className="p-1 border-r border-b border-white/5"
         style={{ width, minHeight: height, flexShrink: 0 }}
       >
-        {pickLabel}
+        <div
+          className="w-full h-full rounded-md border border-dashed border-white/8 bg-white/[0.012] flex items-center justify-between px-2"
+          data-testid={`board-cell-${round}-${pickInRound}-empty`}
+        >
+          <ChevronRight className="w-3 h-3 text-white/15" />
+          <span className="text-[10px] font-semibold tabular-nums text-white/22">
+            {pickLabel}
+          </span>
+        </div>
       </div>
     );
   }
 
   const palette = BOX_POS_PALETTE[pick.position];
   const isPick = pick.is_rookie_placeholder;
+  const posTeam = isPick
+    ? "Rookie Pick"
+    : `${pick.position}${pick.team ? ` · ${pick.team}` : ""}`;
 
   return (
     <div
-      className="border-r border-b border-white/5 p-1.5"
+      className="border-r border-b border-white/5 p-1"
       style={{ width, minHeight: height, flexShrink: 0 }}
     >
       <button
         type="button"
         onClick={() => onPlayerClick?.(pick)}
         className={cn(
-          "group relative w-full h-full rounded-lg border flex flex-col items-center cursor-pointer text-left",
-          "transition-all duration-150 hover:-translate-y-0.5 hover:brightness-110",
+          "group relative w-full h-full rounded-md border cursor-pointer text-left overflow-hidden",
+          "transition-colors duration-150 hover:brightness-110 hover:border-white/35",
           palette.bg,
           palette.border,
         )}
         title={`${pickLabel} · ${pick.player_name} · ${pick.position}${pick.positional_rank}`}
         data-testid={`board-cell-${round}-${pickInRound}`}
       >
-        {/* Header row: pick number (left) + position rank badge (right). */}
-        <div className="w-full flex items-center justify-between px-2 pt-1.5">
-          <span className="text-[10px] font-semibold tabular-nums text-white/45">
-            {pickLabel}
-          </span>
-          <span
-            className={cn(
-              "px-1.5 py-px rounded text-[9px] font-bold uppercase tracking-wider border",
-              palette.badgeBg,
-              palette.badgeText,
-              palette.badgeBorder,
-            )}
-          >
-            {isPick ? "RP" : `${pick.position}${pick.positional_rank}`}
+        {/* Top-left: position rank badge. */}
+        <span
+          className={cn(
+            "absolute top-1.5 left-1.5 px-1.5 py-px rounded text-[9px] font-bold uppercase tracking-wider border leading-none",
+            palette.badgeBg,
+            palette.badgeText,
+            palette.badgeBorder,
+          )}
+          data-testid={`box-posrank-${round}-${pickInRound}`}
+        >
+          {isPick ? "RP" : `${pick.position}${pick.positional_rank}`}
+        </span>
+
+        {/* Top-right: pick number. */}
+        <span
+          className="absolute top-1.5 right-1.5 text-[10px] font-semibold tabular-nums text-white/55 leading-none"
+          data-testid={`box-pick-${round}-${pickInRound}`}
+        >
+          {pickLabel}
+        </span>
+
+        {/* Center: player name — primary scan focus. Reserved padding leaves
+             room for the corners + the headshot in the bottom-right. */}
+        <div className="absolute inset-x-2 top-6 bottom-6 flex items-center pr-10">
+          <span className="text-[11px] sm:text-[12px] font-bold text-white leading-[1.15] line-clamp-2 tracking-tight">
+            {pick.player_name}
           </span>
         </div>
 
-        {/* Circular player image + small team logo overlay. */}
-        <div className="flex-1 flex items-center justify-center w-full">
+        {/* Bottom-left: position · team. */}
+        <span
+          className={cn(
+            "absolute bottom-1.5 left-1.5 text-[9px] font-semibold uppercase tracking-wider leading-none truncate max-w-[60%]",
+            palette.posText,
+          )}
+        >
+          {posTeam}
+        </span>
+
+        {/* Bottom-right: small circular headshot. */}
+        <div className="absolute bottom-1 right-1">
           <PlayerImageCircle
             playerId={pick.player_id}
             name={pick.player_name}
@@ -884,21 +969,14 @@ function DraftPickCell({
             isPick={isPick}
           />
         </div>
-
-        {/* Player name. */}
-        <div className="w-full px-1.5 pb-1.5">
-          <div className="text-[11px] sm:text-[12px] font-bold text-white text-center leading-[1.1] line-clamp-2 tracking-tight">
-            {pick.player_name}
-          </div>
-        </div>
       </button>
     </div>
   );
 }
 
-/** Circular player headshot with a small NFL team-logo overlay at bottom-right. */
+/** Small circular player headshot anchored at the bottom-right of the cell. */
 function PlayerImageCircle({
-  playerId, name, team, isPick,
+  playerId, name, isPick,
 }: {
   playerId: string;
   name: string;
@@ -910,44 +988,23 @@ function PlayerImageCircle({
   const showImage = looksLikeSleeperId && !imgErr && !isPick;
 
   return (
-    <div className="relative">
-      <div
-        className="w-12 h-12 sm:w-14 sm:h-14 rounded-full overflow-hidden bg-white/[0.04] flex items-center justify-center"
-        style={{ boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.10)" }}
-      >
-        {isPick ? (
-          <Hexagon className="w-5 h-5 sm:w-6 sm:h-6 text-white/45" strokeWidth={2} />
-        ) : showImage ? (
-          <img
-            src={`https://sleepercdn.com/content/nfl/players/thumb/${playerId}.jpg`}
-            alt={name}
-            className="w-full h-full object-cover object-top"
-            onError={() => setImgErr(true)}
-          />
-        ) : (
-          <span className="text-[11px] font-bold text-white/70">
-            {initialsOf(name)}
-          </span>
-        )}
-      </div>
-
-      {/* Team logo, slightly overlapping the bottom-right of the circle. */}
-      {!isPick && team && team !== "FA" && (
-        <div
-          className="absolute -bottom-0.5 -right-0.5 w-5 h-5 sm:w-[22px] sm:h-[22px] rounded-full overflow-hidden bg-[#0a1628] flex items-center justify-center"
-          style={{
-            boxShadow: "0 1px 3px rgba(0,0,0,0.6), inset 0 0 0 1px rgba(255,255,255,0.10)",
-          }}
-        >
-          <img
-            src={`https://sleepercdn.com/images/team_logos/nfl/${team.toLowerCase()}.png`}
-            alt={team}
-            className="w-full h-full object-contain p-0.5"
-            onError={(e) => {
-              (e.target as HTMLImageElement).style.display = "none";
-            }}
-          />
-        </div>
+    <div
+      className="w-8 h-8 sm:w-9 sm:h-9 rounded-full overflow-hidden bg-white/[0.04] flex items-center justify-center"
+      style={{ boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.10)" }}
+    >
+      {isPick ? (
+        <Hexagon className="w-4 h-4 text-white/45" strokeWidth={2} />
+      ) : showImage ? (
+        <img
+          src={`https://sleepercdn.com/content/nfl/players/thumb/${playerId}.jpg`}
+          alt={name}
+          className="w-full h-full object-cover object-top"
+          onError={() => setImgErr(true)}
+        />
+      ) : (
+        <span className="text-[10px] font-bold text-white/70">
+          {initialsOf(name)}
+        </span>
       )}
     </div>
   );

@@ -913,10 +913,13 @@ export async function registerRoutes(
     const provided = req.headers["x-admin-secret"];
     if (secret && typeof provided === "string" && provided === secret) return true;
 
+    let userId: string | null = null;
+    let userEmail: string | null = null;
     try {
-      const userId = getUserIdFromRequest(req);
+      userId = getUserIdFromRequest(req);
       if (userId) {
         const user = await getUser(userId);
+        userEmail = user?.email ?? null;
         if (user && isAdminByEmail(user.email)) {
           req.adminEmail = user.email;
           return true;
@@ -925,7 +928,15 @@ export async function registerRoutes(
     } catch (err: any) {
       console.error("[requireAdmin] auth check threw:", err?.message);
     }
-    res.status(403).json({ error: "Forbidden" });
+
+    // Specific reason so the panel can tell the user what to do next.
+    const reason = !userId
+      ? "Not signed in — log in to a StatChasers admin account and retry."
+      : !userEmail
+        ? "Signed in but the user record has no email."
+        : `Email ${userEmail} is not in the admin allowlist.`;
+    console.warn(`[requireAdmin] denied: ${reason}`);
+    res.status(403).json({ error: "Forbidden", reason });
     return false;
   };
 

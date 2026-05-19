@@ -569,7 +569,18 @@ export const NAV_CONFIG: MainTabConfig[] = [
       { id: "compare-players", label: "Compare Players" },
     ],
   },
-  // Temporarily hidden — the `live-draft` and `draft` modules still exist in
-  // the codebase (DynastyCommandCenter / LiveDraft / DraftCommand) but are
-  // removed from the navigation. Add the entries back here to re-enable them.
+  {
+    id: "live-draft",
+    label: "Live Draft",
+    subTabs: [
+      { id: "draft-board", label: "Draft Board" },
+    ],
+  },
+  {
+    id: "draft",
+    label: "Draft",
+    subTabs: [
+      { id: "adp-explorer", label: "ADP Explorer" },
+    ],
+  },
 ];
