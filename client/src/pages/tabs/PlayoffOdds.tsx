@@ -7,6 +7,7 @@ import {
   Loader2, AlertCircle, TrendingDown,
   Trophy, Flame, Snowflake, Target, Clock,
 } from "lucide-react";
+import { TeamLoader } from "@/components/TeamLoader";
 
 interface PlayoffTeam {
   roster_id: number;
@@ -329,11 +330,7 @@ export function PlayoffOdds({ leagueId }: { leagueId: string }) {
     <div className="space-y-6">
       <Card className="p-4">
         <div className="flex flex-wrap items-center gap-3">
-          {loading && (
-            <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-              <Loader2 className="w-3.5 h-3.5 animate-spin" /> Running simulations…
-            </span>
-          )}
+          {loading && <TeamLoader size="sm" fallback="Running simulations…" context="Running simulations" />}
 
           <div className="flex-1" />
 
@@ -443,8 +440,8 @@ export function PlayoffOdds({ leagueId }: { leagueId: string }) {
 
       <div className="md:hidden space-y-2" data-testid="pc-mobile">
         {loading && !data && (
-          <Card className="p-4 flex items-center justify-center gap-2 text-sm text-muted-foreground">
-            <Loader2 className="w-4 h-4 animate-spin" /> Running simulations...
+          <Card className="p-4">
+            <TeamLoader size="md" fallback="Running simulations…" context="Running simulations" />
           </Card>
         )}
         {!loading && enrichedTeams.length === 0 && !error && (

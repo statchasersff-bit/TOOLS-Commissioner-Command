@@ -37,6 +37,8 @@ function authHeaders(): Record<string, string> {
 export interface ScUser {
   id: string;
   email: string;
+  /** NFL team abbreviation (e.g. "ATL"). Null when the user hasn't picked one. */
+  favoriteNflTeam: string | null;
 }
 
 export interface SleeperInfo {

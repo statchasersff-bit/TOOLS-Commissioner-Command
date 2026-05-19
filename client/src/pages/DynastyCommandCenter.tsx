@@ -11,11 +11,13 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { useValueModel } from "@/contexts/ValueModelContext";
 import { useSleeper } from "@/contexts/SleeperContext";
 import { useAuth } from "@/contexts/AuthContext";
+import { useFavoriteTeam } from "@/contexts/FavoriteTeamContext";
+import { SettingsModal } from "@/components/SettingsModal";
 import { NAV_CONFIG } from "@/data/mockData";
 import type { League, Team } from "@/types";
 import { fetchSleeperLeagueFull } from "@/lib/sleeperApi";
 import { DataDiagnostics } from "@/components/DataDiagnostics";
-import { LayoutDashboard, Loader2, Lock, Check, User, RefreshCw, AlertCircle, Wifi, WifiOff, ChevronDown, LogOut, Trophy, ArrowRightLeft, TrendingUp, Zap, X, MessageSquare, HelpCircle, Eye, Unlink } from "lucide-react";
+import { LayoutDashboard, Loader2, Lock, Check, User, RefreshCw, AlertCircle, Wifi, WifiOff, ChevronDown, LogOut, Trophy, ArrowRightLeft, TrendingUp, Zap, X, MessageSquare, HelpCircle, Eye, Unlink, Star, Settings } from "lucide-react";
 import { AccessGate } from "@/components/AccessGate";
 import { UpgradeFlow } from "@/components/UpgradeFlow";
 import { resolveAccess } from "@/config/moduleAccess";
@@ -86,6 +88,8 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
   const [fetchedLeague, setFetchedLeague] = useState<{ league: League; userTeamId: string | null } | null>(null);
   const [isLeagueLoading, setIsLeagueLoading] = useState(false);
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const { favoriteTeam } = useFavoriteTeam();
   const userDropdownRef = useRef<HTMLDivElement>(null);
   const [logoMenuOpen, setLogoMenuOpen] = useState(false);
   const logoMenuRef = useRef<HTMLDivElement>(null);
@@ -630,6 +634,26 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
                         </div>
                       </div>
 
+                      {/* Favorite NFL Team row — always visible, opens Settings */}
+                      <button
+                        onClick={() => { setUserDropdownOpen(false); setSettingsOpen(true); }}
+                        data-testid="button-menu-favorite-team"
+                        className="w-full flex items-center gap-2.5 px-3 py-2.5 text-xs font-medium text-foreground hover:bg-muted/40 transition-colors border-b border-border/30"
+                      >
+                        <Star className="w-3.5 h-3.5 flex-shrink-0 text-[#d4af37]" />
+                        <span className="flex-1 text-left min-w-0">
+                          <span className="block text-[10px] uppercase tracking-wider text-muted-foreground font-semibold leading-tight">
+                            Favorite NFL Team
+                          </span>
+                          <span className="block truncate text-xs">
+                            {favoriteTeam ? favoriteTeam.name : "Not set"}
+                          </span>
+                        </span>
+                        <span className="text-[10px] text-[#d4af37] flex-shrink-0">
+                          {favoriteTeam ? "Change" : "Choose"}
+                        </span>
+                      </button>
+
                       {/* Read-only: offer login for full access */}
                       {accessLevel === "readonly" && (
                         <button
@@ -753,6 +777,7 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
       <WhatsNewModal
         isAuthenticated={!!scUser}
       />
+      <SettingsModal open={settingsOpen} onOpenChange={setSettingsOpen} />
       <MobileBottomNav
         tabs={NAV_CONFIG}
         activeTab={activeMainTab}

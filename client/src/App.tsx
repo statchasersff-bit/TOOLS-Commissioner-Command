@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { ValueModelProvider } from "@/contexts/ValueModelContext";
 import { SleeperProvider } from "@/contexts/SleeperContext";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { FavoriteTeamProvider } from "@/contexts/FavoriteTeamContext";
 import { AuthGate } from "@/pages/auth/AuthGate";
 import DynastyCommandCenter from "@/pages/DynastyCommandCenter";
 import { Component, useEffect, type ReactNode, type ErrorInfo } from "react";
@@ -145,11 +146,13 @@ function App() {
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
           <AuthProvider>
-            <AuthGate>
-              <ErrorBoundary label="authenticated-tree">
-                <AuthenticatedTree probe={probe} />
-              </ErrorBoundary>
-            </AuthGate>
+            <FavoriteTeamProvider>
+              <AuthGate>
+                <ErrorBoundary label="authenticated-tree">
+                  <AuthenticatedTree probe={probe} />
+                </ErrorBoundary>
+              </AuthGate>
+            </FavoriteTeamProvider>
           </AuthProvider>
         </TooltipProvider>
       </QueryClientProvider>

@@ -179,6 +179,10 @@ export const scUsers = pgTable("sc_users", {
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
   lastLoginAt: timestamp("last_login_at"),
+  // Personalization. Phase 1 stores the favorite NFL team abbreviation
+  // directly on the user row; if more prefs accumulate later this can move
+  // to a dedicated user_preferences table without changing the API shape.
+  favoriteNflTeam: varchar("favorite_nfl_team", { length: 5 }),
 });
 
 export const emailVerificationCodes = pgTable("email_verification_codes", {

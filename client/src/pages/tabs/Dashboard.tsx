@@ -20,7 +20,9 @@ import {
   TierBreakdown,
   RosterConstruction,
   PowerDifferential,
+  NflTeamExposure,
 } from "@/components/gm-dashboard";
+import { TeamLoader } from "@/components/TeamLoader";
 
 interface DashboardProps {
   league: League;
@@ -1299,7 +1301,7 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
 
       {/* ── VIEW 1.5: Economy ─────────────────────────────────────── */}
       {viewMode === "economy" && (
-        <Suspense fallback={<div className="flex items-center justify-center py-16"><span className="text-sm text-muted-foreground">Loading…</span></div>}>
+        <Suspense fallback={<TeamLoader size="lg" context="Loading league economy" />}>
           <LeagueEconomyLazy league={league} />
         </Suspense>
       )}
@@ -1963,6 +1965,9 @@ export function MyTeam({ league, userTeam, onNavigate }: DashboardOverviewProps)
 
         {/* Asset quality: 5-tier stacked bar + per-tier cards — needs width. */}
         <TierBreakdown league={league} userTeam={userTeam} />
+
+        {/* NFL Team Exposure: roster breakdown by NFL team, highlights favorite. */}
+        <NflTeamExposure userTeam={userTeam} />
 
         {/* Age health + league standing — both happy at half-width on lg. */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

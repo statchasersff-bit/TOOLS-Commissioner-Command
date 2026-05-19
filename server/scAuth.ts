@@ -277,11 +277,29 @@ export async function resetPassword(
 
 export async function getUser(userId: string) {
   const rows = await getDb()
-    .select({ id: scUsers.id, email: scUsers.email, createdAt: scUsers.createdAt })
+    .select({
+      id: scUsers.id,
+      email: scUsers.email,
+      createdAt: scUsers.createdAt,
+      favoriteNflTeam: scUsers.favoriteNflTeam,
+    })
     .from(scUsers)
     .where(eq(scUsers.id, userId))
     .limit(1);
   return rows[0] ?? null;
+}
+
+/**
+ * Set or clear the user's favorite NFL team. Pass null/empty to clear.
+ * Validation of the abbreviation against the canonical list lives client-side
+ * + at the route layer; the DB column is varchar(5) so it can't grow large.
+ */
+export async function updateFavoriteNflTeam(userId: string, abbr: string | null): Promise<void> {
+  const value = abbr && abbr.trim().length > 0 ? abbr.trim().toUpperCase() : null;
+  await getDb()
+    .update(scUsers)
+    .set({ favoriteNflTeam: value, updatedAt: new Date() })
+    .where(eq(scUsers.id, userId));
 }
 
 // ── Connected accounts ────────────────────────────────────────────────────────

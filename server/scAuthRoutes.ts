@@ -12,6 +12,7 @@ import {
   connectSleeper,
   disconnectSleeper,
   decryptToken,
+  updateFavoriteNflTeam,
 } from "./scAuth";
 import { enqueueSleeperUser } from "./adpCrawler";
 import { isAdminByEmail } from "@shared/admin";
@@ -142,7 +143,11 @@ export function registerScAuthRoutes(app: Express): void {
           }
         : null;
       res.json({
-        user: { id: user.id, email: user.email },
+        user: {
+          id: user.id,
+          email: user.email,
+          favoriteNflTeam: user.favoriteNflTeam ?? null,
+        },
         sleeper: sleeperInfo,
         isAdmin: isAdminByEmail(user.email),
       });
@@ -210,4 +215,36 @@ export function registerScAuthRoutes(app: Express): void {
       res.status(500).json({ error: "Failed to disconnect Sleeper account." });
     }
   });
+
+  // PUT /api/sc-auth/me/favorite-team
+  // Sets (abbr present) or clears (abbr null) the user's favorite NFL team.
+  // We validate against the canonical 32-team list to keep junk out of the DB.
+  app.put("/api/sc-auth/me/favorite-team", async (req, res) => {
+    try {
+      const userId = getUserIdFromRequest(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated" });
+      const { favoriteNflTeam } = req.body as { favoriteNflTeam?: string | null };
+      const next = favoriteNflTeam == null || favoriteNflTeam === ""
+        ? null
+        : String(favoriteNflTeam).toUpperCase();
+      if (next !== null && !VALID_NFL_ABBRS.has(next)) {
+        return res.status(400).json({ error: `Unknown NFL team abbreviation: ${next}` });
+      }
+      await updateFavoriteNflTeam(userId, next);
+      res.json({ ok: true, favoriteNflTeam: next });
+    } catch (err: any) {
+      console.error("[sc-auth] favorite-team error:", err.message);
+      res.status(500).json({ error: "Failed to update favorite team." });
+    }
+  });
 }
+
+// Mirrors client/src/config/nflTeams.ts NFL_TEAMS. Hardcoded server-side
+// because the client config is bundled-only — keep these in sync if either
+// list changes (32 entries, stable since the Chargers re-relocation).
+const VALID_NFL_ABBRS = new Set<string>([
+  "ARI", "ATL", "BAL", "BUF", "CAR", "CHI", "CIN", "CLE",
+  "DAL", "DEN", "DET", "GB",  "HOU", "IND", "JAX", "KC",
+  "LV",  "LAC", "LAR", "MIA", "MIN", "NE",  "NO",  "NYG",
+  "NYJ", "PHI", "PIT", "SEA", "SF",  "TB",  "TEN", "WAS",
+]);

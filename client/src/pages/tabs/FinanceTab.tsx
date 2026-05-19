@@ -6,6 +6,7 @@ import { useSleeper } from "@/contexts/SleeperContext";
 import { useValueModel } from "@/contexts/ValueModelContext";
 import { API_BASE } from "@/lib/apiBase";
 import { SleeperAuthCard } from "@/components/SleeperAuthCard";
+import { TeamLoader } from "@/components/TeamLoader";
 import {
   DollarSign,
   TrendingUp,
@@ -664,7 +665,7 @@ export function FinanceTab() {
   }
 
   if (!authChecked) {
-    return <div className="flex items-center justify-center min-h-[40vh]"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>;
+    return <div className="min-h-[40vh] flex items-center justify-center"><TeamLoader size="lg" context="Checking your session" /></div>;
   }
 
   if (!token) {
@@ -685,7 +686,7 @@ export function FinanceTab() {
   }
 
   if (loadingFinances) {
-    return <div className="flex items-center justify-center min-h-[40vh]"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>;
+    return <div className="min-h-[40vh] flex items-center justify-center"><TeamLoader size="lg" context="Loading league finances" /></div>;
   }
 
   const plSign = totals.netPL > 0 ? "+" : "";

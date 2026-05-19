@@ -1,4 +1,6 @@
 import { Loader2 } from "lucide-react";
+import { useFavoriteTeam } from "@/contexts/FavoriteTeamContext";
+import { getTeamSlogan } from "@/config/nflTeams";
 import { useAuth } from "@/contexts/AuthContext";
 
 /**
@@ -18,6 +20,12 @@ import { useAuth } from "@/contexts/AuthContext";
  */
 
 function LoadingScreen() {
+  // Slogan flashes in below the spinner when the user has set a favorite
+  // team — FavoriteTeamProvider initializes from localStorage synchronously
+  // so we can show it on the very first paint without a flicker.
+  const { favoriteTeam } = useFavoriteTeam();
+  const slogan = getTeamSlogan(favoriteTeam);
+
   return (
     <div className="min-h-screen bg-[#060d1a] flex items-center justify-center">
       <div className="flex flex-col items-center gap-4">
@@ -26,7 +34,18 @@ function LoadingScreen() {
             <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="#d4af37" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </div>
-        <Loader2 className="w-5 h-5 text-[#d4af37]/60 animate-spin" />
+        <Loader2
+          className="w-5 h-5 animate-spin"
+          style={{ color: favoriteTeam ? "var(--favorite-team-primary)" : "rgba(212,175,55,0.6)" }}
+        />
+        {slogan && (
+          <p
+            className="text-sm font-semibold tracking-tight"
+            style={{ color: "var(--favorite-team-primary)" }}
+          >
+            {slogan}
+          </p>
+        )}
       </div>
     </div>
   );
