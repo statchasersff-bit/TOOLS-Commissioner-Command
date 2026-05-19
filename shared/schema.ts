@@ -135,6 +135,32 @@ export const insertLeagueFinanceSchema = createInsertSchema(leagueFinances).omit
 export type InsertLeagueFinance = z.infer<typeof insertLeagueFinanceSchema>;
 export type LeagueFinance = typeof leagueFinances.$inferSelect;
 
+// Weekly snapshots of a roster's high-level value composition, used to power
+// the GM Dashboard's "Team Trajectory" chart. Granularity is intentionally
+// daily; the client gates writes via snapshotDate so spamming the endpoint
+// doesn't create noisy duplicates.
+export const teamValueSnapshots = pgTable("team_value_snapshots", {
+  id: serial("id").primaryKey(),
+  leagueId: varchar("league_id", { length: 32 }).notNull(),
+  rosterId: integer("roster_id").notNull(),
+  // YYYY-MM-DD — one row per (league, roster, day) per the unique key below.
+  snapshotDate: varchar("snapshot_date", { length: 10 }).notNull(),
+  dynastyValue: integer("dynasty_value").notNull().default(0),
+  winNowValue: integer("win_now_value").notNull().default(0),
+  pickValue: integer("pick_value").notNull().default(0),
+  starterStrength: integer("starter_strength").notNull().default(0),
+  // Stored * 10 to keep this an integer column. avgAge = 26.4 → 264.
+  avgAgeX10: integer("avg_age_x10").notNull().default(0),
+  capturedAt: timestamp("captured_at").defaultNow(),
+});
+
+export const insertTeamValueSnapshotSchema = createInsertSchema(teamValueSnapshots).omit({
+  id: true,
+  capturedAt: true,
+});
+export type InsertTeamValueSnapshot = z.infer<typeof insertTeamValueSnapshotSchema>;
+export type TeamValueSnapshot = typeof teamValueSnapshots.$inferSelect;
+
 export type CrawledLeague = typeof crawledLeagues.$inferSelect;
 export type CrawledUser = typeof crawledUsers.$inferSelect;
 export type Trade = typeof trades.$inferSelect;

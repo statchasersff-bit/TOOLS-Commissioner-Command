@@ -1,633 +1,136 @@
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useState } from "react";
 import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { SectionHeader } from "@/components/SectionHeader";
-import { DataTable } from "@/components/DataTable";
 import { useSleeper } from "@/contexts/SleeperContext";
-import { API_BASE } from "@/lib/apiBase";
-import { cn } from "@/lib/utils";
-import {
-  RefreshCw, Loader2, AlertCircle, TrendingUp, TrendingDown,
-  Trophy, Flame, Snowflake, Target, Clock,
-} from "lucide-react";
+import { BarChart3, Swords } from "lucide-react";
+import { PlayoffOdds } from "./PlayoffOdds";
+import { WeeklyMatchups } from "./WeeklyMatchups";
 
-interface PlayoffTeam {
-  roster_id: number;
-  owner_id: string;
-  team_name: string;
-  owner_name: string;
-  avatar: string | null;
-  current_wins: number;
-  current_losses: number;
-  current_ties: number;
-  points_for: number;
-  points_against: number;
-  win_now_score: number;
-  team_rating: number;
-  remaining_opponents: number[];
-  projected_record: string;
-  projected_wins: number;
-  projected_losses: number;
-  remaining_sos: number;
-  expected_wins_remaining: number;
-  projected_points_for: number;
-  make_playoffs_pct: number;
-  first_round_bye_pct: number;
-  semifinals_pct: number;
-  finals_pct: number;
-  championship_pct: number;
-  change_since_last_run: number;
-}
+type SubTab = "odds" | "matchups";
 
-interface PlayoffMeta {
-  totalTeams: number;
-  playoffTeams: number;
-  byeTeams: number;
-  currentWeek: number;
-  regularSeasonEndWeek: number;
-  remainingGames: number;
-  simulations: number;
-  scheduleSource: "sleeper" | "synthetic" | "none";
-  playoffPctSum: number;
-  byePctSum: number;
-  championshipPctSum: number;
-  warnings: string[];
-}
-
-interface PlayoffResponse {
-  league: { id: string; name: string; season: string; totalRosters: number };
-  settings: {
-    playoffTeams: number;
-    byes: number;
-    playoffWeekStart: number;
-    championshipWeek: number;
-    regularSeasonWeeks: number;
-    currentWeek: number;
-    remainingWeeks: number;
-    format: "SF" | "1QB";
-    scoringFormat: string;
-    isBestBall: boolean;
-  };
-  simulationCount: number;
-  lastUpdated: string;
-  teams: PlayoffTeam[];
-  meta?: PlayoffMeta;
-}
-
-const SIM_OPTIONS = [
-  { value: "1000",  label: "1,000 sims (fast)"  },
-  { value: "5000",  label: "5,000 sims"         },
-  { value: "10000", label: "10,000 sims (recommended)" },
+const SUB_TABS = [
+  {
+    id: "odds" as const,
+    label: "Playoff Odds",
+    icon: BarChart3,
+    subtitle: "Monte Carlo playoff odds blending win-now value with your remaining schedule",
+  },
+  {
+    id: "matchups" as const,
+    label: "Weekly Matchups",
+    icon: Swords,
+    subtitle: "Every matchup, grouped by week, with projected win probabilities",
+  },
 ];
 
-// Display clamp — pct values are stored 0..100; we only soften the extremes
-// at render time so the UI never shows "100.0%" or "0.0%" unless the team is
-// truly locked in or eliminated.
-function pctLabel(pct: number): string {
-  const v = Math.max(0, Math.min(100, pct));
-  if (v >= 99.5) return ">99%";
-  if (v > 0 && v < 0.5) return "<1%";
-  if (v === 0) return "0%";
-  return `${v.toFixed(1)}%`;
-}
-
-function pctCell(pct: number): { className: string; label: string } {
-  // Blue heatmap; brighter = higher
-  const v = Math.max(0, Math.min(100, pct));
-  const label = pctLabel(pct);
-  if (v === 0) return { className: "text-muted-foreground/60", label };
-  if (v >= 99) return { className: "font-bold text-emerald-300 bg-emerald-500/40", label };
-  if (v >= 75) return { className: "font-bold text-blue-50 bg-blue-500/70", label };
-  if (v >= 50) return { className: "font-semibold text-blue-50 bg-blue-500/50", label };
-  if (v >= 25) return { className: "font-medium text-blue-100 bg-blue-500/30", label };
-  if (v >= 10) return { className: "text-blue-200 bg-blue-500/15", label };
-  return { className: "text-blue-200/70 bg-blue-500/5", label };
-}
-
-// Change column. `delta` is null when there's no prior run for this team
-// (first visit) — show an em-dash instead of fabricating a number. We also
-// clamp the absolute delta to ±100% so a corrupted snapshot from a previous
-// (buggy) build can't render "+1000000.0%".
-function changeCell(delta: number | null) {
-  if (delta === null) {
-    return <span className="text-muted-foreground text-xs">—</span>;
-  }
-  const clamped = Math.max(-100, Math.min(100, delta));
-  if (Math.abs(clamped) < 0.1) {
-    return <span className="text-muted-foreground text-xs">0%</span>;
-  }
-  const up = clamped > 0;
+function renderSubTabButton(
+  tab: typeof SUB_TABS[number],
+  isActive: boolean,
+  onClick: () => void,
+  testIdSuffix?: string,
+) {
+  const Icon = tab.icon;
   return (
-    <span className={cn(
-      "inline-flex items-center gap-0.5 text-xs font-semibold tabular-nums",
-      up ? "text-emerald-500 dark:text-emerald-400" : "text-rose-500 dark:text-rose-400",
-    )}>
-      {up ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-      {up ? "+" : ""}{clamped.toFixed(1)}%
-    </span>
+    <button
+      key={tab.id}
+      onClick={onClick}
+      data-testid={`pc-tab-${tab.id}${testIdSuffix ? `-${testIdSuffix}` : ""}`}
+      className="relative flex items-center justify-center gap-2 font-semibold transition-all duration-200"
+      style={{
+        borderRadius: 12,
+        fontSize: 13,
+        letterSpacing: "0.01em",
+        background: isActive
+          ? "linear-gradient(135deg, rgba(11,58,122,0.85) 0%, rgba(11,58,122,0.65) 100%)"
+          : "transparent",
+        color: isActive ? "#fff" : "rgba(203,213,225,0.45)",
+        border: isActive ? "1px solid rgba(212,175,55,0.30)" : "1px solid transparent",
+        boxShadow: isActive
+          ? "0 2px 12px rgba(11,58,122,0.40), inset 0 1px 0 rgba(255,255,255,0.06)"
+          : "none",
+      }}
+    >
+      <Icon style={{ width: 15, height: 15, flexShrink: 0 }} />
+      {tab.label}
+      {isActive && (
+        <span
+          className="absolute bottom-[3px] left-1/2 -translate-x-1/2 rounded-full"
+          style={{ width: 28, height: 2, background: "#d4af37", opacity: 0.85 }}
+        />
+      )}
+    </button>
   );
 }
-
-function teamAvatar(t: PlayoffTeam, size = "w-8 h-8") {
-  if (t.avatar) {
-    return (
-      <img
-        src={t.avatar}
-        alt={t.team_name}
-        className={cn("rounded-full object-cover flex-shrink-0 ring-1 ring-border/40", size)}
-        onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-        data-testid={`pc-avatar-${t.roster_id}`}
-      />
-    );
-  }
-  return (
-    <div className={cn("rounded-full bg-[#0b3a7a]/20 dark:bg-blue-400/20 flex items-center justify-center text-xs font-bold text-[#0b3a7a] dark:text-blue-400 flex-shrink-0 ring-1 ring-border/40", size)}>
-      {(t.team_name || t.owner_name || "?").charAt(0).toUpperCase()}
-    </div>
-  );
-}
-
-const STORAGE_PREFIX = "sc-playoff-calc";
 
 export function PlayoffCalculator() {
   const sleeper = useSleeper();
   const leagueId = sleeper.activeLeagueId;
+  const [activeSubTab, setActiveSubTab] = useState<SubTab>("odds");
 
-  const [simCount, setSimCount] = useState<string>("10000");
-  const [data, setData] = useState<PlayoffResponse | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [reqNonce, setReqNonce] = useState(0);
-  const [prevMap, setPrevMap] = useState<Record<number, number>>({});
-
-  // Load prior run's make-playoffs map from localStorage for the Change column
-  useEffect(() => {
-    if (!leagueId) return;
-    try {
-      const raw = localStorage.getItem(`${STORAGE_PREFIX}:${leagueId}`);
-      if (raw) {
-        const parsed = JSON.parse(raw) as Record<string, number>;
-        const numMap: Record<number, number> = {};
-        for (const [k, v] of Object.entries(parsed)) numMap[parseInt(k, 10)] = v;
-        setPrevMap(numMap);
-      } else {
-        setPrevMap({});
-      }
-    } catch {
-      setPrevMap({});
-    }
-  }, [leagueId]);
-
-  // Fetch when league or sim count changes (and on manual refresh)
-  useEffect(() => {
-    if (!leagueId) {
-      setData(null);
-      return;
-    }
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-
-    (async () => {
-      try {
-        const url = `${API_BASE}/api/leagues/${leagueId}/playoff-calculator?simulations=${simCount}`;
-        console.log("[PlayoffCalculator] fetch URL:", url);
-        const res = await fetch(url, { credentials: "include" });
-        const contentType = res.headers.get("content-type") || "";
-        if (!res.ok) {
-          const errorText = await res.text();
-          // Try to surface a JSON error message if it's there; otherwise
-          // include a snippet of the body so HTML/empty responses are obvious.
-          let msg = `Playoff API failed (${res.status})`;
-          try {
-            const j = JSON.parse(errorText);
-            if (j?.error) msg = `Playoff API failed (${res.status}): ${j.error}`;
-          } catch {
-            if (errorText.trim()) msg = `Playoff API failed (${res.status}): ${errorText.slice(0, 240)}`;
-          }
-          throw new Error(msg);
-        }
-        if (!contentType.includes("application/json")) {
-          const text = await res.text();
-          const looksLikeHtml = /^\s*<!doctype|^\s*<html/i.test(text);
-          throw new Error(
-            looksLikeHtml
-              ? "API route returned app HTML. Check server route registration."
-              : `Expected JSON but received ${contentType || "no content-type"}: ${text.slice(0, 240)}`
-          );
-        }
-        const json = (await res.json()) as PlayoffResponse;
-        if (cancelled) return;
-        setData(json);
-      } catch (err: any) {
-        if (cancelled) return;
-        console.error("[PlayoffCalculator]", err);
-        setError(err?.message || "Failed to load playoff odds");
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-
-    return () => { cancelled = true; };
-  }, [leagueId, simCount, reqNonce]);
-
-  // After a successful fetch, persist current make-playoffs map so the
-  // next run can diff against it. We do NOT overwrite the prevMap state we
-  // already loaded — that is what the Change column displays.
-  useEffect(() => {
-    if (!data || !leagueId) return;
-    const snapshot: Record<string, number> = {};
-    for (const t of data.teams) snapshot[String(t.roster_id)] = t.make_playoffs_pct;
-    try {
-      localStorage.setItem(`${STORAGE_PREFIX}:${leagueId}`, JSON.stringify(snapshot));
-    } catch {
-      /* quota / disabled — fine */
-    }
-  }, [data, leagueId]);
-
-  const enrichedTeams = useMemo(() => {
-    if (!data) return [] as (PlayoffTeam & { change: number | null })[];
-    return data.teams.map((t) => ({
-      ...t,
-      // null when there's no prior run for this team — render as "—" instead
-      // of fabricating a number. Defensive clamp inside changeCell guards
-      // against corrupted localStorage snapshots from earlier builds.
-      change: t.roster_id in prevMap ? t.make_playoffs_pct - prevMap[t.roster_id] : null,
-    }));
-  }, [data, prevMap]);
-
-  const insights = useMemo(() => {
-    if (enrichedTeams.length === 0) return null;
-    const favorite = [...enrichedTeams].sort((a, b) => b.make_playoffs_pct - a.make_playoffs_pct)[0];
-    const changeOf = (t: PlayoffTeam & { change: number | null }) => t.change ?? Number.NEGATIVE_INFINITY;
-    const valueRiser = [...enrichedTeams].sort((a, b) => changeOf(b) - changeOf(a))[0];
-    const hardSos = [...enrichedTeams]
-      .filter((t) => t.remaining_opponents.length > 0)
-      .sort((a, b) => b.remaining_sos - a.remaining_sos)[0];
-    const softSos = [...enrichedTeams]
-      .filter((t) => t.remaining_opponents.length > 0)
-      .sort((a, b) => a.remaining_sos - b.remaining_sos)[0];
-    const bubble = [...enrichedTeams]
-      .filter((t) => t.make_playoffs_pct > 5 && t.make_playoffs_pct < 95)
-      .sort((a, b) => Math.abs(a.make_playoffs_pct - 50) - Math.abs(b.make_playoffs_pct - 50))[0];
-    return { favorite, valueRiser, hardSos, softSos, bubble };
-  }, [enrichedTeams]);
-
-  const columns = useMemo(() => [
-    {
-      key: "team_rating",
-      header: "Team Rating",
-      sortable: true,
-      sortAccessor: (r: PlayoffTeam & { change: number | null }) => r.team_rating,
-      render: (r: PlayoffTeam & { change: number | null }) => (
-        <span className="font-bold text-foreground tabular-nums">{r.team_rating}</span>
-      ),
-    },
-    {
-      key: "change",
-      header: "Change",
-      sortable: true,
-      // null "no prior run" entries sort to the bottom so columns ranked by
-      // change still surface teams with real movement first.
-      sortAccessor: (r: PlayoffTeam & { change: number | null }) => r.change ?? Number.NEGATIVE_INFINITY,
-      render: (r: PlayoffTeam & { change: number | null }) => changeCell(r.change),
-    },
-    {
-      key: "team",
-      header: "Team",
-      sticky: true,
-      sortable: true,
-      sortAccessor: (r: PlayoffTeam & { change: number | null }) => r.team_name.toLowerCase(),
-      render: (r: PlayoffTeam & { change: number | null }) => (
-        <div className="flex items-center gap-2 min-w-[180px]">
-          {teamAvatar(r, "w-7 h-7")}
-          <div className="flex flex-col leading-tight">
-            <span className="text-sm font-semibold truncate max-w-[140px]" data-testid={`pc-team-${r.roster_id}`}>{r.team_name}</span>
-            <span className="text-[10px] text-muted-foreground truncate max-w-[140px]">{r.owner_name}</span>
-          </div>
-        </div>
-      ),
-    },
-    {
-      key: "projected_record",
-      header: "Projected Record",
-      sortable: true,
-      sortAccessor: (r: PlayoffTeam & { change: number | null }) => r.projected_wins,
-      render: (r: PlayoffTeam & { change: number | null }) => (
-        <div className="flex flex-col leading-tight">
-          <span className="text-sm font-semibold tabular-nums">{r.projected_record}</span>
-          <span className="text-[10px] text-muted-foreground">Now {r.current_wins}-{r.current_losses}{r.current_ties > 0 ? `-${r.current_ties}` : ""}</span>
-        </div>
-      ),
-    },
-    {
-      key: "make_playoffs_pct",
-      header: "Make Playoffs",
-      sortable: true,
-      sortAccessor: (r: PlayoffTeam & { change: number | null }) => r.make_playoffs_pct,
-      render: (r: PlayoffTeam & { change: number | null }) => {
-        const c = pctCell(r.make_playoffs_pct);
-        return <span className={cn("inline-block px-2.5 py-1 rounded-md text-xs tabular-nums", c.className)}>{c.label}</span>;
-      },
-    },
-    {
-      key: "first_round_bye_pct",
-      header: "1st-Round Bye",
-      sortable: true,
-      sortAccessor: (r: PlayoffTeam & { change: number | null }) => r.first_round_bye_pct,
-      render: (r: PlayoffTeam & { change: number | null }) => {
-        const c = pctCell(r.first_round_bye_pct);
-        return <span className={cn("inline-block px-2.5 py-1 rounded-md text-xs tabular-nums", c.className)}>{c.label}</span>;
-      },
-    },
-    {
-      key: "semifinals_pct",
-      header: "Make Semi-Finals",
-      sortable: true,
-      sortAccessor: (r: PlayoffTeam & { change: number | null }) => r.semifinals_pct,
-      render: (r: PlayoffTeam & { change: number | null }) => {
-        const c = pctCell(r.semifinals_pct);
-        return <span className={cn("inline-block px-2.5 py-1 rounded-md text-xs tabular-nums", c.className)}>{c.label}</span>;
-      },
-    },
-    {
-      key: "finals_pct",
-      header: "Make Finals",
-      sortable: true,
-      sortAccessor: (r: PlayoffTeam & { change: number | null }) => r.finals_pct,
-      render: (r: PlayoffTeam & { change: number | null }) => {
-        const c = pctCell(r.finals_pct);
-        return <span className={cn("inline-block px-2.5 py-1 rounded-md text-xs tabular-nums", c.className)}>{c.label}</span>;
-      },
-    },
-    {
-      key: "championship_pct",
-      header: "Win Finals",
-      sortable: true,
-      sortAccessor: (r: PlayoffTeam & { change: number | null }) => r.championship_pct,
-      render: (r: PlayoffTeam & { change: number | null }) => {
-        const c = pctCell(r.championship_pct);
-        return (
-          <span className={cn("inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs tabular-nums", c.className)}>
-            {r.championship_pct >= 25 && <Trophy className="w-3 h-3" />}{c.label}
-          </span>
-        );
-      },
-    },
-  ], []);
-
-  const handleRefresh = useCallback(() => {
-    setReqNonce((n) => n + 1);
-  }, []);
-
-  const lastUpdatedLabel = useMemo(() => {
-    if (!data) return "—";
-    const d = new Date(data.lastUpdated);
-    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  }, [data]);
+  const subtitle = SUB_TABS.find((t) => t.id === activeSubTab)?.subtitle ?? "";
 
   if (!leagueId) {
     return (
-      <div className="space-y-8">
+      <div className="space-y-5">
         <SectionHeader title="Playoff Calculator" subtitle="Monte Carlo playoff odds for your league" />
         <Card className="p-8 text-center text-muted-foreground" data-testid="pc-empty">
-          Select a league to view playoff odds.
+          {activeSubTab === "matchups"
+            ? "Select a league to view weekly matchups."
+            : "Select a league to view playoff odds."}
         </Card>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      <SectionHeader title="Playoff Calculator" subtitle="Monte Carlo playoff odds blending win-now value with your remaining schedule" />
-
-      {/* Controls */}
-      <Card className="p-4">
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-2">
-            <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">Sims</span>
-            <Select value={simCount} onValueChange={setSimCount}>
-              <SelectTrigger className="w-[200px] h-8 text-xs" data-testid="pc-sim-count">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {SIM_OPTIONS.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleRefresh}
-            disabled={loading}
-            data-testid="pc-refresh"
-            className="h-8 gap-1.5"
+    <div className="space-y-5">
+      {/* Header row: title on the left, desktop pill switcher on the right */}
+      <div className="flex items-start justify-between gap-4">
+        <SectionHeader title="Playoff Calculator" subtitle={subtitle} />
+        <div className="hidden md:flex items-center gap-2 flex-shrink-0 pt-1">
+          <div
+            className="grid flex-shrink-0"
+            style={{
+              gridTemplateColumns: "1fr 1fr",
+              height: 48,
+              borderRadius: 16,
+              padding: 4,
+              background: "rgba(255,255,255,0.04)",
+              border: "1px solid rgba(255,255,255,0.07)",
+              gap: 4,
+              width: 300,
+            }}
           >
-            {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-            Refresh
-          </Button>
-
-          <div className="flex-1" />
-
-          {data && (
-            <div className="flex flex-wrap items-center gap-1.5 text-[11px]" data-testid="pc-settings-pills">
-              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-muted/40 border border-border/40">
-                <Clock className="w-3 h-3 text-muted-foreground" />
-                <span className="font-semibold">{data.settings.remainingWeeks}</span>
-                <span className="text-muted-foreground">wks left</span>
-              </span>
-              <span className="px-2 py-1 rounded-md bg-muted/40 border border-border/40">
-                <span className="text-muted-foreground">Playoff teams:</span>{" "}
-                <span className="font-semibold">{data.settings.playoffTeams}</span>
-              </span>
-              {data.settings.byes > 0 && (
-                <span className="px-2 py-1 rounded-md bg-muted/40 border border-border/40">
-                  <span className="text-muted-foreground">Byes:</span>{" "}
-                  <span className="font-semibold">{data.settings.byes}</span>
-                </span>
-              )}
-              <span className="px-2 py-1 rounded-md bg-muted/40 border border-border/40">
-                <span className="text-muted-foreground">Updated:</span>{" "}
-                <span className="font-semibold">{lastUpdatedLabel}</span>
-              </span>
-            </div>
-          )}
-        </div>
-      </Card>
-
-      {/* Error */}
-      {error && (
-        <Card className="p-4 border-rose-500/40 bg-rose-500/5" data-testid="pc-error">
-          <div className="flex items-center gap-2 text-rose-500 dark:text-rose-400">
-            <AlertCircle className="w-4 h-4 flex-shrink-0" />
-            <span className="text-sm font-medium">{error}</span>
+            {SUB_TABS.map((tab) =>
+              renderSubTabButton(tab, activeSubTab === tab.id, () => setActiveSubTab(tab.id), "desktop"),
+            )}
           </div>
-        </Card>
-      )}
-
-      {/* Server-side data warnings (e.g. synthesized schedule, sum
-          deviation). Yellow rather than red since the calculator still
-          returned numbers — the warnings just qualify them. */}
-      {data?.meta?.warnings && data.meta.warnings.length > 0 && (
-        <Card className="p-3 border-amber-500/40 bg-amber-500/5" data-testid="pc-warnings">
-          <div className="flex items-start gap-2 text-amber-600 dark:text-amber-400">
-            <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-            <ul className="text-[12px] space-y-1">
-              {data.meta.warnings.map((w, i) => (
-                <li key={i}>{w}</li>
-              ))}
-            </ul>
-          </div>
-        </Card>
-      )}
-
-      {/* Info cards */}
-      {data && insights && !error && (
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3" data-testid="pc-insights">
-          <InfoCard
-            icon={<Trophy className="w-4 h-4 text-[#d4af37]" />}
-            label="Favorite"
-            value={insights.favorite.team_name}
-            sub={`${insights.favorite.make_playoffs_pct.toFixed(1)}% to make playoffs`}
-            avatarTeam={insights.favorite}
-          />
-          <InfoCard
-            icon={<TrendingUp className="w-4 h-4 text-emerald-500" />}
-            label="Best Value Riser"
-            value={insights.valueRiser.team_name}
-            sub={(insights.valueRiser.change ?? 0) > 0 ? `+${(insights.valueRiser.change ?? 0).toFixed(1)}% vs last run` : "no prior run"}
-            avatarTeam={insights.valueRiser}
-          />
-          {insights.hardSos && (
-            <InfoCard
-              icon={<Flame className="w-4 h-4 text-rose-500" />}
-              label="Toughest Schedule"
-              value={insights.hardSos.team_name}
-              sub={`Rem SOS ${insights.hardSos.remaining_sos.toFixed(1)}`}
-              avatarTeam={insights.hardSos}
-            />
-          )}
-          {insights.softSos && (
-            <InfoCard
-              icon={<Snowflake className="w-4 h-4 text-sky-400" />}
-              label="Softest Schedule"
-              value={insights.softSos.team_name}
-              sub={`Rem SOS ${insights.softSos.remaining_sos.toFixed(1)}`}
-              avatarTeam={insights.softSos}
-            />
-          )}
-          {insights.bubble && (
-            <InfoCard
-              icon={<Target className="w-4 h-4 text-blue-400" />}
-              label="Bubble Team"
-              value={insights.bubble.team_name}
-              sub={`${insights.bubble.make_playoffs_pct.toFixed(1)}% playoff odds`}
-              avatarTeam={insights.bubble}
-            />
-          )}
         </div>
-      )}
-
-      {/* Table (desktop) */}
-      <div className="hidden md:block">
-        <DataTable
-          columns={columns}
-          data={enrichedTeams}
-          loading={loading && !data}
-          defaultSortKey="make_playoffs_pct"
-          defaultSortDir="desc"
-        />
       </div>
 
-      {/* Mobile cards */}
-      <div className="md:hidden space-y-2" data-testid="pc-mobile">
-        {loading && !data && (
-          <Card className="p-4 flex items-center justify-center gap-2 text-sm text-muted-foreground">
-            <Loader2 className="w-4 h-4 animate-spin" /> Running simulations...
-          </Card>
-        )}
-        {!loading && enrichedTeams.length === 0 && !error && (
-          <Card className="p-4 text-center text-sm text-muted-foreground">No teams.</Card>
-        )}
-        {[...enrichedTeams]
-          .sort((a, b) => b.make_playoffs_pct - a.make_playoffs_pct)
-          .map((t) => (
-            <Card key={t.roster_id} className="p-3" data-testid={`pc-mobile-${t.roster_id}`}>
-              <div className="flex items-center gap-2 mb-2">
-                {teamAvatar(t, "w-9 h-9")}
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-bold truncate">{t.team_name}</p>
-                  <p className="text-[11px] text-muted-foreground truncate">
-                    {t.owner_name} • Rating {t.team_rating} • {t.projected_record}
-                  </p>
-                </div>
-                <div className="text-right flex-shrink-0">
-                  {changeCell(t.change)}
-                </div>
-              </div>
-              <div className="grid grid-cols-5 gap-1 text-[10px]">
-                {[
-                  { lbl: "Playoffs", v: t.make_playoffs_pct },
-                  { lbl: "Bye",      v: t.first_round_bye_pct },
-                  { lbl: "Semis",    v: t.semifinals_pct },
-                  { lbl: "Finals",   v: t.finals_pct },
-                  { lbl: "Champ",    v: t.championship_pct },
-                ].map((c) => {
-                  const cc = pctCell(c.v);
-                  return (
-                    <div key={c.lbl} className="flex flex-col items-center gap-0.5">
-                      <span className="text-muted-foreground uppercase tracking-wider text-[9px]">{c.lbl}</span>
-                      <span className={cn("w-full text-center rounded px-1 py-0.5 tabular-nums", cc.className)}>{cc.label}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            </Card>
-          ))}
+      {/* Mobile switcher */}
+      <div className="md:hidden flex justify-center sm:justify-start !mt-0">
+        <div
+          className="grid w-full sm:w-auto"
+          style={{
+            gridTemplateColumns: "1fr 1fr",
+            maxWidth: 420,
+            height: 48,
+            borderRadius: 16,
+            padding: 4,
+            background: "rgba(255,255,255,0.04)",
+            border: "1px solid rgba(255,255,255,0.07)",
+            gap: 4,
+          }}
+        >
+          {SUB_TABS.map((tab) =>
+            renderSubTabButton(tab, activeSubTab === tab.id, () => setActiveSubTab(tab.id)),
+          )}
+        </div>
       </div>
 
-      {/* Methodology footer */}
-      {data && (
-        <div className="text-[11px] text-muted-foreground leading-relaxed">
-          <p>
-            <span className="font-semibold text-foreground">Methodology:</span>{" "}
-            Each team's win-now score uses FantasyCalc redraft starter values for the optimal
-            lineup under your league's roster slots. Ratings normalize 0–100. The remaining
-            schedule is simulated {data.simulationCount.toLocaleString()} times with a per-team
-            weekly std-dev tuned for your format. Tiebreakers: record → points for → rating.
-            <span className="italic"> Not a substitute for trash talk.</span>
-          </p>
-        </div>
-      )}
+      {activeSubTab === "odds" && <PlayoffOdds leagueId={leagueId} />}
+      {activeSubTab === "matchups" && <WeeklyMatchups leagueId={leagueId} />}
     </div>
-  );
-}
-
-function InfoCard({
-  icon, label, value, sub, avatarTeam,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-  sub: string;
-  avatarTeam?: PlayoffTeam;
-}) {
-  return (
-    <Card className="p-3 flex flex-col gap-2 min-h-[88px]">
-      <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
-        {icon}{label}
-      </div>
-      <div className="flex items-center gap-2 min-w-0">
-        {avatarTeam && teamAvatar(avatarTeam, "w-7 h-7")}
-        <div className="flex flex-col min-w-0">
-          <span className="text-sm font-bold truncate">{value}</span>
-          <span className="text-[10px] text-muted-foreground truncate">{sub}</span>
-        </div>
-      </div>
-    </Card>
   );
 }

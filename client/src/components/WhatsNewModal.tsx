@@ -73,21 +73,37 @@ export function WhatsNewModal({ isAuthenticated, onViewChangelog }: Props) {
         data-testid="whatsnew-modal"
       >
         <div className="p-5 sm:p-6 max-h-[75vh] overflow-y-auto">
-          <DialogHeader className="space-y-2 text-left">
+          <DialogHeader className="space-y-3 text-left">
             <div className="flex items-center gap-2.5">
               <img src={logoDark} alt="StatChasers" className="w-8 h-8 flex-shrink-0" />
-              <div className="leading-none min-w-0">
+              <div className="leading-none min-w-0 flex-1">
                 <p className="text-[10px] font-semibold tracking-wide truncate" style={{ color: "#d4af37" }}>
                   STATCHASERS · DYNASTY COMMAND
                 </p>
                 <p className="text-[10px] text-white/40 mt-0.5">{CURRENT_UPDATE_NOTES.date}</p>
               </div>
+              {/* Small branded tag — keeps the briefing tone without leaning
+                  on military copy elsewhere in the modal. */}
+              <span
+                className="text-[9px] font-bold uppercase tracking-[0.12em] px-2 py-1 rounded-full border whitespace-nowrap flex-shrink-0"
+                style={{ color: "#d4af37", borderColor: "rgba(212,175,55,0.35)", background: "rgba(212,175,55,0.08)" }}
+                data-testid="whatsnew-badge"
+              >
+                Update Briefing
+              </span>
             </div>
-            <DialogTitle className="text-lg sm:text-xl font-bold text-white">
+            <DialogTitle className="text-2xl sm:text-[26px] font-bold text-white leading-tight">
               {CURRENT_UPDATE_NOTES.title}
             </DialogTitle>
+            {/* Subtle gold rule under the title for the same visual signature
+                used by section headers throughout the app. */}
+            <span
+              aria-hidden
+              className="block h-[2.5px] w-10 rounded-full"
+              style={{ background: "#d4af37" }}
+            />
             {CURRENT_UPDATE_NOTES.subtitle && (
-              <DialogDescription className="text-sm text-white/60">
+              <DialogDescription className="text-sm text-white/70 leading-relaxed">
                 {CURRENT_UPDATE_NOTES.subtitle}
               </DialogDescription>
             )}
@@ -118,7 +134,7 @@ export function WhatsNewModal({ isAuthenticated, onViewChangelog }: Props) {
             className="w-full sm:w-auto bg-[#d4af37] hover:bg-[#c49b2e] text-black font-semibold"
             data-testid="whatsnew-got-it"
           >
-            Got it
+            Back to the War Room
           </Button>
         </DialogFooter>
       </DialogContent>

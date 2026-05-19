@@ -33,21 +33,25 @@ export interface UpdateNotes {
 
 export const CURRENT_UPDATE_NOTES: UpdateNotes = {
   version: CURRENT_UPDATE_VERSION,
-  title: "What's New in Dynasty Command",
-  subtitle: "Recent updates are now live.",
+  // Title is rendered with the salute emoji as part of the string so the
+  // modal layout doesn't need to know about it — the cap of "one salute
+  // emoji max" lives here.
+  title: "Welcome Back, Commander! 🫡",
+  subtitle: "Fresh upgrades are live. Here's what changed since your last huddle.",
   date: "May 18, 2026",
   sections: [
     {
       heading: "New Features",
       items: [
         "Research - Market Value: now includes 2026 rookies and future draft picks under the \"All Pos\" filter.",
-        "Player/Pick Values: Updated option to enter custom values.",
+        "Player/Pick Values: custom value inputs are now supported.",
       ],
     },
     {
       heading: "Improvements",
       items: [
-        "Command Center - My Portfolio: Mobile improvements to League Breakdown tab and Finance tab.",
+        "Command Center - My Portfolio: mobile improvements added to League Breakdown and Finance.",
+        "Finance and portfolio views now use space more efficiently on smaller screens.",
       ],
     },
   ],

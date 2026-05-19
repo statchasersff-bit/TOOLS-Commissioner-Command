@@ -228,6 +228,267 @@ const TIER_CONFIG: Record<Tier, {
 };
 
 
+// ─── Expanded-row editor (module scope) ───────────────────────────────────────
+// IMPORTANT: this component MUST live at module scope. When it was defined
+// inside FinanceTab's body, every parent re-render produced a new component
+// type, causing React to unmount and remount the entire editor on each
+// keystroke — which is why inputs lost focus after typing one character.
+// Lifting it here makes the component identity stable across renders so React
+// reconciles existing DOM nodes (and preserves input focus).
+
+interface FinanceCalcResult {
+  projectedPrize: number;
+  pl: number;
+  breakdown: { place: number; amount: number; probability: number }[];
+}
+
+interface FinanceLeagueEditorProps {
+  leagueId: string;
+  finance: LeagueFinanceData;
+  standing: LeagueStanding | undefined;
+  calc: FinanceCalcResult | null;
+  onUpdate: (leagueId: string, patch: Partial<LeagueFinanceData>) => void;
+  onAddPrize: (leagueId: string) => void;
+  onRemovePrize: (leagueId: string, place: number) => void;
+  onUpdatePrize: (leagueId: string, place: number, amount: number) => void;
+}
+
+function SectionLabel({ children, action }: { children: React.ReactNode; action?: React.ReactNode }) {
+  return (
+    <div className="flex items-center gap-2 mb-1.5">
+      <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{children}</span>
+      <div className="flex-1 h-px bg-border/30" />
+      {action}
+    </div>
+  );
+}
+
+function FinanceLeagueEditor({
+  leagueId, finance, standing, calc,
+  onUpdate, onAddPrize, onRemovePrize, onUpdatePrize,
+}: FinanceLeagueEditorProps) {
+  // Local drafts for the two text fields per the spec. Numeric fields
+  // (buyIn / prize amounts) flow straight to the parent for immediate table
+  // feedback — focus is no longer at risk now that the component is stable.
+  const [urlDraft, setUrlDraft] = useState(finance.leagueSafeUrl);
+  const [notesDraft, setNotesDraft] = useState(finance.notes);
+  const urlTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const notesTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Flush any pending text drafts on unmount (e.g. row collapse) so latest
+  // typing isn't lost if the user closes the row before the debounce fires.
+  useEffect(() => {
+    return () => {
+      if (urlTimer.current) clearTimeout(urlTimer.current);
+      if (notesTimer.current) clearTimeout(notesTimer.current);
+    };
+  }, []);
+
+  const flushUrl = useCallback((v: string) => {
+    if (urlTimer.current) clearTimeout(urlTimer.current);
+    urlTimer.current = setTimeout(() => onUpdate(leagueId, { leagueSafeUrl: v }), 600);
+  }, [leagueId, onUpdate]);
+
+  const flushNotes = useCallback((v: string) => {
+    if (notesTimer.current) clearTimeout(notesTimer.current);
+    notesTimer.current = setTimeout(() => onUpdate(leagueId, { notes: v }), 600);
+  }, [leagueId, onUpdate]);
+
+  const s = standing;
+  const f = finance;
+  const gamesPlayed = s ? s.wins + s.losses + s.ties : 0;
+  const hasOddsData = s && !s.loading && !s.error && s.rank > 0 && (gamesPlayed > 0 || s.valueRank > 0);
+  const playoffPctVal = hasOddsData ? approxPlayoffPct(s) : null;
+  const playoffPctCls = playoffPctVal === null
+    ? "text-muted-foreground"
+    : playoffPctVal >= 50 ? "text-emerald-600 dark:text-emerald-400"
+    : playoffPctVal <= 20 ? "text-red-500 dark:text-red-400"
+    : "text-amber-600 dark:text-amber-400";
+
+  const standingVal = s && !s.loading && !s.error && s.rank > 0 && gamesPlayed > 0 ? `#${s.rank}/${s.totalTeams}` : "N/A";
+  const recordVal   = s && !s.loading && !s.error && gamesPlayed > 0 ? `${s.wins}-${s.losses}${s.ties > 0 ? `-${s.ties}` : ""}` : "Pre-season";
+  const pfVal       = s && !s.loading && !s.error && s.ptsFor > 0 ? s.ptsFor.toFixed(1) : "N/A";
+
+  return (
+    <div className="border-t border-border/30 bg-muted/10 p-4 space-y-3">
+      {/* Summary strip */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-3 py-2 rounded-lg bg-muted/30 border border-border/30 text-xs">
+        <div className="flex items-center gap-1.5">
+          <span className="text-muted-foreground">Standing</span>
+          <span className={`font-semibold ${s?.inPlayoffs && gamesPlayed > 0 ? "text-emerald-500 dark:text-emerald-400" : ""}`}>{standingVal}</span>
+        </div>
+        <span className="text-border/60">|</span>
+        <div className="flex items-center gap-1.5">
+          <span className="text-muted-foreground">Record</span>
+          <span className="font-semibold">{recordVal}</span>
+        </div>
+        <span className="text-border/60">|</span>
+        <div className="flex items-center gap-1.5">
+          <span className="text-muted-foreground">PF</span>
+          <span className="font-semibold">{pfVal}</span>
+        </div>
+        <span className="text-border/60">|</span>
+        <div className="flex items-center gap-1.5">
+          <span className="text-muted-foreground">Playoff Odds</span>
+          <span className={`font-semibold ${playoffPctCls}`}>{playoffPctVal !== null ? `~${playoffPctVal}%` : "N/A"}</span>
+          {playoffPctVal !== null && s && (
+            <span className="text-[10px] text-muted-foreground">
+              {gamesPlayed > 0 ? (s.inPlayoffs ? "In ✓" : `${s.rank - s.playoffSpots} back`) : "talent-based"}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {s?.error && (
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <AlertCircle className="w-3.5 h-3.5" /><span>Could not load standings for this league.</span>
+        </div>
+      )}
+
+      {/* Financial Details */}
+      <div>
+        <SectionLabel>Financial Details</SectionLabel>
+        <div className="flex flex-col sm:flex-row gap-2">
+          <div className="relative sm:w-36">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-xs">$</span>
+            <Input type="number" min="0" className="pl-6 h-9 text-sm" value={f.buyIn || ""} placeholder="Buy-in"
+              onChange={e => onUpdate(leagueId, { buyIn: parseFloat(e.target.value) || 0 })}
+              data-testid={`input-buyin-${leagueId}`} />
+          </div>
+          <div className="relative flex-1 min-w-0">
+            <Input type="url" placeholder="LeagueSafe link (https://leaguesafe.com/league/...)"
+              value={urlDraft}
+              onChange={e => {
+                setUrlDraft(e.target.value);
+                flushUrl(e.target.value);
+              }}
+              onBlur={() => {
+                if (urlTimer.current) { clearTimeout(urlTimer.current); urlTimer.current = null; }
+                if (urlDraft !== finance.leagueSafeUrl) onUpdate(leagueId, { leagueSafeUrl: urlDraft });
+              }}
+              className={`h-9 text-sm ${urlDraft ? "pr-9" : ""}`}
+              data-testid={`input-leaguesafe-${leagueId}`} />
+            {urlDraft && (
+              <a href={urlDraft} target="_blank" rel="noopener noreferrer"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#0b3a7a] dark:text-blue-400 hover:opacity-70 transition-opacity"
+                data-testid={`link-leaguesafe-${leagueId}`} onClick={e => e.stopPropagation()}>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Prize Structure */}
+      <div>
+        <SectionLabel action={
+          <button
+            onClick={() => onAddPrize(leagueId)}
+            className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-[#d4af37] hover:opacity-80 transition-opacity"
+            data-testid={`button-add-prize-${leagueId}`}>
+            <Plus className="w-3 h-3" /> Add Place
+          </button>
+        }>Prize Structure</SectionLabel>
+        {f.prizes.length === 0 ? (
+          <p className="text-xs text-muted-foreground italic">No prizes configured. Click Add Place to start.</p>
+        ) : (
+          <div className="space-y-1.5">
+            {[...f.prizes].sort((a, b) => a.place - b.place).map(prize => {
+              const placeLabel = prize.place === 1 ? "🥇 1st" : prize.place === 2 ? "🥈 2nd" : prize.place === 3 ? "🥉 3rd" : `${prize.place}th`;
+              const isCurrentRank = s && !s.loading && s.rank === prize.place;
+              const prob = calc?.breakdown.find(b => b.place === prize.place)?.probability ?? 0;
+              const probPct = Math.round(prob * 1000) / 10;
+              const probBadgeCls = probPct >= 30 ? "border-emerald-500/50 text-emerald-600 dark:text-emerald-400" : probPct >= 10 ? "border-[#d4af37]/50 text-amber-600 dark:text-amber-400" : "border-border/40 text-muted-foreground";
+              return (
+                <div key={prize.place} className={`flex items-center gap-2 px-2.5 py-1.5 rounded-md border ${isCurrentRank ? "border-[#d4af37]/40 bg-[#d4af37]/5" : "border-border/30 bg-muted/20"}`} data-testid={`prize-row-${leagueId}-${prize.place}`}>
+                  <span className="text-xs font-semibold w-14 flex-shrink-0">{placeLabel}</span>
+                  {probPct > 0 ? (
+                    <Badge variant="outline" className={`text-[10px] px-1.5 h-4 flex-shrink-0 ${probBadgeCls}`} data-testid={`badge-prob-${leagueId}-${prize.place}`}>~{probPct}%</Badge>
+                  ) : isCurrentRank ? (
+                    <Badge variant="outline" className="text-[10px] px-1.5 h-4 border-[#d4af37]/50 text-amber-600 dark:text-amber-400 flex-shrink-0">Now</Badge>
+                  ) : (
+                    <span className="w-10 flex-shrink-0" />
+                  )}
+                  <div className="relative flex-1 max-w-[140px] ml-auto">
+                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground text-xs">$</span>
+                    <Input type="number" min="0" className="pl-6 h-8 text-sm" value={prize.amount || ""} placeholder="0"
+                      onChange={e => onUpdatePrize(leagueId, prize.place, parseFloat(e.target.value) || 0)}
+                      data-testid={`input-prize-${leagueId}-${prize.place}`} />
+                  </div>
+                  <button onClick={() => onRemovePrize(leagueId, prize.place)} className="text-muted-foreground hover:text-red-500 transition-colors flex-shrink-0 p-1" data-testid={`button-remove-prize-${leagueId}-${prize.place}`}>
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {(f.buyIn > 0 || f.prizes.length > 0) && (() => {
+          const showCalc = !!calc;
+          const plValue = calc ? calc.pl : -f.buyIn;
+          const expectedPrize = calc ? fmtDollar(Math.round(calc.projectedPrize)) : "N/A";
+          const subtitle = calc ? `rank #${s?.rank} · prob-weighted` : f.prizes.length > 0 && s && !s.loading ? "standings loading…" : "";
+          return (
+            <div className={`mt-2 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 px-3 py-2 rounded-lg border text-xs ${showCalc ? plBg(plValue) : "bg-muted/20 border-border/30"}`}>
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-muted-foreground">Buy-in</span>
+                  <span className="font-semibold">{fmtDollar(f.buyIn)}</span>
+                </div>
+                <span className="text-border/60">|</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-muted-foreground">Expected Prize</span>
+                  <span className="font-semibold">{expectedPrize}</span>
+                </div>
+                <span className="text-border/60">|</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-muted-foreground">Expected P&L</span>
+                  <span className={`font-bold text-sm ${plColor(plValue)}`}>{plValue >= 0 ? "+" : ""}{fmtDollar(Math.round(plValue))}</span>
+                </div>
+              </div>
+              {subtitle && <span className="text-[10px] text-muted-foreground">{subtitle}</span>}
+            </div>
+          );
+        })()}
+      </div>
+
+      {/* Notes */}
+      <div>
+        <SectionLabel>Notes</SectionLabel>
+        <Input placeholder="e.g. best ball rules, side bets…"
+          value={notesDraft}
+          onChange={e => {
+            setNotesDraft(e.target.value);
+            flushNotes(e.target.value);
+          }}
+          onBlur={() => {
+            if (notesTimer.current) { clearTimeout(notesTimer.current); notesTimer.current = null; }
+            if (notesDraft !== finance.notes) onUpdate(leagueId, { notes: notesDraft });
+          }}
+          className="h-9 text-sm" data-testid={`input-notes-${leagueId}`} />
+      </div>
+
+      {/* Secondary actions */}
+      <div className="flex flex-wrap justify-end gap-1.5">
+        <button
+          onClick={() => onUpdate(leagueId, { isFree: !f.isFree, buyIn: !f.isFree ? 0 : f.buyIn, prizes: !f.isFree ? [] : f.prizes })}
+          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors ${f.isFree ? "bg-sky-500/10 text-sky-500 dark:text-sky-400 hover:bg-sky-500/15" : "text-muted-foreground hover:bg-muted/50 hover:text-sky-500 dark:hover:text-sky-400"}`}
+          data-testid={`button-toggle-free-${leagueId}`}>
+          <Tag className="w-3 h-3" />{f.isFree ? "Free League ✓" : "Mark as Free League"}
+        </button>
+        <button
+          onClick={() => onUpdate(leagueId, { ignored: !f.ignored })}
+          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors ${f.ignored ? "bg-muted text-muted-foreground hover:bg-muted/70" : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"}`}
+          data-testid={`button-toggle-ignore-${leagueId}`}>
+          {f.ignored ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
+          {f.ignored ? "Unhide League" : "Hide from Summary"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Finance Tab ─────────────────────────────────────────────────────────
 
 export function FinanceTab() {
@@ -531,196 +792,6 @@ export function FinanceTab() {
         // keep only the column template here and apply `md:grid` at use sites.
         const COL = "grid-cols-[minmax(160px,1fr)_72px_60px_72px_56px_68px_60px_52px_52px_52px_88px_28px]";
 
-        const ExpandedRow = ({ league }: { league: typeof visibleLeagues[0] }) => {
-          const f = getFinance(league.leagueId);
-          const s = standings[league.leagueId];
-          const calc = calcPL(league.leagueId);
-          const gamesPlayed = s ? s.wins + s.losses + s.ties : 0;
-          const hasOddsData = s && !s.loading && !s.error && s.rank > 0 && (gamesPlayed > 0 || s.valueRank > 0);
-          const playoffPctVal = hasOddsData ? approxPlayoffPct(s) : null;
-          const playoffPctCls = playoffPctVal === null
-            ? "text-muted-foreground"
-            : playoffPctVal >= 50 ? "text-emerald-600 dark:text-emerald-400"
-            : playoffPctVal <= 20 ? "text-red-500 dark:text-red-400"
-            : "text-amber-600 dark:text-amber-400";
-
-          const SectionLabel = ({ children, action }: { children: React.ReactNode; action?: React.ReactNode }) => (
-            <div className="flex items-center gap-2 mb-1.5">
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{children}</span>
-              <div className="flex-1 h-px bg-border/30" />
-              {action}
-            </div>
-          );
-
-          const standingVal = s && !s.loading && !s.error && s.rank > 0 && gamesPlayed > 0 ? `#${s.rank}/${s.totalTeams}` : "N/A";
-          const recordVal   = s && !s.loading && !s.error && gamesPlayed > 0 ? `${s.wins}-${s.losses}${s.ties > 0 ? `-${s.ties}` : ""}` : "Pre-season";
-          const pfVal       = s && !s.loading && !s.error && s.ptsFor > 0 ? s.ptsFor.toFixed(1) : "N/A";
-
-          return (
-            <div className="border-t border-border/30 bg-muted/10 p-4 space-y-3">
-              {/* Summary strip */}
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-3 py-2 rounded-lg bg-muted/30 border border-border/30 text-xs">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-muted-foreground">Standing</span>
-                  <span className={`font-semibold ${s?.inPlayoffs && gamesPlayed > 0 ? "text-emerald-500 dark:text-emerald-400" : ""}`}>{standingVal}</span>
-                </div>
-                <span className="text-border/60">|</span>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-muted-foreground">Record</span>
-                  <span className="font-semibold">{recordVal}</span>
-                </div>
-                <span className="text-border/60">|</span>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-muted-foreground">PF</span>
-                  <span className="font-semibold">{pfVal}</span>
-                </div>
-                <span className="text-border/60">|</span>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-muted-foreground">Playoff Odds</span>
-                  <span className={`font-semibold ${playoffPctCls}`}>{playoffPctVal !== null ? `~${playoffPctVal}%` : "N/A"}</span>
-                  {playoffPctVal !== null && (
-                    <span className="text-[10px] text-muted-foreground">
-                      {gamesPlayed > 0 ? (s.inPlayoffs ? "In ✓" : `${s.rank - s.playoffSpots} back`) : "talent-based"}
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              {s?.error && (
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <AlertCircle className="w-3.5 h-3.5" /><span>Could not load standings for this league.</span>
-                </div>
-              )}
-
-              {/* Financial Details */}
-              <div>
-                <SectionLabel>Financial Details</SectionLabel>
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <div className="relative sm:w-36">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-xs">$</span>
-                    <Input type="number" min="0" className="pl-6 h-9 text-sm" value={f.buyIn || ""} placeholder="Buy-in"
-                      onChange={e => updateFinance(league.leagueId, { buyIn: parseFloat(e.target.value) || 0 })}
-                      data-testid={`input-buyin-${league.leagueId}`} />
-                  </div>
-                  <div className="relative flex-1 min-w-0">
-                    <Input type="url" placeholder="LeagueSafe link (https://leaguesafe.com/league/...)"
-                      value={f.leagueSafeUrl}
-                      onChange={e => updateFinance(league.leagueId, { leagueSafeUrl: e.target.value })}
-                      className={`h-9 text-sm ${f.leagueSafeUrl ? "pr-9" : ""}`}
-                      data-testid={`input-leaguesafe-${league.leagueId}`} />
-                    {f.leagueSafeUrl && (
-                      <a href={f.leagueSafeUrl} target="_blank" rel="noopener noreferrer"
-                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#0b3a7a] dark:text-blue-400 hover:opacity-70 transition-opacity"
-                        data-testid={`link-leaguesafe-${league.leagueId}`} onClick={e => e.stopPropagation()}>
-                        <ExternalLink className="w-3.5 h-3.5" />
-                      </a>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Prize Structure */}
-              <div>
-                <SectionLabel action={
-                  <button
-                    onClick={() => addPrize(league.leagueId)}
-                    className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-[#d4af37] hover:opacity-80 transition-opacity"
-                    data-testid={`button-add-prize-${league.leagueId}`}>
-                    <Plus className="w-3 h-3" /> Add Place
-                  </button>
-                }>Prize Structure</SectionLabel>
-                {f.prizes.length === 0 ? (
-                  <p className="text-xs text-muted-foreground italic">No prizes configured. Click Add Place to start.</p>
-                ) : (
-                  <div className="space-y-1.5">
-                    {f.prizes.sort((a, b) => a.place - b.place).map(prize => {
-                      const placeLabel = prize.place === 1 ? "🥇 1st" : prize.place === 2 ? "🥈 2nd" : prize.place === 3 ? "🥉 3rd" : `${prize.place}th`;
-                      const isCurrentRank = s && !s.loading && s.rank === prize.place;
-                      const prob = calc?.breakdown.find(b => b.place === prize.place)?.probability ?? 0;
-                      const probPct = Math.round(prob * 1000) / 10;
-                      const probBadgeCls = probPct >= 30 ? "border-emerald-500/50 text-emerald-600 dark:text-emerald-400" : probPct >= 10 ? "border-[#d4af37]/50 text-amber-600 dark:text-amber-400" : "border-border/40 text-muted-foreground";
-                      return (
-                        <div key={prize.place} className={`flex items-center gap-2 px-2.5 py-1.5 rounded-md border ${isCurrentRank ? "border-[#d4af37]/40 bg-[#d4af37]/5" : "border-border/30 bg-muted/20"}`} data-testid={`prize-row-${league.leagueId}-${prize.place}`}>
-                          <span className="text-xs font-semibold w-14 flex-shrink-0">{placeLabel}</span>
-                          {probPct > 0 ? (
-                            <Badge variant="outline" className={`text-[10px] px-1.5 h-4 flex-shrink-0 ${probBadgeCls}`} data-testid={`badge-prob-${league.leagueId}-${prize.place}`}>~{probPct}%</Badge>
-                          ) : isCurrentRank ? (
-                            <Badge variant="outline" className="text-[10px] px-1.5 h-4 border-[#d4af37]/50 text-amber-600 dark:text-amber-400 flex-shrink-0">Now</Badge>
-                          ) : (
-                            <span className="w-10 flex-shrink-0" />
-                          )}
-                          <div className="relative flex-1 max-w-[140px] ml-auto">
-                            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground text-xs">$</span>
-                            <Input type="number" min="0" className="pl-6 h-8 text-sm" value={prize.amount || ""} placeholder="0"
-                              onChange={e => updatePrize(league.leagueId, prize.place, parseFloat(e.target.value) || 0)}
-                              data-testid={`input-prize-${league.leagueId}-${prize.place}`} />
-                          </div>
-                          <button onClick={() => removePrize(league.leagueId, prize.place)} className="text-muted-foreground hover:text-red-500 transition-colors flex-shrink-0 p-1" data-testid={`button-remove-prize-${league.leagueId}-${prize.place}`}>
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {(f.buyIn > 0 || f.prizes.length > 0) && (() => {
-                  const showCalc = !!calc;
-                  const plValue = calc ? calc.pl : -f.buyIn;
-                  const expectedPrize = calc ? fmtDollar(Math.round(calc.projectedPrize)) : "N/A";
-                  const subtitle = calc ? `rank #${s?.rank} · prob-weighted` : f.prizes.length > 0 && s && !s.loading ? "standings loading…" : "";
-                  return (
-                    <div className={`mt-2 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 px-3 py-2 rounded-lg border text-xs ${showCalc ? plBg(plValue) : "bg-muted/20 border-border/30"}`}>
-                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-muted-foreground">Buy-in</span>
-                          <span className="font-semibold">{fmtDollar(f.buyIn)}</span>
-                        </div>
-                        <span className="text-border/60">|</span>
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-muted-foreground">Expected Prize</span>
-                          <span className="font-semibold">{expectedPrize}</span>
-                        </div>
-                        <span className="text-border/60">|</span>
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-muted-foreground">Expected P&L</span>
-                          <span className={`font-bold text-sm ${plColor(plValue)}`}>{plValue >= 0 ? "+" : ""}{fmtDollar(Math.round(plValue))}</span>
-                        </div>
-                      </div>
-                      {subtitle && <span className="text-[10px] text-muted-foreground">{subtitle}</span>}
-                    </div>
-                  );
-                })()}
-              </div>
-
-              {/* Notes */}
-              <div>
-                <SectionLabel>Notes</SectionLabel>
-                <Input placeholder="e.g. best ball rules, side bets…" value={f.notes}
-                  onChange={e => updateFinance(league.leagueId, { notes: e.target.value })}
-                  className="h-9 text-sm" data-testid={`input-notes-${league.leagueId}`} />
-              </div>
-
-              {/* Secondary actions */}
-              <div className="flex flex-wrap justify-end gap-1.5">
-                <button
-                  onClick={() => updateFinance(league.leagueId, { isFree: !f.isFree, buyIn: !f.isFree ? 0 : f.buyIn, prizes: !f.isFree ? [] : f.prizes })}
-                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors ${f.isFree ? "bg-sky-500/10 text-sky-500 dark:text-sky-400 hover:bg-sky-500/15" : "text-muted-foreground hover:bg-muted/50 hover:text-sky-500 dark:hover:text-sky-400"}`}
-                  data-testid={`button-toggle-free-${league.leagueId}`}>
-                  <Tag className="w-3 h-3" />{f.isFree ? "Free League ✓" : "Mark as Free League"}
-                </button>
-                <button
-                  onClick={() => updateFinance(league.leagueId, { ignored: !f.ignored })}
-                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors ${f.ignored ? "bg-muted text-muted-foreground hover:bg-muted/70" : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"}`}
-                  data-testid={`button-toggle-ignore-${league.leagueId}`}>
-                  {f.ignored ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
-                  {f.ignored ? "Unhide League" : "Hide from Summary"}
-                </button>
-              </div>
-            </div>
-          );
-        };
-
         return (
           <>
             <Card className="overflow-hidden">
@@ -924,7 +995,18 @@ export function FinanceTab() {
                       </div>
                     </button>
 
-                    {isExpanded && <ExpandedRow league={league} />}
+                    {isExpanded && (
+                      <FinanceLeagueEditor
+                        leagueId={league.leagueId}
+                        finance={f}
+                        standing={s}
+                        calc={calc}
+                        onUpdate={updateFinance}
+                        onAddPrize={addPrize}
+                        onRemovePrize={removePrize}
+                        onUpdatePrize={updatePrize}
+                      />
+                    )}
                   </div>
                 );
               })}

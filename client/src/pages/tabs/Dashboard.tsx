@@ -14,6 +14,13 @@ import { cn } from "@/lib/utils";
 import { Trophy, Zap, Target, Calendar, Users, Medal, ArrowRight, ArrowUp, ArrowDown, ArrowUpDown, Table, ArrowRightLeft, Compass, Flame, Sprout, Archive, ChevronDown, ChevronUp, ChevronRight, TrendingUp, TrendingDown, MapPin, BarChart2, Grid3X3, List, LayoutDashboard, Activity, CheckCircle2, AlertTriangle, Coins, Settings2 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
+import {
+  RosterStrengthProfile,
+  AgeCurves,
+  TierBreakdown,
+  RosterConstruction,
+  PowerDifferential,
+} from "@/components/gm-dashboard";
 
 interface DashboardProps {
   league: League;
@@ -1942,6 +1949,29 @@ export function MyTeam({ league, userTeam, onNavigate }: DashboardOverviewProps)
             </div>
           </Card>
         ))}
+      </div>
+
+      {/* ── 2. GM DASHBOARD SECTIONS ────────────────────────────────────────
+          Five analytics panels, ordered headline → quality → comparison →
+          GM read. Each section is a standalone component and uses useMemo
+          internally so re-renders don't recompute league-wide aggregates on
+          every prop change. Team Trajectory is intentionally omitted; bring
+          it back by importing it and pairing with Power Differential. */}
+      <div className="space-y-4" data-testid="gm-dashboard">
+        {/* Headline: the five quantitative stat cards work best full-width. */}
+        <RosterStrengthProfile league={league} userTeam={userTeam} />
+
+        {/* Asset quality: 5-tier stacked bar + per-tier cards — needs width. */}
+        <TierBreakdown league={league} userTeam={userTeam} />
+
+        {/* Age health + league standing — both happy at half-width on lg. */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <AgeCurves league={league} userTeam={userTeam} />
+          <PowerDifferential league={league} userTeam={userTeam} />
+        </div>
+
+        {/* Qualitative wrap-up: 3 narrative cards inside, reads best full-width. */}
+        <RosterConstruction league={league} userTeam={userTeam} />
       </div>
 
       {/* ── 5. POSITION GROUPS (single collapsible, columns per position) ──── */}

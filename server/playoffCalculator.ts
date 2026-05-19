@@ -768,3 +768,313 @@ export async function computePlayoffCalculator(
     },
   };
 }
+
+// ── Weekly matchups ──────────────────────────────────────────────────────────
+
+// Default scale for the logistic win-prob model. With FantasyCalc redraft
+// starter totals (typically tens of thousands), a 900-unit gap maps to a
+// sigmoid input of ~1.0 → ~73% win-prob for the favorite. Exported so the
+// client can pass a tuned value later if we swap in projected points.
+export const MATCHUP_WIN_PROB_SCALE = 900;
+
+/**
+ * Logistic win probability for team A vs team B given a single-number rating
+ * per team (e.g. FantasyCalc-derived win-now starter total). Symmetric, so
+ * `calculateMatchupWinProbability(a, b)` + `calculateMatchupWinProbability(b, a)`
+ * always sums to 1.
+ */
+export function calculateMatchupWinProbability(
+  teamAWinNow: number,
+  teamBWinNow: number,
+  scale: number = MATCHUP_WIN_PROB_SCALE,
+): number {
+  const safeScale = scale > 0 ? scale : MATCHUP_WIN_PROB_SCALE;
+  const diff = teamAWinNow - teamBWinNow;
+  return 1 / (1 + Math.exp(-diff / safeScale));
+}
+
+export interface WeeklyMatchupTeam {
+  rosterId: number;
+  ownerName: string;
+  teamName: string;
+  avatar: string | null;
+  record: string;
+  pointsFor: number;        // current matchup score (0 when not yet played)
+  winNowScore: number;
+  winProbability: number;   // 0..100
+}
+
+export type WeeklyMatchupStatus = "upcoming" | "live" | "final";
+
+export interface WeeklyMatchupCard {
+  matchupId: number | null;   // null for synthesized matchups (no Sleeper schedule)
+  status: WeeklyMatchupStatus;
+  isBye: boolean;
+  teamA: WeeklyMatchupTeam;
+  teamB: WeeklyMatchupTeam | null;
+  favoriteRosterId: number | null;
+  edgePct: number;            // 0..100, absolute spread between favorite and underdog
+  combinedWinNowScore: number;
+  scoreA: number;
+  scoreB: number;
+}
+
+export interface WeeklyMatchupsSummary {
+  biggestFavorite: { matchupId: number | null; rosterId: number; winProbability: number } | null;
+  closestMatchup: { matchupId: number | null; edgePct: number } | null;
+  highestCombinedScore: { matchupId: number | null; combinedWinNowScore: number } | null;
+  upsetWatch: { matchupId: number | null; underdogRosterId: number; underdogWinProbability: number } | null;
+}
+
+export interface WeeklyMatchupsResponse {
+  leagueId: string;
+  week: number;
+  currentWeek: number;
+  regularSeasonWeeks: number;
+  scheduleSource: "sleeper" | "synthetic" | "none";
+  matchups: WeeklyMatchupCard[];
+  summary: WeeklyMatchupsSummary;
+  warnings: string[];
+}
+
+/**
+ * Group raw Sleeper matchups for a single week into roster-pair tuples by
+ * `matchup_id`. Roster ids appear in the order returned by Sleeper (usually
+ * roster_id order). Single-roster groups are kept so we can render byes.
+ */
+function groupMatchupsByPairing(ms: SleeperMatchupRaw[]): Map<number, SleeperMatchupRaw[]> {
+  const byMatchup = new Map<number, SleeperMatchupRaw[]>();
+  for (const m of ms) {
+    if (m.matchup_id == null) continue;
+    const arr = byMatchup.get(m.matchup_id) || [];
+    arr.push(m);
+    byMatchup.set(m.matchup_id, arr);
+  }
+  return byMatchup;
+}
+
+export async function computeWeeklyMatchups(
+  leagueId: string,
+  requestedWeek?: number,
+): Promise<WeeklyMatchupsResponse> {
+  const [leagueRaw, rostersRaw, usersRaw, playersDb] = await Promise.all([
+    fetchJson<SleeperLeagueRaw>(`${SLEEPER_API}/league/${leagueId}`),
+    fetchJson<SleeperRosterRaw[]>(`${SLEEPER_API}/league/${leagueId}/rosters`),
+    fetchJson<SleeperLeagueUserRaw[]>(`${SLEEPER_API}/league/${leagueId}/users`),
+    getSleeperPlayers(),
+  ]);
+
+  const rosterPositions: string[] = leagueRaw.roster_positions || [];
+  const format = deriveFormat(rosterPositions);
+  const playoffWeekStart: number = leagueRaw.settings?.playoff_week_start ?? 15;
+  const regularSeasonWeeks: number = Math.max(1, playoffWeekStart - 1);
+
+  const redraft = await getFantasyCalcRedraftValues(format === "SF" ? "sf" : "1qb")
+    .catch(() => ({ valuesBySleeperId: {} as Record<string, number> }));
+  const winNowMap: Record<string, number> = redraft.valuesBySleeperId || {};
+
+  const userMap = new Map<string, SleeperLeagueUserRaw>();
+  for (const u of usersRaw) userMap.set(u.user_id, u);
+
+  // Per-team static info + win-now score
+  const teamInfo = new Map<number, {
+    rosterId: number;
+    ownerName: string;
+    teamName: string;
+    avatar: string | null;
+    record: string;
+    winNowScore: number;
+  }>();
+  for (const r of rostersRaw) {
+    const u = r.owner_id ? userMap.get(r.owner_id) : null;
+    const wins = r.settings?.wins ?? 0;
+    const losses = r.settings?.losses ?? 0;
+    const ties = r.settings?.ties ?? 0;
+    teamInfo.set(r.roster_id, {
+      rosterId: r.roster_id,
+      teamName: u?.metadata?.team_name || u?.display_name || `Team ${r.roster_id}`,
+      ownerName: u?.display_name || `Owner ${r.roster_id}`,
+      avatar: u?.avatar ? `https://sleepercdn.com/avatars/thumbs/${u.avatar}` : null,
+      record: `${wins}-${losses}${ties > 0 ? `-${ties}` : ""}`,
+      winNowScore: optimalStarterTotal(r.players || [], rosterPositions, winNowMap, playersDb),
+    });
+  }
+
+  const matchupsByWeek = await fetchAllMatchups(leagueId, regularSeasonWeeks);
+  const currentWeek = deriveCurrentWeek(matchupsByWeek);
+
+  // Clamp requested week into [1, regularSeasonWeeks]. Default = currentWeek
+  // if we're inside the regular season, else Week 1.
+  const inRegSeason = currentWeek >= 1 && currentWeek <= regularSeasonWeeks;
+  const defaultWeek = inRegSeason ? currentWeek : 1;
+  const week = Math.max(1, Math.min(regularSeasonWeeks,
+    Math.floor(requestedWeek ?? defaultWeek) || defaultWeek));
+
+  const warnings: string[] = [];
+  const rawMatchups = matchupsByWeek.get(week) || [];
+  let scheduleSource: "sleeper" | "synthetic" | "none" = rawMatchups.length > 0 ? "sleeper" : "none";
+
+  // If Sleeper hasn't published the schedule, synthesize a round-robin so the
+  // weekly view doesn't go blank pre-season.
+  let pairs: { matchupId: number | null; rosters: SleeperMatchupRaw[] }[] = [];
+  if (rawMatchups.length > 0) {
+    const grouped = groupMatchupsByPairing(rawMatchups);
+    grouped.forEach((rosters, matchupId) => pairs.push({ matchupId, rosters }));
+    // Sort by Sleeper-supplied matchup_id for stable order.
+    pairs.sort((a, b) => (a.matchupId ?? 0) - (b.matchupId ?? 0));
+  } else if (week >= currentWeek) {
+    const teamIds = rostersRaw.map((r) => r.roster_id);
+    const synth = synthesizeRoundRobin(teamIds, regularSeasonWeeks);
+    const offset = week - 1;
+    const round = synth[offset] || [];
+    pairs = round.map(([a, b]) => ({
+      matchupId: null,
+      rosters: [
+        { roster_id: a, matchup_id: null, points: 0 } as SleeperMatchupRaw,
+        { roster_id: b, matchup_id: null, points: 0 } as SleeperMatchupRaw,
+      ],
+    }));
+    if (pairs.length > 0) {
+      scheduleSource = "synthetic";
+      warnings.push(
+        `Sleeper has not published the schedule yet; showing a synthesized round-robin for week ${week}.`,
+      );
+    }
+  }
+
+  if (pairs.length === 0) {
+    warnings.push(`No matchup data available for week ${week}.`);
+  }
+
+  const buildTeam = (
+    m: SleeperMatchupRaw,
+    winProbabilityPct: number,
+  ): WeeklyMatchupTeam => {
+    const info = teamInfo.get(m.roster_id);
+    return {
+      rosterId: m.roster_id,
+      ownerName: info?.ownerName || `Owner ${m.roster_id}`,
+      teamName: info?.teamName || `Team ${m.roster_id}`,
+      avatar: info?.avatar ?? null,
+      record: info?.record || "0-0",
+      pointsFor: Math.round((m.points ?? 0) * 100) / 100,
+      winNowScore: Math.round(info?.winNowScore || 0),
+      winProbability: Math.round(winProbabilityPct * 10) / 10,
+    };
+  };
+
+  const cards: WeeklyMatchupCard[] = pairs.map(({ matchupId, rosters }) => {
+    if (rosters.length === 1) {
+      const [solo] = rosters;
+      const team = buildTeam(solo, 0);
+      return {
+        matchupId,
+        status: "upcoming" as WeeklyMatchupStatus,
+        isBye: true,
+        teamA: team,
+        teamB: null,
+        favoriteRosterId: null,
+        edgePct: 0,
+        combinedWinNowScore: team.winNowScore,
+        scoreA: team.pointsFor,
+        scoreB: 0,
+      };
+    }
+    const [a, b] = rosters;
+    const aInfo = teamInfo.get(a.roster_id);
+    const bInfo = teamInfo.get(b.roster_id);
+    const probA = calculateMatchupWinProbability(
+      aInfo?.winNowScore ?? 0,
+      bInfo?.winNowScore ?? 0,
+    );
+    const teamA = buildTeam(a, probA * 100);
+    const teamB = buildTeam(b, (1 - probA) * 100);
+
+    const anyScore = (a.points ?? 0) > 0 || (b.points ?? 0) > 0;
+    let status: WeeklyMatchupStatus;
+    if (week < currentWeek) status = "final";
+    else if (week === currentWeek) status = anyScore ? "live" : "upcoming";
+    else status = "upcoming";
+
+    const edgePct = Math.abs(teamA.winProbability - teamB.winProbability);
+    const favoriteRosterId = teamA.winProbability >= teamB.winProbability ? a.roster_id : b.roster_id;
+
+    return {
+      matchupId,
+      status,
+      isBye: false,
+      teamA,
+      teamB,
+      favoriteRosterId,
+      edgePct: Math.round(edgePct * 10) / 10,
+      combinedWinNowScore: teamA.winNowScore + teamB.winNowScore,
+      scoreA: teamA.pointsFor,
+      scoreB: teamB.pointsFor,
+    };
+  });
+
+  // ── Summary cards ───────────────────────────────────────────────────────
+  const headToHead = cards.filter((c) => !c.isBye && c.teamB);
+
+  const biggestFavoriteCard = [...headToHead].sort((x, y) => {
+    const xMax = Math.max(x.teamA.winProbability, x.teamB!.winProbability);
+    const yMax = Math.max(y.teamA.winProbability, y.teamB!.winProbability);
+    return yMax - xMax;
+  })[0];
+  const closestCard = [...headToHead].sort((x, y) => x.edgePct - y.edgePct)[0];
+  const highestCombinedCard = [...headToHead].sort(
+    (x, y) => y.combinedWinNowScore - x.combinedWinNowScore,
+  )[0];
+  // Upset watch: matchup where the underdog has the highest realistic chance
+  // (i.e., closest underdog probability under 50%). Picks matchups where an
+  // upset is plausible without just collapsing to "closest matchup".
+  const upsetCard = [...headToHead]
+    .map((c) => {
+      const underdogProb = Math.min(c.teamA.winProbability, c.teamB!.winProbability);
+      const underdogRosterId = c.teamA.winProbability < c.teamB!.winProbability
+        ? c.teamA.rosterId : c.teamB!.rosterId;
+      return { card: c, underdogProb, underdogRosterId };
+    })
+    .filter((x) => x.underdogProb >= 30 && x.underdogProb < 50)
+    .sort((x, y) => y.underdogProb - x.underdogProb)[0];
+
+  const summary: WeeklyMatchupsSummary = {
+    biggestFavorite: biggestFavoriteCard
+      ? {
+          matchupId: biggestFavoriteCard.matchupId,
+          rosterId: biggestFavoriteCard.favoriteRosterId!,
+          winProbability: Math.max(
+            biggestFavoriteCard.teamA.winProbability,
+            biggestFavoriteCard.teamB!.winProbability,
+          ),
+        }
+      : null,
+    closestMatchup: closestCard
+      ? { matchupId: closestCard.matchupId, edgePct: closestCard.edgePct }
+      : null,
+    highestCombinedScore: highestCombinedCard
+      ? {
+          matchupId: highestCombinedCard.matchupId,
+          combinedWinNowScore: highestCombinedCard.combinedWinNowScore,
+        }
+      : null,
+    upsetWatch: upsetCard
+      ? {
+          matchupId: upsetCard.card.matchupId,
+          underdogRosterId: upsetCard.underdogRosterId,
+          underdogWinProbability: upsetCard.underdogProb,
+        }
+      : null,
+  };
+
+  return {
+    leagueId,
+    week,
+    currentWeek,
+    regularSeasonWeeks,
+    scheduleSource,
+    matchups: cards,
+    summary,
+    warnings,
+  };
+}

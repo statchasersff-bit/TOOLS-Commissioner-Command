@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { getFantasyCalcValues, getFantasyCalcRedraftValues } from "./fantasycalc";
-import { computePlayoffCalculator } from "./playoffCalculator";
+import { computePlayoffCalculator, computeWeeklyMatchups } from "./playoffCalculator";
 import { getAdpHistory, getAdpAvailability } from "./adpPlayerProfile";
 import {
   fetchSleeperUser,
@@ -64,6 +64,7 @@ import {
 } from "./customValues";
 import { getUserIdFromRequest } from "./scAuthRoutes";
 import { getFinancesForUser, upsertLeagueFinance } from "./finances";
+import { upsertTeamSnapshot, getTeamSnapshots } from "./teamValueSnapshots";
 import { registerScAuthRoutes } from "./scAuthRoutes";
 import { requireReadOnlySleeperContext } from "./accessMiddleware";
 import {
@@ -103,6 +104,7 @@ function makeCache<T>(ttlMs: number) {
 const statsCache   = makeCache<any>(5 * 60 * 1000);   // 5-min TTL
 const searchCache  = makeCache<any>(2 * 60 * 1000);   // 2-min TTL
 const playoffCalcCache = makeCache<any>(10 * 60 * 1000); // 10-min TTL
+const weeklyMatchupsCache = makeCache<any>(5 * 60 * 1000); // 5-min TTL — live scores need fresher data
 
 export async function registerRoutes(
   httpServer: Server,
@@ -273,6 +275,33 @@ export async function registerRoutes(
       console.error("[PlayoffCalculator] error:", err);
       const msg = err?.message || "Failed to compute playoff odds";
       // Upstream Sleeper / FantasyCalc failure → 502; otherwise 500.
+      const status = /sleeper|fantasycalc|fetch/i.test(msg) ? 502 : 500;
+      res.status(status).json({ error: msg });
+    }
+  });
+
+  app.get("/api/leagues/:leagueId/playoff-calculator/matchups", async (req, res) => {
+    const { leagueId } = req.params;
+    if (!leagueId) {
+      return res.status(400).json({ error: "leagueId is required" });
+    }
+    const weekRaw = req.query.week;
+    const week = typeof weekRaw === "string" ? parseInt(weekRaw, 10) : NaN;
+    const weekArg = Number.isFinite(week) && week > 0 ? week : undefined;
+    try {
+      const cacheKey = `${leagueId}:${weekArg ?? "auto"}`;
+      const cached = weeklyMatchupsCache.get(cacheKey);
+      if (cached) {
+        res.setHeader("Cache-Control", "public, max-age=300");
+        return res.json(cached);
+      }
+      const result = await computeWeeklyMatchups(leagueId, weekArg);
+      weeklyMatchupsCache.set(cacheKey, result);
+      res.setHeader("Cache-Control", "public, max-age=300");
+      res.json(result);
+    } catch (err: any) {
+      console.error("[WeeklyMatchups] error:", err);
+      const msg = err?.message || "Failed to compute weekly matchups";
       const status = /sleeper|fantasycalc|fetch/i.test(msg) ? 502 : 500;
       res.status(status).json({ error: msg });
     }
@@ -476,6 +505,51 @@ export async function registerRoutes(
       res.json(result);
     } catch (err: any) {
       res.status(500).json({ error: err.message || "Failed to save finances" });
+    }
+  });
+
+  // Team value snapshots — feeds the GM Dashboard's "Team Trajectory" chart.
+  // Idempotent per (leagueId, rosterId, snapshotDate) so the client can fire
+  // a write on every Overview load without flooding the table.
+  app.post("/api/teams/snapshots", async (req, res) => {
+    try {
+      const {
+        leagueId, rosterId, snapshotDate,
+        dynastyValue, winNowValue, pickValue, starterStrength, avgAge,
+      } = req.body ?? {};
+      if (!leagueId || typeof rosterId !== "number" || !snapshotDate) {
+        return res.status(400).json({ error: "leagueId, rosterId and snapshotDate are required" });
+      }
+      // Defensive parsing: clients are trusted but we don't want NaN rows.
+      const num = (v: any, def = 0) => (typeof v === "number" && Number.isFinite(v) ? v : def);
+      const result = await upsertTeamSnapshot({
+        leagueId, rosterId, snapshotDate,
+        dynastyValue: num(dynastyValue),
+        winNowValue: num(winNowValue),
+        pickValue: num(pickValue),
+        starterStrength: num(starterStrength),
+        avgAge: num(avgAge),
+      });
+      res.json(result);
+    } catch (err: any) {
+      console.error("[TeamSnapshots] upsert error:", err);
+      res.status(500).json({ error: err?.message || "Failed to save snapshot" });
+    }
+  });
+
+  app.get("/api/leagues/:leagueId/rosters/:rosterId/snapshots", async (req, res) => {
+    try {
+      const { leagueId, rosterId } = req.params;
+      const rId = parseInt(rosterId, 10);
+      if (!leagueId || Number.isNaN(rId)) {
+        return res.status(400).json({ error: "leagueId and numeric rosterId are required" });
+      }
+      const rows = await getTeamSnapshots(leagueId, rId);
+      res.setHeader("Cache-Control", "public, max-age=60");
+      res.json({ leagueId, rosterId: rId, snapshots: rows });
+    } catch (err: any) {
+      console.error("[TeamSnapshots] fetch error:", err);
+      res.status(500).json({ error: err?.message || "Failed to fetch snapshots" });
     }
   });
 
