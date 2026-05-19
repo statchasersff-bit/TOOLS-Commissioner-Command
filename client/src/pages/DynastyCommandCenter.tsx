@@ -43,7 +43,6 @@ import TradeSync from "./tabs/TradeSync";
 import { CompareRBs } from "./tabs/CompareRBs";
 import { ShareDynastyPopup } from "@/components/ShareDynastyPopup";
 import { WhatsNewModal } from "@/components/WhatsNewModal";
-import { DraftCommand } from "./tabs/DraftCommand";
 import { AboutPage } from "@/components/AboutModal";
 import { FeedbackPage } from "@/components/FeedbackPage";
 import { TermsPage, PrivacyPage, CookiesPage } from "@/components/LegalModals";
@@ -356,9 +355,6 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
     if (activeMainTab === "terms") return <TermsPage onNavigate={handleMainTabChange} />;
     if (activeMainTab === "privacy") return <PrivacyPage onNavigate={handleMainTabChange} />;
     if (activeMainTab === "cookies") return <CookiesPage onNavigate={handleMainTabChange} />;
-
-    // Draft Command runs on public ADP data — no Sleeper or league required.
-    if (activeMainTab === "draft") return <DraftCommand />;
 
     if (activeMainTab === "portfolio") {
       const key = `portfolio:${activeSubTab}`;
