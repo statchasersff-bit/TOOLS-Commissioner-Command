@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, useEffect, useMemo, type ReactNode } from "react";
+import { createContext, useContext, useState, useCallback, useEffect, useMemo, useRef, type ReactNode } from "react";
 import {
   saveSleeperSession,
   clearSleeperSession,
@@ -176,6 +176,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   });
 
   const checkSession = useCallback(async () => {
+    // eslint-disable-next-line no-console
+    console.info("[sc-auth] auth check started");
+
     // ── Step 0: ALWAYS clean up legacy global keys before any read. ──────────
     const removed = detectAndRemoveLegacySleeperKeys();
     setLegacyKeysRemoved(removed);
@@ -193,29 +196,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const readOnly = getReadOnlySleeper();
     setReadOnlySleeperUser(readOnly);
 
+    // The final status we'll commit in `finally`. Default = guest. Every
+    // path in this function only *proposes* a status; the finally block
+    // is the ONLY place that actually releases the bootstrap splash.
+    // That guarantee is the whole point — neither a hang, an AbortError,
+    // nor an unexpected throw can leave the user staring at a loader.
+    let finalStatus: AuthStatus = "unauthenticated";
+
+    const failClosedNoDc = (reason: string) => {
+      // eslint-disable-next-line no-console
+      console.info(`[sc-auth] no DC session (${reason}) — proceeding without StatChasers account`);
+      clearToken();
+      setUser(null);
+      setSleeperInfo(null);
+      setServerIsAdmin(false);
+      setSleeperSource(readOnly ? "read-only" : "none");
+      finalStatus = "unauthenticated";
+    };
+
     try {
-      setStatus("loading");
       const headers = { "Content-Type": "application/json", ...authHeaders() };
 
-      // Failure path: no DC session. Do NOT purge read-only Sleeper here —
-      // a guest visitor is a valid state now.
-      const failClosedNoDc = (reason: string) => {
-        // eslint-disable-next-line no-console
-        console.info(`[sc-auth] no DC session (${reason}) — proceeding without StatChasers account`);
-        clearToken();
-        setUser(null);
-        setSleeperInfo(null);
-        setServerIsAdmin(false);
-        setSleeperSource(readOnly ? "read-only" : "none");
-        setStatus("unauthenticated");
-      };
-
-      // Hard timeout. If /me hangs (backend asleep, proxy dropping requests,
-      // CORS preflight stalled, etc.) we MUST still release the splash so
-      // read-only / guest mode can render. 10s is generous for a healthy
-      // server and short enough that nobody stares at the loader forever.
+      // Generous timeout. Replit deployments can take ~15s to cold-boot;
+      // the previous 10s was tripping on healthy-but-warming backends and
+      // surfacing as the "AbortError: signal is aborted without reason"
+      // the user saw. 25s lets the server wake; the finally block still
+      // guarantees the splash releases.
       const ac = new AbortController();
-      const timeoutId = setTimeout(() => ac.abort(), 10_000);
+      const timeoutId = setTimeout(() => ac.abort(), 25_000);
       let res: Response;
       try {
         res = await fetch(`${API_BASE}/api/sc-auth/me`, {
@@ -227,16 +235,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         clearTimeout(timeoutId);
       }
 
+      // eslint-disable-next-line no-console
+      console.info(`[sc-auth] /api/sc-auth/me status: ${res.status}`);
+
       // 401 = anonymous visitor. Treat as a valid unauthenticated state —
       // not an error. The app continues to render in read-only / guest mode.
-      if (res.status === 401) return failClosedNoDc("401 from /me");
+      if (res.status === 401) { failClosedNoDc("401 from /me"); return; }
       // Any other non-OK (5xx, 404 from a misrouted proxy, etc.) also
       // degrades to guest mode rather than blocking the app.
-      if (!res.ok) return failClosedNoDc(`status ${res.status} from /me`);
+      if (!res.ok) { failClosedNoDc(`status ${res.status} from /me`); return; }
 
       const data = await res.json().catch(() => null);
-      if (!data) return failClosedNoDc("/me returned non-JSON");
-      if (!data.user) return failClosedNoDc("/me returned no user");
+      if (!data) { failClosedNoDc("/me returned non-JSON"); return; }
+      if (!data.user) { failClosedNoDc("/me returned no user"); return; }
 
       // ── Bind the Sleeper auth store to this DC user BEFORE any read/write.
       setActiveDcUser(data.user.id);
@@ -301,7 +312,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         source = "server-linked";
-        setStatus("ready");
+        finalStatus = "ready";
       } else {
         // ── DC user logged in but no Sleeper linked: authenticated tier.
         // Keep the read-only Sleeper identity if present — gives them
@@ -313,7 +324,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } else {
           source = removed.length > 0 ? "legacy-cache-removed" : "none";
         }
-        setStatus("needs-sleeper");
+        finalStatus = "needs-sleeper";
       }
 
       setSleeperSource(source);
@@ -326,19 +337,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         ...(removed.length > 0 ? ["| legacy removed:", removed] : []),
       );
     } catch (err) {
+      // AbortError = our own timeout fired, not a real failure. Other
+      // throws = network/DNS/CORS failures. Both degrade to guest mode;
+      // we only log them at warn level so they don't look like crashes.
+      const isAbort = err instanceof DOMException && err.name === "AbortError";
       // eslint-disable-next-line no-console
-      console.warn("[sc-auth] checkSession threw — DC unavailable, falling back to guest/read-only", err);
+      console.warn(
+        `[sc-auth] session check ${isAbort ? "timed out" : "failed"} — continuing as guest`,
+        err
+      );
       clearToken();
       setUser(null);
       setSleeperInfo(null);
       setServerIsAdmin(false);
       setSleeperSource(readOnly ? "read-only" : "none");
-      setStatus("unauthenticated");
+      finalStatus = "unauthenticated";
+    } finally {
+      // Single point of release. No code path above sets `status` directly,
+      // so this line is the *only* thing that can flip the bootstrap splash
+      // off — making "stuck on loading screen" structurally impossible.
+      setStatus(finalStatus);
+      // eslint-disable-next-line no-console
+      console.info(`[sc-auth] auth check finished — status: ${finalStatus}`);
     }
   }, []);
 
+  // StrictMode (and any incidental remount) would otherwise fire two
+  // overlapping /me requests on first paint. The ref guard makes the
+  // initial bootstrap exactly-once; explicit re-checks via onLoginSuccess /
+  // onSleeperConnected still go through `checkSession` directly.
+  const bootstrapRanRef = useRef(false);
   useEffect(() => {
-    checkSession();
+    if (bootstrapRanRef.current) return;
+    bootstrapRanRef.current = true;
+    void checkSession();
   }, [checkSession]);
 
   const onLoginSuccess = useCallback(async (token: string) => {
