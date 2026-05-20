@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect, Component } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef, Component } from "react";
 import type { ReactNode } from "react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Card } from "@/components/ui/card";
@@ -31,6 +31,16 @@ import { PlayerProfileDrawer } from "@/components/PlayerProfileDrawer";
 // which serves the most recent adp_snapshots row for the active filter set.
 function buildAdpUrl(filters: DraftFilters): string {
   const p = new URLSearchParams();
+  // Season MUST be sent — the API defaults to "current year" when omitted,
+  // but being explicit makes the cache key obvious and pins the snapshot
+  // to the filter the user is actually viewing.
+  if (filters.season === "all") {
+    p.set("season", "all");
+  } else if (Array.isArray(filters.season)) {
+    p.set("season", filters.season.join(","));
+  } else if (filters.season) {
+    p.set("season", filters.season);
+  }
   p.set("draftType", filters.draftType);
   p.set("draftFormat", filters.draftFormat);
   p.set("rookieMode", filters.rookieMode);
@@ -124,18 +134,33 @@ export function DraftCommand() {
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [meta, setMeta] = useState<AdpResponseMeta | null>(null);
+  // Stash the AbortController so the Cancel button (and effect cleanup) can
+  // actually kill the in-flight HTTP request, not just discard its result.
+  const [scanController, setScanController] = useState<AbortController | null>(null);
+  const [wasCancelled, setWasCancelled] = useState(false);
+  // Retry counter — bumped by the Cancelled-state Retry button to force the
+  // fetch effect to re-run with the same filters. setFilters(filters) won't
+  // re-trigger the effect because the reference is unchanged.
+  const [retryNonce, setRetryNonce] = useState(0);
+  // Distinguishes user-initiated cancels from filter-change aborts. Without
+  // it, every filter change would briefly mark the explorer "cancelled"
+  // because the cleanup also aborts the in-flight fetch.
+  const userCancelledRef = useRef(false);
 
   const [profilePlayer, setProfilePlayer] = useState<ADPResult | null>(null);
   const handlePlayerClick = useCallback((row: ADPResult) => setProfilePlayer(row), []);
 
   useEffect(() => {
-    let cancelled = false;
+    const controller = new AbortController();
+    setScanController(controller);
     setIsLoading(true);
     setErrorMessage(null);
+    setWasCancelled(false);
+    userCancelledRef.current = false;
 
     const url = buildAdpUrl(filters);
     console.log("[ADP] fetch URL:", url);
-    fetch(url)
+    fetch(url, { signal: controller.signal })
       .then(async (r) => {
         const ct = r.headers.get("content-type") || "";
         if (!ct.includes("application/json")) {
@@ -160,25 +185,40 @@ export function DraftCommand() {
         return body;
       })
       .then((data) => {
-        if (cancelled) return;
+        if (controller.signal.aborted) return;
         setRows(Array.isArray(data.items) ? data.items : []);
         setMeta(data.meta ?? null);
       })
       .catch((err) => {
-        if (cancelled) return;
+        if (controller.signal.aborted) {
+          // Only present the soft "Cancelled" state if the user actually
+          // clicked Cancel — filter-change aborts shouldn't briefly flash
+          // "cancelled" on their way to the next fetch.
+          if (userCancelledRef.current) setWasCancelled(true);
+          return;
+        }
         console.error("[DraftCommand] /api/adp fetch failed:", err);
         setErrorMessage(err?.message || "Failed to load ADP");
         setRows([]);
         setMeta(null);
       })
       .finally(() => {
-        if (!cancelled) setIsLoading(false);
+        setIsLoading(false);
       });
 
     return () => {
-      cancelled = true;
+      controller.abort();
     };
-  }, [filters]);
+  }, [filters, retryNonce]);
+
+  const cancelScan = useCallback(() => {
+    userCancelledRef.current = true;
+    scanController?.abort();
+  }, [scanController]);
+
+  const retryScan = useCallback(() => {
+    setRetryNonce((n) => n + 1);
+  }, []);
 
   // Search runs client-side over whatever the server returned so typing is
   // instant; everything else is already filtered by the API. After filtering
@@ -339,9 +379,14 @@ export function DraftCommand() {
       </div>
 
       {/* ── Main body ─────────────────────────────────────────────────────── */}
-      {isLoading && <LoadingState />}
-      {hasError  && <ErrorState message={errorMessage} />}
-      {isEmpty   && <EmptyState message={meta?.message} />}
+      {/* When the user cancels mid-fetch we keep any previously-loaded rows
+          on screen rather than wiping the explorer — only fall back to the
+          dedicated "Scan cancelled" empty state when there's literally
+          nothing to display. */}
+      {isLoading                                              && <LoadingState onCancel={cancelScan} />}
+      {!isLoading && hasError                                 && <ErrorState message={errorMessage} />}
+      {!isLoading && !hasError && isEmpty && wasCancelled     && <CancelledState onRetry={retryScan} />}
+      {!isLoading && !hasError && isEmpty && !wasCancelled    && <EmptyState message={meta?.message} />}
       {!isLoading && !hasError && !isEmpty && (
         <>
           {/* Confidence banner — under ~25 drafts ADP swings hard, so we
@@ -609,10 +654,10 @@ function ListView({ rows, filters, onPlayerClick }: { rows: ADPResult[]; filters
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border/40 bg-muted/30 dark:bg-white/[0.02] text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-              <th className="px-3 py-2 text-left">Player</th>
-              <th className="px-2 py-2 text-center cursor-pointer hover:text-foreground" onClick={() => handleSort("overall_rank")}>
+              <th className="px-2 py-2 text-center cursor-pointer hover:text-foreground w-12" onClick={() => handleSort("overall_rank")}>
                 <span className="inline-flex items-center gap-0.5">Rk <SortIcon col="overall_rank" /></span>
               </th>
+              <th className="px-3 py-2 text-left">Player</th>
               <th className="px-2 py-2 text-center cursor-pointer hover:text-foreground" onClick={() => handleSort("positional_rank")}>
                 <span className="inline-flex items-center gap-0.5">PosRk <SortIcon col="positional_rank" /></span>
               </th>
@@ -641,10 +686,10 @@ function ListView({ rows, filters, onPlayerClick }: { rows: ADPResult[]; filters
                 data-testid={`row-adp-${r.player_id}`}
                 onClick={() => onPlayerClick?.(r)}
               >
+                <td className="px-2 py-2.5 text-center font-semibold tabular-nums">{r.overall_rank}</td>
                 <td className="px-3 py-2.5">
                   <PlayerCell row={r} />
                 </td>
-                <td className="px-2 py-2.5 text-center font-semibold tabular-nums">{r.overall_rank}</td>
                 <td className="px-2 py-2.5 text-center">
                   <span className={cn("inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold border", POS_COLOR[r.position].chip)}>
                     {r.position}{r.positional_rank}
@@ -1889,13 +1934,46 @@ function SelectField({ value, onChange, options }: { value: string; onChange: (v
 }
 
 // ── Empty / Loading / Error states ───────────────────────────────────────────
-function LoadingState() {
+function LoadingState({ onCancel }: { onCancel?: () => void }) {
   return (
-    <Card className="flex items-center justify-center py-20 border-border/60 dark:border-[#1a2d4a]/80">
+    <Card className="flex flex-col items-center justify-center gap-3 py-20 border-border/60 dark:border-[#1a2d4a]/80">
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
         <RefreshCw className="w-4 h-4 animate-spin text-[#d4af37]" />
         <span>Loading ADP…</span>
       </div>
+      {onCancel && (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={onCancel}
+          className="h-7 px-2.5 text-xs"
+          data-testid="button-cancel-adp-scan"
+        >
+          <X className="w-3 h-3 mr-1" />
+          Cancel
+        </Button>
+      )}
+    </Card>
+  );
+}
+
+function CancelledState({ onRetry }: { onRetry: () => void }) {
+  return (
+    <Card className="flex flex-col items-center justify-center py-16 px-6 text-center border-border/60 dark:border-[#1a2d4a]/80" data-testid="adp-cancelled-state">
+      <X className="w-8 h-8 text-muted-foreground mb-2" />
+      <h3 className="text-sm font-bold mb-1">Scan cancelled</h3>
+      <p className="text-xs text-muted-foreground max-w-xs mb-3">
+        You stopped the ADP fetch. Adjust filters or retry below.
+      </p>
+      <Button
+        size="sm"
+        onClick={onRetry}
+        className="h-7 px-3 text-xs bg-[#d4af37] hover:bg-[#c49b2e] text-black font-semibold"
+        data-testid="button-retry-adp-scan"
+      >
+        <RefreshCw className="w-3 h-3 mr-1" />
+        Retry
+      </Button>
     </Card>
   );
 }

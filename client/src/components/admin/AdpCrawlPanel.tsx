@@ -44,9 +44,12 @@ interface CrawlResult {
  *  a live progress bar while the server-side crawl runs. */
 interface CrawlLiveState extends CrawlResult {
   jobId: string;
-  status: "idle" | "running" | "completed" | "failed";
+  status: "idle" | "running" | "completed" | "failed" | "cancelled";
   startedAt: number | null;
   completedAt: number | null;
+  /** Server-side flag set by /cancel. UI uses this to grey out the Stop
+   *  button while the crawl finishes the in-flight request. */
+  cancelRequested?: boolean;
   seedUsername: string;
   draftCategories: string[];
   phase: "seed" | "depth" | "snapshots" | "done";
@@ -278,6 +281,12 @@ export function AdpCrawlPanel() {
         } else if (state.status === "completed") {
           setResult(state);
           setRunState((prev) => (prev === "success" ? prev : "success"));
+        } else if (state.status === "cancelled") {
+          // Cancelled = the user stopped the crawl. Treat it as a "success"
+          // for the result panel so partial counters are surfaced; the
+          // capsHit / phaseLabel already say "Cancelled" so the user knows.
+          setResult(state);
+          setRunState((prev) => (prev === "success" ? prev : "success"));
         } else if (state.status === "failed") {
           setResult(state);
           setRunState((prev) => (prev === "error" ? prev : "error"));
@@ -300,6 +309,26 @@ export function AdpCrawlPanel() {
         pollRef.current = null;
       }
     };
+  }, [adminSecretOverride]);
+
+  const cancelCrawl = useCallback(async () => {
+    setError("");
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/adp/crawl-network/cancel`, {
+        method: "POST",
+        credentials: "include",
+        headers: buildAdminHeaders(adminSecretOverride),
+      });
+      if (!res.ok) {
+        const { json, text, isHtml } = await readResponse(res);
+        setError(describeFailure(res.status, isHtml, json, text));
+      }
+      // The /progress poller will surface the new "cancelled" status within
+      // ~1.5s — no need to setRunState here. Showing "Stopping…" is handled
+      // server-side via state.currentActivity.
+    } catch (err: any) {
+      setError(err?.message || "Cancel request failed");
+    }
   }, [adminSecretOverride]);
 
   const refreshStatus = useCallback(async () => {
@@ -473,8 +502,23 @@ export function AdpCrawlPanel() {
             <div className="text-[11px] font-semibold uppercase tracking-wide text-amber-500">
               Live progress
             </div>
-            <div className="text-[10px] text-muted-foreground">
-              Running in background — safe to switch tabs
+            <div className="flex items-center gap-2">
+              <div className="text-[10px] text-muted-foreground">
+                Running in background — safe to switch tabs
+              </div>
+              {/* Stop button — flags the server-side crawl to halt at the
+                  next BFS boundary. Disabled once cancellation has already
+                  been requested so the user knows the click registered. */}
+              <button
+                type="button"
+                onClick={cancelCrawl}
+                disabled={!!liveProgress.cancelRequested}
+                className="px-2 py-1 rounded-md border border-red-500/40 text-[11px] font-semibold text-red-500 hover:bg-red-500/10 disabled:opacity-50 disabled:cursor-not-allowed"
+                data-testid="button-cancel-crawl"
+                title={liveProgress.cancelRequested ? "Stop already requested — finishing the current request." : "Stop the in-flight crawl. Partial progress is preserved."}
+              >
+                {liveProgress.cancelRequested ? "Stopping…" : "Stop"}
+              </button>
             </div>
           </div>
 

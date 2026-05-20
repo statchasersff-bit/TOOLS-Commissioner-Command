@@ -1594,7 +1594,9 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
             {([
               { id: "review"   as const, label: "Review Trade" },
               { id: "edit"     as const, label: "Edit Trade"   },
-              { id: "messages" as const, label: "Messages",   badge: hasUnread },
+              // Messages tab removed — replies still arrive in Sleeper itself.
+              // Tab content paths below remain dead-code-gated in case the
+              // tab is reintroduced.
             ]).map(({ id, label, badge }) => (
               <button
                 key={id}

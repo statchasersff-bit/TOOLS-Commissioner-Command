@@ -72,6 +72,7 @@ import { requireReadOnlySleeperContext } from "./accessMiddleware";
 import {
   startCrawlInBackground,
   getCrawlLiveState,
+  requestCrawlCancel,
   type DraftCategory,
 } from "./adpNetworkCrawl";
 import { getUser } from "./scAuth";
@@ -819,7 +820,24 @@ export async function registerRoutes(
         return (allowed as readonly string[]).includes(s) ? (s as T) : undefined;
       };
 
+      // Season parsing — accepts:
+      //   ?season=2026          → string
+      //   ?season=2026,2025     → comma-list expanded to array
+      //   ?season=all           → no season filter (admin tooling)
+      //   omitted               → defaults to current year inside AdpFilters
+      const parseSeason = (v: unknown): AdpFilters["season"] => {
+        if (v === undefined || v === null || v === "") return undefined;
+        const s = String(v).trim();
+        if (s === "all") return "all";
+        if (s.includes(",")) {
+          const parts = s.split(",").map((x) => x.trim()).filter(Boolean);
+          return parts.length > 1 ? parts : parts[0];
+        }
+        return s;
+      };
+
       const filters: AdpFilters = {
+        season: parseSeason(q.season),
         draftType: str(q.draftType, ["startup", "rookie", "supplemental"] as const) ?? "startup",
         draftFormat: str(q.draftFormat, ["snake", "auction", "linear"] as const) ?? "snake",
         scoring: str(q.scoring, ["ppr", "half", "standard"] as const) ?? "all",
@@ -1086,6 +1104,177 @@ export async function registerRoutes(
   });
 
   /**
+   * POST /api/admin/adp/cache-clear
+   *
+   * Wipes every cached ADP snapshot row. Use after fixing a data bug
+   * (rookie-classification, season filter, etc.) when you want all reads
+   * to recompute from raw picks rather than wait out the 6-hour TTL.
+   * The next /api/adp request for any filter will recompute live and
+   * re-populate the snapshot row.
+   */
+  app.post("/api/admin/adp/cache-clear", async (req, res) => {
+    if (!(await requireAdmin(req, res))) return;
+    try {
+      const pg = await import("pg");
+      const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+      const result = await pool.query("DELETE FROM adp_snapshots");
+      await pool.end();
+      console.info(`[Admin] adp/cache-clear deleted ${result.rowCount ?? 0} snapshot rows`);
+      res.json({ deleted: result.rowCount ?? 0 });
+    } catch (err: any) {
+      console.error("[Admin] adp/cache-clear error:", err);
+      res.status(500).json({ error: err.message || "Cache clear failed" });
+    }
+  });
+
+  /**
+   * POST /api/admin/adp/debug/discover
+   *
+   * Targeted debug for "why isn't this draft showing up?" — given a seed
+   * Sleeper username + season (+ optional leagueId / draftId), walks the
+   * public Sleeper endpoints and reports each step's result. Used to
+   * verify that the discovery pipeline can reach a specific draft.
+   *
+   * Body:
+   *   { username: string, season: string, leagueId?: string, draftId?: string }
+   */
+  app.post("/api/admin/adp/debug/discover", async (req, res) => {
+    if (!(await requireAdmin(req, res))) return;
+    try {
+      const body = (req.body ?? {}) as { username?: string; season?: string; leagueId?: string; draftId?: string };
+      const username = String(body.username || "").trim();
+      const season = String(body.season || new Date().getFullYear()).trim();
+      const targetLeagueId = body.leagueId ? String(body.leagueId) : null;
+      const targetDraftId = body.draftId ? String(body.draftId) : null;
+      if (!username) {
+        return res.status(400).json({ error: "username is required" });
+      }
+
+      const SLEEPER = "https://api.sleeper.app/v1";
+      const fetchJson = async <T>(url: string): Promise<T | null> => {
+        try {
+          const r = await fetch(url);
+          if (!r.ok) return null;
+          return (await r.json()) as T;
+        } catch {
+          return null;
+        }
+      };
+
+      const trace: any = { username, season, targetLeagueId, targetDraftId, steps: {} };
+
+      // Step 1: username → user_id
+      const userRaw = await fetchJson<{ user_id?: string; username?: string; display_name?: string }>(
+        `${SLEEPER}/user/${encodeURIComponent(username)}`,
+      );
+      trace.steps.userLookup = {
+        url: `${SLEEPER}/user/${username}`,
+        userId: userRaw?.user_id ?? null,
+        resolvedUsername: userRaw?.username ?? null,
+        ok: !!userRaw?.user_id,
+      };
+      if (!userRaw?.user_id) {
+        trace.skipReason = "Sleeper /user/{username} returned no user_id";
+        return res.json(trace);
+      }
+
+      // Step 2: user_id + season → leagues
+      const leaguesRaw = await fetchJson<Array<{ league_id: string; name: string; season: string }>>(
+        `${SLEEPER}/user/${userRaw.user_id}/leagues/nfl/${encodeURIComponent(season)}`,
+      );
+      const leagues = leaguesRaw ?? [];
+      trace.steps.leagueList = {
+        url: `${SLEEPER}/user/${userRaw.user_id}/leagues/nfl/${season}`,
+        count: leagues.length,
+        names: leagues.map((l) => ({ leagueId: l.league_id, name: l.name, season: l.season })),
+        targetFound: targetLeagueId ? leagues.some((l) => l.league_id === targetLeagueId) : null,
+      };
+
+      // Step 3: per-league drafts (limit work to target league when provided)
+      const leaguesToInspect = targetLeagueId
+        ? leagues.filter((l) => l.league_id === targetLeagueId)
+        : leagues.slice(0, 5);
+      trace.steps.leagueDrafts = [];
+      for (const lg of leaguesToInspect) {
+        const drafts = await fetchJson<Array<any>>(`${SLEEPER}/league/${lg.league_id}/drafts`);
+        trace.steps.leagueDrafts.push({
+          leagueId: lg.league_id,
+          leagueName: lg.name,
+          season: lg.season,
+          drafts: (drafts ?? []).map((d) => ({
+            draftId: d.draft_id,
+            type: d.type,
+            status: d.status,
+            season: d.season,
+            settings: d.settings,
+            metadataKeys: d.metadata ? Object.keys(d.metadata) : [],
+          })),
+        });
+      }
+
+      // Step 4: deep inspect a specific draft id when provided
+      if (targetDraftId) {
+        const draftRaw = await fetchJson<any>(`${SLEEPER}/draft/${targetDraftId}`);
+        const picksRaw = await fetchJson<any[]>(`${SLEEPER}/draft/${targetDraftId}/picks`);
+        const picksMade = (picksRaw ?? []).filter((p: any) => p?.player_id).length;
+        trace.steps.draftDetail = {
+          draftId: targetDraftId,
+          draftType: draftRaw?.type ?? null,
+          draftStatus: draftRaw?.status ?? null,
+          draftSeason: draftRaw?.season ?? null,
+          settings: draftRaw?.settings ?? null,
+          metadata: draftRaw?.metadata ?? null,
+          totalPicks: picksRaw?.length ?? 0,
+          picksMade,
+        };
+
+        // Check storage state
+        const pg = await import("pg");
+        const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+        const storedQ = await pool.query(
+          "SELECT draft_id, season, status, draft_type, excluded_from_adp FROM drafts WHERE draft_id = $1",
+          [targetDraftId],
+        );
+        const picksStoredQ = await pool.query(
+          "SELECT COUNT(*)::int AS n FROM draft_picks WHERE draft_id = $1",
+          [targetDraftId],
+        );
+        await pool.end();
+        trace.steps.storedState = {
+          draftRow: storedQ.rows[0] ?? null,
+          storedPickCount: picksStoredQ.rows[0]?.n ?? 0,
+        };
+
+        // Infer skip reason matching adp.ts ingestDraftById gates.
+        const skipReasons: string[] = [];
+        if (!draftRaw) skipReasons.push("Sleeper /draft/{id} returned no payload");
+        else {
+          const completed = draftRaw.status === "complete" || picksMade >= (draftRaw.settings?.teams ?? 12) * (draftRaw.settings?.rounds ?? 4);
+          if (!completed) skipReasons.push(`status='${draftRaw.status}' — only 'complete' drafts contribute to ADP`);
+          const teams = draftRaw.settings?.teams ?? 0;
+          const rounds = draftRaw.settings?.rounds ?? 0;
+          const draftType = (() => {
+            if (rounds <= 6) return "rookie";
+            return "startup";
+          })();
+          const minTeams = 8;
+          const minRounds = draftType === "startup" ? 8 : 3;
+          if (teams < minTeams) skipReasons.push(`teams=${teams} below minimum ${minTeams}`);
+          if (rounds < minRounds) skipReasons.push(`rounds=${rounds} below minimum ${minRounds} (for draftType=${draftType})`);
+          const enoughPicks = picksMade >= teams * rounds * 0.6;
+          if (!enoughPicks) skipReasons.push(`picksMade=${picksMade} < 60% of teams*rounds (${teams * rounds})`);
+        }
+        trace.likelySkipReasons = skipReasons;
+      }
+
+      res.json(trace);
+    } catch (err: any) {
+      console.error("[Admin] adp/debug/discover error:", err);
+      res.status(500).json({ error: err.message || "Discover debug failed" });
+    }
+  });
+
+  /**
    * POST /api/admin/adp/crawl-network
    *
    * 2-hop ADP discovery crawl starting from a seed Sleeper username. Uses
@@ -1190,6 +1379,20 @@ export async function registerRoutes(
   app.get("/api/admin/adp/crawl-network/progress", async (req, res) => {
     if (!(await requireAdmin(req, res))) return;
     res.json(getCrawlLiveState());
+  });
+
+  /**
+   * POST /api/admin/adp/crawl-network/cancel
+   *
+   * Asks the in-flight crawl to stop. The crawl loop checks the flag at
+   * each BFS iteration boundary and returns gracefully — any drafts already
+   * ingested stay, the live state moves to `cancelled`, and the next
+   * /progress poll surfaces the new status to the UI.
+   */
+  app.post("/api/admin/adp/crawl-network/cancel", async (req, res) => {
+    if (!(await requireAdmin(req, res))) return;
+    const flagged = requestCrawlCancel();
+    res.json({ ok: true, flagged, state: getCrawlLiveState() });
   });
 
   app.post("/api/admin/cleanup-one-sided-trades", async (req, res) => {

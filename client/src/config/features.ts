@@ -6,7 +6,7 @@ export const FEATURES = {
   // Temporary kill-switch: when false, the entire Draft tab (Draft Board +
   // ADP Explorer) is hidden from navigation and any direct URL/saved-state
   // routing falls back to Portfolio. Flip to `true` to bring it back.
-  SHOW_DRAFT_MODULE: false,
+  SHOW_DRAFT_MODULE: true,
 } as const;
 
 export type FeatureFlag = keyof typeof FEATURES;

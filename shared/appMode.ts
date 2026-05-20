@@ -3,12 +3,13 @@
  * perform Sleeper write actions?".
  *
  * The Dynasty Command app is deployed on multiple domains:
- *   - statchasers.com / www.statchasers.com  →  READ_ONLY (free tier).
- *     Reads (portfolio, league analysis, ADP, etc.) work; any UI affordance
- *     that would mutate Sleeper state is hidden.
- *   - the paid domain (configurable via env)  →  WRITE_ACCESS (paid tier).
+ *   - dynastycommandff.com / www.dynastycommandff.com  →  WRITE_ACCESS (paid tier).
  *     Subscription-gated write features (lineup submit, waiver, trade
  *     propose/accept/reject, draft pick, DMs) are exposed.
+ *   - statchasers.com / www.statchasers.com  →  TEMPORARILY also WRITE_ACCESS
+ *     (see TEMPORARY_WRITE_ACCESS_DOMAINS below). Originally a READ_ONLY
+ *     free-tier mirror; promoted for live testing until manually reverted.
+ *     Reads (portfolio, league analysis, ADP, etc.) work on both regardless.
  *
  * This file runs in both the browser bundle and the Node server (no DOM,
  * no Express types) so the mode decision is identical on both sides. The
@@ -30,7 +31,14 @@ export type AppMode = "READ_ONLY" | "WRITE_ACCESS";
 
 /** Hosts that MUST run read-only. Match is case-insensitive and ignores
  *  port. Subdomains other than `www` are NOT included — they'd need an
- *  explicit entry. */
+ *  explicit entry.
+ *
+ *  NOTE: statchasers.com / www.statchasers.com are also listed in
+ *  TEMPORARY_WRITE_ACCESS_DOMAINS below. Write-access wins in `getAppMode`,
+ *  so the temporary promotion is in effect; the read-only entries remain
+ *  only so that the kill-switch fallback (ENABLE_WRITE_ACCESS=false) still
+ *  classifies statchasers.com as a known host rather than WRONG_DOMAIN.
+ *  When you remove the temporary promotion, leave these as-is. */
 export const READ_ONLY_DOMAINS: readonly string[] = [
   "statchasers.com",
   "www.statchasers.com",
@@ -47,6 +55,23 @@ const DEFAULT_WRITE_ACCESS_DOMAINS: readonly string[] = [
   "dynastycommandff.com",
   "www.dynastycommandff.com",
 ];
+
+// ─── TEMPORARY (remove to revert) ──────────────────────────────────────────
+// Hosts that are unconditionally treated as WRITE_ACCESS in addition to
+// the env-configured / default list. Merged in by `getWriteAccessDomains`
+// EVEN WHEN `WRITE_ACCESS_HOSTS` env var is set, so production env config
+// cannot accidentally disable the promotion.
+//
+// statchasers.com is normally a READ_ONLY tier (free, public mirror); this
+// block was added to give it the same full Dynasty Command functionality
+// as dynastycommandff.com for live testing. Remove this constant and the
+// corresponding merge in `getWriteAccessDomains` to revert to the original
+// read-only tier. The READ_ONLY_DOMAINS entries above intentionally stay.
+const TEMPORARY_WRITE_ACCESS_DOMAINS: readonly string[] = [
+  "statchasers.com",
+  "www.statchasers.com",
+];
+// ─── end TEMPORARY ─────────────────────────────────────────────────────────
 
 /** Canonical public URLs surfaced to the UI ("Upgrade to Pro", etc.).
  *  Overridable via APP_PUBLIC_URL / APP_WRITE_URL env vars. */
@@ -106,8 +131,12 @@ export function getWriteAccessDomains(): string[] {
       readEnv("WRITE_ACCESS_DOMAINS") ??
       readEnv("VITE_WRITE_ACCESS_DOMAINS"),
   );
-  if (fromEnv.length > 0) return fromEnv;
-  return [...DEFAULT_WRITE_ACCESS_DOMAINS];
+  const base = fromEnv.length > 0 ? fromEnv : [...DEFAULT_WRITE_ACCESS_DOMAINS];
+  // TEMPORARY: always merge in the statchasers.com promotion, regardless
+  // of env config. Dedupe to keep the list clean. Remove this merge (and
+  // the TEMPORARY_WRITE_ACCESS_DOMAINS constant) to revert.
+  const merged = new Set([...base, ...TEMPORARY_WRITE_ACCESS_DOMAINS]);
+  return [...merged];
 }
 
 export function getReadOnlyDomains(): string[] {

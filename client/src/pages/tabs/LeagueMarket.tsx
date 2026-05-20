@@ -23,12 +23,13 @@ interface PlayerRow {
   name: string;
   pos: string;
   team: string;
+  age: number | null;
   dynastyValue: number;
   redraftValue: number;
   sleeperId: string;
 }
 
-type SortKey = "name" | "pos" | "dynastyValue" | "redraftValue";
+type SortKey = "name" | "pos" | "age" | "dynastyValue" | "redraftValue";
 type SortDir = "asc" | "desc";
 
 export function MarketValue({ league }: MarketProps) {
@@ -70,6 +71,7 @@ export function MarketValue({ league }: MarketProps) {
           name: p.name,
           pos: p.pos,
           team: p.team,
+          age: typeof p.age === "number" && p.age > 0 ? p.age : null,
           sleeperId: id,
           dynastyValue: valuesBySleeperId[id] ?? p.value ?? 0,
           redraftValue: redraftValuesBySleeperId[id] ?? valuesBySleeperId[id] ?? p.value ?? 0,
@@ -93,6 +95,7 @@ export function MarketValue({ league }: MarketProps) {
           name: `${pick.year} ${ordinal(pick.round)}`,
           pos: "PICK",
           team: "—",
+          age: null,
           sleeperId: `FP_${pick.year}_${pick.round}`,
           dynastyValue: getPickValue({ ...pick, projectedRange: "Mid" }),
           redraftValue: 0,
@@ -105,9 +108,9 @@ export function MarketValue({ league }: MarketProps) {
   const rookieRows = useMemo<PlayerRow[]>(() => {
     // Build a name|pos → RankedPlayer lookup from the live FantasyCalc data so we
     // can resolve real Sleeper IDs (for photos), real NFL teams, and redraft values.
-    const nameMap = new Map<string, { sleeperId: string; team: string }>();
+    const nameMap = new Map<string, { sleeperId: string; team: string; age: number }>();
     for (const p of dynastyPlayerList) {
-      nameMap.set(`${p.name.toLowerCase().trim()}|${p.pos}`, { sleeperId: p.sleeperId, team: p.team });
+      nameMap.set(`${p.name.toLowerCase().trim()}|${p.pos}`, { sleeperId: p.sleeperId, team: p.team, age: p.age });
     }
 
     return ROOKIE_BOARD_2026_SF.map((r) => {
@@ -115,11 +118,13 @@ export function MarketValue({ league }: MarketProps) {
       const matched = nameMap.get(key);
       const realId = matched?.sleeperId || r.sleeperId;
       const team = matched?.team || r.team || "FA";
+      const age = matched?.age && matched.age > 0 ? matched.age : (r.age > 0 ? r.age : null);
       const redraftValue = matched ? (redraftValuesBySleeperId[matched.sleeperId] ?? 0) : 0;
       return {
         name: r.name,
         pos: r.pos,
         team,
+        age,
         sleeperId: realId,
         dynastyValue: r.value,
         redraftValue,
@@ -135,6 +140,21 @@ export function MarketValue({ league }: MarketProps) {
     }
     return [...allPlayers, ...extra, ...pickRows];
   }, [allPlayers, rookieRows, pickRows]);
+
+  // Position rank lookup — `dynastyPlayerList` is already sorted by dynasty
+  // value descending across all positions, so walking it once and counting
+  // per-position gives us "RB1", "RB2", "WR3", etc. keyed by sleeperId.
+  // Picks and any player not in the FantasyCalc dataset get no rank and
+  // fall back to the raw position string in the table.
+  const posRankBySleeperId = useMemo(() => {
+    const map = new Map<string, string>();
+    const counters: Record<string, number> = {};
+    for (const p of dynastyPlayerList) {
+      counters[p.pos] = (counters[p.pos] ?? 0) + 1;
+      map.set(p.sleeperId, `${p.pos}${counters[p.pos]}`);
+    }
+    return map;
+  }, [dynastyPlayerList]);
 
   const filtered = useMemo(() => {
     let rows = posFilter === "rookies" ? rookieRows : posFilter === "all" ? mergedAllRows : allPlayers;
@@ -152,6 +172,13 @@ export function MarketValue({ league }: MarketProps) {
       let cmp = 0;
       if (sortKey === "name") cmp = a.name.localeCompare(b.name);
       else if (sortKey === "pos") cmp = a.pos.localeCompare(b.pos);
+      else if (sortKey === "age") {
+        // Picks / unknown ages sort to the bottom regardless of direction
+        // so they don't pollute the meaningful end of the list.
+        const av = a.age ?? Number.POSITIVE_INFINITY;
+        const bv = b.age ?? Number.POSITIVE_INFINITY;
+        cmp = av - bv;
+      }
       else cmp = (a[sortKey] ?? 0) - (b[sortKey] ?? 0);
       return sortDir === "desc" ? -cmp : cmp;
     });
@@ -164,7 +191,8 @@ export function MarketValue({ league }: MarketProps) {
       setSortDir((d) => (d === "desc" ? "asc" : "desc"));
     } else {
       setSortKey(key);
-      setSortDir("desc");
+      // Age is more useful youngest-first; values are more useful highest-first.
+      setSortDir(key === "age" || key === "name" || key === "pos" ? "asc" : "desc");
     }
   };
 
@@ -173,9 +201,12 @@ export function MarketValue({ league }: MarketProps) {
 
   return (
     <div className="space-y-6">
+      {/* Subtitle describes the underlying FantasyCalc value set
+          (12-team, PPR, superflex) — not the user's league config — since
+          the values shown are computed against those FantasyCalc params. */}
       <SectionHeader
         title="Market Value"
-        subtitle={`${league.totalRosters ?? league.teams.length}-team · ${(league.scoringFormat ?? "").replace(league.format ?? "", "").trim() || (league.scoringFormat ?? "")} · ${league.format ?? ""}`}
+        subtitle="12-team · PPR · SF"
       />
 
       <div className="flex flex-wrap items-center gap-3">
@@ -220,7 +251,14 @@ export function MarketValue({ league }: MarketProps) {
                 Player{sortIndicator("name")}
               </th>
               <th
-                className="text-left px-2 md:px-4 py-2.5 font-semibold text-xs uppercase tracking-wider cursor-pointer hover:text-[#d4af37] select-none w-10 md:w-20"
+                className="text-right px-2 md:px-4 py-2.5 font-semibold text-xs uppercase tracking-wider cursor-pointer hover:text-[#d4af37] select-none w-10 md:w-16"
+                onClick={() => toggleSort("age")}
+                data-testid="th-age"
+              >
+                Age{sortIndicator("age")}
+              </th>
+              <th
+                className="text-left px-2 md:px-4 py-2.5 font-semibold text-xs uppercase tracking-wider cursor-pointer hover:text-[#d4af37] select-none w-12 md:w-20"
                 onClick={() => toggleSort("pos")}
                 data-testid="th-pos"
               >
@@ -245,7 +283,7 @@ export function MarketValue({ league }: MarketProps) {
           <tbody>
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={4} className="text-center py-8 text-muted-foreground text-sm">
+                <td colSpan={5} className="text-center py-8 text-muted-foreground text-sm">
                   No players found
                 </td>
               </tr>
@@ -279,9 +317,12 @@ export function MarketValue({ league }: MarketProps) {
                     )}
                   </div>
                 </td>
+                <td className="px-2 md:px-4 py-2 text-right font-mono text-xs md:text-sm tabular-nums text-muted-foreground" data-testid={`text-age-${row.sleeperId}`}>
+                  {row.age != null ? row.age.toFixed(1) : "—"}
+                </td>
                 <td className="px-2 md:px-4 py-2">
-                  <Badge variant="outline" className={`text-[9px] md:text-[10px] px-1 md:px-2 h-4 md:h-5 md:w-8 justify-center ${getPositionColor(row.pos)}`}>
-                    {row.pos}
+                  <Badge variant="outline" className={`text-[9px] md:text-[10px] px-1 md:px-2 h-4 md:h-5 md:min-w-[36px] justify-center ${getPositionColor(row.pos)}`}>
+                    {posRankBySleeperId.get(row.sleeperId) ?? row.pos}
                   </Badge>
                 </td>
                 <td className="px-2 md:px-4 py-2 text-right font-mono text-xs md:text-sm" data-testid={`text-redraft-${row.sleeperId}`}>

@@ -66,6 +66,7 @@ const MEGA_DATA: Record<string, MegaSection[]> = {
         { subId: "trade-database",      label: "Database",      description: "Search real dynasty trades by player",           icon: Database       },
         { subId: "positional-analysis", label: "Finder",     description: "Find trade targets by position & value",      icon: Search     },
         { subId: "trade-calculator",    label: "Calculator", description: "Value-based trade evaluator",                 icon: Calculator },
+        { subId: "bulk-trades",         label: "Bulk Trades",description: "Scan all leagues for a player, offer in bulk", icon: ArrowLeftRight },
         { subId: "trade-block",         label: "Intel",      description: "Trade block activity & hot markets",          icon: Eye        },
       ],
     },

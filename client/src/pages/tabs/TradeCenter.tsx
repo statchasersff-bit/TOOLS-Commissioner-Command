@@ -21,7 +21,7 @@ import { cn } from "@/lib/utils";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { TradeBlockCandidates } from "@/components/trade/TradeBlockCandidates";
 import { BulkTrade } from "@/components/trade/BulkTrade";
-import { ArrowRightLeft, TrendingUp, TrendingDown, Target, X, Plus, Search, Scale, RotateCcw, Database, Play, Pause, Loader2, ChevronLeft, ChevronRight, ChevronDown, Download, Tag, Clock, ArrowRight, Send, CheckCircle2, DollarSign, Undo2, Layers, Globe } from "lucide-react";
+import { ArrowRightLeft, TrendingUp, TrendingDown, Target, X, Plus, Search, Scale, RotateCcw, Database, Play, Pause, Loader2, ChevronLeft, ChevronRight, ChevronDown, Download, Tag, Clock, ArrowRight, Send, CheckCircle2, DollarSign, Undo2, Layers, Globe, Trophy } from "lucide-react";
 
 const SLEEPER_JWT_KEY = "dc-sleeper-draft-jwt";
 const SLEEPER_API_BASE = "https://api.sleeper.app/v1";
@@ -3116,7 +3116,10 @@ export function TradeDatabase({ league }: { league: League }) {
           )}
         </div>
       ) : (
-        <div className="space-y-4" data-testid="trade-db-results">
+        // Centered max-width list so cards stop stretching to the full
+        // tab width on large viewports — denser comparisons, less wasted
+        // empty space, more "premium dashboard" feel.
+        <div className="mx-auto w-full max-w-[1100px] space-y-3" data-testid="trade-db-results">
           {tradeResults.map((trade) => (
             <TradeCard
               key={trade.tradeId}
@@ -3166,111 +3169,237 @@ function TradeCard({
 
   const maxValue = sideValues.length > 0 ? Math.max(...sideValues) : 0;
 
+  // Value delta — drives both the "+N Value" pill on the winning side and
+  // the muted total on the losing side. Shown only when there's a clean
+  // single winner; ties hide the pill entirely.
+  const sortedTotals = [...sideValues].sort((a, b) => b - a);
+  const valueDelta = sortedTotals.length >= 2 ? Math.max(0, sortedTotals[0] - sortedTotals[1]) : 0;
+  const hasCleanWinner =
+    sideValues.length > 1 &&
+    valueDelta > 0 &&
+    sideValues.filter((v) => v === maxValue).length === 1;
+
+  // Compact format pill mapping. Sleeper sometimes hands us long strings
+  // ("Superflex", "Standard PPR"); show short, capital-case pills so the
+  // header row fits on one line at typical card widths.
+  const formatPill = (s: string): string => {
+    const v = (s || "").trim();
+    const up = v.toUpperCase();
+    if (!v) return "";
+    if (up.includes("SUPER") || up === "SF" || up.includes("2QB")) return "SF";
+    if (up.includes("1QB") || up.includes("STD") || up === "STANDARD") return "1QB";
+    return v.length > 6 ? v.slice(0, 6) : v;
+  };
+  const scoringPill = (s: string): string => {
+    const up = (s || "").toUpperCase();
+    if (up.includes("HALF")) return "HALF";
+    if (up.includes("PPR")) return "PPR";
+    if (up.includes("STD") || up.includes("STANDARD")) return "STD";
+    return s || "—";
+  };
+
   return (
-    <Card className="p-4 hover:border-[#d4af37]/30 transition-colors" data-testid={`trade-card-${trade.tradeId}`}>
-      <div className="flex items-center gap-2 mb-3 flex-wrap">
-        <Badge variant="outline" className="text-[10px]">{trade.leagueFormat}</Badge>
-        <Badge variant="outline" className="text-[10px]">{trade.leagueScoringFormat}</Badge>
-        <Badge variant="outline" className="text-[10px]">{trade.leagueTotalRosters}-team</Badge>
-        <Badge variant="secondary" className="text-[10px]">{trade.season} Wk {trade.week}</Badge>
-        <span className="text-[10px] text-muted-foreground ml-auto">{formatDate(trade.timestamp)}</span>
+    <Card
+      className={cn(
+        "relative overflow-hidden bg-card/40 border-border/40",
+        // Subtle hover polish — border + lift by 1px. Faster than colour
+        // change so it feels responsive without being twitchy.
+        "transition-[border-color,background-color,transform] duration-200 ease-out",
+        "hover:border-[#d4af37]/30 hover:-translate-y-px",
+      )}
+      data-testid={`trade-card-${trade.tradeId}`}
+    >
+      {/* ── Header row: compact metadata pills + date ───────────────────── */}
+      <div className="flex items-center gap-1 px-3 py-1.5 border-b border-border/30 flex-wrap">
+        <Badge variant="outline" className="h-[18px] px-1 text-[9px] font-bold uppercase tracking-wider leading-none">
+          {formatPill(trade.leagueFormat)}
+        </Badge>
+        <Badge variant="outline" className="h-[18px] px-1 text-[9px] font-bold uppercase tracking-wider leading-none">
+          {trade.leagueTotalRosters}T
+        </Badge>
+        <Badge variant="outline" className="h-[18px] px-1 text-[9px] font-bold uppercase tracking-wider leading-none">
+          {trade.season} W{trade.week}
+        </Badge>
+        <Badge variant="outline" className="h-[18px] px-1 text-[9px] font-bold uppercase tracking-wider leading-none">
+          {scoringPill(trade.leagueScoringFormat)}
+        </Badge>
+        <span className="ml-auto text-[10px] text-muted-foreground/80 tabular-nums">
+          {formatDate(trade.timestamp)}
+        </span>
       </div>
 
-      <div className={cn(
-        "grid gap-4",
-        trade.sides.length === 2 ? "grid-cols-1 md:grid-cols-2" : "grid-cols-1"
-      )}>
-        {trade.sides.map((side, idx) => {
-          const sideTotal = sideValues[idx];
-          const isWinner = sideValues.length > 1 && sideTotal === maxValue && sideValues.filter(v => v === maxValue).length === 1;
+      {/* ── Body: two equal columns with a centered swap-icon divider ───── */}
+      <div className="relative px-3 py-2">
+        {/* Centered swap icon. Smaller + softer glow per the second pass —
+            the divider should separate the trade, not dominate it.
+            Hidden on single-side or 3+ side trades. */}
+        {trade.sides.length === 2 && (
+          <div
+            className="hidden md:flex absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10 items-center justify-center w-[26px] h-[26px] rounded-full bg-card border border-[#d4af37]/25 shadow-[0_0_0_3px_rgba(212,175,55,0.03)]"
+            aria-hidden="true"
+          >
+            <ArrowRightLeft className="w-3 h-3 text-[#d4af37]/80" />
+          </div>
+        )}
 
-          return (
-            <div
-              key={side.rosterId}
-              className={cn(
-                "p-3 rounded-lg border",
-                isWinner ? "border-emerald-500/30 bg-emerald-50/30 dark:bg-emerald-950/10" : "border-border/30 bg-muted/10"
-              )}
-              data-testid={`trade-side-${side.rosterId}`}
-            >
-              <div className="flex items-center justify-between mb-2">
-                <div>
-                  <p className="text-sm font-semibold" data-testid={`text-team-name-${side.rosterId}`}>
-                    {side.teamName || `Side ${String.fromCharCode(65 + idx)}`}
-                  </p>
-                  {side.ownerName ? (
-                    <p className="text-[10px] text-muted-foreground">{side.ownerName} receives:</p>
-                  ) : (
-                    <p className="text-[10px] text-muted-foreground">receives:</p>
-                  )}
-                </div>
-                <div className="text-right">
-                  <p className="text-sm font-bold" data-testid={`text-side-total-${side.rosterId}`}>{sideTotal.toLocaleString()}</p>
-                  {isWinner && (
-                    <Badge variant="outline" className="text-[9px] border-emerald-500 text-emerald-600">Value Winner</Badge>
-                  )}
-                </div>
-              </div>
+        <div
+          className={cn(
+            "grid gap-2",
+            // Wider gap between sides on md+ so content has breathing room
+            // around the centered divider; the actual vertical line is
+            // rendered as a faint divide-x on the inner grid.
+            trade.sides.length === 2
+              ? "grid-cols-1 md:grid-cols-2 md:gap-x-8 md:divide-x md:divide-border/20"
+              : "grid-cols-1",
+          )}
+        >
+          {trade.sides.map((side, idx) => {
+            const sideTotal = sideValues[idx];
+            const isWinner = hasCleanWinner && sideTotal === maxValue;
 
-              <div className="space-y-1">
-                {side.playersReceived.map((p, pi) => {
-                  const val = getPlayerValue(p.sleeperId);
-                  return (
-                    <div key={pi} className="flex items-center justify-between py-1">
-                      <PlayerAvatar id={p.sleeperId ?? ""} name={p.name} pos={p.pos} team={p.team ?? ""} size="sm" />
-                      {val > 0 && <span className="text-[10px] text-muted-foreground ml-2 flex-shrink-0" data-testid={`text-player-value-${p.sleeperId}`}>{val.toLocaleString()}</span>}
-                    </div>
-                  );
-                })}
-
-                {side.picksReceived.map((p, pi) => {
-                  // Use stored draftType when available; fall back to round > 5 for legacy picks
-                  const isStartup = p.draftType === "startup" || (!p.draftType && p.round > 5);
-                  // Exact slot confidence: only show slot-level label when slot is known
-                  const exactSlot = !isStartup && p.slot != null && p.slot > 0;
-                  const slotStr = exactSlot
-                    ? `${p.round}.${String(p.slot).padStart(2, "0")}`
-                    : null;
-                  const val = isStartup ? 0 : getStaticPickValue(parseInt(p.season) || 2026, p.round, "mid", p.slot, trade.leagueTotalRosters);
-                  const ord = (r: number) => r === 1 ? "1st" : r === 2 ? "2nd" : r === 3 ? "3rd" : `${r}th`;
-                  // Label rules:
-                  //   exact slot known  → "2026 Rookie 1.03"
-                  //   startup pick      → "2026 Startup 1st"
-                  //   rookie (no slot)  → "2026 Rookie 1st"
-                  const pickLabel = isStartup
-                    ? `${p.season} Startup ${ord(p.round)}`
-                    : slotStr
-                      ? `${p.season} Rookie ${slotStr}`
-                      : `${p.season} Rookie ${ord(p.round)}`;
-                  return (
-                    <div key={`pick-${pi}`} className="flex items-center justify-between py-1">
-                      <div className="flex items-center gap-1.5">
-                        <Badge variant="outline" className={`text-[10px] w-7 justify-center ${isStartup ? "bg-violet-50 text-violet-700 dark:bg-violet-950/30 dark:text-violet-400 border-violet-300 dark:border-violet-700" : "bg-purple-50 text-purple-600 dark:bg-purple-950/30 dark:text-purple-400"}`}>
-                          {isStartup ? "SP" : "PK"}
-                        </Badge>
-                        <span className="text-xs font-medium">
-                          {pickLabel}
-                        </span>
-                        {p.originalOwnerName && (
-                          <span className="text-[10px] text-muted-foreground">({p.originalOwnerName}'s)</span>
-                        )}
-                      </div>
-                      {!isStartup && val > 0 && <span className="text-[10px] text-muted-foreground">{val.toLocaleString()}</span>}
-                    </div>
-                  );
-                })}
-
-                {side.playersReceived.length === 0 && side.picksReceived.length === 0 && (
-                  <p className="text-[10px] text-muted-foreground italic">No assets recorded</p>
+            return (
+              <div
+                key={side.rosterId}
+                className={cn(
+                  "relative px-1 md:px-2",
+                  // Subtle left-edge accent bar — desaturated emerald so it
+                  // reads as a finance-dashboard accent, not gaming neon.
+                  isWinner && "before:absolute before:left-0 before:top-0.5 before:bottom-0.5 before:w-[2px] before:rounded-full before:bg-emerald-500/40 md:before:left-2",
                 )}
+                data-testid={`trade-side-${side.rosterId}`}
+              >
+                {/* Side header — team name + receives subtitle + total */}
+                <div className="grid grid-cols-[1fr_auto] items-start gap-2 mb-1.5">
+                  <div className="min-w-0">
+                    <p
+                      className="text-[12px] font-semibold text-foreground truncate leading-tight"
+                      data-testid={`text-team-name-${side.rosterId}`}
+                    >
+                      {side.teamName || `Side ${String.fromCharCode(65 + idx)}`}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground/60 truncate leading-tight">
+                      {side.ownerName ? `${side.ownerName} receives` : "receives"}
+                    </p>
+                  </div>
+                  <div className="flex flex-col items-end gap-1 shrink-0">
+                    <p
+                      className={cn(
+                        "text-[12px] font-semibold tabular-nums leading-none",
+                        isWinner ? "text-emerald-400/85" : "text-foreground/65",
+                      )}
+                      data-testid={`text-side-total-${side.rosterId}`}
+                    >
+                      {sideTotal.toLocaleString()}
+                    </p>
+                    {isWinner && (
+                      <span
+                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-emerald-500/[0.06] text-emerald-400/80 border border-emerald-500/20 text-[9px] font-semibold leading-none"
+                        data-testid={`badge-value-winner-${side.rosterId}`}
+                      >
+                        <Trophy className="w-2.5 h-2.5" />
+                        +{valueDelta.toLocaleString()} Value
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Asset rows — strict 1fr auto grid so values align across
+                    every row, regardless of name length / chip width. */}
+                <div className="space-y-px">
+                  {side.playersReceived.map((p, pi) => {
+                    const val = getPlayerValue(p.sleeperId);
+                    return (
+                      <div
+                        key={pi}
+                        className="grid grid-cols-[1fr_auto] items-center gap-2 py-0.5"
+                      >
+                        <div className="min-w-0">
+                          <PlayerAvatar
+                            id={p.sleeperId ?? ""}
+                            name={p.name}
+                            pos={p.pos}
+                            team={p.team ?? ""}
+                            size="sm"
+                          />
+                        </div>
+                        <span
+                          className={cn(
+                            "text-[11px] tabular-nums text-foreground/70",
+                            val > 0 ? "" : "opacity-0",
+                          )}
+                          data-testid={`text-player-value-${p.sleeperId}`}
+                        >
+                          {val > 0 ? val.toLocaleString() : "0"}
+                        </span>
+                      </div>
+                    );
+                  })}
+
+                  {side.picksReceived.map((p, pi) => {
+                    const isStartup = p.draftType === "startup" || (!p.draftType && p.round > 5);
+                    const exactSlot = !isStartup && p.slot != null && p.slot > 0;
+                    const slotStr = exactSlot
+                      ? `${p.round}.${String(p.slot).padStart(2, "0")}`
+                      : null;
+                    const val = isStartup ? 0 : getStaticPickValue(parseInt(p.season) || 2026, p.round, "mid", p.slot, trade.leagueTotalRosters);
+                    const ord = (r: number) => r === 1 ? "1st" : r === 2 ? "2nd" : r === 3 ? "3rd" : `${r}th`;
+                    const pickLabel = isStartup
+                      ? `${p.season} Startup ${ord(p.round)}`
+                      : slotStr
+                        ? `${p.season} Rookie ${slotStr}`
+                        : `${p.season} Rookie ${ord(p.round)}`;
+                    return (
+                      <div
+                        key={`pick-${pi}`}
+                        className="grid grid-cols-[1fr_auto] items-center gap-2 py-0.5"
+                      >
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span
+                            className={cn(
+                              "inline-flex items-center justify-center h-[18px] px-1 rounded text-[9px] font-bold uppercase tracking-wider shrink-0 border leading-none",
+                              isStartup
+                                ? "bg-violet-500/8 text-violet-400/90 border-violet-500/25"
+                                : "bg-purple-500/8 text-purple-400/90 border-purple-500/25",
+                            )}
+                          >
+                            {isStartup ? "SP" : "PK"}
+                          </span>
+                          <span className="text-[12px] font-medium text-foreground truncate">
+                            {pickLabel}
+                          </span>
+                          {p.originalOwnerName && (
+                            <span className="text-[10px] text-muted-foreground/60 truncate">
+                              ({p.originalOwnerName}'s)
+                            </span>
+                          )}
+                        </div>
+                        <span
+                          className={cn(
+                            "text-[11px] tabular-nums text-foreground/70",
+                            (!isStartup && val > 0) ? "" : "opacity-0",
+                          )}
+                        >
+                          {!isStartup && val > 0 ? val.toLocaleString() : "0"}
+                        </span>
+                      </div>
+                    );
+                  })}
+
+                  {side.playersReceived.length === 0 && side.picksReceived.length === 0 && (
+                    <p className="text-[10px] text-muted-foreground italic">No assets recorded</p>
+                  )}
+                </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
 
       {trade.leagueName && (
-        <p className="text-[10px] text-muted-foreground mt-2 truncate" data-testid={`trade-league-name-${trade.tradeId}`}>
+        <p
+          className="px-3 pb-1.5 text-[10px] text-muted-foreground/60 truncate"
+          data-testid={`trade-league-name-${trade.tradeId}`}
+        >
           {trade.leagueName}
         </p>
       )}

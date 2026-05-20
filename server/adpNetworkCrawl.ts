@@ -105,9 +105,13 @@ export interface NetworkCrawlResult {
  */
 export interface CrawlLiveState extends NetworkCrawlResult {
   jobId: string;
-  status: "idle" | "running" | "completed" | "failed";
+  status: "idle" | "running" | "completed" | "failed" | "cancelled";
   startedAt: number | null;
   completedAt: number | null;
+  /** Set by the cancel endpoint. The crawl loop checks this between BFS
+   *  iterations and returns gracefully so partial work (drafts already
+   *  ingested) is preserved. */
+  cancelRequested?: boolean;
 
   // Inputs echoed for UI display
   seedUsername: string;
@@ -335,6 +339,20 @@ export function isCrawlRunning(): boolean {
 }
 
 /**
+ * Request the in-flight crawl to stop. The crawl loop checks the flag at
+ * BFS boundaries and returns gracefully, preserving any drafts already
+ * ingested. Idempotent — calling when no crawl is running is a no-op.
+ *
+ * Returns true when a running crawl was flagged for cancellation.
+ */
+export function requestCrawlCancel(): boolean {
+  if (liveState.status !== "running") return false;
+  liveState.cancelRequested = true;
+  liveState.currentActivity = "Stopping after current request…";
+  return true;
+}
+
+/**
  * Start a crawl in the background. Returns the freshly-initialized live state
  * (or the existing state if a crawl is already running). The HTTP handler can
  * return this state immediately; the crawl continues server-side regardless
@@ -351,14 +369,18 @@ export function startCrawlInBackground(opts: NetworkCrawlOpts): CrawlLiveState {
     const state = liveState;
     try {
       await runNetworkCrawl(opts, state);
-      state.status = "completed";
+      const wasCancelled = !!state.cancelRequested;
+      state.status = wasCancelled ? "cancelled" : "completed";
       state.completedAt = Date.now();
       state.durationMs = state.completedAt - (state.startedAt ?? state.completedAt);
       state.phase = "done";
-      state.phaseLabel = "Done";
+      state.phaseLabel = wasCancelled ? "Cancelled" : "Done";
       state.currentActivity = "";
       recomputeOverallPct(state);
-      await writeCrawlLog(state, "completed");
+      // The crawl log only accepts "completed" | "failed" — record a
+      // cancellation as "completed" so partial progress isn't lost, and
+      // surface the user-initiated stop via capsHit (e.g. "cancelled").
+      await writeCrawlLog(state, wasCancelled ? "completed" : "completed");
     } catch (err: any) {
       console.error("[NetworkCrawl] background run failed:", err);
       state.status = "failed";
@@ -449,6 +471,20 @@ export async function runNetworkCrawl(
     return false;
   };
 
+  // Helper: user-initiated cancel. Checked at every BFS boundary so the
+  // crawl stops between the next league / user / depth iteration without
+  // abandoning a partially-ingested draft mid-write.
+  const cancelHit = (): boolean => {
+    if (result.cancelRequested) {
+      if (!result.capsHit.includes("cancelled")) {
+        result.capsHit.push("cancelled");
+        console.warn(`[NetworkCrawl] Crawl cancelled by user.`);
+      }
+      return true;
+    }
+    return false;
+  };
+
   // ── Resolve seed user ──────────────────────────────────────────────────
   result.phase = "seed";
   result.phaseLabel = "Resolving seed user…";
@@ -471,6 +507,7 @@ export async function runNetworkCrawl(
   result.usersDiscoveredByDepth[0] = 1;
 
   for (let depth = 0; depth <= maxDepth; depth++) {
+    if (cancelHit()) break;
     const nextDepth = new Set<string>();
     const depthSize = currentDepth.size;
     console.log(`[NetworkCrawl] depth ${depth}: ${depthSize} candidate users`);
@@ -498,7 +535,7 @@ export async function runNetworkCrawl(
         depthCapped = true;
         break;
       }
-      if (requestCapHit()) { depthCapped = true; break; }
+      if (requestCapHit() || cancelHit()) { depthCapped = true; break; }
 
       processedUsers.add(userId);
       result.usersProcessed++;
@@ -509,7 +546,7 @@ export async function runNetworkCrawl(
 
       for (const season of seasons) {
         if (depthCapped) break;
-        if (requestCapHit()) { depthCapped = true; break; }
+        if (requestCapHit() || cancelHit()) { depthCapped = true; break; }
 
         result.requestCount++;
         const leagues = await fetchUserLeagues(userId, season);
@@ -530,7 +567,7 @@ export async function runNetworkCrawl(
           result.currentActivity = `Depth ${depth}: league ${(lg.name ?? lg.league_id).slice(0, 40)} (${season})`;
 
           // ── 1) Ingest drafts for this league ─────────────────────────────
-          if (requestCapHit()) { depthCapped = true; break; }
+          if (requestCapHit() || cancelHit()) { depthCapped = true; break; }
           result.requestCount++;
           const draftList = await fetchLeagueDrafts(lg.league_id);
           if (draftList && draftList.length > 0) {
@@ -584,13 +621,13 @@ export async function runNetworkCrawl(
               } catch (err: any) {
                 result.errors.push(`draft ${d.draft_id} threw: ${err?.message ?? "unknown"}`);
               }
-              if (requestCapHit()) { depthCapped = true; break; }
+              if (requestCapHit() || cancelHit()) { depthCapped = true; break; }
             }
           }
 
           // ── 2) Discover next-depth users (only when we have room) ────────
           if (depth < maxDepth && !depthCapped) {
-            if (requestCapHit()) { depthCapped = true; break; }
+            if (requestCapHit() || cancelHit()) { depthCapped = true; break; }
             result.requestCount++;
             const lgUsers = await fetchLeagueUsers(lg.league_id);
             if (lgUsers) {

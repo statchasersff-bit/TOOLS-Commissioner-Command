@@ -67,6 +67,18 @@ interface SleeperDraftPickRaw {
 }
 
 export type AdpFilters = {
+  /**
+   * NFL season(s) to include. Defaults to the current season when omitted.
+   * Stored as the same string Sleeper uses ("2026"). The crawler stamps
+   * `drafts.season` from the raw Sleeper response, so this is the dimension
+   * the read path filters on.
+   *
+   * Bug history: prior to 2026-05 the ADP read path had NO season filter,
+   * which meant 2026 picks were averaged together with 2025/2024 picks and
+   * the displayed ADP looked like a stale 2025 snapshot. Always include
+   * `season` in queries + the snapshot cache key from here on.
+   */
+  season?: string | string[] | "all";
   draftType?: "startup" | "rookie" | "supplemental" | "all";
   draftFormat?: "snake" | "auction" | "linear" | "all";
   scoring?: "ppr" | "half" | "standard" | "all";
@@ -871,12 +883,31 @@ export async function ingestCrawledLeagueDrafts(limit: number = 200): Promise<{ 
 // every filter key so old cache rows can never match new reads.
 //   v2 — exclude whole drafts that contain any K pick from Direct Rookies
 //        (was: drop individual K picks only).
-const FILTER_KEY_VERSION = "v2";
+//   v3 — partition snapshots by `season` so 2026 picks never blend with
+//        prior years. (Pre-v3 cached entries blend all seasons and are
+//        unsafe to serve.)
+const FILTER_KEY_VERSION = "v3";
+
+/** Normalize the season filter into a comma-joined sorted list, "all", or
+ *  the inferred current season. Centralised so filterKey and the WHERE
+ *  builder always agree on the same string. */
+function normalizeSeasonFilter(f: AdpFilters): string {
+  const s = f.season;
+  if (s === "all") return "all";
+  if (Array.isArray(s)) {
+    const cleaned = s.map((x) => String(x).trim()).filter(Boolean);
+    if (cleaned.length === 0) return String(new Date().getFullYear());
+    return cleaned.sort().join(",");
+  }
+  if (typeof s === "string" && s.trim()) return s.trim();
+  return String(new Date().getFullYear());
+}
 
 function filterKey(f: AdpFilters): string {
   // Deterministic key for cache lookups. Keep keys human-readable so logs
   // are usable.
   const k = {
+    se: normalizeSeasonFilter(f),
     dt: f.draftType ?? "startup",
     df: f.draftFormat ?? "snake",
     sc: f.scoring ?? "all",
@@ -899,6 +930,17 @@ function buildDraftWhere(f: AdpFilters) {
   // player guardrail — those drafts have their own ADP curves and shouldn't
   // be mixed with the standard QB/RB/WR/TE dataset.
   const conds: any[] = [eq(drafts.status, "complete"), eq(drafts.excludedFromAdp, false)];
+
+  // Season filter. Default = current calendar year. Pass `season: "all"` to
+  // disable the filter (admin tooling only — public reads should always be
+  // season-scoped so 2026 picks don't blend into 2025 averages).
+  const seasonNormalized = normalizeSeasonFilter(f);
+  if (seasonNormalized !== "all") {
+    const seasons = seasonNormalized.split(",").filter(Boolean);
+    if (seasons.length === 1) conds.push(eq(drafts.season, seasons[0]));
+    else if (seasons.length > 1) conds.push(inArray(drafts.season, seasons));
+  }
+
   if (f.draftType && f.draftType !== "all") conds.push(eq(drafts.draftType, f.draftType));
   if (f.draftFormat && f.draftFormat !== "all") conds.push(eq(drafts.draftFormat, f.draftFormat));
   if (f.scoring && f.scoring !== "all") conds.push(eq(drafts.scoringType, f.scoring));

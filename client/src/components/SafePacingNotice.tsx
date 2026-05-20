@@ -100,7 +100,7 @@ export function SafePacingNotice({
     >
       <Info className="w-3.5 h-3.5 mt-px flex-shrink-0 text-[#d4af37]" />
       <span>
-        Actions are intentionally submitted gradually to protect your Sleeper account and avoid rate limits.
+        Actions are intentionally submitted gradually to help protect your Sleeper account and avoid rate limits.
         {long && (
           <>
             {" "}

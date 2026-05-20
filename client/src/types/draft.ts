@@ -73,6 +73,12 @@ export interface ADPResult {
 
 // Filters captured by the settings panel.
 export interface DraftFilters {
+  /**
+   * NFL season(s) to include. Default = current calendar year. Use "all" to
+   * disable season filtering (admin tooling only — public reads should be
+   * season-scoped, otherwise 2026 picks blend into the historical mean).
+   */
+  season: string | string[] | "all";
   dateRange: { start: string; end: string }; // ISO dates
   draftType: DraftType | "all";
   draftFormat: DraftFormat | "all";
@@ -90,6 +96,7 @@ export interface DraftFilters {
 }
 
 export const DEFAULT_FILTERS: DraftFilters = {
+  season: String(new Date().getFullYear()),
   dateRange: defaultDateRange(),
   draftType: "startup",
   draftFormat: "snake",

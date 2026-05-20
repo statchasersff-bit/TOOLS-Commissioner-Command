@@ -78,7 +78,12 @@ export function PlayerAvatar({
       {team && team !== "FA" && (
         <div
           className={cn(
-            "absolute -bottom-0.5 -right-0.5 rounded-full overflow-hidden ring-[1.5px] ring-background bg-[#0a1628] flex items-center justify-center",
+            // Outer wrapper renders the dark backdrop + ring; we hide the
+            // ENTIRE wrapper (not just the inner img) on image error so
+            // there's no orphaned dark dot when Sleeper's CDN 404s on a
+            // legacy team abbreviation. Slightly thicker ring keeps the
+            // badge visible against dark page backgrounds.
+            "absolute -bottom-0.5 -right-0.5 rounded-full overflow-hidden ring-2 ring-background bg-[#0a1628] flex items-center justify-center",
             badgeSize
           )}
         >
@@ -87,7 +92,9 @@ export function PlayerAvatar({
             alt={team}
             className="w-full h-full object-contain"
             onError={(e) => {
-              (e.target as HTMLImageElement).style.display = "none";
+              const img = e.target as HTMLImageElement;
+              const parent = img.parentElement;
+              if (parent) parent.style.display = "none";
             }}
           />
         </div>

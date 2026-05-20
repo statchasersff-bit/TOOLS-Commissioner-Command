@@ -562,6 +562,7 @@ export const NAV_CONFIG: MainTabConfig[] = [
       { id: "trade-database",     label: "Database"      },
       { id: "positional-analysis", label: "Finder" },
       { id: "bulk-trade",          label: "Bulk Trade" },
+      { id: "bulk-trades",         label: "Bulk Trades" },
       { id: "trade-calculator", label: "Calculator" },
       { id: "trade-block", label: "Intel" },
     ],

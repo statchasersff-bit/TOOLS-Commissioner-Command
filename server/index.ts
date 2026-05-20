@@ -5,30 +5,68 @@ import connectPgSimple from "connect-pg-simple";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
-import { execSync } from "child_process";
+import { readFileSync, readdirSync, readlinkSync } from "fs";
 
 /**
- * Forcefully free `port` so we can bind to it.
- * Uses `fuser -k <port>/tcp` to send SIGKILL to whatever process is currently
- * holding the port (e.g. the previous tsx-watch child), then waits up to
- * `graceMs` for the OS to reclaim it before proceeding.
+ * Find the PID holding `port` via /proc/net/tcp, then SIGKILL it.
+ * Falls back silently if /proc is unavailable or nothing is on the port.
  */
-async function freePort(port: number, graceMs = 2000): Promise<void> {
+async function freePort(port: number): Promise<void> {
   try {
-    execSync(`fuser -k ${port}/tcp`, { stdio: "ignore" });
-    console.log(`[server] freed port ${port} via fuser`);
-    // Give the OS a moment to reclaim the port
-    await new Promise(r => setTimeout(r, graceMs));
+    // /proc/net/tcp uses hex little-endian addresses: "00000000:1388" for 0.0.0.0:5000
+    const portHex = port.toString(16).toUpperCase().padStart(4, "0");
+    const tcp = readFileSync("/proc/net/tcp", "utf8");
+
+    // Find the inode for the listening socket on this port
+    let inode: string | null = null;
+    for (const line of tcp.split("\n").slice(1)) {
+      const parts = line.trim().split(/\s+/);
+      if (!parts[1]) continue;
+      const localPort = parts[1].split(":")[1];
+      if (localPort === portHex && parts[3] === "0A") { // 0A = LISTEN
+        inode = parts[9];
+        break;
+      }
+    }
+    if (!inode) return; // nothing listening on this port
+
+    // Walk /proc/*/fd/* to find which PID owns the inode
+    const ownPid = process.pid;
+    for (const pidEntry of readdirSync("/proc")) {
+      const pid = parseInt(pidEntry, 10);
+      if (isNaN(pid) || pid === ownPid) continue;
+      try {
+        const fds = readdirSync(`/proc/${pid}/fd`);
+        for (const fd of fds) {
+          try {
+            const link = readlinkSync(`/proc/${pid}/fd/${fd}`);
+            if (link === `socket:[${inode}]`) {
+              process.kill(pid, "SIGKILL");
+              console.log(`[server] killed PID ${pid} holding port ${port}`);
+              // Give the OS ~1s to reclaim the port
+              await new Promise(r => setTimeout(r, 1000));
+              return;
+            }
+          } catch { /* fd may disappear */ }
+        }
+      } catch { /* proc entry may disappear */ }
+    }
   } catch {
-    // fuser exits non-zero when nothing is using the port — that's fine
+    // /proc not available or other error — proceed and let bind fail naturally
   }
 }
 
 const app = express();
 const httpServer = createServer(app);
 
-// CORS — always allow statchasers.com plus any additional origins from CORS_ORIGIN env var.
+// CORS — always allow the production domains plus any additional origins
+// from CORS_ORIGIN env var. statchasers.com is included as a first-class
+// production origin (see TEMPORARY note in shared/appMode.ts — when the
+// temporary write-access promotion is reverted, statchasers.com should
+// still keep CORS for read-only features).
 const BUILTIN_ORIGINS = [
+  "https://dynastycommandff.com",
+  "https://www.dynastycommandff.com",
   "https://statchasers.com",
   "https://www.statchasers.com",
   "https://dynasty-command.pages.dev",

@@ -7,7 +7,6 @@ import { Input } from "@/components/ui/input";
 import { KpiCard } from "@/components/KpiCard";
 import { SectionHeader } from "@/components/SectionHeader";
 import { DashboardGreeting } from "@/components/DashboardGreeting";
-import { FavoriteTeamWidget } from "@/components/FavoriteTeamWidget";
 import { useSleeper } from "@/contexts/SleeperContext";
 import { useValueModel } from "@/contexts/ValueModelContext";
 import { getPositionColor } from "@/data/mockData";
@@ -712,11 +711,11 @@ export function PortfolioSummary() {
 
   return (
     <div className="space-y-8">
+      {/* Combined Welcome + Team Hub card. Identity-only on Portfolio —
+          no hydrated league/team is in scope here, so the Team Hub's
+          exposure row shows its friendly fallback. The MyTeam Overview
+          tab can re-render with `players` to fill in real numbers. */}
       <DashboardGreeting />
-      {/* Identity-only — Portfolio doesn't carry a single hydrated league/team,
-          so we skip the roster-exposure line. The MyTeam Overview tab renders
-          a fully populated copy with real exposure numbers. */}
-      <FavoriteTeamWidget />
       <div className="flex items-start justify-between gap-4">
         <SectionHeader title="My Portfolio" subtitle="Overview of your dynasty portfolio across all leagues" />
         <div className="hidden md:block pt-1">{portfolioToggle}</div>

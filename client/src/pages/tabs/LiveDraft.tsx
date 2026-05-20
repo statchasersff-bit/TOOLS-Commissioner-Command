@@ -270,11 +270,27 @@ interface DraftSlot {
   avatar: string | null;
 }
 
+interface DraftPickOwner {
+  round: number;
+  slot: number;
+  originalRosterId: number;
+  currentRosterId: number;
+  isTraded: boolean;
+  currentUserId: string | null;
+  currentDisplayName: string;
+  currentAvatar: string | null;
+  originalDisplayName: string;
+  originalAvatar: string | null;
+}
+
 interface DraftResponse {
   draft: DraftInfo | null;
   picks: DraftPick[];
   players: Record<string, { name: string; pos: string; team: string }>;
   draftSlots: DraftSlot[];
+  /** Per-(round, slot) current owner with traded-pick awareness. Empty array
+   *  while loading or when the league has no traded picks for this season. */
+  pickOwners: DraftPickOwner[];
   error: string | null;
 }
 
@@ -717,26 +733,13 @@ function DraftsDashboard({
   );
 }
 
-// Board overlay enum — declared here so REST + GraphQL headers can both
-// type their props with it. (BOARD_OVERLAY_OPTIONS lives just below.)
-type BoardOverlay = "value" | "adp" | "positional" | "tier" | "exposure";
-const BOARD_OVERLAY_OPTIONS: { key: BoardOverlay; label: string }[] = [
-  { key: "value", label: "Value" },
-  { key: "adp", label: "ADP" },
-  { key: "positional", label: "Positional" },
-  { key: "tier", label: "Tier" },
-  { key: "exposure", label: "Exposure" },
-];
-
 // REST-only header used when the GraphQL draftState isn't available (e.g.
 // the user is connected to Sleeper but hasn't pasted a JWT). Mirrors the
 // shape of DraftStateHeader but reads only from the public draft endpoint.
-function RestDraftHeader({ draft, picksMade, currentPickInfo, boardOverlay, onBoardOverlayChange }: {
+function RestDraftHeader({ draft, picksMade, currentPickInfo }: {
   draft: DraftInfo;
   picksMade: number;
   currentPickInfo: CurrentPickInfo | null;
-  boardOverlay: BoardOverlay;
-  onBoardOverlayChange: (o: BoardOverlay) => void;
 }) {
   const totalPicks = draft.teams * draft.rounds;
   const pct = totalPicks > 0 ? Math.min(100, Math.round((picksMade / totalPicks) * 100)) : 0;
@@ -785,18 +788,6 @@ function RestDraftHeader({ draft, picksMade, currentPickInfo, boardOverlay, onBo
               {draft.season} · {typeLabel} · {draft.teams}T · {draft.rounds}R
             </p>
           </div>
-          <div className="flex items-center gap-1.5 shrink-0">
-            <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground hidden sm:inline">Overlay</span>
-            <select
-              value={boardOverlay}
-              onChange={(e) => onBoardOverlayChange(e.target.value as BoardOverlay)}
-              className="text-[11px] font-semibold bg-background border border-border/40 rounded px-2 py-1 hover:border-border focus:outline-none focus:ring-1 focus:ring-[#d4af37]/30"
-            >
-              {BOARD_OVERLAY_OPTIONS.map((o) => (
-                <option key={o.key} value={o.key}>{o.label}</option>
-              ))}
-            </select>
-          </div>
         </div>
 
         <div className="space-y-1.5">
@@ -805,11 +796,36 @@ function RestDraftHeader({ draft, picksMade, currentPickInfo, boardOverlay, onBo
               <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Pick</span>
               <span className="text-2xl sm:text-3xl font-extrabold text-foreground tabular-nums leading-none">{pickLabel}</span>
               <span className="text-[11px] text-muted-foreground">· {picksMade}/{totalPicks}</span>
+              {currentPickInfo && typeof currentPickInfo.picksAway === "number" && (
+                isMyTurn ? (
+                  <span className="text-[11px] font-bold text-[#d4af37]" data-testid="text-pickline-your-pick">· YOUR PICK</span>
+                ) : (
+                  <span className="text-[11px] text-foreground tabular-nums" data-testid="text-pickline-picks-away">
+                    · {currentPickInfo.picksAway} {currentPickInfo.picksAway === 1 ? "pick" : "picks"} away
+                  </span>
+                )
+              )}
             </div>
             <div className="text-[10px] text-muted-foreground tabular-nums">
               {pct}% · {currentPickInfo ? `${currentPickInfo.picksRemaining} left` : ""}
             </div>
           </div>
+          {/* Your-pick countdown — surfaces picksAway directly under the
+              progress bar so the user always knows how far away they are.
+              Hidden when we couldn't resolve the user's slot in this draft. */}
+          {currentPickInfo && typeof currentPickInfo.picksAway === "number" && (
+            <div className="text-[11px] font-semibold" data-testid="text-picks-away">
+              {isMyTurn ? (
+                <span className="text-[#d4af37]">You're on the clock</span>
+              ) : (
+                <span className="text-muted-foreground">
+                  Your next pick is{" "}
+                  <span className="text-foreground tabular-nums">{currentPickInfo.picksAway}</span>{" "}
+                  {currentPickInfo.picksAway === 1 ? "pick" : "picks"} away
+                </span>
+              )}
+            </div>
+          )}
           <div className="w-full h-2 bg-muted/30 rounded-full overflow-hidden">
             <div
               className="h-full bg-gradient-to-r from-[#0b3a7a] to-[#d4af37] rounded-full transition-all duration-700"
@@ -824,15 +840,12 @@ function RestDraftHeader({ draft, picksMade, currentPickInfo, boardOverlay, onBo
 
 // ── DraftStateHeader ─────────────────────────────────────────────────────────
 // OTC-style draft room header. Heavy emphasis on the current pick + on-the-
-// clock identity, with a board overlay picker. This is the top of the
-// 3-section draft room layout.
-function DraftStateHeader({ ds, currentPickInfo, draftStateLoading, myUserId, boardOverlay, onBoardOverlayChange }: {
+// clock identity. This is the top of the 3-section draft room layout.
+function DraftStateHeader({ ds, currentPickInfo, draftStateLoading, myUserId }: {
   ds: DraftState;
   currentPickInfo: CurrentPickInfo | null;
   draftStateLoading: boolean;
   myUserId: string | null;
-  boardOverlay: BoardOverlay;
-  onBoardOverlayChange: (o: BoardOverlay) => void;
 }) {
   const totalPicks = ds.teams * ds.rounds;
   const pct = totalPicks > 0 ? Math.min(100, Math.round((ds.picks.length / totalPicks) * 100)) : 0;
@@ -884,20 +897,6 @@ function DraftStateHeader({ ds, currentPickInfo, draftStateLoading, myUserId, bo
             </p>
           </div>
 
-          {/* Board overlay picker — controls the visual treatment on the board */}
-          <div className="flex items-center gap-1.5 shrink-0" data-testid="board-overlay-picker">
-            <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground hidden sm:inline">Overlay</span>
-            <select
-              value={boardOverlay}
-              onChange={(e) => onBoardOverlayChange(e.target.value as BoardOverlay)}
-              className="text-[11px] font-semibold bg-background border border-border/40 rounded px-2 py-1 hover:border-border focus:outline-none focus:ring-1 focus:ring-[#d4af37]/30"
-              data-testid="select-board-overlay"
-            >
-              {BOARD_OVERLAY_OPTIONS.map((o) => (
-                <option key={o.key} value={o.key}>{o.label}</option>
-              ))}
-            </select>
-          </div>
         </div>
 
         {/* Pick + progress bar — bigger, more prominent */}
@@ -909,6 +908,15 @@ function DraftStateHeader({ ds, currentPickInfo, draftStateLoading, myUserId, bo
               <span className="text-[11px] text-muted-foreground">
                 · {ds.picks.length}/{totalPicks}
               </span>
+              {currentPickInfo && typeof currentPickInfo.picksAway === "number" && (
+                isMyTurn ? (
+                  <span className="text-[11px] font-bold text-[#d4af37]" data-testid="text-pickline-your-pick">· YOUR PICK</span>
+                ) : (
+                  <span className="text-[11px] text-foreground tabular-nums" data-testid="text-pickline-picks-away">
+                    · {currentPickInfo.picksAway} {currentPickInfo.picksAway === 1 ? "pick" : "picks"} away
+                  </span>
+                )
+              )}
             </div>
             <div className="text-[10px] text-muted-foreground tabular-nums">
               {pct}% · {currentPickInfo ? `${currentPickInfo.picksRemaining} left` : ""}
@@ -967,212 +975,6 @@ function DraftStateHeader({ ds, currentPickInfo, draftStateLoading, myUserId, bo
           </div>
         )}
       </CardContent>
-    </Card>
-  );
-}
-
-// ── TimeOnClockSection ────────────────────────────────────────────────────────
-// Collapsible "ON THE CLOCK" section that surfaces the current drafter +
-// best-available suggestions. Lives between the header and the live board so
-// the active pick is impossible to miss in an OTC-style draft room.
-function TimeOnClockSection({
-  currentPickInfo,
-  timerInfo,
-  bestAvailable,
-  onAddToQueue,
-  queueIds,
-  collapsed,
-  onToggleCollapsed,
-  onDraftPlayer,
-  canDraftNow,
-}: {
-  currentPickInfo: CurrentPickInfo | null;
-  timerInfo: { available: boolean; label: string; remainingMs: number; expired: boolean };
-  bestAvailable: Array<{ sleeperId: string; name: string; pos: string; value?: number; team?: string | null }>;
-  onAddToQueue?: (sleeperId: string) => void;
-  queueIds: string[];
-  collapsed: boolean;
-  onToggleCollapsed: () => void;
-  /** Open the draft-pick confirm modal for this player. Only invoked when
-   *  the user is actually on the clock — gated by `canDraftNow`. */
-  onDraftPlayer?: (player: { sleeperId: string; name: string; pos: string; team?: string | null }) => void;
-  /** True when it's the user's turn AND we have a server-stored Sleeper
-   *  token to submit picks with. Drives the Draft button visibility. */
-  canDraftNow?: boolean;
-}) {
-  if (!currentPickInfo) return null;
-  const isMyTurn = currentPickInfo.isMyTurn;
-  const user = currentPickInfo.currentUser;
-  const pickLabel = `${currentPickInfo.currentRound}.${String(currentPickInfo.pickInRound).padStart(2, "0")}`;
-  // Surface low-time states with a colour cue — under 30s urgent, under 60s warning.
-  const timerColor = !timerInfo.available
-    ? "text-muted-foreground"
-    : timerInfo.expired
-      ? "text-red-500"
-      : timerInfo.remainingMs <= 30_000
-        ? "text-red-500"
-        : timerInfo.remainingMs <= 60_000
-          ? "text-amber-500"
-          : "text-emerald-500 dark:text-emerald-400";
-
-  const posBg: Record<string, string> = {
-    QB: "border-red-500/40 text-red-600 dark:text-red-400",
-    RB: "border-emerald-500/40 text-emerald-600 dark:text-emerald-400",
-    WR: "border-blue-500/40 text-blue-600 dark:text-blue-400",
-    TE: "border-orange-500/40 text-orange-500 dark:text-orange-400",
-    K: "border-purple-500/40 text-purple-600 dark:text-purple-400",
-  };
-
-  return (
-    <Card
-      className={cn(
-        "overflow-hidden",
-        isMyTurn ? "border-[#d4af37]/60" : "border-border/40",
-      )}
-      data-testid="section-time-on-clock"
-    >
-      {/* Header — clickable to toggle */}
-      <button
-        onClick={onToggleCollapsed}
-        className="w-full flex items-center justify-between gap-3 px-4 py-2.5 hover:bg-muted/20 transition-colors"
-        data-testid="button-toggle-time-on-clock"
-      >
-        <div className="flex items-center gap-2.5 min-w-0">
-          <SleeperUserAvatar
-            username={user?.displayName ?? "—"}
-            avatar={user?.avatar ?? null}
-            size="md"
-            compact
-          />
-          <div className="min-w-0 text-left">
-            <p className="text-[9px] font-bold uppercase tracking-widest text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              Time On The Clock
-            </p>
-            <p className="text-sm font-bold text-foreground truncate" data-testid="text-on-clock-collapsed">
-              {isMyTurn ? "YOUR PICK" : user?.displayName ?? "—"}
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          {/* Compact countdown chip in the collapsed header */}
-          <span
-            className={cn("text-sm font-mono font-bold tabular-nums", timerColor)}
-            data-testid="text-timer-collapsed"
-          >
-            {timerInfo.available ? timerInfo.label : "—"}
-          </span>
-          <span className="text-[10px] font-bold tabular-nums px-2 py-0.5 rounded bg-muted/30 border border-border/30">
-            Pick {pickLabel}
-          </span>
-          {collapsed ? <ChevronDown className="w-4 h-4 text-muted-foreground" /> : <ChevronUp className="w-4 h-4 text-muted-foreground" />}
-        </div>
-      </button>
-
-      {/* Body — countdown + pick metadata + best available */}
-      {!collapsed && (
-        <div className="border-t border-border/30 px-4 py-3 space-y-3">
-          {/* Prominent timer block */}
-          <div className="flex items-center justify-between gap-3 px-3 py-2 rounded-lg border border-border/40 bg-muted/10">
-            <div>
-              <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground">Time Remaining</p>
-              <p className={cn("text-2xl font-mono font-extrabold tabular-nums leading-none", timerColor)} data-testid="text-timer-remaining">
-                {timerInfo.available ? timerInfo.label : timerInfo.label}
-              </p>
-            </div>
-            <div className="text-right">
-              <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground">Pick</p>
-              <p className="text-2xl font-extrabold tabular-nums text-foreground leading-none">{pickLabel}</p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3 flex-wrap text-[11px]">
-            <div className="flex items-center gap-1.5">
-              <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Round</span>
-              <span className="font-bold text-foreground tabular-nums">{currentPickInfo.currentRound}</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Slot</span>
-              <span className="font-bold text-foreground tabular-nums">{currentPickInfo.pickInRound}</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Picks Away</span>
-              {isMyTurn ? (
-                <span className="font-bold text-[#d4af37] tabular-nums">0 · YOUR PICK</span>
-              ) : (
-                <span className="font-bold text-foreground tabular-nums">{currentPickInfo.picksAway}</span>
-              )}
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Remaining</span>
-              <span className="font-bold text-foreground tabular-nums">{currentPickInfo.picksRemaining}</span>
-            </div>
-          </div>
-
-          {bestAvailable.length > 0 && (
-            <div className="space-y-1.5">
-              <div className="flex items-center gap-1.5">
-                <Zap className="w-3 h-3 text-[#d4af37]" />
-                <span className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground">Best Available</span>
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-1.5" data-testid="grid-best-available">
-                {bestAvailable.slice(0, 5).map((p, idx) => {
-                  const inQueue = queueIds.includes(p.sleeperId);
-                  // Real Sleeper player ids are numeric strings — rookie
-                  // board synthetic ids ("rookie_1", etc.) can't be drafted.
-                  const isRealSleeperId = /^[0-9]+$/.test(p.sleeperId);
-                  const showDraftButton = !!(canDraftNow && onDraftPlayer && isRealSleeperId);
-                  return (
-                    <div
-                      key={p.sleeperId}
-                      className={cn(
-                        "flex items-center gap-1.5 px-2 py-1.5 rounded-md border bg-muted/10 hover:bg-muted/30 transition-colors",
-                        posBg[p.pos] || "border-border/30",
-                      )}
-                      data-testid={`best-available-${idx}`}
-                    >
-                      <span className="text-[9px] font-mono text-muted-foreground tabular-nums shrink-0">#{idx + 1}</span>
-                      <div className="min-w-0 flex-1">
-                        <PlayerAvatar
-                          id={p.sleeperId}
-                          name={p.name}
-                          pos={p.pos}
-                          team={p.team ?? ""}
-                          size="xs"
-                          sub={p.value ? p.value.toLocaleString() : undefined}
-                        />
-                      </div>
-                      {showDraftButton && (
-                        <button
-                          onClick={() => onDraftPlayer!({ sleeperId: p.sleeperId, name: p.name, pos: p.pos, team: p.team ?? null })}
-                          className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-[#d4af37] hover:bg-[#d4af37]/85 text-[#0b3a7a] transition-colors shrink-0"
-                          title="Draft this player"
-                          data-testid={`button-draft-best-${p.sleeperId}`}
-                        >
-                          DRAFT
-                        </button>
-                      )}
-                      {!showDraftButton && onAddToQueue && !inQueue && (
-                        <button
-                          onClick={() => onAddToQueue(p.sleeperId)}
-                          className="p-0.5 rounded hover:bg-[#d4af37]/20 text-muted-foreground hover:text-[#d4af37] transition-colors shrink-0"
-                          title="Add to queue"
-                          data-testid={`button-queue-best-${p.sleeperId}`}
-                        >
-                          <Plus className="w-3 h-3" />
-                        </button>
-                      )}
-                      {!showDraftButton && inQueue && (
-                        <span className="text-[8px] font-bold text-[#d4af37] shrink-0">Q</span>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
     </Card>
   );
 }
@@ -1256,6 +1058,10 @@ type ManagerTimingStats = {
   timedPicksCount: number;
   avgMs: number;
   longestMs: number;
+  /** Shortest known on-the-clock interval (ms). `Infinity` until a timed
+   *  pick is observed; consumers fall back to `null` when no timed picks
+   *  exist for the manager. */
+  shortestMs: number;
   picks: ManagerTimingEntry[];
 };
 
@@ -1283,6 +1089,15 @@ function formatPickTimestamp(ms: number | null | undefined): string {
   });
 }
 
+type ManagerTimingSortKey = "avg" | "picks" | "total" | "longest";
+
+const MANAGER_TIMING_SORT_LABEL: Record<ManagerTimingSortKey, string> = {
+  avg: "Avg Time",
+  picks: "Picks Made",
+  total: "Total Time",
+  longest: "Longest",
+};
+
 function ManagerTimingsSection({ history, teams }: {
   history: Array<{
     pick: DraftPickNormalized | null;
@@ -1295,6 +1110,10 @@ function ManagerTimingsSection({ history, teams }: {
 }) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [sectionCollapsed, setSectionCollapsed] = useState(false);
+  // Default = avg desc so the slowest managers (the ones holding up the
+  // room) appear first. Spec: "Sort default by average pick time
+  // descending so slowest managers are easy to identify."
+  const [sortKey, setSortKey] = useState<ManagerTimingSortKey>("avg");
 
   const managers = useMemo<ManagerTimingStats[]>(() => {
     const byUser = new Map<string, ManagerTimingStats>();
@@ -1320,6 +1139,7 @@ function ManagerTimingsSection({ history, teams }: {
           timedPicksCount: 0,
           avgMs: 0,
           longestMs: 0,
+          shortestMs: Infinity,
           picks: [],
         };
         byUser.set(userId, stats);
@@ -1342,6 +1162,7 @@ function ManagerTimingsSection({ history, teams }: {
         stats.totalMs += timeMs;
         stats.timedPicksCount += 1;
         if (timeMs > stats.longestMs) stats.longestMs = timeMs;
+        if (timeMs < stats.shortestMs) stats.shortestMs = timeMs;
       }
     }
 
@@ -1351,11 +1172,36 @@ function ManagerTimingsSection({ history, teams }: {
       stats.picks.sort((a, b) => a.pickNo - b.pickNo);
     }
 
-    return list.sort((a: ManagerTimingStats, b: ManagerTimingStats) => b.totalMs - a.totalMs);
-  }, [history, teams]);
+    // Build the comparator from the active sort key. All sorts are
+    // descending so the "most" of whatever the user is sorting by lands
+    // at the top. Ties fall back to picksCount to keep the order stable
+    // when a column has lots of zeros (no timing data yet).
+    const compare = (a: ManagerTimingStats, b: ManagerTimingStats): number => {
+      const primary = sortKey === "avg"     ? b.avgMs - a.avgMs
+                    : sortKey === "picks"   ? b.picksCount - a.picksCount
+                    : sortKey === "total"   ? b.totalMs - a.totalMs
+                    : /* "longest" */         b.longestMs - a.longestMs;
+      if (primary !== 0) return primary;
+      return b.picksCount - a.picksCount;
+    };
+    return list.sort(compare);
+  }, [history, teams, sortKey]);
 
   const maxTotal = managers.reduce((m, s) => Math.max(m, s.totalMs), 0);
   const hasAnyTiming = managers.some((m) => m.timedPicksCount > 0);
+  const totalPicks = history.length;
+  const timedPicks = history.reduce((n, e) => n + (e.timing?.timeMs != null ? 1 : 0), 0);
+  // Why we might not have timings:
+  //   - Sleeper's /draft/{id}/picks doesn't include picked_at for this draft
+  //     (some draft types / older drafts / very fresh drafts).
+  //   - Only one pick has been made and draft.start_time is 0 so the seed
+  //     for 1.01 isn't available — at least one delta requires either a
+  //     preceding pick or a non-zero draft start_time.
+  //   - The user hasn't connected a Sleeper JWT, so the GraphQL message
+  //     history (which carries the most reliable timing) isn't available.
+  const emptyStateMessage = totalPicks === 0
+    ? "No picks made yet."
+    : "Not enough timing data yet.";
 
   if (managers.length === 0) return null;
 
@@ -1372,8 +1218,8 @@ function ManagerTimingsSection({ history, teams }: {
           <span className="text-sm font-semibold text-foreground">Manager Time</span>
           <Badge variant="outline" className="text-[10px] h-4 px-1.5 shrink-0">{managers.length}</Badge>
           {!hasAnyTiming && (
-            <span className="text-[10px] text-muted-foreground/70 truncate">
-              Pick timestamps unavailable for this draft
+            <span className="text-[10px] text-muted-foreground/70 truncate" data-testid="text-manager-time-empty">
+              {emptyStateMessage}
             </span>
           )}
         </div>
@@ -1384,19 +1230,46 @@ function ManagerTimingsSection({ history, teams }: {
 
       {!sectionCollapsed && (
         <div className="border-t border-border/30">
+          {/* Sort selector — small pill row above the table. All sorts run
+              descending; picking a column moves it to the top. */}
+          <div
+            className="flex items-center gap-1.5 px-3 py-2 text-[10px] border-b border-border/20 bg-muted/10 overflow-x-auto scrollbar-hide"
+            data-testid="manager-timings-sort"
+          >
+            <span className="font-bold uppercase tracking-wider text-muted-foreground shrink-0">Sort by</span>
+            {(["avg", "picks", "total", "longest"] as const).map((k) => (
+              <button
+                key={k}
+                type="button"
+                onClick={() => setSortKey(k)}
+                data-on={sortKey === k}
+                data-testid={`button-sort-${k}`}
+                className={cn(
+                  "px-2 py-0.5 rounded-full border whitespace-nowrap transition-colors",
+                  sortKey === k
+                    ? "bg-[#d4af37]/15 border-[#d4af37]/40 text-[#d4af37] font-semibold"
+                    : "border-border/40 text-muted-foreground hover:text-foreground hover:bg-muted/30",
+                )}
+              >
+                {MANAGER_TIMING_SORT_LABEL[k]}
+              </button>
+            ))}
+          </div>
+
           {/* Column header — desktop only */}
           <div
             className="hidden md:grid items-center gap-3 px-3 py-1.5 text-[9px] font-bold uppercase tracking-wider text-muted-foreground border-b border-border/20 bg-muted/15 dark-any:bg-muted/8"
-            style={{ gridTemplateColumns: "28px 1.6fr 1.4fr 70px 50px 70px 70px 18px" }}
+            style={{ gridTemplateColumns: "28px 1.4fr 1.2fr 70px 50px 70px 70px 70px 18px" }}
             data-testid="header-manager-timings"
           >
             <span>#</span>
             <span>Manager</span>
             <span>Total Time</span>
-            <span className="text-right">Total</span>
-            <span className="text-right">Picks</span>
-            <span className="text-right">Avg / Pick</span>
-            <span className="text-right">Longest</span>
+            <span className={cn("text-right", sortKey === "total"   && "text-[#d4af37]")}>Total</span>
+            <span className={cn("text-right", sortKey === "picks"   && "text-[#d4af37]")}>Picks</span>
+            <span className={cn("text-right", sortKey === "avg"     && "text-[#d4af37]")}>Avg</span>
+            <span className={cn("text-right", sortKey === "longest" && "text-[#d4af37]")}>Longest</span>
+            <span className="text-right">Shortest</span>
             <span />
           </div>
 
@@ -1420,7 +1293,7 @@ function ManagerTimingsSection({ history, teams }: {
                     {/* Desktop layout */}
                     <div
                       className="hidden md:grid items-center gap-3 px-3 py-2"
-                      style={{ gridTemplateColumns: "28px 1.6fr 1.4fr 70px 50px 70px 70px 18px" }}
+                      style={{ gridTemplateColumns: "28px 1.4fr 1.2fr 70px 50px 70px 70px 70px 18px" }}
                     >
                       <span className="text-[11px] font-bold tabular-nums text-muted-foreground">{idx + 1}</span>
                       <span className="flex items-center gap-2 min-w-0">
@@ -1449,6 +1322,9 @@ function ManagerTimingsSection({ history, teams }: {
                       </span>
                       <span className="text-[11px] tabular-nums text-foreground/80 text-right">
                         {formatDurationMs(mgr.longestMs)}
+                      </span>
+                      <span className="text-[11px] tabular-nums text-foreground/80 text-right">
+                        {mgr.shortestMs !== Infinity ? formatDurationMs(mgr.shortestMs) : "—"}
                       </span>
                       <ChevronDown
                         className={cn(
@@ -1491,10 +1367,11 @@ function ManagerTimingsSection({ history, teams }: {
                           {formatDurationMs(mgr.totalMs)}
                         </span>
                       </div>
-                      <div className="flex items-center gap-3 text-[10px] text-muted-foreground tabular-nums">
+                      <div className="flex items-center gap-3 text-[10px] text-muted-foreground tabular-nums flex-wrap">
                         <span>Picks <span className="text-foreground/80 font-semibold">{mgr.picksCount}</span></span>
                         <span>Avg <span className="text-foreground/80 font-semibold">{formatDurationMs(mgr.avgMs)}</span></span>
                         <span>Long <span className="text-foreground/80 font-semibold">{formatDurationMs(mgr.longestMs)}</span></span>
+                        <span>Short <span className="text-foreground/80 font-semibold">{mgr.shortestMs !== Infinity ? formatDurationMs(mgr.shortestMs) : "—"}</span></span>
                       </div>
                     </div>
                   </button>
@@ -1555,6 +1432,15 @@ function ManagerTimingsSection({ history, teams }: {
               );
             })}
           </div>
+          {/* Manager time isn't returned as a first-class field by Sleeper —
+              we derive it from consecutive pick timestamps (and the draft
+              `start_time` for 1.01 when present). Make that transparent. */}
+          <p
+            className="px-3 py-2 text-[10px] text-muted-foreground/80 border-t border-border/20 bg-muted/10 leading-snug"
+            data-testid="manager-timings-note"
+          >
+            Timing is based on Sleeper pick timestamps and may include paused time.
+          </p>
         </div>
       )}
     </Card>
@@ -1562,13 +1448,10 @@ function ManagerTimingsSection({ history, teams }: {
 }
 
 // ── PlayersPanel ──────────────────────────────────────────────────────────────
-// Expandable panel beneath the Manager Time card. Three tabs:
-//   1) Players Available — searchable/filterable pool drawn from `fullBoard`
-//      (the same list that powers the Best-Available rail); each row has a
-//      "+" to push it onto the user's draft queue.
-//   2) Queue — current draft queue with a remove button. Reuses the existing
-//      `draftQueue` + `queueMutate` source of truth; not a parallel store.
-//   3) My Team — the user's current league roster (loaded from
+// Expandable panel beneath the Manager Time card. Two tabs:
+//   1) Available Players — searchable/filterable pool drawn from `fullBoard`
+//      with a dedicated Dynasty Value column.
+//   2) My Team — the user's current league roster (loaded from
 //      fetchSleeperLeagueFull), independent of picks made in this draft.
 
 type AvailablePoolPlayer = {
@@ -1633,11 +1516,8 @@ function PlayersPanel({
   fullBoard,
   pickedPlayerIds,
   pickedPlayerNames,
-  draftQueue,
-  queueMutate,
-  queueAvailable,
-  draftPlayersIndex,
   realIdResolver,
+  realTeamResolver,
   myRoster,
   myRosterLoading,
   myRosterError,
@@ -1648,15 +1528,12 @@ function PlayersPanel({
   fullBoard: AvailablePoolPlayer[];
   pickedPlayerIds: Set<string>;
   pickedPlayerNames: Set<string>;
-  draftQueue: string[];
-  queueMutate: (next: string[]) => void;
-  /** True when we have a Sleeper JWT and can actually mutate the queue. */
-  queueAvailable: boolean;
-  /** Lookup table used to render queued players when they aren't in fullBoard. */
-  draftPlayersIndex: DraftPlayersIndex;
   /** Resolves a synthetic rookie_N id to a real Sleeper id when one exists,
    *  so PlayerAvatar can render real headshots in rookie drafts. */
   realIdResolver: (id: string, name: string, pos: string) => string;
+  /** Resolves the rookie's NFL team from dynastyPlayerList when the board
+   *  ships team="" (rookie board snapshot pre-dates the NFL draft). */
+  realTeamResolver: (id: string, name: string, pos: string, fallbackTeam: string) => string;
   myRoster: RosterPlayer[] | null;
   myRosterLoading: boolean;
   myRosterError: string | null;
@@ -1665,12 +1542,10 @@ function PlayersPanel({
   defaultOpen: boolean;
 }) {
   const [open, setOpen] = useState(defaultOpen);
-  const [tab, setTab] = useState<"available" | "queue" | "my-team">("available");
+  const [tab, setTab] = useState<"available" | "my-team">("available");
   const [search, setSearch] = useState("");
   const [availFilter, setAvailFilter] = useState<"ALL" | "QB" | "RB" | "WR" | "TE" | "K" | "Rookies">("ALL");
   const [teamFilter, setTeamFilter] = useState<"ALL" | "QB" | "RB" | "WR" | "TE" | "K" | "DEF">("ALL");
-
-  const queueSet = useMemo(() => new Set(draftQueue), [draftQueue]);
 
   const availablePool = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -1689,39 +1564,14 @@ function PlayersPanel({
     });
   }, [fullBoard, pickedPlayerIds, pickedPlayerNames, availFilter, search]);
 
-  const queueRows = useMemo(() => {
-    return draftQueue.map((id, idx) => {
-      const fb = fullBoard.find((p) => p.sleeperId === id);
-      const idx2 = draftPlayersIndex[id];
-      return {
-        order: idx + 1,
-        sleeperId: id,
-        name: fb?.name ?? idx2?.name ?? id,
-        pos: fb?.pos ?? idx2?.pos ?? "",
-        team: fb?.team ?? idx2?.team ?? "",
-        drafted: pickedPlayerIds.has(id),
-      };
-    });
-  }, [draftQueue, fullBoard, draftPlayersIndex, pickedPlayerIds]);
-
   const filteredRoster = useMemo(() => {
     if (!myRoster) return [] as RosterPlayer[];
     if (teamFilter === "ALL") return myRoster;
     return myRoster.filter((p) => p.pos === teamFilter);
   }, [myRoster, teamFilter]);
 
-  const addToQueue = (id: string) => {
-    if (!queueAvailable || queueSet.has(id)) return;
-    queueMutate([...draftQueue, id]);
-  };
-  const removeFromQueue = (id: string) => {
-    if (!queueAvailable) return;
-    queueMutate(draftQueue.filter((q) => q !== id));
-  };
-
-  const tabs: Array<{ id: "available" | "queue" | "my-team"; label: string; count?: number }> = [
-    { id: "available", label: "Players Available", count: availablePool.length },
-    { id: "queue", label: "Queue", count: draftQueue.length },
+  const tabs: Array<{ id: "available" | "my-team"; label: string; count?: number }> = [
+    { id: "available", label: "Available Players", count: availablePool.length },
     { id: "my-team", label: "My Team", count: myRoster?.length },
   ];
 
@@ -1808,16 +1658,15 @@ function PlayersPanel({
                   ))}
                 </div>
 
-                {/* Column header — desktop only */}
+                {/* Column header — desktop only. Two columns now that the
+                    ADP / PAR / DH placeholders are gone and the Queue add
+                    button has been retired with the Queue tab. */}
                 <div
                   className="hidden md:grid items-center gap-2 px-2 py-1 text-[9px] font-bold uppercase tracking-wider text-muted-foreground border-b border-border/20"
-                  style={{ gridTemplateColumns: "minmax(0,1fr) 50px 50px 50px 32px" }}
+                  style={{ gridTemplateColumns: "minmax(0,1fr) 90px" }}
                 >
                   <span>Player</span>
-                  <span className="text-right">ADP</span>
-                  <span className="text-right">PAR</span>
-                  <span className="text-right">DH</span>
-                  <span />
+                  <span className="text-right">Dynasty Value</span>
                 </div>
 
                 <div className="max-h-[480px] overflow-y-auto -mx-1 px-1" data-testid="list-players-available">
@@ -1827,111 +1676,33 @@ function PlayersPanel({
                     </p>
                   ) : (
                     <ul className="space-y-1.5">
-                      {availablePool.slice(0, 200).map((p) => {
-                        const queued = queueSet.has(p.sleeperId);
-                        return (
-                          <li
-                            key={p.sleeperId}
-                            className="md:grid md:gap-2 md:items-center flex items-center gap-2 px-2.5 py-2 rounded-lg border border-border/30 bg-muted/15 hover:bg-muted/30 transition-colors"
-                            style={{ gridTemplateColumns: "minmax(0,1fr) 56px 56px 56px 36px" }}
-                            data-testid={`player-row-${p.sleeperId}`}
-                          >
-                            <div className="min-w-0 flex-1 md:flex-initial">
-                              <PlayerAvatar
-                                id={realIdResolver(p.sleeperId, p.name, p.pos)}
-                                name={p.name}
-                                pos={p.pos}
-                                team={p.team}
-                                size="sm"
-                                sub={typeof p.value === "number" && p.value > 0 ? p.value.toLocaleString() : undefined}
-                              />
-                            </div>
-                            <span className="hidden md:block text-[11px] text-right text-muted-foreground tabular-nums">—</span>
-                            <span className="hidden md:block text-[11px] text-right text-muted-foreground tabular-nums">—</span>
-                            <span className="hidden md:block text-[11px] text-right text-muted-foreground tabular-nums">—</span>
-                            <button
-                              type="button"
-                              onClick={() => addToQueue(p.sleeperId)}
-                              disabled={!queueAvailable || queued}
-                              title={!queueAvailable ? "Connect Sleeper to manage your queue" : queued ? "Already in queue" : "Add to queue"}
-                              data-testid={`button-add-queue-${p.sleeperId}`}
-                              className={cn(
-                                "w-8 h-8 rounded-md flex items-center justify-center border transition-colors shrink-0",
-                                queued
-                                  ? "bg-[#d4af37]/15 border-[#d4af37]/40 text-[#d4af37] cursor-default"
-                                  : queueAvailable
-                                    ? "bg-muted/30 border-border/40 text-muted-foreground hover:bg-[#3d8fe0]/15 hover:text-[#3d8fe0] hover:border-[#3d8fe0]/40"
-                                    : "bg-muted/20 border-border/30 text-muted-foreground/50 cursor-not-allowed",
-                              )}
-                            >
-                              {queued ? <Check className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
-                            </button>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {tab === "queue" && (
-              <div className="space-y-2.5">
-                {!queueAvailable && (
-                  <div className="rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-[11px] text-amber-600 dark-any:text-amber-400 flex items-center gap-2">
-                    <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                    Connect Sleeper to manage your draft queue.
-                  </div>
-                )}
-                {queueRows.length === 0 ? (
-                  <div className="text-center py-8 space-y-1" data-testid="empty-queue">
-                    <p className="text-sm font-medium text-foreground">No players in queue yet.</p>
-                    <p className="text-xs text-muted-foreground">Add players from the Players Available tab.</p>
-                  </div>
-                ) : (
-                  <div className="max-h-[480px] overflow-y-auto -mx-1 px-1" data-testid="list-queue">
-                    <ul className="space-y-1.5">
-                      {queueRows.map((row) => (
+                      {availablePool.slice(0, 200).map((p) => (
                         <li
-                          key={row.sleeperId}
-                          className={cn(
-                            "flex items-center gap-2.5 px-2.5 py-2 rounded-lg border transition-colors",
-                            row.drafted
-                              ? "opacity-50 border-border/20 bg-muted/10"
-                              : "border-border/30 bg-muted/15 hover:bg-muted/30",
-                          )}
-                          data-testid={`queue-row-${row.sleeperId}`}
+                          key={p.sleeperId}
+                          className="md:grid md:gap-2 md:items-center flex items-center gap-2 px-2.5 py-2 rounded-lg border border-border/30 bg-muted/15 hover:bg-muted/30 transition-colors"
+                          style={{ gridTemplateColumns: "minmax(0,1fr) 90px" }}
+                          data-testid={`player-row-${p.sleeperId}`}
                         >
-                          <span className="text-[11px] font-mono font-bold text-muted-foreground tabular-nums w-6 shrink-0 text-right">
-                            {row.order}
-                          </span>
-                          <div className="min-w-0 flex-1">
+                          <div className="min-w-0 flex-1 md:flex-initial">
                             <PlayerAvatar
-                              id={realIdResolver(row.sleeperId, row.name, row.pos)}
-                              name={row.name}
-                              pos={row.pos}
-                              team={row.team}
+                              id={realIdResolver(p.sleeperId, p.name, p.pos)}
+                              name={p.name}
+                              pos={p.pos}
+                              team={realTeamResolver(p.sleeperId, p.name, p.pos, p.team)}
                               size="sm"
                             />
                           </div>
-                          <span className="hidden sm:inline text-[11px] text-muted-foreground tabular-nums w-10 text-right">—</span>
-                          <span className="hidden sm:inline text-[11px] text-muted-foreground tabular-nums w-10 text-right">—</span>
-                          <span className="hidden sm:inline text-[11px] text-muted-foreground tabular-nums w-10 text-right">—</span>
-                          <button
-                            type="button"
-                            onClick={() => removeFromQueue(row.sleeperId)}
-                            disabled={!queueAvailable}
-                            title="Remove from queue"
-                            data-testid={`button-remove-queue-${row.sleeperId}`}
-                            className="w-8 h-8 rounded-md flex items-center justify-center bg-muted/30 border border-border/40 text-muted-foreground hover:text-red-500 hover:bg-red-500/10 hover:border-red-500/40 transition-colors shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
+                          <span
+                            className="text-[12px] md:text-[13px] text-right tabular-nums font-semibold text-[#d4af37] shrink-0"
+                            data-testid={`text-dynasty-value-${p.sleeperId}`}
                           >
-                            <X className="w-4 h-4" />
-                          </button>
+                            {typeof p.value === "number" && p.value > 0 ? p.value.toLocaleString() : "—"}
+                          </span>
                         </li>
                       ))}
                     </ul>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
             )}
 
@@ -1969,6 +1740,16 @@ function PlayersPanel({
                         />
                       ))}
                     </div>
+                    {/* Column header — desktop only. STARTER pills retired;
+                        Dynasty Value promoted to its own column. */}
+                    <div
+                      className="hidden md:grid items-center gap-2 px-2 py-1 text-[9px] font-bold uppercase tracking-wider text-muted-foreground border-b border-border/20"
+                      style={{ gridTemplateColumns: "minmax(0,1fr) 50px 90px" }}
+                    >
+                      <span>Player</span>
+                      <span className="text-right">Age</span>
+                      <span className="text-right">Dynasty Value</span>
+                    </div>
                     <div className="max-h-[480px] overflow-y-auto -mx-1 px-1" data-testid="list-my-team">
                       {filteredRoster.length === 0 ? (
                         <p className="text-xs text-muted-foreground text-center py-6">
@@ -1979,29 +1760,28 @@ function PlayersPanel({
                           {filteredRoster.map((p) => (
                             <li
                               key={p.id}
-                              className="flex items-center gap-2.5 px-2.5 py-2 rounded-lg border border-border/30 bg-muted/15 hover:bg-muted/30 transition-colors"
+                              className="md:grid md:gap-2 md:items-center flex items-center gap-2.5 px-2.5 py-2 rounded-lg border border-border/30 bg-muted/15 hover:bg-muted/30 transition-colors"
+                              style={{ gridTemplateColumns: "minmax(0,1fr) 50px 90px" }}
                               data-testid={`my-team-row-${p.sleeperId ?? p.id}`}
                             >
-                              <div className="min-w-0 flex-1">
+                              <div className="min-w-0 flex-1 md:flex-initial">
                                 <PlayerAvatar
                                   id={p.sleeperId ?? p.id}
                                   name={p.name}
                                   pos={p.pos}
                                   team={p.team}
                                   size="sm"
-                                  sub={typeof p.value === "number" && p.value > 0 ? p.value.toLocaleString() : undefined}
                                 />
                               </div>
-                              {typeof p.age === "number" && p.age > 0 && (
-                                <span className="hidden sm:inline text-[11px] text-muted-foreground tabular-nums shrink-0">
-                                  {p.age.toFixed(1)} yr
-                                </span>
-                              )}
-                              {p.starter && (
-                                <span className="hidden md:inline text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-700 dark-any:text-emerald-300 border border-emerald-500/40 shrink-0">
-                                  STARTER
-                                </span>
-                              )}
+                              <span className="text-[11px] text-right text-muted-foreground tabular-nums shrink-0">
+                                {typeof p.age === "number" && p.age > 0 ? `${p.age.toFixed(1)}` : "—"}
+                              </span>
+                              <span
+                                className="text-[12px] md:text-[13px] text-right tabular-nums font-semibold text-[#d4af37] shrink-0"
+                                data-testid={`text-my-team-value-${p.sleeperId ?? p.id}`}
+                              >
+                                {typeof p.value === "number" && p.value > 0 ? p.value.toLocaleString() : "—"}
+                              </span>
                             </li>
                           ))}
                         </ul>
@@ -2114,10 +1894,8 @@ export default function LiveDraft() {
   // Board overlay picker — controls the visual treatment applied to the
   // live draft board (Value / ADP / Positional / Tier / Exposure). Wired
   // through DraftStateHeader; downstream board renderer can opt-in.
-  const [boardOverlay, setBoardOverlay] = useState<BoardOverlay>("value");
   // Time-On-Clock section starts expanded — collapsible for screen real
   // estate once the user has a feel for the draft flow.
-  const [timeOnClockCollapsed, setTimeOnClockCollapsed] = useState(false);
 
   // Mobile flag drives the default open-state for the Players panel below.
   const isMobile = useIsMobile();
@@ -2362,11 +2140,11 @@ export default function LiveDraft() {
   // initials). When no match exists (true draft-eligible rookie not yet in
   // Sleeper's player DB), we fall through to the synthetic id and the
   // initials fallback continues to work.
-  const realSleeperIdByNameKey = useMemo(() => {
-    const m = new Map<string, string>();
+  const realPlayerByNameKey = useMemo(() => {
+    const m = new Map<string, { sleeperId: string; team: string }>();
     for (const p of dynastyPlayerList) {
       if (!p.sleeperId || p.sleeperId.startsWith("rookie_")) continue;
-      m.set(`${p.name.toLowerCase().trim()}|${p.pos}`, p.sleeperId);
+      m.set(`${p.name.toLowerCase().trim()}|${p.pos}`, { sleeperId: p.sleeperId, team: p.team || "" });
     }
     return m;
   }, [dynastyPlayerList]);
@@ -2376,9 +2154,21 @@ export default function LiveDraft() {
         return id;
       }
       const key = `${(name || "").toLowerCase().trim()}|${pos}`;
-      return realSleeperIdByNameKey.get(key) ?? id;
+      return realPlayerByNameKey.get(key)?.sleeperId ?? id;
     },
-    [realSleeperIdByNameKey],
+    [realPlayerByNameKey],
+  );
+  // Rookie board entries ship with team="" (they haven't been drafted to an
+  // NFL team yet at compile time). Once a rookie matches a real Sleeper id
+  // we can pull their current NFL team from dynastyPlayerList so the team
+  // logo badge renders alongside their headshot in the Players list.
+  const resolveRealTeam = useCallback(
+    (id: string, name: string, pos: string, fallbackTeam: string): string => {
+      if (fallbackTeam && fallbackTeam !== "FA") return fallbackTeam;
+      const key = `${(name || "").toLowerCase().trim()}|${pos}`;
+      return realPlayerByNameKey.get(key)?.team || fallbackTeam;
+    },
+    [realPlayerByNameKey],
   );
 
   // Reference rankings for the "Best Available" rail. Auto-detects rookie
@@ -2464,21 +2254,27 @@ export default function LiveDraft() {
   // this is a live draft tracker, not a static rookie board.
   const boardGrid = useMemo(() => {
     const rounds = draftData?.draft?.rounds || draftState?.rounds || 0;
-    if (!rounds || !teamCount) {
-      return [] as Array<Array<{
-        pickNo: number;
-        round: number;
-        slot: number;
-        pick: DraftPick | null;
-        isDrafted: boolean;
-        isCurrent: boolean;
-        isMine: boolean;
-        ownerName: string;
-        ownerAvatar: string | null;
-      }>>;
-    }
+    type Cell = {
+      pickNo: number;
+      round: number;
+      slot: number;
+      pick: DraftPick | null;
+      isDrafted: boolean;
+      isCurrent: boolean;
+      /** True when the CURRENT owner of this (round, slot) is the user. */
+      isMine: boolean;
+      /** Display name for the CURRENT owner — post-trade if traded. */
+      ownerName: string;
+      ownerAvatar: string | null;
+      /** Original slot owner's display name. Only meaningful when isTraded. */
+      originalOwnerName: string | null;
+      isTraded: boolean;
+    };
+    if (!rounds || !teamCount) return [] as Array<Array<Cell>>;
 
-    // Index actual picks by `round-slot`.
+    // Index actual picks by `round-slot`. Sleeper stamps `roster_id` /
+    // `picked_by` on the pick when it's made, so for drafted cells those
+    // are the source of truth — they already reflect any trade.
     const pickMap = new Map<string, DraftPick>();
     if (draftData) {
       for (const p of draftData.picks) {
@@ -2486,8 +2282,19 @@ export default function LiveDraft() {
       }
     }
 
-    // Slot → owning user (from draftState when available). Lets us flag
-    // user-owned picks with the gold accent + show usernames on empty slots.
+    // Per-(round, slot) ownership from the REST helper. Falls back to
+    // the slot's original owner when no traded_picks entry exists.
+    const ownerByCell = new Map<string, DraftPickOwner>();
+    if (draftData?.pickOwners) {
+      for (const po of draftData.pickOwners) {
+        ownerByCell.set(`${po.round}-${po.slot}`, po);
+      }
+    }
+
+    // GraphQL fallback for current-owner display (when draftData hasn't
+    // loaded yet but draftState is present, e.g. in JWT-only edge cases).
+    // No traded-pick data is available here — we treat every slot as
+    // owned by its original draftOrder slot.
     const slotToUserId: Record<number, string | undefined> = {};
     if (draftState?.draftOrderByUserId) {
       for (const [uid, slot] of Object.entries(draftState.draftOrderByUserId)) {
@@ -2495,49 +2302,66 @@ export default function LiveDraft() {
       }
     }
 
-    // Slot → manager display name (prefer draftState username, fall back to
-    // the REST draftSlots displayName which is also username-derived).
-    const slotToName: Record<number, string> = {};
-    const slotToAvatar: Record<number, string | null> = {};
-    for (let s = 1; s <= teamCount; s++) {
-      const uid = slotToUserId[s];
-      const u = uid ? draftState?.usersById[uid] : null;
-      if (u?.displayName) {
-        slotToName[s] = u.displayName;
-        slotToAvatar[s] = u.avatar ?? null;
-        continue;
-      }
-      const fromRest = draftData?.draftSlots?.find((d) => d.slot === s);
-      slotToName[s] = fromRest?.displayName || `Slot ${s}`;
-      slotToAvatar[s] = fromRest?.avatar ?? null;
-    }
-
     // Snake direction follows draft type (linear = always left→right).
     const isSnake = (draftData?.draft?.type ?? draftState?.type) === "snake";
     const currentPickNo = (draftState?.picks.length ?? draftData?.picks.filter((p) => p.playerId).length ?? 0) + 1;
     const myUserId = user?.userId ?? null;
 
-    const grid: Array<Array<{
-      pickNo: number;
-      round: number;
-      slot: number;
-      pick: DraftPick | null;
-      isDrafted: boolean;
-      isCurrent: boolean;
-      isMine: boolean;
-      ownerName: string;
-      ownerAvatar: string | null;
-    }>> = [];
+    const grid: Array<Array<Cell>> = [];
 
     for (let r = 0; r < rounds; r++) {
-      const row: typeof grid[0] = [];
+      const row: Array<Cell> = [];
       const isSnakeRound = isSnake && r % 2 === 1;
       for (let i = 0; i < teamCount; i++) {
-        const slot = isSnakeRound ? teamCount - i : i + 1; // 1-based slot for display
+        const slot = isSnakeRound ? teamCount - i : i + 1;
         const round = r + 1;
         const pickNo = r * teamCount + i + 1;
         const draftPick = pickMap.get(`${round}-${slot}`);
-        const ownerUid = slotToUserId[slot];
+        const ownerInfo = ownerByCell.get(`${round}-${slot}`);
+
+        let ownerName: string;
+        let ownerAvatar: string | null;
+        let originalOwnerName: string | null = null;
+        let isTraded = false;
+        let isMine = false;
+
+        if (draftPick?.playerId && draftPick.rosterId != null) {
+          // Drafted cell: the pick record's roster_id IS the picker
+          // post-trade. Use ownerInfo (if present) to render the picker's
+          // name + flag the cell as traded relative to the original slot.
+          const pickerRoster = draftPick.rosterId;
+          if (ownerInfo && ownerInfo.currentRosterId === pickerRoster) {
+            ownerName = ownerInfo.currentDisplayName;
+            ownerAvatar = ownerInfo.currentAvatar;
+            isTraded = ownerInfo.isTraded;
+            originalOwnerName = isTraded ? ownerInfo.originalDisplayName : null;
+            isMine = !!myUserId && ownerInfo.currentUserId === myUserId;
+          } else {
+            // Fall back to the draftSlots lookup against the picker's roster.
+            const fromRest = draftData?.draftSlots?.find((d) => d.rosterId === pickerRoster);
+            ownerName = fromRest?.displayName ?? `Roster ${pickerRoster}`;
+            ownerAvatar = fromRest?.avatar ?? null;
+            isTraded = ownerInfo ? ownerInfo.isTraded : false;
+            originalOwnerName = isTraded && ownerInfo ? ownerInfo.originalDisplayName : null;
+            isMine = false;
+          }
+        } else if (ownerInfo) {
+          // Undrafted cell with REST data → use the resolved current owner.
+          ownerName = ownerInfo.currentDisplayName;
+          ownerAvatar = ownerInfo.currentAvatar;
+          isTraded = ownerInfo.isTraded;
+          originalOwnerName = isTraded ? ownerInfo.originalDisplayName : null;
+          isMine = !!myUserId && ownerInfo.currentUserId === myUserId;
+        } else {
+          // No REST data yet — fall back to draftState's slot mapping
+          // (no traded-pick awareness, but better than "Slot N").
+          const uid = slotToUserId[slot];
+          const u = uid ? draftState?.usersById[uid] : null;
+          ownerName = u?.displayName ?? `Slot ${slot}`;
+          ownerAvatar = u?.avatar ?? null;
+          isMine = !!myUserId && uid === myUserId;
+        }
+
         row.push({
           pickNo,
           round,
@@ -2545,9 +2369,11 @@ export default function LiveDraft() {
           pick: draftPick ?? null,
           isDrafted: !!draftPick?.playerId,
           isCurrent: pickNo === currentPickNo,
-          isMine: !!myUserId && ownerUid === myUserId,
-          ownerName: slotToName[slot] ?? `Slot ${slot}`,
-          ownerAvatar: slotToAvatar[slot] ?? null,
+          isMine,
+          ownerName,
+          ownerAvatar,
+          originalOwnerName,
+          isTraded,
         });
       }
       grid.push(row);
@@ -2605,44 +2431,76 @@ export default function LiveDraft() {
 
   // currentPickInfo — derived from draftState when available (rich, JWT-only)
   // and falls back to draftData (public REST) so the room renders without a
-  // GraphQL token. The REST path doesn't have user_ids per slot — we match
-  // the user's Sleeper username against the slot's displayName to figure out
-  // "is my turn" and "picks away."
+  // GraphQL token. When pickOwners (traded-pick aware) data is present we
+  // prefer that for "who is on the clock" and "is my turn / picks away"
+  // so traded picks are correctly attributed to the current owner.
   const currentPickInfo = useMemo((): CurrentPickInfo | null => {
+    const myUserId = user?.userId ?? null;
+    // Snake helper.
+    const slotForPick = (pickNoOneBased: number, teams: number, type: string | undefined): { round: number; pickInRound: number; slot: number } => {
+      const round = Math.ceil(pickNoOneBased / teams);
+      const pickInRound = ((pickNoOneBased - 1) % teams) + 1;
+      const slot = type === "snake" && round % 2 === 0 ? teams - pickInRound + 1 : pickInRound;
+      return { round, pickInRound, slot };
+    };
+
+    // Index of pickOwners keyed by `${round}-${slot}`. Empty when REST data
+    // hasn't loaded yet — consumers fall back to the slot-based mapping.
+    const ownerByCell = new Map<string, DraftPickOwner>();
+    if (draftData?.pickOwners) {
+      for (const po of draftData.pickOwners) ownerByCell.set(`${po.round}-${po.slot}`, po);
+    }
+
     if (draftState) {
       const { teams, rounds, picks, draftOrderByUserId, usersById, type } = draftState;
       const totalPicks = teams * rounds;
       if (picks.length >= totalPicks) return null;
       const nextPickNo = picks.length + 1;
-      const currentRound = Math.ceil(nextPickNo / teams);
-      const pickInRound = ((nextPickNo - 1) % teams) + 1;
-      // Snake awareness: even rounds reverse direction.
-      const draftSlot = type === "snake" && currentRound % 2 === 0
-        ? teams - pickInRound + 1
-        : pickInRound;
-      const currentUserId = Object.entries(draftOrderByUserId).find(([, slot]) => slot === draftSlot)?.[0] ?? null;
-      const currentUser = currentUserId ? (usersById[currentUserId] ?? null) : null;
-      const myUserId = user?.userId ?? null;
+      const { round: currentRound, pickInRound, slot: draftSlot } = slotForPick(nextPickNo, teams, type);
+
+      // Prefer pickOwners for the on-the-clock identity. Falls back to the
+      // draftState slot owner when REST data hasn't loaded yet.
+      const ownerInfo = ownerByCell.get(`${currentRound}-${draftSlot}`);
+      let currentUserId: string | null = null;
+      let currentUser: DraftUser | null = null;
+      if (ownerInfo?.currentUserId) {
+        currentUserId = ownerInfo.currentUserId;
+        currentUser = usersById[currentUserId] ?? {
+          userId: currentUserId,
+          displayName: ownerInfo.currentDisplayName,
+          avatar: ownerInfo.currentAvatar,
+          isBot: false,
+        } as DraftUser;
+      } else {
+        const draftStateUid = Object.entries(draftOrderByUserId).find(([, s]) => s === draftSlot)?.[0] ?? null;
+        currentUserId = draftStateUid;
+        currentUser = draftStateUid ? usersById[draftStateUid] ?? null : null;
+      }
+
+      // Picks-away: walk forward through future cells. Traded picks I own
+      // count as mine; trades that gave my original slot away don't.
       let picksAway = 0;
       let isMyTurn = false;
       if (myUserId) {
-        const mySlot = draftOrderByUserId[myUserId];
-        if (mySlot !== undefined) {
-          isMyTurn = mySlot === draftSlot;
-          if (isMyTurn) {
-            picksAway = 0;
-          } else if (mySlot > draftSlot) {
-            picksAway = mySlot - draftSlot;
-          } else {
-            picksAway = teams - draftSlot + mySlot;
+        for (let p = nextPickNo; p <= totalPicks; p++) {
+          const { round: rr, slot: ss } = slotForPick(p, teams, type);
+          const oi = ownerByCell.get(`${rr}-${ss}`);
+          const cellUid = oi?.currentUserId
+            ?? Object.entries(draftOrderByUserId).find(([, s]) => s === ss)?.[0]
+            ?? null;
+          if (cellUid === myUserId) {
+            picksAway = p - nextPickNo;
+            isMyTurn = picksAway === 0;
+            break;
           }
         }
       }
+
       return { nextPickNo, currentRound, pickInRound, currentUserId, currentUser, picksAway, totalPicks, picksRemaining: totalPicks - picks.length, isMyTurn };
     }
 
     // REST-only fallback — no GraphQL token required.
-    if (draftData?.draft && draftData.draftSlots && draftData.draftSlots.length > 0) {
+    if (draftData?.draft) {
       const teams = draftData.draft.teams || teamCount;
       const rounds = draftData.draft.rounds;
       const type = draftData.draft.type;
@@ -2650,38 +2508,61 @@ export default function LiveDraft() {
       const picksMade = draftData.picks.filter((p) => p.playerId).length;
       if (picksMade >= totalPicks) return null;
       const nextPickNo = picksMade + 1;
-      const currentRound = Math.ceil(nextPickNo / teams);
-      const pickInRound = ((nextPickNo - 1) % teams) + 1;
-      const draftSlot = type === "snake" && currentRound % 2 === 0
-        ? teams - pickInRound + 1
-        : pickInRound;
-      const slotMeta = draftData.draftSlots.find((s) => s.slot === draftSlot) ?? null;
-      const currentUser: DraftUser | null = slotMeta
-        ? { userId: String(slotMeta.rosterId), displayName: slotMeta.displayName, avatar: slotMeta.avatar ?? null, isBot: false } as DraftUser
-        : null;
+      const { round: currentRound, pickInRound, slot: draftSlot } = slotForPick(nextPickNo, teams, type);
 
-      // Match username → slot via displayName. user.username is the canonical
-      // Sleeper handle; displayName from the REST endpoint is also username-
-      // derived (see server/sleeper.ts userNameMap).
-      const myHandle = (user?.username ?? user?.displayName ?? "").toLowerCase();
-      let mySlot: number | null = null;
-      if (myHandle) {
-        const match = draftData.draftSlots.find((s) => s.displayName.toLowerCase() === myHandle);
-        if (match) mySlot = match.slot;
-      }
+      // Prefer pickOwners; fall back to draftSlots (original-only) so the
+      // header still renders before traded_picks resolves.
+      const ownerInfo = ownerByCell.get(`${currentRound}-${draftSlot}`);
+      const slotMeta = draftData.draftSlots.find((s) => s.slot === draftSlot) ?? null;
+      const currentUser: DraftUser | null = ownerInfo
+        ? {
+            userId: ownerInfo.currentUserId ?? String(ownerInfo.currentRosterId),
+            displayName: ownerInfo.currentDisplayName,
+            avatar: ownerInfo.currentAvatar,
+            isBot: false,
+          } as DraftUser
+        : slotMeta
+          ? { userId: String(slotMeta.rosterId), displayName: slotMeta.displayName, avatar: slotMeta.avatar ?? null, isBot: false } as DraftUser
+          : null;
+
+      // Match username → user id for picks-away. Sleeper hands us the
+      // current user's user id directly on the connected session.
       let picksAway = 0;
       let isMyTurn = false;
-      if (mySlot !== null) {
-        isMyTurn = mySlot === draftSlot;
-        if (isMyTurn) picksAway = 0;
-        else if (mySlot > draftSlot) picksAway = mySlot - draftSlot;
-        else picksAway = teams - draftSlot + mySlot;
+      if (myUserId) {
+        for (let p = nextPickNo; p <= totalPicks; p++) {
+          const { round: rr, slot: ss } = slotForPick(p, teams, type);
+          const oi = ownerByCell.get(`${rr}-${ss}`);
+          if (oi?.currentUserId === myUserId) {
+            picksAway = p - nextPickNo;
+            isMyTurn = picksAway === 0;
+            break;
+          }
+        }
       }
+      // Username-derived fallback when we don't have pickOwners yet AND the
+      // session userId isn't set — match by displayName on the original slot.
+      if (!ownerByCell.size) {
+        const myHandle = (user?.username ?? user?.displayName ?? "").toLowerCase();
+        if (myHandle) {
+          const match = draftData.draftSlots.find((s) => s.displayName.toLowerCase() === myHandle);
+          if (match) {
+            const mySlot = match.slot;
+            isMyTurn = mySlot === draftSlot;
+            picksAway = isMyTurn
+              ? 0
+              : mySlot > draftSlot
+                ? mySlot - draftSlot
+                : teams - draftSlot + mySlot;
+          }
+        }
+      }
+
       return {
         nextPickNo,
         currentRound,
         pickInRound,
-        currentUserId: slotMeta ? String(slotMeta.rosterId) : null,
+        currentUserId: ownerInfo?.currentUserId ?? (slotMeta ? String(slotMeta.rosterId) : null),
         currentUser,
         picksAway,
         totalPicks,
@@ -2696,33 +2577,47 @@ export default function LiveDraft() {
   // My own picks — prefer draftState; fall back to matching draftData picks
   // by slot ownership using the user's Sleeper username.
   const myPicks = useMemo(() => {
+    // GraphQL path: pick.pickedBy is the actual user_id who clicked draft —
+    // already trade-aware because Sleeper sets it when the pick is made.
     if (draftState && user?.userId) {
       return draftState.picks.filter((p) => p.pickedBy === user.userId);
     }
-    if (draftData && draftData.picks && draftData.draftSlots) {
-      const myHandle = (user?.username ?? user?.displayName ?? "").toLowerCase();
-      if (!myHandle) return [] as DraftPickNormalized[];
-      const mySlotMeta = draftData.draftSlots.find((s) => s.displayName.toLowerCase() === myHandle);
-      if (!mySlotMeta) return [] as DraftPickNormalized[];
-      const teams = draftData.draft?.teams ?? teamCount;
-      // Snake-aware: in even rounds the slot you own is mirrored. Walk every
-      // round and decide whether the row hits this user's slot.
-      const myPickNos = new Set<number>();
-      const totalRounds = draftData.draft?.rounds ?? 0;
-      for (let r = 1; r <= totalRounds; r++) {
-        const isSnakeRound = draftData.draft?.type === "snake" && r % 2 === 0;
-        const effectiveSlot = isSnakeRound ? teams - mySlotMeta.slot + 1 : mySlotMeta.slot;
-        myPickNos.add((r - 1) * teams + effectiveSlot);
+
+    // REST path: every made pick carries `rosterId` (the actual picker's
+    // roster_id). For traded picks this is the NEW owner, not the slot's
+    // original owner — so filtering by my-rosterId is the correct
+    // trade-aware lookup.
+    //
+    // Previous implementation walked the original draft slot for every
+    // round; that included picks the user had traded away (false positive)
+    // AND missed picks the user had traded for (false negative).
+    if (draftData && draftData.picks) {
+      // Determine my rosterId. Prefer the pickOwners map (resolved from
+      // /league/{id}/users by fetchDraftBoard); fall back to draftSlots'
+      // displayName match for legacy callers.
+      let myRosterId: number | null = null;
+      if (draftData.pickOwners && user?.userId) {
+        const mine = draftData.pickOwners.find((po) => po.currentUserId === user.userId);
+        if (mine) myRosterId = mine.currentRosterId;
       }
+      if (myRosterId == null && draftData.draftSlots) {
+        const myHandle = (user?.username ?? user?.displayName ?? "").toLowerCase();
+        if (myHandle) {
+          const match = draftData.draftSlots.find((s) => s.displayName.toLowerCase() === myHandle);
+          if (match) myRosterId = match.rosterId;
+        }
+      }
+      if (myRosterId == null) return [] as DraftPickNormalized[];
+
       return draftData.picks
-        .filter((p) => p.playerId && myPickNos.has(p.pickNo))
+        .filter((p) => p.playerId && p.rosterId === myRosterId)
         .map((p) => ({
           pickNo: p.pickNo,
           playerId: p.playerId,
           playerName: p.playerName,
           position: p.pos,
           teamAbbr: p.team,
-          pickedBy: mySlotMeta.displayName,
+          pickedBy: user?.userId ?? "",
           isKeeper: false,
           reactions: [],
         } as unknown as DraftPickNormalized));
@@ -2778,6 +2673,28 @@ export default function LiveDraft() {
           displayName: fromRest.displayName,
           // DraftSlot carries the Sleeper avatar hash even on the REST path —
           // pass it through so manager rows show profile images without JWT.
+          avatar: fromRest.avatar ?? null,
+          isBot: false,
+        } as DraftUser;
+      }
+      return null;
+    };
+
+    // Trade-aware lookup: every made pick carries the actual picker's
+    // `roster_id`. Mapping pick.rosterId → manager (via draftSlots, which
+    // is keyed by rosterId regardless of which slot the manager originally
+    // owned) credits the right manager when a slot was traded mid-draft.
+    const rosterIdToUser = (rosterId: number): DraftUser | null => {
+      // draftState carries roster_id → user_id only indirectly via
+      // draftOrderByUserId (which is slot-based, not roster-based). The
+      // REST draftSlots list is the cleanest source: each entry is one
+      // (slot, rosterId, displayName, avatar) tuple, and rosterId is
+      // unique per league.
+      const fromRest = draftData?.draftSlots?.find((d) => d.rosterId === rosterId);
+      if (fromRest) {
+        return {
+          userId: String(fromRest.rosterId),
+          displayName: fromRest.displayName,
           avatar: fromRest.avatar ?? null,
           isBot: false,
         } as DraftUser;
@@ -2848,12 +2765,16 @@ export default function LiveDraft() {
             isKeeper: false,
             reactions: [],
           } as unknown as DraftPickNormalized;
-          // pick_in_round derivation matches snake awareness when supplied.
+          // Trade-aware attribution: the pick's roster_id reflects the
+          // actual picker (Sleeper stamps it when the pick is made, so a
+          // traded pick records the NEW owner). Fall back to slot-based
+          // lookup only when the pick record is missing its rosterId.
           const slot = p.draftSlot || ((p.pickNo - 1) % Math.max(teamsCount, 1)) + 1;
+          const user = (p.rosterId != null && rosterIdToUser(p.rosterId)) || slotToUser(slot);
           const entry: MergedPickEntry = {
             pick: synth,
             timing: restTimingByNo.get(p.pickNo) ?? null,
-            user: slotToUser(slot),
+            user,
             isForced: false,
             timestamp: restPickedAtByNo.get(p.pickNo) ?? p.pickedAt ?? null,
           };
@@ -3008,47 +2929,14 @@ export default function LiveDraft() {
               currentPickInfo={currentPickInfo}
               draftStateLoading={draftStateLoading}
               myUserId={user?.userId ?? null}
-              boardOverlay={boardOverlay}
-              onBoardOverlayChange={setBoardOverlay}
             />
           ) : draftData?.draft && (
             <RestDraftHeader
               draft={draftData.draft}
               picksMade={draftData.picks.filter((p) => p.playerId).length}
               currentPickInfo={currentPickInfo}
-              boardOverlay={boardOverlay}
-              onBoardOverlayChange={setBoardOverlay}
             />
           )}
-          {currentPickInfo && (
-            <TimeOnClockSection
-              currentPickInfo={currentPickInfo}
-              timerInfo={timerInfo}
-              bestAvailable={fullBoard
-                .filter((p) =>
-                  !pickedPlayerIds.has(p.sleeperId) &&
-                  !pickedPlayerNames.has(p.name.toLowerCase().trim())
-                )
-                .slice(0, 5)
-                .map((p) => ({ sleeperId: p.sleeperId, name: p.name, pos: p.pos, value: (p as any).value, team: (p as any).team }))}
-              onAddToQueue={sleeperJwt ? (sid: string) => queueMutate([...draftQueue, sid]) : undefined}
-              queueIds={draftQueue}
-              collapsed={timeOnClockCollapsed}
-              onToggleCollapsed={() => setTimeOnClockCollapsed((c) => !c)}
-              canDraftNow={!!currentPickInfo?.isMyTurn && draftData?.draft?.status === "drafting"}
-              onDraftPlayer={(p) => {
-                if (!activeDraftId || !currentPickInfo) return;
-                setDraftPickTarget({
-                  draftId: activeDraftId,
-                  draftName: draftData?.draft?.leagueName ?? undefined,
-                  pickNo: currentPickInfo.nextPickNo,
-                  pickLabel: `${currentPickInfo.currentRound}.${String(currentPickInfo.pickInRound).padStart(2, "0")}`,
-                  player: { playerId: p.sleeperId, name: p.name, pos: p.pos, team: p.team },
-                });
-              }}
-            />
-          )}
-
           {mergedPickHistory.length > 0 && (
             <ManagerTimingsSection
               history={mergedPickHistory}
@@ -3060,11 +2948,8 @@ export default function LiveDraft() {
             fullBoard={fullBoard}
             pickedPlayerIds={pickedPlayerIds}
             pickedPlayerNames={pickedPlayerNames}
-            draftQueue={draftQueue}
-            queueMutate={queueMutate}
-            queueAvailable={!!sleeperJwt && !!activeDraftId}
-            draftPlayersIndex={draftData?.players ?? {}}
             realIdResolver={resolveRealSleeperId}
+            realTeamResolver={resolveRealTeam}
             myRoster={myTeamRoster}
             myRosterLoading={myTeamRosterLoading}
             myRosterError={myTeamRosterError}
@@ -3326,11 +3211,21 @@ export default function LiveDraft() {
                                 )}
                                 data-testid={`cell-${cell.round}-${cell.slot}`}
                                 title={
-                                  hasPick
+                                  (hasPick
                                     ? `${pickLabel} · ${fullName} (${pos}) · ${cell.ownerName}`
-                                    : `${pickLabel} · ${cell.ownerName}${cell.isCurrent ? " · On the clock" : ""}`
+                                    : `${pickLabel} · ${cell.ownerName}${cell.isCurrent ? " · On the clock" : ""}`)
+                                  + (cell.isTraded && cell.originalOwnerName ? ` · via ${cell.originalOwnerName}` : "")
                                 }
                               >
+                                {cell.isTraded && (
+                                  <span
+                                    className="absolute top-0.5 left-0.5 z-20 inline-flex items-center px-1 py-px rounded-sm bg-[#d4af37]/85 text-[#0b3a7a] text-[7px] font-extrabold uppercase leading-tight ring-1 ring-[#d4af37]/30 pointer-events-none"
+                                    data-testid={`cell-traded-${cell.round}-${cell.slot}`}
+                                    title={cell.originalOwnerName ? `Traded pick · via ${cell.originalOwnerName}` : "Traded pick"}
+                                  >
+                                    Traded
+                                  </span>
+                                )}
                                 {hasPick ? (
                                   <>
                                     {/* Right-side player image area. Layered:
@@ -3410,16 +3305,23 @@ export default function LiveDraft() {
                                         <span className="text-[7px] font-bold px-1 py-px rounded bg-[#d4af37]/20 text-[#d4af37] border border-[#d4af37]/40 leading-tight">MINE</span>
                                       )}
                                     </div>
-                                    <div className="flex items-center gap-1 min-w-0" title={cell.ownerName}>
-                                      <SleeperUserAvatar
-                                        username={cell.ownerName}
-                                        avatar={cell.ownerAvatar}
-                                        size="xs"
-                                        compact
-                                      />
-                                      <span className="text-[9px] text-muted-foreground/80 leading-tight truncate">
-                                        {cell.ownerName}
-                                      </span>
+                                    <div className="flex flex-col gap-0.5 min-w-0" title={cell.ownerName}>
+                                      <div className="flex items-center gap-1 min-w-0">
+                                        <SleeperUserAvatar
+                                          username={cell.ownerName}
+                                          avatar={cell.ownerAvatar}
+                                          size="xs"
+                                          compact
+                                        />
+                                        <span className="text-[9px] text-muted-foreground/80 leading-tight truncate">
+                                          {cell.ownerName}
+                                        </span>
+                                      </div>
+                                      {cell.isTraded && cell.originalOwnerName && (
+                                        <span className="text-[8px] text-[#d4af37] leading-tight truncate italic">
+                                          via {cell.originalOwnerName}
+                                        </span>
+                                      )}
                                     </div>
                                   </div>
                                 )}

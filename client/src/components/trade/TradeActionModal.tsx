@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
   Send, Loader2, ArrowRightLeft, CheckCircle2, XCircle,
-  AlertTriangle, ExternalLink, MessageSquare, Pencil, X,
+  AlertTriangle, ExternalLink, Pencil, X,
 } from "lucide-react";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import {
@@ -824,25 +824,16 @@ export function TradeActionModal({
   }, [onRefresh, onClose]);
 
   // ── Tabs ─────────────────────────────────────────────────────────────────────
-  // The Messages tab is hidden while general messaging is paused — users can
-  // still see and reply to DMs inside Sleeper itself.
-  const messagingOn = isGeneralMessagingEnabled();
-  const messagesTab = messagingOn ? [{ id: "messages" as const, label: "Messages", badge: hasUnread }] : [];
+  // The Messages tab and Message buttons were removed from the UI. Replies
+  // still arrive in Sleeper itself; the in-app DM viewer plumbing below
+  // remains dead-code-gated by isGeneralMessagingEnabled() in case messaging
+  // is re-enabled later.
   const tabs: Array<{ id: "review" | "edit" | "messages"; label: string; badge?: boolean }> =
     activeMode === "counter"
-      ? [
-          { id: "edit", label: "Edit Counter" },
-          ...messagesTab,
-        ]
+      ? [{ id: "edit", label: "Edit Counter" }]
       : activeMode === "resend"
-      ? [
-          { id: "edit", label: "Edit Trade" },
-          ...messagesTab,
-        ]
-      : [
-          { id: "review", label: "Review Trade" },
-          ...messagesTab,
-        ];
+      ? [{ id: "edit", label: "Edit Trade" }]
+      : [{ id: "review", label: "Review Trade" }];
 
   const modalTitle =
     activeMode === "counter"  ? "Counter Offer"   :
@@ -1073,16 +1064,6 @@ export function TradeActionModal({
                 Reject
               </Button>
               <div className="flex gap-2 ml-auto">
-                {/* Message */}
-                <Button
-                  variant="ghost"
-                  className="text-white/40 hover:text-white/70"
-                  onClick={() => handleTabChange("messages")}
-                  data-testid="btn-message-incoming"
-                >
-                  <MessageSquare className="w-4 h-4 mr-1.5" />
-                  Message
-                </Button>
                 {/* Counter */}
                 <Button
                   variant="outline"
@@ -1157,15 +1138,6 @@ export function TradeActionModal({
                 >
                   <Pencil className="w-4 h-4 mr-1.5" />
                   Edit & Resend
-                </Button>
-                <Button
-                  variant="ghost"
-                  className="ml-auto text-white/40 hover:text-white/70"
-                  onClick={() => handleTabChange("messages")}
-                  data-testid="btn-message-partner"
-                >
-                  <MessageSquare className="w-4 h-4 mr-1.5" />
-                  Message Partner
                 </Button>
               </>
             )

@@ -44,6 +44,7 @@ import { API_BASE } from "@/lib/apiBase";
 import Transactions from "./tabs/Transactions";
 import { LineupCommand } from "./tabs/LineupCommand";
 import TradeSync from "./tabs/TradeSync";
+import { BulkTrades } from "./tabs/BulkTrades";
 import { CompareRBs } from "./tabs/CompareRBs";
 import { ShareDynastyPopup } from "@/components/ShareDynastyPopup";
 import { WhatsNewModal } from "@/components/WhatsNewModal";
@@ -395,6 +396,11 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
     // trade-sync doesn't need a selected league
     if (activeMainTab === "trade-center" && activeSubTab === "trade-sync") {
       return <TradeSync />;
+    }
+
+    // Bulk Trades scans every connected league — no active league required.
+    if (activeMainTab === "trade-center" && activeSubTab === "bulk-trades") {
+      return <BulkTrades />;
     }
 
     // Past this point we need an active league. AccessGate has already

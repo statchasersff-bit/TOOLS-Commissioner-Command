@@ -982,6 +982,18 @@ export async function fetchDraftBoard(leagueId: string) {
       picks: [],
       players: {} as Record<string, { name: string; pos: string; team: string }>,
       draftSlots: [] as { slot: number; rosterId: number; displayName: string; avatar: string | null }[],
+      pickOwners: [] as Array<{
+        round: number;
+        slot: number;
+        originalRosterId: number;
+        currentRosterId: number;
+        isTraded: boolean;
+        currentUserId: string | null;
+        currentDisplayName: string;
+        currentAvatar: string | null;
+        originalDisplayName: string;
+        originalAvatar: string | null;
+      }>,
       error: "No drafts found for this league",
     };
   }
@@ -992,7 +1004,15 @@ export async function fetchDraftBoard(leagueId: string) {
   // Also fetch league rosters — `draft.draft_order` is empty pre-draft and
   // sometimes incomplete on freshly created live drafts, so we fall back
   // to roster ownership to resolve every slot to a real Sleeper user.
-  const [picksRaw, playersDb, leagueUsers, leagueRosters] = await Promise.all([
+  //
+  // traded_picks is the source of truth for "who currently owns pick X.Y"
+  // before the pick has been made. Without it the board defaults every
+  // upcoming pick to the original slot, which is wrong any time a pick
+  // has changed hands. After the pick is made Sleeper records the actual
+  // picker on the pick record itself, so traded_picks only matters for
+  // unmade picks; we still surface it for both cases so the UI can flag
+  // traded picks with a "via [Original]" indicator.
+  const [picksRaw, playersDb, leagueUsers, leagueRosters, tradedPicksRaw] = await Promise.all([
     fetchJson<any[]>(`${SLEEPER_API}/draft/${draftId}/picks`),
     getSleeperPlayers(),
     fetchJson<SleeperLeagueUserRaw[]>(
@@ -1001,6 +1021,9 @@ export async function fetchDraftBoard(leagueId: string) {
     fetchJson<SleeperRosterRaw[]>(
       `${SLEEPER_API}/league/${leagueId}/rosters`
     ).catch(() => [] as SleeperRosterRaw[]),
+    fetchJson<SleeperTradedPickRaw[]>(
+      `${SLEEPER_API}/league/${leagueId}/traded_picks`
+    ).catch(() => [] as SleeperTradedPickRaw[]),
   ]);
 
   // Username priority for slot display:
@@ -1058,6 +1081,62 @@ export async function fetchDraftBoard(leagueId: string) {
       : `Team ${s}`;
     const avatar = uId ? userAvatarMap.get(uId) ?? null : null;
     draftSlots.push({ slot: s, rosterId, displayName, avatar });
+  }
+
+  // ── Per-(round, slot) current pick ownership ────────────────────────────
+  // Sleeper returns `traded_picks` as a flat list of ALL pick transactions
+  // for a season. Each entry is keyed by (season, round, roster_id) where
+  // roster_id is the ORIGINAL owner. We walk the list in order and the
+  // last entry for any (round, original) tuple wins, mirroring Sleeper's
+  // own resolution logic.
+  const draftSeason = String(draft.season ?? "");
+  const currentOwnerByRoundOriginal = new Map<string, number>();
+  for (const tp of tradedPicksRaw || []) {
+    if (String(tp.season) !== draftSeason) continue;
+    currentOwnerByRoundOriginal.set(`${tp.round}-${tp.roster_id}`, tp.owner_id);
+  }
+
+  const slotResolved = (rosterId: number) => {
+    const uId = rosterIdToUserId.get(rosterId);
+    return {
+      displayName: uId ? userNameMap.get(uId) || `Roster ${rosterId}` : `Roster ${rosterId}`,
+      avatar: uId ? userAvatarMap.get(uId) ?? null : null,
+      userId: uId ?? null,
+    };
+  };
+
+  const pickOwners: Array<{
+    round: number;
+    slot: number;
+    originalRosterId: number;
+    currentRosterId: number;
+    isTraded: boolean;
+    currentUserId: string | null;
+    currentDisplayName: string;
+    currentAvatar: string | null;
+    originalDisplayName: string;
+    originalAvatar: string | null;
+  }> = [];
+  for (let r = 1; r <= rounds; r++) {
+    for (let s = 1; s <= numTeams; s++) {
+      const originalRosterId = slotToRosterId[s] || s;
+      const traded = currentOwnerByRoundOriginal.get(`${r}-${originalRosterId}`);
+      const currentRosterId = traded ?? originalRosterId;
+      const cur = slotResolved(currentRosterId);
+      const orig = slotResolved(originalRosterId);
+      pickOwners.push({
+        round: r,
+        slot: s,
+        originalRosterId,
+        currentRosterId,
+        isTraded: currentRosterId !== originalRosterId,
+        currentUserId: cur.userId,
+        currentDisplayName: cur.displayName,
+        currentAvatar: cur.avatar,
+        originalDisplayName: orig.displayName,
+        originalAvatar: orig.avatar,
+      });
+    }
   }
 
   // ── Generic timestamp extractor ──────────────────────────────────────────
@@ -1231,6 +1310,11 @@ export async function fetchDraftBoard(leagueId: string) {
     picks,
     players: playerMap,
     draftSlots,
+    // Per-(round, slot) current owner with traded-pick metadata. The
+    // consumer keys by `${round}-${slot}` to resolve "who currently owns
+    // pick X.Y" even when picks have been traded away from their
+    // original slot owner.
+    pickOwners,
     error: null,
   };
 }

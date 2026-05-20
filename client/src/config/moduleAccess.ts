@@ -48,6 +48,7 @@ export const MODULE_ACCESS: Record<string, AccessRequirement> = {
   "trade-center:positional-analysis": "full",
   "trade-center:trade-calculator": "full",
   "trade-center:bulk-trade": "full",
+  "trade-center:bulk-trades": "full",
   "trade-center:trade-block": "full",
 
   // Research (league-market)
