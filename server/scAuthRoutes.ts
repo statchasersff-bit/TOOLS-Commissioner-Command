@@ -16,6 +16,13 @@ import {
 } from "./scAuth";
 import { enqueueSleeperUser } from "./adpCrawler";
 import { isAdminByEmail } from "@shared/admin";
+import { getAppModeFromRequest, getSubscriptionStatusForUser } from "./appMode";
+import {
+  isDevRuntime,
+  isDevSubscriptionOverride,
+  isDevSleeperConnectedOverride,
+  anyDevOverrideActive,
+} from "@shared/appMode";
 
 const JWT_SECRET = process.env.SESSION_SECRET || "fallback-dev-secret";
 const JWT_EXPIRES = "30d";
@@ -147,6 +154,28 @@ export function registerScAuthRoutes(app: Express): void {
             token: sleeper.encryptedToken ? decryptToken(sleeper.encryptedToken) : null,
           }
         : null;
+      // Surface app-mode and subscription so the client can hide write
+      // controls preemptively. The backend still enforces these on every
+      // mutating request — this is UX only.
+      let subscription = await getSubscriptionStatusForUser(userId);
+      const appMode = getAppModeFromRequest(req);
+
+      // Dev-only overrides — never applied in production. Mirror the
+      // server-side gate behavior into the /me payload so the UI sees
+      // the same "subscribed / connected" state the backend will honor.
+      const devActive = anyDevOverrideActive();
+      if (isDevRuntime() && isDevSubscriptionOverride()) {
+        subscription = { ...subscription, status: "active", plan: subscription.plan ?? "dev_override", active: true };
+      }
+      const devOverrides = isDevRuntime()
+        ? {
+            active: devActive,
+            appMode: !!(process.env.DEV_APP_MODE),
+            subscription: isDevSubscriptionOverride(),
+            sleeperConnected: isDevSleeperConnectedOverride(),
+          }
+        : null;
+
       res.json({
         user: {
           id: user.id,
@@ -155,6 +184,9 @@ export function registerScAuthRoutes(app: Express): void {
         },
         sleeper: sleeperInfo,
         isAdmin: isAdminByEmail(user.email),
+        appMode,
+        subscription,
+        devOverrides,
       });
     } catch (err: any) {
       console.error("[sc-auth] me error:", err.message);

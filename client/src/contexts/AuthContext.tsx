@@ -17,6 +17,14 @@ import {
 } from "@/services/readOnlySleeper";
 import { API_BASE } from "@/lib/apiBase";
 import { isAdminUser } from "@shared/admin";
+import { getBrowserAppMode } from "@/lib/appMode";
+import {
+  isDevRuntime,
+  isDevSubscriptionOverride,
+  isDevSleeperConnectedOverride,
+  anyDevOverrideActive,
+  type AppMode,
+} from "@shared/appMode";
 
 const SC_TOKEN_KEY = "sc_auth_token";
 
@@ -75,6 +83,13 @@ export type AccessLevel = "guest" | "readonly" | "authenticated" | "full";
 
 export type SleeperSource = "server-linked" | "local-scoped" | "legacy-cache-removed" | "none" | "read-only";
 
+export interface SubscriptionInfo {
+  status: string;
+  plan: string | null;
+  currentPeriodEnd: number | null;
+  active: boolean;
+}
+
 interface AuthContextValue {
   status: AuthStatus;
   user: ScUser | null;
@@ -95,6 +110,26 @@ interface AuthContextValue {
    * Backend admin routes do their own strict server-side check.
    */
   isAdmin: boolean;
+
+  // ── Domain-based app mode + subscription entitlement ───────────────────
+  // `appMode` is the server's authoritative answer for the current host;
+  // `isWriteAccessDomain` is true when we're allowed to expose write
+  // features at all (subscription gate is separate).
+  appMode: AppMode;
+  isWriteAccessDomain: boolean;
+  subscription: SubscriptionInfo;
+  /**
+   * Composite "can the UI render write controls right now?" flag:
+   *   write-access domain  &&  authenticated  &&  has Sleeper token  &&  active subscription
+   * The backend enforces the same condition — this is for hiding UI.
+   */
+  canPerformWriteActions: boolean;
+  /**
+   * Dev override snapshot — populated only in non-production builds.
+   * `active` is true when ANY override is in force; the per-field flags
+   * tell the UI which gate is being bypassed. Never set in production.
+   */
+  devOverrides: { active: boolean; appMode: boolean; subscription: boolean; sleeperConnected: boolean } | null;
 
   // ── Actions ────────────────────────────────────────────────────────────
   checkSession: () => Promise<void>;
@@ -128,6 +163,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // below so a connected-but-unauthenticated Mak (Sleeper username match)
   // still sees the admin UI — backend will still gate the API.
   const [serverIsAdmin, setServerIsAdmin] = useState<boolean>(false);
+
+  // App mode + subscription. Defaults to a safe browser-derived value so
+  // the UI can render on an unauthenticated visit; /me overrides with the
+  // server's canonical answer once a session exists.
+  const [serverAppMode, setServerAppMode] = useState<AppMode | null>(null);
+  const [subscription, setSubscription] = useState<SubscriptionInfo>({
+    status: "inactive",
+    plan: null,
+    currentPeriodEnd: null,
+    active: false,
+  });
 
   const checkSession = useCallback(async () => {
     // ── Step 0: ALWAYS clean up legacy global keys before any read. ──────────
@@ -197,6 +243,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       setUser(data.user);
       setServerIsAdmin(!!data.isAdmin);
+      // /me now carries the server-canonical app mode + subscription so
+      // the client can hide write controls without guessing from URL.
+      if (data.appMode === "READ_ONLY" || data.appMode === "WRITE_ACCESS") {
+        setServerAppMode(data.appMode);
+      }
+      if (data.subscription && typeof data.subscription === "object") {
+        setSubscription({
+          status: typeof data.subscription.status === "string" ? data.subscription.status : "inactive",
+          plan: typeof data.subscription.plan === "string" ? data.subscription.plan : null,
+          currentPeriodEnd:
+            typeof data.subscription.currentPeriodEnd === "number"
+              ? data.subscription.currentPeriodEnd
+              : null,
+          active: !!data.subscription.active,
+        });
+      }
       let source: SleeperSource;
       if (data.sleeper?.token) {
         // ── Server-linked path: full mode.
@@ -353,6 +415,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
   }, [serverIsAdmin, user?.email, sleeperInfo?.username, readOnlySleeperUser?.username]);
 
+  // Prefer server's answer for app mode; fall back to the browser-derived
+  // value when no /me response is in hand yet (guest visits). Both already
+  // honor DEV_APP_MODE in non-production.
+  const appMode: AppMode = serverAppMode ?? getBrowserAppMode();
+  const isWriteAccessDomainFlag = appMode === "WRITE_ACCESS";
+
+  // Dev-only overrides (never apply in production). Mirror server-side
+  // bypass logic so the UI's view of "subscribed / Sleeper-connected"
+  // matches what the backend will honor on the next request.
+  const subOverride = isDevSubscriptionOverride();
+  const sleeperOverride = isDevSleeperConnectedOverride();
+  const effectiveSubscription: SubscriptionInfo = subOverride
+    ? { ...subscription, status: "active", active: true, plan: subscription.plan ?? "dev_override" }
+    : subscription;
+  const effectiveHasSleeperToken = sleeperOverride ? true : hasSleeperToken;
+  const effectiveIsAuthenticated = subOverride || sleeperOverride ? true : isAuthenticatedUser;
+  // Synthetic devOverrides — only populated outside production.
+  const devOverrides = isDevRuntime()
+    ? {
+        active: anyDevOverrideActive(),
+        appMode: false, // resolved inside getAppMode; surfaced for the banner only when DEV_APP_MODE was read
+        subscription: subOverride,
+        sleeperConnected: sleeperOverride,
+      }
+    : null;
+
+  // Composite "may we render write affordances?" — every leg of the
+  // server-side write gate, in client form. Defense in depth: the server
+  // still re-checks all of these on the actual request.
+  const canPerformWriteActions =
+    isWriteAccessDomainFlag &&
+    effectiveIsAuthenticated &&
+    effectiveHasSleeperToken &&
+    effectiveSubscription.active;
+
   // ── Debug helper exposed on window ─────────────────────────────────────
   useEffect(() => {
     try {
@@ -380,9 +477,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       accessLevel,
       readOnlySleeperUser,
       isReadOnlyConnected,
-      isAuthenticatedUser,
-      hasSleeperToken,
+      isAuthenticatedUser: effectiveIsAuthenticated,
+      hasSleeperToken: effectiveHasSleeperToken,
       isAdmin,
+      appMode,
+      isWriteAccessDomain: isWriteAccessDomainFlag,
+      subscription: effectiveSubscription,
+      canPerformWriteActions,
+      devOverrides,
       checkSession, logout, onLoginSuccess, onSleeperConnected, onSleeperDisconnected,
       connectReadOnlySleeper, disconnectReadOnlySleeper,
     }}>

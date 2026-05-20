@@ -55,8 +55,13 @@ export const MODULE_ACCESS: Record<string, AccessRequirement> = {
   "league-market:market-value": "readonly",
   "league-market:compare-players": "readonly",
 
-  // Draft (currently hidden; safe public ADP)
+  // Draft — public ADP data + Sleeper draft tracker. Both require at
+  // most a Sleeper username for the live tracker (which itself prompts
+  // for a Sleeper connection on click), so the module-level requirement
+  // is readonly. The Draft Board's inner Sleeper-token gate lives
+  // inside the LiveDraft view.
   "draft:adp-explorer": "public",
+  "draft:draft-board":  "readonly",
 
   // Static pages
   "about": "public",

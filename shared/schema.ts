@@ -183,6 +183,29 @@ export const scUsers = pgTable("sc_users", {
   // directly on the user row; if more prefs accumulate later this can move
   // to a dedicated user_preferences table without changing the API shape.
   favoriteNflTeam: varchar("favorite_nfl_team", { length: 5 }),
+  // Subscription state — gates Sleeper write actions on the write-access
+  // domain. `status` mirrors Stripe vocabulary so the eventual webhook can
+  // write through unchanged:
+  //   "inactive" — default; never subscribed or subscription ended.
+  //   "trialing" — in trial; treated as active for entitlement.
+  //   "active" — paid and current.
+  //   "past_due" — payment failed; grace period. Treated as inactive for
+  //     write entitlement (server blocks writes) but UI may show a
+  //     soft warning.
+  //   "canceled" / "incomplete" / "incomplete_expired" / "unpaid" —
+  //     inactive.
+  subscriptionStatus: varchar("subscription_status", { length: 20 }).notNull().default("inactive"),
+  // Plan identifier (e.g. "pro_monthly", "pro_yearly"). Free-form so we
+  // don't couple the schema to a specific pricing plan name.
+  subscriptionPlan: varchar("subscription_plan", { length: 32 }),
+  // When the *current* paid period ends. While `subscriptionStatus` is the
+  // primary truth, this lets us catch the rare case of a webhook missing
+  // the cancel event — we treat a status that says active but with an
+  // expired `currentPeriodEnd` as inactive.
+  subscriptionCurrentPeriodEnd: timestamp("subscription_current_period_end"),
+  // Reference to the upstream billing record. Nullable until first subscribe.
+  stripeCustomerId: text("stripe_customer_id"),
+  stripeSubscriptionId: text("stripe_subscription_id"),
 });
 
 export const emailVerificationCodes = pgTable("email_verification_codes", {
@@ -247,6 +270,12 @@ export const drafts = pgTable("drafts", {
   // ingestion from the pick mix (see classifyDraftRookieMode). Drives the
   // Rookie Picks vs Direct Rookies filter on the ADP Explorer.
   rookieMode: text("rookie_mode").notNull().default("unknown"),
+  // True when this draft has been excluded from ADP calculations — set when
+  // it contains defensive players / IDP picks (IDP drafts have very
+  // different ADP behavior and shouldn't be mixed with standard data) or a
+  // real kicker outside of the rookie-pick-placeholder pattern.
+  excludedFromAdp: boolean("excluded_from_adp").notNull().default(false),
+  exclusionReason: text("exclusion_reason"),
   ingestedAt: timestamp("ingested_at").defaultNow(),
 });
 
@@ -268,6 +297,12 @@ export const draftPicks = pgTable("draft_picks", {
   isRookie: boolean("is_rookie").notNull().default(false),
   isRookiePlaceholder: boolean("is_rookie_placeholder").notNull().default(false),
   rookiePickLabel: text("rookie_pick_label"),
+  // Year the picked player entered the NFL — derived at ingest time from
+  // either the pick's metadata.years (when Sleeper supplies it) or from
+  // draftSeason - playerDb[pid].years_exp. Null when neither signal is
+  // available (e.g. placeholder picks, unknown players). Lets us filter
+  // Direct Rookies by class year (2026 vs returning players, etc).
+  rookieYear: integer("rookie_year"),
 });
 
 // One row per (filter_key, snapshot_date). Stored as a JSON blob so the

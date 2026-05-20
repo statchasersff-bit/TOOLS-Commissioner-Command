@@ -12,7 +12,9 @@ import {
   sendTradeMessage, sendPlainDm,
   acceptTrade, rejectTrade, proposeTrade,
   buildTradeAttachment, makeTradeAttachmentUser,
+  firePostTradeLinkDm,
 } from "@/services/sleeperAuthedApi";
+import { isGeneralMessagingEnabled } from "@/services/sleeperSafetyGate";
 import type { SleeperDmMessage, SleeperTransactionPick, ProposeTradeResult } from "@/services/sleeperAuthedApi";
 import { TradeEditTab, type EditAssetsWithFaab } from "./TradeEditTab";
 
@@ -713,34 +715,16 @@ export function TradeActionModal({
         rejectTransactionLeg: trade.leg,
       });
 
-      // DM flow: trade card + tool link (non-fatal if partner ID missing)
+      // Automatic Dynasty Command link DM (non-fatal). Replaces the previous
+      // trade-card builder + free-text link send — the controlled helper
+      // handles 20–60s pacing, caps, and dedupe internally.
       if (trade.partnerUserId) {
-        try {
-          const dmInfo = await getDmByMembersFull(trade.partnerUserId);
-          if (dmInfo?.dm_id) {
-            const { transactionsByRoster, usersInLeagueMap } = buildCounterTradeAttachment({
-              result,
-              leagueId: trade.leagueId,
-              myUserId,
-              myUsername,
-              myRosterId: trade.userRosterId,
-              partnerUserId: trade.partnerUserId,
-              partnerName: trade.partnerName,
-              partnerRosterId: trade.partnerRosterId,
-            });
-            await sendTradeMessage({
-              dmId: dmInfo.dm_id,
-              text: `@${myUsername} has sent a counter offer in ${trade.leagueName}`,
-              transactionId: result.transaction_id,
-              leagueId: trade.leagueId,
-              status: result.status,
-              transactionsByRoster,
-              usersInLeagueMap,
-              attachTradeCard: true,
-            });
-            await sendPlainDm(dmInfo.dm_id, "https://statchasers.com/dynasty-command-tool/");
-          }
-        } catch { /* DM failures are non-fatal */ }
+        void firePostTradeLinkDm({
+          recipientUserId: trade.partnerUserId,
+          leagueId: trade.leagueId,
+          senderUserId: myUserId,
+          queueType: "counter-trade",
+        });
       }
 
       setCounterResult({ success: true, message: "Counter offer sent! The existing offer has been rejected." });
@@ -803,36 +787,16 @@ export function TradeActionModal({
         ? Math.floor(trade.expiresAt / 1000)
         : Math.floor((Date.now() + 7 * 24 * 60 * 60 * 1000) / 1000);
 
-      const result = await proposeTrade({ leagueId: trade.leagueId, adds, drops, draftPicks, waiverBudget, expiresAt });
+      await proposeTrade({ leagueId: trade.leagueId, adds, drops, draftPicks, waiverBudget, expiresAt });
 
-      // DM flow: trade card + tool link (non-fatal if partner ID missing)
+      // Automatic Dynasty Command link DM after the new offer lands.
       if (trade.partnerUserId) {
-        try {
-          const dmInfo = await getDmByMembersFull(trade.partnerUserId);
-          if (dmInfo?.dm_id) {
-            const { transactionsByRoster, usersInLeagueMap } = buildCounterTradeAttachment({
-              result,
-              leagueId: trade.leagueId,
-              myUserId,
-              myUsername,
-              myRosterId: trade.userRosterId,
-              partnerUserId: trade.partnerUserId,
-              partnerName: trade.partnerName,
-              partnerRosterId: trade.partnerRosterId,
-            });
-            await sendTradeMessage({
-              dmId: dmInfo.dm_id,
-              text: `@${myUsername} has updated a trade offer in ${trade.leagueName}`,
-              transactionId: result.transaction_id,
-              leagueId: trade.leagueId,
-              status: result.status,
-              transactionsByRoster,
-              usersInLeagueMap,
-              attachTradeCard: true,
-            });
-            await sendPlainDm(dmInfo.dm_id, "https://statchasers.com/dynasty-command-tool/");
-          }
-        } catch { /* DM failures are non-fatal */ }
+        void firePostTradeLinkDm({
+          recipientUserId: trade.partnerUserId,
+          leagueId: trade.leagueId,
+          senderUserId: myUserId,
+          queueType: "resend-trade",
+        });
       }
 
       setCounterResult({ success: true, message: "Updated offer sent! Your previous offer has been withdrawn." });
@@ -860,20 +824,24 @@ export function TradeActionModal({
   }, [onRefresh, onClose]);
 
   // ── Tabs ─────────────────────────────────────────────────────────────────────
+  // The Messages tab is hidden while general messaging is paused — users can
+  // still see and reply to DMs inside Sleeper itself.
+  const messagingOn = isGeneralMessagingEnabled();
+  const messagesTab = messagingOn ? [{ id: "messages" as const, label: "Messages", badge: hasUnread }] : [];
   const tabs: Array<{ id: "review" | "edit" | "messages"; label: string; badge?: boolean }> =
     activeMode === "counter"
       ? [
           { id: "edit", label: "Edit Counter" },
-          { id: "messages", label: "Messages", badge: hasUnread },
+          ...messagesTab,
         ]
       : activeMode === "resend"
       ? [
           { id: "edit", label: "Edit Trade" },
-          { id: "messages", label: "Messages", badge: hasUnread },
+          ...messagesTab,
         ]
       : [
           { id: "review", label: "Review Trade" },
-          { id: "messages", label: "Messages", badge: hasUnread },
+          ...messagesTab,
         ];
 
   const modalTitle =
@@ -1039,19 +1007,30 @@ export function TradeActionModal({
           )}
 
           {activeTab === "messages" && !finalResult && (
-            <MessagesPanel
-              trade={trade}
-              myUserId={myUserId}
-              myUsername={myUsername}
-              dmId={dmId}
-              dmMessages={dmMessages}
-              dmLoading={dmLoading}
-              msgInput={msgInput}
-              setMsgInput={setMsgInput}
-              msgSending={msgSending}
-              onSend={handleSend}
-              msgListRef={msgListRef}
-            />
+            isGeneralMessagingEnabled() ? (
+              <MessagesPanel
+                trade={trade}
+                myUserId={myUserId}
+                myUsername={myUsername}
+                dmId={dmId}
+                dmMessages={dmMessages}
+                dmLoading={dmLoading}
+                msgInput={msgInput}
+                setMsgInput={setMsgInput}
+                msgSending={msgSending}
+                onSend={handleSend}
+                msgListRef={msgListRef}
+              />
+            ) : (
+              <div className="flex-1 overflow-y-auto px-3 sm:px-6 py-4 sm:py-6">
+                <div className="rounded-md border border-white/10 bg-white/[0.02] px-4 py-6 text-center">
+                  <div className="text-[12px] font-semibold text-white/75 mb-1">Messaging temporarily disabled</div>
+                  <div className="text-[11px] text-white/45 leading-relaxed">
+                    Dynasty Command's messaging UI is paused right now. Your trade was sent through Sleeper normally — only the in-app DM viewer is hidden. You can still see and reply to messages in the Sleeper app.
+                  </div>
+                </div>
+              </div>
+            )
           )}
         </div>
 

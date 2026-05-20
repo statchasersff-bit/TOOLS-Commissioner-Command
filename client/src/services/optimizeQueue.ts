@@ -14,6 +14,7 @@
 
 import { useState, useRef, useCallback } from "react";
 import { submitLineup } from "@/services/sleeperAuthedApi";
+import { sleeperWriteLimiter } from "@/services/sleeperWriteLimiter";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -150,8 +151,9 @@ export function useOptimizeQueue() {
         let ok      = false;
         let lastErr = "";
 
-        // Attempt 1
+        // Attempt 1 — global write turn first, then submit.
         try {
+          await sleeperWriteLimiter.waitTurn("lineup");
           await submitLineup(item.leagueId, item.rosterId, item.optimalStarters);
           ok = true;
         } catch (e: any) {
@@ -163,6 +165,7 @@ export function useOptimizeQueue() {
           await new Promise(r => setTimeout(r, 5000 + Math.random() * 5000));
           if ((qStatusRef.current as QueueStatus) !== "idle") {
             try {
+              await sleeperWriteLimiter.waitTurn("lineup");
               await submitLineup(item.leagueId, item.rosterId, item.optimalStarters);
               ok = true;
             } catch (e: any) {

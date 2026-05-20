@@ -99,6 +99,15 @@ const ROOKIE_MODE_OPTIONS: { id: RookieMode; label: string; sub: string }[] = [
   { id: "both",   label: "Both",           sub: "All rookie data" },
 ];
 
+/** Top-N cap applied across all three views — beyond this depth the data is
+ *  mostly noise (waiver fodder) and the Box/Hex draft boards become unwieldy. */
+const MAX_PLAYERS_SHOWN = 490;
+
+/** Hard upper bound on rounds rendered in the Box/Hex draft-room views. At
+ *  490 players ÷ 12 teams ≈ 41 rounds, so the cap mainly binds for smaller
+ *  team counts and protects against runaway grids. */
+const MAX_ROUNDS_SHOWN = 45;
+
 const RANGE_SHORTCUTS = [
   { id: "7",   label: "7D",  days: 7 },
   { id: "30",  label: "30D", days: 30 },
@@ -172,8 +181,17 @@ export function DraftCommand() {
   }, [filters]);
 
   // Search runs client-side over whatever the server returned so typing is
-  // instant; everything else is already filtered by the API.
-  const filtered = useMemo(() => filterAdp(rows, filters), [rows, filters]);
+  // instant; everything else is already filtered by the API. After filtering
+  // we cap to the top MAX_PLAYERS_SHOWN by overall_rank — beyond that depth
+  // the data is mostly noise (deep waiver fodder) and the Box/Hex grids get
+  // unmanageably tall.
+  const filtered = useMemo(() => {
+    const f = filterAdp(rows, filters);
+    if (f.length <= MAX_PLAYERS_SHOWN) return f;
+    return [...f]
+      .sort((a, b) => a.overall_rank - b.overall_rank)
+      .slice(0, MAX_PLAYERS_SHOWN);
+  }, [rows, filters]);
   // Two distinct empty states: dataset legitimately empty (no ingest yet, or
   // current filters match no drafts) vs. fetch failure. The latter shows the
   // error card; the former shows a friendly "no data yet" message.
@@ -345,23 +363,6 @@ export function DraftCommand() {
         </>
       )}
 
-      {/* Dev-only debug panel — surfaces what the API actually returned so
-          we can spot empty-vs-error issues without opening DevTools. */}
-      {import.meta.env.DEV && meta && (
-        <div className="mt-3 rounded-lg border border-dashed border-border/50 bg-white/[0.02] px-3 py-2 text-[10px] font-mono text-muted-foreground/80">
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-0.5">
-            <span>filter_key: <span className="text-foreground/80">{meta.filter_key ?? "—"}</span></span>
-            <span>cached: <span className="text-foreground/80">{String(meta.cached)}</span></span>
-            <span>is_empty: <span className="text-foreground/80">{String(meta.is_empty)}</span></span>
-            <span>draft_count: <span className="text-foreground/80">{meta.draft_count}</span></span>
-            <span>pick_count: <span className="text-foreground/80">{meta.pick_count}</span></span>
-            <span>rows: <span className="text-foreground/80">{rows.length}</span></span>
-            <span className="col-span-2 md:col-span-3">computed_at: <span className="text-foreground/80">{meta.computed_at ?? "—"}</span></span>
-            {meta.message && <span className="col-span-2 md:col-span-3">message: <span className="text-foreground/80">{meta.message}</span></span>}
-          </div>
-        </div>
-      )}
-
       {/* ── Filter sheet (right side, mobile + desktop) ───────────────────── */}
       <FilterSheet
         open={filterSheetOpen}
@@ -428,6 +429,7 @@ function ReclassifyDraftsButton() {
   const [result, setResult] = useState<{
     drafts: number;
     picksReclassified: number;
+    rookieYearsBackfilled?: number;
     byMode: Record<"direct_rookies" | "rookie_picks" | "mixed" | "unknown", number>;
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -485,6 +487,9 @@ function ReclassifyDraftsButton() {
         <div className="mt-3 text-[11px] text-white/65 grid grid-cols-2 md:grid-cols-3 gap-x-3 gap-y-0.5 tabular-nums">
           <span>Drafts scanned: <span className="text-white">{result.drafts}</span></span>
           <span>Picks updated: <span className="text-white">{result.picksReclassified}</span></span>
+          {typeof result.rookieYearsBackfilled === "number" && (
+            <span>Rookie years filled: <span className="text-white">{result.rookieYearsBackfilled}</span></span>
+          )}
           <span>Direct rookies: <span className="text-white">{result.byMode.direct_rookies}</span></span>
           <span>Rookie picks: <span className="text-white">{result.byMode.rookie_picks}</span></span>
           <span>Mixed: <span className="text-white">{result.byMode.mixed}</span></span>
@@ -743,16 +748,18 @@ function PlayerCell({ row }: { row: ADPResult }) {
 
 function BoxView({ rows, teams, onPlayerClick }: { rows: ADPResult[]; teams: number; onPlayerClick?: (row: ADPResult) => void }) {
   const isMobile = useIsMobile();
-  // Tighter draft-room tiles — the player name is the dominant element and
-  // the headshot anchors the bottom-right corner. Smaller than the previous
-  // pass so more of the board fits on one screen.
-  const cellW = isMobile ? 112 : 132;
-  const cellH = isMobile ? 86 : 92;
-  const labelColW = isMobile ? 44 : 56;
+  // Sleeper-style draft-room density: shorter tiles, no card padding between
+  // them, dark navy body with a thin position-tinted top stripe rather than
+  // a full-card colour fill. Names fit on one line (first-name abbreviated)
+  // so we can drop the height further.
+  const cellW = isMobile ? 108 : 124;
+  const cellH = isMobile ? 60 : 64;
+  const labelColW = isMobile ? 40 : 48;
 
   // Build the snake-layout grid. We sort by ADP ascending and assign each
   // entry a (round, slot) coordinate so the resulting grid reads exactly like
-  // a startup draft room replay.
+  // a startup draft room replay. Hard cap at MAX_ROUNDS_SHOWN — anything
+  // deeper falls off the board.
   const { grid, totalRounds } = useMemo(() => {
     const sorted = [...rows].sort((a, b) => a.avg_pick - b.avg_pick);
     const g = new Map<number, Array<ADPResult | null>>();
@@ -760,6 +767,7 @@ function BoxView({ rows, teams, onPlayerClick }: { rows: ADPResult[]; teams: num
     sorted.forEach((r, idx) => {
       const seq = idx + 1;
       const round = Math.ceil(seq / teams);
+      if (round > MAX_ROUNDS_SHOWN) return;
       const pickInRound = ((seq - 1) % teams) + 1;
       const slot = round % 2 === 1 ? pickInRound : teams - pickInRound + 1; // snake
       if (!g.has(round)) g.set(round, Array.from({ length: teams }, () => null));
@@ -784,39 +792,33 @@ function BoxView({ rows, teams, onPlayerClick }: { rows: ADPResult[]; teams: num
 
       <div className="overflow-x-auto overflow-y-hidden">
         <div className="inline-block min-w-full">
-          {/* Team header row */}
-          <div className="flex sticky top-0 z-30 bg-[#070f1c] border-b border-white/10">
+          {/* Team header row — tighter, Sleeper-style "Team N" labels. */}
+          <div className="flex sticky top-0 z-30 bg-[#070f1c] border-b border-white/[0.08]">
             <div
-              className="sticky left-0 z-40 flex items-center justify-center text-[9px] font-bold uppercase tracking-wider text-white/30 border-r border-white/10 bg-[#070f1c]"
-              style={{ width: labelColW, height: 32, flexShrink: 0 }}
+              className="sticky left-0 z-40 flex items-center justify-center text-[9px] font-bold uppercase tracking-[0.18em] text-white/30 border-r border-white/[0.08] bg-[#070f1c]"
+              style={{ width: labelColW, height: 24, flexShrink: 0 }}
             >
-              Rd
+              R
             </div>
             {Array.from({ length: teams }, (_, i) => (
               <div
                 key={i}
-                className="flex flex-col items-center justify-center text-[9px] font-bold uppercase tracking-wider text-white/55 border-r border-white/5"
-                style={{ width: cellW, height: 32, flexShrink: 0 }}
+                className="flex items-center justify-center text-[9px] font-semibold uppercase tracking-[0.15em] text-white/45 border-r border-white/[0.04]"
+                style={{ width: cellW, height: 24, flexShrink: 0 }}
               >
-                <span>Team</span>
-                <span className="text-[10px] font-bold text-white/80 tabular-nums leading-none">{i + 1}</span>
+                <span>T{i + 1}</span>
               </div>
             ))}
           </div>
 
-          {/* Round rows */}
+          {/* Round rows — no row striping, no per-row bottom border (each
+               cell renders its own hairline so rows blend into a grid). */}
           {Array.from({ length: totalRounds }, (_, rIdx) => {
             const round = rIdx + 1;
             const cells = grid.get(round) ?? Array.from({ length: teams }, () => null);
             const isOdd = round % 2 === 1;
             return (
-              <div
-                key={round}
-                className={cn(
-                  "flex border-b border-white/5",
-                  rIdx % 2 === 1 && "bg-white/[0.015]", // subtle row striping
-                )}
-              >
+              <div key={round} className="flex">
                 <RoundLabel round={round} isOdd={isOdd} width={labelColW} height={cellH} />
                 {cells.map((cell, slotIdx) => (
                   <DraftPickCell
@@ -838,30 +840,70 @@ function BoxView({ rows, teams, onPlayerClick }: { rows: ADPResult[]; teams: num
   );
 }
 
-function RoundLabel({ round, isOdd, width, height }: { round: number; isOdd: boolean; width: number; height: number }) {
+function RoundLabel({ round, width, height }: { round: number; isOdd: boolean; width: number; height: number }) {
   return (
     <div
-      className="sticky left-0 z-20 flex flex-col items-center justify-center text-[10px] font-bold border-r border-white/10 bg-[#070f1c]"
+      className="sticky left-0 z-20 flex items-center justify-center text-[10px] font-bold border-r border-white/8 bg-[#070f1c]"
       style={{ width, flexShrink: 0, minHeight: height }}
     >
-      <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold whitespace-nowrap border bg-white/5 border-white/15 text-white/70">
-        Rd {round}
+      <span className="text-[9px] font-semibold uppercase tracking-[0.18em] text-white/35 tabular-nums">
+        R{round}
       </span>
-      <span className="text-[10px] text-white/30 mt-0.5">{isOdd ? "→" : "←"}</span>
     </div>
   );
 }
 
-// Soft, flat per-position card palette — fill + border. No gradients or glow.
-// Slightly more colour presence than the prior pass so the position identity
-// reads at a glance, but still muted (no neon).
-const BOX_POS_PALETTE: Record<Position, { bg: string; border: string; badgeBg: string; badgeText: string; badgeBorder: string; posText: string }> = {
-  QB:   { bg: "bg-rose-500/12",      border: "border-rose-500/30",    badgeBg: "bg-rose-500/20",    badgeText: "text-rose-200",    badgeBorder: "border-rose-500/45",   posText: "text-rose-300/85"    },
-  RB:   { bg: "bg-emerald-500/12",   border: "border-emerald-500/30", badgeBg: "bg-emerald-500/20", badgeText: "text-emerald-200", badgeBorder: "border-emerald-500/45", posText: "text-emerald-300/85" },
-  WR:   { bg: "bg-sky-500/12",       border: "border-sky-500/30",     badgeBg: "bg-sky-500/20",     badgeText: "text-sky-200",     badgeBorder: "border-sky-500/45",    posText: "text-sky-300/85"     },
-  TE:   { bg: "bg-amber-500/12",     border: "border-amber-500/30",   badgeBg: "bg-amber-500/20",   badgeText: "text-amber-200",   badgeBorder: "border-amber-500/45",  posText: "text-amber-300/85"   },
-  K:    { bg: "bg-purple-500/12",    border: "border-purple-500/30",  badgeBg: "bg-purple-500/20",  badgeText: "text-purple-200",  badgeBorder: "border-purple-500/45", posText: "text-purple-300/85"  },
-  PICK: { bg: "bg-[#d4af37]/12",     border: "border-[#d4af37]/30",   badgeBg: "bg-[#d4af37]/20",   badgeText: "text-[#fde68a]",   badgeBorder: "border-[#d4af37]/45",  posText: "text-[#fde68a]/90"   },
+// Position colour as ACCENT only — a thin top stripe and the badge text.
+// The card body itself stays neutral navy (Sleeper-style: position is a
+// scan cue, not the dominant visual).
+const BOX_POS_ACCENT: Record<Position, {
+  stripe: string;
+  badgeText: string;
+  metaText: string;
+  /** Filled background of the card body. Soft enough that white text stays
+   *  legible without an overlay. */
+  bg: string;
+  /** Hover variant — slightly brighter fill. */
+  hoverBg: string;
+  /** Per-card border that picks up the position tint. */
+  border: string;
+}> = {
+  QB:   {
+    stripe: "bg-rose-500/80",    badgeText: "text-rose-200",
+    metaText: "text-rose-200/80",
+    bg: "bg-rose-900/35",        hoverBg: "hover:bg-rose-900/55",
+    border: "border-rose-500/40",
+  },
+  RB:   {
+    stripe: "bg-emerald-500/80", badgeText: "text-emerald-200",
+    metaText: "text-emerald-200/80",
+    bg: "bg-emerald-900/35",     hoverBg: "hover:bg-emerald-900/55",
+    border: "border-emerald-500/40",
+  },
+  WR:   {
+    stripe: "bg-sky-500/80",     badgeText: "text-sky-200",
+    metaText: "text-sky-200/80",
+    bg: "bg-sky-900/40",         hoverBg: "hover:bg-sky-900/60",
+    border: "border-sky-500/40",
+  },
+  TE:   {
+    stripe: "bg-amber-500/80",   badgeText: "text-amber-200",
+    metaText: "text-amber-200/80",
+    bg: "bg-amber-900/35",       hoverBg: "hover:bg-amber-900/55",
+    border: "border-amber-500/40",
+  },
+  K:    {
+    stripe: "bg-purple-500/80",  badgeText: "text-purple-200",
+    metaText: "text-purple-200/80",
+    bg: "bg-purple-900/35",      hoverBg: "hover:bg-purple-900/55",
+    border: "border-purple-500/40",
+  },
+  PICK: {
+    stripe: "bg-[#d4af37]/85",   badgeText: "text-[#d4af37]",
+    metaText: "text-[#fde68a]/80",
+    bg: "bg-[#d4af37]/15",       hoverBg: "hover:bg-[#d4af37]/25",
+    border: "border-[#d4af37]/45",
+  },
 };
 
 function DraftPickCell({
@@ -876,21 +918,18 @@ function DraftPickCell({
 }) {
   const pickLabel = `${round}.${String(pickInRound).padStart(2, "0")}`;
 
-  // Empty future-pick slot — minimal placeholder with the pick number and a
-  // faint chevron, framed like a draft slot so the board still reads as a
-  // continuous grid.
+  // Empty future-pick slot — sits in the same gapped grid as filled cells,
+  // dark navy body with a muted chevron + pick number.
   if (!pick) {
     return (
       <div
-        className="p-1 border-r border-b border-white/5"
+        className="p-[2px]"
         style={{ width, minHeight: height, flexShrink: 0 }}
+        data-testid={`board-cell-${round}-${pickInRound}-empty`}
       >
-        <div
-          className="w-full h-full rounded-md border border-dashed border-white/8 bg-white/[0.012] flex items-center justify-between px-2"
-          data-testid={`board-cell-${round}-${pickInRound}-empty`}
-        >
-          <ChevronRight className="w-3 h-3 text-white/15" />
-          <span className="text-[10px] font-semibold tabular-nums text-white/22">
+        <div className="w-full h-full rounded-[3px] bg-[#0a1424] flex items-center justify-between px-2 border border-white/[0.04]">
+          <ChevronRight className="w-3 h-3 text-white/12" />
+          <span className="text-[10px] font-semibold tabular-nums text-white/20">
             {pickLabel}
           </span>
         </div>
@@ -898,7 +937,7 @@ function DraftPickCell({
     );
   }
 
-  const palette = BOX_POS_PALETTE[pick.position];
+  const accent = BOX_POS_ACCENT[pick.position];
   const isPick = pick.is_rookie_placeholder;
   const posTeam = isPick
     ? "Rookie Pick"
@@ -906,70 +945,77 @@ function DraftPickCell({
 
   return (
     <div
-      className="border-r border-b border-white/5 p-1"
+      className="p-[2px]"
       style={{ width, minHeight: height, flexShrink: 0 }}
     >
-      <button
-        type="button"
-        onClick={() => onPlayerClick?.(pick)}
+    <button
+      type="button"
+      onClick={() => onPlayerClick?.(pick)}
+      className={cn(
+        "group relative w-full h-full rounded-[3px] border cursor-pointer text-left overflow-hidden",
+        "transition-colors duration-150",
+        accent.bg,
+        accent.hoverBg,
+        accent.border,
+      )}
+      title={`${pickLabel} · ${pick.player_name} · ${pick.position}${pick.positional_rank}`}
+      data-testid={`board-cell-${round}-${pickInRound}`}
+    >
+      {/* Thin position-tinted top stripe — Sleeper's main scan cue. */}
+      <div className={cn("absolute inset-x-0 top-0 h-[2px]", accent.stripe)} />
+
+      {/* Top-left: position rank — text only (no fill), coloured by pos. */}
+      <span
         className={cn(
-          "group relative w-full h-full rounded-md border cursor-pointer text-left overflow-hidden",
-          "transition-colors duration-150 hover:brightness-110 hover:border-white/35",
-          palette.bg,
-          palette.border,
+          "absolute top-1 left-1.5 text-[9px] font-bold uppercase tracking-wider leading-none",
+          accent.badgeText,
         )}
-        title={`${pickLabel} · ${pick.player_name} · ${pick.position}${pick.positional_rank}`}
-        data-testid={`board-cell-${round}-${pickInRound}`}
+        data-testid={`box-posrank-${round}-${pickInRound}`}
       >
-        {/* Top-left: position rank badge. */}
+        {isPick ? "RP" : `${pick.position}${pick.positional_rank}`}
+      </span>
+
+      {/* Top-right: pick number — muted. */}
+      <span
+        className="absolute top-1 right-1.5 text-[9px] font-semibold tabular-nums text-white/35 leading-none"
+        data-testid={`box-pick-${round}-${pickInRound}`}
+      >
+        {pickLabel}
+      </span>
+
+      {/* Player name — dominant text element. Single-line truncate with the
+           first name abbreviated so the tile stays compact. */}
+      <div className="absolute inset-x-1.5 top-4 bottom-4 flex items-center pr-9">
         <span
-          className={cn(
-            "absolute top-1.5 left-1.5 px-1.5 py-px rounded text-[9px] font-bold uppercase tracking-wider border leading-none",
-            palette.badgeBg,
-            palette.badgeText,
-            palette.badgeBorder,
-          )}
-          data-testid={`box-posrank-${round}-${pickInRound}`}
+          className="block w-full text-[11px] sm:text-[12px] font-bold text-white leading-[1.15] tracking-tight truncate"
+          title={pick.player_name}
         >
-          {isPick ? "RP" : `${pick.position}${pick.positional_rank}`}
+          {abbreviateFirstName(pick.player_name)}
         </span>
+      </div>
 
-        {/* Top-right: pick number. */}
-        <span
-          className="absolute top-1.5 right-1.5 text-[10px] font-semibold tabular-nums text-white/55 leading-none"
-          data-testid={`box-pick-${round}-${pickInRound}`}
-        >
-          {pickLabel}
-        </span>
+      {/* Bottom-left: pos · team — small + muted, lightly position-tinted. */}
+      <span
+        className={cn(
+          "absolute bottom-1 left-1.5 text-[9px] font-semibold uppercase tracking-wider leading-none truncate max-w-[58%]",
+          accent.metaText,
+        )}
+      >
+        {posTeam}
+      </span>
 
-        {/* Center: player name — primary scan focus. Reserved padding leaves
-             room for the corners + the headshot in the bottom-right. */}
-        <div className="absolute inset-x-2 top-6 bottom-6 flex items-center pr-10">
-          <span className="text-[11px] sm:text-[12px] font-bold text-white leading-[1.15] line-clamp-2 tracking-tight">
-            {pick.player_name}
-          </span>
-        </div>
-
-        {/* Bottom-left: position · team. */}
-        <span
-          className={cn(
-            "absolute bottom-1.5 left-1.5 text-[9px] font-semibold uppercase tracking-wider leading-none truncate max-w-[60%]",
-            palette.posText,
-          )}
-        >
-          {posTeam}
-        </span>
-
-        {/* Bottom-right: small circular headshot. */}
-        <div className="absolute bottom-1 right-1">
-          <PlayerImageCircle
-            playerId={pick.player_id}
-            name={pick.player_name}
-            team={pick.team}
-            isPick={isPick}
-          />
-        </div>
-      </button>
+      {/* Bottom-right: headshot. Anchored slightly past the bottom-right
+           corner so it crops into the tile edge — Sleeper's integrated
+           look. The outer `overflow-hidden` clips the bleed. */}
+      <div className="absolute -bottom-1 -right-1">
+        <PlayerImageCircle
+          playerId={pick.player_id}
+          name={pick.player_name}
+          team={pick.team}
+          isPick={isPick}
+        />
+      </div>
+    </button>
     </div>
   );
 }
@@ -989,11 +1035,11 @@ function PlayerImageCircle({
 
   return (
     <div
-      className="w-8 h-8 sm:w-9 sm:h-9 rounded-full overflow-hidden bg-white/[0.04] flex items-center justify-center"
-      style={{ boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.10)" }}
+      className="w-9 h-9 sm:w-10 sm:h-10 rounded-full overflow-hidden bg-[#0a1424] flex items-center justify-center"
+      style={{ boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.06)" }}
     >
       {isPick ? (
-        <Hexagon className="w-4 h-4 text-white/45" strokeWidth={2} />
+        <Hexagon className="w-4 h-4 text-white/40" strokeWidth={2} />
       ) : showImage ? (
         <img
           src={`https://sleepercdn.com/content/nfl/players/thumb/${playerId}.jpg`}
@@ -1002,7 +1048,7 @@ function PlayerImageCircle({
           onError={() => setImgErr(true)}
         />
       ) : (
-        <span className="text-[10px] font-bold text-white/70">
+        <span className="text-[10px] font-bold text-white/65">
           {initialsOf(name)}
         </span>
       )}
@@ -1133,24 +1179,23 @@ function HexView({ rows, teams, onPlayerClick }: { rows: ADPResult[]; teams: num
   // derived from rounded ADP. Each round row is exactly `teams` slots wide;
   // empty slots get a placeholder tile so the visual layout always reflects
   // the draft size setting (12 slots when teams=12, 10 when teams=10, etc.).
+  // Anything beyond MAX_ROUNDS_SHOWN is dropped to keep the grid bounded.
+  // Sequential placement — same approach as BoxView. Sort by avg_pick,
+  // then assign each player to the next available slot (round + slot derived
+  // from `idx + 1`). This guarantees every slot fills in order rather than
+  // being skipped when no player's rounded ADP happens to land on a given
+  // integer pick. Hex view is non-snake, so we don't reverse rows.
   const grouped = useMemo(() => {
+    const sorted = [...rows].sort((a, b) => a.avg_pick - b.avg_pick);
     const byRound = new Map<number, Array<ADPResult | null>>();
-    for (const r of rows) {
-      const visualPick = Math.max(1, Math.round(r.avg_pick));
-      const round = Math.ceil(visualPick / teams);
-      const pickInRound = ((visualPick - 1) % teams) + 1;
+    sorted.forEach((r, idx) => {
+      const seq = idx + 1;
+      const round = Math.ceil(seq / teams);
+      if (round > MAX_ROUNDS_SHOWN) return;
+      const pickInRound = ((seq - 1) % teams) + 1;
       if (!byRound.has(round)) byRound.set(round, Array.from({ length: teams }, () => null));
-      const slots = byRound.get(round)!;
-      // First player at this slot wins; collisions push to the next empty
-      // slot in the same round so we never lose data due to ADP rounding ties.
-      if (slots[pickInRound - 1] == null) {
-        slots[pickInRound - 1] = r;
-      } else {
-        for (let i = 0; i < teams; i++) {
-          if (slots[i] == null) { slots[i] = r; break; }
-        }
-      }
-    }
+      byRound.get(round)![pickInRound - 1] = r;
+    });
     return Array.from(byRound.entries()).sort((a, b) => a[0] - b[0]);
   }, [rows, teams]);
 
@@ -1885,11 +1930,30 @@ function EmptyState({ message }: { message?: string }) {
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
+// Allowlist for ADP Explorer display. Anything outside this set should never
+// reach the screen — backend is the primary defense (IDP-containing drafts
+// are excluded at ingest), but a stray defensive row in cached snapshots
+// would still leak through without this filter.
+const ALLOWED_DISPLAY_POSITIONS = new Set(["QB", "RB", "WR", "TE", "K", "PICK"]);
+
 function filterAdp(all: ADPResult[], filters: DraftFilters): ADPResult[] {
   const q = filters.search.trim().toLowerCase();
+  // Sleeper rookie drafts often use real-named kickers as future-pick
+  // placeholders. The ingest-time heuristic catches the obvious cases
+  // (kicker density ≥10%, same team drafting 2+ Ks), but quieter leaks
+  // slip through and show up as "real" rookie kickers. Real NFL rookie
+  // kickers are essentially never drafted in dynasty rookie drafts, so
+  // under Direct/Both rookie modes on a rookie draft we drop all Ks.
+  const dropKickers =
+    filters.draftType === "rookie" && filters.rookieMode !== "picks";
   return all.filter((r) => {
+    // Frontend defensive guardrail. Backend drops IDP-containing drafts at
+    // ingest, but if a cached snapshot still references a defensive player
+    // (e.g. before the reclassify job ran) we still don't want to render it.
+    if (!ALLOWED_DISPLAY_POSITIONS.has(r.position)) return false;
     if (filters.rookieMode === "picks"  && !r.is_rookie_placeholder) return false;
     if (filters.rookieMode === "direct" &&  r.is_rookie_placeholder) return false;
+    if (dropKickers && r.position === "K") return false;
     if (q && !r.player_name.toLowerCase().includes(q)) return false;
     return true;
   });
@@ -1933,4 +1997,20 @@ function shortenName(name: string): string {
   const parts = name.split(/\s+/);
   if (parts.length < 2) return name;
   return `${parts[0][0]}. ${parts.slice(1).join(" ")}`;
+}
+
+/**
+ * Always abbreviate the first name to an initial, e.g.
+ *   "Justin Jefferson"          → "J. Jefferson"
+ *   "Marvin Harrison Jr."       → "M. Harrison Jr."
+ *   "CeeDee"                    → "CeeDee"  (single token, no change)
+ *
+ * Used by the Box View where every tile renders the name on a single line.
+ */
+function abbreviateFirstName(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length < 2) return name;
+  const first = parts[0];
+  if (!first) return name;
+  return `${first[0]}. ${parts.slice(1).join(" ")}`;
 }

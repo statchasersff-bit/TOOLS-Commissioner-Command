@@ -43,6 +43,9 @@ interface SleeperRosterRaw {
 
 interface SleeperLeagueUserRaw {
   user_id: string;
+  // Sleeper account handle — the true identity for trade attribution.
+  // Always present in /league/{id}/users responses.
+  username?: string | null;
   display_name: string;
   avatar: string | null;
   metadata?: { team_name?: string };
@@ -65,6 +68,9 @@ interface SleeperPlayerRaw {
   team: string | null;
   age: number | null;
   fantasy_positions: string[] | null;
+  // Years in the NFL — 0 == rookie. Always present in Sleeper's
+  // /players/nfl payload; we now read it for rookie-class derivation.
+  years_exp?: number | null;
 }
 
 export interface SleeperUser {
@@ -220,7 +226,13 @@ export async function fetchSleeperLeagueFull(leagueId: string, userId: string) {
       ownerUser?.metadata?.team_name ||
       ownerUser?.display_name ||
       `Team ${roster.roster_id}`;
-    const ownerName = ownerUser?.display_name || `Owner ${roster.roster_id}`;
+    // Manager identity — used for trade-sender labels ("makitrain sends…").
+    // Prefer the Sleeper username (the unambiguous account handle) over
+    // display_name, which users often set to their team name.
+    const ownerName =
+      ownerUser?.username ||
+      ownerUser?.display_name ||
+      `Owner ${roster.roster_id}`;
 
     const starterSet = new Set(roster.starters || []);
     const rosterPlayers = (roster.players || [])
@@ -599,133 +611,6 @@ export async function fetchPortfolioSummary(
   };
 }
 
-export async function detectLiveDrafts(userId: string) {
-  const leagues = await fetchJson<SleeperLeagueRaw[]>(
-    `${SLEEPER_API}/user/${userId}/leagues/nfl/2026`
-  );
-  if (!leagues || !Array.isArray(leagues)) return [];
-
-  const results: { leagueId: string; leagueName: string; draftId: string; status: string; type: string; season: string; rounds: number; teams: number; picksMade: number; totalPicks: number }[] = [];
-
-  const checks = leagues.map(async (lg) => {
-    try {
-      const drafts = await fetchJson<any[]>(`${SLEEPER_API}/league/${lg.league_id}/drafts`);
-      if (!drafts || drafts.length === 0) return;
-      for (const d of drafts) {
-        if (d.status === "drafting") {
-          const rounds = d.settings?.rounds || 4;
-          const teams = d.settings?.teams || lg.total_rosters || 12;
-          let picksMade = 0;
-          try {
-            const picks = await fetchJson<any[]>(`${SLEEPER_API}/draft/${d.draft_id}/picks`);
-            picksMade = (picks || []).filter((p: any) => p.player_id).length;
-          } catch {}
-          results.push({
-            leagueId: lg.league_id,
-            leagueName: lg.name,
-            draftId: d.draft_id,
-            status: d.status,
-            type: d.type || "snake",
-            season: d.season,
-            rounds,
-            teams,
-            picksMade,
-            totalPicks: rounds * teams,
-          });
-        }
-      }
-    } catch {}
-  });
-
-  await Promise.all(checks);
-  return results;
-}
-
-export async function fetchDraftBoard(leagueId: string) {
-  const draftsRaw = await fetchJson<any[]>(`${SLEEPER_API}/league/${leagueId}/drafts`);
-  if (!draftsRaw || draftsRaw.length === 0) {
-    return { draft: null, picks: [], players: {} as Record<string, { name: string; pos: string; team: string }>, draftSlots: [] as { slot: number; rosterId: number; displayName: string }[], error: "No drafts found for this league" };
-  }
-
-  const draft = draftsRaw[0];
-  const draftId = draft.draft_id;
-
-  const [picksRaw, playersDb, leagueUsers] = await Promise.all([
-    fetchJson<any[]>(`${SLEEPER_API}/draft/${draftId}/picks`),
-    getSleeperPlayers(),
-    fetchJson<SleeperLeagueUserRaw[]>(`${SLEEPER_API}/league/${leagueId}/users`).catch(() => [] as SleeperLeagueUserRaw[]),
-  ]);
-
-  const userNameMap = new Map<string, string>();
-  for (const u of (leagueUsers || [])) {
-    userNameMap.set(u.user_id, u.metadata?.team_name || u.display_name || u.user_id);
-  }
-
-  const slotToRosterId: Record<number, number> = draft.slot_to_roster_id || {};
-  const draftOrder: Record<string, number> = draft.draft_order || {};
-
-  const rosterIdToUserId = new Map<number, string>();
-  for (const [userId, slot] of Object.entries(draftOrder)) {
-    const rosterId = slotToRosterId[slot as any];
-    if (rosterId) rosterIdToUserId.set(rosterId, userId);
-  }
-
-  const numTeams = draft.settings?.teams || Object.keys(slotToRosterId).length || 12;
-  const rounds = draft.settings?.rounds || 4;
-
-  const draftSlots: { slot: number; rosterId: number; displayName: string }[] = [];
-  for (let s = 1; s <= numTeams; s++) {
-    const rosterId = slotToRosterId[s] || s;
-    const userId = rosterIdToUserId.get(rosterId);
-    const displayName = userId ? (userNameMap.get(userId) || `Team ${s}`) : `Team ${s}`;
-    draftSlots.push({ slot: s, rosterId, displayName });
-  }
-
-  const picks = (picksRaw || []).map((p: any) => ({
-    round: p.round,
-    pickNo: p.pick_no,
-    draftSlot: p.draft_slot || 0,
-    rosterId: p.roster_id,
-    playerId: p.player_id,
-    playerName: p.metadata?.first_name && p.metadata?.last_name
-      ? `${p.metadata.first_name} ${p.metadata.last_name}`
-      : playersDb[p.player_id]
-        ? `${playersDb[p.player_id].first_name} ${playersDb[p.player_id].last_name}`
-        : `Unknown`,
-    pos: p.metadata?.position || playersDb[p.player_id]?.position || "??",
-    team: p.metadata?.team || playersDb[p.player_id]?.team || "FA",
-  }));
-
-  const pickedPlayerIds = new Set(picks.map((p: any) => p.playerId).filter(Boolean));
-
-  const playerMap: Record<string, { name: string; pos: string; team: string }> = {};
-  for (const [id, p] of Object.entries(playersDb)) {
-    if (!p.position || !["QB", "RB", "WR", "TE"].includes(p.position)) continue;
-    if (p.active === false && !pickedPlayerIds.has(id)) continue;
-    playerMap[id] = {
-      name: `${p.first_name} ${p.last_name}`,
-      pos: p.position,
-      team: p.team || "FA",
-    };
-  }
-
-  return {
-    draft: {
-      draftId,
-      status: draft.status,
-      type: draft.type,
-      rounds,
-      teams: numTeams,
-      season: draft.season,
-      leagueName: draft.metadata?.name || "",
-    },
-    picks,
-    players: playerMap,
-    draftSlots,
-    error: null,
-  };
-}
-
 export async function fetchCrossLeagueTrades(
   userId: string,
   currentLeagueId: string,
@@ -778,7 +663,9 @@ export async function fetchCrossLeagueTrades(
     const ownerMap = new Map<number, string>();
     for (const r of rostersRaw) {
       const u = usersRaw.find((u: any) => u.user_id === r.owner_id);
-      ownerMap.set(r.roster_id, u?.display_name || u?.username || `Roster ${r.roster_id}`);
+      // Prefer username (account handle) so transactions read as
+      // "makitrain added X" rather than as a customised display name.
+      ownerMap.set(r.roster_id, u?.username || u?.display_name || `Roster ${r.roster_id}`);
     }
 
     for (let round = 1; round <= 18; round++) {
@@ -835,7 +722,10 @@ export async function fetchLeagueTransactions(leagueId: string) {
   const rosterOwnerMap = new Map<number, string>();
   const ownerNameMap = new Map<string, string>();
   for (const u of usersRaw) {
-    ownerNameMap.set(u.user_id, u.metadata?.team_name || u.display_name || u.user_id);
+    // Manager identity — never team_name. Trade history attribution uses
+    // this map ("makitrain ↔ Jonnygray691"), so we want the account
+    // handle, not the team name the user happens to have set.
+    ownerNameMap.set(u.user_id, u.username || u.display_name || u.user_id);
   }
   for (const r of rostersRaw) {
     rosterOwnerMap.set(r.roster_id, ownerNameMap.get(r.owner_id) || `Team ${r.roster_id}`);

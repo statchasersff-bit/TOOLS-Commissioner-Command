@@ -80,19 +80,12 @@ const MEGA_DATA: Record<string, MegaSection[]> = {
       ],
     },
   ],
-  "live-draft": [
-    {
-      title: "Draft Tools",
-      items: [
-        { subId: "draft-board", label: "Draft Board", description: "Dynasty rankings board & live draft integration", icon: Zap },
-      ],
-    },
-  ],
   draft: [
     {
       title: "Draft",
       items: [
-        { subId: "adp-explorer", label: "ADP Explorer", description: "Sleeper startup ADP, rookie picks & market trends", icon: ClipboardList },
+        { subId: "draft-board",  label: "Draft Board",  description: "Dynasty rankings board & live draft integration",     icon: Zap          },
+        { subId: "adp-explorer", label: "ADP Explorer", description: "Sleeper startup ADP, rookie picks & market trends",   icon: ClipboardList },
       ],
     },
   ],
@@ -353,7 +346,6 @@ const TAB_ICONS: Record<string, typeof BarChart2> = {
   "league-analyzer": Trophy,
   "trade-center": ArrowLeftRight,
   "league-market": LineChart,
-  "live-draft": Zap,
   draft: ClipboardList,
 };
 
@@ -363,8 +355,7 @@ const TAB_SHORT_LABELS: Record<string, string> = {
   "league-analyzer": "League",
   "trade-center": "Trades",
   "league-market": "Research",
-  "live-draft": "Live Draft",
-  draft: "ADP",
+  draft: "Draft",
 };
 
 // ── MobileBottomNav ────────────────────────────────────────────────────────────

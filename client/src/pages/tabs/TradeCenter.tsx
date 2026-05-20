@@ -15,7 +15,7 @@ import { getStaticPickValue } from "@/data/pickValues";
 import { API_BASE } from "@/lib/apiBase";
 import { fetchRosterDraftPicks, fetchLeaguePlayerSettings } from "@/lib/sleeperApi";
 import { getSleeperToken, getSleeperSession } from "@/services/sleeperAuth";
-import { proposeTrade as proposeTradeAuthed, rejectTrade, getDmByMembersFull, sendTradeMessage, buildTradeAttachment, makeTradeAttachmentUser, type ProposeTradeResult } from "@/services/sleeperAuthedApi";
+import { proposeTrade as proposeTradeAuthed, rejectTrade, firePostTradeLinkDm, type ProposeTradeResult } from "@/services/sleeperAuthedApi";
 import type { League, Team, Tier, Player, Pick, TradeRecord, TradeSide, CrawlStatus } from "@/types";
 import { cn } from "@/lib/utils";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
@@ -1639,7 +1639,7 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
   const [proposeError, setProposeError] = useState<string | null>(null);
   const [withdrawing, setWithdrawing] = useState(false);
   const [withdrawError, setWithdrawError] = useState<string | null>(null);
-  const [dmStatus, setDmStatus] = useState<"idle" | "sending" | "sent" | "failed">("idle");
+  const [dmStatus, setDmStatus] = useState<"idle" | "sending" | "sent" | "skipped" | "failed">("idle");
   const [dmError, setDmError] = useState<string | null>(null);
 
   const handleProposeTrade = async () => {
@@ -1739,122 +1739,32 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
     }
   };
 
+  /**
+   * After a successful Calculator-proposed trade, fire the controlled
+   * automatic Dynasty Command link DM. Replaces the previous trade-card
+   * builder (now disabled while general messaging is paused).
+   *
+   * Never blocks the trade — `firePostTradeLinkDm` returns a status enum
+   * and never throws. The Calculator UI reflects sent / failed / skipped.
+   */
   const sendCalcTradeDm = async (trade: ProposeTradeResult, partnerUserId: string) => {
     setDmStatus("sending");
     setDmError(null);
-    try {
-      const session = getSleeperSession();
-      const myUserId = session?.user_id ?? "";
-      const myName = session?.display_name || userTeam.owner;
-      const myRosterId = parseInt(userTeam.id.replace("roster_", ""), 10);
-      const partnerName = sideBTeam?.owner || sideBTeam?.name || "Partner";
-      const partnerRosterId = sideBTeam ? parseInt(sideBTeam.id.replace("roster_", ""), 10) : NaN;
-
-      // Bucket adds/drops by roster as arrays of player objects so Sleeper's
-      // desktop renderer can call .map() on them. player_map may not include
-      // every player; fall back to a minimal { player_id } object so the entry
-      // is still iterable.
-      const playerMap = (trade.player_map as Record<string, unknown> | null) ?? {};
-      const rosterAdds: Record<string, unknown[]> = {};
-      const rosterDrops: Record<string, unknown[]> = {};
-      for (const [pid, rid] of Object.entries(trade.adds ?? {})) {
-        const r = String(rid);
-        if (!rosterAdds[r]) rosterAdds[r] = [];
-        rosterAdds[r].push(playerMap[pid] ?? { player_id: pid });
-      }
-      for (const [pid, rid] of Object.entries(trade.drops ?? {})) {
-        const r = String(rid);
-        if (!rosterDrops[r]) rosterDrops[r] = [];
-        rosterDrops[r].push(playerMap[pid] ?? { player_id: pid });
-      }
-
-      // Picks: keep stringified or parsed picks under the receiving roster.
-      const rosterAddedPicks: Record<string, unknown[]> = {};
-      if (Array.isArray(trade.draft_picks)) {
-        for (const pick of trade.draft_picks) {
-          if (typeof pick === "string") {
-            const parts = pick.split(",");
-            const recvRid = Number(parts[3]);
-            const r = String(recvRid);
-            if (!rosterAddedPicks[r]) rosterAddedPicks[r] = [];
-            rosterAddedPicks[r].push({
-              roster_id: Number(parts[0]),
-              season: parts[1],
-              round: Number(parts[2]),
-              owner_id: Number(parts[3]),
-              previous_owner_id: Number(parts[4]),
-            });
-          } else if (pick && typeof pick === "object") {
-            const obj = pick as Record<string, unknown>;
-            const recvRid = Number(obj.owner_id);
-            const r = String(recvRid);
-            if (!rosterAddedPicks[r]) rosterAddedPicks[r] = [];
-            rosterAddedPicks[r].push(obj);
-          }
-        }
-      }
-
-      const involvedRids = new Set<number>([
-        ...Object.values(trade.adds ?? {}).map(Number),
-        ...Object.values(trade.drops ?? {}).map(Number),
-      ]);
-      if (Number.isFinite(myRosterId)) involvedRids.add(myRosterId);
-      if (Number.isFinite(partnerRosterId)) involvedRids.add(partnerRosterId);
-
-      const userForRid = (rid: number) => {
-        if (rid === myRosterId) {
-          return makeTradeAttachmentUser(myUserId, myName, trade.league_id);
-        }
-        if (rid === partnerRosterId) {
-          return makeTradeAttachmentUser(partnerUserId, partnerName, trade.league_id);
-        }
-        return makeTradeAttachmentUser("", `Roster ${rid}`, trade.league_id);
-      };
-
-      const rosters = Array.from(involvedRids).map(rid => ({
-        rosterId: rid,
-        user: userForRid(rid),
-        adds: rosterAdds[String(rid)] ?? [],
-        drops: rosterDrops[String(rid)] ?? [],
-        added_picks: rosterAddedPicks[String(rid)] ?? [],
-        dropped_picks: [],
-        added_budget: [],
-        dropped_budget: [],
-      }));
-
-      const { transactionsByRoster, usersInLeagueMap } = buildTradeAttachment({
-        status: trade.status || "proposed",
-        rosters,
-        users: [
-          makeTradeAttachmentUser(myUserId, myName, trade.league_id),
-          makeTradeAttachmentUser(partnerUserId, partnerName, trade.league_id),
-        ],
-      });
-
-      const dmInfo = await getDmByMembersFull(partnerUserId);
-      if (!dmInfo) throw new Error("No DM thread found with this manager.");
-
-      // Trade-card attachment is intentionally disabled until our generator
-      // matches the native Sleeper trade_dm payload exactly. See
-      // tradeAttachmentSchema.ts for the required shape. Mismatches today:
-      // bare { player_id } fallbacks for unmapped players, no dropped_picks on
-      // the sending side, no per-roster added_budget/dropped_budget, and
-      // placeholder {} metadata/settings on user objects. A plain-text DM is
-      // still delivered so the partner gets notified.
-      await sendTradeMessage({
-        dmId: dmInfo.dm_id,
-        text: `@${myName} has proposed a trade in ${league.name}`,
-        transactionId: trade.transaction_id,
-        leagueId: trade.league_id,
-        status: trade.status || "proposed",
-        transactionsByRoster,
-        usersInLeagueMap,
-        attachTradeCard: false,
-      });
+    const session = getSleeperSession();
+    const result = await firePostTradeLinkDm({
+      recipientUserId: partnerUserId,
+      leagueId: trade.league_id,
+      senderUserId: session?.user_id ?? null,
+      queueType: "trade-calc",
+    });
+    if (result.status === "sent") {
       setDmStatus("sent");
-    } catch (e: any) {
+    } else if (result.status === "skipped") {
+      setDmStatus("skipped");
+      setDmError("Link message skipped to stay within safe messaging limits.");
+    } else {
       setDmStatus("failed");
-      setDmError(e?.message || "DM could not be sent.");
+      setDmError("Link message could not be delivered.");
     }
   };
 
@@ -2404,7 +2314,7 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
               </div>
             )}
             <h3 className="text-sm font-bold">
-              {rosterTeam ? `${rosterTeam.owner || rosterTeam.name} Sends...` : `Side ${sideLabel} Sends...`}
+              {rosterTeam ? `${rosterTeam.owner} Sends...` : `Side ${sideLabel} Sends...`}
             </h3>
             {side === "a" && (
               <Select value={sideARosterId} onValueChange={handleSideATeamChange}>
@@ -2414,10 +2324,10 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
                 <SelectContent>
                   {league.teams
                     .filter((t) => t.id !== tradePartnerId)
-                    .sort((a, b) => (a.owner || a.name).localeCompare(b.owner || b.name))
+                    .sort((a, b) => a.owner.localeCompare(b.owner))
                     .map((t) => (
                       <SelectItem key={t.id} value={t.id}>
-                        {t.owner || t.name}
+                        {t.owner}
                       </SelectItem>
                     ))}
                 </SelectContent>
@@ -2724,14 +2634,10 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
                       Withdraw
                     </Button>
                     {withdrawError && <p className="text-[10px] text-red-400">{withdrawError}</p>}
-                    {dmStatus === "sending" && <div className="flex items-center gap-1.5 text-[10px] text-emerald-400/60"><Loader2 className="w-3 h-3 animate-spin" />Sending DM…</div>}
-                    {dmStatus === "sent"    && <div className="flex items-center gap-1.5 text-[10px] text-emerald-400"><CheckCircle2 className="w-3 h-3" />DM delivered</div>}
-                    {dmStatus === "failed"  && (
-                      <div>
-                        <p className="text-[10px] text-amber-400">DM not delivered.</p>
-                        {dmError && <p className="text-[9px] text-red-400/70 break-all">{dmError}</p>}
-                      </div>
-                    )}
+                    {dmStatus === "sending" && <div className="flex items-center gap-1.5 text-[10px] text-emerald-400/60"><Loader2 className="w-3 h-3 animate-spin" />Sending Dynasty Command link…</div>}
+                    {dmStatus === "sent"    && <div className="flex items-center gap-1.5 text-[10px] text-emerald-400"><CheckCircle2 className="w-3 h-3" />Dynasty Command link shared with the manager.</div>}
+                    {dmStatus === "skipped" && <div className="text-[10px] text-amber-400">Trade sent. Link message skipped to stay within safe messaging limits.</div>}
+                    {dmStatus === "failed"  && <div className="text-[10px] text-amber-400">Trade sent. Link message could not be delivered.</div>}
                   </div>
                 ) : (
                   // Send + secondary controls.

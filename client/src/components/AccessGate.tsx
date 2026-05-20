@@ -4,6 +4,8 @@ import type { AccessRequirement } from "@/config/moduleAccess";
 import { ConnectSleeperUsername } from "@/pages/auth/ConnectSleeperUsername";
 import { LoginRequiredGate } from "./LoginRequiredGate";
 import { UpgradeFlow } from "./UpgradeFlow";
+import { Card, CardContent } from "@/components/ui/card";
+import { Lock } from "lucide-react";
 
 /**
  * AccessGate — wraps a module render and enforces the configured access tier.
@@ -31,7 +33,7 @@ export function AccessGate({
   onBackToReadOnly?: () => void;
   children: ReactNode;
 }) {
-  const { accessLevel } = useAuth();
+  const { accessLevel, isWriteAccessDomain } = useAuth();
   const [showUpgrade, setShowUpgrade] = useState(false);
 
   // Public: always render.
@@ -49,6 +51,29 @@ export function AccessGate({
 
   // Full tier: need DC login + Sleeper token.
   if (requiredAccess === "full") {
+    // On a read-only domain, full-tier modules are unavailable regardless
+    // of login state. Don't surface the upgrade flow — it'd send the user
+    // through Sleeper credentials only to bounce off the backend's domain
+    // gate. Tell them where to go instead.
+    if (!isWriteAccessDomain) {
+      return (
+        <Card className="border-[#d4af37]/40" data-testid="card-readonly-domain-gate">
+          <CardContent className="py-10 px-6 text-center space-y-3 max-w-xl mx-auto">
+            <div className="w-12 h-12 rounded-full bg-[#d4af37]/10 mx-auto flex items-center justify-center border border-[#d4af37]/30">
+              <Lock className="w-6 h-6 text-[#d4af37]" />
+            </div>
+            <h3 className="text-base font-bold text-foreground">
+              Available on Dynasty Command (paid)
+            </h3>
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              This feature performs Sleeper write actions and is only
+              available on the paid Dynasty Command domain. Read-only tools
+              remain free at statchasers.com.
+            </p>
+          </CardContent>
+        </Card>
+      );
+    }
     if (accessLevel === "full") {
       return <>{children}</>;
     }

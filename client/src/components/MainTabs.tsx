@@ -12,7 +12,6 @@ const TAB_ICONS: Record<string, typeof BarChart2> = {
   "league-analyzer": SearchCheck,
   "trade-center": ArrowLeftRight,
   "league-market": UserRound,
-  "live-draft": Zap,
   draft: ClipboardList,
   "dont-click": Skull,
 };

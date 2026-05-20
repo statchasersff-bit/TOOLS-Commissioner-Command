@@ -45,6 +45,7 @@ interface SleeperRosterRaw {
 
 interface SleeperLeagueUserRaw {
   user_id: string;
+  username?: string;
   display_name: string;
   avatar: string | null;
   metadata?: { team_name?: string };
@@ -847,6 +848,44 @@ export async function fetchPortfolioSummary(
   };
 }
 
+/**
+ * Infer the draft category. Sleeper's `metadata.type` is the source of truth
+ * when present ("rookie"/"startup"). When missing (older drafts often have
+ * blank metadata), fall back to a league + round-count heuristic:
+ *   - dynasty league + 3-6 rounds → rookie
+ *   - dynasty league + 20+ rounds → startup
+ *   - rounds 7-19 in dynasty → ambiguous, classify as startup (mid-sized
+ *     drafts are almost always startup re-drafts after a league reset)
+ * Returns "unknown" when we have no league or round data to work with.
+ */
+function inferDraftCategory(
+  d: { metadata?: { type?: string }; settings?: { rounds?: number } },
+  leagueIsDynasty: boolean,
+): "rookie" | "startup" | "supplemental" | "unknown" {
+  const meta = (d.metadata?.type ?? "").toString().toLowerCase().trim();
+  if (meta === "rookie") return "rookie";
+  if (meta === "startup") return "startup";
+  if (meta === "supplemental") return "supplemental";
+  if (meta === "redraft") return "startup";
+
+  const rounds = d.settings?.rounds ?? 0;
+  if (!leagueIsDynasty) return "unknown";
+  if (rounds >= 3 && rounds <= 6) return "rookie";
+  if (rounds >= 20) return "startup";
+  if (rounds >= 7 && rounds < 20) return "startup";
+  return "unknown";
+}
+
+function isLeagueDynasty(lg: { settings?: any }): boolean {
+  // Sleeper marks dynasty via settings.type === 2 (dynasty) vs 0 (redraft) / 1
+  // (keeper). Some older payloads omit the flag, in which case we default to
+  // dynasty since this app is dynasty-focused.
+  const t = lg.settings?.type;
+  if (t === 2) return true;
+  if (t === 0 || t === 1) return false;
+  return true;
+}
+
 export async function detectLiveDrafts(userId: string) {
   const leagues = await fetchJson<SleeperLeagueRaw[]>(
     `${SLEEPER_API}/user/${userId}/leagues/nfl/2026`
@@ -856,6 +895,7 @@ export async function detectLiveDrafts(userId: string) {
   const results: {
     leagueId: string;
     leagueName: string;
+    leagueAvatar: string | null;
     draftId: string;
     status: string;
     type: string;
@@ -865,6 +905,8 @@ export async function detectLiveDrafts(userId: string) {
     teams: number;
     picksMade: number;
     totalPicks: number;
+    startTime: number | null;
+    draftOrderSet: boolean;
   }[] = [];
 
   const checks = leagues.map(async (lg) => {
@@ -873,31 +915,55 @@ export async function detectLiveDrafts(userId: string) {
         `${SLEEPER_API}/league/${lg.league_id}/drafts`
       );
       if (!drafts || drafts.length === 0) return;
+      const leagueIsDynasty = isLeagueDynasty(lg as any);
       for (const d of drafts) {
-        if (d.status === "drafting") {
-          const rounds = d.settings?.rounds || 4;
-          const teams = d.settings?.teams || lg.total_rosters || 12;
-          let picksMade = 0;
+        // Include drafting (LIVE), paused (LIVE), and pre_draft (UPCOMING).
+        // Skip complete drafts and any unknown statuses.
+        const status = (d.status ?? "").toLowerCase();
+        if (
+          status !== "drafting" &&
+          status !== "paused" &&
+          status !== "pre_draft"
+        ) {
+          continue;
+        }
+
+        const rounds = d.settings?.rounds || 4;
+        const teams = d.settings?.teams || lg.total_rosters || 12;
+        let picksMade = 0;
+        // For pre_draft we skip the picks call — there shouldn't be any, and
+        // it saves one round-trip per upcoming draft on a multi-league scan.
+        if (status !== "pre_draft") {
           try {
             const picks = await fetchJson<any[]>(
               `${SLEEPER_API}/draft/${d.draft_id}/picks`
             );
             picksMade = (picks || []).filter((p: any) => p.player_id).length;
           } catch {}
-          results.push({
-            leagueId: lg.league_id,
-            leagueName: lg.name,
-            draftId: d.draft_id,
-            status: d.status,
-            type: d.type || "snake",
-            draftCategory: d.metadata?.type || "",
-            season: d.season,
-            rounds,
-            teams,
-            picksMade,
-            totalPicks: rounds * teams,
-          });
         }
+
+        // Sleeper's start_time is unix ms. Treat 0 / missing as "not set".
+        const rawStart = typeof d.start_time === "number" ? d.start_time : null;
+        const startTime = rawStart && rawStart > 0 ? rawStart : null;
+        const draftOrderSet = !!d.draft_order && Object.keys(d.draft_order).length > 0;
+        const category = inferDraftCategory(d, leagueIsDynasty);
+
+        results.push({
+          leagueId: lg.league_id,
+          leagueName: lg.name,
+          leagueAvatar: (lg as any).avatar ?? null,
+          draftId: d.draft_id,
+          status,
+          type: d.type || "snake",
+          draftCategory: category,
+          season: d.season,
+          rounds,
+          teams,
+          picksMade,
+          totalPicks: rounds * teams,
+          startTime,
+          draftOrderSet,
+        });
       }
     } catch {}
   });
@@ -915,7 +981,7 @@ export async function fetchDraftBoard(leagueId: string) {
       draft: null,
       picks: [],
       players: {} as Record<string, { name: string; pos: string; team: string }>,
-      draftSlots: [] as { slot: number; rosterId: number; displayName: string }[],
+      draftSlots: [] as { slot: number; rosterId: number; displayName: string; avatar: string | null }[],
       error: "No drafts found for this league",
     };
   }
@@ -923,37 +989,66 @@ export async function fetchDraftBoard(leagueId: string) {
   const draft = draftsRaw[0];
   const draftId = draft.draft_id;
 
-  const [picksRaw, playersDb, leagueUsers] = await Promise.all([
+  // Also fetch league rosters — `draft.draft_order` is empty pre-draft and
+  // sometimes incomplete on freshly created live drafts, so we fall back
+  // to roster ownership to resolve every slot to a real Sleeper user.
+  const [picksRaw, playersDb, leagueUsers, leagueRosters] = await Promise.all([
     fetchJson<any[]>(`${SLEEPER_API}/draft/${draftId}/picks`),
     getSleeperPlayers(),
     fetchJson<SleeperLeagueUserRaw[]>(
       `${SLEEPER_API}/league/${leagueId}/users`
     ).catch(() => [] as SleeperLeagueUserRaw[]),
+    fetchJson<SleeperRosterRaw[]>(
+      `${SLEEPER_API}/league/${leagueId}/rosters`
+    ).catch(() => [] as SleeperRosterRaw[]),
   ]);
 
+  // Username priority for slot display:
+  //   1. username (Sleeper handle — the canonical identity)
+  //   2. display_name (user-set display name)
+  //   3. metadata.team_name (chosen team name, e.g. "Mak's Tigers")
+  //   4. user_id as last resort
+  // "Team N" is reserved for slots where no user data exists at all.
+  // Avatar map carries the Sleeper avatar HASH (not a URL); consumers prefix
+  // with `https://sleepercdn.com/avatars/thumbs/{hash}` when rendering.
   const userNameMap = new Map<string, string>();
+  const userAvatarMap = new Map<string, string | null>();
   for (const u of leagueUsers || []) {
     userNameMap.set(
       u.user_id,
-      u.metadata?.team_name || u.display_name || u.user_id
+      u.username || u.display_name || u.metadata?.team_name || u.user_id
     );
+    userAvatarMap.set(u.user_id, u.avatar ?? null);
   }
 
   const slotToRosterId: Record<number, number> =
     draft.slot_to_roster_id || {};
   const draftOrder: Record<string, number> = draft.draft_order || {};
 
+  // Two independent ways to learn "who owns this roster slot":
+  //   A) draft.draft_order maps user → draft slot (set once order is drawn).
+  //   B) league rosters carry owner_id directly (always populated for any
+  //      rostered league — including pre-draft startups).
+  // We compose both: try (A) first, fall back to (B). The merge guarantees
+  // a username for every slot as long as ANY of the two has data.
   const rosterIdToUserId = new Map<number, string>();
+  // Pass B (lower priority): rosters → owner. Set first so A can override.
+  for (const r of leagueRosters || []) {
+    if (r.roster_id != null && r.owner_id) {
+      rosterIdToUserId.set(r.roster_id, r.owner_id);
+    }
+  }
+  // Pass A (higher priority): draft_order → slot → rosterId → user.
   for (const [uId, slot] of Object.entries(draftOrder)) {
     const rosterId = slotToRosterId[slot as any];
     if (rosterId) rosterIdToUserId.set(rosterId, uId);
   }
 
   const numTeams =
-    draft.settings?.teams || Object.keys(slotToRosterId).length || 12;
+    draft.settings?.teams || Object.keys(slotToRosterId).length || (leagueRosters?.length ?? 12);
   const rounds = draft.settings?.rounds || 4;
 
-  const draftSlots: { slot: number; rosterId: number; displayName: string }[] =
+  const draftSlots: { slot: number; rosterId: number; displayName: string; avatar: string | null }[] =
     [];
   for (let s = 1; s <= numTeams; s++) {
     const rosterId = slotToRosterId[s] || s;
@@ -961,7 +1056,8 @@ export async function fetchDraftBoard(leagueId: string) {
     const displayName = uId
       ? userNameMap.get(uId) || `Team ${s}`
       : `Team ${s}`;
-    draftSlots.push({ slot: s, rosterId, displayName });
+    const avatar = uId ? userAvatarMap.get(uId) ?? null : null;
+    draftSlots.push({ slot: s, rosterId, displayName, avatar });
   }
 
   // ── Generic timestamp extractor ──────────────────────────────────────────
@@ -1107,6 +1203,17 @@ export async function fetchDraftBoard(leagueId: string) {
     }
   }
 
+  // Sleeper's pick timer is in seconds. We surface it here so the live
+  // draft room can compute a real MM:SS countdown without re-fetching.
+  const pickTimerSeconds = typeof draft.settings?.pick_timer === "number"
+    ? draft.settings.pick_timer
+    : 0;
+  const lastPickedMs = (() => {
+    const v = draft.last_picked;
+    if (typeof v !== "number") return null;
+    return v > 1_000_000_000_000 ? v : v > 1_000_000_000 ? v * 1000 : null;
+  })();
+
   return {
     draft: {
       draftId,
@@ -1118,6 +1225,8 @@ export async function fetchDraftBoard(leagueId: string) {
       season: draft.season,
       leagueName: draft.metadata?.name || "",
       startTime: typeof draft.start_time === "number" ? draft.start_time : null,
+      pickTimer: pickTimerSeconds,
+      lastPicked: lastPickedMs,
     },
     picks,
     players: playerMap,

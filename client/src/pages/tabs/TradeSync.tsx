@@ -15,7 +15,7 @@ import { PlayerAvatar } from "@/components/PlayerAvatar";
 import {
   ArrowRightLeft, TrendingUp, TrendingDown, RefreshCw, Loader2,
   Clock, AlertTriangle, CheckCircle2, XCircle, Inbox, Send,
-  Lock, Activity, MessageSquare,
+  Lock, Activity,
 } from "lucide-react";
 import {
   TradeActionModal,
@@ -526,13 +526,12 @@ function ValueEdgeCell({ edge }: { edge: number }) {
 
 // ─── Trade Card ───────────────────────────────────────────────────────────────
 
-function TradeCard({ trade, myUsername, myAvatar, onView, onCounter, onMessage }: {
+function TradeCard({ trade, myUsername, myAvatar, onView, onCounter }: {
   trade: NormalizedTrade;
   myUsername: string;
   myAvatar: string | null;
   onView: () => void;
   onCounter?: () => void;
-  onMessage?: () => void;
 }) {
   const expiring = isExpiringSoon(trade.expiresAt);
   const isProposed = trade.status === "proposed";
@@ -637,19 +636,6 @@ function TradeCard({ trade, myUsername, myAvatar, onView, onCounter, onMessage }
         >
           Review
         </Button>
-
-        {/* Message */}
-        {trade.partnerUserId && (
-          <Button
-            size="sm"
-            variant="ghost"
-            className="h-7 px-3 text-[11px] gap-1 text-muted-foreground hover:text-foreground"
-            onClick={onMessage}
-            data-testid={`btn-message-${trade.transactionId}`}
-          >
-            <MessageSquare className="w-3 h-3" /> Message
-          </Button>
-        )}
 
         {/* Mode-specific actions */}
         {isProposed && trade.direction === "incoming" && (
@@ -1010,7 +996,6 @@ export default function TradeSync() {
                 myAvatar={sleeper.user?.avatar ? `https://sleepercdn.com/avatars/thumbs/${sleeper.user.avatar}` : null}
                 onView={() => openModal(trade, mode)}
                 onCounter={() => openModal(trade, "counter")}
-                onMessage={() => openModal(trade, mode)}
               />
             );
           })}

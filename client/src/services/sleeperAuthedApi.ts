@@ -15,6 +15,22 @@
 
 import { SLEEPER_WEB_GQL_URL } from "@/config/sleeperAuthEndpoints";
 import { getSleeperSession, getSleeperToken } from "@/services/sleeperAuth";
+import {
+  sleeperWriteLimiter,
+  type SleeperWriteAction,
+} from "@/services/sleeperWriteLimiter";
+import {
+  isWriteEnabled,
+  killSwitchError,
+  KILL_SWITCH_MESSAGE,
+  recordWrite as recordSafetyWrite,
+  isGeneralMessagingEnabled,
+  isTradeLinkDmEnabled,
+  MESSAGING_DISABLED_MESSAGE,
+  canSendTradeLinkDm,
+  recordTradeLinkDm,
+  type TradeLinkSkipReason,
+} from "@/services/sleeperSafetyGate";
 
 // ─── Core transport ───────────────────────────────────────────────────────────
 
@@ -22,6 +38,54 @@ interface GQLRequest {
   operationName: string;
   query: string;
   variables?: Record<string, unknown>;
+  /** Optional diagnostic context — included in error logs, never sent to
+   *  Sleeper. Use this to surface "which queue / league produced an error"
+   *  without opening DevTools. */
+  meta?: {
+    actionType?: SleeperWriteAction;
+    queueType?: string;
+    leagueId?: string;
+    /** Required when calling create_message. "trade-link" is the controlled
+     *  automatic post-trade DM (only allowed when VITE_ENABLE_TRADE_LINK_DM
+     *  is on); "general" covers every other create_message and is only
+     *  allowed when VITE_ENABLE_GENERAL_SLEEPER_MESSAGES is on. */
+    messagingIntent?: "trade-link" | "general";
+  };
+}
+
+/**
+ * Mutation operation names treated as authenticated writes — every entry
+ * here is gated through the global write limiter. Add new write ops here
+ * when introducing them. Reads (queries) are not pre-paced.
+ */
+const WRITE_OPERATIONS = new Set<string>([
+  "submit_lineup",
+  "submit_waiver_claim",
+  "propose_trade",
+  "accept_trade",
+  "reject_trade",
+  "draft_pick",
+  "create_message", // DMs, league chat, trade-card DMs
+]);
+
+/** Default action type derived from operation name when callers don't pass
+ *  one explicitly. */
+function deriveActionType(op: string): SleeperWriteAction {
+  if (op === "submit_lineup") return "lineup";
+  if (op === "submit_waiver_claim") return "waiver";
+  if (op === "propose_trade" || op === "accept_trade" || op === "reject_trade") return "trade";
+  if (op === "create_message") return "chat";
+  if (op === "draft_pick") return "draft";
+  return "other";
+}
+
+/** Shortened request id for log correlation across the request lifetime. */
+function makeRequestId(): string {
+  try {
+    return crypto.randomUUID().slice(0, 8);
+  } catch {
+    return Math.random().toString(36).slice(2, 10);
+  }
 }
 
 /**
@@ -43,19 +107,102 @@ export async function sleeperGraphQLRequest<T = unknown>(
     );
   }
 
-  const res = await fetch(SLEEPER_WEB_GQL_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "authorization": token,
-      "x-sleeper-graphql-op": req.operationName,
-    },
-    body: JSON.stringify({
-      operationName: req.operationName,
-      query: req.query,
-      variables: req.variables ?? {},
-    }),
-  });
+  const op = req.operationName;
+  const requestId = makeRequestId();
+  const isWrite = WRITE_OPERATIONS.has(op);
+  const actionType: SleeperWriteAction = req.meta?.actionType ?? deriveActionType(op);
+  const queueType = req.meta?.queueType ?? (isWrite ? "single" : "read");
+  const leagueId = req.meta?.leagueId;
+  const logPrefix = `[Sleeper GQL ${requestId} ${op}]`;
+
+  // ── Emergency kill switch ────────────────────────────────────────────────
+  // Reads are never blocked. Writes throw a clear user-facing error before
+  // any network call. Logs include diagnostic context but never the JWT.
+  if (isWrite && !isWriteEnabled()) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      `${logPrefix} blocked by safety gate (writes disabled) action=${actionType} queue=${queueType}` +
+      (leagueId ? ` league=${leagueId}` : ""),
+    );
+    throw killSwitchError();
+  }
+
+  // ── Messaging gate ───────────────────────────────────────────────────────
+  // create_message is the only authenticated write that can carry arbitrary
+  // user-typed content. Require callers to explicitly tag intent, and gate
+  // each intent independently:
+  //   - "trade-link" → controlled automatic post-trade DM only.
+  //   - "general"    → free-text messaging (currently disabled by default).
+  // Untagged create_message attempts are refused — no path can sneak past.
+  if (op === "create_message") {
+    const intent = req.meta?.messagingIntent;
+    if (intent === "trade-link") {
+      if (!isTradeLinkDmEnabled()) {
+        // eslint-disable-next-line no-console
+        console.warn(`${logPrefix} blocked: trade-link DM disabled by env flag`);
+        throw new Error(MESSAGING_DISABLED_MESSAGE);
+      }
+    } else if (intent === "general") {
+      if (!isGeneralMessagingEnabled()) {
+        // eslint-disable-next-line no-console
+        console.warn(`${logPrefix} blocked: general messaging disabled by env flag`);
+        throw new Error(MESSAGING_DISABLED_MESSAGE);
+      }
+    } else {
+      // Missing tag → refuse. Forces every call site to declare intent so
+      // we can't accidentally re-open general messaging by mistake.
+      // eslint-disable-next-line no-console
+      console.warn(`${logPrefix} blocked: create_message called without messagingIntent`);
+      throw new Error(MESSAGING_DISABLED_MESSAGE);
+    }
+  }
+
+  // Every authenticated write passes through the global limiter. Reads are
+  // not pre-paced (Sleeper's read endpoints carry a far higher budget).
+  let waitedMs = 0;
+  let tier = "n/a";
+  if (isWrite) {
+    const turn = await sleeperWriteLimiter.waitTurn(actionType);
+    waitedMs = turn.waitedMs;
+    tier = turn.tier;
+    if (waitedMs > 1000 || tier !== "base") {
+      // eslint-disable-next-line no-console
+      console.info(
+        `${logPrefix} limiter released after ${waitedMs}ms tier=${tier}` +
+        (leagueId ? ` league=${leagueId}` : "") +
+        ` queue=${queueType}`,
+      );
+    }
+  }
+
+  const startedAt = Date.now();
+  let res: Response;
+  try {
+    res = await fetch(SLEEPER_WEB_GQL_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "authorization": token,
+        "x-sleeper-graphql-op": op,
+      },
+      body: JSON.stringify({
+        operationName: op,
+        query: req.query,
+        variables: req.variables ?? {},
+      }),
+    });
+  } catch (err: any) {
+    const latency = Date.now() - startedAt;
+    // eslint-disable-next-line no-console
+    console.error(
+      `${logPrefix} network error after ${latency}ms` +
+      (leagueId ? ` league=${leagueId}` : "") +
+      ` queue=${queueType}`,
+      err?.message ?? err,
+    );
+    throw err;
+  }
+  const latency = Date.now() - startedAt;
 
   let rawBody = "";
   try { rawBody = await res.text(); } catch { /* ignore */ }
@@ -70,20 +217,61 @@ export async function sleeperGraphQLRequest<T = unknown>(
         body?.error ||
         message;
     } catch { /* ignore */ }
-    console.error("[Sleeper GQL] error response", res.status, rawBody);
+
+    // Anti-abuse / rate-limit feedback: tell the limiter so every future
+    // write across the app slows down for a cooldown period. We feed BOTH
+    // raw status and the parsed message so the matcher catches either.
+    if (res.status === 429 || sleeperWriteLimiter.looksLikeRateLimit(message)) {
+      sleeperWriteLimiter.noteRateLimit(`HTTP ${res.status}`);
+    }
+
+    // eslint-disable-next-line no-console
+    console.error(
+      `${logPrefix} ${res.status} after ${latency}ms` +
+      (leagueId ? ` league=${leagueId}` : "") +
+      ` queue=${queueType} action=${actionType}`,
+      rawBody.slice(0, 500),
+    );
     throw new Error(message + (rawBody ? `: ${rawBody.slice(0, 300)}` : ""));
   }
 
   let json: any;
   try { json = JSON.parse(rawBody); } catch {
+    // eslint-disable-next-line no-console
+    console.error(`${logPrefix} non-JSON 200 after ${latency}ms`, rawBody.slice(0, 200));
     throw new Error("Sleeper returned non-JSON response.");
   }
   if (json.errors?.length) {
-    console.error("[Sleeper GQL] GraphQL errors", json.errors);
-    throw new Error(json.errors[0]?.message || "Sleeper operation failed.");
+    const firstMsg = json.errors[0]?.message || "Sleeper operation failed.";
+    if (sleeperWriteLimiter.looksLikeRateLimit(firstMsg)) {
+      sleeperWriteLimiter.noteRateLimit("graphql error");
+    }
+    // eslint-disable-next-line no-console
+    console.error(
+      `${logPrefix} GraphQL errors after ${latency}ms` +
+      (leagueId ? ` league=${leagueId}` : "") +
+      ` queue=${queueType} action=${actionType}`,
+      json.errors,
+    );
+    throw new Error(firstMsg);
+  }
+  if (isWrite) {
+    // Record into the soft-cap counters. Triggers a limiter bump if the
+    // write puts us past the configured per-action threshold.
+    try { recordSafetyWrite(actionType); } catch { /* never block on telemetry */ }
+    // eslint-disable-next-line no-console
+    console.info(
+      `${logPrefix} ok ${latency}ms` +
+      (leagueId ? ` league=${leagueId}` : "") +
+      ` queue=${queueType} action=${actionType}`,
+    );
   }
   return (json.data ?? {}) as T;
 }
+
+// Re-export so consumers can show the kill-switch message inline without
+// directly importing from sleeperSafetyGate.
+export { KILL_SWITCH_MESSAGE };
 
 /**
  * Throws if no valid session exists.
@@ -501,7 +689,7 @@ function buildAcceptTradeMutation(leagueId: string): string {
 
 function buildRejectTradeMutation(leagueId: string): string {
   return `
-    mutation RejectTrade($transactionId: String!, $leg: Int!) {
+    mutation reject_trade($transactionId: String!, $leg: Int!) {
       reject_trade(
         league_id: "${leagueId}"
         transaction_id: $transactionId
@@ -558,7 +746,7 @@ export async function rejectTrade(
   leg: number = 1
 ): Promise<TradeActionResult> {
   const data = await sleeperGraphQLRequest<{ reject_trade: TradeActionResult }>({
-    operationName: "RejectTrade",
+    operationName: "reject_trade",
     query: buildRejectTradeMutation(leagueId),
     variables: { transactionId, leg },
   });
@@ -851,7 +1039,7 @@ export async function sendTradeMessage(
   }
 
   if (!attach) {
-    const plain = await sendPlainDm(dmId, text);
+    const plain = await sendPlainDm(dmId, text, "general");
     return {
       message_id: plain.message_id,
       text: plain.text,
@@ -916,6 +1104,7 @@ export async function sendTradeMessage(
         JSON.stringify(usersInLeagueMap),
       ],
     },
+    meta: { messagingIntent: "general" },
   });
   return { ...data.create_message, attachment_sent: true };
 }
@@ -934,8 +1123,17 @@ export interface SendPlainDmResult {
 /**
  * Send a plain-text DM with no attachment_type, no k/v_attachment_data.
  * A fresh client_id is generated on every call.
+ *
+ * `intent` is REQUIRED and gates this call through the messaging flags:
+ *   - "trade-link" → controlled automatic post-trade DM (always allowed
+ *     unless explicitly disabled).
+ *   - "general"    → user-initiated DM (disabled by default).
  */
-export async function sendPlainDm(dmId: string, text: string): Promise<SendPlainDmResult> {
+export async function sendPlainDm(
+  dmId: string,
+  text: string,
+  intent: "trade-link" | "general" = "general",
+): Promise<SendPlainDmResult> {
   const clientId = crypto.randomUUID();
   const data = await sleeperGraphQLRequest<{ create_message: SendPlainDmResult }>({
     operationName: "create_message",
@@ -957,6 +1155,7 @@ export async function sendPlainDm(dmId: string, text: string): Promise<SendPlain
       }
     `,
     variables: { text },
+    meta: { messagingIntent: intent },
   });
   return data.create_message;
 }
@@ -1013,6 +1212,7 @@ export async function sendDmMessage(dmId: string, text: string): Promise<Sleeper
       }
     `,
     variables: { text },
+    meta: { messagingIntent: "general" },
   });
   return data.create_message;
 }
@@ -1040,6 +1240,7 @@ export async function sendLeagueChatMessage(
       }
     `,
     variables: { text },
+    meta: { messagingIntent: "general" },
   });
   return data.create_message;
 }
@@ -1056,4 +1257,117 @@ export async function draftPlayer(
     "draft_pick: mutation shape not yet discovered. " +
       "Capture from sleeper.com/graphql with x-sleeper-graphql-op: draft_pick."
   );
+}
+
+// ─── Automatic post-trade Dynasty Command link DM ────────────────────────────
+//
+// Single source of truth for the controlled, automatic message we send to a
+// trade partner right after a propose_trade succeeds. This is the ONLY
+// messaging surface that remains active while general messaging is
+// disabled. Templated copy, no free-text input, caps + dedupe enforced.
+
+/** Fixed copy — never user-customizable. */
+const TRADE_LINK_DM_TEXT =
+  "Trade sent through Dynasty Command by StatChasers: https://statchasers.com/dynasty-command/";
+
+export type TradeLinkDmStatus = "sent" | "skipped" | "failed";
+
+export interface FirePostTradeLinkDmParams {
+  /** Sleeper user_id of the trade recipient. */
+  recipientUserId: string;
+  /** League the trade was sent in. */
+  leagueId: string;
+  /** Sender Sleeper user_id, when known — for accurate dedupe across DC accounts. */
+  senderUserId?: string | null;
+  /** Diagnostic queue label for logs (e.g. "bulk-trade", "trade-calc"). */
+  queueType?: string;
+}
+
+export interface FirePostTradeLinkDmResult {
+  status: TradeLinkDmStatus;
+  /** When status === "skipped". */
+  skipReason?: TradeLinkSkipReason;
+  /** When status === "failed". */
+  error?: string;
+}
+
+function randRange(loMs: number, hiMs: number): number {
+  return Math.floor(loMs + Math.random() * (hiMs - loMs));
+}
+
+/**
+ * Fire the automatic post-trade Dynasty Command link DM.
+ *
+ *   1. Waits a randomized 20–60 s so it looks human-paced relative to the
+ *      preceding propose_trade.
+ *   2. Re-runs preflight after the wait (cap counts may have advanced).
+ *   3. Resolves the recipient's DM channel and sends a plain-text DM via
+ *      sendPlainDm with intent "trade-link" — the only path that bypasses
+ *      the general-messaging gate.
+ *   4. Records the send so caps + dedupe work on the NEXT call.
+ *
+ * This function NEVER throws. Trades must not roll back if the DM fails.
+ * Returns a discriminated status so the caller can surface user-facing
+ * messaging.
+ */
+export async function firePostTradeLinkDm(
+  params: FirePostTradeLinkDmParams,
+): Promise<FirePostTradeLinkDmResult> {
+  const { recipientUserId, leagueId, senderUserId, queueType } = params;
+
+  if (!recipientUserId || !leagueId) {
+    return { status: "failed", error: "Missing recipient or league id." };
+  }
+
+  // 1) Preflight up front — if disabled or already over caps for this
+  //    triple, exit before paying the 20–60s wait.
+  const preBefore = canSendTradeLinkDm({ senderUserId, recipientUserId, leagueId });
+  if (!preBefore.ok) {
+    return { status: "skipped", skipReason: preBefore.skipReason };
+  }
+
+  // 2) Humanized post-trade pause.
+  const delayMs = randRange(20_000, 60_000);
+  await new Promise((r) => setTimeout(r, delayMs));
+
+  // 3) Re-preflight — counts may have moved while we waited.
+  const preAfter = canSendTradeLinkDm({ senderUserId, recipientUserId, leagueId });
+  if (!preAfter.ok) {
+    return { status: "skipped", skipReason: preAfter.skipReason };
+  }
+
+  // 4) Resolve DM channel. Treat resolution failure as a generic failure
+  //    so the caller can surface "could not deliver" without revealing
+  //    Sleeper-internal error text in the UI.
+  try {
+    const dmInfo = await getDmByMembersFull(recipientUserId);
+    if (!dmInfo?.dm_id) {
+      return { status: "failed", error: "No DM channel with the trade recipient." };
+    }
+    await sendPlainDm(dmInfo.dm_id, TRADE_LINK_DM_TEXT, "trade-link");
+
+    // 5) Record on success — cap + dedupe state advances.
+    recordTradeLinkDm({ recipientUserId, leagueId, senderUserId });
+
+    // eslint-disable-next-line no-console
+    console.info(
+      `[Sleeper trade-link-dm] sent league=${leagueId} recipient=${recipientUserId} queue=${queueType ?? "single"}`,
+    );
+    return { status: "sent" };
+  } catch (err: any) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[Sleeper trade-link-dm] failed league=${leagueId} recipient=${recipientUserId} queue=${queueType ?? "single"}: ${err?.message ?? err}`,
+    );
+    return { status: "failed", error: err?.message ?? "DM failed" };
+  }
+}
+
+/** Status → user-facing copy for trade flows. */
+export function describeTradeLinkResult(r: FirePostTradeLinkDmResult): string {
+  if (r.status === "sent") return "Trade sent. Dynasty Command link shared with the manager.";
+  if (r.status === "failed") return "Trade sent. Link message could not be delivered.";
+  // Skipped — show the canonical safe-limits copy regardless of which
+  // specific skip reason fired. Internal details are in console logs.
+  return "Trade sent. Link message skipped to stay within safe messaging limits.";
 }

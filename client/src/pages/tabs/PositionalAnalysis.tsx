@@ -13,7 +13,8 @@ import { formatPickLabel } from "@/types";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { getSleeperSession } from "@/services/sleeperAuth";
-import { proposeTrade, getDmByMembers, getDmByMembersFull, markDmRead, sendTradeMessage, sendDmMessage, fetchDmMessages } from "@/services/sleeperAuthedApi";
+import { proposeTrade, getDmByMembers, getDmByMembersFull, markDmRead, sendTradeMessage, sendDmMessage, fetchDmMessages, firePostTradeLinkDm } from "@/services/sleeperAuthedApi";
+import { isGeneralMessagingEnabled } from "@/services/sleeperSafetyGate";
 import type { ProposeTradeResult, SleeperTransactionPick, SleeperDmMessage } from "@/services/sleeperAuthedApi";
 import {
   ArrowRightLeft, Target, TrendingUp, TrendingDown, Zap, ShieldCheck,
@@ -1040,124 +1041,24 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
     setDmStatus("sending");
     setDmError("");
 
-    // ── Step 1: trade-card DM ──────────────────────────────────────────────────
-    let dmId: string | null = null;
-    if (!tradeCardAlreadySent || isRetry) {
-      try {
-        const usersRaw: any[] = await fetch(`${SLEEPER_API_BASE}/league/${trade.league_id}/users`).then(r => r.json());
-
-        const usersInLeagueMap: Record<string, unknown> = {};
-        const userIdToInfo = new Map<string, any>();
-        for (const u of usersRaw) {
-          const info = {
-            avatar: u.avatar ?? null,
-            display_name: u.display_name || u.username || u.user_id,
-            is_bot: false,
-            is_owner: false,
-            league_id: trade.league_id,
-            metadata: u.metadata || {},
-            settings: u.settings || {},
-            user_id: u.user_id,
-          };
-          usersInLeagueMap[u.user_id] = info;
-          userIdToInfo.set(u.user_id, info);
-        }
-
-        const rosterUserMap = new Map<number, unknown>();
-        for (const team of league.teams) {
-          const rid = parseInt(team.id.replace("roster_", ""), 10);
-          if (team.ownerId && userIdToInfo.has(team.ownerId)) {
-            rosterUserMap.set(rid, userIdToInfo.get(team.ownerId));
-          } else {
-            // Placeholder so Sleeper's desktop renderer never reads `user: null`.
-            rosterUserMap.set(rid, {
-              avatar: null,
-              display_name: team.owner || team.name || `Roster ${rid}`,
-              is_bot: false,
-              is_owner: false,
-              league_id: trade.league_id,
-              metadata: {},
-              settings: {},
-              user_id: team.ownerId || "",
-            });
-          }
-        }
-
-        const transactionsByRoster: Record<string, unknown> = {};
-        for (const rosterId of (trade.roster_ids || [])) {
-          const ridStr = String(rosterId);
-          const rosterAdds: unknown[] = [];
-          if (trade.adds) {
-            for (const [playerId, receivingRosterId] of Object.entries(trade.adds)) {
-              if (receivingRosterId === rosterId) {
-                const playerObj = (trade.player_map as Record<string, unknown>)?.[playerId] || { player_id: playerId };
-                rosterAdds.push(playerObj);
-              }
-            }
-          }
-          const rosterPicks: unknown[] = [];
-          if (Array.isArray(trade.draft_picks)) {
-            for (const pick of trade.draft_picks) {
-              if (typeof pick === "string") {
-                const parts = pick.split(",");
-                if (Number(parts[3]) === rosterId) {
-                  rosterPicks.push({
-                    roster_id: Number(parts[0]),
-                    season: parts[1],
-                    round: Number(parts[2]),
-                    owner_id: Number(parts[3]),
-                    previous_owner_id: Number(parts[4]),
-                  });
-                }
-              } else if (pick && typeof pick === "object" && (pick as any).owner_id === rosterId) {
-                rosterPicks.push(pick);
-              }
-            }
-          }
-          transactionsByRoster[ridStr] = {
-            adds: rosterAdds,
-            drops: [],
-            added_picks: rosterPicks,
-            dropped_picks: [],
-            added_budget: [],
-            dropped_budget: [],
-            status: trade.status || "proposed",
-            user: rosterUserMap.get(rosterId),
-          };
-        }
-
-        dmId = await getDmByMembers(partnerUserId);
-        if (!dmId) throw new Error("No DM thread found with this manager.");
-
-        // Trade-card attachment is intentionally disabled until our generator
-        // matches the native Sleeper trade_dm payload exactly. See
-        // tradeAttachmentSchema.ts for the required shape. Mismatches today
-        // in this code path: drops is always [] (sending side never populated),
-        // dropped_picks is always [], no per-roster added_budget/dropped_budget,
-        // and player fallback to bare { player_id }. A plain-text DM is still
-        // delivered so the partner gets notified.
-        const session = getSleeperSession();
-        const myName = session?.display_name || userTeam.owner;
-        await sendTradeMessage({
-          dmId,
-          text: `@${myName} has proposed a trade in ${league.name}`,
-          transactionId: txId,
-          leagueId: trade.league_id,
-          status: trade.status || "proposed",
-          transactionsByRoster,
-          usersInLeagueMap,
-          attachTradeCard: false,
-        });
-
-        dmTradeCardSentMap.set(txId, true);
-        setDmStatus("sent");
-      } catch (err: any) {
-        setDmError(err?.message || "DM could not be delivered.");
-        setDmStatus("failed");
-        return;
-      }
-    } else {
+    // Use the controlled automatic Dynasty Command link DM helper. Replaces
+    // the old free-text trade-card builder while general messaging is paused.
+    const session = getSleeperSession();
+    const result = await firePostTradeLinkDm({
+      recipientUserId: partnerUserId,
+      leagueId: trade.league_id,
+      senderUserId: session?.user_id ?? null,
+      queueType: "trade-finder",
+    });
+    if (result.status === "sent") {
+      dmTradeCardSentMap.set(txId, true);
       setDmStatus("sent");
+    } else if (result.status === "skipped") {
+      setDmError("Link message skipped to stay within safe messaging limits.");
+      setDmStatus("failed");
+    } else {
+      setDmError("Link message could not be delivered.");
+      setDmStatus("failed");
     }
   }
 
@@ -1924,7 +1825,17 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
         )}
 
         {/* ── Messages view ── */}
-        {activeTab === "messages" && (
+        {activeTab === "messages" && !isGeneralMessagingEnabled() && (
+          <div className="flex flex-col flex-1 overflow-hidden min-h-0 px-3 sm:px-6 pt-4">
+            <div className="rounded-md border border-white/10 bg-white/[0.02] px-4 py-6 text-center mt-4">
+              <div className="text-[12px] font-semibold text-white/75 mb-1">Messaging temporarily disabled</div>
+              <div className="text-[11px] text-white/45 leading-relaxed">
+                Dynasty Command's messaging UI is paused right now. Your trade was sent through Sleeper normally — replies are still visible in the Sleeper app.
+              </div>
+            </div>
+          </div>
+        )}
+        {activeTab === "messages" && isGeneralMessagingEnabled() && (
           <div className="flex flex-col flex-1 overflow-hidden min-h-0 px-3 sm:px-6 pt-4">
             {dmLoading ? (
               <div className="flex-1 flex items-center justify-center">

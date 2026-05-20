@@ -20,6 +20,9 @@ import { useValueModel } from "@/contexts/ValueModelContext";
 import type { RankedPlayer } from "@/contexts/ValueModelContext";
 import { getSleeperPlayers } from "@/lib/sleeperApi";
 import { submitWaiverClaim } from "@/services/sleeperAuthedApi";
+import { sleeperWriteLimiter } from "@/services/sleeperWriteLimiter";
+import { preflightBatch, isWriteEnabled } from "@/services/sleeperSafetyGate";
+import { SafePacingNotice } from "@/components/SafePacingNotice";
 import { getSleeperSession, isSessionExpired, type SleeperSession } from "@/services/sleeperAuth";
 import {
   Waves, Zap, Users, DollarSign, Star, TrendingUp, TrendingDown,
@@ -1077,7 +1080,9 @@ function BulkClaimsView({
   const [selections, setSelections] = useState<Record<string, LeagueSel>>({});
   const [step, setStep] = useState<"search" | "review" | "confirm" | "results">("search");
   const [submitting, setSubmitting] = useState(false);
-  const [submitResults, setSubmitResults] = useState<Record<string, { status: "pending" | "success" | "error"; message?: string }>>({});
+  const [submitResults, setSubmitResults] = useState<Record<string, { status: "pending" | "delaying" | "submitting" | "success" | "error" | "skipped"; message?: string }>>({});
+  const [submitPhase, setSubmitPhase] = useState<{ message: string; etaMs: number } | null>(null);
+  const cancelSubmitRef = useRef(false);
   const [session, setSession] = useState<SleeperSession | null>(() => getSleeperSession());
   const searchRef = useRef<HTMLDivElement>(null);
 
@@ -1125,15 +1130,106 @@ function BulkClaimsView({
   const highestBid = selectedLeagues.reduce((m, r) => Math.max(m, r.waiverType === 2 ? (selections[r.leagueId]?.bid ?? 0) : 0), 0);
   const dropCount = selectedLeagues.filter(r => selections[r.leagueId]?.dropId !== "none").length;
 
+  /** Compute the human-style delay BEFORE the (completed+1)th claim — i.e.
+   *  the wait that sits between claim N and claim N+1. Mirrors the staged
+   *  pacing used by BulkTrade so the waiver path no longer looks like a
+   *  burst of automation:
+   *    claims 1–3 → 8–15s,  4–7 → 20–45s,  8+ → 60–180s,
+   *    every 10th → 5–10 min cooldown. */
+  const computeWaiverDelayMs = (completed: number): number => {
+    const r = Math.random();
+    if (completed > 0 && completed % 10 === 0) {
+      return Math.floor((5 + r * 5) * 60_000); // 5–10 min
+    }
+    if (completed < 3)  return Math.floor((8  + r * 7)   * 1_000);  // 8–15 s
+    if (completed < 7)  return Math.floor((20 + r * 25)  * 1_000);  // 20–45 s
+    return                   Math.floor((60 + r * 120) * 1_000);    // 60–180 s
+  };
+
+  /** Cancellable sleep — wakes up early when the user cancels the submit
+   *  so the user isn't forced to wait out a 3-minute pause to abort. */
+  const cancellableSleep = (ms: number) => new Promise<void>((resolve) => {
+    if (cancelSubmitRef.current) return resolve();
+    const start = Date.now();
+    const step = Math.min(250, ms);
+    const tick = () => {
+      if (cancelSubmitRef.current) return resolve();
+      if (Date.now() - start >= ms) return resolve();
+      setTimeout(tick, step);
+    };
+    tick();
+  });
+
   const handleSubmit = async () => {
     if (!token) return;
-    const initial: Record<string, { status: "pending" | "success" | "error" }> = {};
+    // Safety preflight — surfaces kill switch + soft-cap confirmation up front.
+    const pre = preflightBatch({ action: "waiver", batchSize: selectedLeagues.length });
+    if (!pre.ok) {
+      if (pre.blockedReason === "kill-switch") {
+        setSubmitPhase({
+          message: "Sleeper actions are temporarily paused by StatChasers for safety. Please try again later.",
+          etaMs: 0,
+        });
+      } else {
+        setSubmitPhase({
+          message: "Batch cancelled — you can resume later from the waiver tab.",
+          etaMs: 0,
+        });
+      }
+      return;
+    }
+    cancelSubmitRef.current = false;
+    const initial: Record<string, { status: "pending" | "delaying" | "submitting" | "success" | "error" | "skipped"; message?: string }> = {};
     for (const r of selectedLeagues) initial[r.leagueId] = { status: "pending" };
     setSubmitResults(initial);
     setStep("results");
     setSubmitting(true);
-    for (const r of selectedLeagues) {
+    setSubmitPhase(null);
+
+    let completed = 0;
+    for (let i = 0; i < selectedLeagues.length; i++) {
+      if (cancelSubmitRef.current) {
+        // Mark everything still pending as skipped and bail out.
+        setSubmitResults(prev => {
+          const next = { ...prev };
+          for (const r of selectedLeagues.slice(i)) {
+            if (next[r.leagueId]?.status === "pending") {
+              next[r.leagueId] = { status: "skipped", message: "Cancelled" };
+            }
+          }
+          return next;
+        });
+        break;
+      }
+      const r = selectedLeagues[i];
       const sel = selections[r.leagueId];
+
+      // Human-paced gap between claims (skip before the very first one).
+      if (completed > 0) {
+        const delayMs = computeWaiverDelayMs(completed);
+        setSubmitResults(prev => ({ ...prev, [r.leagueId]: { status: "delaying" } }));
+        const isCooldown = completed % 10 === 0;
+        setSubmitPhase({
+          message: isCooldown
+            ? `Cooling down before the next batch (≈${Math.round(delayMs / 60_000)} min)…`
+            : `Pacing the next claim (≈${Math.round(delayMs / 1_000)}s)…`,
+          etaMs: delayMs,
+        });
+        await cancellableSleep(delayMs);
+        if (cancelSubmitRef.current) {
+          setSubmitResults(prev => ({ ...prev, [r.leagueId]: { status: "skipped", message: "Cancelled" } }));
+          continue;
+        }
+      }
+
+      // Defense-in-depth: also pass through the global limiter. Even when
+      // our staged delay above is short, the limiter enforces the cross-
+      // queue minimum gap and any active 429 cooldown.
+      setSubmitPhase({ message: "Waiting for global write turn…", etaMs: 0 });
+      await sleeperWriteLimiter.waitTurn("waiver");
+
+      setSubmitResults(prev => ({ ...prev, [r.leagueId]: { status: "submitting" } }));
+      setSubmitPhase({ message: `Submitting claim in ${r.leagueId}…`, etaMs: 0 });
       try {
         await submitWaiverClaim(
           r.leagueId,
@@ -1144,15 +1240,37 @@ function BulkClaimsView({
         );
         setSubmitResults(prev => ({ ...prev, [r.leagueId]: { status: "success" } }));
       } catch (e: any) {
-        setSubmitResults(prev => ({ ...prev, [r.leagueId]: { status: "error", message: e.message ?? "Claim failed" } }));
+        const msg = e?.message ?? "Claim failed";
+        setSubmitResults(prev => ({ ...prev, [r.leagueId]: { status: "error", message: msg } }));
+        // If Sleeper signals 429 / anti-abuse, stop the queue — the limiter
+        // has already set a global cooldown and continuing would just queue
+        // more attempts behind it.
+        if (sleeperWriteLimiter.looksLikeRateLimit(e)) {
+          setSubmitPhase({
+            message: "Sleeper is temporarily rate-limiting requests. Cancelling the rest of the batch — try again later.",
+            etaMs: 0,
+          });
+          cancelSubmitRef.current = true;
+        }
       }
+      completed++;
     }
+
+    setSubmitPhase(null);
     setSubmitting(false);
   };
 
+  /** Set by the cancel button on the results screen. The in-flight loop
+   *  notices on its next check and stops cleanly. */
+  const handleCancelSubmit = () => {
+    cancelSubmitRef.current = true;
+  };
+
   const handleReset = () => {
+    cancelSubmitRef.current = false;
     setQuery(""); setTargetPlayer(null); setScanResults([]);
     setSelections({}); setStep("search"); setSubmitResults({});
+    setSubmitPhase(null);
   };
 
   const posBadge: Record<string, string> = {
@@ -1506,6 +1624,13 @@ function BulkClaimsView({
           </div>
         )}
 
+        {/* Safety messaging before submit — explains the deliberate pacing. */}
+        {isWriteEnabled() ? (
+          <SafePacingNotice variant="idle" batchSize={selectedLeagues.length} />
+        ) : (
+          <SafePacingNotice variant="kill" />
+        )}
+
         <div className="flex items-center gap-3 justify-end">
           <Button variant="outline" onClick={() => setStep("review")} className="border-[#1a2d4a]">
             Back to Review
@@ -1528,7 +1653,10 @@ function BulkClaimsView({
   if (step === "results" && targetPlayer) {
     const successCount = Object.values(submitResults).filter(r => r.status === "success").length;
     const errorCount = Object.values(submitResults).filter(r => r.status === "error").length;
-    const pendingCount = Object.values(submitResults).filter(r => r.status === "pending").length;
+    const pendingCount = Object.values(submitResults).filter(r =>
+      r.status === "pending" || r.status === "delaying" || r.status === "submitting"
+    ).length;
+    const skippedCount = Object.values(submitResults).filter(r => r.status === "skipped").length;
 
     return (
       <div className="max-w-2xl mx-auto space-y-5">
@@ -1560,7 +1688,29 @@ function BulkClaimsView({
               <RefreshCw className="w-3 h-3 animate-spin" /> {pendingCount} pending
             </span>
           )}
+          {skippedCount > 0 && (
+            <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 font-semibold">
+              {skippedCount} skipped
+            </span>
+          )}
+          {submitting && (
+            <button
+              type="button"
+              onClick={handleCancelSubmit}
+              className="ml-auto flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/30 hover:bg-rose-500/20 font-semibold text-xs"
+              data-testid="button-cancel-waiver-submit"
+            >
+              <X className="w-3 h-3" /> Cancel remaining
+            </button>
+          )}
         </div>
+
+        {submitting && submitPhase && (
+          <SafePacingNotice
+            variant={/cooling down|rate-?limit|safety/i.test(submitPhase.message) ? "cooldown" : "active"}
+            message={submitPhase.message}
+          />
+        )}
 
         <Card className="overflow-hidden border-border/60 dark:border-[#1a2d4a]/80">
           <div className="divide-y divide-border/30 dark:divide-white/[0.04]">
@@ -1572,10 +1722,12 @@ function BulkClaimsView({
               return (
                 <div key={r.leagueId} className="flex items-center gap-3 px-4 py-3">
                   <div className="flex-shrink-0 w-5 flex items-center justify-center">
-                    {!result || result.status === "pending" ? (
+                    {!result || result.status === "pending" || result.status === "delaying" || result.status === "submitting" ? (
                       <RefreshCw className="w-4 h-4 text-muted-foreground animate-spin" />
                     ) : result.status === "success" ? (
                       <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                    ) : result.status === "skipped" ? (
+                      <Minus className="w-4 h-4 text-amber-400" />
                     ) : (
                       <AlertCircle className="w-4 h-4 text-rose-400" />
                     )}
@@ -1594,11 +1746,17 @@ function BulkClaimsView({
                     {isFaab && sel?.bid > 0 && <span className="text-[#d4af37] font-semibold">Bid ${sel.bid}</span>}
                     {drop && <span>Drop {drop.name}</span>}
                   </div>
-                  <div className="text-xs font-semibold flex-shrink-0 w-20 text-right">
+                  <div className="text-xs font-semibold flex-shrink-0 w-24 text-right">
                     {!result || result.status === "pending" ? (
+                      <span className="text-muted-foreground">Queued</span>
+                    ) : result.status === "delaying" ? (
+                      <span className="text-muted-foreground">Pacing…</span>
+                    ) : result.status === "submitting" ? (
                       <span className="text-muted-foreground">Submitting…</span>
                     ) : result.status === "success" ? (
                       <span className="text-emerald-400">Submitted</span>
+                    ) : result.status === "skipped" ? (
+                      <span className="text-amber-400" title={result.message}>Cancelled</span>
                     ) : (
                       <span className="text-rose-400" title={result.message}>Failed</span>
                     )}

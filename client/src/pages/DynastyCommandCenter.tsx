@@ -66,8 +66,15 @@ function loadSavedState() {
 
 function getInitialState(pathTab?: string, pathSub?: string) {
   const saved = loadSavedState();
-  const requestedTab = pathTab || saved?.tab || "portfolio";
-  const requestedSub = pathSub || saved?.sub || "portfolio-summary";
+  let requestedTab = pathTab || saved?.tab || "portfolio";
+  let requestedSub = pathSub || saved?.sub || "portfolio-summary";
+
+  // Legacy redirect — the "Live Draft" module was merged into "Draft" as
+  // the Draft Board sub-tab. Keep old URLs / saved state working.
+  if (requestedTab === "live-draft") {
+    requestedTab = "draft";
+    requestedSub = "draft-board";
+  }
 
   return {
     tab: requestedTab,
@@ -358,12 +365,12 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
     if (activeMainTab === "privacy") return <PrivacyPage onNavigate={handleMainTabChange} />;
     if (activeMainTab === "cookies") return <CookiesPage onNavigate={handleMainTabChange} />;
 
-    if (activeMainTab === "live-draft") {
-      return <LiveDraft />;
+    // Draft module — Draft Board (live Sleeper draft tracker) and ADP
+    // Explorer (public ADP dataset). Both run without an active league.
+    if (activeMainTab === "draft") {
+      if (activeSubTab === "draft-board") return <LiveDraft />;
+      return <DraftCommand />;
     }
-
-    // Draft Command runs on public ADP data — no Sleeper or league required.
-    if (activeMainTab === "draft") return <DraftCommand />;
 
     if (activeMainTab === "portfolio") {
       const key = `portfolio:${activeSubTab}`;

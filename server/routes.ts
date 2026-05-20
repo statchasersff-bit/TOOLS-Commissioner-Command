@@ -9,8 +9,6 @@ import {
   fetchSleeperLeagueFull,
   fetchPortfolioSummary,
   fetchCrossLeagueTrades,
-  fetchDraftBoard,
-  detectLiveDrafts,
   fetchLeagueTransactions,
 } from "./sleeper";
 import {
@@ -41,6 +39,7 @@ import {
   refreshDefaultSnapshots,
   reclassifyAdpDrafts,
   getAdp,
+  getAdpInclusionStatus,
   startAdpScheduler,
   backfillLeagueScoring,
   type AdpFilters,
@@ -67,6 +66,8 @@ import { getUserIdFromRequest } from "./scAuthRoutes";
 import { getFinancesForUser, upsertLeagueFinance } from "./finances";
 import { upsertTeamSnapshot, getTeamSnapshots } from "./teamValueSnapshots";
 import { registerScAuthRoutes } from "./scAuthRoutes";
+import { registerBillingRoutes } from "./billingRoutes";
+import { registerSleeperDraftPickRoutes } from "./sleeperDraftPickRoutes";
 import { requireReadOnlySleeperContext } from "./accessMiddleware";
 import {
   startCrawlInBackground,
@@ -112,6 +113,8 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
   registerScAuthRoutes(app);
+  registerBillingRoutes(app);
+  registerSleeperDraftPickRoutes(app);
 
   app.get("/api/health", (_req, res) => {
     res.json({ status: "ok", ts: Date.now() });
@@ -190,28 +193,6 @@ export async function registerRoutes(
     } catch (err: any) {
       console.error("Portfolio summary error:", err);
       res.status(500).json({ error: err.message || "Failed to fetch portfolio summary" });
-    }
-  });
-
-  app.get("/api/sleeper/draft/:leagueId", async (req, res) => {
-    try {
-      const { leagueId } = req.params;
-      const result = await fetchDraftBoard(leagueId);
-      res.json(result);
-    } catch (err: any) {
-      console.error("Draft board error:", err);
-      res.status(500).json({ error: err.message || "Failed to fetch draft board" });
-    }
-  });
-
-  app.get("/api/sleeper/live-drafts/:userId", requireReadOnlySleeperContext, async (req, res) => {
-    try {
-      const { userId } = req.params;
-      const results = await detectLiveDrafts(userId);
-      res.json(results);
-    } catch (err: any) {
-      console.error("Live draft detection error:", err);
-      res.status(500).json({ error: err.message || "Failed to detect live drafts" });
     }
   });
 
@@ -1053,6 +1034,37 @@ export async function registerRoutes(
     } catch (err: any) {
       console.error("[Admin] adp/reclassify error:", err);
       res.status(500).json({ error: err.message || "Reclassify failed" });
+    }
+  });
+
+  // Alias: same handler under the more explicit name the data-repair spec
+  // uses. Keeps both endpoints live so existing UI / scripts don't break.
+  app.post("/api/admin/adp/reclassify-drafts", async (req, res) => {
+    if (!(await requireAdmin(req, res))) return;
+    try {
+      const result = await reclassifyAdpDrafts();
+      // Trigger a default-snapshot refresh so the freshly-included/excluded
+      // counts are immediately reflected in ADP Explorer reads.
+      refreshDefaultSnapshots().catch((err) =>
+        console.error("[Admin] post-reclassify refresh failed:", err)
+      );
+      res.json(result);
+    } catch (err: any) {
+      console.error("[Admin] adp/reclassify-drafts error:", err);
+      res.status(500).json({ error: err.message || "Reclassify failed" });
+    }
+  });
+
+  // Status / debug view — exposes draft inclusion vs. exclusion counts so
+  // the ADP admin tools can show "X drafts total / Y included / Z excluded".
+  app.get("/api/admin/adp/status", async (req, res) => {
+    if (!(await requireAdmin(req, res))) return;
+    try {
+      const status = await getAdpInclusionStatus();
+      res.json(status);
+    } catch (err: any) {
+      console.error("[Admin] adp/status error:", err);
+      res.status(500).json({ error: err.message || "Status failed" });
     }
   });
 

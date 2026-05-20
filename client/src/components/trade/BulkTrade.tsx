@@ -18,8 +18,11 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { cn } from "@/lib/utils";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { useValueModel } from "@/contexts/ValueModelContext";
-import { proposeTrade } from "@/services/sleeperAuthedApi";
-import { getSleeperToken } from "@/services/sleeperAuth";
+import { proposeTrade, firePostTradeLinkDm } from "@/services/sleeperAuthedApi";
+import { sleeperWriteLimiter } from "@/services/sleeperWriteLimiter";
+import { preflightBatch, isWriteEnabled } from "@/services/sleeperSafetyGate";
+import { SafePacingNotice } from "@/components/SafePacingNotice";
+import { getSleeperToken, getSleeperSession } from "@/services/sleeperAuth";
 import { fmtEta } from "@/services/optimizeQueue";
 import type { League, Team, Player, Pick } from "@/types";
 import type { SleeperTransactionPick } from "@/services/sleeperAuthedApi";
@@ -649,6 +652,7 @@ export function BulkTrade({
         let lastErr = "";
 
         try {
+          await sleeperWriteLimiter.waitTurn("trade");
           await proposeTrade({
             leagueId: item.leagueId,
             adds, drops, draftPicks,
@@ -675,6 +679,7 @@ export function BulkTrade({
           await new Promise(r => setTimeout(r, 8_000 + Math.random() * 7_000));
           if (qStatusRef.current === "running") {
             try {
+              await sleeperWriteLimiter.waitTurn("trade");
               await proposeTrade({
                 leagueId: item.leagueId,
                 adds, drops, draftPicks,
@@ -685,6 +690,20 @@ export function BulkTrade({
               lastErr = e?.message ?? "Retry failed";
             }
           }
+        }
+
+        // Fire the automatic StatChasers-link DM after a successful trade.
+        // Fire-and-forget so the queue moves on immediately; the helper
+        // handles the 20–60s pause + caps + dedupe internally and never
+        // throws. A failed DM has no effect on the trade outcome.
+        if (ok && item.partner?.ownerId) {
+          const me = getSleeperSession();
+          void firePostTradeLinkDm({
+            recipientUserId: item.partner.ownerId,
+            leagueId: item.leagueId,
+            senderUserId: me?.user_id ?? null,
+            queueType: "bulk-trade",
+          });
         }
 
         patchItem(
@@ -735,6 +754,17 @@ export function BulkTrade({
       rdNet:           sumRd(giveAssets)           - sumRd(t.resolvedGetAssets),
     }));
     const items = [...inLeague, ...crossLeague];
+    // Safety preflight — kill switch + soft cap. Aborts the start when the
+    // gate refuses; the caller-facing notice below already explains why.
+    const pre = preflightBatch({ action: "trade", batchSize: items.length });
+    if (!pre.ok) {
+      setPauseMsg(
+        pre.blockedReason === "kill-switch"
+          ? "Sleeper actions are temporarily paused by StatChasers for safety. Please try again later."
+          : "Batch cancelled.",
+      );
+      return;
+    }
     queueRef.current   = items;
     qStatusRef.current = "running";
     setQueueItems(items);
@@ -1189,6 +1219,15 @@ export function BulkTrade({
             </p>
           </div>
 
+          {isWriteEnabled() ? (
+            <SafePacingNotice
+              variant="idle"
+              batchSize={selectedTargets.length + selectedCrossTargets.length}
+            />
+          ) : (
+            <SafePacingNotice variant="kill" />
+          )}
+
           <div className="space-y-3">
             {selectedTargets.map(target => {
               const resolvedGet = target.resolvedGetAssets.length > 0 ? target.resolvedGetAssets : getAssets;
@@ -1419,6 +1458,12 @@ export function BulkTrade({
               <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
               <p className="text-xs text-amber-500">{pauseMsg}</p>
             </div>
+          )}
+
+          {/* Pacing notice — shown while queue is running so the user
+               understands the long gaps between sends. */}
+          {qStatus === "running" && !pauseMsg && (
+            <SafePacingNotice variant="active" message="Submitting trades safely — Dynasty Command paces each send like a real user." />
           )}
 
           {/* Queue items */}

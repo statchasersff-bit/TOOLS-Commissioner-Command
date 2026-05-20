@@ -3,6 +3,9 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useSleeper } from "@/contexts/SleeperContext";
 import { sendLeagueChatMessage } from "@/services/sleeperAuthedApi";
+import { sleeperWriteLimiter } from "@/services/sleeperWriteLimiter";
+import { preflightBatch, isWriteEnabled } from "@/services/sleeperSafetyGate";
+import { SafePacingNotice } from "@/components/SafePacingNotice";
 import {
   X, Share2, Loader2, CheckCircle2, AlertCircle,
   Pause, Play, XCircle, ChevronRight, ChevronLeft,
@@ -221,7 +224,10 @@ export function ShareDynastyPopup({ blocked = false, forceOpen = false, onForceO
     const snap = patchItem(q, idx, { status: "sending" });
     setQueue(snap);
 
-    sendLeagueChatMessage(q.items[idx].leagueId, SHARE_MESSAGE)
+    // Gate every chat send on the global write limiter — protects against
+    // overlap with bulk-trade / waiver / lineup queues running concurrently.
+    sleeperWriteLimiter.waitTurn("chat")
+      .then(() => sendLeagueChatMessage(q.items[idx].leagueId, SHARE_MESSAGE))
       .then(() => {
         markLeagueSent(snap.items[idx].leagueId);
 
@@ -363,6 +369,10 @@ export function ShareDynastyPopup({ blocked = false, forceOpen = false, onForceO
   function startQueue() {
     const toSend = eligibleLeagues.filter(l => selected.has(l.leagueId));
     if (toSend.length === 0) return;
+
+    // Safety preflight — kill switch + soft cap. If declined, exit silently.
+    const pre = preflightBatch({ action: "chat", batchSize: toSend.length });
+    if (!pre.ok) return;
 
     localStorage.setItem(SHARED_KEY, String(Date.now()));
     sessionStorage.setItem(SESSION_KEY, "1");
@@ -770,6 +780,12 @@ export function ShareDynastyPopup({ blocked = false, forceOpen = false, onForceO
                     You can pause or cancel from the progress indicator at any time. Dynasty Command remains fully usable while the queue runs.
                   </p>
 
+                  {isWriteEnabled() ? (
+                    <SafePacingNotice variant="idle" batchSize={selected.size} />
+                  ) : (
+                    <SafePacingNotice variant="kill" />
+                  )}
+
                   <div className="flex items-center gap-2 pt-1">
                     <Button size="sm" variant="ghost"
                       className="h-8 text-[12px] border border-border/40"
@@ -777,7 +793,8 @@ export function ShareDynastyPopup({ blocked = false, forceOpen = false, onForceO
                       <ChevronLeft className="w-3 h-3" /> Back
                     </Button>
                     <Button size="sm"
-                      className="flex-1 h-8 text-[12px] bg-gradient-to-r from-[#d4af37] to-[#b8962e] text-black font-bold hover:opacity-90"
+                      disabled={!isWriteEnabled()}
+                      className="flex-1 h-8 text-[12px] bg-gradient-to-r from-[#d4af37] to-[#b8962e] text-black font-bold hover:opacity-90 disabled:opacity-50"
                       onClick={startQueue}>
                       <Share2 className="w-3 h-3 mr-1.5" />
                       Start Sharing

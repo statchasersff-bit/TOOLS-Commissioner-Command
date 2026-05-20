@@ -8,6 +8,8 @@ import { PlayerProfileProvider } from "@/contexts/PlayerProfileContext";
 import { GlobalPlayerProfileDrawer } from "@/components/GlobalPlayerProfileDrawer";
 import { SleeperProvider } from "@/contexts/SleeperContext";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { WriteAccessModalProvider } from "@/contexts/WriteAccessModalContext";
+import { DevModeBanner } from "@/components/DevModeBanner";
 import { FavoriteTeamProvider } from "@/contexts/FavoriteTeamContext";
 import { AuthGate } from "@/pages/auth/AuthGate";
 import DynastyCommandCenter from "@/pages/DynastyCommandCenter";
@@ -151,13 +153,16 @@ function App() {
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
           <AuthProvider>
-            <FavoriteTeamProvider>
-              <AuthGate>
-                <ErrorBoundary label="authenticated-tree">
-                  <AuthenticatedTree probe={probe} />
-                </ErrorBoundary>
-              </AuthGate>
-            </FavoriteTeamProvider>
+            <WriteAccessModalProvider>
+              <FavoriteTeamProvider>
+                <DevModeBanner />
+                <AuthGate>
+                  <ErrorBoundary label="authenticated-tree">
+                    <AuthenticatedTree probe={probe} />
+                  </ErrorBoundary>
+                </AuthGate>
+              </FavoriteTeamProvider>
+            </WriteAccessModalProvider>
           </AuthProvider>
         </TooltipProvider>
       </QueryClientProvider>

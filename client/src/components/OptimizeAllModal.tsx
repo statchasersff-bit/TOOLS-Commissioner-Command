@@ -16,6 +16,8 @@ import {
 import type { OptimizeQueueItem, QueueSummary, QueueStatus } from "@/services/optimizeQueue";
 import { fmtEta } from "@/services/optimizeQueue";
 import { getSleeperSession } from "@/services/sleeperAuth";
+import { preflightBatch, isWriteEnabled } from "@/services/sleeperSafetyGate";
+import { SafePacingNotice } from "@/components/SafePacingNotice";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -73,6 +75,15 @@ function ConfirmView({
         </div>
       )}
 
+      {/* Safe pacing notice — set expectations about deliberate delays. */}
+      <div className="mx-5 mt-4">
+        {isWriteEnabled() ? (
+          <SafePacingNotice variant="idle" batchSize={leagues.length} />
+        ) : (
+          <SafePacingNotice variant="kill" />
+        )}
+      </div>
+
       {/* League list */}
       <div className="px-5 py-4 space-y-2 max-h-72 overflow-y-auto">
         {leagues.map((l, i) => (
@@ -109,12 +120,16 @@ function ConfirmView({
         </Button>
         <Button
           size="sm"
-          onClick={onConfirm}
-          disabled={!hasAuth}
+          onClick={() => {
+            const pre = preflightBatch({ action: "lineup", batchSize: leagues.length });
+            if (!pre.ok) return;
+            onConfirm();
+          }}
+          disabled={!hasAuth || !isWriteEnabled()}
           data-testid="button-confirm-optimize-all"
           className={cn(
             "flex-1 font-bold transition-all",
-            hasAuth
+            hasAuth && isWriteEnabled()
               ? "bg-[#d4af37] hover:bg-[#c9a227] text-[#0b0e14]"
               : "opacity-40 cursor-not-allowed bg-white/10 text-white/40"
           )}
@@ -220,6 +235,16 @@ function ProgressView({
               <span className="text-[9px] text-white/25">ETA {fmtEta(estimatedRemainingMs)}</span>
             )}
           </div>
+        </div>
+      )}
+
+      {/* Active-pacing notice — keeps users from thinking the tool is stuck. */}
+      {!isDone && isRunning && (
+        <div className="px-5 pt-2">
+          <SafePacingNotice
+            variant="active"
+            message="Submitting lineups safely — Dynasty Command spaces each push to avoid Sleeper rate limits."
+          />
         </div>
       )}
 
