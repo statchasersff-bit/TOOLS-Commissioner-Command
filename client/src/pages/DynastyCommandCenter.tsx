@@ -452,8 +452,8 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
                   </span>
                 )}
                 <div className="w-8 h-8 md:w-9 md:h-9 rounded-lg flex items-center justify-center flex-shrink-0">
-                  <img src={logoDark} alt="StatChasers" className="w-8 h-8 md:w-9 md:h-9 hidden dark:block" />
-                  <img src={logoLight} alt="StatChasers" className="w-8 h-8 md:w-9 md:h-9 block dark:hidden" />
+                  <img src={logoDark} alt="StatChasers" className="w-8 h-8 md:w-9 md:h-9 hidden dark-any:block" />
+                  <img src={logoLight} alt="StatChasers" className="w-8 h-8 md:w-9 md:h-9 block dark-any:hidden" />
                 </div>
                 <div className="leading-none hidden md:block text-left">
                   <h1 className="text-sm md:text-base font-bold text-foreground leading-tight tracking-tight" data-testid="text-app-title">StatChasers</h1>
@@ -471,8 +471,8 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
                   {/* Brand header */}
                   <div className="px-4 py-3.5" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)", background: "linear-gradient(135deg, rgba(11,58,122,0.18) 0%, transparent 100%)" }}>
                     <div className="flex items-center gap-2.5">
-                      <img src={logoDark} alt="StatChasers" className="w-7 h-7 hidden dark:block" />
-                      <img src={logoLight} alt="StatChasers" className="w-7 h-7 block dark:hidden" />
+                      <img src={logoDark} alt="StatChasers" className="w-7 h-7 hidden dark-any:block" />
+                      <img src={logoLight} alt="StatChasers" className="w-7 h-7 block dark-any:hidden" />
                       <div>
                         <p className="text-[13px] font-black text-white leading-tight">StatChasers</p>
                         <p className="text-[10px] font-semibold leading-tight" style={{ color: "#d4af37" }}>Dynasty Command</p>

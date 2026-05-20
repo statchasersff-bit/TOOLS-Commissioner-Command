@@ -235,6 +235,116 @@
   --destructive-border: hsl(from hsl(var(--destructive)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
 }
 
+/* ── X-MODE — cleaner, brighter dark variant ─────────────────────────────────
+ * A third theme option alongside light and dark. Goals: move away from the
+ * very-deep navy stack toward a lighter blue-grey system, brighter text, a
+ * brighter interactive blue (#3d8fe0) as the primary, and gold (#f5a623)
+ * reserved for premium/draft-capital accents rather than CTAs. Variable
+ * names mirror .dark so every component picks up the new palette without
+ * any markup changes. */
+.x-mode {
+  --button-outline: rgba(255,255,255, .12);
+  --badge-outline: rgba(255,255,255, .06);
+  --opaque-button-border-intensity: 9;
+  --elevate-1: rgba(255,255,255, .05);
+  --elevate-2: rgba(255,255,255, .10);
+
+  /* Surfaces — blue-grey stack, lighter than dark mode */
+  --background: 220 24% 7%;             /* #0e1117 page                    */
+  --foreground: 210 39% 95%;            /* #edf2f7 brighter primary text   */
+  --border: 218 28% 17%;                /* #1f2837 borders                 */
+  --card: 219 29% 12%;                  /* #151b26 card / nav              */
+  --card-foreground: 210 39% 95%;
+  --card-border: 218 28% 17%;
+  --sidebar: 219 29% 12%;
+  --sidebar-foreground: 210 39% 95%;
+  --sidebar-border: 218 28% 17%;
+  --sidebar-primary: 210 72% 56%;       /* #3d8fe0 brighter interactive    */
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 218 25% 17%;
+  --sidebar-accent-foreground: 210 39% 95%;
+  --sidebar-ring: 210 72% 56%;
+  --popover: 219 29% 14%;
+  --popover-foreground: 210 39% 95%;
+  --popover-border: 218 28% 19%;
+
+  /* Primary = brighter blue. Used for buttons, active states, selected tabs,
+   * focus rings, and CTAs. Gold is intentionally NOT primary here. */
+  --primary: 210 72% 56%;               /* #3d8fe0                          */
+  --primary-foreground: 0 0% 100%;
+  --secondary: 218 25% 17%;             /* elevated chip surface            */
+  --secondary-foreground: 210 39% 95%;
+  --muted: 218 25% 15%;
+  --muted-foreground: 215 12% 54%;      /* #7b8798 muted text               */
+  --accent: 218 25% 17%;
+  --accent-foreground: 210 39% 95%;
+  --destructive: 0 70% 45%;
+  --destructive-foreground: 0 0% 100%;
+  --input: 218 25% 22%;
+  --ring: 210 72% 56%;                  /* bright-blue focus ring           */
+
+  /* Chart hues — keep dark-mode chart palette; positions stay legible. */
+  --chart-1: 210 80% 65%;
+  --chart-2: 38 90% 60%;
+  --chart-3: 200 75% 60%;
+  --chart-4: 25 80% 65%;
+  --chart-5: 280 65% 70%;
+
+  --shadow-2xs: 0px 2px 0px 0px hsl(0 0% 0% / 0.20);
+  --shadow-xs: 0px 2px 0px 0px hsl(0 0% 0% / 0.28);
+  --shadow-sm: 0px 2px 0px 0px hsl(0 0% 0% / 0.28), 0px 1px 2px -1px hsl(0 0% 0% / 0.35);
+  --shadow: 0px 2px 0px 0px hsl(0 0% 0% / 0.28), 0px 1px 2px -1px hsl(0 0% 0% / 0.40);
+  --shadow-md: 0px 2px 0px 0px hsl(0 0% 0% / 0.28), 0px 2px 4px -1px hsl(0 0% 0% / 0.45);
+  --shadow-lg: 0px 2px 0px 0px hsl(0 0% 0% / 0.28), 0px 4px 6px -1px hsl(0 0% 0% / 0.50);
+  --shadow-xl: 0px 2px 0px 0px hsl(0 0% 0% / 0.28), 0px 8px 10px -1px hsl(0 0% 0% / 0.55);
+  --shadow-2xl: 0px 2px 0px 0px hsl(0 0% 0% / 0.60);
+
+  /* StatChasers brand surfaces — X-Mode variant. Keeps the navy brand hue
+   * intact for badges/headers but lifts every surface to the new blue-grey
+   * baseline so the UI feels cleaner. */
+  --sc-page-bg: #0e1117;
+  --sc-card-bg: #151b26;
+  --sc-navy: #0F2447;                   /* brand navy stays — used for logos/badges */
+  --sc-navy-soft: #1E3A6B;
+  --sc-text-primary: #edf2f7;
+  --sc-text-secondary: #aab6c5;
+  --sc-text-muted: #7b8798;
+  --sc-border: rgba(148, 163, 184, 0.20);
+  --sc-border-strong: rgba(148, 163, 184, 0.32);
+  --sc-gold: #f5a623;                   /* premium accent only              */
+  --sc-gold-deep: #c8821b;
+  --sc-gold-soft: rgba(245, 166, 35, 0.12);
+  --sc-shadow-card: 0 8px 24px rgba(0, 0, 0, 0.32);
+  --sc-shadow-card-hover: 0 12px 32px rgba(0, 0, 0, 0.45);
+  --sc-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.32);
+  --sc-nav-bg: #151b26;
+  --sc-nav-bg-translucent: rgba(21, 27, 38, 0.85);
+  --sc-table-header-bg: rgba(148, 163, 184, 0.06);
+  --sc-table-row-hover: rgba(148, 163, 184, 0.04);
+
+/* Fallback for older browsers */
+  --sidebar-primary-border: hsl(var(--sidebar-primary));
+  --sidebar-primary-border: hsl(from hsl(var(--sidebar-primary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+
+  --sidebar-accent-border: hsl(var(--sidebar-accent));
+  --sidebar-accent-border: hsl(from hsl(var(--sidebar-accent)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+
+  --primary-border: hsl(var(--primary));
+  --primary-border: hsl(from hsl(var(--primary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+
+  --secondary-border: hsl(var(--secondary));
+  --secondary-border: hsl(from hsl(var(--secondary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+
+  --muted-border: hsl(var(--muted));
+  --muted-border: hsl(from hsl(var(--muted)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+
+  --accent-border: hsl(var(--accent));
+  --accent-border: hsl(from hsl(var(--accent)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+
+  --destructive-border: hsl(var(--destructive));
+  --destructive-border: hsl(from hsl(var(--destructive)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+}
+
 @layer base {
   * {
     @apply border-border;
@@ -251,7 +361,8 @@
     background-size: 32px 32px;
     overflow-x: hidden;
   }
-  .dark body {
+  .dark body,
+  .x-mode body {
     background-image: none;
   }
 
@@ -391,6 +502,12 @@
       linear-gradient(90deg, rgba(100, 160, 255, 0.04) 1px, transparent 1px);
     background-size: 24px 24px;
   }
+  .x-mode .blueprint-bg {
+    background-image:
+      linear-gradient(rgba(170, 200, 255, 0.05) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(170, 200, 255, 0.05) 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
 
   /* ── StatChasers brand utilities ─────────────────────────────────────────
    * Opt-in helpers components reach for when they need brand-specific
@@ -406,7 +523,8 @@
       linear-gradient(90deg, rgba(15, 36, 71, 0.025) 1px, transparent 1px);
     background-size: 32px 32px;
   }
-  .dark .sc-page-bg {
+  .dark .sc-page-bg,
+  .x-mode .sc-page-bg {
     background-color: var(--sc-page-bg);
     background-image: none;
   }
@@ -494,6 +612,23 @@
       linear-gradient(rgba(120, 170, 255, 0.05) 1px, transparent 1px),
       linear-gradient(90deg, rgba(120, 170, 255, 0.05) 1px, transparent 1px);
     background-size: auto, auto, 28px 28px, 28px 28px;
+  }
+  /* X-Mode: lighter HUD base so the board reads cleaner / less "black hole".
+   * Brighter blue ambient up top + a touch of warm amber-gold accent. */
+  .x-mode .hex-tactical-bg {
+    background-color: #0b111d;
+    background-image:
+      radial-gradient(ellipse 80% 60% at 50% 0%, rgba(61, 143, 224, 0.22), transparent 60%),
+      radial-gradient(ellipse 60% 40% at 90% 100%, rgba(245, 166, 35, 0.05), transparent 70%),
+      linear-gradient(rgba(170, 200, 255, 0.06) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(170, 200, 255, 0.06) 1px, transparent 1px);
+    background-size: auto, auto, 28px 28px, 28px 28px;
+  }
+  /* Draft-board tile/avatar background — hardcoded as #0a1424 inline. Match
+   * the lighter HUD baseline in X-Mode so empty/upcoming picks don't punch
+   * holes in the board. */
+  .x-mode .bg-\[\#0a1424\] {
+    background-color: #151b26;
   }
   .hex-tactical-bg::before {
     content: "";

@@ -994,10 +994,12 @@ function HeroKpi({
 
 function PositionBadge({ pos }: { pos: string }) {
   const colors: Record<string, string> = {
-    QB: "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400",
-    RB: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400",
-    WR: "bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400",
-    TE: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400",
+    QB: "bg-red-500/20 text-red-700 dark-any:bg-red-500/25 dark-any:text-red-300",
+    RB: "bg-emerald-500/20 text-emerald-700 dark-any:bg-emerald-500/25 dark-any:text-emerald-300",
+    WR: "bg-blue-500/20 text-blue-700 dark-any:bg-blue-500/25 dark-any:text-blue-300",
+    TE: "bg-orange-500/20 text-orange-700 dark-any:bg-orange-500/25 dark-any:text-orange-300",
+    K:  "bg-amber-500/20 text-amber-700 dark-any:bg-amber-500/25 dark-any:text-amber-300",
+    DEF: "bg-slate-500/20 text-slate-700 dark-any:bg-slate-500/25 dark-any:text-slate-300",
   };
   return (
     <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded", colors[pos] ?? "bg-muted text-muted-foreground")}>

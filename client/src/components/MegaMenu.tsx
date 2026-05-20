@@ -259,7 +259,7 @@ function NavItem({ tab, isActive, isOpen, onOpen, onClose, onClickTab, onNavigat
           "transition-all duration-[180ms]",
           "focus:outline-none focus-visible:ring-1 focus-visible:ring-[#d4af37]/50",
           isActive
-            ? "text-[#0b3a7a] dark:text-blue-200 bg-[#0b3a7a]/8 dark:bg-blue-400/10"
+            ? "text-[#0b3a7a] dark:text-blue-200 x-mode:text-[#3d8fe0] bg-[#0b3a7a]/8 dark:bg-blue-400/10 x-mode:bg-[#3d8fe0]/10"
             : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
         )}
       >
@@ -548,8 +548,8 @@ export function MobileMenuButton({ tabs, activeTab, setActiveTab }: MobileMenuBu
           <div className="absolute inset-x-3 top-3 bottom-auto max-h-[calc(100vh-24px)] bg-[#0a1628] rounded-2xl border border-[#1a2d4a] shadow-2xl shadow-black/40 animate-in slide-in-from-top-2 fade-in duration-250 overflow-hidden">
             <div className="flex items-center justify-between px-5 pt-5 pb-2">
               <div className="flex items-center gap-3">
-                <img src={logoDark} alt="StatChasers" className="w-9 h-9 hidden dark:block" />
-                <img src={logoLight} alt="StatChasers" className="w-9 h-9 block dark:hidden" />
+                <img src={logoDark} alt="StatChasers" className="w-9 h-9 hidden dark-any:block" />
+                <img src={logoLight} alt="StatChasers" className="w-9 h-9 block dark-any:hidden" />
                 <div>
                   <p className="text-[15px] font-bold text-white leading-tight tracking-tight">StatChasers</p>
                   <p className="text-[10px] text-[#d4af37] font-semibold tracking-widest uppercase">Dynasty Command</p>

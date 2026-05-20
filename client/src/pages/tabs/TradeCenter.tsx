@@ -3245,7 +3245,7 @@ function TradeCard({
                   return (
                     <div key={`pick-${pi}`} className="flex items-center justify-between py-1">
                       <div className="flex items-center gap-1.5">
-                        <Badge variant="outline" className={`text-[10px] w-7 justify-center ${isStartup ? "bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400 border-amber-300 dark:border-amber-700" : "bg-purple-50 text-purple-600 dark:bg-purple-950/30 dark:text-purple-400"}`}>
+                        <Badge variant="outline" className={`text-[10px] w-7 justify-center ${isStartup ? "bg-violet-50 text-violet-700 dark:bg-violet-950/30 dark:text-violet-400 border-violet-300 dark:border-violet-700" : "bg-purple-50 text-purple-600 dark:bg-purple-950/30 dark:text-purple-400"}`}>
                           {isStartup ? "SP" : "PK"}
                         </Badge>
                         <span className="text-xs font-medium">

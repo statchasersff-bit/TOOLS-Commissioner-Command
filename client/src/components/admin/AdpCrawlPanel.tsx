@@ -30,6 +30,9 @@ interface CrawlResult {
   draftsIngested: number;
   picksIngested: number;
   duplicatesSkipped: number;
+  notCompleteSkipped?: number;
+  categoryFilteredSkipped?: number;
+  excludedSkipped?: number;
   errors: string[];
   capsHit: string[];
   requestCount: number;
@@ -504,7 +507,32 @@ export function AdpCrawlPanel() {
             <Stat label="Drafts found" value={formatNum(liveProgress.draftsFound)} />
             <Stat label="Drafts ingested" value={formatNum(liveProgress.draftsIngested)} />
             <Stat label="Picks ingested" value={formatNum(liveProgress.picksIngested)} />
+            <Stat label="Already in DB" value={formatNum(liveProgress.duplicatesSkipped)} />
+            <Stat label="Not complete" value={formatNum(liveProgress.notCompleteSkipped ?? 0)} />
+            <Stat label="Category filtered" value={formatNum(liveProgress.categoryFilteredSkipped ?? 0)} />
+            <Stat label="Excluded" value={formatNum(liveProgress.excludedSkipped ?? 0)} />
           </div>
+
+          {/* Skip-reason hint: if drafts are being found but none ingested,
+              surface the most likely cause so the user isn't left guessing. */}
+          {liveProgress.draftsFound > 0 && liveProgress.draftsIngested === 0 && (
+            <div className="mt-2 text-[11px] text-amber-500/90 leading-snug">
+              {(() => {
+                const nc = liveProgress.notCompleteSkipped ?? 0;
+                const cf = liveProgress.categoryFilteredSkipped ?? 0;
+                const dup = liveProgress.duplicatesSkipped;
+                const exc = liveProgress.excludedSkipped ?? 0;
+                const parts: string[] = [];
+                if (nc > 0) parts.push(`${nc} still in progress / pre-draft`);
+                if (cf > 0) parts.push(`${cf} skipped by category filter`);
+                if (dup > 0) parts.push(`${dup} already ingested`);
+                if (exc > 0) parts.push(`${exc} excluded by quality gates`);
+                return parts.length > 0
+                  ? `Found ${liveProgress.draftsFound} drafts but ingested none — ${parts.join(", ")}.`
+                  : null;
+              })()}
+            </div>
+          )}
 
           {/* Per-depth progress */}
           {liveProgress.depthProgress.length > 0 && (
@@ -558,7 +586,10 @@ export function AdpCrawlPanel() {
             <Stat label="Drafts found" value={formatNum(result.draftsFound)} testId="stat-drafts-found" />
             <Stat label="Drafts ingested" value={formatNum(result.draftsIngested)} testId="stat-drafts-ingested" />
             <Stat label="Picks ingested" value={formatNum(result.picksIngested)} testId="stat-picks-ingested" />
-            <Stat label="Dup skipped" value={formatNum(result.duplicatesSkipped)} testId="stat-duplicates-skipped" />
+            <Stat label="Already in DB" value={formatNum(result.duplicatesSkipped)} testId="stat-duplicates-skipped" />
+            <Stat label="Not complete" value={formatNum(result.notCompleteSkipped ?? 0)} testId="stat-not-complete-skipped" />
+            <Stat label="Category filtered" value={formatNum(result.categoryFilteredSkipped ?? 0)} testId="stat-category-filtered" />
+            <Stat label="Excluded" value={formatNum(result.excludedSkipped ?? 0)} testId="stat-excluded-skipped" />
             <Stat label="Caps hit" value={(result.capsHit ?? []).length === 0 ? "none" : (result.capsHit ?? []).join(", ")} testId="stat-caps-hit" />
             <Stat label="Errors" value={formatNum((result.errors ?? []).length)} testId="stat-errors-count" />
           </div>

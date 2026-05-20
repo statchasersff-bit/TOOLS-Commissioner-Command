@@ -86,6 +86,12 @@ export interface NetworkCrawlResult {
   draftsIngested: number;
   picksIngested: number;
   duplicatesSkipped: number;
+  /** Drafts that exist but aren't completed yet (pre_draft / drafting). */
+  notCompleteSkipped: number;
+  /** Drafts skipped because their category didn't match the user's filter. */
+  categoryFilteredSkipped: number;
+  /** Drafts dropped by ADP quality gates (too few rounds/teams, IDP, etc.). */
+  excludedSkipped: number;
   errors: string[];
   capsHit: string[];
   requestCount: number;
@@ -234,6 +240,9 @@ function makeIdleState(): CrawlLiveState {
     draftsIngested: 0,
     picksIngested: 0,
     duplicatesSkipped: 0,
+    notCompleteSkipped: 0,
+    categoryFilteredSkipped: 0,
+    excludedSkipped: 0,
     errors: [],
     capsHit: [],
     requestCount: 0,
@@ -267,6 +276,9 @@ function makeRunningState(opts: NetworkCrawlOpts): CrawlLiveState {
     draftsIngested: 0,
     picksIngested: 0,
     duplicatesSkipped: 0,
+    notCompleteSkipped: 0,
+    categoryFilteredSkipped: 0,
+    excludedSkipped: 0,
     errors: [],
     capsHit: [],
     requestCount: 0,
@@ -402,6 +414,9 @@ export async function runNetworkCrawl(
     draftsIngested: 0,
     picksIngested: 0,
     duplicatesSkipped: 0,
+    notCompleteSkipped: 0,
+    categoryFilteredSkipped: 0,
+    excludedSkipped: 0,
     errors: [],
     capsHit: [],
     requestCount: 0,
@@ -531,7 +546,11 @@ export async function runNetworkCrawl(
 
               if (categoryFilter) {
                 const cat = estimateDraftCategory(d);
-                if (!categoryFilter.has(cat)) continue;
+                if (!categoryFilter.has(cat)) {
+                  result.categoryFilteredSkipped++;
+                  console.log(`[NetworkCrawl] skip ${d.draft_id}: category=${cat} not in filter (rounds=${d.settings?.rounds ?? "?"})`);
+                  continue;
+                }
               }
 
               // ingestDraftById issues 2 fetches (draft + picks) when not
@@ -544,8 +563,23 @@ export async function runNetworkCrawl(
                 } else if (r.ok && r.picks > 0) {
                   result.draftsIngested++;
                   result.picksIngested += r.picks;
+                } else if (r.ok && r.picks === 0) {
+                  // ingestDraftById succeeded but produced no picks. The two
+                  // documented reasons are: draft "not complete" (still
+                  // in-progress / pre-draft) and ADP quality gates
+                  // (excluded — defensive players, too few rounds/teams).
+                  // Both used to be silently dropped from the counters,
+                  // making the UI show "0 ingested" with no explanation.
+                  const reason = r.reason ?? "no picks";
+                  if (reason === "not complete") {
+                    result.notCompleteSkipped++;
+                  } else {
+                    result.excludedSkipped++;
+                  }
+                  console.log(`[NetworkCrawl] skip ${d.draft_id}: ${reason} (status=${r.status})`);
                 } else if (!r.ok && r.reason) {
                   result.errors.push(`draft ${d.draft_id}: ${r.reason}`);
+                  console.log(`[NetworkCrawl] error ${d.draft_id}: ${r.reason}`);
                 }
               } catch (err: any) {
                 result.errors.push(`draft ${d.draft_id} threw: ${err?.message ?? "unknown"}`);
@@ -607,6 +641,8 @@ export async function runNetworkCrawl(
     `users=${result.usersProcessed} leagues=${result.leaguesProcessed} ` +
     `drafts=${result.draftsFound} ingested=${result.draftsIngested} ` +
     `picks=${result.picksIngested} dupSkipped=${result.duplicatesSkipped} ` +
+    `notComplete=${result.notCompleteSkipped} catFiltered=${result.categoryFilteredSkipped} ` +
+    `excluded=${result.excludedSkipped} errors=${result.errors.length} ` +
     `caps=${result.capsHit.join("|") || "none"} reqs=${result.requestCount}`
   );
   // When called from startCrawlInBackground the wrapper writes the log row

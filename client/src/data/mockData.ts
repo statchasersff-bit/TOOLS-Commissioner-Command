@@ -126,14 +126,19 @@ export function getLeagues(): League[] {
 }
 
 export function getPositionColor(pos: string): string {
+  // Saturated position pills — richer than the old red-100/red-900 pairing.
+  // Uses dark-any: so .dark and .x-mode share the same vibrant treatment.
   switch (pos) {
-    case "QB": return "bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800";
-    case "RB": return "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800";
-    case "WR": return "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800";
-    case "TE": return "bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800";
+    case "QB": return "bg-red-500/20 dark-any:bg-red-500/25 text-red-700 dark-any:text-red-300 border-red-500/50";
+    case "RB": return "bg-emerald-500/20 dark-any:bg-emerald-500/25 text-emerald-700 dark-any:text-emerald-300 border-emerald-500/50";
+    case "WR": return "bg-blue-500/20 dark-any:bg-blue-500/25 text-blue-700 dark-any:text-blue-300 border-blue-500/50";
+    case "TE": return "bg-orange-500/20 dark-any:bg-orange-500/25 text-orange-700 dark-any:text-orange-300 border-orange-500/50";
+    case "K":  return "bg-amber-500/20 dark-any:bg-amber-500/25 text-amber-700 dark-any:text-amber-300 border-amber-500/50";
+    case "DEF":
+    case "DST": return "bg-slate-500/20 dark-any:bg-slate-500/25 text-slate-700 dark-any:text-slate-300 border-slate-500/50";
     case "PK":
-    case "PICK": return "bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-400 border-purple-200 dark:border-purple-800";
-    default: return "bg-muted text-muted-foreground";
+    case "PICK": return "bg-purple-500/20 dark-any:bg-purple-500/25 text-purple-700 dark-any:text-purple-300 border-purple-500/50";
+    default: return "bg-muted text-muted-foreground border-border/40";
   }
 }
 

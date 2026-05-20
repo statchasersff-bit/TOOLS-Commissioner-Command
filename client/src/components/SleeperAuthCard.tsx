@@ -321,7 +321,7 @@ export function SleeperAuthCard() {
                     onVerify={handleCaptchaToken}
                     onExpire={handleCaptchaExpire}
                     onError={handleCaptchaError}
-                    theme={document.documentElement.classList.contains("dark") ? "dark" : "light"}
+                    theme={(document.documentElement.classList.contains("dark") || document.documentElement.classList.contains("x-mode")) ? "dark" : "light"}
                   />
                   {captchaToken && (
                     <p className="flex items-center gap-1.5 text-[11px] text-emerald-600 dark:text-emerald-400">
@@ -398,7 +398,7 @@ export function SleeperAuthCard() {
                       onVerify={handleCaptchaToken}
                       onExpire={handleCaptchaExpire}
                       onError={handleCaptchaError}
-                      theme={document.documentElement.classList.contains("dark") ? "dark" : "light"}
+                      theme={(document.documentElement.classList.contains("dark") || document.documentElement.classList.contains("x-mode")) ? "dark" : "light"}
                     />
                     {captchaToken && (
                       <p className="flex items-center gap-1.5 text-[11px] text-emerald-600 dark:text-emerald-400 mt-1">

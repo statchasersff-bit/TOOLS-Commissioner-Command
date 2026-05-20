@@ -7,6 +7,7 @@ import { InsightCallout } from "@/components/InsightCallout";
 import { SectionHeader } from "@/components/SectionHeader";
 import { useValueModel } from "@/contexts/ValueModelContext";
 import { usePlayerProfile } from "@/contexts/PlayerProfileContext";
+import { useSleeper } from "@/contexts/SleeperContext";
 import { getPositionColor } from "@/data/mockData";
 import { ROOKIE_BOARD_2026_SF } from "@/data/rookieBoard2026";
 import type { League } from "@/types";
@@ -33,10 +34,26 @@ type SortDir = "asc" | "desc";
 export function MarketValue({ league }: MarketProps) {
   const { sourceId, sources, valuesBySleeperId, redraftValuesBySleeperId, dynastyPlayerList, getPickValue } = useValueModel();
   const { openPlayerProfile } = usePlayerProfile();
+  const { user } = useSleeper();
   const [search, setSearch] = useState("");
   const [posFilter, setPosFilter] = useState("all");
   const [sortKey, setSortKey] = useState<SortKey>("dynastyValue");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
+
+  // Set of sleeperIds owned by the signed-in user in this league — used to
+  // tag rows with the "On Your Team" pill. Matches by Sleeper user_id against
+  // each team's ownerId (Sleeper roster owner).
+  const myPlayerIds = useMemo(() => {
+    if (!user?.userId) return new Set<string>();
+    const myTeam = league.teams.find((t) => t.ownerId === user.userId);
+    if (!myTeam) return new Set<string>();
+    const ids = new Set<string>();
+    for (const p of myTeam.roster) {
+      if (p.sleeperId) ids.add(p.sleeperId);
+      if (p.id) ids.add(p.id);
+    }
+    return ids;
+  }, [league, user?.userId]);
 
   const activeSource = sources.find((s) => s.id === sourceId);
 
@@ -243,13 +260,24 @@ export function MarketValue({ league }: MarketProps) {
                 data-testid={`row-player-${row.sleeperId}`}
               >
                 <td className="px-2 md:px-4 py-2">
-                  <PlayerAvatar
-                    id={row.sleeperId}
-                    name={row.name}
-                    pos={row.pos}
-                    team={row.team}
-                    size="sm"
-                  />
+                  <div className="flex items-center gap-2 min-w-0">
+                    <PlayerAvatar
+                      id={row.sleeperId}
+                      name={row.name}
+                      pos={row.pos}
+                      team={row.team}
+                      size="sm"
+                    />
+                    {myPlayerIds.has(row.sleeperId) && (
+                      <span
+                        className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] md:text-[10px] font-bold uppercase tracking-wide bg-blue-500/15 text-blue-700 dark:text-blue-400 border border-blue-500/40 whitespace-nowrap"
+                        data-testid={`pill-on-your-team-${row.sleeperId}`}
+                        title="This player is on your roster in this league"
+                      >
+                        On Your Team
+                      </span>
+                    )}
+                  </div>
                 </td>
                 <td className="px-2 md:px-4 py-2">
                   <Badge variant="outline" className={`text-[9px] md:text-[10px] px-1 md:px-2 h-4 md:h-5 md:w-8 justify-center ${getPositionColor(row.pos)}`}>

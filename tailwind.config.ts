@@ -1,4 +1,5 @@
 import type { Config } from "tailwindcss";
+import plugin from "tailwindcss/plugin";
 
 export default {
   darkMode: ["class"],
@@ -103,5 +104,15 @@ export default {
       },
     },
   },
-  plugins: [require("tailwindcss-animate"), require("@tailwindcss/typography")],
+  plugins: [
+    require("tailwindcss-animate"),
+    require("@tailwindcss/typography"),
+    // `x-mode:` variant — sister to `dark:`, scoped to the .x-mode theme.
+    // `dark-any:` fires for both .dark and .x-mode, so shared rules don't need
+    // to be duplicated.
+    plugin(({ addVariant }) => {
+      addVariant("x-mode", ".x-mode &");
+      addVariant("dark-any", [".dark &", ".x-mode &"]);
+    }),
+  ],
 } satisfies Config;
