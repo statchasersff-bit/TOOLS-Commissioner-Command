@@ -210,13 +210,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setStatus("unauthenticated");
       };
 
-      const res = await fetch(`${API_BASE}/api/sc-auth/me`, {
-        credentials: "include",
-        headers,
-      });
-      if (res.status === 401) return failClosedNoDc("401 from /me");
+      // Hard timeout. If /me hangs (backend asleep, proxy dropping requests,
+      // CORS preflight stalled, etc.) we MUST still release the splash so
+      // read-only / guest mode can render. 10s is generous for a healthy
+      // server and short enough that nobody stares at the loader forever.
+      const ac = new AbortController();
+      const timeoutId = setTimeout(() => ac.abort(), 10_000);
+      let res: Response;
+      try {
+        res = await fetch(`${API_BASE}/api/sc-auth/me`, {
+          credentials: "include",
+          headers,
+          signal: ac.signal,
+        });
+      } finally {
+        clearTimeout(timeoutId);
+      }
 
-      const data = await res.json();
+      // 401 = anonymous visitor. Treat as a valid unauthenticated state —
+      // not an error. The app continues to render in read-only / guest mode.
+      if (res.status === 401) return failClosedNoDc("401 from /me");
+      // Any other non-OK (5xx, 404 from a misrouted proxy, etc.) also
+      // degrades to guest mode rather than blocking the app.
+      if (!res.ok) return failClosedNoDc(`status ${res.status} from /me`);
+
+      const data = await res.json().catch(() => null);
+      if (!data) return failClosedNoDc("/me returned non-JSON");
       if (!data.user) return failClosedNoDc("/me returned no user");
 
       // ── Bind the Sleeper auth store to this DC user BEFORE any read/write.

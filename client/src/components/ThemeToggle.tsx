@@ -6,10 +6,10 @@ type Theme = "light" | "dark" | "x-mode";
 const THEMES: Theme[] = ["light", "dark", "x-mode"];
 
 function readInitialTheme(): Theme {
-  if (typeof window === "undefined") return "dark";
+  if (typeof window === "undefined") return "x-mode";
   const saved = localStorage.getItem("theme");
   if (saved === "light" || saved === "dark" || saved === "x-mode") return saved;
-  return "dark";
+  return "x-mode";
 }
 
 export function ThemeToggle() {

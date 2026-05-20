@@ -14,6 +14,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useFavoriteTeam } from "@/contexts/FavoriteTeamContext";
 import { SettingsModal } from "@/components/SettingsModal";
 import { NAV_CONFIG } from "@/data/mockData";
+import { FEATURES } from "@/config/features";
 import type { League, Team } from "@/types";
 import { fetchSleeperLeagueFull } from "@/lib/sleeperApi";
 import { DataDiagnostics } from "@/components/DataDiagnostics";
@@ -74,6 +75,14 @@ function getInitialState(pathTab?: string, pathSub?: string) {
   if (requestedTab === "live-draft") {
     requestedTab = "draft";
     requestedSub = "draft-board";
+  }
+
+  // Draft module temporarily hidden — see FEATURES.SHOW_DRAFT_MODULE.
+  // Any stale URL/saved state that targets `draft` falls back to portfolio
+  // so the user isn't dropped on a nav-less, unrenderable tab.
+  if (!FEATURES.SHOW_DRAFT_MODULE && requestedTab === "draft") {
+    requestedTab = "portfolio";
+    requestedSub = "portfolio-summary";
   }
 
   return {

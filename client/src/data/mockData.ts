@@ -1,4 +1,5 @@
 import type { League, Team, Player, Pick, TeamMetrics, Tier, MainTabConfig, Insight } from "../types";
+import { FEATURES } from "@/config/features";
 
 const playerNames: Record<string, string[]> = {
   QB: ["Patrick Mahomes", "Josh Allen", "Lamar Jackson", "Joe Burrow", "Jalen Hurts", "Justin Herbert", "Tua Tagovailoa", "CJ Stroud", "Anthony Richardson", "Dak Prescott", "Jordan Love", "Brock Purdy", "Kyler Murray", "Trevor Lawrence", "Caleb Williams", "Drake Maye", "Jayden Daniels", "Sam Darnold", "Baker Mayfield", "Geno Smith", "Russell Wilson", "Kirk Cousins", "Aaron Rodgers", "Matthew Stafford"],
@@ -582,4 +583,4 @@ export const NAV_CONFIG: MainTabConfig[] = [
       { id: "adp-explorer", label: "ADP Explorer" },
     ],
   },
-];
+].filter((tab) => tab.id !== "draft" || FEATURES.SHOW_DRAFT_MODULE);
