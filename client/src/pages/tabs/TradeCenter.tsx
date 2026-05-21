@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { DataTable } from "@/components/DataTable";
 import { SectionHeader } from "@/components/SectionHeader";
+import { ManagerNameButton } from "@/components/ManagerNameButton";
 import { useValueModel } from "@/contexts/ValueModelContext";
 import { useSleeper } from "@/contexts/SleeperContext";
 import { useToast } from "@/hooks/use-toast";
@@ -131,7 +132,16 @@ function TradeProposalCard({ proposal, mode, userTeam, league }: { proposal: Tra
         />
         <div className="flex-1 min-w-0">
           <span className="text-sm font-semibold">{proposal.partner.name}</span>
-          <span className="text-xs text-muted-foreground ml-1.5">· {proposal.partner.owner}</span>
+          <span className="text-xs text-muted-foreground ml-1.5">·{" "}
+            <ManagerNameButton
+              userId={proposal.partner.ownerId}
+              username={proposal.partner.owner}
+              avatar={proposal.partner.avatar}
+              leagueId={league.id}
+            >
+              {proposal.partner.owner}
+            </ManagerNameButton>
+          </span>
         </div>
         <Badge variant="outline" className="text-[10px] flex-shrink-0">{typeLabel}</Badge>
       </div>
@@ -145,7 +155,17 @@ function TradeProposalCard({ proposal, mode, userTeam, league }: { proposal: Tra
           <ArrowRightLeft className="w-3.5 h-3.5 text-muted-foreground/60" />
         </div>
         <div>
-          <p className="text-[9px] text-muted-foreground font-semibold uppercase tracking-wider mb-0.5">{proposal.partner.owner} sends</p>
+          <p className="text-[9px] text-muted-foreground font-semibold uppercase tracking-wider mb-0.5">
+            <ManagerNameButton
+              userId={proposal.partner.ownerId}
+              username={proposal.partner.owner}
+              avatar={proposal.partner.avatar}
+              leagueId={league.id}
+            >
+              {proposal.partner.owner}
+            </ManagerNameButton>
+            {" sends"}
+          </p>
           {proposal.gets.map((p, i) => <PlayerChip key={i} player={p} value={proposal.getVal / proposal.gets.length} />)}
         </div>
       </div>

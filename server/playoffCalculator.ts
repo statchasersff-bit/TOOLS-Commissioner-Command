@@ -795,6 +795,8 @@ export function calculateMatchupWinProbability(
 
 export interface WeeklyMatchupTeam {
   rosterId: number;
+  /** Sleeper user_id of the team owner. Drives the Manager Intel drawer. */
+  ownerId: string | null;
   ownerName: string;
   teamName: string;
   avatar: string | null;
@@ -879,6 +881,7 @@ export async function computeWeeklyMatchups(
   // Per-team static info + win-now score
   const teamInfo = new Map<number, {
     rosterId: number;
+    ownerId: string | null;
     ownerName: string;
     teamName: string;
     avatar: string | null;
@@ -892,6 +895,7 @@ export async function computeWeeklyMatchups(
     const ties = r.settings?.ties ?? 0;
     teamInfo.set(r.roster_id, {
       rosterId: r.roster_id,
+      ownerId: r.owner_id || null,
       teamName: u?.metadata?.team_name || u?.display_name || `Team ${r.roster_id}`,
       ownerName: u?.display_name || `Owner ${r.roster_id}`,
       avatar: u?.avatar ? `https://sleepercdn.com/avatars/thumbs/${u.avatar}` : null,
@@ -953,6 +957,7 @@ export async function computeWeeklyMatchups(
     const info = teamInfo.get(m.roster_id);
     return {
       rosterId: m.roster_id,
+      ownerId: info?.ownerId ?? null,
       ownerName: info?.ownerName || `Owner ${m.roster_id}`,
       teamName: info?.teamName || `Team ${m.roster_id}`,
       avatar: info?.avatar ?? null,

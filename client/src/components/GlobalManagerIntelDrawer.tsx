@@ -251,15 +251,22 @@ function IntelHeader({
   refreshing: boolean;
 }) {
   const name = data?.user.display_name || data?.user.username || target?.username || "Manager";
-  const avatar = data?.user.avatar || target?.avatar || null;
+  const rawAvatar = data?.user.avatar || target?.avatar || null;
+  // Some call sites pass a full Sleeper CDN URL (e.g. team.avatar from the
+  // League object); others pass a bare hash (the API response). Accept either.
+  const avatarSrc = rawAvatar
+    ? rawAvatar.startsWith("http")
+      ? rawAvatar
+      : `https://sleepercdn.com/avatars/thumbs/${rawAvatar}`
+    : null;
   const initial = (name || "?").charAt(0).toUpperCase();
   const teamName = data?.currentLeague?.teamName;
   return (
     <div className="px-4 pt-5 pb-3 border-b border-white/5 bg-gradient-to-b from-white/[0.04] to-transparent sticky top-0 z-10">
       <div className="flex items-center gap-3">
-        {avatar ? (
+        {avatarSrc ? (
           <img
-            src={`https://sleepercdn.com/avatars/thumbs/${avatar}`}
+            src={avatarSrc}
             alt={name}
             className="w-10 h-10 rounded-full object-cover flex-shrink-0"
             onError={(e) => {

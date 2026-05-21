@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 import { Trophy, Zap, Target, Calendar, Users, Medal, ArrowRight, ArrowUp, ArrowDown, ArrowUpDown, Table, ArrowRightLeft, Compass, Flame, Sprout, Archive, ChevronDown, ChevronUp, ChevronRight, TrendingUp, TrendingDown, MapPin, BarChart2, Grid3X3, List, LayoutDashboard, Activity, CheckCircle2, AlertTriangle, Coins, Settings2 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
+import { ManagerNameButton } from "@/components/ManagerNameButton";
 import {
   RosterStrengthProfile,
   AgeCurves,
@@ -1137,7 +1138,15 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
                               {(team.owner || "?").charAt(0).toUpperCase()}
                             </div>
                           )}
-                          <span className={`font-semibold text-foreground ${isUser ? "text-[#0b3a7a] dark:text-blue-400" : ""}`}>{team.owner}</span>
+                          <ManagerNameButton
+                            userId={team.ownerId}
+                            username={team.owner}
+                            avatar={team.avatar}
+                            leagueId={league.id}
+                            className={`font-semibold text-foreground ${isUser ? "text-[#0b3a7a] dark:text-blue-400" : ""}`}
+                          >
+                            {team.owner}
+                          </ManagerNameButton>
                           {isUser && <Badge className="text-[10px] px-1.5 py-0 bg-[#0b3a7a] text-white dark:bg-blue-600" data-testid="your-team-badge">You</Badge>}
                         </div>
                       </td>
@@ -1395,9 +1404,15 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
                         {(team.owner || "?").charAt(0).toUpperCase()}
                       </div>
                     )}
-                    <span className={cn("text-xs font-semibold truncate", isUser ? "text-[#0b3a7a] dark:text-blue-400" : "text-foreground")}>
+                    <ManagerNameButton
+                      userId={team.ownerId}
+                      username={team.owner}
+                      avatar={team.avatar}
+                      leagueId={league.id}
+                      className={cn("text-xs font-semibold truncate", isUser ? "text-[#0b3a7a] dark:text-blue-400" : "text-foreground")}
+                    >
                       {team.owner}
-                    </span>
+                    </ManagerNameButton>
                     {isUser && <div className="w-1.5 h-1.5 rounded-full bg-[#d4af37] flex-shrink-0" />}
                   </div>
 
@@ -1565,9 +1580,15 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
                                 {(team.owner || "?").charAt(0).toUpperCase()}
                               </div>
                             )}
-                            <span className={cn("font-semibold truncate max-w-[80px] sm:max-w-none", isUser ? "text-[#0b3a7a] dark:text-blue-400" : "text-foreground")}>
+                            <ManagerNameButton
+                              userId={team.ownerId}
+                              username={team.owner}
+                              avatar={team.avatar}
+                              leagueId={league.id}
+                              className={cn("font-semibold truncate max-w-[80px] sm:max-w-none", isUser ? "text-[#0b3a7a] dark:text-blue-400" : "text-foreground")}
+                            >
                               {team.owner}
-                            </span>
+                            </ManagerNameButton>
                             {isUser && <div className="w-1.5 h-1.5 rounded-full bg-[#d4af37] flex-shrink-0" />}
                           </div>
                         </td>

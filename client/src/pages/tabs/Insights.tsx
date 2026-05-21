@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { Card } from "@/components/ui/card";
 import { SectionHeader } from "@/components/SectionHeader";
+import { ManagerNameButton } from "@/components/ManagerNameButton";
 import { getLeagueTeamTiers } from "@/data/mockData";
 import type { League, Team } from "@/types";
 
@@ -41,7 +42,15 @@ export function LeagueIntelligence({ league, userTeam }: Props) {
                 </div>
               )}
               <div className="min-w-0">
-                <p className="text-sm font-bold truncate">{team.owner}</p>
+                <ManagerNameButton
+                  userId={team.ownerId}
+                  username={team.owner}
+                  avatar={team.avatar}
+                  leagueId={league.id}
+                  className="text-sm font-bold truncate block"
+                >
+                  {team.owner}
+                </ManagerNameButton>
                 <p className="text-[10px] text-muted-foreground truncate">{team.name}</p>
               </div>
             </div>

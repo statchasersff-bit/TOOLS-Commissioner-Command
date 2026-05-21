@@ -3,6 +3,7 @@ import { Card } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { API_BASE } from "@/lib/apiBase";
 import { cn } from "@/lib/utils";
+import { ManagerNameButton } from "@/components/ManagerNameButton";
 import {
   Loader2, AlertCircle, Trophy, Flame, Scale, Swords,
   CheckCircle2, Radio, Clock,
@@ -11,6 +12,7 @@ import {
 // ── Types matching the server response ──────────────────────────────────────
 interface WMTeam {
   rosterId: number;
+  ownerId: string | null;
   ownerName: string;
   teamName: string;
   avatar: string | null;
@@ -266,7 +268,7 @@ export function WeeklyMatchups({ leagueId }: { leagueId: string }) {
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3" data-testid="wm-grid">
           {sortedMatchups.map((m, i) => (
-            <MatchupCard key={`${m.matchupId ?? "synth"}-${i}`} matchup={m} />
+            <MatchupCard key={`${m.matchupId ?? "synth"}-${i}`} matchup={m} leagueId={leagueId} />
           ))}
         </div>
       )}
@@ -395,7 +397,7 @@ function SummaryCards({
   );
 }
 
-function MatchupCard({ matchup }: { matchup: WMCard }) {
+function MatchupCard({ matchup, leagueId }: { matchup: WMCard; leagueId: string }) {
   if (matchup.isBye) {
     const t = matchup.teamA;
     return (
@@ -407,7 +409,17 @@ function MatchupCard({ matchup }: { matchup: WMCard }) {
           {avatar(t)}
           <div className="min-w-0 flex-1">
             <p className="text-sm font-bold truncate">{t.teamName}</p>
-            <p className="text-[11px] text-muted-foreground truncate">{t.ownerName} • {t.record} • Win-Now {formatWinNow(t.winNowScore)}</p>
+            <p className="text-[11px] text-muted-foreground truncate">
+              <ManagerNameButton
+                userId={t.ownerId}
+                username={t.ownerName}
+                avatar={t.avatar}
+                leagueId={leagueId}
+              >
+                {t.ownerName}
+              </ManagerNameButton>
+              {" • "}{t.record} • Win-Now {formatWinNow(t.winNowScore)}
+            </p>
           </div>
         </div>
       </Card>
@@ -438,7 +450,7 @@ function MatchupCard({ matchup }: { matchup: WMCard }) {
         )}
       </div>
 
-      <TeamRow team={teamA} badge={aBadge} highlight={matchup.favoriteRosterId === teamA.rosterId} />
+      <TeamRow team={teamA} badge={aBadge} highlight={matchup.favoriteRosterId === teamA.rosterId} leagueId={leagueId} />
 
       {/* probability bar */}
       <div className="my-2 px-1">
@@ -455,17 +467,18 @@ function MatchupCard({ matchup }: { matchup: WMCard }) {
         </div>
       </div>
 
-      <TeamRow team={teamB} badge={bBadge} highlight={matchup.favoriteRosterId === teamB.rosterId} />
+      <TeamRow team={teamB} badge={bBadge} highlight={matchup.favoriteRosterId === teamB.rosterId} leagueId={leagueId} />
     </Card>
   );
 }
 
 function TeamRow({
-  team, badge, highlight,
+  team, badge, highlight, leagueId,
 }: {
   team: WMTeam;
   badge: { label: string; className: string };
   highlight: boolean;
+  leagueId: string;
 }) {
   return (
     <div className={cn("flex items-center gap-2 py-1", highlight && "")}>
@@ -478,7 +491,15 @@ function TeamRow({
           </span>
         </div>
         <p className="text-[11px] text-muted-foreground truncate tabular-nums">
-          {team.ownerName} • {team.record} • Win-Now {formatWinNow(team.winNowScore)}
+          <ManagerNameButton
+            userId={team.ownerId}
+            username={team.ownerName}
+            avatar={team.avatar}
+            leagueId={leagueId}
+          >
+            {team.ownerName}
+          </ManagerNameButton>
+          {" • "}{team.record} • Win-Now {formatWinNow(team.winNowScore)}
         </p>
       </div>
       <div className="text-right flex-shrink-0">

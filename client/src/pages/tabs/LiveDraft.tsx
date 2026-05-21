@@ -13,6 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { SleeperUserAvatar } from "@/components/SleeperUserAvatar";
+import { useManagerIntel } from "@/contexts/ManagerIntelContext";
 import type { DraftState, DraftUser, DraftPickNormalized, DraftAutopickerStatus } from "@/lib/sleeperApi";
 import { ROOKIE_BOARD_2026_SF, ROOKIE_BOARD_2026_1QB } from "@/data/rookieBoard2026";
 import type { Player as RosterPlayer } from "@/types";
@@ -841,12 +842,14 @@ function RestDraftHeader({ draft, picksMade, currentPickInfo }: {
 // ── DraftStateHeader ─────────────────────────────────────────────────────────
 // OTC-style draft room header. Heavy emphasis on the current pick + on-the-
 // clock identity. This is the top of the 3-section draft room layout.
-function DraftStateHeader({ ds, currentPickInfo, draftStateLoading, myUserId }: {
+function DraftStateHeader({ ds, currentPickInfo, draftStateLoading, myUserId, leagueId }: {
   ds: DraftState;
   currentPickInfo: CurrentPickInfo | null;
   draftStateLoading: boolean;
   myUserId: string | null;
+  leagueId: string | null;
 }) {
+  const { openManagerIntel } = useManagerIntel();
   const totalPicks = ds.teams * ds.rounds;
   const pct = totalPicks > 0 ? Math.min(100, Math.round((ds.picks.length / totalPicks) * 100)) : 0;
   const isLive = ds.status === "drafting";
@@ -941,12 +944,38 @@ function DraftStateHeader({ ds, currentPickInfo, draftStateLoading, myUserId }: 
                 avatar={currentPickInfo.currentUser?.avatar ?? null}
                 size="md"
                 compact
+                onClick={
+                  currentPickInfo.currentUser && !currentPickInfo.currentUser.isBot && leagueId
+                    ? () => openManagerIntel({
+                        userId: currentPickInfo.currentUser!.userId,
+                        username: currentPickInfo.currentUser!.displayName,
+                        avatar: currentPickInfo.currentUser!.avatar,
+                        leagueId,
+                      })
+                    : undefined
+                }
               />
               <div className="min-w-0">
                 <p className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">On the Clock</p>
-                <p className="text-sm font-bold text-foreground truncate" data-testid="text-on-clock">
-                  {currentPickInfo.currentUser?.displayName || "—"}
-                </p>
+                {currentPickInfo.currentUser && !currentPickInfo.currentUser.isBot && leagueId ? (
+                  <button
+                    type="button"
+                    onClick={() => openManagerIntel({
+                      userId: currentPickInfo.currentUser!.userId,
+                      username: currentPickInfo.currentUser!.displayName,
+                      avatar: currentPickInfo.currentUser!.avatar,
+                      leagueId,
+                    })}
+                    className="text-sm font-bold text-foreground truncate hover:text-[#d4af37] transition-colors block text-left"
+                    data-testid="text-on-clock"
+                  >
+                    {currentPickInfo.currentUser.displayName}
+                  </button>
+                ) : (
+                  <p className="text-sm font-bold text-foreground truncate" data-testid="text-on-clock">
+                    {currentPickInfo.currentUser?.displayName || "—"}
+                  </p>
+                )}
                 <p className="text-[10px] text-muted-foreground">Pick {currentPickInfo.nextPickNo} · Rd {currentPickInfo.currentRound}</p>
               </div>
             </div>
@@ -1856,6 +1885,7 @@ function MyPicksPanel({ myPicks, myUserId, usersById, teams }: {
 }
 
 export default function LiveDraft() {
+  const { openManagerIntel } = useManagerIntel();
   const [activeLeagueId, setActiveLeagueId] = useState<string | null>(null);
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [draftData, setDraftData] = useState<DraftResponse | null>(null);
@@ -2394,31 +2424,33 @@ export default function LiveDraft() {
   // match who actually picked 1.01 ("chaffima after trade"). We now consult
   // draftData.pickOwners (which folds traded_picks) for round=1 first, and
   // fall back to the static draftSlots map only when pickOwners is missing.
-  const slotHeaders = useMemo<Array<{ displayName: string; avatar: string | null }>>(() => {
+  const slotHeaders = useMemo<Array<{ displayName: string; avatar: string | null; userId: string | null }>>(() => {
     if (draftData?.pickOwners && draftData.pickOwners.length > 0) {
-      const round1 = new Map<number, { displayName: string; avatar: string | null }>();
+      const round1 = new Map<number, { displayName: string; avatar: string | null; userId: string | null }>();
       for (const po of draftData.pickOwners) {
         if (po.round !== 1) continue;
         round1.set(po.slot, {
           displayName: po.currentDisplayName,
           avatar: po.currentAvatar ?? null,
+          userId: po.currentUserId ?? null,
         });
       }
       if (round1.size > 0) {
         return Array.from({ length: teamCount }, (_, i) => {
           const s = i + 1;
-          return round1.get(s) ?? { displayName: `Pick ${s}`, avatar: null };
+          return round1.get(s) ?? { displayName: `Pick ${s}`, avatar: null, userId: null };
         });
       }
     }
     if (draftData?.draftSlots && draftData.draftSlots.length > 0) {
       return [...draftData.draftSlots]
         .sort((a, b) => a.slot - b.slot)
-        .map((s) => ({ displayName: s.displayName, avatar: s.avatar ?? null }));
+        .map((s) => ({ displayName: s.displayName, avatar: s.avatar ?? null, userId: (s as any).userId ?? null }));
     }
     return Array.from({ length: teamCount }, (_, i) => ({
       displayName: `Pick ${i + 1}`,
       avatar: null,
+      userId: null,
     }));
   }, [draftData, teamCount]);
 
@@ -2664,7 +2696,7 @@ export default function LiveDraft() {
   // because GraphQL doesn't expose traded_picks; without this guard the
   // headers would silently revert to original owners on JWT-authenticated
   // sessions.
-  const enhancedSlotHeaders = useMemo<Array<{ displayName: string; avatar: string | null }>>(() => {
+  const enhancedSlotHeaders = useMemo<Array<{ displayName: string; avatar: string | null; userId: string | null }>>(() => {
     if (draftData?.pickOwners && draftData.pickOwners.length > 0) {
       // `slotHeaders` already folds in pickOwners[round=1]; re-use it so
       // the two header arrays stay in lockstep.
@@ -2677,7 +2709,11 @@ export default function LiveDraft() {
       }
       return Array.from({ length: draftState.teams }, (_, i) => {
         const u = slotToUser[i + 1];
-        return { displayName: u?.displayName || `Pick ${i + 1}`, avatar: u?.avatar ?? null };
+        return {
+          displayName: u?.displayName || `Pick ${i + 1}`,
+          avatar: u?.avatar ?? null,
+          userId: u && !u.isBot ? u.userId : null,
+        };
       });
     }
     return slotHeaders;
@@ -2970,6 +3006,7 @@ export default function LiveDraft() {
               currentPickInfo={currentPickInfo}
               draftStateLoading={draftStateLoading}
               myUserId={user?.userId ?? null}
+              leagueId={activeLeagueId}
             />
           ) : draftData?.draft && (
             <RestDraftHeader
@@ -3179,6 +3216,16 @@ export default function LiveDraft() {
                               avatar={header.avatar}
                               size="xs"
                               compact
+                              onClick={
+                                header.userId && activeLeagueId
+                                  ? () => openManagerIntel({
+                                      userId: header.userId!,
+                                      username: header.displayName,
+                                      avatar: header.avatar,
+                                      leagueId: activeLeagueId,
+                                    })
+                                  : undefined
+                              }
                             />
                             <span className="text-[10px] font-semibold text-foreground truncate block leading-tight max-w-full">
                               {displayName}

@@ -72,12 +72,21 @@ export function SleeperUserAvatar({
     </span>
   );
 
+  const guarded = onClick
+    ? (e: React.MouseEvent) => {
+        // Stop propagation so a wrapping clickable surface (e.g. an
+        // expand-row button) doesn't also toggle when the avatar is clicked.
+        e.stopPropagation();
+        onClick(e);
+      }
+    : undefined;
+
   if (compact) {
-    if (onClick) {
+    if (guarded) {
       return (
         <button
           type="button"
-          onClick={onClick}
+          onClick={guarded}
           className={cn(
             "rounded-full hover:ring-2 hover:ring-[#d4af37]/40 transition-shadow focus:outline-none focus:ring-2 focus:ring-[#d4af37]/60",
             className,
@@ -97,11 +106,11 @@ export function SleeperUserAvatar({
     className,
   );
 
-  if (onClick) {
+  if (guarded) {
     return (
       <button
         type="button"
-        onClick={onClick}
+        onClick={guarded}
         className={cn(wrapperCls, "text-left")}
         data-testid={`sleeper-user-avatar-button-${username}`}
       >

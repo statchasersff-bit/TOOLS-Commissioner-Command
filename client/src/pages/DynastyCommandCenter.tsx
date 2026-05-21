@@ -524,7 +524,7 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
                   {/* Footer row */}
                   <div className="flex items-center justify-between px-4 py-3" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
                     <a
-                      href="https://discord.gg/34XkMXF6t3"
+                      href="https://discord.gg/yerHQKBrre"
                       target="_blank"
                       rel="noopener noreferrer"
                       onClick={() => setLogoMenuOpen(false)}
@@ -723,7 +723,7 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
                 /* Discord + ThemeToggle inline when not connected */
                 <div className="flex items-center gap-1.5 border-l border-border/40 pl-2">
                   <a
-                    href="https://discord.gg/34XkMXF6t3"
+                    href="https://discord.gg/yerHQKBrre"
                     target="_blank"
                     rel="noopener noreferrer"
                     data-testid="button-discord"

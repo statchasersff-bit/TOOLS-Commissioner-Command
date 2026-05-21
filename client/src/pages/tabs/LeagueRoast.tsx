@@ -3,6 +3,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { SectionHeader } from "@/components/SectionHeader";
+import { ManagerNameButton } from "@/components/ManagerNameButton";
 import { getLeagueTeamTiers, getTierColor, getTierEmoji } from "@/data/mockData";
 import type { League, Team, Tier } from "@/types";
 import { AlertTriangle, Skull, Trophy, TrendingUp, TrendingDown, Star, Zap, Target, Gem, Clock, Dice1, Eye, Shield, Flame, ChevronDown, ChevronRight } from "lucide-react";
@@ -317,7 +318,16 @@ export function LeagueRoast({ league, userTeam }: { league: League; userTeam: Te
               </p>
               <p className="text-sm text-muted-foreground mb-2">The worst GM honor goes to:</p>
               <p className="text-lg font-black text-red-500 dark:text-red-400 mb-1">
-                {worstCard?.team.owner}
+                {worstCard?.team ? (
+                  <ManagerNameButton
+                    userId={worstCard.team.ownerId}
+                    username={worstCard.team.owner}
+                    avatar={worstCard.team.avatar}
+                    leagueId={league.id}
+                  >
+                    {worstCard.team.owner}
+                  </ManagerNameButton>
+                ) : null}
               </p>
               <p className="text-sm text-muted-foreground italic mb-8">
                 "{worstCard?.roast}"
@@ -378,7 +388,14 @@ export function LeagueRoast({ league, userTeam }: { league: League; userTeam: Te
                   >
                     <td className="py-2.5 px-2 text-muted-foreground font-medium">{i + 1}</td>
                     <td className="py-2.5 px-2 font-semibold">
-                      {rc.team.owner}
+                      <ManagerNameButton
+                        userId={rc.team.ownerId}
+                        username={rc.team.owner}
+                        avatar={rc.team.avatar}
+                        leagueId={league.id}
+                      >
+                        {rc.team.owner}
+                      </ManagerNameButton>
                       {isUser && <Badge variant="outline" className="ml-2 text-[9px] py-0">You</Badge>}
                     </td>
                     <td className={`py-2.5 px-2 text-center font-black ${letterColor(rc.letter)}`}>{rc.letter}</td>
@@ -402,7 +419,16 @@ export function LeagueRoast({ league, userTeam }: { league: League; userTeam: Te
             return (
               <Card key={rc.team.id} className="p-3 text-center" data-testid={`archetype-${rc.team.id}`}>
                 <Icon className="w-5 h-5 mx-auto mb-1.5 text-[#d4af37]" />
-                <p className="text-xs font-bold truncate">{rc.team.owner}</p>
+                <p className="text-xs font-bold truncate">
+                  <ManagerNameButton
+                    userId={rc.team.ownerId}
+                    username={rc.team.owner}
+                    avatar={rc.team.avatar}
+                    leagueId={league.id}
+                  >
+                    {rc.team.owner}
+                  </ManagerNameButton>
+                </p>
                 <p className="text-[10px] text-muted-foreground">{rc.archetype}</p>
               </Card>
             );
@@ -511,7 +537,18 @@ export function LeagueRoast({ league, userTeam }: { league: League; userTeam: Te
             <Card key={award.label} className="p-3 sm:p-4" data-testid={`award-${award.label.toLowerCase().replace(/\s+/g, "-")}`}>
               <award.icon className={`w-5 h-5 ${award.color} mb-1.5`} />
               <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">{award.label}</p>
-              <p className="text-sm font-bold mt-1 truncate">{award.team?.owner}</p>
+              <p className="text-sm font-bold mt-1 truncate">
+                {award.team ? (
+                  <ManagerNameButton
+                    userId={award.team.ownerId}
+                    username={award.team.owner}
+                    avatar={award.team.avatar}
+                    leagueId={league.id}
+                  >
+                    {award.team.owner}
+                  </ManagerNameButton>
+                ) : null}
+              </p>
             </Card>
           ))}
         </div>

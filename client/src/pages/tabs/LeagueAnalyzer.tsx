@@ -7,6 +7,7 @@ import { DataTable } from "@/components/DataTable";
 import { SectionHeader } from "@/components/SectionHeader";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
+import { ManagerNameButton } from "@/components/ManagerNameButton";
 import { getLeagueTeamTiers, getTierColor, getTierBg, getTierEmoji, getTierTooltip } from "@/data/mockData";
 import { useValueModel } from "@/contexts/ValueModelContext";
 import { usePlayerProfile } from "@/contexts/PlayerProfileContext";
@@ -104,7 +105,15 @@ export function PowerRankings({ league }: AnalyzerProps) {
             {(row.owner || "?").charAt(0).toUpperCase()}
           </div>
         )}
-        <span className="font-semibold">{row.owner}</span>
+        <ManagerNameButton
+          userId={row.ownerId}
+          username={row.owner}
+          avatar={row.avatar}
+          leagueId={league.id}
+          className="font-semibold"
+        >
+          {row.owner}
+        </ManagerNameButton>
       </div>
     )},
     { key: "tier", header: "Tier", sortable: true, sortAccessor: (row: any) => { const ti = tierMap.get(row.id); return ti ? TIER_ORDER.indexOf(ti.tier) : 99; }, render: (row: any) => {
@@ -186,7 +195,15 @@ export function PowerRankings({ league }: AnalyzerProps) {
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold truncate">{team.name}</p>
                       {team.owner && team.owner !== team.name && (
-                        <p className="text-xs text-muted-foreground truncate">{team.owner}</p>
+                        <ManagerNameButton
+                          userId={team.ownerId}
+                          username={team.owner}
+                          avatar={team.avatar}
+                          leagueId={league.id}
+                          className="text-xs text-muted-foreground truncate block"
+                        >
+                          {team.owner}
+                        </ManagerNameButton>
                       )}
                     </div>
                     <span className="text-lg font-bold text-foreground flex-shrink-0">{team.metrics.overall}</span>
