@@ -3693,14 +3693,14 @@ export default function LiveDraft() {
                                   (hasPick
                                     ? `${pickLabel} · ${fullName} (${pos}) · ${cell.ownerName}`
                                     : `${pickLabel} · ${cell.ownerName}${cell.isCurrent ? " · On the clock" : ""}`)
-                                  + (cell.isTraded && cell.originalOwnerName ? ` · via ${cell.originalOwnerName}` : "")
+                                  + (cell.isTraded ? " · Traded pick" : "")
                                 }
                               >
                                 {cell.isTraded && (
                                   <span
                                     className="absolute top-0.5 left-0.5 z-20 inline-flex items-center px-1 py-px rounded-sm bg-[#d4af37]/85 text-[#0b3a7a] text-[7px] font-extrabold uppercase leading-tight ring-1 ring-[#d4af37]/30 pointer-events-none"
                                     data-testid={`cell-traded-${cell.round}-${cell.slot}`}
-                                    title={cell.originalOwnerName ? `Traded pick · via ${cell.originalOwnerName}` : "Traded pick"}
+                                    title="Traded pick"
                                   >
                                     Traded
                                   </span>
@@ -3797,11 +3797,6 @@ export default function LiveDraft() {
                                             {cell.ownerName}
                                           </span>
                                         </div>
-                                        {cell.originalOwnerName && (
-                                          <span className="text-[8px] text-muted-foreground/60 leading-tight truncate italic">
-                                            via {cell.originalOwnerName}
-                                          </span>
-                                        )}
                                       </div>
                                     ) : null}
                                   </div>
