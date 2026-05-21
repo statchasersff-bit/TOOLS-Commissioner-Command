@@ -1,0 +1,132 @@
+Fix the live draft “Time On The Clock” tracker.
+
+Core discovery:
+Do NOT rely on draft_queue or league_transactions_filtered for pick timing. OTC appears to calculate pick timing from Sleeper draft chat bot messages using:
+
+POST https://sleeper.com/graphql
+operationName: messages
+query:
+query messages {
+  messages(parent_id: "<draft_id>") {
+    message_id
+    author_is_bot
+    created
+    text
+  }
+}
+
+The messages response includes Sleeper bot messages like:
+- "This draft has begun!"
+- "Pick 1.1 - Pick: Jeremiyah Love (RB - ARI)"
+- "Pick 1.2 - Pick: Carnell Tate (WR - TEN)"
+
+Each message has a created timestamp in milliseconds. Use those timestamps as the actual pick completion times.
+
+Implementation requirements:
+
+1. Add a function fetchDraftMessages(draftId, sleeperToken?)
+- Call Sleeper GraphQL /graphql
+- Use operationName "messages"
+- Pass Authorization token if the user is authenticated
+- Query messages(parent_id: draftId)
+- Return messages sorted ascending by created timestamp
+
+2. Parse pick messages
+Create parseDraftPickMessage(message.text) that detects:
+"Pick 1.1 - Pick: Player Name (POS - TEAM)"
+
+Return:
+{
+  pick_no: full Sleeper pick number if available,
+  round: 1,
+  pickInRound: 1,
+  displayPick: "1.1",
+  playerName: "...",
+  pos: "...",
+  team: "..."
+}
+
+Ignore non-pick messages except "This draft has begun!", which should be used as the draft start timestamp.
+
+3. Build pick timestamp list
+Use:
+- draftStartTime = timestamp of "This draft has begun!" if available
+- pickTimes = parsed pick bot messages sorted by created ASC
+
+For each pick:
+- pick completion time = message.created
+- pick start time =
+  - draftStartTime for pick 1.1
+  - previous pick completion time for every later pick
+- timeOnClockMs = pick.created - pickStartTime
+
+4. Map each pick to the manager who owned that pick at the time
+This is critical.
+Do NOT assume original draft slot equals manager if pick was traded.
+
+Use the draft pick object from Sleeper draft data if available:
+- draft.picks or /draft/<draft_id>/picks should include pick_no and roster_id/player_id
+- For each pick message, match it to the corresponding pick by pick_no or round/pickInRound
+- Use the pick’s roster_id to assign the time to the correct manager
+- Then map roster_id to manager display name/avatar using league rosters + users
+
+If Sleeper REST pick data is not available yet for an active draft, fallback:
+- Use draft.draft_order only temporarily
+- Mark traded-pick detection as unavailable
+- Recompute when pick data arrives
+
+5. Aggregate manager stats
+For each roster_id/manager:
+- totalTimeMs = sum of timeOnClockMs for their picks
+- picks = count of picks made
+- avgPickMs = totalTimeMs / picks
+- longestPickMs = max timeOnClockMs
+- longestPickLabel = displayPick of the pick where longestPickMs occurred
+
+6. Live current-pick timer
+If draft is active:
+- Determine current pick number from draft metadata/settings or last parsed pick + 1
+- Determine current pick owner from current pick slot / traded pick ownership
+- currentElapsedMs = Date.now() - lastPickCompletionTime
+- Add this live elapsed time to the current manager’s visible total while they are on the clock
+- But do not permanently save it as completed pick time until the next pick bot message appears
+
+7. UI should match the screenshot
+Table columns:
+- #
+- Manager
+- bar visualization
+- Total Time
+- Picks
+- Avg / Pick
+- Longest
+
+Sort by total time descending.
+Show total draft time in the header:
+Time On The Clock (37:58 total)
+
+Use turquoise filled bars where:
+barWidth = manager.totalTimeMs / maxTotalTimeMs
+
+8. Add debugging panel/logging
+Log:
+- draft_id used for messages parent_id
+- number of messages returned
+- number of pick messages parsed
+- draft start timestamp
+- parsed pick timestamps
+- unmatched pick messages
+- picks missing roster_id
+- current pick owner source: exact pick data vs fallback draft_order
+
+9. Acceptance test
+Using this sample:
+This draft has begun! at 1779134443528
+Pick 1.1 at 1779136660619
+Pick 1.2 at 1779136721857
+
+Expected:
+Pick 1.1 time = 1779136660619 - 1779134443528 = 2,217,091 ms = 36:57
+Pick 1.2 time = 1779136721857 - 1779136660619 = 61,238 ms = 1:01
+
+These values should match the OTC screenshot behavior.

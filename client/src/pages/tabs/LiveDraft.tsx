@@ -1252,7 +1252,7 @@ const MANAGER_TIMING_SORT_LABEL: Record<ManagerTimingSortKey, string> = {
   longest: "Longest",
 };
 
-function ManagerTimingsSection({ history, teams }: {
+function ManagerTimingsSection({ history, teams, livePickUserId, liveElapsedMs }: {
   history: Array<{
     pick: DraftPickNormalized | null;
     timing: { timeMs: number; timeLabel: string } | null;
@@ -1261,6 +1261,10 @@ function ManagerTimingsSection({ history, teams }: {
     timestamp: number | null;
   }>;
   teams: number;
+  /** userId of the manager currently on the clock (from currentPickInfo). */
+  livePickUserId?: string | null;
+  /** Milliseconds elapsed for the current pick so far (updates every second). */
+  liveElapsedMs?: number | null;
 }) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [sectionCollapsed, setSectionCollapsed] = useState(false);
@@ -1341,7 +1345,11 @@ function ManagerTimingsSection({ history, teams }: {
     return list.sort(compare);
   }, [history, teams, sortKey]);
 
-  const maxTotal = managers.reduce((m, s) => Math.max(m, s.totalMs), 0);
+  const maxTotal = managers.reduce((m, s) => {
+    const t = s.userId === livePickUserId ? s.totalMs + (liveElapsedMs ?? 0) : s.totalMs;
+    return Math.max(m, t);
+  }, 0);
+  const totalDraftMs = managers.reduce((sum, s) => sum + s.totalMs, 0) + (liveElapsedMs ?? 0);
   const hasAnyTiming = managers.some((m) => m.timedPicksCount > 0);
   const totalPicks = history.length;
   const timedPicks = history.reduce((n, e) => n + (e.timing?.timeMs != null ? 1 : 0), 0);
@@ -1369,8 +1377,13 @@ function ManagerTimingsSection({ history, teams }: {
       >
         <div className="flex items-center gap-2 min-w-0">
           <Clock className="w-4 h-4 text-[#d4af37] shrink-0" />
-          <span className="text-sm font-semibold text-foreground">Manager Time</span>
+          <span className="text-sm font-semibold text-foreground">Time On The Clock</span>
           <Badge variant="outline" className="text-[10px] h-4 px-1.5 shrink-0">{managers.length}</Badge>
+          {totalDraftMs > 0 && (
+            <span className="text-[10px] text-muted-foreground tabular-nums shrink-0">
+              ({formatDurationMs(totalDraftMs)} total)
+            </span>
+          )}
           {!hasAnyTiming && (
             <span className="text-[10px] text-muted-foreground/70 truncate" data-testid="text-manager-time-empty">
               {emptyStateMessage}
@@ -1430,7 +1443,9 @@ function ManagerTimingsSection({ history, teams }: {
           <div className="divide-y divide-border/15">
             {managers.map((mgr, idx) => {
               const isExpanded = expandedId === mgr.userId;
-              const pct = maxTotal > 0 ? Math.max(2, Math.round((mgr.totalMs / maxTotal) * 100)) : 0;
+              const displayMs = mgr.userId === livePickUserId ? mgr.totalMs + (liveElapsedMs ?? 0) : mgr.totalMs;
+              const pct = maxTotal > 0 ? Math.max(2, Math.round((displayMs / maxTotal) * 100)) : 0;
+              const isOnClock = !!livePickUserId && mgr.userId === livePickUserId && (liveElapsedMs ?? 0) > 0;
               return (
                 <div key={mgr.userId} data-testid={`manager-timing-row-${mgr.userId}`}>
                   {/* Collapsed row */}
@@ -1465,8 +1480,9 @@ function ManagerTimingsSection({ history, teams }: {
                           style={{ width: `${pct}%` }}
                         />
                       </span>
-                      <span className="text-[11px] font-semibold tabular-nums text-foreground text-right">
-                        {formatDurationMs(mgr.totalMs)}
+                      <span className={cn("text-[11px] font-semibold tabular-nums text-right flex items-center justify-end gap-0.5", isOnClock ? "text-[#d4af37]" : "text-foreground")}>
+                        {formatDurationMs(displayMs)}
+                        {isOnClock && <span className="text-[9px] font-bold animate-pulse">▶</span>}
                       </span>
                       <span className="text-[11px] tabular-nums text-foreground/80 text-right">
                         {mgr.picksCount}
@@ -1517,8 +1533,9 @@ function ManagerTimingsSection({ history, teams }: {
                             style={{ width: `${pct}%` }}
                           />
                         </span>
-                        <span className="text-[10px] font-semibold tabular-nums text-foreground tabular-nums">
-                          {formatDurationMs(mgr.totalMs)}
+                        <span className={cn("text-[10px] font-semibold tabular-nums flex items-center gap-0.5", isOnClock ? "text-[#d4af37]" : "text-foreground")}>
+                          {formatDurationMs(displayMs)}
+                          {isOnClock && <span className="text-[9px] font-bold animate-pulse">▶</span>}
                         </span>
                       </div>
                       <div className="flex items-center gap-3 text-[10px] text-muted-foreground tabular-nums flex-wrap">
@@ -2637,6 +2654,17 @@ export default function LiveDraft() {
     return draftMessages.map(parsePickMessage).filter((p): p is ParsedPick => p !== null);
   }, [draftMessages]);
 
+  // Timestamp of the last completed pick — this is the start of the current
+  // manager's on-the-clock window, used for the live elapsed timer.
+  // Falls back to the "This draft has begun!" message when no picks yet.
+  const lastPickTimestamp = useMemo<number | null>(() => {
+    if (parsedPicks.length > 0) {
+      return parsedPicks.reduce((max, p) => Math.max(max, p.created), 0);
+    }
+    const startMsg = draftMessages.find(m => m.author_is_bot && m.text === "This draft has begun!");
+    return startMsg?.created ?? null;
+  }, [parsedPicks, draftMessages]);
+
   // message_id → { timeMs, timeLabel } — duration since previous relevant bot message
   const pickTimings = useMemo<Map<string, { timeMs: number; timeLabel: string }>>(() => {
     const map = new Map<string, { timeMs: number; timeLabel: string }>();
@@ -3009,11 +3037,36 @@ export default function LiveDraft() {
     }
 
     if (draftState && draftState.picks.length > 0) {
-      return draftState.picks.map<MergedPickEntry>((pick, idx) => {
-        const parsed = parsedPicks[idx] ?? null;
-        const messageTiming = (parsed ? pickTimings.get(parsed.message_id) : null) ?? null;
+      const teams = draftState.teams;
+      // Key by "round-pickInRound" for robust matching — positional-index
+      // lookup breaks when message count differs from pick count (e.g. extra
+      // bot messages, offline/queued picks without a chat announcement).
+      const parsedByRoundPick = new Map<string, ParsedPick>();
+      for (const p of parsedPicks) parsedByRoundPick.set(`${p.round}-${p.pickInRound}`, p);
+
+      if (import.meta.env.DEV) {
+        const startMsg = draftMessages.find(m => m.author_is_bot && m.text === "This draft has begun!");
+        console.log(`[OTC] draftId=${activeDraftId} totalMessages=${draftMessages.length} pickMessages=${parsedPicks.length} draftStatePicks=${draftState.picks.length} draftStartTs=${startMsg?.created ?? "none"}`);
+        const unmatched = parsedPicks.filter(p => !draftState.picks.some(pk => {
+          const r = Math.ceil(pk.pickNo / teams);
+          const pi = ((pk.pickNo - 1) % teams) + 1;
+          return r === p.round && pi === p.pickInRound;
+        }));
+        if (unmatched.length) console.log(`[OTC] unmatchedPickMessages=${JSON.stringify(unmatched.map(p => `${p.round}.${p.pickInRound}`))}`);
+        const missingRosterId = draftState.picks.filter(pk => pk.playerId && !pk.pickedBy);
+        if (missingRosterId.length) console.log(`[OTC] picksMissingPickedBy count=${missingRosterId.length}`, missingRosterId.map(pk => pk.pickNo));
+      }
+
+      return draftState.picks.map<MergedPickEntry>((pick) => {
+        const round = Math.ceil(pick.pickNo / teams);
+        const pickInRound = ((pick.pickNo - 1) % teams) + 1;
+        const parsed = parsedByRoundPick.get(`${round}-${pickInRound}`) ?? null;
+        const messageTiming = parsed ? (pickTimings.get(parsed.message_id) ?? null) : null;
         const timing = messageTiming ?? restTimingByNo.get(pick.pickNo) ?? null;
         const pickUser = draftState.usersById[pick.pickedBy] ?? null;
+        if (import.meta.env.DEV && pick.pickedBy && !pickUser) {
+          console.log(`[OTC] pick ${round}.${pickInRound} missing user for pickedBy=${pick.pickedBy} (source: draftState — not in usersById)`);
+        }
         return {
           pick,
           timing,
@@ -3227,6 +3280,12 @@ export default function LiveDraft() {
             <ManagerTimingsSection
               history={mergedPickHistory}
               teams={draftState?.teams ?? teamCount}
+              livePickUserId={currentPickInfo?.currentUserId ?? null}
+              liveElapsedMs={
+                currentPickInfo && lastPickTimestamp
+                  ? Math.max(0, nowTs - lastPickTimestamp)
+                  : null
+              }
             />
           )}
 
