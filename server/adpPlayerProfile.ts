@@ -52,6 +52,10 @@ export interface AdpHistoryResponse {
   appliedFilters: AdpFilters;
   buckets: AdpHistoryPoint[];
   daily: Array<{ date: string; avgPick: number; count: number }>;
+  /** Per-pick count across the filtered draft pool. The UI bins this into
+   *  rounds client-side using the user's teams filter so the same payload
+   *  feeds both a per-pick view (Avail tab) and a per-round view (ADP tab). */
+  pickHistogram: Array<{ pickNo: number; count: number }>;
 }
 
 export async function getAdpHistory(playerId: string, filters: AdpFilters): Promise<AdpHistoryResponse> {
@@ -65,6 +69,7 @@ export async function getAdpHistory(playerId: string, filters: AdpFilters): Prom
         asOf: new Date().toISOString(),
       })),
       daily: [],
+      pickHistogram: [],
     };
   }
   const draftIds = eligible.map((d) => d.draftId);
@@ -148,6 +153,12 @@ export interface AdpAvailabilityResponse {
    *  "draft cliff" insight. Null when fewer than 2 cells have data. */
   biggestDropAt: { fromPick: number; toPick: number; delta: number } | null;
   cells: AvailabilityCell[];
+  /** Per-pick count of how often the player was actually drafted at that
+   *  slot inside the visible grid (pickNo 1..teams*rounds). Drives the
+   *  pick-distribution histogram below the heatmap. Picks outside the grid
+   *  bucket into the final cell as "+overflow" so users see late draft
+   *  capture without inflating the x-axis. */
+  pickHistogram: Array<{ pickNo: number; count: number }>;
 }
 
 export async function getAdpAvailability(
@@ -172,7 +183,7 @@ export async function getAdpAvailability(
     return {
       playerId, appliedFilters: filters, teams, rounds,
       totalDrafts: 0, draftsWithPlayer: 0, expectedPick: null,
-      biggestDropAt: null, cells: [],
+      biggestDropAt: null, cells: [], pickHistogram: [],
     };
   }
 
@@ -228,8 +239,19 @@ export async function getAdpAvailability(
       ) / 10
     : null;
 
+  // Pick-distribution histogram across the visible grid. Picks beyond the
+  // final slot are folded into that slot so a long-tail late pick doesn't
+  // silently drop from the chart.
+  const histCounts = new Array<number>(totalSlots).fill(0);
+  for (const p of Array.from(pickByDraft.values())) {
+    const slot = Math.min(totalSlots, Math.max(1, p));
+    histCounts[slot - 1] += 1;
+  }
+  const pickHistogram = histCounts.map((count, i) => ({ pickNo: i + 1, count }));
+
   return {
     playerId, appliedFilters: filters, teams, rounds,
     totalDrafts, draftsWithPlayer, expectedPick, biggestDropAt, cells,
+    pickHistogram,
   };
 }

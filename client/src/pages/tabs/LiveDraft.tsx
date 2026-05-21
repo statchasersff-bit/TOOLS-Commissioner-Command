@@ -2484,24 +2484,38 @@ export default function LiveDraft() {
         if (uid) slotToUserId[Number(slot)] = uid;
       }
     }
-    // Pick→slot resolution delegates to the normalizer when draftState is
-    // loaded so snake/linear/3RR all flow through one rule.
-    const pickSlotResolver = draftState?.normalizedOrder.getSlotForPick ?? null;
-    const isSnake = (draftData?.draft?.type ?? draftState?.type) === "snake";
-    const currentPickNo = (draftState?.picks.length ?? draftData?.picks.filter((p) => p.playerId).length ?? 0) + 1;
+    // Roster-centric board: each column i always represents the same team
+    // (slot i+1) across every round. The picks in pickMap are keyed by
+    // (round, draftSlot) where draftSlot is the team's assigned position —
+    // so we look up slot = i+1 directly without any snake/linear reversal.
+    //
+    // Bug history: the previous code used getSlotForPick(pickNo) — a
+    // snake-visual formula that reverses even rounds — causing picks to
+    // appear in the wrong columns. E.g. in R2 of a 12-team snake draft,
+    // column 0 (header = slot 1's team) would show slot 12's pick.
+    const currentPickNoGrid = (draftState?.picks.length ?? draftData?.picks.filter((p) => p.playerId).length ?? 0) + 1;
+    const currentRoundGrid = teamCount > 0 ? Math.ceil(currentPickNoGrid / teamCount) : 0;
+    // Current slot: prefer normalizer (handles snake/linear/3RR correctly).
+    // Fall back to a basic snake formula when draftState isn't available.
+    const currentSlotGrid = draftState
+      ? draftState.normalizedOrder.currentSlot
+      : (() => {
+          const isSnakeLocal = (draftData?.draft?.type ?? "") === "snake";
+          const inRound = ((currentPickNoGrid - 1) % Math.max(teamCount, 1)) + 1;
+          return isSnakeLocal && currentRoundGrid % 2 === 0
+            ? teamCount - inRound + 1
+            : inRound;
+        })();
     const myUserId = user?.userId ?? null;
 
     const grid: Array<Array<Cell>> = [];
 
     for (let r = 0; r < rounds; r++) {
       const row: Array<Cell> = [];
-      const isSnakeRound = isSnake && r % 2 === 1;
       for (let i = 0; i < teamCount; i++) {
         const round = r + 1;
-        const pickNo = r * teamCount + i + 1;
-        const slot = pickSlotResolver
-          ? pickSlotResolver(pickNo)
-          : isSnakeRound ? teamCount - i : i + 1;
+        const slot = i + 1; // roster-centric: column i always = slot i+1
+        const pickNo = r * teamCount + i + 1; // grid index (for display label only)
         const draftPick = pickMap.get(`${round}-${slot}`);
         const ownerInfo = ownerByCell.get(`${round}-${slot}`);
 
@@ -2554,7 +2568,7 @@ export default function LiveDraft() {
           slot,
           pick: draftPick ?? null,
           isDrafted: !!draftPick?.playerId,
-          isCurrent: pickNo === currentPickNo,
+          isCurrent: round === currentRoundGrid && slot === currentSlotGrid,
           isMine,
           ownerName,
           ownerAvatar,

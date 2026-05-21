@@ -53,6 +53,9 @@ interface AvailabilityResponse {
   expectedPick: number | null;
   biggestDropAt: { fromPick: number; toPick: number; delta: number } | null;
   cells: AvailabilityCell[];
+  // Optional — older cached responses may omit. The UI hides the histogram
+  // when absent rather than rendering an empty axis.
+  pickHistogram?: Array<{ pickNo: number; count: number }>;
 }
 
 const POS_TINT: Record<Position, { bg: string; ring: string; text: string }> = {
@@ -606,18 +609,18 @@ function AdpHistoryTab({ playerId, active, ctxLabel, filterQuery }: { playerId: 
     return () => { cancelled = true; };
   }, [playerId, active, filterQuery]);
 
-  if (loading) return <div className="flex items-center gap-2 text-muted-foreground text-sm"><Loader2 className="w-4 h-4 animate-spin"/>Loading ADP history…</div>;
-  if (error)   return <div className="flex items-center gap-2 text-rose-400 text-sm"><AlertCircle className="w-4 h-4"/>{error}</div>;
-  if (!data)   return <div className="text-sm text-muted-foreground">No history yet.</div>;
-
-  // Subset of daily points to the active range. "all" keeps everything.
+  // useMemo must be called unconditionally before any early returns.
   const filteredDaily = useMemo(() => {
-    if (data.daily.length === 0) return [];
+    if (!data || data.daily.length === 0) return [];
     if (range === "all") return data.daily;
     const days = range === "7d" ? 7 : range === "30d" ? 30 : 90;
     const cutoffMs = Date.now() - days * 24 * 60 * 60 * 1000;
     return data.daily.filter((d) => new Date(d.date).getTime() >= cutoffMs);
-  }, [data.daily, range]);
+  }, [data, range]);
+
+  if (loading) return <div className="flex items-center gap-2 text-muted-foreground text-sm"><Loader2 className="w-4 h-4 animate-spin"/>Loading ADP history…</div>;
+  if (error)   return <div className="flex items-center gap-2 text-rose-400 text-sm"><AlertCircle className="w-4 h-4"/>{error}</div>;
+  if (!data)   return <div className="text-sm text-muted-foreground">No history yet.</div>;
 
   const hasDaily = filteredDaily.length >= 2;
   const summary = buildAdpSummary(data);
@@ -777,6 +780,10 @@ function AvailabilityTab({
   const [data, setData] = useState<AvailabilityResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Active cell for the hover popover. Tracked by pickNo (unique within the
+  // grid) rather than coordinates so keyboard focus could surface the same
+  // popover later without ref juggling.
+  const [hoverPickNo, setHoverPickNo] = useState<number | null>(null);
 
   useEffect(() => {
     if (!active) return;
@@ -830,6 +837,10 @@ function AvailabilityTab({
     ? `${Math.ceil(drop.fromPick / teams)}.${String(((drop.fromPick - 1) % teams) + 1).padStart(2, "0")} → ${Math.ceil(drop.toPick / teams)}.${String(((drop.toPick - 1) % teams) + 1).padStart(2, "0")}`
     : null;
 
+  const hist = (data.pickHistogram ?? []).filter((p) => p.pickNo >= minPickInPool && p.pickNo <= maxPickInPool);
+  const histMax = hist.reduce((m, p) => (p.count > m ? p.count : m), 0);
+  const histDraftedTotal = hist.reduce((s, p) => s + p.count, 0);
+
   return (
     <div className="space-y-3 text-[12px]" data-testid="availability-tab">
       {/* Filter context banner — explains why the values look the way they do. */}
@@ -850,8 +861,9 @@ function AvailabilityTab({
         )}
       </div>
 
-      {/* Heatmap — slightly rounded cells, hover tooltip, expected pick highlighted. */}
-      <div className="overflow-x-auto rounded-md border border-white/8 bg-white/[0.02] p-2">
+      {/* Heatmap — rich hover popover, expected pick highlighted. `relative`
+          wrapper anchors the absolute-positioned popover. */}
+      <div className="overflow-x-auto rounded-md border border-white/8 bg-white/[0.02] p-2 relative" onMouseLeave={() => setHoverPickNo(null)}>
         <table className="text-[10px] border-separate" style={{ borderSpacing: "2px" }}>
           <thead>
             <tr className="text-muted-foreground">
@@ -872,16 +884,19 @@ function AvailabilityTab({
                     const cell = row.find((c) => c.pickInRound === i + 1);
                     if (!cell) return <td key={i} className="px-0.5 py-0.5" />;
                     const isExpected = cell.pickNo === expectedSlot.pickNo;
-                    const draftsAvail = Math.round((cell.availabilityPct / 100) * data.totalDrafts);
                     return (
                       <td key={i} className="p-0">
                         <div
                           className={cn(
-                            "rounded-[3px] h-7 flex items-center justify-center text-[10px] font-bold tabular-nums",
+                            "rounded-[3px] h-7 flex items-center justify-center text-[10px] font-bold tabular-nums cursor-default transition-shadow",
                             availabilityClass(cell.availabilityPct),
                             isExpected && "ring-2 ring-[#d4af37] z-10 relative",
+                            hoverPickNo === cell.pickNo && "ring-2 ring-white/70",
                           )}
-                          title={`${cell.round}.${String(cell.pickInRound).padStart(2, "0")} · ${cell.availabilityPct.toFixed(1)}% available · ${draftsAvail.toLocaleString()} / ${data.totalDrafts.toLocaleString()} drafts`}
+                          onMouseEnter={() => setHoverPickNo(cell.pickNo)}
+                          onFocus={() => setHoverPickNo(cell.pickNo)}
+                          onBlur={() => setHoverPickNo(null)}
+                          tabIndex={0}
                           data-testid={`avail-cell-${cell.round}-${cell.pickInRound}`}
                         >
                           {Math.round(cell.availabilityPct)}
@@ -894,6 +909,33 @@ function AvailabilityTab({
             })}
           </tbody>
         </table>
+        {hoverPickNo != null && (() => {
+          const c = data.cells.find((x) => x.pickNo === hoverPickNo);
+          if (!c) return null;
+          const draftsAvail = Math.round((c.availabilityPct / 100) * data.totalDrafts);
+          const histCount = data.pickHistogram?.find((p) => p.pickNo === c.pickNo)?.count ?? 0;
+          return (
+            <div
+              className="absolute top-2 right-2 z-20 pointer-events-none rounded-md border border-white/15 bg-[#0a1628]/95 backdrop-blur px-2.5 py-1.5 shadow-lg text-[10.5px] leading-tight"
+              data-testid="avail-tooltip"
+            >
+              <div className="text-[#d4af37] font-bold tabular-nums">
+                Pick {c.round}.{String(c.pickInRound).padStart(2, "0")}
+              </div>
+              <div className="text-white/85 mt-0.5">
+                <span className="tabular-nums font-semibold">{c.availabilityPct.toFixed(1)}%</span> available
+              </div>
+              <div className="text-white/55 tabular-nums">
+                {draftsAvail.toLocaleString()} / {data.totalDrafts.toLocaleString()} drafts
+              </div>
+              {histCount > 0 && (
+                <div className="text-white/45 tabular-nums mt-0.5">
+                  Drafted here in {histCount.toLocaleString()} {histCount === 1 ? "draft" : "drafts"}
+                </div>
+              )}
+            </div>
+          );
+        })()}
       </div>
 
       {/* Color legend — same scale order as the cells. */}
@@ -905,6 +947,18 @@ function AvailabilityTab({
         <LegendDot className="bg-teal-500/55 border-teal-500/70" label="60–85%" />
         <LegendDot className="bg-emerald-500/55 border-emerald-500/70" label=">85%" />
       </div>
+
+      {hist.length > 0 && histMax > 0 && (
+        <PickDistributionHistogram
+          hist={hist}
+          histMax={histMax}
+          totalDrafted={histDraftedTotal}
+          teams={teams}
+          expectedPickNo={expectedSlot.pickNo}
+          hoverPickNo={hoverPickNo}
+          onHoverPickNo={setHoverPickNo}
+        />
+      )}
 
       {insights.length > 0 && (
         <div className="space-y-1.5" data-testid="availability-insights">
@@ -921,6 +975,74 @@ function AvailabilityTab({
           </ul>
         </div>
       )}
+    </div>
+  );
+}
+
+function PickDistributionHistogram({
+  hist, histMax, totalDrafted, teams, expectedPickNo, hoverPickNo, onHoverPickNo,
+}: {
+  hist: Array<{ pickNo: number; count: number }>;
+  histMax: number;
+  totalDrafted: number;
+  teams: number;
+  expectedPickNo: number;
+  hoverPickNo: number | null;
+  onHoverPickNo: (n: number | null) => void;
+}) {
+  // Modal pick is the column users will gravitate to — annotate it so the
+  // chart reads independently of the heatmap above.
+  const modal = hist.reduce((acc, p) => (p.count > acc.count ? p : acc), { pickNo: 0, count: 0 });
+  return (
+    <div className="rounded-md border border-white/8 bg-white/[0.02] p-2" data-testid="availability-histogram" onMouseLeave={() => onHoverPickNo(null)}>
+      <div className="flex items-center justify-between text-[10px] uppercase tracking-wider text-muted-foreground mb-1.5">
+        <span>Where He's Actually Drafted</span>
+        <span className="text-white/40 normal-case tracking-normal tabular-nums">{totalDrafted.toLocaleString()} picks</span>
+      </div>
+      <div className="overflow-x-auto">
+        <div className="flex items-end gap-[2px] h-16 min-w-full">
+          {hist.map((p) => {
+            const isExpected = p.pickNo === expectedPickNo;
+            const isHover = p.pickNo === hoverPickNo;
+            const isModal = p.pickNo === modal.pickNo && modal.count > 0;
+            const heightPct = (p.count / histMax) * 100;
+            return (
+              <button
+                key={p.pickNo}
+                type="button"
+                onMouseEnter={() => onHoverPickNo(p.pickNo)}
+                onFocus={() => onHoverPickNo(p.pickNo)}
+                onBlur={() => onHoverPickNo(null)}
+                className={cn(
+                  "relative flex-1 min-w-[6px] rounded-t-sm transition-all",
+                  p.count === 0
+                    ? "bg-white/[0.04]"
+                    : isHover
+                      ? "bg-white/85"
+                      : isExpected
+                        ? "bg-[#d4af37]"
+                        : isModal
+                          ? "bg-[#d4af37]/80"
+                          : "bg-[#d4af37]/40 hover:bg-[#d4af37]/60",
+                )}
+                style={{ height: p.count > 0 ? `${Math.max(4, heightPct)}%` : "2px" }}
+                data-testid={`avail-hist-${p.pickNo}`}
+                aria-label={`Pick ${p.pickNo}: drafted in ${p.count} drafts`}
+              />
+            );
+          })}
+        </div>
+      </div>
+      <div className="flex justify-between text-[9px] text-muted-foreground tabular-nums mt-1">
+        <span>Pick {hist[0]?.pickNo}</span>
+        {modal.count > 0 && (
+          <span className="text-[#d4af37]">
+            Most common: {Math.ceil(modal.pickNo / teams)}.{String(((modal.pickNo - 1) % teams) + 1).padStart(2, "0")}
+            <span className="text-white/50"> · {modal.count.toLocaleString()} drafts</span>
+          </span>
+        )}
+        <span>Pick {hist[hist.length - 1]?.pickNo}</span>
+      </div>
     </div>
   );
 }
