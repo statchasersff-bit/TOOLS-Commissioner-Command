@@ -130,7 +130,25 @@ export async function getAdpHistory(playerId: string, filters: AdpFilters): Prom
     }))
     .sort((a, b) => a.date.localeCompare(b.date));
 
-  return { playerId, appliedFilters: filters, buckets, daily };
+  // Per-pick histogram across the entire filtered pool. Capped at a generous
+  // upper bound so a single outlier "drafted at 240" doesn't blow up the
+  // array — anything past the cap rolls into the final bucket.
+  const HIST_CAP = 360;
+  const histCounts = new Array<number>(HIST_CAP).fill(0);
+  for (const r of rows) {
+    const idx = Math.min(HIST_CAP, Math.max(1, r.pickNo)) - 1;
+    histCounts[idx] += 1;
+  }
+  // Trim trailing zeros so the client doesn't loop over empty tail buckets.
+  let lastNonZero = -1;
+  for (let i = histCounts.length - 1; i >= 0; i--) {
+    if (histCounts[i] > 0) { lastNonZero = i; break; }
+  }
+  const pickHistogram = histCounts
+    .slice(0, lastNonZero + 1)
+    .map((count, i) => ({ pickNo: i + 1, count }));
+
+  return { playerId, appliedFilters: filters, buckets, daily, pickHistogram };
 }
 
 export interface AvailabilityCell {

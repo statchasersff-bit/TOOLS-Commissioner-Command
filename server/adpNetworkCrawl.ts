@@ -705,13 +705,21 @@ export async function runNetworkCrawl(
           if (depthCapped) break;
           if (!lg.league_id) continue;
           if (processedLeagues.has(lg.league_id)) continue;
+          // Mark as seen immediately so other depth paths don't re-examine it.
+          processedLeagues.add(lg.league_id);
+
+          // Only dynasty leagues (settings.type === 2) carry dynasty ADP data.
+          // Sleeper encodes: 0 = redraft, 1 = keeper, 2 = dynasty.
+          // Skipping non-dynasty here prevents redraft/keeper drafts from being
+          // ingested and avoids wasting API quota on irrelevant leagues.
+          if ((lg.settings?.type ?? 0) !== 2) continue;
+
           if (result.leaguesProcessed >= caps.maxLeagues) {
             result.capsHit.push("maxLeagues");
             console.warn(`[NetworkCrawl] Crawl capped for safety. (maxLeagues=${caps.maxLeagues})`);
             depthCapped = true;
             break;
           }
-          processedLeagues.add(lg.league_id);
           result.leaguesProcessed++;
           result.currentActivity = `Depth ${depth}: league ${(lg.name ?? lg.league_id).slice(0, 40)} (${season})`;
 

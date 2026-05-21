@@ -159,7 +159,12 @@ interface SleeperLeagueScoring {
     [k: string]: any;
   };
   roster_positions?: string[];
-  settings?: { pass_td?: number; [k: string]: any };
+  settings?: {
+    /** Sleeper league type: 0 = redraft, 1 = keeper, 2 = dynasty. */
+    type?: number;
+    pass_td?: number;
+    [k: string]: any;
+  };
 }
 
 const leagueScoringCache = new Map<string, SleeperLeagueScoring | null>();
@@ -222,6 +227,22 @@ function deriveDraftFormat(d: SleeperDraftRaw): "snake" | "auction" | "linear" {
   if (d.type === "auction") return "auction";
   if (d.type === "linear") return "linear";
   return "snake";
+}
+
+/**
+ * Derive the Sleeper league mode from the fetched league object.
+ * Sleeper encodes: settings.type 0 = redraft, 1 = keeper, 2 = dynasty.
+ * Falls back to "dynasty" when the league isn't available (e.g. mock/test
+ * drafts with no league_id) so existing behavior is preserved for those cases.
+ */
+function deriveLeagueMode(league: SleeperLeagueScoring | null): "dynasty" | "keeper" | "redraft" {
+  const t = league?.settings?.type;
+  if (t === 2) return "dynasty";
+  if (t === 1) return "keeper";
+  if (t === 0) return "redraft";
+  // No league attached (standalone draft) — assume dynasty since this tool
+  // is dynasty-only and the crawl already filters to dynasty leagues.
+  return "dynasty";
 }
 
 /** Normalize a Sleeper timestamp value to JS milliseconds. */
@@ -874,7 +895,7 @@ function buildDraftRowValues(
     teams: draftRaw.settings?.teams ?? 12,
     rounds: draftRaw.settings?.rounds ?? 0,
     scoringType: deriveScoringType(draftRaw, league),
-    leagueMode: "dynasty" as const,
+    leagueMode: deriveLeagueMode(league),
     superflex: deriveSuperflex(draftRaw, league),
     tePremium: deriveTePremium(league),
     bestBall: (draftRaw.settings?.best_ball ?? 0) === 1,

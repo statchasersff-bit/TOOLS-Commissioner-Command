@@ -323,27 +323,113 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
     </div>
   );
 
-  const renderSelectLeague = () => (
-    <div className="flex items-center justify-center min-h-[50vh] md:min-h-[60vh] px-4">
-      <Card className="p-6 md:p-10 text-center max-w-sm md:max-w-md w-full border-border/60 dark:border-[#1a2d4a]/80 bg-gradient-to-b from-background to-muted/20 dark:from-[#0c1929] dark:to-[#0a1628] shadow-xl shadow-black/5 dark:shadow-black/30" data-testid="select-league-card">
-        <div className="mx-auto w-14 h-14 md:w-16 md:h-16 rounded-2xl bg-[#0b3a7a]/10 dark:bg-blue-400/10 flex items-center justify-center mb-4 ring-1 ring-[#0b3a7a]/15 dark:ring-blue-400/15">
-          <LayoutDashboard className="w-6 h-6 md:w-7 md:h-7 text-[#0b3a7a] dark:text-blue-400" />
+  // Empty-state branching. We only reach this when AccessGate has confirmed
+  // at least readonly access, so "Connect Sleeper Account" is almost always
+  // the wrong CTA — the user has already connected. The cases we actually
+  // need to handle are:
+  //   A. Sleeper API still fetching → spinner card
+  //   B. Connected, but Sleeper returned zero eligible dynasty leagues →
+  //      "No eligible dynasty leagues found" + "Try Another Username" (only
+  //      a real action for readonly users; auth-linked users can't swap
+  //      Sleeper accounts from here).
+  //   C. Leagues exist + a league is selected, but its full payload hasn't
+  //      arrived yet → "Loading Your League" (no CTA).
+  //   D. Pathological fall-through (no user at all, somehow past AccessGate)
+  //      → keep the old Connect prompt as a last resort.
+  const renderSelectLeague = () => {
+    const hasUser = !!(sleeper.user || readOnlySleeperUser);
+    const isFetchingLeagues = sleeper.isLoading;
+    const noLeagues = hasUser && !isFetchingLeagues && sleeper.leagues.length === 0;
+    const isReadOnlyUser = !!readOnlySleeperUser && !sleeper.isConnected ? true : (accessLevel === "readonly");
+
+    // A. Initial fetch — show a spinner card.
+    if (hasUser && isFetchingLeagues) {
+      return (
+        <div className="flex items-center justify-center min-h-[50vh] md:min-h-[60vh] px-4">
+          <Card className="p-6 md:p-10 text-center max-w-sm md:max-w-md w-full border-border/60 dark:border-[#1a2d4a]/80 bg-gradient-to-b from-background to-muted/20 dark:from-[#0c1929] dark:to-[#0a1628] shadow-xl shadow-black/5 dark:shadow-black/30" data-testid="loading-leagues-card">
+            <div className="mx-auto w-14 h-14 md:w-16 md:h-16 rounded-2xl bg-[#0b3a7a]/10 dark:bg-blue-400/10 flex items-center justify-center mb-4 ring-1 ring-[#0b3a7a]/15 dark:ring-blue-400/15">
+              <Loader2 className="w-6 h-6 md:w-7 md:h-7 text-[#0b3a7a] dark:text-blue-400 animate-spin" />
+            </div>
+            <h3 className="text-lg md:text-xl font-bold mb-1.5">Loading Your Leagues</h3>
+            <p className="text-[13px] md:text-sm text-muted-foreground leading-relaxed max-w-[280px] mx-auto">
+              Looking up your Sleeper dynasty leagues…
+            </p>
+          </Card>
         </div>
-        <h3 className="text-lg md:text-xl font-bold mb-1.5" data-testid="text-empty-state">Select a League to Begin</h3>
-        <p className="text-[13px] md:text-sm text-muted-foreground leading-relaxed mb-5 max-w-[280px] mx-auto">
-          Choose a league to explore power rankings, trade tools, and deep roster analysis.
-        </p>
-        <Button
-          variant="outline"
-          className="w-full md:w-auto h-11 md:h-10 text-sm font-semibold"
-          onClick={() => navigateToSubTab("portfolio", "connect")}
-          data-testid="button-go-to-leagues"
-        >
-          Connect Sleeper Account
-        </Button>
-      </Card>
-    </div>
-  );
+      );
+    }
+
+    // B. Connected, but no eligible leagues exist.
+    if (noLeagues) {
+      return (
+        <div className="flex items-center justify-center min-h-[50vh] md:min-h-[60vh] px-4">
+          <Card className="p-6 md:p-10 text-center max-w-sm md:max-w-md w-full border-border/60 dark:border-[#1a2d4a]/80 bg-gradient-to-b from-background to-muted/20 dark:from-[#0c1929] dark:to-[#0a1628] shadow-xl shadow-black/5 dark:shadow-black/30" data-testid="no-leagues-card">
+            <div className="mx-auto w-14 h-14 md:w-16 md:h-16 rounded-2xl bg-amber-500/10 dark:bg-amber-400/10 flex items-center justify-center mb-4 ring-1 ring-amber-500/20 dark:ring-amber-400/20">
+              <AlertCircle className="w-6 h-6 md:w-7 md:h-7 text-amber-600 dark:text-amber-400" />
+            </div>
+            <h3 className="text-lg md:text-xl font-bold mb-1.5" data-testid="text-no-leagues">No eligible dynasty leagues found for this Sleeper username.</h3>
+            <p className="text-[13px] md:text-sm text-muted-foreground leading-relaxed mb-5 max-w-[300px] mx-auto">
+              We couldn't find any active dynasty leagues with a drafted roster under{" "}
+              <span className="font-semibold text-foreground">@{sleeper.user?.username ?? readOnlySleeperUser?.username}</span>.
+            </p>
+            {isReadOnlyUser && (
+              <Button
+                variant="outline"
+                className="w-full md:w-auto h-11 md:h-10 text-sm font-semibold"
+                onClick={() => disconnectReadOnlySleeper()}
+                data-testid="button-try-another-username"
+              >
+                Try Another Username
+              </Button>
+            )}
+          </Card>
+        </div>
+      );
+    }
+
+    // C. Leagues are loaded and a selection exists — we're just waiting on
+    //    the full league payload (rosters, picks, etc.) to render the module.
+    if (hasUser && sleeper.leagues.length > 0) {
+      return (
+        <div className="flex items-center justify-center min-h-[50vh] md:min-h-[60vh] px-4">
+          <Card className="p-6 md:p-10 text-center max-w-sm md:max-w-md w-full border-border/60 dark:border-[#1a2d4a]/80 bg-gradient-to-b from-background to-muted/20 dark:from-[#0c1929] dark:to-[#0a1628] shadow-xl shadow-black/5 dark:shadow-black/30" data-testid="loading-league-card">
+            <div className="mx-auto w-14 h-14 md:w-16 md:h-16 rounded-2xl bg-[#0b3a7a]/10 dark:bg-blue-400/10 flex items-center justify-center mb-4 ring-1 ring-[#0b3a7a]/15 dark:ring-blue-400/15">
+              <Loader2 className="w-6 h-6 md:w-7 md:h-7 text-[#0b3a7a] dark:text-blue-400 animate-spin" />
+            </div>
+            <h3 className="text-lg md:text-xl font-bold mb-1.5" data-testid="text-loading-league">Loading Your League</h3>
+            <p className="text-[13px] md:text-sm text-muted-foreground leading-relaxed max-w-[300px] mx-auto">
+              We found your Sleeper leagues and are opening one now.
+            </p>
+          </Card>
+        </div>
+      );
+    }
+
+    // D. True "not connected" fallback. AccessGate normally catches this
+    //    before we reach here — but if a render slips through, keep the
+    //    Connect CTA as a safety net.
+    return (
+      <div className="flex items-center justify-center min-h-[50vh] md:min-h-[60vh] px-4">
+        <Card className="p-6 md:p-10 text-center max-w-sm md:max-w-md w-full border-border/60 dark:border-[#1a2d4a]/80 bg-gradient-to-b from-background to-muted/20 dark:from-[#0c1929] dark:to-[#0a1628] shadow-xl shadow-black/5 dark:shadow-black/30" data-testid="select-league-card">
+          <div className="mx-auto w-14 h-14 md:w-16 md:h-16 rounded-2xl bg-[#0b3a7a]/10 dark:bg-blue-400/10 flex items-center justify-center mb-4 ring-1 ring-[#0b3a7a]/15 dark:ring-blue-400/15">
+            <LayoutDashboard className="w-6 h-6 md:w-7 md:h-7 text-[#0b3a7a] dark:text-blue-400" />
+          </div>
+          <h3 className="text-lg md:text-xl font-bold mb-1.5" data-testid="text-empty-state">Select a League to Begin</h3>
+          <p className="text-[13px] md:text-sm text-muted-foreground leading-relaxed mb-5 max-w-[280px] mx-auto">
+            Choose a league to explore power rankings, trade tools, and deep roster analysis.
+          </p>
+          <Button
+            variant="outline"
+            className="w-full md:w-auto h-11 md:h-10 text-sm font-semibold"
+            onClick={() => navigateToSubTab("portfolio", "connect")}
+            data-testid="button-go-to-leagues"
+          >
+            Connect Sleeper Account
+          </Button>
+        </Card>
+      </div>
+    );
+  };
 
   // Navigate back to the default read-only landing module — used by the
   // "Back to Read-Only Tools" button on the LoginRequiredGate.

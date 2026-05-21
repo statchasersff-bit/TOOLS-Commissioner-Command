@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import { getFantasyCalcValues, getFantasyCalcRedraftValues } from "./fantasycalc";
 import { computePlayoffCalculator, computeWeeklyMatchups } from "./playoffCalculator";
 import { getAdpHistory, getAdpAvailability } from "./adpPlayerProfile";
+import { getPlayerMetadata, getPlayerProduction, type ScoringKey } from "./sleeperPlayerProfile";
 import {
   fetchSleeperUser,
   fetchSleeperLeagues,
@@ -281,6 +282,45 @@ export async function registerRoutes(
     } catch (err: any) {
       console.error("[AdpPlayerProfile/history] error:", err);
       res.status(500).json({ error: err?.message || "Failed to load ADP history" });
+    }
+  });
+
+  // Single-player metadata read from the cached Sleeper /players/nfl
+  // payload. Cheap — no network call once the cache is warm. Header tabs
+  // in the ADP Explorer modal hit this on every player open.
+  app.get("/api/sleeper/player/:playerId", async (req, res) => {
+    try {
+      const { playerId } = req.params;
+      if (!playerId) return res.status(400).json({ error: "playerId is required" });
+      const meta = await getPlayerMetadata(playerId);
+      if (!meta) return res.status(404).json({ error: "Player not found" });
+      res.setHeader("Cache-Control", "public, max-age=3600");
+      res.json(meta);
+    } catch (err: any) {
+      console.error("[SleeperPlayer/metadata] error:", err);
+      res.status(500).json({ error: err?.message || "Failed to load player metadata" });
+    }
+  });
+
+  // Per-season fantasy production. Backed by Sleeper's public
+  // /stats/nfl/regular/{season} endpoint with on-disk caching per season.
+  // Scoring defaults to PPR — front-end can pass scoring=half_ppr|std to
+  // match the ADP Explorer view the user is looking at.
+  app.get("/api/players/:playerId/production", async (req, res) => {
+    try {
+      const { playerId } = req.params;
+      if (!playerId) return res.status(400).json({ error: "playerId is required" });
+      const raw = String(req.query.scoring ?? "ppr").toLowerCase();
+      const scoring: ScoringKey =
+        raw === "std" || raw === "standard"  ? "std" :
+        raw === "half" || raw === "half_ppr" ? "half_ppr" :
+        "ppr";
+      const seasons = await getPlayerProduction(playerId, scoring);
+      res.setHeader("Cache-Control", "public, max-age=3600");
+      res.json({ playerId, scoring, seasons });
+    } catch (err: any) {
+      console.error("[Player/production] error:", err);
+      res.status(500).json({ error: err?.message || "Failed to load production" });
     }
   });
 
