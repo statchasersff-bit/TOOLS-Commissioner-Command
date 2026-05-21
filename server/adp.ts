@@ -1051,7 +1051,7 @@ export async function ingestCrawledLeagueDrafts(limit: number = 200): Promise<{ 
 //   v5 — Direct Rookies excludes kickers across all draft types (not just
 //        rookie drafts). Pre-v5 snapshots for draftType=all/supplemental
 //        under rookieMode=direct could still contain K rows.
-const FILTER_KEY_VERSION = "v5";
+const FILTER_KEY_VERSION = "v7";
 
 /** Normalize the season filter into a comma-joined sorted list, "all", or
  *  the inferred current season. Centralised so filterKey and the WHERE
@@ -1123,12 +1123,43 @@ export function buildDraftWhere(f: AdpFilters) {
 
   // Rookie-mode filter at the draft level. Only applies to rookie drafts —
   // startup drafts always count as "direct" since they're full-roster picks.
-  // "Mixed" drafts surface in both buckets so they aren't dropped.
   if (f.draftType === "rookie") {
     if (f.rookieMode === "direct") {
+      // Direct Rookies: drafts where actual rookies were selected. Mixed
+      // drafts surface here too since they include real rookie picks.
       conds.push(inArray(drafts.rookieMode, ["direct_rookies", "mixed"]));
     } else if (f.rookieMode === "picks") {
-      conds.push(inArray(drafts.rookieMode, ["rookie_picks", "mixed"]));
+      // Strict Rookie-Picks rule: ONLY show drafts where (a) placeholder
+      // picks were used (Sleeper's "rookie pick futures" encoding, either
+      // kickers-as-placeholders OR null player_id slots) and (b) no
+      // actual rookies (years_exp = 0 at draft time) were selected.
+      //
+      // We deliberately read the per-pick signals (is_rookie_placeholder
+      // and rookie_year) rather than the draft-level `rookieMode` label.
+      // The classifier label aggregates with a 75% / 25% share threshold,
+      // which buckets most real-world futures drafts as "mixed" — they
+      // contain a few accidental rookie picks but are still placeholder-
+      // dominant. The per-pick check answers exactly the question we
+      // care about for this filter: does any rookie row exist? If yes,
+      // the draft fails the rule; otherwise it passes.
+      //
+      // (a) EXISTS placeholder pick — gates out drafts that have no
+      //     futures encoding at all (which would be a startup-ish draft
+      //     that already gets filtered out by draftType, but defensive
+      //     belt-and-suspenders).
+      // (b) NOT EXISTS rookie_year=season — gates out any draft where a
+      //     years_exp=0 player was selected at draft time. rookie_year is
+      //     populated at ingest from years_exp (see deriveRookieYear).
+      conds.push(sql`EXISTS (
+        SELECT 1 FROM ${draftPicks}
+        WHERE ${draftPicks.draftId} = ${drafts.draftId}
+          AND ${draftPicks.isRookiePlaceholder} = TRUE
+      )`);
+      conds.push(sql`NOT EXISTS (
+        SELECT 1 FROM ${draftPicks}
+        WHERE ${draftPicks.draftId} = ${drafts.draftId}
+          AND ${draftPicks.rookieYear} = CAST(${drafts.season} AS integer)
+      )`);
     }
     // "both" or undefined → no draft-level filter, all rookie drafts.
   }

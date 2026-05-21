@@ -2584,25 +2584,33 @@ export default function LiveDraft() {
   // REST-only slot headers (displayName + avatar hash). The GraphQL path
   // enriches further in `enhancedSlotHeaders` below.
   //
-  // Header semantics: each column shows the user who CURRENTLY owns the
-  // round-1 pick for that slot. That's the order in which picks will
-  // actually be made in round 1 — i.e. "the draft order" as a user reads it.
+  // Header semantics: each column header shows the ORIGINAL owner of that
+  // draft slot — i.e. who was assigned pick slot N before any trades. This
+  // makes the column a permanent "team identity" regardless of whether they
+  // traded picks away or acquired others. Traded-pick awareness belongs in
+  // the cells (the "Traded" badge), not in the column header.
   //
-  // Bug history: pre-fix, headers showed the ORIGINAL slot owner from
-  // draft.draft_order, ignoring traded_picks. In a startup with a few 1st-
-  // round trades, the visible header order ("makitrain at slot 1") didn't
-  // match who actually picked 1.01 ("chaffima after trade"). We now consult
-  // draftData.pickOwners (which folds traded_picks) for round=1 first, and
-  // fall back to the static draftSlots map only when pickOwners is missing.
+  // Source priority:
+  //   1. draftSlots — built directly from draft_order + slot_to_roster_id;
+  //      always represents original slot assignments.
+  //   2. pickOwners[round=1].originalDisplayName — same semantic, used when
+  //      draftSlots is unavailable (race condition during loading).
   const slotHeaders = useMemo<Array<{ displayName: string; avatar: string | null; userId: string | null }>>(() => {
+    // Prefer draftSlots — it is the canonical original slot assignment source.
+    if (draftData?.draftSlots && draftData.draftSlots.length > 0) {
+      return [...draftData.draftSlots]
+        .sort((a, b) => a.slot - b.slot)
+        .map((s) => ({ displayName: s.displayName, avatar: s.avatar ?? null, userId: (s as any).userId ?? null }));
+    }
+    // Fallback: use the ORIGINAL owner from pickOwners (not current/post-trade).
     if (draftData?.pickOwners && draftData.pickOwners.length > 0) {
       const round1 = new Map<number, { displayName: string; avatar: string | null; userId: string | null }>();
       for (const po of draftData.pickOwners) {
         if (po.round !== 1) continue;
         round1.set(po.slot, {
-          displayName: po.currentDisplayName,
-          avatar: po.currentAvatar ?? null,
-          userId: po.currentUserId ?? null,
+          displayName: po.originalDisplayName,
+          avatar: po.originalAvatar ?? null,
+          userId: null, // originalUserId not available; manager-intel click uses enhancedSlotHeaders
         });
       }
       if (round1.size > 0) {
@@ -2611,11 +2619,6 @@ export default function LiveDraft() {
           return round1.get(s) ?? { displayName: `Pick ${s}`, avatar: null, userId: null };
         });
       }
-    }
-    if (draftData?.draftSlots && draftData.draftSlots.length > 0) {
-      return [...draftData.draftSlots]
-        .sort((a, b) => a.slot - b.slot)
-        .map((s) => ({ displayName: s.displayName, avatar: s.avatar ?? null, userId: (s as any).userId ?? null }));
     }
     return Array.from({ length: teamCount }, (_, i) => ({
       displayName: `Pick ${i + 1}`,
