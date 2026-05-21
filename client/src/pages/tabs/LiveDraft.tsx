@@ -325,6 +325,7 @@ interface ParsedPick {
   message_id: string;
   round: number;
   pickInRound: number;
+  displayPick: string;
   playerName: string;
   position: string;
   team: string;
@@ -334,17 +335,37 @@ interface ParsedPick {
 
 // DEV_JWT_KEY imported from @/lib/sleeperAuthToken — used only as dev fallback.
 
-const PICK_RE = /^Pick (\d+)\.(\d+) - Pick: (.+?) \((\w+) - (\w+)\)$/;
-const FORCED_RE = /^Pick (\d+)\.(\d+) - Commish forced pick: (.+?) \((\w+) - (\w+)\)$/;
+// Flexible pick regex — handles all known Sleeper bot message formats:
+//   "Pick 1.2 - Pick: Carnell Tate (WR - TEN)"
+//   "Pick 1.02 - Pick: Carnell Tate (WR - TEN)"
+//   "Pick 1.2: Carnell Tate (WR - TEN)"
+//   "Pick 1.2 - Pick: Carnell Tate"        ← no position/team suffix
+//   "Pick 1.02 - Pick: Carnell Tate"
+const PICK_RE = /^Pick\s+(\d+)\.(\d+)\s*(?:-\s*Pick:|:)\s+(.*?)(?:\s*\((\w+)\s*-\s*(\w+)\))?$/i;
+const FORCED_RE = /^Pick\s+(\d+)\.(\d+)\s*-\s*(?:Commish\s+)?forced\s+pick:\s+(.*?)(?:\s*\((\w+)\s*-\s*(\w+)\))?$/i;
 
 function parsePickMessage(msg: DraftMessage): ParsedPick | null {
   const forced = FORCED_RE.exec(msg.text);
   if (forced) {
-    return { message_id: msg.message_id, round: +forced[1], pickInRound: +forced[2], playerName: forced[3], position: forced[4], team: forced[5], forced: true, created: msg.created };
+    const round = Number(forced[1]);
+    const pickInRound = Number(forced[2]);
+    return {
+      message_id: msg.message_id, round, pickInRound,
+      displayPick: `${round}.${String(pickInRound).padStart(2, "0")}`,
+      playerName: forced[3]?.trim() ?? "", position: forced[4] ?? "", team: forced[5] ?? "",
+      forced: true, created: msg.created,
+    };
   }
   const normal = PICK_RE.exec(msg.text);
   if (normal) {
-    return { message_id: msg.message_id, round: +normal[1], pickInRound: +normal[2], playerName: normal[3], position: normal[4], team: normal[5], forced: false, created: msg.created };
+    const round = Number(normal[1]);
+    const pickInRound = Number(normal[2]);
+    return {
+      message_id: msg.message_id, round, pickInRound,
+      displayPick: `${round}.${String(pickInRound).padStart(2, "0")}`,
+      playerName: normal[3]?.trim() ?? "", position: normal[4] ?? "", team: normal[5] ?? "",
+      forced: false, created: msg.created,
+    };
   }
   return null;
 }
@@ -2369,9 +2390,16 @@ export default function LiveDraft({ onConnectSleeper }: { onConnectSleeper?: () 
       const pickMsgCount = sorted.filter(m => m.author_is_bot && m.text.includes("Pick ")).length;
       // eslint-disable-next-line no-console
       console.info(`[messages] loaded ${sorted.length} messages for draftId=${draftId} (bot=${botMsgs.length} pickMsgs=${pickMsgCount} hasBegan=${hasBegan})`);
-      if (import.meta.env.DEV && botMsgs.length > 0 && !hasBegan) {
+      if (import.meta.env.DEV) {
         // eslint-disable-next-line no-console
-        console.info("[messages] sample bot texts (no 'begun' found):", botMsgs.slice(0, 3).map(m => m.text));
+        console.log("[OTC messages raw]", sorted.slice(0, 20).map(m => ({ message_id: m.message_id, created: m.created, author_is_bot: m.author_is_bot, text: m.text })));
+        const parsedMessagePicks = sorted.map(parsePickMessage).filter(Boolean);
+        // eslint-disable-next-line no-console
+        console.log("[OTC parsed message picks]", parsedMessagePicks);
+        if (botMsgs.length > 0 && !hasBegan) {
+          // eslint-disable-next-line no-console
+          console.info("[messages] sample bot texts (no 'begun' found):", botMsgs.slice(0, 3).map(m => m.text));
+        }
       }
       setDraftMessages(sorted);
       setDraftStarted(sorted.some(m => m.text === "This draft has begun!"));
@@ -3301,6 +3329,43 @@ export default function LiveDraft({ onConnectSleeper }: { onConnectSleeper?: () 
       }
     }
 
+    // Build multi-key timing maps from parsed pick messages so timing can be
+    // found by pick_no, displayPick ("1.02"), or round.slot — whichever key
+    // the REST pick rows expose. The message_id-keyed pickTimings map already
+    // holds the computed durations; we just re-index it here.
+    const teamsForTiming = draftState?.teams ?? draftData?.draft?.teams ?? teamCount;
+    const timingByPickNo    = new Map<string, { timeMs: number; timeLabel: string }>();
+    const timingByDisplayPick = new Map<string, { timeMs: number; timeLabel: string }>();
+    const timingByRoundPick   = new Map<string, { timeMs: number; timeLabel: string }>();
+    for (const p of parsedPicks) {
+      const t = pickTimings.get(p.message_id);
+      if (!t) continue;
+      const pickNo = (p.round - 1) * teamsForTiming + p.pickInRound;
+      timingByPickNo.set(String(pickNo), t);
+      timingByDisplayPick.set(p.displayPick, t);                         // "1.02"
+      timingByRoundPick.set(`${p.round}.${p.pickInRound}`, t);           // "1.2"
+    }
+
+    if (import.meta.env.DEV) {
+      const restPicks = draftData?.picks ?? [];
+      console.log("[OTC timing diagnostics]", {
+        messagesReturned: draftMessages.length,
+        parsedPickMessages: parsedPicks.length,
+        pickTimingsSize: pickTimings.size,
+        timingByPickNoKeys: [...timingByPickNo.keys()].slice(0, 20),
+        restPicksCount: restPicks.length,
+        sampleRestPicks: restPicks.slice(0, 10).map(p => ({
+          pick_no: p.pickNo, round: p.round, draft_slot: p.draftSlot, player_id: p.playerId,
+        })),
+        sampleMatches: restPicks.slice(0, 10).map(p => ({
+          pick_no: p.pickNo,
+          displayPick: `${p.round}.${String(p.draftSlot).padStart(2, "0")}`,
+          hasTimingByPickNo: timingByPickNo.has(String(p.pickNo)),
+          hasTimingByDisplayPick: timingByDisplayPick.has(`${p.round}.${String(p.draftSlot).padStart(2, "0")}`),
+        })),
+      });
+    }
+
     if (draftState && draftState.picks.length > 0) {
       const teams = draftState.teams;
       // Key by "round-pickInRound" for robust matching — positional-index
@@ -3312,7 +3377,7 @@ export default function LiveDraft({ onConnectSleeper }: { onConnectSleeper?: () 
       if (import.meta.env.DEV) {
         const startMsg = draftMessages.find(m => m.author_is_bot && m.text === "This draft has begun!");
         const hasRestTiming = restTimingByNo.size > 0;
-        console.log(`[OTC] draftId=${activeDraftId} totalMessages=${draftMessages.length} pickMessages=${parsedPicks.length} draftStatePicks=${draftState.picks.length} draftStartTs=${startMsg?.created ?? "none"} pickTimings=${pickTimings.size} restTiming=${hasRestTiming}(${restPickedAtByNo.size}picks)`);
+        console.log(`[OTC] draftId=${activeDraftId} totalMessages=${draftMessages.length} pickMessages=${parsedPicks.length} draftStatePicks=${draftState.picks.length} draftStartTs=${startMsg?.created ?? "none"} pickTimings=${pickTimings.size} timingByPickNo=${timingByPickNo.size} restTiming=${hasRestTiming}(${restPickedAtByNo.size}picks)`);
         const unmatched = parsedPicks.filter(p => !draftState.picks.some(pk => {
           const r = Math.ceil(pk.pickNo / teams);
           const pi = ((pk.pickNo - 1) % teams) + 1;
@@ -3328,7 +3393,14 @@ export default function LiveDraft({ onConnectSleeper }: { onConnectSleeper?: () 
         const pickInRound = ((pick.pickNo - 1) % teams) + 1;
         const parsed = parsedByRoundPick.get(`${round}-${pickInRound}`) ?? null;
         const messageTiming = parsed ? (pickTimings.get(parsed.message_id) ?? null) : null;
-        const timing = messageTiming ?? restTimingByNo.get(pick.pickNo) ?? null;
+        // Multi-key fallback: message_id → pick_no → displayPick → REST timestamp chain
+        const displayPick = `${round}.${String(pickInRound).padStart(2, "0")}`;
+        const timing =
+          messageTiming ??
+          timingByPickNo.get(String(pick.pickNo)) ??
+          timingByDisplayPick.get(displayPick) ??
+          restTimingByNo.get(pick.pickNo) ??
+          null;
         const pickUser = draftState.usersById[pick.pickedBy] ?? null;
         if (import.meta.env.DEV && pick.pickedBy && !pickUser) {
           console.log(`[OTC] pick ${round}.${pickInRound} missing user for pickedBy=${pick.pickedBy} (source: draftState — not in usersById)`);
@@ -3366,9 +3438,17 @@ export default function LiveDraft({ onConnectSleeper }: { onConnectSleeper?: () 
           // lookup only when the pick record is missing its rosterId.
           const slot = p.draftSlot || ((p.pickNo - 1) % Math.max(teamsCount, 1)) + 1;
           const user = (p.rosterId != null && rosterIdToUser(p.rosterId)) || slotToUser(slot);
+          // Multi-key timing lookup: REST timestamp map first, then message-derived maps
+          const dpKey = `${p.round}.${String(p.draftSlot).padStart(2, "0")}`;
+          const timing =
+            restTimingByNo.get(p.pickNo) ??
+            timingByPickNo.get(String(p.pickNo)) ??
+            timingByDisplayPick.get(dpKey) ??
+            timingByRoundPick.get(`${p.round}.${p.draftSlot}`) ??
+            null;
           const entry: MergedPickEntry = {
             pick: synth,
-            timing: restTimingByNo.get(p.pickNo) ?? null,
+            timing,
             user,
             isForced: false,
             timestamp: restPickedAtByNo.get(p.pickNo) ?? p.pickedAt ?? null,

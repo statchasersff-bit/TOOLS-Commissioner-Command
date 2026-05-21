@@ -418,22 +418,26 @@ export function DraftCommand() {
             ))}
           </div>
 
-          {/* Rookie mode */}
-          <div className="flex items-center gap-1 p-1 rounded-xl bg-white/[0.03] border border-white/6">
-            {ROOKIE_MODE_OPTIONS.map((m) => (
-              <button
-                key={m.id}
-                onClick={() => updateFilter("rookieMode", m.id)}
-                className={cn(
-                  "px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-all whitespace-nowrap",
-                  filters.rookieMode === m.id ? "bg-[#d4af37]/15 text-[#d4af37] border border-[#d4af37]/30" : "text-white/40 hover:text-white/70",
-                )}
-                data-testid={`rookie-mode-${m.id}`}
-              >
-                {m.label}
-              </button>
-            ))}
-          </div>
+          {/* Rookie mode — only meaningful on the Startup tab. The Rookie
+              Drafts tab is locked to Direct Rookies (set in rookieTabDefaults),
+              so the toggle is hidden there. */}
+          {topTab !== "rookie" && (
+            <div className="flex items-center gap-1 p-1 rounded-xl bg-white/[0.03] border border-white/6">
+              {ROOKIE_MODE_OPTIONS.map((m) => (
+                <button
+                  key={m.id}
+                  onClick={() => updateFilter("rookieMode", m.id)}
+                  className={cn(
+                    "px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-all whitespace-nowrap",
+                    filters.rookieMode === m.id ? "bg-[#d4af37]/15 text-[#d4af37] border border-[#d4af37]/30" : "text-white/40 hover:text-white/70",
+                  )}
+                  data-testid={`rookie-mode-${m.id}`}
+                >
+                  {m.label}
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* Date range shortcuts */}
           <div className="flex items-center gap-1 p-1 rounded-xl bg-white/[0.03] border border-white/6">
@@ -517,6 +521,7 @@ export function DraftCommand() {
         filters={filters}
         update={updateFilter}
         onReset={() => setFilters(DEFAULT_FILTERS)}
+        topTab={topTab}
       />
 
       {/* ── Admin-only "ADP Data Crawl" tools (see shared/admin.ts) ───────── */}
@@ -1965,13 +1970,14 @@ function TrendBadge({ value, compact = false }: { value: number; compact?: boole
 
 // ── Filter Sheet ─────────────────────────────────────────────────────────────
 function FilterSheet({
-  open, onOpenChange, filters, update, onReset,
+  open, onOpenChange, filters, update, onReset, topTab,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   filters: DraftFilters;
   update: <K extends keyof DraftFilters>(key: K, value: DraftFilters[K]) => void;
   onReset: () => void;
+  topTab: DraftTopTab;
 }) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -2011,26 +2017,28 @@ function FilterSheet({
             ]} />
           </FilterGroup>
 
-          <FilterGroup label="Picks / Rookies">
-            <div className="grid grid-cols-2 gap-1.5">
-              {ROOKIE_MODE_OPTIONS.map((m) => (
-                <button
-                  key={m.id}
-                  onClick={() => update("rookieMode", m.id)}
-                  className={cn(
-                    "px-2 py-2 rounded-lg border text-[11px] font-semibold transition-all text-center",
-                    filters.rookieMode === m.id
-                      ? "bg-[#d4af37]/15 text-[#d4af37] border-[#d4af37]/40"
-                      : "bg-muted/30 text-muted-foreground border-border/40 hover:border-border",
-                  )}
-                  data-testid={`filter-rookie-${m.id}`}
-                >
-                  <div>{m.label}</div>
-                  <div className="text-[9px] text-muted-foreground mt-0.5">{m.sub}</div>
-                </button>
-              ))}
-            </div>
-          </FilterGroup>
+          {topTab !== "rookie" && (
+            <FilterGroup label="Picks / Rookies">
+              <div className="grid grid-cols-2 gap-1.5">
+                {ROOKIE_MODE_OPTIONS.map((m) => (
+                  <button
+                    key={m.id}
+                    onClick={() => update("rookieMode", m.id)}
+                    className={cn(
+                      "px-2 py-2 rounded-lg border text-[11px] font-semibold transition-all text-center",
+                      filters.rookieMode === m.id
+                        ? "bg-[#d4af37]/15 text-[#d4af37] border-[#d4af37]/40"
+                        : "bg-muted/30 text-muted-foreground border-border/40 hover:border-border",
+                    )}
+                    data-testid={`filter-rookie-${m.id}`}
+                  >
+                    <div>{m.label}</div>
+                    <div className="text-[9px] text-muted-foreground mt-0.5">{m.sub}</div>
+                  </button>
+                ))}
+              </div>
+            </FilterGroup>
+          )}
 
           <FilterGroup label="Teams">
             <SelectField value={String(filters.teams)} onChange={(v) => update("teams", v === "all" ? "all" : Number(v) as DraftFilters["teams"])} options={[
