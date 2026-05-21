@@ -3,10 +3,12 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, RefreshCw, Trophy, Target, Radio, Zap, MessageSquare, Key, AlertTriangle, ChevronDown, ChevronUp, ArrowUp, ArrowDown, ArrowUpDown, X, Plus, Calendar, Clock, UserCircle, Search, Users, Check } from "lucide-react";
+import { Loader2, RefreshCw, Trophy, Target, Radio, Zap, MessageSquare, Key, AlertTriangle, ChevronDown, ChevronUp, ArrowUp, ArrowDown, ArrowUpDown, X, Plus, Calendar, Clock, UserCircle, Search, Users, Check, Wifi, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useValueModel } from "@/contexts/ValueModelContext";
 import { useSleeper } from "@/contexts/SleeperContext";
+import { useAuth } from "@/contexts/AuthContext";
+import { maskToken, DEV_JWT_KEY } from "@/lib/sleeperAuthToken";
 import { detectLiveDrafts as detectLiveDraftsApi, fetchDraftBoard as fetchDraftBoardApi, fetchDraftState, getDraftQueue, getDraftAutopickers, updateDraftQueue as updateDraftQueueApi, fetchSleeperLeagueFull } from "@/lib/sleeperApi";
 import { DraftPickConfirmModal, type DraftPickTarget } from "@/components/DraftPickConfirmModal";
 import { useToast } from "@/hooks/use-toast";
@@ -330,7 +332,7 @@ interface ParsedPick {
   created: number;
 }
 
-const SLEEPER_JWT_KEY = "dc-sleeper-draft-jwt";
+// DEV_JWT_KEY imported from @/lib/sleeperAuthToken — used only as dev fallback.
 
 const PICK_RE = /^Pick (\d+)\.(\d+) - Pick: (.+?) \((\w+) - (\w+)\)$/;
 const FORCED_RE = /^Pick (\d+)\.(\d+) - Commish forced pick: (.+?) \((\w+) - (\w+)\)$/;
@@ -1253,7 +1255,7 @@ const MANAGER_TIMING_SORT_LABEL: Record<ManagerTimingSortKey, string> = {
   longest: "Longest",
 };
 
-function ManagerTimingsSection({ history, teams, livePickUserId, liveElapsedMs, hasJwt }: {
+function ManagerTimingsSection({ history, teams, livePickUserId, liveElapsedMs, hasToken, messagesError, onConnectSleeper }: {
   history: Array<{
     pick: DraftPickNormalized | null;
     timing: { timeMs: number; timeLabel: string } | null;
@@ -1266,8 +1268,12 @@ function ManagerTimingsSection({ history, teams, livePickUserId, liveElapsedMs, 
   livePickUserId?: string | null;
   /** Milliseconds elapsed for the current pick so far (updates every second). */
   liveElapsedMs?: number | null;
-  /** Whether a Sleeper JWT is connected (needed for timing data). */
-  hasJwt?: boolean;
+  /** Whether the auth-provided Sleeper token is available for timing data. */
+  hasToken?: boolean;
+  /** Non-null when draft messages failed to load (even with a token). */
+  messagesError?: string | null;
+  /** Triggers the app-level Sleeper connect / reconnect flow. */
+  onConnectSleeper?: () => void;
 }) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [sectionCollapsed, setSectionCollapsed] = useState(false);
@@ -1364,9 +1370,20 @@ function ManagerTimingsSection({ history, teams, livePickUserId, liveElapsedMs, 
   //     preceding pick or a non-zero draft start_time.
   //   - The user hasn't connected a Sleeper JWT, so the GraphQL message
   //     history (which carries the most reliable timing) isn't available.
-  const emptyStateMessage = totalPicks === 0
-    ? "No picks made yet."
-    : "Not enough timing data yet.";
+  //
+  // Four empty-state cases (per spec):
+  //   A — no picks made yet
+  //   B — picks made, no Sleeper auth token
+  //   C — has token but messages errored
+  //   D — timing loaded (not an empty state)
+  const emptyStateLabel: string =
+    totalPicks === 0
+      ? "Timing will appear once the draft starts."  // Case A
+      : !hasToken
+        ? "Connect Sleeper to unlock pick timing."  // Case B
+        : messagesError
+          ? "Couldn't load draft timing."           // Case C
+          : "Not enough timing data yet.";           // timing exists but no deltas yet
 
   if (managers.length === 0) return null;
 
@@ -1389,7 +1406,7 @@ function ManagerTimingsSection({ history, teams, livePickUserId, liveElapsedMs, 
           )}
           {!hasAnyTiming && (
             <span className="text-[10px] text-muted-foreground/70 truncate" data-testid="text-manager-time-empty">
-              {emptyStateMessage}
+              {emptyStateLabel}
             </span>
           )}
         </div>
@@ -1400,13 +1417,50 @@ function ManagerTimingsSection({ history, teams, livePickUserId, liveElapsedMs, 
 
       {!sectionCollapsed && (
         <div className="border-t border-border/30">
-          {/* No-JWT notice — shown when picks exist but no timing data */}
-          {!hasAnyTiming && !hasJwt && totalPicks > 0 && (
-            <div className="flex items-start gap-2 px-3 py-2.5 bg-[#d4af37]/5 border-b border-[#d4af37]/20" data-testid="notice-jwt-needed">
-              <Key className="w-3.5 h-3.5 text-[#d4af37] shrink-0 mt-px" />
-              <p className="text-[11px] text-muted-foreground leading-snug">
-                Timing data requires a Sleeper JWT. Paste yours in the <span className="font-semibold text-foreground">Draft Log</span> section below to unlock pick durations.
-              </p>
+          {/* Case A: no picks yet — quiet hint */}
+          {totalPicks === 0 && (
+            <div className="px-3 py-2.5 border-b border-border/20 text-[11px] text-muted-foreground/60" data-testid="notice-timing-no-picks">
+              Timing will appear once the draft starts.
+            </div>
+          )}
+          {/* Case B: picks made but no Sleeper token — CTA */}
+          {totalPicks > 0 && !hasToken && (
+            <div className="flex items-center justify-between gap-3 px-3 py-2.5 bg-[#d4af37]/5 border-b border-[#d4af37]/20" data-testid="notice-timing-no-auth">
+              <div className="flex items-start gap-2 min-w-0">
+                <Key className="w-3.5 h-3.5 text-[#d4af37] shrink-0 mt-px" />
+                <p className="text-[11px] text-muted-foreground leading-snug">
+                  Connect Sleeper to unlock pick timing from the draft log.
+                </p>
+              </div>
+              {onConnectSleeper && (
+                <button
+                  onClick={onConnectSleeper}
+                  className="shrink-0 h-6 px-2.5 text-[10px] font-semibold rounded-md bg-[#d4af37]/90 hover:bg-[#d4af37] text-[#0b3a7a] transition-colors whitespace-nowrap"
+                  data-testid="button-timing-connect-sleeper"
+                >
+                  Connect Sleeper
+                </button>
+              )}
+            </div>
+          )}
+          {/* Case C: has token but messages errored — reconnect CTA */}
+          {totalPicks > 0 && hasToken && messagesError && (
+            <div className="flex items-center justify-between gap-3 px-3 py-2.5 bg-red-500/5 border-b border-red-500/20" data-testid="notice-timing-auth-error">
+              <div className="flex items-start gap-2 min-w-0">
+                <AlertTriangle className="w-3.5 h-3.5 text-red-400 shrink-0 mt-px" />
+                <p className="text-[11px] text-muted-foreground leading-snug">
+                  Couldn't load draft timing. Try reconnecting Sleeper.
+                </p>
+              </div>
+              {onConnectSleeper && (
+                <button
+                  onClick={onConnectSleeper}
+                  className="shrink-0 h-6 px-2.5 text-[10px] font-semibold rounded-md border border-red-500/30 text-red-400 hover:bg-red-500/10 transition-colors whitespace-nowrap"
+                  data-testid="button-timing-reconnect-sleeper"
+                >
+                  Reconnect Sleeper
+                </button>
+              )}
             </div>
           )}
           {/* Sort selector — small pill row above the table. All sorts run
@@ -2151,7 +2205,7 @@ function MyPicksPanel({ myPicks, myUserId, usersById, teams }: {
   );
 }
 
-export default function LiveDraft() {
+export default function LiveDraft({ onConnectSleeper }: { onConnectSleeper?: () => void } = {}) {
   const { openManagerIntel } = useManagerIntel();
   const [activeLeagueId, setActiveLeagueId] = useState<string | null>(null);
   const [autoRefresh, setAutoRefresh] = useState(false);
@@ -2173,10 +2227,32 @@ export default function LiveDraft() {
   const { isConnected, user, leagues } = useSleeper();
   const mockDrafts = useMemo(() => getMockDraftSummaries(), []);
 
+  // ── Sleeper auth — provides JWT automatically for timing data ─────────────
+  const { sleeperInfo, hasSleeperToken, accessLevel } = useAuth();
+  // Primary JWT source: auth-linked token from the Sleeper connect flow.
+  // DEV fallback: check the legacy manual-paste key so internal testing still
+  // works without going through the full connect flow.
+  const sleeperJwt = useMemo(() => {
+    if (sleeperInfo?.token) {
+      if (import.meta.env.DEV) console.debug("[timing] JWT source: authenticated Sleeper", maskToken(sleeperInfo.token));
+      return sleeperInfo.token;
+    }
+    if (import.meta.env.DEV) {
+      try {
+        const dev = localStorage.getItem(DEV_JWT_KEY);
+        if (dev) { console.debug("[timing] JWT source: dev manual paste", maskToken(dev)); return dev; }
+      } catch { /* ignore */ }
+      console.debug("[timing] JWT source: unavailable");
+    }
+    return null;
+  }, [sleeperInfo?.token]);
+
+  // DEV-only manual paste state — hidden behind a toggle, never shown in prod.
+  const [devJwtInput, setDevJwtInput] = useState("");
+  const [devJwtSaved, setDevJwtSaved] = useState(false);
+  const [showDevJwtInput, setShowDevJwtInput] = useState(false);
+
   // ── Draft log / message history ──────────────────────────────────────────
-  const [sleeperJwt, setSleeperJwt] = useState<string | null>(null);
-  const [jwtInput, setJwtInput] = useState<string>("");
-  const [jwtSaved, setJwtSaved] = useState(false);
   const [draftMessages, setDraftMessages] = useState<DraftMessage[]>([]);
   const [messagesLoading, setMessagesLoading] = useState(false);
   const [messagesError, setMessagesError] = useState<string | null>(null);
@@ -2221,10 +2297,7 @@ export default function LiveDraft() {
   const [draftAutopickersLoading, setDraftAutopickersLoading] = useState(false);
   const [draftAutopickersError, setDraftAutopickersError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const saved = localStorage.getItem(SLEEPER_JWT_KEY);
-    if (saved) setSleeperJwt(saved);
-  }, []);
+  // sleeperJwt is now derived from useAuth() — no localStorage seed needed.
 
   // Load the user's current league roster for the "My Team" tab. Runs once
   // per (league, user) pair; the heavy fetchSleeperLeagueFull call only fires
@@ -2298,21 +2371,23 @@ export default function LiveDraft() {
     }
   }, []);
 
-  const saveJwt = useCallback(() => {
-    const val = jwtInput.trim();
+  // DEV-only: save a manually-pasted JWT into the legacy key so it feeds
+  // back into the sleeperJwt memo on the next render.
+  const saveDevJwt = useCallback(() => {
+    if (!import.meta.env.DEV) return;
+    const val = devJwtInput.trim();
     if (!val) return;
-    localStorage.setItem(SLEEPER_JWT_KEY, val);
-    setSleeperJwt(val);
-    setJwtInput("");
-    setJwtSaved(true);
-    setTimeout(() => setJwtSaved(false), 2500);
+    try { localStorage.setItem(DEV_JWT_KEY, val); } catch { /* ignore */ }
+    setDevJwtInput("");
+    setDevJwtSaved(true);
+    setTimeout(() => setDevJwtSaved(false), 2500);
     if (activeDraftId) refreshMessages(activeDraftId, val);
-  }, [jwtInput, activeDraftId, refreshMessages]);
+  }, [devJwtInput, activeDraftId, refreshMessages]);
 
-  const clearJwt = useCallback(() => {
-    localStorage.removeItem(SLEEPER_JWT_KEY);
-    setSleeperJwt(null);
-    setJwtInput("");
+  const clearDevJwt = useCallback(() => {
+    if (!import.meta.env.DEV) return;
+    try { localStorage.removeItem(DEV_JWT_KEY); } catch { /* ignore */ }
+    setDevJwtInput("");
     setDraftMessages([]);
   }, []);
 
@@ -3440,7 +3515,9 @@ export default function LiveDraft() {
                   ? Math.max(0, nowTs - lastPickTimestamp)
                   : null
               }
-              hasJwt={!!sleeperJwt}
+              hasToken={!!sleeperJwt}
+              messagesError={messagesError}
+              onConnectSleeper={onConnectSleeper}
             />
           )}
 
@@ -3729,13 +3806,33 @@ export default function LiveDraft() {
                                 }
                               >
                                 {cell.isTraded && (
-                                  <span
-                                    className="absolute top-0.5 left-0.5 z-20 inline-flex items-center px-1 py-px rounded-sm bg-[#d4af37]/85 text-[#0b3a7a] text-[7px] font-extrabold uppercase leading-tight ring-1 ring-[#d4af37]/30 pointer-events-none"
+                                  <div
+                                    className={cn(
+                                      "absolute bottom-1 left-1/2 z-30 -translate-x-1/2",
+                                      "inline-flex items-center justify-center gap-1",
+                                      "max-w-[calc(100%-8px)] px-1.5 py-0.5 rounded-md",
+                                      "border border-[#ffd75a]/55 text-[#102033]",
+                                      "text-[10px] font-extrabold leading-[1.1] whitespace-nowrap",
+                                      "pointer-events-none shadow-[0_1px_4px_rgba(0,0,0,0.35)]",
+                                    )}
+                                    style={{ background: "linear-gradient(180deg, #d7b83f 0%, #b88f16 100%)" }}
                                     data-testid={`cell-traded-${cell.round}-${cell.slot}`}
-                                    title="Traded pick"
+                                    title={cell.ownerName ? `Traded pick · ${cell.ownerName}` : "Traded pick"}
                                   >
-                                    Traded
-                                  </span>
+                                    {cell.isMine ? (
+                                      <span className="font-black tracking-wide">MINE</span>
+                                    ) : (
+                                      <>
+                                        <span className="font-black tracking-wide flex-shrink-0">TRADED</span>
+                                        {cell.ownerName && (
+                                          <>
+                                            <span className="flex-shrink-0 opacity-70">·</span>
+                                            <span className="overflow-hidden text-ellipsis min-w-0">{cell.ownerName}</span>
+                                          </>
+                                        )}
+                                      </>
+                                    )}
+                                  </div>
                                 )}
                                 {hasPick ? (
                                   <>
@@ -3797,8 +3894,11 @@ export default function LiveDraft() {
                                       <div>
                                         <div className="text-[8px] leading-none opacity-75 truncate">{firstName}</div>
                                         <div className="text-[11px] font-bold leading-tight truncate">{lastName}</div>
-                                        <div className="text-[8px] opacity-70 font-medium mt-0.5 truncate">
-                                          {cell.pick?.team || "FA"}{cell.isTraded && cell.ownerName ? ` · ${cell.ownerName}` : ""}
+                                        <div className={cn(
+                                          "text-[8px] opacity-70 font-medium mt-0.5 truncate",
+                                          cell.isTraded && "invisible",
+                                        )}>
+                                          {cell.pick?.team || "FA"}
                                         </div>
                                       </div>
                                     </div>
@@ -3812,25 +3912,10 @@ export default function LiveDraft() {
                                       {cell.isCurrent && (
                                         <span className="text-[7px] font-bold px-1 py-px rounded bg-emerald-500 text-white leading-tight animate-pulse">ON CLOCK</span>
                                       )}
-                                      {!cell.isCurrent && cell.isMine && (
+                                      {!cell.isCurrent && cell.isMine && !cell.isTraded && (
                                         <span className="text-[7px] font-bold px-1 py-px rounded bg-[#d4af37]/20 text-[#d4af37] border border-[#d4af37]/40 leading-tight">MINE</span>
                                       )}
                                     </div>
-                                    {cell.isTraded ? (
-                                      <div className="flex flex-col gap-0.5 min-w-0" title={cell.ownerName}>
-                                        <div className="flex items-center gap-1 min-w-0">
-                                          <SleeperUserAvatar
-                                            username={cell.ownerName}
-                                            avatar={cell.ownerAvatar}
-                                            size="xs"
-                                            compact
-                                          />
-                                          <span className="text-[9px] text-[#d4af37] font-semibold leading-tight truncate">
-                                            {cell.ownerName}
-                                          </span>
-                                        </div>
-                                      </div>
-                                    ) : null}
                                   </div>
                                 )}
                               </div>
@@ -4011,39 +4096,74 @@ export default function LiveDraft() {
                 </div>
               </div>
 
-              {/* JWT input — paste Sleeper token to unlock timing + live features */}
-              {!sleeperJwt ? (
-                <div className="flex items-center gap-2 flex-wrap" data-testid="section-jwt-input">
-                  <Key className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                  <input
-                    type="password"
-                    className="flex-1 min-w-0 h-7 px-2.5 text-xs rounded-md border border-border/60 bg-muted/30 text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-[#d4af37]/50"
-                    placeholder="Paste Sleeper JWT for timing data…"
-                    value={jwtInput}
-                    onChange={(e) => setJwtInput(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && saveJwt()}
-                    data-testid="input-sleeper-jwt"
-                  />
+              {/* Sleeper auth status — shows connection state; no manual input needed */}
+              <div className="flex items-center gap-2 text-xs" data-testid="section-sleeper-auth-status">
+                {sleeperJwt ? (
+                  <>
+                    <Key className="w-3.5 h-3.5 text-[#d4af37] shrink-0" />
+                    <span className="text-muted-foreground">Sleeper connected — timing active</span>
+                  </>
+                ) : (
+                  <>
+                    {accessLevel === "guest" || accessLevel === "readonly" ? (
+                      <Wifi className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                    ) : (
+                      <Lock className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                    )}
+                    <span className="text-muted-foreground/70">Sleeper not connected</span>
+                    {onConnectSleeper && (
+                      <button
+                        onClick={onConnectSleeper}
+                        className="ml-auto h-6 px-2.5 text-[10px] font-semibold rounded-md bg-[#d4af37]/90 hover:bg-[#d4af37] text-[#0b3a7a] transition-colors"
+                        data-testid="button-draft-log-connect-sleeper"
+                      >
+                        Connect Sleeper
+                      </button>
+                    )}
+                  </>
+                )}
+              </div>
+              {/* Advanced: dev-only manual JWT paste (hidden by default) */}
+              {import.meta.env.DEV && (
+                <div data-testid="section-dev-jwt">
                   <button
-                    onClick={saveJwt}
-                    disabled={!jwtInput.trim()}
-                    className="h-7 px-3 text-xs rounded-md bg-[#d4af37]/90 hover:bg-[#d4af37] text-[#0b3a7a] font-semibold disabled:opacity-40 disabled:cursor-not-allowed transition-colors shrink-0"
-                    data-testid="button-save-jwt"
+                    onClick={() => setShowDevJwtInput((v) => !v)}
+                    className="flex items-center gap-1 text-[10px] text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+                    data-testid="button-toggle-dev-jwt"
                   >
-                    {jwtSaved ? <><Check className="w-3 h-3 inline mr-1" />Saved</> : "Connect"}
+                    <ChevronDown className={cn("w-3 h-3 transition-transform", showDevJwtInput && "rotate-180")} />
+                    Advanced: Paste Sleeper JWT
                   </button>
-                </div>
-              ) : (
-                <div className="flex items-center gap-2 text-xs" data-testid="section-jwt-connected">
-                  <Key className="w-3.5 h-3.5 text-[#d4af37] shrink-0" />
-                  <span className="text-muted-foreground">JWT connected</span>
-                  <button
-                    onClick={clearJwt}
-                    className="ml-auto h-6 px-2 text-[10px] rounded border border-border/40 text-muted-foreground hover:text-foreground hover:border-border transition-colors"
-                    data-testid="button-clear-jwt"
-                  >
-                    Disconnect
-                  </button>
+                  {showDevJwtInput && (
+                    <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                      <input
+                        type="password"
+                        className="flex-1 min-w-0 h-7 px-2.5 text-xs rounded-md border border-border/60 bg-muted/30 text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-[#d4af37]/50"
+                        placeholder="Dev only — paste Sleeper JWT…"
+                        value={devJwtInput}
+                        onChange={(e) => setDevJwtInput(e.target.value)}
+                        onKeyDown={(e) => e.key === "Enter" && saveDevJwt()}
+                        data-testid="input-dev-sleeper-jwt"
+                      />
+                      <button
+                        onClick={saveDevJwt}
+                        disabled={!devJwtInput.trim()}
+                        className="h-7 px-3 text-xs rounded-md bg-[#d4af37]/90 hover:bg-[#d4af37] text-[#0b3a7a] font-semibold disabled:opacity-40 disabled:cursor-not-allowed transition-colors shrink-0"
+                        data-testid="button-save-dev-jwt"
+                      >
+                        {devJwtSaved ? <><Check className="w-3 h-3 inline mr-1" />Saved</> : "Save"}
+                      </button>
+                      {sleeperJwt && (
+                        <button
+                          onClick={clearDevJwt}
+                          className="h-7 px-2 text-xs rounded border border-border/40 text-muted-foreground hover:text-foreground transition-colors shrink-0"
+                          data-testid="button-clear-dev-jwt"
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 

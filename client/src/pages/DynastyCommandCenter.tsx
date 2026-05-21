@@ -463,7 +463,15 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
     // Draft module — Draft Board (live Sleeper draft tracker) and ADP
     // Explorer (public ADP dataset). Both run without an active league.
     if (activeMainTab === "draft") {
-      if (activeSubTab === "draft-board") return <LiveDraft />;
+      if (activeSubTab === "draft-board") return (
+        <LiveDraft
+          onConnectSleeper={
+            accessLevel === "guest" || accessLevel === "readonly"
+              ? () => { handleMainTabChange("portfolio"); handleSubTabChange("portfolio-summary"); }
+              : () => setHeaderUpgradeOpen(true)
+          }
+        />
+      );
       return <DraftCommand />;
     }
 

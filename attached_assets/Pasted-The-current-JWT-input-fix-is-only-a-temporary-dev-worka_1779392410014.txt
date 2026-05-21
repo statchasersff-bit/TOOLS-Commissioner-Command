@@ -1,0 +1,69 @@
+The current JWT input fix is only a temporary dev workaround. Do not leave this as the primary user flow.
+
+Problem:
+Sleeper draft timing requires the GraphQL messages endpoint, and that requires a Sleeper JWT. However, asking users to find a JWT in DevTools and paste it into Draft Log is not acceptable for normal users.
+
+Required update:
+Use our existing Sleeper authenticated connection flow to obtain/store the JWT automatically, then use that same JWT for draft timing.
+
+Desired behavior:
+1. If user is already authenticated with Sleeper:
+   - Automatically use the stored Sleeper JWT.
+   - Fetch GraphQL messages(parent_id: draft_id).
+   - Populate Time On The Clock automatically.
+   - Do not show the manual JWT input by default.
+
+2. If user is not authenticated:
+   - Show a clean CTA inside Time On The Clock:
+     “Connect Sleeper to unlock pick timing”
+   - Button: “Connect Sleeper”
+   - Clicking it should open/use the existing Sleeper connect flow.
+   - After successful connect, immediately refetch draft messages.
+
+3. Keep manual JWT input only behind a dev/debug toggle.
+   - Rename it to “Advanced: Paste Sleeper JWT”
+   - Hide it by default.
+   - This is for internal testing only.
+
+4. Centralize token access:
+   Create or use one helper like:
+   getSleeperAuthToken()
+   It should check:
+   - authenticated Sleeper connection state
+   - existing localStorage token key used by the app
+   - fallback dev/debug JWT key
+
+5. Do not store duplicate token keys randomly.
+   Standardize the localStorage key.
+   Example:
+   sleeper_jwt
+   or use the app’s existing auth key if one already exists.
+
+6. Update Time On The Clock empty states:
+   Case A: no picks made:
+   “Timing will appear once the draft starts.”
+
+   Case B: picks made, no Sleeper auth:
+   “Connect Sleeper to unlock pick timing from the draft log.”
+   Button: Connect Sleeper
+
+   Case C: auth connected, messages unavailable/error:
+   “Couldn’t load draft timing. Try reconnecting Sleeper.”
+   Button: Reconnect Sleeper
+
+   Case D: timing loaded:
+   Show Total, Avg, Longest, Shortest normally.
+
+7. Security/UX:
+   - Never expose the JWT in normal UI.
+   - Never print full JWTs in logs.
+   - If logging, only show first 6 and last 4 chars.
+   - Disconnect should clear the token and timing data.
+   - Refetch timing after reconnect.
+
+8. Acceptance criteria:
+   - A normal user can get draft timing by clicking Connect Sleeper, not by opening DevTools.
+   - Existing authenticated users get timing automatically.
+   - Manual JWT entry is hidden unless dev/debug mode is enabled.
+   - Time columns show “—” only when timing data is unavailable, not when timing is actually zero.
+   - Console logs clearly show whether timing source is: authenticated Sleeper JWT, dev JWT, or unavailable.
