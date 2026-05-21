@@ -63,6 +63,10 @@ export interface ADPResult {
   median_pick: number;
   min_pick: number;
   max_pick: number;
+  // Middle 80% pick band — present on rows produced by the new aggregator.
+  // Older cached responses may omit these; treat as optional client-side.
+  p10_pick?: number;
+  p90_pick?: number;
   draft_count: number;
   positional_rank: number;
   overall_rank: number;

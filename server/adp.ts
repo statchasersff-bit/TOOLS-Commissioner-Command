@@ -104,6 +104,11 @@ export type AdpRow = {
   median_pick: number;
   min_pick: number;
   max_pick: number;
+  // 10th / 90th percentile picks — the middle 80% of drafts fall between
+  // these two. Used by the Overview tab's "X% of drafts between …" line so
+  // the rail isn't summarised only by min/max outliers.
+  p10_pick: number;
+  p90_pick: number;
   draft_count: number;
   positional_rank: number;
   overall_rank: number;
@@ -1231,11 +1236,21 @@ export async function computeAdp(f: AdpFilters): Promise<{ rows: AdpRow[]; draft
   const now = Date.now();
   const DAY = 24 * 60 * 60 * 1000;
 
+  // Nearest-rank percentile (no interpolation) — keeps values aligned to a
+  // real observed pick. q in [0,1].
+  const percentile = (sortedArr: number[], q: number): number => {
+    if (sortedArr.length === 0) return 0;
+    const idx = Math.min(sortedArr.length - 1, Math.max(0, Math.ceil(q * sortedArr.length) - 1));
+    return sortedArr[idx];
+  };
+
   const rows: AdpRow[] = Array.from(agg.values()).map((a) => {
     const sorted = [...a.picks].sort((x, y) => x - y);
     const sum = sorted.reduce((s, v) => s + v, 0);
     const avg = sum / sorted.length;
     const median = sorted[Math.floor(sorted.length / 2)];
+    const p10 = percentile(sorted, 0.10);
+    const p90 = percentile(sorted, 0.90);
 
     const last7 = a.timed.filter((x) => now - x.t <= 7 * DAY).map((x) => x.p);
     const last30 = a.timed.filter((x) => now - x.t <= 30 * DAY).map((x) => x.p);
@@ -1260,6 +1275,8 @@ export async function computeAdp(f: AdpFilters): Promise<{ rows: AdpRow[]; draft
       median_pick: median,
       min_pick: sorted[0],
       max_pick: sorted[sorted.length - 1],
+      p10_pick: p10,
+      p90_pick: p90,
       draft_count: sorted.length,
       positional_rank: 0,
       overall_rank: 0,

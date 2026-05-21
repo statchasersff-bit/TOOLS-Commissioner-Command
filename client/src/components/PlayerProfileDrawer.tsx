@@ -171,7 +171,7 @@ export function PlayerProfileDrawer({ open, onClose, adp, teams = 12, rounds = 5
               </TabsList>
 
               <div className="flex-1 overflow-y-auto px-4 py-3">
-                <TabsContent value="overview"><OverviewTab adp={adp} ctxLabel={ctxLabel} /></TabsContent>
+                <TabsContent value="overview"><OverviewTab adp={adp} ctxLabel={ctxLabel} teams={teams} /></TabsContent>
                 <TabsContent value="production"><ProductionTab adp={adp} /></TabsContent>
                 <TabsContent value="advanced"><AdvancedShell /></TabsContent>
                 <TabsContent value="history"><AdpHistoryTab playerId={adp.player_id} active={tab === "history"} ctxLabel={ctxLabel} filterQuery={filterQuery} /></TabsContent>
@@ -260,7 +260,7 @@ function ProfileHeader({ adp, ctxLabel }: { adp: ADPResult; ctxLabel: string }) 
 
 // ── Overview ────────────────────────────────────────────────────────────────
 
-function OverviewTab({ adp, ctxLabel }: { adp: ADPResult; ctxLabel: string }) {
+function OverviewTab({ adp, ctxLabel, teams }: { adp: ADPResult; ctxLabel: string; teams: number }) {
   const range = Math.max(1, adp.max_pick - adp.min_pick);
   const medianPct = ((adp.median_pick - adp.min_pick) / range) * 100;
   const currentPct = ((adp.avg_pick - adp.min_pick) / range) * 100;
@@ -269,9 +269,18 @@ function OverviewTab({ adp, ctxLabel }: { adp: ADPResult; ctxLabel: string }) {
   const marketBadge = marketStatus(adp);
   const insights = buildOverviewInsights(adp);
   const trendChips = buildTrendChips(adp);
+  const summary = buildPlayerSummary(adp, ctxLabel);
+  const distributionLine = buildDistributionLine(adp, teams);
 
   return (
     <div className="space-y-4 text-[12px]">
+      {/* Prose narrative — the "fantasy stock profile" lead-in. */}
+      {summary && (
+        <p className="text-[12.5px] leading-snug text-white/85" data-testid="overview-summary">
+          {summary}
+        </p>
+      )}
+
       {/* Tier + market status */}
       <div className="flex flex-wrap items-center gap-1.5" data-testid="overview-tier-row">
         <Badge variant="outline" className="text-[10px] text-[#d4af37] border-[#d4af37]/40 font-semibold">
@@ -330,6 +339,11 @@ function OverviewTab({ adp, ctxLabel }: { adp: ADPResult; ctxLabel: string }) {
           <span className="text-[#d4af37] font-semibold">ADP {adp.avg_pick.toFixed(1)}</span>
           <span title="Latest observed pick">Max {adp.max_pick}</span>
         </div>
+        {distributionLine && (
+          <p className="text-[11px] text-white/70 mt-2" data-testid="overview-distribution-context">
+            {distributionLine}
+          </p>
+        )}
       </div>
 
       {insights.length > 0 && (
@@ -406,6 +420,73 @@ function trendArrow(n: number): string {
   if (n === 0) return "Stable";
   const sign = n > 0 ? "↓" : "↑";
   return `${sign} ${Math.abs(n).toFixed(1)}`;
+}
+
+/** Premium-card lead-in sentence. Stitches position rank, overall rank,
+ *  filter context, draft volume, ADP, and 30-day trend into a single,
+ *  human-readable paragraph. Returns null if there's nothing meaningful to
+ *  say (no sample, rookie placeholder with no ADP, etc.). */
+function buildPlayerSummary(adp: ADPResult, ctxLabel: string): string | null {
+  if (adp.draft_count <= 0) return null;
+  const pron = guessPronoun(adp.player_name);
+  const posPhrase = adp.is_rookie_placeholder
+    ? "a tracked rookie pick"
+    : `the ${adp.position}${adp.positional_rank}`;
+  const overallPhrase = adp.is_rookie_placeholder
+    ? ""
+    : ` and overall #${adp.overall_rank}`;
+  const ctx = ctxLabel ? ` in ${ctxLabel}` : "";
+  const draftWord = adp.draft_count === 1 ? "draft" : "drafts";
+
+  let trendNote = "";
+  if (adp.draft_count >= 20) {
+    if (adp.trend_30d <= -1.5) {
+      trendNote = ` Value is rising — ADP has tightened about ${Math.abs(adp.trend_30d).toFixed(1)} spots in the last 30 days.`;
+    } else if (adp.trend_30d >= 1.5) {
+      trendNote = ` Value is softening — ADP has slipped about ${Math.abs(adp.trend_30d).toFixed(1)} spots in the last 30 days.`;
+    } else {
+      trendNote = " Market position has held steady through the last month.";
+    }
+  }
+
+  return `${adp.player_name} is currently ${posPhrase}${overallPhrase}${ctx}. ${pron} has been selected in ${adp.draft_count.toLocaleString()} tracked ${draftWord} at ADP ${adp.avg_pick.toFixed(1)}.${trendNote}`;
+}
+
+/** "X% of drafts selected [Player] between picks A.BB and C.DD" — uses the
+ *  p10/p90 percentile band (middle 80% of the sample). Returns null when the
+ *  sample is too small or the band collapses to a single pick. */
+function buildDistributionLine(adp: ADPResult, teams: number): string | null {
+  if (adp.p10_pick == null || adp.p90_pick == null) return null;
+  if (adp.draft_count < 15) return null; // band isn't meaningful below this
+  const lo = adp.p10_pick;
+  const hi = adp.p90_pick;
+  if (lo === hi) return null;
+  const loStr = formatPick(lo, teams);
+  const hiStr = formatPick(hi, teams);
+  return `80% of drafts selected ${shortName(adp.player_name)} between picks ${loStr} and ${hiStr}.`;
+}
+
+function formatPick(pickNo: number, teams: number): string {
+  // Round.pick form when we actually know the league size; otherwise the
+  // raw pick number so we don't fabricate a structure that doesn't exist.
+  if (!teams || teams <= 0) return String(pickNo);
+  const round = Math.ceil(pickNo / teams);
+  const slot = ((pickNo - 1) % teams) + 1;
+  return `${round}.${String(slot).padStart(2, "0")}`;
+}
+
+function shortName(full: string): string {
+  // "Bijan Robinson" → "Bijan Robinson" stays as-is here; the helper is in
+  // place so future tightening (e.g. "B. Robinson" on mobile) is one edit.
+  return full;
+}
+
+function guessPronoun(name: string): string {
+  // Defensive default — every fantasy player in this dataset is currently
+  // male, but we don't want to bake a hard assumption into the codebase.
+  // If the dataset ever broadens, switch this to a name → pronoun lookup.
+  void name;
+  return "He";
 }
 
 function buildOverviewInsights(adp: ADPResult): string[] {

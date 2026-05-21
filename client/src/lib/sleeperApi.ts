@@ -973,34 +973,48 @@ export async function detectLiveDrafts(userId: string) {
   return results;
 }
 
-export async function fetchDraftBoard(leagueId: string) {
-  const draftsRaw = await fetchJson<any[]>(
-    `${SLEEPER_API}/league/${leagueId}/drafts`
-  );
-  if (!draftsRaw || draftsRaw.length === 0) {
-    return {
-      draft: null,
-      picks: [],
-      players: {} as Record<string, { name: string; pos: string; team: string }>,
-      draftSlots: [] as { slot: number; rosterId: number; displayName: string; avatar: string | null }[],
-      pickOwners: [] as Array<{
-        round: number;
-        slot: number;
-        originalRosterId: number;
-        currentRosterId: number;
-        isTraded: boolean;
-        currentUserId: string | null;
-        currentDisplayName: string;
-        currentAvatar: string | null;
-        originalDisplayName: string;
-        originalAvatar: string | null;
-      }>,
-      error: "No drafts found for this league",
-    };
-  }
+export async function fetchDraftBoard(leagueId: string, specificDraftId?: string) {
+  let draft: any;
+  let draftId: string;
 
-  const draft = draftsRaw[0];
-  const draftId = draft.draft_id;
+  if (specificDraftId) {
+    // Load the specific draft directly — avoids picking the wrong draft
+    // when a league has multiple drafts (e.g. startup + rookie).
+    draft = await fetchJson<any>(`${SLEEPER_API}/draft/${specificDraftId}`);
+    if (!draft) {
+      return {
+        draft: null, picks: [],
+        players: {} as Record<string, { name: string; pos: string; team: string }>,
+        draftSlots: [] as { slot: number; rosterId: number; displayName: string; avatar: string | null }[],
+        pickOwners: [] as Array<{
+          round: number; slot: number; originalRosterId: number; currentRosterId: number;
+          isTraded: boolean; currentUserId: string | null; currentDisplayName: string;
+          currentAvatar: string | null; originalDisplayName: string; originalAvatar: string | null;
+        }>,
+        error: "Draft not found",
+      };
+    }
+    draftId = specificDraftId;
+  } else {
+    const draftsRaw = await fetchJson<any[]>(
+      `${SLEEPER_API}/league/${leagueId}/drafts`
+    );
+    if (!draftsRaw || draftsRaw.length === 0) {
+      return {
+        draft: null, picks: [],
+        players: {} as Record<string, { name: string; pos: string; team: string }>,
+        draftSlots: [] as { slot: number; rosterId: number; displayName: string; avatar: string | null }[],
+        pickOwners: [] as Array<{
+          round: number; slot: number; originalRosterId: number; currentRosterId: number;
+          isTraded: boolean; currentUserId: string | null; currentDisplayName: string;
+          currentAvatar: string | null; originalDisplayName: string; originalAvatar: string | null;
+        }>,
+        error: "No drafts found for this league",
+      };
+    }
+    draft = draftsRaw[0];
+    draftId = draft.draft_id;
+  }
 
   // Also fetch league rosters — `draft.draft_order` is empty pre-draft and
   // sometimes incomplete on freshly created live drafts, so we fall back
@@ -1172,58 +1186,6 @@ export async function fetchDraftBoard(leagueId: string) {
       }
     }
     return null;
-  }
-
-  // ── Debug: log the raw draft object (from /league/{id}/drafts) ───────────
-  console.group(`[LiveDraft] Draft object debug — draft ${draftId}`);
-  console.log("Draft status:", draft.status);
-  console.log("All draft keys:", Object.keys(draft));
-  console.log("Timestamp-like fields on draft:", {
-    start_time: draft.start_time,
-    created: draft.created,
-    updated: draft.updated,
-    last_picked: draft.last_picked,
-    last_message_time: draft.last_message_time,
-    "metadata.created": draft.metadata?.created,
-    "settings.pick_timer": draft.settings?.pick_timer,
-    "settings.pick_timer_seconds": draft.settings?.pick_timer_seconds,
-    "settings.nomination_timer": draft.settings?.nomination_timer,
-  });
-  console.log("Full raw draft object:", draft);
-  console.groupEnd();
-
-  // ── Debug: also call GET /draft/{id} directly for comparison ─────────────
-  try {
-    const directDraft = await fetchJson<any>(`${SLEEPER_API}/draft/${draftId}`);
-    console.group(`[LiveDraft] Direct GET /draft/${draftId}`);
-    console.log("All keys:", Object.keys(directDraft || {}));
-    console.log("Timestamp-like fields:", {
-      start_time: directDraft?.start_time,
-      created: directDraft?.created,
-      updated: directDraft?.updated,
-      last_picked: directDraft?.last_picked,
-      last_message_time: directDraft?.last_message_time,
-    });
-    console.log("Full object:", directDraft);
-    console.groupEnd();
-  } catch (e) {
-    console.warn("[LiveDraft] GET /draft/{id} failed:", e);
-  }
-
-  // ── Debug: log first 5 raw picks with all keys ───────────────────────────
-  if (picksRaw && picksRaw.length > 0) {
-    const samples = picksRaw.slice(0, 5);
-    console.group(`[LiveDraft] Raw picks debug — draft ${draftId} (first ${samples.length} of ${picksRaw.length})`);
-    samples.forEach((p: any) => {
-      const ts = getPickTimestamp(p);
-      console.log(`Pick #${p.pick_no} keys:`, Object.keys(p));
-      console.log(`Pick #${p.pick_no} metadata keys:`, p.metadata ? Object.keys(p.metadata) : []);
-      console.log(`Pick #${p.pick_no} all fields:`, p);
-      console.log(`Pick #${p.pick_no} getPickTimestamp() →`, ts, ts ? `(${new Date(ts).toISOString()})` : "(none)");
-    });
-    const hasAnyTimestamp = picksRaw.some((p: any) => getPickTimestamp(p) !== null);
-    console.log("[LiveDraft] Sleeper provides timestamps:", hasAnyTimestamp);
-    console.groupEnd();
   }
 
   const picks = (picksRaw || []).map((p: any) => ({

@@ -2023,6 +2023,10 @@ export default function LiveDraft() {
   const [isDetecting, setIsDetecting] = useState(false);
   const [hasScanned, setHasScanned] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
+  // Explicit draft ID from the card the user clicked — bypasses the
+  // "first draft for this league" fallback in fetchDraftBoard so we
+  // always load the exact draft the user selected.
+  const [activeDraftIdOverride, setActiveDraftIdOverride] = useState<string | null>(null);
   const { dynastyPlayerList } = useValueModel();
   const { isConnected, user, leagues } = useSleeper();
   const mockDrafts = useMemo(() => getMockDraftSummaries(), []);
@@ -2264,9 +2268,10 @@ export default function LiveDraft() {
     }
   }, [isConnected, user?.userId, hasScanned, scanForLiveDrafts]);
 
-  const handleJoinLiveDraft = (leagueId: string, teams: number) => {
+  const handleJoinLiveDraft = (draftId: string, leagueId: string, teams: number) => {
     setDraftData(null);
     setApiError(null);
+    setActiveDraftIdOverride(draftId);
     setActiveLeagueId(leagueId);
     setTeamCount(teams);
     setAutoRefresh(false);
@@ -2278,7 +2283,7 @@ export default function LiveDraft() {
     setIsLoading(true);
     setApiError(null);
     try {
-      const data: DraftResponse = await fetchDraftBoardApi(targetId);
+      const data: DraftResponse = await fetchDraftBoardApi(targetId, activeDraftIdOverride ?? undefined);
       if (data.error) {
         setApiError(data.error);
         return;
@@ -2291,7 +2296,7 @@ export default function LiveDraft() {
     } finally {
       setIsLoading(false);
     }
-  }, [activeLeagueId]);
+  }, [activeLeagueId, activeDraftIdOverride]);
 
   useEffect(() => {
     if (activeLeagueId) fetchDraft(activeLeagueId);
@@ -3060,10 +3065,11 @@ export default function LiveDraft() {
       .map(normalizeFromDetect);
   }, [liveDrafts, leagues]);
 
-  // In draft-room mode (a live draft is active), collapse vertical spacing
-  // to feel dense and information-rich — OTC/Sleeper draft rooms favour
-  // density over breathing room. Dashboard mode keeps the looser layout.
-  const isDraftRoomActive = !!activeLeagueId && !isLoading;
+  // As soon as the user clicks a draft card, switch to draft-room mode
+  // immediately — hide the lobby and show the room shell + loading spinner.
+  // Previously used `!!activeLeagueId && !isLoading` which kept the lobby
+  // visible during the load, creating an ugly overlap.
+  const isDraftRoomActive = !!activeLeagueId;
   return (
     <div className={cn(isDraftRoomActive ? "space-y-3" : "space-y-6")}>
       {!isDraftRoomActive && (
@@ -3089,7 +3095,7 @@ export default function LiveDraft() {
           hasScanned={hasScanned}
           scanError={scanError}
           onRefresh={isConnected ? scanForLiveDrafts : undefined}
-          onTrack={(d) => handleJoinLiveDraft(d.leagueId, d.teams)}
+          onTrack={(d) => handleJoinLiveDraft(d.id, d.leagueId, d.teams)}
           isConnected={isConnected}
         />
       )}
@@ -3097,7 +3103,7 @@ export default function LiveDraft() {
       {isDraftRoomActive && (
         <div className="flex items-center justify-between gap-3">
           <button
-            onClick={() => { setActiveLeagueId(null); setDraftData(null); }}
+            onClick={() => { setActiveLeagueId(null); setDraftData(null); setActiveDraftIdOverride(null); }}
             className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
             data-testid="button-back-to-drafts"
           >
@@ -3147,7 +3153,7 @@ export default function LiveDraft() {
             <div className="flex items-center justify-center gap-2 pt-1 flex-wrap">
               <Button
                 variant="outline"
-                onClick={() => { setActiveLeagueId(null); setDraftData(null); }}
+                onClick={() => { setActiveLeagueId(null); setDraftData(null); setActiveDraftIdOverride(null); }}
                 data-testid="button-gate-back"
               >
                 Back to Draft List
