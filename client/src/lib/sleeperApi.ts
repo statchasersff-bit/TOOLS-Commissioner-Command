@@ -1,6 +1,7 @@
 import { getFantasyCalcValues, getFantasyCalcRedraftValues } from "./fantasycalcApi";
 import { buildOptimalStarterIds } from "./lineupUtils";
 import { normalizeSleeperDraftOrder, type NormalizedDraftOrder } from "./sleeperDraftOrder";
+import { FeatureDisabledError, showFeatureDisabled } from "@/components/FeatureDisabledDialog";
 
 const SLEEPER_API = "https://api.sleeper.app/v1";
 const PLAYERS_CACHE_KEY = "sc-sleeper-players";
@@ -1827,6 +1828,8 @@ export async function rejectTradeOnSleeper(
   leg: number,
   jwt: string
 ): Promise<any> {
+  showFeatureDisabled();
+  throw new FeatureDisabledError();
   const res = await fetch("https://sleeper.com/graphql", {
     method: "POST",
     headers: {
@@ -1860,6 +1863,8 @@ export async function acceptTradeOnSleeper(
   leg: number,
   jwt: string
 ): Promise<any> {
+  showFeatureDisabled();
+  throw new FeatureDisabledError();
   const res = await fetch("https://sleeper.com/graphql", {
     method: "POST",
     headers: {

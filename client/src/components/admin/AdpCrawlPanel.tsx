@@ -802,9 +802,165 @@ export function AdpCrawlPanel() {
         </div>
       )}
 
+      <PassiveCrawlEventsSection />
+
       <p className="mt-3 text-[10px] text-muted-foreground/70">
         Admin DC users authorize via session token automatically. Override secret, if entered, is held in component memory only.
       </p>
+    </div>
+  );
+}
+
+// ── Passive user-login crawl events ──────────────────────────────────────────
+// Lists recent automatic depth-1 crawls triggered by users connecting their
+// Sleeper account (authed or read-only). Polls /api/admin/adp/passive-events
+// while at least one row is queued/running so counters update live.
+
+interface PassiveEvent {
+  id: number;
+  sleeperUserId: string;
+  sleeperUsername: string | null;
+  source: string;
+  status: string;
+  queuedItems: number;
+  leaguesScanned: number;
+  draftsFound: number;
+  draftsAdded: number;
+  pendingItems: number;
+  errorMessage: string | null;
+  createdAt: string;
+  updatedAt: string;
+  completedAt: string | null;
+}
+
+function PassiveCrawlEventsSection() {
+  const [events, setEvents] = useState<PassiveEvent[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string>("");
+  const [recrawlingId, setRecrawlingId] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const r = await fetch(`${API_BASE}/api/admin/adp/passive-events?limit=50`, {
+        headers: buildAdminHeaders(""),
+      });
+      const j = await r.json().catch(() => null);
+      if (!r.ok) throw new Error(j?.error || `HTTP ${r.status}`);
+      setEvents(j?.events ?? []);
+    } catch (err: any) {
+      setError(err?.message ?? "Failed to load passive events");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { void load(); }, [load]);
+
+  // Auto-refresh while anything is queued/running so counters tick up.
+  useEffect(() => {
+    if (!events) return;
+    const anyOpen = events.some(e => e.status === "queued" || e.status === "running");
+    if (!anyOpen) return;
+    const id = window.setInterval(() => { void load(); }, 3000);
+    return () => window.clearInterval(id);
+  }, [events, load]);
+
+  const recrawl = useCallback(async (e: PassiveEvent) => {
+    setRecrawlingId(e.sleeperUserId);
+    try {
+      const r = await fetch(`${API_BASE}/api/admin/adp/passive-events/recrawl`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...buildAdminHeaders("") },
+        body: JSON.stringify({ sleeperUserId: e.sleeperUserId, sleeperUsername: e.sleeperUsername }),
+      });
+      const j = await r.json().catch(() => null);
+      if (!r.ok) throw new Error(j?.error || `HTTP ${r.status}`);
+      await load();
+    } catch (err: any) {
+      setError(err?.message ?? "Recrawl failed");
+    } finally {
+      setRecrawlingId(null);
+    }
+  }, [load]);
+
+  return (
+    <div className="mt-6 pt-4 border-t border-border/30" data-testid="passive-crawl-events">
+      <div className="flex items-center justify-between mb-2 gap-2">
+        <div>
+          <h4 className="text-sm font-bold text-amber-500 dark:text-amber-400">Passive User Crawls</h4>
+          <p className="text-[11px] text-muted-foreground mt-0.5">
+            Depth-1 crawls triggered automatically when users connect Sleeper. 7-day cooldown per user; 24h on failure.
+          </p>
+        </div>
+        <button
+          onClick={() => void load()}
+          disabled={loading}
+          className="text-[11px] px-2 py-1 rounded border border-border/40 hover:bg-muted/40 disabled:opacity-50"
+          data-testid="button-refresh-passive-events"
+        >
+          {loading ? "Refreshing…" : "Refresh"}
+        </button>
+      </div>
+
+      {error && (
+        <p className="text-[11px] text-red-500 mt-1" data-testid="passive-events-error">{error}</p>
+      )}
+
+      {events && events.length === 0 && !loading && (
+        <p className="text-[11px] text-muted-foreground py-2">No passive crawl events yet.</p>
+      )}
+
+      {events && events.length > 0 && (
+        <div className="overflow-x-auto mt-2">
+          <table className="w-full text-[11px]">
+            <thead className="text-muted-foreground">
+              <tr>
+                <th className="px-2 py-1 text-left">When</th>
+                <th className="px-2 py-1 text-left">User</th>
+                <th className="px-2 py-1 text-left">Source</th>
+                <th className="px-2 py-1 text-left">Status</th>
+                <th className="px-2 py-1 text-right">Leagues</th>
+                <th className="px-2 py-1 text-right">Drafts found</th>
+                <th className="px-2 py-1 text-right">Drafts added</th>
+                <th className="px-2 py-1 text-right">Pending</th>
+                <th className="px-2 py-1 text-left">Error</th>
+                <th className="px-2 py-1"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {events.map((e) => (
+                <tr key={e.id} className="border-t border-border/30" data-testid={`passive-event-row-${e.id}`}>
+                  <td className="px-2 py-1 whitespace-nowrap font-mono text-muted-foreground">{formatTime(e.createdAt)}</td>
+                  <td className="px-2 py-1 whitespace-nowrap">
+                    {e.sleeperUsername ?? <span className="text-muted-foreground">—</span>}
+                    <span className="text-[10px] text-muted-foreground ml-1">{e.sleeperUserId}</span>
+                  </td>
+                  <td className="px-2 py-1 text-muted-foreground">{e.source}</td>
+                  <td className={`px-2 py-1 font-semibold ${statusColor(e.status)}`}>{e.status}</td>
+                  <td className="px-2 py-1 text-right tabular-nums">{e.leaguesScanned}</td>
+                  <td className="px-2 py-1 text-right tabular-nums">{e.draftsFound}</td>
+                  <td className="px-2 py-1 text-right tabular-nums">{e.draftsAdded}</td>
+                  <td className="px-2 py-1 text-right tabular-nums text-muted-foreground">{e.pendingItems}</td>
+                  <td className="px-2 py-1 max-w-[200px] truncate text-red-500/80" title={e.errorMessage ?? ""}>{e.errorMessage ?? "—"}</td>
+                  <td className="px-2 py-1 text-right">
+                    <button
+                      onClick={() => void recrawl(e)}
+                      disabled={recrawlingId === e.sleeperUserId || e.status === "queued" || e.status === "running"}
+                      className="text-[10px] px-2 py-0.5 rounded border border-border/40 hover:bg-muted/40 disabled:opacity-40"
+                      data-testid={`button-recrawl-${e.id}`}
+                      title={e.status === "queued" || e.status === "running" ? "Already running" : "Force a new crawl bypassing the cooldown"}
+                    >
+                      {recrawlingId === e.sleeperUserId ? "…" : "Recrawl"}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

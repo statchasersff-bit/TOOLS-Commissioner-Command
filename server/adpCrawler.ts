@@ -1,10 +1,11 @@
 import pg from "pg";
 import { drizzle } from "drizzle-orm/node-postgres";
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import {
   adpCrawlSeeds,
   adpCrawlQueue,
   adpCrawlLog,
+  adpUserCrawlEvents,
   drafts,
   draftPicks,
 } from "@shared/schema";
@@ -143,6 +144,7 @@ async function enqueueOnce(
   targetId: string,
   season: string | null,
   priority = 50,
+  seedSleeperUserId: string | null = null,
 ): Promise<boolean> {
   // Dedup pending queue items so re-pasting the same seed doesn't pile up
   // duplicate work.
@@ -157,19 +159,82 @@ async function enqueueOnce(
     ))
     .limit(1);
   if (existing.length > 0) return false;
-  await db.insert(adpCrawlQueue).values({ targetType, targetId, season, priority, status: "pending" });
+  await db.insert(adpCrawlQueue).values({ targetType, targetId, season, priority, status: "pending", seedSleeperUserId });
   return true;
 }
 
-/** Enqueue a Sleeper user_id at low-ish priority. Called when a DC user
- *  connects their Sleeper account. */
-export async function enqueueSleeperUser(userId: string, seasons: string[] = DEFAULT_SEASONS): Promise<number> {
-  let added = 0;
-  for (const s of seasons) {
-    if (await enqueueOnce("user", userId, s, 30)) added++;
+// ── Passive (user-login) enrichment ──────────────────────────────────────────
+// Cooldown windows. The 7-day complete window keeps us from re-fetching the
+// same user's leagues on every login; the 24-hour failed window lets us
+// retry transient Sleeper API errors next day without manual intervention.
+const COOLDOWN_COMPLETE_MS = 7 * 24 * 60 * 60 * 1000;
+const COOLDOWN_FAILED_MS   = 24 * 60 * 60 * 1000;
+
+export type EnqueueSleeperUserResult =
+  | { enqueued: true; eventId: number }
+  | { enqueued: false; eventId: number | null; reason: "already_running" | "cooldown_complete" | "cooldown_failed" };
+
+/** Enqueue a Sleeper user_id at low priority for a depth-1 crawl. Called when
+ *  a user connects their Sleeper account (auth or read-only). Returns a
+ *  result describing whether the enqueue happened or why it was skipped, so
+ *  callers can show non-blocking UI without making a new call. */
+export async function enqueueSleeperUser(
+  sleeperUserId: string,
+  opts: {
+    sleeperUsername?: string;
+    seasons?: string[];
+    source?: "user_login_depth1" | "readonly_connect_depth1" | "admin_recrawl";
+    force?: boolean;
+  } = {},
+): Promise<EnqueueSleeperUserResult> {
+  const seasons = opts.seasons && opts.seasons.length > 0 ? opts.seasons : DEFAULT_SEASONS;
+  const source = opts.source ?? "user_login_depth1";
+
+  // Cooldown gate. Read the most recent event for this Sleeper user; decide
+  // whether to skip, retry, or enqueue fresh. Admins can pass force=true to
+  // bypass the gate (used by the admin recrawl button).
+  if (!opts.force) {
+    const recent = await db
+      .select()
+      .from(adpUserCrawlEvents)
+      .where(eq(adpUserCrawlEvents.sleeperUserId, sleeperUserId))
+      .orderBy(desc(adpUserCrawlEvents.createdAt))
+      .limit(1);
+    if (recent.length > 0) {
+      const last = recent[0];
+      const ageMs = Date.now() - last.createdAt.getTime();
+      if (last.status === "queued" || last.status === "running") {
+        return { enqueued: false, eventId: last.id, reason: "already_running" };
+      }
+      if (last.status === "complete" && ageMs < COOLDOWN_COMPLETE_MS) {
+        return { enqueued: false, eventId: last.id, reason: "cooldown_complete" };
+      }
+      if (last.status === "failed" && ageMs < COOLDOWN_FAILED_MS) {
+        return { enqueued: false, eventId: last.id, reason: "cooldown_failed" };
+      }
+    }
   }
-  if (added > 0 && !workerRunning) startCrawlWorker();
-  return added;
+
+  // Insert the event row first so any concurrent enqueue for the same user
+  // sees an "already_running" gate above.
+  const [event] = await db.insert(adpUserCrawlEvents).values({
+    sleeperUserId,
+    sleeperUsername: opts.sleeperUsername ?? null,
+    source,
+    status: "queued",
+  }).returning({ id: adpUserCrawlEvents.id });
+
+  let queuedItems = 0;
+  for (const s of seasons) {
+    if (await enqueueOnce("user", sleeperUserId, s, 30, sleeperUserId)) queuedItems++;
+  }
+
+  await db.update(adpUserCrawlEvents)
+    .set({ queuedItems, updatedAt: new Date() })
+    .where(eq(adpUserCrawlEvents.id, event.id));
+
+  if (queuedItems > 0 && !workerRunning) startCrawlWorker();
+  return { enqueued: true, eventId: event.id };
 }
 
 // ── Worker ───────────────────────────────────────────────────────────────────
@@ -230,7 +295,12 @@ async function workerTick() {
     let error: string | null = null;
 
     try {
-      const result = await processItem(item.targetType as any, item.targetId, item.season);
+      const result = await processItem(
+        item.targetType as any,
+        item.targetId,
+        item.season,
+        item.seedSleeperUserId ?? null,
+      );
       draftsFound = result.draftsFound;
       draftsIngested = result.draftsIngested;
       picksIngested = result.picksIngested;
@@ -238,9 +308,10 @@ async function workerTick() {
       error = err?.message ?? "unknown error";
     }
 
+    const willRetry = !!error && item.attempts + 1 < MAX_ATTEMPTS;
     await db.update(adpCrawlQueue)
       .set({
-        status: error ? (item.attempts + 1 >= MAX_ATTEMPTS ? "failed" : "pending") : "completed",
+        status: error ? (willRetry ? "pending" : "failed") : "completed",
         lastError: error,
         processedAt: new Date(),
       })
@@ -256,7 +327,95 @@ async function workerTick() {
         completedAt: new Date(),
       })
       .where(eq(adpCrawlLog.id, logId));
+
+    // Passive crawl: update the originating event row.
+    // - processUser items contribute leagues_scanned (each league enqueued).
+    // - processLeague items contribute drafts_found (each eligible draft).
+    // - processDraft items contribute drafts_added (1 if ingested).
+    // - On retry the item stays "pending" — we hold off counter updates
+    //   until the terminal pass to avoid double-counting.
+    if (item.seedSleeperUserId && !willRetry) {
+      await applyPassiveEventIncrement(
+        item.seedSleeperUserId,
+        item.targetType as any,
+        { draftsFound, draftsIngested },
+        error,
+      );
+      await maybeCompletePassiveEvent(item.seedSleeperUserId);
+    }
   }
+}
+
+/** Apply per-item counter increments to the most recent open event for
+ *  this Sleeper user. Also flips status from "queued" → "running" on the
+ *  first non-error item. */
+async function applyPassiveEventIncrement(
+  sleeperUserId: string,
+  targetType: "username" | "user" | "league" | "draft",
+  counts: { draftsFound: number; draftsIngested: number },
+  error: string | null,
+) {
+  const recent = await db
+    .select()
+    .from(adpUserCrawlEvents)
+    .where(and(
+      eq(adpUserCrawlEvents.sleeperUserId, sleeperUserId),
+      inArray(adpUserCrawlEvents.status, ["queued", "running"]),
+    ))
+    .orderBy(desc(adpUserCrawlEvents.createdAt))
+    .limit(1);
+  if (recent.length === 0) return;
+  const event = recent[0];
+
+  const patch: Partial<typeof adpUserCrawlEvents.$inferInsert> & { updatedAt: Date } = {
+    updatedAt: new Date(),
+  };
+  if (event.status === "queued") patch.status = "running";
+  if (targetType === "user" || targetType === "username") {
+    // processUser/processUsername returns leagues-enqueued as draftsFound.
+    patch.leaguesScanned = event.leaguesScanned + counts.draftsFound;
+  } else if (targetType === "league") {
+    patch.draftsFound = event.draftsFound + counts.draftsFound;
+  } else if (targetType === "draft") {
+    patch.draftsAdded = event.draftsAdded + counts.draftsIngested;
+  }
+  if (error) patch.errorMessage = error;
+
+  await db.update(adpUserCrawlEvents)
+    .set(patch)
+    .where(eq(adpUserCrawlEvents.id, event.id));
+}
+
+/** Mark the event complete when no pending/processing queue items remain
+ *  for this Sleeper user. If at least one terminal item recorded an error
+ *  and zero progress was made, mark it failed instead. */
+async function maybeCompletePassiveEvent(sleeperUserId: string) {
+  const outstanding = await db
+    .select({ c: sql<number>`count(*)` })
+    .from(adpCrawlQueue)
+    .where(and(
+      eq(adpCrawlQueue.seedSleeperUserId, sleeperUserId),
+      inArray(adpCrawlQueue.status, ["pending", "processing"]),
+    ));
+  if (Number(outstanding[0]?.c ?? 0) > 0) return;
+
+  const recent = await db
+    .select()
+    .from(adpUserCrawlEvents)
+    .where(and(
+      eq(adpUserCrawlEvents.sleeperUserId, sleeperUserId),
+      inArray(adpUserCrawlEvents.status, ["queued", "running"]),
+    ))
+    .orderBy(desc(adpUserCrawlEvents.createdAt))
+    .limit(1);
+  if (recent.length === 0) return;
+  const event = recent[0];
+
+  const noProgress = event.leaguesScanned === 0 && event.draftsFound === 0 && event.draftsAdded === 0;
+  const status = noProgress && event.errorMessage ? "failed" : "complete";
+  await db.update(adpUserCrawlEvents)
+    .set({ status, completedAt: new Date(), updatedAt: new Date() })
+    .where(eq(adpUserCrawlEvents.id, event.id));
 }
 
 // ── Per-item processors ──────────────────────────────────────────────────────
@@ -265,23 +424,24 @@ async function processItem(
   targetType: "username" | "user" | "league" | "draft",
   targetId: string,
   season: string | null,
+  seedSleeperUserId: string | null,
 ): Promise<{ draftsFound: number; draftsIngested: number; picksIngested: number }> {
-  if (targetType === "username") return processUsername(targetId, season);
-  if (targetType === "user")     return processUser(targetId, season);
-  if (targetType === "league")   return processLeague(targetId);
+  if (targetType === "username") return processUsername(targetId, season, seedSleeperUserId);
+  if (targetType === "user")     return processUser(targetId, season, seedSleeperUserId);
+  if (targetType === "league")   return processLeague(targetId, seedSleeperUserId);
   if (targetType === "draft")    return processDraft(targetId);
   throw new Error(`unknown target type: ${targetType}`);
 }
 
-async function processUsername(username: string, season: string | null) {
+async function processUsername(username: string, season: string | null, seedSleeperUserId: string | null) {
   const user = await rateLimitedFetchJson<{ user_id: string }>(`${SLEEPER_API}/user/${username}`);
   if (!user?.user_id) {
     return { draftsFound: 0, draftsIngested: 0, picksIngested: 0 };
   }
-  return processUser(user.user_id, season);
+  return processUser(user.user_id, season, seedSleeperUserId);
 }
 
-async function processUser(userId: string, season: string | null) {
+async function processUser(userId: string, season: string | null, seedSleeperUserId: string | null) {
   const seasons = season ? [season] : DEFAULT_SEASONS;
   let totals = { draftsFound: 0, draftsIngested: 0, picksIngested: 0 };
 
@@ -291,31 +451,60 @@ async function processUser(userId: string, season: string | null) {
     );
     if (!leagues) continue;
     // Enqueue each league as its own queue row so the work fans out and
-    // remains resumable across server restarts.
+    // remains resumable across server restarts. For passive crawls we
+    // tag every descendant with the originating sleeper_user_id so the
+    // event-row counters and completion detection in workerTick can
+    // attribute work back to the right event.
     for (const lg of leagues) {
-      await enqueueOnce("league", lg.league_id, null, 60);
-      totals.draftsFound++;
+      const added = await enqueueOnce("league", lg.league_id, null, 60, seedSleeperUserId);
+      if (added) totals.draftsFound++;
     }
   }
+  // Passive-crawl counter semantics: for processUser, draftsFound carries
+  // the number of leagues enqueued (this becomes leagues_scanned at the
+  // event level).
   return totals;
 }
 
-async function processLeague(leagueId: string) {
-  const draftList = await rateLimitedFetchJson<Array<{ draft_id: string; status?: string }>>(
+async function processLeague(leagueId: string, seedSleeperUserId: string | null) {
+  const draftList = await rateLimitedFetchJson<Array<{ draft_id: string; status?: string; type?: string; sport?: string }>>(
     `${SLEEPER_API}/league/${leagueId}/drafts`,
   );
   if (!draftList) return { draftsFound: 0, draftsIngested: 0, picksIngested: 0 };
 
-  let totals = { draftsFound: draftList.length, draftsIngested: 0, picksIngested: 0 };
-  for (const d of draftList) {
-    await enqueueOnce("draft", d.draft_id, null, 70);
+  // Eligibility gate. Only startup / rookie NFL drafts feed the ADP dataset.
+  // Sleeper's `type` field is one of "snake" | "auction" | "linear" for the
+  // draft FORMAT, and the dynasty/startup classification lives on the
+  // associated league. The per-draft `metadata.scoring_type === "rookies"`
+  // or the league's `settings.type` would be more reliable, but those are
+  // only available after a per-draft fetch. We do a cheap first-pass filter
+  // here using whatever the drafts-list response gives us, then let
+  // ingestDraftById's deriveDraftType + quality filters reject the rest.
+  // The result is we waste at most one extra Sleeper fetch per misclassified
+  // draft instead of dragging an entire redraft league through the pipe.
+  const eligible = draftList.filter((d) => {
+    if (d.sport && d.sport !== "nfl") return false;
+    return true;
+  });
+
+  let drafts_found = 0;
+  for (const d of eligible) {
+    const added = await enqueueOnce("draft", d.draft_id, null, 70, seedSleeperUserId);
+    if (added) drafts_found++;
   }
-  return totals;
+  // Passive-crawl counter semantics: for processLeague, draftsFound is the
+  // number of eligible drafts we just enqueued for this league.
+  return { draftsFound: drafts_found, draftsIngested: 0, picksIngested: 0 };
 }
 
 async function processDraft(draftId: string) {
   const r = await ingestDraftById(draftId);
   if (!r.ok) return { draftsFound: 1, draftsIngested: 0, picksIngested: 0 };
+  // ingestDraftById's quality filter rejects non-dynasty / IDP / mock /
+  // micro-league drafts; deriveDraftType labels each accepted draft. We
+  // only count drafts that actually landed picks in the table — anything
+  // skipped (already complete, excluded, quality filtered) returns
+  // r.picks=0 and so doesn't bump drafts_added.
   return {
     draftsFound: 1,
     draftsIngested: r.skipped ? 0 : (r.picks > 0 ? 1 : 0),
@@ -377,6 +566,64 @@ export async function getCrawlStatus(): Promise<{
     })),
     workerRunning,
   };
+}
+
+/** Recent passive-crawl events for the admin panel. Ordered newest first.
+ *  Includes derived `pendingItems` so the UI can show "still running" rows
+ *  with a useful denominator. */
+export async function getPassiveCrawlEvents(limit = 50): Promise<Array<{
+  id: number;
+  sleeperUserId: string;
+  sleeperUsername: string | null;
+  source: string;
+  status: string;
+  queuedItems: number;
+  leaguesScanned: number;
+  draftsFound: number;
+  draftsAdded: number;
+  pendingItems: number;
+  errorMessage: string | null;
+  createdAt: string;
+  updatedAt: string;
+  completedAt: string | null;
+}>> {
+  const rows = await db
+    .select()
+    .from(adpUserCrawlEvents)
+    .orderBy(desc(adpUserCrawlEvents.createdAt))
+    .limit(limit);
+  if (rows.length === 0) return [];
+
+  const userIds = Array.from(new Set(rows.map((r) => r.sleeperUserId)));
+  const pendingRows = await db
+    .select({ uid: adpCrawlQueue.seedSleeperUserId, c: sql<number>`count(*)` })
+    .from(adpCrawlQueue)
+    .where(and(
+      isNotNull(adpCrawlQueue.seedSleeperUserId),
+      inArray(adpCrawlQueue.seedSleeperUserId, userIds),
+      inArray(adpCrawlQueue.status, ["pending", "processing"]),
+    ))
+    .groupBy(adpCrawlQueue.seedSleeperUserId);
+  const pendingByUser = new Map<string, number>(
+    pendingRows.map((r) => [r.uid as string, Number(r.c ?? 0)]),
+  );
+
+  return rows.map((r) => ({
+    id: r.id,
+    sleeperUserId: r.sleeperUserId,
+    sleeperUsername: r.sleeperUsername,
+    source: r.source,
+    status: r.status,
+    queuedItems: r.queuedItems,
+    leaguesScanned: r.leaguesScanned,
+    draftsFound: r.draftsFound,
+    draftsAdded: r.draftsAdded,
+    pendingItems: pendingByUser.get(r.sleeperUserId) ?? 0,
+    errorMessage: r.errorMessage,
+    createdAt: r.createdAt.toISOString(),
+    updatedAt: r.updatedAt.toISOString(),
+    completedAt: r.completedAt?.toISOString() ?? null,
+  }));
 }
 
 export async function resetFailedQueueItems(): Promise<{ reset: number }> {

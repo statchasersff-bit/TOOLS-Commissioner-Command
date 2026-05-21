@@ -47,6 +47,8 @@ import {
 } from "./adp";
 import {
   enqueueSeeds,
+  enqueueSleeperUser,
+  getPassiveCrawlEvents,
   startCrawlWorker,
   getCrawlStatus as getAdpCrawlStatus,
   resetFailedQueueItems,
@@ -1100,7 +1102,67 @@ export async function registerRoutes(
     }
   });
 
+  // ── Passive ADP enrichment (public — no auth required) ───────────────────
+  // Called by the read-only Sleeper header connect after the client resolves
+  // a username to a Sleeper user_id. The authed connect path
+  // (/api/sc-auth/connect-sleeper) calls enqueueSleeperUser directly. Both
+  // routes share the same 7-day cooldown gate inside enqueueSleeperUser so
+  // repeated calls for the same user don't double-queue or pile up events.
+  app.post("/api/adp/passive-enrich", async (req, res) => {
+    try {
+      const { sleeperUserId, sleeperUsername } = (req.body ?? {}) as {
+        sleeperUserId?: string;
+        sleeperUsername?: string;
+      };
+      if (!sleeperUserId || !/^\d{6,20}$/.test(sleeperUserId)) {
+        return res.status(400).json({ error: "Valid sleeperUserId is required" });
+      }
+      const result = await enqueueSleeperUser(sleeperUserId, {
+        sleeperUsername,
+        source: "readonly_connect_depth1",
+      });
+      res.json(result);
+    } catch (err: any) {
+      console.warn("[adp passive-enrich] error:", err?.message);
+      // Never bubble up — the connect UX must not depend on this succeeding.
+      res.json({ enqueued: false, eventId: null, reason: "error" });
+    }
+  });
+
   // ── ADP crawler admin endpoints ───────────────────────────────────────────
+  app.get("/api/admin/adp/passive-events", async (req, res) => {
+    if (!(await requireAdmin(req, res))) return;
+    try {
+      const limit = Math.min(200, Number(req.query.limit ?? 50) || 50);
+      const events = await getPassiveCrawlEvents(limit);
+      res.json({ events });
+    } catch (err: any) {
+      console.error("[Admin] adp/passive-events error:", err);
+      res.status(500).json({ error: err.message || "List passive events failed" });
+    }
+  });
+
+  app.post("/api/admin/adp/passive-events/recrawl", async (req, res) => {
+    if (!(await requireAdmin(req, res))) return;
+    try {
+      const { sleeperUserId, sleeperUsername } = (req.body ?? {}) as {
+        sleeperUserId?: string;
+        sleeperUsername?: string;
+      };
+      if (!sleeperUserId) return res.status(400).json({ error: "sleeperUserId is required" });
+      const result = await enqueueSleeperUser(sleeperUserId, {
+        sleeperUsername,
+        source: "admin_recrawl",
+        force: true,
+      });
+      startCrawlWorker();
+      res.json(result);
+    } catch (err: any) {
+      console.error("[Admin] passive-events/recrawl error:", err);
+      res.status(500).json({ error: err.message || "Recrawl failed" });
+    }
+  });
+
   app.post("/api/admin/adp/seed", async (req, res) => {
     if (!(await requireAdmin(req, res))) return;
     try {

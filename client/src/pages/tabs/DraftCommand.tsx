@@ -125,9 +125,9 @@ const STARTUP_VIEW_OPTIONS: { id: ViewMode; label: string; icon: typeof List }[]
 ];
 
 const ROOKIE_VIEW_OPTIONS: { id: ViewMode; label: string; icon: typeof List }[] = [
-  { id: "list",  label: "List",        icon: List },
-  { id: "box",   label: "Box",         icon: LayoutGrid },
-  { id: "round", label: "Round Board", icon: Trophy },
+  { id: "list", label: "List", icon: List },
+  { id: "box",  label: "Box",  icon: LayoutGrid },
+  { id: "hex",  label: "Hex",  icon: Hexagon },
 ];
 
 // Rookie-tab defaults — 12-team superflex PPR over the last 90 days, Actual
@@ -330,13 +330,13 @@ export function DraftCommand() {
   return (
     <div className="space-y-4 md:space-y-5">
       <SectionHeader
-        title="Draft Command"
+        title="ADP Explorer"
         subtitle={currentTabMeta.subtitle}
       />
 
       {/* Mobile-only header — SectionHeader hides on mobile. */}
       <div className="md:hidden">
-        <h2 className="text-lg font-bold text-foreground tracking-tight">Draft Command</h2>
+        <h2 className="text-lg font-bold text-foreground tracking-tight">ADP Explorer</h2>
         <p className="text-xs text-muted-foreground mt-1">{currentTabMeta.subtitle}</p>
       </div>
 
@@ -418,26 +418,10 @@ export function DraftCommand() {
             ))}
           </div>
 
-          {/* Rookie mode — only meaningful on the Startup tab. The Rookie
-              Drafts tab is locked to Direct Rookies (set in rookieTabDefaults),
-              so the toggle is hidden there. */}
-          {topTab !== "rookie" && (
-            <div className="flex items-center gap-1 p-1 rounded-xl bg-white/[0.03] border border-white/6">
-              {ROOKIE_MODE_OPTIONS.map((m) => (
-                <button
-                  key={m.id}
-                  onClick={() => updateFilter("rookieMode", m.id)}
-                  className={cn(
-                    "px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-all whitespace-nowrap",
-                    filters.rookieMode === m.id ? "bg-[#d4af37]/15 text-[#d4af37] border border-[#d4af37]/30" : "text-white/40 hover:text-white/70",
-                  )}
-                  data-testid={`rookie-mode-${m.id}`}
-                >
-                  {m.label}
-                </button>
-              ))}
-            </div>
-          )}
+          {/* Rookie Mode toggle removed — both Startup and Rookie tabs are
+              now locked to Direct Rookies via *TabDefaults. The Picks / Both
+              modes remain reachable via the API (admin tooling) but aren't
+              exposed in the UI. */}
 
           {/* Date range shortcuts */}
           <div className="flex items-center gap-1 p-1 rounded-xl bg-white/[0.03] border border-white/6">
@@ -507,10 +491,9 @@ export function DraftCommand() {
             </div>
           )}
 
-          {view === "list"  && <ListView rows={filtered} filters={filters} onPlayerClick={handlePlayerClick} />}
-          {view === "box"   && <BoxView  rows={filtered} teams={typeof filters.teams === "number" ? filters.teams : 12} onPlayerClick={handlePlayerClick} />}
-          {view === "hex"   && topTab === "startup" && <HexView rows={filtered} teams={typeof filters.teams === "number" ? filters.teams : 12} draftFormat={filters.draftFormat} onPlayerClick={handlePlayerClick} />}
-          {view === "round" && topTab === "rookie"  && <RoundBoardView rows={filtered} teams={typeof filters.teams === "number" ? filters.teams : 12} onPlayerClick={handlePlayerClick} />}
+          {view === "list" && <ListView rows={filtered} filters={filters} onPlayerClick={handlePlayerClick} />}
+          {view === "box"  && <BoxView  rows={filtered} teams={typeof filters.teams === "number" ? filters.teams : 12} filters={filters} onPlayerClick={handlePlayerClick} />}
+          {view === "hex"  && <HexView  rows={filtered} teams={typeof filters.teams === "number" ? filters.teams : 12} draftFormat={filters.draftFormat} filters={filters} onPlayerClick={handlePlayerClick} />}
         </>
       )}
 
@@ -899,7 +882,8 @@ function PlayerCell({ row }: { row: ADPResult }) {
 // - HEX_POS_THEME (defined further down) is the single source of truth for
 //   board palette — shared between Hex and Box for visual consistency.
 
-function BoxView({ rows, teams, onPlayerClick }: { rows: ADPResult[]; teams: number; onPlayerClick?: (row: ADPResult) => void }) {
+function BoxView({ rows, teams, filters, onPlayerClick }: { rows: ADPResult[]; teams: number; filters: DraftFilters; onPlayerClick?: (row: ADPResult) => void }) {
+  const draftLabel = formatDraftLabel(filters);
   const isMobile = useIsMobile();
   // Sleeper / OTC / FFPC density: short tiles, ~1px gutter, dark navy body
   // with a thin position-tinted top stripe. Cells must fit a position rank
@@ -943,6 +927,20 @@ function BoxView({ rows, teams, onPlayerClick }: { rows: ADPResult[]; teams: num
         </div>
         <HexLegend />
       </div>
+
+      {draftLabel && (
+        <div className="px-3 py-2 border-b border-white/5 bg-white/[0.02] flex items-center gap-2">
+          <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-white/45">
+            Draft Type
+          </span>
+          <span
+            className="inline-flex items-center px-2 py-0.5 rounded-md border border-[#d4af37]/30 bg-[#d4af37]/10 text-[#d4af37] text-[11px] font-bold tabular-nums"
+            data-testid="box-draft-label"
+          >
+            {draftLabel}
+          </span>
+        </div>
+      )}
 
       <div className="overflow-x-auto overflow-y-hidden">
         <div className="inline-block min-w-full">
@@ -1396,7 +1394,8 @@ const HEX_POS_THEME: Record<Position, PosTheme> = {
 
 const ELITE_RANK_CUTOFF = 12;
 
-function HexView({ rows, teams, draftFormat, onPlayerClick }: { rows: ADPResult[]; teams: number; draftFormat: DraftFilters["draftFormat"]; onPlayerClick?: (row: ADPResult) => void }) {
+function HexView({ rows, teams, draftFormat, filters, onPlayerClick }: { rows: ADPResult[]; teams: number; draftFormat: DraftFilters["draftFormat"]; filters: DraftFilters; onPlayerClick?: (row: ADPResult) => void }) {
+  const draftLabel = formatDraftLabel(filters);
   const isMobile = useIsMobile();
   // Larger tiles than before — the redesign uses a prominent square headshot
   // so we give it more room. Mobile still shrinks but keeps a readable layout.
@@ -1461,6 +1460,20 @@ function HexView({ rows, teams, draftFormat, onPlayerClick }: { rows: ADPResult[
         </div>
         <HexLegend selected={selectedPositions} onToggle={togglePosition} />
       </div>
+
+      {draftLabel && (
+        <div className="px-4 py-2 border-b border-white/5 bg-white/[0.02] flex items-center gap-2">
+          <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-white/45">
+            Draft Type
+          </span>
+          <span
+            className="inline-flex items-center px-2 py-0.5 rounded-md border border-[#d4af37]/30 bg-[#d4af37]/10 text-[#d4af37] text-[11px] font-bold tabular-nums"
+            data-testid="hex-draft-label"
+          >
+            {draftLabel}
+          </span>
+        </div>
+      )}
 
       {/* ── Board canvas ──────────────────────────────────────────────────── */}
       <div className="relative overflow-x-auto overflow-y-hidden">
@@ -2017,28 +2030,8 @@ function FilterSheet({
             ]} />
           </FilterGroup>
 
-          {topTab !== "rookie" && (
-            <FilterGroup label="Picks / Rookies">
-              <div className="grid grid-cols-2 gap-1.5">
-                {ROOKIE_MODE_OPTIONS.map((m) => (
-                  <button
-                    key={m.id}
-                    onClick={() => update("rookieMode", m.id)}
-                    className={cn(
-                      "px-2 py-2 rounded-lg border text-[11px] font-semibold transition-all text-center",
-                      filters.rookieMode === m.id
-                        ? "bg-[#d4af37]/15 text-[#d4af37] border-[#d4af37]/40"
-                        : "bg-muted/30 text-muted-foreground border-border/40 hover:border-border",
-                    )}
-                    data-testid={`filter-rookie-${m.id}`}
-                  >
-                    <div>{m.label}</div>
-                    <div className="text-[9px] text-muted-foreground mt-0.5">{m.sub}</div>
-                  </button>
-                ))}
-              </div>
-            </FilterGroup>
-          )}
+          {/* Picks / Rookies filter group removed — both Startup and Rookie
+              tabs are locked to Direct Rookies. See header-bar comment. */}
 
           <FilterGroup label="Teams">
             <SelectField value={String(filters.teams)} onChange={(v) => update("teams", v === "all" ? "all" : Number(v) as DraftFilters["teams"])} options={[

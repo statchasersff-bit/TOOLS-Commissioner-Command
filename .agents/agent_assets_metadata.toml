@@ -48,3 +48,9 @@ id = "8Kn97Ky1SgiZ84eHdFGem"
 uri = "file://dynasty-command-v1.6.zip"
 type = "unspecified"
 title = "dynasty-command-v1.6.zip (871 KB)"
+
+[[outputs]]
+id = "s3BctLgneu4ZSIxZKP_Jb"
+uri = "file://dynasty-command-center.zip"
+type = "unspecified"
+title = "Dynasty Command Center — latest build"

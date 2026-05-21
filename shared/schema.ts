@@ -365,6 +365,13 @@ export const adpCrawlQueue = pgTable("adp_crawl_queue", {
   lastError: text("last_error"),
   createdAt: timestamp("created_at").defaultNow(),
   processedAt: timestamp("processed_at"),
+  // Set when this item was enqueued by the passive crawler for a specific
+  // Sleeper user (depth-1 from their leagues on login). NULL for admin /
+  // operator seeds. Threaded through processUser → processLeague →
+  // processDraft so each item produced by a passive crawl can be linked back
+  // to its originating adp_user_crawl_events row for counter updates and
+  // completion detection.
+  seedSleeperUserId: varchar("seed_sleeper_user_id", { length: 32 }),
 });
 
 export const adpCrawlLog = pgTable("adp_crawl_log", {
@@ -382,6 +389,38 @@ export const adpCrawlLog = pgTable("adp_crawl_log", {
 export type AdpCrawlSeed = typeof adpCrawlSeeds.$inferSelect;
 export type AdpCrawlQueueItem = typeof adpCrawlQueue.$inferSelect;
 export type AdpCrawlLogEntry = typeof adpCrawlLog.$inferSelect;
+
+// ── Passive ADP enrichment events ────────────────────────────────────────────
+// One row per "user connected their Sleeper account → kick off a depth-1
+// crawl" event. Doubles as audit log AND cooldown table — enqueueSleeperUser
+// reads the most recent row for a sleeper_user_id and decides whether to skip
+// (cooldown), retry (failed > 24h ago), or fresh-crawl (>7d since complete).
+//
+// Counters are incremented as the worker processes queue items tagged with
+// this event's sleeper_user_id (via adp_crawl_queue.seed_sleeper_user_id).
+// status transitions: queued → running → complete|failed|skipped.
+
+export const adpUserCrawlEvents = pgTable("adp_user_crawl_events", {
+  id: serial("id").primaryKey(),
+  sleeperUserId: varchar("sleeper_user_id", { length: 32 }).notNull(),
+  sleeperUsername: text("sleeper_username"),
+  // Origin tag so audit views can distinguish where a passive crawl was
+  // kicked off from. "user_login_depth1" = authed /api/sc-auth/connect-sleeper.
+  // "readonly_connect_depth1" = anonymous header-bar Sleeper username connect.
+  // "admin_recrawl" = operator-forced via the admin panel.
+  source: varchar("source", { length: 32 }).notNull().default("user_login_depth1"),
+  status: varchar("status", { length: 20 }).notNull().default("queued"),
+  queuedItems: integer("queued_items").notNull().default(0),
+  leaguesScanned: integer("leagues_scanned").notNull().default(0),
+  draftsFound: integer("drafts_found").notNull().default(0),
+  draftsAdded: integer("drafts_added").notNull().default(0),
+  errorMessage: text("error_message"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  completedAt: timestamp("completed_at"),
+});
+
+export type AdpUserCrawlEvent = typeof adpUserCrawlEvents.$inferSelect;
 
 // ── Custom value sets (Value Source Manager) ─────────────────────────────────
 // One row per uploaded value set. value_type partitions dynasty vs redraft;

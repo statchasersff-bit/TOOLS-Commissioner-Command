@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { SectionHeader } from "@/components/SectionHeader";
 import { fetchLeagueTransactions as fetchLeagueTransactionsApi, acceptTradeOnSleeper, rejectTradeOnSleeper } from "@/lib/sleeperApi";
+import { FeatureDisabledError } from "@/components/FeatureDisabledDialog";
 import { useValueModel } from "@/contexts/ValueModelContext";
 import { useSleeper } from "@/contexts/SleeperContext";
 import { cn } from "@/lib/utils";
@@ -168,6 +169,10 @@ export default function Transactions({ leagueId }: { leagueId: string }) {
       setConfirmingId(null);
       await fetchTransactions();
     } catch (e: any) {
+      if (e instanceof FeatureDisabledError) {
+        setConfirmingId(null);
+        return;
+      }
       setAcceptError(e.message || "Failed to accept trade");
     } finally {
       setAccepting(false);
@@ -185,6 +190,10 @@ export default function Transactions({ leagueId }: { leagueId: string }) {
       setRejectingId(null);
       await fetchTransactions();
     } catch (e: any) {
+      if (e instanceof FeatureDisabledError) {
+        setRejectingId(null);
+        return;
+      }
       setRejectError(e.message || "Failed to reject trade");
     } finally {
       setRejecting(false);

@@ -37,6 +37,7 @@ import {
   type SleeperTransaction,
   type SleeperWaiverClaimResult,
 } from "@/services/sleeperAuthedApi";
+import { FeatureDisabledError } from "@/components/FeatureDisabledDialog";
 
 export interface WaiverPlayer {
   id: string;
@@ -126,6 +127,10 @@ export function WaiverClaimModal({
       setSubmitState("success");
       onSuccess?.(claimResult, pendingWaivers);
     } catch (err: unknown) {
+      if (err instanceof FeatureDisabledError) {
+        setSubmitState("idle");
+        return;
+      }
       const msg =
         err instanceof Error ? err.message : "Something went wrong. Please try again.";
       if (isAuthError(msg)) {

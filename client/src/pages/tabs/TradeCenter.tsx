@@ -17,6 +17,7 @@ import { API_BASE } from "@/lib/apiBase";
 import { fetchRosterDraftPicks, fetchLeaguePlayerSettings } from "@/lib/sleeperApi";
 import { getSleeperToken, getSleeperSession } from "@/services/sleeperAuth";
 import { proposeTrade as proposeTradeAuthed, rejectTrade, firePostTradeLinkDm, type ProposeTradeResult } from "@/services/sleeperAuthedApi";
+import { FeatureDisabledError } from "@/components/FeatureDisabledDialog";
 import type { League, Team, Tier, Player, Pick, TradeRecord, TradeSide, CrawlStatus } from "@/types";
 import { cn } from "@/lib/utils";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
@@ -107,7 +108,11 @@ function TradeProposalCard({ proposal, mode, userTeam, league }: { proposal: Tra
     try {
       await proposeTradeAuthed({ leagueId: league.id, adds, drops, draftPicks: [], expiresAt: null });
       setSendState("sent");
-    } catch {
+    } catch (e: any) {
+      if (e instanceof FeatureDisabledError) {
+        setSendState("idle");
+        return;
+      }
       setSendState("failed");
     }
   };
@@ -1702,6 +1707,10 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
       const partnerUserId = sideBTeam?.ownerId;
       if (partnerUserId) sendCalcTradeDm(result, partnerUserId);
     } catch (e: any) {
+      if (e instanceof FeatureDisabledError) {
+        setProposing(false);
+        return;
+      }
       setProposeError(e.message || "Failed to propose trade");
     } finally {
       setProposing(false);
@@ -1719,6 +1728,10 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
       window.dispatchEvent(new CustomEvent("sleeper-txn-refresh"));
       toast({ title: "Trade withdrawn." });
     } catch (e: any) {
+      if (e instanceof FeatureDisabledError) {
+        setWithdrawing(false);
+        return;
+      }
       setWithdrawError(e.message || "Failed to withdraw trade");
     } finally {
       setWithdrawing(false);

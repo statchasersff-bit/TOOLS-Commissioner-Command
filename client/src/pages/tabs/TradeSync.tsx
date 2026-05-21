@@ -897,7 +897,7 @@ export default function TradeSync() {
         <Card className="p-8 text-center max-w-sm w-full">
           <Lock className="w-10 h-10 mx-auto mb-3 text-[#0b3a7a] dark:text-blue-400 opacity-60" />
           <h3 className="text-base font-bold mb-1">Connect Sleeper to Unlock</h3>
-          <p className="text-sm text-muted-foreground">Trade Sync requires a connected Sleeper account.</p>
+          <p className="text-sm text-muted-foreground">My Trades requires a connected Sleeper account.</p>
         </Card>
       </div>
     );
@@ -908,7 +908,7 @@ export default function TradeSync() {
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <SectionHeader
-          title="Trade Sync"
+          title="My Trades"
           subtitle="All pending trade offers across your leagues, managed from one dashboard."
         />
       </div>

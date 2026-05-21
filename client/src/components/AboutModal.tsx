@@ -132,7 +132,7 @@ const FEATURES: FeatureDef[] = [
   {
     id: "trade-sync",
     category: "Trade",
-    title: "Trade Sync",
+    title: "My Trades",
     icon: Inbox,
     description: "View all your Sleeper trade offers across every league: incoming, outgoing, completed, rejected, and cancelled.",
     bullets: [

@@ -1051,7 +1051,7 @@ export async function ingestCrawledLeagueDrafts(limit: number = 200): Promise<{ 
 //   v5 — Direct Rookies excludes kickers across all draft types (not just
 //        rookie drafts). Pre-v5 snapshots for draftType=all/supplemental
 //        under rookieMode=direct could still contain K rows.
-const FILTER_KEY_VERSION = "v8";
+const FILTER_KEY_VERSION = "v9";
 
 /** Normalize the season filter into a comma-joined sorted list, "all", or
  *  the inferred current season. Centralised so filterKey and the WHERE
@@ -1238,6 +1238,25 @@ export async function computeAdp(f: AdpFilters): Promise<{ rows: AdpRow[]; draft
     ? sql`(${draftPicks.position} IS NULL OR upper(${draftPicks.position}) <> 'K')`
     : sql`true`;
 
+  // Rookie-tab strict rookie filter. The draft-level rookieMode classifier
+  // accepts "direct_rookies" and "mixed" drafts, but mixed drafts still
+  // contain veteran picks — orphan / replacement drafts where a manager
+  // refills a roster slot show real veterans (Najee Harris, Calvin Ridley)
+  // alongside the actual rookies. For Direct Rookies on the Rookie tab the
+  // user expects rookies only, so gate picks on rookieYear matching the
+  // draft's season. Picks with NULL rookieYear are excluded — without an
+  // ingest-time rookie-class signal we can't prove they're rookies, and
+  // letting them through is exactly the leak we're closing.
+  const rookieYearCond =
+    rookieMode === "direct" && f.draftType === "rookie"
+      ? sql`EXISTS (
+          SELECT 1 FROM ${drafts}
+          WHERE ${drafts.draftId} = ${draftPicks.draftId}
+            AND ${draftPicks.rookieYear} IS NOT NULL
+            AND ${draftPicks.rookieYear} = CAST(${drafts.season} AS integer)
+        )`
+      : sql`true`;
+
   const picks = await db
     .select({
       draftId: draftPicks.draftId,
@@ -1254,6 +1273,7 @@ export async function computeAdp(f: AdpFilters): Promise<{ rows: AdpRow[]; draft
       inArray(draftPicks.draftId, draftIds),
       placeholderCond,
       kickerCond,
+      rookieYearCond,
       // Belt-and-braces allowlist at the pick level. Whole-draft exclusion is
       // the primary defense (see buildDraftWhere), but if a stray defensive
       // pick ever slipped past detection we still don't want it showing up

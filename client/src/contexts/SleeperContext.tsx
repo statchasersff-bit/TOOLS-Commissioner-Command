@@ -2,6 +2,8 @@ import { createContext, useContext, useState, useCallback, useEffect, useMemo, u
 import type { SleeperUser, SleeperLeagueSummary } from "../types";
 import { fetchSleeperUser, fetchSleeperLeagues } from "@/lib/sleeperApi";
 import { useAuth } from "@/contexts/AuthContext";
+import { toast } from "@/hooks/use-toast";
+import { API_BASE } from "@/lib/apiBase";
 
 // IMPORTANT: there is intentionally no localStorage key for the Sleeper
 // connection. The connection is derived from useAuth().sleeperInfo, which is
@@ -57,7 +59,7 @@ export function SleeperProvider({ children }: { children: React.ReactNode }) {
 
   const fetchUserAndLeagues = useCallback(async (
     username: string,
-    opts: { preserveStubOnError?: boolean; stub?: SleeperUser | null } = {}
+    opts: { preserveStubOnError?: boolean; stub?: SleeperUser | null; triggerPassiveEnrich?: boolean } = {}
   ) => {
     setIsLoading(true);
     setError(null);
@@ -67,6 +69,32 @@ export function SleeperProvider({ children }: { children: React.ReactNode }) {
     try {
       const userData = await fetchSleeperUser(username);
       setUser(userData);
+
+      // Fire the passive ADP enrichment POST on explicit read-only connects
+      // (i.e. the user typed a username in the header). The auth-flow path
+      // already kicks off enqueueSleeperUser server-side via
+      // /api/sc-auth/connect-sleeper, so we skip on those (callers omit the
+      // flag). Cooldown enforcement lives on the server, so repeat connects
+      // within 7 days are a no-op there too — but we still surface the toast
+      // so users get the same affordance every time.
+      if (opts.triggerPassiveEnrich && userData?.userId) {
+        void fetch(`${API_BASE}/api/adp/passive-enrich`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sleeperUserId: userData.userId,
+            sleeperUsername: userData.username,
+          }),
+        }).catch((err) => {
+          // Never surface — enrichment is best-effort background work.
+          console.warn("[sleeper] passive-enrich post failed:", err?.message);
+        });
+        toast({
+          title: "Sleeper connected",
+          description:
+            "We'll scan eligible dynasty drafts in the background to improve ADP.",
+        });
+      }
 
       const leaguesData = await fetchSleeperLeagues(userData.userId, "2026");
       setLeagues(leaguesData);
@@ -98,7 +126,7 @@ export function SleeperProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const connect = useCallback(async (username: string) => {
-    await fetchUserAndLeagues(username);
+    await fetchUserAndLeagues(username, { triggerPassiveEnrich: true });
   }, [fetchUserAndLeagues]);
 
   const disconnect = useCallback(() => {

@@ -20,6 +20,7 @@ import { useValueModel } from "@/contexts/ValueModelContext";
 import type { RankedPlayer } from "@/contexts/ValueModelContext";
 import { getSleeperPlayers } from "@/lib/sleeperApi";
 import { submitWaiverClaim } from "@/services/sleeperAuthedApi";
+import { FeatureDisabledError } from "@/components/FeatureDisabledDialog";
 import { sleeperWriteLimiter } from "@/services/sleeperWriteLimiter";
 import { preflightBatch, isWriteEnabled } from "@/services/sleeperSafetyGate";
 import { SafePacingNotice } from "@/components/SafePacingNotice";
@@ -1242,6 +1243,15 @@ function BulkClaimsView({
         );
         setSubmitResults(prev => ({ ...prev, [r.leagueId]: { status: "success" } }));
       } catch (e: any) {
+        if (e instanceof FeatureDisabledError) {
+          setSubmitResults(prev => {
+            const next = { ...prev };
+            delete next[r.leagueId];
+            return next;
+          });
+          cancelSubmitRef.current = true;
+          break;
+        }
         const msg = e?.message ?? "Claim failed";
         setSubmitResults(prev => ({ ...prev, [r.leagueId]: { status: "error", message: msg } }));
         // If Sleeper signals 429 / anti-abuse, stop the queue — the limiter
@@ -1826,6 +1836,10 @@ function ClaimPlayerModal({ row, preAddId, onClose }: { row: WaiverRow | null; p
       );
       setSuccess(true);
     } catch (e: any) {
+      if (e instanceof FeatureDisabledError) {
+        setSubmitError(null);
+        return;
+      }
       setSubmitError(e.message || "Claim failed. Check Sleeper for details.");
     } finally {
       setSubmitting(false);

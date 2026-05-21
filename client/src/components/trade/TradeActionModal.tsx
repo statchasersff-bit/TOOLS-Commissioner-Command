@@ -17,6 +17,7 @@ import {
 import { isGeneralMessagingEnabled } from "@/services/sleeperSafetyGate";
 import type { SleeperDmMessage, SleeperTransactionPick, ProposeTradeResult } from "@/services/sleeperAuthedApi";
 import { TradeEditTab, type EditAssetsWithFaab } from "./TradeEditTab";
+import { FeatureDisabledError } from "@/components/FeatureDisabledDialog";
 
 // ─── Exported Types ───────────────────────────────────────────────────────────
 
@@ -659,6 +660,11 @@ export function TradeActionModal({
         setActionResult({ success: true, message: "Trade offer withdrawn." });
       }
     } catch (err: any) {
+      if (err instanceof FeatureDisabledError) {
+        setActionLoading(false);
+        setConfirmAction(null);
+        return;
+      }
       const msg = err?.message || "Action failed.";
       setActionResult({ success: false, message: `${msg} You can also act directly on Sleeper.` });
     } finally {
@@ -730,6 +736,10 @@ export function TradeActionModal({
       setCounterResult({ success: true, message: "Counter offer sent! The existing offer has been rejected." });
       setTimeout(() => onCounterSent?.(), 1600);
     } catch (err: any) {
+      if (err instanceof FeatureDisabledError) {
+        setCounterSubmitting(false);
+        return;
+      }
       setCounterResult({
         success: false,
         message: `${err?.message || "Failed to send counter."} You can also counter directly on Sleeper.`,
@@ -802,6 +812,10 @@ export function TradeActionModal({
       setCounterResult({ success: true, message: "Updated offer sent! Your previous offer has been withdrawn." });
       setTimeout(() => onCounterSent?.(), 1600);
     } catch (err: any) {
+      if (err instanceof FeatureDisabledError) {
+        setResendSubmitting(false);
+        return;
+      }
       if (withdrew) {
         setCounterResult({
           success: false,

@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useCallback, useEffect, useMemo, useRef, type ReactNode } from "react";
+import { toast } from "@/hooks/use-toast";
 import {
   saveSleeperSession,
   clearSleeperSession,
@@ -405,6 +406,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       headers: { "Content-Type": "application/json", ...authHeaders() },
       credentials: "include",
       body: JSON.stringify({ sleeperUsername: username, sleeperUserId: userId, token }),
+    });
+    // The server-side handler fire-and-forget enqueues a depth-1 ADP crawl
+    // for this Sleeper user (cooldown-gated). Surface the same affordance
+    // here as the read-only connect path so users see consistent UX.
+    toast({
+      title: "Sleeper connected",
+      description: "We'll scan eligible dynasty drafts in the background to improve ADP.",
     });
     // After server-linking, the read-only identity is redundant.
     clearReadOnlySleeper();

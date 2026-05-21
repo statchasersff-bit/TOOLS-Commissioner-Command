@@ -678,10 +678,6 @@ function DraftsDashboard({
   const upcoming = displayDrafts.filter(d =>
     isUpcomingDraft({ status: d.status, picksMade: d.picksMade, startTime: d.startTime })
   );
-  const completed = displayDrafts.filter(d =>
-    isCompletedDraft({ status: d.status, picksMade: d.picksMade, totalPicks: d.totalPicks })
-  );
-
   // Sort upcoming by scheduled start time (no-start-time items last)
   const upcomingSorted = [...upcoming].sort((a, b) => {
     const aT = a.startTime ?? Number.MAX_SAFE_INTEGER;
@@ -720,7 +716,7 @@ function DraftsDashboard({
       {scanError && <p className="text-xs text-red-500" data-testid="text-scan-error">{scanError}</p>}
 
       {/* Summary cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5" data-testid="grid-summary-cards">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5" data-testid="grid-summary-cards">
         <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-3" data-testid="summary-live">
           <div className="flex items-center gap-1.5">
             <Radio className="w-3 h-3 text-emerald-500" />
@@ -734,13 +730,6 @@ function DraftsDashboard({
             <span className="text-[10px] font-bold uppercase tracking-widest text-blue-600 dark:text-blue-400">Upcoming</span>
           </div>
           <p className="text-2xl font-bold text-foreground tabular-nums mt-0.5" data-testid="text-summary-upcoming-count">{upcoming.length}</p>
-        </div>
-        <div className="rounded-xl border border-border/40 bg-muted/10 p-3" data-testid="summary-completed">
-          <div className="flex items-center gap-1.5">
-            <Trophy className="w-3 h-3 text-muted-foreground" />
-            <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Completed</span>
-          </div>
-          <p className="text-2xl font-bold text-foreground tabular-nums mt-0.5" data-testid="text-summary-completed-count">{completed.length}</p>
         </div>
         <div className="rounded-xl border border-[#d4af37]/30 bg-[#d4af37]/5 p-3" data-testid="summary-next">
           <div className="flex items-center gap-1.5">
@@ -3925,27 +3914,31 @@ export default function LiveDraft({ onConnectSleeper }: { onConnectSleeper?: () 
                                 {cell.isTraded && (
                                   <div
                                     className={cn(
-                                      "absolute bottom-1 left-1/2 z-30 -translate-x-1/2",
-                                      "inline-flex items-center justify-center gap-1",
-                                      "max-w-[calc(100%-8px)] px-1.5 py-0.5 rounded-md",
-                                      "border border-[#ffd75a]/55 text-[#102033]",
-                                      "text-[10px] font-extrabold leading-[1.1] whitespace-nowrap",
-                                      "pointer-events-none shadow-[0_1px_4px_rgba(0,0,0,0.35)]",
+                                      "absolute left-1/2 bottom-[6px] z-30 -translate-x-1/2",
+                                      "inline-flex flex-col items-center justify-center gap-px",
+                                      "min-w-[52px] max-w-[64px] md:min-w-[58px] md:max-w-[72px]",
+                                      "px-[5px] py-[2px] md:px-1.5 md:py-[3px]",
+                                      "rounded-md",
+                                      "border border-[#ffd75a]/45 text-[#111827]",
+                                      "leading-none overflow-hidden",
+                                      "pointer-events-none",
+                                      "shadow-[0_1px_3px_rgba(0,0,0,0.35),inset_0_1px_0_rgba(255,255,255,0.1)]",
                                     )}
                                     style={{ background: "linear-gradient(180deg, #d7b83f 0%, #b88f16 100%)" }}
                                     data-testid={`cell-traded-${cell.round}-${cell.slot}`}
                                     title={cell.ownerName ? `Traded pick · ${cell.ownerName}` : "Traded pick"}
                                   >
                                     {cell.isMine ? (
-                                      <span className="font-black tracking-wide">MINE</span>
+                                      <span className="text-[8px] font-black tracking-wide leading-none">MINE</span>
                                     ) : (
                                       <>
-                                        <span className="font-black tracking-wide flex-shrink-0">TRADED</span>
+                                        <span className="text-[6px] md:text-[7px] font-black tracking-[0.04em] leading-none opacity-90">
+                                          TRADED
+                                        </span>
                                         {cell.ownerName && (
-                                          <>
-                                            <span className="flex-shrink-0 opacity-70">·</span>
-                                            <span className="overflow-hidden text-ellipsis min-w-0">{cell.ownerName}</span>
-                                          </>
+                                          <span className="text-[8px] md:text-[9px] font-extrabold leading-none max-w-full overflow-hidden text-ellipsis whitespace-nowrap">
+                                            {cell.ownerName}
+                                          </span>
                                         )}
                                       </>
                                     )}

@@ -228,9 +228,14 @@ export function registerScAuthRoutes(app: Express): void {
       }
       await connectSleeper(userId, sleeperUsername, sleeperUserId, token);
       // Fire-and-forget: enqueue this Sleeper user_id for the ADP crawler so
-      // their leagues' drafts feed into the dataset. We never block the
-      // connection request on this.
-      void enqueueSleeperUser(sleeperUserId).catch((err) =>
+      // their leagues' drafts feed into the dataset. enqueueSleeperUser owns
+      // the 7-day/24-hour cooldown gate (see adp_user_crawl_events); the
+      // connection request never blocks on this, and a "skipped" return is
+      // expected on repeat logins inside the cooldown window.
+      void enqueueSleeperUser(sleeperUserId, {
+        sleeperUsername,
+        source: "user_login_depth1",
+      }).catch((err) =>
         console.warn("[sc-auth] adp enqueue failed:", err?.message)
       );
       res.json({ ok: true });

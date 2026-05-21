@@ -34,7 +34,7 @@ function getTabLabel(tab: string, sub: string): string {
     "waiver-command": "Waiver Command", "my-team": "Overview",
     "share-team": "Share My Team", "power-rankings": "Rankings",
     "roster-comparison": "Compare", "transactions": "Transactions",
-    "trade-sync": "Trade Sync", "trade-database": "Database",
+    "trade-sync": "My Trades", "trade-database": "Database",
     "positional-analysis": "Finder", "trade-calculator": "Calculator",
     "trade-block": "Intel", "analysis": "Analysis",
     "market-value": "Market Value", "compare-players": "Compare Players",

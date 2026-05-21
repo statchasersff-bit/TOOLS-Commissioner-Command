@@ -11,6 +11,7 @@ import { GlobalManagerIntelDrawer } from "@/components/GlobalManagerIntelDrawer"
 import { SleeperProvider } from "@/contexts/SleeperContext";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { WriteAccessModalProvider } from "@/contexts/WriteAccessModalContext";
+import { FeatureDisabledDialogHost } from "@/components/FeatureDisabledDialog";
 import { DevModeBanner } from "@/components/DevModeBanner";
 import { FavoriteTeamProvider } from "@/contexts/FavoriteTeamContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
@@ -163,6 +164,7 @@ function App() {
               <FavoriteTeamProvider>
                 <ThemeProvider>
                   <DevModeBanner />
+                  <FeatureDisabledDialogHost />
                   <AuthGate>
                     <ErrorBoundary label="authenticated-tree">
                       <AuthenticatedTree probe={probe} />

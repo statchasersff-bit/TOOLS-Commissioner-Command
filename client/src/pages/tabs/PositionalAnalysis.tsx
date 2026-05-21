@@ -14,6 +14,7 @@ import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { getSleeperSession } from "@/services/sleeperAuth";
 import { proposeTrade, getDmByMembers, getDmByMembersFull, markDmRead, sendTradeMessage, sendDmMessage, fetchDmMessages, firePostTradeLinkDm } from "@/services/sleeperAuthedApi";
+import { FeatureDisabledError } from "@/components/FeatureDisabledDialog";
 import { isGeneralMessagingEnabled } from "@/services/sleeperSafetyGate";
 import type { ProposeTradeResult, SleeperTransactionPick, SleeperDmMessage } from "@/services/sleeperAuthedApi";
 import { BulkTrades } from "@/pages/tabs/BulkTrades";
@@ -240,7 +241,7 @@ export function PositionalAnalysis({ league, userTeam, onNavigateToCalculator }:
       {(["finder", "bulk-trades"] as const).map((tab) => {
         const isActive = innerTab === tab;
         const Icon = tab === "finder" ? Search : Layers;
-        const label = tab === "finder" ? "Finder" : "Bulk Trades";
+        const label = tab === "finder" ? "Matched Trades" : "Bulk Trades";
         return (
           <button
             key={tab}
@@ -287,7 +288,7 @@ export function PositionalAnalysis({ league, userTeam, onNavigateToCalculator }:
             </h2>
             <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
             <p className="text-sm text-muted-foreground mt-2">
-              Search a player you own, scan every connected league, and send bulk trade offers through a safe queue.
+              Scan all connected leagues and build/send trade offers across your dynasty portfolio.
             </p>
           </div>
           <div className="ml-auto">{innerToggle}</div>
@@ -302,11 +303,11 @@ export function PositionalAnalysis({ league, userTeam, onNavigateToCalculator }:
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div className="hidden md:block">
           <h2 className="text-2xl font-bold tracking-tight text-foreground" data-testid="text-positional-analysis-title">
-            Positional Analysis
+            Matched Trades
           </h2>
           <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
           <p className="text-sm text-muted-foreground mt-2">
-            Analyze positional surplus and need across your league. Find trade partners driven by supply and demand.
+            Analyze positional strengths, identify trade partners, and discover AI-powered dynasty trade opportunities.
           </p>
         </div>
         <div className="ml-auto">{innerToggle}</div>
@@ -1193,6 +1194,10 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
         setDmError("Partner user ID not available. DM could not be sent.");
       }
     } catch (e: any) {
+      if (e instanceof FeatureDisabledError) {
+        setStatus("idle");
+        return;
+      }
       setStatus("error");
       setErrorMsg(e?.message || "Trade submission failed.");
     }

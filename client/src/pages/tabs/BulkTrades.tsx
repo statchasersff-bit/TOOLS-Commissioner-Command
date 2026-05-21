@@ -32,6 +32,7 @@ import { useSleeper } from "@/contexts/SleeperContext";
 import { useValueModel, type RankedPlayer } from "@/contexts/ValueModelContext";
 import { fetchSleeperLeagueFull } from "@/lib/sleeperApi";
 import { proposeTrade, firePostTradeLinkDm } from "@/services/sleeperAuthedApi";
+import { FeatureDisabledError } from "@/components/FeatureDisabledDialog";
 import { getSleeperSession, isSessionExpired } from "@/services/sleeperAuth";
 import { sleeperWriteLimiter } from "@/services/sleeperWriteLimiter";
 import { preflightBatch, isWriteEnabled } from "@/services/sleeperSafetyGate";
@@ -793,6 +794,17 @@ export function BulkTrades() {
           setSubmitResults((s) => ({ ...s, [row.leagueId]: { status: "error", message: "Sleeper accepted the request but returned no transaction id." } }));
         }
       } catch (err: any) {
+        if (err instanceof FeatureDisabledError) {
+          setSubmitResults((s) => {
+            const next = { ...s };
+            delete next[row.leagueId];
+            for (let j = i + 1; j < targets.length; j++) {
+              delete next[targets[j].leagueId];
+            }
+            return next;
+          });
+          break;
+        }
         const msg = err?.message ?? "Trade submission failed.";
         if (sleeperWriteLimiter.looksLikeRateLimit(err)) {
           // Mark this row failed AND stop the rest of the queue so we
@@ -834,13 +846,9 @@ export function BulkTrades() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold">Bulk Trades</h1>
-        <p className="text-sm text-muted-foreground mt-1 max-w-2xl">
-          Search one player, scan every league, and build trade offers across your full dynasty portfolio.
-        </p>
-      </div>
+      {/* Header is supplied by the Finder wrapper (PositionalAnalysis.tsx)
+          when this tab is rendered as a sub-view, so we don't render our
+          own page title here. */}
 
       {/* ── Step: search ──────────────────────────────────────────────────── */}
       {step === "search" && (

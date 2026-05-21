@@ -14,6 +14,7 @@
  */
 
 import { SLEEPER_WEB_GQL_URL } from "@/config/sleeperAuthEndpoints";
+import { FeatureDisabledError, showFeatureDisabled } from "@/components/FeatureDisabledDialog";
 import { getSleeperSession, getSleeperToken } from "@/services/sleeperAuth";
 import {
   sleeperWriteLimiter,
@@ -464,6 +465,8 @@ export async function submitWaiverClaim(
   dropPlayerIds: string[],
   waiverBid: number
 ): Promise<SleeperWaiverClaimResult> {
+  showFeatureDisabled();
+  throw new FeatureDisabledError();
   const k_adds = addPlayerIds;
   const v_adds = addPlayerIds.map(() => rosterId);
   const k_drops = dropPlayerIds;
@@ -630,6 +633,8 @@ export interface ProposeTradeResult {
  * to keep local state in sync.
  */
 export async function proposeTrade(params: ProposeTradeParams): Promise<ProposeTradeResult> {
+  showFeatureDisabled();
+  throw new FeatureDisabledError();
   const {
     leagueId,
     adds,
@@ -729,6 +734,8 @@ export async function acceptTrade(
   leagueId: string,
   transactionId: string
 ): Promise<TradeActionResult> {
+  showFeatureDisabled();
+  throw new FeatureDisabledError();
   const data = await sleeperGraphQLRequest<{ accept_trade: TradeActionResult }>({
     operationName: "accept_trade",
     query: buildAcceptTradeMutation(leagueId),
@@ -745,6 +752,8 @@ export async function rejectTrade(
   transactionId: string,
   leg: number = 1
 ): Promise<TradeActionResult> {
+  showFeatureDisabled();
+  throw new FeatureDisabledError();
   const data = await sleeperGraphQLRequest<{ reject_trade: TradeActionResult }>({
     operationName: "reject_trade",
     query: buildRejectTradeMutation(leagueId),
