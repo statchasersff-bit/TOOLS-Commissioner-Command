@@ -3643,7 +3643,7 @@ export default function LiveDraft() {
                                         <div className="text-[8px] leading-none opacity-75 truncate">{firstName}</div>
                                         <div className="text-[11px] font-bold leading-tight truncate">{lastName}</div>
                                         <div className="text-[8px] opacity-70 font-medium mt-0.5 truncate">
-                                          {cell.pick?.team || "FA"}{cell.ownerName ? ` · ${cell.ownerName}` : ""}
+                                          {cell.pick?.team || "FA"}{cell.isTraded && cell.ownerName ? ` · ${cell.ownerName}` : ""}
                                         </div>
                                       </div>
                                     </div>
@@ -3661,24 +3661,26 @@ export default function LiveDraft() {
                                         <span className="text-[7px] font-bold px-1 py-px rounded bg-[#d4af37]/20 text-[#d4af37] border border-[#d4af37]/40 leading-tight">MINE</span>
                                       )}
                                     </div>
-                                    <div className="flex flex-col gap-0.5 min-w-0" title={cell.ownerName}>
-                                      <div className="flex items-center gap-1 min-w-0">
-                                        <SleeperUserAvatar
-                                          username={cell.ownerName}
-                                          avatar={cell.ownerAvatar}
-                                          size="xs"
-                                          compact
-                                        />
-                                        <span className="text-[9px] text-muted-foreground/80 leading-tight truncate">
-                                          {cell.ownerName}
-                                        </span>
+                                    {cell.isTraded ? (
+                                      <div className="flex flex-col gap-0.5 min-w-0" title={cell.ownerName}>
+                                        <div className="flex items-center gap-1 min-w-0">
+                                          <SleeperUserAvatar
+                                            username={cell.ownerName}
+                                            avatar={cell.ownerAvatar}
+                                            size="xs"
+                                            compact
+                                          />
+                                          <span className="text-[9px] text-[#d4af37] font-semibold leading-tight truncate">
+                                            {cell.ownerName}
+                                          </span>
+                                        </div>
+                                        {cell.originalOwnerName && (
+                                          <span className="text-[8px] text-muted-foreground/60 leading-tight truncate italic">
+                                            via {cell.originalOwnerName}
+                                          </span>
+                                        )}
                                       </div>
-                                      {cell.isTraded && cell.originalOwnerName && (
-                                        <span className="text-[8px] text-[#d4af37] leading-tight truncate italic">
-                                          via {cell.originalOwnerName}
-                                        </span>
-                                      )}
-                                    </div>
+                                    ) : null}
                                   </div>
                                 )}
                               </div>

@@ -16,15 +16,19 @@ import { getSleeperSession } from "@/services/sleeperAuth";
 import { proposeTrade, getDmByMembers, getDmByMembersFull, markDmRead, sendTradeMessage, sendDmMessage, fetchDmMessages, firePostTradeLinkDm } from "@/services/sleeperAuthedApi";
 import { isGeneralMessagingEnabled } from "@/services/sleeperSafetyGate";
 import type { ProposeTradeResult, SleeperTransactionPick, SleeperDmMessage } from "@/services/sleeperAuthedApi";
+import { BulkTrade } from "@/components/trade/BulkTrade";
 import {
   ArrowRightLeft, Target, TrendingUp, TrendingDown, Zap, ShieldCheck,
   ChevronRight, Send, Loader2, CheckCircle2, AlertTriangle, X, Pencil, Search
 } from "lucide-react";
 
+type FinderInnerTab = "finder" | "bulk-trade";
+
 interface PositionalAnalysisProps {
   league: League;
   userTeam: Team;
   onNavigateToCalculator?: (side1: string[], side2: string[]) => void;
+  initialInnerTab?: FinderInnerTab;
 }
 
 type PosLabel = "QB" | "RB" | "WR" | "TE";
@@ -160,8 +164,9 @@ function adjustedTotal(values: number[]): number {
   return sorted.reduce((s, v, i) => s + v * getWeight(i), 0);
 }
 
-export function PositionalAnalysis({ league, userTeam, onNavigateToCalculator }: PositionalAnalysisProps) {
+export function PositionalAnalysis({ league, userTeam, onNavigateToCalculator, initialInnerTab }: PositionalAnalysisProps) {
   const [activeSubTab, setActiveSubTab] = useState<"opportunities">("opportunities");
+  const [innerTab, setInnerTab] = useState<FinderInnerTab>(initialInnerTab ?? "finder");
   const { getPlayerValue, getRedraftValue } = useValueModel();
 
   const positionalProfile = useMemo(() => {
@@ -218,16 +223,94 @@ export function PositionalAnalysis({ league, userTeam, onNavigateToCalculator }:
       ? 100
       : Math.round((1 - (rank - 1) / (positionalProfile.leagueSize - 1)) * 100);
 
+  const innerToggle = (
+    <div
+      className="grid flex-shrink-0"
+      style={{
+        gridTemplateColumns: "1fr 1fr",
+        height: 48,
+        borderRadius: 16,
+        padding: 4,
+        background: "rgba(255,255,255,0.04)",
+        border: "1px solid rgba(255,255,255,0.07)",
+        gap: 4,
+        width: 260,
+      }}
+      data-testid="finder-inner-toggle"
+    >
+      {(["finder", "bulk-trade"] as const).map((tab) => {
+        const isActive = innerTab === tab;
+        const Icon = tab === "finder" ? Search : ArrowRightLeft;
+        const label = tab === "finder" ? "Finder" : "Bulk Trade";
+        return (
+          <button
+            key={tab}
+            onClick={() => setInnerTab(tab)}
+            data-testid={`finder-inner-tab-${tab}`}
+            className="relative flex items-center justify-center gap-2 font-semibold transition-all duration-200"
+            style={{
+              borderRadius: 12,
+              fontSize: 13,
+              letterSpacing: "0.01em",
+              background: isActive
+                ? "linear-gradient(135deg, rgba(11,58,122,0.85) 0%, rgba(11,58,122,0.65) 100%)"
+                : "transparent",
+              color: isActive ? "#fff" : "rgba(203,213,225,0.45)",
+              border: isActive
+                ? "1px solid rgba(212,175,55,0.30)"
+                : "1px solid transparent",
+              boxShadow: isActive
+                ? "0 2px 12px rgba(11,58,122,0.40), inset 0 1px 0 rgba(255,255,255,0.06)"
+                : "none",
+            }}
+          >
+            <Icon style={{ width: 15, height: 15, flexShrink: 0 }} />
+            {label}
+            {isActive && (
+              <span
+                className="absolute bottom-[3px] left-1/2 -translate-x-1/2 rounded-full"
+                style={{ width: 28, height: 2, background: "#d4af37", opacity: 0.85 }}
+              />
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+
+  if (innerTab === "bulk-trade") {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div className="hidden md:block">
+            <h2 className="text-2xl font-bold tracking-tight text-foreground" data-testid="text-bulk-trade-title">
+              Bulk Trade
+            </h2>
+            <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
+            <p className="text-sm text-muted-foreground mt-2">
+              Prepare similar offers across managers and send them gradually through a safe queue.
+            </p>
+          </div>
+          <div className="ml-auto">{innerToggle}</div>
+        </div>
+        <BulkTrade league={league} userTeam={userTeam} />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
-      <div className="hidden md:block">
-        <h2 className="text-2xl font-bold tracking-tight text-foreground" data-testid="text-positional-analysis-title">
-          Positional Analysis
-        </h2>
-        <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
-        <p className="text-sm text-muted-foreground mt-2">
-          Analyze positional surplus and need across your league. Find trade partners driven by supply and demand.
-        </p>
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div className="hidden md:block">
+          <h2 className="text-2xl font-bold tracking-tight text-foreground" data-testid="text-positional-analysis-title">
+            Positional Analysis
+          </h2>
+          <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
+          <p className="text-sm text-muted-foreground mt-2">
+            Analyze positional surplus and need across your league. Find trade partners driven by supply and demand.
+          </p>
+        </div>
+        <div className="ml-auto">{innerToggle}</div>
       </div>
 
       {/* My Positional Profile */}

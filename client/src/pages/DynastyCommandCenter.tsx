@@ -34,7 +34,6 @@ import { PlayoffCalculator } from "./tabs/PlayoffCalculator";
 import { FieldView } from "./tabs/FieldView";
 import { ShareTeam } from "./tabs/ShareTeam";
 import { TradeBlockScanner, TradeCalculator, TradeDatabase, TradeFinder } from "./tabs/TradeCenter";
-import { BulkTrade } from "@/components/trade/BulkTrade";
 import { PositionalAnalysis } from "./tabs/PositionalAnalysis";
 import { MarketValue } from "./tabs/LeagueMarket";
 import Analysis from "./tabs/Analysis";
@@ -507,7 +506,7 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
       case "trade-center:trade-database":        return <TradeDatabase league={league} />;
       case "trade-center:trade-calculator":      return <TradeCalculator league={league} userTeam={userTeam} />;
       case "trade-center:positional-analysis":   return <PositionalAnalysis league={league} userTeam={userTeam} />;
-      case "trade-center:bulk-trade":            return <BulkTrade league={league} userTeam={userTeam} />;
+      case "trade-center:bulk-trade":            return <PositionalAnalysis league={league} userTeam={userTeam} initialInnerTab="bulk-trade" />;
       case "trade-center:trade-block":           return <TradeBlockScanner league={league} />;
       case "league-market:market-value":         return <MarketValue league={league} />;
       case "league-market:analysis":             return <Analysis />;
