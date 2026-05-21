@@ -21,8 +21,7 @@ import type { League, Team, Tier, Player, Pick, TradeRecord, TradeSide, CrawlSta
 import { cn } from "@/lib/utils";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { TradeBlockCandidates } from "@/components/trade/TradeBlockCandidates";
-import { BulkTrade } from "@/components/trade/BulkTrade";
-import { ArrowRightLeft, TrendingUp, TrendingDown, Target, X, Plus, Search, Scale, RotateCcw, Database, Play, Pause, Loader2, ChevronLeft, ChevronRight, ChevronDown, Download, Tag, Clock, ArrowRight, Send, CheckCircle2, DollarSign, Undo2, Layers, Globe, Trophy } from "lucide-react";
+import { ArrowRightLeft, TrendingUp, TrendingDown, Target, X, Plus, Search, Scale, RotateCcw, Database, Play, Pause, Loader2, ChevronLeft, ChevronRight, ChevronDown, Download, Tag, Clock, ArrowRight, Send, CheckCircle2, DollarSign, Undo2, Globe, Trophy } from "lucide-react";
 
 const SLEEPER_JWT_KEY = "dc-sleeper-draft-jwt";
 const SLEEPER_API_BASE = "https://api.sleeper.app/v1";
@@ -244,7 +243,6 @@ function TradeProposalCard({ proposal, mode, userTeam, league }: { proposal: Tra
 export function TradeFinder({ league, userTeam }: TradeProps) {
   const { getPlayerValue, getRedraftValue, optimizeLineup } = useValueModel();
   const tradeFinderTierMap = useMemo(() => getLeagueTeamTiers(league.teams), [league.teams]);
-  const [finderMode, setFinderMode] = useState<"finder" | "bulk">("finder");
   const [proposalMode, setProposalMode] = useState<"dynasty" | "redraft">("dynasty");
   const [posFilter, setPosFilter] = useState<string>("all");
   const [showAllProposals, setShowAllProposals] = useState(false);
@@ -699,38 +697,7 @@ export function TradeFinder({ league, userTeam }: TradeProps) {
 
   return (
     <div className="space-y-8">
-      {/* Header row: title + Bulk Trade toggle */}
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <SectionHeader title="Trade Finder" subtitle="AI-generated trade proposals based on roster needs, positional value, and fair market rates" className="flex-1 min-w-0" />
-        <div className="flex gap-1 p-1 rounded-xl bg-white/[0.03] border border-white/6 flex-shrink-0">
-          <button
-            onClick={() => setFinderMode("finder")}
-            className={cn("relative px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all duration-200 flex items-center gap-1.5",
-              finderMode === "finder" ? "bg-[#0b3a7a]/60 text-white border border-[#d4af37]/25" : "text-white/35 hover:text-white/60")}
-            data-testid="btn-mode-finder"
-          >
-            Finder
-            {finderMode === "finder" && <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-6 h-[2px] rounded-full bg-[#d4af37]" />}
-          </button>
-          <button
-            onClick={() => setFinderMode("bulk")}
-            className={cn("relative px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all duration-200 flex items-center gap-1.5",
-              finderMode === "bulk" ? "bg-[#0b3a7a]/60 text-white border border-[#d4af37]/25" : "text-white/35 hover:text-white/60")}
-            data-testid="btn-mode-bulk"
-          >
-            <Layers className="w-3 h-3" />
-            Bulk Trade
-            {finderMode === "bulk" && <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-6 h-[2px] rounded-full bg-[#d4af37]" />}
-          </button>
-        </div>
-      </div>
-
-      {/* Bulk Trade workspace */}
-      {finderMode === "bulk" && (
-        <BulkTrade league={league} userTeam={userTeam} onBack={() => setFinderMode("finder")} />
-      )}
-
-      {finderMode === "finder" && <>
+      <SectionHeader title="Trade Finder" subtitle="AI-generated trade proposals based on roster needs, positional value, and fair market rates" />
       {/* My Positional Profile */}
       <Card className="p-6" data-testid="card-positional-profile">
         <div className="mb-5">
@@ -1029,7 +996,6 @@ export function TradeFinder({ league, userTeam }: TradeProps) {
           ))}
         </div>
       </Card>
-      </>}
     </div>
   );
 }

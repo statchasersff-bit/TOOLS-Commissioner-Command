@@ -1051,7 +1051,7 @@ export async function ingestCrawledLeagueDrafts(limit: number = 200): Promise<{ 
 //   v5 — Direct Rookies excludes kickers across all draft types (not just
 //        rookie drafts). Pre-v5 snapshots for draftType=all/supplemental
 //        under rookieMode=direct could still contain K rows.
-const FILTER_KEY_VERSION = "v7";
+const FILTER_KEY_VERSION = "v8";
 
 /** Normalize the season filter into a comma-joined sorted list, "all", or
  *  the inferred current season. Centralised so filterKey and the WHERE
@@ -1121,35 +1121,29 @@ export function buildDraftWhere(f: AdpFilters) {
   if (f.startDate) conds.push(sql`${drafts.draftDate} >= ${f.startDate}::timestamp`);
   if (f.endDate) conds.push(sql`${drafts.draftDate} < (${f.endDate}::timestamp + interval '1 day')`);
 
-  // Rookie-mode filter at the draft level. Only applies to rookie drafts —
-  // startup drafts always count as "direct" since they're full-roster picks.
+  // Rookie-mode filter at the draft level.
+  //
+  // Rookie tab (draftType === "rookie") — long-standing behavior:
+  //   - direct : restrict to rookie drafts whose classifier labelled them
+  //              direct_rookies or mixed.
+  //   - picks  : strict rule — EXISTS a placeholder pick AND NOT EXISTS
+  //              any years_exp=0 player at draft time.
+  //
+  // Startup tab (draftType === "startup") — new branch:
+  //   - picks  : Sleeper occasionally labels future-pick drafts as
+  //              "startup" when commissioners use a real kicker as a
+  //              placeholder. detectKickerPlaceholderDraft short-circuits
+  //              to false for startups (server/adp.ts:457), so those
+  //              drafts never get is_rookie_placeholder=true at ingest and
+  //              the rookie-tab rule above misses them. This branch picks
+  //              them up by reading the raw signals directly: a K-position
+  //              pick must exist AND no years_exp=0 player may have been
+  //              selected. The remaining rookieMode values ("direct",
+  //              "both") fall through with no draft-level constraint.
   if (f.draftType === "rookie") {
     if (f.rookieMode === "direct") {
-      // Direct Rookies: drafts where actual rookies were selected. Mixed
-      // drafts surface here too since they include real rookie picks.
       conds.push(inArray(drafts.rookieMode, ["direct_rookies", "mixed"]));
     } else if (f.rookieMode === "picks") {
-      // Strict Rookie-Picks rule: ONLY show drafts where (a) placeholder
-      // picks were used (Sleeper's "rookie pick futures" encoding, either
-      // kickers-as-placeholders OR null player_id slots) and (b) no
-      // actual rookies (years_exp = 0 at draft time) were selected.
-      //
-      // We deliberately read the per-pick signals (is_rookie_placeholder
-      // and rookie_year) rather than the draft-level `rookieMode` label.
-      // The classifier label aggregates with a 75% / 25% share threshold,
-      // which buckets most real-world futures drafts as "mixed" — they
-      // contain a few accidental rookie picks but are still placeholder-
-      // dominant. The per-pick check answers exactly the question we
-      // care about for this filter: does any rookie row exist? If yes,
-      // the draft fails the rule; otherwise it passes.
-      //
-      // (a) EXISTS placeholder pick — gates out drafts that have no
-      //     futures encoding at all (which would be a startup-ish draft
-      //     that already gets filtered out by draftType, but defensive
-      //     belt-and-suspenders).
-      // (b) NOT EXISTS rookie_year=season — gates out any draft where a
-      //     years_exp=0 player was selected at draft time. rookie_year is
-      //     populated at ingest from years_exp (see deriveRookieYear).
       conds.push(sql`EXISTS (
         SELECT 1 FROM ${draftPicks}
         WHERE ${draftPicks.draftId} = ${drafts.draftId}
@@ -1162,6 +1156,17 @@ export function buildDraftWhere(f: AdpFilters) {
       )`);
     }
     // "both" or undefined → no draft-level filter, all rookie drafts.
+  } else if (f.draftType === "startup" && f.rookieMode === "picks") {
+    conds.push(sql`EXISTS (
+      SELECT 1 FROM ${draftPicks}
+      WHERE ${draftPicks.draftId} = ${drafts.draftId}
+        AND upper(${draftPicks.position}) = 'K'
+    )`);
+    conds.push(sql`NOT EXISTS (
+      SELECT 1 FROM ${draftPicks}
+      WHERE ${draftPicks.draftId} = ${drafts.draftId}
+        AND ${draftPicks.rookieYear} = CAST(${drafts.season} AS integer)
+    )`);
   }
 
   // ── Kicker-draft exclusion (Direct Rookies only) ────────────────────────
@@ -1208,9 +1213,19 @@ export async function computeAdp(f: AdpFilters): Promise<{ rows: AdpRow[]; draft
   //   direct → exclude placeholder picks (show only real rookie players)
   //   picks  → include only placeholder picks
   //   both   → include everything
+  //
+  // Startup-tab "picks" expansion: ingest skips the kicker-as-placeholder
+  // flag for startup-labelled drafts (see detectKickerPlaceholderDraft), so
+  // K rows in those drafts have is_rookie_placeholder=false. The draft-level
+  // filter in buildDraftWhere has already narrowed us to startups whose K
+  // picks are functionally placeholders — include the K rows here so they
+  // actually aggregate.
   const rookieMode = f.rookieMode ?? "direct";
   const placeholderCond =
-    rookieMode === "picks" ? eq(draftPicks.isRookiePlaceholder, true)
+    rookieMode === "picks"
+      ? (f.draftType === "startup"
+          ? sql`(${draftPicks.isRookiePlaceholder} = TRUE OR upper(${draftPicks.position}) = 'K')`
+          : eq(draftPicks.isRookiePlaceholder, true))
     : rookieMode === "both" ? sql`true`
     : eq(draftPicks.isRookiePlaceholder, false);
 

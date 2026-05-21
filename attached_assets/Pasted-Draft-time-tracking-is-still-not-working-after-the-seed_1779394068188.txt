@@ -1,0 +1,163 @@
+Draft time tracking is still not working after the seed fallback fix.
+
+Current symptom:
+The OTC table shows managers and pick counts correctly, but every timing field is still “—”.
+Expanded manager rows show picks like:
+- Pick #3 / 1.03 / Carnell Tate
+- Pick #9 / 1.09 / Kenyon Sadiq
+- etc.
+But each row shows:
+- Time Used: —
+- Cumulative: —
+- Timestamp: Unavailable
+
+This means REST draft picks are loading correctly, but pickTimings is not being attached to those picks.
+
+Likely root cause:
+The GraphQL messages are being parsed, but the parsed timing map is keyed differently than the REST pick rows.
+
+Fix this by making pick timing matching robust.
+
+Required implementation:
+
+1. Log the raw GraphQL messages response
+Add debug logs:
+console.log("[OTC messages raw]", messages.slice(0, 20));
+
+Also log parsed pick messages:
+console.log("[OTC parsed message picks]", parsedMessagePicks);
+
+Each parsed message should include:
+{
+  message_id,
+  created,
+  text,
+  pick_no,
+  round,
+  pickInRound,
+  displayPick,
+  playerName
+}
+
+2. Improve pick message parser
+Sleeper bot messages can vary. Support at least these formats:
+
+"Pick 1.2 - Pick: Carnell Tate (WR - TEN)"
+"Pick 1.02 - Pick: Carnell Tate (WR - TEN)"
+"Pick 1.2: Carnell Tate (WR - TEN)"
+"Pick 1.02: Carnell Tate (WR - TEN)"
+
+Parser should extract:
+- round = 1
+- pickInRound = 2
+- displayPick = "1.02"
+- created timestamp
+- player name if available
+
+Do NOT require exact text match.
+
+Suggested regex:
+const pickRegex = /Pick\s+(\d+)\.(\d+)\s*(?:-|:)?\s*(?:Pick:)?\s*(.*?)\s*(?:\((.*?)\))?$/i;
+
+Normalize:
+const round = Number(match[1]);
+const pickInRound = Number(match[2]);
+const displayPick = `${round}.${String(pickInRound).padStart(2, "0")}`;
+
+3. Calculate pick_no from round/pickInRound
+If draft has 12 teams:
+pick_no = (round - 1) * 12 + pickInRound
+
+Do not rely only on text pick number.
+
+Get teams/slots from:
+- draft.settings.teams
+- draftData.draft.settings.teams
+- draftData.rosters.length
+- fallback max draft_order size
+
+4. Build timing maps using multiple keys
+When calculating timing, store each timing record under multiple keys:
+
+timingByPickNo.set(String(pick_no), timing)
+timingByDisplayPick.set(displayPick, timing)
+timingByRoundPick.set(`${round}.${pickInRound}`, timing)
+
+Example:
+1.03 should be retrievable by:
+- "3"
+- "1.03"
+- "1.3"
+
+5. Attach timing to REST pick rows using all possible keys
+When rendering/aggregating a REST pick, try:
+
+const timing =
+  timingByPickNo.get(String(pick.pick_no)) ||
+  timingByDisplayPick.get(normalizedDisplayPickFromPick) ||
+  timingByRoundPick.get(`${pick.round}.${pick.draft_slot}`) ||
+  timingByPlayerName.get(normalizedPlayerName);
+
+Only use player name as a last fallback.
+
+6. Important: REST pick fields may not mean what you think
+For Sleeper draft picks:
+- pick.pick_no is the global pick number
+- pick.round is the round
+- pick.draft_slot is often the original draft slot/pick within round
+- pick.roster_id is the current owner/roster making the pick
+
+So for pick display:
+displayPick = `${pick.round}.${String(pick.draft_slot).padStart(2, "0")}`
+
+And timing lookup should primarily use:
+pick.pick_no
+
+7. Fix first-pick fallback logic
+If the "draft begun" message is missing but draft.startTime exists:
+- use draft.startTime as prevCreated
+- do NOT skip pick #1
+
+If only first pick message is available:
+- first pick gets no duration
+- second and later picks should get duration
+
+8. Add final diagnostic log
+After building timing maps, log:
+
+console.log("[OTC timing diagnostics]", {
+  messagesReturned: messages.length,
+  parsedPickMessages: parsedMessagePicks.length,
+  pickTimingsSize: pickTimings.size,
+  timingByPickNoKeys: [...timingByPickNo.keys()].slice(0, 20),
+  restPicksCount: restPicks.length,
+  sampleRestPicks: restPicks.slice(0, 10).map(p => ({
+    pick_no: p.pick_no,
+    round: p.round,
+    draft_slot: p.draft_slot,
+    player_id: p.player_id,
+    metadata: p.metadata
+  })),
+  sampleMatches: restPicks.slice(0, 10).map(p => ({
+    pick_no: p.pick_no,
+    displayPick: `${p.round}.${String(p.draft_slot).padStart(2, "0")}`,
+    hasTimingByPickNo: timingByPickNo.has(String(p.pick_no)),
+    hasTimingByDisplayPick: timingByDisplayPick.has(`${p.round}.${String(p.draft_slot).padStart(2, "0")}`)
+  }))
+});
+
+9. Acceptance test:
+Using these messages:
+This draft has begun at 1779134443528
+Pick 1.1 - Pick: Jeremiyah Love at 1779136660619
+Pick 1.2 - Pick: Carnell Tate at 1779136721857
+
+For a 12-team draft:
+- 1.01 maps to pick_no 1
+- 1.02 maps to pick_no 2
+- Pick 1 time = 36:57
+- Pick 2 time = 1:01
+
+If REST pick row has:
+{ pick_no: 2, round: 1, draft_slot: 2 }
+It must find the timing using timingByPickNo.get("2").

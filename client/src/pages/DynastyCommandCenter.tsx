@@ -33,7 +33,7 @@ import { RosterComparison } from "./tabs/LeagueAnalyzer";
 import { PlayoffCalculator } from "./tabs/PlayoffCalculator";
 import { FieldView } from "./tabs/FieldView";
 import { ShareTeam } from "./tabs/ShareTeam";
-import { TradeBlockScanner, TradeCalculator, TradeDatabase, TradeFinder } from "./tabs/TradeCenter";
+import { TradeBlockScanner, TradeCalculator, TradeDatabase } from "./tabs/TradeCenter";
 import { PositionalAnalysis } from "./tabs/PositionalAnalysis";
 import { MarketValue } from "./tabs/LeagueMarket";
 import Analysis from "./tabs/Analysis";
@@ -43,7 +43,6 @@ import { API_BASE } from "@/lib/apiBase";
 import Transactions from "./tabs/Transactions";
 import { LineupCommand } from "./tabs/LineupCommand";
 import TradeSync from "./tabs/TradeSync";
-import { BulkTrades } from "./tabs/BulkTrades";
 import { CompareRBs } from "./tabs/CompareRBs";
 import { ShareDynastyPopup } from "@/components/ShareDynastyPopup";
 import { WhatsNewModal } from "@/components/WhatsNewModal";
@@ -491,11 +490,6 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
       return <TradeSync />;
     }
 
-    // Bulk Trades scans every connected league — no active league required.
-    if (activeMainTab === "trade-center" && activeSubTab === "bulk-trades") {
-      return <BulkTrades />;
-    }
-
     // Past this point we need an active league. AccessGate has already
     // ensured the user is at least readonly-connected; if they're connected
     // but haven't loaded a league yet, prompt them.
@@ -514,7 +508,6 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
       case "trade-center:trade-database":        return <TradeDatabase league={league} />;
       case "trade-center:trade-calculator":      return <TradeCalculator league={league} userTeam={userTeam} />;
       case "trade-center:positional-analysis":   return <PositionalAnalysis league={league} userTeam={userTeam} />;
-      case "trade-center:bulk-trade":            return <PositionalAnalysis league={league} userTeam={userTeam} initialInnerTab="bulk-trade" />;
       case "trade-center:trade-block":           return <TradeBlockScanner league={league} />;
       case "league-market:market-value":         return <MarketValue league={league} />;
       case "league-market:analysis":             return <Analysis />;

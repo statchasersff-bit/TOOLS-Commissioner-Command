@@ -2221,12 +2221,21 @@ function filterAdp(all: ADPResult[], filters: DraftFilters): ADPResult[] {
   // rows whenever rookieMode === "direct", regardless of draftType. The
   // server applies the same rule (see buildDraftWhere in server/adp.ts).
   const dropKickers = filters.rookieMode === "direct";
+  // Startup-tab Rookie Picks: K rows from startup-labelled placeholder
+  // drafts are NOT flagged is_rookie_placeholder at ingest (the
+  // detectKickerPlaceholderDraft heuristic skips startups). The backend
+  // surfaces those K rows under picks mode; the frontend must let them
+  // through here even though the placeholder flag is false.
+  const allowKAsPlaceholder =
+    filters.rookieMode === "picks" && filters.draftType === "startup";
   return all.filter((r) => {
     // Frontend defensive guardrail. Backend drops IDP-containing drafts at
     // ingest, but if a cached snapshot still references a defensive player
     // (e.g. before the reclassify job ran) we still don't want to render it.
     if (!ALLOWED_DISPLAY_POSITIONS.has(r.position)) return false;
-    if (filters.rookieMode === "picks"  && !r.is_rookie_placeholder) return false;
+    if (filters.rookieMode === "picks" && !r.is_rookie_placeholder) {
+      if (!(allowKAsPlaceholder && r.position === "K")) return false;
+    }
     if (filters.rookieMode === "direct" &&  r.is_rookie_placeholder) return false;
     if (dropKickers && r.position === "K") return false;
     if (q && !r.player_name.toLowerCase().includes(q)) return false;

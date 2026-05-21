@@ -16,19 +16,18 @@ import { getSleeperSession } from "@/services/sleeperAuth";
 import { proposeTrade, getDmByMembers, getDmByMembersFull, markDmRead, sendTradeMessage, sendDmMessage, fetchDmMessages, firePostTradeLinkDm } from "@/services/sleeperAuthedApi";
 import { isGeneralMessagingEnabled } from "@/services/sleeperSafetyGate";
 import type { ProposeTradeResult, SleeperTransactionPick, SleeperDmMessage } from "@/services/sleeperAuthedApi";
-import { BulkTrade } from "@/components/trade/BulkTrade";
+import { BulkTrades } from "@/pages/tabs/BulkTrades";
 import {
   ArrowRightLeft, Target, TrendingUp, TrendingDown, Zap, ShieldCheck,
-  ChevronRight, Send, Loader2, CheckCircle2, AlertTriangle, X, Pencil, Search
+  ChevronRight, Send, Loader2, CheckCircle2, AlertTriangle, X, Pencil, Search, Layers
 } from "lucide-react";
 
-type FinderInnerTab = "finder" | "bulk-trade";
+type FinderInnerTab = "finder" | "bulk-trades";
 
 interface PositionalAnalysisProps {
   league: League;
   userTeam: Team;
   onNavigateToCalculator?: (side1: string[], side2: string[]) => void;
-  initialInnerTab?: FinderInnerTab;
 }
 
 type PosLabel = "QB" | "RB" | "WR" | "TE";
@@ -164,9 +163,9 @@ function adjustedTotal(values: number[]): number {
   return sorted.reduce((s, v, i) => s + v * getWeight(i), 0);
 }
 
-export function PositionalAnalysis({ league, userTeam, onNavigateToCalculator, initialInnerTab }: PositionalAnalysisProps) {
+export function PositionalAnalysis({ league, userTeam, onNavigateToCalculator }: PositionalAnalysisProps) {
   const [activeSubTab, setActiveSubTab] = useState<"opportunities">("opportunities");
-  const [innerTab, setInnerTab] = useState<FinderInnerTab>(initialInnerTab ?? "finder");
+  const [innerTab, setInnerTab] = useState<FinderInnerTab>("finder");
   const { getPlayerValue, getRedraftValue } = useValueModel();
 
   const positionalProfile = useMemo(() => {
@@ -238,10 +237,10 @@ export function PositionalAnalysis({ league, userTeam, onNavigateToCalculator, i
       }}
       data-testid="finder-inner-toggle"
     >
-      {(["finder", "bulk-trade"] as const).map((tab) => {
+      {(["finder", "bulk-trades"] as const).map((tab) => {
         const isActive = innerTab === tab;
-        const Icon = tab === "finder" ? Search : ArrowRightLeft;
-        const label = tab === "finder" ? "Finder" : "Bulk Trade";
+        const Icon = tab === "finder" ? Search : Layers;
+        const label = tab === "finder" ? "Finder" : "Bulk Trades";
         return (
           <button
             key={tab}
@@ -278,22 +277,22 @@ export function PositionalAnalysis({ league, userTeam, onNavigateToCalculator, i
     </div>
   );
 
-  if (innerTab === "bulk-trade") {
+  if (innerTab === "bulk-trades") {
     return (
       <div className="space-y-6">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div className="hidden md:block">
-            <h2 className="text-2xl font-bold tracking-tight text-foreground" data-testid="text-bulk-trade-title">
-              Bulk Trade
+            <h2 className="text-2xl font-bold tracking-tight text-foreground" data-testid="text-bulk-trades-title">
+              Bulk Trades
             </h2>
             <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
             <p className="text-sm text-muted-foreground mt-2">
-              Prepare similar offers across managers and send them gradually through a safe queue.
+              Search a player you own, scan every connected league, and send bulk trade offers through a safe queue.
             </p>
           </div>
           <div className="ml-auto">{innerToggle}</div>
         </div>
-        <BulkTrade league={league} userTeam={userTeam} />
+        <BulkTrades />
       </div>
     );
   }
