@@ -1064,7 +1064,7 @@ function filterKey(f: AdpFilters): string {
   return Object.entries(k).map(([key, val]) => `${key}=${val}`).join("|");
 }
 
-function buildDraftWhere(f: AdpFilters) {
+export function buildDraftWhere(f: AdpFilters) {
   // Always exclude drafts flagged excludedFromAdp. This is the IDP/defensive-
   // player guardrail — those drafts have their own ADP curves and shouldn't
   // be mixed with the standard QB/RB/WR/TE dataset.

@@ -1,10 +1,34 @@
 import fs from "fs";
 import path from "path";
+import { fileURLToPath } from "url";
 
 const CACHE_DIR = "/tmp";
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
 const API_BASE = "https://api.fantasycalc.com/values/current";
+
+// ESM-safe __dirname. `package.json` sets "type": "module" so the CommonJS
+// `__dirname` global is undefined here — without this polyfill the snapshot
+// fallback path resolves to undefined and `path.join` throws, which masked
+// FantasyCalc upstream errors and left clients spinning on "Loading
+// FantasyCalc values…" because the server kept returning 500.
+const __dirname_esm = path.dirname(fileURLToPath(import.meta.url));
+
+// Upstream fetch timeout. FantasyCalc has been known to take 20–30s under
+// load — long enough to outlast the client's 12s timeout and leave the
+// dyno holding a half-open connection. We abort aggressively and fall
+// through to the on-disk snapshot.
+const UPSTREAM_TIMEOUT_MS = 6_000;
+
+async function fetchWithTimeout(url: string, timeoutMs: number): Promise<Response> {
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), timeoutMs);
+  try {
+    return await fetch(url, { signal: ac.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 interface FantasyCalcPlayer {
   player: {
@@ -51,7 +75,7 @@ function getCachePath(format: string): string {
 
 function getSnapshotPath(format: string): string {
   return path.join(
-    __dirname,
+    __dirname_esm,
     "data",
     `fantasycalc_snapshot_${format}.json`
   );
@@ -135,7 +159,7 @@ export async function getFantasyCalcValues(
   const url = `${API_BASE}?isDynasty=true&numQbs=${numQbs}&numTeams=12&ppr=1`;
 
   try {
-    const response = await fetch(url);
+    const response = await fetchWithTimeout(url, UPSTREAM_TIMEOUT_MS);
     if (!response.ok) {
       throw new Error(`FantasyCalc API returned ${response.status}`);
     }
@@ -180,7 +204,7 @@ export async function getFantasyCalcRedraftValues(
 
   try {
     console.log(`[FantasyCalc] Fetching redraft values (${format})...`);
-    const response = await fetch(url);
+    const response = await fetchWithTimeout(url, UPSTREAM_TIMEOUT_MS);
     if (!response.ok) {
       throw new Error(`FantasyCalc redraft API returned ${response.status}`);
     }

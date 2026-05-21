@@ -17,7 +17,7 @@ import { cn } from "@/lib/utils";
 import {
   Search, SlidersHorizontal, List, LayoutGrid, Hexagon,
   TrendingUp, TrendingDown, Minus, AlertCircle, RefreshCw, ChevronUp, ChevronDown, ChevronRight,
-  Calendar, X,
+  Calendar, X, Trophy,
 } from "lucide-react";
 import {
   DEFAULT_FILTERS, toIsoDate,
@@ -41,7 +41,17 @@ function buildAdpUrl(filters: DraftFilters): string {
   } else if (filters.season) {
     p.set("season", filters.season);
   }
-  p.set("draftType", filters.draftType);
+  // Rookie Picks (placeholder mode) only ever returns data from rookie
+  // drafts — startup drafts have isRookiePlaceholder=false on every pick by
+  // definition, so leaving draftType=startup here returned zero rows and
+  // the chip appeared broken. Force draftType=rookie at request time when
+  // the user has selected the placeholder filter; the URL-level override
+  // doesn't mutate filter state, so toggling back to "Direct Rookies" still
+  // queries whatever draftType the user has chosen.
+  const effectiveDraftType = filters.rookieMode === "picks"
+    ? "rookie"
+    : filters.draftType;
+  p.set("draftType", effectiveDraftType);
   p.set("draftFormat", filters.draftFormat);
   p.set("rookieMode", filters.rookieMode);
   p.set("leagueMode", filters.leagueMode);
@@ -95,13 +105,60 @@ const POS_COLOR: Record<Position, { bg: string; text: string; ring: string; chip
   PICK: { bg: "bg-[#d4af37]/15", text: "text-[#d4af37]", ring: "ring-[#d4af37]/30", chip: "bg-[#d4af37]/10 text-[#d4af37] border-[#d4af37]/30" },
 };
 
-type ViewMode = "list" | "box" | "hex";
+type ViewMode = "list" | "box" | "hex" | "round";
 
-const VIEW_OPTIONS: { id: ViewMode; label: string; icon: typeof List }[] = [
+// ── Top-level tabs (Startup ADP vs Rookie Drafts) ───────────────────────────
+// Live Drafts lives at a higher level (Draft Board sub-tab in the Command
+// Center sidebar), so it doesn't appear here — including a third tab would
+// double-route to the same view.
+type DraftTopTab = "startup" | "rookie";
+
+const TOP_TABS: { id: DraftTopTab; label: string; subtitle: string }[] = [
+  { id: "startup", label: "Startup ADP",  subtitle: "Real Sleeper startup draft data and market movement." },
+  { id: "rookie",  label: "Rookie Drafts", subtitle: "Track rookie-only draft ADP from real Sleeper rookie drafts." },
+];
+
+const STARTUP_VIEW_OPTIONS: { id: ViewMode; label: string; icon: typeof List }[] = [
   { id: "list", label: "List", icon: List },
   { id: "box",  label: "Box",  icon: LayoutGrid },
   { id: "hex",  label: "Hex",  icon: Hexagon },
 ];
+
+const ROOKIE_VIEW_OPTIONS: { id: ViewMode; label: string; icon: typeof List }[] = [
+  { id: "list",  label: "List",        icon: List },
+  { id: "box",   label: "Box",         icon: LayoutGrid },
+  { id: "round", label: "Round Board", icon: Trophy },
+];
+
+// Rookie-tab defaults — 12-team superflex PPR over the last 90 days, Actual
+// Rookies mode. Per the spec these override DEFAULT_FILTERS only for the
+// fields that diverge; everything else is inherited.
+function rookieTabDefaults(prev: DraftFilters): DraftFilters {
+  const end = new Date();
+  const start = new Date();
+  start.setDate(end.getDate() - 90);
+  return {
+    ...prev,
+    draftType: "rookie",
+    rookieMode: "direct",
+    scoring: "all",
+    superflex: "all",
+    teams: 12,
+    dateRange: { start: toIsoDate(start), end: toIsoDate(end) },
+    search: "",
+  };
+}
+
+function startupTabDefaults(prev: DraftFilters): DraftFilters {
+  // Hop back to startup-friendly defaults — keep most things, but reset the
+  // rookie-specific bits so we don't accidentally re-query rookie data.
+  return {
+    ...prev,
+    draftType: "startup",
+    rookieMode: "direct",
+    search: "",
+  };
+}
 
 const ROOKIE_MODE_OPTIONS: { id: RookieMode; label: string; sub: string }[] = [
   { id: "picks",  label: "Rookie Picks",   sub: "Placeholders" },
@@ -128,7 +185,22 @@ const RANGE_SHORTCUTS = [
 export function DraftCommand() {
   const [filters, setFilters] = useState<DraftFilters>(DEFAULT_FILTERS);
   const [view, setView] = useState<ViewMode>("list");
+  const [topTab, setTopTab] = useState<DraftTopTab>("startup");
   const [filterSheetOpen, setFilterSheetOpen] = useState(false);
+
+  const switchTab = useCallback((next: DraftTopTab) => {
+    if (next === topTab) return;
+    setTopTab(next);
+    setFilters((prev) => next === "rookie" ? rookieTabDefaults(prev) : startupTabDefaults(prev));
+    // If the active view isn't valid for the new tab, drop back to List.
+    setView((cur) => {
+      const allowed = (next === "rookie" ? ROOKIE_VIEW_OPTIONS : STARTUP_VIEW_OPTIONS).map((v) => v.id);
+      return allowed.includes(cur) ? cur : "list";
+    });
+  }, [topTab]);
+
+  const currentViewOptions = topTab === "rookie" ? ROOKIE_VIEW_OPTIONS : STARTUP_VIEW_OPTIONS;
+  const currentTabMeta = TOP_TABS.find((t) => t.id === topTab) ?? TOP_TABS[0];
 
   const [rows, setRows] = useState<ADPResult[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -259,13 +331,33 @@ export function DraftCommand() {
     <div className="space-y-4 md:space-y-5">
       <SectionHeader
         title="Draft Command"
-        subtitle="Real Sleeper draft data, ADP trends, and startup market movement."
+        subtitle={currentTabMeta.subtitle}
       />
 
       {/* Mobile-only header — SectionHeader hides on mobile. */}
       <div className="md:hidden">
         <h2 className="text-lg font-bold text-foreground tracking-tight">Draft Command</h2>
-        <p className="text-xs text-muted-foreground mt-1">Real Sleeper draft data, ADP trends, and startup market movement.</p>
+        <p className="text-xs text-muted-foreground mt-1">{currentTabMeta.subtitle}</p>
+      </div>
+
+      {/* ── Top tabs: Startup ADP / Rookie Drafts ───────────────────────── */}
+      <div className="flex items-center gap-1 p-1 rounded-xl bg-white/[0.03] border border-white/6 w-fit" data-testid="draft-command-top-tabs">
+        {TOP_TABS.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => switchTab(t.id)}
+            className={cn(
+              "px-3.5 py-1.5 rounded-lg text-[12px] font-semibold transition-all whitespace-nowrap",
+              topTab === t.id
+                ? "bg-[#0b3a7a]/70 text-white border border-[#d4af37]/30 shadow-[0_0_0_1px_rgba(212,175,55,0.05)]"
+                : "text-white/45 hover:text-white/80 border border-transparent",
+            )}
+            data-testid={`draft-tab-${t.id}`}
+          >
+            {t.label}
+          </button>
+        ))}
       </div>
 
       {/* ── Top controls row ─────────────────────────────────────────────── */}
@@ -307,9 +399,10 @@ export function DraftCommand() {
 
         {/* View switcher + Rookie mode + Date range */}
         <div className="flex flex-wrap items-center gap-2">
-          {/* View switcher */}
+          {/* View switcher — set varies by top tab (rookie tab swaps Hex
+              for the rookie-board layout). */}
           <div className="flex items-center gap-1 p-1 rounded-xl bg-white/[0.03] border border-white/6">
-            {VIEW_OPTIONS.map(({ id, label, icon: Icon }) => (
+            {currentViewOptions.map(({ id, label, icon: Icon }) => (
               <button
                 key={id}
                 onClick={() => setView(id)}
@@ -386,7 +479,15 @@ export function DraftCommand() {
       {isLoading                                              && <LoadingState onCancel={cancelScan} />}
       {!isLoading && hasError                                 && <ErrorState message={errorMessage} />}
       {!isLoading && !hasError && isEmpty && wasCancelled     && <CancelledState onRetry={retryScan} />}
-      {!isLoading && !hasError && isEmpty && !wasCancelled    && <EmptyState message={meta?.message} />}
+      {!isLoading && !hasError && isEmpty && !wasCancelled    && (
+        <EmptyState
+          message={
+            topTab === "rookie"
+              ? "No rookie draft data found. Try expanding your date range or changing rookie mode."
+              : meta?.message
+          }
+        />
+      )}
       {!isLoading && !hasError && !isEmpty && (
         <>
           {/* Confidence banner — under ~25 drafts ADP swings hard, so we
@@ -402,9 +503,10 @@ export function DraftCommand() {
             </div>
           )}
 
-          {view === "list" && <ListView rows={filtered} filters={filters} onPlayerClick={handlePlayerClick} />}
-          {view === "box"  && <BoxView  rows={filtered} teams={typeof filters.teams === "number" ? filters.teams : 12} onPlayerClick={handlePlayerClick} />}
-          {view === "hex"  && <HexView  rows={filtered} teams={typeof filters.teams === "number" ? filters.teams : 12} draftFormat={filters.draftFormat} onPlayerClick={handlePlayerClick} />}
+          {view === "list"  && <ListView rows={filtered} filters={filters} onPlayerClick={handlePlayerClick} />}
+          {view === "box"   && <BoxView  rows={filtered} teams={typeof filters.teams === "number" ? filters.teams : 12} onPlayerClick={handlePlayerClick} />}
+          {view === "hex"   && topTab === "startup" && <HexView rows={filtered} teams={typeof filters.teams === "number" ? filters.teams : 12} draftFormat={filters.draftFormat} onPlayerClick={handlePlayerClick} />}
+          {view === "round" && topTab === "rookie"  && <RoundBoardView rows={filtered} teams={typeof filters.teams === "number" ? filters.teams : 12} onPlayerClick={handlePlayerClick} />}
         </>
       )}
 
@@ -428,6 +530,7 @@ export function DraftCommand() {
         open={profilePlayer != null}
         adp={profilePlayer}
         teams={typeof filters.teams === "number" ? filters.teams : 12}
+        filters={filters}
         onClose={() => setProfilePlayer(null)}
       />
     </div>
@@ -793,13 +896,14 @@ function PlayerCell({ row }: { row: ADPResult }) {
 
 function BoxView({ rows, teams, onPlayerClick }: { rows: ADPResult[]; teams: number; onPlayerClick?: (row: ADPResult) => void }) {
   const isMobile = useIsMobile();
-  // Sleeper-style draft-room density: shorter tiles, no card padding between
-  // them, dark navy body with a thin position-tinted top stripe rather than
-  // a full-card colour fill. Names fit on one line (first-name abbreviated)
-  // so we can drop the height further.
-  const cellW = isMobile ? 108 : 124;
-  const cellH = isMobile ? 60 : 64;
-  const labelColW = isMobile ? 40 : 48;
+  // Sleeper / OTC / FFPC density: short tiles, ~1px gutter, dark navy body
+  // with a thin position-tinted top stripe. Cells must fit a position rank
+  // badge, pick number, single-line player name, pos·team meta, and a small
+  // bottom-right headshot inside ~72px tall (~5–6 rounds visible on a
+  // typical 13" laptop without scroll).
+  const cellW = isMobile ? 100 : 116;
+  const cellH = isMobile ? 56 : 60;
+  const labelColW = isMobile ? 32 : 36;
 
   // Build the snake-layout grid. We sort by ADP ascending and assign each
   // entry a (round, slot) coordinate so the resulting grid reads exactly like
@@ -826,10 +930,10 @@ function BoxView({ rows, teams, onPlayerClick }: { rows: ADPResult[]; teams: num
 
   return (
     <Card className="overflow-hidden border-white/8 bg-[#070f1c]">
-      <div className="px-4 py-3 flex items-center justify-between border-b border-white/5">
+      <div className="px-3 py-1.5 flex items-center justify-between border-b border-white/5">
         <div className="flex items-center gap-2 min-w-0">
           <LayoutGrid className="w-3.5 h-3.5 text-white/55 flex-shrink-0" />
-          <h3 className="text-sm font-bold text-white">Draft Board</h3>
+          <h3 className="text-[13px] font-bold text-white">Draft Board</h3>
           <span className="text-[10px] text-white/40 truncate">{teams}-team snake</span>
         </div>
         <HexLegend />
@@ -841,7 +945,7 @@ function BoxView({ rows, teams, onPlayerClick }: { rows: ADPResult[]; teams: num
           <div className="flex sticky top-0 z-30 bg-[#070f1c] border-b border-white/[0.08]">
             <div
               className="sticky left-0 z-40 flex items-center justify-center text-[9px] font-bold uppercase tracking-[0.18em] text-white/30 border-r border-white/[0.08] bg-[#070f1c]"
-              style={{ width: labelColW, height: 24, flexShrink: 0 }}
+              style={{ width: labelColW, height: 20, flexShrink: 0 }}
             >
               R
             </div>
@@ -849,7 +953,7 @@ function BoxView({ rows, teams, onPlayerClick }: { rows: ADPResult[]; teams: num
               <div
                 key={i}
                 className="flex items-center justify-center text-[9px] font-semibold uppercase tracking-[0.15em] text-white/45 border-r border-white/[0.04]"
-                style={{ width: cellW, height: 24, flexShrink: 0 }}
+                style={{ width: cellW, height: 20, flexShrink: 0 }}
               >
                 <span>T{i + 1}</span>
               </div>
@@ -968,11 +1072,11 @@ function DraftPickCell({
   if (!pick) {
     return (
       <div
-        className="p-[2px]"
+        className="p-px"
         style={{ width, minHeight: height, flexShrink: 0 }}
         data-testid={`board-cell-${round}-${pickInRound}-empty`}
       >
-        <div className="w-full h-full rounded-[3px] bg-[#0a1424] flex items-center justify-between px-2 border border-white/[0.04]">
+        <div className="w-full h-full rounded-[2px] bg-[#0a1424] flex items-center justify-between px-1.5 border border-white/[0.04]">
           <ChevronRight className="w-3 h-3 text-white/12" />
           <span className="text-[10px] font-semibold tabular-nums text-white/20">
             {pickLabel}
@@ -990,14 +1094,14 @@ function DraftPickCell({
 
   return (
     <div
-      className="p-[2px]"
+      className="p-px"
       style={{ width, minHeight: height, flexShrink: 0 }}
     >
     <button
       type="button"
       onClick={() => onPlayerClick?.(pick)}
       className={cn(
-        "group relative w-full h-full rounded-[3px] border cursor-pointer text-left overflow-hidden",
+        "group relative w-full h-full rounded-[2px] border cursor-pointer text-left overflow-hidden",
         "transition-colors duration-150",
         accent.bg,
         accent.hoverBg,
@@ -1009,10 +1113,10 @@ function DraftPickCell({
       {/* Thin position-tinted top stripe — Sleeper's main scan cue. */}
       <div className={cn("absolute inset-x-0 top-0 h-[2px]", accent.stripe)} />
 
-      {/* Top-left: position rank — text only (no fill), coloured by pos. */}
+      {/* Top-left: position rank — text only, coloured by pos. */}
       <span
         className={cn(
-          "absolute top-1 left-1.5 text-[9px] font-bold uppercase tracking-wider leading-none",
+          "absolute top-[3px] left-1 text-[10px] font-bold uppercase tracking-wider leading-none",
           accent.badgeText,
         )}
         data-testid={`box-posrank-${round}-${pickInRound}`}
@@ -1020,19 +1124,21 @@ function DraftPickCell({
         {isPick ? "RP" : `${pick.position}${pick.positional_rank}`}
       </span>
 
-      {/* Top-right: pick number — muted. */}
+      {/* Top-right: pick number — muted, slightly bumped for scannability. */}
       <span
-        className="absolute top-1 right-1.5 text-[9px] font-semibold tabular-nums text-white/35 leading-none"
+        className="absolute top-[3px] right-1 text-[10px] font-semibold tabular-nums text-white/40 leading-none"
         data-testid={`box-pick-${round}-${pickInRound}`}
       >
         {pickLabel}
       </span>
 
-      {/* Player name — dominant text element. Single-line truncate with the
-           first name abbreviated so the tile stays compact. */}
-      <div className="absolute inset-x-1.5 top-4 bottom-4 flex items-center pr-9">
+      {/* Player name — dominant text element. Single-line truncate; first
+           name abbreviated so the tile stays compact. Right padding reserves
+           space for the bottom-right headshot so the name never collides
+           with the avatar bleed. */}
+      <div className="absolute inset-x-1 top-[14px] bottom-[14px] flex items-center pr-[30px]">
         <span
-          className="block w-full text-[11px] sm:text-[12px] font-bold text-white leading-[1.15] tracking-tight truncate"
+          className="block w-full text-[12px] sm:text-[13px] font-bold text-white leading-[1.1] tracking-tight truncate"
           title={pick.player_name}
         >
           {abbreviateFirstName(pick.player_name)}
@@ -1042,17 +1148,17 @@ function DraftPickCell({
       {/* Bottom-left: pos · team — small + muted, lightly position-tinted. */}
       <span
         className={cn(
-          "absolute bottom-1 left-1.5 text-[9px] font-semibold uppercase tracking-wider leading-none truncate max-w-[58%]",
+          "absolute bottom-[3px] left-1 text-[9px] font-semibold uppercase tracking-wider leading-none truncate max-w-[60%]",
           accent.metaText,
         )}
       >
         {posTeam}
       </span>
 
-      {/* Bottom-right: headshot. Anchored slightly past the bottom-right
-           corner so it crops into the tile edge — Sleeper's integrated
-           look. The outer `overflow-hidden` clips the bleed. */}
-      <div className="absolute -bottom-1 -right-1">
+      {/* Bottom-right: headshot. Smaller than before (28px) and anchored
+           tight to the bottom-right corner. The outer `overflow-hidden`
+           clips any bleed. */}
+      <div className="absolute bottom-0.5 right-0.5">
         <PlayerImageCircle
           playerId={pick.player_id}
           name={pick.player_name}
@@ -1080,11 +1186,11 @@ function PlayerImageCircle({
 
   return (
     <div
-      className="w-9 h-9 sm:w-10 sm:h-10 rounded-full overflow-hidden bg-[#0a1424] flex items-center justify-center"
+      className="w-7 h-7 sm:w-8 sm:h-8 rounded-full overflow-hidden bg-[#0a1424] flex items-center justify-center"
       style={{ boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.06)" }}
     >
       {isPick ? (
-        <Hexagon className="w-4 h-4 text-white/40" strokeWidth={2} />
+        <Hexagon className="w-3.5 h-3.5 text-white/40" strokeWidth={2} />
       ) : showImage ? (
         <img
           src={`https://sleepercdn.com/content/nfl/players/thumb/${playerId}.jpg`}
@@ -1093,11 +1199,102 @@ function PlayerImageCircle({
           onError={() => setImgErr(true)}
         />
       ) : (
-        <span className="text-[10px] font-bold text-white/65">
+        <span className="text-[9px] font-bold text-white/65">
           {initialsOf(name)}
         </span>
       )}
     </div>
+  );
+}
+
+// ── Round Board View (rookie tab) ─────────────────────────────────────────
+// Simpler rookie-board layout: one row per round, each pick rendered as a
+// compact card showing slot number, player/placeholder name, position/team,
+// ADP, draft count. Picks within a round flow left-to-right (rookie drafts
+// are typically snake but reading order matches the natural pick sequence —
+// the slot column tells you the team). Sorted by avg_pick ascending so the
+// first card in each round is the earliest pick on average.
+function RoundBoardView({ rows, teams, onPlayerClick }: { rows: ADPResult[]; teams: number; onPlayerClick?: (row: ADPResult) => void }) {
+  const grouped = useMemo(() => {
+    const sorted = [...rows].sort((a, b) => a.avg_pick - b.avg_pick);
+    const byRound = new Map<number, ADPResult[]>();
+    sorted.forEach((r, idx) => {
+      const seq = idx + 1;
+      const round = Math.ceil(seq / Math.max(teams, 1));
+      if (round > MAX_ROUNDS_SHOWN) return;
+      const arr = byRound.get(round) ?? [];
+      arr.push(r);
+      byRound.set(round, arr);
+    });
+    return Array.from(byRound.entries()).sort((a, b) => a[0] - b[0]);
+  }, [rows, teams]);
+
+  if (grouped.length === 0) return null;
+
+  return (
+    <Card className="overflow-hidden border-white/8 bg-[#070f1c]">
+      <div className="px-3 py-1.5 flex items-center justify-between border-b border-white/5">
+        <div className="flex items-center gap-2 min-w-0">
+          <Trophy className="w-3.5 h-3.5 text-[#d4af37]" />
+          <h3 className="text-[13px] font-bold text-white">Rookie Round Board</h3>
+          <span className="text-[10px] text-white/40 truncate">{teams}-team · {grouped.length} {grouped.length === 1 ? "round" : "rounds"}</span>
+        </div>
+        <HexLegend />
+      </div>
+      <div className="divide-y divide-white/5">
+        {grouped.map(([round, picks]) => (
+          <div key={round} className="px-3 py-2" data-testid={`round-board-round-${round}`}>
+            <div className="flex items-baseline gap-2 mb-1.5">
+              <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#d4af37]">Round {round}</span>
+              <span className="text-[9px] text-white/35">{picks.length} {picks.length === 1 ? "pick" : "picks"}</span>
+            </div>
+            <div className="grid gap-1.5 grid-cols-[repeat(auto-fill,minmax(168px,1fr))]">
+              {picks.map((p, idx) => (
+                <RoundBoardCard key={`${round}-${p.player_id}`} pick={p} slot={idx + 1} round={round} onClick={() => onPlayerClick?.(p)} />
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+function RoundBoardCard({ pick, slot, round, onClick }: { pick: ADPResult; slot: number; round: number; onClick?: () => void }) {
+  const accent = BOX_POS_ACCENT[pick.position];
+  const isPick = pick.is_rookie_placeholder;
+  const posLine = isPick
+    ? (pick.rookie_pick_label ? `Rookie Pick · ${pick.rookie_pick_label}` : "Rookie Pick")
+    : `${pick.position}${pick.positional_rank}${pick.team ? ` · ${pick.team}` : ""}`;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "group relative text-left rounded-[3px] border overflow-hidden transition-colors duration-150",
+        accent.bg, accent.hoverBg, accent.border,
+        "px-2 py-1.5",
+      )}
+      data-testid={`round-board-card-${round}-${slot}`}
+    >
+      <div className={cn("absolute inset-x-0 top-0 h-[2px]", accent.stripe)} />
+      <div className="flex items-center justify-between text-[10px] leading-none">
+        <span className={cn("font-bold uppercase tracking-wider", accent.badgeText)}>
+          {isPick ? "RP" : `${pick.position}${pick.positional_rank}`}
+        </span>
+        <span className="font-semibold tabular-nums text-white/40">
+          #{slot}
+        </span>
+      </div>
+      <p className="mt-1 text-[12px] font-bold text-white truncate" title={pick.player_name}>
+        {abbreviateFirstName(pick.player_name)}
+      </p>
+      <p className={cn("text-[10px] truncate", accent.metaText)}>{posLine}</p>
+      <div className="mt-1 flex items-center justify-between text-[10px] text-white/55">
+        <span>ADP <span className="tabular-nums text-white/80">{pick.avg_pick.toFixed(1)}</span></span>
+        <span className="tabular-nums">{pick.draft_count} {pick.draft_count === 1 ? "draft" : "drafts"}</span>
+      </div>
+    </button>
   );
 }
 

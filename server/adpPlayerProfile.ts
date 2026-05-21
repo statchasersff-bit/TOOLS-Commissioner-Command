@@ -6,21 +6,35 @@
  *   /api/adp/player/:playerId/history       → time-bucketed ADP (7/30/90 day)
  *   /api/adp/player/:playerId/availability  → P(available at pick X) grid
  *
- * The history endpoint is intentionally conservative: it returns aggregate
- * averages over rolling windows rather than per-draft scatter, which is
- * already enough to render the inverted-axis "ADP over time" line chart.
+ * Both endpoints accept the same filter query string as /api/adp so the
+ * modal reflects the *currently active* ADP Explorer dataset (rookie vs
+ * startup, SF vs 1QB, TEP vs non-TEP, date range, etc.). Without this the
+ * modal showed global startup-only data regardless of what the user had
+ * selected in DraftCommand.
  */
 
 import pg from "pg";
 import { drizzle } from "drizzle-orm/node-postgres";
-import { and, eq, gte, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { drafts, draftPicks } from "@shared/schema";
+import { buildDraftWhere, type AdpFilters } from "./adp";
 
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
 const db = drizzle(pool);
 
 function safePickDate(d: { completedAt: number | null; startTime: number | null; createdAt: number | null }): number | null {
   return d.completedAt ?? d.startTime ?? d.createdAt ?? null;
+}
+
+/** Resolve the set of draft IDs that match the current ADP Explorer filters.
+ *  Returns an empty array when no drafts match — callers should short-circuit
+ *  to an empty response in that case. */
+async function eligibleDraftIds(f: AdpFilters): Promise<{ draftId: string; teams: number }[]> {
+  const rows = await db
+    .select({ draftId: drafts.draftId, teams: drafts.teams })
+    .from(drafts)
+    .where(buildDraftWhere(f));
+  return rows;
 }
 
 export interface AdpHistoryPoint {
@@ -34,12 +48,29 @@ export interface AdpHistoryPoint {
 
 export interface AdpHistoryResponse {
   playerId: string;
+  /** Echoes the resolved filter context so the UI can show "12T · SF · TEP · …". */
+  appliedFilters: AdpFilters;
   buckets: AdpHistoryPoint[];
   daily: Array<{ date: string; avgPick: number; count: number }>;
 }
 
-export async function getAdpHistory(playerId: string): Promise<AdpHistoryResponse> {
-  // Pull every pick for this player along with the parent draft's completion timestamp.
+export async function getAdpHistory(playerId: string, filters: AdpFilters): Promise<AdpHistoryResponse> {
+  const eligible = await eligibleDraftIds(filters);
+  if (eligible.length === 0) {
+    return {
+      playerId,
+      appliedFilters: filters,
+      buckets: (["7d", "30d", "90d"] as const).map((w) => ({
+        window: w, draftCount: 0, avgPick: null, minPick: null, maxPick: null,
+        asOf: new Date().toISOString(),
+      })),
+      daily: [],
+    };
+  }
+  const draftIds = eligible.map((d) => d.draftId);
+
+  // Pull every pick for this player in the filtered draft pool along with the
+  // parent draft's completion timestamp.
   const rows = await db
     .select({
       pickNo: draftPicks.pickNo,
@@ -50,7 +81,7 @@ export async function getAdpHistory(playerId: string): Promise<AdpHistoryRespons
     })
     .from(draftPicks)
     .innerJoin(drafts, eq(draftPicks.draftId, drafts.draftId))
-    .where(eq(draftPicks.playerId, playerId));
+    .where(and(eq(draftPicks.playerId, playerId), inArray(draftPicks.draftId, draftIds)));
 
   const now = Date.now();
   const dayMs = 24 * 60 * 60 * 1000;
@@ -94,7 +125,7 @@ export async function getAdpHistory(playerId: string): Promise<AdpHistoryRespons
     }))
     .sort((a, b) => a.date.localeCompare(b.date));
 
-  return { playerId, buckets, daily };
+  return { playerId, appliedFilters: filters, buckets, daily };
 }
 
 export interface AvailabilityCell {
@@ -106,34 +137,43 @@ export interface AvailabilityCell {
 
 export interface AdpAvailabilityResponse {
   playerId: string;
+  /** Echoes the resolved filter context so the UI can show "12T · SF · TEP · …". */
+  appliedFilters: AdpFilters;
   teams: number;
   rounds: number;
   totalDrafts: number;
   draftsWithPlayer: number;
   expectedPick: number | null;
+  /** Steepest single-pick drop in availability — surfaced by the UI as the
+   *  "draft cliff" insight. Null when fewer than 2 cells have data. */
+  biggestDropAt: { fromPick: number; toPick: number; delta: number } | null;
   cells: AvailabilityCell[];
 }
 
 export async function getAdpAvailability(
   playerId: string,
+  filters: AdpFilters,
   teams: number = 12,
   rounds: number = 5,
 ): Promise<AdpAvailabilityResponse> {
-  // Use only startup drafts in the requested team size for a clean baseline.
-  // For now we accept any teams setting and fall back to "all drafts" so that
-  // small samples still produce a result. The teams param controls the grid
-  // layout (round = ceil(pick/teams)) but does not filter the source pool.
-  const startupDrafts = await db
-    .select({ draftId: drafts.draftId, teams: drafts.teams })
-    .from(drafts)
-    .where(and(eq(drafts.draftType, "startup"), eq(drafts.status, "complete")));
+  // Use the full filtered draft pool — not just startup — so the modal's
+  // Avail tab matches the table the user is looking at. The old impl
+  // hardcoded draftType=startup which made Avail wrong for rookie views.
+  const eligible = await eligibleDraftIds(filters);
 
+  // Filter to drafts that match the requested team size when we have it.
+  // teams=0 in the source means "unspecified" — we keep those in the pool
+  // so small datasets still produce some signal.
   const filtered = teams > 0
-    ? startupDrafts.filter((d) => d.teams === teams || d.teams === 0)
-    : startupDrafts;
+    ? eligible.filter((d) => d.teams === teams || d.teams === 0)
+    : eligible;
   const eligibleIds = filtered.map((d) => d.draftId);
   if (eligibleIds.length === 0) {
-    return { playerId, teams, rounds, totalDrafts: 0, draftsWithPlayer: 0, expectedPick: null, cells: [] };
+    return {
+      playerId, appliedFilters: filters, teams, rounds,
+      totalDrafts: 0, draftsWithPlayer: 0, expectedPick: null,
+      biggestDropAt: null, cells: [],
+    };
   }
 
   const playerPicks = await db
@@ -168,11 +208,28 @@ export async function getAdpAvailability(
     });
   }
 
+  // Identify the steepest pick-to-pick drop so the UI can surface a
+  // "draft cliff" insight without needing the whole curve client-side.
+  let biggestDropAt: AdpAvailabilityResponse["biggestDropAt"] = null;
+  for (let i = 1; i < cells.length; i++) {
+    const delta = cells[i - 1].availabilityPct - cells[i].availabilityPct;
+    if (delta > 0 && (biggestDropAt == null || delta > biggestDropAt.delta)) {
+      biggestDropAt = {
+        fromPick: cells[i - 1].pickNo,
+        toPick: cells[i].pickNo,
+        delta: Math.round(delta * 10) / 10,
+      };
+    }
+  }
+
   const expectedPick = draftsWithPlayer > 0
     ? Math.round(
         (Array.from(pickByDraft.values()).reduce((s, n) => s + n, 0) / draftsWithPlayer) * 10
       ) / 10
     : null;
 
-  return { playerId, teams, rounds, totalDrafts, draftsWithPlayer, expectedPick, cells };
+  return {
+    playerId, appliedFilters: filters, teams, rounds,
+    totalDrafts, draftsWithPlayer, expectedPick, biggestDropAt, cells,
+  };
 }

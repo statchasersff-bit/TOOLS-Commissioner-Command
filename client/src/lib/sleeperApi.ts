@@ -1,5 +1,6 @@
 import { getFantasyCalcValues, getFantasyCalcRedraftValues } from "./fantasycalcApi";
 import { buildOptimalStarterIds } from "./lineupUtils";
+import { normalizeSleeperDraftOrder, type NormalizedDraftOrder } from "./sleeperDraftOrder";
 
 const SLEEPER_API = "https://api.sleeper.app/v1";
 const PLAYERS_CACHE_KEY = "sc-sleeper-players";
@@ -2220,17 +2221,28 @@ export interface DraftState {
   lastPicked: number | null;
   /** userId → 1-indexed slot number */
   draftOrderByUserId: Record<string, number>;
+  /** Raw 1-indexed slot → roster_id from Sleeper. Empty when not yet set. */
+  slotToRosterIdRaw: Record<number, number>;
   usersById: Record<string, DraftUser>;
   picks: DraftPickNormalized[];
+  /** Fully resolved draft-order view. See sleeperDraftOrder.ts for fields.
+   *  Use this for "who is on the clock", board headers, and pickNo→user
+   *  lookups — it falls back through slot_to_roster_id + roster owners
+   *  when draft_order isn't populated. */
+  normalizedOrder: NormalizedDraftOrder;
 }
 
 /**
  * Fetch full draft state via confirmed Sleeper GraphQL endpoint.
  * Single round-trip: get_draft + user_drafts_by_draft + draft_picks.
  * Requires JWT (x-sleeper-graphql-op: get_draft).
+ *
+ * League rosters are fetched in parallel (REST) so the draft-order
+ * normalizer can fall through `slot_to_roster_id → roster.owner_id` when
+ * Sleeper hasn't populated `draft_order` (common pre-draft state).
  */
 export async function fetchDraftState(draftId: string, jwt: string): Promise<DraftState> {
-  const res = await fetch("https://sleeper.com/graphql", {
+  const graphqlPromise = fetch("https://sleeper.com/graphql", {
     method: "POST",
     headers: {
       "authorization": jwt,
@@ -2240,7 +2252,7 @@ export async function fetchDraftState(draftId: string, jwt: string): Promise<Dra
     body: JSON.stringify({
       query: `query get_draft {
         get_draft(sport: "nfl", draft_id: "${draftId}") {
-          created draft_id draft_order last_message_time last_message_id
+          created draft_id draft_order slot_to_roster_id last_message_time last_message_id
           last_picked league_id metadata season season_type settings sport
           status start_time type
         }
@@ -2253,6 +2265,8 @@ export async function fetchDraftState(draftId: string, jwt: string): Promise<Dra
       }`,
     }),
   });
+
+  const res = await graphqlPromise;
   if (!res.ok) throw new Error(`get_draft GraphQL ${res.status}`);
   const json = await res.json();
   if (json?.errors?.length) throw new Error(json.errors[0].message || "get_draft failed");
@@ -2261,6 +2275,18 @@ export async function fetchDraftState(draftId: string, jwt: string): Promise<Dra
   const rawUsers: any[] = json?.data?.user_drafts_by_draft ?? [];
   const rawPicks: any[] = json?.data?.draft_picks ?? [];
   if (!raw) throw new Error("No draft data in response");
+
+  const leagueId: string = raw.league_id;
+
+  // Fetch league users + rosters so the normalizer can chain through
+  // slot_to_roster_id → roster.owner_id when draft_order is empty.
+  // Errors here aren't fatal — the normalizer degrades gracefully.
+  const [leagueUsers, leagueRosters] = await Promise.all([
+    fetchJson<SleeperLeagueUserRaw[]>(`${SLEEPER_API}/league/${leagueId}/users`)
+      .catch(() => [] as SleeperLeagueUserRaw[]),
+    fetchJson<SleeperRosterRaw[]>(`${SLEEPER_API}/league/${leagueId}/rosters`)
+      .catch(() => [] as SleeperRosterRaw[]),
+  ]);
 
   const usersById: Record<string, DraftUser> = {};
   for (const u of rawUsers) {
@@ -2271,8 +2297,29 @@ export async function fetchDraftState(draftId: string, jwt: string): Promise<Dra
       isBot: !!u.user_is_bot,
     };
   }
+  // Also enrich usersById with any league users that aren't in
+  // user_drafts_by_draft (Sleeper sometimes lags). Without this, slot
+  // owners resolved via slot_to_roster_id may render with no avatar.
+  for (const u of leagueUsers || []) {
+    if (!usersById[u.user_id]) {
+      usersById[u.user_id] = {
+        userId: u.user_id,
+        displayName: u.username || u.display_name || u.user_id,
+        avatar: u.avatar ?? null,
+        isBot: false,
+      };
+    }
+  }
 
   const draftOrderByUserId: Record<string, number> = raw.draft_order || {};
+  const slotToRosterIdRaw: Record<number, number> = {};
+  for (const [slotKey, rosterIdRaw] of Object.entries(raw.slot_to_roster_id ?? {})) {
+    const slot = Number(slotKey);
+    const rosterId = Number(rosterIdRaw);
+    if (Number.isFinite(slot) && Number.isFinite(rosterId)) {
+      slotToRosterIdRaw[slot] = rosterId;
+    }
+  }
   const settings = raw.settings || {};
   const teams = settings.teams || 12;
   const rounds = settings.rounds || 4;
@@ -2297,9 +2344,23 @@ export async function fetchDraftState(draftId: string, jwt: string): Promise<Dra
     raw.status === "drafting" ? "drafting" :
     raw.status === "complete" ? "complete" : "pre_draft";
 
+  const normalizedOrder = normalizeSleeperDraftOrder({
+    draft: {
+      type: raw.type,
+      draft_order: raw.draft_order,
+      slot_to_roster_id: raw.slot_to_roster_id,
+      settings: raw.settings,
+      metadata: raw.metadata,
+    },
+    leagueUsers: leagueUsers ?? [],
+    leagueRosters: leagueRosters ?? [],
+    picks: picks.map((p) => ({ pick_no: p.pickNo, picked_by: p.pickedBy })),
+    rounds,
+  });
+
   return {
     draftId: raw.draft_id,
-    leagueId: raw.league_id,
+    leagueId,
     name: raw.metadata?.name || `${raw.season} ${raw.type} Draft`,
     status,
     season: raw.season,
@@ -2310,8 +2371,10 @@ export async function fetchDraftState(draftId: string, jwt: string): Promise<Dra
     startTime: raw.start_time || null,
     lastPicked: raw.last_picked || null,
     draftOrderByUserId,
+    slotToRosterIdRaw,
     usersById,
     picks,
+    normalizedOrder,
   };
 }
 

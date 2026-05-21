@@ -3,6 +3,20 @@ import { useAuth } from "@/contexts/AuthContext";
 import { API_BASE } from "@/lib/apiBase";
 import { getFavoriteTeamTheme, isValidNflTeamAbbr, type NflTeam } from "@/config/nflTeams";
 
+const SC_TOKEN_KEY = "sc_auth_token";
+
+/** Mirror of AuthContext's bearer-header helper. We can't import from AuthContext
+ *  here because it would create a circular dependency (AuthContext loads first),
+ *  so we read the token directly from localStorage using the same key. */
+function authBearerHeader(): Record<string, string> {
+  try {
+    const token = localStorage.getItem(SC_TOKEN_KEY);
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  } catch {
+    return {};
+  }
+}
+
 // ─── Storage ──────────────────────────────────────────────────────────────────
 
 const STORAGE_KEY = "dc_favorite_nfl_team";
@@ -80,21 +94,36 @@ export function FavoriteTeamProvider({ children }: { children: ReactNode }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // When the authenticated user's record arrives via /me, prefer the server's
-  // value and reconcile localStorage. This handles "I logged in on a new
-  // device" without a separate fetch.
+  // When the authenticated user's record arrives via /me, reconcile against
+  // the cached local value:
+  //
+  //   - server has a value         → adopt it (handles "logged in on new device")
+  //   - server null, local has one → push the local value up to the server
+  //                                  (handles "guest picked a team, then made
+  //                                  an account" — without this we'd overwrite
+  //                                  their pick with null and they'd lose it)
+  //   - both null                  → no-op
   useEffect(() => {
     if (!isAuthenticatedUser || !user) return;
     const serverFav = user.favoriteNflTeam && isValidNflTeamAbbr(user.favoriteNflTeam)
       ? user.favoriteNflTeam.toUpperCase()
       : null;
-    if (serverFav !== favoriteAbbr) {
-      setFavoriteAbbrState(serverFav);
-      writeCache(serverFav);
+    if (serverFav) {
+      if (serverFav !== favoriteAbbr) {
+        setFavoriteAbbrState(serverFav);
+        writeCache(serverFav);
+      }
+      return;
     }
-    // We intentionally don't depend on favoriteAbbr here — that would loop
-    // when this effect writes back its own update. We only want to react to
-    // the server-supplied value changing.
+    // Server has no favorite. If the user has one locally (e.g. they picked
+    // it pre-login), persist that up rather than wiping the local cache.
+    const localFav = readCache();
+    if (localFav) {
+      void persist(localFav);
+    }
+    // We intentionally don't depend on favoriteAbbr / persist here — they'd
+    // loop when this effect writes back its own update. We only want to
+    // react to the server-supplied value (or login state) changing.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticatedUser, user?.favoriteNflTeam]);
 
@@ -117,7 +146,19 @@ export function FavoriteTeamProvider({ children }: { children: ReactNode }) {
       const res = await fetch(`${API_BASE}/api/sc-auth/me/favorite-team`, {
         method: "PUT",
         credentials: "include",
-        headers: { "Content-Type": "application/json" },
+        // The server accepts either a session cookie or a Bearer token.
+        // /me sends both, but earlier versions of this call sent only
+        // credentials — when the session cookie wasn't available (cross-
+        // origin SameSite restrictions, etc.) the PUT 401'd silently, the
+        // server never stored the favorite, and the next /me returned null
+        // → the FavoriteTeam effect below then overwrote localStorage with
+        // null, making it look like the favorite "forgot itself" between
+        // visits. Sending the Bearer token matches every other authenticated
+        // write in the app.
+        headers: {
+          "Content-Type": "application/json",
+          ...authBearerHeader(),
+        },
         body: JSON.stringify({ favoriteNflTeam: next }),
       });
       if (!res.ok) {

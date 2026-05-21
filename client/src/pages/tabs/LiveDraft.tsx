@@ -400,6 +400,39 @@ const POS_BADGE_SM: Record<string, string> = {
   TE: "text-orange-600 dark:text-orange-400",
 };
 
+// Compact "Time Left" stat block — used by both header variants. Colour
+// scales with urgency: muted gray when no timer, foreground default,
+// amber under 60s, red under 30s. Hidden when the draft has no timer
+// configured AND we shouldn't even reserve space — caller decides.
+function TimerStatBlock({ timer, testid = "stat-time-left" }: { timer: TimerInfo; testid?: string }) {
+  const urgent = timer.available && !timer.expired && timer.remainingMs < 30_000;
+  const warning = timer.available && !timer.expired && timer.remainingMs < 60_000 && timer.remainingMs >= 30_000;
+  const valueClass = !timer.available
+    ? "text-muted-foreground"
+    : timer.expired
+      ? "text-red-500"
+      : urgent
+        ? "text-red-500"
+        : warning
+          ? "text-amber-500 dark:text-amber-400"
+          : "text-foreground";
+  return (
+    <div className="text-center shrink-0 px-3 py-1.5 rounded-lg bg-muted/20 border border-border/30 min-w-[84px]" data-testid={testid}>
+      <p className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Time Left</p>
+      <p
+        className={cn(
+          "text-xl font-bold tabular-nums leading-tight",
+          valueClass,
+          urgent && "animate-pulse",
+        )}
+        data-testid={`${testid}-value`}
+      >
+        {timer.label}
+      </p>
+    </div>
+  );
+}
+
 // CurrentPickInfo — computed from DraftState for "on the clock" display
 interface CurrentPickInfo {
   nextPickNo: number;
@@ -411,6 +444,17 @@ interface CurrentPickInfo {
   totalPicks: number;
   picksRemaining: number;
   isMyTurn: boolean;
+}
+
+// TimerInfo — derived in LiveDraft (ticks every second), passed into headers
+// so the live MM:SS countdown can render with the proper urgency styling.
+interface TimerInfo {
+  /** false when the draft has no `pick_timer` set, or we can't anchor a base time. */
+  available: boolean;
+  /** "MM:SS" when available; "Expired" when expired; "No timer" / "Timer unavailable" otherwise. */
+  label: string;
+  remainingMs: number;
+  expired: boolean;
 }
 
 // ── DraftCard ─────────────────────────────────────────────────────────────────
@@ -737,10 +781,11 @@ function DraftsDashboard({
 // REST-only header used when the GraphQL draftState isn't available (e.g.
 // the user is connected to Sleeper but hasn't pasted a JWT). Mirrors the
 // shape of DraftStateHeader but reads only from the public draft endpoint.
-function RestDraftHeader({ draft, picksMade, currentPickInfo }: {
+function RestDraftHeader({ draft, picksMade, currentPickInfo, timerInfo }: {
   draft: DraftInfo;
   picksMade: number;
   currentPickInfo: CurrentPickInfo | null;
+  timerInfo: TimerInfo;
 }) {
   const totalPicks = draft.teams * draft.rounds;
   const pct = totalPicks > 0 ? Math.min(100, Math.round((picksMade / totalPicks) * 100)) : 0;
@@ -834,6 +879,32 @@ function RestDraftHeader({ draft, picksMade, currentPickInfo }: {
             />
           </div>
         </div>
+
+        {/* On the clock + Time Left — matches DraftStateHeader so the JWT
+            and REST paths render the same bottom row. Stacks on mobile via
+            flex-wrap; right-aligned blocks on desktop. */}
+        {isLive && currentPickInfo && (
+          <div className="flex items-center gap-4 flex-wrap border-t border-border/30 pt-3">
+            <div className="flex items-center gap-2.5 flex-1 min-w-0">
+              <SleeperUserAvatar
+                username={currentPickInfo.currentUser?.displayName || "—"}
+                avatar={currentPickInfo.currentUser?.avatar ?? null}
+                size="md"
+                compact
+              />
+              <div className="min-w-0">
+                <p className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">On the Clock</p>
+                <p className="text-sm font-bold text-foreground truncate" data-testid="text-on-clock-rest">
+                  {currentPickInfo.currentUser?.displayName || "—"}
+                </p>
+                <p className="text-[10px] text-muted-foreground">
+                  Pick {currentPickInfo.nextPickNo} · Rd {currentPickInfo.currentRound}
+                </p>
+              </div>
+            </div>
+            <TimerStatBlock timer={timerInfo} testid="stat-time-left-rest" />
+          </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -842,12 +913,13 @@ function RestDraftHeader({ draft, picksMade, currentPickInfo }: {
 // ── DraftStateHeader ─────────────────────────────────────────────────────────
 // OTC-style draft room header. Heavy emphasis on the current pick + on-the-
 // clock identity. This is the top of the 3-section draft room layout.
-function DraftStateHeader({ ds, currentPickInfo, draftStateLoading, myUserId, leagueId }: {
+function DraftStateHeader({ ds, currentPickInfo, draftStateLoading, myUserId, leagueId, timerInfo }: {
   ds: DraftState;
   currentPickInfo: CurrentPickInfo | null;
   draftStateLoading: boolean;
   myUserId: string | null;
   leagueId: string | null;
+  timerInfo: TimerInfo;
 }) {
   const { openManagerIntel } = useManagerIntel();
   const totalPicks = ds.teams * ds.rounds;
@@ -992,18 +1064,71 @@ function DraftStateHeader({ ds, currentPickInfo, draftStateLoading, myUserId, le
               </div>
             )}
 
-            {/* Timer */}
-            <div className="text-center shrink-0 px-3 py-1.5 rounded-lg bg-muted/20 border border-border/30">
-              <p className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Timer</p>
-              {ds.pickTimer > 0 ? (
-                <p className="text-sm font-semibold text-foreground" data-testid="text-pick-timer">{ds.pickTimer}s</p>
-              ) : (
-                <p className="text-xs font-medium text-muted-foreground" data-testid="text-no-timer">None</p>
-              )}
-            </div>
+            {/* Time Left — live MM:SS countdown. Ticks once per second from
+                the parent's wall-clock interval; no per-second API refetch. */}
+            <TimerStatBlock timer={timerInfo} testid="stat-time-left" />
           </div>
         )}
       </CardContent>
+    </Card>
+  );
+}
+
+// ── DraftOrderDebugPanel ──────────────────────────────────────────────────────
+// Dev-only diagnostic surface for the normalized Sleeper draft order. Renders
+// the raw inputs (draft_order, slot_to_roster_id) side-by-side with the
+// resolved view (slotToUserId, slotToUsername, currentPickNo/Slot/UserId/Username)
+// so on-the-clock mismatches can be diagnosed in the browser without dropping
+// into the network tab. Hidden in production via `import.meta.env.DEV`.
+function DraftOrderDebugPanel({
+  state,
+  currentPickInfo,
+}: {
+  state: DraftState;
+  currentPickInfo: CurrentPickInfo | null;
+}) {
+  const [open, setOpen] = useState(false);
+  const n = state.normalizedOrder;
+  const renderJson = (label: string, value: unknown) => (
+    <div className="space-y-1">
+      <p className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">{label}</p>
+      <pre className="text-[10px] leading-tight font-mono bg-muted/20 border border-border/30 rounded p-2 overflow-x-auto max-h-40">
+        {JSON.stringify(value, null, 2)}
+      </pre>
+    </div>
+  );
+  return (
+    <Card data-testid="debug-draft-order" className="border-amber-500/30 bg-amber-500/[0.03]">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center justify-between gap-2 px-3 py-2 hover:bg-amber-500/5"
+        data-testid="button-toggle-debug-draft-order"
+      >
+        <span className="text-[11px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
+          Debug · Draft Order ({n.draftType}{n.isThirdRoundReversal ? " · 3RR" : ""})
+        </span>
+        <span className="text-[10px] text-muted-foreground">
+          teams {n.teams} · pick {n.currentPickNo} · slot {n.currentSlot} · {n.currentUsername}
+        </span>
+        {open ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+      </button>
+      {open && (
+        <CardContent className="pt-2 pb-3 grid gap-3 md:grid-cols-2">
+          {renderJson("raw draft.draft_order", state.draftOrderByUserId)}
+          {renderJson("raw draft.slot_to_roster_id", state.slotToRosterIdRaw)}
+          {renderJson("normalized slotToUserId", n.slotToUserId)}
+          {renderJson("normalized slotToUsername", n.slotToUsername)}
+          {renderJson("normalized slotToRosterId", n.slotToRosterId)}
+          {renderJson("current pick", {
+            currentPickNo: n.currentPickNo,
+            currentSlot: n.currentSlot,
+            currentUserId: n.currentUserId,
+            currentUsername: n.currentUsername,
+            currentPickInfo,
+          })}
+        </CardContent>
+      )}
     </Card>
   );
 }
@@ -1984,6 +2109,30 @@ export default function LiveDraft() {
     return () => { cancelled = true; };
   }, [activeLeagueId, user?.userId]);
 
+  // Enrich roster players with dynasty values from the shared ranking list.
+  // fetchSleeperLeagueFull hardcodes `value: 0` (it's used elsewhere where
+  // values aren't relevant) so the My Team tab would render "—" for every
+  // row without this join. Lookup is by sleeperId first, then by name+pos.
+  const enrichedMyTeamRoster = useMemo<RosterPlayer[] | null>(() => {
+    if (!myTeamRoster) return null;
+    if (myTeamRoster.length === 0) return myTeamRoster;
+    const byId = new Map<string, number>();
+    const byNameKey = new Map<string, number>();
+    for (const dp of dynastyPlayerList) {
+      if (typeof dp.value !== "number" || dp.value <= 0) continue;
+      if (dp.sleeperId) byId.set(dp.sleeperId, dp.value);
+      byNameKey.set(`${(dp.name || "").toLowerCase().trim()}|${dp.pos}`, dp.value);
+    }
+    return myTeamRoster.map((p) => {
+      if (typeof p.value === "number" && p.value > 0) return p;
+      const id = p.sleeperId ?? p.id;
+      const fromId = id ? byId.get(id) : undefined;
+      const fromName = byNameKey.get(`${(p.name || "").toLowerCase().trim()}|${p.pos}`);
+      const value = fromId ?? fromName ?? 0;
+      return value > 0 ? { ...p, value } : p;
+    });
+  }, [myTeamRoster, dynastyPlayerList]);
+
   const activeDraftId = draftData?.draft?.draftId ?? null;
 
   const refreshMessages = useCallback(async (draftId: string, jwt: string) => {
@@ -2249,15 +2398,10 @@ export default function LiveDraft() {
     return () => clearInterval(iv);
   }, [activeLeagueId]);
 
-  const timerInfo = useMemo((): {
-    available: boolean;
-    label: string;
-    remainingMs: number;
-    expired: boolean;
-  } => {
+  const timerInfo = useMemo<TimerInfo>(() => {
     const pickTimer = draftData?.draft?.pickTimer ?? draftState?.pickTimer ?? 0;
     if (!pickTimer || pickTimer <= 0) {
-      return { available: false, label: "No pick timer", remainingMs: 0, expired: false };
+      return { available: false, label: "No timer", remainingMs: 0, expired: false };
     }
     // Anchor: most recent pick's timestamp; else draft start time. The
     // first pick is timed from when the draft actually started.
@@ -2265,7 +2409,7 @@ export default function LiveDraft() {
     const startTime = draftData?.draft?.startTime ?? null;
     const baseTime = lastPicked ?? startTime ?? null;
     if (!baseTime) {
-      return { available: false, label: "Timer unavailable", remainingMs: 0, expired: false };
+      return { available: false, label: "No timer", remainingMs: 0, expired: false };
     }
     const deadline = baseTime + pickTimer * 1000;
     const remainingMs = Math.max(0, deadline - nowTs);
@@ -2273,7 +2417,7 @@ export default function LiveDraft() {
     const totalSecs = Math.floor(remainingMs / 1000);
     const mins = Math.floor(totalSecs / 60);
     const secs = totalSecs % 60;
-    const label = expired ? "Expired" : `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+    const label = expired ? "00:00" : `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
     return { available: true, label, remainingMs, expired };
   }, [draftData, draftState, nowTs]);
 
@@ -2325,14 +2469,19 @@ export default function LiveDraft() {
     // loaded yet but draftState is present, e.g. in JWT-only edge cases).
     // No traded-pick data is available here — we treat every slot as
     // owned by its original draftOrder slot.
+    //
+    // Use the normalizer's resolved slot→user mapping, which falls back
+    // through slot_to_roster_id → roster.owner_id so a pre-draft startup
+    // with an empty draft_order still renders correct headers/cells.
     const slotToUserId: Record<number, string | undefined> = {};
-    if (draftState?.draftOrderByUserId) {
-      for (const [uid, slot] of Object.entries(draftState.draftOrderByUserId)) {
-        slotToUserId[slot] = uid;
+    if (draftState?.normalizedOrder.slotToUserId) {
+      for (const [slot, uid] of Object.entries(draftState.normalizedOrder.slotToUserId)) {
+        if (uid) slotToUserId[Number(slot)] = uid;
       }
     }
-
-    // Snake direction follows draft type (linear = always left→right).
+    // Pick→slot resolution delegates to the normalizer when draftState is
+    // loaded so snake/linear/3RR all flow through one rule.
+    const pickSlotResolver = draftState?.normalizedOrder.getSlotForPick ?? null;
     const isSnake = (draftData?.draft?.type ?? draftState?.type) === "snake";
     const currentPickNo = (draftState?.picks.length ?? draftData?.picks.filter((p) => p.playerId).length ?? 0) + 1;
     const myUserId = user?.userId ?? null;
@@ -2343,9 +2492,11 @@ export default function LiveDraft() {
       const row: Array<Cell> = [];
       const isSnakeRound = isSnake && r % 2 === 1;
       for (let i = 0; i < teamCount; i++) {
-        const slot = isSnakeRound ? teamCount - i : i + 1;
         const round = r + 1;
         const pickNo = r * teamCount + i + 1;
+        const slot = pickSlotResolver
+          ? pickSlotResolver(pickNo)
+          : isSnakeRound ? teamCount - i : i + 1;
         const draftPick = pickMap.get(`${round}-${slot}`);
         const ownerInfo = ownerByCell.get(`${round}-${slot}`);
 
@@ -2511,14 +2662,19 @@ export default function LiveDraft() {
     }
 
     if (draftState) {
-      const { teams, rounds, picks, draftOrderByUserId, usersById, type } = draftState;
+      const { teams, rounds, picks, usersById, normalizedOrder } = draftState;
       const totalPicks = teams * rounds;
       if (picks.length >= totalPicks) return null;
       const nextPickNo = picks.length + 1;
-      const { round: currentRound, pickInRound, slot: draftSlot } = slotForPick(nextPickNo, teams, type);
+      const currentRound = Math.ceil(nextPickNo / teams);
+      const pickInRound = ((nextPickNo - 1) % teams) + 1;
+      // Snake/linear/3RR all resolved by the normalizer — single source of
+      // truth so the on-the-clock identity can't drift from the board cells.
+      const draftSlot = normalizedOrder.getSlotForPick(nextPickNo);
 
-      // Prefer pickOwners for the on-the-clock identity. Falls back to the
-      // draftState slot owner when REST data hasn't loaded yet.
+      // Prefer pickOwners for the on-the-clock identity (trade-aware).
+      // When pickOwners hasn't loaded yet, fall through to the normalizer —
+      // which itself folds draft_order + slot_to_roster_id + roster owners.
       const ownerInfo = ownerByCell.get(`${currentRound}-${draftSlot}`);
       let currentUserId: string | null = null;
       let currentUser: DraftUser | null = null;
@@ -2531,9 +2687,18 @@ export default function LiveDraft() {
           isBot: false,
         } as DraftUser;
       } else {
-        const draftStateUid = Object.entries(draftOrderByUserId).find(([, s]) => s === draftSlot)?.[0] ?? null;
-        currentUserId = draftStateUid;
-        currentUser = draftStateUid ? usersById[draftStateUid] ?? null : null;
+        const slotUid = normalizedOrder.slotToUserId[draftSlot] ?? null;
+        currentUserId = slotUid;
+        if (slotUid && usersById[slotUid]) {
+          currentUser = usersById[slotUid];
+        } else if (slotUid) {
+          currentUser = {
+            userId: slotUid,
+            displayName: normalizedOrder.slotToUsername[draftSlot] ?? `Team ${draftSlot}`,
+            avatar: null,
+            isBot: false,
+          };
+        }
       }
 
       // Picks-away: walk forward through future cells. Traded picks I own
@@ -2542,11 +2707,10 @@ export default function LiveDraft() {
       let isMyTurn = false;
       if (myUserId) {
         for (let p = nextPickNo; p <= totalPicks; p++) {
-          const { round: rr, slot: ss } = slotForPick(p, teams, type);
+          const ss = normalizedOrder.getSlotForPick(p);
+          const rr = Math.ceil(p / teams);
           const oi = ownerByCell.get(`${rr}-${ss}`);
-          const cellUid = oi?.currentUserId
-            ?? Object.entries(draftOrderByUserId).find(([, s]) => s === ss)?.[0]
-            ?? null;
+          const cellUid = oi?.currentUserId ?? normalizedOrder.slotToUserId[ss] ?? null;
           if (cellUid === myUserId) {
             picksAway = p - nextPickNo;
             isMyTurn = picksAway === 0;
@@ -2702,19 +2866,23 @@ export default function LiveDraft() {
       // the two header arrays stay in lockstep.
       return slotHeaders;
     }
-    if (draftState && Object.keys(draftState.draftOrderByUserId).length > 0) {
-      const slotToUser: Record<number, DraftUser> = {};
-      for (const [userId, slot] of Object.entries(draftState.draftOrderByUserId)) {
-        slotToUser[slot] = draftState.usersById[userId] ?? { userId, displayName: `Slot ${slot}`, avatar: null, isBot: false };
-      }
-      return Array.from({ length: draftState.teams }, (_, i) => {
-        const u = slotToUser[i + 1];
+    if (draftState) {
+      // Use the normalizer's slotToUserId / slotToUsername — these chain
+      // through draft_order → slot_to_roster_id → roster.owner_id so the
+      // column header is never a "Slot N" placeholder when any of those
+      // mappings carries the slot.
+      const { normalizedOrder, usersById, teams } = draftState;
+      const headers = Array.from({ length: teams }, (_, i) => {
+        const slot = i + 1;
+        const userId = normalizedOrder.slotToUserId[slot] ?? null;
+        const user = userId ? usersById[userId] ?? null : null;
         return {
-          displayName: u?.displayName || `Pick ${i + 1}`,
-          avatar: u?.avatar ?? null,
-          userId: u && !u.isBot ? u.userId : null,
+          displayName: user?.displayName || normalizedOrder.slotToUsername[slot] || `Pick ${slot}`,
+          avatar: user?.avatar ?? null,
+          userId: user && !user.isBot ? user.userId : userId,
         };
       });
+      if (headers.some((h) => h.userId)) return headers;
     }
     return slotHeaders;
   }, [draftState, slotHeaders, draftData]);
@@ -2740,8 +2908,17 @@ export default function LiveDraft() {
     // slot displayName when draftState isn't available.
     const slotToUser = (slot: number): DraftUser | null => {
       if (draftState) {
-        const uid = Object.entries(draftState.draftOrderByUserId).find(([, s]) => s === slot)?.[0];
-        if (uid) return draftState.usersById[uid] ?? null;
+        const uid = draftState.normalizedOrder.slotToUserId[slot];
+        if (uid) {
+          return (
+            draftState.usersById[uid] ?? {
+              userId: uid,
+              displayName: draftState.normalizedOrder.slotToUsername[slot] ?? `Team ${slot}`,
+              avatar: null,
+              isBot: false,
+            }
+          );
+        }
       }
       const fromRest = draftData?.draftSlots?.find((d) => d.slot === slot);
       if (fromRest) {
@@ -3007,13 +3184,21 @@ export default function LiveDraft() {
               draftStateLoading={draftStateLoading}
               myUserId={user?.userId ?? null}
               leagueId={activeLeagueId}
+              timerInfo={timerInfo}
             />
           ) : draftData?.draft && (
             <RestDraftHeader
               draft={draftData.draft}
               picksMade={draftData.picks.filter((p) => p.playerId).length}
               currentPickInfo={currentPickInfo}
+              timerInfo={timerInfo}
             />
+          )}
+          {/* Dev-only debug panel — exposes the raw + normalized draft order
+              so on-the-clock / header mismatches can be diagnosed without
+              opening the GraphQL response by hand. */}
+          {import.meta.env.DEV && draftState && (
+            <DraftOrderDebugPanel state={draftState} currentPickInfo={currentPickInfo} />
           )}
           {mergedPickHistory.length > 0 && (
             <ManagerTimingsSection
@@ -3028,7 +3213,7 @@ export default function LiveDraft() {
             pickedPlayerNames={pickedPlayerNames}
             realIdResolver={resolveRealSleeperId}
             realTeamResolver={resolveRealTeam}
-            myRoster={myTeamRoster}
+            myRoster={enrichedMyTeamRoster}
             myRosterLoading={myTeamRosterLoading}
             myRosterError={myTeamRosterError}
             hasActiveLeague={!!activeLeagueId}
@@ -3193,13 +3378,14 @@ export default function LiveDraft() {
                       </div>
                       {enhancedSlotHeaders.map((header, i) => {
                         const slot1Based = i + 1;
+                        // Autopick can be reported by slot, userId, or rosterId.
+                        // Resolve all three against the normalized order.
+                        const slotUserId = draftState?.normalizedOrder.slotToUserId[slot1Based] ?? null;
+                        const slotRosterId = draftState?.normalizedOrder.slotToRosterId[slot1Based] ?? null;
                         const isAuto = draftAutopickers.some((ap) =>
                           ap.draftSlot === slot1Based ||
-                          (ap.userId && draftState?.draftOrderByUserId[ap.userId] === slot1Based) ||
-                          (ap.rosterId && (() => {
-                            const userId = Object.entries(draftState?.draftOrderByUserId ?? {}).find(([, s]) => s === slot1Based)?.[0];
-                            return userId ? ap.rosterId === parseInt(userId) : false;
-                          })())
+                          (ap.userId && slotUserId === ap.userId) ||
+                          (ap.rosterId != null && slotRosterId === ap.rosterId)
                         );
                         const displayName = header.displayName.length > 10
                           ? header.displayName.slice(0, 9) + "…"

@@ -94,6 +94,49 @@ import {
   checkFinancePassword,
 } from "./auth";
 
+// ── Shared filter parser for the player-profile endpoints ───────────────────
+// Accepts the same query string as /api/adp so the modal can mirror whatever
+// the DraftCommand view is currently filtered to. Unknown / blank values fall
+// through to backend defaults — same precedence as the main /api/adp parser.
+function parsePlayerProfileFilters(q: Record<string, unknown>): AdpFilters {
+  const num = (v: unknown) => {
+    if (v === undefined || v === null || v === "" || v === "all") return undefined;
+    const n = parseInt(String(v), 10);
+    return Number.isFinite(n) ? n : undefined;
+  };
+  const str = <T extends string>(v: unknown, allowed: readonly T[]): T | "all" | undefined => {
+    if (v === undefined || v === null || v === "") return undefined;
+    const s = String(v);
+    if (s === "all") return "all";
+    return (allowed as readonly string[]).includes(s) ? (s as T) : undefined;
+  };
+  const parseSeason = (v: unknown): AdpFilters["season"] => {
+    if (v === undefined || v === null || v === "") return undefined;
+    const s = String(v).trim();
+    if (s === "all") return "all";
+    if (s.includes(",")) {
+      const parts = s.split(",").map((x) => x.trim()).filter(Boolean);
+      return parts.length > 1 ? parts : parts[0];
+    }
+    return s;
+  };
+  return {
+    season: parseSeason(q.season),
+    draftType: str(q.draftType, ["startup", "rookie", "supplemental"] as const) ?? "startup",
+    draftFormat: str(q.draftFormat, ["snake", "auction", "linear"] as const) ?? "snake",
+    scoring: str(q.scoring, ["ppr", "half", "standard"] as const) ?? "all",
+    superflex: str(q.superflex, ["yes", "no"] as const) ?? "all",
+    tePremium: str(q.tePremium, ["yes", "no"] as const) ?? "all",
+    bestBall: str(q.bestBall, ["yes", "no"] as const) ?? "all",
+    leagueMode: str(q.leagueMode, ["dynasty", "keeper", "redraft"] as const) ?? "dynasty",
+    teams: num(q.teams) ?? "all",
+    rookieMode: (str(q.rookieMode, ["picks", "direct", "both"] as const) ?? "direct") as AdpFilters["rookieMode"],
+    passTd: (num(q.passTd) === 6 ? 6 : num(q.passTd) === 4 ? 4 : "all") as AdpFilters["passTd"],
+    startDate: typeof q.startDate === "string" ? q.startDate : undefined,
+    endDate: typeof q.endDate === "string" ? q.endDate : undefined,
+  };
+}
+
 // ── Simple in-memory TTL cache ────────────────────────────────────────────────
 interface CacheEntry<T> { data: T; expiresAt: number; }
 function makeCache<T>(ttlMs: number) {
@@ -222,12 +265,17 @@ export async function registerRoutes(
     }
   });
 
-  // Player profile analytics for the ADP Explorer drawer.
+  // Player profile analytics for the ADP Explorer drawer. Both endpoints
+  // accept the same filter query string as /api/adp so the modal reflects
+  // the currently selected DraftCommand filters (rookie vs startup, SF,
+  // TEP, scoring, date range, etc.). Without filters they fall back to
+  // current-year startup defaults — matching the original behavior.
   app.get("/api/adp/player/:playerId/history", async (req, res) => {
     try {
       const { playerId } = req.params;
       if (!playerId) return res.status(400).json({ error: "playerId is required" });
-      const data = await getAdpHistory(playerId);
+      const filters = parsePlayerProfileFilters(req.query);
+      const data = await getAdpHistory(playerId, filters);
       res.setHeader("Cache-Control", "public, max-age=300");
       res.json(data);
     } catch (err: any) {
@@ -242,7 +290,8 @@ export async function registerRoutes(
       const teams = Math.max(4, Math.min(20, parseInt(String(req.query.teams ?? "12"), 10) || 12));
       const rounds = Math.max(1, Math.min(20, parseInt(String(req.query.rounds ?? "5"), 10) || 5));
       if (!playerId) return res.status(400).json({ error: "playerId is required" });
-      const data = await getAdpAvailability(playerId, teams, rounds);
+      const filters = parsePlayerProfileFilters(req.query);
+      const data = await getAdpAvailability(playerId, filters, teams, rounds);
       res.setHeader("Cache-Control", "public, max-age=300");
       res.json(data);
     } catch (err: any) {

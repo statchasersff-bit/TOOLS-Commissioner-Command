@@ -12,8 +12,10 @@ import { useToast } from "@/hooks/use-toast";
 import { useFavoriteTeam } from "@/contexts/FavoriteTeamContext";
 import { FavoriteTeamPicker } from "@/components/FavoriteTeamPicker";
 import { useAuth } from "@/contexts/AuthContext";
+import { useTheme, type ThemeMode } from "@/contexts/ThemeContext";
 import { NFL_TEAMS } from "@/config/nflTeams";
-import { Loader2, Star } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { Loader2, Star, Sun, Moon, Zap, Palette } from "lucide-react";
 
 interface Props {
   open: boolean;
@@ -28,6 +30,7 @@ export function SettingsModal({ open, onOpenChange }: Props) {
   const { toast } = useToast();
   const { isAuthenticatedUser } = useAuth();
   const { favoriteAbbr, favoriteTeam, saving, setFavoriteTeam, clearFavoriteTeam } = useFavoriteTeam();
+  const { themeMode, setThemeMode, needsTeamForMyTeamMode } = useTheme();
 
   // Draft state so the user can browse around before committing.
   const [draftAbbr, setDraftAbbr] = useState<string | null>(favoriteAbbr);
@@ -70,6 +73,37 @@ export function SettingsModal({ open, onOpenChange }: Props) {
               Customize your Dynasty Command experience.
             </DialogDescription>
           </DialogHeader>
+
+          {/* ── Theme ─────────────────────────────────────────────────── */}
+          <section className="mt-6 space-y-3" data-testid="settings-theme">
+            <div className="flex items-center gap-2">
+              <Palette className="w-4 h-4 text-[#d4af37]" />
+              <h3 className="text-sm font-bold uppercase tracking-wider">Theme</h3>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Pick how Dynasty Command looks. <span className="font-semibold text-foreground">My Team</span> tints
+              the app with your favorite NFL team's colors while preserving readable contrast.
+            </p>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2" data-testid="theme-mode-picker">
+              <ThemeChoice mode="light"   current={themeMode} onSelect={setThemeMode} icon={Sun}  label="Light" />
+              <ThemeChoice mode="dark"    current={themeMode} onSelect={setThemeMode} icon={Moon} label="Dark"  />
+              <ThemeChoice mode="x-mode"  current={themeMode} onSelect={setThemeMode} icon={Zap}  label="X-Mode" />
+              <ThemeChoice
+                mode="my_team"
+                current={themeMode}
+                onSelect={setThemeMode}
+                icon={Star}
+                label={favoriteAbbr ? `My Team · ${favoriteAbbr}` : "My Team · Select team"}
+              />
+            </div>
+
+            {needsTeamForMyTeamMode && (
+              <p className="text-[11px] text-amber-500 dark:text-amber-400" data-testid="my-team-mode-prompt">
+                Pick your favorite NFL team below to unlock My Team Mode.
+              </p>
+            )}
+          </section>
 
           {/* ── Personalization ────────────────────────────────────────── */}
           <section className="mt-6 space-y-3" data-testid="settings-personalization">
@@ -127,4 +161,33 @@ export function SettingsModal({ open, onOpenChange }: Props) {
 function favoriteTeamLabel(abbr: string | null): string {
   if (!abbr) return "";
   return NFL_TEAMS.find((t) => t.abbreviation === abbr)?.name ?? abbr;
+}
+
+function ThemeChoice({
+  mode, current, onSelect, icon: Icon, label,
+}: {
+  mode: ThemeMode;
+  current: ThemeMode;
+  onSelect: (m: ThemeMode) => void;
+  icon: typeof Sun;
+  label: string;
+}) {
+  const active = current === mode;
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect(mode)}
+      data-on={active}
+      data-testid={`theme-choice-${mode}`}
+      className={cn(
+        "flex items-center gap-2 px-2.5 py-2 rounded-lg border text-xs font-semibold text-left transition-colors",
+        active
+          ? "bg-[#d4af37]/12 border-[#d4af37]/40 text-foreground"
+          : "border-border/40 text-muted-foreground hover:text-foreground hover:bg-muted/30",
+      )}
+    >
+      <Icon className={cn("w-3.5 h-3.5 flex-shrink-0", active ? "text-[#d4af37]" : "text-muted-foreground")} />
+      <span className="truncate">{label}</span>
+    </button>
+  );
 }

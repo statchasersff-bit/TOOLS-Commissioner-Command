@@ -3,6 +3,35 @@ import type { ValueSourceId, ValueSourceOption, Player, Pick, Team, TeamMetrics 
 import { getStaticPickValue } from "../data/pickValues";
 import { getFantasyCalcValues, getFantasyCalcRedraftValues } from "@/lib/fantasycalcApi";
 import { scAuthFetch } from "@/lib/scAuthFetch";
+import dynastySnapshot from "@/data/fantasycalc_snapshot_sf.json";
+import redraftSnapshot from "@/data/fantasycalc_snapshot_redraft_sf.json";
+
+// Seed state directly from the bundled snapshots — these ship with the
+// SPA so they're available synchronously on first render. The server fetch
+// below upgrades the values once the latest payload arrives; if it fails
+// (or stalls), the UI keeps running on the snapshot instead of getting
+// stuck on the "Loading FantasyCalc values…" overlay.
+interface SnapshotShape {
+  valuesBySleeperId: Record<string, number>;
+  players: Array<{ sleeperId: string; name: string; pos: string; team: string; value: number; age: number; overallRank: number }>;
+  updatedAt?: string;
+}
+const BUNDLED_DYNASTY = dynastySnapshot as unknown as SnapshotShape;
+const BUNDLED_REDRAFT = redraftSnapshot as unknown as SnapshotShape;
+
+function buildNameMap(snap: SnapshotShape): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const p of snap.players || []) {
+    out[`${p.name.toLowerCase().trim()}|${p.pos}`] = p.value;
+  }
+  return out;
+}
+
+function buildRankedList(snap: SnapshotShape): RankedPlayer[] {
+  return (snap.players || [])
+    .filter((p) => p.sleeperId && p.value > 0)
+    .sort((a, b) => b.value - a.value);
+}
 
 // Server-resolved custom value sets — see server/customValues.ts.
 interface ResolvedCustomSet {
@@ -107,14 +136,18 @@ export function ValueModelProvider({ children }: { children: React.ReactNode }) 
   useEffect(() => { console.log("[app] ValueModelProvider mounted"); }, []);
   const [sourceId, setSourceIdRaw] = useState<ValueSourceId>("fantasycalc");
   const [isRecalculating, setIsRecalculating] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isSnapshot, setIsSnapshot] = useState(false);
+  // Start `isLoading=false` — the bundled snapshot below means we have
+  // usable values from the first render, so the "Loading FantasyCalc
+  // values…" overlay never blocks the UI on a hung upstream. The server
+  // fetch in the effect upgrades values when it eventually returns.
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSnapshot, setIsSnapshot] = useState(true);
   const [unmatchedCount, setUnmatchedCount] = useState(0);
-  const [valuesBySleeperId, setValuesBySleeperId] = useState<Record<string, number>>({});
-  const [nameValueMap, setNameValueMap] = useState<Record<string, number>>({});
-  const [redraftValuesBySleeperId, setRedraftValuesBySleeperId] = useState<Record<string, number>>({});
-  const [redraftNameValueMap, setRedraftNameValueMap] = useState<Record<string, number>>({});
-  const [dynastyPlayerList, setDynastyPlayerList] = useState<RankedPlayer[]>([]);
+  const [valuesBySleeperId, setValuesBySleeperId] = useState<Record<string, number>>(() => BUNDLED_DYNASTY.valuesBySleeperId ?? {});
+  const [nameValueMap, setNameValueMap] = useState<Record<string, number>>(() => buildNameMap(BUNDLED_DYNASTY));
+  const [redraftValuesBySleeperId, setRedraftValuesBySleeperId] = useState<Record<string, number>>(() => BUNDLED_REDRAFT.valuesBySleeperId ?? {});
+  const [redraftNameValueMap, setRedraftNameValueMap] = useState<Record<string, number>>(() => buildNameMap(BUNDLED_REDRAFT));
+  const [dynastyPlayerList, setDynastyPlayerList] = useState<RankedPlayer[]>(() => buildRankedList(BUNDLED_DYNASTY));
   const [customDynasty, setCustomDynasty] = useState<ResolvedCustomSet | null>(null);
   const [customRedraft, setCustomRedraft] = useState<ResolvedCustomSet | null>(null);
   const [diagnostics, setDiagnostics] = useState<ValueDiagnostics>({
@@ -161,7 +194,9 @@ export function ValueModelProvider({ children }: { children: React.ReactNode }) 
   useEffect(() => {
     if (sourceId !== "fantasycalc") return;
     let cancelled = false;
-    setIsLoading(true);
+    // We deliberately do NOT setIsLoading(true) here — state is already
+    // seeded from the bundled snapshot, so the upgrade happens silently
+    // in the background and the user never sees a blocking spinner.
 
     Promise.all([
       getFantasyCalcValues("sf"),
@@ -172,6 +207,12 @@ export function ValueModelProvider({ children }: { children: React.ReactNode }) 
     ])
       .then(([dynastyData, redraftData]: [any, any]) => {
         if (cancelled) return;
+        // Defensive: if the server somehow returned malformed data, keep
+        // the bundled snapshot in place rather than nuking it.
+        if (!dynastyData || !dynastyData.valuesBySleeperId) {
+          setIsLoading(false);
+          return;
+        }
 
         setValuesBySleeperId(dynastyData.valuesBySleeperId);
         const byName: Record<string, number> = {};
@@ -211,7 +252,7 @@ export function ValueModelProvider({ children }: { children: React.ReactNode }) 
       })
       .catch((err) => {
         if (cancelled) return;
-        console.warn("[ValueModel] FantasyCalc fetch failed, using mock fallback:", err);
+        console.warn("[ValueModel] FantasyCalc fetch failed, keeping bundled snapshot:", err);
         setIsLoading(false);
         setIsSnapshot(true);
         setDiagnostics((prev) => ({

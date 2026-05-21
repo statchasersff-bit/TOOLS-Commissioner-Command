@@ -13,6 +13,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { WriteAccessModalProvider } from "@/contexts/WriteAccessModalContext";
 import { DevModeBanner } from "@/components/DevModeBanner";
 import { FavoriteTeamProvider } from "@/contexts/FavoriteTeamContext";
+import { ThemeProvider } from "@/contexts/ThemeContext";
 import { AuthGate } from "@/pages/auth/AuthGate";
 import DynastyCommandCenter from "@/pages/DynastyCommandCenter";
 import { Component, useEffect, type ReactNode, type ErrorInfo } from "react";
@@ -160,12 +161,14 @@ function App() {
           <AuthProvider>
             <WriteAccessModalProvider>
               <FavoriteTeamProvider>
-                <DevModeBanner />
-                <AuthGate>
-                  <ErrorBoundary label="authenticated-tree">
-                    <AuthenticatedTree probe={probe} />
-                  </ErrorBoundary>
-                </AuthGate>
+                <ThemeProvider>
+                  <DevModeBanner />
+                  <AuthGate>
+                    <ErrorBoundary label="authenticated-tree">
+                      <AuthenticatedTree probe={probe} />
+                    </ErrorBoundary>
+                  </AuthGate>
+                </ThemeProvider>
               </FavoriteTeamProvider>
             </WriteAccessModalProvider>
           </AuthProvider>

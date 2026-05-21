@@ -1,11 +1,12 @@
 /**
- * PlayerProfileDrawer — reusable side-drawer / bottom-sheet that shows
- * a player's ADP overview, fantasy production (mock), advanced stats (shell),
- * ADP history graph, pick availability grid, and news (shell).
+ * PlayerProfileDrawer — side-drawer / bottom-sheet that opens off the ADP
+ * Explorer (List/Box/Hex/Round Board) for a single player.
  *
- * Designed to be opened from the ADP Explorer Hex / List / Box views, but
- * intentionally has no dependency on those views — the consumer passes in
- * the ADP row it already has, and the drawer fetches the rest.
+ * Filter-aware: every analytic tab below (Overview, ADP, Availability) takes
+ * the active DraftCommand filter state as a prop and forwards it to the
+ * backend so the figures match whatever the user is looking at. Without the
+ * filter pass-through the modal silently fell back to startup-only data and
+ * "Rookie Drafts → Direct Rookies" looked identical to "Startup ADP".
  */
 
 import { useEffect, useState, useMemo } from "react";
@@ -15,10 +16,10 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { API_BASE } from "@/lib/apiBase";
 import { cn } from "@/lib/utils";
-import type { ADPResult, Position } from "@/types/draft";
+import type { ADPResult, Position, DraftFilters } from "@/types/draft";
 import {
   Loader2, AlertCircle, TrendingUp, TrendingDown, BarChart3,
-  Activity, History, Layers, Newspaper,
+  Activity, History, Layers, Newspaper, Sparkles,
 } from "lucide-react";
 
 interface AdpHistoryPoint {
@@ -50,6 +51,7 @@ interface AvailabilityResponse {
   totalDrafts: number;
   draftsWithPlayer: number;
   expectedPick: number | null;
+  biggestDropAt: { fromPick: number; toPick: number; delta: number } | null;
   cells: AvailabilityCell[];
 }
 
@@ -70,14 +72,74 @@ interface PlayerProfileDrawerProps {
    *  build the Pick Availability grid. Defaults to 12. */
   teams?: number;
   rounds?: number;
+  /** Active DraftCommand filter state — forwarded into the player-specific
+   *  history / availability endpoints so the modal reflects the dataset the
+   *  user is looking at. Optional so the drawer can still be used from
+   *  contexts (tests, dev tools) that don't have a filter set. */
+  filters?: DraftFilters;
 }
 
-export function PlayerProfileDrawer({ open, onClose, adp, teams = 12, rounds = 5 }: PlayerProfileDrawerProps) {
+// Stringify the DraftFilters into the same query string /api/adp expects.
+// Subset only — date range, scoring, SF, TEP, draftType, rookieMode, teams.
+function filtersToQuery(filters?: DraftFilters): string {
+  if (!filters) return "";
+  const p = new URLSearchParams();
+  if (filters.season === "all") p.set("season", "all");
+  else if (Array.isArray(filters.season)) p.set("season", filters.season.join(","));
+  else if (filters.season) p.set("season", filters.season);
+  // Mirror the same Rookie-Picks override the main /api/adp URL builder
+  // applies so the modal can't drift from the table.
+  const effectiveDraftType = filters.rookieMode === "picks" ? "rookie" : filters.draftType;
+  p.set("draftType", effectiveDraftType);
+  p.set("draftFormat", filters.draftFormat);
+  p.set("rookieMode", filters.rookieMode);
+  p.set("leagueMode", filters.leagueMode);
+  if (filters.scoring !== "all") p.set("scoring", filters.scoring);
+  if (filters.superflex !== "all") p.set("superflex", filters.superflex);
+  if (filters.tePremium !== "all") p.set("tePremium", filters.tePremium);
+  if (filters.bestBall !== "all") p.set("bestBall", filters.bestBall);
+  if (filters.teams !== "all") p.set("teams", String(filters.teams));
+  if (filters.passTd !== "all") p.set("passTd", String(filters.passTd));
+  if (filters.dateRange.start) p.set("startDate", filters.dateRange.start);
+  if (filters.dateRange.end) p.set("endDate", filters.dateRange.end);
+  return p.toString();
+}
+
+// Human-readable summary of the active filter context. Shown near each tab's
+// title so the user always knows which dataset the figures came from.
+function filterContextLabel(filters?: DraftFilters): string {
+  if (!filters) return "";
+  const parts: string[] = [];
+  if (typeof filters.teams === "number") parts.push(`${filters.teams}T`);
+  if (filters.superflex === "yes") parts.push("SF");
+  else if (filters.superflex === "no") parts.push("1QB");
+  if (filters.tePremium === "yes") parts.push("TEP");
+  if (filters.scoring !== "all") parts.push(filters.scoring.toUpperCase());
+  if (filters.rookieMode === "picks") parts.push("Rookie · Placeholders");
+  else if (filters.draftType === "rookie") parts.push("Rookie · Direct");
+  else if (filters.draftType === "startup") parts.push("Startup");
+  else parts.push("All Drafts");
+  const days = daysBetweenIso(filters.dateRange.start, filters.dateRange.end);
+  if (days > 0) parts.push(`${days}D`);
+  return parts.join(" · ");
+}
+
+function daysBetweenIso(start: string, end: string): number {
+  if (!start || !end) return 0;
+  const s = new Date(start).getTime();
+  const e = new Date(end).getTime();
+  return Math.round((e - s) / 86_400_000);
+}
+
+export function PlayerProfileDrawer({ open, onClose, adp, teams = 12, rounds = 5, filters }: PlayerProfileDrawerProps) {
   const isMobile = useIsMobile();
   const [tab, setTab] = useState("overview");
 
   // Reset to overview every time a new player is opened.
   useEffect(() => { if (open) setTab("overview"); }, [open, adp?.player_id]);
+
+  const ctxLabel = useMemo(() => filterContextLabel(filters), [filters]);
+  const filterQuery = useMemo(() => filtersToQuery(filters), [filters]);
 
   return (
     <Sheet open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
@@ -87,40 +149,42 @@ export function PlayerProfileDrawer({ open, onClose, adp, teams = 12, rounds = 5
           "p-0 border-l border-border/60 bg-[#0a1628] text-foreground overflow-hidden flex flex-col",
           isMobile
             ? "h-[92vh] sm:max-w-full rounded-t-2xl"
-            : "w-full sm:max-w-[520px]",
+            : "w-full sm:max-w-[540px]",
         )}
         data-testid="player-profile-drawer"
       >
-        {/* Hidden title for a11y; the visual header lives in <ProfileHeader>. */}
         <SheetTitle className="sr-only">
           {adp ? `${adp.player_name} profile` : "Player profile"}
         </SheetTitle>
 
         {adp ? (
           <>
-            <ProfileHeader adp={adp} />
+            <ProfileHeader adp={adp} ctxLabel={ctxLabel} />
             <Tabs value={tab} onValueChange={setTab} className="flex flex-col flex-1 min-h-0">
-              <TabsList className="mx-3 mt-2 grid grid-cols-6 h-9 bg-white/[0.04]">
-                <TabsTrigger value="overview"     className="text-[10px] flex items-center gap-1"><BarChart3 className="w-3 h-3"/>Overview</TabsTrigger>
-                <TabsTrigger value="production"   className="text-[10px] flex items-center gap-1"><Activity className="w-3 h-3"/>Production</TabsTrigger>
-                <TabsTrigger value="advanced"     className="text-[10px] flex items-center gap-1"><Layers className="w-3 h-3"/>Advanced</TabsTrigger>
-                <TabsTrigger value="history"      className="text-[10px] flex items-center gap-1"><History className="w-3 h-3"/>ADP</TabsTrigger>
-                <TabsTrigger value="availability" className="text-[10px] flex items-center gap-1">Avail.</TabsTrigger>
-                <TabsTrigger value="news"         className="text-[10px] flex items-center gap-1"><Newspaper className="w-3 h-3"/>News</TabsTrigger>
+              <TabsList className="mx-3 mt-1.5 grid grid-cols-6 h-7 bg-white/[0.04] p-0.5">
+                <TabsTrigger value="overview"     className="text-[10px] flex items-center gap-1 h-6 px-1.5"><BarChart3 className="w-3 h-3"/>Overview</TabsTrigger>
+                <TabsTrigger value="production"   className="text-[10px] flex items-center gap-1 h-6 px-1.5"><Activity className="w-3 h-3"/>Production</TabsTrigger>
+                <TabsTrigger value="advanced"     className="text-[10px] flex items-center gap-1 h-6 px-1.5"><Layers className="w-3 h-3"/>Advanced</TabsTrigger>
+                <TabsTrigger value="history"      className="text-[10px] flex items-center gap-1 h-6 px-1.5"><History className="w-3 h-3"/>ADP</TabsTrigger>
+                <TabsTrigger value="availability" className="text-[10px] flex items-center gap-1 h-6 px-1.5">Avail.</TabsTrigger>
+                <TabsTrigger value="news"         className="text-[10px] flex items-center gap-1 h-6 px-1.5"><Newspaper className="w-3 h-3"/>News</TabsTrigger>
               </TabsList>
 
-              <div className="flex-1 overflow-y-auto px-4 py-4">
-                <TabsContent value="overview"><OverviewTab adp={adp} /></TabsContent>
+              <div className="flex-1 overflow-y-auto px-4 py-3">
+                <TabsContent value="overview"><OverviewTab adp={adp} ctxLabel={ctxLabel} /></TabsContent>
                 <TabsContent value="production"><ProductionTab adp={adp} /></TabsContent>
                 <TabsContent value="advanced"><AdvancedShell /></TabsContent>
-                <TabsContent value="history"><AdpHistoryTab playerId={adp.player_id} active={tab === "history"} /></TabsContent>
+                <TabsContent value="history"><AdpHistoryTab playerId={adp.player_id} active={tab === "history"} ctxLabel={ctxLabel} filterQuery={filterQuery} /></TabsContent>
                 <TabsContent value="availability">
                   <AvailabilityTab
                     playerId={adp.player_id}
+                    playerName={adp.player_name}
                     teams={teams}
                     rounds={rounds}
                     expectedAdp={adp.avg_pick}
                     active={tab === "availability"}
+                    ctxLabel={ctxLabel}
+                    filterQuery={filterQuery}
                   />
                 </TabsContent>
                 <TabsContent value="news"><NewsShell /></TabsContent>
@@ -137,16 +201,16 @@ export function PlayerProfileDrawer({ open, onClose, adp, teams = 12, rounds = 5
 
 // ── Header ──────────────────────────────────────────────────────────────────
 
-function ProfileHeader({ adp }: { adp: ADPResult }) {
+function ProfileHeader({ adp, ctxLabel }: { adp: ADPResult; ctxLabel: string }) {
   const tint = POS_TINT[adp.position] ?? POS_TINT.WR;
   const looksLikeSleeperId = /^\d+$/.test(adp.player_id);
   const rising = adp.trend_30d < -2;
   const falling = adp.trend_30d > 2;
   return (
-    <div className="px-4 pt-5 pb-3 border-b border-white/5 bg-gradient-to-b from-white/[0.04] to-transparent">
+    <div className="px-4 pt-4 pb-3 border-b border-white/5 bg-gradient-to-b from-white/[0.04] to-transparent">
       <div className="flex items-center gap-3">
         <div className={cn(
-          "w-16 h-16 rounded-lg overflow-hidden flex items-center justify-center ring-2 flex-shrink-0",
+          "w-14 h-14 rounded-lg overflow-hidden flex items-center justify-center ring-1 flex-shrink-0",
           tint.bg, tint.ring,
         )}>
           {looksLikeSleeperId ? (
@@ -164,22 +228,30 @@ function ProfileHeader({ adp }: { adp: ADPResult }) {
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5">
-            <h2 className="text-base font-bold truncate" data-testid="profile-name">{adp.player_name}</h2>
+            <h2 className="text-[15px] font-bold truncate" data-testid="profile-name">{adp.player_name}</h2>
             {rising && <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />}
             {falling && <TrendingDown className="w-3.5 h-3.5 text-rose-400" />}
           </div>
-          <div className="text-[11px] text-muted-foreground mt-0.5 flex items-center gap-2">
-            <Badge variant="outline" className={cn("text-[9px]", tint.text)}>
+          {/* Inline metrics row — compact, no giant standalone ADP block. */}
+          <div className="text-[11px] text-muted-foreground mt-0.5 flex items-center gap-1.5 flex-wrap">
+            <Badge variant="outline" className={cn("text-[9px] h-4 px-1.5", tint.text)}>
               {adp.position}{adp.positional_rank}
             </Badge>
             <span>{adp.team || (adp.is_rookie_placeholder ? "Rookie Pick" : "FA")}</span>
-            <span>·</span>
+            <span className="text-white/20">·</span>
             <span>Overall #{adp.overall_rank}</span>
+            <span className="text-white/20">·</span>
+            <span><span className="text-[#d4af37] font-semibold tabular-nums">ADP {adp.avg_pick.toFixed(1)}</span></span>
+            <span className="text-white/20">·</span>
+            <span className="tabular-nums">{adp.min_pick}–{adp.max_pick}</span>
+            <span className="text-white/20">·</span>
+            <span className="tabular-nums">{adp.draft_count} drafts</span>
           </div>
-        </div>
-        <div className="text-right flex-shrink-0">
-          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">ADP</div>
-          <div className="text-xl font-black tabular-nums text-[#d4af37]">{adp.avg_pick.toFixed(1)}</div>
+          {ctxLabel && (
+            <div className="text-[10px] text-white/40 mt-1 truncate" title={ctxLabel}>
+              {ctxLabel}
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -188,94 +260,191 @@ function ProfileHeader({ adp }: { adp: ADPResult }) {
 
 // ── Overview ────────────────────────────────────────────────────────────────
 
-function OverviewTab({ adp }: { adp: ADPResult }) {
-  const range = adp.max_pick - adp.min_pick;
+function OverviewTab({ adp, ctxLabel }: { adp: ADPResult; ctxLabel: string }) {
+  const range = Math.max(1, adp.max_pick - adp.min_pick);
+  const medianPct = ((adp.median_pick - adp.min_pick) / range) * 100;
+  const currentPct = ((adp.avg_pick - adp.min_pick) / range) * 100;
+
+  const tier = playerTier(adp);
+  const marketBadge = marketStatus(adp);
+  const insights = buildOverviewInsights(adp);
+  const trendChips = buildTrendChips(adp);
+
   return (
     <div className="space-y-4 text-[12px]">
-      <div className="grid grid-cols-3 gap-2">
-        <Stat label="Min Pick" value={adp.min_pick} />
-        <Stat label="Median" value={adp.median_pick} />
-        <Stat label="Max Pick" value={adp.max_pick} />
-        <Stat label="Drafts" value={adp.draft_count} />
-        <Stat label="7D Trend" value={trendLabel(adp.trend_7d)} accent={adp.trend_7d < 0 ? "emerald" : adp.trend_7d > 0 ? "rose" : undefined} />
-        <Stat label="30D Trend" value={trendLabel(adp.trend_30d)} accent={adp.trend_30d < 0 ? "emerald" : adp.trend_30d > 0 ? "rose" : undefined} />
-      </div>
-
-      <div>
-        <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1.5">ADP Range</div>
-        <div className="relative h-3 rounded-full bg-white/5 overflow-hidden border border-white/5">
-          <div className="absolute inset-y-0 bg-blue-500/40" style={{ left: 0, right: 0 }} />
-          {range > 0 && (
-            <div
-              className="absolute top-1/2 -translate-y-1/2 w-2 h-4 rounded-sm bg-[#d4af37] shadow-[0_0_6px_rgba(212,175,55,0.9)]"
-              style={{ left: `calc(${((adp.median_pick - adp.min_pick) / range) * 100}% - 4px)` }}
-            />
-          )}
-        </div>
-        <div className="flex justify-between text-[10px] text-muted-foreground mt-1 tabular-nums">
-          <span>{adp.min_pick}</span>
-          <span className="text-[#d4af37] font-semibold">ADP {adp.avg_pick.toFixed(1)}</span>
-          <span>{adp.max_pick}</span>
-        </div>
-      </div>
-
-      <div className="flex flex-wrap gap-1.5">
+      {/* Tier + market status */}
+      <div className="flex flex-wrap items-center gap-1.5" data-testid="overview-tier-row">
+        <Badge variant="outline" className="text-[10px] text-[#d4af37] border-[#d4af37]/40 font-semibold">
+          {tier}
+        </Badge>
+        {marketBadge && (
+          <Badge variant="outline" className={cn("text-[10px]", marketBadge.className)}>
+            {marketBadge.label}
+          </Badge>
+        )}
         {adp.sample_size_warning && (
-          <Badge variant="outline" className="text-[9px] text-amber-400 border-amber-500/40">
+          <Badge variant="outline" className="text-[10px] text-amber-400 border-amber-500/40">
             Small sample
           </Badge>
         )}
-        {adp.trend_30d < -3 && (
-          <Badge variant="outline" className="text-[9px] text-emerald-400 border-emerald-500/40">
-            Rising
-          </Badge>
-        )}
-        {adp.trend_30d > 3 && (
-          <Badge variant="outline" className="text-[9px] text-rose-400 border-rose-500/40">
-            Falling
-          </Badge>
-        )}
-        {adp.overall_rank <= 12 && (
-          <Badge variant="outline" className="text-[9px] text-[#d4af37] border-[#d4af37]/40">
-            Elite (Top 12)
-          </Badge>
-        )}
       </div>
+
+      {/* Compact stat strip — single horizontal row, no boxed cards. */}
+      <div className="flex items-baseline gap-3 flex-wrap text-[11px] text-muted-foreground" data-testid="overview-stat-strip">
+        <StripStat label="Min" value={adp.min_pick} />
+        <StripStat label="Median" value={adp.median_pick} />
+        <StripStat label="Max" value={adp.max_pick} />
+        <StripStat label="Drafts" value={adp.draft_count.toLocaleString()} />
+        {trendChips.map((c) => (
+          <StripStat key={c.label} label={c.label} value={c.value} accent={c.accent} />
+        ))}
+      </div>
+
+      {/* Distribution rail — min … median … current … max with markers and shading. */}
+      <div data-testid="overview-distribution">
+        <div className="flex items-center justify-between text-[10px] uppercase tracking-wider text-muted-foreground mb-1.5">
+          <span>Draft Position Distribution</span>
+          <span className="text-white/50 normal-case tracking-normal">{ctxLabel || ""}</span>
+        </div>
+        <div className="relative h-2 rounded-full bg-white/5 border border-white/10 overflow-hidden">
+          {/* Median to max — softer band. */}
+          <div className="absolute inset-y-0 bg-blue-500/25" style={{ left: `${medianPct}%`, right: 0 }} />
+          {/* Min to median — denser band (the bulk of the range). */}
+          <div className="absolute inset-y-0 bg-blue-500/40" style={{ left: 0, width: `${medianPct}%` }} />
+          {/* Median marker. */}
+          <div
+            className="absolute top-1/2 -translate-y-1/2 w-px h-3 bg-white/70"
+            style={{ left: `calc(${medianPct}% - 0.5px)` }}
+            title={`Median ${adp.median_pick}`}
+          />
+          {/* Current ADP marker — gold dot. */}
+          <div
+            className="absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full bg-[#d4af37] ring-1 ring-[#d4af37]/60 shadow-[0_0_6px_rgba(212,175,55,0.9)]"
+            style={{ left: `calc(${currentPct}% - 5px)` }}
+            title={`ADP ${adp.avg_pick.toFixed(1)}`}
+          />
+        </div>
+        <div className="flex justify-between text-[10px] text-muted-foreground mt-1 tabular-nums">
+          <span title="Earliest observed pick">Min {adp.min_pick}</span>
+          <span className="text-white/70">Median {adp.median_pick}</span>
+          <span className="text-[#d4af37] font-semibold">ADP {adp.avg_pick.toFixed(1)}</span>
+          <span title="Latest observed pick">Max {adp.max_pick}</span>
+        </div>
+      </div>
+
+      {insights.length > 0 && (
+        <div className="space-y-1.5" data-testid="overview-insights">
+          <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-muted-foreground">
+            <Sparkles className="w-3 h-3 text-[#d4af37]" /> Draft Insights
+          </div>
+          <ul className="space-y-1 text-[11px] text-white/85">
+            {insights.map((i, idx) => (
+              <li key={idx} className="flex gap-1.5">
+                <span className="text-[#d4af37] mt-px">•</span>
+                <span>{i}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }
 
-function trendLabel(n: number): string {
-  if (n === 0) return "—";
+function StripStat({ label, value, accent }: { label: string; value: string | number; accent?: "emerald" | "rose" }) {
+  const accentClass = accent === "emerald" ? "text-emerald-300" : accent === "rose" ? "text-rose-300" : "text-foreground";
+  return (
+    <span className="inline-flex items-baseline gap-1 whitespace-nowrap">
+      <span className="text-[9px] uppercase tracking-wider text-muted-foreground">{label}</span>
+      <span className={cn("font-bold tabular-nums text-[12px]", accentClass)}>{value}</span>
+    </span>
+  );
+}
+
+function playerTier(adp: ADPResult): string {
+  if (adp.is_rookie_placeholder) return "Rookie Pick Asset";
+  if (adp.overall_rank <= 6)  return "Tier 1 · Foundation Asset";
+  if (adp.overall_rank <= 12) return "Elite Startup Cornerstone";
+  if (adp.overall_rank <= 24) return "Early-Round Anchor";
+  if (adp.overall_rank <= 48) return "Mid-Round Starter";
+  if (adp.overall_rank <= 96) return "Roster Builder";
+  return "Late-Round Upside";
+}
+
+function marketStatus(adp: ADPResult): { label: string; className: string } | null {
+  const mag30 = Math.abs(adp.trend_30d);
+  const mag7 = Math.abs(adp.trend_7d);
+  if (mag30 >= 5 || mag7 >= 6)  return { label: "Volatile",       className: "text-amber-300 border-amber-500/40" };
+  if (adp.trend_30d <= -3)      return { label: "Rising Fast",    className: "text-emerald-300 border-emerald-500/40" };
+  if (adp.trend_30d < 0)        return { label: "Trending Up",    className: "text-emerald-300 border-emerald-500/40" };
+  if (adp.trend_30d >= 3)       return { label: "Trending Down",  className: "text-rose-300 border-rose-500/40" };
+  return { label: "Market Stable", className: "text-white/60 border-white/20" };
+}
+
+function buildTrendChips(adp: ADPResult): Array<{ label: string; value: string; accent?: "emerald" | "rose" }> {
+  // Only surface a chip when the trend is meaningful (≥ 0.3 pick movement).
+  // Suppresses the dead "—" cards the old layout left behind.
+  const chips: Array<{ label: string; value: string; accent?: "emerald" | "rose" }> = [];
+  if (Math.abs(adp.trend_7d) >= 0.3) {
+    chips.push({
+      label: "7D",
+      value: trendArrow(adp.trend_7d),
+      accent: adp.trend_7d < 0 ? "emerald" : "rose",
+    });
+  }
+  if (Math.abs(adp.trend_30d) >= 0.3) {
+    chips.push({
+      label: "30D",
+      value: trendArrow(adp.trend_30d),
+      accent: adp.trend_30d < 0 ? "emerald" : "rose",
+    });
+  }
+  return chips;
+}
+
+function trendArrow(n: number): string {
+  if (n === 0) return "Stable";
   const sign = n > 0 ? "↓" : "↑";
   return `${sign} ${Math.abs(n).toFixed(1)}`;
 }
 
-function Stat({ label, value, accent }: { label: string; value: string | number; accent?: "emerald" | "rose" }) {
-  const accentClass = accent === "emerald" ? "text-emerald-300" : accent === "rose" ? "text-rose-300" : "text-foreground";
-  return (
-    <div className="rounded-md border border-white/10 bg-white/[0.02] px-2 py-1.5">
-      <div className="text-[9px] uppercase tracking-wider text-muted-foreground">{label}</div>
-      <div className={cn("font-bold tabular-nums text-sm", accentClass)}>{value}</div>
-    </div>
-  );
+function buildOverviewInsights(adp: ADPResult): string[] {
+  const out: string[] = [];
+  const range = adp.max_pick - adp.min_pick;
+  // Tight ADP range.
+  if (adp.draft_count >= 25 && range <= 6) {
+    out.push(`Rarely falls outside the ${adp.min_pick}–${adp.max_pick} range across the filtered sample.`);
+  }
+  // Positional anchor.
+  if (adp.positional_rank === 1) {
+    out.push(`Currently the consensus ${adp.position}1 in this view.`);
+  } else if (adp.positional_rank <= 6) {
+    out.push(`Sits inside the top ${adp.positional_rank === 1 ? "1" : adp.positional_rank} at ${adp.position} in this filter context.`);
+  }
+  // Trend interpretation.
+  if (adp.trend_30d <= -1.5) {
+    out.push(`Market value rising — ADP has improved about ${Math.abs(adp.trend_30d).toFixed(1)} spots over the last 30 days.`);
+  } else if (adp.trend_30d >= 1.5) {
+    out.push(`Market cooling — ADP has slipped about ${Math.abs(adp.trend_30d).toFixed(1)} spots over the last 30 days.`);
+  } else if (adp.draft_count >= 25) {
+    out.push("Market position has held steady over the last 30 days.");
+  }
+  return out;
 }
 
-// ── Production (mock structure) ─────────────────────────────────────────────
+// ── Production ──────────────────────────────────────────────────────────────
 
 function ProductionTab({ adp }: { adp: ADPResult }) {
-  // Mock structure — real per-season fantasy production lands once the
-  // backend production endpoint is wired. Columns reflect the spec.
-  const rows = [
-    { season: "2024", team: adp.team || "—", games: "—", points: "—", ppg: "—", finish: "—" },
-    { season: "2023", team: "—", games: "—", points: "—", ppg: "—", finish: "—" },
-    { season: "2022", team: "—", games: "—", points: "—", ppg: "—", finish: "—" },
-  ];
+  // Backend shape: server/playerProduction (future) returns
+  //   [{ season, team, games, fantasy_points, ppg, positional_finish }, …]
+  // Until that endpoint exists we render the shell + a transparent empty
+  // state rather than fake "—" rows. The columns + skeleton stay in place
+  // so the swap-in is a one-line change.
   return (
-    <div className="space-y-3">
-      <div className="text-[11px] text-muted-foreground">
-        Fantasy production history. Per-season stats will populate when the production feed is connected.
-      </div>
+    <div className="space-y-3 text-[12px]" data-testid="production-tab">
+      <p className="text-[11px] text-muted-foreground">
+        Per-season fantasy production will populate once the stat provider integration ships.
+      </p>
       <div className="rounded-md border border-white/10 overflow-hidden">
         <table className="w-full text-[11px]">
           <thead className="bg-white/[0.04] text-muted-foreground">
@@ -289,16 +458,12 @@ function ProductionTab({ adp }: { adp: ADPResult }) {
             </tr>
           </thead>
           <tbody>
-            {rows.map((r) => (
-              <tr key={r.season} className="border-t border-white/5">
-                <td className="px-2 py-1.5">{r.season}</td>
-                <td className="px-2 py-1.5">{r.team}</td>
-                <td className="px-2 py-1.5 text-right tabular-nums">{r.games}</td>
-                <td className="px-2 py-1.5 text-right tabular-nums">{r.points}</td>
-                <td className="px-2 py-1.5 text-right tabular-nums">{r.ppg}</td>
-                <td className="px-2 py-1.5 text-right tabular-nums">{r.finish}</td>
-              </tr>
-            ))}
+            <tr>
+              <td colSpan={6} className="px-3 py-6 text-center text-[11px] text-muted-foreground">
+                No production data available yet.
+                {adp.team && <span className="block text-[10px] mt-0.5 text-white/40">Current team: {adp.team}</span>}
+              </td>
+            </tr>
           </tbody>
         </table>
       </div>
@@ -309,32 +474,44 @@ function ProductionTab({ adp }: { adp: ADPResult }) {
 // ── Advanced shell ──────────────────────────────────────────────────────────
 
 function AdvancedShell() {
+  // Placeholder cards reserved for the future advanced-metrics endpoint
+  // (target share, YPRR, EPA, etc.). No fake values — empty cells stay empty.
+  const placeholders = [
+    "Target Share", "Yards / Route Run", "Air Yards",
+    "Red Zone Usage", "Route Participation", "Snap Share",
+  ];
   return (
-    <div className="text-[12px] text-muted-foreground space-y-2">
-      <p>Advanced stats — coming soon.</p>
-      <ul className="list-disc pl-4 space-y-0.5 text-[11px]">
-        <li>Targets, target share, air yards</li>
-        <li>Yards per route run, route participation</li>
-        <li>Red zone usage, snap share</li>
-        <li>Carries, efficiency metrics</li>
-      </ul>
+    <div className="space-y-3" data-testid="advanced-tab">
+      <p className="text-[11px] text-muted-foreground">
+        Advanced metrics will populate once the stat provider integration ships.
+      </p>
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+        {placeholders.map((p) => (
+          <div key={p} className="rounded-md border border-white/10 bg-white/[0.02] px-2 py-2">
+            <div className="text-[9px] uppercase tracking-wider text-muted-foreground">{p}</div>
+            <div className="text-[15px] font-bold tabular-nums text-white/35">—</div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
 
 // ── ADP History ─────────────────────────────────────────────────────────────
 
-function AdpHistoryTab({ playerId, active }: { playerId: string; active: boolean }) {
+function AdpHistoryTab({ playerId, active, ctxLabel, filterQuery }: { playerId: string; active: boolean; ctxLabel: string; filterQuery: string }) {
   const [data, setData] = useState<AdpHistoryResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [range, setRange] = useState<"7d" | "30d" | "90d" | "all">("90d");
 
   useEffect(() => {
     if (!active) return;
     let cancelled = false;
     setLoading(true);
     setError(null);
-    fetch(`${API_BASE}/api/adp/player/${encodeURIComponent(playerId)}/history`, { credentials: "include" })
+    const qs = filterQuery ? `?${filterQuery}` : "";
+    fetch(`${API_BASE}/api/adp/player/${encodeURIComponent(playerId)}/history${qs}`, { credentials: "include" })
       .then(async (r) => {
         const ct = r.headers.get("content-type") || "";
         if (!r.ok || !ct.includes("application/json")) {
@@ -346,84 +523,175 @@ function AdpHistoryTab({ playerId, active }: { playerId: string; active: boolean
       .catch((e) => { if (!cancelled) setError(e?.message || "Failed to load ADP history"); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [playerId, active]);
+  }, [playerId, active, filterQuery]);
 
   if (loading) return <div className="flex items-center gap-2 text-muted-foreground text-sm"><Loader2 className="w-4 h-4 animate-spin"/>Loading ADP history…</div>;
   if (error)   return <div className="flex items-center gap-2 text-rose-400 text-sm"><AlertCircle className="w-4 h-4"/>{error}</div>;
   if (!data)   return <div className="text-sm text-muted-foreground">No history yet.</div>;
 
-  const hasDaily = data.daily.length >= 2;
+  // Subset of daily points to the active range. "all" keeps everything.
+  const filteredDaily = useMemo(() => {
+    if (data.daily.length === 0) return [];
+    if (range === "all") return data.daily;
+    const days = range === "7d" ? 7 : range === "30d" ? 30 : 90;
+    const cutoffMs = Date.now() - days * 24 * 60 * 60 * 1000;
+    return data.daily.filter((d) => new Date(d.date).getTime() >= cutoffMs);
+  }, [data.daily, range]);
+
+  const hasDaily = filteredDaily.length >= 2;
+  const summary = buildAdpSummary(data);
 
   return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-3 gap-2">
-        {data.buckets.map((b) => (
-          <div key={b.window} className="rounded-md border border-white/10 bg-white/[0.02] px-2 py-2">
-            <div className="text-[9px] uppercase tracking-wider text-muted-foreground">{b.window.toUpperCase()} ADP</div>
-            <div className="text-base font-bold tabular-nums text-[#d4af37]">
-              {b.avgPick != null ? b.avgPick.toFixed(1) : "—"}
-            </div>
-            <div className="text-[10px] text-muted-foreground tabular-nums">
-              {b.draftCount} drafts · {b.minPick ?? "—"}–{b.maxPick ?? "—"}
-            </div>
-          </div>
-        ))}
+    <div className="space-y-3 text-[12px]" data-testid="adp-history-tab">
+      {/* Compact pill row for window switching — no boxed cards. */}
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+          {(["7d", "30d", "90d", "all"] as const).map((r) => {
+            const b = data.buckets.find((x) => x.window === r);
+            const adp = b?.avgPick != null ? b.avgPick.toFixed(1) : "—";
+            return (
+              <button
+                key={r}
+                type="button"
+                onClick={() => setRange(r)}
+                className={cn(
+                  "inline-flex items-baseline gap-1 px-2 py-0.5 rounded-full transition-colors",
+                  range === r
+                    ? "bg-[#d4af37]/15 text-[#d4af37] border border-[#d4af37]/40"
+                    : "border border-transparent text-white/55 hover:text-white/85",
+                )}
+                data-testid={`adp-range-${r}`}
+              >
+                <span className="uppercase tracking-wider">{r.toUpperCase()}</span>
+                <span className="font-bold tabular-nums text-[11px]">{adp}</span>
+              </button>
+            );
+          })}
+        </div>
+        {ctxLabel && <span className="text-[10px] text-white/40 truncate ml-2" title={ctxLabel}>{ctxLabel}</span>}
       </div>
 
+      {summary && (
+        <p className="text-[11px] text-white/75 leading-snug" data-testid="adp-trend-summary">
+          {summary}
+        </p>
+      )}
+
       <div>
-        <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1.5">ADP over time (lower = higher value)</div>
-        {hasDaily ? <DailyAdpLine series={data.daily} /> : (
-          <div className="text-[11px] text-muted-foreground italic">Not enough data points to render a trend yet.</div>
+        <div className="flex items-center justify-between text-[10px] uppercase tracking-wider text-muted-foreground mb-1.5">
+          <span>ADP over time</span>
+          <span className="text-white/40 normal-case tracking-normal">Lower = earlier drafted</span>
+        </div>
+        {hasDaily ? <DailyAdpLine series={filteredDaily} /> : (
+          <div className="rounded-md border border-white/8 bg-white/[0.02] py-6 text-center text-[11px] text-muted-foreground italic">
+            Not enough data points in the selected window yet.
+          </div>
         )}
       </div>
     </div>
   );
 }
 
+function buildAdpSummary(data: AdpHistoryResponse): string | null {
+  const b30 = data.buckets.find((b) => b.window === "30d");
+  const b90 = data.buckets.find((b) => b.window === "90d");
+  if (!b30 || b30.avgPick == null) return null;
+  if (!b90 || b90.avgPick == null) {
+    return `Tracking at ADP ${b30.avgPick.toFixed(1)} across ${b30.draftCount} drafts in the last 30 days.`;
+  }
+  const delta = b30.avgPick - b90.avgPick;
+  if (Math.abs(delta) < 0.4) {
+    return `ADP has held within half a pick of ${b30.avgPick.toFixed(1)} across the last 90 days — market position is stable.`;
+  }
+  if (delta < 0) {
+    return `ADP has tightened roughly ${Math.abs(delta).toFixed(1)} spots over the last 30 days — value is rising.`;
+  }
+  return `ADP has slipped about ${delta.toFixed(1)} spots over the last 30 days — value is softening.`;
+}
+
 function DailyAdpLine({ series }: { series: Array<{ date: string; avgPick: number; count: number }> }) {
-  const W = 480, H = 140, PAD = 18;
+  const W = 480, H = 150, PAD_X = 24, PAD_Y = 16;
   const xs = series.map((_, i) => i);
   const ys = series.map((s) => s.avgPick);
   const minY = Math.min(...ys);
   const maxY = Math.max(...ys);
   const ySpan = Math.max(1, maxY - minY);
   const xSpan = Math.max(1, xs[xs.length - 1] - xs[0]);
-  const points = series.map((s, i) => {
-    const x = PAD + ((i - xs[0]) / xSpan) * (W - PAD * 2);
-    // Inverted Y axis — lower ADP number = higher value, paint it higher.
-    const y = PAD + ((s.avgPick - minY) / ySpan) * (H - PAD * 2);
-    return `${x},${y}`;
-  }).join(" ");
+
+  const xAt = (i: number) => PAD_X + ((i - xs[0]) / xSpan) * (W - PAD_X * 2);
+  const yAt = (v: number) => PAD_Y + ((v - minY) / ySpan) * (H - PAD_Y * 2);
+
+  // Smooth cubic-bezier path so the chart reads as a market curve, not a
+  // jagged scatter. Catmull–Rom → bezier conversion with low tension so
+  // the line still respects each data point.
+  const pathD = useMemo(() => buildBezierPath(series.map((s, i) => [xAt(i), yAt(s.avgPick)])), [series]);
+  const avgY = yAt(series.reduce((s, p) => s + p.avgPick, 0) / series.length);
+
+  const hi = series.reduce((acc, s, i) => s.avgPick > acc.v ? { v: s.avgPick, i } : acc, { v: -Infinity, i: 0 });
+  const lo = series.reduce((acc, s, i) => s.avgPick < acc.v ? { v: s.avgPick, i } : acc, { v: Infinity, i: 0 });
 
   return (
-    <div className="relative overflow-x-auto border border-white/10 rounded-md bg-white/[0.02] p-2">
+    <div className="relative overflow-x-auto border border-white/8 rounded-md bg-gradient-to-b from-white/[0.025] to-transparent p-2">
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-[150px]" preserveAspectRatio="none">
-        <polyline points={points} fill="none" stroke="#d4af37" strokeWidth={1.5} strokeLinejoin="round" />
-        {series.map((s, i) => {
-          const x = PAD + ((i - xs[0]) / xSpan) * (W - PAD * 2);
-          const y = PAD + ((s.avgPick - minY) / ySpan) * (H - PAD * 2);
-          return <circle key={s.date} cx={x} cy={y} r={1.6} fill="#d4af37" />;
-        })}
-        <line x1={PAD} y1={H - PAD} x2={W - PAD} y2={H - PAD} stroke="rgba(255,255,255,0.08)" strokeWidth={1} />
+        <defs>
+          <linearGradient id="adpFade" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#d4af37" stopOpacity="0.35" />
+            <stop offset="100%" stopColor="#d4af37" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        {/* Muted grid baseline. */}
+        <line x1={PAD_X} y1={H - PAD_Y} x2={W - PAD_X} y2={H - PAD_Y} stroke="rgba(255,255,255,0.06)" strokeWidth={1} />
+        {/* Average ADP reference line. */}
+        <line x1={PAD_X} y1={avgY} x2={W - PAD_X} y2={avgY} stroke="rgba(255,255,255,0.18)" strokeWidth={0.7} strokeDasharray="2 3" />
+        {/* Soft area under the line. */}
+        <path d={`${pathD} L ${W - PAD_X} ${H - PAD_Y} L ${PAD_X} ${H - PAD_Y} Z`} fill="url(#adpFade)" />
+        {/* The line itself — thin gold bezier, no per-point markers. */}
+        <path d={pathD} fill="none" stroke="#d4af37" strokeWidth={1.4} strokeLinecap="round" strokeLinejoin="round" />
+        {/* High / low markers — the two points worth annotating. */}
+        <circle cx={xAt(lo.i)} cy={yAt(lo.v)} r={2.6} fill="#22d3ee" />
+        <circle cx={xAt(hi.i)} cy={yAt(hi.v)} r={2.6} fill="#fb7185" />
       </svg>
       <div className="flex justify-between text-[9px] text-muted-foreground tabular-nums mt-1">
         <span>{series[0]?.date}</span>
+        <span className="text-[#d4af37]">avg ADP {(ys.reduce((s, n) => s + n, 0) / ys.length).toFixed(1)}</span>
         <span>{series[series.length - 1]?.date}</span>
       </div>
     </div>
   );
 }
 
+/** Catmull–Rom → Bezier path builder. Returns a path string starting with M. */
+function buildBezierPath(pts: Array<[number, number]>): string {
+  if (pts.length === 0) return "";
+  if (pts.length === 1) return `M ${pts[0][0]} ${pts[0][1]}`;
+  const d: string[] = [`M ${pts[0][0]} ${pts[0][1]}`];
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[i - 1] ?? pts[i];
+    const p1 = pts[i];
+    const p2 = pts[i + 1];
+    const p3 = pts[i + 2] ?? p2;
+    const c1x = p1[0] + (p2[0] - p0[0]) / 6;
+    const c1y = p1[1] + (p2[1] - p0[1]) / 6;
+    const c2x = p2[0] - (p3[0] - p1[0]) / 6;
+    const c2y = p2[1] - (p3[1] - p1[1]) / 6;
+    d.push(`C ${c1x} ${c1y}, ${c2x} ${c2y}, ${p2[0]} ${p2[1]}`);
+  }
+  return d.join(" ");
+}
+
 // ── Availability ────────────────────────────────────────────────────────────
 
 function AvailabilityTab({
-  playerId, teams, rounds, expectedAdp, active,
+  playerId, playerName, teams, rounds, expectedAdp, active, ctxLabel, filterQuery,
 }: {
   playerId: string;
+  playerName: string;
   teams: number;
   rounds: number;
   expectedAdp: number;
   active: boolean;
+  ctxLabel: string;
+  filterQuery: string;
 }) {
   const [data, setData] = useState<AvailabilityResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -434,8 +702,11 @@ function AvailabilityTab({
     let cancelled = false;
     setLoading(true);
     setError(null);
+    const params = new URLSearchParams(filterQuery);
+    params.set("teams", String(teams));
+    params.set("rounds", String(rounds));
     fetch(
-      `${API_BASE}/api/adp/player/${encodeURIComponent(playerId)}/availability?teams=${teams}&rounds=${rounds}`,
+      `${API_BASE}/api/adp/player/${encodeURIComponent(playerId)}/availability?${params.toString()}`,
       { credentials: "include" },
     )
       .then(async (r) => {
@@ -449,7 +720,7 @@ function AvailabilityTab({
       .catch((e) => { if (!cancelled) setError(e?.message || "Failed to load availability"); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [playerId, teams, rounds, active]);
+  }, [playerId, teams, rounds, active, filterQuery]);
 
   const expectedSlot = useMemo(() => {
     const pickNo = Math.round(expectedAdp);
@@ -461,42 +732,51 @@ function AvailabilityTab({
   if (loading) return <div className="flex items-center gap-2 text-muted-foreground text-sm"><Loader2 className="w-4 h-4 animate-spin"/>Loading availability…</div>;
   if (error)   return <div className="flex items-center gap-2 text-rose-400 text-sm"><AlertCircle className="w-4 h-4"/>{error}</div>;
   if (!data || data.totalDrafts === 0) {
-    return <div className="text-sm text-muted-foreground">No startup draft data yet for this team size.</div>;
+    return <div className="text-sm text-muted-foreground">No draft data matches the current filters for this player.</div>;
   }
 
   const expectedCell = data.cells.find((c) => c.pickNo === expectedSlot.pickNo);
+  const minPickInPool = data.cells.length > 0 ? data.cells[0].pickNo : 1;
+  const maxPickInPool = data.cells.length > 0 ? data.cells[data.cells.length - 1].pickNo : 1;
   const cellsByRound = new Map<number, AvailabilityCell[]>();
   for (const c of data.cells) {
     if (!cellsByRound.has(c.round)) cellsByRound.set(c.round, []);
     cellsByRound.get(c.round)!.push(c);
   }
+  const drop = data.biggestDropAt;
+  const insights = buildAvailInsights(data, playerName, teams, expectedSlot);
+  const cliffLabel = drop
+    ? `${Math.ceil(drop.fromPick / teams)}.${String(((drop.fromPick - 1) % teams) + 1).padStart(2, "0")} → ${Math.ceil(drop.toPick / teams)}.${String(((drop.toPick - 1) % teams) + 1).padStart(2, "0")}`
+    : null;
 
   return (
-    <div className="space-y-3">
-      <div className="grid grid-cols-2 gap-2">
-        <div className="rounded-md border border-white/10 bg-white/[0.02] px-3 py-2">
-          <div className="text-[9px] uppercase tracking-wider text-muted-foreground">Expected pick</div>
-          <div className="text-base font-bold tabular-nums text-[#d4af37]">{expectedSlot.label}</div>
-          <div className="text-[10px] text-muted-foreground tabular-nums">Overall #{expectedSlot.pickNo}</div>
+    <div className="space-y-3 text-[12px]" data-testid="availability-tab">
+      {/* Filter context banner — explains why the values look the way they do. */}
+      {ctxLabel && (
+        <div className="text-[10px] text-white/45 truncate" title={ctxLabel}>
+          Dataset · {ctxLabel}
         </div>
-        <div className="rounded-md border border-white/10 bg-white/[0.02] px-3 py-2">
-          <div className="text-[9px] uppercase tracking-wider text-muted-foreground">Available @ Expected</div>
-          <div className="text-base font-bold tabular-nums text-blue-300">
-            {expectedCell ? `${expectedCell.availabilityPct.toFixed(0)}%` : "—"}
-          </div>
-          <div className="text-[10px] text-muted-foreground tabular-nums">
-            {data.draftsWithPlayer}/{data.totalDrafts} drafts had player
-          </div>
-        </div>
+      )}
+
+      {/* Compact summary strip — replaces the two big boxes. */}
+      <div className="flex items-baseline gap-3 flex-wrap text-[11px] text-muted-foreground" data-testid="availability-summary">
+        <StripStat label="Expected Pick" value={expectedSlot.label} />
+        <StripStat label="At ADP" value={expectedCell ? `${expectedCell.availabilityPct.toFixed(0)}%` : "—"} />
+        <StripStat label="Drafts" value={`${data.draftsWithPlayer.toLocaleString()} / ${data.totalDrafts.toLocaleString()}`} />
+        <StripStat label="Range" value={`${minPickInPool}–${maxPickInPool}`} />
+        {cliffLabel && (
+          <StripStat label="Biggest Drop" value={`${cliffLabel} (-${drop!.delta.toFixed(0)}%)`} accent="rose" />
+        )}
       </div>
 
-      <div className="overflow-x-auto rounded-md border border-white/10 bg-white/[0.02] p-2">
-        <table className="text-[10px]">
+      {/* Heatmap — slightly rounded cells, hover tooltip, expected pick highlighted. */}
+      <div className="overflow-x-auto rounded-md border border-white/8 bg-white/[0.02] p-2">
+        <table className="text-[10px] border-separate" style={{ borderSpacing: "2px" }}>
           <thead>
             <tr className="text-muted-foreground">
-              <th className="px-1 py-1 text-left font-semibold">Rd</th>
+              <th className="px-1 py-1 text-left font-semibold sticky left-0 bg-[#0a1628] z-10">Rd</th>
               {Array.from({ length: teams }, (_, i) => (
-                <th key={i} className="px-1 py-1 text-center font-semibold w-7">{i + 1}</th>
+                <th key={i} className="px-1 py-1 text-center font-semibold w-7 tabular-nums">{i + 1}</th>
               ))}
             </tr>
           </thead>
@@ -506,19 +786,22 @@ function AvailabilityTab({
               const row = cellsByRound.get(round) ?? [];
               return (
                 <tr key={round}>
-                  <td className="px-1 py-0.5 font-semibold text-muted-foreground">Rd {round}</td>
+                  <td className="px-1 py-0.5 font-semibold text-muted-foreground sticky left-0 bg-[#0a1628] z-10">Rd {round}</td>
                   {Array.from({ length: teams }, (_, i) => {
                     const cell = row.find((c) => c.pickInRound === i + 1);
                     if (!cell) return <td key={i} className="px-0.5 py-0.5" />;
+                    const isExpected = cell.pickNo === expectedSlot.pickNo;
+                    const draftsAvail = Math.round((cell.availabilityPct / 100) * data.totalDrafts);
                     return (
-                      <td key={i} className="px-0.5 py-0.5">
+                      <td key={i} className="p-0">
                         <div
                           className={cn(
-                            "rounded-sm h-6 flex items-center justify-center text-[9px] font-bold tabular-nums border",
+                            "rounded-[3px] h-7 flex items-center justify-center text-[10px] font-bold tabular-nums",
                             availabilityClass(cell.availabilityPct),
-                            cell.pickNo === expectedSlot.pickNo && "ring-2 ring-[#d4af37]",
+                            isExpected && "ring-2 ring-[#d4af37] z-10 relative",
                           )}
-                          title={`${cell.round}.${String(cell.pickInRound).padStart(2, "0")} · ${cell.availabilityPct.toFixed(1)}%`}
+                          title={`${cell.round}.${String(cell.pickInRound).padStart(2, "0")} · ${cell.availabilityPct.toFixed(1)}% available · ${draftsAvail.toLocaleString()} / ${data.totalDrafts.toLocaleString()} drafts`}
+                          data-testid={`avail-cell-${cell.round}-${cell.pickInRound}`}
                         >
                           {Math.round(cell.availabilityPct)}
                         </div>
@@ -532,30 +815,85 @@ function AvailabilityTab({
         </table>
       </div>
 
+      {/* Color legend — same scale order as the cells. */}
       <div className="flex flex-wrap items-center gap-2 text-[9px] text-muted-foreground">
-        <span>Color scale:</span>
-        <LegendDot className="bg-rose-500/40 border-rose-500/60" label="<10%" />
-        <LegendDot className="bg-orange-500/40 border-orange-500/60" label="10–30%" />
-        <LegendDot className="bg-[#d4af37]/40 border-[#d4af37]/60" label="30–70%" />
-        <LegendDot className="bg-teal-500/40 border-teal-500/60" label="70–90%" />
-        <LegendDot className="bg-emerald-500/50 border-emerald-500/70" label=">90%" />
+        <span>Color:</span>
+        <LegendDot className="bg-rose-500/55 border-rose-500/70" label="<10%" />
+        <LegendDot className="bg-orange-500/55 border-orange-500/70" label="10–30%" />
+        <LegendDot className="bg-[#d4af37]/55 border-[#d4af37]/70" label="30–60%" />
+        <LegendDot className="bg-teal-500/55 border-teal-500/70" label="60–85%" />
+        <LegendDot className="bg-emerald-500/55 border-emerald-500/70" label=">85%" />
       </div>
+
+      {insights.length > 0 && (
+        <div className="space-y-1.5" data-testid="availability-insights">
+          <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-muted-foreground">
+            <Sparkles className="w-3 h-3 text-[#d4af37]" /> Draft Insights
+          </div>
+          <ul className="space-y-1 text-[11px] text-white/85">
+            {insights.map((i, idx) => (
+              <li key={idx} className="flex gap-1.5">
+                <span className="text-[#d4af37] mt-px">•</span>
+                <span>{i}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }
 
+function buildAvailInsights(
+  data: AvailabilityResponse,
+  playerName: string,
+  teams: number,
+  expectedSlot: { pickNo: number; label: string },
+): string[] {
+  const out: string[] = [];
+  // Where does availability cross 50%? That's the "rarely available past X" line.
+  const cross50 = data.cells.find((c) => c.availabilityPct < 50);
+  if (cross50) {
+    const r = cross50.round;
+    const pir = cross50.pickInRound;
+    out.push(`${firstName(playerName)} is gone in over half of drafts past pick ${r}.${String(pir).padStart(2, "0")}.`);
+  }
+  // Available at the 2/3 turn? Only meaningful when the user is in a 12T view.
+  const turnPickNo = teams * 2;
+  const cell23 = data.cells.find((c) => c.pickNo === turnPickNo);
+  if (cell23) {
+    out.push(`Only ${cell23.availabilityPct.toFixed(0)}% of drafts see ${firstName(playerName)} available at the ${cell23.round}/${cell23.round + 1} turn.`);
+  }
+  // Biggest drop summary.
+  if (data.biggestDropAt) {
+    const d = data.biggestDropAt;
+    const fromLabel = `${Math.ceil(d.fromPick / teams)}.${String(((d.fromPick - 1) % teams) + 1).padStart(2, "0")}`;
+    const toLabel = `${Math.ceil(d.toPick / teams)}.${String(((d.toPick - 1) % teams) + 1).padStart(2, "0")}`;
+    out.push(`Biggest availability drop: ${fromLabel} → ${toLabel} (-${d.delta.toFixed(0)}%).`);
+  }
+  // Sample size disclaimer when low.
+  if (data.totalDrafts > 0 && data.totalDrafts < 25) {
+    out.push(`Sample size is small (${data.totalDrafts} drafts) — values may swing as more drafts come in.`);
+  }
+  return out;
+}
+
+function firstName(name: string): string {
+  return name.split(" ")[0] || name;
+}
+
 function availabilityClass(pct: number): string {
-  if (pct < 10) return "bg-rose-500/40 border-rose-500/60 text-rose-100";
-  if (pct < 30) return "bg-orange-500/35 border-orange-500/55 text-orange-100";
-  if (pct < 70) return "bg-[#d4af37]/30 border-[#d4af37]/55 text-[#fde68a]";
-  if (pct < 90) return "bg-teal-500/35 border-teal-500/55 text-teal-100";
-  return "bg-emerald-500/40 border-emerald-500/60 text-emerald-100";
+  if (pct < 10) return "bg-rose-500/55 border-rose-500/70 text-rose-50";
+  if (pct < 30) return "bg-orange-500/50 border-orange-500/65 text-orange-50";
+  if (pct < 60) return "bg-[#d4af37]/50 border-[#d4af37]/70 text-[#1f1300]";
+  if (pct < 85) return "bg-teal-500/50 border-teal-500/65 text-teal-50";
+  return "bg-emerald-500/55 border-emerald-500/70 text-emerald-50";
 }
 
 function LegendDot({ className, label }: { className: string; label: string }) {
   return (
     <span className="inline-flex items-center gap-1">
-      <span className={cn("inline-block w-3 h-3 rounded-sm border", className)} />
+      <span className={cn("inline-block w-3 h-3 rounded-[3px] border", className)} />
       <span>{label}</span>
     </span>
   );
@@ -564,9 +902,16 @@ function LegendDot({ className, label }: { className: string; label: string }) {
 // ── News shell ──────────────────────────────────────────────────────────────
 
 function NewsShell() {
+  // Backend shape: server/playerNews (future) returns
+  //   [{ headline, source, url, publishedAt, summary }, …]
+  // Until that endpoint exists we render the article-card skeleton + an
+  // explicit empty state so the swap-in is incremental.
   return (
-    <div className="text-[12px] text-muted-foreground">
-      News integration coming soon.
+    <div className="space-y-2 text-[12px]" data-testid="news-tab">
+      <p className="text-[11px] text-muted-foreground">News will populate once the news provider integration ships.</p>
+      <div className="rounded-md border border-dashed border-white/10 bg-white/[0.02] py-6 text-center text-[11px] text-muted-foreground">
+        No articles available yet.
+      </div>
     </div>
   );
 }
