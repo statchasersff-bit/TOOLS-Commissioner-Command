@@ -1253,7 +1253,7 @@ const MANAGER_TIMING_SORT_LABEL: Record<ManagerTimingSortKey, string> = {
   longest: "Longest",
 };
 
-function ManagerTimingsSection({ history, teams, livePickUserId, liveElapsedMs }: {
+function ManagerTimingsSection({ history, teams, livePickUserId, liveElapsedMs, hasJwt }: {
   history: Array<{
     pick: DraftPickNormalized | null;
     timing: { timeMs: number; timeLabel: string } | null;
@@ -1266,6 +1266,8 @@ function ManagerTimingsSection({ history, teams, livePickUserId, liveElapsedMs }
   livePickUserId?: string | null;
   /** Milliseconds elapsed for the current pick so far (updates every second). */
   liveElapsedMs?: number | null;
+  /** Whether a Sleeper JWT is connected (needed for timing data). */
+  hasJwt?: boolean;
 }) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [sectionCollapsed, setSectionCollapsed] = useState(false);
@@ -1398,6 +1400,15 @@ function ManagerTimingsSection({ history, teams, livePickUserId, liveElapsedMs }
 
       {!sectionCollapsed && (
         <div className="border-t border-border/30">
+          {/* No-JWT notice — shown when picks exist but no timing data */}
+          {!hasAnyTiming && !hasJwt && totalPicks > 0 && (
+            <div className="flex items-start gap-2 px-3 py-2.5 bg-[#d4af37]/5 border-b border-[#d4af37]/20" data-testid="notice-jwt-needed">
+              <Key className="w-3.5 h-3.5 text-[#d4af37] shrink-0 mt-px" />
+              <p className="text-[11px] text-muted-foreground leading-snug">
+                Timing data requires a Sleeper JWT. Paste yours in the <span className="font-semibold text-foreground">Draft Log</span> section below to unlock pick durations.
+              </p>
+            </div>
+          )}
           {/* Sort selector — small pill row above the table. All sorts run
               descending; picking a column moves it to the top. */}
           <div
@@ -2164,6 +2175,8 @@ export default function LiveDraft() {
 
   // ── Draft log / message history ──────────────────────────────────────────
   const [sleeperJwt, setSleeperJwt] = useState<string | null>(null);
+  const [jwtInput, setJwtInput] = useState<string>("");
+  const [jwtSaved, setJwtSaved] = useState(false);
   const [draftMessages, setDraftMessages] = useState<DraftMessage[]>([]);
   const [messagesLoading, setMessagesLoading] = useState(false);
   const [messagesError, setMessagesError] = useState<string | null>(null);
@@ -2283,6 +2296,24 @@ export default function LiveDraft() {
     } finally {
       setMessagesLoading(false);
     }
+  }, []);
+
+  const saveJwt = useCallback(() => {
+    const val = jwtInput.trim();
+    if (!val) return;
+    localStorage.setItem(SLEEPER_JWT_KEY, val);
+    setSleeperJwt(val);
+    setJwtInput("");
+    setJwtSaved(true);
+    setTimeout(() => setJwtSaved(false), 2500);
+    if (activeDraftId) refreshMessages(activeDraftId, val);
+  }, [jwtInput, activeDraftId, refreshMessages]);
+
+  const clearJwt = useCallback(() => {
+    localStorage.removeItem(SLEEPER_JWT_KEY);
+    setSleeperJwt(null);
+    setJwtInput("");
+    setDraftMessages([]);
   }, []);
 
   const refreshQueue = useCallback(async (draftId: string, jwt: string) => {
@@ -3409,6 +3440,7 @@ export default function LiveDraft() {
                   ? Math.max(0, nowTs - lastPickTimestamp)
                   : null
               }
+              hasJwt={!!sleeperJwt}
             />
           )}
 
@@ -3978,6 +4010,42 @@ export default function LiveDraft() {
                   )}
                 </div>
               </div>
+
+              {/* JWT input — paste Sleeper token to unlock timing + live features */}
+              {!sleeperJwt ? (
+                <div className="flex items-center gap-2 flex-wrap" data-testid="section-jwt-input">
+                  <Key className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                  <input
+                    type="password"
+                    className="flex-1 min-w-0 h-7 px-2.5 text-xs rounded-md border border-border/60 bg-muted/30 text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-[#d4af37]/50"
+                    placeholder="Paste Sleeper JWT for timing data…"
+                    value={jwtInput}
+                    onChange={(e) => setJwtInput(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && saveJwt()}
+                    data-testid="input-sleeper-jwt"
+                  />
+                  <button
+                    onClick={saveJwt}
+                    disabled={!jwtInput.trim()}
+                    className="h-7 px-3 text-xs rounded-md bg-[#d4af37]/90 hover:bg-[#d4af37] text-[#0b3a7a] font-semibold disabled:opacity-40 disabled:cursor-not-allowed transition-colors shrink-0"
+                    data-testid="button-save-jwt"
+                  >
+                    {jwtSaved ? <><Check className="w-3 h-3 inline mr-1" />Saved</> : "Connect"}
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 text-xs" data-testid="section-jwt-connected">
+                  <Key className="w-3.5 h-3.5 text-[#d4af37] shrink-0" />
+                  <span className="text-muted-foreground">JWT connected</span>
+                  <button
+                    onClick={clearJwt}
+                    className="ml-auto h-6 px-2 text-[10px] rounded border border-border/40 text-muted-foreground hover:text-foreground hover:border-border transition-colors"
+                    data-testid="button-clear-jwt"
+                  >
+                    Disconnect
+                  </button>
+                </div>
+              )}
 
               {/* Error */}
               {messagesError && (
