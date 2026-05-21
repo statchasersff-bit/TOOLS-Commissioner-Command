@@ -189,6 +189,16 @@ app.use((req, res, next) => {
 });
 
 process.on("unhandledRejection", (reason) => {
+  // Ignore benign connection-abort errors (browser disconnected mid-request).
+  // These come from raw-body/express.json() and are not server bugs.
+  if (
+    reason instanceof Error &&
+    ((reason as any).code === "ECONNABORTED" ||
+      (reason as any).type === "request.aborted" ||
+      reason.message?.includes("request aborted"))
+  ) {
+    return;
+  }
   console.error("[server] unhandledRejection:", reason);
   process.exit(1);
 });
