@@ -2359,12 +2359,25 @@ export default function LiveDraft({ onConnectSleeper }: { onConnectSleeper?: () 
   const refreshMessages = useCallback(async (draftId: string, jwt?: string | null) => {
     setMessagesLoading(true);
     setMessagesError(null);
+    // eslint-disable-next-line no-console
+    console.info(`[messages] fetching draftId=${draftId} hasJwt=${!!jwt}${jwt ? ` jwt=${maskToken(jwt)}` : ""}`);
     try {
       const msgs = await fetchDraftMessages(draftId, jwt);
       const sorted = [...msgs].sort((a, b) => a.created - b.created);
+      const botMsgs = sorted.filter(m => m.author_is_bot);
+      const hasBegan = sorted.some(m => m.author_is_bot && m.text === "This draft has begun!");
+      const pickMsgCount = sorted.filter(m => m.author_is_bot && m.text.includes("Pick ")).length;
+      // eslint-disable-next-line no-console
+      console.info(`[messages] loaded ${sorted.length} messages for draftId=${draftId} (bot=${botMsgs.length} pickMsgs=${pickMsgCount} hasBegan=${hasBegan})`);
+      if (import.meta.env.DEV && botMsgs.length > 0 && !hasBegan) {
+        // eslint-disable-next-line no-console
+        console.info("[messages] sample bot texts (no 'begun' found):", botMsgs.slice(0, 3).map(m => m.text));
+      }
       setDraftMessages(sorted);
       setDraftStarted(sorted.some(m => m.text === "This draft has begun!"));
     } catch (e: any) {
+      // eslint-disable-next-line no-console
+      console.warn(`[messages] failed draftId=${draftId}`, e);
       setMessagesError(e.message || "Failed to load draft log");
     } finally {
       setMessagesLoading(false);
@@ -2894,19 +2907,42 @@ export default function LiveDraft({ onConnectSleeper }: { onConnectSleeper?: () 
     return startMsg?.created ?? null;
   }, [parsedPicks, draftMessages]);
 
-  // message_id → { timeMs, timeLabel } — duration since previous relevant bot message
+  // message_id → { timeMs, timeLabel } — duration since previous relevant bot message.
+  // Seed priority:
+  //   1. "This draft has begun!" bot message (most accurate)
+  //   2. draftData.draft.startTime (REST field, always present for completed drafts)
+  //   3. First pick message's own timestamp — no timing emitted for that first pick
+  //      but all subsequent picks correctly measure time since the prior pick.
+  // This handles the common case where Sleeper returns only recent messages and
+  // the "begun" message falls outside the returned window.
   const pickTimings = useMemo<Map<string, { timeMs: number; timeLabel: string }>>(() => {
     const map = new Map<string, { timeMs: number; timeLabel: string }>();
     const relevant = draftMessages
       .filter(m => m.author_is_bot && (m.text.includes("This draft has begun!") || m.text.includes("Pick ")))
       .sort((a, b) => a.created - b.created);
-    let prevCreated: number | null = null;
+    if (relevant.length === 0) return map;
+
+    // Check whether a "begun" message is present in the returned window.
+    const begunMsg = relevant.find(m => m.text.includes("This draft has begun!"));
+
+    // Seed prevCreated: begun-msg > REST startTime > null (first pick seeds itself).
+    const restStart = draftData?.draft?.startTime;
+    let prevCreated: number | null =
+      begunMsg?.created ??
+      (restStart && restStart > 1_000_000_000_000 ? restStart :
+       restStart && restStart > 1_000_000_000 ? restStart * 1000 : null);
+
     for (const msg of relevant) {
       if (msg.text.includes("This draft has begun!")) {
         prevCreated = msg.created;
         continue;
       }
-      if (prevCreated === null) continue;
+      if (prevCreated === null) {
+        // No seed available yet — use this pick's timestamp as seed for the next
+        // pick without emitting a timing entry for the current one.
+        prevCreated = msg.created;
+        continue;
+      }
       const timeMs = msg.created - prevCreated;
       const totalSecs = Math.floor(timeMs / 1000);
       const mins = Math.floor(totalSecs / 60);
@@ -2916,7 +2952,7 @@ export default function LiveDraft({ onConnectSleeper }: { onConnectSleeper?: () 
       prevCreated = msg.created;
     }
     return map;
-  }, [draftMessages]);
+  }, [draftMessages, draftData?.draft?.startTime]);
 
   // currentPickInfo — derived from draftState when available (rich, JWT-only)
   // and falls back to draftData (public REST) so the room renders without a
@@ -3275,7 +3311,8 @@ export default function LiveDraft({ onConnectSleeper }: { onConnectSleeper?: () 
 
       if (import.meta.env.DEV) {
         const startMsg = draftMessages.find(m => m.author_is_bot && m.text === "This draft has begun!");
-        console.log(`[OTC] draftId=${activeDraftId} totalMessages=${draftMessages.length} pickMessages=${parsedPicks.length} draftStatePicks=${draftState.picks.length} draftStartTs=${startMsg?.created ?? "none"}`);
+        const hasRestTiming = restTimingByNo.size > 0;
+        console.log(`[OTC] draftId=${activeDraftId} totalMessages=${draftMessages.length} pickMessages=${parsedPicks.length} draftStatePicks=${draftState.picks.length} draftStartTs=${startMsg?.created ?? "none"} pickTimings=${pickTimings.size} restTiming=${hasRestTiming}(${restPickedAtByNo.size}picks)`);
         const unmatched = parsedPicks.filter(p => !draftState.picks.some(pk => {
           const r = Math.ceil(pk.pickNo / teams);
           const pi = ((pk.pickNo - 1) % teams) + 1;
