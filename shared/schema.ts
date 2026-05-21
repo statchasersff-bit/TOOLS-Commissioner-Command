@@ -322,6 +322,20 @@ export type Draft = typeof drafts.$inferSelect;
 export type DraftPick = typeof draftPicks.$inferSelect;
 export type AdpSnapshot = typeof adpSnapshots.$inferSelect;
 
+// Manager Intel — cached per (user, league, season) so the modal isn't
+// re-aggregating dozens of Sleeper API calls on every open. The payload is
+// stored as a single JSON blob; we never query it by field, only refresh it.
+export const managerIntelCache = pgTable("manager_intel_cache", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id", { length: 32 }).notNull(),
+  leagueId: varchar("league_id", { length: 32 }).notNull().default(""),
+  season: varchar("season", { length: 10 }).notNull(),
+  payload: jsonb("payload").notNull(),
+  computedAt: timestamp("computed_at").defaultNow().notNull(),
+});
+
+export type ManagerIntelCache = typeof managerIntelCache.$inferSelect;
+
 // ── ADP crawl pipeline ───────────────────────────────────────────────────────
 // Seeds are the operator's "I trust this entry point" list — usernames /
 // user_ids / league_ids / draft_ids that we explicitly want to expand from.

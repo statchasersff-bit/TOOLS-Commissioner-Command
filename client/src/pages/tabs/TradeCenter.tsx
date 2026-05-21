@@ -3260,12 +3260,7 @@ function TradeCard({
             return (
               <div
                 key={side.rosterId}
-                className={cn(
-                  "relative px-1 md:px-2",
-                  // Subtle left-edge accent bar — desaturated emerald so it
-                  // reads as a finance-dashboard accent, not gaming neon.
-                  isWinner && "before:absolute before:left-0 before:top-0.5 before:bottom-0.5 before:w-[2px] before:rounded-full before:bg-emerald-500/40 md:before:left-2",
-                )}
+                className="relative px-1 md:px-2"
                 data-testid={`trade-side-${side.rosterId}`}
               >
                 {/* Side header — team name + receives subtitle + total */}

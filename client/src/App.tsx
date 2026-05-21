@@ -6,6 +6,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { ValueModelProvider } from "@/contexts/ValueModelContext";
 import { PlayerProfileProvider } from "@/contexts/PlayerProfileContext";
 import { GlobalPlayerProfileDrawer } from "@/components/GlobalPlayerProfileDrawer";
+import { ManagerIntelProvider } from "@/contexts/ManagerIntelContext";
+import { GlobalManagerIntelDrawer } from "@/components/GlobalManagerIntelDrawer";
 import { SleeperProvider } from "@/contexts/SleeperContext";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { WriteAccessModalProvider } from "@/contexts/WriteAccessModalContext";
@@ -134,11 +136,14 @@ function AuthenticatedTree({ probe }: { probe: Probe }) {
     <SleeperProvider>
       <ValueModelProvider>
         <PlayerProfileProvider>
-          <Toaster />
-          <ErrorBoundary label="Router/DynastyCommandCenter">
-            <Router />
-          </ErrorBoundary>
-          <GlobalPlayerProfileDrawer />
+          <ManagerIntelProvider>
+            <Toaster />
+            <ErrorBoundary label="Router/DynastyCommandCenter">
+              <Router />
+            </ErrorBoundary>
+            <GlobalPlayerProfileDrawer />
+            <GlobalManagerIntelDrawer />
+          </ManagerIntelProvider>
         </PlayerProfileProvider>
       </ValueModelProvider>
     </SleeperProvider>

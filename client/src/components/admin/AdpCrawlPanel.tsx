@@ -44,7 +44,9 @@ interface CrawlResult {
  *  a live progress bar while the server-side crawl runs. */
 interface CrawlLiveState extends CrawlResult {
   jobId: string;
-  status: "idle" | "running" | "completed" | "failed" | "cancelled";
+  /** adp_crawl_log row id — null until the scan opens its audit row. */
+  logId?: number | null;
+  status: "idle" | "running" | "completed" | "failed" | "cancelled" | "partial";
   startedAt: number | null;
   completedAt: number | null;
   /** Server-side flag set by /cancel. UI uses this to grey out the Stop
@@ -356,6 +358,49 @@ export function AdpCrawlPanel() {
     }
   }, [adminSecretOverride]);
 
+  const repairCrawlState = useCallback(async (dryRun: boolean) => {
+    setError("");
+    if (!dryRun) {
+      const ok = window.confirm(
+        "Reset incomplete ADP drafts?\n\n" +
+        "This deletes draft rows the crawl never finished writing picks for, " +
+        "so the next scan will re-ingest them cleanly. IDP-excluded and " +
+        "quality-filtered drafts are left alone. Stuck 'running' scan log " +
+        "rows are also flipped to 'failed'.",
+      );
+      if (!ok) return;
+    }
+    try {
+      const res = await fetch(
+        `${API_BASE}/api/admin/adp/crawl-network/repair${dryRun ? "?dryRun=true" : ""}`,
+        {
+          method: "POST",
+          credentials: "include",
+          headers: buildAdminHeaders(adminSecretOverride),
+        },
+      );
+      const { json, text, isHtml } = await readResponse(res);
+      if (!res.ok || !json) {
+        setError(describeFailure(res.status, isHtml, json, text));
+        return;
+      }
+      const r = json.recovery ?? {};
+      const d = json.drafts ?? {};
+      const summary =
+        `${dryRun ? "[Dry-run] " : ""}` +
+        `Flagged ${r.staleScansFlagged ?? 0} stale scan logs, ` +
+        `reset ${r.staleQueueItemsReset ?? 0} stuck queue items. ` +
+        `Drafts inspected=${d.inspected ?? 0}, ` +
+        `orphans=${d.orphansDeleted ?? 0}, partials=${d.partialsDeleted ?? 0}.`;
+      // Surface via the error slot — it's the only banner the panel has.
+      setError(summary);
+      // Refresh status so the new counts appear.
+      void refreshStatus();
+    } catch (err: any) {
+      setError(err?.message || "Repair request failed");
+    }
+  }, [adminSecretOverride, refreshStatus]);
+
   return (
     <div
       data-testid="adp-crawl-panel"
@@ -481,6 +526,26 @@ export function AdpCrawlPanel() {
           onClick={refreshStatus}
           disabled={statusLoading}
           testId="button-refresh-status"
+        />
+        {/*
+         * Recovery hatch for the "drafts in DB but not visible/usable" bug.
+         * Resets any scan log row stuck in `running`, requeues stuck queue
+         * items, and deletes draft rows that are status=complete but missing
+         * picks (so the next scan re-ingests them cleanly).
+         */}
+        <RunButton
+          label="Repair Crawl State (dry-run)"
+          variant="ghost"
+          onClick={() => repairCrawlState(true)}
+          disabled={running}
+          testId="button-repair-crawl-dry"
+        />
+        <RunButton
+          label="Reset Incomplete ADP Drafts"
+          variant="ghost"
+          onClick={() => repairCrawlState(false)}
+          disabled={running}
+          testId="button-repair-crawl"
         />
       </div>
 

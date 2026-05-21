@@ -31,6 +31,10 @@ export async function setupVite(server: Server, app: Express) {
 
   app.use(vite.middlewares);
 
+  // Pre-compile the main entry so the first browser request doesn't block
+  // on cold Vite compilation (which causes a white screen in the preview).
+  vite.warmupRequest("/src/main.tsx").catch(() => {});
+
   app.use("/{*path}", async (req, res, next) => {
     const url = req.originalUrl;
 

@@ -18,6 +18,7 @@ export function SleeperUserAvatar({
   size = "sm",
   compact = false,
   className,
+  onClick,
 }: {
   /** Sleeper username (or display name). Required for the fallback initial. */
   username: string;
@@ -28,6 +29,11 @@ export function SleeperUserAvatar({
   /** Render only the circle (no username text). Use inside dense layouts. */
   compact?: boolean;
   className?: string;
+  /**
+   * When provided, the whole avatar+name surface becomes an interactive
+   * button — wired in Manager Intel call sites. Consumers opt in.
+   */
+  onClick?: (e: React.MouseEvent) => void;
 }) {
   const dims = size === "md" ? "w-8 h-8" : size === "xs" ? "w-5 h-5" : "w-6 h-6";
   const nameSize = size === "md" ? "text-sm" : size === "xs" ? "text-[10px]" : "text-xs";
@@ -66,10 +72,47 @@ export function SleeperUserAvatar({
     </span>
   );
 
-  if (compact) return circle;
+  if (compact) {
+    if (onClick) {
+      return (
+        <button
+          type="button"
+          onClick={onClick}
+          className={cn(
+            "rounded-full hover:ring-2 hover:ring-[#d4af37]/40 transition-shadow focus:outline-none focus:ring-2 focus:ring-[#d4af37]/60",
+            className,
+          )}
+          data-testid={`sleeper-user-avatar-button-${username}`}
+        >
+          {circle}
+        </button>
+      );
+    }
+    return circle;
+  }
+
+  const wrapperCls = cn(
+    "flex items-center gap-2 min-w-0",
+    onClick && "cursor-pointer rounded-md hover:bg-white/[0.05] -mx-1 px-1 py-0.5 transition-colors",
+    className,
+  );
+
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        className={cn(wrapperCls, "text-left")}
+        data-testid={`sleeper-user-avatar-button-${username}`}
+      >
+        {circle}
+        <span className={cn("font-semibold truncate", nameSize)}>{username}</span>
+      </button>
+    );
+  }
 
   return (
-    <div className={cn("flex items-center gap-2 min-w-0", className)}>
+    <div className={wrapperCls}>
       {circle}
       <span className={cn("font-semibold truncate", nameSize)}>{username}</span>
     </div>

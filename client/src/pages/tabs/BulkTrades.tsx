@@ -27,6 +27,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2, Search, ArrowLeft, ArrowRight, AlertCircle, CheckCircle2, RefreshCw, Minus, ChevronDown, ChevronUp, X, Plus, Send, ShieldAlert, Pencil } from "lucide-react";
 import { SleeperUserAvatar } from "@/components/SleeperUserAvatar";
+import { useManagerIntel } from "@/contexts/ManagerIntelContext";
 import { useSleeper } from "@/contexts/SleeperContext";
 import { useValueModel, type RankedPlayer } from "@/contexts/ValueModelContext";
 import { fetchSleeperLeagueFull } from "@/lib/sleeperApi";
@@ -1119,6 +1120,7 @@ function RowView({
   onSetManualPartner: (leagueId: string, teamId: string | null) => void;
   onToggleAsset: (leagueId: string, side: "send" | "receive", kind: "player" | "pick", id: string) => void;
 }) {
+  const { openManagerIntel } = useManagerIntel();
   // Resolve the live list of assets going each direction. The verified
   // intersection runs at submit time too — this is purely for display.
   const sendPlayers = useMemo(() => {
@@ -1205,11 +1207,41 @@ function RowView({
                 avatar={partner.avatar}
                 size="sm"
                 compact
+                onClick={
+                  partner.ownerId
+                    ? () =>
+                        openManagerIntel({
+                          userId: partner.ownerId!,
+                          username: partner.ownerName,
+                          avatar: partner.avatar,
+                          leagueId: row.leagueId,
+                        })
+                    : undefined
+                }
               />
               <div className="min-w-0">
-                <div className="text-xs font-semibold truncate max-w-[140px]" data-testid={`manager-name-${row.leagueId}`}>
+                <button
+                  type="button"
+                  onClick={
+                    partner.ownerId
+                      ? () =>
+                          openManagerIntel({
+                            userId: partner.ownerId!,
+                            username: partner.ownerName,
+                            avatar: partner.avatar,
+                            leagueId: row.leagueId,
+                          })
+                      : undefined
+                  }
+                  disabled={!partner.ownerId}
+                  className={cn(
+                    "text-xs font-semibold truncate max-w-[140px] text-left",
+                    partner.ownerId && "hover:text-[#d4af37] transition-colors cursor-pointer",
+                  )}
+                  data-testid={`manager-name-${row.leagueId}`}
+                >
                   {partner.ownerName}
-                </div>
+                </button>
                 {partner.teamName && partner.teamName !== partner.ownerName && (
                   <div className="text-[10px] text-muted-foreground truncate max-w-[140px]">{partner.teamName}</div>
                 )}

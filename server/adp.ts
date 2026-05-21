@@ -282,22 +282,54 @@ const DEFENSIVE_POSITIONS = new Set([
   "EDGE", "IDP",
 ]);
 
-/** True when a single pick is a defensive / IDP player. Checks the per-pick
- *  metadata position first (most specific), then the cached player DB's
- *  `position` and `fantasy_positions` array. */
+/** Offensive primary positions — used as a "trust the drafted slot" signal
+ *  so multi-position-eligible players (e.g. Travis Hunter — Sleeper lists his
+ *  fantasy_positions as ["DB","WR"]) aren't misclassified as IDP.
+ *
+ *  Bug history: prior to this guard, any pick whose `fantasy_positions`
+ *  array contained a defensive token was flagged as IDP regardless of how
+ *  the player was actually drafted. Travis Hunter alone — drafted as a WR
+ *  in essentially every 2026 dynasty startup — caused ~595 startup drafts
+ *  to be excluded as "contains_defensive_players", collapsing the ADP
+ *  sample to a handful of drafts.
+ */
+const OFFENSIVE_POSITIONS = new Set(["QB", "RB", "WR", "TE", "K", "PICK"]);
+
+/**
+ * True when a single pick is a defensive / IDP player. Evaluation order:
+ *   1. If the per-pick metadata position is offensive (QB/RB/WR/TE/K), the
+ *      drafter explicitly took this player at an offensive slot — never IDP.
+ *   2. If the per-pick metadata position is defensive, flag as IDP.
+ *   3. If the cached player-DB primary position is offensive, the pick is
+ *      a multi-position-eligible offensive player (Travis Hunter, etc.) —
+ *      not IDP.
+ *   4. If the player-DB primary position is defensive, flag as IDP.
+ *   5. Only when no primary position is available do we fall back to
+ *      `fantasy_positions`. That array is multi-position eligibility, NOT
+ *      the source of truth for what they were drafted as.
+ */
 export function isDefensivePlayer(
   pick: SleeperDraftPickRaw,
   playersDb?: Record<string, { position?: string | null; fantasy_positions?: string[] | null }> | null,
 ): boolean {
   const metaPos = (pick.metadata?.position ?? "").toUpperCase().trim();
+  if (metaPos && OFFENSIVE_POSITIONS.has(metaPos)) return false;
   if (metaPos && DEFENSIVE_POSITIONS.has(metaPos)) return true;
 
   if (pick.player_id && playersDb) {
     const p = playersDb[pick.player_id];
     if (p) {
       const dbPos = (p.position ?? "").toUpperCase().trim();
+      if (dbPos && OFFENSIVE_POSITIONS.has(dbPos)) return false;
       if (dbPos && DEFENSIVE_POSITIONS.has(dbPos)) return true;
       const fp = Array.isArray(p.fantasy_positions) ? p.fantasy_positions : [];
+      // Only when *no* offensive eligibility exists do we treat a defensive
+      // fantasy_positions entry as proof of IDP. Hybrid players (WR + DB)
+      // are always offense in this codepath because step 1/3 returned early
+      // if their primary position was offensive — this branch is the
+      // "primary position missing" fallback.
+      const hasOffensiveFp = fp.some(f => OFFENSIVE_POSITIONS.has(String(f).toUpperCase().trim()));
+      if (hasOffensiveFp) return false;
       for (const f of fp) {
         if (DEFENSIVE_POSITIONS.has(String(f).toUpperCase().trim())) return true;
       }
@@ -320,19 +352,24 @@ export function draftContainsDefensivePlayers(
 }
 
 /** Stored-row version of isDefensivePlayer — used by the reclassifier when we
- *  only have draft_picks rows (no raw Sleeper metadata) to work from. */
+ *  only have draft_picks rows (no raw Sleeper metadata) to work from. Mirrors
+ *  the same offense-wins precedence as `isDefensivePlayer`. */
 function isDefensiveFromStored(
   p: { position: string | null; playerId: string | null },
   playersDb?: Record<string, { position?: string | null; fantasy_positions?: string[] | null }> | null,
 ): boolean {
   const pos = (p.position ?? "").toUpperCase().trim();
+  if (pos && OFFENSIVE_POSITIONS.has(pos)) return false;
   if (pos && DEFENSIVE_POSITIONS.has(pos)) return true;
   if (p.playerId && playersDb) {
     const pl = playersDb[p.playerId];
     if (pl) {
       const dbPos = (pl.position ?? "").toUpperCase().trim();
+      if (dbPos && OFFENSIVE_POSITIONS.has(dbPos)) return false;
       if (dbPos && DEFENSIVE_POSITIONS.has(dbPos)) return true;
       const fp = Array.isArray(pl.fantasy_positions) ? pl.fantasy_positions : [];
+      const hasOffensiveFp = fp.some(f => OFFENSIVE_POSITIONS.has(String(f).toUpperCase().trim()));
+      if (hasOffensiveFp) return false;
       for (const f of fp) {
         if (DEFENSIVE_POSITIONS.has(String(f).toUpperCase().trim())) return true;
       }
@@ -536,22 +573,55 @@ export async function ingestDraftById(
   draftId: string,
   opts: { force?: boolean } = {},
 ): Promise<{ ok: boolean; status: string; picks: number; reason?: string; skipped?: boolean }> {
-  // Dedup: if we've already stored picks for this draft and the caller hasn't
-  // asked for a forced refresh, skip the API calls entirely.
+  // ── Dedup gate ───────────────────────────────────────────────────────────
+  // We skip three cases:
+  //   (a) Already fully ingested: status=complete AND picks present AND the
+  //       saved pick count matches what the draft metadata says we should
+  //       have (teams * rounds, with a 60% slack for late picks).
+  //   (b) Permanently excluded: excludedFromAdp=true (IDP draft, quality
+  //       filter, real-kicker exclusion). The decision is deterministic from
+  //       the Sleeper payload so re-fetching can't change the outcome.
+  //
+  // We do NOT skip:
+  //   - status=complete with 0 picks (crash mid-insert)
+  //   - status=complete with fewer picks than expected (partial insert)
+  //   - any non-"complete" status (pre_draft, drafting, paused)
+  //
+  // These are eligible for re-ingestion. This is the primary defence against
+  // the "drafts appear in DB but aren't usable" failure mode — the previous
+  // dedup only required picksStored > 0, which let partial inserts through.
   if (!opts.force) {
     const existing = await db
-      .select({ id: drafts.draftId, status: drafts.status })
+      .select({
+        status: drafts.status,
+        teams: drafts.teams,
+        rounds: drafts.rounds,
+        excludedFromAdp: drafts.excludedFromAdp,
+      })
       .from(drafts)
       .where(eq(drafts.draftId, draftId))
       .limit(1);
-    if (existing.length > 0 && existing[0].status === "complete") {
-      const pickCount = await db
-        .select({ c: sql<number>`count(*)` })
-        .from(draftPicks)
-        .where(eq(draftPicks.draftId, draftId));
-      const picksStored = Number(pickCount[0]?.c ?? 0);
-      if (picksStored > 0) {
-        return { ok: true, status: "complete", picks: picksStored, skipped: true, reason: "already ingested" };
+    if (existing.length > 0) {
+      const row = existing[0];
+      if (row.excludedFromAdp) {
+        return { ok: true, status: row.status, picks: 0, skipped: true, reason: "previously excluded" };
+      }
+      if (row.status === "complete") {
+        const pickCount = await db
+          .select({ c: sql<number>`count(*)` })
+          .from(draftPicks)
+          .where(eq(draftPicks.draftId, draftId));
+        const picksStored = Number(pickCount[0]?.c ?? 0);
+        const expected = (row.teams ?? 0) * (row.rounds ?? 0);
+        // Threshold matches the quality-filter "enoughPicks" rule below.
+        const minAcceptable = expected > 0 ? Math.floor(expected * 0.6) : 1;
+        if (picksStored > 0 && picksStored >= minAcceptable) {
+          return { ok: true, status: "complete", picks: picksStored, skipped: true, reason: "already ingested" };
+        }
+        console.log(
+          `[ADP ingestDraftById] ${draftId} previously incomplete (status=complete, ` +
+          `picks=${picksStored}, expected≈${expected}). Re-ingesting.`,
+        );
       }
     }
   }
@@ -575,7 +645,8 @@ export async function ingestDraftById(
   );
 
   // Per spec: only completed drafts go into ADP by default. We still record
-  // their existence so the admin tools can see in-progress drafts.
+  // their existence so the admin tools can see in-progress drafts. Marked
+  // as not excluded — when the draft completes later, a rerun will re-ingest.
   if (!completed) {
     await upsertDraftRow(draftRaw, /* directlyDraftedRookies */ false, "unknown", completed, league, false, null);
     return { ok: true, status: draftRaw.status, picks: 0, reason: "not complete" };
@@ -590,19 +661,19 @@ export async function ingestDraftById(
   // position because they were in the same dataset).
   const playersDbForDetection = await getSleeperPlayers().catch(() => ({} as Record<string, any>));
   if (draftContainsDefensivePlayers(picksRaw, playersDbForDetection)) {
-    await upsertDraftRow(
-      draftRaw,
-      /* directlyDraftedRookies */ false,
-      "unknown",
-      completed,
-      league,
-      /* excludedFromAdp */ true,
-      "contains_defensive_players",
-    );
-    // Optionally persist picks for audit — we want them available in the
-    // admin views without affecting ADP calculations. Wipe-and-replace the
-    // existing rows for this draft so reclassification stays idempotent.
-    await db.delete(draftPicks).where(eq(draftPicks.draftId, draftId));
+    await db.transaction(async (tx) => {
+      await upsertDraftRowTx(
+        tx,
+        draftRaw,
+        /* directlyDraftedRookies */ false,
+        "unknown",
+        completed,
+        league,
+        /* excludedFromAdp */ true,
+        "contains_defensive_players",
+      );
+      await tx.delete(draftPicks).where(eq(draftPicks.draftId, draftId));
+    });
     return {
       ok: true,
       status: draftRaw.status,
@@ -629,31 +700,31 @@ export async function ingestDraftById(
   const directlyDraftedRookies =
     rookieMode === "direct_rookies" || (draftType === "startup");
 
-  // Quality filters: keep the dataset honest by dropping obvious mock /
-  // micro-leagues. Startup drafts must look like a real league bench-deep
-  // draft (≥8 rounds); rookie drafts only need to cover the standard 3
-  // rookie rounds. Below the floor we still upsert the metadata so admin
-  // tools can see why it was rejected, but we don't store picks.
+  // Quality filters: drop obvious mock / micro-leagues. We mark these
+  // `excludedFromAdp=true` with reason="quality_filter" so the dedup gate
+  // recognises them as a permanent decision and skips them on rerun —
+  // previously they were stored as plain status=complete with 0 picks,
+  // which was indistinguishable from a crash and led to wasted re-fetches
+  // on every crawl pass.
   const minTeams = 8;
   const minRounds = draftType === "startup" ? 8 : 3;
   const enoughPicks = picksRaw.filter((p) => p.player_id).length >= minTeams * minRounds * 0.6;
   if (teams < minTeams || rounds < minRounds || !enoughPicks) {
-    await upsertDraftRow(draftRaw, directlyDraftedRookies, rookieMode, /* completed */ false, league, false, null);
+    await upsertDraftRow(
+      draftRaw,
+      directlyDraftedRookies,
+      rookieMode,
+      completed,
+      league,
+      /* excludedFromAdp */ true,
+      "quality_filter",
+    );
     return {
       ok: true,
       status: draftRaw.status,
       picks: 0,
       reason: `quality filter (teams=${teams} rounds=${rounds} picks=${picksRaw.length})`,
     };
-  }
-
-  await upsertDraftRow(draftRaw, directlyDraftedRookies, rookieMode, completed, league, false, null);
-
-  // Replace picks atomically (cheap — they're small per draft).
-  await db.delete(draftPicks).where(eq(draftPicks.draftId, draftId));
-
-  if (picksRaw.length === 0) {
-    return { ok: true, status: draftRaw.status, picks: 0 };
   }
 
   // Pull the cached Sleeper player DB once so we can fall back to
@@ -698,15 +769,82 @@ export async function ingestDraftById(
     };
   });
 
+  // ── Atomic persistence ──────────────────────────────────────────────────
+  // All three writes (delete existing picks, insert new picks, upsert the
+  // draft row with status=complete) happen inside a single Postgres
+  // transaction. If any step throws — or the process dies before COMMIT —
+  // Postgres rolls back automatically, leaving the previous state intact.
+  //
+  // The draft row is upserted LAST so status=complete is never visible
+  // without its picks. Combined with the strengthened dedup gate above,
+  // this guarantees that a partial ingest is invisible to subsequent reruns
+  // (the row either doesn't exist, or has an earlier status that lets the
+  // rerun re-fetch).
   const BATCH = 500;
-  for (let i = 0; i < rows.length; i += BATCH) {
-    await db.insert(draftPicks).values(rows.slice(i, i + BATCH));
-  }
+  await db.transaction(async (tx) => {
+    await tx.delete(draftPicks).where(eq(draftPicks.draftId, draftId));
+    for (let i = 0; i < rows.length; i += BATCH) {
+      await tx.insert(draftPicks).values(rows.slice(i, i + BATCH));
+    }
+    await upsertDraftRowTx(tx, draftRaw, directlyDraftedRookies, rookieMode, completed, league, false, null);
+  });
 
   return { ok: true, status: draftRaw.status, picks: rows.length };
 }
 
+/**
+ * Transaction-scoped version of `upsertDraftRow`. The normal flow inside
+ * `ingestDraftById` calls this with the same `tx` used to write picks, so a
+ * mid-write crash rolls back the entire ingest (status, picks, exclusion
+ * flags) as a unit. Standalone callers can use `upsertDraftRow` below — it
+ * forwards to this one with a fresh implicit txn.
+ */
+async function upsertDraftRowTx(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  draftRaw: SleeperDraftRaw,
+  directlyDraftedRookies: boolean,
+  rookieMode: DraftRookieMode,
+  completed: boolean,
+  league: SleeperLeagueScoring | null,
+  excludedFromAdp: boolean,
+  exclusionReason: string | null,
+) {
+  const values = buildDraftRowValues(
+    draftRaw, directlyDraftedRookies, rookieMode, completed, league,
+    excludedFromAdp, exclusionReason,
+  );
+  await tx
+    .insert(drafts)
+    .values(values)
+    .onConflictDoUpdate({
+      target: drafts.draftId,
+      set: values,
+    });
+}
+
 async function upsertDraftRow(
+  draftRaw: SleeperDraftRaw,
+  directlyDraftedRookies: boolean,
+  rookieMode: DraftRookieMode,
+  completed: boolean,
+  league: SleeperLeagueScoring | null,
+  excludedFromAdp: boolean,
+  exclusionReason: string | null,
+) {
+  const values = buildDraftRowValues(
+    draftRaw, directlyDraftedRookies, rookieMode, completed, league,
+    excludedFromAdp, exclusionReason,
+  );
+  await db
+    .insert(drafts)
+    .values(values)
+    .onConflictDoUpdate({
+      target: drafts.draftId,
+      set: values,
+    });
+}
+
+function buildDraftRowValues(
   draftRaw: SleeperDraftRaw,
   directlyDraftedRookies: boolean,
   rookieMode: DraftRookieMode,
@@ -764,13 +902,7 @@ async function upsertDraftRow(
     ingestedAt: new Date(),
   };
 
-  await db
-    .insert(drafts)
-    .values(values)
-    .onConflictDoUpdate({
-      target: drafts.draftId,
-      set: values,
-    });
+  return values;
 }
 
 /**
@@ -886,7 +1018,14 @@ export async function ingestCrawledLeagueDrafts(limit: number = 200): Promise<{ 
 //   v3 — partition snapshots by `season` so 2026 picks never blend with
 //        prior years. (Pre-v3 cached entries blend all seasons and are
 //        unsafe to serve.)
-const FILTER_KEY_VERSION = "v3";
+//   v4 — fix IDP false-positive: hybrid offense/defense players
+//        (Travis Hunter et al.) no longer flag their entire draft as IDP.
+//        Pre-v4 snapshots were computed from a dataset where ~595 startup
+//        drafts were wrongly excluded.
+//   v5 — Direct Rookies excludes kickers across all draft types (not just
+//        rookie drafts). Pre-v5 snapshots for draftType=all/supplemental
+//        under rookieMode=direct could still contain K rows.
+const FILTER_KEY_VERSION = "v5";
 
 /** Normalize the season filter into a comma-joined sorted list, "all", or
  *  the inferred current season. Centralised so filterKey and the WHERE
@@ -969,22 +1108,22 @@ function buildDraftWhere(f: AdpFilters) {
   }
 
   // ── Kicker-draft exclusion (Direct Rookies only) ────────────────────────
-  // Per product rule: Direct Rookies should never pull from a draft that
-  // includes any kicker pick. Real rookie kickers are essentially never
-  // taken in dynasty rookie drafts, so a K presence here signals either a
-  // placeholder-as-kicker convention OR a league that drafts a kicker as
-  // a roster slot — both pollute the curves we want to surface as
-  // "actual rookie draft order."
+  // Per product rule: Direct Rookies should never include kicker rows. Real
+  // rookie kickers are essentially never taken in dynasty rookie drafts, so
+  // a K presence under "direct" signals either a placeholder-as-kicker
+  // convention OR a league that drafts a kicker as a roster slot — both
+  // pollute the curves we want to surface as "actual rookie draft order."
   //
   // We apply this at the draft level via NOT EXISTS rather than at the
   // pick level: removing K picks individually still leaves the rest of a
   // kicker-using draft in the dataset, which is exactly what the user is
   // complaining about. Whole-draft exclusion is the right tool.
   //
-  // Skipped for `rookieMode = "picks"` because the "Rookie Picks" view
-  // wants K-as-placeholder picks. Skipped for non-rookie drafts so
-  // startups (which legitimately include kickers) are untouched.
-  if (f.draftType === "rookie" && f.rookieMode !== "picks") {
+  // Applies whenever rookieMode === "direct", regardless of draftType, so
+  // mixed (draftType=all) and rookie-only views are equally clean. Skipped
+  // for "picks" and "both" so the Rookie Picks view (K-as-placeholder) and
+  // the unfiltered "both" view aren't disturbed.
+  if (f.rookieMode === "direct") {
     conds.push(sql`NOT EXISTS (
       SELECT 1 FROM ${draftPicks}
       WHERE ${draftPicks.draftId} = ${drafts.draftId}
@@ -1018,15 +1157,11 @@ export async function computeAdp(f: AdpFilters): Promise<{ rows: AdpRow[]; draft
     : rookieMode === "both" ? sql`true`
     : eq(draftPicks.isRookiePlaceholder, false);
 
-  // Rookie drafts that pass our placeholder heuristic still leak real-named
-  // kicker placeholders (e.g. "Justin Tucker" repeated across rounds) when
-  // neither the density signal (≥10% Ks) nor the duplicate-roster signal
-  // trips. Real rookie kickers are essentially never taken in dynasty
-  // rookie drafts, so under "direct"/"both" on a rookie draft we drop all
-  // Ks at the query level. Startup drafts are untouched — kickers are
-  // legitimate startup picks.
-  const dropKickers =
-    f.draftType === "rookie" && rookieMode !== "picks";
+  // Belt-and-braces pick-level K drop for Direct Rookies. The draft-level
+  // NOT EXISTS in buildDraftWhere is the primary defense, but if any stray
+  // K pick survives (e.g. a draft that was K-free at ingest but later had
+  // a K added) this guarantees Direct Rookies never renders a kicker row.
+  const dropKickers = rookieMode === "direct";
   const kickerCond = dropKickers
     ? sql`(${draftPicks.position} IS NULL OR upper(${draftPicks.position}) <> 'K')`
     : sql`true`;
@@ -1498,8 +1633,7 @@ export async function getAdp(f: AdpFilters): Promise<{
   // placeholder rows are legitimate.
   const cacheHasForbiddenKickers =
     cached &&
-    f.draftType === "rookie" &&
-    f.rookieMode !== "picks" &&
+    f.rookieMode === "direct" &&
     cached.rows.some((r) => r.position === "K");
   if (cached && cached.rows.length > 0 && !cacheHasForbiddenKickers) {
     return {

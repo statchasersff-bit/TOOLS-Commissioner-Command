@@ -27,6 +27,7 @@
 
 import pg from "pg";
 import { drizzle } from "drizzle-orm/node-postgres";
+import { eq } from "drizzle-orm";
 import { adpCrawlLog } from "@shared/schema";
 import {
   rateLimitedFetchJson,
@@ -56,7 +57,46 @@ const DEFAULT_CAPS = {
 const INTER_USER_PAUSE_MS = 250;
 const INTER_LEAGUE_PAUSE_MS = 100;
 
+// Periodic snapshot refresh during the crawl. The user-facing ADP Explorer
+// reads from the `adp_snapshots` table; without this, partial crawl
+// progress would only become visible after the post-crawl refresh (or the
+// 6h scheduler tick). Every Nth newly-ingested draft we fire a background
+// refresh so any interruption — server crash, OOM, user Stop — leaves the
+// most recent partial state visible to readers.
+const IN_CRAWL_SNAPSHOT_REFRESH_EVERY = 100;
+
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+// In-flight guard so overlapping crawls / fast-firing periodic refreshes
+// don't pile on each other. The fire-and-forget call below skips when a
+// previous refresh is still running — the next one fires after another
+// N drafts anyway.
+let snapshotRefreshInFlight = false;
+let lastInCrawlRefreshAt = 0;
+
+/**
+ * Fire-and-forget periodic snapshot refresh during the crawl. Skips when
+ * the previous refresh is still running or when the threshold hasn't been
+ * crossed yet. Errors are logged and swallowed — they must never abort
+ * the crawl, since each individual draft is already safely persisted by
+ * `ingestDraftById`.
+ */
+function maybeRefreshSnapshotsDuringCrawl(result: { draftsIngested: number }): void {
+  if (snapshotRefreshInFlight) return;
+  if (result.draftsIngested - lastInCrawlRefreshAt < IN_CRAWL_SNAPSHOT_REFRESH_EVERY) return;
+  lastInCrawlRefreshAt = result.draftsIngested;
+  snapshotRefreshInFlight = true;
+  void (async () => {
+    try {
+      const r = await refreshDefaultSnapshots();
+      console.log(`[NetworkCrawl] mid-crawl snapshot refresh @${result.draftsIngested} drafts → ${r.combos} combos, ${r.rows} rows`);
+    } catch (err: any) {
+      console.error("[NetworkCrawl] mid-crawl snapshot refresh failed:", err?.message ?? err);
+    } finally {
+      snapshotRefreshInFlight = false;
+    }
+  })();
+}
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -105,7 +145,13 @@ export interface NetworkCrawlResult {
  */
 export interface CrawlLiveState extends NetworkCrawlResult {
   jobId: string;
-  status: "idle" | "running" | "completed" | "failed" | "cancelled";
+  /** adp_crawl_log row id for this scan. Used by the recovery sweep to flag
+   *  stale `running` rows as failed, and by the finalize step to UPDATE the
+   *  same row rather than insert a duplicate. */
+  logId: number | null;
+  /** Terminal status, including the new "partial" state for crawls that
+   *  saved some drafts before hitting an error. */
+  status: "idle" | "running" | "completed" | "failed" | "cancelled" | "partial";
   startedAt: number | null;
   completedAt: number | null;
   /** Set by the cancel endpoint. The crawl loop checks this between BFS
@@ -190,8 +236,50 @@ function estimateDraftCategory(d: SleeperDraftListItem): DraftCategory {
 }
 
 // ── Logging ─────────────────────────────────────────────────────────────────
+// Scan log lifecycle:
+//   * `openCrawlLog` runs at scan START with status="running" and returns
+//     the row id. This is the audit anchor — even if the process is killed
+//     before completion, the row stays in adp_crawl_log so admins can see
+//     the crash. The startup recovery sweep (recoverStaleCrawlLogs) reaps
+//     any row still "running" after the inactivity threshold and flips it
+//     to status="failed".
+//   * `finalizeCrawlLog` runs at scan END (or in the catch block when
+//     something throws) with a terminal status — "completed", "failed",
+//     "partial", or "cancelled". The same row is UPDATEd, not a second row
+//     inserted, so the log shows one row per scan.
+//   * If finalize never runs (e.g. SIGKILL), the row is left in the
+//     `running` state for the recovery sweep — which is exactly what we
+//     want for the "scan crashed mid-run, disappears from logs" failure
+//     mode the original code had.
 
-async function writeCrawlLog(result: NetworkCrawlResult, status: "completed" | "failed"): Promise<void> {
+export type CrawlLogStatus = "running" | "completed" | "failed" | "partial" | "cancelled";
+
+async function openCrawlLog(seedUsername: string, seasons: string[], maxDepth: number): Promise<number | null> {
+  try {
+    const message = `seed=${seedUsername} depth=${maxDepth} seasons=${seasons.join(",")} (started)`;
+    const inserted = await db
+      .insert(adpCrawlLog)
+      .values({
+        jobType: "network-crawl",
+        status: "running",
+        message,
+        draftsFound: 0,
+        draftsIngested: 0,
+        picksIngested: 0,
+      })
+      .returning({ id: adpCrawlLog.id });
+    return inserted[0]?.id ?? null;
+  } catch (err: any) {
+    console.error("[NetworkCrawl] failed to open log row:", err?.message);
+    return null;
+  }
+}
+
+async function finalizeCrawlLog(
+  logId: number | null,
+  result: NetworkCrawlResult,
+  status: CrawlLogStatus,
+): Promise<void> {
   try {
     const message =
       `seed=${result.seedUser?.username ?? "(unresolved)"} ` +
@@ -201,18 +289,37 @@ async function writeCrawlLog(result: NetworkCrawlResult, status: "completed" | "
       `dupSkipped=${result.duplicatesSkipped} ` +
       `caps=${result.capsHit.join("|") || "none"} ` +
       `errors=${result.errors.length} ` +
-      `reqs=${result.requestCount}`;
-    await db.insert(adpCrawlLog).values({
-      jobType: "network-crawl",
-      status,
-      message,
-      draftsFound: result.draftsFound,
-      draftsIngested: result.draftsIngested,
-      picksIngested: result.picksIngested,
-      completedAt: new Date(),
-    });
+      `reqs=${result.requestCount}` +
+      (result.errors[0] ? ` lastError=${result.errors[result.errors.length - 1].slice(0, 200)}` : "");
+
+    if (logId == null) {
+      // Open failed (rare) — fall back to inserting a terminal row so the
+      // scan still shows up in the audit log.
+      await db.insert(adpCrawlLog).values({
+        jobType: "network-crawl",
+        status,
+        message,
+        draftsFound: result.draftsFound,
+        draftsIngested: result.draftsIngested,
+        picksIngested: result.picksIngested,
+        completedAt: new Date(),
+      });
+      return;
+    }
+
+    await db
+      .update(adpCrawlLog)
+      .set({
+        status,
+        message,
+        draftsFound: result.draftsFound,
+        draftsIngested: result.draftsIngested,
+        picksIngested: result.picksIngested,
+        completedAt: new Date(),
+      })
+      .where(eq(adpCrawlLog.id, logId));
   } catch (err: any) {
-    console.error("[NetworkCrawl] failed to write log row:", err?.message);
+    console.error("[NetworkCrawl] failed to finalize log row:", err?.message);
   }
 }
 
@@ -229,6 +336,7 @@ let liveState: CrawlLiveState = makeIdleState();
 function makeIdleState(): CrawlLiveState {
   return {
     jobId: "",
+    logId: null,
     status: "idle",
     startedAt: null,
     completedAt: null,
@@ -265,6 +373,7 @@ function makeRunningState(opts: NetworkCrawlOpts): CrawlLiveState {
   const maxDepth = Math.min(Math.max(0, opts.maxDepth ?? 2), ABSOLUTE_MAX_DEPTH);
   return {
     jobId: `crawl-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    logId: null,
     status: "running",
     startedAt: Date.now(),
     completedAt: null,
@@ -367,29 +476,65 @@ export function startCrawlInBackground(opts: NetworkCrawlOpts): CrawlLiveState {
   // the crawl mutates `liveState` until it terminates.
   (async () => {
     const state = liveState;
+    // Open the audit row IMMEDIATELY with status="running" so a process
+    // kill before the work completes still leaves a trail. The recovery
+    // sweep at startup will flip stale running rows to "failed".
+    state.logId = await openCrawlLog(opts.seedUsername, state.seasons, state.maxDepth);
+
     try {
       await runNetworkCrawl(opts, state);
       const wasCancelled = !!state.cancelRequested;
-      state.status = wasCancelled ? "cancelled" : "completed";
+      // "partial" when we stored some drafts but also hit errors; "completed"
+      // is reserved for clean finishes (no errors).
+      const finalStatus: CrawlLogStatus = wasCancelled
+        ? "cancelled"
+        : state.errors.length > 0 && state.draftsIngested > 0
+          ? "partial"
+          : state.errors.length > 0
+            ? "failed"
+            : "completed";
+      state.status = finalStatus === "completed" ? "completed"
+        : finalStatus === "cancelled" ? "cancelled"
+        : finalStatus === "partial" ? "partial"
+        : "failed";
       state.completedAt = Date.now();
       state.durationMs = state.completedAt - (state.startedAt ?? state.completedAt);
       state.phase = "done";
-      state.phaseLabel = wasCancelled ? "Cancelled" : "Done";
+      state.phaseLabel =
+        finalStatus === "cancelled" ? "Cancelled"
+        : finalStatus === "partial" ? "Partial"
+        : finalStatus === "failed" ? "Failed"
+        : "Done";
       state.currentActivity = "";
       recomputeOverallPct(state);
-      // The crawl log only accepts "completed" | "failed" — record a
-      // cancellation as "completed" so partial progress isn't lost, and
-      // surface the user-initiated stop via capsHit (e.g. "cancelled").
-      await writeCrawlLog(state, wasCancelled ? "completed" : "completed");
+      await finalizeCrawlLog(state.logId, state, finalStatus);
     } catch (err: any) {
       console.error("[NetworkCrawl] background run failed:", err);
-      state.status = "failed";
+      // Any drafts we successfully ingested before the throw are real — mark
+      // the scan partial when there's work to recover, otherwise failed.
+      const finalStatus: CrawlLogStatus = state.draftsIngested > 0 ? "partial" : "failed";
+      state.status = finalStatus === "partial" ? "partial" : "failed";
       state.completedAt = Date.now();
       state.durationMs = state.completedAt - (state.startedAt ?? state.completedAt);
       if (err?.message) state.errors.push(err.message);
       state.phase = "done";
-      state.phaseLabel = "Failed";
-      await writeCrawlLog(state, "failed");
+      state.phaseLabel = finalStatus === "partial" ? "Partial" : "Failed";
+      await finalizeCrawlLog(state.logId, state, finalStatus);
+    } finally {
+      // Always refresh ADP snapshots when the crawl exits — success,
+      // failure, or user-cancel. The raw drafts have already been
+      // persisted by ingestDraftById, so this just makes whatever was
+      // ingested visible to the Explorer. Without the finally, a
+      // mid-flight throw would orphan the ingested rows for up to 6h
+      // (until the scheduler tick).
+      if (opts.refreshSnapshots !== false && state.draftsIngested > 0) {
+        try {
+          const r = await refreshDefaultSnapshots();
+          console.log(`[NetworkCrawl] finalize snapshot refresh: ${r.combos} combos, ${r.rows} rows`);
+        } catch (refreshErr: any) {
+          console.error("[NetworkCrawl] finalize snapshot refresh failed:", refreshErr?.message ?? refreshErr);
+        }
+      }
     }
   })().catch(() => {/* terminal handler above already logged */});
 
@@ -421,6 +566,7 @@ export async function runNetworkCrawl(
   // (tests, scripts) we allocate a private state object.
   const result: CrawlLiveState = externalState ?? {
     jobId: "",
+    logId: null,
     status: "running",
     startedAt: Date.now(),
     completedAt: null,
@@ -496,7 +642,10 @@ export async function runNetworkCrawl(
   if (!seed) {
     result.errors.push(`Seed username "${opts.seedUsername}" did not resolve.`);
     result.durationMs = Date.now() - startedAt;
-    if (!externalState) await writeCrawlLog(result, "failed");
+    if (!externalState) {
+      const logId = await openCrawlLog(opts.seedUsername, result.seasons, result.maxDepth);
+      await finalizeCrawlLog(logId, result, "failed");
+    }
     return result;
   }
   result.seedUser = seed;
@@ -583,7 +732,16 @@ export async function runNetworkCrawl(
 
               if (categoryFilter) {
                 const cat = estimateDraftCategory(d);
-                if (!categoryFilter.has(cat)) {
+                // "unknown" means the LIST response didn't carry enough
+                // metadata to classify (no settings.rounds). We can't tell
+                // whether it's a real startup/rookie draft from the
+                // summary, so we let it through and let `ingestDraftById`
+                // make the call via the full draft detail + Sleeper's
+                // actual rounds/teams. Without this, drafts whose list
+                // summary lacks `rounds` (older formats, certain auction
+                // types) get silently dropped here even though they'd
+                // pass the real classifier.
+                if (cat !== "unknown" && !categoryFilter.has(cat)) {
                   result.categoryFilteredSkipped++;
                   console.log(`[NetworkCrawl] skip ${d.draft_id}: category=${cat} not in filter (rounds=${d.settings?.rounds ?? "?"})`);
                   continue;
@@ -600,6 +758,12 @@ export async function runNetworkCrawl(
                 } else if (r.ok && r.picks > 0) {
                   result.draftsIngested++;
                   result.picksIngested += r.picks;
+                  // Periodically refresh the ADP snapshot table so partial
+                  // crawl progress is visible in the Explorer immediately
+                  // — and survives a process restart mid-crawl. Without
+                  // this, the user-facing snapshot only updates after the
+                  // full crawl finishes (or the 6h scheduler tick).
+                  maybeRefreshSnapshotsDuringCrawl(result);
                 } else if (r.ok && r.picks === 0) {
                   // ingestDraftById succeeded but produced no picks. The two
                   // documented reasons are: draft "not complete" (still
@@ -682,11 +846,17 @@ export async function runNetworkCrawl(
     `excluded=${result.excludedSkipped} errors=${result.errors.length} ` +
     `caps=${result.capsHit.join("|") || "none"} reqs=${result.requestCount}`
   );
-  // When called from startCrawlInBackground the wrapper writes the log row
-  // (so it can mark "failed" on a thrown error). Standalone callers still
-  // log here for backward compatibility.
+  // When called from startCrawlInBackground the wrapper opens + finalizes
+  // the log row (so it can mark "failed" / "partial" on a thrown error).
+  // Standalone callers still get one terminal row written here so scripts
+  // and tests don't lose their audit trail.
   if (!externalState) {
-    await writeCrawlLog(result, "completed");
+    const logId = await openCrawlLog(opts.seedUsername, result.seasons, result.maxDepth);
+    const finalStatus: CrawlLogStatus =
+      result.errors.length > 0 && result.draftsIngested > 0 ? "partial"
+      : result.errors.length > 0 ? "failed"
+      : "completed";
+    await finalizeCrawlLog(logId, result, finalStatus);
   }
   return result;
 }

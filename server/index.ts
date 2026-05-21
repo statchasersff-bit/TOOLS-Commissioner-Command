@@ -246,5 +246,11 @@ process.on("unhandledRejection", (reason) => {
 
   httpServer.listen({ port, host: "0.0.0.0", reusePort: true }, () => {
     log(`serving on port ${port}`);
+    // Kick a self-request so Vite compiles the module graph immediately on
+    // startup rather than on the first real browser request (which causes a
+    // white screen while Vite cold-compiles).
+    if (process.env.NODE_ENV !== "production") {
+      fetch(`http://localhost:${port}/`).catch(() => {});
+    }
   });
 })();

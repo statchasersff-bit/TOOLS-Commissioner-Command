@@ -404,7 +404,7 @@ export function DraftCommand() {
 
           {view === "list" && <ListView rows={filtered} filters={filters} onPlayerClick={handlePlayerClick} />}
           {view === "box"  && <BoxView  rows={filtered} teams={typeof filters.teams === "number" ? filters.teams : 12} onPlayerClick={handlePlayerClick} />}
-          {view === "hex"  && <HexView  rows={filtered} teams={typeof filters.teams === "number" ? filters.teams : 12} onPlayerClick={handlePlayerClick} />}
+          {view === "hex"  && <HexView  rows={filtered} teams={typeof filters.teams === "number" ? filters.teams : 12} draftFormat={filters.draftFormat} onPlayerClick={handlePlayerClick} />}
         </>
       )}
 
@@ -1194,7 +1194,7 @@ const HEX_POS_THEME: Record<Position, PosTheme> = {
 
 const ELITE_RANK_CUTOFF = 12;
 
-function HexView({ rows, teams, onPlayerClick }: { rows: ADPResult[]; teams: number; onPlayerClick?: (row: ADPResult) => void }) {
+function HexView({ rows, teams, draftFormat, onPlayerClick }: { rows: ADPResult[]; teams: number; draftFormat: DraftFilters["draftFormat"]; onPlayerClick?: (row: ADPResult) => void }) {
   const isMobile = useIsMobile();
   // Larger tiles than before — the redesign uses a prominent square headshot
   // so we give it more room. Mobile still shrinks but keeps a readable layout.
@@ -1220,16 +1220,17 @@ function HexView({ rows, teams, onPlayerClick }: { rows: ADPResult[]; teams: num
     });
   };
 
-  // Group rows into rounds, placing each at its (round, pickInRound) slot
-  // derived from rounded ADP. Each round row is exactly `teams` slots wide;
-  // empty slots get a placeholder tile so the visual layout always reflects
-  // the draft size setting (12 slots when teams=12, 10 when teams=10, etc.).
+  // Group rows into rounds, placing each at its (round, slot) coordinate
+  // derived from sequential ADP ordering. Each round row is exactly `teams`
+  // slots wide; empty slots get a placeholder tile so the visual layout
+  // always reflects the draft size setting (12 slots when teams=12, etc.).
   // Anything beyond MAX_ROUNDS_SHOWN is dropped to keep the grid bounded.
-  // Sequential placement — same approach as BoxView. Sort by avg_pick,
-  // then assign each player to the next available slot (round + slot derived
-  // from `idx + 1`). This guarantees every slot fills in order rather than
-  // being skipped when no player's rounded ADP happens to land on a given
-  // integer pick. Hex view is non-snake, so we don't reverse rows.
+  //
+  // When the draftFormat filter is "snake", even rounds reverse direction
+  // so the board reads exactly like a startup draft replay (matches
+  // BoxView). For "linear"/"auction"/"all", picks fill left-to-right every
+  // round.
+  const isSnake = draftFormat === "snake";
   const grouped = useMemo(() => {
     const sorted = [...rows].sort((a, b) => a.avg_pick - b.avg_pick);
     const byRound = new Map<number, Array<ADPResult | null>>();
@@ -1238,11 +1239,12 @@ function HexView({ rows, teams, onPlayerClick }: { rows: ADPResult[]; teams: num
       const round = Math.ceil(seq / teams);
       if (round > MAX_ROUNDS_SHOWN) return;
       const pickInRound = ((seq - 1) % teams) + 1;
+      const slot = isSnake && round % 2 === 0 ? teams - pickInRound + 1 : pickInRound;
       if (!byRound.has(round)) byRound.set(round, Array.from({ length: teams }, () => null));
-      byRound.get(round)![pickInRound - 1] = r;
+      byRound.get(round)![slot - 1] = r;
     });
     return Array.from(byRound.entries()).sort((a, b) => a[0] - b[0]);
-  }, [rows, teams]);
+  }, [rows, teams, isSnake]);
 
   return (
     <Card className="overflow-hidden border-white/8 bg-[#070f1c]">
@@ -2016,14 +2018,12 @@ const ALLOWED_DISPLAY_POSITIONS = new Set(["QB", "RB", "WR", "TE", "K", "PICK"])
 
 function filterAdp(all: ADPResult[], filters: DraftFilters): ADPResult[] {
   const q = filters.search.trim().toLowerCase();
-  // Sleeper rookie drafts often use real-named kickers as future-pick
-  // placeholders. The ingest-time heuristic catches the obvious cases
-  // (kicker density ≥10%, same team drafting 2+ Ks), but quieter leaks
-  // slip through and show up as "real" rookie kickers. Real NFL rookie
-  // kickers are essentially never drafted in dynasty rookie drafts, so
-  // under Direct/Both rookie modes on a rookie draft we drop all Ks.
-  const dropKickers =
-    filters.draftType === "rookie" && filters.rookieMode !== "picks";
+  // Direct Rookies must never render kicker rows. Sleeper rookie drafts
+  // often use real-named kickers as future-pick placeholders and ingest-
+  // time heuristics don't catch every case; the cleanest UX is to drop K
+  // rows whenever rookieMode === "direct", regardless of draftType. The
+  // server applies the same rule (see buildDraftWhere in server/adp.ts).
+  const dropKickers = filters.rookieMode === "direct";
   return all.filter((r) => {
     // Frontend defensive guardrail. Backend drops IDP-containing drafts at
     // ingest, but if a cached snapshot still references a defensive player

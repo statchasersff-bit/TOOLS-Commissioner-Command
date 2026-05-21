@@ -69,12 +69,17 @@ import { registerScAuthRoutes } from "./scAuthRoutes";
 import { registerBillingRoutes } from "./billingRoutes";
 import { registerSleeperDraftPickRoutes } from "./sleeperDraftPickRoutes";
 import { requireReadOnlySleeperContext } from "./accessMiddleware";
+import { getManagerIntel } from "./managerIntel";
 import {
   startCrawlInBackground,
   getCrawlLiveState,
   requestCrawlCancel,
   type DraftCategory,
 } from "./adpNetworkCrawl";
+import {
+  recoverAdpCrawlState,
+  repairIncompleteDrafts,
+} from "./adpCrawlRepair";
 import { getUser } from "./scAuth";
 import { isAdminByEmail } from "@shared/admin";
 import {
@@ -194,6 +199,26 @@ export async function registerRoutes(
     } catch (err: any) {
       console.error("Portfolio summary error:", err);
       res.status(500).json({ error: err.message || "Failed to fetch portfolio summary" });
+    }
+  });
+
+  // Manager Intel — aggregated cross-league read for the click-to-open
+  // ManagerIntelDrawer. Cached in Postgres for 6h per (userId, leagueId,
+  // season); pass ?refresh=1 to bypass the cache.
+  app.get("/api/manager-intel/:userId", requireReadOnlySleeperContext, async (req, res) => {
+    try {
+      const userId = req.params.userId;
+      const leagueId = (req.query.leagueId as string) || "";
+      const season = (req.query.season as string) || String(new Date().getFullYear());
+      const refresh = req.query.refresh === "1" || req.query.refresh === "true";
+      const payload = await getManagerIntel({ userId, leagueId, season, refresh });
+      res.setHeader("Cache-Control", "private, max-age=60");
+      res.json(payload);
+    } catch (err: any) {
+      console.error("Manager Intel error:", err);
+      res.status(500).json({
+        error: err?.message || "Failed to compute manager intel",
+      });
     }
   });
 
@@ -1395,6 +1420,37 @@ export async function registerRoutes(
     res.json({ ok: true, flagged, state: getCrawlLiveState() });
   });
 
+  /**
+   * POST /api/admin/adp/crawl-network/repair
+   *
+   * Admin recovery hatch for the "drafts in DB but not visible/usable"
+   * failure mode. Runs two sweeps:
+   *
+   *   1) Crash recovery — any adp_crawl_log row stuck in status="running"
+   *      past the inactivity threshold is flipped to "failed" with a
+   *      recovery message. Any adp_crawl_queue row stuck in "processing" is
+   *      reset to "pending".
+   *
+   *   2) Orphan draft cleanup — finds draft rows marked complete (and not
+   *      intentionally excluded) whose pick count is missing or below the
+   *      60% threshold, and deletes them so the next crawl re-ingests
+   *      cleanly. IDP-excluded and quality-filter drafts are left alone.
+   *
+   * Pass `?dryRun=true` to count without deleting.
+   */
+  app.post("/api/admin/adp/crawl-network/repair", async (req, res) => {
+    if (!(await requireAdmin(req, res))) return;
+    try {
+      const dryRun = req.query.dryRun === "true" || req.body?.dryRun === true;
+      const recovery = await recoverAdpCrawlState();
+      const drafts = await repairIncompleteDrafts({ dryRun });
+      res.json({ ok: true, dryRun, recovery, drafts });
+    } catch (err: any) {
+      console.error("[Admin] adp/crawl-network/repair error:", err);
+      res.status(500).json({ error: err?.message || "Repair failed" });
+    }
+  });
+
   app.post("/api/admin/cleanup-one-sided-trades", async (req, res) => {
     if (!(await requireAdmin(req, res))) return;
     try {
@@ -1410,6 +1466,14 @@ export async function registerRoutes(
   startSnapshotScheduler();
   startAdpScheduler();
   startCrawlWorker();
+
+  // Reap any scan log row or queue item that the previous process left
+  // dangling. Without this, a crashed scan stays in status="running"
+  // forever — blocking the in-flight guard and hiding the failure from
+  // the audit log. Fire-and-forget so a recovery error doesn't break boot.
+  recoverAdpCrawlState().catch((err) => {
+    console.error("[ADP recovery] startup sweep failed:", err);
+  });
 
   // One-time cleanup: remove one-sided trades stored before the UNNEST query fix.
   // Disable by setting SKIP_ONESIDED_CLEANUP=true once production confirms remaining=0.

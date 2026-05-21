@@ -2383,7 +2383,34 @@ export default function LiveDraft() {
 
   // REST-only slot headers (displayName + avatar hash). The GraphQL path
   // enriches further in `enhancedSlotHeaders` below.
+  //
+  // Header semantics: each column shows the user who CURRENTLY owns the
+  // round-1 pick for that slot. That's the order in which picks will
+  // actually be made in round 1 — i.e. "the draft order" as a user reads it.
+  //
+  // Bug history: pre-fix, headers showed the ORIGINAL slot owner from
+  // draft.draft_order, ignoring traded_picks. In a startup with a few 1st-
+  // round trades, the visible header order ("makitrain at slot 1") didn't
+  // match who actually picked 1.01 ("chaffima after trade"). We now consult
+  // draftData.pickOwners (which folds traded_picks) for round=1 first, and
+  // fall back to the static draftSlots map only when pickOwners is missing.
   const slotHeaders = useMemo<Array<{ displayName: string; avatar: string | null }>>(() => {
+    if (draftData?.pickOwners && draftData.pickOwners.length > 0) {
+      const round1 = new Map<number, { displayName: string; avatar: string | null }>();
+      for (const po of draftData.pickOwners) {
+        if (po.round !== 1) continue;
+        round1.set(po.slot, {
+          displayName: po.currentDisplayName,
+          avatar: po.currentAvatar ?? null,
+        });
+      }
+      if (round1.size > 0) {
+        return Array.from({ length: teamCount }, (_, i) => {
+          const s = i + 1;
+          return round1.get(s) ?? { displayName: `Pick ${s}`, avatar: null };
+        });
+      }
+    }
     if (draftData?.draftSlots && draftData.draftSlots.length > 0) {
       return [...draftData.draftSlots]
         .sort((a, b) => a.slot - b.slot)
@@ -2625,10 +2652,24 @@ export default function LiveDraft() {
     return [] as DraftPickNormalized[];
   }, [draftState, draftData, user?.userId, user?.username, user?.displayName, teamCount]);
 
-  // Slot headers — username + avatar per slot. Prefers draftState (rich
-  // GraphQL data with avatar hashes) and falls back to draftData.draftSlots
-  // (REST). Always returns an array of length = team count.
+  // Slot headers — username + avatar per slot, AFTER applying traded_picks
+  // for round 1 (so the visible order reflects who will actually pick first
+  // in each column, not who originally owned the slot).
+  //
+  // Source priority:
+  //   1) draftData.pickOwners (REST + traded_picks → current owner)
+  //   2) draftState.draftOrderByUserId (GraphQL, original owner only)
+  //   3) draftData.draftSlots (REST fallback, original owner only)
+  // The pickOwners path is preferred even when GraphQL data is loaded
+  // because GraphQL doesn't expose traded_picks; without this guard the
+  // headers would silently revert to original owners on JWT-authenticated
+  // sessions.
   const enhancedSlotHeaders = useMemo<Array<{ displayName: string; avatar: string | null }>>(() => {
+    if (draftData?.pickOwners && draftData.pickOwners.length > 0) {
+      // `slotHeaders` already folds in pickOwners[round=1]; re-use it so
+      // the two header arrays stay in lockstep.
+      return slotHeaders;
+    }
     if (draftState && Object.keys(draftState.draftOrderByUserId).length > 0) {
       const slotToUser: Record<number, DraftUser> = {};
       for (const [userId, slot] of Object.entries(draftState.draftOrderByUserId)) {
@@ -2640,7 +2681,7 @@ export default function LiveDraft() {
       });
     }
     return slotHeaders;
-  }, [draftState, slotHeaders]);
+  }, [draftState, slotHeaders, draftData]);
 
   // Merged pick history: draftState.picks (primary) joined with message timing data
   // Pick history is built from three layered sources so the Draft Log
