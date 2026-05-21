@@ -3,7 +3,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, RefreshCw, Trophy, Target, Radio, Zap, MessageSquare, Key, AlertTriangle, ChevronDown, ChevronUp, ArrowUp, ArrowDown, X, Plus, Calendar, Clock, UserCircle, Search, Users, Check } from "lucide-react";
+import { Loader2, RefreshCw, Trophy, Target, Radio, Zap, MessageSquare, Key, AlertTriangle, ChevronDown, ChevronUp, ArrowUp, ArrowDown, ArrowUpDown, X, Plus, Calendar, Clock, UserCircle, Search, Users, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useValueModel } from "@/contexts/ValueModelContext";
 import { useSleeper } from "@/contexts/SleeperContext";
@@ -347,14 +347,15 @@ function parsePickMessage(msg: DraftMessage): ParsedPick | null {
   return null;
 }
 
-async function fetchDraftMessages(draftId: string, jwt: string): Promise<DraftMessage[]> {
+async function fetchDraftMessages(draftId: string, jwt?: string | null): Promise<DraftMessage[]> {
+  const headers: Record<string, string> = {
+    "x-sleeper-graphql-op": "messages",
+    "content-type": "application/json",
+  };
+  if (jwt) headers["authorization"] = jwt;
   const res = await fetch("https://sleeper.com/graphql", {
     method: "POST",
-    headers: {
-      "authorization": jwt,
-      "x-sleeper-graphql-op": "messages",
-      "content-type": "application/json",
-    },
+    headers,
     body: JSON.stringify({
       query: `query messages { messages(parent_id: "${draftId}") { message_id author_is_bot created text } }`,
     }),
@@ -1481,20 +1482,20 @@ function ManagerTimingsSection({ history, teams, livePickUserId, liveElapsedMs }
                         />
                       </span>
                       <span className={cn("text-[11px] font-semibold tabular-nums text-right flex items-center justify-end gap-0.5", isOnClock ? "text-[#d4af37]" : "text-foreground")}>
-                        {formatDurationMs(displayMs)}
+                        {(mgr.timedPicksCount > 0 || isOnClock) ? formatDurationMs(displayMs) : "—"}
                         {isOnClock && <span className="text-[9px] font-bold animate-pulse">▶</span>}
                       </span>
                       <span className="text-[11px] tabular-nums text-foreground/80 text-right">
                         {mgr.picksCount}
                       </span>
                       <span className="text-[11px] tabular-nums text-foreground/80 text-right">
-                        {formatDurationMs(mgr.avgMs)}
+                        {formatDurationMs(mgr.timedPicksCount > 0 ? mgr.avgMs : null)}
                       </span>
                       <span className="text-[11px] tabular-nums text-foreground/80 text-right">
-                        {formatDurationMs(mgr.longestMs)}
+                        {formatDurationMs(mgr.timedPicksCount > 0 ? mgr.longestMs : null)}
                       </span>
                       <span className="text-[11px] tabular-nums text-foreground/80 text-right">
-                        {mgr.shortestMs !== Infinity ? formatDurationMs(mgr.shortestMs) : "—"}
+                        {mgr.timedPicksCount > 0 && mgr.shortestMs !== Infinity ? formatDurationMs(mgr.shortestMs) : "—"}
                       </span>
                       <ChevronDown
                         className={cn(
@@ -1534,15 +1535,15 @@ function ManagerTimingsSection({ history, teams, livePickUserId, liveElapsedMs }
                           />
                         </span>
                         <span className={cn("text-[10px] font-semibold tabular-nums flex items-center gap-0.5", isOnClock ? "text-[#d4af37]" : "text-foreground")}>
-                          {formatDurationMs(displayMs)}
+                          {(mgr.timedPicksCount > 0 || isOnClock) ? formatDurationMs(displayMs) : "—"}
                           {isOnClock && <span className="text-[9px] font-bold animate-pulse">▶</span>}
                         </span>
                       </div>
                       <div className="flex items-center gap-3 text-[10px] text-muted-foreground tabular-nums flex-wrap">
                         <span>Picks <span className="text-foreground/80 font-semibold">{mgr.picksCount}</span></span>
-                        <span>Avg <span className="text-foreground/80 font-semibold">{formatDurationMs(mgr.avgMs)}</span></span>
-                        <span>Long <span className="text-foreground/80 font-semibold">{formatDurationMs(mgr.longestMs)}</span></span>
-                        <span>Short <span className="text-foreground/80 font-semibold">{mgr.shortestMs !== Infinity ? formatDurationMs(mgr.shortestMs) : "—"}</span></span>
+                        <span>Avg <span className="text-foreground/80 font-semibold">{formatDurationMs(mgr.timedPicksCount > 0 ? mgr.avgMs : null)}</span></span>
+                        <span>Long <span className="text-foreground/80 font-semibold">{formatDurationMs(mgr.timedPicksCount > 0 ? mgr.longestMs : null)}</span></span>
+                        <span>Short <span className="text-foreground/80 font-semibold">{mgr.timedPicksCount > 0 && mgr.shortestMs !== Infinity ? formatDurationMs(mgr.shortestMs) : "—"}</span></span>
                       </div>
                     </div>
                   </button>
@@ -1683,6 +1684,67 @@ function PosChip({
   );
 }
 
+type PlayersSortKey = "name" | "age" | "value";
+type PlayersSortState = { key: PlayersSortKey; dir: "asc" | "desc" };
+
+function comparePlayers(
+  a: { name: string; age?: number; value?: number },
+  b: { name: string; age?: number; value?: number },
+  sort: PlayersSortState,
+): number {
+  const { key, dir } = sort;
+  if (key === "name") {
+    const cmp = (a.name || "").localeCompare(b.name || "");
+    return dir === "asc" ? cmp : -cmp;
+  }
+  // Numeric: missing / non-positive values always sink to the bottom,
+  // regardless of sort direction, so a partial dataset doesn't pile
+  // empties at the top when ascending.
+  const va = typeof a[key] === "number" && (a[key] as number) > 0 ? (a[key] as number) : null;
+  const vb = typeof b[key] === "number" && (b[key] as number) > 0 ? (b[key] as number) : null;
+  if (va === null && vb === null) return 0;
+  if (va === null) return 1;
+  if (vb === null) return -1;
+  return dir === "asc" ? va - vb : vb - va;
+}
+
+function PlayersSortHeader({
+  label,
+  sortKey,
+  current,
+  onClick,
+  align = "left",
+}: {
+  label: string;
+  sortKey: PlayersSortKey;
+  current: PlayersSortState;
+  onClick: (key: PlayersSortKey) => void;
+  align?: "left" | "right";
+}) {
+  const isActive = current.key === sortKey;
+  return (
+    <button
+      type="button"
+      onClick={() => onClick(sortKey)}
+      data-testid={`players-sort-${sortKey}`}
+      className={cn(
+        "flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider transition-colors hover:text-foreground",
+        isActive ? "text-foreground" : "text-muted-foreground",
+        align === "right" ? "justify-end ml-auto" : "justify-start",
+      )}
+    >
+      {label}
+      {isActive ? (
+        current.dir === "asc"
+          ? <ArrowUp className="w-2.5 h-2.5" />
+          : <ArrowDown className="w-2.5 h-2.5" />
+      ) : (
+        <ArrowUpDown className="w-2.5 h-2.5 opacity-40" />
+      )}
+    </button>
+  );
+}
+
 function PlayersPanel({
   fullBoard,
   pickedPlayerIds,
@@ -1717,10 +1779,19 @@ function PlayersPanel({
   const [search, setSearch] = useState("");
   const [availFilter, setAvailFilter] = useState<"ALL" | "QB" | "RB" | "WR" | "TE" | "K" | "Rookies">("ALL");
   const [teamFilter, setTeamFilter] = useState<"ALL" | "QB" | "RB" | "WR" | "TE" | "K" | "DEF">("ALL");
+  const [availSort, setAvailSort] = useState<PlayersSortState>({ key: "value", dir: "desc" });
+  const [teamSort, setTeamSort] = useState<PlayersSortState>({ key: "value", dir: "desc" });
+
+  const cycleSort = (current: PlayersSortState, key: PlayersSortKey): PlayersSortState => {
+    if (current.key === key) {
+      return { key, dir: current.dir === "asc" ? "desc" : "asc" };
+    }
+    return { key, dir: key === "name" ? "asc" : "desc" };
+  };
 
   const availablePool = useMemo(() => {
     const term = search.trim().toLowerCase();
-    return fullBoard.filter((p) => {
+    const filtered = fullBoard.filter((p) => {
       if (pickedPlayerIds.has(p.sleeperId)) return false;
       if (pickedPlayerNames.has((p.name || "").toLowerCase().trim())) return false;
       if (availFilter === "Rookies") {
@@ -1733,13 +1804,14 @@ function PlayersPanel({
       if (term && !p.name.toLowerCase().includes(term)) return false;
       return true;
     });
-  }, [fullBoard, pickedPlayerIds, pickedPlayerNames, availFilter, search]);
+    return [...filtered].sort((a, b) => comparePlayers(a, b, availSort));
+  }, [fullBoard, pickedPlayerIds, pickedPlayerNames, availFilter, search, availSort]);
 
   const filteredRoster = useMemo(() => {
     if (!myRoster) return [] as RosterPlayer[];
-    if (teamFilter === "ALL") return myRoster;
-    return myRoster.filter((p) => p.pos === teamFilter);
-  }, [myRoster, teamFilter]);
+    const base = teamFilter === "ALL" ? myRoster : myRoster.filter((p) => p.pos === teamFilter);
+    return [...base].sort((a, b) => comparePlayers(a, b, teamSort));
+  }, [myRoster, teamFilter, teamSort]);
 
   const tabs: Array<{ id: "available" | "my-team"; label: string; count?: number }> = [
     { id: "available", label: "Available Players", count: availablePool.length },
@@ -1829,15 +1901,33 @@ function PlayersPanel({
                   ))}
                 </div>
 
-                {/* Column header — desktop only. Two columns now that the
-                    ADP / PAR / DH placeholders are gone and the Queue add
-                    button has been retired with the Queue tab. */}
+                {/* Column header — desktop only. Columns are sortable; click
+                    a header to cycle sort direction (asc ⇄ desc). */}
                 <div
-                  className="hidden md:grid items-center gap-2 px-2 py-1 text-[9px] font-bold uppercase tracking-wider text-muted-foreground border-b border-border/20"
-                  style={{ gridTemplateColumns: "minmax(0,1fr) 90px" }}
+                  className="hidden md:grid items-center gap-2 px-2 py-1 border-b border-border/20"
+                  style={{ gridTemplateColumns: "minmax(0,1fr) 50px 90px" }}
                 >
-                  <span>Player</span>
-                  <span className="text-right">Dynasty Value</span>
+                  <PlayersSortHeader
+                    label="Player"
+                    sortKey="name"
+                    current={availSort}
+                    onClick={(k) => setAvailSort((s) => cycleSort(s, k))}
+                    align="left"
+                  />
+                  <PlayersSortHeader
+                    label="Age"
+                    sortKey="age"
+                    current={availSort}
+                    onClick={(k) => setAvailSort((s) => cycleSort(s, k))}
+                    align="right"
+                  />
+                  <PlayersSortHeader
+                    label="Dynasty Value"
+                    sortKey="value"
+                    current={availSort}
+                    onClick={(k) => setAvailSort((s) => cycleSort(s, k))}
+                    align="right"
+                  />
                 </div>
 
                 <div className="max-h-[480px] overflow-y-auto -mx-1 px-1" data-testid="list-players-available">
@@ -1851,7 +1941,7 @@ function PlayersPanel({
                         <li
                           key={p.sleeperId}
                           className="md:grid md:gap-2 md:items-center flex items-center gap-2 px-2.5 py-2 rounded-lg border border-border/30 bg-muted/15 hover:bg-muted/30 transition-colors"
-                          style={{ gridTemplateColumns: "minmax(0,1fr) 90px" }}
+                          style={{ gridTemplateColumns: "minmax(0,1fr) 50px 90px" }}
                           data-testid={`player-row-${p.sleeperId}`}
                         >
                           <div className="min-w-0 flex-1 md:flex-initial">
@@ -1863,6 +1953,12 @@ function PlayersPanel({
                               size="sm"
                             />
                           </div>
+                          <span
+                            className="hidden md:inline text-[11px] text-right text-muted-foreground tabular-nums shrink-0"
+                            data-testid={`text-age-${p.sleeperId}`}
+                          >
+                            {typeof p.age === "number" && p.age > 0 ? p.age.toFixed(1) : "—"}
+                          </span>
                           <span
                             className="text-[12px] md:text-[13px] text-right tabular-nums font-semibold text-[#d4af37] shrink-0"
                             data-testid={`text-dynasty-value-${p.sleeperId}`}
@@ -1911,15 +2007,33 @@ function PlayersPanel({
                         />
                       ))}
                     </div>
-                    {/* Column header — desktop only. STARTER pills retired;
-                        Dynasty Value promoted to its own column. */}
+                    {/* Column header — desktop only. Sortable: click a header
+                        to cycle sort direction (asc ⇄ desc). */}
                     <div
-                      className="hidden md:grid items-center gap-2 px-2 py-1 text-[9px] font-bold uppercase tracking-wider text-muted-foreground border-b border-border/20"
+                      className="hidden md:grid items-center gap-2 px-2 py-1 border-b border-border/20"
                       style={{ gridTemplateColumns: "minmax(0,1fr) 50px 90px" }}
                     >
-                      <span>Player</span>
-                      <span className="text-right">Age</span>
-                      <span className="text-right">Dynasty Value</span>
+                      <PlayersSortHeader
+                        label="Player"
+                        sortKey="name"
+                        current={teamSort}
+                        onClick={(k) => setTeamSort((s) => cycleSort(s, k))}
+                        align="left"
+                      />
+                      <PlayersSortHeader
+                        label="Age"
+                        sortKey="age"
+                        current={teamSort}
+                        onClick={(k) => setTeamSort((s) => cycleSort(s, k))}
+                        align="right"
+                      />
+                      <PlayersSortHeader
+                        label="Dynasty Value"
+                        sortKey="value"
+                        current={teamSort}
+                        onClick={(k) => setTeamSort((s) => cycleSort(s, k))}
+                        align="right"
+                      />
                     </div>
                     <div className="max-h-[480px] overflow-y-auto -mx-1 px-1" data-testid="list-my-team">
                       {filteredRoster.length === 0 ? (
@@ -2156,7 +2270,7 @@ export default function LiveDraft() {
 
   const activeDraftId = draftData?.draft?.draftId ?? null;
 
-  const refreshMessages = useCallback(async (draftId: string, jwt: string) => {
+  const refreshMessages = useCallback(async (draftId: string, jwt?: string | null) => {
     setMessagesLoading(true);
     setMessagesError(null);
     try {
@@ -2227,17 +2341,24 @@ export default function LiveDraft() {
     }
   }, []);
 
-  // Fetch all live data whenever activeDraftId + JWT are both available
+  // Load messages whenever activeDraftId changes — JWT is optional (Sleeper
+  // may serve public draft messages without auth; if it requires auth the
+  // call gracefully fails and we fall back to REST timing).
+  useEffect(() => {
+    if (!activeDraftId) return;
+    setDraftMessages([]);
+    refreshMessages(activeDraftId, sleeperJwt);
+  }, [activeDraftId, sleeperJwt, refreshMessages]);
+
+  // JWT-only data: queue, draftState, autopickers
   useEffect(() => {
     if (activeDraftId && sleeperJwt) {
-      setDraftMessages([]);
       setDraftQueue([]);
-      refreshMessages(activeDraftId, sleeperJwt);
       refreshQueue(activeDraftId, sleeperJwt);
       loadDraftState(activeDraftId, sleeperJwt);
       loadAutopickers(activeDraftId, sleeperJwt);
     }
-  }, [activeDraftId, sleeperJwt, refreshMessages, refreshQueue, loadDraftState, loadAutopickers]);
+  }, [activeDraftId, sleeperJwt, refreshQueue, loadDraftState, loadAutopickers]);
 
   // Poll draftState + autopickers every 12s while JWT is set and draft is active
   useEffect(() => {
@@ -2323,8 +2444,10 @@ export default function LiveDraft() {
     if (autoRefresh && activeLeagueId) {
       intervalRef.current = setInterval(() => {
         fetchDraft();
-        if (activeDraftId && sleeperJwt) {
+        if (activeDraftId) {
           refreshMessages(activeDraftId, sleeperJwt);
+        }
+        if (activeDraftId && sleeperJwt) {
           refreshQueue(activeDraftId, sleeperJwt);
         }
       }, 45000);
