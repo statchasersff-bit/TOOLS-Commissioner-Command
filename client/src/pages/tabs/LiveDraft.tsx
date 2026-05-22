@@ -133,6 +133,22 @@ function getCategoryLabel(cat: DraftSummary["category"]): string {
     default: return "Draft";
   }
 }
+
+// Small uppercase pill shown next to the status badge so the lobby surfaces
+// whether each card is a rookie / startup / supplemental / unknown draft at
+// a glance.
+function getCategoryBadge(cat: DraftSummary["category"]): { label: string; className: string } {
+  switch (cat) {
+    case "rookie":
+      return { label: "ROOKIE", className: "bg-purple-500/15 text-purple-300 border border-purple-500/30" };
+    case "startup":
+      return { label: "STARTUP", className: "bg-[#d4af37]/15 text-[#d4af37] border border-[#d4af37]/30" };
+    case "supplemental":
+      return { label: "SUPPL.", className: "bg-cyan-500/15 text-cyan-300 border border-cyan-500/30" };
+    default:
+      return { label: "UNKNOWN", className: "bg-muted/50 text-muted-foreground border border-border" };
+  }
+}
 function getTypeLabel(type: DraftSummary["type"]): string {
   return type === "snake" ? "Snake" : type === "linear" ? "Linear" : "Auction";
 }
@@ -312,6 +328,10 @@ interface LiveDraftInfo {
   totalPicks: number;
   startTime?: number | null;
   draftOrderSet?: boolean;
+  /** Whether the draft's league is a Sleeper dynasty league (settings.type=2).
+   *  Used by Live Draft to surface fresh startup leagues whose roster has no
+   *  players yet — those don't make it into the global dynasty league list. */
+  isDynasty?: boolean;
 }
 
 interface DraftMessage {
@@ -547,6 +567,20 @@ function DraftCard({ draft, onTrack }: { draft: DraftSummary; onTrack?: () => vo
             </div>
           </div>
           <div className="flex flex-col items-end gap-1 shrink-0">
+            {(() => {
+              const cat = getCategoryBadge(draft.category);
+              return (
+                <span
+                  className={cn(
+                    "inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold tracking-wider",
+                    cat.className,
+                  )}
+                  data-testid={`badge-category-${draft.id}`}
+                >
+                  {cat.label}
+                </span>
+              );
+            })()}
             <span
               className={cn(
                 "inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold",
@@ -3457,16 +3491,36 @@ export default function LiveDraft({ onConnectSleeper }: { onConnectSleeper?: () 
     }));
   }, [draftState, draftData, parsedPicks, pickTimings, teamCount]);
 
-  // Only show drafts for leagues the user is actually playing in. We use
-  // the same filtered league list that Portfolio renders (dynasty-only +
-  // user owns a roster + roster has players) — that's the source of truth
-  // for "leagues I'm in." Leagues not in the portfolio (e.g. archived or
-  // commissioner-only leagues Sleeper still returns) are hidden here.
+  // Only show drafts for leagues the user is actually playing in. The
+  // "playing in" set is normally derived from useSleeper().leagues, which
+  // requires the user's roster to already have players — that excludes
+  // fresh startup leagues where the draft hasn't happened yet. To keep
+  // those drafts visible we also let through any live/upcoming draft whose
+  // own league is dynasty (verified during discovery), so a pre-draft
+  // startup makes it onto the lobby.
   const portfolioFilteredDrafts = useMemo(() => {
     const allowed = new Set(leagues.map((l) => l.leagueId));
-    if (allowed.size === 0) return [] as DraftSummary[];
     return liveDrafts
-      .filter((ld) => allowed.has(ld.leagueId))
+      .filter((ld) => {
+        if (allowed.has(ld.leagueId)) return true;
+        if (ld.isDynasty) {
+          // eslint-disable-next-line no-console
+          console.log("[LIVE DRAFT DISCOVERY] surfacing pre-roster dynasty draft", {
+            league_id: ld.leagueId,
+            draft_id: ld.draftId,
+            category: ld.draftCategory,
+            status: ld.status,
+          });
+          return true;
+        }
+        // eslint-disable-next-line no-console
+        console.log("[LIVE DRAFT DISCOVERY] hidden by portfolio filter", {
+          league_id: ld.leagueId,
+          draft_id: ld.draftId,
+          reason: "league not in portfolio + isDynasty=false",
+        });
+        return false;
+      })
       .map(normalizeFromDetect);
   }, [liveDrafts, leagues]);
 

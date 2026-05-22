@@ -860,22 +860,106 @@ export async function fetchPortfolioSummary(
  *     drafts are almost always startup re-drafts after a league reset)
  * Returns "unknown" when we have no league or round data to work with.
  */
-function inferDraftCategory(
-  d: { metadata?: { type?: string }; settings?: { rounds?: number } },
+export function classifyDraft(
+  draft: any,
+  league?: { name?: string | null; metadata?: { name?: string | null } | null } | null,
+): { isStartup: boolean; isRookie: boolean; isSupplemental: boolean; kind: "startup" | "rookie" | "supplemental" | "unknown" } {
+  const raw = [
+    draft?.type,
+    draft?.status,
+    draft?.metadata?.type,
+    draft?.metadata?.name,
+    draft?.metadata?.description,
+    draft?.metadata?.draft_type,
+    draft?.name,
+    league?.name,
+    league?.metadata?.name,
+  ]
+    .filter(Boolean)
+    .map((v) => String(v))
+    .join(" ")
+    .toLowerCase();
+
+  const metaType = (draft?.metadata?.type ?? "").toString().toLowerCase().trim();
+  const draftType = (draft?.type ?? "").toString().toLowerCase().trim();
+
+  const isStartup =
+    metaType === "startup" ||
+    metaType === "redraft" ||
+    draftType === "startup" ||
+    raw.includes("startup") ||
+    raw.includes("start-up");
+
+  const isRookie =
+    metaType === "rookie" ||
+    draftType === "rookie" ||
+    raw.includes("rookie");
+
+  const isSupplemental =
+    metaType === "supplemental" ||
+    draftType === "supplemental" ||
+    raw.includes("supplemental");
+
+  // Tie-break when both flags fired — meta type wins; otherwise rookie wins
+  // (the more specific category) so a generically-named "rookie/startup
+  // re-draft" league doesn't get mis-bucketed when it's actually a rookie
+  // draft.
+  let kind: "startup" | "rookie" | "supplemental" | "unknown" = "unknown";
+  if (isSupplemental) kind = "supplemental";
+  else if (metaType === "startup") kind = "startup";
+  else if (metaType === "rookie") kind = "rookie";
+  else if (isRookie) kind = "rookie";
+  else if (isStartup) kind = "startup";
+
+  return { isStartup, isRookie, isSupplemental, kind };
+}
+
+/**
+ * Round-count heuristic used as a fallback when classifyDraft returns
+ * "unknown" — small drafts in a dynasty league are almost always rookie
+ * drafts, large drafts are almost always startups.
+ */
+function classifyByRoundShape(
+  draft: { settings?: { rounds?: number } | null; metadata?: { name?: string | null } | null },
   leagueIsDynasty: boolean,
 ): "rookie" | "startup" | "supplemental" | "unknown" {
-  const meta = (d.metadata?.type ?? "").toString().toLowerCase().trim();
-  if (meta === "rookie") return "rookie";
-  if (meta === "startup") return "startup";
-  if (meta === "supplemental") return "supplemental";
-  if (meta === "redraft") return "startup";
-
-  const rounds = d.settings?.rounds ?? 0;
+  const rounds = draft?.settings?.rounds ?? 0;
+  const name = (draft?.metadata?.name ?? "").toString().toLowerCase();
+  if (rounds >= 10) return "startup";
+  if (rounds > 0 && rounds <= 7 && name.includes("rookie")) return "rookie";
   if (!leagueIsDynasty) return "unknown";
   if (rounds >= 3 && rounds <= 6) return "rookie";
-  if (rounds >= 20) return "startup";
-  if (rounds >= 7 && rounds < 20) return "startup";
+  if (rounds >= 7) return "startup";
   return "unknown";
+}
+
+/**
+ * Should this draft surface in the Live Draft lobby?
+ *   - status: drafting, paused, or pre_draft
+ *   - sport: nfl (or unset — Sleeper sometimes omits it on draft endpoints)
+ *   - belongs to one of the user's connected leagues (league_id present)
+ *   - is classified as rookie / startup / supplemental / unknown
+ * "unknown" drafts are surfaced rather than silently hidden so debugging
+ * is possible without code edits.
+ */
+export function isLiveDraftEligible(
+  draft: any,
+  league?: { league_id?: string | null } | null,
+): { eligible: boolean; reasons: string[] } {
+  const reasons: string[] = [];
+  const status = (draft?.status ?? "").toString().toLowerCase();
+  const statusOk = status === "drafting" || status === "paused" || status === "pre_draft";
+  if (!statusOk) reasons.push(`status=${status || "none"}`);
+
+  const sport = (draft?.sport ?? "").toString().toLowerCase();
+  const sportOk = !sport || sport === "nfl";
+  if (!sportOk) reasons.push(`sport=${sport}`);
+
+  const leagueId = draft?.league_id ?? league?.league_id ?? null;
+  const hasLeague = !!leagueId;
+  if (!hasLeague) reasons.push("missing-league_id");
+
+  return { eligible: statusOk && sportOk && hasLeague, reasons };
 }
 
 function isLeagueDynasty(lg: { settings?: any }): boolean {
@@ -909,24 +993,82 @@ export async function detectLiveDrafts(userId: string) {
     totalPicks: number;
     startTime: number | null;
     draftOrderSet: boolean;
+    isDynasty: boolean;
   }[] = [];
 
   const checks = leagues.map(async (lg) => {
     try {
-      const drafts = await fetchJson<any[]>(
-        `${SLEEPER_API}/league/${lg.league_id}/drafts`
-      );
-      if (!drafts || drafts.length === 0) return;
+      // Gather every candidate draft for this league:
+      //   - the league.draft_id (current draft pointer)
+      //   - /league/:id/drafts (full history; startup + rookie + supplemental)
+      // Then de-dupe by draft_id. Startups occasionally only surface via the
+      // league.draft_id pointer when the league is fresh and the drafts list
+      // hasn't been populated yet.
+      const [byLeague, byPointer] = await Promise.all([
+        fetchJson<any[]>(`${SLEEPER_API}/league/${lg.league_id}/drafts`).catch(() => [] as any[]),
+        lg.draft_id
+          ? fetchJson<any>(`${SLEEPER_API}/draft/${lg.draft_id}`).catch(() => null)
+          : Promise.resolve(null),
+      ]);
+
+      const byId = new Map<string, any>();
+      for (const d of byLeague || []) {
+        if (d?.draft_id) byId.set(d.draft_id, d);
+      }
+      if (byPointer?.draft_id && !byId.has(byPointer.draft_id)) {
+        byId.set(byPointer.draft_id, byPointer);
+      }
+      const drafts = Array.from(byId.values());
+
+      if (drafts.length === 0) {
+        console.log("[LIVE DRAFT DISCOVERY] no drafts for league", {
+          league_id: lg.league_id,
+          league_name: lg.name,
+          league_draft_id: lg.draft_id ?? null,
+        });
+        return;
+      }
+
       const leagueIsDynasty = isLeagueDynasty(lg as any);
+
       for (const d of drafts) {
-        // Include drafting (LIVE), paused (LIVE), and pre_draft (UPCOMING).
-        // Skip complete drafts and any unknown statuses.
         const status = (d.status ?? "").toLowerCase();
-        if (
-          status !== "drafting" &&
-          status !== "paused" &&
-          status !== "pre_draft"
-        ) {
+
+        // Per-draft discovery log — fires for EVERY draft Sleeper returned,
+        // regardless of whether we end up including it. Lets debugging
+        // happen without redeploying.
+        console.log("[LIVE DRAFT DISCOVERY]", {
+          draft_id: d.draft_id,
+          league_id: d.league_id ?? lg.league_id,
+          league_name: lg.name,
+          status: d.status,
+          type: d.type,
+          sport: d.sport,
+          season: d.season,
+          metadata: d.metadata,
+          settings: d.settings,
+          name: d.metadata?.name || (d as any).name || null,
+        });
+
+        const elig = isLiveDraftEligible(d, { league_id: lg.league_id });
+        if (!elig.eligible) {
+          console.log("[LIVE DRAFT DISCOVERY] excluded", {
+            draft_id: d.draft_id,
+            league_id: lg.league_id,
+            reasons: elig.reasons,
+          });
+          continue;
+        }
+
+        // Skip complete drafts at this layer — eligibility check above
+        // doesn't filter on completeness, but the lobby is for live /
+        // upcoming only.
+        if (status === "complete") {
+          console.log("[LIVE DRAFT DISCOVERY] excluded", {
+            draft_id: d.draft_id,
+            league_id: lg.league_id,
+            reasons: ["status=complete"],
+          });
           continue;
         }
 
@@ -948,7 +1090,22 @@ export async function detectLiveDrafts(userId: string) {
         const rawStart = typeof d.start_time === "number" ? d.start_time : null;
         const startTime = rawStart && rawStart > 0 ? rawStart : null;
         const draftOrderSet = !!d.draft_order && Object.keys(d.draft_order).length > 0;
-        const category = inferDraftCategory(d, leagueIsDynasty);
+
+        const classification = classifyDraft(d, lg as any);
+        const category =
+          classification.kind === "unknown"
+            ? classifyByRoundShape(d, leagueIsDynasty)
+            : classification.kind;
+
+        console.log("[LIVE DRAFT DISCOVERY] included", {
+          draft_id: d.draft_id,
+          league_id: lg.league_id,
+          status,
+          kind: classification.kind,
+          resolved_category: category,
+          rounds,
+          teams,
+        });
 
         results.push({
           leagueId: lg.league_id,
@@ -965,9 +1122,15 @@ export async function detectLiveDrafts(userId: string) {
           totalPicks: rounds * teams,
           startTime,
           draftOrderSet,
+          isDynasty: leagueIsDynasty,
         });
       }
-    } catch {}
+    } catch (err) {
+      console.warn("[LIVE DRAFT DISCOVERY] league scan failed", {
+        league_id: lg.league_id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
   });
 
   await Promise.all(checks);
