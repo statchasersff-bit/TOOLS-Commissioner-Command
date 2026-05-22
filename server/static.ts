@@ -1,6 +1,7 @@
 import express, { type Express } from "express";
 import fs from "fs";
 import path from "path";
+import { fileURLToPath } from "url";
 
 /**
  * Normalize a base path to "/segment/" form (leading + trailing slash).
@@ -30,8 +31,15 @@ const STATIC_OPTIONS: Parameters<typeof express.static>[1] = {
   },
 };
 
+// Safe __dirname for both ESM (dev) and CJS (production esbuild output).
+declare const __dirname: string | undefined;
+const _dirname: string =
+  typeof __dirname !== "undefined"
+    ? __dirname
+    : path.dirname(fileURLToPath(import.meta.url));
+
 export function serveStatic(app: Express) {
-  const distPath = path.resolve(import.meta.dirname, "../dist/public");
+  const distPath = path.resolve(_dirname, "../dist/public");
   if (!fs.existsSync(distPath)) {
     // No static build present — running as API-only backend (e.g. deployed
     // when the frontend is hosted separately on Bluehost).

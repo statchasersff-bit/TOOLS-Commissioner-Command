@@ -7,12 +7,15 @@ const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
 const API_BASE = "https://api.fantasycalc.com/values/current";
 
-// ESM-safe __dirname. `package.json` sets "type": "module" so the CommonJS
-// `__dirname` global is undefined here — without this polyfill the snapshot
-// fallback path resolves to undefined and `path.join` throws, which masked
-// FantasyCalc upstream errors and left clients spinning on "Loading
-// FantasyCalc values…" because the server kept returning 500.
-const __dirname_esm = path.dirname(fileURLToPath(import.meta.url));
+// Safe __dirname for both ESM (dev) and CJS (production build via esbuild).
+// When esbuild compiles to CJS, `import.meta.url` is undefined but the CJS
+// global `__dirname` is injected automatically — so we prefer it.
+// In pure ESM (dev via tsx), `__dirname` is undefined and we use fileURLToPath.
+declare const __dirname: string | undefined;
+const __dirname_esm: string =
+  typeof __dirname !== "undefined"
+    ? __dirname
+    : path.dirname(fileURLToPath(import.meta.url));
 
 // Upstream fetch timeout. FantasyCalc has been known to take 20–30s under
 // load — long enough to outlast the client's 12s timeout and leave the

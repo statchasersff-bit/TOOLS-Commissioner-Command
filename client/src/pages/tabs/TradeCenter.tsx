@@ -2843,6 +2843,64 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
 
 const TRADE_DB_LIMIT = 50;
 
+type TradeShape =
+  | "1-1"
+  | "2-1"
+  | "2-2"
+  | "3-1"
+  | "3-2"
+  | "large"
+  | "picks_only"
+  | "players_only";
+
+const TRADE_SHAPE_OPTIONS: ReadonlyArray<{
+  value: "all" | TradeShape;
+  label: string;
+  badge: string | null;
+  description: string;
+}> = [
+  { value: "all",           label: "All trade shapes",   badge: null,   description: "No shape filter applied" },
+  { value: "1-1",           label: "1-for-1",            badge: "1:1",  description: "Single asset each side" },
+  { value: "2-1",           label: "2-for-1",            badge: "2:1",  description: "Consolidation" },
+  { value: "2-2",           label: "2-for-2",            badge: "2:2",  description: "Balanced multi-piece" },
+  { value: "3-1",           label: "3-for-1",            badge: "3:1",  description: "Heavy consolidation" },
+  { value: "3-2",           label: "3-for-2",            badge: "3:2",  description: "Larger balanced swap" },
+  { value: "large",         label: "Large package (4+)", badge: "4+",   description: "Big multi-asset swaps" },
+  { value: "picks_only",    label: "Picks only",         badge: "PK",   description: "Pure draft capital swap" },
+  { value: "players_only",  label: "Players only",       badge: "PL",   description: "No draft picks involved" },
+];
+
+// Classify a trade by asset shape. Falls through to "large" for anything that
+// does not neatly map (3+ side trades, malformed shapes, etc.) so callers
+// always get a defined bucket.
+function getTradeShape(trade: TradeRecord | null | undefined): TradeShape {
+  const sides = Array.isArray(trade?.sides) ? trade!.sides : [];
+  if (sides.length === 0) return "large";
+
+  const counts = sides.map((side) => {
+    const playerCount = Array.isArray(side?.playersReceived) ? side.playersReceived.length : 0;
+    const pickCount   = Array.isArray(side?.picksReceived)   ? side.picksReceived.length   : 0;
+    return { playerCount, pickCount, total: playerCount + pickCount };
+  });
+
+  const allSidesPicksOnly   = counts.every((c) => c.playerCount === 0 && c.pickCount   > 0);
+  const allSidesPlayersOnly = counts.every((c) => c.pickCount   === 0 && c.playerCount > 0);
+  if (allSidesPicksOnly)   return "picks_only";
+  if (allSidesPlayersOnly) return "players_only";
+
+  if (counts.some((c) => c.total >= 4)) return "large";
+
+  if (sides.length !== 2) return "large";
+
+  const [hi, lo] = [counts[0].total, counts[1].total].sort((a, b) => b - a);
+  if (hi === 1 && lo === 1) return "1-1";
+  if (hi === 2 && lo === 1) return "2-1";
+  if (hi === 2 && lo === 2) return "2-2";
+  if (hi === 3 && lo === 1) return "3-1";
+  if (hi === 3 && lo === 2) return "3-2";
+  return "large";
+}
+
 export function TradeDatabase({ league }: { league: League }) {
   const { valuesBySleeperId, dynastyPlayerList } = useValueModel();
 
@@ -2852,6 +2910,7 @@ export function TradeDatabase({ league }: { league: League }) {
   const [format, setFormat] = useState("all");
   const [scoring, setScoring] = useState("all");
   const [teamSize, setTeamSize] = useState("all");
+  const [tradeShape, setTradeShape] = useState<"all" | TradeShape>("all");
   const [tradeResults, setTradeResults] = useState<TradeRecord[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -2964,10 +3023,10 @@ export function TradeDatabase({ league }: { league: League }) {
         <Database className="w-4 h-4 text-[#0b3a7a] dark:text-blue-400 flex-shrink-0 mt-0.5" />
         {stats ? (
           <p className="text-sm leading-snug">
-            <span className="font-bold text-foreground" data-testid="text-total-trades">{stats.totalTrades.toLocaleString()}</span>
-            <span className="text-muted-foreground"> trades indexed from </span>
-            <span className="font-bold text-foreground" data-testid="text-total-leagues">{stats.totalLeagues.toLocaleString()}</span>
-            <span className="text-muted-foreground"> leagues, grows automatically as users analyze their leagues</span>
+            <span className="font-bold text-[#0b3a7a] dark:text-blue-400" data-testid="text-total-trades">{stats.totalTrades.toLocaleString()}</span>
+            <span className="text-muted-foreground"> Real Trades | </span>
+            <span className="font-bold text-[#0b3a7a] dark:text-blue-400" data-testid="text-total-leagues">{stats.totalLeagues.toLocaleString()}</span>
+            <span className="text-muted-foreground"> Leagues Scanned</span>
           </p>
         ) : (
           <p className="text-sm text-muted-foreground">Loading database stats...</p>
