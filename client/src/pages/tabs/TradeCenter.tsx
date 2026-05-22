@@ -3009,8 +3009,20 @@ export function TradeDatabase({ league }: { league: League }) {
     [valuesBySleeperId]
   );
 
+  const displayedTrades = useMemo(() => {
+    if (tradeShape === "all") return tradeResults;
+    return tradeResults.filter((t) => {
+      try {
+        return getTradeShape(t) === tradeShape;
+      } catch {
+        return false;
+      }
+    });
+  }, [tradeResults, tradeShape]);
+
   const hasMore = tradeResults.length < total;
-  const isEmpty = !isSearching && tradeResults.length === 0;
+  const isEmpty = !isSearching && displayedTrades.length === 0;
+  const shapeFilterActive = tradeShape !== "all";
 
   return (
     <div className="space-y-5">
@@ -3023,9 +3035,9 @@ export function TradeDatabase({ league }: { league: League }) {
         <Database className="w-4 h-4 text-[#0b3a7a] dark:text-blue-400 flex-shrink-0 mt-0.5" />
         {stats ? (
           <p className="text-sm leading-snug">
-            <span className="font-bold text-[#0b3a7a] dark:text-blue-400" data-testid="text-total-trades">{stats.totalTrades.toLocaleString()}</span>
+            <span className="font-bold text-[#d4af37]" data-testid="text-total-trades">{stats.totalTrades.toLocaleString()}</span>
             <span className="text-muted-foreground"> Real Trades | </span>
-            <span className="font-bold text-[#0b3a7a] dark:text-blue-400" data-testid="text-total-leagues">{stats.totalLeagues.toLocaleString()}</span>
+            <span className="font-bold text-[#d4af37]" data-testid="text-total-leagues">{stats.totalLeagues.toLocaleString()}</span>
             <span className="text-muted-foreground"> Leagues Scanned</span>
           </p>
         ) : (
@@ -3142,12 +3154,64 @@ export function TradeDatabase({ league }: { league: League }) {
               </button>
             ))}
           </div>
+
+          <div className="hidden sm:block w-px h-5 bg-[#d4af37]/50 flex-shrink-0" />
+
+          <Select
+            value={tradeShape}
+            onValueChange={(v) => setTradeShape(v as "all" | TradeShape)}
+          >
+            <SelectTrigger
+              className={cn(
+                "h-7 w-auto min-w-[160px] px-3 rounded-full text-xs font-medium border gap-2",
+                shapeFilterActive
+                  ? "bg-[#0b3a7a] text-white border-[#0b3a7a] dark:bg-blue-500 dark:border-blue-500 [&_svg]:text-white"
+                  : "bg-transparent text-muted-foreground border-border hover:border-foreground/30"
+              )}
+              data-testid="select-trade-shape"
+              aria-label="Trade Shape"
+            >
+              <SelectValue placeholder="Trade Shape" />
+            </SelectTrigger>
+            <SelectContent align="start" className="min-w-[260px]">
+              {TRADE_SHAPE_OPTIONS.map((opt) => (
+                <SelectItem
+                  key={opt.value}
+                  value={opt.value}
+                  data-testid={`option-trade-shape-${opt.value}`}
+                  className="py-2"
+                >
+                  <div className="flex items-center gap-2">
+                    {opt.badge && (
+                      <span className="inline-flex items-center justify-center h-[18px] min-w-[28px] px-1 rounded text-[10px] font-bold tracking-wider border bg-[#0b3a7a]/10 text-[#0b3a7a] border-[#0b3a7a]/30 dark:bg-blue-400/10 dark:text-blue-300 dark:border-blue-400/30 leading-none">
+                        {opt.badge}
+                      </span>
+                    )}
+                    <div className="flex flex-col">
+                      <span className="text-[12px] font-medium leading-tight">{opt.label}</span>
+                      <span className="text-[10px] text-muted-foreground leading-tight">{opt.description}</span>
+                    </div>
+                  </div>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
       {!isSearching && total > 0 && (
         <p className="text-xs text-muted-foreground text-center md:text-left" data-testid="text-results-count">
-          Showing {tradeResults.length.toLocaleString()} of {total.toLocaleString()} trades
+          {shapeFilterActive ? (
+            <>
+              Showing {displayedTrades.length.toLocaleString()} matching{" "}
+              <span className="font-semibold text-foreground/80">
+                {TRADE_SHAPE_OPTIONS.find((o) => o.value === tradeShape)?.label}
+              </span>{" "}
+              · {tradeResults.length.toLocaleString()} of {total.toLocaleString()} loaded
+            </>
+          ) : (
+            <>Showing {tradeResults.length.toLocaleString()} of {total.toLocaleString()} trades</>
+          )}
         </p>
       )}
 
@@ -3160,10 +3224,20 @@ export function TradeDatabase({ league }: { league: League }) {
           <Database className="w-8 h-8 text-muted-foreground mb-3" />
           <p className="text-sm font-medium text-foreground mb-1">No trades found</p>
           <p className="text-xs text-muted-foreground mb-4">
-            {debouncedQuery || format !== "all" || scoring !== "all" || teamSize !== "all"
+            {debouncedQuery || format !== "all" || scoring !== "all" || teamSize !== "all" || shapeFilterActive
               ? "Try adjusting your search or filters"
               : "The database grows as users analyze their leagues"}
           </p>
+          {shapeFilterActive && tradeResults.length > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setTradeShape("all")}
+              data-testid="button-clear-trade-shape"
+            >
+              Clear Trade Shape filter
+            </Button>
+          )}
           {stats?.totalTrades === 0 && (
             <div className="mt-2 p-4 rounded-xl border border-[#d4af37]/30 bg-[#d4af37]/5 max-w-xs">
               <p className="text-xs font-semibold text-foreground mb-1">Database is warming up</p>
@@ -3178,7 +3252,7 @@ export function TradeDatabase({ league }: { league: League }) {
         // tab width on large viewports — denser comparisons, less wasted
         // empty space, more "premium dashboard" feel.
         <div className="mx-auto w-full max-w-[1100px] space-y-3" data-testid="trade-db-results">
-          {tradeResults.map((trade) => (
+          {displayedTrades.map((trade) => (
             <TradeCard
               key={trade.tradeId}
               trade={trade}

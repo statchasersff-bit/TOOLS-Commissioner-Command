@@ -204,10 +204,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // nor an unexpected throw can leave the user staring at a loader.
     let finalStatus: AuthStatus = "unauthenticated";
 
-    const failClosedNoDc = (reason: string) => {
+    // clearJwt=true only for genuine 401s (token invalid/expired).
+    // Network failures and 5xx errors must NOT clear the token — the server
+    // may be temporarily down and the token is still valid. Wiping it on a
+    // transient error is what caused users to get silently logged out.
+    const failClosedNoDc = (reason: string, clearJwt = false) => {
       // eslint-disable-next-line no-console
       console.info(`[sc-auth] no DC session (${reason}) — proceeding without StatChasers account`);
-      clearToken();
+      if (clearJwt) clearToken();
       setUser(null);
       setSleeperInfo(null);
       setServerIsAdmin(false);
@@ -239,11 +243,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // eslint-disable-next-line no-console
       console.info(`[sc-auth] /api/sc-auth/me status: ${res.status}`);
 
-      // 401 = anonymous visitor. Treat as a valid unauthenticated state —
-      // not an error. The app continues to render in read-only / guest mode.
-      if (res.status === 401) { failClosedNoDc("401 from /me"); return; }
-      // Any other non-OK (5xx, 404 from a misrouted proxy, etc.) also
-      // degrades to guest mode rather than blocking the app.
+      // 401 = token genuinely invalid or expired. Clear it so the user
+      // sees the login screen rather than being stuck in a retry loop.
+      if (res.status === 401) { failClosedNoDc("401 from /me", true); return; }
+      // Any other non-OK (5xx, 404 from a misrouted proxy, etc.) degrades
+      // to guest mode but intentionally keeps the JWT intact — the server
+      // may be temporarily unavailable and the token is still valid.
       if (!res.ok) { failClosedNoDc(`status ${res.status} from /me`); return; }
 
       const data = await res.json().catch(() => null);
@@ -341,13 +346,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // AbortError = our own timeout fired, not a real failure. Other
       // throws = network/DNS/CORS failures. Both degrade to guest mode;
       // we only log them at warn level so they don't look like crashes.
+      // IMPORTANT: do NOT clear the JWT here — the server may be temporarily
+      // unavailable. Keeping the token means the next page load will restore
+      // the session automatically once the server is back up.
       const isAbort = err instanceof DOMException && err.name === "AbortError";
       // eslint-disable-next-line no-console
       console.warn(
-        `[sc-auth] session check ${isAbort ? "timed out" : "failed"} — continuing as guest`,
+        `[sc-auth] session check ${isAbort ? "timed out" : "failed"} — continuing as guest (token preserved)`,
         err
       );
-      clearToken();
       setUser(null);
       setSleeperInfo(null);
       setServerIsAdmin(false);
