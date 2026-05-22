@@ -129,8 +129,46 @@ export async function getAdpHistory(playerId: string, filters: AdpFilters): Prom
   monthlyCutoffDate.setUTCMonth(monthlyCutoffDate.getUTCMonth() - 36);
   const monthlyCutoff = monthlyCutoffDate.getTime();
 
+  // The monthly chart promises a 3-year window. Default ADP filters scope
+  // drafts to the current calendar year, and the user may also have an
+  // explicit date range applied — both would cap the chart to a sliver of
+  // the last 36 months. Re-query with season/date-range relaxed, but keep
+  // the rest of the filter context (draftType, scoring, SF, TEP, teams,
+  // rookieMode, etc.) so the chart still reflects the user's league shape.
+  const needsBroadQuery =
+    filters.season !== "all" ||
+    !!filters.startDate ||
+    !!filters.endDate;
+
+  let monthlyRows = rows;
+  if (needsBroadQuery) {
+    const broadFilters: AdpFilters = {
+      ...filters,
+      season: "all",
+      startDate: undefined,
+      endDate: undefined,
+    };
+    const broadEligible = await eligibleDraftIds(broadFilters);
+    const broadDraftIds = broadEligible.map((d) => d.draftId);
+    if (broadDraftIds.length > 0) {
+      monthlyRows = await db
+        .select({
+          pickNo: draftPicks.pickNo,
+          draftId: draftPicks.draftId,
+          completedAt: drafts.completedAt,
+          startTime: drafts.startTime,
+          createdAt: drafts.createdAt,
+        })
+        .from(draftPicks)
+        .innerJoin(drafts, eq(draftPicks.draftId, drafts.draftId))
+        .where(and(eq(draftPicks.playerId, playerId), inArray(draftPicks.draftId, broadDraftIds)));
+    } else {
+      monthlyRows = [];
+    }
+  }
+
   const byMonth = new Map<string, number[]>();
-  for (const r of rows) {
+  for (const r of monthlyRows) {
     const ts = safePickDate(r);
     if (ts == null || ts < monthlyCutoff) continue;
     const d = new Date(ts);

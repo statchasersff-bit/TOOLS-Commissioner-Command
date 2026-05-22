@@ -1714,6 +1714,13 @@ export async function getCachedAdp(f: AdpFilters): Promise<{
   };
 }
 
+// Snapshots with a date-range filter use a short TTL because the underlying
+// data changes as new drafts are ingested (the window slides daily and
+// crawl jobs add picks inside that range). Without this, the first load
+// after a crawl still returns the old cached result.
+// Snapshots without date filters are managed by the 6-hour scheduler.
+const SNAPSHOT_DATE_RANGE_TTL_MS = 60 * 60 * 1000; // 1 hour
+
 /**
  * Read-time entry point: returns the cached snapshot when available, falls
  * back to a live computation against our own draft_picks table when no
@@ -1731,7 +1738,8 @@ export async function getAdp(f: AdpFilters): Promise<{
 }> {
   const key = filterKey(f);
   const cached = await getCachedAdp(f);
-  // Stale-cache guard: under the new Direct-Rookies rule, kicker rows must
+
+  // Stale-cache guard 1: under the new Direct-Rookies rule, kicker rows must
   // never appear. If an older snapshot still has a K row, treat it as
   // stale and recompute fresh. Skipped for "picks" mode where K-as-
   // placeholder rows are legitimate.
@@ -1739,7 +1747,18 @@ export async function getAdp(f: AdpFilters): Promise<{
     cached &&
     f.rookieMode === "direct" &&
     cached.rows.some((r) => r.position === "K");
-  if (cached && cached.rows.length > 0 && !cacheHasForbiddenKickers) {
+
+  // Stale-cache guard 2: date-range filtered snapshots expire after 1 hour.
+  // Without this, ingesting new drafts has no effect on the displayed data
+  // until the snapshot is manually regenerated — the old cached result keeps
+  // being served indefinitely.
+  const hasDateFilter = !!(f.startDate || f.endDate);
+  const cacheExpired =
+    hasDateFilter &&
+    cached !== null &&
+    Date.now() - new Date(cached.computedAt).getTime() > SNAPSHOT_DATE_RANGE_TTL_MS;
+
+  if (cached && cached.rows.length > 0 && !cacheHasForbiddenKickers && !cacheExpired) {
     return {
       rows: cached.rows,
       draftCount: cached.draftCount,
@@ -1754,6 +1773,11 @@ export async function getAdp(f: AdpFilters): Promise<{
     console.warn(
       `[ADP getAdp] stale snapshot dropped — contained K rows under ` +
       `Direct Rookies (key=${key}). Recomputing.`,
+    );
+  }
+  if (cacheExpired) {
+    console.info(
+      `[ADP getAdp] date-range snapshot expired (>1h old, key=${key}). Recomputing from DB.`,
     );
   }
   const fresh = await computeAdp(f);
