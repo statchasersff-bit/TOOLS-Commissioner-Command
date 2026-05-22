@@ -973,10 +973,16 @@ function isLeagueDynasty(lg: { settings?: any }): boolean {
 }
 
 export async function detectLiveDrafts(userId: string) {
-  const leagues = await fetchJson<SleeperLeagueRaw[]>(
+  const leaguesRaw = await fetchJson<SleeperLeagueRaw[]>(
     `${SLEEPER_API}/user/${userId}/leagues/nfl/2026`
   );
-  if (!leagues || !Array.isArray(leagues)) return [];
+  if (!leaguesRaw || !Array.isArray(leaguesRaw)) return [];
+
+  // Only surface dynasty leagues (settings.type === 2) and skip inactive ones.
+  // Redraft/keeper leagues (type 0/1) are not relevant to this app's lobby.
+  const leagues = leaguesRaw.filter(
+    (lg) => lg.settings?.type === 2 && lg.status !== "inactive"
+  );
 
   const results: {
     leagueId: string;
@@ -1004,12 +1010,33 @@ export async function detectLiveDrafts(userId: string) {
       // Then de-dupe by draft_id. Startups occasionally only surface via the
       // league.draft_id pointer when the league is fresh and the drafts list
       // hasn't been populated yet.
-      const [byLeague, byPointer] = await Promise.all([
+      //
+      // We also fetch rosters here so we can confirm the user actually
+      // owns (or co-owns) a roster slot in this league — Sleeper's
+      // /user/:id/leagues endpoint returns leagues where the user is a
+      // commissioner-only or spectator without a roster, and we don't
+      // want those drafts in the Live Draft lobby.
+      const [byLeague, byPointer, rosters] = await Promise.all([
         fetchJson<any[]>(`${SLEEPER_API}/league/${lg.league_id}/drafts`).catch(() => [] as any[]),
         lg.draft_id
           ? fetchJson<any>(`${SLEEPER_API}/draft/${lg.draft_id}`).catch(() => null)
           : Promise.resolve(null),
+        fetchJson<SleeperRosterRaw[]>(`${SLEEPER_API}/league/${lg.league_id}/rosters`).catch(() => [] as SleeperRosterRaw[]),
       ]);
+
+      const userOwnsRoster = (rosters || []).some((r) => {
+        if (r.owner_id === userId) return true;
+        const coOwners = (r as any).co_owners;
+        return Array.isArray(coOwners) && coOwners.includes(userId);
+      });
+      if (!userOwnsRoster) {
+        console.log("[LIVE DRAFT DISCOVERY] excluded league", {
+          league_id: lg.league_id,
+          league_name: lg.name,
+          reason: "user has no roster (spectator / commissioner-only)",
+        });
+        return;
+      }
 
       const byId = new Map<string, any>();
       for (const d of byLeague || []) {
