@@ -42,14 +42,16 @@ export const MODULE_ACCESS: Record<string, AccessRequirement> = {
   "league-analyzer:playoff-calculator": "readonly",
   "league-analyzer:transactions": "readonly",
 
-  // Trade Center — entire module is full per spec
+  // Trade Center — only the Trade Inbox (My Trades) requires a full
+  // StatChasers account + Sleeper token. Everything else in the module is
+  // research/calculator surface and opens with at most a Sleeper username.
   "trade-center:trade-sync": "full",
-  "trade-center:trade-database": "full",
-  "trade-center:positional-analysis": "full",
-  "trade-center:trade-calculator": "full",
-  "trade-center:bulk-trade": "full",
-  "trade-center:bulk-trades": "full",
-  "trade-center:trade-block": "full",
+  "trade-center:trade-database": "readonly",
+  "trade-center:positional-analysis": "readonly",
+  "trade-center:trade-calculator": "readonly",
+  "trade-center:bulk-trade": "readonly",
+  "trade-center:bulk-trades": "readonly",
+  "trade-center:trade-block": "readonly",
 
   // Research (league-market)
   "league-market:analysis": "readonly",

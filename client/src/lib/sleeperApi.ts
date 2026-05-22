@@ -1000,7 +1000,55 @@ export async function detectLiveDrafts(userId: string) {
     startTime: number | null;
     draftOrderSet: boolean;
     isDynasty: boolean;
+    /** User's 1-indexed draft slot, or null when not yet assigned. */
+    mySlot: number | null;
+    /** Picks remaining until the user is on the clock for this draft.
+     *  0 = on the clock, null = unknown / not applicable (auction, no slot). */
+    picksAway: number | null;
   }[] = [];
+
+  // Resolve the user's draft slot from the draft payload. Sleeper exposes
+  // `draft_order` (userId → slot) once the order is set; for pre_draft
+  // startups it may be empty, in which case we fall back to the user's
+  // roster_id mapping via slot_to_roster_id.
+  const resolveMySlot = (draft: any, userRosterId: number | null): number | null => {
+    const order = (draft?.draft_order ?? {}) as Record<string, number>;
+    const direct = order[userId];
+    if (typeof direct === "number" && direct > 0) return direct;
+    const slotToRoster = (draft?.slot_to_roster_id ?? {}) as Record<string, number>;
+    if (userRosterId != null) {
+      for (const [slotStr, rosterId] of Object.entries(slotToRoster)) {
+        if (rosterId === userRosterId) {
+          const slot = parseInt(slotStr, 10);
+          if (Number.isFinite(slot) && slot > 0) return slot;
+        }
+      }
+    }
+    return null;
+  };
+
+  // Standard snake/linear picksAway math. Walks at most 2 rounds forward —
+  // every slot appears at least once per 2 rounds in a snake draft.
+  const computePicksAway = (
+    draftType: string,
+    teams: number,
+    mySlot: number,
+    currentPickNo: number,
+    totalPicks: number,
+  ): number | null => {
+    if (teams < 1 || mySlot < 1 || mySlot > teams) return null;
+    if (currentPickNo > totalPicks) return null;
+    const t = (draftType || "snake").toLowerCase();
+    if (t === "auction") return null;
+    const horizon = Math.min(totalPicks, currentPickNo + teams * 2);
+    for (let pickNo = currentPickNo; pickNo <= horizon; pickNo++) {
+      const round = Math.ceil(pickNo / teams);
+      const pickInRound = ((pickNo - 1) % teams) + 1;
+      const slot = t === "snake" && round % 2 === 0 ? teams - pickInRound + 1 : pickInRound;
+      if (slot === mySlot) return pickNo - currentPickNo;
+    }
+    return null;
+  };
 
   const checks = leagues.map(async (lg) => {
     try {
@@ -1024,11 +1072,13 @@ export async function detectLiveDrafts(userId: string) {
         fetchJson<SleeperRosterRaw[]>(`${SLEEPER_API}/league/${lg.league_id}/rosters`).catch(() => [] as SleeperRosterRaw[]),
       ]);
 
-      const userOwnsRoster = (rosters || []).some((r) => {
+      const userRoster = (rosters || []).find((r) => {
         if (r.owner_id === userId) return true;
         const coOwners = (r as any).co_owners;
         return Array.isArray(coOwners) && coOwners.includes(userId);
       });
+      const userOwnsRoster = !!userRoster;
+      const userRosterId = userRoster?.roster_id ?? null;
       if (!userOwnsRoster) {
         console.log("[LIVE DRAFT DISCOVERY] excluded league", {
           league_id: lg.league_id,
@@ -1118,6 +1168,14 @@ export async function detectLiveDrafts(userId: string) {
         const startTime = rawStart && rawStart > 0 ? rawStart : null;
         const draftOrderSet = !!d.draft_order && Object.keys(d.draft_order).length > 0;
 
+        const totalPicks = rounds * teams;
+        const mySlot = resolveMySlot(d, userRosterId);
+        const currentPickNo = Math.min(totalPicks, picksMade + 1);
+        const picksAway =
+          mySlot != null && (status === "drafting" || status === "paused" || status === "pre_draft")
+            ? computePicksAway(d.type || "snake", teams, mySlot, currentPickNo, totalPicks)
+            : null;
+
         const classification = classifyDraft(d, lg as any);
         const category =
           classification.kind === "unknown"
@@ -1146,10 +1204,12 @@ export async function detectLiveDrafts(userId: string) {
           rounds,
           teams,
           picksMade,
-          totalPicks: rounds * teams,
+          totalPicks,
           startTime,
           draftOrderSet,
           isDynasty: leagueIsDynasty,
+          mySlot,
+          picksAway,
         });
       }
     } catch (err) {

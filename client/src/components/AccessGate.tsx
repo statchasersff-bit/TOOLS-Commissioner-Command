@@ -7,6 +7,8 @@ import { UpgradeFlow } from "./UpgradeFlow";
 import { Card, CardContent } from "@/components/ui/card";
 import { Lock } from "lucide-react";
 
+type UpgradeEntry = "login" | "signup-email";
+
 /**
  * AccessGate — wraps a module render and enforces the configured access tier.
  *
@@ -26,15 +28,24 @@ import { Lock } from "lucide-react";
 export function AccessGate({
   requiredAccess,
   onBackToReadOnly,
+  gateTitle,
+  gateDescription,
+  showBackButton = true,
   children,
 }: {
   requiredAccess: AccessRequirement;
   /** Callback invoked when a full-mode gate user clicks "Back to Read-Only Tools". */
   onBackToReadOnly?: () => void;
+  /** Optional custom title for the LoginRequiredGate (e.g. trade inbox). */
+  gateTitle?: string;
+  /** Optional custom description for the LoginRequiredGate. */
+  gateDescription?: string;
+  /** Whether to render the Back to Read-Only Tools button. Default true. */
+  showBackButton?: boolean;
   children: ReactNode;
 }) {
   const { accessLevel, isWriteAccessDomain } = useAuth();
-  const [showUpgrade, setShowUpgrade] = useState(false);
+  const [upgradeEntry, setUpgradeEntry] = useState<UpgradeEntry | null>(null);
 
   // Public: always render.
   if (requiredAccess === "public") {
@@ -77,17 +88,21 @@ export function AccessGate({
     if (accessLevel === "full") {
       return <>{children}</>;
     }
-    if (showUpgrade) {
+    if (upgradeEntry) {
       return (
         <UpgradeFlow
-          onDone={() => setShowUpgrade(false)}
+          initialScreen={upgradeEntry}
+          onDone={() => setUpgradeEntry(null)}
         />
       );
     }
     return (
       <LoginRequiredGate
-        onLogin={() => setShowUpgrade(true)}
-        onBack={() => onBackToReadOnly?.()}
+        title={gateTitle}
+        description={gateDescription}
+        onLogin={() => setUpgradeEntry("login")}
+        onSignup={() => setUpgradeEntry("signup-email")}
+        onBack={showBackButton && onBackToReadOnly ? () => onBackToReadOnly() : undefined}
       />
     );
   }

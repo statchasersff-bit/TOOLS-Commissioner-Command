@@ -479,7 +479,7 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
       switch (key) {
         case "portfolio:connect":          return <PortfolioConnect onNavigate={navigateToSubTab} />;
         case "portfolio:lineup-command":   return <LineupCommand />;
-        case "portfolio:portfolio-summary":return <PortfolioSummary />;
+        case "portfolio:portfolio-summary":return <PortfolioSummary onNavigate={navigateToSubTab} />;
         case "portfolio:waiver-command":   return <WaiverCommand />;
         default:                           return <PortfolioConnect onNavigate={navigateToSubTab} />;
       }
@@ -518,10 +518,14 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
 
   const renderContent = () => {
     const access = resolveAccess(activeMainTab, activeSubTab);
+    const isTradeInbox = activeMainTab === "trade-center" && activeSubTab === "trade-sync";
     return (
       <AccessGate
         requiredAccess={access}
         onBackToReadOnly={backToReadOnly}
+        gateTitle={isTradeInbox ? "Login required to see trade inbox." : undefined}
+        gateDescription={isTradeInbox ? "Create a free StatChasers account below." : undefined}
+        showBackButton={!isTradeInbox}
       >
         {renderModule()}
       </AccessGate>

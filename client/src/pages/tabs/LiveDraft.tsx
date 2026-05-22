@@ -18,6 +18,7 @@ import { SleeperUserAvatar } from "@/components/SleeperUserAvatar";
 import { useManagerIntel } from "@/contexts/ManagerIntelContext";
 import type { DraftState, DraftUser, DraftPickNormalized, DraftAutopickerStatus } from "@/lib/sleeperApi";
 import { ROOKIE_BOARD_2026_SF, ROOKIE_BOARD_2026_1QB } from "@/data/rookieBoard2026";
+import { buildOptimalStarterIds } from "@/lib/lineupUtils";
 import type { Player as RosterPlayer } from "@/types";
 
 // ── Normalized draft model — abstracted from raw Sleeper format ───────────────
@@ -201,12 +202,12 @@ function normalizeFromDetect(ld: LiveDraftInfo): DraftSummary {
     picksMade: ld.picksMade,
     totalPicks: ld.totalPicks,
     currentPickNumber: ld.picksMade + 1,
-    picksAway: null,
-    mySlot: null,
+    picksAway: typeof ld.picksAway === "number" ? ld.picksAway : null,
+    mySlot: typeof ld.mySlot === "number" ? ld.mySlot : null,
     startTime: ld.startTime ?? null,
     timerSeconds: null,
     draftOrderSet: ld.draftOrderSet ?? false,
-    isMyTurn: false,
+    isMyTurn: isLive && ld.picksAway === 0,
     isLive,
     isUpcoming,
     isCompleted,
@@ -332,6 +333,11 @@ interface LiveDraftInfo {
    *  Used by Live Draft to surface fresh startup leagues whose roster has no
    *  players yet — those don't make it into the global dynasty league list. */
   isDynasty?: boolean;
+  /** User's 1-indexed slot in this draft, or null when not yet set. */
+  mySlot?: number | null;
+  /** Picks remaining until the user is on the clock. 0 = on the clock,
+   *  null = unknown / not applicable (auction, slot unknown). */
+  picksAway?: number | null;
 }
 
 interface DraftMessage {
@@ -543,6 +549,11 @@ function DraftCard({ draft, onTrack }: { draft: DraftSummary; onTrack?: () => vo
     <Card
       className={cn(
         "overflow-hidden transition-all hover:border-[#d4af37]/30 hover:shadow-sm",
+        // Live drafts get a subtle green accent so users can pick them out
+        // of a mixed live/upcoming list at a glance. On-the-clock cards
+        // override this with the gold "my turn" treatment.
+        draft.isLive && !draft.isPaused && !draft.isMyTurn &&
+          "border-emerald-500/40 shadow-[0_0_0_1px_rgba(16,185,129,0.08)] hover:border-emerald-500/60",
         draft.isMyTurn && "border-[#d4af37]/60 shadow-[0_0_0_1px_rgba(212,175,55,0.1)]"
       )}
       data-testid={`draft-card-${draft.id}`}
@@ -1793,12 +1804,12 @@ function PosChip({
   );
 }
 
-type PlayersSortKey = "name" | "age" | "value";
+type PlayersSortKey = "name" | "age" | "value" | "redraftValue";
 type PlayersSortState = { key: PlayersSortKey; dir: "asc" | "desc" };
 
 function comparePlayers(
-  a: { name: string; age?: number; value?: number },
-  b: { name: string; age?: number; value?: number },
+  a: { name: string; age?: number; value?: number; redraftValue?: number },
+  b: { name: string; age?: number; value?: number; redraftValue?: number },
   sort: PlayersSortState,
 ): number {
   const { key, dir } = sort;
@@ -1866,6 +1877,9 @@ function PlayersPanel({
   hasActiveLeague,
   isConnected,
   defaultOpen,
+  rosterSlots,
+  isStartupDraft,
+  redraftValueBySleeperId,
 }: {
   fullBoard: AvailablePoolPlayer[];
   pickedPlayerIds: Set<string>;
@@ -1882,6 +1896,19 @@ function PlayersPanel({
   hasActiveLeague: boolean;
   isConnected: boolean;
   defaultOpen: boolean;
+  /** League roster_positions (starter slots only — bench/taxi/IR stripped).
+   *  When provided alongside isStartupDraft, the My Team tab slots picks
+   *  into the league's actual starting-lineup structure. */
+  rosterSlots: string[] | null;
+  /** When true, the My Team tab renders drafted picks slotted into the
+   *  league lineup instead of the league roster (which is empty for a
+   *  startup draft until it completes). */
+  isStartupDraft: boolean;
+  /** Lookup of redraft (in-season) values by Sleeper player ID. When
+   *  provided (only for startup drafts), the Players section adds a
+   *  Redraft column next to Dynasty, and My Team shows starter-redraft
+   *  + dynasty totals at the top. Pass null to hide the column. */
+  redraftValueBySleeperId: Record<string, number> | null;
 }) {
   const [open, setOpen] = useState(defaultOpen);
   const [tab, setTab] = useState<"available" | "my-team">("available");
@@ -1898,6 +1925,24 @@ function PlayersPanel({
     return { key, dir: key === "name" ? "asc" : "desc" };
   };
 
+  // Should the Redraft Value column appear? Only when we're in a startup
+  // draft AND we actually have a redraft lookup with data in it.
+  const showRedraftColumn =
+    isStartupDraft &&
+    !!redraftValueBySleeperId &&
+    Object.keys(redraftValueBySleeperId).length > 0;
+
+  // Attach redraft value to each row so the existing sort/render path
+  // works uniformly without scattering lookups.
+  const attachRedraft = useCallback(
+    <T extends { sleeperId?: string; id?: string }>(p: T): T & { redraftValue?: number } => {
+      const id = p.sleeperId ?? p.id ?? "";
+      const r = id && redraftValueBySleeperId ? redraftValueBySleeperId[id] : undefined;
+      return { ...p, redraftValue: typeof r === "number" && r > 0 ? r : undefined };
+    },
+    [redraftValueBySleeperId],
+  );
+
   const availablePool = useMemo(() => {
     const term = search.trim().toLowerCase();
     const filtered = fullBoard.filter((p) => {
@@ -1913,14 +1958,59 @@ function PlayersPanel({
       if (term && !p.name.toLowerCase().includes(term)) return false;
       return true;
     });
-    return [...filtered].sort((a, b) => comparePlayers(a, b, availSort));
-  }, [fullBoard, pickedPlayerIds, pickedPlayerNames, availFilter, search, availSort]);
+    const augmented = showRedraftColumn ? filtered.map(attachRedraft) : filtered;
+    return [...augmented].sort((a, b) => comparePlayers(a, b, availSort));
+  }, [fullBoard, pickedPlayerIds, pickedPlayerNames, availFilter, search, availSort, showRedraftColumn, attachRedraft]);
 
   const filteredRoster = useMemo(() => {
     if (!myRoster) return [] as RosterPlayer[];
     const base = teamFilter === "ALL" ? myRoster : myRoster.filter((p) => p.pos === teamFilter);
-    return [...base].sort((a, b) => comparePlayers(a, b, teamSort));
-  }, [myRoster, teamFilter, teamSort]);
+    const augmented = showRedraftColumn ? base.map(attachRedraft) : base;
+    return [...augmented].sort((a, b) => comparePlayers(a, b, teamSort));
+  }, [myRoster, teamFilter, teamSort, showRedraftColumn, attachRedraft]);
+
+  // For startup drafts, split the drafted players into starters + bench
+  // using the league's roster_positions so the My Team tab mirrors the
+  // lineup structure the league will use post-draft. The same filter +
+  // sort applied above is preserved for the bench section so user
+  // interactions still work consistently.
+  const startersBenchSplit = useMemo<{ starters: RosterPlayer[]; bench: RosterPlayer[] } | null>(() => {
+    if (!isStartupDraft || !myRoster || !rosterSlots || rosterSlots.length === 0) return null;
+    const starterIds = buildOptimalStarterIds(
+      myRoster.map((p) => p.sleeperId ?? p.id),
+      (id) => {
+        const m = myRoster.find((p) => (p.sleeperId ?? p.id) === id);
+        return m ? m.pos : null;
+      },
+      (id) => {
+        const m = myRoster.find((p) => (p.sleeperId ?? p.id) === id);
+        return m?.value ?? 0;
+      },
+      rosterSlots,
+    );
+    const starters = myRoster.filter((p) => starterIds.has(p.sleeperId ?? p.id));
+    const bench = myRoster.filter((p) => !starterIds.has(p.sleeperId ?? p.id));
+    return { starters, bench };
+  }, [isStartupDraft, myRoster, rosterSlots]);
+
+  // Starter totals for the My Team header: redraft (in-season starter
+  // points) + dynasty (long-term asset value). When the roster split
+  // isn't available we fall back to summing the whole roster — better
+  // than showing zeros while the league shape loads.
+  const myTeamTotals = useMemo<{ dynasty: number; redraft: number } | null>(() => {
+    if (!isStartupDraft) return null;
+    const source = startersBenchSplit?.starters ?? myRoster ?? [];
+    if (source.length === 0) return { dynasty: 0, redraft: 0 };
+    let dynasty = 0;
+    let redraft = 0;
+    for (const p of source) {
+      if (typeof p.value === "number" && p.value > 0) dynasty += p.value;
+      const id = p.sleeperId ?? p.id;
+      const r = id && redraftValueBySleeperId ? redraftValueBySleeperId[id] : 0;
+      if (typeof r === "number" && r > 0) redraft += r;
+    }
+    return { dynasty, redraft };
+  }, [isStartupDraft, startersBenchSplit, myRoster, redraftValueBySleeperId]);
 
   const tabs: Array<{ id: "available" | "my-team"; label: string; count?: number }> = [
     { id: "available", label: "Available Players", count: availablePool.length },
@@ -2011,33 +2101,51 @@ function PlayersPanel({
                 </div>
 
                 {/* Column header — desktop only. Columns are sortable; click
-                    a header to cycle sort direction (asc ⇄ desc). */}
-                <div
-                  className="hidden md:grid items-center gap-2 px-2 py-1 border-b border-border/20"
-                  style={{ gridTemplateColumns: "minmax(0,1fr) 50px 90px" }}
-                >
-                  <PlayersSortHeader
-                    label="Player"
-                    sortKey="name"
-                    current={availSort}
-                    onClick={(k) => setAvailSort((s) => cycleSort(s, k))}
-                    align="left"
-                  />
-                  <PlayersSortHeader
-                    label="Age"
-                    sortKey="age"
-                    current={availSort}
-                    onClick={(k) => setAvailSort((s) => cycleSort(s, k))}
-                    align="right"
-                  />
-                  <PlayersSortHeader
-                    label="Dynasty Value"
-                    sortKey="value"
-                    current={availSort}
-                    onClick={(k) => setAvailSort((s) => cycleSort(s, k))}
-                    align="right"
-                  />
-                </div>
+                    a header to cycle sort direction (asc ⇄ desc). When the
+                    Redraft column is shown (startup drafts), the grid uses
+                    a 4-column template instead of 3. */}
+                {(() => {
+                  const gridCols = showRedraftColumn
+                    ? "minmax(0,1fr) 50px 78px 78px"
+                    : "minmax(0,1fr) 50px 90px";
+                  return (
+                    <div
+                      className="hidden md:grid items-center gap-2 px-2 py-1 border-b border-border/20"
+                      style={{ gridTemplateColumns: gridCols }}
+                    >
+                      <PlayersSortHeader
+                        label="Player"
+                        sortKey="name"
+                        current={availSort}
+                        onClick={(k) => setAvailSort((s) => cycleSort(s, k))}
+                        align="left"
+                      />
+                      <PlayersSortHeader
+                        label="Age"
+                        sortKey="age"
+                        current={availSort}
+                        onClick={(k) => setAvailSort((s) => cycleSort(s, k))}
+                        align="right"
+                      />
+                      <PlayersSortHeader
+                        label={showRedraftColumn ? "Dynasty" : "Dynasty Value"}
+                        sortKey="value"
+                        current={availSort}
+                        onClick={(k) => setAvailSort((s) => cycleSort(s, k))}
+                        align="right"
+                      />
+                      {showRedraftColumn && (
+                        <PlayersSortHeader
+                          label="Redraft"
+                          sortKey="redraftValue"
+                          current={availSort}
+                          onClick={(k) => setAvailSort((s) => cycleSort(s, k))}
+                          align="right"
+                        />
+                      )}
+                    </div>
+                  );
+                })()}
 
                 <div className="max-h-[480px] overflow-y-auto -mx-1 px-1" data-testid="list-players-available">
                   {availablePool.length === 0 ? (
@@ -2046,36 +2154,51 @@ function PlayersPanel({
                     </p>
                   ) : (
                     <ul className="space-y-1.5">
-                      {availablePool.slice(0, 200).map((p) => (
-                        <li
-                          key={p.sleeperId}
-                          className="md:grid md:gap-2 md:items-center flex items-center gap-2 px-2.5 py-2 rounded-lg border border-border/30 bg-muted/15 hover:bg-muted/30 transition-colors"
-                          style={{ gridTemplateColumns: "minmax(0,1fr) 50px 90px" }}
-                          data-testid={`player-row-${p.sleeperId}`}
-                        >
-                          <div className="min-w-0 flex-1 md:flex-initial">
-                            <PlayerAvatar
-                              id={realIdResolver(p.sleeperId, p.name, p.pos)}
-                              name={p.name}
-                              pos={p.pos}
-                              team={realTeamResolver(p.sleeperId, p.name, p.pos, p.team)}
-                              size="sm"
-                            />
-                          </div>
-                          <span
-                            className="hidden md:inline text-[11px] text-right text-muted-foreground tabular-nums shrink-0"
-                            data-testid={`text-age-${p.sleeperId}`}
+                      {availablePool.slice(0, 200).map((p) => {
+                        const gridCols = showRedraftColumn
+                          ? "minmax(0,1fr) 50px 78px 78px"
+                          : "minmax(0,1fr) 50px 90px";
+                        return (
+                          <li
+                            key={p.sleeperId}
+                            className="md:grid md:gap-2 md:items-center flex items-center gap-2 px-2.5 py-2 rounded-lg border border-border/30 bg-muted/15 hover:bg-muted/30 transition-colors"
+                            style={{ gridTemplateColumns: gridCols }}
+                            data-testid={`player-row-${p.sleeperId}`}
                           >
-                            {typeof p.age === "number" && p.age > 0 ? p.age.toFixed(1) : "—"}
-                          </span>
-                          <span
-                            className="text-[12px] md:text-[13px] text-right tabular-nums font-semibold text-[#d4af37] shrink-0"
-                            data-testid={`text-dynasty-value-${p.sleeperId}`}
-                          >
-                            {typeof p.value === "number" && p.value > 0 ? p.value.toLocaleString() : "—"}
-                          </span>
-                        </li>
-                      ))}
+                            <div className="min-w-0 flex-1 md:flex-initial">
+                              <PlayerAvatar
+                                id={realIdResolver(p.sleeperId, p.name, p.pos)}
+                                name={p.name}
+                                pos={p.pos}
+                                team={realTeamResolver(p.sleeperId, p.name, p.pos, p.team)}
+                                size="sm"
+                              />
+                            </div>
+                            <span
+                              className="hidden md:inline text-[11px] text-right text-muted-foreground tabular-nums shrink-0"
+                              data-testid={`text-age-${p.sleeperId}`}
+                            >
+                              {typeof p.age === "number" && p.age > 0 ? p.age.toFixed(1) : "—"}
+                            </span>
+                            <span
+                              className="text-[12px] md:text-[13px] text-right tabular-nums font-semibold text-[#d4af37] shrink-0"
+                              data-testid={`text-dynasty-value-${p.sleeperId}`}
+                            >
+                              {typeof p.value === "number" && p.value > 0 ? p.value.toLocaleString() : "—"}
+                            </span>
+                            {showRedraftColumn && (
+                              <span
+                                className="text-[12px] md:text-[13px] text-right tabular-nums font-semibold text-cyan-500 dark:text-cyan-300 shrink-0"
+                                data-testid={`text-redraft-value-${p.sleeperId}`}
+                              >
+                                {typeof (p as any).redraftValue === "number" && (p as any).redraftValue > 0
+                                  ? ((p as any).redraftValue as number).toLocaleString()
+                                  : "—"}
+                              </span>
+                            )}
+                          </li>
+                        );
+                      })}
                     </ul>
                   )}
                 </div>
@@ -2098,13 +2221,46 @@ function PlayersPanel({
                   <div className="rounded-md border border-red-500/30 bg-red-500/5 px-3 py-2 text-[11px] text-red-500">
                     {myRosterError}
                   </div>
-                ) : !myRoster || myRoster.length === 0 ? (
+                ) : (!myRoster || myRoster.length === 0) && !isStartupDraft ? (
                   <div className="text-center py-8 space-y-1" data-testid="empty-my-team">
                     <p className="text-sm font-medium text-foreground">Roster unavailable.</p>
                     <p className="text-xs text-muted-foreground">Connect Sleeper or select your team to view your current roster.</p>
                   </div>
                 ) : (
                   <>
+                    {/* Startup-only totals strip — surfaces in-season starter
+                        points (redraft) AND long-term dynasty asset value so
+                        the user can see both lenses at a glance. */}
+                    {isStartupDraft && myTeamTotals && (
+                      <div
+                        className="grid grid-cols-2 gap-2"
+                        data-testid="my-team-totals"
+                      >
+                        <div className="rounded-lg border border-cyan-500/30 bg-cyan-500/[0.06] px-3 py-2">
+                          <p className="text-[9.5px] uppercase tracking-wider text-cyan-600 dark:text-cyan-300/80 font-semibold">
+                            Starter Redraft
+                          </p>
+                          <p
+                            className="text-[15px] font-bold tabular-nums text-cyan-600 dark:text-cyan-300 leading-tight"
+                            data-testid="text-my-team-total-redraft"
+                          >
+                            {myTeamTotals.redraft > 0 ? myTeamTotals.redraft.toLocaleString() : "—"}
+                          </p>
+                        </div>
+                        <div className="rounded-lg border border-[#d4af37]/30 bg-[#d4af37]/[0.06] px-3 py-2">
+                          <p className="text-[9.5px] uppercase tracking-wider text-[#d4af37]/85 font-semibold">
+                            Total Dynasty
+                          </p>
+                          <p
+                            className="text-[15px] font-bold tabular-nums text-[#d4af37] leading-tight"
+                            data-testid="text-my-team-total-dynasty"
+                          >
+                            {myTeamTotals.dynasty > 0 ? myTeamTotals.dynasty.toLocaleString() : "—"}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
                     <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-hide pb-0.5">
                       {(["ALL", "QB", "RB", "WR", "TE", "K", "DEF"] as const).map((f) => (
                         <PosChip
@@ -2117,45 +2273,64 @@ function PlayersPanel({
                       ))}
                     </div>
                     {/* Column header — desktop only. Sortable: click a header
-                        to cycle sort direction (asc ⇄ desc). */}
-                    <div
-                      className="hidden md:grid items-center gap-2 px-2 py-1 border-b border-border/20"
-                      style={{ gridTemplateColumns: "minmax(0,1fr) 50px 90px" }}
-                    >
-                      <PlayersSortHeader
-                        label="Player"
-                        sortKey="name"
-                        current={teamSort}
-                        onClick={(k) => setTeamSort((s) => cycleSort(s, k))}
-                        align="left"
-                      />
-                      <PlayersSortHeader
-                        label="Age"
-                        sortKey="age"
-                        current={teamSort}
-                        onClick={(k) => setTeamSort((s) => cycleSort(s, k))}
-                        align="right"
-                      />
-                      <PlayersSortHeader
-                        label="Dynasty Value"
-                        sortKey="value"
-                        current={teamSort}
-                        onClick={(k) => setTeamSort((s) => cycleSort(s, k))}
-                        align="right"
-                      />
-                    </div>
+                        to cycle sort direction (asc ⇄ desc). When the
+                        Redraft column is shown (startup drafts), the grid
+                        uses a 4-column template instead of 3. */}
+                    {(() => {
+                      const gridCols = showRedraftColumn
+                        ? "minmax(0,1fr) 50px 78px 78px"
+                        : "minmax(0,1fr) 50px 90px";
+                      return (
+                        <div
+                          className="hidden md:grid items-center gap-2 px-2 py-1 border-b border-border/20"
+                          style={{ gridTemplateColumns: gridCols }}
+                        >
+                          <PlayersSortHeader
+                            label="Player"
+                            sortKey="name"
+                            current={teamSort}
+                            onClick={(k) => setTeamSort((s) => cycleSort(s, k))}
+                            align="left"
+                          />
+                          <PlayersSortHeader
+                            label="Age"
+                            sortKey="age"
+                            current={teamSort}
+                            onClick={(k) => setTeamSort((s) => cycleSort(s, k))}
+                            align="right"
+                          />
+                          <PlayersSortHeader
+                            label={showRedraftColumn ? "Dynasty" : "Dynasty Value"}
+                            sortKey="value"
+                            current={teamSort}
+                            onClick={(k) => setTeamSort((s) => cycleSort(s, k))}
+                            align="right"
+                          />
+                          {showRedraftColumn && (
+                            <PlayersSortHeader
+                              label="Redraft"
+                              sortKey="redraftValue"
+                              current={teamSort}
+                              onClick={(k) => setTeamSort((s) => cycleSort(s, k))}
+                              align="right"
+                            />
+                          )}
+                        </div>
+                      );
+                    })()}
                     <div className="max-h-[480px] overflow-y-auto -mx-1 px-1" data-testid="list-my-team">
-                      {filteredRoster.length === 0 ? (
-                        <p className="text-xs text-muted-foreground text-center py-6">
-                          No {teamFilter} players on your roster.
-                        </p>
-                      ) : (
-                        <ul className="space-y-1.5">
-                          {filteredRoster.map((p) => (
+                      {(() => {
+                        const rowGridCols = showRedraftColumn
+                          ? "minmax(0,1fr) 50px 78px 78px"
+                          : "minmax(0,1fr) 50px 90px";
+                        const renderRow = (p: RosterPlayer) => {
+                          const id = p.sleeperId ?? p.id;
+                          const r = id && redraftValueBySleeperId ? redraftValueBySleeperId[id] : 0;
+                          return (
                             <li
-                              key={p.id}
+                              key={p.id || p.sleeperId}
                               className="md:grid md:gap-2 md:items-center flex items-center gap-2.5 px-2.5 py-2 rounded-lg border border-border/30 bg-muted/15 hover:bg-muted/30 transition-colors"
-                              style={{ gridTemplateColumns: "minmax(0,1fr) 50px 90px" }}
+                              style={{ gridTemplateColumns: rowGridCols }}
                               data-testid={`my-team-row-${p.sleeperId ?? p.id}`}
                             >
                               <div className="min-w-0 flex-1 md:flex-initial">
@@ -2176,10 +2351,81 @@ function PlayersPanel({
                               >
                                 {typeof p.value === "number" && p.value > 0 ? p.value.toLocaleString() : "—"}
                               </span>
+                              {showRedraftColumn && (
+                                <span
+                                  className="text-[12px] md:text-[13px] text-right tabular-nums font-semibold text-cyan-500 dark:text-cyan-300 shrink-0"
+                                  data-testid={`text-my-team-redraft-${p.sleeperId ?? p.id}`}
+                                >
+                                  {typeof r === "number" && r > 0 ? r.toLocaleString() : "—"}
+                                </span>
+                              )}
                             </li>
-                          ))}
-                        </ul>
-                      )}
+                          );
+                        };
+                        const applyFilterSort = (list: RosterPlayer[]) => {
+                          const filtered = teamFilter === "ALL" ? list : list.filter((p) => p.pos === teamFilter);
+                          const augmented = showRedraftColumn ? filtered.map(attachRedraft) : filtered;
+                          return [...augmented].sort((a, b) => comparePlayers(a, b, teamSort));
+                        };
+
+                        if (startersBenchSplit) {
+                          const starters = applyFilterSort(startersBenchSplit.starters);
+                          const bench = applyFilterSort(startersBenchSplit.bench);
+                          const empty = starters.length === 0 && bench.length === 0;
+                          if (empty) {
+                            return (
+                              <p className="text-xs text-muted-foreground text-center py-6">
+                                {myRoster && myRoster.length === 0
+                                  ? "No picks yet — your drafted players will appear here."
+                                  : `No ${teamFilter} players on your roster.`}
+                              </p>
+                            );
+                          }
+                          return (
+                            <div className="space-y-3">
+                              <div>
+                                <div className="flex items-center justify-between px-1 mb-1">
+                                  <span className="text-[10px] font-semibold uppercase tracking-wider text-[#d4af37]">Starters</span>
+                                  <span className="text-[10px] text-muted-foreground tabular-nums">
+                                    {starters.length}/{(rosterSlots ?? []).length}
+                                  </span>
+                                </div>
+                                {starters.length === 0 ? (
+                                  <p className="text-xs text-muted-foreground text-center py-3">
+                                    No starters yet — draft a {teamFilter === "ALL" ? "player" : teamFilter} to fill this group.
+                                  </p>
+                                ) : (
+                                  <ul className="space-y-1.5">{starters.map(renderRow)}</ul>
+                                )}
+                              </div>
+                              <div>
+                                <div className="flex items-center justify-between px-1 mb-1">
+                                  <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Bench</span>
+                                  <span className="text-[10px] text-muted-foreground tabular-nums">{bench.length}</span>
+                                </div>
+                                {bench.length === 0 ? (
+                                  <p className="text-xs text-muted-foreground text-center py-3">
+                                    No bench depth yet.
+                                  </p>
+                                ) : (
+                                  <ul className="space-y-1.5">{bench.map(renderRow)}</ul>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        }
+
+                        if (filteredRoster.length === 0) {
+                          return (
+                            <p className="text-xs text-muted-foreground text-center py-6">
+                              {isStartupDraft && (!myRoster || myRoster.length === 0)
+                                ? "No picks yet — your drafted players will appear here."
+                                : `No ${teamFilter} players on your roster.`}
+                            </p>
+                          );
+                        }
+                        return <ul className="space-y-1.5">{filteredRoster.map(renderRow)}</ul>;
+                      })()}
                     </div>
                   </>
                 )}
@@ -2267,7 +2513,7 @@ export default function LiveDraft({ onConnectSleeper }: { onConnectSleeper?: () 
   // "first draft for this league" fallback in fetchDraftBoard so we
   // always load the exact draft the user selected.
   const [activeDraftIdOverride, setActiveDraftIdOverride] = useState<string | null>(null);
-  const { dynastyPlayerList } = useValueModel();
+  const { dynastyPlayerList, redraftValuesBySleeperId } = useValueModel();
   const { isConnected, user, leagues } = useSleeper();
   const mockDrafts = useMemo(() => getMockDraftSummaries(), []);
 
@@ -2329,6 +2575,13 @@ export default function LiveDraft({ onConnectSleeper }: { onConnectSleeper?: () 
   const [myTeamRoster, setMyTeamRoster] = useState<RosterPlayer[] | null>(null);
   const [myTeamRosterLoading, setMyTeamRosterLoading] = useState(false);
   const [myTeamRosterError, setMyTeamRosterError] = useState<string | null>(null);
+  // League roster shape (starter slot list + bench count) so the My Team tab
+  // can group startup-draft picks into Starters / Bench the same way the
+  // league itself will after the draft is final.
+  const [myTeamLeagueSlots, setMyTeamLeagueSlots] = useState<{
+    starterPositions: string[];
+    benchSlots: number;
+  } | null>(null);
 
   // ── Draft-pick (server-mediated) ──────────────────────────────────────
   // Holds the player + pick the user is about to submit. `null` when the
@@ -2351,6 +2604,7 @@ export default function LiveDraft({ onConnectSleeper }: { onConnectSleeper?: () 
       setMyTeamRoster(null);
       setMyTeamRosterError(null);
       setMyTeamRosterLoading(false);
+      setMyTeamLeagueSlots(null);
       return;
     }
     let cancelled = false;
@@ -2364,12 +2618,17 @@ export default function LiveDraft({ onConnectSleeper }: { onConnectSleeper?: () 
           : null;
         const cleanRoster: RosterPlayer[] = (team?.roster ?? []).filter((p) => p !== null) as RosterPlayer[];
         setMyTeamRoster(cleanRoster);
+        setMyTeamLeagueSlots({
+          starterPositions: data.league.rosterPositions ?? [],
+          benchSlots: data.league.benchSlots ?? 0,
+        });
         setMyTeamRosterLoading(false);
       })
       .catch((err) => {
         if (cancelled) return;
         setMyTeamRosterError(err?.message || "Failed to load roster");
         setMyTeamRosterLoading(false);
+        setMyTeamLeagueSlots(null);
       });
     return () => { cancelled = true; };
   }, [activeLeagueId, user?.userId]);
@@ -3214,6 +3473,50 @@ export default function LiveDraft({ onConnectSleeper }: { onConnectSleeper?: () 
     return [] as DraftPickNormalized[];
   }, [draftState, draftData, user?.userId, user?.username, user?.displayName, teamCount]);
 
+  // For startup drafts, the league roster is empty until the draft completes,
+  // so the My Team tab would render "Roster unavailable" the entire time. Map
+  // the user's current draft picks into a synthetic RosterPlayer[] (enriched
+  // with dynasty values) and use that in place of the league roster. Rookie
+  // drafts keep the existing league-roster behavior.
+  const isStartupDraft =
+    (draftData?.draft?.draftCategory ?? "").toLowerCase() === "startup";
+
+  const startupDraftedRoster = useMemo<RosterPlayer[] | null>(() => {
+    if (!isStartupDraft) return null;
+    const byId = new Map<string, number>();
+    const byNameKey = new Map<string, number>();
+    for (const dp of dynastyPlayerList) {
+      if (typeof dp.value !== "number" || dp.value <= 0) continue;
+      if (dp.sleeperId) byId.set(dp.sleeperId, dp.value);
+      byNameKey.set(`${(dp.name || "").toLowerCase().trim()}|${dp.pos}`, dp.value);
+    }
+    const allowedPos = new Set(["QB", "RB", "WR", "TE"]);
+    return myPicks
+      .filter((p) => !!p.playerId && allowedPos.has((p.position || "").toUpperCase()))
+      .map((p) => {
+        const pos = (p.position || "").toUpperCase() as RosterPlayer["pos"];
+        const valueById = p.playerId ? byId.get(p.playerId) : undefined;
+        const valueByName = byNameKey.get(`${(p.playerName || "").toLowerCase().trim()}|${pos}`);
+        const value = valueById ?? valueByName ?? 0;
+        return {
+          id: p.playerId,
+          sleeperId: p.playerId,
+          name: p.playerName,
+          pos,
+          age: 0,
+          value,
+          team: p.teamAbbr ?? "",
+          starter: false,
+          onTaxi: false,
+          onReserve: false,
+        } as RosterPlayer;
+      });
+  }, [isStartupDraft, myPicks, dynastyPlayerList]);
+
+  // What actually feeds the My Team tab: startup → drafted picks, otherwise
+  // the existing enriched league roster.
+  const effectiveMyTeamRoster = isStartupDraft ? startupDraftedRoster : enrichedMyTeamRoster;
+
   // Slot headers — username + avatar per slot, AFTER applying traded_picks
   // for round 1 (so the visible order reflects who will actually pick first
   // in each column, not who originally owned the slot).
@@ -3687,12 +3990,15 @@ export default function LiveDraft({ onConnectSleeper }: { onConnectSleeper?: () 
             pickedPlayerNames={pickedPlayerNames}
             realIdResolver={resolveRealSleeperId}
             realTeamResolver={resolveRealTeam}
-            myRoster={enrichedMyTeamRoster}
-            myRosterLoading={myTeamRosterLoading}
-            myRosterError={myTeamRosterError}
+            myRoster={effectiveMyTeamRoster}
+            myRosterLoading={myTeamRosterLoading && !isStartupDraft}
+            myRosterError={isStartupDraft ? null : myTeamRosterError}
             hasActiveLeague={!!activeLeagueId}
             isConnected={isConnected}
             defaultOpen={!isMobile}
+            rosterSlots={myTeamLeagueSlots?.starterPositions ?? null}
+            isStartupDraft={isStartupDraft}
+            redraftValueBySleeperId={isStartupDraft ? redraftValuesBySleeperId : null}
           />
 
           {/* Server-mediated draft pick — confirm + submit. On success we

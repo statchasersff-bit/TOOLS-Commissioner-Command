@@ -228,6 +228,72 @@ const TIER_CONFIG: Record<Tier, {
   },
 };
 
+// Focus Zones panel styling — separate from TIER_CONFIG (used in the per-
+// league table) so the dashboard zone cards can have their own premium
+// treatment: layered gradient, soft glow, distinct CTAs per tier.
+const FOCUS_ZONE_CONFIG: Record<Tier, {
+  label: string;
+  pillText: string;
+  description: string;
+  ctaLabel: string;
+  ctaText: string;
+  emptyText: string;
+  // Tailwind class fragments — kept as static strings so the JIT picks them up.
+  glowBorder: string;     // outer border + shadow color
+  gradientBg: string;     // card background gradient
+  accentText: string;     // headline + count tint
+  accentDot: string;      // league-row dot tint
+  countPill: string;      // count badge background + border
+  ctaBg: string;          // bottom CTA strip background
+  iconBg: string;         // icon chip background
+}> = {
+  contender: {
+    label: "Contender",
+    pillText: "Title Window",
+    description: "Your strongest title windows. Prioritize upgrades and weekly optimization.",
+    ctaLabel: "Suggested action",
+    ctaText: "Push for title",
+    emptyText: "No contenders right now.",
+    glowBorder: "border-emerald-500/30 hover:border-emerald-500/55 shadow-[0_0_0_1px_rgba(16,185,129,0.05)] hover:shadow-[0_10px_30px_-12px_rgba(16,185,129,0.35)]",
+    gradientBg: "bg-[linear-gradient(180deg,rgba(16,185,129,0.10),rgba(16,185,129,0.02))]",
+    accentText: "text-emerald-600 dark:text-emerald-300",
+    accentDot: "bg-emerald-500",
+    countPill: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-200 border border-emerald-500/40",
+    ctaBg: "bg-emerald-500/10 border-t border-emerald-500/20 text-emerald-700 dark:text-emerald-200",
+    iconBg: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-300 ring-1 ring-emerald-500/30",
+  },
+  bubble: {
+    label: "Bubble",
+    pillText: "Playoff Race",
+    description: "One move away from contention. Explore aggressive trades.",
+    ctaLabel: "Suggested action",
+    ctaText: "Buy or sell decisively",
+    emptyText: "No bubble teams — every league is leaning contend or rebuild.",
+    glowBorder: "border-[#d4af37]/35 hover:border-[#d4af37]/60 shadow-[0_0_0_1px_rgba(212,175,55,0.05)] hover:shadow-[0_10px_30px_-12px_rgba(212,175,55,0.40)]",
+    gradientBg: "bg-[linear-gradient(180deg,rgba(212,175,55,0.10),rgba(212,175,55,0.02))]",
+    accentText: "text-[#d4af37]",
+    accentDot: "bg-[#d4af37]",
+    countPill: "bg-[#d4af37]/15 text-[#d4af37] border border-[#d4af37]/45",
+    ctaBg: "bg-[#d4af37]/10 border-t border-[#d4af37]/25 text-[#d4af37]",
+    iconBg: "bg-[#d4af37]/15 text-[#d4af37] ring-1 ring-[#d4af37]/35",
+  },
+  rebuild: {
+    label: "Rebuild",
+    pillText: "Asset Build",
+    description: "Focus on youth, picks, and long-term value accumulation.",
+    ctaLabel: "Suggested action",
+    ctaText: "Stockpile picks and youth",
+    emptyText: "No rebuild teams detected — every league is at least bubble or better.",
+    glowBorder: "border-indigo-500/30 hover:border-indigo-500/55 shadow-[0_0_0_1px_rgba(99,102,241,0.05)] hover:shadow-[0_10px_30px_-12px_rgba(99,102,241,0.40)]",
+    gradientBg: "bg-[linear-gradient(180deg,rgba(99,102,241,0.10),rgba(99,102,241,0.02))]",
+    accentText: "text-indigo-500 dark:text-indigo-300",
+    accentDot: "bg-indigo-500",
+    countPill: "bg-indigo-500/15 text-indigo-700 dark:text-indigo-200 border border-indigo-500/40",
+    ctaBg: "bg-indigo-500/10 border-t border-indigo-500/25 text-indigo-700 dark:text-indigo-200",
+    iconBg: "bg-indigo-500/15 text-indigo-600 dark:text-indigo-300 ring-1 ring-indigo-500/35",
+  },
+};
+
 
 // ─── Expanded-row editor (module scope) ───────────────────────────────────────
 // IMPORTANT: this component MUST live at module scope. When it was defined
@@ -722,49 +788,121 @@ export function FinanceTab() {
         </Card>
       )}
 
-      {/* Focus Zones Summary */}
+      {/* Focus Zones — portfolio-management dashboard. Each tier is a
+          strategy card (header + description + leagues + CTA) so the user
+          can see at a glance where to push, where to fish for trades, and
+          where to retool. */}
       {visibleLeagues.length > 1 && (() => {
-        const ORDER: (Tier | "unknown")[] = ["contender", "bubble", "rebuild", "unknown"];
         const groups: Record<Tier | "unknown", string[]> = { contender: [], bubble: [], rebuild: [], unknown: [] };
         visibleLeagues.forEach(l => groups[classifyTeam(standings[l.leagueId])].push(l.name));
         const readyCount = visibleLeagues.length - groups.unknown.length;
         if (readyCount === 0) return null;
 
+        const summaryParts: string[] = [];
+        (["contender", "bubble", "rebuild"] as Tier[]).forEach(t => {
+          const n = groups[t].length;
+          summaryParts.push(`${n} ${n === 1 ? FOCUS_ZONE_CONFIG[t].label : FOCUS_ZONE_CONFIG[t].label + "s"}`);
+        });
+
         return (
-          <Card className="p-4 space-y-3" data-testid="card-focus-zones">
-            <div className="flex items-center gap-2">
-              <Target className="w-4 h-4 text-[#0b3a7a] dark:text-blue-400" />
-              <h3 className="text-xs font-bold uppercase tracking-wide">Focus Zones</h3>
-              <span className="text-[10px] text-muted-foreground">which leagues to prioritize this season</span>
+          <Card
+            className="p-4 md:p-5 space-y-4 border border-border/50 bg-[linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.015))] backdrop-blur-sm shadow-inner"
+            data-testid="card-focus-zones"
+          >
+            {/* Section header + portfolio summary row */}
+            <div className="flex flex-wrap items-end justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg bg-[#0b3a7a]/10 dark:bg-blue-400/10 flex items-center justify-center ring-1 ring-[#0b3a7a]/20 dark:ring-blue-400/20">
+                  <Target className="w-3.5 h-3.5 text-[#0b3a7a] dark:text-blue-400" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold tracking-tight">Focus Zones</h3>
+                  <p className="text-[10.5px] text-muted-foreground/85 leading-tight">Where to compete, retool, and trade across your portfolio.</p>
+                </div>
+              </div>
+              <div
+                className="flex items-center gap-2 text-[10.5px] font-medium text-muted-foreground tabular-nums"
+                data-testid="focus-zones-summary"
+              >
+                <span className="uppercase tracking-wider text-[9.5px] text-muted-foreground/70">Portfolio</span>
+                <span className="text-foreground/80">{summaryParts.join(" · ")}</span>
+              </div>
             </div>
-            <div className="grid grid-cols-3 gap-2">
+
+            {/* Strategy cards */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               {(["contender", "bubble", "rebuild"] as Tier[]).map(tier => {
-                const cfg = TIER_CONFIG[tier];
+                const cfg = FOCUS_ZONE_CONFIG[tier];
                 const names = groups[tier];
                 const Icon = tier === "contender" ? Flame : tier === "bubble" ? Target : Wrench;
+                const hasLeagues = names.length > 0;
                 return (
-                  <div key={tier} className={`rounded-xl border p-3 space-y-2 ${cfg.bgCls}`}>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-1">
-                        <Icon className={`w-3 h-3 ${cfg.headerCls}`} />
-                        <span className={`text-[11px] font-bold uppercase tracking-wide ${cfg.headerCls}`}>{cfg.short}</span>
+                  <div
+                    key={tier}
+                    className={`group relative rounded-xl border ${cfg.glowBorder} ${cfg.gradientBg} overflow-hidden transition-all duration-200 hover:-translate-y-px`}
+                    data-testid={`zone-card-${tier}`}
+                  >
+                    {/* Header row */}
+                    <div className="px-3.5 pt-3 pb-2 flex items-center gap-2.5">
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${cfg.iconBg}`}>
+                        <Icon className="w-4 h-4" />
                       </div>
-                      <span className={`text-xl font-bold leading-none ${cfg.headerCls}`}>{names.length}</span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5">
+                          <h4 className={`text-[13px] font-bold uppercase tracking-wider ${cfg.accentText} leading-none`}>{cfg.label}</h4>
+                          <span className="text-[8.5px] uppercase tracking-wider text-muted-foreground/70 leading-none mt-px">· {cfg.pillText}</span>
+                        </div>
+                      </div>
+                      <span
+                        className={`shrink-0 inline-flex items-center justify-center min-w-[28px] h-[22px] px-2 rounded-full text-[11.5px] font-bold tabular-nums leading-none ${cfg.countPill}`}
+                        data-testid={`zone-count-${tier}`}
+                      >
+                        {names.length}
+                      </span>
                     </div>
-                    <p className={`text-[10px] leading-snug ${cfg.headerCls} opacity-75`}>{cfg.desc}</p>
-                    {names.length > 0 && (
-                      <div className="border-t border-current/10 pt-1.5 space-y-0.5">
-                        {names.map(n => (
-                          <p key={n} className={`text-[10px] truncate ${cfg.headerCls} opacity-65`}>· {n}</p>
-                        ))}
+
+                    {/* Strategy text */}
+                    <p className="px-3.5 text-[11.5px] text-foreground/70 leading-snug">
+                      {cfg.description}
+                    </p>
+
+                    {/* League list (or empty state) */}
+                    <div className="px-3.5 mt-2.5 mb-3 min-h-[58px]">
+                      {hasLeagues ? (
+                        <ul className="space-y-1" data-testid={`zone-league-list-${tier}`}>
+                          {names.map(n => (
+                            <li key={n} className="flex items-center gap-2 text-[11.5px] text-foreground/90 truncate">
+                              <span className={`w-1.5 h-1.5 rounded-full ${cfg.accentDot} shrink-0`} />
+                              <span className="truncate">{n}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <div
+                          className="h-full flex items-center justify-center text-center px-2 py-3 rounded-md border border-dashed border-border/40 bg-foreground/[0.015]"
+                          data-testid={`zone-empty-${tier}`}
+                        >
+                          <p className="text-[10.5px] text-muted-foreground/80 leading-snug italic">
+                            {cfg.emptyText}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* CTA strip */}
+                    {hasLeagues && (
+                      <div className={`px-3.5 py-2 ${cfg.ctaBg} flex items-center justify-between gap-2 transition-colors`}>
+                        <span className="text-[9.5px] uppercase tracking-wider opacity-70">{cfg.ctaLabel}</span>
+                        <span className="text-[11.5px] font-semibold">{cfg.ctaText} →</span>
                       </div>
                     )}
                   </div>
                 );
               })}
             </div>
+
             {groups.unknown.length > 0 && (
-              <p className="text-[10px] text-muted-foreground text-center">
+              <p className="text-[10.5px] text-muted-foreground/80 text-center">
                 {groups.unknown.length} league{groups.unknown.length > 1 ? "s" : ""} still loading standings…
               </p>
             )}
