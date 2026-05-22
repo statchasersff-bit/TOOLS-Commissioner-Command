@@ -337,27 +337,40 @@ export function DraftCommand() {
       {/* Mobile-only header — SectionHeader hides on mobile. */}
       <div className="md:hidden">
         <h2 className="text-lg font-bold text-foreground tracking-tight">ADP Explorer</h2>
-        <p className="text-xs text-muted-foreground mt-1">{currentTabMeta.subtitle}</p>
       </div>
 
-      {/* ── Top tabs: Startup ADP / Rookie Drafts ───────────────────────── */}
-      <div className="flex items-center gap-1 p-1 rounded-xl bg-white/[0.03] border border-white/6 w-fit" data-testid="draft-command-top-tabs">
-        {TOP_TABS.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            onClick={() => switchTab(t.id)}
-            className={cn(
-              "px-3.5 py-1.5 rounded-lg text-[12px] font-semibold transition-all whitespace-nowrap",
-              topTab === t.id
-                ? "bg-[#0b3a7a]/70 text-white border border-[#d4af37]/30 shadow-[0_0_0_1px_rgba(212,175,55,0.05)]"
-                : "text-white/45 hover:text-white/80 border border-transparent",
-            )}
-            data-testid={`draft-tab-${t.id}`}
-          >
-            {t.label}
-          </button>
-        ))}
+      {/* ── Top tabs: Startup ADP / Rookie Drafts ─────────────────────────
+          On mobile: centered, with a gold underline on the active tab.
+          On desktop: pill-style group, left-aligned (unchanged). */}
+      <div
+        className="flex items-center gap-1 p-1 rounded-xl bg-white/[0.03] border border-white/6 w-fit mx-auto md:mx-0"
+        data-testid="draft-command-top-tabs"
+      >
+        {TOP_TABS.map((t) => {
+          const active = topTab === t.id;
+          return (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => switchTab(t.id)}
+              className={cn(
+                "relative px-3.5 py-1.5 rounded-lg text-[12px] font-semibold transition-all whitespace-nowrap",
+                active
+                  ? "md:bg-[#0b3a7a]/70 text-white md:border md:border-[#d4af37]/30 md:shadow-[0_0_0_1px_rgba(212,175,55,0.05)]"
+                  : "text-white/45 hover:text-white/80 md:border md:border-transparent",
+              )}
+              data-testid={`draft-tab-${t.id}`}
+            >
+              {t.label}
+              {active && (
+                <span
+                  aria-hidden
+                  className="md:hidden absolute left-2 right-2 -bottom-0.5 h-[2px] rounded-full bg-[#d4af37]"
+                />
+              )}
+            </button>
+          );
+        })}
       </div>
 
       {/* ── Top controls row ─────────────────────────────────────────────── */}
@@ -830,7 +843,14 @@ function MobileListRow({ row, onPlayerClick }: { row: ADPResult; onPlayerClick?:
       data-testid={`row-adp-mobile-${row.player_id}`}
       onClick={() => onPlayerClick?.(row)}
     >
-      <PositionTile pos={row.position} text={row.position === "PICK" ? "RP" : row.position} />
+      <PlayerAvatar
+        compact
+        id={row.player_id}
+        name={row.player_name}
+        pos={row.position}
+        team={row.team}
+        size="sm"
+      />
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5">
           <span className="font-semibold text-[13px] truncate">{row.player_name}</span>
@@ -1396,14 +1416,15 @@ const ELITE_RANK_CUTOFF = 12;
 
 function HexView({ rows, teams, draftFormat, filters, onPlayerClick }: { rows: ADPResult[]; teams: number; draftFormat: DraftFilters["draftFormat"]; filters: DraftFilters; onPlayerClick?: (row: ADPResult) => void }) {
   const draftLabel = formatDraftLabel(filters);
-  const isMobile = useIsMobile();
-  // Larger tiles than before — the redesign uses a prominent square headshot
-  // so we give it more room. Mobile still shrinks but keeps a readable layout.
-  // Roomier than the previous pass — the larger headshot + prominent
-  // position-rank glyph need a touch more horizontal space. Mobile shrinks
-  // but stays scannable; horizontal scroll handles the rest.
-  const tileW = isMobile ? 110 : 144;
-  const tileH = Math.round(tileW * 2 / Math.sqrt(3));
+  // Tile sizing is driven by CSS variables set on the board wrapper with
+  // responsive Tailwind classes — see the `[--hex-w:..]` arbitrary-property
+  // utilities below. Heights derive from W·2/√3 (pointy-top hex math) and
+  // are pre-baked at each breakpoint to avoid runtime calc():
+  //
+  //   <430px (very small): 76 / 88
+  //    430–639 (mobile):   88 / 102
+  //    640–767 (tablet):   110 / 127
+  //    768+ (desktop):     144 / 166
 
   // Position filter — defaults to all selected. Toggling a legend pill hides
   // hexes of that position WITHOUT collapsing the layout: the slot still
@@ -1476,10 +1497,19 @@ function HexView({ rows, teams, draftFormat, filters, onPlayerClick }: { rows: A
       )}
 
       {/* ── Board canvas ──────────────────────────────────────────────────── */}
-      <div className="relative overflow-x-auto overflow-y-hidden">
+      <div
+        className="relative overflow-x-auto overflow-y-hidden snap-x snap-proximity pb-3 md:pb-0"
+        style={{ WebkitOverflowScrolling: "touch", scrollBehavior: "smooth" }}
+      >
         <div
-          className="relative inline-block py-5 pl-1 pr-6"
-          style={{ "--hex-w": `${tileW}px`, "--hex-h": `${tileH}px` } as React.CSSProperties}
+          className={cn(
+            "relative inline-block py-3 md:py-5 pl-1 pr-6 [min-width:max-content]",
+            // Hex dimensions per breakpoint (W / H pre-baked from W·2/√3).
+            "[--hex-w:88px] [--hex-h:102px]",
+            "max-[430px]:[--hex-w:76px] max-[430px]:[--hex-h:88px]",
+            "sm:[--hex-w:110px] sm:[--hex-h:127px]",
+            "md:[--hex-w:144px] md:[--hex-h:166px]",
+          )}
         >
           {grouped.map(([round, slots], rowIdx) => (
             <HexRow
@@ -1524,23 +1554,22 @@ function HexRow({
         marginTop: rowIdx === 0 ? 0 : "calc(var(--hex-h) * -0.25)",
       }}
     >
-      {/* Sticky round label — futuristic "Rd 01 →" badge with status tick. */}
+      {/* Sticky round label — narrower on mobile so it doesn't eat the row. */}
       <div
-        className="sticky left-0 z-20 flex-shrink-0 flex items-start pl-3 md:pl-4 pr-3 pt-3"
+        className="sticky left-0 z-20 flex-shrink-0 flex items-start pl-1.5 sm:pl-3 md:pl-4 pr-1.5 sm:pr-3 pt-2 md:pt-3 min-w-[44px] sm:min-w-[60px] md:min-w-[68px]"
         style={{
           background: "linear-gradient(to right, rgba(6,12,24,1) 70%, rgba(6,12,24,0))",
-          minWidth: 68,
         }}
       >
         <div
           className={cn(
-            "inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold whitespace-nowrap border tabular-nums",
+            "inline-flex items-center gap-0.5 sm:gap-1 px-1 sm:px-1.5 md:px-2 py-0.5 rounded-md text-[9px] sm:text-[10px] font-bold whitespace-nowrap border tabular-nums",
             round === 1
               ? "bg-[#d4af37]/15 border-[#d4af37]/45 text-[#d4af37] shadow-[0_0_12px_-2px_rgba(212,175,55,0.5)]"
               : "bg-white/[0.04] border-white/15 text-white/75",
           )}
         >
-          <span className="text-[8px] opacity-60">RD</span>
+          <span className="text-[7px] sm:text-[8px] opacity-60">RD</span>
           <span>{String(round).padStart(2, "0")}</span>
         </div>
       </div>
@@ -1564,7 +1593,7 @@ function HexRow({
 function HexEmpty({ pickInRound }: { pickInRound: number }) {
   return (
     <div
-      className="relative"
+      className="relative snap-start"
       style={{ width: "var(--hex-w)", height: "var(--hex-h)", flexShrink: 0 }}
     >
       <div
@@ -1647,7 +1676,7 @@ function HexTile({ row, round, pickInRound, onClick }: { row: ADPResult; round: 
     // Outer wrapper is NOT clipped — so the hover panel can render outside
     // the hexagon bounds. The clipping lives one level in.
     <div
-      className="relative group cursor-pointer hover:z-30"
+      className="relative group cursor-pointer hover:z-30 snap-start [touch-action:manipulation]"
       style={{ width: "var(--hex-w)", height: "var(--hex-h)", flexShrink: 0 }}
       data-testid={`hex-${row.player_id}`}
       onClick={() => onClick?.(row)}
@@ -1679,11 +1708,11 @@ function HexTile({ row, round, pickInRound, onClick }: { row: ADPResult; round: 
       />
 
       {/* ── Content stack ────────────────────────────────────────────── */}
-      <div className="absolute inset-0 flex flex-col items-center px-2 pt-[16%] pb-[6%]">
+      <div className="absolute inset-0 flex flex-col items-center px-1.5 sm:px-2 pt-[14%] sm:pt-[16%] pb-[6%]">
         {/* Position rank — centered above the player image. */}
         <span
           className={cn(
-            "px-1.5 py-px rounded border text-[10px] font-bold uppercase tracking-wider leading-none",
+            "px-1 sm:px-1.5 py-px rounded border text-[9px] sm:text-[10px] font-bold uppercase tracking-wider leading-none",
             badge.text,
             badge.border,
             "bg-white/[0.03]",
@@ -1702,7 +1731,7 @@ function HexTile({ row, round, pickInRound, onClick }: { row: ADPResult; round: 
               src={`https://sleepercdn.com/images/team_logos/nfl/${row.team.toLowerCase()}.png`}
               alt=""
               aria-hidden="true"
-              className="absolute w-[110px] h-[110px] sm:w-[120px] sm:h-[120px] object-contain opacity-[0.14] pointer-events-none"
+              className="absolute w-[80px] h-[80px] sm:w-[110px] sm:h-[110px] md:w-[120px] md:h-[120px] object-contain opacity-[0.14] pointer-events-none"
               onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
             />
           )}
@@ -1716,21 +1745,21 @@ function HexTile({ row, round, pickInRound, onClick }: { row: ADPResult; round: 
         {/* Name + team abbreviation, tight stack directly below the image. */}
         <div className="w-full text-center mt-1 leading-none">
           <div
-            className="text-[11px] sm:text-[12px] font-semibold text-white/90 leading-[1.1] line-clamp-1 tracking-tight px-0.5"
+            className="text-[10px] sm:text-[11px] md:text-[12px] font-semibold text-white/90 leading-[1.1] line-clamp-1 tracking-tight px-0.5"
             data-testid={`hex-name-${row.player_id}`}
           >
             {shortenName(row.player_name)}
           </div>
           {row.team && (
             <div
-              className="text-[9px] font-semibold tabular-nums text-white/45 mt-0.5 uppercase tracking-wider"
+              className="hidden sm:block text-[9px] font-semibold tabular-nums text-white/45 mt-0.5 uppercase tracking-wider"
               data-testid={`hex-team-${row.player_id}`}
             >
               {row.team}
             </div>
           )}
           <div
-            className="text-[9px] font-bold tabular-nums text-white/35 mt-0.5"
+            className="text-[8px] sm:text-[9px] font-bold tabular-nums text-white/35 mt-0.5"
             data-testid={`hex-pick-${row.player_id}`}
           >
             {pickLabel}
@@ -1762,7 +1791,7 @@ function PlayerHeadshotHex({
 
   return (
     <div
-      className="relative w-[50px] h-[58px] sm:w-[58px] sm:h-[66px] rounded-md overflow-hidden bg-white/[0.04] flex items-center justify-center"
+      className="relative w-[42px] h-[48px] max-[430px]:w-[36px] max-[430px]:h-[42px] sm:w-[50px] sm:h-[58px] md:w-[58px] md:h-[66px] rounded-md overflow-hidden bg-white/[0.04] flex items-center justify-center"
       style={{ boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.08)" }}
     >
       {showImage ? (
@@ -1773,7 +1802,7 @@ function PlayerHeadshotHex({
           onError={() => setErrored(true)}
         />
       ) : (
-        <span className="text-sm font-bold text-white/70">
+        <span className="text-xs sm:text-sm font-bold text-white/70">
           {initialsOf(name)}
         </span>
       )}
@@ -1785,10 +1814,10 @@ function PlayerHeadshotHex({
 function PickGlyph({ label }: { label?: string | null }) {
   return (
     <div
-      className="relative w-[50px] h-[58px] sm:w-[58px] sm:h-[66px] rounded-md flex items-center justify-center bg-white/[0.04]"
+      className="relative w-[42px] h-[48px] max-[430px]:w-[36px] max-[430px]:h-[42px] sm:w-[50px] sm:h-[58px] md:w-[58px] md:h-[66px] rounded-md flex items-center justify-center bg-white/[0.04]"
       style={{ boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.08)" }}
     >
-      <Hexagon className="w-5 h-5 sm:w-6 sm:h-6 text-white/40" strokeWidth={2} />
+      <Hexagon className="w-4 h-4 sm:w-5 sm:h-5 md:w-6 md:h-6 text-white/40" strokeWidth={2} />
       {label && (
         <span className="absolute bottom-0.5 left-1/2 -translate-x-1/2 px-1 py-px rounded text-[8px] font-bold uppercase tracking-wider whitespace-nowrap bg-black/40 text-white/65 leading-none">
           {label.replace(/^\d{4}\s+Rookie\s+/i, "")}
