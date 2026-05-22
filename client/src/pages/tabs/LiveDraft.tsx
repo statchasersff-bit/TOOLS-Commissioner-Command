@@ -3794,38 +3794,13 @@ export default function LiveDraft({ onConnectSleeper }: { onConnectSleeper?: () 
     }));
   }, [draftState, draftData, parsedPicks, pickTimings, teamCount]);
 
-  // Only show drafts for leagues the user is actually playing in. The
-  // "playing in" set is normally derived from useSleeper().leagues, which
-  // requires the user's roster to already have players — that excludes
-  // fresh startup leagues where the draft hasn't happened yet. To keep
-  // those drafts visible we also let through any live/upcoming draft whose
-  // own league is dynasty (verified during discovery), so a pre-draft
-  // startup makes it onto the lobby.
-  const portfolioFilteredDrafts = useMemo(() => {
-    const allowed = new Set(leagues.map((l) => l.leagueId));
-    return liveDrafts
-      .filter((ld) => {
-        if (allowed.has(ld.leagueId)) return true;
-        if (ld.isDynasty) {
-          // eslint-disable-next-line no-console
-          console.log("[LIVE DRAFT DISCOVERY] surfacing pre-roster dynasty draft", {
-            league_id: ld.leagueId,
-            draft_id: ld.draftId,
-            category: ld.draftCategory,
-            status: ld.status,
-          });
-          return true;
-        }
-        // eslint-disable-next-line no-console
-        console.log("[LIVE DRAFT DISCOVERY] hidden by portfolio filter", {
-          league_id: ld.leagueId,
-          draft_id: ld.draftId,
-          reason: "league not in portfolio + isDynasty=false",
-        });
-        return false;
-      })
-      .map(normalizeFromDetect);
-  }, [liveDrafts, leagues]);
+  // detectLiveDrafts already guarantees: dynasty-only, user owns a roster,
+  // and at least 4 members have joined (filters out template leagues).
+  // No secondary filter needed — map directly to DraftSummary shape.
+  const portfolioFilteredDrafts = useMemo(
+    () => liveDrafts.map(normalizeFromDetect),
+    [liveDrafts],
+  );
 
   // As soon as the user clicks a draft card, switch to draft-room mode
   // immediately — hide the lobby and show the room shell + loading spinner.

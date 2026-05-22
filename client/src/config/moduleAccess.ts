@@ -29,8 +29,8 @@ export const MODULE_ACCESS: Record<string, AccessRequirement> = {
   // Command Center (Portfolio tab)
   "portfolio:connect": "public", // legacy connect screen — no gate
   "portfolio:portfolio-summary": "readonly",
-  "portfolio:lineup-command": "full",
-  "portfolio:waiver-command": "full",
+  "portfolio:lineup-command": "readonly",
+  "portfolio:waiver-command": "readonly",
 
   // My Team
   "dashboard:my-team": "readonly",

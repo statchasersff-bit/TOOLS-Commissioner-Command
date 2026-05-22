@@ -1027,25 +1027,50 @@ export async function detectLiveDrafts(userId: string) {
     return null;
   };
 
-  // Standard snake/linear picksAway math. Walks at most 2 rounds forward —
-  // every slot appears at least once per 2 rounds in a snake draft.
+  // Trade-aware picksAway. Walks forward through upcoming picks; for each
+  // cell, resolves the *current* owner via traded_picks before checking
+  // whether the cell is the user's. This avoids the false-positive where
+  // the lobby says "1 PICK AWAY" for a slot whose pick the user has
+  // already traded away.
   const computePicksAway = (
     draftType: string,
     teams: number,
-    mySlot: number,
+    rounds: number,
+    userRosterId: number | null,
+    slotToRosterId: Record<string, number> | null,
+    tradedPicksRaw: SleeperTradedPickRaw[],
+    draftSeason: string,
     currentPickNo: number,
     totalPicks: number,
   ): number | null => {
-    if (teams < 1 || mySlot < 1 || mySlot > teams) return null;
+    if (teams < 1 || userRosterId == null) return null;
     if (currentPickNo > totalPicks) return null;
     const t = (draftType || "snake").toLowerCase();
     if (t === "auction") return null;
-    const horizon = Math.min(totalPicks, currentPickNo + teams * 2);
+
+    // Build a (round, original_roster_id) → current_roster_id map filtered
+    // to this draft's season. Walk in order so the last entry wins —
+    // mirrors Sleeper's own resolution for chained trades.
+    const currentOwnerByRoundOriginal = new Map<string, number>();
+    for (const tp of tradedPicksRaw || []) {
+      if (String(tp.season) !== draftSeason) continue;
+      if (tp.round < 1 || tp.round > rounds) continue;
+      currentOwnerByRoundOriginal.set(`${tp.round}-${tp.roster_id}`, tp.owner_id);
+    }
+
+    // Resolve each cell forward until we find a pick whose CURRENT owner
+    // is the user's roster. Walking 2 rounds covers every slot in a snake
+    // draft; we cap further out to handle linear drafts with many empty
+    // rounds between the user's picks.
+    const horizon = Math.min(totalPicks, currentPickNo + teams * rounds);
     for (let pickNo = currentPickNo; pickNo <= horizon; pickNo++) {
       const round = Math.ceil(pickNo / teams);
       const pickInRound = ((pickNo - 1) % teams) + 1;
       const slot = t === "snake" && round % 2 === 0 ? teams - pickInRound + 1 : pickInRound;
-      if (slot === mySlot) return pickNo - currentPickNo;
+      const originalRosterId = slotToRosterId?.[String(slot)] ?? slot;
+      const currentRosterId =
+        currentOwnerByRoundOriginal.get(`${round}-${originalRosterId}`) ?? originalRosterId;
+      if (currentRosterId === userRosterId) return pickNo - currentPickNo;
     }
     return null;
   };
@@ -1064,12 +1089,13 @@ export async function detectLiveDrafts(userId: string) {
       // /user/:id/leagues endpoint returns leagues where the user is a
       // commissioner-only or spectator without a roster, and we don't
       // want those drafts in the Live Draft lobby.
-      const [byLeague, byPointer, rosters] = await Promise.all([
+      const [byLeague, byPointer, rosters, tradedPicksRaw] = await Promise.all([
         fetchJson<any[]>(`${SLEEPER_API}/league/${lg.league_id}/drafts`).catch(() => [] as any[]),
         lg.draft_id
           ? fetchJson<any>(`${SLEEPER_API}/draft/${lg.draft_id}`).catch(() => null)
           : Promise.resolve(null),
         fetchJson<SleeperRosterRaw[]>(`${SLEEPER_API}/league/${lg.league_id}/rosters`).catch(() => [] as SleeperRosterRaw[]),
+        fetchJson<SleeperTradedPickRaw[]>(`${SLEEPER_API}/league/${lg.league_id}/traded_picks`).catch(() => [] as SleeperTradedPickRaw[]),
       ]);
 
       const userRoster = (rosters || []).find((r) => {
@@ -1084,6 +1110,19 @@ export async function detectLiveDrafts(userId: string) {
           league_id: lg.league_id,
           league_name: lg.name,
           reason: "user has no roster (spectator / commissioner-only)",
+        });
+        return;
+      }
+
+      // Template / demo leagues have most roster slots unowned — only the
+      // commissioner's slot is filled. Require at least 4 owned roster slots
+      // so we don't surface drafts from leagues nobody has actually joined.
+      const ownedRosterCount = (rosters || []).filter((r) => !!r.owner_id).length;
+      if (ownedRosterCount < 4) {
+        console.log("[LIVE DRAFT DISCOVERY] excluded league", {
+          league_id: lg.league_id,
+          league_name: lg.name,
+          reason: `template/empty league — only ${ownedRosterCount} roster(s) have owners`,
         });
         return;
       }
@@ -1172,8 +1211,18 @@ export async function detectLiveDrafts(userId: string) {
         const mySlot = resolveMySlot(d, userRosterId);
         const currentPickNo = Math.min(totalPicks, picksMade + 1);
         const picksAway =
-          mySlot != null && (status === "drafting" || status === "paused" || status === "pre_draft")
-            ? computePicksAway(d.type || "snake", teams, mySlot, currentPickNo, totalPicks)
+          userRosterId != null && (status === "drafting" || status === "paused" || status === "pre_draft")
+            ? computePicksAway(
+                d.type || "snake",
+                teams,
+                rounds,
+                userRosterId,
+                (d.slot_to_roster_id ?? null) as Record<string, number> | null,
+                tradedPicksRaw,
+                String(d.season ?? ""),
+                currentPickNo,
+                totalPicks,
+              )
             : null;
 
         const classification = classifyDraft(d, lg as any);
