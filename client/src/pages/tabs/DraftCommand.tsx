@@ -14,6 +14,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { API_BASE } from "@/lib/apiBase";
 import {
   Search, SlidersHorizontal, List, LayoutGrid, Hexagon,
   TrendingUp, TrendingDown, Minus, AlertCircle, RefreshCw, ChevronUp, ChevronDown, ChevronRight,
@@ -63,7 +64,10 @@ function buildAdpUrl(filters: DraftFilters): string {
   if (filters.passTd !== "all") p.set("passTd", String(filters.passTd));
   if (filters.dateRange.start) p.set("startDate", filters.dateRange.start);
   if (filters.dateRange.end) p.set("endDate", filters.dateRange.end);
-  return `/api/adp?${p.toString()}`;
+  // Prefix with API_BASE so production builds hit the Express backend on the
+  // separate API origin instead of the static host's SPA fallback (which would
+  // return index.html and trip the "API route returned app HTML" guard).
+  return `${API_BASE}/api/adp?${p.toString()}`;
 }
 
 interface AdpResponseMeta {
@@ -588,7 +592,7 @@ function ReclassifyDraftsButton() {
     setError(null);
     try {
       const token = (() => { try { return localStorage.getItem("sc_auth_token"); } catch { return null; } })();
-      const r = await fetch(`/api/admin/adp/reclassify`, {
+      const r = await fetch(`${API_BASE}/api/admin/adp/reclassify`, {
         method: "POST",
         credentials: "include",
         headers: token ? { Authorization: `Bearer ${token}` } : {},
