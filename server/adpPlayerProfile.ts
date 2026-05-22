@@ -51,6 +51,13 @@ export interface AdpHistoryResponse {
   /** Echoes the resolved filter context so the UI can show "12T · SF · TEP · …". */
   appliedFilters: AdpFilters;
   buckets: AdpHistoryPoint[];
+  /** One bucket per calendar month (UTC) the player was drafted in, capped at
+   *  the last 36 months. Months with zero picks are omitted, so a rookie with
+   *  a one-year career naturally returns ≤12 months without a separate
+   *  "NFL entry date" lookup. Drives the ADP-over-time chart. */
+  monthly: Array<{ month: string; avgPick: number; count: number }>;
+  /** Legacy field — kept (always empty) so older cached frontends that read
+   *  `daily.length` don't crash post-deploy. New code should use `monthly`. */
   daily: Array<{ date: string; avgPick: number; count: number }>;
   /** Per-pick count across the filtered draft pool. The UI bins this into
    *  rounds client-side using the user's teams filter so the same payload
@@ -68,6 +75,7 @@ export async function getAdpHistory(playerId: string, filters: AdpFilters): Prom
         window: w, draftCount: 0, avgPick: null, minPick: null, maxPick: null,
         asOf: new Date().toISOString(),
       })),
+      monthly: [],
       daily: [],
       pickHistogram: [],
     };
@@ -113,22 +121,34 @@ export async function getAdpHistory(playerId: string, filters: AdpFilters): Prom
     };
   });
 
-  // Daily rolling average (last 90 days), one bucket per day with picks.
-  const byDay = new Map<string, number[]>();
+  // Monthly rolling average — one bucket per UTC calendar month the player
+  // was drafted in, capped at the last 36 months. Computed with calendar
+  // arithmetic (not a rolling day count) so the boundary lands exactly at
+  // the same day-of-month 36 months ago instead of drifting by leap days.
+  const monthlyCutoffDate = new Date(now);
+  monthlyCutoffDate.setUTCMonth(monthlyCutoffDate.getUTCMonth() - 36);
+  const monthlyCutoff = monthlyCutoffDate.getTime();
+
+  const byMonth = new Map<string, number[]>();
   for (const r of rows) {
     const ts = safePickDate(r);
-    if (ts == null || now - ts > 90 * dayMs) continue;
-    const day = new Date(ts).toISOString().slice(0, 10);
-    if (!byDay.has(day)) byDay.set(day, []);
-    byDay.get(day)!.push(r.pickNo);
+    if (ts == null || ts < monthlyCutoff) continue;
+    const d = new Date(ts);
+    const monthKey = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+    if (!byMonth.has(monthKey)) byMonth.set(monthKey, []);
+    byMonth.get(monthKey)!.push(r.pickNo);
   }
-  const daily = Array.from(byDay.entries())
-    .map(([date, picks]) => ({
-      date,
+  const monthly = Array.from(byMonth.entries())
+    .map(([month, picks]) => ({
+      month,
       avgPick: Math.round((picks.reduce((s, n) => s + n, 0) / picks.length) * 10) / 10,
       count: picks.length,
     }))
-    .sort((a, b) => a.date.localeCompare(b.date));
+    .sort((a, b) => a.month.localeCompare(b.month));
+
+  // `daily` retained as an empty array to keep older cached frontends —
+  // which read `data.daily.length` on the chart path — from throwing.
+  const daily: Array<{ date: string; avgPick: number; count: number }> = [];
 
   // Per-pick histogram across the entire filtered pool. Capped at a generous
   // upper bound so a single outlier "drafted at 240" doesn't blow up the
@@ -148,7 +168,7 @@ export async function getAdpHistory(playerId: string, filters: AdpFilters): Prom
     .slice(0, lastNonZero + 1)
     .map((count, i) => ({ pickNo: i + 1, count }));
 
-  return { playerId, appliedFilters: filters, buckets, daily, pickHistogram };
+  return { playerId, appliedFilters: filters, buckets, monthly, daily, pickHistogram };
 }
 
 export interface AvailabilityCell {

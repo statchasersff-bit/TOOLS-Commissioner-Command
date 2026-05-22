@@ -4,6 +4,30 @@ import { cn } from "@/lib/utils";
 import logoDark from "@assets/statchasers_logo_transparent_dark_1772764844282.png";
 import { API_BASE } from "@/lib/apiBase";
 
+// Retries a fetch on network-level failures (no response / connection refused).
+// This handles Replit deployment cold-starts where the server needs a moment
+// to wake up. HTTP error responses (4xx, 5xx) are NOT retried.
+async function fetchWithRetry(
+  url: string,
+  options: RequestInit,
+  onRetrying?: (attempt: number) => void,
+): Promise<Response> {
+  const MAX = 3;
+  let lastErr: unknown;
+  for (let i = 0; i <= MAX; i++) {
+    try {
+      return await fetch(url, options);
+    } catch (err) {
+      lastErr = err;
+      if (i < MAX) {
+        onRetrying?.(i + 1);
+        await new Promise(r => setTimeout(r, 2000 * (i + 1)));
+      }
+    }
+  }
+  throw lastErr;
+}
+
 // ── Shared helpers ────────────────────────────────────────────────────────────
 
 function AuthLayout({ children, onBack }: { children: React.ReactNode; onBack?: () => void }) {
@@ -103,8 +127,14 @@ function GoldButton({ children, loading, disabled, type = "button", onClick }: {
 
 function ErrorMsg({ msg }: { msg: string }) {
   if (!msg) return null;
+  const isWaking = msg.startsWith("Server is waking up");
   return (
-    <div className="bg-red-500/10 border border-red-500/20 rounded-lg px-4 py-2.5 text-[13px] text-red-400">
+    <div className={cn(
+      "rounded-lg px-4 py-2.5 text-[13px]",
+      isWaking
+        ? "bg-[#d4af37]/10 border border-[#d4af37]/25 text-[#d4af37]/90"
+        : "bg-red-500/10 border border-red-500/20 text-red-400",
+    )}>
       {msg}
     </div>
   );
@@ -366,12 +396,12 @@ export function LoginScreen({ onNavigate, onLoginSuccess }: ScreenProps) {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch(`${API_BASE}/api/sc-auth/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ email, password }),
-      });
+      const res = await fetchWithRetry(
+        `${API_BASE}/api/sc-auth/login`,
+        { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ email, password }) },
+        () => setError("Server is waking up, please wait…"),
+      );
+      setError("");
       const data = await res.json();
       console.log("[auth] login response status:", res.status);
       if (!res.ok) { setError(data.error || "Login failed."); return; }
@@ -426,11 +456,12 @@ export function SignupEmailScreen({ onNavigate, state }: ScreenProps) {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch(`${API_BASE}/api/sc-auth/request-code`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, purpose: "signup" }),
-      });
+      const res = await fetchWithRetry(
+        `${API_BASE}/api/sc-auth/request-code`,
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, purpose: "signup" }) },
+        () => setError("Server is waking up, please wait…"),
+      );
+      setError("");
       const data = await res.json();
       if (!res.ok) { setError(data.error || "Failed to send code."); return; }
       onNavigate("signup-code", { email });
@@ -474,11 +505,12 @@ export function SignupCodeScreen({ onNavigate, state }: ScreenProps) {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch(`${API_BASE}/api/sc-auth/verify-code`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: state.email, code, purpose: "signup" }),
-      });
+      const res = await fetchWithRetry(
+        `${API_BASE}/api/sc-auth/verify-code`,
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: state.email, code, purpose: "signup" }) },
+        () => setError("Server is waking up, please wait…"),
+      );
+      setError("");
       const data = await res.json();
       if (!res.ok) { setError(data.error || "Invalid code."); return; }
       onNavigate("signup-password", { email: state.email, verifiedToken: data.verifiedToken });
@@ -493,11 +525,12 @@ export function SignupCodeScreen({ onNavigate, state }: ScreenProps) {
     setResending(true);
     setError("");
     try {
-      await fetch(`${API_BASE}/api/sc-auth/request-code`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: state.email, purpose: "signup" }),
-      });
+      await fetchWithRetry(
+        `${API_BASE}/api/sc-auth/request-code`,
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: state.email, purpose: "signup" }) },
+        () => setError("Server is waking up, please wait…"),
+      );
+      setError("");
     } finally {
       setResending(false);
     }
@@ -541,17 +574,12 @@ export function SignupPasswordScreen({ onNavigate, state, onLoginSuccess }: Scre
     setLoading(true);
     setError("");
     try {
-      const res = await fetch(`${API_BASE}/api/sc-auth/register`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({
-          email: state.email,
-          verifiedToken: state.verifiedToken,
-          password,
-          confirmPassword: confirm,
-        }),
-      });
+      const res = await fetchWithRetry(
+        `${API_BASE}/api/sc-auth/register`,
+        { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ email: state.email, verifiedToken: state.verifiedToken, password, confirmPassword: confirm }) },
+        () => setError("Server is waking up, please wait…"),
+      );
+      setError("");
       const data = await res.json();
       console.log("[auth] register response status:", res.status);
       if (!res.ok) { setError(data.error || "Registration failed."); return; }
@@ -611,11 +639,12 @@ export function ForgotEmailScreen({ onNavigate }: ScreenProps) {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch(`${API_BASE}/api/sc-auth/request-code`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, purpose: "password_reset" }),
-      });
+      const res = await fetchWithRetry(
+        `${API_BASE}/api/sc-auth/request-code`,
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, purpose: "password_reset" }) },
+        () => setError("Server is waking up, please wait…"),
+      );
+      setError("");
       const data = await res.json();
       if (!res.ok) { setError(data.error || "Failed to send code."); return; }
       onNavigate("forgot-code", { email });
@@ -654,11 +683,12 @@ export function ForgotCodeScreen({ onNavigate, state }: ScreenProps) {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch(`${API_BASE}/api/sc-auth/verify-code`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: state.email, code, purpose: "password_reset" }),
-      });
+      const res = await fetchWithRetry(
+        `${API_BASE}/api/sc-auth/verify-code`,
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: state.email, code, purpose: "password_reset" }) },
+        () => setError("Server is waking up, please wait…"),
+      );
+      setError("");
       const data = await res.json();
       if (!res.ok) { setError(data.error || "Invalid code."); return; }
       onNavigate("forgot-password", { email: state.email, verifiedToken: data.verifiedToken });
@@ -672,11 +702,10 @@ export function ForgotCodeScreen({ onNavigate, state }: ScreenProps) {
   async function handleResend() {
     setResending(true);
     try {
-      await fetch(`${API_BASE}/api/sc-auth/request-code`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: state.email, purpose: "password_reset" }),
-      });
+      await fetchWithRetry(
+        `${API_BASE}/api/sc-auth/request-code`,
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: state.email, purpose: "password_reset" }) },
+      );
     } finally {
       setResending(false);
     }
@@ -720,16 +749,12 @@ export function ForgotPasswordScreen({ onNavigate, state }: ScreenProps) {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch(`${API_BASE}/api/sc-auth/reset-password`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: state.email,
-          verifiedToken: state.verifiedToken,
-          newPassword: password,
-          confirmPassword: confirm,
-        }),
-      });
+      const res = await fetchWithRetry(
+        `${API_BASE}/api/sc-auth/reset-password`,
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: state.email, verifiedToken: state.verifiedToken, newPassword: password, confirmPassword: confirm }) },
+        () => setError("Server is waking up, please wait…"),
+      );
+      setError("");
       const data = await res.json();
       if (!res.ok) { setError(data.error || "Password reset failed."); return; }
       onNavigate("forgot-done");

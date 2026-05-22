@@ -34,7 +34,16 @@ interface AdpHistoryPoint {
 interface AdpHistoryResponse {
   playerId: string;
   buckets: AdpHistoryPoint[];
-  daily: Array<{ date: string; avgPick: number; count: number }>;
+  /** One bucket per calendar month the player was drafted in, last 36 months.
+   *  Months with zero picks are omitted, so recent rookies naturally return
+   *  fewer than 36 entries — the chart range is the player's NFL career or
+   *  3 years, whichever is shorter. Optional so older cached responses
+   *  (pre-monthly rollout) don't crash the client. */
+  monthly?: Array<{ month: string; avgPick: number; count: number }>;
+  // Legacy field — pre-monthly server returned a daily series capped at 90
+  // days. New server returns this empty; we leave the type here so a stale
+  // cached response stays type-compatible.
+  daily?: Array<{ date: string; avgPick: number; count: number }>;
   // Optional — older cached responses may omit. UI hides the per-round
   // distribution row when absent.
   pickHistogram?: Array<{ pickNo: number; count: number }>;
@@ -740,13 +749,17 @@ function PpgTrend({ seasons }: { seasons: ProductionSeason[] }) {
           </span>
         )}
       </div>
-      <div className="flex items-end gap-2 h-14">
+      {/* items-stretch (the default) — `items-end` previously collapsed each
+           column to its intrinsic height, which broke the bar's percentage-
+           height cascade (flex-1 → 0px → bar at 0px). Stretching gives the
+           inner flex-1 a definite parent so the bar percentages render. */}
+      <div className="flex items-stretch gap-2 h-14">
         {ordered.map((s, i) => {
           const isLatest = i === ordered.length - 1;
           const heightPct = (s.ppg / maxPpg) * 100;
           return (
-            <div key={s.season} className="flex-1 flex flex-col items-center gap-1 min-w-0">
-              <div className="flex-1 w-full flex items-end">
+            <div key={s.season} className="flex-1 flex flex-col items-center gap-1 min-w-0 h-full">
+              <div className="flex-1 w-full flex items-end min-h-0">
                 <div
                   className={cn("w-full rounded-t-sm", isLatest ? "bg-[#d4af37]" : "bg-[#d4af37]/40")}
                   style={{ height: `${Math.max(6, heightPct)}%` }}
@@ -794,7 +807,6 @@ function AdpHistoryTab({ playerId, active, ctxLabel, filterQuery, teams }: { pla
   const [data, setData] = useState<AdpHistoryResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [range, setRange] = useState<"7d" | "30d" | "90d" | "all">("90d");
 
   useEffect(() => {
     if (!active) return;
@@ -816,48 +828,34 @@ function AdpHistoryTab({ playerId, active, ctxLabel, filterQuery, teams }: { pla
     return () => { cancelled = true; };
   }, [playerId, active, filterQuery]);
 
-  // useMemo must be called unconditionally before any early returns.
-  const filteredDaily = useMemo(() => {
-    if (!data || data.daily.length === 0) return [];
-    if (range === "all") return data.daily;
-    const days = range === "7d" ? 7 : range === "30d" ? 30 : 90;
-    const cutoffMs = Date.now() - days * 24 * 60 * 60 * 1000;
-    return data.daily.filter((d) => new Date(d.date).getTime() >= cutoffMs);
-  }, [data, range]);
-
   if (loading) return <div className="flex items-center gap-2 text-muted-foreground text-sm"><Loader2 className="w-4 h-4 animate-spin"/>Loading ADP history…</div>;
   if (error)   return <div className="flex items-center gap-2 text-rose-400 text-sm"><AlertCircle className="w-4 h-4"/>{error}</div>;
   if (!data)   return <div className="text-sm text-muted-foreground">No history yet.</div>;
 
-  const hasDaily = filteredDaily.length >= 2;
+  const monthly = data.monthly ?? [];
+  const hasMonthly = monthly.length >= 2;
   const summary = buildAdpSummary(data);
   const trendBadge = buildTrendBadge(data);
   const roundBars = buildRoundBars(data.pickHistogram ?? [], teams);
 
   return (
     <div className="space-y-3 text-[12px]" data-testid="adp-history-tab">
-      {/* Compact pill row for window switching — no boxed cards. */}
+      {/* Summary stat chips — windowed averages from the buckets payload.
+          No longer drive the chart; the chart is always the monthly series. */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
-          {(["7d", "30d", "90d", "all"] as const).map((r) => {
+          {(["7d", "30d", "90d"] as const).map((r) => {
             const b = data.buckets.find((x) => x.window === r);
             const adp = b?.avgPick != null ? b.avgPick.toFixed(1) : "—";
             return (
-              <button
+              <span
                 key={r}
-                type="button"
-                onClick={() => setRange(r)}
-                className={cn(
-                  "inline-flex items-baseline gap-1 px-2 py-0.5 rounded-full transition-colors",
-                  range === r
-                    ? "bg-[#d4af37]/15 text-[#d4af37] border border-[#d4af37]/40"
-                    : "border border-transparent text-white/55 hover:text-white/85",
-                )}
+                className="inline-flex items-baseline gap-1 px-2 py-0.5 rounded-full border border-white/8 bg-white/[0.02] text-white/65"
                 data-testid={`adp-range-${r}`}
               >
                 <span className="uppercase tracking-wider">{r.toUpperCase()}</span>
-                <span className="font-bold tabular-nums text-[11px]">{adp}</span>
-              </button>
+                <span className="font-bold tabular-nums text-[11px] text-white/85">{adp}</span>
+              </span>
             );
           })}
         </div>
@@ -874,6 +872,7 @@ function AdpHistoryTab({ playerId, active, ctxLabel, filterQuery, teams }: { pla
         <div className="flex items-center justify-between text-[10px] uppercase tracking-wider text-muted-foreground mb-1.5">
           <span className="flex items-center gap-1.5">
             ADP over time
+            <span className="text-white/35 normal-case tracking-normal">· monthly · 3y</span>
             {trendBadge && (
               <span
                 className={cn("inline-flex items-center gap-0.5 px-1.5 py-px rounded-full text-[9px] normal-case tracking-normal", trendBadge.className)}
@@ -885,9 +884,9 @@ function AdpHistoryTab({ playerId, active, ctxLabel, filterQuery, teams }: { pla
           </span>
           <span className="text-white/40 normal-case tracking-normal">Lower = earlier drafted</span>
         </div>
-        {hasDaily ? <DailyAdpLine series={filteredDaily} /> : (
+        {hasMonthly ? <MonthlyAdpLine series={monthly} /> : (
           <div className="rounded-md border border-white/8 bg-white/[0.02] py-6 text-center text-[11px] text-muted-foreground italic">
-            Not enough data points in the selected window yet.
+            Not enough monthly data yet — this player needs picks in at least two different months.
           </div>
         )}
       </div>
@@ -979,7 +978,18 @@ function buildAdpSummary(data: AdpHistoryResponse): string | null {
   return `ADP has slipped about ${delta.toFixed(1)} spots over the last 30 days — value is softening.`;
 }
 
-function DailyAdpLine({ series }: { series: Array<{ date: string; avgPick: number; count: number }> }) {
+/** "2025-08" → "Aug 2025". Used for tooltip + axis labels in MonthlyAdpLine.
+ *  Returns the input unchanged if the format doesn't match. */
+function formatMonthLabel(month: string): string {
+  const m = /^(\d{4})-(\d{2})$/.exec(month);
+  if (!m) return month;
+  const year = m[1];
+  const monthIdx = parseInt(m[2], 10) - 1;
+  const NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  return `${NAMES[monthIdx] ?? m[2]} ${year}`;
+}
+
+function MonthlyAdpLine({ series }: { series: Array<{ month: string; avgPick: number; count: number }> }) {
   const W = 480, H = 150, PAD_X = 24, PAD_Y = 16;
   const xs = series.map((_, i) => i);
   const ys = series.map((s) => s.avgPick);
@@ -1002,7 +1012,7 @@ function DailyAdpLine({ series }: { series: Array<{ date: string; avgPick: numbe
 
   // Hover tracking. We store the index of the nearest data point to keep the
   // tooltip locked to real observations rather than interpolated y-values
-  // (would otherwise display a fake "ADP 2.34" between two daily points).
+  // (would otherwise display a fake "ADP 2.34" between two monthly points).
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
 
@@ -1049,8 +1059,12 @@ function DailyAdpLine({ series }: { series: Array<{ date: string; avgPick: numbe
         <line x1={PAD_X} y1={avgY} x2={W - PAD_X} y2={avgY} stroke="rgba(255,255,255,0.18)" strokeWidth={0.7} strokeDasharray="2 3" />
         {/* Soft area under the line. */}
         <path d={`${pathD} L ${W - PAD_X} ${H - PAD_Y} L ${PAD_X} ${H - PAD_Y} Z`} fill="url(#adpFade)" />
-        {/* The line itself — thin gold bezier, no per-point markers. */}
+        {/* The line itself — thin gold bezier. Monthly dots get a marker so
+             sparse series (recent rookies) don't render as a single segment. */}
         <path d={pathD} fill="none" stroke="#d4af37" strokeWidth={1.4} strokeLinecap="round" strokeLinejoin="round" />
+        {series.map((s, i) => (
+          <circle key={s.month} cx={xAt(i)} cy={yAt(s.avgPick)} r={1.8} fill="#d4af37" opacity={0.55} />
+        ))}
         {/* High / low markers — the two points worth annotating. */}
         <circle cx={xAt(lo.i)} cy={yAt(lo.v)} r={2.6} fill="#22d3ee" />
         <circle cx={xAt(hi.i)} cy={yAt(hi.v)} r={2.6} fill="#fb7185" />
@@ -1070,15 +1084,15 @@ function DailyAdpLine({ series }: { series: Array<{ date: string; avgPick: numbe
           )}
           data-testid="adp-history-tooltip"
         >
-          <div className="text-white/55 tabular-nums">{hoverPoint.date}</div>
+          <div className="text-white/55">{formatMonthLabel(hoverPoint.month)}</div>
           <div className="text-[#d4af37] tabular-nums font-bold text-[11px]">ADP {hoverPoint.avgPick.toFixed(1)}</div>
           <div className="text-white/55 tabular-nums">{hoverPoint.count.toLocaleString()} {hoverPoint.count === 1 ? "draft" : "drafts"}</div>
         </div>
       )}
-      <div className="flex justify-between text-[9px] text-muted-foreground tabular-nums mt-1">
-        <span>{series[0]?.date}</span>
-        <span className="text-[#d4af37]">avg ADP {(ys.reduce((s, n) => s + n, 0) / ys.length).toFixed(1)}</span>
-        <span>{series[series.length - 1]?.date}</span>
+      <div className="flex justify-between text-[9px] text-muted-foreground mt-1">
+        <span>{series[0] ? formatMonthLabel(series[0].month) : ""}</span>
+        <span className="text-[#d4af37] tabular-nums">avg ADP {(ys.reduce((s, n) => s + n, 0) / ys.length).toFixed(1)}</span>
+        <span>{series[series.length - 1] ? formatMonthLabel(series[series.length - 1].month) : ""}</span>
       </div>
     </div>
   );
