@@ -243,9 +243,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // eslint-disable-next-line no-console
       console.info(`[sc-auth] /api/sc-auth/me status: ${res.status}`);
 
-      // 401 = token genuinely invalid or expired. Clear it so the user
-      // sees the login screen rather than being stuck in a retry loop.
-      if (res.status === 401) { failClosedNoDc("401 from /me", true); return; }
+      if (res.status === 401) {
+        // The server may be warming up and the session is simply empty —
+        // that's NOT a reason to wipe a perfectly valid JWT. We only clear
+        // the token when the server explicitly tells us the JWT itself is
+        // cryptographically bad (jwtBad: true). Any other 401 (no session,
+        // DB not yet ready, etc.) is treated like a transient failure: keep
+        // the token and let the retry logic below handle it.
+        const body = await res.json().catch(() => null);
+        const tokenIsBad = !!(body as any)?.jwtBad;
+        // eslint-disable-next-line no-console
+        console.info(`[sc-auth] 401 from /me — jwtBad=${tokenIsBad}`);
+        failClosedNoDc("401 from /me", tokenIsBad);
+        if (!tokenIsBad && getStoredToken()) {
+          // Server said "not authenticated" but the JWT looks fine locally —
+          // treat this like a network hiccup and retry.
+          if (retryCountRef.current < 5) {
+            retryCountRef.current += 1;
+            const delayMs = Math.min(5_000 * retryCountRef.current, 20_000);
+            // eslint-disable-next-line no-console
+            console.info(`[sc-auth] 401 without jwtBad — retry ${retryCountRef.current} in ${delayMs / 1000}s`);
+            retryTimerRef.current = setTimeout(() => { void checkSession(); }, delayMs);
+            finalStatus = "loading";
+          }
+        }
+        return;
+      }
       // Any other non-OK (5xx, 404 from a misrouted proxy, etc.) degrades
       // to guest mode but intentionally keeps the JWT intact — the server
       // may be temporarily unavailable and the token is still valid.

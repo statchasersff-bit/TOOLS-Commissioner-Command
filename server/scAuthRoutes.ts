@@ -32,21 +32,28 @@ function signUserJwt(userId: string): string {
 }
 
 export function getUserIdFromRequest(req: Request): string | null {
-  // Prefer a valid Bearer token, but if it fails to verify (e.g. the server
-  // restarted with a new SESSION_SECRET, invalidating an older token still
-  // sitting in localStorage) fall through to the session cookie instead of
-  // returning null — otherwise a stale localStorage token can wedge a user
-  // out of admin routes even when their cookie session is fine.
+  return getAuthResult(req).userId;
+}
+
+/**
+ * Richer auth result used by /me so the client can distinguish "your JWT is
+ * cryptographically bad (clear it)" from "no session found (keep the token,
+ * the server may just be starting up)".
+ */
+export function getAuthResult(req: Request): { userId: string | null; jwtVerifyFailed: boolean } {
   const auth = req.headers.authorization;
+  let jwtVerifyFailed = false;
   if (auth?.startsWith("Bearer ")) {
     try {
       const payload = jwt.verify(auth.slice(7), JWT_SECRET) as any;
-      if (payload.scUserId) return payload.scUserId;
+      if (payload.scUserId) return { userId: payload.scUserId, jwtVerifyFailed: false };
     } catch (err: any) {
       console.warn("[sc-auth] Bearer token verify failed, falling back to session:", err?.message);
+      jwtVerifyFailed = true;
     }
   }
-  return (req.session as any).scUserId ?? null;
+  const sessionUserId = (req.session as any).scUserId ?? null;
+  return { userId: sessionUserId, jwtVerifyFailed };
 }
 
 function getIp(req: Request): string {
@@ -139,8 +146,13 @@ export function registerScAuthRoutes(app: Express): void {
   // GET /api/sc-auth/me
   app.get("/api/sc-auth/me", async (req, res) => {
     try {
-      const userId = getUserIdFromRequest(req);
-      if (!userId) return res.status(401).json({ error: "Not authenticated" });
+      const { userId, jwtVerifyFailed } = getAuthResult(req);
+      if (!userId) {
+        // jwtBad=true tells the client its stored token is cryptographically
+        // invalid and should be cleared. Without this flag the client MUST
+        // preserve the token — the server may simply be warming up.
+        return res.status(401).json({ error: "Not authenticated", jwtBad: jwtVerifyFailed });
+      }
       const user = await getUser(userId);
       if (!user) {
         req.session.destroy(() => {});
