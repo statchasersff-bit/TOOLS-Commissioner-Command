@@ -12,7 +12,6 @@ import { maskToken, DEV_JWT_KEY } from "@/lib/sleeperAuthToken";
 import { detectLiveDrafts as detectLiveDraftsApi, fetchDraftBoard as fetchDraftBoardApi, fetchDraftState, getDraftQueue, getDraftAutopickers, updateDraftQueue as updateDraftQueueApi, fetchSleeperLeagueFull } from "@/lib/sleeperApi";
 import { DraftPickConfirmModal, type DraftPickTarget } from "@/components/DraftPickConfirmModal";
 import { useToast } from "@/hooks/use-toast";
-import { useIsMobile } from "@/hooks/use-mobile";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { SleeperUserAvatar } from "@/components/SleeperUserAvatar";
 import { useManagerIntel } from "@/contexts/ManagerIntelContext";
@@ -1331,7 +1330,7 @@ function ManagerTimingsSection({ history, teams, livePickUserId, liveElapsedMs, 
   onConnectSleeper?: () => void;
 }) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [sectionCollapsed, setSectionCollapsed] = useState(false);
+  const [sectionCollapsed, setSectionCollapsed] = useState(true);
   // Default = avg desc so the slowest managers (the ones holding up the
   // room) appear first. Spec: "Sort default by average pick time
   // descending so slowest managers are easy to identify."
@@ -2563,12 +2562,6 @@ export default function LiveDraft({ onConnectSleeper }: { onConnectSleeper?: () 
   // Board overlay picker — controls the visual treatment applied to the
   // live draft board (Value / ADP / Positional / Tier / Exposure). Wired
   // through DraftStateHeader; downstream board renderer can opt-in.
-  // Time-On-Clock section starts expanded — collapsible for screen real
-  // estate once the user has a feel for the draft flow.
-
-  // Mobile flag drives the default open-state for the Players panel below.
-  const isMobile = useIsMobile();
-
   // ── My Team roster (current league roster, not picks in this draft) ───
   // Loaded once per (league, user) and shared with the PlayersPanel "My Team"
   // tab. Independent of the draft picks tracked elsewhere.
@@ -3994,7 +3987,7 @@ export default function LiveDraft({ onConnectSleeper }: { onConnectSleeper?: () 
             myRosterError={isStartupDraft ? null : myTeamRosterError}
             hasActiveLeague={!!activeLeagueId}
             isConnected={isConnected}
-            defaultOpen={!isMobile}
+            defaultOpen={false}
             rosterSlots={myTeamLeagueSlots?.starterPositions ?? null}
             isStartupDraft={isStartupDraft}
             redraftValueBySleeperId={isStartupDraft ? redraftValuesBySleeperId : null}

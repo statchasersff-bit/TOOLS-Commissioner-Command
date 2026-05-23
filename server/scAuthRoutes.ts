@@ -1,5 +1,5 @@
 import jwt from "jsonwebtoken";
-import type { Express, Request } from "express";
+import type { Express, Request, Response } from "express";
 import {
   sendVerificationCode,
   verifyCode,
@@ -26,9 +26,53 @@ import {
 
 const JWT_SECRET = process.env.SESSION_SECRET || "fallback-dev-secret";
 const JWT_EXPIRES = "30d";
+const JWT_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+
+// httpOnly cookie that mirrors the JWT stored in the browser's localStorage.
+// This is the key resilience layer: if JavaScript ever clears localStorage
+// (our own clearToken(), browser data wipe, etc.) the cookie keeps the user
+// logged in and /me will restore the localStorage token automatically.
+const SC_JWT_COOKIE = "sc.jwt";
 
 function signUserJwt(userId: string): string {
   return jwt.sign({ scUserId: userId }, JWT_SECRET, { expiresIn: JWT_EXPIRES });
+}
+
+/** Set the JWT httpOnly cookie on a response. */
+function setJwtCookie(res: Response, token: string): void {
+  res.cookie(SC_JWT_COOKIE, token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+    maxAge: JWT_MAX_AGE_MS,
+  });
+}
+
+/** Clear the JWT httpOnly cookie on a response. */
+function clearJwtCookie(res: Response): void {
+  res.clearCookie(SC_JWT_COOKIE, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+  });
+}
+
+/**
+ * Read the JWT from the raw Cookie header without needing cookie-parser.
+ * Returns null if the cookie is absent or undecodable.
+ */
+function readJwtCookie(req: Request): string | null {
+  const header = req.headers.cookie;
+  if (!header) return null;
+  for (const part of header.split(";")) {
+    const trimmed = part.trim();
+    if (trimmed.startsWith(`${SC_JWT_COOKIE}=`)) {
+      try {
+        return decodeURIComponent(trimmed.slice(SC_JWT_COOKIE.length + 1));
+      } catch { return null; }
+    }
+  }
+  return null;
 }
 
 export function getUserIdFromRequest(req: Request): string | null {
@@ -39,21 +83,51 @@ export function getUserIdFromRequest(req: Request): string | null {
  * Richer auth result used by /me so the client can distinguish "your JWT is
  * cryptographically bad (clear it)" from "no session found (keep the token,
  * the server may just be starting up)".
+ *
+ * Auth priority:
+ *   1. Bearer header  — primary path (localStorage token sent as Authorization)
+ *   2. sc.jwt cookie  — httpOnly backup (survives localStorage clears)
+ *   3. Session cookie — legacy fallback
+ *
+ * `cookieToken` is set when auth succeeded via the cookie so /me can echo it
+ * back to the client as `freshToken`, restoring localStorage automatically.
  */
-export function getAuthResult(req: Request): { userId: string | null; jwtVerifyFailed: boolean } {
+export function getAuthResult(req: Request): {
+  userId: string | null;
+  jwtVerifyFailed: boolean;
+  cookieToken: string | null;
+} {
+  // ── 1. Bearer header ──────────────────────────────────────────────────────
   const auth = req.headers.authorization;
   let jwtVerifyFailed = false;
   if (auth?.startsWith("Bearer ")) {
     try {
       const payload = jwt.verify(auth.slice(7), JWT_SECRET) as any;
-      if (payload.scUserId) return { userId: payload.scUserId, jwtVerifyFailed: false };
+      if (payload.scUserId) return { userId: payload.scUserId, jwtVerifyFailed: false, cookieToken: null };
     } catch (err: any) {
-      console.warn("[sc-auth] Bearer token verify failed, falling back to session:", err?.message);
+      console.warn("[sc-auth] Bearer token verify failed, trying cookie:", err?.message);
       jwtVerifyFailed = true;
     }
   }
+
+  // ── 2. sc.jwt httpOnly cookie ─────────────────────────────────────────────
+  const cookieJwt = readJwtCookie(req);
+  if (cookieJwt) {
+    try {
+      const payload = jwt.verify(cookieJwt, JWT_SECRET) as any;
+      if (payload.scUserId) {
+        console.info("[sc-auth] authenticated via JWT cookie (localStorage was empty/cleared)");
+        return { userId: payload.scUserId, jwtVerifyFailed: false, cookieToken: cookieJwt };
+      }
+    } catch (err: any) {
+      console.warn("[sc-auth] JWT cookie verify failed:", err?.message);
+      jwtVerifyFailed = true;
+    }
+  }
+
+  // ── 3. Session cookie ─────────────────────────────────────────────────────
   const sessionUserId = (req.session as any).scUserId ?? null;
-  return { userId: sessionUserId, jwtVerifyFailed };
+  return { userId: sessionUserId, jwtVerifyFailed, cookieToken: null };
 }
 
 function getIp(req: Request): string {
@@ -112,7 +186,9 @@ export function registerScAuthRoutes(app: Express): void {
       if (!result.ok) return res.status(400).json({ error: result.error });
       (req.session as any).scUserId = result.userId;
       req.session.save(() => {});
-      res.json({ ok: true, token: signUserJwt(result.userId) });
+      const token = signUserJwt(result.userId);
+      setJwtCookie(res, token);
+      res.json({ ok: true, token });
     } catch (err: any) {
       console.error("[sc-auth] register error:", err.message);
       res.status(500).json({ error: "Registration failed. Please try again." });
@@ -128,7 +204,9 @@ export function registerScAuthRoutes(app: Express): void {
       if (!result.ok) return res.status(401).json({ error: result.error });
       (req.session as any).scUserId = result.userId;
       req.session.save(() => {});
-      res.json({ ok: true, token: signUserJwt(result.userId) });
+      const token = signUserJwt(result.userId);
+      setJwtCookie(res, token);
+      res.json({ ok: true, token });
     } catch (err: any) {
       console.error("[sc-auth] login error:", err.message);
       res.status(500).json({ error: "Login failed. Please try again." });
@@ -139,6 +217,7 @@ export function registerScAuthRoutes(app: Express): void {
   app.post("/api/sc-auth/logout", (req, res) => {
     req.session.destroy(() => {
       res.clearCookie("sc.sid");
+      clearJwtCookie(res);
       res.json({ ok: true });
     });
   });
@@ -146,7 +225,7 @@ export function registerScAuthRoutes(app: Express): void {
   // GET /api/sc-auth/me
   app.get("/api/sc-auth/me", async (req, res) => {
     try {
-      const { userId, jwtVerifyFailed } = getAuthResult(req);
+      const { userId, jwtVerifyFailed, cookieToken } = getAuthResult(req);
       if (!userId) {
         // jwtBad=true tells the client its stored token is cryptographically
         // invalid and should be cleared. Without this flag the client MUST
@@ -188,6 +267,12 @@ export function registerScAuthRoutes(app: Express): void {
           }
         : null;
 
+      // Refresh the JWT cookie on every successful /me so the 30-day expiry
+      // slides forward with each visit, not just from the original login.
+      if (cookieToken) {
+        setJwtCookie(res, cookieToken); // already have the raw token from cookie
+      }
+
       res.json({
         user: {
           id: user.id,
@@ -199,6 +284,10 @@ export function registerScAuthRoutes(app: Express): void {
         appMode,
         subscription,
         devOverrides,
+        // Present when auth succeeded via the JWT cookie but localStorage was
+        // empty. The client uses this to restore sc_auth_token so subsequent
+        // requests use the Authorization header path again.
+        freshToken: cookieToken ?? undefined,
       });
     } catch (err: any) {
       console.error("[sc-auth] me error:", err.message);

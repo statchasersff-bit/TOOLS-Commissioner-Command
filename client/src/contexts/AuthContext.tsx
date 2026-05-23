@@ -300,6 +300,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         clearSleeperSession();
       }
 
+      // If the server authenticated via the JWT cookie (localStorage was
+      // empty/cleared), it echoes the token back as `freshToken`. Restore it
+      // to localStorage so subsequent requests use the Authorization header
+      // path again instead of relying on the cookie every time.
+      if (data.freshToken && !getStoredToken()) {
+        // eslint-disable-next-line no-console
+        console.info("[sc-auth] restoring sc_auth_token from server JWT cookie");
+        saveToken(data.freshToken);
+      }
+
       // Successful auth — reset the retry counter so any future overnight
       // restart gets the full 5-retry budget again.
       retryCountRef.current = 0;
