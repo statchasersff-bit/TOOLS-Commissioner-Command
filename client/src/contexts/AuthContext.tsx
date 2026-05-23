@@ -277,6 +277,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         clearSleeperSession();
       }
 
+      // Successful auth — reset the retry counter so any future overnight
+      // restart gets the full 5-retry budget again.
+      retryCountRef.current = 0;
+      if (retryTimerRef.current) { clearTimeout(retryTimerRef.current); retryTimerRef.current = null; }
+
       setUser(data.user);
       setServerIsAdmin(!!data.isAdmin);
       // /me now carries the server-canonical app mode + subscription so
@@ -350,16 +355,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // unavailable. Keeping the token means the next page load will restore
       // the session automatically once the server is back up.
       const isAbort = err instanceof DOMException && err.name === "AbortError";
+      const storedToken = getStoredToken();
+      const MAX_RETRIES = 5;
       // eslint-disable-next-line no-console
       console.warn(
-        `[sc-auth] session check ${isAbort ? "timed out" : "failed"} — continuing as guest (token preserved)`,
+        `[sc-auth] session check ${isAbort ? "timed out" : "failed"}`,
+        storedToken
+          ? `— token preserved, retry ${retryCountRef.current + 1}/${MAX_RETRIES}`
+          : "— no token, continuing as guest",
         err
       );
       setUser(null);
       setSleeperInfo(null);
       setServerIsAdmin(false);
       setSleeperSource(readOnly ? "read-only" : "none");
-      finalStatus = "unauthenticated";
+
+      // If a JWT exists and we haven't exhausted retries, keep showing the
+      // loading screen and retry automatically. This recovers from overnight
+      // VM restarts without forcing the user to manually refresh or log in.
+      if (storedToken && retryCountRef.current < MAX_RETRIES) {
+        retryCountRef.current += 1;
+        const delayMs = Math.min(5_000 * retryCountRef.current, 20_000);
+        // eslint-disable-next-line no-console
+        console.info(`[sc-auth] scheduling retry ${retryCountRef.current} in ${delayMs / 1000}s`);
+        retryTimerRef.current = setTimeout(() => { void checkSession(); }, delayMs);
+        finalStatus = "loading"; // keep the splash, not the login screen
+      } else {
+        // No token or retries exhausted — surface guest mode so the user
+        // can at least use the app as a guest.
+        retryCountRef.current = 0;
+        finalStatus = "unauthenticated";
+      }
     } finally {
       // Single point of release. No code path above sets `status` directly,
       // so this line is the *only* thing that can flip the bootstrap splash
@@ -370,6 +396,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  // Retry state for server-restart recovery. When the server is temporarily
+  // unreachable and we have a stored JWT, we keep showing "loading" and
+  // schedule an automatic retry so the user doesn't land on the login screen
+  // after an overnight VM restart. Cap at 5 retries (~60s total) to avoid
+  // spinning indefinitely when the server is genuinely unavailable.
+  const retryCountRef = useRef(0);
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // StrictMode (and any incidental remount) would otherwise fire two
   // overlapping /me requests on first paint. The ref guard makes the
   // initial bootstrap exactly-once; explicit re-checks via onLoginSuccess /
@@ -379,6 +413,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (bootstrapRanRef.current) return;
     bootstrapRanRef.current = true;
     void checkSession();
+    return () => {
+      if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+    };
   }, [checkSession]);
 
   const onLoginSuccess = useCallback(async (token: string) => {
