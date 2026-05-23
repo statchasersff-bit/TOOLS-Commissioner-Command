@@ -1143,7 +1143,7 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
                             username={team.owner}
                             avatar={team.avatar}
                             leagueId={league.id}
-                            className={`font-semibold text-foreground ${isUser ? "text-[#0b3a7a] dark:text-blue-400" : ""}`}
+                            className="font-semibold text-foreground"
                           >
                             {team.owner}
                           </ManagerNameButton>

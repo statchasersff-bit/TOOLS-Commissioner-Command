@@ -57,6 +57,7 @@ export const MODULE_ACCESS: Record<string, AccessRequirement> = {
   "league-market:analysis": "readonly",
   "league-market:market-value": "readonly",
   "league-market:compare-players": "readonly",
+  "league-market:position-stats": "public",
 
   // Draft — public ADP data + Sleeper draft tracker. Both require at
   // most a Sleeper username for the live tracker (which itself prompts

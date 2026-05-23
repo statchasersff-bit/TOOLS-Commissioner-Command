@@ -159,6 +159,19 @@ const statsCache   = makeCache<any>(5 * 60 * 1000);   // 5-min TTL
 const searchCache  = makeCache<any>(2 * 60 * 1000);   // 2-min TTL
 const playoffCalcCache = makeCache<any>(10 * 60 * 1000); // 10-min TTL
 const weeklyMatchupsCache = makeCache<any>(5 * 60 * 1000); // 5-min TTL — live scores need fresher data
+const statChasersDataCache = makeCache<any>(10 * 60 * 1000); // 10-min TTL — public-data repo JSON
+
+// Allowed axes for the StatChasers public-data proxy. Kept in lock-step with
+// client/src/lib/statChasersDataConfig.ts. If the data repo grows new
+// positions/categories/years, update both this file and the client config.
+// Default branch is `master`; data is nested one extra `statchasers-data/`
+// directory deep (the repo wraps a Replit workspace). Mirror updates here
+// and in client/src/lib/statChasersDataConfig.ts.
+const STATCHASERS_DATA_BASE =
+  "https://raw.githubusercontent.com/statchasersff-bit/statchasers-data/master/statchasers-data/output";
+const STATCHASERS_POSITIONS = new Set(["qb", "rb", "wr", "te"]);
+const STATCHASERS_CATEGORIES = new Set(["overview", "usage", "efficiency", "stat_explorer"]);
+const STATCHASERS_YEARS = new Set([2023, 2024, 2025]);
 
 export async function registerRoutes(
   httpServer: Server,
@@ -544,6 +557,77 @@ export async function registerRoutes(
       res.json(stats);
     } catch (err: any) {
       res.status(500).json({ error: err.message || "Failed to get trade stats" });
+    }
+  });
+
+  // ── StatChasers public-data proxy ─────────────────────────────────────────
+  // Mirrors the static JSON files in statchasersff-bit/statchasers-data so
+  // the frontend has one cached entrypoint instead of fanning out to raw
+  // GitHub URLs. Cached server-side for 10 minutes per (position, category,
+  // year) tuple. See client/src/lib/statChasersDataConfig.ts for the
+  // canonical axes.
+  app.get("/api/statchasers-data/positions/:position/:category/:year", async (req, res) => {
+    try {
+      const position = String(req.params.position ?? "").toLowerCase();
+      const category = String(req.params.category ?? "");
+      const yearNum = parseInt(String(req.params.year ?? ""), 10);
+
+      if (!STATCHASERS_POSITIONS.has(position)) {
+        return res.status(400).json({
+          error: `Invalid position "${req.params.position}". Expected one of: qb, rb, wr, te.`,
+        });
+      }
+      if (!STATCHASERS_CATEGORIES.has(category)) {
+        return res.status(400).json({
+          error: `Invalid category "${req.params.category}". Expected one of: overview, usage, efficiency, stat_explorer.`,
+        });
+      }
+      if (!Number.isFinite(yearNum) || !STATCHASERS_YEARS.has(yearNum)) {
+        return res.status(400).json({
+          error: `Invalid year "${req.params.year}". Expected one of: 2023, 2024, 2025.`,
+        });
+      }
+
+      const cacheKey = `${position}:${category}:${yearNum}`;
+      const cached = statChasersDataCache.get(cacheKey);
+      if (cached) {
+        res.setHeader("Cache-Control", "public, max-age=600");
+        return res.json(cached);
+      }
+
+      const url = `${STATCHASERS_DATA_BASE}/positions/${position}/${category}_${yearNum}.json`;
+      const upstream = await fetch(url, { headers: { Accept: "application/json" } });
+      const ct = upstream.headers.get("content-type") || "";
+      if (!upstream.ok) {
+        return res.status(upstream.status).json({
+          error: `Upstream fetch failed (${upstream.status} ${upstream.statusText})`,
+          url,
+        });
+      }
+      if (!ct.includes("application/json") && !ct.includes("text/plain")) {
+        return res.status(502).json({
+          error: `Non-JSON response from upstream (content-type=${ct || "none"})`,
+          url,
+        });
+      }
+      const text = await upstream.text();
+      let json: unknown;
+      try {
+        json = JSON.parse(text);
+      } catch (parseErr: any) {
+        return res.status(502).json({
+          error: `Failed to parse upstream JSON: ${parseErr?.message || parseErr}`,
+          url,
+        });
+      }
+      statChasersDataCache.set(cacheKey, json);
+      res.setHeader("Cache-Control", "public, max-age=600");
+      return res.json(json);
+    } catch (err: any) {
+      console.error("[statchasers-data] proxy error:", err);
+      return res.status(500).json({
+        error: err?.message || "Failed to fetch StatChasers data",
+      });
     }
   });
 

@@ -601,9 +601,15 @@ export function PortfolioSummary({ onNavigate }: { onNavigate?: (mainTab: string
     import("@/lib/sleeperApi").then(({ detectLiveDrafts }) => detectLiveDrafts(user.userId))
       .then((all) => {
         if (cancelled) return;
+        // Restrict to actually-in-progress startups (drafting / paused).
+        // Sleeper's /user/:id/leagues endpoint also surfaces pre_draft
+        // leagues from its public league browser / marketplace that the
+        // user merely showed interest in — those have a roster slot but
+        // the user isn't truly drafting, so they'd appear here as noise.
+        // Once a draft enters "drafting" only real participants remain.
         const startups = (all || []).filter((d: any) =>
           d.draftCategory === "startup" &&
-          (d.status === "drafting" || d.status === "paused" || d.status === "pre_draft")
+          (d.status === "drafting" || d.status === "paused")
         );
         setLiveStartupDrafts(startups);
         setLiveStartupDraftsLoading(false);
@@ -821,7 +827,7 @@ export function PortfolioSummary({ onNavigate }: { onNavigate?: (mainTab: string
               <div>
                 <h3 className="text-sm font-bold tracking-tight">Live Startup Drafts</h3>
                 <p className="text-[10.5px] text-muted-foreground leading-tight">
-                  {liveStartupDrafts.length} startup draft{liveStartupDrafts.length === 1 ? "" : "s"} in progress or about to start.
+                  {liveStartupDrafts.length} startup draft{liveStartupDrafts.length === 1 ? "" : "s"} in progress.
                 </p>
               </div>
             </div>

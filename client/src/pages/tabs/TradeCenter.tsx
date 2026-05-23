@@ -1182,7 +1182,7 @@ function CrossLeagueTradeIntel({ league }: { league: League }) {
 }
 
 export function TradeBlockScanner({ league }: { league: League }) {
-  const { getPlayerValue } = useValueModel();
+  const { getPlayerValue, getRedraftValue } = useValueModel();
   const [intelMode, setIntelMode] = useState<"block" | "intel">("block");
 
   const [sleeperJwt, setSleeperJwt] = useState<string | null>(() => getSleeperToken() ?? localStorage.getItem(SLEEPER_JWT_KEY));
@@ -1247,12 +1247,13 @@ export function TradeBlockScanner({ league }: { league: League }) {
           age: player?.age ?? 0,
           team: player?.team,
           ownerName: ownerTeam?.owner || ownerTeam?.name || `Roster ${ownerRosterId}`,
-          redraftVal: player ? getPlayerValue(player) : 0,
+          dynastyVal: player ? getPlayerValue(player) : 0,
+          redraftVal: player ? getRedraftValue(player) : 0,
           addedAt,
         };
       })
       .sort((a, b) => (b.addedAt ?? 0) - (a.addedAt ?? 0));
-  }, [lpsData, playerById, teamByRosterId, getPlayerValue]);
+  }, [lpsData, playerById, teamByRosterId, getPlayerValue, getRedraftValue]);
 
   const INTEL_TABS = [
     { id: "block" as const, label: "Trade Block", Icon: Target },

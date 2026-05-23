@@ -924,18 +924,6 @@ export default function TradeSync() {
         <KPICard label="All Trades"  value={kpis.allTrades}    icon={Activity}       color="bg-muted text-muted-foreground"                            loading={loading} onClick={() => setView("activity")}  active={view === "activity"}  />
       </div>
 
-      {/* Auth banner — public REST fallback only shows completed history */}
-      {!pendingTradesAvailable && (
-        <Card className="p-3 border-amber-500/30 bg-amber-500/5">
-          <div className="flex items-center gap-2">
-            <Lock className="w-4 h-4 text-amber-500 flex-shrink-0" />
-            <p className="text-xs text-muted-foreground">
-              <span className="font-semibold text-foreground">Connected Sleeper session required</span> to view pending incoming/outgoing trade offers. Sign in via <span className="font-semibold text-foreground">Waiver Command</span> to unlock. Completed trade history is shown below.
-            </p>
-          </div>
-        </Card>
-      )}
-
       {/* Errors */}
       {errors.length > 0 && (
         <Card className="p-3 border-amber-500/30 bg-amber-500/5">

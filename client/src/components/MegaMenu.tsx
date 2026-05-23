@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 import {
   BarChart2, LayoutDashboard, Users, Share2,
   Trophy, GitCompare, Coins, ArrowLeftRight, Database, Search,
-  Calculator, Eye, LineChart, TrendingUp, Zap, ChevronDown,
+  Calculator, Eye, LineChart, TrendingUp, Zap, ChevronDown, BarChart3,
   LucideIcon, Waves, Crosshair, LayoutGrid, Inbox, MessageCircle,
   Hexagon, ClipboardList, Target,
 } from "lucide-react";
@@ -77,6 +77,7 @@ const MEGA_DATA: Record<string, MegaSection[]> = {
         { subId: "analysis",        label: "Analysis",        description: "League trends & positional insights",           icon: LineChart  },
         { subId: "market-value",    label: "Market Value",    description: "Player market values across formats",           icon: TrendingUp },
         { subId: "compare-players", label: "Compare Players", description: "Side-by-side player value comparison",          icon: GitCompare },
+        { subId: "position-stats",  label: "Position Stats",  description: "Season QB/RB/WR/TE usage, efficiency, overview", icon: BarChart3  },
       ],
     },
   ],

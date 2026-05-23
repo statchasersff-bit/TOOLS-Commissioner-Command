@@ -3794,13 +3794,37 @@ export default function LiveDraft({ onConnectSleeper }: { onConnectSleeper?: () 
     }));
   }, [draftState, draftData, parsedPicks, pickTimings, teamCount]);
 
-  // detectLiveDrafts already guarantees: dynasty-only, user owns a roster,
-  // and at least 4 members have joined (filters out template leagues).
-  // No secondary filter needed — map directly to DraftSummary shape.
-  const portfolioFilteredDrafts = useMemo(
-    () => liveDrafts.map(normalizeFromDetect),
-    [liveDrafts],
-  );
+  // Sleeper's /user/:id/leagues endpoint includes leagues from its public
+  // League Browser / marketplace where the user expressed interest and
+  // got assigned a placeholder roster slot but isn't actually drafting.
+  // Those leak through detectLiveDrafts' roster-ownership check (Sleeper
+  // marks them owner_id=userId). To suppress them without hiding legit
+  // fresh startups:
+  //   - leagues already in useSleeper().leagues (rostered + players) → any
+  //     active status passes — covers established leagues with rookie
+  //     drafts about to start.
+  //   - leagues NOT in useSleeper().leagues → only drafting/paused passes —
+  //     blocks marketplace pre_draft noise. Real fresh startups still
+  //     surface here as soon as they enter drafting state.
+  const portfolioFilteredDrafts = useMemo(() => {
+    const rostered = new Set(leagues.map((l) => l.leagueId));
+    return liveDrafts
+      .filter((ld) => {
+        if (rostered.has(ld.leagueId)) return true;
+        const isLiveNow = ld.status === "drafting" || ld.status === "paused";
+        if (!isLiveNow) {
+          // eslint-disable-next-line no-console
+          console.log("[LIVE DRAFT DISCOVERY] hidden — non-rostered + not live", {
+            league_id: ld.leagueId,
+            draft_id: ld.draftId,
+            status: ld.status,
+          });
+          return false;
+        }
+        return true;
+      })
+      .map(normalizeFromDetect);
+  }, [liveDrafts, leagues]);
 
   // As soon as the user clicks a draft card, switch to draft-room mode
   // immediately — hide the lobby and show the room shell + loading spinner.
