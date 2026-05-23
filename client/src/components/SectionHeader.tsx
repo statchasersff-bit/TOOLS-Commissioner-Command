@@ -11,16 +11,16 @@ export function SectionHeader({ title, subtitle, className }: SectionHeaderProps
   // titles; dark mode keeps the existing token-driven foreground so the
   // contrast on the dark canvas stays correct.
   return (
-    <div className={cn("hidden md:block mb-8", className)}>
+    <div className={cn("hidden md:block mb-6", className)}>
       <h2
-        className="text-xl md:text-2xl font-bold tracking-tight text-[var(--sc-text-primary)] dark:text-foreground"
+        className="text-xl md:text-2xl font-bold tracking-tight text-[var(--sc-blue)] dark:text-foreground"
         data-testid={`section-header-${title.toLowerCase().replace(/\s+/g, "-")}`}
       >
         {title}
       </h2>
       <span className="sc-section-rule" />
       {subtitle && (
-        <p className="text-sm mt-2.5 text-[var(--sc-text-secondary)] dark:text-muted-foreground">
+        <p className="text-sm mt-2 text-[var(--sc-text-muted)] dark:text-muted-foreground">
           {subtitle}
         </p>
       )}

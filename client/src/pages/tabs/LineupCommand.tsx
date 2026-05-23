@@ -237,19 +237,24 @@ function IssueBadge({ type }: { type: IssueType }) {
 
 // ─── Skeleton row ─────────────────────────────────────────────────────────────
 function SkeletonRow() {
+  // bar = light-mode placeholder bg; the dark: variant restores the original
+  // glass placeholder so dark mode is untouched.
+  const bar = "bg-[var(--sc-border)]/70 dark:bg-white/8";
   return (
-    <div className="flex items-center gap-1.5 md:gap-3 px-2 md:px-5 py-3 border-b border-white/5 animate-pulse">
-      <div className="flex-1 min-w-[140px] h-3.5 bg-white/8 rounded" />
-      <div className="w-10 md:w-16 flex-shrink-0 h-3.5 bg-white/8 rounded" />
-      <div className="w-12 md:w-28 flex-shrink-0 h-3.5 bg-white/8 rounded" />
-      <div className="w-8 md:w-24 flex-shrink-0 h-4 bg-white/8 rounded" />
-      <div className="w-8 md:w-20 flex-shrink-0 h-4 bg-white/8 rounded" />
-      <div className="w-[68px] md:w-[108px] flex-shrink-0 h-7 bg-white/8 rounded-lg" />
+    <div className="flex items-center gap-1.5 md:gap-3 px-2 md:px-5 py-3 border-b border-[var(--sc-border)] dark:border-white/5 animate-pulse">
+      <div className={cn("flex-1 min-w-[140px] h-3.5 rounded", bar)} />
+      <div className={cn("w-10 md:w-16 flex-shrink-0 h-3.5 rounded", bar)} />
+      <div className={cn("w-12 md:w-28 flex-shrink-0 h-3.5 rounded", bar)} />
+      <div className={cn("w-8 md:w-24 flex-shrink-0 h-4 rounded", bar)} />
+      <div className={cn("w-8 md:w-20 flex-shrink-0 h-4 rounded", bar)} />
+      <div className={cn("w-[68px] md:w-[108px] flex-shrink-0 h-7 rounded-lg", bar)} />
     </div>
   );
 }
 
 // ─── KPI card ─────────────────────────────────────────────────────────────────
+// Light mode: white surface, slate border, accent only on icon + value and a
+// thin left bar. Dark mode: tinted glass card (legacy).
 function KpiCard({
   icon: Icon, label, value, accent, sub,
 }: {
@@ -259,20 +264,45 @@ function KpiCard({
   accent: "red" | "gold" | "blue" | "yellow" | "slate";
   sub?: string;
 }) {
-  const colors: Record<string, { text: string; bg: string; ring: string }> = {
-    red:    { text: "text-red-400",     bg: "bg-red-500/10",    ring: "ring-red-500/20" },
-    gold:   { text: "text-[#d4af37]",   bg: "bg-[#d4af37]/10", ring: "ring-[#d4af37]/25" },
-    blue:   { text: "text-blue-400",    bg: "bg-blue-500/10",  ring: "ring-blue-500/20" },
-    yellow: { text: "text-yellow-400",  bg: "bg-yellow-500/10",ring: "ring-yellow-500/20" },
-    slate:  { text: "text-slate-400",   bg: "bg-slate-500/10", ring: "ring-slate-500/20" },
+  // Per-accent palette. Light mode uses the brand spec (small accent on
+  // icon + value + a thin left bar). Dark mode keeps the legacy
+  // tinted-glass look so contrast on the dark canvas stays correct.
+  const palette: Record<string, {
+    accentColor: string;             // CSS color for the left bar (light mode)
+    textCls: string;                 // light text + dark text combined
+    darkSurface: string;             // dark-mode tint applied to the card
+  }> = {
+    red:    { accentColor: "#dc2626", textCls: "text-[#dc2626] dark:text-red-400",     darkSurface: "dark:bg-red-500/10 dark:ring-red-500/20" },
+    gold:   { accentColor: "#d6a21e", textCls: "text-[#d6a21e] dark:text-[#d4af37]",   darkSurface: "dark:bg-[#d4af37]/10 dark:ring-[#d4af37]/25" },
+    blue:   { accentColor: "#0b2344", textCls: "text-[#0b2344] dark:text-blue-400",    darkSurface: "dark:bg-blue-500/10 dark:ring-blue-500/20" },
+    yellow: { accentColor: "#d97706", textCls: "text-[#d97706] dark:text-yellow-400",  darkSurface: "dark:bg-yellow-500/10 dark:ring-yellow-500/20" },
+    slate:  { accentColor: "#475569", textCls: "text-[#475569] dark:text-slate-400",   darkSurface: "dark:bg-slate-500/10 dark:ring-slate-500/20" },
   };
-  const c = colors[accent];
+  const c = palette[accent];
   return (
-    <div className={cn("flex flex-col items-center justify-center gap-1 rounded-xl p-3 md:p-4 ring-1 border border-white/6", c.bg, c.ring)}>
-      <Icon className={cn("w-4 h-4 md:w-5 md:h-5 flex-shrink-0", c.text)} />
-      <span className={cn("text-xl md:text-2xl font-black tabular-nums leading-tight", c.text)}>{value}</span>
-      <span className="text-[9px] md:text-[10px] font-semibold text-white/50 uppercase tracking-wide text-center leading-tight">{label}</span>
-      {sub && <span className="text-[8px] text-white/30 text-center">{sub}</span>}
+    <div
+      className={cn(
+        "relative flex flex-col items-center justify-center gap-1 rounded-2xl p-3 md:p-4 overflow-hidden",
+        // Light mode: white card with slate border + soft shadow.
+        "bg-[var(--sc-card-soft)] border border-[var(--sc-border)] shadow-[0_2px_8px_rgba(11,35,68,0.04)]",
+        // Dark mode: legacy tinted-glass look (overrides light surface).
+        "dark:bg-transparent dark:border-white/6 dark:ring-1 dark:shadow-none",
+        c.darkSurface,
+      )}
+    >
+      {/* Light-mode left accent bar — hidden in dark mode where the whole
+          card is tinted instead. */}
+      <span
+        aria-hidden
+        className="absolute left-0 top-0 bottom-0 w-1 dark:hidden"
+        style={{ background: c.accentColor }}
+      />
+      <Icon className={cn("w-4 h-4 md:w-5 md:h-5 flex-shrink-0", c.textCls)} />
+      <span className={cn("text-xl md:text-2xl font-black tabular-nums leading-tight", c.textCls)}>{value}</span>
+      <span className="text-[9px] md:text-[10px] font-semibold uppercase tracking-wide text-center leading-tight text-[var(--sc-text-muted)] dark:text-white/50">
+        {label}
+      </span>
+      {sub && <span className="text-[8px] text-center text-[var(--sc-text-muted)]/70 dark:text-white/30">{sub}</span>}
     </div>
   );
 }
@@ -282,15 +312,27 @@ function LeagueRow({ analysis, preseason }: { analysis: LeagueAnalysis; preseaso
   const [expanded, setExpanded] = useState(false);
   const { leagueName, format, scoringFormat, avatar, currentProj, gain, issues, swaps, loading, error } = analysis;
 
-  const improvColor = gain >= 10 ? "text-emerald-400" : gain >= 3 ? "text-emerald-500/80" : gain > 0.5 ? "text-emerald-600" : "text-white/25";
+  // Improvement (gain) color — emerald for real gains, muted for none. Light
+  // mode uses a darker green so it stays readable on a white background.
+  const improvColor =
+    gain >= 10  ? "text-emerald-700 dark:text-emerald-400" :
+    gain >= 3   ? "text-emerald-600 dark:text-emerald-500/80" :
+    gain > 0.5  ? "text-emerald-600 dark:text-emerald-600" :
+                  "text-[var(--sc-text-muted)]/60 dark:text-white/25";
   const hardIssues = issues.filter(i => i.type === "out" || i.type === "ir" || i.type === "bye");
   const softIssues = issues.filter(i => i.type === "questionable" || i.type === "doubtful");
   const isOptimized = !loading && !error && swaps.length === 0;
 
+  const skeletonBar = "bg-[var(--sc-border)]/70 dark:bg-white/8";
+
   return (
     <div className={cn(
-      "border-b border-white/5 last:border-0 transition-colors",
-      swaps.length > 0 ? "hover:bg-white/[0.02]" : "hover:bg-white/[0.01]"
+      "border-b last:border-0 transition-colors",
+      // Light: slate border + soft hover; dark: legacy translucent.
+      "border-[#edf2f7] dark:border-white/5",
+      swaps.length > 0
+        ? "hover:bg-[var(--sc-card-soft)] dark:hover:bg-white/[0.02]"
+        : "hover:bg-[var(--sc-card-soft)]/60 dark:hover:bg-white/[0.01]",
     )}>
       {/* Main row */}
       <div
@@ -303,18 +345,18 @@ function LeagueRow({ analysis, preseason }: { analysis: LeagueAnalysis; preseaso
             <img
               src={avatar}
               alt=""
-              className="w-6 h-6 md:w-7 md:h-7 rounded-lg flex-shrink-0 object-cover bg-white/10"
+              className="w-6 h-6 md:w-7 md:h-7 rounded-lg flex-shrink-0 object-cover bg-[var(--sc-blue-soft)] dark:bg-white/10"
               onError={e => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
             />
           ) : (
-            <div className="w-6 h-6 md:w-7 md:h-7 rounded-lg flex-shrink-0 bg-[#0b3a7a]/40 flex items-center justify-center">
-              <Users className="w-3 h-3 md:w-3.5 md:h-3.5 text-blue-400/60" />
+            <div className="w-6 h-6 md:w-7 md:h-7 rounded-lg flex-shrink-0 bg-[var(--sc-blue-soft)] dark:bg-[#0b3a7a]/40 flex items-center justify-center">
+              <Users className="w-3 h-3 md:w-3.5 md:h-3.5 text-[var(--sc-blue)] dark:text-blue-400/60" />
             </div>
           )}
           <div className="min-w-0">
-            <p className="text-[12px] md:text-sm font-bold text-white/90 truncate leading-tight">{leagueName}</p>
+            <p className="text-[12px] md:text-sm font-bold truncate leading-tight text-[var(--sc-blue)] dark:text-white/90">{leagueName}</p>
             <div className="flex items-center gap-1 mt-0.5">
-              <span className="text-[8px] md:text-[9px] text-white/30 font-medium truncate">{format} · {scoringFormat}</span>
+              <span className="text-[8px] md:text-[9px] font-medium truncate text-[var(--sc-text-muted)] dark:text-white/30">{format} · {scoringFormat}</span>
             </div>
           </div>
         </div>
@@ -322,24 +364,24 @@ function LeagueRow({ analysis, preseason }: { analysis: LeagueAnalysis; preseaso
         {/* Proj (Current) */}
         <div className="text-right w-10 md:w-16 flex-shrink-0">
           {loading ? (
-            <div className="h-3.5 bg-white/8 rounded animate-pulse" />
+            <div className={cn("h-3.5 rounded animate-pulse", skeletonBar)} />
           ) : preseason ? (
-            <span className="text-[10px] text-white/25 font-medium">N/A</span>
+            <span className="text-[10px] font-medium text-[var(--sc-text-muted)] dark:text-white/25">N/A</span>
           ) : error ? (
-            <span className="text-[10px] text-white/20">—</span>
+            <span className="text-[10px] text-[var(--sc-text-muted)]/70 dark:text-white/20">—</span>
           ) : (
-            <p className="text-[11px] md:text-[13px] font-bold text-white/60 tabular-nums">{fmt1(currentProj)}</p>
+            <p className="text-[11px] md:text-[13px] font-bold tabular-nums text-[var(--sc-text)] dark:text-white/60">{fmt1(currentProj)}</p>
           )}
         </div>
 
         {/* +Pts (Improvement) */}
         <div className="text-right w-12 md:w-28 flex-shrink-0">
           {loading ? (
-            <div className="h-3.5 bg-white/8 rounded animate-pulse" />
+            <div className={cn("h-3.5 rounded animate-pulse", skeletonBar)} />
           ) : preseason ? (
-            <span className="text-[10px] text-white/25 font-medium">N/A</span>
+            <span className="text-[10px] font-medium text-[var(--sc-text-muted)] dark:text-white/25">N/A</span>
           ) : error ? (
-            <span className="text-[10px] text-white/20">—</span>
+            <span className="text-[10px] text-[var(--sc-text-muted)]/70 dark:text-white/20">—</span>
           ) : (
             <p className={cn("text-[11px] md:text-[13px] font-black tabular-nums", improvColor)}>
               {gain > 0.1 ? `+${fmt1(gain)}` : "—"}
@@ -350,13 +392,13 @@ function LeagueRow({ analysis, preseason }: { analysis: LeagueAnalysis; preseaso
         {/* OUT / IR / BYE */}
         <div className="w-8 md:w-24 flex-shrink-0 flex justify-center">
           {loading ? (
-            <div className="h-4 w-4 bg-white/8 rounded animate-pulse" />
+            <div className={cn("h-4 w-4 rounded animate-pulse", skeletonBar)} />
           ) : preseason ? (
-            <span className="text-[10px] text-white/25 font-medium">N/A</span>
+            <span className="text-[10px] font-medium text-[var(--sc-text-muted)] dark:text-white/25">N/A</span>
           ) : hardIssues.length === 0 ? (
-            <CheckCircle2 className="w-3 h-3 md:w-3.5 md:h-3.5 text-emerald-500/60" />
+            <CheckCircle2 className="w-3 h-3 md:w-3.5 md:h-3.5 text-emerald-600 dark:text-emerald-500/60" />
           ) : (
-            <span className="text-[12px] md:text-sm font-black tabular-nums text-red-400">
+            <span className="text-[12px] md:text-sm font-black tabular-nums text-[#dc2626] dark:text-red-400">
               {hardIssues.length}
             </span>
           )}
@@ -365,13 +407,13 @@ function LeagueRow({ analysis, preseason }: { analysis: LeagueAnalysis; preseaso
         {/* QUES / DOUB */}
         <div className="w-8 md:w-20 flex-shrink-0 flex justify-center">
           {loading ? (
-            <div className="h-4 w-4 bg-white/8 rounded animate-pulse" />
+            <div className={cn("h-4 w-4 rounded animate-pulse", skeletonBar)} />
           ) : preseason ? (
-            <span className="text-[10px] text-white/25 font-medium">N/A</span>
+            <span className="text-[10px] font-medium text-[var(--sc-text-muted)] dark:text-white/25">N/A</span>
           ) : softIssues.length === 0 ? (
-            <CheckCircle2 className="w-3 h-3 md:w-3.5 md:h-3.5 text-emerald-500/60" />
+            <CheckCircle2 className="w-3 h-3 md:w-3.5 md:h-3.5 text-emerald-600 dark:text-emerald-500/60" />
           ) : (
-            <span className="text-[12px] md:text-sm font-black tabular-nums text-yellow-400">
+            <span className="text-[12px] md:text-sm font-black tabular-nums text-[#d97706] dark:text-yellow-400">
               {softIssues.length}
             </span>
           )}
@@ -380,17 +422,17 @@ function LeagueRow({ analysis, preseason }: { analysis: LeagueAnalysis; preseaso
         {/* Status */}
         <div className="w-[68px] md:w-[108px] flex-shrink-0 flex justify-end">
           {loading ? (
-            <div className="h-6 w-[56px] md:w-20 bg-white/8 rounded-full animate-pulse" />
+            <div className={cn("h-6 w-[56px] md:w-20 rounded-full animate-pulse", skeletonBar)} />
           ) : error ? (
-            <span className="text-[10px] text-white/20">—</span>
+            <span className="text-[10px] text-[var(--sc-text-muted)]/70 dark:text-white/20">—</span>
           ) : isOptimized ? (
-            <span className="inline-flex items-center justify-center gap-1 text-[10px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-full px-2 py-1">
+            <span className="inline-flex items-center justify-center gap-1 text-[10px] font-bold rounded-full px-2 py-1 bg-[var(--sc-success-soft)] text-[var(--sc-success)] border border-[var(--sc-success-border)] dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20">
               <CheckCircle2 className="w-3 h-3 flex-shrink-0" />
               <span className="hidden md:inline">Optimized</span>
             </span>
           ) : (
             <button
-              className="inline-flex items-center gap-1 text-[10px] font-bold bg-[#d4af37]/15 hover:bg-[#d4af37]/25 border border-[#d4af37]/35 hover:border-[#d4af37]/55 text-[#d4af37] rounded-full px-2 md:px-2.5 py-1 transition-colors"
+              className="inline-flex items-center gap-1 text-[10px] font-bold rounded-full px-2 md:px-2.5 py-1 transition-colors bg-[var(--sc-gold)] hover:bg-[var(--sc-gold-deep)] text-[var(--sc-blue)] hover:text-white border border-[var(--sc-gold-deep)] dark:bg-[#d4af37]/15 dark:hover:bg-[#d4af37]/25 dark:border-[#d4af37]/35 dark:hover:border-[#d4af37]/55 dark:text-[#d4af37] dark:hover:text-[#d4af37]"
               onClick={() => setExpanded(v => !v)}
               data-testid={`button-optimize-${analysis.leagueId}`}
             >
@@ -404,26 +446,26 @@ function LeagueRow({ analysis, preseason }: { analysis: LeagueAnalysis; preseaso
 
       {/* Expanded detail panel */}
       {expanded && (
-        <div className="px-3 md:px-5 pb-4 space-y-3 border-t border-white/4 pt-3 bg-white/[0.015]">
+        <div className="px-3 md:px-5 pb-4 space-y-3 border-t pt-3 border-[var(--sc-border)] bg-[var(--sc-card-soft)] dark:border-white/4 dark:bg-white/[0.015]">
 
           {/* Recommended swaps */}
           {swaps.length > 0 && (
             <div>
-              <p className="text-[9px] font-bold uppercase tracking-widest text-white/30 mb-2">
+              <p className="sc-eyebrow mb-2 dark:text-white/30 dark:tracking-widest">
                 Recommended Swaps
               </p>
               <div className="space-y-1.5">
                 {swaps.map((swap, i) => (
-                  <div key={i} className="flex items-center gap-2 rounded-lg bg-emerald-500/5 border border-emerald-500/15 px-3 py-2">
-                    <TrendingUp className="w-3 h-3 text-emerald-400 flex-shrink-0" />
-                    <span className="text-[10px] md:text-[11px] text-white/50">Start</span>
-                    <span className="text-[11px] md:text-xs font-bold text-emerald-300">{swap.inName}</span>
-                    <Badge variant="outline" className="text-[7px] px-1 py-0 h-3.5 border-emerald-500/30 text-emerald-400/70">{swap.inPos}</Badge>
-                    <ArrowRight className="w-3 h-3 text-white/20 flex-shrink-0 mx-1" />
-                    <span className="text-[10px] md:text-[11px] text-white/40">over</span>
-                    <span className="text-[11px] md:text-xs font-semibold text-white/60">{swap.outName}</span>
+                  <div key={i} className="flex items-center gap-2 rounded-lg px-3 py-2 bg-[var(--sc-success-soft)] border border-[var(--sc-success-border)] dark:bg-emerald-500/5 dark:border-emerald-500/15">
+                    <TrendingUp className="w-3 h-3 text-[var(--sc-success)] dark:text-emerald-400 flex-shrink-0" />
+                    <span className="text-[10px] md:text-[11px] text-[var(--sc-text-muted)] dark:text-white/50">Start</span>
+                    <span className="text-[11px] md:text-xs font-bold text-[var(--sc-success)] dark:text-emerald-300">{swap.inName}</span>
+                    <Badge variant="outline" className="text-[7px] px-1 py-0 h-3.5 border-[var(--sc-success-border)] text-[var(--sc-success)] dark:border-emerald-500/30 dark:text-emerald-400/70">{swap.inPos}</Badge>
+                    <ArrowRight className="w-3 h-3 text-[var(--sc-text-muted)]/60 dark:text-white/20 flex-shrink-0 mx-1" />
+                    <span className="text-[10px] md:text-[11px] text-[var(--sc-text-muted)] dark:text-white/40">over</span>
+                    <span className="text-[11px] md:text-xs font-semibold text-[var(--sc-text)] dark:text-white/60">{swap.outName}</span>
                     {swap.projGain > 0 && (
-                      <span className="ml-auto text-[10px] font-bold text-emerald-400 tabular-nums">+{fmt1(swap.projGain)} pts</span>
+                      <span className="ml-auto text-[10px] font-bold tabular-nums text-[var(--sc-success)] dark:text-emerald-400">+{fmt1(swap.projGain)} pts</span>
                     )}
                   </div>
                 ))}
@@ -434,7 +476,7 @@ function LeagueRow({ analysis, preseason }: { analysis: LeagueAnalysis; preseaso
           {/* Active issues */}
           {issues.length > 0 && (
             <div>
-              <p className="text-[9px] font-bold uppercase tracking-widest text-white/30 mb-2">
+              <p className="sc-eyebrow mb-2 dark:text-white/30 dark:tracking-widest">
                 Starter Alerts
               </p>
               <div className="flex flex-wrap gap-1.5">
@@ -442,18 +484,19 @@ function LeagueRow({ analysis, preseason }: { analysis: LeagueAnalysis; preseaso
                   const typeLabel: Record<IssueType, string> = {
                     out: "Out", ir: "IR", doubtful: "Doubtful", questionable: "Questionable", bye: "Bye Week"
                   };
+                  // Light: pale-tinted pill with strong text. Dark: legacy translucent.
                   const typeCls: Record<IssueType, string> = {
-                    out: "bg-red-500/10 border-red-500/30 text-red-400",
-                    ir: "bg-red-500/10 border-red-500/30 text-red-400",
-                    doubtful: "bg-orange-500/10 border-orange-500/30 text-orange-400",
-                    questionable: "bg-yellow-500/10 border-yellow-500/30 text-yellow-400",
-                    bye: "bg-slate-500/10 border-slate-500/30 text-slate-400",
+                    out:          "bg-[var(--sc-danger-soft)] border-[#fecaca] text-[var(--sc-danger)] dark:bg-red-500/10 dark:border-red-500/30 dark:text-red-400",
+                    ir:           "bg-[var(--sc-danger-soft)] border-[#fecaca] text-[var(--sc-danger)] dark:bg-red-500/10 dark:border-red-500/30 dark:text-red-400",
+                    doubtful:     "bg-[#fff7ed] border-[#fed7aa] text-[#c2410c] dark:bg-orange-500/10 dark:border-orange-500/30 dark:text-orange-400",
+                    questionable: "bg-[var(--sc-warning-soft)] border-[#fde68a] text-[var(--sc-warning)] dark:bg-yellow-500/10 dark:border-yellow-500/30 dark:text-yellow-400",
+                    bye:          "bg-[var(--sc-blue-soft)] border-[var(--sc-border-strong)] text-[var(--sc-text)] dark:bg-slate-500/10 dark:border-slate-500/30 dark:text-slate-400",
                   };
                   return (
                     <div key={i} className={cn("flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[10px]", typeCls[iss.type])}>
                       <AlertTriangle className="w-3 h-3 flex-shrink-0" />
                       <span className="font-bold">{iss.playerName}</span>
-                      <span className="text-white/40">({iss.pos})</span>
+                      <span className="opacity-70">({iss.pos})</span>
                       <span className="font-medium">· {typeLabel[iss.type]}</span>
                     </div>
                   );
@@ -469,37 +512,38 @@ function LeagueRow({ analysis, preseason }: { analysis: LeagueAnalysis; preseaso
 
 // ─── Matchup skeleton card ────────────────────────────────────────────────────
 function MatchupSkeletonRow() {
+  const bar = "bg-[var(--sc-border)]/70 dark:bg-white/8";
   return (
-    <div className="px-3.5 md:px-5 py-3.5 border-b border-white/5 animate-pulse">
+    <div className="px-3.5 md:px-5 py-3.5 border-b border-[var(--sc-border)] dark:border-white/5 animate-pulse">
       <div className="flex items-center gap-2 mb-3">
-        <div className="w-5 h-5 rounded bg-white/8" />
-        <div className="h-2.5 w-28 bg-white/8 rounded" />
-        <div className="ml-auto h-3 w-16 bg-white/8 rounded-full" />
+        <div className={cn("w-5 h-5 rounded", bar)} />
+        <div className={cn("h-2.5 w-28 rounded", bar)} />
+        <div className={cn("ml-auto h-3 w-16 rounded-full", bar)} />
       </div>
       <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 md:gap-4">
         <div className="flex items-center gap-2.5">
-          <div className="w-10 h-10 md:w-11 md:h-11 rounded-full bg-white/8 flex-shrink-0" />
+          <div className={cn("w-10 h-10 md:w-11 md:h-11 rounded-full flex-shrink-0", bar)} />
           <div className="space-y-1.5 min-w-0 flex-1">
-            <div className="h-3 w-24 bg-white/8 rounded" />
-            <div className="h-2 w-10 bg-white/8 rounded" />
-            <div className="h-5 w-14 bg-white/8 rounded mt-1" />
+            <div className={cn("h-3 w-24 rounded", bar)} />
+            <div className={cn("h-2 w-10 rounded", bar)} />
+            <div className={cn("h-5 w-14 rounded mt-1", bar)} />
           </div>
         </div>
         <div className="flex flex-col items-center gap-1 w-[68px] md:w-[88px]">
-          <div className="h-2 w-12 bg-white/8 rounded" />
-          <div className="h-6 w-14 bg-white/8 rounded" />
-          <div className="h-2 w-10 bg-white/8 rounded" />
+          <div className={cn("h-2 w-12 rounded", bar)} />
+          <div className={cn("h-6 w-14 rounded", bar)} />
+          <div className={cn("h-2 w-10 rounded", bar)} />
         </div>
         <div className="flex items-center justify-end gap-2.5">
           <div className="space-y-1.5 items-end flex flex-col min-w-0">
-            <div className="h-3 w-24 bg-white/8 rounded" />
-            <div className="h-2 w-10 bg-white/8 rounded" />
-            <div className="h-5 w-14 bg-white/8 rounded mt-1" />
+            <div className={cn("h-3 w-24 rounded", bar)} />
+            <div className={cn("h-2 w-10 rounded", bar)} />
+            <div className={cn("h-5 w-14 rounded mt-1", bar)} />
           </div>
-          <div className="w-10 h-10 md:w-11 md:h-11 rounded-full bg-white/8 flex-shrink-0" />
+          <div className={cn("w-10 h-10 md:w-11 md:h-11 rounded-full flex-shrink-0", bar)} />
         </div>
       </div>
-      <div className="mt-3.5 h-1.5 bg-white/6 rounded-full" />
+      <div className={cn("mt-3.5 h-1.5 rounded-full", bar)} />
     </div>
   );
 }
@@ -1260,18 +1304,42 @@ export function LineupCommand() {
           {(baseLoading || allLoading || mAllLoading) && (
             <RefreshCw className="w-3.5 h-3.5 text-muted-foreground animate-spin" />
           )}
-          <div className="grid flex-shrink-0" style={{ gridTemplateColumns: "1fr 1fr 1fr", height: 48, borderRadius: 16, padding: 4, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", gap: 4, width: 390 }}>
+          <div
+            className={cn(
+              "grid flex-shrink-0 rounded-2xl p-1 gap-1 w-[390px] h-12",
+              // Light: white inner with slate border.
+              "bg-[var(--sc-card-bg)] border border-[var(--sc-border)]",
+              // Dark: legacy translucent strip.
+              "dark:bg-white/[0.04] dark:border-white/[0.07]",
+            )}
+            style={{ gridTemplateColumns: "1fr 1fr 1fr" }}
+          >
             {(["lineup", "matchups", "startsit"] as const).map(tab => {
               const isActive = activeTab === tab;
               const Icon = tab === "lineup" ? Zap : tab === "matchups" ? Swords : Users;
               const label = tab === "lineup" ? "Lineups" : tab === "matchups" ? "Matchups" : "Start/Sit";
               return (
-                <button key={tab} onClick={() => setActiveTab(tab)} data-testid={`tab-${tab}-desktop`}
-                  className="relative flex items-center justify-center gap-2 font-semibold transition-all duration-200"
-                  style={{ borderRadius: 12, fontSize: 13, letterSpacing: "0.01em", background: isActive ? "linear-gradient(135deg, rgba(11,58,122,0.85) 0%, rgba(11,58,122,0.65) 100%)" : "transparent", color: isActive ? "#fff" : "rgba(203,213,225,0.45)", border: isActive ? "1px solid rgba(212,175,55,0.30)" : "1px solid transparent", boxShadow: isActive ? "0 2px 12px rgba(11,58,122,0.40), inset 0 1px 0 rgba(255,255,255,0.06)" : "none" }}>
-                  <Icon style={{ width: 15, height: 15, flexShrink: 0 }} />
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  data-testid={`tab-${tab}-desktop`}
+                  className={cn(
+                    "relative flex items-center justify-center gap-2 font-semibold transition-all duration-200 rounded-xl text-[13px] tracking-[0.01em]",
+                    isActive
+                      // Active: navy bg, white text, gold underline (added below).
+                      ? "bg-[var(--sc-blue)] text-white shadow-[0_4px_12px_rgba(11,35,68,0.18)] dark:bg-[linear-gradient(135deg,rgba(11,58,122,0.85)_0%,rgba(11,58,122,0.65)_100%)] dark:shadow-[0_2px_12px_rgba(11,58,122,0.40),inset_0_1px_0_rgba(255,255,255,0.06)] dark:border dark:border-[#d4af37]/30"
+                      // Inactive: muted navy text, transparent bg, gentle hover.
+                      : "text-[var(--sc-text-muted)] hover:bg-[var(--sc-blue-soft)] hover:text-[var(--sc-blue)] dark:text-white/45 dark:hover:bg-transparent dark:hover:text-white/70",
+                  )}
+                >
+                  <Icon className="w-[15px] h-[15px] flex-shrink-0" />
                   {label}
-                  {isActive && <span className="absolute bottom-[3px] left-1/2 -translate-x-1/2 rounded-full" style={{ width: 28, height: 2, background: "#d4af37", opacity: 0.85 }} />}
+                  {isActive && (
+                    <span
+                      className="absolute bottom-[3px] left-1/2 -translate-x-1/2 rounded-full w-7 h-0.5"
+                      style={{ background: "#d6a21e", opacity: 0.95 }}
+                    />
+                  )}
                 </button>
               );
             })}
@@ -1294,18 +1362,38 @@ export function LineupCommand() {
         {(baseLoading || allLoading || mAllLoading) && (
           <RefreshCw className="w-3.5 h-3.5 text-muted-foreground animate-spin absolute right-4 top-4" />
         )}
-        <div className="grid w-full sm:w-auto" style={{ gridTemplateColumns: "1fr 1fr 1fr", maxWidth: 520, height: 48, borderRadius: 16, padding: 4, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", gap: 4 }}>
+        <div
+          className={cn(
+            "grid w-full sm:w-auto max-w-[520px] h-12 rounded-2xl p-1 gap-1",
+            "bg-[var(--sc-card-bg)] border border-[var(--sc-border)]",
+            "dark:bg-white/[0.04] dark:border-white/[0.07]",
+          )}
+          style={{ gridTemplateColumns: "1fr 1fr 1fr" }}
+        >
           {(["lineup", "matchups", "startsit"] as const).map(tab => {
             const isActive = activeTab === tab;
             const Icon = tab === "lineup" ? Zap : tab === "matchups" ? Swords : Users;
             const label = tab === "lineup" ? "Lineups" : tab === "matchups" ? "Matchups" : "Start/Sit";
             return (
-              <button key={tab} onClick={() => setActiveTab(tab)} data-testid={`tab-${tab}`}
-                className="relative flex items-center justify-center gap-2 font-semibold transition-all duration-200"
-                style={{ borderRadius: 12, fontSize: 13, letterSpacing: "0.01em", background: isActive ? "linear-gradient(135deg, rgba(11,58,122,0.85) 0%, rgba(11,58,122,0.65) 100%)" : "transparent", color: isActive ? "#fff" : "rgba(203,213,225,0.45)", border: isActive ? "1px solid rgba(212,175,55,0.30)" : "1px solid transparent", boxShadow: isActive ? "0 2px 12px rgba(11,58,122,0.40), inset 0 1px 0 rgba(255,255,255,0.06)" : "none" }}>
-                <Icon style={{ width: 15, height: 15, flexShrink: 0 }} />
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                data-testid={`tab-${tab}`}
+                className={cn(
+                  "relative flex items-center justify-center gap-2 font-semibold transition-all duration-200 rounded-xl text-[13px] tracking-[0.01em]",
+                  isActive
+                    ? "bg-[var(--sc-blue)] text-white shadow-[0_4px_12px_rgba(11,35,68,0.18)] dark:bg-[linear-gradient(135deg,rgba(11,58,122,0.85)_0%,rgba(11,58,122,0.65)_100%)] dark:shadow-[0_2px_12px_rgba(11,58,122,0.40),inset_0_1px_0_rgba(255,255,255,0.06)] dark:border dark:border-[#d4af37]/30"
+                    : "text-[var(--sc-text-muted)] hover:bg-[var(--sc-blue-soft)] hover:text-[var(--sc-blue)] dark:text-white/45 dark:hover:bg-transparent dark:hover:text-white/70",
+                )}
+              >
+                <Icon className="w-[15px] h-[15px] flex-shrink-0" />
                 {label}
-                {isActive && <span className="absolute bottom-[3px] left-1/2 -translate-x-1/2 rounded-full" style={{ width: 28, height: 2, background: "#d4af37", opacity: 0.85 }} />}
+                {isActive && (
+                  <span
+                    className="absolute bottom-[3px] left-1/2 -translate-x-1/2 rounded-full w-7 h-0.5"
+                    style={{ background: "#d6a21e", opacity: 0.95 }}
+                  />
+                )}
               </button>
             );
           })}
@@ -1315,12 +1403,17 @@ export function LineupCommand() {
       {/* ══════════════════ LINEUP COMMAND TAB ══════════════════ */}
       {activeTab === "lineup" && (
         <>
-          {/* ── Hero KPI bar ───────────────────────────────────────── */}
+          {/* ── Hero KPI bar — light: clean white dashboard card; dark: legacy gradient ── */}
           <div
-            className="rounded-2xl border border-white/8 p-4 md:p-5"
-            style={{ background: "linear-gradient(135deg, rgba(4,13,26,0.95) 0%, rgba(11,58,122,0.08) 100%)" }}
+            className={cn(
+              "rounded-[18px] p-4 md:p-5",
+              // Light mode: white card, slate border, premium shadow.
+              "bg-[var(--sc-card-bg)] border border-[var(--sc-border)] shadow-[var(--sc-shadow-card)]",
+              // Dark mode: preserve original gradient look.
+              "dark:rounded-2xl dark:border-white/8 dark:shadow-none dark:bg-[linear-gradient(135deg,rgba(4,13,26,0.95)_0%,rgba(11,58,122,0.08)_100%)]",
+            )}
           >
-            <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-white/30 mb-3 md:mb-4">
+            <p className="sc-eyebrow mb-3 md:mb-4 dark:text-white/30 dark:tracking-[0.2em]">
               Operations Overview
             </p>
             <div className="grid grid-cols-3 md:grid-cols-5 gap-2 md:gap-3">
@@ -1347,8 +1440,8 @@ export function LineupCommand() {
                   className={cn(
                     "inline-flex items-center gap-1.5 text-[11px] font-bold rounded-full px-4 py-1.5 border transition-all",
                     disabled
-                      ? "bg-white/4 border-white/8 text-white/30 cursor-not-allowed"
-                      : "bg-[#d4af37]/12 hover:bg-[#d4af37]/22 border-[#d4af37]/30 hover:border-[#d4af37]/50 text-[#d4af37] hover:shadow-[0_0_12px_rgba(212,175,55,0.15)]"
+                      ? "bg-[var(--sc-card-soft)] border-[var(--sc-border)] text-[var(--sc-text-muted)] cursor-not-allowed dark:bg-white/4 dark:border-white/8 dark:text-white/30"
+                      : "bg-[var(--sc-gold)] hover:bg-[var(--sc-gold-deep)] border-[var(--sc-gold-deep)] text-[var(--sc-blue)] hover:text-white shadow-[0_2px_8px_rgba(214,162,30,0.25)] dark:bg-[#d4af37]/12 dark:hover:bg-[#d4af37]/22 dark:border-[#d4af37]/30 dark:hover:border-[#d4af37]/50 dark:text-[#d4af37] dark:hover:text-[#d4af37] dark:shadow-none dark:hover:shadow-[0_0_12px_rgba(212,175,55,0.15)]",
                   )}
                 >
                   {isRunning ? (
@@ -1368,24 +1461,40 @@ export function LineupCommand() {
           {/* ── Lineup table ───────────────────────────────────────── */}
           {/* Swipe hint — mobile only */}
           <div className="flex items-center justify-end gap-1.5 md:hidden mb-1 px-1">
-            <span className="text-[10px] text-white/25">Swipe to view</span>
-            <ArrowRight className="w-3 h-3 text-white/20" />
+            <span className="text-[10px] text-[var(--sc-text-muted)] dark:text-white/25">Swipe to view</span>
+            <ArrowRight className="w-3 h-3 text-[var(--sc-text-muted)]/70 dark:text-white/20" />
           </div>
 
           <div
-            className="rounded-2xl border border-white/6"
-            style={{ background: "linear-gradient(180deg, rgba(4,13,26,0.9) 0%, rgba(4,10,20,0.95) 100%)" }}
+            className={cn(
+              "rounded-2xl overflow-hidden",
+              // Light: clean white wrapper, slate border, premium shadow.
+              "bg-[var(--sc-card-bg)] border border-[var(--sc-border)] shadow-[var(--sc-shadow-card)]",
+              // Dark: legacy gradient.
+              "dark:border-white/6 dark:shadow-none dark:bg-[linear-gradient(180deg,rgba(4,13,26,0.9)_0%,rgba(4,10,20,0.95)_100%)]",
+            )}
           >
             {/* Scroll container */}
             <div className="overflow-x-auto" style={{ WebkitOverflowScrolling: "touch" }}>
               <div style={{ minWidth: 500 }}>
-                {/* Header */}
-                <div className="flex items-center gap-1.5 md:gap-3 px-2 md:px-5 py-2 border-b border-white/6 bg-white/[0.02]">
+                {/* Header — navy in light mode, glass strip in dark. */}
+                <div className="flex items-center gap-1.5 md:gap-3 px-2 md:px-5 py-2.5 bg-[var(--sc-blue)] dark:bg-white/[0.02] border-b border-[var(--sc-blue-2)] dark:border-white/6">
                   {(() => {
                     function SortBtn({ col, label, className }: { col: typeof sortKey; label: React.ReactNode; className?: string }) {
                       const active = sortKey === col;
                       return (
-                        <button onClick={() => handleSort(col)} className={cn("flex items-center gap-0.5 text-[9px] font-bold uppercase tracking-widest whitespace-nowrap transition-colors cursor-pointer select-none", active ? "text-[#d4af37]" : "text-white/30 hover:text-white/55", className)}>
+                        <button
+                          onClick={() => handleSort(col)}
+                          className={cn(
+                            "flex items-center gap-0.5 text-[9px] font-bold uppercase tracking-widest whitespace-nowrap transition-colors cursor-pointer select-none",
+                            // Navy header → gold for active, white for inactive (light mode).
+                            // Dark mode keeps the legacy gold/white-translucent palette.
+                            active
+                              ? "text-[#d6a21e] dark:text-[#d4af37]"
+                              : "text-white/70 hover:text-white dark:text-white/30 dark:hover:text-white/55",
+                            className,
+                          )}
+                        >
                           {label}
                           {active ? (sortDir === "desc" ? <ChevronDown className="w-2.5 h-2.5 flex-shrink-0" /> : <ChevronUp className="w-2.5 h-2.5 flex-shrink-0" />) : <ArrowUpDown className="w-2.5 h-2.5 flex-shrink-0 opacity-40" />}
                         </button>
@@ -1408,9 +1517,9 @@ export function LineupCommand() {
                   [...Array(Math.min(activeLeagues.length || 4, 6))].map((_, i) => <SkeletonRow key={i} />)
                 ) : sortedAnalyses.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
-                    <Users className="w-8 h-8 text-white/15 mb-3" />
-                    <p className="text-sm font-semibold text-white/40">No leagues found</p>
-                    <p className="text-xs text-white/25 mt-1">Connect leagues in the Portfolio tab to get started.</p>
+                    <Users className="w-8 h-8 text-[var(--sc-text-muted)]/40 dark:text-white/15 mb-3" />
+                    <p className="text-sm font-semibold text-[var(--sc-text)] dark:text-white/40">No leagues found</p>
+                    <p className="text-xs text-[var(--sc-text-muted)] dark:text-white/25 mt-1">Connect leagues in the Portfolio tab to get started.</p>
                   </div>
                 ) : (
                   sortedAnalyses.map(a => <LeagueRow key={a.leagueId} analysis={a} preseason={isPreseason} />)
@@ -1419,7 +1528,7 @@ export function LineupCommand() {
             </div>
           </div>
 
-          <p className="text-[9px] text-white/20 text-center px-4 pb-20 md:pb-0">
+          <p className="text-[9px] text-center px-4 pb-20 md:pb-0 text-[var(--sc-text-muted)] dark:text-white/20">
             Projections from Sleeper · Updated weekly · Optimal lineup uses projected points, not dynasty values
           </p>
         </>
@@ -1457,27 +1566,30 @@ export function LineupCommand() {
           {/* ── Matchup KPI bar ────────────────────────────────────── */}
           {isPreseason ? (
             <div
-              className="rounded-2xl border border-white/8 px-5 py-5 md:py-6"
-              style={{ background: "linear-gradient(135deg, rgba(4,13,26,0.95) 0%, rgba(11,58,122,0.08) 100%)" }}
+              className={cn(
+                "rounded-[18px] px-5 py-5 md:py-6",
+                "bg-[var(--sc-card-bg)] border border-[var(--sc-border)] shadow-[var(--sc-shadow-card)]",
+                "dark:rounded-2xl dark:border-white/8 dark:shadow-none dark:bg-[linear-gradient(135deg,rgba(4,13,26,0.95)_0%,rgba(11,58,122,0.08)_100%)]",
+              )}
             >
               <div className="flex items-start md:items-center gap-3 md:gap-4">
-                <div className="w-10 h-10 md:w-11 md:h-11 rounded-xl bg-yellow-500/10 ring-1 ring-yellow-500/25 flex items-center justify-center flex-shrink-0">
-                  <CalendarX className="w-5 h-5 text-yellow-400/80" />
+                <div className="w-10 h-10 md:w-11 md:h-11 rounded-xl bg-[var(--sc-warning-soft)] border border-[#fde68a] dark:bg-yellow-500/10 dark:ring-1 dark:ring-yellow-500/25 dark:border-transparent flex items-center justify-center flex-shrink-0">
+                  <CalendarX className="w-5 h-5 text-[var(--sc-warning)] dark:text-yellow-400/80" />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-[12px] md:text-[13px] font-bold text-white/80 leading-tight">
+                  <p className="text-[12px] md:text-[13px] font-bold text-[var(--sc-blue)] dark:text-white/80 leading-tight">
                     Matchup intel arrives at kickoff
                   </p>
-                  <p className="text-[11px] md:text-[12px] text-white/40 mt-1 leading-snug max-w-2xl">
+                  <p className="text-[11px] md:text-[12px] text-[var(--sc-text-muted)] dark:text-white/40 mt-1 leading-snug max-w-2xl">
                     Win probabilities, projected scores, and live matchup stats will populate here once weekly projections begin.
                   </p>
                 </div>
                 <div className="hidden md:flex flex-col items-end gap-0.5 ml-auto flex-shrink-0 pl-3">
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-white/30">Tracking</span>
-                  <span className="text-[20px] font-black text-white/85 tabular-nums leading-none">
+                  <span className="sc-eyebrow dark:text-white/30 dark:tracking-widest">Tracking</span>
+                  <span className="text-[20px] font-black tabular-nums leading-none text-[var(--sc-blue)] dark:text-white/85">
                     {activeLeagues.length}
                   </span>
-                  <span className="text-[10px] text-white/35">
+                  <span className="text-[10px] text-[var(--sc-text-muted)] dark:text-white/35">
                     {activeLeagues.length === 1 ? "league" : "leagues"}
                   </span>
                 </div>
@@ -1485,10 +1597,13 @@ export function LineupCommand() {
             </div>
           ) : (
             <div
-              className="rounded-2xl border border-white/8 p-4 md:p-5"
-              style={{ background: "linear-gradient(135deg, rgba(4,13,26,0.95) 0%, rgba(11,58,122,0.08) 100%)" }}
+              className={cn(
+                "rounded-[18px] p-4 md:p-5",
+                "bg-[var(--sc-card-bg)] border border-[var(--sc-border)] shadow-[var(--sc-shadow-card)]",
+                "dark:rounded-2xl dark:border-white/8 dark:shadow-none dark:bg-[linear-gradient(135deg,rgba(4,13,26,0.95)_0%,rgba(11,58,122,0.08)_100%)]",
+              )}
             >
-              <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-white/30 mb-3 md:mb-4">
+              <p className="sc-eyebrow mb-3 md:mb-4 dark:text-white/30 dark:tracking-[0.2em]">
                 Matchup Overview
               </p>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
@@ -1528,15 +1643,18 @@ export function LineupCommand() {
 
           {/* ── Matchup cards ──────────────────────────────────────── */}
           <div
-            className="rounded-2xl overflow-hidden border border-white/6"
-            style={{ background: "linear-gradient(180deg, rgba(4,13,26,0.9) 0%, rgba(4,10,20,0.95) 100%)" }}
+            className={cn(
+              "rounded-2xl overflow-hidden",
+              "bg-[var(--sc-card-bg)] border border-[var(--sc-border)] shadow-[var(--sc-shadow-card)]",
+              "dark:border-white/6 dark:shadow-none dark:bg-[linear-gradient(180deg,rgba(4,13,26,0.9)_0%,rgba(4,10,20,0.95)_100%)]",
+            )}
           >
             {/* Sort header — segmented control */}
-            <div className="flex items-center justify-between gap-3 px-3.5 md:px-5 py-2.5 border-b border-white/5 bg-white/[0.018]">
-              <span className="text-[10px] md:text-[11px] text-white/40 font-bold uppercase tracking-widest">
+            <div className="flex items-center justify-between gap-3 px-3.5 md:px-5 py-2.5 bg-[var(--sc-blue)] dark:bg-white/[0.018] border-b border-[var(--sc-blue-2)] dark:border-white/5">
+              <span className="text-[10px] md:text-[11px] font-bold uppercase tracking-widest text-white/80 dark:text-white/40">
                 {sortedMatchups.filter(m => !m.loading).length} {sortedMatchups.filter(m => !m.loading).length === 1 ? "Matchup" : "Matchups"}
               </span>
-              <div className="flex items-center gap-0.5 p-0.5 rounded-full bg-white/[0.04] border border-white/8 shadow-inner">
+              <div className="flex items-center gap-0.5 p-0.5 rounded-full bg-white/10 border border-white/15 shadow-inner dark:bg-white/[0.04] dark:border-white/8">
                 {(["winPct", "myProj", "record"] as const).map(key => {
                   const active = mSortKey === key;
                   const label = key === "winPct" ? "Win %" : key === "myProj" ? "Proj" : "Record";
@@ -1548,8 +1666,8 @@ export function LineupCommand() {
                       className={cn(
                         "text-[10px] font-bold uppercase tracking-wider px-2.5 md:px-3 py-1 rounded-full transition-all duration-150 whitespace-nowrap",
                         active
-                          ? "bg-[#d4af37]/18 text-[#d4af37] shadow-[inset_0_0_0_1px_rgba(212,175,55,0.35)]"
-                          : "text-white/35 hover:text-white/65"
+                          ? "bg-[#d6a21e] text-[var(--sc-blue)] shadow-[inset_0_0_0_1px_rgba(214,162,30,0.7)] dark:bg-[#d4af37]/18 dark:text-[#d4af37] dark:shadow-[inset_0_0_0_1px_rgba(212,175,55,0.35)]"
+                          : "text-white/70 hover:text-white dark:text-white/35 dark:hover:text-white/65",
                       )}
                     >
                       {label}
@@ -1564,16 +1682,16 @@ export function LineupCommand() {
               [...Array(Math.min(activeLeagues.length || 3, 4))].map((_, i) => <MatchupSkeletonRow key={i} />)
             ) : sortedMatchups.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
-                <Swords className="w-8 h-8 text-white/15 mb-3" />
-                <p className="text-sm font-semibold text-white/40">No matchup data yet</p>
-                <p className="text-xs text-white/25 mt-1">Matchup data loads once projections are available.</p>
+                <Swords className="w-8 h-8 text-[var(--sc-text-muted)]/40 dark:text-white/15 mb-3" />
+                <p className="text-sm font-semibold text-[var(--sc-text)] dark:text-white/40">No matchup data yet</p>
+                <p className="text-xs text-[var(--sc-text-muted)] dark:text-white/25 mt-1">Matchup data loads once projections are available.</p>
               </div>
             ) : (
               sortedMatchups.map(m => <MatchupBattleCard key={m.leagueId} m={m} preseason={isPreseason} />)
             )}
           </div>
 
-          <p className="text-[9px] text-white/20 text-center px-4">
+          <p className="text-[9px] text-[var(--sc-text-muted)] dark:text-white/20 text-center px-4">
             Matchup projections from Sleeper starters · Win % = projected pts / combined projected pts · Records from current standings
           </p>
         </>

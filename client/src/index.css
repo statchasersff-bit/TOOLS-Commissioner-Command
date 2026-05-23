@@ -63,19 +63,48 @@
   --chart-4: 30 90% 50%;
   --chart-5: 270 60% 50%;
 
-  /* ── StatChasers brand surfaces ─────────────────────────────────────── */
-  --sc-page-bg: #F8FAFC;
-  --sc-card-bg: #FFFFFF;
-  --sc-navy: #0F2447;
-  --sc-navy-soft: #1E3A6B;
-  --sc-text-primary: #0F2447;
-  --sc-text-secondary: #475569;
-  --sc-text-muted: #64748B;
-  --sc-border: #E2E8F0;
-  --sc-border-strong: #CBD5E1;
-  --sc-gold: #D4AF37;
-  --sc-gold-deep: #B8941F;
-  --sc-gold-soft: #FBF5E1;
+  /* ── StatChasers brand surfaces ───────────────────────────────────────
+   * Aligned to the brand spec: white surfaces, deep navy structure,
+   * gold as accent only. Tokens are organised so:
+   *   --sc-white / --sc-card-bg / --sc-page-bg cover surfaces
+   *   --sc-blue family covers navy structure + chips
+   *   --sc-gold family covers accent / focus / active highlights
+   *   --sc-text / --sc-text-muted cover text levels
+   * Legacy aliases (--sc-navy, --sc-text-primary, …) kept so existing
+   * call sites keep working. */
+  --sc-white: #ffffff;
+  --sc-page-bg: #f7f9fc;
+  --sc-card-bg: #ffffff;
+  --sc-card-soft: #f9fbff;
+
+  --sc-blue: #0b2344;
+  --sc-blue-2: #123a67;
+  --sc-blue-soft: #eef4fb;
+
+  /* Legacy navy aliases — same value as --sc-blue family. */
+  --sc-navy: #0b2344;
+  --sc-navy-soft: #123a67;
+
+  --sc-text: #102033;
+  --sc-text-muted: #64748b;
+  --sc-border: #dbe4ef;
+  --sc-border-strong: #c5d1e0;
+
+  /* Legacy text aliases. */
+  --sc-text-primary: #102033;
+  --sc-text-secondary: #64748b;
+
+  --sc-gold: #d6a21e;
+  --sc-gold-deep: #b8881a;
+  --sc-gold-soft: #fff7df;
+
+  --sc-success: #047857;
+  --sc-success-soft: #ecfdf5;
+  --sc-success-border: #a7f3d0;
+  --sc-danger: #dc2626;
+  --sc-danger-soft: #fef2f2;
+  --sc-warning: #d97706;
+  --sc-warning-soft: #fffbeb;
   /* Favorite-team theme tokens. Default to StatChasers gold/navy so any
    * component that opts in via var() stays branded when no favorite team
    * is selected. The FavoriteTeamProvider overrides these on <html> when
@@ -83,9 +112,9 @@
   --favorite-team-primary: #D4AF37;
   --favorite-team-secondary: #0F2447;
   --favorite-team-accent: rgba(212, 175, 55, 0.35);
-  --sc-shadow-card: 0 8px 24px rgba(15, 23, 42, 0.06);
-  --sc-shadow-card-hover: 0 12px 32px rgba(15, 23, 42, 0.10);
-  --sc-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.05);
+  --sc-shadow-card: 0 12px 30px rgba(11, 35, 68, 0.08);
+  --sc-shadow-card-hover: 0 18px 40px rgba(11, 35, 68, 0.12);
+  --sc-shadow-sm: 0 1px 2px rgba(11, 35, 68, 0.06);
   --sc-nav-bg: #FFFFFF;
   --sc-nav-bg-translucent: rgba(255, 255, 255, 0.85);
   --sc-table-header-bg: #F1F5F9;
@@ -533,11 +562,29 @@
   .sc-card {
     background-color: var(--sc-card-bg);
     border: 1px solid var(--sc-border);
-    border-radius: 0.75rem;
+    border-radius: 1.125rem;
     box-shadow: var(--sc-shadow-card);
   }
   .sc-card:hover {
     box-shadow: var(--sc-shadow-card-hover);
+  }
+
+  /* Section eyebrow — small uppercase label that sits above a card. Used
+   * for "Operations Overview", "Matchup Overview", etc. */
+  .sc-eyebrow {
+    color: var(--sc-text-muted);
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  /* Inline focus ring for inputs — gold glow per brand spec. */
+  .sc-input-focus:focus,
+  .sc-input-focus:focus-visible {
+    outline: none;
+    border-color: var(--sc-gold);
+    box-shadow: 0 0 0 3px rgba(214, 162, 30, 0.18);
   }
 
   /* Section title rule — gold underline aligned with the website. Use as
