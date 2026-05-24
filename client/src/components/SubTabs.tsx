@@ -70,7 +70,7 @@ export function SubTabs({ tabs, activeTab, setActiveTab }: SubTabsProps) {
             >
               {tab.label}
               {activeTab === tab.id && (
-                <span className="absolute bottom-0 left-3 right-3 h-[2px] bg-[#d4af37] rounded-full" />
+                <span className="sc-subtab-underline absolute bottom-0 left-3 right-3 h-[2px] bg-[#d4af37] rounded-full" />
               )}
             </button>
           ))}

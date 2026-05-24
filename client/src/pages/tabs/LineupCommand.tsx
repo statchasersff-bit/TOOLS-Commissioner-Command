@@ -1316,7 +1316,7 @@ export function LineupCommand() {
                   {label}
                   {isActive && (
                     <span
-                      className="absolute bottom-[3px] left-1/2 -translate-x-1/2 rounded-full w-7 h-0.5"
+                      className="sc-subtab-underline absolute bottom-[3px] left-1/2 -translate-x-1/2 rounded-full w-7 h-0.5"
                       style={{ background: "#d6a21e", opacity: 0.95 }}
                     />
                   )}
@@ -1370,7 +1370,7 @@ export function LineupCommand() {
                 {label}
                 {isActive && (
                   <span
-                    className="absolute bottom-[3px] left-1/2 -translate-x-1/2 rounded-full w-7 h-0.5"
+                    className="sc-subtab-underline absolute bottom-[3px] left-1/2 -translate-x-1/2 rounded-full w-7 h-0.5"
                     style={{ background: "#d6a21e", opacity: 0.95 }}
                   />
                 )}

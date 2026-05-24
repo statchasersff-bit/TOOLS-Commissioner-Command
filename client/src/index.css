@@ -119,6 +119,12 @@
   --sc-nav-bg-translucent: rgba(255, 255, 255, 0.85);
   --sc-table-header-bg: #F1F5F9;
   --sc-table-row-hover: #F8FAFC;
+  /* Inline-styled segmented toggles (e.g. ShareTeam List/Field view). Readable
+   * defaults for light + any non-dark theme; .dark/.x-mode restore the legacy
+   * translucent-on-dark values below. */
+  --sc-toggle-bg: #f1f5f9;
+  --sc-toggle-border: #dbe3ef;
+  --sc-toggle-inactive-text: #64748b;
   --font-sans: Inter, sans-serif;
   --font-serif: Georgia, serif;
   --font-mono: Menlo, monospace;
@@ -161,6 +167,162 @@
   /* Fallback for older browsers */
   --destructive-border: hsl(var(--destructive));
   --destructive-border: hsl(from hsl(var(--destructive)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * LIGHT MODE ONLY — clean StatChasers light theme refinement.
+ * Scoped to [data-theme="light"], which ThemeContext sets ONLY in light mode
+ * (x-mode → data-theme="x-mode"; my_team → data-theme="my_team" + .dark).
+ * Equal specificity to :root but placed after it, so these win in light mode;
+ * dark / x-mode / team modes never match this selector and are untouched.
+ * ────────────────────────────────────────────────────────────────────────── */
+[data-theme="light"] {
+  /* Surfaces — crisp white cards on a neutral off-white page (no washed blue) */
+  --background: 210 40% 98%;            /* #f8fafc */
+  --sc-page-bg: #f8fafc;
+  --sc-card-bg: #ffffff;
+  --sc-card-soft: #f1f5f9;              /* defined secondary surface */
+  --sc-nav-bg: #ffffff;
+  --sc-nav-bg-translucent: rgba(255, 255, 255, 0.85);
+  --sc-table-header-bg: #f1f5f9;
+  --sc-table-row-hover: #f8fafc;
+
+  /* Navy — secondary brand color (#18376d), richer than the old near-black */
+  --foreground: 214 68% 14%;            /* #0b1f3a navy text */
+  --sc-blue: #18376d;
+  --sc-blue-2: #234c86;                 /* lighter navy line on navy surfaces */
+  --sc-blue-soft: #eef3fb;
+  --sc-navy: #18376d;
+  --sc-navy-soft: #10264f;              /* navy-dark for depth/gradients */
+
+  /* Text */
+  --sc-text: #0b1f3a;
+  --sc-text-primary: #0b1f3a;
+  --sc-text-muted: #64748b;
+  --sc-text-secondary: #64748b;
+
+  /* Borders */
+  --border: 214 32% 91%;                /* #dbe3ef */
+  --sc-border: #dbe3ef;
+  --sc-border-strong: #c5d1e0;
+
+  /* Gold — accent only (#d4af37, classic StatChasers gold) */
+  --primary: 46 65% 52%;                /* #d4af37 */
+  --ring: 46 65% 52%;
+  --sidebar-ring: 46 65% 52%;
+  --sc-gold: #d4af37;
+  --sc-gold-deep: #b8901f;
+  --sc-gold-soft: #fbf3d6;              /* pale tint surface — kept soft, not neon */
+
+  /* Premium, tighter card shadow */
+  --sc-shadow-card: 0 6px 18px rgba(15, 23, 42, 0.08);
+  --sc-shadow-card-hover: 0 10px 26px rgba(15, 23, 42, 0.12);
+  --sc-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
+}
+
+/* Light mode only: mega-menu section header row is a filled StatChasers blue bar
+   with white text (dark/x-mode keep the transparent gold-text treatment). */
+[data-theme="light"] .mega-section-title {
+  background-color: var(--sc-blue);
+  color: #ffffff;
+  padding-top: 0.3rem;
+  padding-bottom: 0.3rem;
+  border-radius: 6px;
+}
+
+/* Light mode only: every table header row is StatChasers blue with white text.
+   Scoped to thead so column headers turn blue but tbody row-header <th> cells don't.
+   The descendant + child selectors out-specify the per-table Tailwind classes
+   (bg-muted/30, text-muted-foreground, etc.) without needing !important.
+   Dark and x-mode are unaffected — they never carry data-theme="light". */
+[data-theme="light"] thead,
+[data-theme="light"] thead tr,
+[data-theme="light"] thead th {
+  background-color: var(--sc-blue);
+}
+[data-theme="light"] thead th,
+[data-theme="light"] thead th * {
+  color: #ffffff;
+}
+
+/* Light mode only: in-page sub-tab / segmented controls (e.g. Table/Plot/Chart/
+   Heatmap) switch the active pill from blue→StatChasers gold, white→black text,
+   and the gold underline→black. Every active sub-tab renders a direct-child
+   <span class="sc-subtab-underline">, so :has() restyles the active <button>
+   without having to touch each call site's varied inline/Tailwind active styles.
+   Top-level nav (MainTabs/MegaMenu) uses a different underline with no marker
+   class, so it's unaffected; dark/x-mode never match this scope. */
+[data-theme="light"] button:has(> .sc-subtab-underline) {
+  background: var(--sc-gold) !important;
+  color: #000 !important;
+}
+[data-theme="light"] button:has(> .sc-subtab-underline) * {
+  color: #000 !important;
+}
+[data-theme="light"] .sc-subtab-underline {
+  background: #000 !important;
+  opacity: 1 !important;
+}
+
+/* Light mode only: the INACTIVE sub-tabs in those segmented controls use faint
+   dark-mode colors (e.g. rgba(203,213,225,0.45)) that are nearly invisible on a
+   light background. A control's active button is marked by a .sc-subtab-underline
+   child, so :has() finds the container and we darken every sibling button that
+   does NOT contain the underline — the active gold pill (handled above) is left
+   alone. Covers inline-style and Tailwind text colors, plus nested icons/labels. */
+[data-theme="light"] *:has(> button > .sc-subtab-underline) > button:not(:has(.sc-subtab-underline)),
+[data-theme="light"] *:has(> button > .sc-subtab-underline) > button:not(:has(.sc-subtab-underline)) * {
+  color: #475569 !important;   /* slate-600 — clearly legible on light surfaces */
+}
+
+/* Light mode only: Playoff Calculator % pills use light text (text-blue-50/100/
+   200, text-emerald-300) tuned for dark backgrounds — nearly invisible on the
+   pale-blue pill tints in light mode. Force a dark navy text so every pill is
+   legible while the background gradient still conveys the odds scale. */
+[data-theme="light"] .playoff-pct-pill,
+[data-theme="light"] .playoff-pct-pill * {
+  color: #0b2344 !important;
+}
+
+/* Light mode only: Trade Center trade cards were washed out — semi-transparent
+   backgrounds (bg-card/40, bg-muted/10) over barely-visible borders. Give them a
+   solid white background and a faint StatChasers-blue outer border so each card
+   reads clearly against the page. */
+[data-theme="light"] [data-testid^="trade-card-"],
+[data-theme="light"] [data-testid^="proposal-card-"] {
+  background-color: #ffffff !important;
+  background-image: none !important;
+  border-color: rgba(24, 55, 109, 0.35) !important;   /* slight --sc-blue (#18376d) */
+}
+
+/* Light mode only: ADP Explorer date-range pills (7D/30D/90D/Custom) used faint
+   white-on-dark text (text-white/40) and a washed translucent navy active state.
+   Make inactive text legible and the selected pill solid StatChasers blue. */
+[data-theme="light"] .range-pill {
+  color: #475569 !important;            /* legible inactive (slate-600) */
+}
+[data-theme="light"] .range-pill.range-active {
+  background-color: var(--sc-blue) !important;   /* solid #18376d */
+  border-color: var(--sc-blue) !important;
+  color: #ffffff !important;
+}
+
+/* Light mode only: League Power Rankings body rows get a solid white (opaque)
+   background, replacing the semi-transparent zebra/tint (bg-muted/10, /5 navy).
+   Scoped to tbody so the blue header row (styled above) is untouched. */
+[data-theme="light"] [data-testid="power-rankings-table"] tbody tr,
+[data-theme="light"] [data-testid="power-rankings-table"] tbody td {
+  background-color: #ffffff !important;
+}
+[data-theme="light"] [data-testid="power-rankings-table"] tbody tr:hover,
+[data-theme="light"] [data-testid="power-rankings-table"] tbody tr:hover td {
+  background-color: #f1f5f9 !important;   /* subtle opaque hover, still not see-through */
+}
+
+/* Light mode only: Trade Center → Finder positional-profile cards (QB/RB/WR/TE)
+   get a solid white background instead of the semi-transparent bg-muted/30. */
+[data-theme="light"] [data-testid^="pos-profile-"] {
+  background-color: #ffffff !important;
 }
 
 .dark {
@@ -234,6 +396,10 @@
   --sc-nav-bg-translucent: rgba(14, 28, 51, 0.85);
   --sc-table-header-bg: rgba(148, 163, 184, 0.06);
   --sc-table-row-hover: rgba(148, 163, 184, 0.04);
+  /* Legacy translucent-on-dark toggle values (unchanged dark-mode look). */
+  --sc-toggle-bg: rgba(255, 255, 255, 0.04);
+  --sc-toggle-border: rgba(255, 255, 255, 0.07);
+  --sc-toggle-inactive-text: rgba(203, 213, 225, 0.45);
 
 /* Fallback for older browsers */
   --sidebar-primary-border: hsl(var(--sidebar-primary));
@@ -350,6 +516,10 @@
   --sc-nav-bg-translucent: rgba(21, 27, 38, 0.85);
   --sc-table-header-bg: rgba(148, 163, 184, 0.06);
   --sc-table-row-hover: rgba(148, 163, 184, 0.04);
+  /* Legacy translucent-on-dark toggle values (unchanged x-mode look). */
+  --sc-toggle-bg: rgba(255, 255, 255, 0.04);
+  --sc-toggle-border: rgba(255, 255, 255, 0.07);
+  --sc-toggle-inactive-text: rgba(203, 213, 225, 0.45);
 
 /* Fallback for older browsers */
   --sidebar-primary-border: hsl(var(--sidebar-primary));

@@ -1052,7 +1052,7 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
           >
             <Icon style={{ width: 14, height: 14, flexShrink: 0 }} />
             <span>{label}</span>
-            {isActive && <span className="absolute bottom-[3px] left-1/2 -translate-x-1/2 rounded-full" style={{ width: 24, height: 2, background: "#d4af37", opacity: 0.85 }} />}
+            {isActive && <span className="sc-subtab-underline absolute bottom-[3px] left-1/2 -translate-x-1/2 rounded-full" style={{ width: 24, height: 2, background: "#d4af37", opacity: 0.85 }} />}
           </button>
         );
       })}

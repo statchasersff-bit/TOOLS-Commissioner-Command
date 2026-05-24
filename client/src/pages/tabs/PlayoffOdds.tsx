@@ -271,7 +271,7 @@ export function PlayoffOdds({ leagueId }: { leagueId: string }) {
       sortAccessor: (r: PlayoffTeam & { change: number | null }) => r.make_playoffs_pct,
       render: (r: PlayoffTeam & { change: number | null }) => {
         const c = pctCell(r.make_playoffs_pct);
-        return <span className={cn("inline-block px-2.5 py-1 rounded-md text-xs tabular-nums", c.className)}>{c.label}</span>;
+        return <span className={cn("playoff-pct-pill inline-block px-2.5 py-1 rounded-md text-xs tabular-nums", c.className)}>{c.label}</span>;
       },
     },
     {
@@ -281,7 +281,7 @@ export function PlayoffOdds({ leagueId }: { leagueId: string }) {
       sortAccessor: (r: PlayoffTeam & { change: number | null }) => r.first_round_bye_pct,
       render: (r: PlayoffTeam & { change: number | null }) => {
         const c = pctCell(r.first_round_bye_pct);
-        return <span className={cn("inline-block px-2.5 py-1 rounded-md text-xs tabular-nums", c.className)}>{c.label}</span>;
+        return <span className={cn("playoff-pct-pill inline-block px-2.5 py-1 rounded-md text-xs tabular-nums", c.className)}>{c.label}</span>;
       },
     },
     {
@@ -291,7 +291,7 @@ export function PlayoffOdds({ leagueId }: { leagueId: string }) {
       sortAccessor: (r: PlayoffTeam & { change: number | null }) => r.semifinals_pct,
       render: (r: PlayoffTeam & { change: number | null }) => {
         const c = pctCell(r.semifinals_pct);
-        return <span className={cn("inline-block px-2.5 py-1 rounded-md text-xs tabular-nums", c.className)}>{c.label}</span>;
+        return <span className={cn("playoff-pct-pill inline-block px-2.5 py-1 rounded-md text-xs tabular-nums", c.className)}>{c.label}</span>;
       },
     },
     {
@@ -301,7 +301,7 @@ export function PlayoffOdds({ leagueId }: { leagueId: string }) {
       sortAccessor: (r: PlayoffTeam & { change: number | null }) => r.finals_pct,
       render: (r: PlayoffTeam & { change: number | null }) => {
         const c = pctCell(r.finals_pct);
-        return <span className={cn("inline-block px-2.5 py-1 rounded-md text-xs tabular-nums", c.className)}>{c.label}</span>;
+        return <span className={cn("playoff-pct-pill inline-block px-2.5 py-1 rounded-md text-xs tabular-nums", c.className)}>{c.label}</span>;
       },
     },
     {
@@ -312,7 +312,7 @@ export function PlayoffOdds({ leagueId }: { leagueId: string }) {
       render: (r: PlayoffTeam & { change: number | null }) => {
         const c = pctCell(r.championship_pct);
         return (
-          <span className={cn("inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs tabular-nums", c.className)}>
+          <span className={cn("playoff-pct-pill inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs tabular-nums", c.className)}>
             {r.championship_pct >= 25 && <Trophy className="w-3 h-3" />}{c.label}
           </span>
         );
@@ -465,7 +465,7 @@ export function PlayoffOdds({ leagueId }: { leagueId: string }) {
                   return (
                     <div key={c.lbl} className="flex flex-col items-center gap-0.5">
                       <span className="text-muted-foreground uppercase tracking-wider text-[9px]">{c.lbl}</span>
-                      <span className={cn("w-full text-center rounded px-1 py-0.5 tabular-nums", cc.className)}>{cc.label}</span>
+                      <span className={cn("playoff-pct-pill w-full text-center rounded px-1 py-0.5 tabular-nums", cc.className)}>{cc.label}</span>
                     </div>
                   );
                 })}

@@ -18,7 +18,7 @@ import { API_BASE } from "@/lib/apiBase";
 import {
   Search, SlidersHorizontal, List, LayoutGrid, Hexagon,
   TrendingUp, TrendingDown, Minus, AlertCircle, RefreshCw, ChevronUp, ChevronDown, ChevronRight,
-  Calendar, X, Trophy,
+  Calendar, X, Trophy, Rocket, Sparkles,
 } from "lucide-react";
 import {
   DEFAULT_FILTERS, toIsoDate,
@@ -117,9 +117,9 @@ type ViewMode = "list" | "box" | "hex" | "round";
 // double-route to the same view.
 type DraftTopTab = "startup" | "rookie";
 
-const TOP_TABS: { id: DraftTopTab; label: string; subtitle: string }[] = [
-  { id: "startup", label: "Startup ADP",  subtitle: "Real Sleeper startup draft data and market movement." },
-  { id: "rookie",  label: "Rookie Drafts", subtitle: "Track rookie-only draft ADP from real Sleeper rookie drafts." },
+const TOP_TABS: { id: DraftTopTab; label: string; subtitle: string; icon: typeof List }[] = [
+  { id: "startup", label: "Startup ADP",  subtitle: "Real Sleeper startup draft data and market movement.", icon: Rocket },
+  { id: "rookie",  label: "Rookie Drafts", subtitle: "Track rookie-only draft ADP from real Sleeper rookie drafts.", icon: Sparkles },
 ];
 
 const STARTUP_VIEW_OPTIONS: { id: ViewMode; label: string; icon: typeof List }[] = [
@@ -333,48 +333,50 @@ export function DraftCommand() {
 
   return (
     <div className="space-y-4 md:space-y-5">
-      <SectionHeader
-        title="ADP Explorer"
-        subtitle={currentTabMeta.subtitle}
-      />
+      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between md:gap-4">
+        <div className="min-w-0">
+          <SectionHeader
+            title="ADP Explorer"
+            subtitle={currentTabMeta.subtitle}
+          />
 
-      {/* Mobile-only header — SectionHeader hides on mobile. */}
-      <div className="md:hidden">
-        <h2 className="text-lg font-bold text-foreground tracking-tight">ADP Explorer</h2>
-      </div>
+          {/* Mobile-only header — SectionHeader hides on mobile. */}
+          <div className="md:hidden">
+            <h2 className="text-lg font-bold text-foreground tracking-tight">ADP Explorer</h2>
+          </div>
+        </div>
 
-      {/* ── Top tabs: Startup ADP / Rookie Drafts ─────────────────────────
-          On mobile: centered, with a gold underline on the active tab.
-          On desktop: pill-style group, left-aligned (unchanged). */}
-      <div
-        className="flex items-center gap-1 p-1 rounded-xl bg-white/[0.03] border border-white/6 w-fit mx-auto md:mx-0"
-        data-testid="draft-command-top-tabs"
-      >
+        {/* ── Top tabs: Startup ADP / Rookie Drafts — inline with the header
+            row, right-aligned on desktop (centered on mobile), matching the
+            Table/Plot/Chart/Heatmap toggle. The .sc-subtab-underline marker
+            gives it the shared light-mode gold/black treatment. */}
+        <div className="flex justify-center md:justify-end flex-shrink-0">
+          <div
+            className="grid w-fit"
+            style={{ gridTemplateColumns: "repeat(2, 1fr)", height: 48, borderRadius: 16, padding: 4, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", gap: 4, minWidth: 0 }}
+            data-testid="draft-command-top-tabs"
+          >
         {TOP_TABS.map((t) => {
           const active = topTab === t.id;
+          const Icon = t.icon;
           return (
             <button
               key={t.id}
               type="button"
               onClick={() => switchTab(t.id)}
-              className={cn(
-                "relative px-3.5 py-1.5 rounded-lg text-[12px] font-semibold transition-all whitespace-nowrap",
-                active
-                  ? "md:bg-[#0b3a7a]/70 text-white md:border md:border-[#d4af37]/30 md:shadow-[0_0_0_1px_rgba(212,175,55,0.05)]"
-                  : "text-white/45 hover:text-white/80 md:border md:border-transparent",
-              )}
+              title={t.label}
               data-testid={`draft-tab-${t.id}`}
+              className="relative flex items-center justify-center gap-1.5 font-semibold transition-all duration-200"
+              style={{ borderRadius: 12, fontSize: 12, letterSpacing: "0.01em", background: active ? "linear-gradient(135deg, rgba(11,58,122,0.85) 0%, rgba(11,58,122,0.65) 100%)" : "transparent", color: active ? "#fff" : "rgba(203,213,225,0.45)", border: active ? "1px solid rgba(212,175,55,0.30)" : "1px solid transparent", boxShadow: active ? "0 2px 12px rgba(11,58,122,0.40), inset 0 1px 0 rgba(255,255,255,0.06)" : "none", paddingLeft: 12, paddingRight: 12 }}
             >
-              {t.label}
-              {active && (
-                <span
-                  aria-hidden
-                  className="md:hidden absolute left-2 right-2 -bottom-0.5 h-[2px] rounded-full bg-[#d4af37]"
-                />
-              )}
+              <Icon style={{ width: 14, height: 14, flexShrink: 0 }} />
+              <span>{t.label}</span>
+              {active && <span className="sc-subtab-underline absolute bottom-[3px] left-1/2 -translate-x-1/2 rounded-full" style={{ width: 24, height: 2, background: "#d4af37", opacity: 0.85 }} />}
             </button>
           );
         })}
+          </div>
+        </div>
       </div>
 
       {/* ── Top controls row ─────────────────────────────────────────────── */}
@@ -418,14 +420,16 @@ export function DraftCommand() {
         <div className="flex flex-wrap items-center gap-2">
           {/* View switcher — set varies by top tab (rookie tab swaps Hex
               for the rookie-board layout). */}
-          <div className="flex items-center gap-1 p-1 rounded-xl bg-white/[0.03] border border-white/6">
+          <div className="flex items-center gap-1 p-1 rounded-xl bg-[var(--sc-card-soft)] border border-[var(--sc-border)] dark-any:bg-white/[0.03] dark-any:border-white/6">
             {currentViewOptions.map(({ id, label, icon: Icon }) => (
               <button
                 key={id}
                 onClick={() => setView(id)}
                 className={cn(
                   "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-all",
-                  view === id ? "bg-[#0b3a7a]/60 text-white border border-[#d4af37]/25" : "text-white/40 hover:text-white/70",
+                  view === id
+                    ? "bg-[var(--sc-blue)] dark-any:bg-[#0b3a7a]/60 text-white border border-[#d4af37]/25"
+                    : "text-[var(--sc-text-muted)] hover:text-[var(--sc-blue)] dark-any:text-white/40 dark-any:hover:text-white/70",
                 )}
                 data-testid={`view-${id}`}
               >
@@ -447,8 +451,8 @@ export function DraftCommand() {
                 key={s.id}
                 onClick={() => setRange(s.days)}
                 className={cn(
-                  "px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-all",
-                  activeShortcut === s.id ? "bg-[#0b3a7a]/60 text-white border border-[#d4af37]/25" : "text-white/40 hover:text-white/70",
+                  "range-pill px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-all",
+                  activeShortcut === s.id ? "range-active bg-[#0b3a7a]/60 text-white border border-[#d4af37]/25" : "text-white/40 hover:text-white/70",
                 )}
                 data-testid={`range-${s.id}`}
               >
@@ -458,8 +462,8 @@ export function DraftCommand() {
             <button
               onClick={() => setFilterSheetOpen(true)}
               className={cn(
-                "flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-all",
-                activeShortcut === null ? "bg-[#0b3a7a]/60 text-white border border-[#d4af37]/25" : "text-white/40 hover:text-white/70",
+                "range-pill flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-all",
+                activeShortcut === null ? "range-active bg-[#0b3a7a]/60 text-white border border-[#d4af37]/25" : "text-white/40 hover:text-white/70",
               )}
               data-testid="range-custom"
             >
@@ -567,8 +571,11 @@ class AdminToolsBoundary extends Component<{ children: ReactNode }, { error: Err
 }
 
 function AdminAdpTools() {
-  const { isAdmin } = useAuth();
-  if (!isAdmin) return null;
+  const { isAdmin, canPerformWriteActions } = useAuth();
+  // Admin allowlist alone isn't enough: a read-only Sleeper-username match
+  // (e.g. @makitrain with no DC login / token) is still isAdmin but has no
+  // write access. Require both so the crawl tools only show with write access.
+  if (!isAdmin || !canPerformWriteActions) return null;
   return (
     <AdminToolsBoundary>
       <AdpCrawlPanel />

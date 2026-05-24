@@ -78,12 +78,10 @@ export function PlayerAvatar({
       {team && team !== "FA" && (
         <div
           className={cn(
-            // Outer wrapper renders the dark backdrop + ring; we hide the
-            // ENTIRE wrapper (not just the inner img) on image error so
-            // there's no orphaned dark dot when Sleeper's CDN 404s on a
-            // legacy team abbreviation. Slightly thicker ring keeps the
-            // badge visible against dark page backgrounds.
-            "absolute -bottom-0.5 -right-0.5 rounded-full overflow-hidden ring-2 ring-background bg-[#0a1628] flex items-center justify-center",
+            // Bare team logo, no backdrop/ring. We still hide the ENTIRE
+            // wrapper (not just the inner img) on image error so there's no
+            // orphaned box when Sleeper's CDN 404s on a legacy abbreviation.
+            "absolute -bottom-0.5 -right-0.5 flex items-center justify-center",
             badgeSize
           )}
         >

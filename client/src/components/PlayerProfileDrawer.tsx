@@ -317,7 +317,7 @@ function ProfileHeader({ adp, ctxLabel, meta }: { adp: ADPResult; ctxLabel: stri
             <img
               src={`https://sleepercdn.com/images/team_logos/nfl/${team.toLowerCase()}.png`}
               alt={team}
-              className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full ring-1 ring-[#0a1628] bg-[#0a1628] object-contain p-px"
+              className="absolute -bottom-1 -right-1 w-5 h-5 object-contain"
               onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
             />
           )}

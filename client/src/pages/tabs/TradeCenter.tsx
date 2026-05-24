@@ -834,7 +834,7 @@ export function TradeFinder({ league, userTeam }: TradeProps) {
               >
                 Build Dynasty
                 {proposalMode === "dynasty" && (
-                  <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-6 h-[2px] rounded-full bg-[#d4af37]" />
+                  <span className="sc-subtab-underline absolute bottom-0 left-1/2 -translate-x-1/2 w-6 h-[2px] rounded-full bg-[#d4af37]" />
                 )}
               </button>
               <button
@@ -844,7 +844,7 @@ export function TradeFinder({ league, userTeam }: TradeProps) {
               >
                 Win-Now
                 {proposalMode === "redraft" && (
-                  <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-6 h-[2px] rounded-full bg-[#d4af37]" />
+                  <span className="sc-subtab-underline absolute bottom-0 left-1/2 -translate-x-1/2 w-6 h-[2px] rounded-full bg-[#d4af37]" />
                 )}
               </button>
             </div>
@@ -1327,7 +1327,7 @@ export function TradeBlockScanner({ league }: { league: League }) {
               >
                 <Icon style={{ width: 14, height: 14, flexShrink: 0 }} />
                 {label}
-                {isActive && <span className="absolute bottom-[3px] left-1/2 -translate-x-1/2 rounded-full" style={{ width: 28, height: 2, background: "#d4af37", opacity: 0.85 }} />}
+                {isActive && <span className="sc-subtab-underline absolute bottom-[3px] left-1/2 -translate-x-1/2 rounded-full" style={{ width: 28, height: 2, background: "#d4af37", opacity: 0.85 }} />}
               </button>
             );
           })}
@@ -1352,7 +1352,7 @@ export function TradeBlockScanner({ league }: { league: League }) {
               >
                 <Icon style={{ width: 14, height: 14, flexShrink: 0 }} />
                 {label}
-                {isActive && <span className="absolute bottom-[3px] left-1/2 -translate-x-1/2 rounded-full" style={{ width: 28, height: 2, background: "#d4af37", opacity: 0.85 }} />}
+                {isActive && <span className="sc-subtab-underline absolute bottom-[3px] left-1/2 -translate-x-1/2 rounded-full" style={{ width: 28, height: 2, background: "#d4af37", opacity: 0.85 }} />}
               </button>
             );
           })}

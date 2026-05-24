@@ -257,7 +257,7 @@ export function ShareTeam({ league, userTeam }: Props) {
       <div className="flex items-start justify-between gap-4">
         <SectionHeader title="Share My Team" subtitle="Create a clean shareable snapshot of your roster, values, and team profile." />
         <div className="hidden md:block flex-shrink-0 pt-1">
-          <div className="grid" style={{ gridTemplateColumns: "1fr 1fr", height: 48, borderRadius: 16, padding: 4, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", gap: 4, width: 240 }}>
+          <div className="grid" style={{ gridTemplateColumns: "1fr 1fr", height: 48, borderRadius: 16, padding: 4, background: "var(--sc-toggle-bg)", border: "1px solid var(--sc-toggle-border)", gap: 4, width: 240 }}>
             {(["share", "field-view"] as const).map((val) => {
               const isActive = innerTab === val;
               const Icon = val === "share" ? Share2 : LayoutGrid;
@@ -265,10 +265,10 @@ export function ShareTeam({ league, userTeam }: Props) {
               return (
                 <button key={val} onClick={() => setInnerTab(val)} data-testid={`tab-inner-${val}-desktop`}
                   className="relative flex items-center justify-center gap-2 font-semibold transition-all duration-200"
-                  style={{ borderRadius: 12, fontSize: 13, letterSpacing: "0.01em", background: isActive ? "linear-gradient(135deg, rgba(11,58,122,0.85) 0%, rgba(11,58,122,0.65) 100%)" : "transparent", color: isActive ? "#fff" : "rgba(203,213,225,0.45)", border: isActive ? "1px solid rgba(212,175,55,0.30)" : "1px solid transparent", boxShadow: isActive ? "0 2px 12px rgba(11,58,122,0.40), inset 0 1px 0 rgba(255,255,255,0.06)" : "none" }}>
+                  style={{ borderRadius: 12, fontSize: 13, letterSpacing: "0.01em", background: isActive ? "linear-gradient(135deg, rgba(11,58,122,0.85) 0%, rgba(11,58,122,0.65) 100%)" : "transparent", color: isActive ? "#fff" : "var(--sc-toggle-inactive-text)", border: isActive ? "1px solid rgba(212,175,55,0.30)" : "1px solid transparent", boxShadow: isActive ? "0 2px 12px rgba(11,58,122,0.40), inset 0 1px 0 rgba(255,255,255,0.06)" : "none" }}>
                   <Icon style={{ width: 15, height: 15, flexShrink: 0 }} />
                   {label}
-                  {isActive && <span className="absolute bottom-[3px] left-1/2 -translate-x-1/2 rounded-full" style={{ width: 28, height: 2, background: "#d4af37", opacity: 0.85 }} />}
+                  {isActive && <span className="sc-subtab-underline absolute bottom-[3px] left-1/2 -translate-x-1/2 rounded-full" style={{ width: 28, height: 2, background: "#d4af37", opacity: 0.85 }} />}
                 </button>
               );
             })}
@@ -277,7 +277,7 @@ export function ShareTeam({ league, userTeam }: Props) {
       </div>
       {/* Tab toggle — view switcher (mobile only) */}
       <div className="md:hidden flex justify-center sm:justify-start !mt-0">
-        <div className="grid w-full sm:w-auto" style={{ gridTemplateColumns: "1fr 1fr", maxWidth: 420, height: 48, borderRadius: 16, padding: 4, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", gap: 4 }}>
+        <div className="grid w-full sm:w-auto" style={{ gridTemplateColumns: "1fr 1fr", maxWidth: 420, height: 48, borderRadius: 16, padding: 4, background: "var(--sc-toggle-bg)", border: "1px solid var(--sc-toggle-border)", gap: 4 }}>
           {(["share", "field-view"] as const).map((val) => {
             const isActive = innerTab === val;
             const Icon = val === "share" ? Share2 : LayoutGrid;
@@ -285,10 +285,10 @@ export function ShareTeam({ league, userTeam }: Props) {
             return (
               <button key={val} onClick={() => setInnerTab(val)} data-testid={`tab-inner-${val}`}
                 className="relative flex items-center justify-center gap-2 font-semibold transition-all duration-200"
-                style={{ borderRadius: 12, fontSize: 13, letterSpacing: "0.01em", background: isActive ? "linear-gradient(135deg, rgba(11,58,122,0.85) 0%, rgba(11,58,122,0.65) 100%)" : "transparent", color: isActive ? "#fff" : "rgba(203,213,225,0.45)", border: isActive ? "1px solid rgba(212,175,55,0.30)" : "1px solid transparent", boxShadow: isActive ? "0 2px 12px rgba(11,58,122,0.40), inset 0 1px 0 rgba(255,255,255,0.06)" : "none" }}>
+                style={{ borderRadius: 12, fontSize: 13, letterSpacing: "0.01em", background: isActive ? "linear-gradient(135deg, rgba(11,58,122,0.85) 0%, rgba(11,58,122,0.65) 100%)" : "transparent", color: isActive ? "#fff" : "var(--sc-toggle-inactive-text)", border: isActive ? "1px solid rgba(212,175,55,0.30)" : "1px solid transparent", boxShadow: isActive ? "0 2px 12px rgba(11,58,122,0.40), inset 0 1px 0 rgba(255,255,255,0.06)" : "none" }}>
                 <Icon style={{ width: 15, height: 15, flexShrink: 0 }} />
                 {label}
-                {isActive && <span className="absolute bottom-[3px] left-1/2 -translate-x-1/2 rounded-full" style={{ width: 28, height: 2, background: "#d4af37", opacity: 0.85 }} />}
+                {isActive && <span className="sc-subtab-underline absolute bottom-[3px] left-1/2 -translate-x-1/2 rounded-full" style={{ width: 28, height: 2, background: "#d4af37", opacity: 0.85 }} />}
               </button>
             );
           })}

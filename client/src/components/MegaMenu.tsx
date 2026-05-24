@@ -164,7 +164,7 @@ function MegaMenuPanel({ tabId, isOpen, onNavigate, activeSub, onMouseEnter, onM
               <div className="h-px bg-white/[0.05] mx-5" />
             )}
             <div className="px-3 pt-4 pb-1">
-              <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#d4af37]/70 px-2 mb-2">
+              <p className="mega-section-title text-[10px] font-bold uppercase tracking-[0.14em] text-[#d4af37]/70 px-2 mb-2">
                 {section.title}
               </p>
               <div className="flex flex-col gap-0.5">

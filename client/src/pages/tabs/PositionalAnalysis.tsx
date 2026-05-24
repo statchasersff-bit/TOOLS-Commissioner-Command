@@ -268,7 +268,7 @@ export function PositionalAnalysis({ league, userTeam, onNavigateToCalculator }:
             {label}
             {isActive && (
               <span
-                className="absolute bottom-[3px] left-1/2 -translate-x-1/2 rounded-full"
+                className="sc-subtab-underline absolute bottom-[3px] left-1/2 -translate-x-1/2 rounded-full"
                 style={{ width: 28, height: 2, background: "#d4af37", opacity: 0.85 }}
               />
             )}
@@ -762,7 +762,7 @@ function TradeOpportunities({ league, userTeam }: { league: League; userTeam: Te
               <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.01em", lineHeight: 1.2, color: isActive ? "#fff" : "rgba(203,213,225,0.45)" }}>{label}</span>
               <span style={{ fontSize: 10, lineHeight: 1.2, color: isActive ? "rgba(255,255,255,0.55)" : "rgba(203,213,225,0.28)" }}>{desc}</span>
             </div>
-            {isActive && <span className="absolute bottom-[3px] left-1/2 -translate-x-1/2 rounded-full" style={{ width: 28, height: 2, background: "#d4af37", opacity: 0.85 }} />}
+            {isActive && <span className="sc-subtab-underline absolute bottom-[3px] left-1/2 -translate-x-1/2 rounded-full" style={{ width: 28, height: 2, background: "#d4af37", opacity: 0.85 }} />}
           </button>
         );
       })}
@@ -797,7 +797,7 @@ function TradeOpportunities({ league, userTeam }: { league: League; userTeam: Te
                   <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.01em", lineHeight: 1.2, color: isActive ? "#fff" : "rgba(203,213,225,0.45)" }}>{label}</span>
                   <span style={{ fontSize: 10, lineHeight: 1.2, color: isActive ? "rgba(255,255,255,0.55)" : "rgba(203,213,225,0.28)" }}>{desc}</span>
                 </div>
-                {isActive && <span className="absolute bottom-[3px] left-1/2 -translate-x-1/2 rounded-full" style={{ width: 28, height: 2, background: "#d4af37", opacity: 0.85 }} />}
+                {isActive && <span className="sc-subtab-underline absolute bottom-[3px] left-1/2 -translate-x-1/2 rounded-full" style={{ width: 28, height: 2, background: "#d4af37", opacity: 0.85 }} />}
               </button>
             );
           })}

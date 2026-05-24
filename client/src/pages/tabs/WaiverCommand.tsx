@@ -563,7 +563,7 @@ export default function WaiverCommand() {
                 <Icon className="w-3.5 h-3.5" />
                 <span>{label}</span>
                 {activeView === id && (
-                  <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-6 h-[2px] rounded-full bg-[#d4af37]" />
+                  <span className="sc-subtab-underline absolute bottom-0 left-1/2 -translate-x-1/2 w-6 h-[2px] rounded-full bg-[#d4af37]" />
                 )}
               </button>
             ))}
@@ -609,7 +609,7 @@ export default function WaiverCommand() {
                 <Icon className="w-3.5 h-3.5" />
                 <span>{label}</span>
                 {activeView === id && (
-                  <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-6 h-[2px] rounded-full bg-[#d4af37]" />
+                  <span className="sc-subtab-underline absolute bottom-0 left-1/2 -translate-x-1/2 w-6 h-[2px] rounded-full bg-[#d4af37]" />
                 )}
               </button>
             ))}
