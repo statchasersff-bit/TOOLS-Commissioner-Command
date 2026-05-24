@@ -157,18 +157,26 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
     if (!selectedLeagueId || !sleeper.isConnected || !sleeper.user) return;
     let cancelled = false;
     setIsLeagueLoading(true);
+    console.info("[app] league load start", { leagueId: selectedLeagueId, sleeperUserId: sleeper.user.userId });
 
     fetchSleeperLeagueFull(selectedLeagueId, sleeper.user.userId)
       .then((data: { league: League; userTeamId: string | null }) => {
         if (cancelled) return;
+        console.info("[app] league load ok", { leagueId: selectedLeagueId, teams: data.league?.teams?.length, userTeamId: data.userTeamId });
         setFetchedLeague(data);
         setIsLeagueLoading(false);
       })
       .catch((err) => {
         if (cancelled) return;
-        console.error("League fetch error:", err);
+        // fetchSleeperLeagueFull now times out rather than hanging, so this
+        // branch always runs on failure — clearing the overlay instead of
+        // leaving the app stuck on "Loading league data...".
+        console.error("[app] league load failed", { leagueId: selectedLeagueId, endpoint: "fetchSleeperLeagueFull", error: err });
         setFetchedLeague(null);
         setIsLeagueLoading(false);
+      })
+      .finally(() => {
+        if (!cancelled) console.info("[app] league load finished — isLeagueLoading: false");
       });
 
     return () => { cancelled = true; };

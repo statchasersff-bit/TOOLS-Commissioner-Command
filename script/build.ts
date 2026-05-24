@@ -1,6 +1,21 @@
 import { build as esbuild } from "esbuild";
 import { build as viteBuild } from "vite";
 import { rm, readFile } from "fs/promises";
+import { execSync } from "child_process";
+
+// Resolve the current commit at build time so the running server can report
+// exactly which code it's serving (surfaced in startup logs and /health).
+// Falls back to "unknown" if git isn't available in the build environment
+// (e.g. some Replit deployment builders).
+function gitCommit(): string {
+  try {
+    return execSync("git rev-parse --short HEAD", { stdio: ["ignore", "pipe", "ignore"] })
+      .toString()
+      .trim();
+  } catch {
+    return process.env.GIT_COMMIT || "unknown";
+  }
+}
 
 // server deps to bundle to reduce openat(2) syscalls
 // which helps cold start times
@@ -54,6 +69,8 @@ async function buildAll() {
     outfile: "dist/index.cjs",
     define: {
       "process.env.NODE_ENV": '"production"',
+      "process.env.BUILD_TIME": JSON.stringify(new Date().toISOString()),
+      "process.env.GIT_COMMIT": JSON.stringify(gitCommit()),
     },
     minify: true,
     external: externals,

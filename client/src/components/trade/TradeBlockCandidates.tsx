@@ -5,7 +5,8 @@ import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { getTierColor } from "@/data/mockData";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
-import { Loader2, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Loader2, ArrowUp, ArrowDown, ArrowUpDown, AlertTriangle, RefreshCw } from "lucide-react";
 
 export interface TradeBlockCandidate {
   id: string;
@@ -31,6 +32,10 @@ interface TradeBlockCandidatesProps {
   maxItems?: number;
   isLoading?: boolean;
   noJwt?: boolean;
+  /** Non-null when the live trade-block fetch failed; renders an error card. */
+  error?: string | null;
+  /** Called when the user clicks Retry in the error state. */
+  onRetry?: () => void;
   testId?: string;
 }
 
@@ -45,6 +50,8 @@ export function TradeBlockCandidates({
   maxItems = 20,
   isLoading = false,
   noJwt = false,
+  error = null,
+  onRetry,
   testId = "card-trade-block-candidates",
 }: TradeBlockCandidatesProps) {
   const isActual = mode === "actualTradeBlock";
@@ -146,7 +153,7 @@ export function TradeBlockCandidates({
       <div className="mb-5">
         <h3 className="text-base font-bold flex items-center gap-2">
           {title}
-          {!isLoading && <Badge variant="secondary">{candidates.length}</Badge>}
+          {!isLoading && !error && <Badge variant="secondary">{candidates.length}</Badge>}
         </h3>
         <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
         {!isActual && description && (
@@ -161,13 +168,44 @@ export function TradeBlockCandidates({
         </div>
       )}
 
-      {!isLoading && noJwt && isActual && (
+      {/* Error state — a failed fetch gets a clear, retryable card instead of
+          being silently shown as an empty trade block. */}
+      {!isLoading && error && (
+        <div
+          className="flex flex-col items-center gap-3 py-6 text-center"
+          data-testid="trade-block-error"
+        >
+          <div className="w-10 h-10 rounded-full bg-amber-500/10 flex items-center justify-center">
+            <AlertTriangle className="w-5 h-5 text-amber-500" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-foreground">Couldn’t load the trade block</p>
+            <p className="text-xs text-muted-foreground mt-1 max-w-[280px]">
+              The live trade-block data failed to load. Your other tools still work — try again.
+            </p>
+          </div>
+          {onRetry && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={onRetry}
+              data-testid="button-retry-trade-block"
+              className="gap-2"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              Retry
+            </Button>
+          )}
+        </div>
+      )}
+
+      {!isLoading && !error && noJwt && isActual && (
         <p className="text-xs text-muted-foreground">
           Connect your Sleeper account to see live trade block listings.
         </p>
       )}
 
-      {!isLoading && !noJwt && (
+      {!isLoading && !error && !noJwt && (
         <>
           {candidates.length === 0 ? (
             <p className="text-xs text-muted-foreground">{emptyText}</p>

@@ -1367,6 +1367,8 @@ export function TradeBlockScanner({ league }: { league: League }) {
           title="On Trade Block"
           isLoading={lpsLoading}
           noJwt={!sleeperJwt}
+          error={lpsError}
+          onRetry={retryTradeBlock}
         />
       )}
 

@@ -59,6 +59,29 @@ async function freePort(port: number): Promise<void> {
 const app = express();
 const httpServer = createServer(app);
 
+// Build/runtime identity. BUILD_TIME and GIT_COMMIT are inlined at build time
+// by esbuild (see script/build.ts). In dev (tsx) they're undefined and fall
+// back to sensible defaults.
+const BUILD_TIME = process.env.BUILD_TIME || "dev";
+const GIT_COMMIT = process.env.GIT_COMMIT || "unknown";
+
+// ── Liveness probe ───────────────────────────────────────────────────────────
+// Registered BEFORE the session/DB middleware on purpose: "healthy" must mean
+// "the Express process is alive and listening", independent of whether Postgres
+// happens to be reachable. That's exactly the signal an external uptime monitor
+// needs to tell "VM is dead" (504/timeout) apart from "app is up". Both /health
+// and /healthz are served so any monitor convention works.
+app.get(["/health", "/healthz"], (_req, res) => {
+  res.status(200).json({
+    status: "ok",
+    env: process.env.NODE_ENV || "development",
+    uptimeSec: Math.round(process.uptime()),
+    commit: GIT_COMMIT,
+    builtAt: BUILD_TIME,
+    ts: new Date().toISOString(),
+  });
+});
+
 // CORS — always allow the production domains plus any additional origins
 // from CORS_ORIGIN env var. statchasers.com is included as a first-class
 // production origin (see TEMPORARY note in shared/appMode.ts — when the
@@ -188,18 +211,36 @@ app.use((req, res, next) => {
   next();
 });
 
+// Benign connection-abort errors (browser disconnected mid-request) come from
+// raw-body/express.json() and are not server bugs — never log/act on them.
+function isBenignConnectionError(e: unknown): boolean {
+  return (
+    e instanceof Error &&
+    ((e as any).code === "ECONNABORTED" ||
+      (e as any).type === "request.aborted" ||
+      e.message?.includes("request aborted"))
+  );
+}
+
+// ── Crash safety ─────────────────────────────────────────────────────────────
+// THIS IS THE FIX FOR THE DAILY 504s. The old handler called process.exit(1)
+// on ANY unhandled rejection. During Replit's overnight maintenance window the
+// DB/network connections blip, which surfaces as a rejected promise somewhere
+// in the request/background path — and that single transient blip was killing
+// the whole production process. A rejected promise is NOT a reason to take the
+// site down, so we now log loudly and keep serving.
 process.on("unhandledRejection", (reason) => {
-  // Ignore benign connection-abort errors (browser disconnected mid-request).
-  // These come from raw-body/express.json() and are not server bugs.
-  if (
-    reason instanceof Error &&
-    ((reason as any).code === "ECONNABORTED" ||
-      (reason as any).type === "request.aborted" ||
-      reason.message?.includes("request aborted"))
-  ) {
-    return;
-  }
-  console.error("[server] unhandledRejection:", reason);
+  if (isBenignConnectionError(reason)) return;
+  console.error("[server] unhandledRejection (process kept alive):", reason);
+});
+
+// An uncaughtException can leave the process in a genuinely undefined state, so
+// here we DO exit — but cleanly (exit 1) so the Reserved VM supervisor restarts
+// a fresh process automatically. Resilience comes from the supervised restart,
+// not from limping along in a corrupt state. Benign client aborts are ignored.
+process.on("uncaughtException", (err) => {
+  if (isBenignConnectionError(err)) return;
+  console.error("[server] uncaughtException — exiting for clean supervisor restart:", err);
   process.exit(1);
 });
 
@@ -255,7 +296,12 @@ process.on("unhandledRejection", (reason) => {
   });
 
   httpServer.listen({ port, host: "0.0.0.0", reusePort: true }, () => {
-    log(`serving on port ${port}`);
+    log("server started");
+    log(`  port:        ${port}`);
+    log(`  environment: ${process.env.NODE_ENV || "development"}`);
+    log(`  build time:  ${BUILD_TIME}`);
+    log(`  commit:      ${GIT_COMMIT}`);
+    log(`  health:      GET /health`);
     // Kick a self-request so Vite compiles the module graph immediately on
     // startup rather than on the first real browser request (which causes a
     // white screen while Vite cold-compiles).
