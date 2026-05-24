@@ -499,6 +499,11 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
       return <TradeSync />;
     }
 
+    // position-stats is fully self-contained (local bundled data, no Sleeper API)
+    if (activeMainTab === "league-market" && activeSubTab === "position-stats") {
+      return <PositionStats />;
+    }
+
     // Past this point we need an active league. AccessGate has already
     // ensured the user is at least readonly-connected; if they're connected
     // but haven't loaded a league yet, prompt them.
