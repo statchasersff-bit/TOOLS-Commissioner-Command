@@ -1,11 +1,13 @@
 /**
  * ThemeContext — owns the active theme mode and applies it to <html>.
  *
- * Four modes:
+ * Three modes:
  *   - "light"    → no class on <html>            (StatChasers light palette)
- *   - "dark"     → .dark class                   (existing dark palette)
  *   - "x-mode"   → .x-mode class                 (existing tactical theme)
  *   - "my_team"  → .dark + .my-team-mode class + per-team CSS variables
+ *
+ * (The standalone deep-navy "dark" mode was removed; My Team Mode still rides
+ * on the .dark base palette for its team-tinted canvas.)
  *
  * "My Team Mode" sits on top of the dark base — most NFL color combinations
  * read more safely on a dark foundation, per the spec. When the user has no
@@ -25,15 +27,17 @@ import {
 import { useFavoriteTeam } from "./FavoriteTeamContext";
 import { generateTeamTheme, validateTeamTheme } from "@/lib/themeColors";
 
-export type ThemeMode = "light" | "dark" | "x-mode" | "my_team";
+export type ThemeMode = "light" | "x-mode" | "my_team";
 
 const THEME_KEY = "theme";
-const VALID_MODES = new Set<ThemeMode>(["light", "dark", "x-mode", "my_team"]);
+const VALID_MODES = new Set<ThemeMode>(["light", "x-mode", "my_team"]);
 
 function readInitialMode(): ThemeMode {
   if (typeof window === "undefined") return "x-mode";
   try {
     const saved = localStorage.getItem(THEME_KEY);
+    // The retired "dark" mode (and any other unknown value) falls through to
+    // the x-mode default, migrating existing dark-mode users automatically.
     if (saved && VALID_MODES.has(saved as ThemeMode)) return saved as ThemeMode;
   } catch { /* localStorage unavailable — fall through */ }
   return "x-mode";
@@ -106,7 +110,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
     // Class toggles — my_team rides on the dark base because most NFL
     // palettes read safer there (spec: "My Team Mode = dark team-tinted base").
-    root.classList.toggle("dark", themeMode === "dark" || teamReady);
+    root.classList.toggle("dark", teamReady);
     root.classList.toggle("x-mode", themeMode === "x-mode");
     root.classList.toggle("my-team-mode", teamReady);
     root.setAttribute("data-theme", teamReady ? "my_team" : themeMode);

@@ -328,37 +328,29 @@ export function PlayoffOdds({ leagueId }: { leagueId: string }) {
 
   return (
     <div className="space-y-6">
-      <Card className="p-4">
-        <div className="flex flex-wrap items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
           {loading && <TeamLoader size="sm" fallback="Running simulations…" context="Running simulations" />}
 
-          <div className="flex-1" />
-
           {data && (
-            <div className="flex flex-wrap items-center gap-1.5 text-[11px]" data-testid="pc-settings-pills">
-              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-muted/40 border border-border/40">
-                <Clock className="w-3 h-3 text-muted-foreground" />
-                <span className="font-semibold">{data.settings.remainingWeeks}</span>
-                <span className="text-muted-foreground">wks left</span>
+            <div className="flex flex-wrap items-center gap-1.5" data-testid="pc-settings-pills">
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-muted/60 text-muted-foreground border border-border/50">
+                <Clock className="w-3 h-3" />
+                {data.settings.remainingWeeks} wks left
               </span>
-              <span className="px-2 py-1 rounded-md bg-muted/40 border border-border/40">
-                <span className="text-muted-foreground">Playoff teams:</span>{" "}
-                <span className="font-semibold">{data.settings.playoffTeams}</span>
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-muted/60 text-muted-foreground border border-border/50">
+                Playoff teams: {data.settings.playoffTeams}
               </span>
               {data.settings.byes > 0 && (
-                <span className="px-2 py-1 rounded-md bg-muted/40 border border-border/40">
-                  <span className="text-muted-foreground">Byes:</span>{" "}
-                  <span className="font-semibold">{data.settings.byes}</span>
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-muted/60 text-muted-foreground border border-border/50">
+                  Byes: {data.settings.byes}
                 </span>
               )}
-              <span className="px-2 py-1 rounded-md bg-muted/40 border border-border/40">
-                <span className="text-muted-foreground">Updated:</span>{" "}
-                <span className="font-semibold">{lastUpdatedLabel}</span>
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-muted/60 text-muted-foreground border border-border/50">
+                Updated: {lastUpdatedLabel}
               </span>
             </div>
           )}
-        </div>
-      </Card>
+      </div>
 
       {error && (
         <Card className="p-4 border-rose-500/40 bg-rose-500/5" data-testid="pc-error">

@@ -237,11 +237,11 @@ function IssueBadge({ type }: { type: IssueType }) {
 
 // ─── Skeleton row ─────────────────────────────────────────────────────────────
 function SkeletonRow() {
-  // bar = light-mode placeholder bg; the dark: variant restores the original
-  // glass placeholder so dark mode is untouched.
-  const bar = "bg-[var(--sc-border)]/70 dark:bg-white/8";
+  // bar = light-mode placeholder bg; the dark-any: variant restores the original
+  // glass placeholder so dark + x-mode are untouched.
+  const bar = "bg-[var(--sc-border)]/70 dark-any:bg-white/8";
   return (
-    <div className="flex items-center gap-1.5 md:gap-3 px-2 md:px-5 py-3 border-b border-[var(--sc-border)] dark:border-white/5 animate-pulse">
+    <div className="flex items-center gap-1.5 md:gap-3 px-2 md:px-5 py-3 border-b border-[var(--sc-border)] dark-any:border-white/5 animate-pulse">
       <div className={cn("flex-1 min-w-[140px] h-3.5 rounded", bar)} />
       <div className={cn("w-10 md:w-16 flex-shrink-0 h-3.5 rounded", bar)} />
       <div className={cn("w-12 md:w-28 flex-shrink-0 h-3.5 rounded", bar)} />
@@ -253,8 +253,9 @@ function SkeletonRow() {
 }
 
 // ─── KPI card ─────────────────────────────────────────────────────────────────
-// Light mode: white surface, slate border, accent only on icon + value and a
-// thin left bar. Dark mode: tinted glass card (legacy).
+// Mirrors the My Trades KPI cards: a colored rounded icon box on the left with
+// the value + label (and optional sub) stacked beside it, wrapped in the shared
+// Card surface. dark-any: keeps colors legible in both dark and x-mode.
 function KpiCard({
   icon: Icon, label, value, accent, sub,
 }: {
@@ -264,46 +265,25 @@ function KpiCard({
   accent: "red" | "gold" | "blue" | "yellow" | "slate";
   sub?: string;
 }) {
-  // Per-accent palette. Light mode uses the brand spec (small accent on
-  // icon + value + a thin left bar). Dark mode keeps the legacy
-  // tinted-glass look so contrast on the dark canvas stays correct.
-  const palette: Record<string, {
-    accentColor: string;             // CSS color for the left bar (light mode)
-    textCls: string;                 // light text + dark text combined
-    darkSurface: string;             // dark-mode tint applied to the card
-  }> = {
-    red:    { accentColor: "#dc2626", textCls: "text-[#dc2626] dark:text-red-400",     darkSurface: "dark:bg-red-500/10 dark:ring-red-500/20" },
-    gold:   { accentColor: "#d6a21e", textCls: "text-[#d6a21e] dark:text-[#d4af37]",   darkSurface: "dark:bg-[#d4af37]/10 dark:ring-[#d4af37]/25" },
-    blue:   { accentColor: "#0b2344", textCls: "text-[#0b2344] dark:text-blue-400",    darkSurface: "dark:bg-blue-500/10 dark:ring-blue-500/20" },
-    yellow: { accentColor: "#d97706", textCls: "text-[#d97706] dark:text-yellow-400",  darkSurface: "dark:bg-yellow-500/10 dark:ring-yellow-500/20" },
-    slate:  { accentColor: "#475569", textCls: "text-[#475569] dark:text-slate-400",   darkSurface: "dark:bg-slate-500/10 dark:ring-slate-500/20" },
+  // Per-accent icon-box style: tinted background + icon color.
+  const colorByAccent: Record<string, string> = {
+    red:    "bg-red-500/10 text-red-600 dark-any:text-red-400",
+    gold:   "bg-[#d4af37]/10 text-[#d4af37]",
+    blue:   "bg-blue-500/10 text-blue-600 dark-any:text-blue-400",
+    yellow: "bg-yellow-500/10 text-yellow-600 dark-any:text-yellow-400",
+    slate:  "bg-slate-500/10 text-slate-500 dark-any:text-slate-400",
   };
-  const c = palette[accent];
   return (
-    <div
-      className={cn(
-        "relative flex flex-col items-center justify-center gap-1 rounded-2xl p-3 md:p-4 overflow-hidden",
-        // Light mode: white card with slate border + soft shadow.
-        "bg-[var(--sc-card-soft)] border border-[var(--sc-border)] shadow-[0_2px_8px_rgba(11,35,68,0.04)]",
-        // Dark mode: legacy tinted-glass look (overrides light surface).
-        "dark:bg-transparent dark:border-white/6 dark:ring-1 dark:shadow-none",
-        c.darkSurface,
-      )}
-    >
-      {/* Light-mode left accent bar — hidden in dark mode where the whole
-          card is tinted instead. */}
-      <span
-        aria-hidden
-        className="absolute left-0 top-0 bottom-0 w-1 dark:hidden"
-        style={{ background: c.accentColor }}
-      />
-      <Icon className={cn("w-4 h-4 md:w-5 md:h-5 flex-shrink-0", c.textCls)} />
-      <span className={cn("text-xl md:text-2xl font-black tabular-nums leading-tight", c.textCls)}>{value}</span>
-      <span className="text-[9px] md:text-[10px] font-semibold uppercase tracking-wide text-center leading-tight text-[var(--sc-text-muted)] dark:text-white/50">
-        {label}
-      </span>
-      {sub && <span className="text-[8px] text-center text-[var(--sc-text-muted)]/70 dark:text-white/30">{sub}</span>}
-    </div>
+    <Card className="p-4 flex items-start gap-3 min-w-0">
+      <div className={cn("w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5", colorByAccent[accent])}>
+        <Icon className="w-4 h-4" />
+      </div>
+      <div className="min-w-0">
+        <p className="text-xl font-bold tabular-nums leading-tight text-foreground">{value}</p>
+        <p className="text-[11px] font-medium leading-tight mt-0.5 text-muted-foreground">{label}</p>
+        {sub && <p className="text-[10px] text-muted-foreground/70 mt-0.5 truncate">{sub}</p>}
+      </div>
+    </Card>
   );
 }
 
@@ -315,24 +295,24 @@ function LeagueRow({ analysis, preseason }: { analysis: LeagueAnalysis; preseaso
   // Improvement (gain) color — emerald for real gains, muted for none. Light
   // mode uses a darker green so it stays readable on a white background.
   const improvColor =
-    gain >= 10  ? "text-emerald-700 dark:text-emerald-400" :
-    gain >= 3   ? "text-emerald-600 dark:text-emerald-500/80" :
-    gain > 0.5  ? "text-emerald-600 dark:text-emerald-600" :
-                  "text-[var(--sc-text-muted)]/60 dark:text-white/25";
+    gain >= 10  ? "text-emerald-700 dark-any:text-emerald-400" :
+    gain >= 3   ? "text-emerald-600 dark-any:text-emerald-500/80" :
+    gain > 0.5  ? "text-emerald-600 dark-any:text-emerald-600" :
+                  "text-[var(--sc-text-muted)]/60 dark-any:text-white/25";
   const hardIssues = issues.filter(i => i.type === "out" || i.type === "ir" || i.type === "bye");
   const softIssues = issues.filter(i => i.type === "questionable" || i.type === "doubtful");
   const isOptimized = !loading && !error && swaps.length === 0;
 
-  const skeletonBar = "bg-[var(--sc-border)]/70 dark:bg-white/8";
+  const skeletonBar = "bg-[var(--sc-border)]/70 dark-any:bg-white/8";
 
   return (
     <div className={cn(
       "border-b last:border-0 transition-colors",
-      // Light: slate border + soft hover; dark: legacy translucent.
-      "border-[#edf2f7] dark:border-white/5",
+      // Light: slate border + soft hover; dark/x-mode: legacy translucent.
+      "border-[#edf2f7] dark-any:border-white/5",
       swaps.length > 0
-        ? "hover:bg-[var(--sc-card-soft)] dark:hover:bg-white/[0.02]"
-        : "hover:bg-[var(--sc-card-soft)]/60 dark:hover:bg-white/[0.01]",
+        ? "hover:bg-[var(--sc-card-soft)] dark-any:hover:bg-white/[0.02]"
+        : "hover:bg-[var(--sc-card-soft)]/60 dark-any:hover:bg-white/[0.01]",
     )}>
       {/* Main row */}
       <div
@@ -345,18 +325,18 @@ function LeagueRow({ analysis, preseason }: { analysis: LeagueAnalysis; preseaso
             <img
               src={avatar}
               alt=""
-              className="w-6 h-6 md:w-7 md:h-7 rounded-lg flex-shrink-0 object-cover bg-[var(--sc-blue-soft)] dark:bg-white/10"
+              className="w-6 h-6 md:w-7 md:h-7 rounded-lg flex-shrink-0 object-cover bg-[var(--sc-blue-soft)] dark-any:bg-white/10"
               onError={e => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
             />
           ) : (
-            <div className="w-6 h-6 md:w-7 md:h-7 rounded-lg flex-shrink-0 bg-[var(--sc-blue-soft)] dark:bg-[#0b3a7a]/40 flex items-center justify-center">
-              <Users className="w-3 h-3 md:w-3.5 md:h-3.5 text-[var(--sc-blue)] dark:text-blue-400/60" />
+            <div className="w-6 h-6 md:w-7 md:h-7 rounded-lg flex-shrink-0 bg-[var(--sc-blue-soft)] dark-any:bg-[#0b3a7a]/40 flex items-center justify-center">
+              <Users className="w-3 h-3 md:w-3.5 md:h-3.5 text-[var(--sc-blue)] dark-any:text-blue-400/60" />
             </div>
           )}
           <div className="min-w-0">
-            <p className="text-[12px] md:text-sm font-bold truncate leading-tight text-[var(--sc-blue)] dark:text-white/90">{leagueName}</p>
+            <p className="text-[12px] md:text-sm font-bold truncate leading-tight text-[var(--sc-blue)] dark-any:text-white/90">{leagueName}</p>
             <div className="flex items-center gap-1 mt-0.5">
-              <span className="text-[8px] md:text-[9px] font-medium truncate text-[var(--sc-text-muted)] dark:text-white/30">{format} · {scoringFormat}</span>
+              <span className="text-[8px] md:text-[9px] font-medium truncate text-[var(--sc-text-muted)] dark-any:text-white/30">{format} · {scoringFormat}</span>
             </div>
           </div>
         </div>
@@ -366,11 +346,11 @@ function LeagueRow({ analysis, preseason }: { analysis: LeagueAnalysis; preseaso
           {loading ? (
             <div className={cn("h-3.5 rounded animate-pulse", skeletonBar)} />
           ) : preseason ? (
-            <span className="text-[10px] font-medium text-[var(--sc-text-muted)] dark:text-white/25">N/A</span>
+            <span className="text-[10px] font-medium text-[var(--sc-text-muted)] dark-any:text-white/25">N/A</span>
           ) : error ? (
-            <span className="text-[10px] text-[var(--sc-text-muted)]/70 dark:text-white/20">—</span>
+            <span className="text-[10px] text-[var(--sc-text-muted)]/70 dark-any:text-white/20">—</span>
           ) : (
-            <p className="text-[11px] md:text-[13px] font-bold tabular-nums text-[var(--sc-text)] dark:text-white/60">{fmt1(currentProj)}</p>
+            <p className="text-[11px] md:text-[13px] font-bold tabular-nums text-[var(--sc-text)] dark-any:text-white/60">{fmt1(currentProj)}</p>
           )}
         </div>
 
@@ -379,9 +359,9 @@ function LeagueRow({ analysis, preseason }: { analysis: LeagueAnalysis; preseaso
           {loading ? (
             <div className={cn("h-3.5 rounded animate-pulse", skeletonBar)} />
           ) : preseason ? (
-            <span className="text-[10px] font-medium text-[var(--sc-text-muted)] dark:text-white/25">N/A</span>
+            <span className="text-[10px] font-medium text-[var(--sc-text-muted)] dark-any:text-white/25">N/A</span>
           ) : error ? (
-            <span className="text-[10px] text-[var(--sc-text-muted)]/70 dark:text-white/20">—</span>
+            <span className="text-[10px] text-[var(--sc-text-muted)]/70 dark-any:text-white/20">—</span>
           ) : (
             <p className={cn("text-[11px] md:text-[13px] font-black tabular-nums", improvColor)}>
               {gain > 0.1 ? `+${fmt1(gain)}` : "—"}
@@ -394,11 +374,11 @@ function LeagueRow({ analysis, preseason }: { analysis: LeagueAnalysis; preseaso
           {loading ? (
             <div className={cn("h-4 w-4 rounded animate-pulse", skeletonBar)} />
           ) : preseason ? (
-            <span className="text-[10px] font-medium text-[var(--sc-text-muted)] dark:text-white/25">N/A</span>
+            <span className="text-[10px] font-medium text-[var(--sc-text-muted)] dark-any:text-white/25">N/A</span>
           ) : hardIssues.length === 0 ? (
-            <CheckCircle2 className="w-3 h-3 md:w-3.5 md:h-3.5 text-emerald-600 dark:text-emerald-500/60" />
+            <CheckCircle2 className="w-3 h-3 md:w-3.5 md:h-3.5 text-emerald-600 dark-any:text-emerald-500/60" />
           ) : (
-            <span className="text-[12px] md:text-sm font-black tabular-nums text-[#dc2626] dark:text-red-400">
+            <span className="text-[12px] md:text-sm font-black tabular-nums text-[#dc2626] dark-any:text-red-400">
               {hardIssues.length}
             </span>
           )}
@@ -409,11 +389,11 @@ function LeagueRow({ analysis, preseason }: { analysis: LeagueAnalysis; preseaso
           {loading ? (
             <div className={cn("h-4 w-4 rounded animate-pulse", skeletonBar)} />
           ) : preseason ? (
-            <span className="text-[10px] font-medium text-[var(--sc-text-muted)] dark:text-white/25">N/A</span>
+            <span className="text-[10px] font-medium text-[var(--sc-text-muted)] dark-any:text-white/25">N/A</span>
           ) : softIssues.length === 0 ? (
-            <CheckCircle2 className="w-3 h-3 md:w-3.5 md:h-3.5 text-emerald-600 dark:text-emerald-500/60" />
+            <CheckCircle2 className="w-3 h-3 md:w-3.5 md:h-3.5 text-emerald-600 dark-any:text-emerald-500/60" />
           ) : (
-            <span className="text-[12px] md:text-sm font-black tabular-nums text-[#d97706] dark:text-yellow-400">
+            <span className="text-[12px] md:text-sm font-black tabular-nums text-[#d97706] dark-any:text-yellow-400">
               {softIssues.length}
             </span>
           )}
@@ -424,15 +404,15 @@ function LeagueRow({ analysis, preseason }: { analysis: LeagueAnalysis; preseaso
           {loading ? (
             <div className={cn("h-6 w-[56px] md:w-20 rounded-full animate-pulse", skeletonBar)} />
           ) : error ? (
-            <span className="text-[10px] text-[var(--sc-text-muted)]/70 dark:text-white/20">—</span>
+            <span className="text-[10px] text-[var(--sc-text-muted)]/70 dark-any:text-white/20">—</span>
           ) : isOptimized ? (
-            <span className="inline-flex items-center justify-center gap-1 text-[10px] font-bold rounded-full px-2 py-1 bg-[var(--sc-success-soft)] text-[var(--sc-success)] border border-[var(--sc-success-border)] dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20">
+            <span className="inline-flex items-center justify-center gap-1 text-[10px] font-bold rounded-full px-2 py-1 bg-[var(--sc-success-soft)] text-[var(--sc-success)] border border-[var(--sc-success-border)] dark-any:bg-emerald-500/10 dark-any:text-emerald-400 dark-any:border-emerald-500/20">
               <CheckCircle2 className="w-3 h-3 flex-shrink-0" />
               <span className="hidden md:inline">Optimized</span>
             </span>
           ) : (
             <button
-              className="inline-flex items-center gap-1 text-[10px] font-bold rounded-full px-2 md:px-2.5 py-1 transition-colors bg-[var(--sc-gold)] hover:bg-[var(--sc-gold-deep)] text-[var(--sc-blue)] hover:text-white border border-[var(--sc-gold-deep)] dark:bg-[#d4af37]/15 dark:hover:bg-[#d4af37]/25 dark:border-[#d4af37]/35 dark:hover:border-[#d4af37]/55 dark:text-[#d4af37] dark:hover:text-[#d4af37]"
+              className="inline-flex items-center gap-1 text-[10px] font-bold rounded-full px-2 md:px-2.5 py-1 transition-colors bg-[var(--sc-gold)] hover:bg-[var(--sc-gold-deep)] text-[var(--sc-blue)] hover:text-white border border-[var(--sc-gold-deep)] dark-any:bg-[#d4af37]/15 dark-any:hover:bg-[#d4af37]/25 dark-any:border-[#d4af37]/35 dark-any:hover:border-[#d4af37]/55 dark-any:text-[#d4af37] dark-any:hover:text-[#d4af37]"
               onClick={() => setExpanded(v => !v)}
               data-testid={`button-optimize-${analysis.leagueId}`}
             >
@@ -446,26 +426,26 @@ function LeagueRow({ analysis, preseason }: { analysis: LeagueAnalysis; preseaso
 
       {/* Expanded detail panel */}
       {expanded && (
-        <div className="px-3 md:px-5 pb-4 space-y-3 border-t pt-3 border-[var(--sc-border)] bg-[var(--sc-card-soft)] dark:border-white/4 dark:bg-white/[0.015]">
+        <div className="px-3 md:px-5 pb-4 space-y-3 border-t pt-3 border-[var(--sc-border)] bg-[var(--sc-card-soft)] dark-any:border-white/4 dark-any:bg-white/[0.015]">
 
           {/* Recommended swaps */}
           {swaps.length > 0 && (
             <div>
-              <p className="sc-eyebrow mb-2 dark:text-white/30 dark:tracking-widest">
+              <p className="sc-eyebrow mb-2 dark-any:text-white/30 dark-any:tracking-widest">
                 Recommended Swaps
               </p>
               <div className="space-y-1.5">
                 {swaps.map((swap, i) => (
-                  <div key={i} className="flex items-center gap-2 rounded-lg px-3 py-2 bg-[var(--sc-success-soft)] border border-[var(--sc-success-border)] dark:bg-emerald-500/5 dark:border-emerald-500/15">
-                    <TrendingUp className="w-3 h-3 text-[var(--sc-success)] dark:text-emerald-400 flex-shrink-0" />
-                    <span className="text-[10px] md:text-[11px] text-[var(--sc-text-muted)] dark:text-white/50">Start</span>
-                    <span className="text-[11px] md:text-xs font-bold text-[var(--sc-success)] dark:text-emerald-300">{swap.inName}</span>
-                    <Badge variant="outline" className="text-[7px] px-1 py-0 h-3.5 border-[var(--sc-success-border)] text-[var(--sc-success)] dark:border-emerald-500/30 dark:text-emerald-400/70">{swap.inPos}</Badge>
-                    <ArrowRight className="w-3 h-3 text-[var(--sc-text-muted)]/60 dark:text-white/20 flex-shrink-0 mx-1" />
-                    <span className="text-[10px] md:text-[11px] text-[var(--sc-text-muted)] dark:text-white/40">over</span>
-                    <span className="text-[11px] md:text-xs font-semibold text-[var(--sc-text)] dark:text-white/60">{swap.outName}</span>
+                  <div key={i} className="flex items-center gap-2 rounded-lg px-3 py-2 bg-[var(--sc-success-soft)] border border-[var(--sc-success-border)] dark-any:bg-emerald-500/5 dark-any:border-emerald-500/15">
+                    <TrendingUp className="w-3 h-3 text-[var(--sc-success)] dark-any:text-emerald-400 flex-shrink-0" />
+                    <span className="text-[10px] md:text-[11px] text-[var(--sc-text-muted)] dark-any:text-white/50">Start</span>
+                    <span className="text-[11px] md:text-xs font-bold text-[var(--sc-success)] dark-any:text-emerald-300">{swap.inName}</span>
+                    <Badge variant="outline" className="text-[7px] px-1 py-0 h-3.5 border-[var(--sc-success-border)] text-[var(--sc-success)] dark-any:border-emerald-500/30 dark-any:text-emerald-400/70">{swap.inPos}</Badge>
+                    <ArrowRight className="w-3 h-3 text-[var(--sc-text-muted)]/60 dark-any:text-white/20 flex-shrink-0 mx-1" />
+                    <span className="text-[10px] md:text-[11px] text-[var(--sc-text-muted)] dark-any:text-white/40">over</span>
+                    <span className="text-[11px] md:text-xs font-semibold text-[var(--sc-text)] dark-any:text-white/60">{swap.outName}</span>
                     {swap.projGain > 0 && (
-                      <span className="ml-auto text-[10px] font-bold tabular-nums text-[var(--sc-success)] dark:text-emerald-400">+{fmt1(swap.projGain)} pts</span>
+                      <span className="ml-auto text-[10px] font-bold tabular-nums text-[var(--sc-success)] dark-any:text-emerald-400">+{fmt1(swap.projGain)} pts</span>
                     )}
                   </div>
                 ))}
@@ -476,7 +456,7 @@ function LeagueRow({ analysis, preseason }: { analysis: LeagueAnalysis; preseaso
           {/* Active issues */}
           {issues.length > 0 && (
             <div>
-              <p className="sc-eyebrow mb-2 dark:text-white/30 dark:tracking-widest">
+              <p className="sc-eyebrow mb-2 dark-any:text-white/30 dark-any:tracking-widest">
                 Starter Alerts
               </p>
               <div className="flex flex-wrap gap-1.5">
@@ -486,11 +466,11 @@ function LeagueRow({ analysis, preseason }: { analysis: LeagueAnalysis; preseaso
                   };
                   // Light: pale-tinted pill with strong text. Dark: legacy translucent.
                   const typeCls: Record<IssueType, string> = {
-                    out:          "bg-[var(--sc-danger-soft)] border-[#fecaca] text-[var(--sc-danger)] dark:bg-red-500/10 dark:border-red-500/30 dark:text-red-400",
-                    ir:           "bg-[var(--sc-danger-soft)] border-[#fecaca] text-[var(--sc-danger)] dark:bg-red-500/10 dark:border-red-500/30 dark:text-red-400",
-                    doubtful:     "bg-[#fff7ed] border-[#fed7aa] text-[#c2410c] dark:bg-orange-500/10 dark:border-orange-500/30 dark:text-orange-400",
-                    questionable: "bg-[var(--sc-warning-soft)] border-[#fde68a] text-[var(--sc-warning)] dark:bg-yellow-500/10 dark:border-yellow-500/30 dark:text-yellow-400",
-                    bye:          "bg-[var(--sc-blue-soft)] border-[var(--sc-border-strong)] text-[var(--sc-text)] dark:bg-slate-500/10 dark:border-slate-500/30 dark:text-slate-400",
+                    out:          "bg-[var(--sc-danger-soft)] border-[#fecaca] text-[var(--sc-danger)] dark-any:bg-red-500/10 dark-any:border-red-500/30 dark-any:text-red-400",
+                    ir:           "bg-[var(--sc-danger-soft)] border-[#fecaca] text-[var(--sc-danger)] dark-any:bg-red-500/10 dark-any:border-red-500/30 dark-any:text-red-400",
+                    doubtful:     "bg-[#fff7ed] border-[#fed7aa] text-[#c2410c] dark-any:bg-orange-500/10 dark-any:border-orange-500/30 dark-any:text-orange-400",
+                    questionable: "bg-[var(--sc-warning-soft)] border-[#fde68a] text-[var(--sc-warning)] dark-any:bg-yellow-500/10 dark-any:border-yellow-500/30 dark-any:text-yellow-400",
+                    bye:          "bg-[var(--sc-blue-soft)] border-[var(--sc-border-strong)] text-[var(--sc-text)] dark-any:bg-slate-500/10 dark-any:border-slate-500/30 dark-any:text-slate-400",
                   };
                   return (
                     <div key={i} className={cn("flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[10px]", typeCls[iss.type])}>
@@ -512,9 +492,9 @@ function LeagueRow({ analysis, preseason }: { analysis: LeagueAnalysis; preseaso
 
 // ─── Matchup skeleton card ────────────────────────────────────────────────────
 function MatchupSkeletonRow() {
-  const bar = "bg-[var(--sc-border)]/70 dark:bg-white/8";
+  const bar = "bg-[var(--sc-border)]/70 dark-any:bg-white/8";
   return (
-    <div className="px-3.5 md:px-5 py-3.5 border-b border-[var(--sc-border)] dark:border-white/5 animate-pulse">
+    <div className="px-3.5 md:px-5 py-3.5 border-b border-[var(--sc-border)] dark-any:border-white/5 animate-pulse">
       <div className="flex items-center gap-2 mb-3">
         <div className={cn("w-5 h-5 rounded", bar)} />
         <div className={cn("h-2.5 w-28 rounded", bar)} />
@@ -1270,7 +1250,7 @@ export function LineupCommand() {
       <div className="flex items-center justify-center min-h-[50vh] px-4">
         <Card className="p-8 text-center max-w-sm w-full border-border/60">
           <div className="w-14 h-14 rounded-2xl bg-[#0b3a7a]/10 flex items-center justify-center mx-auto mb-4">
-            <Lock className="w-7 h-7 text-[#0b3a7a] dark:text-blue-400" />
+            <Lock className="w-7 h-7 text-[#0b3a7a] dark-any:text-blue-400" />
           </div>
           <h3 className="text-lg font-bold mb-2">Connect Sleeper First</h3>
           <p className="text-sm text-muted-foreground">Link your Sleeper account via the Portfolio tab to unlock the Lineup Command war room.</p>
@@ -1310,7 +1290,7 @@ export function LineupCommand() {
               // Light: white inner with slate border.
               "bg-[var(--sc-card-bg)] border border-[var(--sc-border)]",
               // Dark: legacy translucent strip.
-              "dark:bg-white/[0.04] dark:border-white/[0.07]",
+              "dark-any:bg-white/[0.04] dark-any:border-white/[0.07]",
             )}
             style={{ gridTemplateColumns: "1fr 1fr 1fr" }}
           >
@@ -1327,9 +1307,9 @@ export function LineupCommand() {
                     "relative flex items-center justify-center gap-2 font-semibold transition-all duration-200 rounded-xl text-[13px] tracking-[0.01em]",
                     isActive
                       // Active: navy bg, white text, gold underline (added below).
-                      ? "bg-[var(--sc-blue)] text-white shadow-[0_4px_12px_rgba(11,35,68,0.18)] dark:bg-[linear-gradient(135deg,rgba(11,58,122,0.85)_0%,rgba(11,58,122,0.65)_100%)] dark:shadow-[0_2px_12px_rgba(11,58,122,0.40),inset_0_1px_0_rgba(255,255,255,0.06)] dark:border dark:border-[#d4af37]/30"
+                      ? "bg-[var(--sc-blue)] text-white shadow-[0_4px_12px_rgba(11,35,68,0.18)] dark-any:bg-[linear-gradient(135deg,rgba(11,58,122,0.85)_0%,rgba(11,58,122,0.65)_100%)] dark-any:shadow-[0_2px_12px_rgba(11,58,122,0.40),inset_0_1px_0_rgba(255,255,255,0.06)] dark-any:border dark-any:border-[#d4af37]/30"
                       // Inactive: muted navy text, transparent bg, gentle hover.
-                      : "text-[var(--sc-text-muted)] hover:bg-[var(--sc-blue-soft)] hover:text-[var(--sc-blue)] dark:text-white/45 dark:hover:bg-transparent dark:hover:text-white/70",
+                      : "text-[var(--sc-text-muted)] hover:bg-[var(--sc-blue-soft)] hover:text-[var(--sc-blue)] dark-any:text-white/45 dark-any:hover:bg-transparent dark-any:hover:text-white/70",
                   )}
                 >
                   <Icon className="w-[15px] h-[15px] flex-shrink-0" />
@@ -1366,7 +1346,7 @@ export function LineupCommand() {
           className={cn(
             "grid w-full sm:w-auto max-w-[520px] h-12 rounded-2xl p-1 gap-1",
             "bg-[var(--sc-card-bg)] border border-[var(--sc-border)]",
-            "dark:bg-white/[0.04] dark:border-white/[0.07]",
+            "dark-any:bg-white/[0.04] dark-any:border-white/[0.07]",
           )}
           style={{ gridTemplateColumns: "1fr 1fr 1fr" }}
         >
@@ -1382,8 +1362,8 @@ export function LineupCommand() {
                 className={cn(
                   "relative flex items-center justify-center gap-2 font-semibold transition-all duration-200 rounded-xl text-[13px] tracking-[0.01em]",
                   isActive
-                    ? "bg-[var(--sc-blue)] text-white shadow-[0_4px_12px_rgba(11,35,68,0.18)] dark:bg-[linear-gradient(135deg,rgba(11,58,122,0.85)_0%,rgba(11,58,122,0.65)_100%)] dark:shadow-[0_2px_12px_rgba(11,58,122,0.40),inset_0_1px_0_rgba(255,255,255,0.06)] dark:border dark:border-[#d4af37]/30"
-                    : "text-[var(--sc-text-muted)] hover:bg-[var(--sc-blue-soft)] hover:text-[var(--sc-blue)] dark:text-white/45 dark:hover:bg-transparent dark:hover:text-white/70",
+                    ? "bg-[var(--sc-blue)] text-white shadow-[0_4px_12px_rgba(11,35,68,0.18)] dark-any:bg-[linear-gradient(135deg,rgba(11,58,122,0.85)_0%,rgba(11,58,122,0.65)_100%)] dark-any:shadow-[0_2px_12px_rgba(11,58,122,0.40),inset_0_1px_0_rgba(255,255,255,0.06)] dark-any:border dark-any:border-[#d4af37]/30"
+                    : "text-[var(--sc-text-muted)] hover:bg-[var(--sc-blue-soft)] hover:text-[var(--sc-blue)] dark-any:text-white/45 dark-any:hover:bg-transparent dark-any:hover:text-white/70",
                 )}
               >
                 <Icon className="w-[15px] h-[15px] flex-shrink-0" />
@@ -1403,26 +1383,13 @@ export function LineupCommand() {
       {/* ══════════════════ LINEUP COMMAND TAB ══════════════════ */}
       {activeTab === "lineup" && (
         <>
-          {/* ── Hero KPI bar — light: clean white dashboard card; dark: legacy gradient ── */}
-          <div
-            className={cn(
-              "rounded-[18px] p-4 md:p-5",
-              // Light mode: white card, slate border, premium shadow.
-              "bg-[var(--sc-card-bg)] border border-[var(--sc-border)] shadow-[var(--sc-shadow-card)]",
-              // Dark mode: preserve original gradient look.
-              "dark:rounded-2xl dark:border-white/8 dark:shadow-none dark:bg-[linear-gradient(135deg,rgba(4,13,26,0.95)_0%,rgba(11,58,122,0.08)_100%)]",
-            )}
-          >
-            <p className="sc-eyebrow mb-3 md:mb-4 dark:text-white/30 dark:tracking-[0.2em]">
-              Operations Overview
-            </p>
-            <div className="grid grid-cols-3 md:grid-cols-5 gap-2 md:gap-3">
-              <KpiCard icon={AlertTriangle} label="Lineup Issues"  value={isPreseason ? "N/A" : hasAnyData ? kpis.totalIssues : "—"} accent="red"    sub="Out · IR · Bye" />
-              <KpiCard icon={TrendingUp}   label="Optimal Swaps"  value={isPreseason ? "N/A" : hasAnyData ? kpis.totalSwaps : "—"}  accent="blue"   sub="Available" />
-              <KpiCard icon={Zap}          label="Points Gain"    value={isPreseason ? "N/A" : hasAnyData ? (kpis.totalGain > 0 ? `+${fmt1(kpis.totalGain)}` : "—") : "—"} accent="gold" sub="Projected" />
-              <KpiCard icon={Activity}     label="Questionable"   value={isPreseason ? "N/A" : hasAnyData ? kpis.questionable : "—"} accent="yellow" sub="Starters" />
-              <KpiCard icon={CalendarX}    label="Bye Conflicts"  value={isPreseason ? "N/A" : hasAnyData ? kpis.byeConflicts : "—"} accent="slate"  sub="Active starters" />
-            </div>
+          {/* ── Hero KPI bar — cards sit directly on the page (no wrapper) ── */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+            <KpiCard icon={AlertTriangle} label="Lineup Issues"  value={isPreseason ? "N/A" : hasAnyData ? kpis.totalIssues : "—"} accent="red"    sub="Out · IR · Bye" />
+            <KpiCard icon={TrendingUp}   label="Optimal Swaps"  value={isPreseason ? "N/A" : hasAnyData ? kpis.totalSwaps : "—"}  accent="blue"   sub="Available" />
+            <KpiCard icon={Zap}          label="Points Gain"    value={isPreseason ? "N/A" : hasAnyData ? (kpis.totalGain > 0 ? `+${fmt1(kpis.totalGain)}` : "—") : "—"} accent="gold" sub="Projected" />
+            <KpiCard icon={Activity}     label="Questionable"   value={isPreseason ? "N/A" : hasAnyData ? kpis.questionable : "—"} accent="yellow" sub="Starters" />
+            <KpiCard icon={CalendarX}    label="Bye Conflicts"  value={isPreseason ? "N/A" : hasAnyData ? kpis.byeConflicts : "—"} accent="slate"  sub="Active starters" />
           </div>
 
           {/* ── Optimize All button ────────────────────────────────── */}
@@ -1440,8 +1407,8 @@ export function LineupCommand() {
                   className={cn(
                     "inline-flex items-center gap-1.5 text-[11px] font-bold rounded-full px-4 py-1.5 border transition-all",
                     disabled
-                      ? "bg-[var(--sc-card-soft)] border-[var(--sc-border)] text-[var(--sc-text-muted)] cursor-not-allowed dark:bg-white/4 dark:border-white/8 dark:text-white/30"
-                      : "bg-[var(--sc-gold)] hover:bg-[var(--sc-gold-deep)] border-[var(--sc-gold-deep)] text-[var(--sc-blue)] hover:text-white shadow-[0_2px_8px_rgba(214,162,30,0.25)] dark:bg-[#d4af37]/12 dark:hover:bg-[#d4af37]/22 dark:border-[#d4af37]/30 dark:hover:border-[#d4af37]/50 dark:text-[#d4af37] dark:hover:text-[#d4af37] dark:shadow-none dark:hover:shadow-[0_0_12px_rgba(212,175,55,0.15)]",
+                      ? "bg-[var(--sc-card-soft)] border-[var(--sc-border)] text-[var(--sc-text-muted)] cursor-not-allowed dark-any:bg-white/4 dark-any:border-white/8 dark-any:text-white/30"
+                      : "bg-[var(--sc-gold)] hover:bg-[var(--sc-gold-deep)] border-[var(--sc-gold-deep)] text-[var(--sc-blue)] hover:text-white shadow-[0_2px_8px_rgba(214,162,30,0.25)] dark-any:bg-[#d4af37]/12 dark-any:hover:bg-[#d4af37]/22 dark-any:border-[#d4af37]/30 dark-any:hover:border-[#d4af37]/50 dark-any:text-[#d4af37] dark-any:hover:text-[#d4af37] dark-any:shadow-none dark-any:hover:shadow-[0_0_12px_rgba(212,175,55,0.15)]",
                   )}
                 >
                   {isRunning ? (
@@ -1461,8 +1428,8 @@ export function LineupCommand() {
           {/* ── Lineup table ───────────────────────────────────────── */}
           {/* Swipe hint — mobile only */}
           <div className="flex items-center justify-end gap-1.5 md:hidden mb-1 px-1">
-            <span className="text-[10px] text-[var(--sc-text-muted)] dark:text-white/25">Swipe to view</span>
-            <ArrowRight className="w-3 h-3 text-[var(--sc-text-muted)]/70 dark:text-white/20" />
+            <span className="text-[10px] text-[var(--sc-text-muted)] dark-any:text-white/25">Swipe to view</span>
+            <ArrowRight className="w-3 h-3 text-[var(--sc-text-muted)]/70 dark-any:text-white/20" />
           </div>
 
           <div
@@ -1471,14 +1438,14 @@ export function LineupCommand() {
               // Light: clean white wrapper, slate border, premium shadow.
               "bg-[var(--sc-card-bg)] border border-[var(--sc-border)] shadow-[var(--sc-shadow-card)]",
               // Dark: legacy gradient.
-              "dark:border-white/6 dark:shadow-none dark:bg-[linear-gradient(180deg,rgba(4,13,26,0.9)_0%,rgba(4,10,20,0.95)_100%)]",
+              "dark-any:border-white/6 dark-any:shadow-none dark-any:bg-[linear-gradient(180deg,rgba(4,13,26,0.9)_0%,rgba(4,10,20,0.95)_100%)]",
             )}
           >
             {/* Scroll container */}
             <div className="overflow-x-auto" style={{ WebkitOverflowScrolling: "touch" }}>
               <div style={{ minWidth: 500 }}>
                 {/* Header — navy in light mode, glass strip in dark. */}
-                <div className="flex items-center gap-1.5 md:gap-3 px-2 md:px-5 py-2.5 bg-[var(--sc-blue)] dark:bg-white/[0.02] border-b border-[var(--sc-blue-2)] dark:border-white/6">
+                <div className="flex items-center gap-1.5 md:gap-3 px-2 md:px-5 py-2.5 bg-[var(--sc-blue)] dark-any:bg-white/[0.02] border-b border-[var(--sc-blue-2)] dark-any:border-white/6">
                   {(() => {
                     function SortBtn({ col, label, className }: { col: typeof sortKey; label: React.ReactNode; className?: string }) {
                       const active = sortKey === col;
@@ -1490,8 +1457,8 @@ export function LineupCommand() {
                             // Navy header → gold for active, white for inactive (light mode).
                             // Dark mode keeps the legacy gold/white-translucent palette.
                             active
-                              ? "text-[#d6a21e] dark:text-[#d4af37]"
-                              : "text-white/70 hover:text-white dark:text-white/30 dark:hover:text-white/55",
+                              ? "text-[#d6a21e] dark-any:text-[#d4af37]"
+                              : "text-white/70 hover:text-white dark-any:text-white/30 dark-any:hover:text-white/55",
                             className,
                           )}
                         >
@@ -1517,9 +1484,9 @@ export function LineupCommand() {
                   [...Array(Math.min(activeLeagues.length || 4, 6))].map((_, i) => <SkeletonRow key={i} />)
                 ) : sortedAnalyses.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
-                    <Users className="w-8 h-8 text-[var(--sc-text-muted)]/40 dark:text-white/15 mb-3" />
-                    <p className="text-sm font-semibold text-[var(--sc-text)] dark:text-white/40">No leagues found</p>
-                    <p className="text-xs text-[var(--sc-text-muted)] dark:text-white/25 mt-1">Connect leagues in the Portfolio tab to get started.</p>
+                    <Users className="w-8 h-8 text-[var(--sc-text-muted)]/40 dark-any:text-white/15 mb-3" />
+                    <p className="text-sm font-semibold text-[var(--sc-text)] dark-any:text-white/40">No leagues found</p>
+                    <p className="text-xs text-[var(--sc-text-muted)] dark-any:text-white/25 mt-1">Connect leagues in the Portfolio tab to get started.</p>
                   </div>
                 ) : (
                   sortedAnalyses.map(a => <LeagueRow key={a.leagueId} analysis={a} preseason={isPreseason} />)
@@ -1528,7 +1495,7 @@ export function LineupCommand() {
             </div>
           </div>
 
-          <p className="text-[9px] text-center px-4 pb-20 md:pb-0 text-[var(--sc-text-muted)] dark:text-white/20">
+          <p className="text-[9px] text-center px-4 pb-20 md:pb-0 text-[var(--sc-text-muted)] dark-any:text-white/20">
             Projections from Sleeper · Updated weekly · Optimal lineup uses projected points, not dynasty values
           </p>
         </>
@@ -1569,27 +1536,27 @@ export function LineupCommand() {
               className={cn(
                 "rounded-[18px] px-5 py-5 md:py-6",
                 "bg-[var(--sc-card-bg)] border border-[var(--sc-border)] shadow-[var(--sc-shadow-card)]",
-                "dark:rounded-2xl dark:border-white/8 dark:shadow-none dark:bg-[linear-gradient(135deg,rgba(4,13,26,0.95)_0%,rgba(11,58,122,0.08)_100%)]",
+                "dark-any:rounded-2xl dark-any:border-white/8 dark-any:shadow-none dark-any:bg-[linear-gradient(135deg,rgba(4,13,26,0.95)_0%,rgba(11,58,122,0.08)_100%)]",
               )}
             >
               <div className="flex items-start md:items-center gap-3 md:gap-4">
-                <div className="w-10 h-10 md:w-11 md:h-11 rounded-xl bg-[var(--sc-warning-soft)] border border-[#fde68a] dark:bg-yellow-500/10 dark:ring-1 dark:ring-yellow-500/25 dark:border-transparent flex items-center justify-center flex-shrink-0">
-                  <CalendarX className="w-5 h-5 text-[var(--sc-warning)] dark:text-yellow-400/80" />
+                <div className="w-10 h-10 md:w-11 md:h-11 rounded-xl bg-[var(--sc-warning-soft)] border border-[#fde68a] dark-any:bg-yellow-500/10 dark-any:ring-1 dark-any:ring-yellow-500/25 dark-any:border-transparent flex items-center justify-center flex-shrink-0">
+                  <CalendarX className="w-5 h-5 text-[var(--sc-warning)] dark-any:text-yellow-400/80" />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-[12px] md:text-[13px] font-bold text-[var(--sc-blue)] dark:text-white/80 leading-tight">
+                  <p className="text-[12px] md:text-[13px] font-bold text-[var(--sc-blue)] dark-any:text-white/80 leading-tight">
                     Matchup intel arrives at kickoff
                   </p>
-                  <p className="text-[11px] md:text-[12px] text-[var(--sc-text-muted)] dark:text-white/40 mt-1 leading-snug max-w-2xl">
+                  <p className="text-[11px] md:text-[12px] text-[var(--sc-text-muted)] dark-any:text-white/40 mt-1 leading-snug max-w-2xl">
                     Win probabilities, projected scores, and live matchup stats will populate here once weekly projections begin.
                   </p>
                 </div>
                 <div className="hidden md:flex flex-col items-end gap-0.5 ml-auto flex-shrink-0 pl-3">
-                  <span className="sc-eyebrow dark:text-white/30 dark:tracking-widest">Tracking</span>
-                  <span className="text-[20px] font-black tabular-nums leading-none text-[var(--sc-blue)] dark:text-white/85">
+                  <span className="sc-eyebrow dark-any:text-white/30 dark-any:tracking-widest">Tracking</span>
+                  <span className="text-[20px] font-black tabular-nums leading-none text-[var(--sc-blue)] dark-any:text-white/85">
                     {activeLeagues.length}
                   </span>
-                  <span className="text-[10px] text-[var(--sc-text-muted)] dark:text-white/35">
+                  <span className="text-[10px] text-[var(--sc-text-muted)] dark-any:text-white/35">
                     {activeLeagues.length === 1 ? "league" : "leagues"}
                   </span>
                 </div>
@@ -1600,10 +1567,10 @@ export function LineupCommand() {
               className={cn(
                 "rounded-[18px] p-4 md:p-5",
                 "bg-[var(--sc-card-bg)] border border-[var(--sc-border)] shadow-[var(--sc-shadow-card)]",
-                "dark:rounded-2xl dark:border-white/8 dark:shadow-none dark:bg-[linear-gradient(135deg,rgba(4,13,26,0.95)_0%,rgba(11,58,122,0.08)_100%)]",
+                "dark-any:rounded-2xl dark-any:border-white/8 dark-any:shadow-none dark-any:bg-[linear-gradient(135deg,rgba(4,13,26,0.95)_0%,rgba(11,58,122,0.08)_100%)]",
               )}
             >
-              <p className="sc-eyebrow mb-3 md:mb-4 dark:text-white/30 dark:tracking-[0.2em]">
+              <p className="sc-eyebrow mb-3 md:mb-4 dark-any:text-white/30 dark-any:tracking-[0.2em]">
                 Matchup Overview
               </p>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
@@ -1646,15 +1613,15 @@ export function LineupCommand() {
             className={cn(
               "rounded-2xl overflow-hidden",
               "bg-[var(--sc-card-bg)] border border-[var(--sc-border)] shadow-[var(--sc-shadow-card)]",
-              "dark:border-white/6 dark:shadow-none dark:bg-[linear-gradient(180deg,rgba(4,13,26,0.9)_0%,rgba(4,10,20,0.95)_100%)]",
+              "dark-any:border-white/6 dark-any:shadow-none dark-any:bg-[linear-gradient(180deg,rgba(4,13,26,0.9)_0%,rgba(4,10,20,0.95)_100%)]",
             )}
           >
             {/* Sort header — segmented control */}
-            <div className="flex items-center justify-between gap-3 px-3.5 md:px-5 py-2.5 bg-[var(--sc-blue)] dark:bg-white/[0.018] border-b border-[var(--sc-blue-2)] dark:border-white/5">
-              <span className="text-[10px] md:text-[11px] font-bold uppercase tracking-widest text-white/80 dark:text-white/40">
+            <div className="flex items-center justify-between gap-3 px-3.5 md:px-5 py-2.5 bg-[var(--sc-blue)] dark-any:bg-white/[0.018] border-b border-[var(--sc-blue-2)] dark-any:border-white/5">
+              <span className="text-[10px] md:text-[11px] font-bold uppercase tracking-widest text-white/80 dark-any:text-white/40">
                 {sortedMatchups.filter(m => !m.loading).length} {sortedMatchups.filter(m => !m.loading).length === 1 ? "Matchup" : "Matchups"}
               </span>
-              <div className="flex items-center gap-0.5 p-0.5 rounded-full bg-white/10 border border-white/15 shadow-inner dark:bg-white/[0.04] dark:border-white/8">
+              <div className="flex items-center gap-0.5 p-0.5 rounded-full bg-white/10 border border-white/15 shadow-inner dark-any:bg-white/[0.04] dark-any:border-white/8">
                 {(["winPct", "myProj", "record"] as const).map(key => {
                   const active = mSortKey === key;
                   const label = key === "winPct" ? "Win %" : key === "myProj" ? "Proj" : "Record";
@@ -1666,8 +1633,8 @@ export function LineupCommand() {
                       className={cn(
                         "text-[10px] font-bold uppercase tracking-wider px-2.5 md:px-3 py-1 rounded-full transition-all duration-150 whitespace-nowrap",
                         active
-                          ? "bg-[#d6a21e] text-[var(--sc-blue)] shadow-[inset_0_0_0_1px_rgba(214,162,30,0.7)] dark:bg-[#d4af37]/18 dark:text-[#d4af37] dark:shadow-[inset_0_0_0_1px_rgba(212,175,55,0.35)]"
-                          : "text-white/70 hover:text-white dark:text-white/35 dark:hover:text-white/65",
+                          ? "bg-[#d6a21e] text-[var(--sc-blue)] shadow-[inset_0_0_0_1px_rgba(214,162,30,0.7)] dark-any:bg-[#d4af37]/18 dark-any:text-[#d4af37] dark-any:shadow-[inset_0_0_0_1px_rgba(212,175,55,0.35)]"
+                          : "text-white/70 hover:text-white dark-any:text-white/35 dark-any:hover:text-white/65",
                       )}
                     >
                       {label}
@@ -1682,16 +1649,16 @@ export function LineupCommand() {
               [...Array(Math.min(activeLeagues.length || 3, 4))].map((_, i) => <MatchupSkeletonRow key={i} />)
             ) : sortedMatchups.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
-                <Swords className="w-8 h-8 text-[var(--sc-text-muted)]/40 dark:text-white/15 mb-3" />
-                <p className="text-sm font-semibold text-[var(--sc-text)] dark:text-white/40">No matchup data yet</p>
-                <p className="text-xs text-[var(--sc-text-muted)] dark:text-white/25 mt-1">Matchup data loads once projections are available.</p>
+                <Swords className="w-8 h-8 text-[var(--sc-text-muted)]/40 dark-any:text-white/15 mb-3" />
+                <p className="text-sm font-semibold text-[var(--sc-text)] dark-any:text-white/40">No matchup data yet</p>
+                <p className="text-xs text-[var(--sc-text-muted)] dark-any:text-white/25 mt-1">Matchup data loads once projections are available.</p>
               </div>
             ) : (
               sortedMatchups.map(m => <MatchupBattleCard key={m.leagueId} m={m} preseason={isPreseason} />)
             )}
           </div>
 
-          <p className="text-[9px] text-[var(--sc-text-muted)] dark:text-white/20 text-center px-4">
+          <p className="text-[9px] text-[var(--sc-text-muted)] dark-any:text-white/20 text-center px-4">
             Matchup projections from Sleeper starters · Win % = projected pts / combined projected pts · Records from current standings
           </p>
         </>

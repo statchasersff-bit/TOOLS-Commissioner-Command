@@ -15,7 +15,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useTheme, type ThemeMode } from "@/contexts/ThemeContext";
 import { NFL_TEAMS } from "@/config/nflTeams";
 import { cn } from "@/lib/utils";
-import { Loader2, Star, Sun, Moon, Zap, Palette } from "lucide-react";
+import { Loader2, Star, Sun, Zap, Palette } from "lucide-react";
 
 interface Props {
   open: boolean;
@@ -85,9 +85,8 @@ export function SettingsModal({ open, onOpenChange }: Props) {
               the app with your favorite NFL team's colors while preserving readable contrast.
             </p>
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2" data-testid="theme-mode-picker">
+            <div className="grid grid-cols-3 gap-2" data-testid="theme-mode-picker">
               <ThemeChoice mode="light"   current={themeMode} onSelect={setThemeMode} icon={Sun}  label="Light" />
-              <ThemeChoice mode="dark"    current={themeMode} onSelect={setThemeMode} icon={Moon} label="Dark"  />
               <ThemeChoice mode="x-mode"  current={themeMode} onSelect={setThemeMode} icon={Zap}  label="X-Mode" />
               <ThemeChoice
                 mode="my_team"
