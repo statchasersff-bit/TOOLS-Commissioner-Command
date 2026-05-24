@@ -106,8 +106,27 @@ function deriveScoringFormat(scoringSettings: { rec?: number }): string {
   return "Standard";
 }
 
+// Hard cap on any single Sleeper REST call. A request that never settles is
+// the classic cause of a permanently-stuck loading overlay: the consuming
+// effect's `.then`/`.catch`/`finally` never runs, so the loading flag is
+// never cleared. The AbortController converts a hang into a rejection the
+// caller can handle (and surface to the user) instead of an indefinite wait.
+const SLEEPER_FETCH_TIMEOUT_MS = 20_000;
+
 async function fetchJson<T>(url: string): Promise<T> {
-  const response = await fetch(url);
+  const ac = new AbortController();
+  const timeoutId = setTimeout(() => ac.abort(), SLEEPER_FETCH_TIMEOUT_MS);
+  let response: Response;
+  try {
+    response = await fetch(url, { signal: ac.signal });
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") {
+      throw new Error(`Sleeper API request timed out after ${SLEEPER_FETCH_TIMEOUT_MS / 1000}s for ${url}`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeoutId);
+  }
   if (!response.ok) {
     if (response.status === 404) {
       throw new Error("User not found");
@@ -1971,24 +1990,39 @@ export async function fetchLeaguePlayerSettings(
   leagueId: string,
   jwt: string
 ): Promise<Array<{ league_id: string; metadata: any; player_id: string; settings: any }>> {
-  const res = await fetch("https://sleeper.com/graphql", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "authorization": jwt,
-      "x-sleeper-graphql-op": "league_players",
-    },
-    body: JSON.stringify({
-      query: `query league_players {
-        league_players(league_id: "${leagueId}") {
-          league_id
-          metadata
-          player_id
-          settings
-        }
-      }`,
-    }),
-  });
+  // Timeout guard: without it a hung GraphQL request leaves the trade-block
+  // page's loading spinner up forever (its effect's finally never runs).
+  const ac = new AbortController();
+  const timeoutId = setTimeout(() => ac.abort(), SLEEPER_FETCH_TIMEOUT_MS);
+  let res: Response;
+  try {
+    res = await fetch("https://sleeper.com/graphql", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "authorization": jwt,
+        "x-sleeper-graphql-op": "league_players",
+      },
+      body: JSON.stringify({
+        query: `query league_players {
+          league_players(league_id: "${leagueId}") {
+            league_id
+            metadata
+            player_id
+            settings
+          }
+        }`,
+      }),
+      signal: ac.signal,
+    });
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") {
+      throw new Error(`league_players request timed out after ${SLEEPER_FETCH_TIMEOUT_MS / 1000}s`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeoutId);
+  }
   if (!res.ok) throw new Error(`GraphQL ${res.status}`);
   const json = await res.json();
   if (json?.errors?.length) throw new Error(json.errors[0].message || "league_players failed");

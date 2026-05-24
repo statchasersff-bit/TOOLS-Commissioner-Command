@@ -1206,13 +1206,58 @@ export function TradeBlockScanner({ league }: { league: League }) {
 
   const [lpsData, setLpsData] = useState<any[]>([]);
   const [lpsLoading, setLpsLoading] = useState(false);
+  const [lpsError, setLpsError] = useState<string | null>(null);
+  // Bump to force a re-run of the load effect (used by the error card's Retry).
+  const [reloadKey, setReloadKey] = useState(0);
+  const retryTradeBlock = useCallback(() => setReloadKey((k) => k + 1), []);
+
   useEffect(() => {
-    if (!sleeperJwt || !league.id) { setLpsData([]); return; }
+    // Startup logging — makes a stuck/failed load diagnosable from the console
+    // (route, auth/jwt presence, result, failed endpoint, final loading state).
+    console.info("[trade-block] startup load", { route: "trade-center:trade-block", leagueId: league.id, hasJwt: !!sleeperJwt });
+
+    if (!sleeperJwt || !league.id) {
+      // Not logged in / no league selected — resolve to a clean, non-loading
+      // state. TradeBlockCandidates renders the "connect Sleeper" prompt via
+      // the noJwt flag; we never sit on a spinner here.
+      console.info("[trade-block] skipping load — no jwt or league id; rendering logged-out state");
+      setLpsData([]);
+      setLpsError(null);
+      setLpsLoading(false);
+      return;
+    }
+
+    let cancelled = false;
     setLpsLoading(true);
-    fetchLeaguePlayerSettings(league.id, sleeperJwt)
-      .then(data => { setLpsData(data); setLpsLoading(false); })
-      .catch(() => setLpsLoading(false));
-  }, [sleeperJwt, league.id]);
+    setLpsError(null);
+
+    (async () => {
+      try {
+        const data = await fetchLeaguePlayerSettings(league.id, sleeperJwt);
+        if (cancelled) return;
+        console.info("[trade-block] load ok", { count: data.length });
+        setLpsData(data);
+        setLpsError(null);
+      } catch (err) {
+        if (cancelled) return;
+        // A failed fetch must NOT masquerade as "no players on the block" —
+        // surface a real error so the user gets a retry affordance instead of
+        // a misleading empty list.
+        console.error("[trade-block] load failed", { endpoint: "sleeper.com/graphql (league_players)", error: err });
+        setLpsData([]);
+        setLpsError(err instanceof Error ? err.message : "Failed to load trade block");
+      } finally {
+        // Single point of release — guarantees the spinner always clears,
+        // regardless of success, failure, or timeout.
+        if (!cancelled) {
+          setLpsLoading(false);
+          console.info("[trade-block] startup load finished — loading: false");
+        }
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [sleeperJwt, league.id, reloadKey]);
 
   const playerById = useMemo(() => {
     const map = new Map<string, Player>();
