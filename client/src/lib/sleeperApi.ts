@@ -2,6 +2,7 @@ import { getFantasyCalcValues, getFantasyCalcRedraftValues } from "./fantasycalc
 import { buildOptimalStarterIds } from "./lineupUtils";
 import { normalizeSleeperDraftOrder, type NormalizedDraftOrder } from "./sleeperDraftOrder";
 import { FeatureDisabledError, showFeatureDisabled } from "@/components/FeatureDisabledDialog";
+import { API_BASE } from "./apiBase";
 
 const SLEEPER_API = "https://api.sleeper.app/v1";
 const PLAYERS_CACHE_KEY = "sc-sleeper-players";
@@ -238,6 +239,195 @@ export async function getSleeperPlayers(): Promise<Record<string, SleeperPlayerR
   });
 
   return playersPromise;
+}
+
+// ── Cross-league player exposure (Player Page → Availability tab) ─────────────
+export interface PlayerLeagueExposure {
+  leagueId: string;
+  leagueName: string;
+  status: "owned" | "opponent" | "available";
+  manager: string | null;
+  starter: boolean;
+}
+
+/**
+ * For a single player, determine ownership status in each of the user's
+ * leagues: owned by the user, owned by an opponent (with manager name), or
+ * available (free agent). One rosters+users fetch per league, run in parallel
+ * and capped to keep request volume sane.
+ */
+export async function fetchPlayerExposure(
+  userId: string,
+  leagues: { leagueId: string; name: string }[],
+  playerId: string,
+): Promise<PlayerLeagueExposure[]> {
+  if (!userId || !playerId || !leagues?.length) return [];
+  const capped = leagues.slice(0, 50);
+  const results = await Promise.all(
+    capped.map(async (lg): Promise<PlayerLeagueExposure | null> => {
+      try {
+        const [rosters, users] = await Promise.all([
+          fetchJson<SleeperRosterRaw[]>(`${SLEEPER_API}/league/${lg.leagueId}/rosters`),
+          fetchJson<SleeperLeagueUserRaw[]>(`${SLEEPER_API}/league/${lg.leagueId}/users`).catch(() => [] as SleeperLeagueUserRaw[]),
+        ]);
+        if (!Array.isArray(rosters)) return null;
+        const owning = rosters.find((r) => Array.isArray(r.players) && r.players.includes(playerId));
+        if (!owning) {
+          return { leagueId: lg.leagueId, leagueName: lg.name, status: "available", manager: null, starter: false };
+        }
+        const isUser = owning.owner_id === userId;
+        const starter = Array.isArray(owning.starters) && owning.starters.includes(playerId);
+        let manager: string | null = null;
+        if (!isUser) {
+          const u = users?.find((x) => x.user_id === owning.owner_id);
+          manager = u?.metadata?.team_name || u?.display_name || u?.username || "Unknown";
+        }
+        return { leagueId: lg.leagueId, leagueName: lg.name, status: isUser ? "owned" : "opponent", manager, starter };
+      } catch {
+        return null;
+      }
+    }),
+  );
+  return results.filter((r): r is PlayerLeagueExposure => r !== null);
+}
+
+// ── Player trade history (Player Page → Trades tab) ──────────────────────────
+export interface PlayerTradeAsset {
+  label: string;
+  kind: "player" | "pick";
+  isThisPlayer: boolean;
+}
+export interface PlayerTradeRecord {
+  leagueId: string;
+  leagueName: string;
+  timestamp: number;
+  receiver: string;            // manager who acquired this player
+  giver: string;               // manager who traded him away
+  receiverGot: PlayerTradeAsset[];
+  giverGot: PlayerTradeAsset[];
+}
+
+/**
+ * Scan the user's leagues' transaction logs for completed trades that moved a
+ * specific player (in either direction), building a per-side asset breakdown.
+ * Heavy (per-league weekly transaction fetches) so callers should lazy-load it.
+ * League concurrency is chunked to avoid a request stampede.
+ */
+export async function fetchPlayerTrades(
+  leagues: { leagueId: string; name: string }[],
+  playerId: string,
+): Promise<PlayerTradeRecord[]> {
+  if (!playerId || !leagues?.length) return [];
+  const playersDb = await getSleeperPlayers();
+  const capped = leagues.slice(0, 24);
+  const records: PlayerTradeRecord[] = [];
+
+  const pname = (pid: string) => {
+    const p = playersDb[pid];
+    return p ? (p.full_name || `${p.first_name ?? ""} ${p.last_name ?? ""}`.trim()) : `Player ${pid}`;
+  };
+
+  const scanLeague = async (lg: { leagueId: string; name: string }) => {
+    let rosters: any[] | null = null;
+    let users: any[] | null = null;
+    try {
+      [rosters, users] = await Promise.all([
+        fetchJson<any[]>(`${SLEEPER_API}/league/${lg.leagueId}/rosters`),
+        fetchJson<any[]>(`${SLEEPER_API}/league/${lg.leagueId}/users`).catch(() => [] as any[]),
+      ]);
+    } catch { return; }
+    if (!Array.isArray(rosters)) return;
+
+    const ownerMap = new Map<number, string>();
+    for (const r of rosters) {
+      const u = users?.find((x: any) => x.user_id === r.owner_id);
+      ownerMap.set(r.roster_id, u?.metadata?.team_name || u?.display_name || u?.username || `Roster ${r.roster_id}`);
+    }
+
+    const weekTxns = await Promise.all(
+      Array.from({ length: 22 }, (_, w) =>
+        fetchJson<any[]>(`${SLEEPER_API}/league/${lg.leagueId}/transactions/${w}`).catch(() => [] as any[]),
+      ),
+    );
+    const txns = weekTxns.flat().filter(Boolean);
+
+    const trades = txns.filter(
+      (t: any) =>
+        t.type === "trade" &&
+        t.status === "complete" &&
+        ((t.adds && playerId in t.adds) || (t.drops && playerId in t.drops)),
+    );
+
+    for (const t of trades) {
+      const receiverRid: number | undefined = t.adds?.[playerId];
+      const giverRid: number | undefined = t.drops?.[playerId];
+      if (receiverRid == null) continue;
+
+      const collect = (rid: number): PlayerTradeAsset[] => {
+        const assets: PlayerTradeAsset[] = [];
+        if (t.adds) {
+          for (const [pid, dest] of Object.entries(t.adds)) {
+            if (dest === rid) assets.push({ label: pname(pid), kind: "player", isThisPlayer: pid === playerId });
+          }
+        }
+        if (Array.isArray(t.draft_picks)) {
+          for (const pk of t.draft_picks) {
+            if (pk.owner_id === rid) assets.push({ label: `${pk.season} R${pk.round}`, kind: "pick", isThisPlayer: false });
+          }
+        }
+        return assets;
+      };
+
+      records.push({
+        leagueId: lg.leagueId,
+        leagueName: lg.name,
+        timestamp: t.status_updated || t.created || 0,
+        receiver: ownerMap.get(receiverRid) || "Unknown",
+        giver: giverRid != null ? (ownerMap.get(giverRid) || "Unknown") : "Unknown",
+        receiverGot: collect(receiverRid),
+        giverGot: giverRid != null ? collect(giverRid) : [],
+      });
+    }
+  };
+
+  // Chunk league scans to bound concurrent requests.
+  const CHUNK = 6;
+  for (let i = 0; i < capped.length; i += CHUNK) {
+    await Promise.all(capped.slice(i, i + CHUNK).map(scanLeague));
+  }
+
+  records.sort((a, b) => b.timestamp - a.timestamp);
+  return records;
+}
+
+// ── Game logs (Player Page → Game Log tab) ───────────────────────────────────
+// Calls our cached backend endpoint, NOT Sleeper directly (the stats endpoint
+// is unofficial; the backend handles fetching, caching, and normalization).
+export interface PlayerGameLogRow {
+  week: number;
+  opponent: string | null;
+  team: string | null;
+  ptsPPR: number | null;
+  ptsHalf: number | null;
+  ptsStd: number | null;
+  passCmp: number; passAtt: number; passYd: number; passTd: number; passInt: number;
+  rushAtt: number; rushYd: number; rushTd: number;
+  tgt: number; rec: number; recYd: number; recTd: number;
+  snapPct: number | null;
+}
+
+export async function fetchPlayerGameLogs(
+  playerId: string,
+  season: number,
+  seasonType: "regular" | "post" = "regular",
+): Promise<PlayerGameLogRow[]> {
+  const res = await fetch(
+    `${API_BASE}/api/players/${encodeURIComponent(playerId)}/game-logs?season=${season}&type=${seasonType}`,
+    { credentials: "include" },
+  );
+  if (!res.ok) throw new Error(`Game logs unavailable (${res.status})`);
+  const data = await res.json();
+  return Array.isArray(data?.logs) ? data.logs : [];
 }
 
 export async function fetchSleeperLeagueFull(leagueId: string, userId: string) {

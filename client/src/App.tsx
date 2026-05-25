@@ -4,8 +4,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ValueModelProvider } from "@/contexts/ValueModelContext";
-import { PlayerProfileProvider } from "@/contexts/PlayerProfileContext";
-import { GlobalPlayerProfileDrawer } from "@/components/GlobalPlayerProfileDrawer";
+import { PlayerProfileProvider, PlayerProfileNavigator } from "@/contexts/PlayerProfileContext";
 import { ManagerIntelProvider } from "@/contexts/ManagerIntelContext";
 import { GlobalManagerIntelDrawer } from "@/components/GlobalManagerIntelDrawer";
 import { SleeperProvider } from "@/contexts/SleeperContext";
@@ -17,6 +16,7 @@ import { FavoriteTeamProvider } from "@/contexts/FavoriteTeamContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { AuthGate } from "@/pages/auth/AuthGate";
 import DynastyCommandCenter from "@/pages/DynastyCommandCenter";
+import PlayerPage from "@/pages/PlayerPage";
 import { Component, useEffect, type ReactNode, type ErrorInfo } from "react";
 
 class ErrorBoundary extends Component<{ label?: string; children: ReactNode }, { error: Error | null }> {
@@ -56,7 +56,9 @@ const BASE_PATH = import.meta.env.DEV ? "" : (import.meta.env.BASE_URL.replace(/
 function Router() {
   return (
     <WouterRouter base={BASE_PATH}>
+      <PlayerProfileNavigator />
       <Switch>
+        <Route path="/players/:playerId" component={PlayerPage} />
         <Route path="/:tab/:sub" component={DynastyCommandCenter} />
         <Route path="/:tab" component={DynastyCommandCenter} />
         <Route path="/" component={DynastyCommandCenter} />
@@ -143,7 +145,6 @@ function AuthenticatedTree({ probe }: { probe: Probe }) {
             <ErrorBoundary label="Router/DynastyCommandCenter">
               <Router />
             </ErrorBoundary>
-            <GlobalPlayerProfileDrawer />
             <GlobalManagerIntelDrawer />
           </ManagerIntelProvider>
         </PlayerProfileProvider>

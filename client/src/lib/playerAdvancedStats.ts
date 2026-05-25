@@ -216,7 +216,7 @@ export async function loadPlayerAdvancedStats(
     if (file) {
       // Precompute the numeric value arrays for every component column.
       const colValues: Record<string, number[]> = {};
-      const allKeys = new Set(defs.flatMap((d) => d.keys));
+      const allKeys = Array.from(new Set(defs.flatMap((d) => d.keys)));
       for (const k of allKeys) {
         colValues[k] = file.rows.map((r) => num(r[k])).filter((v): v is number => v != null);
       }

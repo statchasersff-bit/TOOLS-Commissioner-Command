@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { getFantasyCalcValues, getFantasyCalcRedraftValues } from "./fantasycalc";
 import { computePlayoffCalculator, computeWeeklyMatchups } from "./playoffCalculator";
 import { getAdpHistory, getAdpAvailability } from "./adpPlayerProfile";
-import { getPlayerMetadata, getPlayerProduction, type ScoringKey } from "./sleeperPlayerProfile";
+import { getPlayerMetadata, getPlayerProduction, getPlayerGameLogs, type ScoringKey, type GameLogSeasonType } from "./sleeperPlayerProfile";
 import {
   fetchSleeperUser,
   fetchSleeperLeagues,
@@ -336,6 +336,27 @@ export async function registerRoutes(
     } catch (err: any) {
       console.error("[Player/production] error:", err);
       res.status(500).json({ error: err?.message || "Failed to load production" });
+    }
+  });
+
+  // Week-by-week game logs from Sleeper's (unofficial) per-player weekly stats
+  // endpoint, disk-cached. Returns 502 on upstream failure so the UI can show a
+  // "temporarily unavailable" message without breaking the page.
+  app.get("/api/players/:playerId/game-logs", async (req, res) => {
+    try {
+      const { playerId } = req.params;
+      if (!playerId) return res.status(400).json({ error: "playerId is required" });
+      const season = parseInt(String(req.query.season ?? ""), 10);
+      if (!season || season < 2000 || season > 2100) {
+        return res.status(400).json({ error: "valid season is required" });
+      }
+      const seasonType: GameLogSeasonType = String(req.query.type ?? "regular").toLowerCase() === "post" ? "post" : "regular";
+      const logs = await getPlayerGameLogs(playerId, season, seasonType);
+      res.setHeader("Cache-Control", "public, max-age=900");
+      res.json({ playerId, season, seasonType, logs });
+    } catch (err: any) {
+      console.error("[Player/game-logs] error:", err);
+      res.status(502).json({ error: err?.message || "Failed to load game logs" });
     }
   });
 

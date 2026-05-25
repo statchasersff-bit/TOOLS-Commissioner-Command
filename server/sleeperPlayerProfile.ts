@@ -214,3 +214,96 @@ export async function getPlayerProduction(
   // Newest season first — matches how the modal renders the table.
   return results.sort((a, b) => b.season - a.season);
 }
+
+// ── Week-by-week game logs ────────────────────────────────────────────────────
+// Backed by Sleeper's per-player weekly stats endpoint. NOTE: this endpoint is
+// on api.sleeper.com (not the documented /v1 host) and is NOT part of Sleeper's
+// officially-supported API — it works today but may change/break without
+// notice. We cache per player+season+type on disk: a short TTL for the live
+// (current) season, effectively permanent for completed seasons.
+const GAMELOG_CACHE_DIR = path.join(process.cwd(), ".cache", "sleeper-gamelogs");
+const GAMELOG_TTL_CURRENT_MS = 30 * 60 * 1000;        // 30 min in-season
+const GAMELOG_TTL_PAST_MS = 7 * 24 * 60 * 60 * 1000;  // 7 days offseason/historical
+
+export type GameLogSeasonType = "regular" | "post";
+
+export interface GameLogRow {
+  week: number;
+  opponent: string | null;
+  team: string | null;
+  ptsPPR: number | null;
+  ptsHalf: number | null;
+  ptsStd: number | null;
+  passCmp: number; passAtt: number; passYd: number; passTd: number; passInt: number;
+  rushAtt: number; rushYd: number; rushTd: number;
+  tgt: number; rec: number; recYd: number; recTd: number;
+  snapPct: number | null;
+}
+
+function ensureGamelogDir() {
+  try { fs.mkdirSync(GAMELOG_CACHE_DIR, { recursive: true }); } catch { /* ignore */ }
+}
+function gamelogCachePath(playerId: string, season: number, type: GameLogSeasonType): string {
+  return path.join(GAMELOG_CACHE_DIR, `${type}-${season}-${playerId}.json`);
+}
+/** NFL season year — Aug onward counts as the new season. */
+function currentNflSeason(): number {
+  const now = new Date();
+  return now.getMonth() >= 7 ? now.getFullYear() : now.getFullYear() - 1;
+}
+function gnum(v: unknown): number {
+  return typeof v === "number" && Number.isFinite(v) ? v : 0;
+}
+
+function normalizeGameLogs(data: Record<string, any>): GameLogRow[] {
+  const rows: GameLogRow[] = [];
+  for (const [week, entry] of Object.entries(data || {})) {
+    if (!entry) continue; // bye / DNP weeks come back null
+    const e = entry as any;
+    const s = (e.stats ?? e) as Record<string, any>;
+    const wk = Number(e.week ?? week);
+    if (!Number.isFinite(wk)) continue;
+    const offSnp = gnum(s.off_snp);
+    const tmOff = gnum(s.tm_off_snp);
+    rows.push({
+      week: wk,
+      opponent: e.opponent ?? null,
+      team: e.team ?? null,
+      ptsPPR: s.pts_ppr ?? null,
+      ptsHalf: s.pts_half_ppr ?? null,
+      ptsStd: s.pts_std ?? null,
+      passCmp: gnum(s.pass_cmp), passAtt: gnum(s.pass_att), passYd: gnum(s.pass_yd),
+      passTd: gnum(s.pass_td), passInt: gnum(s.pass_int),
+      rushAtt: gnum(s.rush_att), rushYd: gnum(s.rush_yd), rushTd: gnum(s.rush_td),
+      tgt: gnum(s.rec_tgt), rec: gnum(s.rec), recYd: gnum(s.rec_yd), recTd: gnum(s.rec_td),
+      snapPct: tmOff > 0 ? Math.round((offSnp / tmOff) * 100) : null,
+    });
+  }
+  return rows.sort((a, b) => a.week - b.week);
+}
+
+export async function getPlayerGameLogs(
+  playerId: string,
+  season: number,
+  seasonType: GameLogSeasonType = "regular",
+): Promise<GameLogRow[]> {
+  ensureGamelogDir();
+  const cachePath = gamelogCachePath(playerId, season, seasonType);
+  const ttl = season >= currentNflSeason() ? GAMELOG_TTL_CURRENT_MS : GAMELOG_TTL_PAST_MS;
+  try {
+    const stat = fs.statSync(cachePath);
+    if (Date.now() - stat.mtimeMs < ttl) {
+      return JSON.parse(fs.readFileSync(cachePath, "utf-8"));
+    }
+  } catch { /* fall through to network */ }
+
+  const url = `https://api.sleeper.com/stats/nfl/player/${encodeURIComponent(playerId)}?season_type=${seasonType}&season=${season}&grouping=week`;
+  const r = await fetch(url);
+  if (!r.ok) {
+    throw new Error(`Sleeper stats request failed: ${r.status}`);
+  }
+  const data = (await r.json()) as Record<string, any>;
+  const rows = normalizeGameLogs(data);
+  try { fs.writeFileSync(cachePath, JSON.stringify(rows), "utf-8"); } catch { /* ignore */ }
+  return rows;
+}

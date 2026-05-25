@@ -1,51 +1,51 @@
 /**
- * Global player profile drawer state.
+ * Global player-profile trigger.
  *
- * Any component anywhere in the app can call `openPlayerProfile(playerId)` to
- * pop the same drawer. The Provider lives near the app root and the actual
- * drawer is rendered alongside it (see DynastyCommandCenter wiring).
+ * Any component can call `openPlayerProfile(playerId)` to open a player. As of
+ * the full Player Page rollout this NAVIGATES to /players/:slug rather than
+ * popping a drawer — the page is the single deep experience. The context stays
+ * as a thin request bus so the many existing call sites don't have to change;
+ * `<PlayerProfileNavigator />` (mounted inside the wouter Router for base-aware
+ * navigation) performs the actual redirect.
  *
- * IMPORTANT: This is *separate* from the ADP Explorer profile drawer
- * (PlayerProfileDrawer.tsx) which is draft-focused. Do not merge them.
+ * NOTE: separate from the ADP Explorer drawer (PlayerProfileDrawer.tsx).
  */
 
 import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
   type ReactNode,
 } from "react";
+import { useLocation } from "wouter";
+import { getSleeperPlayers } from "@/lib/sleeperApi";
+import { slugForId } from "@/lib/playerSlug";
 
 interface PlayerProfileState {
-  selectedPlayerId: string | null;
-  isOpen: boolean;
+  /** The player id requested but not yet navigated to (consumed by the navigator). */
+  pendingPlayerId: string | null;
   openPlayerProfile: (playerId: string) => void;
-  closePlayerProfile: () => void;
+  clearPending: () => void;
 }
 
 const PlayerProfileContext = createContext<PlayerProfileState | null>(null);
 
 export function PlayerProfileProvider({ children }: { children: ReactNode }) {
-  const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
-  const [isOpen, setIsOpen] = useState(false);
+  const [pendingPlayerId, setPendingPlayerId] = useState<string | null>(null);
 
   const openPlayerProfile = useCallback((playerId: string) => {
     if (!playerId) return;
-    setSelectedPlayerId(playerId);
-    setIsOpen(true);
+    setPendingPlayerId(playerId);
   }, []);
 
-  const closePlayerProfile = useCallback(() => {
-    setIsOpen(false);
-    // Keep `selectedPlayerId` briefly so the drawer can animate out without
-    // flashing an empty body — Sheet's onOpenChange handles cleanup timing.
-  }, []);
+  const clearPending = useCallback(() => setPendingPlayerId(null), []);
 
   const value = useMemo<PlayerProfileState>(
-    () => ({ selectedPlayerId, isOpen, openPlayerProfile, closePlayerProfile }),
-    [selectedPlayerId, isOpen, openPlayerProfile, closePlayerProfile],
+    () => ({ pendingPlayerId, openPlayerProfile, clearPending }),
+    [pendingPlayerId, openPlayerProfile, clearPending],
   );
 
   return (
@@ -61,4 +61,35 @@ export function usePlayerProfile(): PlayerProfileState {
     throw new Error("usePlayerProfile must be used within PlayerProfileProvider");
   }
   return ctx;
+}
+
+/**
+ * Mounted inside the wouter Router. Watches for a pending player id and
+ * navigates to the slug URL (falling back to the raw id), then clears the
+ * request. Kept inside the Router so `setLocation` honors the router base path.
+ */
+export function PlayerProfileNavigator() {
+  const { pendingPlayerId, clearPending } = usePlayerProfile();
+  const [, setLocation] = useLocation();
+
+  useEffect(() => {
+    if (!pendingPlayerId) return;
+    let cancelled = false;
+    (async () => {
+      let target = pendingPlayerId;
+      try {
+        const db = await getSleeperPlayers();
+        const slug = slugForId(db, pendingPlayerId);
+        if (slug) target = slug;
+      } catch {
+        /* fall back to raw id */
+      }
+      if (cancelled) return;
+      clearPending();
+      setLocation(`/players/${target}`);
+    })();
+    return () => { cancelled = true; };
+  }, [pendingPlayerId, clearPending, setLocation]);
+
+  return null;
 }
