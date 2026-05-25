@@ -350,10 +350,26 @@ export default function PositionStats() {
     }
   };
 
-  const toggleCol = (key: string) =>
+  // Toggleable stat columns bucketed by their super-header group, in order.
+  // The Columns panel toggles whole groups rather than individual columns.
+  const statColGroups = useMemo(() => {
+    const groupMap = COLUMN_GROUPS_BY_POSITION[position];
+    const order: string[] = [];
+    const byLabel = new Map<string, string[]>();
+    for (const c of allStatCols) {
+      const label = groupMap?.[c.key] ?? "Other";
+      if (!byLabel.has(label)) { byLabel.set(label, []); order.push(label); }
+      byLabel.get(label)!.push(c.key);
+    }
+    return order.map((label) => ({ label, keys: byLabel.get(label)! }));
+  }, [allStatCols, position]);
+
+  // Show every column in the group if any are hidden; otherwise hide them all.
+  const toggleGroup = (keys: string[]) =>
     setVisibleCols((prev) => {
       const next = new Set(prev);
-      next.has(key) ? next.delete(key) : next.add(key);
+      const allVisible = keys.every((k) => next.has(k));
+      keys.forEach((k) => (allVisible ? next.delete(k) : next.add(k)));
       return next;
     });
 
@@ -413,21 +429,7 @@ export default function PositionStats() {
         </div>
       </div>
 
-      {/* ── Compare sub-tab ──────────────────────────────────────────────── */}
-      {subTab === "compare" && (
-        <Card className="p-10 text-center" data-testid="compare-placeholder">
-          <GitCompare className="w-7 h-7 text-muted-foreground/60 mx-auto mb-3" />
-          <p className="text-sm font-semibold text-foreground mb-1">Player Comparison</p>
-          <p className="text-xs text-muted-foreground max-w-md mx-auto">
-            Compare players side-by-side across advanced stats. This view is coming soon.
-          </p>
-        </Card>
-      )}
-
-      {/* ── Data sub-tab ─────────────────────────────────────────────────── */}
-      {subTab === "data" && (
-      <div className="space-y-5">
-      {/* ── Controls card ────────────────────────────────────────────────── */}
+      {/* ── Shared controls card (both Data and Compare sub-tabs) ────────── */}
       <Card className="p-4 space-y-3" data-testid="position-stats-controls">
         <div className="flex flex-col sm:flex-row gap-3">
           {/* Position selector */}
@@ -553,21 +555,27 @@ export default function PositionStats() {
               </div>
             </div>
             <div className="flex flex-wrap gap-1.5">
-              {allStatCols.map((c) => (
-                <button
-                  key={c.key}
-                  onClick={() => toggleCol(c.key)}
-                  className={cn(
-                    "px-2 py-0.5 rounded-full text-[10px] font-medium border transition-colors",
-                    visibleCols.has(c.key)
-                      ? "bg-[#d4af37]/15 text-[#d4af37] border-[#d4af37]/40"
-                      : "bg-transparent text-muted-foreground/50 border-border/50 hover:border-foreground/20 hover:text-muted-foreground",
-                  )}
-                  data-testid={`btn-col-toggle-${c.key}`}
-                >
-                  {c.label}
-                </button>
-              ))}
+              {statColGroups.map((g) => {
+                const allVisible = g.keys.every((k) => visibleCols.has(k));
+                const someVisible = g.keys.some((k) => visibleCols.has(k));
+                return (
+                  <button
+                    key={g.label}
+                    onClick={() => toggleGroup(g.keys)}
+                    className={cn(
+                      "px-2.5 py-1 rounded-full text-[10px] font-semibold border transition-colors",
+                      allVisible
+                        ? "bg-[#d4af37]/15 text-[#d4af37] border-[#d4af37]/40"
+                        : someVisible
+                          ? "bg-[#d4af37]/[0.06] text-[#d4af37]/80 border-[#d4af37]/25 border-dashed"
+                          : "bg-transparent text-muted-foreground/50 border-border/50 hover:border-foreground/20 hover:text-muted-foreground",
+                    )}
+                    data-testid={`btn-col-group-${g.label}`}
+                  >
+                    {g.label}
+                  </button>
+                );
+              })}
             </div>
           </div>
         )}
@@ -581,6 +589,21 @@ export default function PositionStats() {
           </p>
         )}
       </Card>
+
+      {/* ── Compare sub-tab ──────────────────────────────────────────────── */}
+      {subTab === "compare" && (
+        <Card className="p-10 text-center" data-testid="compare-placeholder">
+          <GitCompare className="w-7 h-7 text-muted-foreground/60 mx-auto mb-3" />
+          <p className="text-sm font-semibold text-foreground mb-1">Player Comparison</p>
+          <p className="text-xs text-muted-foreground max-w-md mx-auto">
+            Compare players side-by-side across advanced stats. This view is coming soon.
+          </p>
+        </Card>
+      )}
+
+      {/* ── Data sub-tab ─────────────────────────────────────────────────── */}
+      {subTab === "data" && (
+      <div className="space-y-5">
 
       {/* ── Loading ──────────────────────────────────────────────────────── */}
       {loading && (

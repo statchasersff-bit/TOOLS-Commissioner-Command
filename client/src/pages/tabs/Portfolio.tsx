@@ -36,6 +36,7 @@ import {
   ArrowUpDown,
   ArrowRightLeft,
   Coins,
+  Info,
 } from "lucide-react";
 
 export function PortfolioConnect({ onNavigate }: { onNavigate?: (mainTab: string, subTab: string) => void }) {
@@ -488,7 +489,7 @@ function SortableLeagueRecords({ records }: { records: any[] }) {
       {sorted.length > 10 && (
         <button
           onClick={() => setShowAll(prev => !prev)}
-          className="w-full py-2.5 text-xs font-semibold text-[#0b3a7a] dark:text-blue-400 hover:bg-muted/20 transition-colors border-t border-border/40"
+          className="w-full py-2.5 text-xs font-semibold text-[#0b3a7a] dark-any:text-white hover:bg-muted/20 transition-colors border-t border-border/40"
           data-testid="button-toggle-leagues"
         >
           {showAll ? "Show Less" : `Show All ${sorted.length} Leagues`}
@@ -913,10 +914,19 @@ export function PortfolioSummary({ onNavigate }: { onNavigate?: (mainTab: string
       {summaryData && (
         <>
           <Card className="p-6" data-testid="portfolio-performance">
-            <div className="mb-5">
+            <div className="mb-4">
               <h3 className="text-base font-bold text-foreground">League Breakdown</h3>
               <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
             </div>
+
+            <p className="flex items-start gap-1.5 text-[11px] leading-snug text-muted-foreground mb-4">
+              <Info className="w-3.5 h-3.5 mt-px flex-shrink-0 text-muted-foreground/60" />
+              <span>
+                Shows your active dynasty leagues only. Redraft &amp; keeper leagues,
+                undrafted leagues, leagues where you aren&apos;t assigned a team, and
+                mostly-unclaimed (orphan) pools are filtered out automatically.
+              </span>
+            </p>
 
             <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 mb-4">
               {([

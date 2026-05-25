@@ -566,8 +566,8 @@ const POS_LABELS = ["QB", "RB", "WR", "TE"] as const;
 function hmBg(rank: number, total: number) {
   const topCut = Math.ceil(total * 0.25);
   const botCut = Math.floor(total * 0.75) + 1;
-  if (rank <= topCut) return "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400";
-  if (rank >= botCut) return "bg-red-500/15 text-red-600 dark:text-red-400";
+  if (rank <= topCut) return "bg-emerald-500/15 text-emerald-700 dark-any:text-emerald-400";
+  if (rank >= botCut) return "bg-red-500/15 text-red-600 dark-any:text-red-400";
   return "text-muted-foreground";
 }
 
@@ -1409,7 +1409,7 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
                       username={team.owner}
                       avatar={team.avatar}
                       leagueId={league.id}
-                      className={cn("text-xs font-semibold truncate", isUser ? "text-[#0b3a7a] dark:text-blue-400" : "text-foreground")}
+                      className={cn("text-xs font-semibold truncate", isUser ? "text-[#0b3a7a] dark-any:text-white" : "text-foreground")}
                     >
                       {team.owner}
                     </ManagerNameButton>
@@ -1488,13 +1488,13 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
                     </button>
                   </th>
                   <th
-                    className="px-2 py-2 text-center text-[10px] font-bold uppercase tracking-wider whitespace-nowrap border-l-2 border-blue-400/40 bg-blue-500/10 text-blue-700 dark:text-blue-300"
+                    className="px-2 py-2 text-center text-[10px] font-bold uppercase tracking-wider whitespace-nowrap border-l-2 border-blue-400/40 bg-blue-500/10 text-blue-700 dark-any:text-blue-300"
                     colSpan={6}
                   >
                     Dynasty (Including Picks)
                   </th>
                   <th
-                    className="px-2 py-2 text-center text-[10px] font-bold uppercase tracking-wider whitespace-nowrap border-l-2 border-[#d4af37]/50 bg-[#d4af37]/10 text-amber-700 dark:text-[#d4af37]"
+                    className="px-2 py-2 text-center text-[10px] font-bold uppercase tracking-wider whitespace-nowrap border-l-2 border-[#d4af37]/50 bg-[#d4af37]/10 text-amber-700 dark-any:text-[#d4af37]"
                     colSpan={5}
                   >
                     Win-Now (Redraft Starters)
@@ -1517,8 +1517,8 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
                     <th key={key} className={cn(
                       "px-2 py-2 text-center text-[10px] font-semibold uppercase tracking-wider whitespace-nowrap",
                       group === "dyn"
-                        ? "bg-blue-500/5 text-blue-700 dark:text-blue-300"
-                        : "bg-[#d4af37]/8 text-amber-700 dark:text-[#d4af37]",
+                        ? "bg-blue-500/5 text-blue-700 dark-any:text-blue-300"
+                        : "bg-[#d4af37]/8 text-amber-700 dark-any:text-[#d4af37]",
                       divider && group === "dyn" && "border-l-2 border-blue-400/40",
                       divider && group === "red" && "border-l-2 border-[#d4af37]/50",
                     )}>
@@ -1585,7 +1585,7 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
                               username={team.owner}
                               avatar={team.avatar}
                               leagueId={league.id}
-                              className={cn("font-semibold truncate max-w-[80px] sm:max-w-none", isUser ? "text-[#0b3a7a] dark:text-blue-400" : "text-foreground")}
+                              className={cn("font-semibold truncate max-w-[80px] sm:max-w-none", isUser ? "text-[#0b3a7a] dark-any:text-white" : "text-foreground")}
                             >
                               {team.owner}
                             </ManagerNameButton>
@@ -1610,10 +1610,10 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
                           const top = Math.ceil(total * 0.33);
                           const bot = Math.floor(total * 0.67) + 1;
                           const cls = rank <= top
-                            ? "text-emerald-600 dark:text-emerald-400 bg-emerald-500/10"
+                            ? "text-emerald-600 dark-any:text-emerald-400 bg-emerald-500/10"
                             : rank >= bot
-                            ? "text-red-500 dark:text-red-400 bg-red-500/10"
-                            : "text-amber-600 dark:text-amber-400 bg-amber-500/10";
+                            ? "text-red-500 dark-any:text-red-400 bg-red-500/10"
+                            : "text-amber-600 dark-any:text-amber-400 bg-amber-500/10";
                           return <span className={`text-[9px] font-bold px-1 py-0.5 rounded ${cls}`}>#{rank}</span>;
                         }
                         // Mirror the Table view: 5 cards in one row on desktop,
@@ -1628,10 +1628,10 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
                             <td colSpan={12} className="px-3 sm:px-5 py-2">
                               <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1 lg:mx-0 lg:px-0 lg:pb-0 lg:gap-2 lg:overflow-visible lg:grid lg:[grid-template-columns:repeat(5,minmax(0,1fr))]">
                                 {([
-                                  { pos: "QB", players: hmRoster.qbs, textColor: "text-rose-500 dark:text-rose-400",      border: "border-rose-500/25",    bg: "bg-rose-500/5"    },
-                                  { pos: "RB", players: hmRoster.rbs, textColor: "text-emerald-500 dark:text-emerald-400", border: "border-emerald-500/25", bg: "bg-emerald-500/5" },
-                                  { pos: "WR", players: hmRoster.wrs, textColor: "text-sky-500 dark:text-sky-400",        border: "border-sky-500/25",     bg: "bg-sky-500/5"     },
-                                  { pos: "TE", players: hmRoster.tes, textColor: "text-orange-500 dark:text-orange-400",  border: "border-orange-500/25",  bg: "bg-orange-500/5"  },
+                                  { pos: "QB", players: hmRoster.qbs, textColor: "text-rose-500 dark-any:text-rose-400",      border: "border-rose-500/25",    bg: "bg-rose-500/5"    },
+                                  { pos: "RB", players: hmRoster.rbs, textColor: "text-emerald-500 dark-any:text-emerald-400", border: "border-emerald-500/25", bg: "bg-emerald-500/5" },
+                                  { pos: "WR", players: hmRoster.wrs, textColor: "text-sky-500 dark-any:text-sky-400",        border: "border-sky-500/25",     bg: "bg-sky-500/5"     },
+                                  { pos: "TE", players: hmRoster.tes, textColor: "text-orange-500 dark-any:text-orange-400",  border: "border-orange-500/25",  bg: "bg-orange-500/5"  },
                                 ] as const).map(({ pos, players, textColor, border, bg }) => {
                                   const dynRank = dRanks[pos] ?? total;
                                   const visible = players.slice(0, HM_MAX_PER_CARD);
@@ -1681,7 +1681,7 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
                                 {/* Picks column — Rank only, no age */}
                                 <div className="rounded-md border border-purple-500/25 bg-purple-500/5 px-2 py-1.5 min-w-[170px] flex-shrink-0 lg:min-w-0 lg:flex-shrink" data-testid={`hm-pos-col-${team.id}-picks`}>
                                   <div className="flex items-center justify-between mb-1">
-                                    <span className="text-[11px] font-black text-purple-500 dark:text-purple-400">Picks</span>
+                                    <span className="text-[11px] font-black text-purple-500 dark-any:text-purple-400">Picks</span>
                                     <div className="flex items-center gap-0.5">
                                       <span className="text-[8px] text-muted-foreground/60 font-medium">RANK</span>
                                       {hmRankBadge(pksRank)}
