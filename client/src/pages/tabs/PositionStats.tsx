@@ -7,7 +7,7 @@
  * structure — labels, types, and default visibility are all data-driven.
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { SectionHeader } from "@/components/SectionHeader";
@@ -88,6 +88,8 @@ const PINNED_KEYS = new Set(["rank", "playerName", "player_name", "name", "team"
 const ALWAYS_HIDDEN = new Set([
   "playerId", "player_id", "sleeper_id", "sleeperId",
   "season",
+  // WR/TE columns with no underlying data yet.
+  "contestedCatchRate", "yardsAfterContactPerReception",
 ]);
 
 // Super-headers: map each column key to the group label shown in the extra
@@ -190,6 +192,24 @@ function numVal(v: unknown): number {
   return -Infinity;
 }
 
+// Maximum players that can be compared side-by-side at once.
+const MAX_COMPARE = 5;
+
+// Stable identity + display helpers tolerant of the varying key names across
+// the bundled JSON files.
+function getPlayerKey(row: Record<string, unknown>): string {
+  return String(
+    row.playerId ?? row.player_id ?? row.sleeper_id ?? row.sleeperId ??
+    row.playerName ?? row.player_name ?? row.name ?? "",
+  );
+}
+function getPlayerName(row: Record<string, unknown>): string {
+  return String(row.playerName ?? row.player_name ?? row.name ?? "—");
+}
+function getPlayerTeam(row: Record<string, unknown>): string {
+  return String(row.team ?? row.nfl_team ?? "—");
+}
+
 // ── Sort icon ─────────────────────────────────────────────────────────────────
 function SortIcon({ col, sortKey, sortDir }: { col: string; sortKey: string; sortDir: SortDir }) {
   if (sortKey !== col) return <ChevronsUpDown className="w-3 h-3 opacity-35 shrink-0" />;
@@ -211,6 +231,8 @@ export default function PositionStats() {
   const [sortDir, setSortDir]       = useState<SortDir>("asc");
   const [visibleCols, setVisibleCols] = useState<Set<string>>(new Set());
   const [showColPanel, setShowColPanel] = useState(false);
+  // Player keys selected for the Compare sub-tab (in display order, max 5).
+  const [compareIds, setCompareIds] = useState<string[]>([]);
 
   // Load the JSON file whenever position or season changes
   useEffect(() => {
@@ -226,6 +248,7 @@ export default function PositionStats() {
     setSortDir("asc");
     setSearch("");
     setShowColPanel(false);
+    setCompareIds([]);
 
     loader()
       .then((mod) => {
@@ -349,6 +372,55 @@ export default function PositionStats() {
       setSortDir(key === "rank" || key === "playerName" || key === "team" ? "asc" : "desc");
     }
   };
+
+  // ── Compare sub-tab derived data ────────────────────────────────────────────
+  // The selected players, resolved to their rows in current display order.
+  const compareRows = useMemo(() => {
+    if (!data) return [];
+    const byKey = new Map(data.rows.map((r) => [getPlayerKey(r), r]));
+    return compareIds
+      .map((id) => byKey.get(id))
+      .filter((r): r is Record<string, unknown> => r != null);
+  }, [data, compareIds]);
+
+  // Players matching the search box that aren't already selected (typeahead).
+  const pickerMatches = useMemo(() => {
+    if (!data) return [];
+    const selected = new Set(compareIds);
+    const q = search.trim().toLowerCase();
+    let r = data.rows.filter((row) => !selected.has(getPlayerKey(row)));
+    if (q) {
+      r = r.filter(
+        (row) =>
+          getPlayerName(row).toLowerCase().includes(q) ||
+          getPlayerTeam(row).toLowerCase().includes(q),
+      );
+    }
+    return r.slice(0, 8);
+  }, [data, search, compareIds]);
+
+  // Visible stat columns bucketed by super-header group (the compare table's rows).
+  const compareGroups = useMemo(() => {
+    const groupMap = COLUMN_GROUPS_BY_POSITION[position];
+    const order: string[] = [];
+    const byLabel = new Map<string, ColDef[]>();
+    for (const c of activeCols) {
+      const label = groupMap?.[c.key] ?? "Other";
+      if (!byLabel.has(label)) { byLabel.set(label, []); order.push(label); }
+      byLabel.get(label)!.push(c);
+    }
+    return order.map((label) => ({ label, cols: byLabel.get(label)! }));
+  }, [activeCols, position]);
+
+  const addCompare = (row: Record<string, unknown>) => {
+    const id = getPlayerKey(row);
+    setCompareIds((prev) =>
+      prev.includes(id) || prev.length >= MAX_COMPARE ? prev : [...prev, id],
+    );
+    setSearch("");
+  };
+  const removeCompare = (id: string) =>
+    setCompareIds((prev) => prev.filter((x) => x !== id));
 
   // Toggleable stat columns bucketed by their super-header group, in order.
   // The Columns panel toggles whole groups rather than individual columns.
@@ -488,7 +560,7 @@ export default function PositionStats() {
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search player or team…"
+              placeholder={subTab === "compare" ? "Search to add a player…" : "Search player or team…"}
               className="pl-8 h-8 text-xs"
               data-testid="input-player-search"
             />
@@ -500,6 +572,43 @@ export default function PositionStats() {
               >
                 <X className="w-3.5 h-3.5" />
               </button>
+            )}
+
+            {/* Compare typeahead: pick a player to add to the comparison. */}
+            {subTab === "compare" && search.trim() && data && (
+              <div
+                className="absolute left-0 right-0 top-full mt-1 z-40 rounded-md border border-border bg-[hsl(var(--card))] shadow-lg overflow-hidden"
+                data-testid="compare-player-dropdown"
+              >
+                {compareIds.length >= MAX_COMPARE ? (
+                  <p className="px-3 py-2 text-[11px] text-muted-foreground italic">
+                    Remove a player to add another (max {MAX_COMPARE}).
+                  </p>
+                ) : pickerMatches.length === 0 ? (
+                  <p className="px-3 py-2 text-[11px] text-muted-foreground italic">
+                    No players found.
+                  </p>
+                ) : (
+                  pickerMatches.map((row) => {
+                    const id = getPlayerKey(row);
+                    return (
+                      <button
+                        key={id}
+                        onClick={() => addCompare(row)}
+                        className="w-full flex items-center justify-between gap-2 px-3 py-1.5 text-left text-xs hover:bg-[#0b3a7a]/10 transition-colors"
+                        data-testid={`compare-add-${id}`}
+                      >
+                        <span className="font-medium text-foreground truncate">
+                          {getPlayerName(row)}
+                        </span>
+                        <span className="text-[10px] text-muted-foreground shrink-0">
+                          {getPlayerTeam(row)}
+                        </span>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
             )}
           </div>
           <button
@@ -516,6 +625,35 @@ export default function PositionStats() {
             Columns
           </button>
         </div>
+
+        {/* Selected players (Compare sub-tab) */}
+        {subTab === "compare" && compareRows.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5" data-testid="compare-chips">
+            {compareRows.map((r) => {
+              const id = getPlayerKey(r);
+              return (
+                <span
+                  key={id}
+                  className="inline-flex items-center gap-1.5 pl-2.5 pr-1.5 py-1 rounded-full text-[11px] font-semibold bg-[#0b3a7a]/12 text-foreground border border-[#0b3a7a]/30"
+                >
+                  {getPlayerName(r)}
+                  <span className="text-[10px] font-normal text-muted-foreground">{getPlayerTeam(r)}</span>
+                  <button
+                    onClick={() => removeCompare(id)}
+                    className="text-muted-foreground hover:text-foreground"
+                    data-testid={`compare-chip-remove-${id}`}
+                    aria-label={`Remove ${getPlayerName(r)}`}
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              );
+            })}
+            <span className="text-[10px] text-muted-foreground/60 ml-1">
+              {compareRows.length} / {MAX_COMPARE}
+            </span>
+          </div>
+        )}
 
         {/* Column visibility panel */}
         {showColPanel && allStatCols.length > 0 && (
@@ -584,28 +722,15 @@ export default function PositionStats() {
         {!loading && data && (
           <p className="text-[10px] text-muted-foreground/55 leading-none">
             {position.toUpperCase()} · {season === "all" ? "All Seasons" : `${season} Season`}
-            {" · "}{rows.length} of {data.rows.length} players
+            {subTab === "compare"
+              ? ` · comparing ${compareRows.length} of ${MAX_COMPARE} players`
+              : ` · ${rows.length} of ${data.rows.length} players`}
             {updatedAt && ` · Updated ${updatedAt}`}
           </p>
         )}
       </Card>
 
-      {/* ── Compare sub-tab ──────────────────────────────────────────────── */}
-      {subTab === "compare" && (
-        <Card className="p-10 text-center" data-testid="compare-placeholder">
-          <GitCompare className="w-7 h-7 text-muted-foreground/60 mx-auto mb-3" />
-          <p className="text-sm font-semibold text-foreground mb-1">Player Comparison</p>
-          <p className="text-xs text-muted-foreground max-w-md mx-auto">
-            Compare players side-by-side across advanced stats. This view is coming soon.
-          </p>
-        </Card>
-      )}
-
-      {/* ── Data sub-tab ─────────────────────────────────────────────────── */}
-      {subTab === "data" && (
-      <div className="space-y-5">
-
-      {/* ── Loading ──────────────────────────────────────────────────────── */}
+      {/* ── Loading (shared) ─────────────────────────────────────────────── */}
       {loading && (
         <Card className="p-8 text-center" data-testid="loading-state">
           <Loader2 className="w-5 h-5 animate-spin text-muted-foreground mx-auto mb-2" />
@@ -615,7 +740,7 @@ export default function PositionStats() {
         </Card>
       )}
 
-      {/* ── Error ────────────────────────────────────────────────────────── */}
+      {/* ── Error (shared) ───────────────────────────────────────────────── */}
       {!loading && error && (
         <Card className="p-6 border-red-500/40 bg-red-500/5" data-testid="error-state">
           <p className="text-sm font-semibold text-red-500 mb-1">Failed to load data</p>
@@ -623,8 +748,146 @@ export default function PositionStats() {
         </Card>
       )}
 
-      {/* ── Stats table ──────────────────────────────────────────────────── */}
-      {!loading && !error && data && (
+      {/* ── Compare sub-tab — transposed table (stats × players) ─────────── */}
+      {!loading && !error && data && subTab === "compare" && (
+        compareRows.length === 0 ? (
+          <Card className="p-10 text-center" data-testid="compare-empty">
+            <GitCompare className="w-7 h-7 text-muted-foreground/60 mx-auto mb-3" />
+            <p className="text-sm font-semibold text-foreground mb-1">Compare players side-by-side</p>
+            <p className="text-xs text-muted-foreground max-w-md mx-auto">
+              Use the search above to add up to {MAX_COMPARE} {position.toUpperCase()}s. Stats run down
+              the rows so you can scan each metric across players. Use Columns to choose which stats appear.
+            </p>
+          </Card>
+        ) : activeCols.length === 0 ? (
+          <Card className="p-10 text-center" data-testid="compare-no-cols">
+            <p className="text-xs text-amber-500/80 italic">
+              No stat columns visible — open Columns to add some.
+            </p>
+          </Card>
+        ) : (
+          <Card className="overflow-hidden p-0" data-testid="compare-table-card">
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs border-collapse" data-testid="compare-table">
+                <thead>
+                  <tr className="border-b border-border/50 bg-muted/25">
+                    <th className="sticky left-0 z-20 bg-[hsl(var(--card))] px-3 py-2.5 text-left font-bold uppercase tracking-wider text-[10px] text-muted-foreground border-r border-border/25 min-w-[150px]">
+                      Stat
+                    </th>
+                    {compareRows.map((r) => {
+                      const id = getPlayerKey(r);
+                      return (
+                        <th
+                          key={id}
+                          className="px-3 py-2.5 text-right font-bold text-muted-foreground whitespace-nowrap min-w-[120px] border-l border-border/25"
+                          data-testid={`compare-col-${id}`}
+                        >
+                          <div className="flex items-start justify-end gap-1.5">
+                            <span className="flex flex-col items-end">
+                              <span className="text-foreground font-semibold normal-case text-xs">
+                                {getPlayerName(r)}
+                              </span>
+                              <span className="text-[10px] font-normal text-muted-foreground">
+                                {getPlayerTeam(r)}
+                              </span>
+                            </span>
+                            <button
+                              onClick={() => removeCompare(id)}
+                              className="text-muted-foreground/60 hover:text-foreground mt-0.5"
+                              data-testid={`compare-remove-${id}`}
+                              aria-label={`Remove ${getPlayerName(r)}`}
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
+                        </th>
+                      );
+                    })}
+                  </tr>
+                </thead>
+                <tbody>
+                  {compareGroups.map((g) => (
+                    <Fragment key={g.label}>
+                      {g.label && (
+                        <tr className="bg-[hsl(var(--muted))] border-b border-border/40">
+                          <td
+                            colSpan={1 + compareRows.length}
+                            className="px-3 py-1 text-[9px] font-bold uppercase tracking-wider text-muted-foreground/75"
+                          >
+                            {g.label}
+                          </td>
+                        </tr>
+                      )}
+                      {g.cols.map((col, ci) => {
+                        // Highlight the highest numeric value across the compared
+                        // players (string columns get no highlight).
+                        let max = -Infinity;
+                        if (col.type !== "string") {
+                          for (const r of compareRows) {
+                            const v = numVal(r[col.key]);
+                            if (v > max) max = v;
+                          }
+                        }
+                        const hasLeader = max !== -Infinity && compareRows.length > 1;
+                        const stickyBg = ci % 2 === 1
+                          ? "linear-gradient(hsl(var(--muted) / 0.7), hsl(var(--muted) / 0.7)), hsl(var(--card))"
+                          : "hsl(var(--card))";
+                        return (
+                          <tr
+                            key={col.key}
+                            className={cn(
+                              "border-b border-border/15 hover:bg-[#0b3a7a]/5 transition-colors",
+                              ci % 2 === 1 && "bg-muted/40",
+                            )}
+                            data-testid={`compare-row-${col.key}`}
+                          >
+                            <td
+                              style={{ background: stickyBg }}
+                              className="sticky left-0 z-10 px-3 py-2 font-medium text-muted-foreground whitespace-nowrap border-r border-border/25"
+                            >
+                              {col.label}
+                            </td>
+                            {compareRows.map((r) => {
+                              const raw = r[col.key];
+                              const isEmpty = raw == null;
+                              const isLeader = hasLeader && !isEmpty && numVal(raw) === max;
+                              return (
+                                <td
+                                  key={getPlayerKey(r)}
+                                  className={cn(
+                                    "px-3 py-2 text-right tabular-nums whitespace-nowrap border-l border-border/25",
+                                    isLeader
+                                      ? "bg-[#d4af37]/[0.08] text-[#d4af37] font-semibold"
+                                      : isEmpty
+                                        ? "text-muted-foreground/30"
+                                        : "text-foreground/90",
+                                  )}
+                                  data-testid={`compare-cell-${col.key}-${getPlayerKey(r)}`}
+                                >
+                                  {formatVal(raw, col.type)}
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        );
+                      })}
+                    </Fragment>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="px-4 py-2.5 border-t border-border/25 bg-muted/10">
+              <p className="text-[10px] text-muted-foreground/60">
+                Comparing {compareRows.length} of {MAX_COMPARE} player{compareRows.length !== 1 ? "s" : ""}
+                {compareRows.length > 1 && " · highest value in each stat highlighted"}
+              </p>
+            </div>
+          </Card>
+        )
+      )}
+
+      {/* ── Data sub-tab ─────────────────────────────────────────────────── */}
+      {!loading && !error && data && subTab === "data" && (
         <Card className="overflow-hidden p-0" data-testid="stats-table-card">
           <div className="overflow-x-auto">
             <table className="w-full text-xs border-collapse" data-testid="stats-table">
@@ -806,8 +1069,6 @@ export default function PositionStats() {
             </div>
           )}
         </Card>
-      )}
-      </div>
       )}
     </div>
   );

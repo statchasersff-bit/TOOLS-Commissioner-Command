@@ -430,6 +430,56 @@ export async function fetchPlayerGameLogs(
   return Array.isArray(data?.logs) ? data.logs : [];
 }
 
+/**
+ * Trades involving a player, sourced from the crawled global trade DATABASE
+ * (GET /api/trades/search?q=name) rather than scanning the user's own leagues.
+ * Filters DB results to trades whose sides actually include this Sleeper id,
+ * then reshapes into the receiver/giver view the Trades tab renders.
+ */
+export async function fetchTradesForPlayer(
+  playerName: string,
+  sleeperId: string,
+): Promise<PlayerTradeRecord[]> {
+  if (!playerName) return [];
+  const res = await fetch(
+    `${API_BASE}/api/trades/search?q=${encodeURIComponent(playerName)}&limit=50`,
+    { credentials: "include" },
+  );
+  if (!res.ok) throw new Error(`Trade search failed (${res.status})`);
+  const data = await res.json();
+  const dbTrades: any[] = Array.isArray(data?.trades) ? data.trades : [];
+
+  const toAssets = (side: any, sid: string): PlayerTradeAsset[] => {
+    const players = (side?.playersReceived || []).map((p: any) => ({
+      label: p.name || "Unknown", kind: "player" as const, isThisPlayer: p.sleeperId === sid,
+    }));
+    const picks = (side?.picksReceived || []).map((pk: any) => ({
+      label: `${pk.season} R${pk.round}`, kind: "pick" as const, isThisPlayer: false,
+    }));
+    return [...players, ...picks];
+  };
+
+  const records: PlayerTradeRecord[] = [];
+  for (const t of dbTrades) {
+    const sides: any[] = Array.isArray(t.sides) ? t.sides : [];
+    const recvIdx = sides.findIndex((s) => (s.playersReceived || []).some((p: any) => p.sleeperId === sleeperId));
+    if (recvIdx < 0) continue; // name matched but not this exact player
+    const recv = sides[recvIdx];
+    const others = sides.filter((_, i) => i !== recvIdx);
+    records.push({
+      leagueId: t.tradeId,
+      leagueName: t.leagueName || [t.leagueFormat, t.leagueScoringFormat].filter(Boolean).join(" · ") || "League",
+      timestamp: typeof t.timestamp === "number" ? t.timestamp : Number(t.timestamp) || 0,
+      receiver: recv.ownerName || recv.teamName || "Unknown",
+      giver: others.map((s) => s.ownerName || s.teamName).filter(Boolean).join(", ") || "Unknown",
+      receiverGot: toAssets(recv, sleeperId),
+      giverGot: others.flatMap((s) => toAssets(s, sleeperId)),
+    });
+  }
+  records.sort((a, b) => b.timestamp - a.timestamp);
+  return records;
+}
+
 export async function fetchSleeperLeagueFull(leagueId: string, userId: string) {
   const [leagueRaw, rostersRaw, usersRaw, tradedPicksRaw, playersDb, draftsRaw] =
     await Promise.all([

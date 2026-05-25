@@ -12,7 +12,7 @@
  * empty states render until then).
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import {
   Activity,
@@ -36,7 +36,7 @@ import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { useSleeper } from "@/contexts/SleeperContext";
 import { useValueModel } from "@/contexts/ValueModelContext";
-import { getSleeperPlayers, fetchSleeperLeagueFull, fetchPlayerExposure, fetchPlayerTrades, fetchPlayerGameLogs, type PlayerLeagueExposure, type PlayerTradeRecord, type PlayerTradeAsset, type PlayerGameLogRow } from "@/lib/sleeperApi";
+import { getSleeperPlayers, fetchSleeperLeagueFull, fetchPlayerExposure, fetchTradesForPlayer, fetchPlayerGameLogs, type PlayerLeagueExposure, type PlayerTradeRecord, type PlayerTradeAsset, type PlayerGameLogRow } from "@/lib/sleeperApi";
 import { resolvePlayerId, toPlayerSlug } from "@/lib/playerSlug";
 import { getPlayerProfile, type PlayerProfile } from "@/lib/playerProfile";
 import {
@@ -194,20 +194,28 @@ export default function PlayerPage({ params }: { params?: { playerId?: string } 
   // only when the Trades tab is first opened, and reset when the player changes.
   const [trades, setTrades] = useState<PlayerTradeRecord[] | null>(null);
   const [tradesLoading, setTradesLoading] = useState(false);
-
-  useEffect(() => { setTab("overview"); window.scrollTo(0, 0); setTrades(null); }, [param]);
+  // Tracks which player we've already kicked off a trades fetch for, so the
+  // effect doesn't refetch (or cancel itself) on unrelated re-renders.
+  const tradesLoadedRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (tab !== "trades" || trades !== null || tradesLoading) return;
-    if (!resolvedId || !sleeper.isConnected || !sleeper.leagues.length) return;
-    let cancelled = false;
+    setTab("overview");
+    window.scrollTo(0, 0);
+    setTrades(null);
+    tradesLoadedRef.current = null;
+  }, [param]);
+
+  useEffect(() => {
+    if (tab !== "trades") return;
+    if (!resolvedId || !profile) return;
+    if (tradesLoadedRef.current === resolvedId) return; // already fetched for this player
+    tradesLoadedRef.current = resolvedId;
     setTradesLoading(true);
-    fetchPlayerTrades(sleeper.leagues.map((l) => ({ leagueId: l.leagueId, name: l.name })), resolvedId)
-      .then((r) => { if (!cancelled) setTrades(r); })
-      .catch(() => { if (!cancelled) setTrades([]); })
-      .finally(() => { if (!cancelled) setTradesLoading(false); });
-    return () => { cancelled = true; };
-  }, [tab, resolvedId, trades, tradesLoading, sleeper.isConnected, sleeper.leagues]);
+    fetchTradesForPlayer(profile.player.name, resolvedId)
+      .then((r) => setTrades(r))
+      .catch(() => setTrades([]))
+      .finally(() => setTradesLoading(false));
+  }, [tab, resolvedId, profile?.player.name]);
 
   // Derived dynasty intelligence (Overview).
   const dynRank = useMemo(
@@ -278,7 +286,7 @@ export default function PlayerPage({ params }: { params?: { playerId?: string } 
               {tab === "production" && <ProductionTab adv={adv} advLoading={advLoading} pos={profile.player.pos} />}
               {tab === "advanced" && <AdvancedTab adv={adv} advLoading={advLoading} pos={profile.player.pos} />}
               {tab === "value" && <DynastyValueTab profile={profile} adv={adv} dynRank={dynRank} />}
-              {tab === "trades" && <TradesTab connected={sleeper.isConnected} trades={trades} loading={tradesLoading} />}
+              {tab === "trades" && <TradesTab trades={trades} loading={tradesLoading} />}
               {tab === "availability" && (
                 <AvailabilityTab
                   connected={sleeper.isConnected}
@@ -321,7 +329,7 @@ function Hero({ profile, raw, dynRank }: { profile: PlayerProfile; raw: any; dyn
   return (
     <Card className="overflow-hidden p-0">
       <div className="flex flex-col sm:flex-row">
-        <HeroImage id={p.id} name={p.name} pos={p.pos} />
+        <HeroImage id={p.id} name={p.name} pos={p.pos} team={p.team} />
         <div className="flex-1 p-5 min-w-0">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
@@ -362,23 +370,35 @@ function Hero({ profile, raw, dynRank }: { profile: PlayerProfile; raw: any; dyn
   );
 }
 
-function HeroImage({ id, name, pos }: { id: string; name: string; pos: string }) {
+function HeroImage({ id, name, pos, team }: { id: string; name: string; pos: string; team?: string }) {
   const [err, setErr] = useState(false);
+  const [logoErr, setLogoErr] = useState(false);
   const synthetic = !id || id.startsWith("rookie_") || id.startsWith("pick_") || id.startsWith("mock_");
   const initials = (name || "?").split(" ").filter(Boolean).map((w) => w[0]).slice(0, 2).join("");
+  const showLogo = !!team && team !== "FA" && !logoErr;
   return (
-    <div className="relative w-full sm:w-[180px] h-[180px] flex-shrink-0 bg-gradient-to-br from-[#0b3a7a]/20 to-transparent">
+    <div className="relative w-full sm:w-[180px] h-[180px] flex-shrink-0 overflow-hidden bg-gradient-to-br from-[#0b3a7a]/25 to-transparent">
+      {/* Faint team logo watermark — sits behind the player photo (visible in
+          the gradient margins / behind the initials fallback). */}
+      {showLogo && (
+        <img
+          src={`https://sleepercdn.com/images/team_logos/nfl/${team!.toLowerCase()}.png`}
+          alt=""
+          aria-hidden="true"
+          className="absolute inset-0 m-auto w-[85%] h-[85%] object-contain opacity-20 pointer-events-none select-none"
+          onError={() => setLogoErr(true)}
+        />
+      )}
       {err || synthetic ? (
-        <div className="w-full h-full flex items-center justify-center text-4xl font-black text-muted-foreground/40">{initials}</div>
+        <div className="relative w-full h-full flex items-center justify-center text-4xl font-black text-muted-foreground/50">{initials}</div>
       ) : (
         <img
           src={`https://sleepercdn.com/content/nfl/players/${id}.jpg`}
           alt={name}
-          className="w-full h-full object-cover object-top"
+          className="relative w-full h-full object-cover object-top"
           onError={() => setErr(true)}
         />
       )}
-      <span className="absolute top-2 left-2 text-[10px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded bg-background/70 text-foreground/70">{pos}</span>
     </div>
   );
 }
@@ -826,13 +846,10 @@ function fmtTradeDate(ms: number): string {
   try { return new Date(ms).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }); } catch { return "—"; }
 }
 
-function TradesTab({ connected, trades, loading }: { connected: boolean; trades: PlayerTradeRecord[] | null; loading: boolean }) {
-  if (!connected) {
-    return <ComingSoon icon={Repeat2} title="Connect Sleeper" body="Connect your Sleeper username to see trades involving this player across your dynasty leagues." />;
-  }
+function TradesTab({ trades, loading }: { trades: PlayerTradeRecord[] | null; loading: boolean }) {
   if (loading && !trades) return <Card className="p-5"><SkeletonLines n={6} /></Card>;
   if (!trades || !trades.length) {
-    return <EmptyBlock icon={Repeat2} text="No trades involving this player were found in your leagues' recent transaction history." />;
+    return <EmptyBlock icon={Repeat2} text="No trades involving this player were found in the trade database yet." />;
   }
 
   // "Most commonly traded for" = what the giver got back, aggregated.
@@ -842,7 +859,7 @@ function TradesTab({ connected, trades, loading }: { connected: boolean; trades:
 
   return (
     <div className="space-y-4">
-      <div className="text-[11px] text-muted-foreground">{trades.length} trade{trades.length !== 1 ? "s" : ""} found across your leagues' transaction history.</div>
+      <div className="text-[11px] text-muted-foreground">{trades.length} trade{trades.length !== 1 ? "s" : ""} found in the trade database.</div>
 
       {common.length > 0 && (
         <Card className="p-4">
