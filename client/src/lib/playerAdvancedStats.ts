@@ -91,9 +91,15 @@ export interface ProductionRow {
   season: string;
   team: string;
   games: number | null;
-  fantasyPoints: number | null;
-  ppg: number | null;
-  positionFinish: number | null;
+  // Fantasy PPG by scoring format. The advanced-stats files only carry Standard
+  // fantasyPoints, so Half-PPR / PPR are derived by adding the reception bonus.
+  ppgStd: number | null;
+  ppgHalf: number | null;
+  ppgPpr: number | null;
+  // Positional finish (1 = best) by scoring format, ranked on season totals.
+  finishStd: number | null;
+  finishHalf: number | null;
+  finishPpr: number | null;
 }
 
 export interface CompositeScore {
@@ -185,24 +191,38 @@ export async function loadPlayerAdvancedStats(
 
     seasons.push({ season, row, columns: file.columns });
 
-    // Production row + positional finish (rank by fantasy points that season).
-    const fp = num(row.fantasyPoints);
+    // Production row: PPG + positional finish for Standard / Half-PPR / PPR.
+    // Half-PPR and PPR are derived from Standard fantasyPoints + a per-reception
+    // bonus (0.5 / 1.0). Finish ranks all qualifying players in this season's
+    // file by that format's season total.
+    const fpStd = num(row.fantasyPoints);
+    const rec = num(row.receptions) ?? 0;
     const games = num(row.games);
-    let finish: number | null = null;
-    if (fp != null) {
+    const fpHalf = fpStd != null ? fpStd + 0.5 * rec : null;
+    const fpPpr = fpStd != null ? fpStd + rec : null;
+
+    const finishFor = (mult: number, playerTotal: number | null): number | null => {
+      if (playerTotal == null) return null;
       const above = file.rows.filter((r) => {
-        const v = num(r.fantasyPoints);
-        return v != null && v > fp;
+        const base = num(r.fantasyPoints);
+        if (base == null) return false;
+        return base + mult * (num(r.receptions) ?? 0) > playerTotal;
       }).length;
-      finish = above + 1;
-    }
+      return above + 1;
+    };
+    const ppgOf = (fp: number | null): number | null =>
+      fp != null && games != null && games > 0 ? fp / games : null;
+
     production.push({
       season,
       team: String(row.team ?? row.nfl_team ?? "—"),
       games,
-      fantasyPoints: fp,
-      ppg: fp != null && games != null && games > 0 ? fp / games : null,
-      positionFinish: finish,
+      ppgStd: ppgOf(fpStd),
+      ppgHalf: ppgOf(fpHalf),
+      ppgPpr: ppgOf(fpPpr),
+      finishStd: finishFor(0, fpStd),
+      finishHalf: finishFor(0.5, fpHalf),
+      finishPpr: finishFor(1, fpPpr),
     });
   }
 

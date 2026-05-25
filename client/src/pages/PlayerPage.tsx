@@ -7,17 +7,18 @@
  * semantic tokens + the StatChasers gold accent.
  *
  * Phase 1 (this file): route, hero, metric cards, sticky tabs, Overview,
- * Production, Advanced Stats, basic Availability, sidebar. Later phases fill
- * the Dynasty Value, Trades, News, Game Log, and Compare tabs (professional
- * empty states render until then).
+ * Production (incl. weekly game logs), Advanced Stats, basic Availability,
+ * sidebar. Later phases fill the Dynasty Value, Trades, News, and Compare tabs
+ * (professional empty states render until then).
  */
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import {
   Activity,
   ArrowLeft,
   BarChart3,
+  ChevronDown,
   CircleUserRound,
   GitCompare,
   Layers,
@@ -179,7 +180,6 @@ const TABS = [
   { id: "trades", label: "Trades", icon: Repeat2 },
   { id: "availability", label: "Availability", icon: Users },
   { id: "news", label: "News", icon: Newspaper },
-  { id: "gamelog", label: "Game Log", icon: ScrollText },
   { id: "compare", label: "Compare", icon: GitCompare },
 ] as const;
 
@@ -283,7 +283,7 @@ export default function PlayerPage({ params }: { params?: { playerId?: string } 
               {tab === "overview" && (
                 <OverviewTab profile={profile} adv={adv} advLoading={advLoading} similar={similar} dynRank={dynRank} onOpenPlayer={(id) => setLocation(`/players/${id}`)} onCompare={() => setTab("compare")} />
               )}
-              {tab === "production" && <ProductionTab adv={adv} advLoading={advLoading} pos={profile.player.pos} />}
+              {tab === "production" && <ProductionTab playerId={resolvedId} adv={adv} advLoading={advLoading} pos={profile.player.pos} />}
               {tab === "advanced" && <AdvancedTab adv={adv} advLoading={advLoading} pos={profile.player.pos} />}
               {tab === "value" && <DynastyValueTab profile={profile} adv={adv} dynRank={dynRank} />}
               {tab === "trades" && <TradesTab trades={trades} loading={tradesLoading} />}
@@ -297,7 +297,6 @@ export default function PlayerPage({ params }: { params?: { playerId?: string } 
                 />
               )}
               {tab === "news" && <ComingSoon icon={Newspaper} title="Player News" body="Beat reports, injury updates, and fantasy-impact analysis will appear here once the news feed is connected." />}
-              {tab === "gamelog" && <GameLogTab playerId={resolvedId} pos={profile.player.pos} />}
               {tab === "compare" && <CompareTab base={profile} baseAdv={adv} baseDynRank={dynRank} />}
             </div>
 
@@ -521,49 +520,72 @@ function OverviewTab({
 }
 
 // ── Production ──────────────────────────────────────────────────────────────
-function ProductionTab({ adv, advLoading, pos }: { adv: PlayerAdvancedResult | null; advLoading: boolean; pos: string }) {
-  if (advLoading) return <Card className="p-5"><SkeletonLines n={6} /></Card>;
+function ProductionTab({ playerId, adv, advLoading, pos }: { playerId: string | null; adv: PlayerAdvancedResult | null; advLoading: boolean; pos: string }) {
   const rows = adv?.production ?? [];
-  if (!rows.length) {
-    return <ComingSoon icon={BarChart3} title="No production history" body={`Season production for this ${pos} will appear once it has qualifying NFL usage in our dataset.`} />;
-  }
-  const ppgVals = rows.filter((r) => r.ppg != null);
+  const ppgVals = rows.filter((r) => r.ppgStd != null);
+  const ppg = (v: number | null) => (v != null ? v.toFixed(1) : "—");
+  const fin = (v: number | null) => (v != null ? `${pos}${v}` : "—");
   return (
-    <div className="space-y-4">
-      {ppgVals.length >= 2 && (
-        <Card className="p-5">
-          <SectionTitle icon={LineChart} title="Fantasy PPG by Season" />
-          <PpgChart rows={[...rows].reverse()} />
-        </Card>
-      )}
-      <Card className="p-0 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border/60 bg-muted/30 text-[10px] uppercase tracking-wider text-muted-foreground">
-                <th className="px-3 py-2.5 text-left">Season</th>
-                <th className="px-3 py-2.5 text-left">Team</th>
-                <th className="px-3 py-2.5 text-right">Games</th>
-                <th className="px-3 py-2.5 text-right">Fantasy Pts</th>
-                <th className="px-3 py-2.5 text-right">PPG</th>
-                <th className="px-3 py-2.5 text-right">Pos Finish</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr key={r.season} className="border-b border-border/30">
-                  <td className="px-3 py-2.5 font-semibold text-foreground">{r.season}</td>
-                  <td className="px-3 py-2.5 text-muted-foreground">{r.team}</td>
-                  <td className="px-3 py-2.5 text-right tabular-nums text-foreground/85">{r.games ?? "—"}</td>
-                  <td className="px-3 py-2.5 text-right tabular-nums font-semibold text-foreground">{r.fantasyPoints != null ? r.fantasyPoints.toFixed(1) : "—"}</td>
-                  <td className="px-3 py-2.5 text-right tabular-nums text-[#d4af37] font-bold">{r.ppg != null ? r.ppg.toFixed(1) : "—"}</td>
-                  <td className="px-3 py-2.5 text-right tabular-nums text-foreground/85">{r.positionFinish != null ? `${pos}${r.positionFinish}` : "—"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+    <div className="space-y-6">
+      {advLoading ? (
+        <Card className="p-5"><SkeletonLines n={6} /></Card>
+      ) : !rows.length ? (
+        <ComingSoon icon={BarChart3} title="No production history" body={`Season production for this ${pos} will appear once it has qualifying NFL usage in our dataset.`} />
+      ) : (
+        <div className="space-y-4">
+          {ppgVals.length >= 2 && (
+            <Card className="p-5">
+              <SectionTitle icon={LineChart} title="Standard Fantasy PPG by Season" />
+              <PpgChart rows={[...rows].reverse().map((r) => ({ season: r.season, ppg: r.ppgStd }))} />
+            </Card>
+          )}
+          <Card className="p-0 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border/40 bg-muted/30 text-[10px] uppercase tracking-wider text-muted-foreground">
+                    <th className="px-3 py-2 text-left" rowSpan={2}>Season</th>
+                    <th className="px-3 py-2 text-left" rowSpan={2}>Team</th>
+                    <th className="px-3 py-2 text-right" rowSpan={2}>Games</th>
+                    <th className="px-3 py-2 text-center border-l border-border/40" colSpan={2}>Standard</th>
+                    <th className="px-3 py-2 text-center border-l border-border/40" colSpan={2}>Half-PPR</th>
+                    <th className="px-3 py-2 text-center border-l border-border/40" colSpan={2}>PPR</th>
+                  </tr>
+                  <tr className="border-b border-border/60 bg-muted/30 text-[10px] uppercase tracking-wider text-muted-foreground">
+                    <th className="px-3 py-1.5 text-right border-l border-border/40">PPG</th>
+                    <th className="px-3 py-1.5 text-right">Finish</th>
+                    <th className="px-3 py-1.5 text-right border-l border-border/40">PPG</th>
+                    <th className="px-3 py-1.5 text-right">Finish</th>
+                    <th className="px-3 py-1.5 text-right border-l border-border/40">PPG</th>
+                    <th className="px-3 py-1.5 text-right">Finish</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((r) => (
+                    <tr key={r.season} className="border-b border-border/30">
+                      <td className="px-3 py-2.5 font-semibold text-foreground">{r.season}</td>
+                      <td className="px-3 py-2.5 text-muted-foreground">{r.team}</td>
+                      <td className="px-3 py-2.5 text-right tabular-nums text-foreground/85">{r.games ?? "—"}</td>
+                      <td className="px-3 py-2.5 text-right tabular-nums text-[#d4af37] font-bold border-l border-border/40">{ppg(r.ppgStd)}</td>
+                      <td className="px-3 py-2.5 text-right tabular-nums text-foreground/85">{fin(r.finishStd)}</td>
+                      <td className="px-3 py-2.5 text-right tabular-nums text-[#d4af37] font-bold border-l border-border/40">{ppg(r.ppgHalf)}</td>
+                      <td className="px-3 py-2.5 text-right tabular-nums text-foreground/85">{fin(r.finishHalf)}</td>
+                      <td className="px-3 py-2.5 text-right tabular-nums text-[#d4af37] font-bold border-l border-border/40">{ppg(r.ppgPpr)}</td>
+                      <td className="px-3 py-2.5 text-right tabular-nums text-foreground/85">{fin(r.finishPpr)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
         </div>
-      </Card>
+      )}
+
+      {/* Weekly game logs — one collapsible row per season */}
+      <div>
+        <SectionTitle icon={ScrollText} title="Weekly Game Logs" />
+        <GameLogTab playerId={playerId} pos={pos} />
+      </div>
     </div>
   );
 }
@@ -1129,14 +1151,25 @@ function nflSeasonNow(): number {
   return now.getMonth() >= 7 ? now.getFullYear() : now.getFullYear() - 1;
 }
 
-interface GLCol { key: string; label: string; get: (r: PlayerGameLogRow) => string; gold?: boolean }
+// Combined regular-season + playoff row. Sleeper returns playoff games as
+// weeks 1–4 (Wild Card → Super Bowl), so we tag each row's seasonType to keep
+// them distinct once merged into one list.
+type GLRow = PlayerGameLogRow & { seasonType: "regular" | "post" };
+const PLAYOFF_ROUND_LABELS: Record<number, string> = { 1: "WC", 2: "DIV", 3: "CONF", 4: "SB" };
+function weekLabel(r: GLRow): string {
+  if (r.seasonType === "post") return PLAYOFF_ROUND_LABELS[r.week] ?? `PO${r.week}`;
+  return `${r.week}`;
+}
+
+interface GLCol { key: string; label: string; get: (r: GLRow) => string; gold?: boolean }
 function gameLogColumns(pos: string): GLCol[] {
   const base: GLCol[] = [
-    { key: "wk", label: "Wk", get: (r) => `${r.week}` },
+    { key: "wk", label: "Wk", get: weekLabel },
     { key: "opp", label: "Opp", get: (r) => r.opponent ?? "—" },
     { key: "snap", label: "Snap%", get: (r) => (r.snapPct != null ? `${r.snapPct}%` : "—") },
   ];
-  const fp: GLCol = { key: "fp", label: "FP", get: (r) => (r.ptsPPR != null ? r.ptsPPR.toFixed(1) : "—"), gold: true };
+  // Standard (non-PPR) scoring, to match the Production season table above.
+  const fp: GLCol = { key: "fp", label: "FP", get: (r) => (r.ptsStd != null ? r.ptsStd.toFixed(1) : "—"), gold: true };
   if (pos === "QB") return [...base,
     { key: "ca", label: "C/A", get: (r) => `${r.passCmp}/${r.passAtt}` },
     { key: "payd", label: "Pa Yd", get: (r) => `${r.passYd}` },
@@ -1164,98 +1197,113 @@ function gameLogColumns(pos: string): GLCol[] {
 function GameLogTab({ playerId, pos }: { playerId: string | null; pos: string }) {
   const cur = nflSeasonNow();
   const seasonOptions = [cur, cur - 1, cur - 2];
-  const [season, setSeason] = useState<number>(cur);
-  const [seasonType, setSeasonType] = useState<"regular" | "post">("regular");
-  const [logs, setLogs] = useState<PlayerGameLogRow[] | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(false);
-
-  useEffect(() => {
-    if (!playerId) return;
-    let cancelled = false;
-    setLoading(true); setError(false);
-    fetchPlayerGameLogs(playerId, season, seasonType)
-      .then((r) => { if (!cancelled) setLogs(r); })
-      .catch(() => { if (!cancelled) { setError(true); setLogs(null); } })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
-  }, [playerId, season, seasonType]);
-
-  const cols = gameLogColumns(pos);
-
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="flex gap-1">
-          {seasonOptions.map((s) => (
-            <button key={s} onClick={() => setSeason(s)} className={cn("px-2.5 py-1 rounded-full text-xs font-semibold border transition-colors", season === s ? "bg-[#0b3a7a] text-white border-[#0b3a7a]" : "border-border text-muted-foreground hover:text-foreground")}>{s}</button>
-          ))}
-        </div>
-        <div className="flex gap-1">
-          {(["regular", "post"] as const).map((t) => (
-            <button key={t} onClick={() => setSeasonType(t)} className={cn("px-2.5 py-1 rounded-full text-xs font-semibold border transition-colors", seasonType === t ? "bg-[#0b3a7a] text-white border-[#0b3a7a]" : "border-border text-muted-foreground hover:text-foreground")}>{t === "regular" ? "Regular" : "Playoffs"}</button>
-          ))}
-        </div>
-      </div>
-
-      {loading && !logs ? (
-        <Card className="p-5"><SkeletonLines n={6} /></Card>
-      ) : error ? (
-        <EmptyBlock icon={ScrollText} text="Game logs are temporarily unavailable from Sleeper. Try again later." />
-      ) : !logs || !logs.length ? (
-        <EmptyBlock icon={ScrollText} text={`No ${seasonType === "post" ? "playoff" : "regular-season"} game logs for ${season}.`} />
-      ) : (
-        <>
-          <GameLogTrend logs={logs} pos={pos} />
-          <Card className="p-0 overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border/60 bg-muted/30 text-[10px] uppercase tracking-wider text-muted-foreground">
-                    {cols.map((c) => (
-                      <th key={c.key} className={cn("px-2.5 py-2.5 whitespace-nowrap", c.key === "wk" || c.key === "opp" ? "text-left" : "text-right")}>{c.label}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {logs.map((r) => (
-                    <tr key={r.week} className="border-b border-border/30">
-                      {cols.map((c) => (
-                        <td key={c.key} className={cn(
-                          "px-2.5 py-2 whitespace-nowrap tabular-nums",
-                          c.key === "wk" || c.key === "opp" ? "text-left text-foreground/85" : "text-right",
-                          c.gold ? "text-[#d4af37] font-bold" : "text-foreground/80",
-                          c.key === "wk" && "font-semibold text-foreground",
-                        )}>{c.get(r)}</td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </Card>
-        </>
-      )}
+    <div className="space-y-2">
+      {seasonOptions.map((s) => (
+        <GameLogSeasonRow key={s} playerId={playerId} pos={pos} season={s} />
+      ))}
     </div>
   );
 }
 
-function GameLogTrend({ logs, pos }: { logs: PlayerGameLogRow[]; pos: string }) {
-  const played = logs.filter((r) => r.ptsPPR != null);
-  const last4 = played.slice(-4);
-  if (!last4.length) return null;
-  const avg = (arr: number[]) => (arr.length ? arr.reduce((s, n) => s + n, 0) / arr.length : 0);
-  const ppg = avg(last4.map((r) => r.ptsPPR ?? 0));
-  const usageLabel = pos === "QB" ? "Pass Att" : pos === "RB" ? "Touches" : "Targets";
-  const usage = avg(last4.map((r) => (pos === "QB" ? r.passAtt : pos === "RB" ? r.rushAtt + r.tgt : r.tgt)));
-  const snapVals = last4.map((r) => r.snapPct).filter((v): v is number => v != null);
-  const snap = snapVals.length ? avg(snapVals) : null;
+// One collapsible row per season. Regular season + playoffs are fetched in
+// parallel (allSettled, so one failing still shows the other) and merged into a
+// single list. Data is fetched lazily the first time the row is expanded.
+function GameLogSeasonRow({ playerId, pos, season, defaultOpen }: { playerId: string | null; pos: string; season: number; defaultOpen?: boolean }) {
+  const [open, setOpen] = useState(!!defaultOpen);
+  const [logs, setLogs] = useState<GLRow[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false);
+  const fetched = useRef(false);
+
+  useEffect(() => {
+    if (!open || !playerId || fetched.current) return;
+    fetched.current = true;
+    let cancelled = false;
+    setLoading(true); setError(false);
+    Promise.allSettled([
+      fetchPlayerGameLogs(playerId, season, "regular"),
+      fetchPlayerGameLogs(playerId, season, "post"),
+    ])
+      .then(([reg, post]) => {
+        if (cancelled) return;
+        if (reg.status === "rejected" && post.status === "rejected") {
+          setError(true); setLogs(null); return;
+        }
+        const regRows: GLRow[] = reg.status === "fulfilled" ? reg.value.map((r) => ({ ...r, seasonType: "regular" })) : [];
+        const postRows: GLRow[] = post.status === "fulfilled" ? post.value.map((r) => ({ ...r, seasonType: "post" })) : [];
+        setLogs([...regRows, ...postRows]);
+      })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [open, playerId, season]);
+
+  const cols = gameLogColumns(pos);
+  const firstPostIdx = logs ? logs.findIndex((r) => r.seasonType === "post") : -1;
+  const played = logs?.filter((r) => r.ptsStd != null) ?? [];
+  const summary = played.length
+    ? `${played.length} G · ${(played.reduce((s, r) => s + (r.ptsStd ?? 0), 0) / played.length).toFixed(1)} PPG`
+    : null;
+
   return (
-    <div className="grid grid-cols-3 gap-3">
-      <MetricCard label={`Last ${last4.length} PPG`} value={ppg.toFixed(1)} accent />
-      <MetricCard label={`Last ${last4.length} ${usageLabel}`} value={usage.toFixed(1)} />
-      <MetricCard label={`Last ${last4.length} Snap %`} value={snap != null ? `${Math.round(snap)}%` : "—"} />
-    </div>
+    <Card className="p-0 overflow-hidden">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-muted/30 transition-colors"
+      >
+        <div className="flex items-center gap-2">
+          <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", open ? "rotate-0" : "-rotate-90")} />
+          <span className="text-sm font-semibold text-foreground">{season}</span>
+        </div>
+        {summary && <span className="text-xs text-muted-foreground tabular-nums">{summary}</span>}
+      </button>
+
+      {open && (
+        <div className="border-t border-border/60 p-4 space-y-4">
+          {loading && !logs ? (
+            <SkeletonLines n={6} />
+          ) : error ? (
+            <EmptyBlock icon={ScrollText} text="Game logs are temporarily unavailable from Sleeper. Try again later." />
+          ) : !logs || !logs.length ? (
+            <EmptyBlock icon={ScrollText} text={`No game logs for ${season}.`} />
+          ) : (
+            <div className="overflow-x-auto rounded-lg border border-border/60">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border/60 bg-muted/30 text-[10px] uppercase tracking-wider text-muted-foreground">
+                      {cols.map((c) => (
+                        <th key={c.key} className={cn("px-2.5 py-2.5 whitespace-nowrap", c.key === "wk" || c.key === "opp" ? "text-left" : "text-right")}>{c.label}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {logs.map((r, i) => (
+                      <Fragment key={`${r.seasonType}-${r.week}`}>
+                        {i === firstPostIdx && (
+                          <tr className="bg-muted/40">
+                            <td colSpan={cols.length} className="px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-[#d4af37]">Playoffs</td>
+                          </tr>
+                        )}
+                        <tr className={cn("border-b border-border/30", r.seasonType === "post" && "bg-[#0b3a7a]/5")}>
+                          {cols.map((c) => (
+                            <td key={c.key} className={cn(
+                              "px-2.5 py-2 whitespace-nowrap tabular-nums",
+                              c.key === "wk" || c.key === "opp" ? "text-left text-foreground/85" : "text-right",
+                              c.gold ? "text-[#d4af37] font-bold" : "text-foreground/80",
+                              c.key === "wk" && "font-semibold text-foreground",
+                            )}>{c.get(r)}</td>
+                          ))}
+                        </tr>
+                      </Fragment>
+                    ))}
+                  </tbody>
+                </table>
+            </div>
+          )}
+        </div>
+      )}
+    </Card>
   );
 }
 
