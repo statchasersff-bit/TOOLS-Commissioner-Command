@@ -188,6 +188,31 @@ const COLUMN_GROUPS_BY_POSITION: Record<string, Record<string, string>> = {
   te: WR_TE_COLUMN_GROUPS,
 };
 
+// Per-section accent colour — drives the left accent bar + header text so each
+// stat family is instantly scannable (and consistent across positions).
+const SECTION_ACCENTS: Record<string, string> = {
+  "Composite Grades":             "#d4af37", // gold
+  "Player Info":                  "#94a3b8", // slate
+  "Volume / Usage":               "#f59e0b", // amber
+  "Usage / Workload":             "#f59e0b",
+  "Usage/Role":                   "#f59e0b",
+  "Aggressiveness / Play Style":  "#fb923c", // orange
+  "Efficiency":                   "#60a5fa", // blue
+  "Production":                   "#34d399", // emerald
+  "Explosiveness":                "#c084fc", // purple
+  "Explosive Play Ability":       "#c084fc",
+  "Pressure & Pocket":            "#22d3ee", // cyan
+  "Hands":                        "#2dd4bf", // teal
+  "Elusiveness":                  "#fb7185", // rose
+  "Contact & Tackle Breaking":    "#22d3ee",
+  "Ball Security / Negative Plays":"#f87171", // red
+};
+const sectionAccent = (label: string): string => SECTION_ACCENTS[label] ?? "#94a3b8";
+// Shared header bar gradient (left → right). The trailing solid colour matches
+// the gradient's end so a sticky label cell + filler cell stay seamless.
+const SECTION_BAR_GRADIENT = "linear-gradient(90deg, rgba(20,35,60,0.97) 0%, rgba(12,22,40,0.97) 100%)";
+const SECTION_BAR_END = "rgba(12,22,40,0.97)";
+
 // ── Composite scores ───────────────────────────────────────────────────────────
 // Per-position grade engine: a function that scores the full pool of rows and
 // the ordered category metadata (Overall first) that becomes the grade columns.
@@ -929,16 +954,46 @@ export default function PositionStats() {
                   </tr>
                 </thead>
                 <tbody>
-                  {compareGroups.map((g) => (
+                  {compareGroups.map((g, gi) => {
+                    const accent = sectionAccent(g.label);
+                    return (
                     <Fragment key={g.label}>
-                      {g.label && (
-                        <tr className="bg-[hsl(var(--muted))] border-b border-border/40">
-                          <td
-                            colSpan={1 + compareRows.length}
-                            className="px-3 py-1 text-[9px] font-bold uppercase tracking-wider text-muted-foreground/75"
-                          >
-                            {g.label}
+                      {/* Vertical separation before each section (not the first) */}
+                      {gi > 0 && (
+                        <tr aria-hidden="true">
+                          <td colSpan={1 + compareRows.length} className="p-0">
+                            <div className="h-4" />
                           </td>
+                        </tr>
+                      )}
+                      {g.label && (
+                        <tr data-testid={`compare-section-${g.label}`}>
+                          {/* Sticky label cell: gradient bar + coloured left accent */}
+                          <td
+                            className="sticky left-0 z-10 px-3 py-2.5 whitespace-nowrap"
+                            style={{
+                              background: SECTION_BAR_GRADIENT,
+                              borderLeft: `3px solid ${accent}`,
+                              borderTop: "1px solid rgba(255,255,255,0.08)",
+                              borderBottom: "1px solid rgba(255,255,255,0.06)",
+                            }}
+                          >
+                            <span
+                              className="text-[10px] font-extrabold uppercase"
+                              style={{ color: accent, letterSpacing: "0.12em" }}
+                            >
+                              {g.label}
+                            </span>
+                          </td>
+                          {/* Filler cell continues the bar across the player columns */}
+                          <td
+                            colSpan={compareRows.length}
+                            style={{
+                              background: SECTION_BAR_END,
+                              borderTop: "1px solid rgba(255,255,255,0.08)",
+                              borderBottom: "1px solid rgba(255,255,255,0.06)",
+                            }}
+                          />
                         </tr>
                       )}
                       {g.cols.map((col, ci) => {
@@ -1000,7 +1055,8 @@ export default function PositionStats() {
                         );
                       })}
                     </Fragment>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -1023,20 +1079,31 @@ export default function PositionStats() {
               <thead>
                 {/* Super-headers (desktop only; mobile hides the Team column) */}
                 {groupSegments.length > 0 && (
-                  <tr className="hidden md:table-row border-b border-border/40">
-                    {groupSegments.map((seg, i) => (
+                  <tr className="hidden md:table-row">
+                    {groupSegments.map((seg, i) => {
+                      const accent = sectionAccent(seg.label);
+                      return (
                       <th
                         key={`grp-${i}`}
                         colSpan={seg.span}
                         className={cn(
-                          "px-3 py-1.5 text-center font-bold uppercase tracking-wider text-[9px] text-muted-foreground/75 bg-[hsl(var(--muted))]",
+                          "px-3 py-2 text-center font-extrabold uppercase text-[10px]",
                           seg.sticky && "sticky left-0 z-30",
-                          seg.showLabel && i > 0 && "border-l-2 border-border/70",
                         )}
+                        style={{
+                          background: SECTION_BAR_GRADIENT,
+                          color: seg.showLabel ? accent : undefined,
+                          letterSpacing: "0.12em",
+                          // Coloured left accent at the start of each labelled section
+                          borderLeft: seg.showLabel && i > 0 ? `3px solid ${accent}` : undefined,
+                          borderTop: "1px solid rgba(255,255,255,0.08)",
+                          borderBottom: "1px solid rgba(255,255,255,0.06)",
+                        }}
                       >
                         {seg.showLabel ? seg.label : null}
                       </th>
-                    ))}
+                      );
+                    })}
                   </tr>
                 )}
                 <tr className="border-b border-border/50 bg-muted/25">

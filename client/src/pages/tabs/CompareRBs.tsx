@@ -4,6 +4,14 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { Search, Trophy, Zap, Target, TrendingUp, Star, ChevronDown, ArrowUpRight } from "lucide-react";
+import { computeQbCompositeScores, QB_SCORE_CATEGORIES } from "@/lib/qbCompositeScores";
+import { computeRbCompositeScores, RB_SCORE_CATEGORIES } from "@/lib/rbCompositeScores";
+import {
+  computeWrCompositeScores,
+  computeTeCompositeScores,
+  WR_SCORE_CATEGORIES,
+  TE_SCORE_CATEGORIES,
+} from "@/lib/receivingComposites";
 
 // ── Types ───────────────────────────────────────────────────────────
 type Position = "RB" | "WR" | "TE" | "QB";
@@ -22,12 +30,6 @@ interface ResolvedPlayer extends PlayerRaw {
   sleeperId: string | null;
 }
 
-type StatDef = {
-  label: string;
-  compute: (p: PlayerRaw) => number | null;
-  display: (v: number) => string;
-};
-
 type EdgeDef = {
   id: string;
   label: string;
@@ -39,10 +41,6 @@ type EdgeDef = {
 
 // ── Helpers ─────────────────────────────────────────────────────────
 const normalizeName = (n: string) => n.toLowerCase().replace(/[^a-z0-9]/g, "");
-const fmtNum = (v: number | null | undefined, d = 1): string =>
-  v == null || isNaN(v as number) ? "—" : (v as number).toFixed(d);
-const fmtPct = (v: number | null | undefined): string =>
-  v == null || isNaN(v as number) ? "—" : `${(v as number).toFixed(1)}%`;
 
 function getField(p: PlayerRaw, field: string): number | null {
   const v = p[field];
@@ -131,35 +129,28 @@ const WR_WINNOW_EDGE: EdgeDef = {
   compute: p => p.rdVal,
 };
 
-const POS_STATS: Record<Position, StatDef[]> = {
-  RB: [
-    { label: "Rush Att/G",  compute: p => getField(p, "rush_att_per_gm"),   display: v => fmtNum(v) },
-    { label: "Targets/G",   compute: p => getField(p, "targets_per_gm"),    display: v => fmtNum(v) },
-    { label: "Yds/Touch",   compute: p => getField(p, "yards_per_touch"),   display: v => fmtNum(v) },
-    { label: "Explosive %", compute: p => getField(p, "explosive_run_pct"), display: v => fmtPct(v) },
-    { label: "RZ Att/G",    compute: p => { const rz = getField(p, "rz_rush_att"); const g = getField(p, "games"); return rz !== null && g ? rz / g : null; }, display: v => fmtNum(v) },
-  ],
-  WR: [
-    { label: "Tgt/Gm",       compute: p => getField(p, "targets_per_gm"),    display: v => fmtNum(v) },
-    { label: "Rec/Gm",       compute: p => getField(p, "receptions_per_gm"), display: v => fmtNum(v) },
-    { label: "Air Yards/Gm", compute: p => getField(p, "air_yards_per_gm"),  display: v => fmtNum(v) },
-    { label: "Yards/Tgt",    compute: p => getField(p, "yards_per_target"),  display: v => fmtNum(v) },
-    { label: "RZ Tgt/Gm",   compute: p => getField(p, "rz_tgt_per_game"),   display: v => fmtNum(v) },
-  ],
-  TE: [
-    { label: "Tgt/Gm",       compute: p => getField(p, "targets_per_gm"),    display: v => fmtNum(v) },
-    { label: "Rec/Gm",       compute: p => getField(p, "receptions_per_gm"), display: v => fmtNum(v) },
-    { label: "Air Yds/Gm",   compute: p => getField(p, "air_yards_per_gm"),  display: v => fmtNum(v) },
-    { label: "Yds/Tgt",      compute: p => getField(p, "yards_per_target"),  display: v => fmtNum(v) },
-    { label: "RZ Tgt/Gm",    compute: p => getField(p, "rz_tgt_per_game"),   display: v => fmtNum(v) },
-  ],
-  QB: [
-    { label: "DB/Gm",       compute: p => getField(p, "dropbacksPerGame"),  display: v => fmtNum(v) },
-    { label: "Rush/Gm",     compute: p => getField(p, "rushAttPerGame"),     display: v => fmtNum(v) },
-    { label: "RZ Att/Gm",   compute: p => { const rz = getField(p, "rzAtt"); const g = getField(p, "games"); return rz !== null && g ? rz / g : null; }, display: v => fmtNum(v) },
-    { label: "Deep Att %",  compute: p => getField(p, "deepAttemptRate"),   display: v => fmtPct(v) },
-    { label: "Yds/Att",     compute: p => getField(p, "ypa"),               display: v => fmtNum(v) },
-  ],
+// ── Composite grades ────────────────────────────────────────────────
+// Each card shows the player's composite grades (Overall + 5 category grades,
+// 0-100). Grades are percentile-based, so they must be computed against the
+// full position pool — we load the same bundled advanced-stats files the
+// Position Stats tab uses and run the matching engine, then look players up by
+// normalized name.
+interface ScoreCategoryMeta { key: string; label: string; shortLabel: string; description: string }
+type ComputeScores = (rows: Record<string, unknown>[]) => Array<Record<string, number>>;
+
+const SCORE_ENGINES: Record<Position, { compute: ComputeScores; categories: ScoreCategoryMeta[] }> = {
+  QB: { compute: computeQbCompositeScores as unknown as ComputeScores, categories: QB_SCORE_CATEGORIES },
+  RB: { compute: computeRbCompositeScores as unknown as ComputeScores, categories: RB_SCORE_CATEGORIES },
+  WR: { compute: computeWrCompositeScores, categories: WR_SCORE_CATEGORIES },
+  TE: { compute: computeTeCompositeScores, categories: TE_SCORE_CATEGORIES },
+};
+
+// Bundled advanced-stats pools (2025) — string literals required for Vite code-splitting.
+const ADV_STATS_LOADERS: Record<Position, () => Promise<{ default: { rows: Record<string, unknown>[] } }>> = {
+  QB: () => import("@/data/advanced_stats/qb_advanced_stats_2025.json"),
+  RB: () => import("@/data/advanced_stats/rb_advanced_stats_2025.json"),
+  WR: () => import("@/data/advanced_stats/wr_advanced_stats_2025.json"),
+  TE: () => import("@/data/advanced_stats/te_advanced_stats_2025.json"),
 };
 
 const POS_EDGES: Record<Position, EdgeDef[]> = {
@@ -313,18 +304,21 @@ function PlayerSelector({
 // ── Player card ─────────────────────────────────────────────────────
 function PlayerCard({
   player,
-  bestStats,
   slot,
-  stats,
   tierField,
+  categories,
+  grades,
+  bestGrades,
 }: {
   player: ResolvedPlayer;
-  bestStats: Record<string, number>;
   slot: number;
-  stats: StatDef[];
   tierField: string;
+  categories: ScoreCategoryMeta[];
+  grades: Record<string, number> | undefined;
+  bestGrades: Record<string, number>;
 }) {
   const tier = String(player[tierField] ?? "");
+  const overallKey = categories[0]?.key;
 
   return (
     <div
@@ -385,21 +379,25 @@ function PlayerCard({
         </div>
       </div>
 
-      {/* Stat grid */}
+      {/* Composite grades */}
       <div className="px-4 pb-4 space-y-1.5">
+        <p className="text-[9px] uppercase tracking-wider text-[#d4af37]/70 font-semibold mb-1">Composite Grades</p>
         <div className="h-px bg-[#d4af37]/10 mb-2" />
-        {stats.map(({ label, compute, display }) => {
-          const raw = compute(player);
-          const isBest = raw !== null && bestStats[label] !== undefined && raw === bestStats[label];
+        {categories.map((cat) => {
+          const v = grades?.[cat.key];
+          const isBest = v != null && bestGrades[cat.key] !== undefined && v === bestGrades[cat.key];
+          const isOverall = cat.key === overallKey;
           return (
-            <div key={label} className="flex items-center justify-between">
-              <span className="text-[10px] text-muted-foreground">{label}</span>
+            <div key={cat.key} className="flex items-center justify-between">
+              <span className={cn("text-[10px]", isOverall ? "text-foreground/90 font-semibold" : "text-muted-foreground")}>
+                {cat.label}
+              </span>
               <span className={cn(
                 "text-[11px] font-mono font-semibold tabular-nums",
-                isBest ? "text-emerald-400" : "text-foreground/80"
+                isBest ? "text-emerald-400" : isOverall ? "text-[#d4af37]" : "text-foreground/80",
               )}>
                 {isBest && <span className="mr-0.5 text-emerald-500">▲</span>}
-                {raw !== null ? display(raw) : "—"}
+                {v != null ? v : "—"}
               </span>
             </div>
           );
@@ -454,6 +452,8 @@ export function CompareRBs() {
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [selected, setSelected] = useState<[string | null, string | null, string | null]>([null, null, null]);
+  // Composite grades for the position pool, keyed by normalized player name.
+  const [gradeMap, setGradeMap] = useState<Map<string, Record<string, number>>>(new Map());
 
   useEffect(() => {
     setLoading(true);
@@ -509,9 +509,30 @@ export function CompareRBs() {
       .catch(() => { setFetchError("Failed to load player data."); setLoading(false); });
   }, [pos]);
 
-  const tierField = POS_TIER_FIELD[pos];
-  const stats     = POS_STATS[pos];
-  const edges     = POS_EDGES[pos];
+  // Load the position's advanced-stats pool and compute composite grades for
+  // every player, keyed by normalized name for card lookups.
+  useEffect(() => {
+    let cancelled = false;
+    setGradeMap(new Map());
+    ADV_STATS_LOADERS[pos]()
+      .then((mod) => {
+        if (cancelled) return;
+        const rows = mod.default.rows ?? [];
+        const scores = SCORE_ENGINES[pos].compute(rows);
+        const m = new Map<string, Record<string, number>>();
+        rows.forEach((r, i) => {
+          const name = String(r.playerName ?? r.player_name ?? r.name ?? "");
+          if (name) m.set(normalizeName(name), scores[i]);
+        });
+        setGradeMap(m);
+      })
+      .catch(() => { if (!cancelled) setGradeMap(new Map()); });
+    return () => { cancelled = true; };
+  }, [pos]);
+
+  const tierField      = POS_TIER_FIELD[pos];
+  const gradeCategories = SCORE_ENGINES[pos].categories;
+  const edges          = POS_EDGES[pos];
 
   const nameMap = useMemo(() => {
     const m = new Map<string, { dynVal: number; rdVal: number; sleeperId: string }>();
@@ -549,16 +570,24 @@ export function CompareRBs() {
     });
   }, [selected, playerData, nameMap]);
 
-  const bestStats = useMemo(() => {
-    const active = resolved.filter(Boolean) as ResolvedPlayer[];
+  // Each slot's grades (aligned to `resolved`), looked up by normalized name.
+  const slotGrades = useMemo<(Record<string, number> | undefined)[]>(
+    () => resolved.map((p) => (p ? gradeMap.get(normalizeName(p.player)) : undefined)),
+    [resolved, gradeMap],
+  );
+
+  // Best (highest) grade per category across the selected players — higher is
+  // always better for composite grades.
+  const bestGrades = useMemo(() => {
+    const active = slotGrades.filter(Boolean) as Record<string, number>[];
     if (active.length < 2) return {} as Record<string, number>;
     const result: Record<string, number> = {};
-    for (const { label, compute } of stats) {
-      const vals = active.map(compute).filter(v => v !== null) as number[];
-      if (vals.length > 0) result[label] = Math.max(...vals);
+    for (const cat of gradeCategories) {
+      const vals = active.map((g) => g[cat.key]).filter((v) => typeof v === "number");
+      if (vals.length > 0) result[cat.key] = Math.max(...vals);
     }
     return result;
-  }, [resolved, stats]);
+  }, [slotGrades, gradeCategories]);
 
   const setSlot = (slot: 0 | 1 | 2, name: string | null) => {
     setSelected(prev => {
@@ -634,10 +663,11 @@ export function CompareRBs() {
                 <PlayerCard
                   key={resolved[slot]!.player}
                   player={resolved[slot]!}
-                  bestStats={bestStats}
                   slot={slot}
-                  stats={stats}
                   tierField={tierField}
+                  categories={gradeCategories}
+                  grades={slotGrades[slot]}
+                  bestGrades={bestGrades}
                 />
               ) : (
                 <div

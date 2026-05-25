@@ -1,7 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useCallback, forwardRef, useImperativeHandle } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { getSleeperPlayers } from "@/lib/sleeperApi";
 import { useValueModel } from "@/contexts/ValueModelContext";
 import { useToast } from "@/hooks/use-toast";
@@ -10,6 +9,14 @@ import { cn } from "@/lib/utils";
 import { Zap, RefreshCw, Users, AlertCircle, Download, Loader2 } from "lucide-react";
 import { getLeagueTeamTiers, getTierEmoji, type Tier } from "@/data/mockData";
 import { toPng } from "html-to-image";
+import { computeQbCompositeScores, QB_SCORE_CATEGORIES } from "@/lib/qbCompositeScores";
+import { computeRbCompositeScores, RB_SCORE_CATEGORIES } from "@/lib/rbCompositeScores";
+import {
+  computeWrCompositeScores,
+  computeTeCompositeScores,
+  WR_SCORE_CATEGORIES,
+  TE_SCORE_CATEGORIES,
+} from "@/lib/receivingComposites";
 
 // ─── Tier colour maps ─────────────────────────────────────────────────────────
 const TIER_GLOW: Record<string, string> = {
@@ -39,6 +46,29 @@ const TIER_BORDER: Record<string, string> = {
 
 const SLEEPER_API = "https://api.sleeper.app/v1";
 
+// ─── Composite grades ───────────────────────────────────────────────────────
+// Cards show each player's Overall composite grade (0-100). Grades are
+// percentile-based, so they're computed against the full position pool — we load
+// the same bundled advanced-stats files the Position Stats tab uses, run the
+// matching engine per position, and look players up by normalized name.
+const normalizeName = (n: string) => n.toLowerCase().replace(/[^a-z0-9]/g, "");
+type GradePos = "QB" | "RB" | "WR" | "TE";
+type ComputeScores = (rows: Record<string, unknown>[]) => Array<Record<string, number>>;
+
+const SCORE_ENGINES: Record<GradePos, { compute: ComputeScores; overallKey: string }> = {
+  QB: { compute: computeQbCompositeScores as unknown as ComputeScores, overallKey: QB_SCORE_CATEGORIES[0].key },
+  RB: { compute: computeRbCompositeScores as unknown as ComputeScores, overallKey: RB_SCORE_CATEGORIES[0].key },
+  WR: { compute: computeWrCompositeScores, overallKey: WR_SCORE_CATEGORIES[0].key },
+  TE: { compute: computeTeCompositeScores, overallKey: TE_SCORE_CATEGORIES[0].key },
+};
+
+const ADV_STATS_LOADERS: Record<GradePos, () => Promise<{ default: { rows: Record<string, unknown>[] } }>> = {
+  QB: () => import("@/data/advanced_stats/qb_advanced_stats_2025.json"),
+  RB: () => import("@/data/advanced_stats/rb_advanced_stats_2025.json"),
+  WR: () => import("@/data/advanced_stats/wr_advanced_stats_2025.json"),
+  TE: () => import("@/data/advanced_stats/te_advanced_stats_2025.json"),
+};
+
 // ─── Slot eligibility ─────────────────────────────────────────────────────────
 const SLOT_ELIGIBILITY: Record<string, string[]> = {
   QB:         ["QB"],
@@ -61,11 +91,16 @@ interface SlotAssignment {
   player: Player | null;
   projection?: number;
   injuryStatus?: string;
+  dynVal: number;
+  rdVal: number;
+  grade: number | null;
 }
-type PlayerState = "out" | "ir" | "doubtful" | "questionable" | "probable" | "upside" | "healthy";
 interface BenchPlayer extends Player {
   projection?: number;
   injuryStatus?: string;
+  dynVal: number;
+  rdVal: number;
+  grade: number | null;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -74,25 +109,6 @@ function projField(scoringFormat: string): string {
   if (scoringFormat === "Half") return "pts_half_ppr";
   return "pts_std";
 }
-function getPlayerState(injuryStatus?: string, proj?: number): PlayerState {
-  if (injuryStatus === "IR")           return "ir";
-  if (injuryStatus === "Out")          return "out";
-  if (injuryStatus === "Doubtful")     return "doubtful";
-  if (injuryStatus === "Questionable") return "questionable";
-  if (injuryStatus === "Probable")     return "probable";
-  if (proj && proj >= 22)              return "upside";
-  return "healthy";
-}
-
-const STATE_STYLES: Record<PlayerState, { ring: string; badge: string; glow: string; dot: string }> = {
-  out:          { ring: "ring-red-500/50",      badge: "bg-red-500/20 text-red-400 border-red-500/40",           glow: "[box-shadow:0_0_14px_rgba(239,68,68,0.25)]",  dot: "bg-red-500" },
-  ir:           { ring: "ring-red-500/50",      badge: "bg-red-500/20 text-red-400 border-red-500/40",           glow: "[box-shadow:0_0_14px_rgba(239,68,68,0.25)]",  dot: "bg-red-500" },
-  doubtful:     { ring: "ring-red-400/40",      badge: "bg-red-400/15 text-red-400 border-red-400/40",           glow: "[box-shadow:0_0_12px_rgba(239,68,68,0.18)]",  dot: "bg-red-400" },
-  questionable: { ring: "ring-yellow-400/50",   badge: "bg-yellow-400/15 text-yellow-400 border-yellow-400/40", glow: "[box-shadow:0_0_14px_rgba(234,179,8,0.22)]",  dot: "bg-yellow-400" },
-  probable:     { ring: "ring-emerald-400/30",  badge: "bg-emerald-400/10 text-emerald-400 border-emerald-400/30", glow: "",                                           dot: "bg-emerald-400" },
-  upside:       { ring: "ring-blue-400/50",     badge: "",                                                        glow: "[box-shadow:0_0_16px_rgba(96,165,250,0.28)]",dot: "bg-blue-400" },
-  healthy:      { ring: "ring-white/8",         badge: "",                                                        glow: "",                                            dot: "" },
-};
 
 const SLOT_BADGE_COLORS: Record<string, string> = {
   QB:         "bg-rose-500/25 text-rose-300 border-rose-500/30",
@@ -107,194 +123,157 @@ const SLOT_BADGE_COLORS: Record<string, string> = {
   DEF:        "bg-orange-500/25 text-orange-300 border-orange-500/30",
 };
 
-// ─── Desktop PlayerCard ───────────────────────────────────────────────────────
-function PlayerCard({ assignment, compact = false }: { assignment: SlotAssignment; compact?: boolean }) {
-  const { slot, slotLabel, player, projection, injuryStatus } = assignment;
-  const state = getPlayerState(injuryStatus, projection);
-  const { ring, badge, glow } = STATE_STYLES[state];
-  const slotColor = SLOT_BADGE_COLORS[slot] ?? "bg-white/10 text-white/60 border-white/15";
-  const lastName = player ? player.name.split(" ").slice(1).join(" ") || player.name : "";
+// Compact value formatter for tiny mobile cards (6234 → "6.2k").
+const fmtCompact = (v: number): string =>
+  v <= 0 ? "—" : v >= 1000 ? `${(v / 1000).toFixed(1)}k` : String(Math.round(v));
+
+// ─── Desktop FieldCard (Compare-style) ─────────────────────────────────────────
+// Portrait headshot with team-logo watermark, gold border, slot badge + Overall
+// grade overlays, and Dynasty / Win-Now value pills. Used for starters and bench.
+function FieldCard({
+  label, colorKey, player, dynVal, rdVal, grade, compact = false,
+}: {
+  label: string;
+  colorKey: string;
+  player: Player | null;
+  dynVal: number;
+  rdVal: number;
+  grade: number | null;
+  compact?: boolean;
+}) {
+  const slotColor = SLOT_BADGE_COLORS[colorKey] ?? "bg-white/10 text-white/60 border-white/15";
+  const width = compact ? "w-[100px] md:w-[110px]" : "w-[112px] md:w-[126px]";
 
   if (!player) {
     return (
       <div className={cn(
-        "flex flex-col items-center gap-1.5 rounded-xl border border-dashed border-white/8",
-        "bg-black/20 backdrop-blur-sm p-2 md:p-2.5",
-        compact ? "min-w-[80px] md:min-w-[90px]" : "min-w-[92px] md:min-w-[112px]"
+        "flex flex-col items-center justify-center gap-1.5 aspect-[3/4] rounded-xl border border-dashed border-white/10 bg-black/20 backdrop-blur-sm",
+        width,
       )}>
-        <Badge variant="outline" className={cn("text-[8px] md:text-[9px] px-1.5 py-0 h-4", slotColor)}>{slotLabel}</Badge>
-        <div className="w-8 h-8 md:w-9 md:h-9 rounded-full bg-white/5 border border-dashed border-white/10" />
+        <Badge variant="outline" className={cn("text-[8px] md:text-[9px] px-1.5 py-0 h-4", slotColor)}>{label}</Badge>
         <span className="text-[9px] text-white/25">Empty</span>
       </div>
     );
   }
 
+  const id = player.sleeperId ?? player.id;
   return (
     <div className={cn(
-      "flex flex-col items-center gap-1 rounded-xl border bg-[#040d1a]/70 backdrop-blur-md",
-      "p-2 md:p-2.5 transition-all duration-300 cursor-default select-none ring-1",
-      ring, glow,
-      compact ? "min-w-[80px] md:min-w-[90px]" : "min-w-[92px] md:min-w-[112px]",
-      state === "out" || state === "ir" ? "border-red-500/30" :
-      state === "doubtful"              ? "border-red-400/25" :
-      state === "questionable"          ? "border-yellow-400/30" :
-      state === "upside"                ? "border-blue-400/30" : "border-white/8"
+      "group rounded-xl overflow-hidden border border-[#d4af37]/25 bg-[#080e1c] shadow-[0_0_16px_rgba(212,175,55,0.10)] transition-all duration-300 hover:-translate-y-0.5 hover:border-[#d4af37]/50 hover:shadow-[0_0_22px_rgba(212,175,55,0.18)] select-none flex-shrink-0",
+      width,
     )}>
-      <Badge variant="outline" className={cn("text-[8px] md:text-[9px] px-1.5 py-0 h-4 mb-0.5", slotColor)}>{slotLabel}</Badge>
-      <PlayerAvatar id={player.sleeperId ?? player.id} name={player.name} pos={player.pos} team={player.team ?? ""} size="sm" compact />
-      <span className="text-[10px] md:text-[11px] font-bold text-white/90 text-center leading-tight line-clamp-1 mt-0.5 max-w-[80px] md:max-w-[100px]">
-        {lastName || player.name}
-      </span>
-      <span className="text-[8px] md:text-[9px] text-white/40 -mt-0.5 font-medium">{player.team || "FA"}</span>
-      {typeof projection === "number" && (
-        <div className="flex items-center gap-0.5 mt-0.5">
-          <Zap className="w-2.5 h-2.5 text-[#d4af37] flex-shrink-0" />
-          <span className="text-[10px] md:text-[11px] font-bold text-[#d4af37] tabular-nums">{projection.toFixed(1)}</span>
+      {/* Headshot */}
+      <div className="relative aspect-square w-full overflow-hidden bg-[#0b1628]">
+        {player.team && (
+          <img
+            src={`https://sleepercdn.com/images/team_logos/nfl/${player.team.toLowerCase()}.png`}
+            alt="" aria-hidden="true"
+            className="absolute inset-0 w-full h-full object-contain p-3 opacity-[0.18] scale-110 pointer-events-none"
+            onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+          />
+        )}
+        <img
+          src={`https://sleepercdn.com/content/nfl/players/thumb/${id}.jpg`}
+          alt={player.name}
+          className="relative w-full h-full object-cover object-top"
+          onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-[#080e1c] via-transparent to-transparent" />
+        <span className={cn("absolute bottom-1 left-1.5 text-[8px] md:text-[9px] px-1.5 py-0.5 rounded font-bold border backdrop-blur-sm", slotColor)}>
+          {label}
+        </span>
+        {grade != null && (
+          <span className="absolute bottom-1 right-1.5 text-[9px] md:text-[10px] font-black px-1.5 py-0.5 rounded bg-black/55 text-[#d4af37] border border-[#d4af37]/40 backdrop-blur-sm tabular-nums">
+            {grade}
+          </span>
+        )}
+      </div>
+
+      {/* Identity */}
+      <div className="px-2 pt-1.5 pb-1 text-center">
+        <p className="text-[11px] font-bold text-white leading-tight truncate">{player.name}</p>
+        <p className="text-[9px] text-[#d4af37] font-semibold leading-tight">
+          {player.team || "FA"}
+          {typeof player.age === "number" && player.age > 0 && (
+            <span className="text-white/35 font-normal ml-1">Age {player.age}</span>
+          )}
+        </p>
+      </div>
+
+      {/* Dynasty / Win-Now pills */}
+      <div className="grid grid-cols-2 gap-1 px-1.5 pb-1.5">
+        <div className="rounded-lg bg-emerald-500/10 border border-emerald-500/20 px-1 py-0.5 text-center">
+          <p className="text-[7px] uppercase tracking-wider text-emerald-500/70 font-semibold leading-none mb-0.5">Dyn</p>
+          <p className="text-[10px] font-bold text-emerald-400 tabular-nums leading-none">{dynVal > 0 ? Math.round(dynVal).toLocaleString() : "—"}</p>
         </div>
-      )}
-      {injuryStatus && badge && (
-        <Badge variant="outline" className={cn("text-[7px] md:text-[8px] px-1 py-0 h-3.5 mt-0.5 uppercase tracking-wide", badge)}>
-          {injuryStatus}
-        </Badge>
-      )}
+        <div className="rounded-lg bg-[#0b3a7a]/25 border border-[#0b3a7a]/40 px-1 py-0.5 text-center">
+          <p className="text-[7px] uppercase tracking-wider text-blue-400/70 font-semibold leading-none mb-0.5">Win-Now</p>
+          <p className="text-[10px] font-bold text-blue-400 tabular-nums leading-none">{rdVal > 0 ? Math.round(rdVal).toLocaleString() : "—"}</p>
+        </div>
+      </div>
     </div>
   );
 }
 
-// ─── Mobile PlayerCard ────────────────────────────────────────────────────────
-function MobilePlayerCard({ assignment }: { assignment: SlotAssignment }) {
-  const { slot, slotLabel, player, projection, injuryStatus } = assignment;
-  const state  = getPlayerState(injuryStatus, projection);
-  const { dot } = STATE_STYLES[state];
-  const slotColor = SLOT_BADGE_COLORS[slot] ?? "bg-white/10 text-white/60 border-white/15";
-  const lastName  = player ? player.name.split(" ").slice(1).join(" ") || player.name : "";
-  const borderCol = state === "out" || state === "ir" ? "border-red-500/40"
-                  : state === "questionable"           ? "border-yellow-400/35"
-                  : state === "upside"                 ? "border-blue-400/30"
-                  :                                      "border-white/10";
+// ─── Mobile FieldCard (compact Compare-style) ──────────────────────────────────
+function MobileFieldCard({
+  label, colorKey, player, dynVal, rdVal, grade,
+}: {
+  label: string;
+  colorKey: string;
+  player: Player | null;
+  dynVal: number;
+  rdVal: number;
+  grade: number | null;
+}) {
+  const slotColor = SLOT_BADGE_COLORS[colorKey] ?? "bg-white/10 text-white/60 border-white/15";
 
   if (!player) {
     return (
-      <div className="flex flex-col items-center gap-1 w-[62px] flex-shrink-0">
-        <span className={cn("text-[7px] font-bold px-1.5 py-0 rounded-full border", slotColor)}>{slotLabel}</span>
-        <div className="w-8 h-8 rounded-full bg-white/5 border border-dashed border-white/15" />
+      <div className="w-[64px] flex-shrink-0 flex flex-col items-center justify-center gap-1 aspect-[3/4] rounded-lg border border-dashed border-white/12 bg-black/20">
+        <span className={cn("text-[7px] font-bold px-1.5 rounded-full border", slotColor)}>{label}</span>
         <span className="text-[8px] text-white/20">–</span>
       </div>
     );
   }
 
+  const id = player.sleeperId ?? player.id;
+  const lastName = player.name.split(" ").slice(1).join(" ") || player.name;
   return (
-    <div className={cn(
-      "flex flex-col items-center gap-0.5 w-[62px] flex-shrink-0 rounded-lg border bg-[#040d1a]/60 py-1.5 px-1",
-      borderCol
-    )}>
-      {/* Slot pill */}
-      <span className={cn("text-[7px] font-bold px-1.5 rounded-full border leading-snug", slotColor)}>{slotLabel}</span>
-
-      {/* Avatar with status dot */}
-      <div className="relative mt-0.5">
-        <PlayerAvatar
-          id={player.sleeperId ?? player.id}
-          name={player.name}
-          pos={player.pos}
-          team={player.team ?? ""}
-          size="xs"
-          compact
+    <div className="w-[80px] flex-shrink-0 rounded-lg overflow-hidden border border-[#d4af37]/25 bg-[#080e1c]">
+      <div className="relative aspect-square w-full overflow-hidden bg-[#0b1628]">
+        {player.team && (
+          <img
+            src={`https://sleepercdn.com/images/team_logos/nfl/${player.team.toLowerCase()}.png`}
+            alt="" aria-hidden="true"
+            className="absolute inset-0 w-full h-full object-contain p-2 opacity-[0.18] scale-110 pointer-events-none"
+            onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+          />
+        )}
+        <img
+          src={`https://sleepercdn.com/content/nfl/players/thumb/${id}.jpg`}
+          alt={player.name}
+          className="relative w-full h-full object-cover object-top"
+          onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
         />
-        {dot && (
-          <span className={cn("absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-[#040d1a]", dot)} />
+        <div className="absolute inset-0 bg-gradient-to-t from-[#080e1c] via-transparent to-transparent" />
+        <span className={cn("absolute bottom-0.5 left-1 text-[6px] px-1 rounded font-bold border backdrop-blur-sm leading-snug", slotColor)}>
+          {label}
+        </span>
+        {grade != null && (
+          <span className="absolute bottom-0.5 right-1 text-[7px] font-black px-1 rounded bg-black/55 text-[#d4af37] border border-[#d4af37]/40 backdrop-blur-sm tabular-nums leading-snug">
+            {grade}
+          </span>
         )}
       </div>
-
-      {/* Last name */}
-      <span className="text-[8px] font-bold text-white/90 text-center leading-tight line-clamp-1 w-full px-0.5 mt-0.5">
-        {lastName || player.name}
-      </span>
-
-      {/* Team */}
-      <span className="text-[7px] text-white/35 font-medium">{player.team || "FA"}</span>
-
-      {/* Projection */}
-      {typeof projection === "number" && (
-        <div className="flex items-center gap-0.5">
-          <Zap className="w-1.5 h-1.5 text-[#d4af37]" />
-          <span className="text-[7px] font-bold text-[#d4af37] tabular-nums">{projection.toFixed(1)}</span>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── Desktop BenchCard ────────────────────────────────────────────────────────
-function BenchCard({ player }: { player: BenchPlayer }) {
-  const state = getPlayerState(player.injuryStatus, player.projection);
-  const { ring, badge, glow } = STATE_STYLES[state];
-  const lastName = player.name.split(" ").slice(1).join(" ") || player.name;
-
-  return (
-    <div className={cn(
-      "flex flex-col items-center gap-1 rounded-xl border bg-[#040d1a]/70 backdrop-blur-md",
-      "p-2 md:p-2.5 min-w-[92px] md:min-w-[112px] flex-shrink-0 ring-1 transition-all duration-300 cursor-default select-none",
-      ring, glow,
-      state === "out" || state === "ir" ? "border-red-500/30" :
-      state === "doubtful"              ? "border-red-400/25" :
-      state === "questionable"          ? "border-yellow-400/30" :
-      state === "upside"                ? "border-blue-400/30" : "border-white/8"
-    )}>
-      <Badge variant="outline" className={cn("text-[8px] md:text-[9px] px-1.5 py-0 h-4 mb-0.5", SLOT_BADGE_COLORS[player.pos] ?? "bg-white/10 text-white/60 border-white/15")}>
-        {player.pos}
-      </Badge>
-      <PlayerAvatar id={player.sleeperId ?? player.id} name={player.name} pos={player.pos} team={player.team ?? ""} size="sm" compact />
-      <span className="text-[10px] md:text-[11px] font-bold text-white/90 text-center leading-tight line-clamp-1 mt-0.5 max-w-[80px] md:max-w-[100px]">
-        {lastName}
-      </span>
-      <span className="text-[8px] md:text-[9px] text-white/40 -mt-0.5 font-medium">{player.team || "FA"}</span>
-      {typeof player.projection === "number" && (
-        <div className="flex items-center gap-0.5 mt-0.5">
-          <Zap className="w-2.5 h-2.5 text-[#d4af37] flex-shrink-0" />
-          <span className="text-[10px] md:text-[11px] font-bold text-[#d4af37] tabular-nums">{player.projection.toFixed(1)}</span>
-        </div>
-      )}
-      {player.injuryStatus && badge && (
-        <Badge variant="outline" className={cn("text-[7px] md:text-[8px] px-1 py-0 h-3.5 mt-0.5 uppercase tracking-wide", badge)}>
-          {player.injuryStatus}
-        </Badge>
-      )}
-    </div>
-  );
-}
-
-// ─── Mobile BenchCard ─────────────────────────────────────────────────────────
-function MobileBenchCard({ player }: { player: BenchPlayer }) {
-  const state = getPlayerState(player.injuryStatus, player.projection);
-  const { dot } = STATE_STYLES[state];
-  const lastName = player.name.split(" ").slice(1).join(" ") || player.name;
-  const posColor = SLOT_BADGE_COLORS[player.pos] ?? "bg-white/10 text-white/60 border-white/15";
-  const borderCol = state === "out" || state === "ir" ? "border-red-500/40"
-                  : state === "questionable"           ? "border-yellow-400/35"
-                  : state === "upside"                 ? "border-blue-400/30"
-                  :                                      "border-white/10";
-
-  return (
-    <div className={cn(
-      "flex flex-col items-center gap-0.5 w-[62px] flex-shrink-0 rounded-lg border bg-[#040d1a]/60 py-1.5 px-1",
-      borderCol
-    )}>
-      <span className={cn("text-[7px] font-bold px-1.5 py-0 rounded-full border leading-snug", posColor)}>{player.pos}</span>
-      <div className="relative mt-0.5">
-        <PlayerAvatar id={player.sleeperId ?? player.id} name={player.name} pos={player.pos} team={player.team ?? ""} size="xs" compact />
-        {dot && <span className={cn("absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-[#040d1a]", dot)} />}
+      <div className="px-1 pt-0.5 text-center">
+        <p className="text-[8px] font-bold text-white leading-tight truncate">{lastName}</p>
+        <p className="text-[7px] text-[#d4af37] font-semibold leading-none">{player.team || "FA"}</p>
       </div>
-      <span className="text-[8px] font-bold text-white/90 text-center leading-tight line-clamp-1 w-full px-0.5 mt-0.5">
-        {lastName}
-      </span>
-      <span className="text-[7px] text-white/35 font-medium">{player.team || "FA"}</span>
-      {typeof player.projection === "number" && (
-        <div className="flex items-center gap-0.5">
-          <Zap className="w-1.5 h-1.5 text-[#d4af37]" />
-          <span className="text-[7px] font-bold text-[#d4af37] tabular-nums">{player.projection.toFixed(1)}</span>
-        </div>
-      )}
+      <div className="grid grid-cols-2 gap-0.5 px-1 py-1">
+        <p className="text-[7px] font-bold text-emerald-400 tabular-nums text-center leading-none">{fmtCompact(dynVal)}</p>
+        <p className="text-[7px] font-bold text-blue-400 tabular-nums text-center leading-none">{fmtCompact(rdVal)}</p>
+      </div>
     </div>
   );
 }
@@ -313,7 +292,18 @@ function FieldRow({ slots, spread = false, label }: { slots: SlotAssignment[]; s
         "flex items-center gap-2 md:gap-3 flex-wrap",
         spread ? "justify-around px-0 md:px-4" : "justify-center",
       )}>
-        {slots.map((s, i) => <PlayerCard key={`${s.slot}-${i}`} assignment={s} compact={slots.length >= 4} />)}
+        {slots.map((s, i) => (
+          <FieldCard
+            key={`${s.slot}-${i}`}
+            label={s.slotLabel}
+            colorKey={s.slot}
+            player={s.player}
+            dynVal={s.dynVal}
+            rdVal={s.rdVal}
+            grade={s.grade}
+            compact={slots.length >= 4}
+          />
+        ))}
       </div>
     </div>
   );
@@ -330,7 +320,17 @@ function MobileFieldRow({ slots, label }: { slots: SlotAssignment[]; label?: str
         </div>
       )}
       <div className="flex items-start justify-center gap-1 flex-wrap">
-        {slots.map((s, i) => <MobilePlayerCard key={`${s.slot}-${i}`} assignment={s} />)}
+        {slots.map((s, i) => (
+          <MobileFieldCard
+            key={`${s.slot}-${i}`}
+            label={s.slotLabel}
+            colorKey={s.slot}
+            player={s.player}
+            dynVal={s.dynVal}
+            rdVal={s.rdVal}
+            grade={s.grade}
+          />
+        ))}
       </div>
     </div>
   );
@@ -400,10 +400,9 @@ function FieldBackground() {
 function FieldLegend() {
   return (
     <div className="flex items-center gap-3 flex-wrap text-[9px] text-white/40">
-      <div className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-400/60" /> Upside (≥22 pts)</div>
-      <div className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-yellow-400/60" /> Questionable</div>
-      <div className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500/60" /> Out / IR</div>
-      <div className="flex items-center gap-1"><Zap className="w-2.5 h-2.5 text-[#d4af37]" /> Projected pts</div>
+      <div className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-emerald-400/60" /> Dynasty value</div>
+      <div className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-blue-400/60" /> Win-Now value</div>
+      <div className="flex items-center gap-1"><span className="font-black text-[#d4af37]">88</span> Overall grade (0–100, QB/RB/WR/TE)</div>
     </div>
   );
 }
@@ -413,7 +412,7 @@ export interface FieldViewHandle { triggerExport: () => void; }
 type FieldViewProps = { league: League; userTeam: Team };
 
 export const FieldView = forwardRef<FieldViewHandle, FieldViewProps>(function FieldView({ league, userTeam }, ref) {
-  const { getPlayerValue } = useValueModel();
+  const { getPlayerValue, getRedraftValue } = useValueModel();
   const { toast } = useToast();
 
   const [projections, setProjections] = useState<Record<string, number>>({});
@@ -424,7 +423,32 @@ export const FieldView = forwardRef<FieldViewHandle, FieldViewProps>(function Fi
   const [playersDb, setPlayersDb]   = useState<Record<string, any>>({});
   const [error, setError]           = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
+  // Overall composite grade per player, keyed by `normalizedName|pos`.
+  const [gradeMap, setGradeMap] = useState<Map<string, number>>(new Map());
   const fieldRef = useRef<HTMLDivElement>(null);
+
+  // Load all four advanced-stats pools once and compute each player's Overall grade.
+  useEffect(() => {
+    let cancelled = false;
+    const positions: GradePos[] = ["QB", "RB", "WR", "TE"];
+    Promise.all(positions.map((p) => ADV_STATS_LOADERS[p]()))
+      .then((mods) => {
+        if (cancelled) return;
+        const m = new Map<string, number>();
+        positions.forEach((posKey, idx) => {
+          const rows = mods[idx].default.rows ?? [];
+          const { compute, overallKey } = SCORE_ENGINES[posKey];
+          const scores = compute(rows);
+          rows.forEach((r, i) => {
+            const name = String(r.playerName ?? r.player_name ?? r.name ?? "");
+            if (name) m.set(`${normalizeName(name)}|${posKey}`, scores[i][overallKey]);
+          });
+        });
+        setGradeMap(m);
+      })
+      .catch(() => { if (!cancelled) setGradeMap(new Map()); });
+    return () => { cancelled = true; };
+  }, []);
 
   const doExport = useCallback(async () => {
     if (!fieldRef.current) return;
@@ -518,6 +542,9 @@ export const FieldView = forwardRef<FieldViewHandle, FieldViewProps>(function Fi
 
   // ── Assign starters to slots ─────────────────────────────────────────────
   const { starterSlots, benchPlayers } = useMemo(() => {
+    const gradeFor = (p: Player): number | null =>
+      gradeMap.get(`${normalizeName(p.name)}|${p.pos}`) ?? null;
+
     const starters = [...userTeam.roster]
       .filter(p => p.starter)
       .map(p => ({ ...p, _rv: getPlayerValue(p) }))
@@ -548,17 +575,21 @@ export const FieldView = forwardRef<FieldViewHandle, FieldViewProps>(function Fi
         assignments.push({
           slot, slotLabel: label.replace("SUPER_FLEX","SFLX").replace("REC_FLEX","RFLX").replace("WRRB_FLEX","FLEX"),
           player: best, projection: projections[sid], injuryStatus: playersDb[sid]?.injury_status,
+          dynVal: getPlayerValue(best), rdVal: getRedraftValue(best), grade: gradeFor(best),
         });
       } else {
-        assignments.push({ slot, slotLabel: label.replace("SUPER_FLEX","SFLX"), player: null });
+        assignments.push({ slot, slotLabel: label.replace("SUPER_FLEX","SFLX"), player: null, dynVal: 0, rdVal: 0, grade: null });
       }
     }
     const bench: BenchPlayer[] = nonStarters.map(p => {
       const sid = p.sleeperId ?? p.id;
-      return { ...p, projection: projections[sid], injuryStatus: playersDb[sid]?.injury_status };
+      return {
+        ...p, projection: projections[sid], injuryStatus: playersDb[sid]?.injury_status,
+        dynVal: getPlayerValue(p), rdVal: getRedraftValue(p), grade: gradeFor(p),
+      };
     });
     return { starterSlots: assignments, benchPlayers: bench };
-  }, [userTeam.roster, rosterPositions, projections, playersDb, getPlayerValue]);
+  }, [userTeam.roster, rosterPositions, projections, playersDb, getPlayerValue, getRedraftValue, gradeMap]);
 
   // ── Group rows ───────────────────────────────────────────────────────────
   const { qbRow, rbTeRow, wrRow, flexRow, specialRow } = useMemo(() => {
@@ -755,7 +786,9 @@ export const FieldView = forwardRef<FieldViewHandle, FieldViewProps>(function Fi
             {/* Desktop bench */}
             <div className="hidden md:block relative">
               <div className="flex gap-2 flex-wrap">
-                {benchPlayers.map((p, i) => <BenchCard key={`bench-${p.id}-${i}`} player={p} />)}
+                {benchPlayers.map((p, i) => (
+                  <FieldCard key={`bench-${p.id}-${i}`} label={p.pos} colorKey={p.pos} player={p} dynVal={p.dynVal} rdVal={p.rdVal} grade={p.grade} />
+                ))}
               </div>
             </div>
 
@@ -763,7 +796,9 @@ export const FieldView = forwardRef<FieldViewHandle, FieldViewProps>(function Fi
             <div className="md:hidden relative">
               <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-background to-transparent z-10 pointer-events-none" />
               <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-hide">
-                {benchPlayers.map((p, i) => <MobileBenchCard key={`mobilebench-${p.id}-${i}`} player={p} />)}
+                {benchPlayers.map((p, i) => (
+                  <MobileFieldCard key={`mobilebench-${p.id}-${i}`} label={p.pos} colorKey={p.pos} player={p} dynVal={p.dynVal} rdVal={p.rdVal} grade={p.grade} />
+                ))}
               </div>
             </div>
           </div>
