@@ -533,12 +533,14 @@ export default function WaiverCommand() {
               <span>Fetching…</span>
             </div>
           )}
-          <div className="flex items-center gap-1 p-1 rounded-xl bg-white/[0.03] border border-white/6">
+          <div className="grid grid-cols-3 flex-shrink-0" style={{ height: 48, borderRadius: 16, padding: 4, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", gap: 4 }}>
             {([
               { id: "overview" as const, icon: LayoutList, label: "Overview" },
               { id: "league"   as const, icon: BarChart3,  label: "League View" },
               { id: "bulk"     as const, icon: Layers,     label: "Bulk Claims" },
-            ]).map(({ id, icon: Icon, label }) => (
+            ]).map(({ id, icon: Icon, label }) => {
+              const active = activeView === id;
+              return (
               <button
                 key={id}
                 onClick={() => {
@@ -552,69 +554,63 @@ export default function WaiverCommand() {
                     if (first) setActiveLeague(first.leagueId);
                   }
                 }}
+                title={label}
                 data-testid={`view-toggle-${id}-desktop`}
-                className={cn(
-                  "relative flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all duration-200",
-                  activeView === id
-                    ? "bg-[#0b3a7a]/60 text-white border border-[#d4af37]/25"
-                    : "text-white/35 hover:text-white/60"
-                )}
+                className="relative flex items-center justify-center gap-1.5 font-semibold transition-all duration-200"
+                style={{ borderRadius: 12, fontSize: 12, letterSpacing: "0.01em", background: active ? "linear-gradient(135deg, rgba(11,58,122,0.85) 0%, rgba(11,58,122,0.65) 100%)" : "transparent", color: active ? "#fff" : "rgba(203,213,225,0.45)", border: active ? "1px solid rgba(212,175,55,0.30)" : "1px solid transparent", boxShadow: active ? "0 2px 12px rgba(11,58,122,0.40), inset 0 1px 0 rgba(255,255,255,0.06)" : "none", paddingLeft: 10, paddingRight: 10 }}
               >
-                <Icon className="w-3.5 h-3.5" />
+                <Icon style={{ width: 14, height: 14, flexShrink: 0 }} />
                 <span>{label}</span>
-                {activeView === id && (
-                  <span className="sc-subtab-underline absolute bottom-0 left-1/2 -translate-x-1/2 w-6 h-[2px] rounded-full bg-[#d4af37]" />
-                )}
+                {active && <span className="sc-subtab-underline absolute bottom-[3px] left-1/2 -translate-x-1/2 rounded-full" style={{ width: 24, height: 2, background: "#d4af37", opacity: 0.85 }} />}
               </button>
-            ))}
+              );
+            })}
           </div>
         </div>
       </div>
       {/* Mobile toggle */}
-      <div className="md:hidden flex flex-col sm:flex-row items-center justify-center sm:justify-end flex-wrap gap-3">
-        <div className="flex items-center gap-3">
-          {isFetching && (
-            <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-              <RefreshCw className="w-3 h-3 animate-spin text-[#d4af37]" />
-              <span>Fetching leagues…</span>
-            </div>
-          )}
-          <div className="flex items-center gap-1 p-1 rounded-xl bg-white/[0.03] border border-white/6">
-            {([
-              { id: "overview" as const, icon: LayoutList, label: "Overview" },
-              { id: "league"   as const, icon: BarChart3,  label: "League View" },
-              { id: "bulk"     as const, icon: Layers,     label: "Bulk Claims" },
-            ]).map(({ id, icon: Icon, label }) => (
-              <button
-                key={id}
-                onClick={() => {
-                  setActiveView(id);
-                  // If switching to League View with no league selected yet,
-                  // default to the first usable row so the user lands on data
-                  // instead of an empty state. We write through to the shared
-                  // context so the header dropdown reflects the same league.
-                  if (id === "league" && !detailRow) {
-                    const first = rows.find(r => !r.loading && !r.error);
-                    if (first) setActiveLeague(first.leagueId);
-                  }
-                }}
-                data-testid={`view-toggle-${id}`}
-                className={cn(
-                  "relative flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all duration-200",
-                  activeView === id
-                    ? "bg-[#0b3a7a]/60 text-white border border-[#d4af37]/25"
-                    : "text-white/35 hover:text-white/60"
-                )}
-              >
-                <Icon className="w-3.5 h-3.5" />
-                <span>{label}</span>
-                {activeView === id && (
-                  <span className="sc-subtab-underline absolute bottom-0 left-1/2 -translate-x-1/2 w-6 h-[2px] rounded-full bg-[#d4af37]" />
-                )}
-              </button>
-            ))}
-          </div>
+      <div className="md:hidden flex flex-col items-center gap-2">
+        {/* View toggle — spans 90% of screen width */}
+        <div className="grid grid-cols-3 w-[90vw]" style={{ height: 48, borderRadius: 16, padding: 4, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", gap: 4 }}>
+          {([
+            { id: "overview" as const, icon: LayoutList, label: "Overview" },
+            { id: "league"   as const, icon: BarChart3,  label: "League View" },
+            { id: "bulk"     as const, icon: Layers,     label: "Bulk Claims" },
+          ]).map(({ id, icon: Icon, label }) => {
+            const active = activeView === id;
+            return (
+            <button
+              key={id}
+              onClick={() => {
+                setActiveView(id);
+                // If switching to League View with no league selected yet,
+                // default to the first usable row so the user lands on data
+                // instead of an empty state. We write through to the shared
+                // context so the header dropdown reflects the same league.
+                if (id === "league" && !detailRow) {
+                  const first = rows.find(r => !r.loading && !r.error);
+                  if (first) setActiveLeague(first.leagueId);
+                }
+              }}
+              title={label}
+              data-testid={`view-toggle-${id}`}
+              className="relative flex items-center justify-center gap-1.5 font-semibold transition-all duration-200 whitespace-nowrap"
+              style={{ borderRadius: 12, fontSize: 12, letterSpacing: "0.01em", background: active ? "linear-gradient(135deg, rgba(11,58,122,0.85) 0%, rgba(11,58,122,0.65) 100%)" : "transparent", color: active ? "#fff" : "rgba(203,213,225,0.45)", border: active ? "1px solid rgba(212,175,55,0.30)" : "1px solid transparent", boxShadow: active ? "0 2px 12px rgba(11,58,122,0.40), inset 0 1px 0 rgba(255,255,255,0.06)" : "none", paddingLeft: 8, paddingRight: 8 }}
+            >
+              <Icon style={{ width: 14, height: 14, flexShrink: 0 }} />
+              <span>{label}</span>
+              {active && <span className="sc-subtab-underline absolute bottom-[3px] left-1/2 -translate-x-1/2 rounded-full" style={{ width: 24, height: 2, background: "#d4af37", opacity: 0.85 }} />}
+            </button>
+            );
+          })}
         </div>
+        {/* Fetching indicator, stacked below */}
+        {isFetching && (
+          <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+            <RefreshCw className="w-3 h-3 animate-spin text-[#d4af37]" />
+            <span>Fetching leagues…</span>
+          </div>
+        )}
       </div>
 
       {activeView === "overview" && (<>

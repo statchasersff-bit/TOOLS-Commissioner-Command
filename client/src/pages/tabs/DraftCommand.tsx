@@ -118,7 +118,7 @@ type ViewMode = "list" | "box" | "hex" | "round";
 type DraftTopTab = "startup" | "rookie";
 
 const TOP_TABS: { id: DraftTopTab; label: string; subtitle: string; icon: typeof List }[] = [
-  { id: "startup", label: "Startup ADP",  subtitle: "Real Sleeper startup draft data and market movement.", icon: Rocket },
+  { id: "startup", label: "Startup Drafts",  subtitle: "Real Sleeper startup draft data and market movement.", icon: Rocket },
   { id: "rookie",  label: "Rookie Drafts", subtitle: "Track rookie-only draft ADP from real Sleeper rookie drafts.", icon: Sparkles },
 ];
 
@@ -313,7 +313,6 @@ export function DraftCommand() {
   // error card; the former shows a friendly "no data yet" message.
   const hasError = errorMessage !== null;
   const isEmpty = !isLoading && !hasError && filtered.length === 0;
-  const lastUpdated = meta?.computed_at ?? null;
 
   const updateFilter = useCallback(<K extends keyof DraftFilters>(key: K, value: DraftFilters[K]) => {
     setFilters((prev) => ({ ...prev, [key]: value }));
@@ -339,11 +338,6 @@ export function DraftCommand() {
             title="ADP Explorer"
             subtitle={currentTabMeta.subtitle}
           />
-
-          {/* Mobile-only header — SectionHeader hides on mobile. */}
-          <div className="md:hidden">
-            <h2 className="text-lg font-bold text-foreground tracking-tight">ADP Explorer</h2>
-          </div>
         </div>
 
         {/* ── Top tabs: Startup ADP / Rookie Drafts — inline with the header
@@ -352,7 +346,7 @@ export function DraftCommand() {
             gives it the shared light-mode gold/black treatment. */}
         <div className="flex justify-center md:justify-end flex-shrink-0">
           <div
-            className="grid w-fit"
+            className="grid w-[90vw] md:w-fit"
             style={{ gridTemplateColumns: "repeat(2, 1fr)", height: 48, borderRadius: 16, padding: 4, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", gap: 4, minWidth: 0 }}
             data-testid="draft-command-top-tabs"
           >
@@ -417,7 +411,7 @@ export function DraftCommand() {
         </div>
 
         {/* View switcher + Rookie mode + Date range */}
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center justify-center md:justify-start gap-2">
           {/* View switcher — set varies by top tab (rookie tab swaps Hex
               for the rookie-board layout). */}
           <div className="flex items-center gap-1 p-1 rounded-xl bg-[var(--sc-card-soft)] border border-[var(--sc-border)] dark-any:bg-white/[0.03] dark-any:border-white/6">
@@ -472,11 +466,6 @@ export function DraftCommand() {
             </button>
           </div>
 
-          {/* Last updated — pushes right on wide viewports */}
-          <div className="ml-auto flex items-center gap-1.5 text-[10px] text-muted-foreground">
-            <RefreshCw className="w-3 h-3" />
-            <span>{lastUpdated ? `Last updated ${formatRelative(lastUpdated)}` : "Loading…"}</span>
-          </div>
         </div>
       </div>
 
@@ -2303,17 +2292,6 @@ function daysBetween(start: string, end: string): number {
   const s = new Date(start).getTime();
   const e = new Date(end).getTime();
   return Math.round((e - s) / 86_400_000);
-}
-
-function formatRelative(iso: string): string {
-  const diffMs = Date.now() - new Date(iso).getTime();
-  const mins = Math.round(diffMs / 60_000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.round(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  const days = Math.round(hrs / 24);
-  return `${days}d ago`;
 }
 
 function shortenName(name: string): string {

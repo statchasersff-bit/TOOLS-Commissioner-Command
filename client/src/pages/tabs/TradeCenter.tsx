@@ -1335,10 +1335,10 @@ export function TradeBlockScanner({ league }: { league: League }) {
       </div>
 
       {/* ── Mobile toggle ───────────────────────────────────────────────── */}
-      <div className="md:hidden flex justify-center sm:justify-start !mt-0">
+      <div className="md:hidden flex justify-center !mt-0">
         <div
-          className="grid w-full sm:w-auto"
-          style={{ gridTemplateColumns: "1fr 1fr", maxWidth: 420, height: 48, borderRadius: 16, padding: 4, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", gap: 4 }}
+          className="grid w-[90vw]"
+          style={{ gridTemplateColumns: "1fr 1fr", height: 48, borderRadius: 16, padding: 4, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", gap: 4 }}
         >
           {INTEL_TABS.map(({ id, label, Icon }) => {
             const isActive = intelMode === id;
@@ -3079,17 +3079,17 @@ export function TradeDatabase({ league }: { league: League }) {
         subtitle="Real dynasty trades contributed by the StatChasers community"
       />
 
-      <div className="flex items-start gap-3 p-3 rounded-lg bg-[#0b3a7a]/5 dark:bg-blue-400/5 border border-[#0b3a7a]/10 dark:border-blue-400/10" data-testid="trade-db-stats-banner">
+      <div className="flex items-start justify-center md:justify-start gap-3 p-3 rounded-lg bg-[#0b3a7a]/5 dark:bg-blue-400/5 border border-[#0b3a7a]/10 dark:border-blue-400/10" data-testid="trade-db-stats-banner">
         <Database className="w-4 h-4 text-[#0b3a7a] dark:text-blue-400 flex-shrink-0 mt-0.5" />
         {stats ? (
-          <p className="text-sm leading-snug">
+          <p className="text-sm leading-snug text-center md:text-left">
             <span className="font-bold text-[#d4af37]" data-testid="text-total-trades">{stats.totalTrades.toLocaleString()}</span>
             <span className="text-muted-foreground"> Real Trades | </span>
             <span className="font-bold text-[#d4af37]" data-testid="text-total-leagues">{stats.totalLeagues.toLocaleString()}</span>
             <span className="text-muted-foreground"> Leagues Scanned</span>
           </p>
         ) : (
-          <p className="text-sm text-muted-foreground">Loading database stats...</p>
+          <p className="text-sm text-muted-foreground text-center md:text-left">Loading database stats...</p>
         )}
       </div>
 

@@ -36,7 +36,7 @@ function getTabLabel(tab: string, sub: string): string {
     "roster-comparison": "Compare", "transactions": "Transactions",
     "trade-sync": "My Trades", "trade-database": "Database",
     "positional-analysis": "Finder", "trade-calculator": "Calculator",
-    "trade-block": "Intel", "analysis": "Analysis",
+    "trade-block": "Intel", "analysis": "Resources",
     "market-value": "Market Value", "compare-players": "Compare Players",
   };
   const tabName = labels[tab] ?? tab;

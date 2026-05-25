@@ -7,10 +7,11 @@
  * structure — labels, types, and default visibility are all data-driven.
  */
 
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { SectionHeader } from "@/components/SectionHeader";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import {
   ChevronDown,
@@ -18,7 +19,6 @@ import {
   ChevronsUpDown,
   GitCompare,
   Loader2,
-  Plus,
   Search,
   SlidersHorizontal,
   Table2,
@@ -37,6 +37,8 @@ import {
 type Position = "qb" | "rb" | "wr" | "te";
 type SeasonKey = "all" | "2023" | "2024" | "2025";
 type SortDir = "asc" | "desc";
+// One cell of the table's section super-header row.
+interface SuperHeaderSeg { label: string; span: number; sticky?: boolean; showLabel: boolean; divider: boolean }
 
 interface ColDef {
   key: string;
@@ -114,9 +116,9 @@ const QB_COLUMN_GROUPS: Record<string, string> = {
   airYards: "Volume / Usage", completedAirYards: "Volume / Usage", redZoneAttempts: "Volume / Usage",
   passingTouchdowns: "Volume / Usage", rushAttempts: "Volume / Usage", rushYards: "Volume / Usage",
   rushTouchdowns: "Volume / Usage",
-  airYardsPerAttempt: "Aggressiveness / Play Style",
-  completedAirYardsPerCompletion: "Aggressiveness / Play Style",
-  yardsPerCatch: "Aggressiveness / Play Style",
+  airYardsPerAttempt: "Aggressiveness",
+  completedAirYardsPerCompletion: "Aggressiveness",
+  yardsPerCatch: "Aggressiveness",
   completionPct: "Efficiency", onTargetPct: "Efficiency", poorThrows: "Efficiency",
   badThrowPct: "Efficiency", interceptions: "Efficiency", epaPerPlay: "Efficiency",
   successRate: "Efficiency", cpoe: "Efficiency",
@@ -196,7 +198,7 @@ const SECTION_ACCENTS: Record<string, string> = {
   "Volume / Usage":               "#f59e0b", // amber
   "Usage / Workload":             "#f59e0b",
   "Usage/Role":                   "#f59e0b",
-  "Aggressiveness / Play Style":  "#fb923c", // orange
+  "Aggressiveness":  "#fb923c", // orange
   "Efficiency":                   "#60a5fa", // blue
   "Production":                   "#34d399", // emerald
   "Explosiveness":                "#c084fc", // purple
@@ -212,6 +214,143 @@ const sectionAccent = (label: string): string => SECTION_ACCENTS[label] ?? "#94a
 // the gradient's end so a sticky label cell + filler cell stay seamless.
 const SECTION_BAR_GRADIENT = "linear-gradient(90deg, rgba(20,35,60,0.97) 0%, rgba(12,22,40,0.97) 100%)";
 const SECTION_BAR_END = "rgba(12,22,40,0.97)";
+
+// Hover-over explanation for each stat column (keyed by column key). Shown as a
+// tooltip on the column header (Data) and the stat-row label (Compare), the same
+// way composite-grade descriptions are surfaced.
+const STAT_DESCRIPTIONS: Record<string, string> = {
+  // Player info
+  position: "Position",
+  age: "Player age (years)",
+  games: "Games played",
+  fantasyPoints: "Total fantasy points scored",
+
+  // QB — volume / usage
+  attempts: "Pass attempts",
+  completions: "Completed passes",
+  passingYards: "Total passing yards",
+  airYards: "Air yards — total distance the ball traveled in the air on all attempts",
+  completedAirYards: "Completed air yards — air yards on completed passes only",
+  redZoneAttempts: "Pass attempts inside the opponent's 20-yard line",
+  passingTouchdowns: "Passing touchdowns",
+  rushAttempts: "Rushing attempts",
+  rushYards: "Rushing yards",
+  rushTouchdowns: "Rushing touchdowns",
+
+  // QB — aggressiveness / play style
+  completedAirYardsPerCompletion: "Completed air yards per completion — average depth of completed passes",
+  yardsPerCatch: "Passing yards per completion",
+
+  // QB — accuracy / efficiency
+  completionPct: "Completion percentage",
+  onTargetPct: "Share of throws placed on target (catchable)",
+  poorThrows: "Number of poorly thrown, uncatchable passes",
+  badThrowPct: "Share of attempts that were bad throws (lower is better)",
+  interceptions: "Interceptions thrown",
+  epaPerPlay: "Expected points added per play — efficiency vs. expectation",
+  successRate: "Share of plays that were 'successful' by EPA",
+  cpoe: "Completion % over expected — accuracy above league baseline",
+
+  // QB — explosiveness
+  passes10Plus: "Completions gaining 10+ yards",
+  passes20Plus: "Completions gaining 20+ yards",
+  passes30Plus: "Completions gaining 30+ yards",
+  passes40Plus: "Completions gaining 40+ yards",
+  passes50Plus: "Completions gaining 50+ yards",
+  longestPass: "Longest completion (yards)",
+  deepAttemptPct: "Share of attempts thrown deep (20+ air yards)",
+
+  // QB — pressure & pocket
+  pocketTime: "Average time in the pocket per dropback (seconds)",
+  timeToThrow: "Average time from snap to throw (seconds)",
+  throwaways: "Intentional throwaways",
+  battedPasses: "Passes batted down at the line",
+  scrambleRate: "Share of dropbacks that became scrambles",
+  yardsPerScramble: "Rushing yards per scramble",
+  hurries: "Times hurried by the pass rush",
+  blitzes: "Times blitzed",
+  knockdowns: "Times knocked down after throwing",
+  sacks: "Times sacked",
+  sackYardsLost: "Yards lost on sacks",
+  fumbles: "Fumbles",
+  pressurePct: "Share of dropbacks under pressure",
+  passesDropped: "Catchable passes dropped by receivers",
+
+  // RB — usage / workload
+  snapPct: "Share of team offensive snaps played",
+  routes: "Routes run",
+  redZoneOpportunities: "Carries + targets inside the opponent's 20",
+  goalLineCarries: "Carries inside the opponent's 5-yard line",
+  targets: "Targets",
+  targetSharePct: "Share of team targets",
+  receptions: "Receptions",
+  redZoneTargets: "Targets inside the opponent's 20",
+  endZoneTargets: "Targets thrown into the end zone",
+
+  // RB — production
+  yardsPerCarry: "Rushing yards per carry",
+  receivingYards: "Receiving yards",
+  yardsPerReception: "Yards per reception",
+  receivingYardsAfterCatch: "Receiving yards gained after the catch",
+  yardsPerRouteRun: "Receiving yards per route run",
+  receivingTouchdowns: "Receiving touchdowns",
+
+  // RB — explosive play ability
+  rushes10Plus: "Rushes gaining 10+ yards",
+  rushes20Plus: "Rushes gaining 20+ yards",
+  rushes30Plus: "Rushes gaining 30+ yards",
+  rushes40Plus: "Rushes gaining 40+ yards",
+  rushes50Plus: "Rushes gaining 50+ yards",
+  explosiveRunPct: "Share of carries gaining 10+ yards",
+  breakawayRunPct: "Share of rushing yards from runs of 15+ yards",
+  longestRush: "Longest rush (yards)",
+  longestRushTouchdown: "Longest rushing touchdown (yards)",
+
+  // RB — contact & tackle breaking
+  brokenTackles: "Broken/missed tackles forced",
+  rushAttemptsPerBrokenTackle: "Carries per broken tackle (lower = breaks tackles more often)",
+  yardsBeforeContactPerAttempt: "Rushing yards before contact per attempt",
+  yardsAfterContactPerAttempt: "Rushing yards after contact per attempt",
+  tackleEludedRate: "Share of tackles eluded",
+
+  // RB — ball security / negative plays
+  tacklesForLoss: "Times tackled for a loss",
+  tacklesForLossYards: "Yards lost on tackles for loss",
+  rushAttForNegativeYards: "Carries that lost yardage",
+
+  // WR / TE — usage / role
+  targetsPerRouteRun: "Targets per route run",
+  airYardsPerTarget: "Air yards per target — average depth of target",
+  airYardsSharePct: "Share of team air yards",
+  wopr: "Weighted Opportunity Rating — blends target share and air-yards share",
+  routePct: "Share of team pass plays on which the player ran a route",
+  airYardsPerReception: "Air yards per reception",
+
+  // WR / TE — production
+  yardsBeforeCatchPerReception: "Yards before the catch per reception (depth of catch)",
+  yardsAfterCatchPerReception: "Yards after the catch per reception",
+  totalYards: "Total yards (receiving + rushing)",
+
+  // WR / TE — hands
+  catchPct: "Catch rate — receptions per target",
+  contestedCatchRate: "Contested-catch rate",
+  catchableTargets: "Catchable targets",
+  drops: "Dropped passes (lower is better)",
+  dropPct: "Drop rate — drops per catchable target (lower is better)",
+  interceptionsWhenTargeted: "Interceptions on throws to this player (lower is better)",
+
+  // WR / TE — elusiveness
+  avoidedTackleRate: "Share of receptions on which a tackle was avoided",
+  receptionsPerBrokenTackle: "Receptions per broken tackle",
+
+  // WR / TE — explosiveness
+  receptions10Plus: "Receptions gaining 10+ yards",
+  receptions20Plus: "Receptions gaining 20+ yards",
+  receptions30Plus: "Receptions gaining 30+ yards",
+  receptions40Plus: "Receptions gaining 40+ yards",
+  receptions50Plus: "Receptions gaining 50+ yards",
+  longestReception: "Longest reception (yards)",
+};
 
 // ── Composite scores ───────────────────────────────────────────────────────────
 // Per-position grade engine: a function that scores the full pool of rows and
@@ -267,6 +406,12 @@ function getPlayerKey(row: Record<string, unknown>): string {
 function getPlayerName(row: Record<string, unknown>): string {
   return String(row.playerName ?? row.player_name ?? row.name ?? "—");
 }
+// "F. Last" — first initial + last name, to save space on non-desktop views.
+function getShortPlayerName(row: Record<string, unknown>): string {
+  const name = getPlayerName(row);
+  const parts = name.trim().split(/\s+/);
+  return parts.length >= 2 ? `${parts[0][0]}. ${parts.slice(1).join(" ")}` : name;
+}
 function getPlayerTeam(row: Record<string, unknown>): string {
   return String(row.team ?? row.nfl_team ?? "—");
 }
@@ -277,6 +422,148 @@ function SortIcon({ col, sortKey, sortDir }: { col: string; sortKey: string; sor
   return sortDir === "asc"
     ? <ChevronUp   className="w-3 h-3 text-[#d4af37] shrink-0" />
     : <ChevronDown className="w-3 h-3 text-[#d4af37] shrink-0" />;
+}
+
+// ── Compare player selector ───────────────────────────────────────────────────
+// A search combobox (mirrors the Compare Players tab) bound to one comparison
+// slot. Picking a player fills the slot; the X clears it.
+function ComparePlayerSelector({
+  label, players, excludeKeys, value, onChange,
+}: {
+  label: string;
+  players: Record<string, unknown>[];
+  excludeKeys: Set<string>;
+  value: string | null;
+  onChange: (id: string | null) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [open]);
+
+  const selected = value ? players.find((p) => getPlayerKey(p) === value) ?? null : null;
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return players
+      .filter((p) => {
+        if (excludeKeys.has(getPlayerKey(p))) return false; // chosen in another slot
+        if (!q) return true;
+        return (
+          getPlayerName(p).toLowerCase().includes(q) ||
+          getPlayerTeam(p).toLowerCase().includes(q)
+        );
+      })
+      .slice(0, 60);
+  }, [players, excludeKeys, query]);
+
+  return (
+    <div ref={ref} className="relative w-full" data-testid={`compare-selector-${label}`}>
+      <div
+        onClick={() => setOpen((o) => !o)}
+        className={cn(
+          "flex items-center gap-2 rounded-lg border px-2.5 h-9 cursor-pointer transition-colors",
+          open ? "border-[#d4af37]/60 bg-[#0b3a7a]/10" : "border-border bg-transparent hover:border-foreground/30",
+        )}
+      >
+        <Search className="w-3.5 h-3.5 text-muted-foreground/70 shrink-0" />
+        {open ? (
+          <input
+            autoFocus
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onClick={(e) => e.stopPropagation()}
+            placeholder="Search player…"
+            className="flex-1 min-w-0 bg-transparent text-xs text-foreground outline-none placeholder:text-muted-foreground/60"
+          />
+        ) : (
+          <span className={cn("flex-1 min-w-0 text-xs truncate", selected ? "text-foreground font-semibold" : "text-muted-foreground")}>
+            {selected ? getPlayerName(selected) : label}
+          </span>
+        )}
+        {selected && !open ? (
+          <button
+            onClick={(e) => { e.stopPropagation(); onChange(null); }}
+            className="text-muted-foreground hover:text-foreground shrink-0"
+            data-testid={`compare-selector-clear-${label}`}
+            aria-label={`Clear ${label}`}
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        ) : (
+          <ChevronDown className={cn("w-3.5 h-3.5 text-muted-foreground/70 shrink-0 transition-transform", open && "rotate-180")} />
+        )}
+      </div>
+
+      {open && (
+        <div className="absolute z-40 top-full mt-1 w-full rounded-lg border border-border bg-[hsl(var(--card))] shadow-xl max-h-64 overflow-y-auto">
+          {filtered.length === 0 ? (
+            <div className="px-3 py-2 text-[11px] text-muted-foreground italic">No players found.</div>
+          ) : (
+            filtered.map((p) => {
+              const key = getPlayerKey(p);
+              return (
+                <button
+                  key={key}
+                  onClick={() => { onChange(key); setOpen(false); setQuery(""); }}
+                  className={cn(
+                    "w-full flex items-center gap-2 px-3 py-1.5 text-left text-xs hover:bg-[#0b3a7a]/15 transition-colors",
+                    key === value && "bg-[#0b3a7a]/20",
+                  )}
+                  data-testid={`compare-selector-option-${key}`}
+                >
+                  <span className="font-medium text-foreground truncate flex-1">{getPlayerName(p)}</span>
+                  <span className="text-[10px] text-muted-foreground shrink-0">{getPlayerTeam(p)}</span>
+                </button>
+              );
+            })
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Section super-header row ──────────────────────────────────────────────────
+// Renders one gradient section-header row from a set of segments. Used for both
+// the desktop (Team column included) and mobile (Team omitted) variants.
+function SuperHeaderRow({ segments, className }: { segments: SuperHeaderSeg[]; className: string }) {
+  return (
+    <tr className={className}>
+      {segments.map((seg, i) => {
+        const accent = sectionAccent(seg.label);
+        return (
+          <th
+            key={`grp-${i}`}
+            colSpan={seg.span}
+            className={cn(
+              "px-3 py-2 text-center font-extrabold uppercase text-[10px]",
+              seg.sticky && "sticky left-0 z-30",
+            )}
+            style={{
+              background: SECTION_BAR_GRADIENT,
+              color: seg.showLabel ? accent : undefined,
+              letterSpacing: "0.12em",
+              // Coloured left accent only at the start of a new section
+              borderLeft: seg.divider ? `3px solid ${accent}` : undefined,
+              borderTop: "1px solid rgba(255,255,255,0.08)",
+              borderBottom: "1px solid rgba(255,255,255,0.06)",
+            }}
+          >
+            {seg.showLabel ? seg.label : null}
+          </th>
+        );
+      })}
+    </tr>
+  );
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -293,12 +580,13 @@ export default function PositionStats() {
   const [visibleCols, setVisibleCols] = useState<Set<string>>(new Set());
   const [showColPanel, setShowColPanel] = useState(false);
   // Compare sub-tab: a fixed set of MAX_COMPARE slots, each holding a player key
-  // (or null when empty). openSlot is the slot whose picker dropdown is open.
+  // (or null when empty).
   const [compareSlots, setCompareSlots] = useState<(string | null)[]>(() =>
     Array(MAX_COMPARE).fill(null),
   );
-  const [openSlot, setOpenSlot] = useState<number | null>(null);
-  const [slotQuery, setSlotQuery] = useState("");
+  // Non-desktop is capped to 3 players to fit; desktop allows the full MAX_COMPARE.
+  const isMobile = useIsMobile();
+  const maxCompare = isMobile ? 3 : MAX_COMPARE;
 
   // Load the JSON file whenever position or season changes
   useEffect(() => {
@@ -315,8 +603,6 @@ export default function PositionStats() {
     setSearch("");
     setShowColPanel(false);
     setCompareSlots(Array(MAX_COMPARE).fill(null));
-    setOpenSlot(null);
-    setSlotQuery("");
 
     loader()
       .then((mod) => {
@@ -397,25 +683,41 @@ export default function PositionStats() {
 
   // Super-header segments: contiguous column groups → colspans. The first two
   // rendered columns (# and Player) are frozen, so they get their own sticky cell.
-  const groupSegments = useMemo(() => {
+  // Super-header section bars. Desktop includes the Team column; mobile omits it
+  // (Team is shown inline next to the player name there), so colspans stay aligned
+  // with the columns actually rendered at each breakpoint.
+  const { groupSegments, groupSegmentsMobile } = useMemo(() => {
     const groupMap = COLUMN_GROUPS_BY_POSITION[position];
-    if (!groupMap) return [];
-    const seq = ["rank", "playerName", "team", ...activeCols.map((c) => c.key)];
-    const segs: { label: string; span: number; sticky?: boolean; showLabel: boolean }[] = [];
-    for (const key of seq) {
-      const label = groupMap[key] ?? "";
-      const last = segs[segs.length - 1];
-      if (last && last.label === label) last.span += 1;
-      else segs.push({ label, span: 1, showLabel: true });
-    }
-    // Split off the two frozen columns into a sticky cell that pins to the left.
-    const first = segs[0];
-    if (first && first.span >= 2) {
-      const rest = first.span - 2;
-      segs[0] = { label: first.label, span: 2, sticky: true, showLabel: true };
-      if (rest > 0) segs.splice(1, 0, { label: first.label, span: rest, showLabel: false });
-    }
-    return segs;
+    if (!groupMap) return { groupSegments: [] as SuperHeaderSeg[], groupSegmentsMobile: [] as SuperHeaderSeg[] };
+    const build = (includeTeam: boolean): SuperHeaderSeg[] => {
+      const seq = includeTeam
+        ? ["rank", "playerName", "team", ...activeCols.map((c) => c.key)]
+        : ["rank", "playerName", ...activeCols.map((c) => c.key)];
+      // Merge contiguous columns that share a group label.
+      const groups: { label: string; span: number }[] = [];
+      for (const key of seq) {
+        const label = groupMap[key] ?? "";
+        const last = groups[groups.length - 1];
+        if (last && last.label === label) last.span += 1;
+        else groups.push({ label, span: 1 });
+      }
+      // The first two columns (#, Player) are frozen, so split them into a sticky
+      // cell. The group's label sits on the wider non-sticky portion so the whole
+      // group (Team, POS, Age, G, FPTS, …) reads under one header. `divider` marks
+      // the start of a *new* group (the coloured left accent bar).
+      const segs: SuperHeaderSeg[] = [];
+      groups.forEach((g, gi) => {
+        if (gi === 0 && g.span >= 2) {
+          const rest = g.span - 2;
+          segs.push({ label: g.label, span: 2, sticky: true, showLabel: rest === 0, divider: false });
+          if (rest > 0) segs.push({ label: g.label, span: rest, showLabel: true, divider: false });
+        } else {
+          segs.push({ label: g.label, span: g.span, showLabel: true, divider: gi > 0 });
+        }
+      });
+      return segs;
+    };
+    return { groupSegments: build(true), groupSegmentsMobile: build(false) };
   }, [position, activeCols]);
 
   // Keys of the stat columns that begin a new group — used to draw a vertical
@@ -487,26 +789,11 @@ export default function PositionStats() {
     if (!scoredData) return [];
     const byKey = new Map(scoredData.rows.map((r) => [getPlayerKey(r), r]));
     return compareSlots
+      .slice(0, maxCompare)
       .filter((id): id is string => id != null)
       .map((id) => byKey.get(id))
       .filter((r): r is Record<string, unknown> => r != null);
-  }, [scoredData, compareSlots]);
-
-  // Players selectable in the currently-open slot picker: the pool minus anyone
-  // already chosen in another slot, filtered by the picker's own search box.
-  const slotMatches = useMemo(() => {
-    if (!scoredData || openSlot == null) return [];
-    const selected = new Set(compareSlots.filter((id): id is string => id != null));
-    const q = slotQuery.trim().toLowerCase();
-    return scoredData.rows.filter((row) => {
-      if (selected.has(getPlayerKey(row))) return false;
-      if (!q) return true;
-      return (
-        getPlayerName(row).toLowerCase().includes(q) ||
-        getPlayerTeam(row).toLowerCase().includes(q)
-      );
-    });
-  }, [scoredData, openSlot, slotQuery, compareSlots]);
+  }, [scoredData, compareSlots, maxCompare]);
 
   // Visible stat columns bucketed by super-header group (the compare table's rows).
   const compareGroups = useMemo(() => {
@@ -521,18 +808,9 @@ export default function PositionStats() {
     return order.map((label) => ({ label, cols: byLabel.get(label)! }));
   }, [activeCols, position]);
 
-  const openSlotPicker = (index: number) => {
-    setOpenSlot((cur) => (cur === index ? null : index));
-    setSlotQuery("");
-  };
-  const assignSlot = (index: number, row: Record<string, unknown>) => {
-    const id = getPlayerKey(row);
+  // Set (or clear) the player in a given comparison slot.
+  const setSlot = (index: number, id: string | null) =>
     setCompareSlots((prev) => prev.map((s, i) => (i === index ? id : s)));
-    setOpenSlot(null);
-    setSlotQuery("");
-  };
-  const clearSlot = (index: number) =>
-    setCompareSlots((prev) => prev.map((s, i) => (i === index ? null : s)));
   // Clear whichever slot currently holds this player (used by the table's
   // column-header remove button).
   const removeById = (id: string) =>
@@ -596,7 +874,7 @@ export default function PositionStats() {
     <div className="space-y-5">
       <div className="flex items-start justify-between gap-4">
         <SectionHeader
-          title="Position Stats"
+          title="Advanced Stats"
           subtitle="Advanced stats leaderboard — sortable, searchable, with customizable columns."
         />
         <div
@@ -608,10 +886,10 @@ export default function PositionStats() {
       </div>
 
       {/* Mobile sub-tab toggle */}
-      <div className="md:hidden flex justify-center sm:justify-start">
+      <div className="md:hidden flex justify-center">
         <div
-          className="grid w-full sm:w-auto"
-          style={{ gridTemplateColumns: "1fr 1fr", maxWidth: 420, height: 48, borderRadius: 16, padding: 4, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", gap: 4 }}
+          className="grid w-[90vw]"
+          style={{ gridTemplateColumns: "1fr 1fr", height: 48, borderRadius: 16, padding: 4, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", gap: 4 }}
         >
           {renderSubTabToggle("stats-subtab-mobile")}
         </div>
@@ -777,7 +1055,7 @@ export default function PositionStats() {
           <p className="text-[10px] text-muted-foreground/55 leading-none">
             {position.toUpperCase()} · {season === "all" ? "All Seasons" : `${season} Season`}
             {subTab === "compare"
-              ? ` · comparing ${compareRows.length} of ${MAX_COMPARE} players`
+              ? ` · comparing ${compareRows.length} of ${maxCompare} players`
               : ` · ${rows.length} of ${data.rows.length} players`}
             {updatedAt && ` · Updated ${updatedAt}`}
           </p>
@@ -802,112 +1080,32 @@ export default function PositionStats() {
         </Card>
       )}
 
-      {/* ── Compare sub-tab — slot pickers + transposed table ───────────── */}
+      {/* ── Compare sub-tab — selectors + transposed table ──────────────── */}
       {!loading && !error && data && subTab === "compare" && (
         <div className="space-y-5">
 
-          {/* Player slot pickers: MAX_COMPARE slots, each a "+ Add player"
-              dropdown when empty or a filled chip with a clear button. */}
+          {/* Player selectors — one search combobox per slot (Compare Players style). */}
           <Card className="p-4" data-testid="compare-slots">
             <span className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-2">
-              Players · {compareRows.length} of {MAX_COMPARE}
+              Players · {compareRows.length} of {maxCompare}
             </span>
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
-              {compareSlots.map((slotId, i) => {
-                const row = slotId ? scoredData?.rows.find((r) => getPlayerKey(r) === slotId) : null;
-                const isOpen = openSlot === i;
-                return (
-                  <div key={i} className="relative">
-                    {row ? (
-                      <div
-                        className="flex items-center justify-between gap-1.5 h-10 px-2.5 rounded-md border border-[#0b3a7a]/40 bg-[#0b3a7a]/12"
-                        data-testid={`compare-slot-${i}`}
-                      >
-                        <span className="min-w-0">
-                          <span className="block truncate text-xs font-semibold text-foreground">{getPlayerName(row)}</span>
-                          <span className="block text-[10px] text-muted-foreground leading-none">{getPlayerTeam(row)}</span>
-                        </span>
-                        <button
-                          onClick={() => clearSlot(i)}
-                          className="shrink-0 text-muted-foreground/70 hover:text-foreground"
-                          data-testid={`compare-slot-clear-${i}`}
-                          aria-label={`Clear player slot ${i + 1}`}
-                        >
-                          <X className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    ) : (
-                      <button
-                        onClick={() => openSlotPicker(i)}
-                        className={cn(
-                          "flex items-center justify-center gap-1.5 w-full h-10 rounded-md border border-dashed text-xs font-semibold transition-colors",
-                          isOpen
-                            ? "border-[#0b3a7a] text-foreground bg-[#0b3a7a]/10"
-                            : "border-border text-muted-foreground hover:border-foreground/40 hover:text-foreground",
-                        )}
-                        data-testid={`compare-slot-add-${i}`}
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                        Add player
-                      </button>
-                    )}
-
-                    {/* Per-slot player picker dropdown */}
-                    {isOpen && (
-                      <>
-                        <div className="fixed inset-0 z-30" onClick={() => setOpenSlot(null)} data-testid="compare-slot-backdrop" />
-                        <div className="absolute left-0 right-0 top-full mt-1 z-40 rounded-md border border-border bg-[hsl(var(--card))] shadow-lg overflow-hidden">
-                          <div className="relative border-b border-border/50">
-                            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground/60 pointer-events-none" />
-                            <Input
-                              autoFocus
-                              value={slotQuery}
-                              onChange={(e) => setSlotQuery(e.target.value)}
-                              placeholder={`Search ${position.toUpperCase()}…`}
-                              className="pl-8 h-8 text-xs border-0 rounded-none focus-visible:ring-0"
-                              data-testid={`compare-slot-search-${i}`}
-                            />
-                          </div>
-                          <div className="max-h-60 overflow-y-auto">
-                            {slotMatches.length === 0 ? (
-                              <p className="px-3 py-2 text-[11px] text-muted-foreground italic">No players found.</p>
-                            ) : (
-                              slotMatches.map((pr) => {
-                                const pid = getPlayerKey(pr);
-                                return (
-                                  <button
-                                    key={pid}
-                                    onClick={() => assignSlot(i, pr)}
-                                    className="w-full flex items-center justify-between gap-2 px-3 py-1.5 text-left text-xs hover:bg-[#0b3a7a]/10 transition-colors"
-                                    data-testid={`compare-slot-option-${i}-${pid}`}
-                                  >
-                                    <span className="font-medium text-foreground truncate">{getPlayerName(pr)}</span>
-                                    <span className="text-[10px] text-muted-foreground shrink-0">{getPlayerTeam(pr)}</span>
-                                  </button>
-                                );
-                              })
-                            )}
-                          </div>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                );
-              })}
+              {compareSlots.slice(0, maxCompare).map((slotId, i) => (
+                <ComparePlayerSelector
+                  key={i}
+                  label={`Player ${i + 1}`}
+                  players={scoredData?.rows ?? []}
+                  excludeKeys={new Set(compareSlots.slice(0, maxCompare).filter((id, j): id is string => id != null && j !== i))}
+                  value={slotId}
+                  onChange={(id) => setSlot(i, id)}
+                />
+              ))}
             </div>
           </Card>
 
-          {/* Comparison table (or hints) */}
-          {compareRows.length === 0 ? (
-            <Card className="p-10 text-center" data-testid="compare-empty">
-              <GitCompare className="w-7 h-7 text-muted-foreground/60 mx-auto mb-3" />
-              <p className="text-sm font-semibold text-foreground mb-1">Compare players side-by-side</p>
-              <p className="text-xs text-muted-foreground max-w-md mx-auto">
-                Add up to {MAX_COMPARE} {position.toUpperCase()}s using the slots above. Stats run down
-                the rows so you can scan each metric across players. Use Columns to choose which stats appear.
-              </p>
-            </Card>
-          ) : activeCols.length === 0 ? (
+          {/* Comparison table: stat rows are preloaded on the left; player
+              columns appear as selections are made. */}
+          {activeCols.length === 0 ? (
             <Card className="p-10 text-center" data-testid="compare-no-cols">
               <p className="text-xs text-amber-500/80 italic">
                 No stat columns visible — open Columns to add some.
@@ -922,7 +1120,14 @@ export default function PositionStats() {
                     <th className="sticky left-0 z-20 bg-[hsl(var(--card))] px-3 py-2.5 text-left font-bold uppercase tracking-wider text-[10px] text-muted-foreground border-r border-border/25 min-w-[150px]">
                       Stat
                     </th>
-                    {compareRows.map((r) => {
+                    {compareRows.length === 0 ? (
+                      <th
+                        className="px-4 py-2.5 text-left text-[11px] font-medium text-muted-foreground/45 italic min-w-[220px] border-l border-border/25"
+                        data-testid="compare-empty-hint"
+                      >
+                        Select players above to compare →
+                      </th>
+                    ) : compareRows.map((r) => {
                       const id = getPlayerKey(r);
                       return (
                         <th
@@ -933,7 +1138,8 @@ export default function PositionStats() {
                           <div className="flex items-start justify-end gap-1.5">
                             <span className="flex flex-col items-end">
                               <span className="text-foreground font-semibold normal-case text-xs">
-                                {getPlayerName(r)}
+                                <span className="hidden md:inline">{getPlayerName(r)}</span>
+                                <span className="md:hidden">{getShortPlayerName(r)}</span>
                               </span>
                               <span className="text-[10px] font-normal text-muted-foreground">
                                 {getPlayerTeam(r)}
@@ -961,7 +1167,7 @@ export default function PositionStats() {
                       {/* Vertical separation before each section (not the first) */}
                       {gi > 0 && (
                         <tr aria-hidden="true">
-                          <td colSpan={1 + compareRows.length} className="p-0">
+                          <td colSpan={1 + Math.max(compareRows.length, 1)} className="p-0">
                             <div className="h-4" />
                           </td>
                         </tr>
@@ -987,7 +1193,7 @@ export default function PositionStats() {
                           </td>
                           {/* Filler cell continues the bar across the player columns */}
                           <td
-                            colSpan={compareRows.length}
+                            colSpan={Math.max(compareRows.length, 1)}
                             style={{
                               background: SECTION_BAR_END,
                               borderTop: "1px solid rgba(255,255,255,0.08)",
@@ -1022,15 +1228,18 @@ export default function PositionStats() {
                           >
                             <td
                               style={{ background: stickyBg }}
-                              title={isScore ? scoreDescByKey[col.key] : undefined}
+                              title={isScore ? scoreDescByKey[col.key] : STAT_DESCRIPTIONS[col.key]}
                               className={cn(
                                 "sticky left-0 z-10 px-3 py-2 whitespace-nowrap border-r border-border/25",
-                                isScore ? "font-semibold text-foreground/90 cursor-help" : "font-medium text-muted-foreground",
+                                isScore ? "font-semibold text-foreground/90" : "font-medium text-muted-foreground",
+                                (isScore ? scoreDescByKey[col.key] : STAT_DESCRIPTIONS[col.key]) && "cursor-help",
                               )}
                             >
                               {col.label}
                             </td>
-                            {compareRows.map((r) => {
+                            {compareRows.length === 0 ? (
+                              <td className="px-3 py-2 text-right text-muted-foreground/25 border-l border-border/25">—</td>
+                            ) : compareRows.map((r) => {
                               const raw = r[col.key];
                               const isEmpty = raw == null;
                               const isLeader = hasLeader && !isEmpty && numVal(raw) === max;
@@ -1062,8 +1271,9 @@ export default function PositionStats() {
             </div>
             <div className="px-4 py-2.5 border-t border-border/25 bg-muted/10">
               <p className="text-[10px] text-muted-foreground/60">
-                Comparing {compareRows.length} of {MAX_COMPARE} player{compareRows.length !== 1 ? "s" : ""}
-                {compareRows.length > 1 && " · highest value in each stat highlighted"}
+                {compareRows.length === 0
+                  ? `Select up to ${maxCompare} players to compare`
+                  : `Comparing ${compareRows.length} of ${maxCompare} player${compareRows.length !== 1 ? "s" : ""}${compareRows.length > 1 ? " · highest value in each stat highlighted" : ""}`}
               </p>
             </div>
           </Card>
@@ -1077,34 +1287,12 @@ export default function PositionStats() {
           <div className="overflow-x-auto">
             <table className="w-full text-xs border-collapse" data-testid="stats-table">
               <thead>
-                {/* Super-headers (desktop only; mobile hides the Team column) */}
+                {/* Section super-headers — desktop includes Team, mobile omits it */}
                 {groupSegments.length > 0 && (
-                  <tr className="hidden md:table-row">
-                    {groupSegments.map((seg, i) => {
-                      const accent = sectionAccent(seg.label);
-                      return (
-                      <th
-                        key={`grp-${i}`}
-                        colSpan={seg.span}
-                        className={cn(
-                          "px-3 py-2 text-center font-extrabold uppercase text-[10px]",
-                          seg.sticky && "sticky left-0 z-30",
-                        )}
-                        style={{
-                          background: SECTION_BAR_GRADIENT,
-                          color: seg.showLabel ? accent : undefined,
-                          letterSpacing: "0.12em",
-                          // Coloured left accent at the start of each labelled section
-                          borderLeft: seg.showLabel && i > 0 ? `3px solid ${accent}` : undefined,
-                          borderTop: "1px solid rgba(255,255,255,0.08)",
-                          borderBottom: "1px solid rgba(255,255,255,0.06)",
-                        }}
-                      >
-                        {seg.showLabel ? seg.label : null}
-                      </th>
-                      );
-                    })}
-                  </tr>
+                  <SuperHeaderRow segments={groupSegments} className="hidden md:table-row" />
+                )}
+                {groupSegmentsMobile.length > 0 && (
+                  <SuperHeaderRow segments={groupSegmentsMobile} className="md:hidden" />
                 )}
                 <tr className="border-b border-border/50 bg-muted/25">
                   {/* # (rank) */}
@@ -1142,7 +1330,7 @@ export default function PositionStats() {
                     <th
                       key={col.key}
                       onClick={() => handleSort(col.key)}
-                      title={scoreKeySet.has(col.key) ? scoreDescByKey[col.key] : undefined}
+                      title={scoreKeySet.has(col.key) ? scoreDescByKey[col.key] : STAT_DESCRIPTIONS[col.key]}
                       className={cn(
                         "px-3 py-2.5 text-right font-bold uppercase tracking-wider text-[10px] cursor-pointer hover:text-foreground transition-colors whitespace-nowrap",
                         sortKey === col.key
@@ -1176,8 +1364,9 @@ export default function PositionStats() {
                     const rank = row.rank as number | undefined;
                     const name = String(row.playerName ?? row.player_name ?? row.name ?? "—");
                     const team = String(row.team ?? row.nfl_team ?? "—");
-                    // Mobile shows "F. Last" (first initial + last name); fall back
-                    // to the raw name when it isn't a simple two-part name.
+                    // Non-desktop shows "F. Last" (first initial + last name) to save
+                    // space; falls back to the raw name when it isn't a simple
+                    // two-part name.
                     const nameParts = name.trim().split(/\s+/);
                     const shortName = nameParts.length >= 2
                       ? `${nameParts[0][0]}. ${nameParts.slice(1).join(" ")}`
@@ -1208,7 +1397,7 @@ export default function PositionStats() {
                           style={{ background: stickyBg }}
                           className="sticky left-10 z-10 px-3 py-2 font-semibold text-foreground whitespace-nowrap border-r border-border/25 min-w-[148px]"
                         >
-                          {/* Desktop: full name. Mobile: "F. Last" + faint team. */}
+                          {/* Desktop: full name. Non-desktop: "F. Last" + faint team. */}
                           <span className="hidden md:inline">{name}</span>
                           <span className="md:hidden">
                             {shortName}

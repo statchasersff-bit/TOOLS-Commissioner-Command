@@ -66,13 +66,13 @@
     },
     {
       "key": "airYards",
-      "label": "Air YDS",
+      "label": "AY",
       "type": "number",
       "defaultVisible": true
     },
     {
       "key": "completedAirYards",
-      "label": "Comp Air YDS",
+      "label": "Comp AY",
       "type": "number",
       "defaultVisible": true
     },

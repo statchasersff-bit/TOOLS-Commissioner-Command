@@ -39,7 +39,7 @@ export default function Analysis() {
   return (
     <div className="space-y-6">
       <SectionHeader
-        title="Analysis Tools"
+        title="Resources"
         subtitle="Deep research and advanced analytics from StatChasers"
       />
 

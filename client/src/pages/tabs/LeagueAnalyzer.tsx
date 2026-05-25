@@ -688,10 +688,6 @@ export function RosterComparison({ league }: AnalyzerProps) {
     const next = league.teams.find((t) => !selectedIds.includes(t.id));
     if (next) setSelectedIds((prev) => [...prev, next.id]);
   };
-  const clearAll = () => {
-    setLimitMsg(null);
-    setSelectedIds([]);
-  };
 
   const showTaxi = includeBench && (league.taxiSlots ?? 0) > 0 && breakdowns.some((b) => b.taxi.length > 0);
   const showIR = includeBench && (league.irSlots ?? 0) > 0 && breakdowns.some((b) => b.ir.length > 0);
@@ -716,12 +712,25 @@ export function RosterComparison({ league }: AnalyzerProps) {
       {/* ── Controls strip ───────────────────────────────────────────────── */}
       <Card className="p-3 md:p-4">
         <div className="flex flex-wrap items-center gap-3">
-          {/* Team selectors */}
-          <div className="flex flex-wrap items-center gap-2">
+          {/* Team selectors — all slots share one row (flex-1 on mobile, fixed
+              width on desktop). The remove "X" sits above each dropdown, and
+              "Add manager" only shows below the max. */}
+          <div className="flex items-end gap-1.5 w-full md:w-auto">
             {selectedIds.map((id, idx) => (
-              <div key={`slot-${idx}`} className="flex items-center gap-1">
+              <div key={`slot-${idx}`} className="flex flex-col gap-0.5 flex-1 md:flex-none md:w-[170px] min-w-0">
+                {selectedIds.length > 2 && (
+                  <button
+                    type="button"
+                    onClick={() => removeSlot(idx)}
+                    className="self-end -mb-0.5 text-muted-foreground hover:text-foreground p-0.5 rounded-md hover:bg-muted/40"
+                    aria-label={`Remove team ${idx + 1}`}
+                    data-testid={`compare-team-remove-${idx}`}
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
                 <Select value={id} onValueChange={(v) => updateSlot(idx, v)}>
-                  <SelectTrigger className="h-8 w-[170px] text-xs" data-testid={`compare-team-select-${idx}`}>
+                  <SelectTrigger className="h-8 w-full min-w-0 text-xs" data-testid={`compare-team-select-${idx}`}>
                     <SelectValue placeholder="Pick a manager" />
                   </SelectTrigger>
                   <SelectContent>
@@ -732,83 +741,65 @@ export function RosterComparison({ league }: AnalyzerProps) {
                     ))}
                   </SelectContent>
                 </Select>
-                {selectedIds.length > 2 && (
-                  <button
-                    type="button"
-                    onClick={() => removeSlot(idx)}
-                    className="text-muted-foreground hover:text-foreground p-1 rounded-md hover:bg-muted/40"
-                    aria-label={`Remove team ${idx + 1}`}
-                    data-testid={`compare-team-remove-${idx}`}
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                )}
               </div>
             ))}
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 gap-1.5"
-              onClick={addSlot}
-              disabled={selectedIds.length >= COMPARE_MAX}
-              data-testid="compare-add-team"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              Add manager
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-8 text-muted-foreground"
-              onClick={clearAll}
-              data-testid="compare-clear"
-            >
-              Clear all
-            </Button>
-          </div>
-
-          <div className="flex-1" />
-
-          {/* Value mode + include toggles */}
-          <div className="flex items-center gap-1 rounded-md border border-border/60 p-0.5">
-            {(["dynasty", "redraft", "both"] as const).map((mode) => (
-              <button
-                key={mode}
-                type="button"
-                onClick={() => setValueMode(mode)}
-                className={cn(
-                  "text-[11px] px-2.5 py-1 rounded-sm font-semibold transition-colors",
-                  valueMode === mode
-                    ? "bg-[#d4af37] text-[#060d1a]"
-                    : "text-muted-foreground hover:text-foreground"
-                )}
-                data-testid={`compare-value-mode-${mode}`}
+            {selectedIds.length < COMPARE_MAX && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 gap-1.5 shrink-0"
+                onClick={addSlot}
+                data-testid="compare-add-team"
               >
-                {mode === "dynasty" ? "Dynasty" : mode === "redraft" ? "Win-Now" : "Both"}
-              </button>
-            ))}
+                <Plus className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Add manager</span>
+                <span className="sm:hidden">Add</span>
+              </Button>
+            )}
           </div>
 
-          <label className="inline-flex items-center gap-1.5 text-[11px] cursor-pointer">
-            <input
-              type="checkbox"
-              checked={includePicks}
-              onChange={(e) => setIncludePicks(e.target.checked)}
-              className="w-3.5 h-3.5"
-              data-testid="compare-include-picks"
-            />
-            <span>Picks</span>
-          </label>
-          <label className="inline-flex items-center gap-1.5 text-[11px] cursor-pointer">
-            <input
-              type="checkbox"
-              checked={includeBench}
-              onChange={(e) => setIncludeBench(e.target.checked)}
-              className="w-3.5 h-3.5"
-              data-testid="compare-include-bench"
-            />
-            <span>Taxi / IR</span>
-          </label>
+          {/* Value mode + include toggles — centered on non-desktop, right-aligned on desktop */}
+          <div className="flex flex-wrap items-center justify-center gap-3 w-full md:w-auto md:ml-auto">
+            <div className="flex items-center gap-1 rounded-md border border-border/60 p-0.5">
+              {(["dynasty", "redraft", "both"] as const).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => setValueMode(mode)}
+                  className={cn(
+                    "text-[11px] px-2.5 py-1 rounded-sm font-semibold transition-colors",
+                    valueMode === mode
+                      ? "bg-[#d4af37] text-[#060d1a]"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                  data-testid={`compare-value-mode-${mode}`}
+                >
+                  {mode === "dynasty" ? "Dynasty" : mode === "redraft" ? "Win-Now" : "Both"}
+                </button>
+              ))}
+            </div>
+
+            <label className="inline-flex items-center gap-1.5 text-[11px] cursor-pointer">
+              <input
+                type="checkbox"
+                checked={includePicks}
+                onChange={(e) => setIncludePicks(e.target.checked)}
+                className="w-3.5 h-3.5"
+                data-testid="compare-include-picks"
+              />
+              <span>Picks</span>
+            </label>
+            <label className="inline-flex items-center gap-1.5 text-[11px] cursor-pointer">
+              <input
+                type="checkbox"
+                checked={includeBench}
+                onChange={(e) => setIncludeBench(e.target.checked)}
+                className="w-3.5 h-3.5"
+                data-testid="compare-include-bench"
+              />
+              <span>Taxi / IR</span>
+            </label>
+          </div>
         </div>
 
         {limitMsg && (
@@ -851,15 +842,13 @@ export function RosterComparison({ league }: AnalyzerProps) {
           )}
 
           {/* ── Team columns ───────────────────────────────────────────────── */}
-          {/* Mobile: horizontal scroll. Desktop: equal columns 2 or 3 wide. */}
-          <div className="overflow-x-auto -mx-2 px-2 pb-2">
+          {/* Equal columns that shrink to fit the viewport (no horizontal scroll);
+              columns get a comfortable min width only from md up. */}
+          <div className="-mx-2 px-2 pb-2">
             <div
-              className={cn(
-                "grid gap-3 md:gap-4",
-                breakdowns.length === 2 ? "md:grid-cols-2" : "md:grid-cols-3"
-              )}
+              className="grid gap-2 sm:gap-3 md:gap-4"
               style={{
-                gridTemplateColumns: `repeat(${breakdowns.length}, minmax(280px, 1fr))`,
+                gridTemplateColumns: `repeat(${breakdowns.length}, minmax(0, 1fr))`,
               }}
             >
               {breakdowns.map((b) => (
@@ -1026,19 +1015,15 @@ function TeamColumn({
             </Badge>
           )}
         </div>
-        <div className="grid grid-cols-3 gap-2 mt-2 text-[10px]">
-          <div className="flex flex-col">
-            <span className="text-muted-foreground uppercase tracking-wider">Dynasty</span>
-            <span className="font-bold tabular-nums">{compactValue(totalDyn)}</span>
-          </div>
-          <div className="flex flex-col">
-            <span className="text-muted-foreground uppercase tracking-wider">Win-Now</span>
-            <span className="font-bold tabular-nums">{compactValue(totalRed)}</span>
-          </div>
-          <div className="flex flex-col">
-            <span className="text-muted-foreground uppercase tracking-wider">Avg Age</span>
-            <span className="font-bold tabular-nums">{avgAge > 0 ? avgAge.toFixed(1) : "—"}</span>
-          </div>
+        {/* Labels in row 1, values in row 2 — so the three values always align
+            on the same row even when a label wraps to two lines. */}
+        <div className="grid grid-cols-3 gap-x-2 gap-y-0.5 mt-2 text-[10px]">
+          <span className="text-muted-foreground uppercase tracking-wider self-end">DYN</span>
+          <span className="text-muted-foreground uppercase tracking-wider self-end">Win-Now</span>
+          <span className="text-muted-foreground uppercase tracking-wider self-end">Avg Age</span>
+          <span className="font-bold tabular-nums">{compactValue(totalDyn)}</span>
+          <span className="font-bold tabular-nums">{compactValue(totalRed)}</span>
+          <span className="font-bold tabular-nums">{avgAge > 0 ? avgAge.toFixed(1) : "—"}</span>
         </div>
       </Card>
 
@@ -1210,6 +1195,12 @@ function PlayerRow({
   const showDyn = valueMode === "dynasty" || valueMode === "both";
   const showRed = valueMode === "redraft" || valueMode === "both";
   const { openPlayerProfile } = usePlayerProfile();
+  // Non-desktop shows "F. Last" (first initial + last name) to save horizontal
+  // space; falls back to the raw name when it isn't a simple two-part name.
+  const nameParts = player.name.trim().split(/\s+/);
+  const shortName = nameParts.length >= 2
+    ? `${nameParts[0][0]}. ${nameParts.slice(1).join(" ")}`
+    : player.name;
   return (
     <div
       role="button"
@@ -1219,10 +1210,13 @@ function PlayerRow({
       className="flex items-center gap-2 py-1 px-1 rounded-md hover:bg-muted/40 cursor-pointer transition-colors"
       data-testid={`compare-player-${player.id}`}
     >
-      <span className="text-[10px] text-muted-foreground w-4 tabular-nums flex-shrink-0">{index}.</span>
+      <span className="hidden md:block text-[10px] text-muted-foreground w-4 tabular-nums flex-shrink-0">{index}.</span>
       <PlayerAvatar id={player.sleeperId || player.id} name={player.name} pos={player.pos} team={player.team} size="xs" compact />
       <div className="min-w-0 flex-1">
-        <p className="text-[11px] font-semibold truncate leading-tight">{player.name}</p>
+        <p className="text-[11px] font-semibold truncate leading-tight">
+          <span className="hidden md:inline">{player.name}</span>
+          <span className="md:hidden">{shortName}</span>
+        </p>
         <p className="text-[9px] text-muted-foreground leading-tight">
           {player.pos}{player.team ? ` · ${player.team}` : ""}{player.age > 0 ? ` · ${player.age}` : ""}
         </p>

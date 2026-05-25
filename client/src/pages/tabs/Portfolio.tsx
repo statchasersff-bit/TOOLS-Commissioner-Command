@@ -734,8 +734,8 @@ export function PortfolioSummary({ onNavigate }: { onNavigate?: (mainTab: string
           <SectionHeader title="League Finances" subtitle="Track buy-ins, prizes, and ROI across your leagues" />
           <div className="hidden md:block pt-1">{portfolioToggle}</div>
         </div>
-        <div className="md:hidden flex justify-center sm:justify-start !mt-0">
-          <div className="grid w-full sm:w-auto" style={{ gridTemplateColumns: "1fr 1fr", maxWidth: 420, height: 48, borderRadius: 16, padding: 4, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", gap: 4 }}>
+        <div className="md:hidden flex justify-center !mt-0">
+          <div className="grid w-[90vw]" style={{ gridTemplateColumns: "1fr 1fr", height: 48, borderRadius: 16, padding: 4, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", gap: 4 }}>
             {(["overview", "finances"] as const).map((tab) => {
               const isActive = innerTab === tab;
               const Icon = tab === "overview" ? BarChart3 : Coins;
@@ -770,8 +770,8 @@ export function PortfolioSummary({ onNavigate }: { onNavigate?: (mainTab: string
         <SectionHeader title="My Portfolio" subtitle="Overview of your dynasty portfolio across all leagues" />
         <div className="hidden md:block pt-1">{portfolioToggle}</div>
       </div>
-      <div className="md:hidden flex justify-center sm:justify-start !mt-0">
-        <div className="grid w-full sm:w-auto" style={{ gridTemplateColumns: "1fr 1fr", maxWidth: 420, height: 48, borderRadius: 16, padding: 4, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", gap: 4 }}>
+      <div className="md:hidden flex justify-center !mt-0">
+        <div className="grid w-[90vw]" style={{ gridTemplateColumns: "1fr 1fr", height: 48, borderRadius: 16, padding: 4, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", gap: 4 }}>
           {(["overview", "finances"] as const).map((tab) => {
             const isActive = innerTab === tab;
             const Icon = tab === "overview" ? BarChart3 : Coins;

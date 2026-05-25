@@ -221,7 +221,7 @@ export function TradeBlockCandidates({
                 <SortHeader label="Owner" sortKey="owner" align="left" />
                 <SortHeader label="Age" sortKey="age" align="right" />
                 <SortHeader label="Dynasty" sortKey="dynasty" align="right" />
-                <SortHeader label="Redraft" sortKey="redraft" align="right" />
+                <SortHeader label="Win-Now" sortKey="redraft" align="right" />
                 <SortHeader
                   label={isActual ? "Added" : "Reason"}
                   sortKey={isActual ? "addedAt" : "pos"}
@@ -272,26 +272,32 @@ export function TradeBlockCandidates({
                       <span className="hidden md:inline text-[11px] text-right text-muted-foreground tabular-nums">
                         {p.age > 0 ? p.age : "—"}
                       </span>
-                      <span
-                        className="text-[12px] md:text-[13px] text-right tabular-nums font-semibold text-foreground"
-                        data-testid={`text-dynasty-value-${sleeperId}`}
-                      >
-                        {dynVal != null ? dynVal.toLocaleString() : "—"}
-                      </span>
-                      <span
-                        className={cn(
-                          "text-[12px] md:text-[13px] text-right tabular-nums font-semibold",
-                          // Highlight redraft values in cyan only when
-                          // redraft is the active sort column — same idea
-                          // as the sortable header highlighting itself.
-                          sortKey === "redraft"
-                            ? "text-cyan-500 dark:text-cyan-300"
-                            : "text-foreground",
-                        )}
-                        data-testid={`text-redraft-value-${sleeperId}`}
-                      >
-                        {rdVal != null ? rdVal.toLocaleString() : "—"}
-                      </span>
+                      <div className="flex flex-col items-end leading-none">
+                        <span className="md:hidden text-[8px] font-bold uppercase tracking-wider text-muted-foreground/70 mb-0.5">Dynasty</span>
+                        <span
+                          className="text-[12px] md:text-[13px] tabular-nums font-semibold text-foreground"
+                          data-testid={`text-dynasty-value-${sleeperId}`}
+                        >
+                          {dynVal != null ? dynVal.toLocaleString() : "—"}
+                        </span>
+                      </div>
+                      <div className="flex flex-col items-end leading-none">
+                        <span className="md:hidden text-[8px] font-bold uppercase tracking-wider text-muted-foreground/70 mb-0.5">Win-Now</span>
+                        <span
+                          className={cn(
+                            "text-[12px] md:text-[13px] tabular-nums font-semibold",
+                            // Highlight redraft values in cyan only when
+                            // redraft is the active sort column — same idea
+                            // as the sortable header highlighting itself.
+                            sortKey === "redraft"
+                              ? "text-cyan-500 dark:text-cyan-300"
+                              : "text-foreground",
+                          )}
+                          data-testid={`text-redraft-value-${sleeperId}`}
+                        >
+                          {rdVal != null ? rdVal.toLocaleString() : "—"}
+                        </span>
+                      </div>
                       <div className="hidden md:flex justify-end">
                         {isActual ? (
                           <span className="text-[10.5px] text-muted-foreground tabular-nums">

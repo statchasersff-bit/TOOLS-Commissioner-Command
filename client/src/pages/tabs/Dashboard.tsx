@@ -1033,7 +1033,7 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
 
   // ── View toggle ──────────────────────────────────────────────────
   const viewToggle = (
-    <div className="grid flex-shrink-0" style={{ gridTemplateColumns: "repeat(4, 1fr)", height: 48, borderRadius: 16, padding: 4, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", gap: 4, minWidth: 0 }}>
+    <div className="grid flex-shrink-0 w-[90vw] md:w-auto" style={{ gridTemplateColumns: "repeat(4, 1fr)", height: 48, borderRadius: 16, padding: 4, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", gap: 4, minWidth: 0 }}>
       {([
         { id: "table",   icon: List,      label: "Table"    },
         { id: "economy", icon: Coins,     label: "Plot"     },
@@ -1061,12 +1061,12 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between md:gap-4">
         <SectionHeader
           title="League Power Rankings"
           subtitle="League-wide roster rankings by redraft value, dynasty value, and draft capital."
         />
-        <div className="flex justify-center sm:justify-end">
+        <div className="flex justify-center md:justify-end">
           {viewToggle}
         </div>
       </div>
@@ -2094,7 +2094,7 @@ export function MyTeam({ league, userTeam, onNavigate }: DashboardOverviewProps)
                                         <p className="text-[10px] text-muted-foreground leading-tight">{p.team} · {p.age}y</p>
                                       </div>
                                     </div>
-                                    <span className="text-[10px] font-bold text-[#0b3a7a] dark:text-blue-400 tabular-nums ml-1 flex-shrink-0">{p.value}</span>
+                                    <span className={cn("text-[10px] font-bold tabular-nums ml-1 flex-shrink-0", posTextColor[pos] ?? "text-foreground")}>{p.value}</span>
                                   </div>
                                 ))}
                               </>

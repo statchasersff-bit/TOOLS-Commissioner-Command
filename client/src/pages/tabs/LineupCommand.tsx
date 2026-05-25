@@ -1338,13 +1338,13 @@ export function LineupCommand() {
       )}
 
       {/* ── Sub-tab switcher (mobile only) ───────────────────────────────── */}
-      <div className="md:hidden flex justify-center sm:justify-start !mt-0">
+      <div className="md:hidden flex justify-center !mt-0">
         {(baseLoading || allLoading || mAllLoading) && (
           <RefreshCw className="w-3.5 h-3.5 text-muted-foreground animate-spin absolute right-4 top-4" />
         )}
         <div
           className={cn(
-            "grid w-full sm:w-auto max-w-[520px] h-12 rounded-2xl p-1 gap-1",
+            "grid w-[90vw] h-12 rounded-2xl p-1 gap-1",
             "bg-[var(--sc-card-bg)] border border-[var(--sc-border)]",
             "dark-any:bg-white/[0.04] dark-any:border-white/[0.07]",
           )}
@@ -1407,8 +1407,8 @@ export function LineupCommand() {
                   className={cn(
                     "inline-flex items-center gap-1.5 text-[11px] font-bold rounded-full px-4 py-1.5 border transition-all",
                     disabled
-                      ? "bg-[var(--sc-card-soft)] border-[var(--sc-border)] text-[var(--sc-text-muted)] cursor-not-allowed dark-any:bg-white/4 dark-any:border-white/8 dark-any:text-white/30"
-                      : "bg-[var(--sc-gold)] hover:bg-[var(--sc-gold-deep)] border-[var(--sc-gold-deep)] text-[var(--sc-blue)] hover:text-white shadow-[0_2px_8px_rgba(214,162,30,0.25)] dark-any:bg-[#d4af37]/12 dark-any:hover:bg-[#d4af37]/22 dark-any:border-[#d4af37]/30 dark-any:hover:border-[#d4af37]/50 dark-any:text-[#d4af37] dark-any:hover:text-[#d4af37] dark-any:shadow-none dark-any:hover:shadow-[0_0_12px_rgba(212,175,55,0.15)]",
+                      ? "bg-muted text-muted-foreground border-border cursor-not-allowed"
+                      : "bg-[#d4af37] hover:bg-[#c8a230] border-[#b8901f] text-[#0b3a7a] hover:text-[#0b3a7a] shadow-[0_2px_8px_rgba(212,175,55,0.3)]",
                   )}
                 >
                   {isRunning ? (
@@ -1633,7 +1633,7 @@ export function LineupCommand() {
                       className={cn(
                         "text-[10px] font-bold uppercase tracking-wider px-2.5 md:px-3 py-1 rounded-full transition-all duration-150 whitespace-nowrap",
                         active
-                          ? "bg-[#d6a21e] text-[var(--sc-blue)] shadow-[inset_0_0_0_1px_rgba(214,162,30,0.7)] dark-any:bg-[#d4af37]/18 dark-any:text-[#d4af37] dark-any:shadow-[inset_0_0_0_1px_rgba(212,175,55,0.35)]"
+                          ? "bg-[#0b3a7a] text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.25)]"
                           : "text-white/70 hover:text-white dark-any:text-white/35 dark-any:hover:text-white/65",
                       )}
                     >

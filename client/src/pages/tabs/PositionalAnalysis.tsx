@@ -225,7 +225,7 @@ export function PositionalAnalysis({ league, userTeam, onNavigateToCalculator }:
 
   const innerToggle = (
     <div
-      className="grid flex-shrink-0"
+      className="grid flex-shrink-0 w-[90vw] md:w-[260px]"
       style={{
         gridTemplateColumns: "1fr 1fr",
         height: 48,
@@ -234,7 +234,6 @@ export function PositionalAnalysis({ league, userTeam, onNavigateToCalculator }:
         background: "rgba(255,255,255,0.04)",
         border: "1px solid rgba(255,255,255,0.07)",
         gap: 4,
-        width: 260,
       }}
       data-testid="finder-inner-toggle"
     >
@@ -291,7 +290,7 @@ export function PositionalAnalysis({ league, userTeam, onNavigateToCalculator }:
               Scan all connected leagues and build/send trade offers across your dynasty portfolio.
             </p>
           </div>
-          <div className="ml-auto">{innerToggle}</div>
+          <div className="w-full md:w-auto md:ml-auto flex justify-center">{innerToggle}</div>
         </div>
         <BulkTrades />
       </div>
@@ -310,7 +309,7 @@ export function PositionalAnalysis({ league, userTeam, onNavigateToCalculator }:
             Analyze positional strengths, identify trade partners, and discover AI-powered dynasty trade opportunities.
           </p>
         </div>
-        <div className="ml-auto">{innerToggle}</div>
+        <div className="w-full md:w-auto md:ml-auto flex justify-center">{innerToggle}</div>
       </div>
 
       {/* My Positional Profile */}
@@ -781,8 +780,8 @@ function TradeOpportunities({ league, userTeam }: { league: League; userTeam: Te
         {modeToggle}
       </div>
       {/* Mobile: toggle only */}
-      <div className="md:hidden flex justify-center sm:justify-start">
-        <div className="grid w-full sm:w-auto" style={{ gridTemplateColumns: "1fr 1fr", maxWidth: 420, height: 56, borderRadius: 16, padding: 4, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", gap: 4 }}>
+      <div className="md:hidden flex justify-center">
+        <div className="grid w-[90vw]" style={{ gridTemplateColumns: "1fr 1fr", height: 56, borderRadius: 16, padding: 4, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", gap: 4 }}>
           {([
             { id: "win-now" as const, label: "Win-Now",       desc: "Maximize starters now",  Icon: Zap        },
             { id: "rebuild" as const, label: "Build Dynasty", desc: "Maximize dynasty value",  Icon: TrendingUp },

@@ -276,8 +276,8 @@ export function ShareTeam({ league, userTeam }: Props) {
         </div>
       </div>
       {/* Tab toggle — view switcher (mobile only) */}
-      <div className="md:hidden flex justify-center sm:justify-start !mt-0">
-        <div className="grid w-full sm:w-auto" style={{ gridTemplateColumns: "1fr 1fr", maxWidth: 420, height: 48, borderRadius: 16, padding: 4, background: "var(--sc-toggle-bg)", border: "1px solid var(--sc-toggle-border)", gap: 4 }}>
+      <div className="md:hidden flex justify-center !mt-0">
+        <div className="grid w-[90vw]" style={{ gridTemplateColumns: "1fr 1fr", height: 48, borderRadius: 16, padding: 4, background: "var(--sc-toggle-bg)", border: "1px solid var(--sc-toggle-border)", gap: 4 }}>
           {(["share", "field-view"] as const).map((val) => {
             const isActive = innerTab === val;
             const Icon = val === "share" ? Share2 : LayoutGrid;

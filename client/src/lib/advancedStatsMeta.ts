@@ -56,9 +56,9 @@ const QB_COLUMN_GROUPS: Record<string, string> = {
   airYards: "Volume / Usage", completedAirYards: "Volume / Usage", redZoneAttempts: "Volume / Usage",
   passingTouchdowns: "Volume / Usage", rushAttempts: "Volume / Usage", rushYards: "Volume / Usage",
   rushTouchdowns: "Volume / Usage",
-  airYardsPerAttempt: "Aggressiveness / Play Style",
-  completedAirYardsPerCompletion: "Aggressiveness / Play Style",
-  yardsPerCatch: "Aggressiveness / Play Style",
+  airYardsPerAttempt: "Aggressiveness",
+  completedAirYardsPerCompletion: "Aggressiveness",
+  yardsPerCatch: "Aggressiveness",
   completionPct: "Efficiency", onTargetPct: "Efficiency", poorThrows: "Efficiency",
   badThrowPct: "Efficiency", interceptions: "Efficiency", epaPerPlay: "Efficiency",
   successRate: "Efficiency", cpoe: "Efficiency",
@@ -136,7 +136,7 @@ export const SECTION_ACCENTS: Record<string, string> = {
   "Volume / Usage":               "#f59e0b", // amber
   "Usage / Workload":             "#f59e0b",
   "Usage/Role":                   "#f59e0b",
-  "Aggressiveness / Play Style":  "#fb923c", // orange
+  "Aggressiveness":  "#fb923c", // orange
   "Efficiency":                   "#60a5fa", // blue
   "Production":                   "#34d399", // emerald
   "Explosiveness":                "#c084fc", // purple
