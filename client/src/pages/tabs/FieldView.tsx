@@ -9,14 +9,15 @@ import { cn } from "@/lib/utils";
 import { Zap, RefreshCw, Users, AlertCircle, Download, Loader2 } from "lucide-react";
 import { getLeagueTeamTiers, getTierEmoji, type Tier } from "@/data/mockData";
 import { toPng } from "html-to-image";
-import { computeQbCompositeScores, QB_SCORE_CATEGORIES } from "@/lib/qbCompositeScores";
-import { computeRbCompositeScores, RB_SCORE_CATEGORIES } from "@/lib/rbCompositeScores";
+import { AnimatePresence, motion } from "framer-motion";
 import {
-  computeWrCompositeScores,
-  computeTeCompositeScores,
-  WR_SCORE_CATEGORIES,
-  TE_SCORE_CATEGORIES,
-} from "@/lib/receivingComposites";
+  type StatPosition,
+  type AdvancedStatsData,
+  SCORE_ENGINES,
+  ADV_STATS_LOADERS,
+  normalizeName,
+} from "@/lib/advancedStatsMeta";
+import { PlayerExpandedModal, type ExpandedPlayer } from "@/components/player/PlayerExpandedModal";
 
 // ─── Tier colour maps ─────────────────────────────────────────────────────────
 const TIER_GLOW: Record<string, string> = {
@@ -46,28 +47,9 @@ const TIER_BORDER: Record<string, string> = {
 
 const SLEEPER_API = "https://api.sleeper.app/v1";
 
-// ─── Composite grades ───────────────────────────────────────────────────────
-// Cards show each player's Overall composite grade (0-100). Grades are
-// percentile-based, so they're computed against the full position pool — we load
-// the same bundled advanced-stats files the Position Stats tab uses, run the
-// matching engine per position, and look players up by normalized name.
-const normalizeName = (n: string) => n.toLowerCase().replace(/[^a-z0-9]/g, "");
-type GradePos = "QB" | "RB" | "WR" | "TE";
-type ComputeScores = (rows: Record<string, unknown>[]) => Array<Record<string, number>>;
-
-const SCORE_ENGINES: Record<GradePos, { compute: ComputeScores; overallKey: string }> = {
-  QB: { compute: computeQbCompositeScores as unknown as ComputeScores, overallKey: QB_SCORE_CATEGORIES[0].key },
-  RB: { compute: computeRbCompositeScores as unknown as ComputeScores, overallKey: RB_SCORE_CATEGORIES[0].key },
-  WR: { compute: computeWrCompositeScores, overallKey: WR_SCORE_CATEGORIES[0].key },
-  TE: { compute: computeTeCompositeScores, overallKey: TE_SCORE_CATEGORIES[0].key },
-};
-
-const ADV_STATS_LOADERS: Record<GradePos, () => Promise<{ default: { rows: Record<string, unknown>[] } }>> = {
-  QB: () => import("@/data/advanced_stats/qb_advanced_stats_2025.json"),
-  RB: () => import("@/data/advanced_stats/rb_advanced_stats_2025.json"),
-  WR: () => import("@/data/advanced_stats/wr_advanced_stats_2025.json"),
-  TE: () => import("@/data/advanced_stats/te_advanced_stats_2025.json"),
-};
+// Positions that have an advanced-stats pool / composite grades.
+const STAT_POSITIONS: StatPosition[] = ["qb", "rb", "wr", "te"];
+const isStatPos = (p: string): p is StatPosition => STAT_POSITIONS.includes(p as StatPosition);
 
 // ─── Slot eligibility ─────────────────────────────────────────────────────────
 const SLOT_ELIGIBILITY: Record<string, string[]> = {
@@ -131,7 +113,7 @@ const fmtCompact = (v: number): string =>
 // Portrait headshot with team-logo watermark, gold border, slot badge + Overall
 // grade overlays, and Dynasty / Win-Now value pills. Used for starters and bench.
 function FieldCard({
-  label, colorKey, player, dynVal, rdVal, grade, compact = false,
+  label, colorKey, player, dynVal, rdVal, grade, compact = false, onSelect,
 }: {
   label: string;
   colorKey: string;
@@ -140,6 +122,7 @@ function FieldCard({
   rdVal: number;
   grade: number | null;
   compact?: boolean;
+  onSelect?: () => void;
 }) {
   const slotColor = SLOT_BADGE_COLORS[colorKey] ?? "bg-white/10 text-white/60 border-white/15";
   const width = compact ? "w-[100px] md:w-[110px]" : "w-[112px] md:w-[126px]";
@@ -158,8 +141,17 @@ function FieldCard({
 
   const id = player.sleeperId ?? player.id;
   return (
-    <div className={cn(
-      "group rounded-xl overflow-hidden border border-[#d4af37]/25 bg-[#080e1c] shadow-[0_0_16px_rgba(212,175,55,0.10)] transition-all duration-300 hover:-translate-y-0.5 hover:border-[#d4af37]/50 hover:shadow-[0_0_22px_rgba(212,175,55,0.18)] select-none flex-shrink-0",
+    <motion.div
+      role="button"
+      tabIndex={0}
+      aria-label={`View ${player.name} details`}
+      onClick={onSelect}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelect?.(); } }}
+      whileHover={{ scale: 1.03, y: -3 }}
+      whileTap={{ scale: 0.985 }}
+      transition={{ type: "spring", stiffness: 400, damping: 26 }}
+      className={cn(
+      "group rounded-xl overflow-hidden border border-[#d4af37]/25 bg-[#080e1c] shadow-[0_0_16px_rgba(212,175,55,0.10)] hover:border-[#d4af37]/55 hover:shadow-[0_0_26px_rgba(212,175,55,0.28)] select-none flex-shrink-0 cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-[#d4af37]/60",
       width,
     )}>
       {/* Headshot */}
@@ -211,13 +203,13 @@ function FieldCard({
           <p className="text-[10px] font-bold text-blue-400 tabular-nums leading-none">{rdVal > 0 ? Math.round(rdVal).toLocaleString() : "—"}</p>
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 }
 
 // ─── Mobile FieldCard (compact Compare-style) ──────────────────────────────────
 function MobileFieldCard({
-  label, colorKey, player, dynVal, rdVal, grade,
+  label, colorKey, player, dynVal, rdVal, grade, onSelect,
 }: {
   label: string;
   colorKey: string;
@@ -225,6 +217,7 @@ function MobileFieldCard({
   dynVal: number;
   rdVal: number;
   grade: number | null;
+  onSelect?: () => void;
 }) {
   const slotColor = SLOT_BADGE_COLORS[colorKey] ?? "bg-white/10 text-white/60 border-white/15";
 
@@ -240,7 +233,15 @@ function MobileFieldCard({
   const id = player.sleeperId ?? player.id;
   const lastName = player.name.split(" ").slice(1).join(" ") || player.name;
   return (
-    <div className="w-[80px] flex-shrink-0 rounded-lg overflow-hidden border border-[#d4af37]/25 bg-[#080e1c]">
+    <motion.div
+      role="button"
+      tabIndex={0}
+      aria-label={`View ${player.name} details`}
+      onClick={onSelect}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelect?.(); } }}
+      whileTap={{ scale: 0.97 }}
+      className="w-[80px] flex-shrink-0 rounded-lg overflow-hidden border border-[#d4af37]/25 bg-[#080e1c] cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-[#d4af37]/60"
+    >
       <div className="relative aspect-square w-full overflow-hidden bg-[#0b1628]">
         {player.team && (
           <img
@@ -274,12 +275,12 @@ function MobileFieldCard({
         <p className="text-[7px] font-bold text-emerald-400 tabular-nums text-center leading-none">{fmtCompact(dynVal)}</p>
         <p className="text-[7px] font-bold text-blue-400 tabular-nums text-center leading-none">{fmtCompact(rdVal)}</p>
       </div>
-    </div>
+    </motion.div>
   );
 }
 
 // ─── Desktop FieldRow ─────────────────────────────────────────────────────────
-function FieldRow({ slots, spread = false, label }: { slots: SlotAssignment[]; spread?: boolean; label?: string }) {
+function FieldRow({ slots, spread = false, label, onSelect }: { slots: SlotAssignment[]; spread?: boolean; label?: string; onSelect: (s: SlotAssignment) => void }) {
   if (slots.length === 0) return null;
   return (
     <div className="relative w-full">
@@ -302,6 +303,7 @@ function FieldRow({ slots, spread = false, label }: { slots: SlotAssignment[]; s
             rdVal={s.rdVal}
             grade={s.grade}
             compact={slots.length >= 4}
+            onSelect={s.player ? () => onSelect(s) : undefined}
           />
         ))}
       </div>
@@ -310,7 +312,7 @@ function FieldRow({ slots, spread = false, label }: { slots: SlotAssignment[]; s
 }
 
 // ─── Mobile FieldRow ──────────────────────────────────────────────────────────
-function MobileFieldRow({ slots, label }: { slots: SlotAssignment[]; label?: string }) {
+function MobileFieldRow({ slots, label, onSelect }: { slots: SlotAssignment[]; label?: string; onSelect: (s: SlotAssignment) => void }) {
   if (slots.length === 0) return null;
   return (
     <div className="w-full">
@@ -329,6 +331,7 @@ function MobileFieldRow({ slots, label }: { slots: SlotAssignment[]; label?: str
             dynVal={s.dynVal}
             rdVal={s.rdVal}
             grade={s.grade}
+            onSelect={s.player ? () => onSelect(s) : undefined}
           />
         ))}
       </div>
@@ -423,30 +426,46 @@ export const FieldView = forwardRef<FieldViewHandle, FieldViewProps>(function Fi
   const [playersDb, setPlayersDb]   = useState<Record<string, any>>({});
   const [error, setError]           = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
-  // Overall composite grade per player, keyed by `normalizedName|pos`.
-  const [gradeMap, setGradeMap] = useState<Map<string, number>>(new Map());
+  // Advanced-stats data, keyed by `normalizedName|statPos`, computed once.
+  const [gradeMap, setGradeMap]   = useState<Map<string, number>>(new Map());
+  const [scoresMap, setScoresMap] = useState<Map<string, Record<string, number>>>(new Map());
+  const [rowMap, setRowMap]       = useState<Map<string, Record<string, unknown>>>(new Map());
+  const [pools, setPools]         = useState<Partial<Record<StatPosition, AdvancedStatsData>>>({});
+  // Player whose detail modal is open.
+  const [selected, setSelected]   = useState<ExpandedPlayer | null>(null);
   const fieldRef = useRef<HTMLDivElement>(null);
 
-  // Load all four advanced-stats pools once and compute each player's Overall grade.
+  // Load all four advanced-stats pools once and compute composite scores.
   useEffect(() => {
     let cancelled = false;
-    const positions: GradePos[] = ["QB", "RB", "WR", "TE"];
-    Promise.all(positions.map((p) => ADV_STATS_LOADERS[p]()))
+    Promise.all(STAT_POSITIONS.map((p) => ADV_STATS_LOADERS[p]()))
       .then((mods) => {
         if (cancelled) return;
-        const m = new Map<string, number>();
-        positions.forEach((posKey, idx) => {
-          const rows = mods[idx].default.rows ?? [];
-          const { compute, overallKey } = SCORE_ENGINES[posKey];
-          const scores = compute(rows);
-          rows.forEach((r, i) => {
+        const grades = new Map<string, number>();
+        const scores = new Map<string, Record<string, number>>();
+        const rows = new Map<string, Record<string, unknown>>();
+        const poolMap: Partial<Record<StatPosition, AdvancedStatsData>> = {};
+        STAT_POSITIONS.forEach((posKey, idx) => {
+          const data = mods[idx].default;
+          poolMap[posKey] = data;
+          const { compute, categories } = SCORE_ENGINES[posKey];
+          const overallKey = categories[0].key;
+          const computed = compute(data.rows);
+          data.rows.forEach((r, i) => {
             const name = String(r.playerName ?? r.player_name ?? r.name ?? "");
-            if (name) m.set(`${normalizeName(name)}|${posKey}`, scores[i][overallKey]);
+            if (!name) return;
+            const key = `${normalizeName(name)}|${posKey}`;
+            grades.set(key, computed[i][overallKey]);
+            scores.set(key, computed[i]);
+            rows.set(key, r);
           });
         });
-        setGradeMap(m);
+        setGradeMap(grades);
+        setScoresMap(scores);
+        setRowMap(rows);
+        setPools(poolMap);
       })
-      .catch(() => { if (!cancelled) setGradeMap(new Map()); });
+      .catch(() => { if (!cancelled) { setGradeMap(new Map()); setScoresMap(new Map()); setRowMap(new Map()); setPools({}); } });
     return () => { cancelled = true; };
   }, []);
 
@@ -543,7 +562,7 @@ export const FieldView = forwardRef<FieldViewHandle, FieldViewProps>(function Fi
   // ── Assign starters to slots ─────────────────────────────────────────────
   const { starterSlots, benchPlayers } = useMemo(() => {
     const gradeFor = (p: Player): number | null =>
-      gradeMap.get(`${normalizeName(p.name)}|${p.pos}`) ?? null;
+      gradeMap.get(`${normalizeName(p.name)}|${p.pos.toLowerCase()}`) ?? null;
 
     const starters = [...userTeam.roster]
       .filter(p => p.starter)
@@ -605,6 +624,27 @@ export const FieldView = forwardRef<FieldViewHandle, FieldViewProps>(function Fi
 
   const projTotal      = useMemo(() => starterSlots.reduce((sum, s) => sum + (s.projection ?? 0), 0).toFixed(1), [starterSlots]);
   const hasProjections = Object.keys(projections).length > 0;
+
+  // Build the expanded-modal payload for a clicked player.
+  const openPlayer = useCallback((player: Player | null, dynVal: number, rdVal: number) => {
+    if (!player) return;
+    const lower = player.pos.toLowerCase();
+    const statPos = isStatPos(lower) ? lower : null;
+    const key = statPos ? `${normalizeName(player.name)}|${statPos}` : "";
+    setSelected({
+      name: player.name,
+      team: player.team ?? "",
+      posLabel: player.pos,
+      age: typeof player.age === "number" ? player.age : 0,
+      sleeperId: player.sleeperId ?? player.id ?? null,
+      dynVal,
+      rdVal,
+      statPos,
+      scores: statPos ? scoresMap.get(key) ?? null : null,
+      row: statPos ? rowMap.get(key) ?? null : null,
+      columns: statPos ? pools[statPos]?.columns ?? null : null,
+    });
+  }, [scoresMap, rowMap, pools]);
 
   // Tier colours for GM card
   const glowRgb   = userTier ? (TIER_GLOW[userTier]   ?? "212,175,55") : "212,175,55";
@@ -741,11 +781,11 @@ export const FieldView = forwardRef<FieldViewHandle, FieldViewProps>(function Fi
 
           <EndZone label={opponentName ? `${opponentName}'s End Zone` : "Opponent"} variant="top" />
           <div className="relative z-10 px-3 md:px-6 py-3 md:py-4 space-y-3 md:space-y-4">
-            <FieldRow slots={qbRow}      label="QB"    />
-            <FieldRow slots={rbTeRow}    label="RB·TE" />
-            <FieldRow slots={wrRow}      label="WR"    spread />
-            <FieldRow slots={flexRow}    label="FLEX"  />
-            <FieldRow slots={specialRow} label="K/D"   />
+            <FieldRow slots={qbRow}      label="QB"    onSelect={(s) => openPlayer(s.player, s.dynVal, s.rdVal)} />
+            <FieldRow slots={rbTeRow}    label="RB·TE" onSelect={(s) => openPlayer(s.player, s.dynVal, s.rdVal)} />
+            <FieldRow slots={wrRow}      label="WR"    spread onSelect={(s) => openPlayer(s.player, s.dynVal, s.rdVal)} />
+            <FieldRow slots={flexRow}    label="FLEX"  onSelect={(s) => openPlayer(s.player, s.dynVal, s.rdVal)} />
+            <FieldRow slots={specialRow} label="K/D"   onSelect={(s) => openPlayer(s.player, s.dynVal, s.rdVal)} />
           </div>
           <EndZone label={userTeam.name || "Your End Zone"} variant="bottom" />
         </div>
@@ -764,11 +804,11 @@ export const FieldView = forwardRef<FieldViewHandle, FieldViewProps>(function Fi
 
           {/* Mobile formation rows */}
           <div className="relative z-10 px-2 py-2 space-y-2">
-            <MobileFieldRow slots={qbRow}      label="QB" />
-            <MobileFieldRow slots={rbTeRow}    label="RB · TE" />
-            <MobileFieldRow slots={wrRow}      label="WR" />
-            <MobileFieldRow slots={flexRow}    label="FLEX" />
-            <MobileFieldRow slots={specialRow} label="K / D" />
+            <MobileFieldRow slots={qbRow}      label="QB"      onSelect={(s) => openPlayer(s.player, s.dynVal, s.rdVal)} />
+            <MobileFieldRow slots={rbTeRow}    label="RB · TE" onSelect={(s) => openPlayer(s.player, s.dynVal, s.rdVal)} />
+            <MobileFieldRow slots={wrRow}      label="WR"      onSelect={(s) => openPlayer(s.player, s.dynVal, s.rdVal)} />
+            <MobileFieldRow slots={flexRow}    label="FLEX"    onSelect={(s) => openPlayer(s.player, s.dynVal, s.rdVal)} />
+            <MobileFieldRow slots={specialRow} label="K / D"   onSelect={(s) => openPlayer(s.player, s.dynVal, s.rdVal)} />
           </div>
 
           <EndZone label={userTeam.name || "Your End Zone"} variant="bottom" mobile />
@@ -787,7 +827,7 @@ export const FieldView = forwardRef<FieldViewHandle, FieldViewProps>(function Fi
             <div className="hidden md:block relative">
               <div className="flex gap-2 flex-wrap">
                 {benchPlayers.map((p, i) => (
-                  <FieldCard key={`bench-${p.id}-${i}`} label={p.pos} colorKey={p.pos} player={p} dynVal={p.dynVal} rdVal={p.rdVal} grade={p.grade} />
+                  <FieldCard key={`bench-${p.id}-${i}`} label={p.pos} colorKey={p.pos} player={p} dynVal={p.dynVal} rdVal={p.rdVal} grade={p.grade} onSelect={() => openPlayer(p, p.dynVal, p.rdVal)} />
                 ))}
               </div>
             </div>
@@ -797,7 +837,7 @@ export const FieldView = forwardRef<FieldViewHandle, FieldViewProps>(function Fi
               <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-background to-transparent z-10 pointer-events-none" />
               <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-hide">
                 {benchPlayers.map((p, i) => (
-                  <MobileFieldCard key={`mobilebench-${p.id}-${i}`} label={p.pos} colorKey={p.pos} player={p} dynVal={p.dynVal} rdVal={p.rdVal} grade={p.grade} />
+                  <MobileFieldCard key={`mobilebench-${p.id}-${i}`} label={p.pos} colorKey={p.pos} player={p} dynVal={p.dynVal} rdVal={p.rdVal} grade={p.grade} onSelect={() => openPlayer(p, p.dynVal, p.rdVal)} />
                 ))}
               </div>
             </div>
@@ -809,6 +849,13 @@ export const FieldView = forwardRef<FieldViewHandle, FieldViewProps>(function Fi
       <div className="pt-1 px-0.5">
         <FieldLegend />
       </div>
+
+      {/* ── Player detail modal ────────────────────────────────────────── */}
+      <AnimatePresence>
+        {selected && (
+          <PlayerExpandedModal player={selected} onClose={() => setSelected(null)} />
+        )}
+      </AnimatePresence>
     </div>
   );
 });
