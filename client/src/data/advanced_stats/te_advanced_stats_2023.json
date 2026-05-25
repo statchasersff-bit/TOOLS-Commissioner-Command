@@ -11,12 +11,6 @@
       "defaultVisible": true
     },
     {
-      "key": "playerId",
-      "label": "Player ID",
-      "type": "string",
-      "defaultVisible": false
-    },
-    {
       "key": "playerName",
       "label": "Player",
       "type": "string",
@@ -26,7 +20,7 @@
       "key": "position",
       "label": "Pos",
       "type": "string",
-      "defaultVisible": false
+      "defaultVisible": true
     },
     {
       "key": "team",
@@ -38,18 +32,18 @@
       "key": "age",
       "label": "Age",
       "type": "number",
-      "defaultVisible": false
-    },
-    {
-      "key": "season",
-      "label": "Season",
-      "type": "number",
-      "defaultVisible": false
+      "defaultVisible": true
     },
     {
       "key": "games",
       "label": "G",
       "type": "number",
+      "defaultVisible": true
+    },
+    {
+      "key": "fantasyPoints",
+      "label": "FPTS",
+      "type": "decimal",
       "defaultVisible": true
     },
     {
@@ -101,12 +95,6 @@
       "defaultVisible": true
     },
     {
-      "key": "receptions",
-      "label": "REC",
-      "type": "number",
-      "defaultVisible": true
-    },
-    {
       "key": "redZoneTargets",
       "label": "RZ TGT",
       "type": "number",
@@ -119,21 +107,15 @@
       "defaultVisible": true
     },
     {
-      "key": "catchPct",
-      "label": "Catch %",
-      "type": "decimal",
+      "key": "receptions",
+      "label": "REC",
+      "type": "number",
       "defaultVisible": true
     },
     {
       "key": "receivingYards",
       "label": "Rec YDS",
       "type": "number",
-      "defaultVisible": true
-    },
-    {
-      "key": "yardsPerReception",
-      "label": "Y/R",
-      "type": "decimal",
       "defaultVisible": true
     },
     {
@@ -145,6 +127,12 @@
     {
       "key": "yardsAfterCatchPerReception",
       "label": "YAC/R",
+      "type": "decimal",
+      "defaultVisible": true
+    },
+    {
+      "key": "yardsPerReception",
+      "label": "Y/R",
       "type": "decimal",
       "defaultVisible": true
     },
@@ -173,34 +161,16 @@
       "defaultVisible": true
     },
     {
+      "key": "catchPct",
+      "label": "Catch %",
+      "type": "decimal",
+      "defaultVisible": true
+    },
+    {
       "key": "contestedCatchRate",
       "label": "Contested %",
       "type": "decimal",
-      "defaultVisible": false
-    },
-    {
-      "key": "fantasyPoints",
-      "label": "FPTS",
-      "type": "decimal",
       "defaultVisible": true
-    },
-    {
-      "key": "avoidedTackleRate",
-      "label": "Avoid Tkl %",
-      "type": "decimal",
-      "defaultVisible": true
-    },
-    {
-      "key": "brokenTackles",
-      "label": "BRKTKL",
-      "type": "number",
-      "defaultVisible": true
-    },
-    {
-      "key": "receptionsPerBrokenTackle",
-      "label": "REC/BRKTKL",
-      "type": "decimal",
-      "defaultVisible": false
     },
     {
       "key": "drops",
@@ -221,10 +191,22 @@
       "defaultVisible": true
     },
     {
+      "key": "avoidedTackleRate",
+      "label": "Avoid Tkl %",
+      "type": "decimal",
+      "defaultVisible": true
+    },
+    {
+      "key": "brokenTackles",
+      "label": "BRKTKL",
+      "type": "number",
+      "defaultVisible": true
+    },
+    {
       "key": "receptions10Plus",
       "label": "10+ YDS",
       "type": "number",
-      "defaultVisible": false
+      "defaultVisible": true
     },
     {
       "key": "receptions20Plus",
@@ -236,25 +218,43 @@
       "key": "receptions30Plus",
       "label": "30+ YDS",
       "type": "number",
-      "defaultVisible": false
+      "defaultVisible": true
     },
     {
       "key": "receptions40Plus",
       "label": "40+ YDS",
       "type": "number",
-      "defaultVisible": false
+      "defaultVisible": true
     },
     {
       "key": "receptions50Plus",
       "label": "50+ YDS",
       "type": "number",
-      "defaultVisible": false
+      "defaultVisible": true
     },
     {
       "key": "longestReception",
       "label": "LNG",
       "type": "number",
       "defaultVisible": true
+    },
+    {
+      "key": "playerId",
+      "label": "Player ID",
+      "type": "string",
+      "defaultVisible": false
+    },
+    {
+      "key": "season",
+      "label": "Season",
+      "type": "number",
+      "defaultVisible": false
+    },
+    {
+      "key": "receptionsPerBrokenTackle",
+      "label": "REC/BRKTKL",
+      "type": "decimal",
+      "defaultVisible": false
     }
   ],
   "rows": [

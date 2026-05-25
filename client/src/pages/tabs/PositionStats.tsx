@@ -16,9 +16,11 @@ import {
   ChevronDown,
   ChevronUp,
   ChevronsUpDown,
+  GitCompare,
   Loader2,
   Search,
   SlidersHorizontal,
+  Table2,
   X,
 } from "lucide-react";
 
@@ -81,12 +83,89 @@ const SEASONS: { key: SeasonKey; label: string }[] = [
 ];
 
 // Columns that are always pinned left and not in the toggleable list.
-const PINNED_KEYS = new Set(["rank", "playerName", "player_name", "name"]);
+const PINNED_KEYS = new Set(["rank", "playerName", "player_name", "name", "team", "nfl_team"]);
 // Columns that are never shown in the table (redundant or non-useful in this context).
 const ALWAYS_HIDDEN = new Set([
   "playerId", "player_id", "sleeper_id", "sleeperId",
-  "position", "pos", "age", "season",
+  "season",
 ]);
+
+// Super-headers: map each column key to the group label shown in the extra
+// header row above the column names. Keys are grouped contiguously so the
+// colspans line up with the rendered column order.
+const QB_COLUMN_GROUPS: Record<string, string> = {
+  rank: "Player Info", playerName: "Player Info", team: "Player Info",
+  position: "Player Info", age: "Player Info", games: "Player Info", fantasyPoints: "Player Info",
+  attempts: "Volume / Usage", completions: "Volume / Usage", passingYards: "Volume / Usage",
+  airYards: "Volume / Usage", completedAirYards: "Volume / Usage", redZoneAttempts: "Volume / Usage",
+  passingTouchdowns: "Volume / Usage", rushAttempts: "Volume / Usage", rushYards: "Volume / Usage",
+  rushTouchdowns: "Volume / Usage",
+  airYardsPerAttempt: "Aggressiveness / Play Style",
+  completedAirYardsPerCompletion: "Aggressiveness / Play Style",
+  yardsPerCatch: "Aggressiveness / Play Style",
+  completionPct: "Efficiency", onTargetPct: "Efficiency", poorThrows: "Efficiency",
+  badThrowPct: "Efficiency", interceptions: "Efficiency", epaPerPlay: "Efficiency",
+  successRate: "Efficiency", cpoe: "Efficiency",
+  passes10Plus: "Explosiveness", passes20Plus: "Explosiveness", passes30Plus: "Explosiveness",
+  passes40Plus: "Explosiveness", passes50Plus: "Explosiveness", longestPass: "Explosiveness",
+  deepAttemptPct: "Explosiveness",
+  pocketTime: "Pressure & Pocket", timeToThrow: "Pressure & Pocket", throwaways: "Pressure & Pocket",
+  battedPasses: "Pressure & Pocket", scrambleRate: "Pressure & Pocket", yardsPerScramble: "Pressure & Pocket",
+  hurries: "Pressure & Pocket", blitzes: "Pressure & Pocket", knockdowns: "Pressure & Pocket",
+  sacks: "Pressure & Pocket", sackYardsLost: "Pressure & Pocket", fumbles: "Pressure & Pocket",
+  pressurePct: "Pressure & Pocket",
+};
+
+const RB_COLUMN_GROUPS: Record<string, string> = {
+  rank: "Player Info", playerName: "Player Info", team: "Player Info",
+  position: "Player Info", age: "Player Info", games: "Player Info", fantasyPoints: "Player Info",
+  snapPct: "Usage / Workload", routes: "Usage / Workload", rushAttempts: "Usage / Workload",
+  redZoneOpportunities: "Usage / Workload", goalLineCarries: "Usage / Workload",
+  targets: "Usage / Workload", targetSharePct: "Usage / Workload", receptions: "Usage / Workload",
+  redZoneTargets: "Usage / Workload", endZoneTargets: "Usage / Workload",
+  rushYards: "Production", yardsPerCarry: "Production", rushTouchdowns: "Production",
+  receivingYards: "Production", yardsPerReception: "Production", receivingYardsAfterCatch: "Production",
+  yardsPerRouteRun: "Production", receivingTouchdowns: "Production", epaPerPlay: "Production",
+  rushes10Plus: "Explosive Play Ability", rushes20Plus: "Explosive Play Ability",
+  rushes30Plus: "Explosive Play Ability", rushes40Plus: "Explosive Play Ability",
+  rushes50Plus: "Explosive Play Ability", explosiveRunPct: "Explosive Play Ability",
+  breakawayRunPct: "Explosive Play Ability", longestRush: "Explosive Play Ability",
+  longestRushTouchdown: "Explosive Play Ability",
+  brokenTackles: "Contact & Tackle Breaking", rushAttemptsPerBrokenTackle: "Contact & Tackle Breaking",
+  yardsBeforeContactPerAttempt: "Contact & Tackle Breaking",
+  yardsAfterContactPerAttempt: "Contact & Tackle Breaking", tackleEludedRate: "Contact & Tackle Breaking",
+  fumbles: "Ball Security / Negative Plays", tacklesForLoss: "Ball Security / Negative Plays",
+  tacklesForLossYards: "Ball Security / Negative Plays", rushAttForNegativeYards: "Ball Security / Negative Plays",
+};
+
+// WR and TE share the same columns, so they share one group map.
+const WR_TE_COLUMN_GROUPS: Record<string, string> = {
+  rank: "Player Info", playerName: "Player Info", team: "Player Info",
+  position: "Player Info", age: "Player Info", games: "Player Info", fantasyPoints: "Player Info",
+  snapPct: "Usage/Role", routes: "Usage/Role", routePct: "Usage/Role", targets: "Usage/Role",
+  targetsPerRouteRun: "Usage/Role", targetSharePct: "Usage/Role", airYardsPerTarget: "Usage/Role",
+  airYardsPerReception: "Usage/Role", airYardsSharePct: "Usage/Role", wopr: "Usage/Role",
+  redZoneTargets: "Usage/Role", endZoneTargets: "Usage/Role",
+  receptions: "Production", receivingYards: "Production",
+  yardsBeforeCatchPerReception: "Production", yardsAfterCatchPerReception: "Production",
+  yardsPerReception: "Production", yardsPerRouteRun: "Production", receivingTouchdowns: "Production",
+  epaPerPlay: "Production", successRate: "Production",
+  catchPct: "Hands", contestedCatchRate: "Hands", catchableTargets: "Hands", drops: "Hands",
+  dropPct: "Hands", interceptionsWhenTargeted: "Hands", fumbles: "Hands",
+  avoidedTackleRate: "Elusiveness", brokenTackles: "Elusiveness",
+  yardsAfterContactPerReception: "Elusiveness",
+  receptions10Plus: "Explosiveness", receptions20Plus: "Explosiveness",
+  receptions30Plus: "Explosiveness", receptions40Plus: "Explosiveness",
+  receptions50Plus: "Explosiveness", longestReception: "Explosiveness",
+};
+
+// Super-header group maps keyed by position (omit a position to show no groups).
+const COLUMN_GROUPS_BY_POSITION: Record<string, Record<string, string>> = {
+  qb: QB_COLUMN_GROUPS,
+  rb: RB_COLUMN_GROUPS,
+  wr: WR_TE_COLUMN_GROUPS,
+  te: WR_TE_COLUMN_GROUPS,
+};
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function formatVal(v: unknown, type: ColDef["type"]): string {
@@ -121,6 +200,7 @@ function SortIcon({ col, sortKey, sortDir }: { col: string; sortKey: string; sor
 
 // ── Component ─────────────────────────────────────────────────────────────────
 export default function PositionStats() {
+  const [subTab, setSubTab]         = useState<"data" | "compare">("data");
   const [position, setPosition]     = useState<Position>("qb");
   const [season, setSeason]         = useState<SeasonKey>("2025");
   const [data, setData]             = useState<AdvancedStatsData | null>(null);
@@ -184,6 +264,44 @@ export default function PositionStats() {
     [allStatCols, visibleCols],
   );
 
+  // Super-header segments: contiguous column groups → colspans. The first two
+  // rendered columns (# and Player) are frozen, so they get their own sticky cell.
+  const groupSegments = useMemo(() => {
+    const groupMap = COLUMN_GROUPS_BY_POSITION[position];
+    if (!groupMap) return [];
+    const seq = ["rank", "playerName", "team", ...activeCols.map((c) => c.key)];
+    const segs: { label: string; span: number; sticky?: boolean; showLabel: boolean }[] = [];
+    for (const key of seq) {
+      const label = groupMap[key] ?? "";
+      const last = segs[segs.length - 1];
+      if (last && last.label === label) last.span += 1;
+      else segs.push({ label, span: 1, showLabel: true });
+    }
+    // Split off the two frozen columns into a sticky cell that pins to the left.
+    const first = segs[0];
+    if (first && first.span >= 2) {
+      const rest = first.span - 2;
+      segs[0] = { label: first.label, span: 2, sticky: true, showLabel: true };
+      if (rest > 0) segs.splice(1, 0, { label: first.label, span: rest, showLabel: false });
+    }
+    return segs;
+  }, [position, activeCols]);
+
+  // Keys of the stat columns that begin a new group — used to draw a vertical
+  // divider down the table at each group boundary.
+  const groupBoundaryKeys = useMemo(() => {
+    const set = new Set<string>();
+    const groupMap = COLUMN_GROUPS_BY_POSITION[position];
+    if (!groupMap) return set;
+    let prevLabel = groupMap["team"] ?? "";
+    for (const c of activeCols) {
+      const label = groupMap[c.key] ?? "";
+      if (label !== prevLabel) set.add(c.key);
+      prevLabel = label;
+    }
+    return set;
+  }, [position, activeCols]);
+
   const colByKey = useMemo<Record<string, ColDef>>(() => {
     const m: Record<string, ColDef> = {};
     for (const c of data?.columns ?? []) m[c.key] = c;
@@ -243,13 +361,72 @@ export default function PositionStats() {
     ? new Date(data.updated_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
     : null;
 
+  // Pill-style sub-tab toggle (matches the My Portfolio Overview/Finances tabs)
+  const renderSubTabToggle = (testidPrefix: string) =>
+    (["data", "compare"] as const).map((tab) => {
+      const isActive = subTab === tab;
+      const Icon = tab === "data" ? Table2 : GitCompare;
+      const label = tab === "data" ? "Data" : "Compare";
+      return (
+        <button
+          key={tab}
+          onClick={() => setSubTab(tab)}
+          data-testid={`${testidPrefix}-${tab}`}
+          className="relative flex items-center justify-center gap-2 font-semibold transition-all duration-200"
+          style={{
+            borderRadius: 12, fontSize: 13, letterSpacing: "0.01em",
+            background: isActive ? "linear-gradient(135deg, rgba(11,58,122,0.85) 0%, rgba(11,58,122,0.65) 100%)" : "transparent",
+            color: isActive ? "#fff" : "rgba(203,213,225,0.45)",
+            border: isActive ? "1px solid rgba(212,175,55,0.30)" : "1px solid transparent",
+            boxShadow: isActive ? "0 2px 12px rgba(11,58,122,0.40), inset 0 1px 0 rgba(255,255,255,0.06)" : "none",
+          }}
+        >
+          <Icon style={{ width: 15, height: 15, flexShrink: 0 }} />
+          {label}
+          {isActive && <span className="sc-subtab-underline absolute bottom-[3px] left-1/2 -translate-x-1/2 rounded-full" style={{ width: 28, height: 2, background: "#d4af37", opacity: 0.85 }} />}
+        </button>
+      );
+    });
+
   return (
     <div className="space-y-5">
-      <SectionHeader
-        title="Position Stats"
-        subtitle="Advanced stats leaderboard — sortable, searchable, with customizable columns."
-      />
+      <div className="flex items-start justify-between gap-4">
+        <SectionHeader
+          title="Position Stats"
+          subtitle="Advanced stats leaderboard — sortable, searchable, with customizable columns."
+        />
+        <div
+          className="hidden md:grid flex-shrink-0"
+          style={{ gridTemplateColumns: "1fr 1fr", height: 48, borderRadius: 16, padding: 4, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", gap: 4, width: 240 }}
+        >
+          {renderSubTabToggle("stats-subtab")}
+        </div>
+      </div>
 
+      {/* Mobile sub-tab toggle */}
+      <div className="md:hidden flex justify-center sm:justify-start">
+        <div
+          className="grid w-full sm:w-auto"
+          style={{ gridTemplateColumns: "1fr 1fr", maxWidth: 420, height: 48, borderRadius: 16, padding: 4, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", gap: 4 }}
+        >
+          {renderSubTabToggle("stats-subtab-mobile")}
+        </div>
+      </div>
+
+      {/* ── Compare sub-tab ──────────────────────────────────────────────── */}
+      {subTab === "compare" && (
+        <Card className="p-10 text-center" data-testid="compare-placeholder">
+          <GitCompare className="w-7 h-7 text-muted-foreground/60 mx-auto mb-3" />
+          <p className="text-sm font-semibold text-foreground mb-1">Player Comparison</p>
+          <p className="text-xs text-muted-foreground max-w-md mx-auto">
+            Compare players side-by-side across advanced stats. This view is coming soon.
+          </p>
+        </Card>
+      )}
+
+      {/* ── Data sub-tab ─────────────────────────────────────────────────── */}
+      {subTab === "data" && (
+      <div className="space-y-5">
       {/* ── Controls card ────────────────────────────────────────────────── */}
       <Card className="p-4 space-y-3" data-testid="position-stats-controls">
         <div className="flex flex-col sm:flex-row gap-3">
@@ -429,6 +606,24 @@ export default function PositionStats() {
           <div className="overflow-x-auto">
             <table className="w-full text-xs border-collapse" data-testid="stats-table">
               <thead>
+                {/* Super-headers (desktop only; mobile hides the Team column) */}
+                {groupSegments.length > 0 && (
+                  <tr className="hidden md:table-row border-b border-border/40">
+                    {groupSegments.map((seg, i) => (
+                      <th
+                        key={`grp-${i}`}
+                        colSpan={seg.span}
+                        className={cn(
+                          "px-3 py-1.5 text-center font-bold uppercase tracking-wider text-[9px] text-muted-foreground/75 bg-[hsl(var(--muted))]",
+                          seg.sticky && "sticky left-0 z-30",
+                          seg.showLabel && i > 0 && "border-l-2 border-border/70",
+                        )}
+                      >
+                        {seg.showLabel ? seg.label : null}
+                      </th>
+                    ))}
+                  </tr>
+                )}
                 <tr className="border-b border-border/50 bg-muted/25">
                   {/* # (rank) */}
                   <th
@@ -450,10 +645,10 @@ export default function PositionStats() {
                       Player <SortIcon col="playerName" sortKey={sortKey} sortDir={sortDir} />
                     </span>
                   </th>
-                  {/* Team */}
+                  {/* Team (hidden on mobile — shown inline next to player name instead) */}
                   <th
                     onClick={() => handleSort("team")}
-                    className="px-3 py-2.5 text-left font-bold uppercase tracking-wider text-[10px] text-muted-foreground cursor-pointer hover:text-foreground transition-colors whitespace-nowrap border-r border-border/25"
+                    className="hidden md:table-cell px-3 py-2.5 text-left font-bold uppercase tracking-wider text-[10px] text-muted-foreground cursor-pointer hover:text-foreground transition-colors whitespace-nowrap border-r border-border/25"
                     data-testid="th-team"
                   >
                     <span className="flex items-center gap-0.5">
@@ -470,6 +665,7 @@ export default function PositionStats() {
                         sortKey === col.key
                           ? "text-[#d4af37]"
                           : "text-muted-foreground",
+                        groupBoundaryKeys.has(col.key) && "border-l-2 border-border/70",
                       )}
                       data-testid={`th-${col.key}`}
                     >
@@ -497,26 +693,48 @@ export default function PositionStats() {
                     const rank = row.rank as number | undefined;
                     const name = String(row.playerName ?? row.player_name ?? row.name ?? "—");
                     const team = String(row.team ?? row.nfl_team ?? "—");
+                    // Mobile shows "F. Last" (first initial + last name); fall back
+                    // to the raw name when it isn't a simple two-part name.
+                    const nameParts = name.trim().split(/\s+/);
+                    const shortName = nameParts.length >= 2
+                      ? `${nameParts[0][0]}. ${nameParts.slice(1).join(" ")}`
+                      : name;
+                    // Opaque background for the sticky (frozen) cells so scrolled
+                    // columns never show through behind the rank/player text.
+                    const stickyBg = idx % 2 === 1
+                      ? "linear-gradient(hsl(var(--muted) / 0.7), hsl(var(--muted) / 0.7)), hsl(var(--card))"
+                      : "hsl(var(--card))";
                     return (
                       <tr
                         key={`${rank ?? idx}-${name}`}
                         className={cn(
                           "border-b border-border/15 hover:bg-[#0b3a7a]/5 transition-colors",
-                          idx % 2 === 1 && "bg-muted/[0.04]",
+                          idx % 2 === 1 && "bg-muted/70",
                         )}
                         data-testid={`row-player-${idx}`}
                       >
                         {/* Rank */}
-                        <td className="sticky left-0 z-10 bg-inherit px-3 py-2 text-right font-mono text-[11px] text-muted-foreground/60 border-r border-border/25 w-10 min-w-[40px]">
+                        <td
+                          style={{ background: stickyBg }}
+                          className="sticky left-0 z-10 px-3 py-2 text-right font-mono text-[11px] text-muted-foreground/60 border-r border-border/25 w-10 min-w-[40px]"
+                        >
                           {rank ?? idx + 1}
                         </td>
                         {/* Player name */}
-                        <td className="sticky left-10 z-10 bg-inherit px-3 py-2 font-semibold text-foreground whitespace-nowrap border-r border-border/25 min-w-[148px]">
-                          {name}
+                        <td
+                          style={{ background: stickyBg }}
+                          className="sticky left-10 z-10 px-3 py-2 font-semibold text-foreground whitespace-nowrap border-r border-border/25 min-w-[148px]"
+                        >
+                          {/* Desktop: full name. Mobile: "F. Last" + faint team. */}
+                          <span className="hidden md:inline">{name}</span>
+                          <span className="md:hidden">
+                            {shortName}
+                            <span className="ml-1.5 font-normal text-muted-foreground/60">{team}</span>
+                          </span>
                         </td>
-                        {/* Team badge */}
-                        <td className="px-3 py-2 whitespace-nowrap border-r border-border/25">
-                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold tracking-wide bg-[#0b3a7a]/12 text-[#0b3a7a] dark:bg-blue-400/15 dark:text-blue-300">
+                        {/* Team badge (hidden on mobile — shown inline next to name) */}
+                        <td className="hidden md:table-cell px-3 py-2 whitespace-nowrap border-r border-border/25">
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold tracking-wide bg-[#0b3a7a]/12 text-white dark:bg-blue-400/15 dark:text-white">
                             {team}
                           </span>
                         </td>
@@ -534,6 +752,7 @@ export default function PositionStats() {
                                 isEmpty
                                   ? "text-muted-foreground/30"
                                   : "text-foreground/90",
+                                groupBoundaryKeys.has(col.key) && "border-l-2 border-border/70",
                               )}
                               data-testid={`cell-${col.key}-${idx}`}
                             >
@@ -564,6 +783,8 @@ export default function PositionStats() {
             </div>
           )}
         </Card>
+      )}
+      </div>
       )}
     </div>
   );

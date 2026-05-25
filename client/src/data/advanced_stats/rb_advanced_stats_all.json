@@ -11,12 +11,6 @@
       "defaultVisible": true
     },
     {
-      "key": "playerId",
-      "label": "Player ID",
-      "type": "string",
-      "defaultVisible": false
-    },
-    {
       "key": "playerName",
       "label": "Player",
       "type": "string",
@@ -26,7 +20,7 @@
       "key": "position",
       "label": "Pos",
       "type": "string",
-      "defaultVisible": false
+      "defaultVisible": true
     },
     {
       "key": "team",
@@ -38,18 +32,18 @@
       "key": "age",
       "label": "Age",
       "type": "number",
-      "defaultVisible": false
-    },
-    {
-      "key": "season",
-      "label": "Season",
-      "type": "number",
-      "defaultVisible": false
+      "defaultVisible": true
     },
     {
       "key": "games",
       "label": "G",
       "type": "number",
+      "defaultVisible": true
+    },
+    {
+      "key": "fantasyPoints",
+      "label": "FPTS",
+      "type": "decimal",
       "defaultVisible": true
     },
     {
@@ -89,6 +83,12 @@
       "defaultVisible": true
     },
     {
+      "key": "targetSharePct",
+      "label": "TGT Share %",
+      "type": "decimal",
+      "defaultVisible": true
+    },
+    {
       "key": "receptions",
       "label": "REC",
       "type": "number",
@@ -125,12 +125,6 @@
       "defaultVisible": true
     },
     {
-      "key": "targetSharePct",
-      "label": "TGT Share %",
-      "type": "decimal",
-      "defaultVisible": true
-    },
-    {
       "key": "receivingYards",
       "label": "Rec YDS",
       "type": "number",
@@ -140,6 +134,12 @@
       "key": "yardsPerReception",
       "label": "Rec Y/R",
       "type": "decimal",
+      "defaultVisible": true
+    },
+    {
+      "key": "receivingYardsAfterCatch",
+      "label": "Rec YAC",
+      "type": "number",
       "defaultVisible": true
     },
     {
@@ -161,16 +161,10 @@
       "defaultVisible": true
     },
     {
-      "key": "fantasyPoints",
-      "label": "FPTS",
-      "type": "decimal",
-      "defaultVisible": true
-    },
-    {
       "key": "rushes10Plus",
       "label": "10+ YDS",
       "type": "number",
-      "defaultVisible": false
+      "defaultVisible": true
     },
     {
       "key": "rushes20Plus",
@@ -182,19 +176,19 @@
       "key": "rushes30Plus",
       "label": "30+ YDS",
       "type": "number",
-      "defaultVisible": false
+      "defaultVisible": true
     },
     {
       "key": "rushes40Plus",
       "label": "40+ YDS",
       "type": "number",
-      "defaultVisible": false
+      "defaultVisible": true
     },
     {
       "key": "rushes50Plus",
       "label": "50+ YDS",
       "type": "number",
-      "defaultVisible": false
+      "defaultVisible": true
     },
     {
       "key": "explosiveRunPct",
@@ -204,7 +198,7 @@
     },
     {
       "key": "breakawayRunPct",
-      "label": "Breakaway %",
+      "label": "BRKWY%",
       "type": "decimal",
       "defaultVisible": true
     },
@@ -233,21 +227,15 @@
       "defaultVisible": true
     },
     {
-      "key": "yardsAfterContactPerAttempt",
-      "label": "YAC/Att",
-      "type": "decimal",
-      "defaultVisible": true
-    },
-    {
       "key": "yardsBeforeContactPerAttempt",
       "label": "YBC/Att",
       "type": "decimal",
       "defaultVisible": true
     },
     {
-      "key": "receivingYardsAfterCatch",
-      "label": "Rec YAC",
-      "type": "number",
+      "key": "yardsAfterContactPerAttempt",
+      "label": "YAC/Att",
+      "type": "decimal",
       "defaultVisible": true
     },
     {
@@ -277,6 +265,18 @@
     {
       "key": "rushAttForNegativeYards",
       "label": "Neg Rush ATT",
+      "type": "number",
+      "defaultVisible": true
+    },
+    {
+      "key": "playerId",
+      "label": "Player ID",
+      "type": "string",
+      "defaultVisible": false
+    },
+    {
+      "key": "season",
+      "label": "Season",
       "type": "number",
       "defaultVisible": false
     }

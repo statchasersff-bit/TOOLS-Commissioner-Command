@@ -11,12 +11,6 @@
       "defaultVisible": true
     },
     {
-      "key": "playerId",
-      "label": "Player ID",
-      "type": "string",
-      "defaultVisible": false
-    },
-    {
       "key": "playerName",
       "label": "Player",
       "type": "string",
@@ -26,7 +20,7 @@
       "key": "position",
       "label": "Pos",
       "type": "string",
-      "defaultVisible": false
+      "defaultVisible": true
     },
     {
       "key": "team",
@@ -38,18 +32,18 @@
       "key": "age",
       "label": "Age",
       "type": "number",
-      "defaultVisible": false
-    },
-    {
-      "key": "season",
-      "label": "Season",
-      "type": "number",
-      "defaultVisible": false
+      "defaultVisible": true
     },
     {
       "key": "games",
       "label": "G",
       "type": "number",
+      "defaultVisible": true
+    },
+    {
+      "key": "fantasyPoints",
+      "label": "FPTS",
+      "type": "decimal",
       "defaultVisible": true
     },
     {
@@ -65,152 +59,32 @@
       "defaultVisible": true
     },
     {
-      "key": "completionPct",
-      "label": "CMP%",
-      "type": "decimal",
-      "defaultVisible": true
-    },
-    {
       "key": "passingYards",
       "label": "YDS",
       "type": "number",
       "defaultVisible": true
     },
     {
-      "key": "yardsPerCatch",
-      "label": "Y/C",
-      "type": "decimal",
-      "defaultVisible": true
-    },
-    {
-      "key": "passingTouchdowns",
-      "label": "Passing TDs",
-      "type": "number",
-      "defaultVisible": true
-    },
-    {
-      "key": "interceptions",
-      "label": "INT",
-      "type": "number",
-      "defaultVisible": true
-    },
-    {
-      "key": "fantasyPoints",
-      "label": "FPTS",
-      "type": "decimal",
-      "defaultVisible": true
-    },
-    {
       "key": "airYards",
       "label": "Air YDS",
       "type": "number",
-      "defaultVisible": false
+      "defaultVisible": true
     },
     {
       "key": "completedAirYards",
       "label": "Comp Air YDS",
       "type": "number",
-      "defaultVisible": false
-    },
-    {
-      "key": "completedAirYardsPerCompletion",
-      "label": "Comp AY/Cmp",
-      "type": "decimal",
       "defaultVisible": true
     },
     {
-      "key": "deepAttemptPct",
-      "label": "Deep ATT%",
-      "type": "decimal",
-      "defaultVisible": true
-    },
-    {
-      "key": "epaPerPlay",
-      "label": "EPA/Play",
-      "type": "decimal",
-      "defaultVisible": true
-    },
-    {
-      "key": "successRate",
-      "label": "Success%",
-      "type": "decimal",
-      "defaultVisible": true
-    },
-    {
-      "key": "cpoe",
-      "label": "CPOE",
-      "type": "decimal",
-      "defaultVisible": true
-    },
-    {
-      "key": "throwaways",
-      "label": "Thrown Away",
+      "key": "redZoneAttempts",
+      "label": "RZ ATT",
       "type": "number",
       "defaultVisible": true
     },
     {
-      "key": "battedPasses",
-      "label": "Batted",
-      "type": "number",
-      "defaultVisible": true
-    },
-    {
-      "key": "poorThrows",
-      "label": "Poor Throws",
-      "type": "number",
-      "defaultVisible": true
-    },
-    {
-      "key": "badThrowPct",
-      "label": "Bad Throw%",
-      "type": "decimal",
-      "defaultVisible": true
-    },
-    {
-      "key": "onTargetPct",
-      "label": "On Target%",
-      "type": "decimal",
-      "defaultVisible": true
-    },
-    {
-      "key": "passesDropped",
-      "label": "Drops",
-      "type": "number",
-      "defaultVisible": true
-    },
-    {
-      "key": "passes10Plus",
-      "label": "10+ YDS",
-      "type": "number",
-      "defaultVisible": false
-    },
-    {
-      "key": "passes20Plus",
-      "label": "20+ YDS",
-      "type": "number",
-      "defaultVisible": true
-    },
-    {
-      "key": "passes30Plus",
-      "label": "30+ YDS",
-      "type": "number",
-      "defaultVisible": false
-    },
-    {
-      "key": "passes40Plus",
-      "label": "40+ YDS",
-      "type": "number",
-      "defaultVisible": false
-    },
-    {
-      "key": "passes50Plus",
-      "label": "50+ YDS",
-      "type": "number",
-      "defaultVisible": false
-    },
-    {
-      "key": "longestPass",
-      "label": "LNG",
+      "key": "passingTouchdowns",
+      "label": "Pass TDs",
       "type": "number",
       "defaultVisible": true
     },
@@ -233,40 +107,106 @@
       "defaultVisible": true
     },
     {
-      "key": "redZoneAttempts",
-      "label": "RZ ATT",
-      "type": "number",
-      "defaultVisible": true
-    },
-    {
-      "key": "scrambleRate",
-      "label": "SCRM%",
-      "type": "decimal",
-      "defaultVisible": false
-    },
-    {
-      "key": "yardsPerScramble",
-      "label": "Yds/Scramble",
+      "key": "completedAirYardsPerCompletion",
+      "label": "AY/Cmp",
       "type": "decimal",
       "defaultVisible": true
     },
     {
-      "key": "fumbles",
-      "label": "FUM",
+      "key": "yardsPerCatch",
+      "label": "Y/C",
+      "type": "decimal",
+      "defaultVisible": true
+    },
+    {
+      "key": "completionPct",
+      "label": "CMP%",
+      "type": "decimal",
+      "defaultVisible": true
+    },
+    {
+      "key": "onTargetPct",
+      "label": "On Tgt%",
+      "type": "decimal",
+      "defaultVisible": true
+    },
+    {
+      "key": "poorThrows",
+      "label": "Bad Throws",
       "type": "number",
       "defaultVisible": true
     },
     {
-      "key": "sacks",
-      "label": "SACK",
+      "key": "badThrowPct",
+      "label": "Bad Throw%",
+      "type": "decimal",
+      "defaultVisible": true
+    },
+    {
+      "key": "interceptions",
+      "label": "INT",
       "type": "number",
       "defaultVisible": true
     },
     {
-      "key": "sackYardsLost",
-      "label": "Sack YDS",
+      "key": "epaPerPlay",
+      "label": "EPA/Play",
+      "type": "decimal",
+      "defaultVisible": true
+    },
+    {
+      "key": "successRate",
+      "label": "Success%",
+      "type": "decimal",
+      "defaultVisible": true
+    },
+    {
+      "key": "cpoe",
+      "label": "CPOE",
+      "type": "decimal",
+      "defaultVisible": true
+    },
+    {
+      "key": "passes10Plus",
+      "label": "10+ YDS",
       "type": "number",
-      "defaultVisible": false
+      "defaultVisible": true
+    },
+    {
+      "key": "passes20Plus",
+      "label": "20+ YDS",
+      "type": "number",
+      "defaultVisible": true
+    },
+    {
+      "key": "passes30Plus",
+      "label": "30+ YDS",
+      "type": "number",
+      "defaultVisible": true
+    },
+    {
+      "key": "passes40Plus",
+      "label": "40+ YDS",
+      "type": "number",
+      "defaultVisible": true
+    },
+    {
+      "key": "passes50Plus",
+      "label": "50+ YDS",
+      "type": "number",
+      "defaultVisible": true
+    },
+    {
+      "key": "longestPass",
+      "label": "LNG",
+      "type": "number",
+      "defaultVisible": true
+    },
+    {
+      "key": "deepAttemptPct",
+      "label": "Deep ATT%",
+      "type": "decimal",
+      "defaultVisible": true
     },
     {
       "key": "pocketTime",
@@ -281,14 +221,38 @@
       "defaultVisible": true
     },
     {
-      "key": "blitzes",
-      "label": "BLZ",
+      "key": "throwaways",
+      "label": "Thrown Away",
       "type": "number",
+      "defaultVisible": true
+    },
+    {
+      "key": "battedPasses",
+      "label": "Batted",
+      "type": "number",
+      "defaultVisible": true
+    },
+    {
+      "key": "scrambleRate",
+      "label": "SCRM%",
+      "type": "decimal",
+      "defaultVisible": true
+    },
+    {
+      "key": "yardsPerScramble",
+      "label": "Yds/Scramble",
+      "type": "decimal",
       "defaultVisible": true
     },
     {
       "key": "hurries",
       "label": "HRY",
+      "type": "number",
+      "defaultVisible": true
+    },
+    {
+      "key": "blitzes",
+      "label": "BLZ",
       "type": "number",
       "defaultVisible": true
     },
@@ -299,10 +263,46 @@
       "defaultVisible": true
     },
     {
+      "key": "sacks",
+      "label": "SACK",
+      "type": "number",
+      "defaultVisible": true
+    },
+    {
+      "key": "sackYardsLost",
+      "label": "Sack YDS",
+      "type": "number",
+      "defaultVisible": true
+    },
+    {
+      "key": "fumbles",
+      "label": "FUM",
+      "type": "number",
+      "defaultVisible": true
+    },
+    {
       "key": "pressurePct",
       "label": "PRSS%",
       "type": "decimal",
       "defaultVisible": true
+    },
+    {
+      "key": "playerId",
+      "label": "Player ID",
+      "type": "string",
+      "defaultVisible": false
+    },
+    {
+      "key": "season",
+      "label": "Season",
+      "type": "number",
+      "defaultVisible": false
+    },
+    {
+      "key": "passesDropped",
+      "label": "Drops",
+      "type": "number",
+      "defaultVisible": false
     }
   ],
   "rows": [
