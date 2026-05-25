@@ -18,11 +18,20 @@ import {
   ChevronsUpDown,
   GitCompare,
   Loader2,
+  Plus,
   Search,
   SlidersHorizontal,
   Table2,
   X,
 } from "lucide-react";
+import { computeQbCompositeScores, QB_SCORE_CATEGORIES } from "@/lib/qbCompositeScores";
+import { computeRbCompositeScores, RB_SCORE_CATEGORIES } from "@/lib/rbCompositeScores";
+import {
+  computeWrCompositeScores,
+  computeTeCompositeScores,
+  WR_SCORE_CATEGORIES,
+  TE_SCORE_CATEGORIES,
+} from "@/lib/receivingComposites";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type Position = "qb" | "rb" | "wr" | "te";
@@ -96,6 +105,9 @@ const ALWAYS_HIDDEN = new Set([
 // header row above the column names. Keys are grouped contiguously so the
 // colspans line up with the rendered column order.
 const QB_COLUMN_GROUPS: Record<string, string> = {
+  overallQBGrade: "Composite Grades", volumeScore: "Composite Grades",
+  accuracyScore: "Composite Grades", explosivenessScore: "Composite Grades",
+  mobilityScore: "Composite Grades", efficiencyScore: "Composite Grades",
   rank: "Player Info", playerName: "Player Info", team: "Player Info",
   position: "Player Info", age: "Player Info", games: "Player Info", fantasyPoints: "Player Info",
   attempts: "Volume / Usage", completions: "Volume / Usage", passingYards: "Volume / Usage",
@@ -119,6 +131,9 @@ const QB_COLUMN_GROUPS: Record<string, string> = {
 };
 
 const RB_COLUMN_GROUPS: Record<string, string> = {
+  overallRBGrade: "Composite Grades", volumeScore: "Composite Grades",
+  efficiencyScore: "Composite Grades", explosivenessScore: "Composite Grades",
+  receivingScore: "Composite Grades", elusivenessScore: "Composite Grades",
   rank: "Player Info", playerName: "Player Info", team: "Player Info",
   position: "Player Info", age: "Player Info", games: "Player Info", fantasyPoints: "Player Info",
   snapPct: "Usage / Workload", routes: "Usage / Workload", rushAttempts: "Usage / Workload",
@@ -142,6 +157,10 @@ const RB_COLUMN_GROUPS: Record<string, string> = {
 
 // WR and TE share the same columns, so they share one group map.
 const WR_TE_COLUMN_GROUPS: Record<string, string> = {
+  overallWRGrade: "Composite Grades", overallTEGrade: "Composite Grades",
+  volumeScore: "Composite Grades", efficiencyScore: "Composite Grades",
+  explosivenessScore: "Composite Grades", handsScore: "Composite Grades",
+  elusivenessScore: "Composite Grades",
   rank: "Player Info", playerName: "Player Info", team: "Player Info",
   position: "Player Info", age: "Player Info", games: "Player Info", fantasyPoints: "Player Info",
   snapPct: "Usage/Role", routes: "Usage/Role", routePct: "Usage/Role", targets: "Usage/Role",
@@ -167,6 +186,23 @@ const COLUMN_GROUPS_BY_POSITION: Record<string, Record<string, string>> = {
   rb: RB_COLUMN_GROUPS,
   wr: WR_TE_COLUMN_GROUPS,
   te: WR_TE_COLUMN_GROUPS,
+};
+
+// ── Composite scores ───────────────────────────────────────────────────────────
+// Per-position grade engine: a function that scores the full pool of rows and
+// the ordered category metadata (Overall first) that becomes the grade columns.
+interface ScoreCategoryMeta { key: string; label: string; shortLabel: string; description: string }
+interface ScoreEngine {
+  compute: (rows: Record<string, unknown>[]) => Array<Record<string, number>>;
+  categories: ScoreCategoryMeta[];
+}
+const SCORE_ENGINES: Record<Position, ScoreEngine> = {
+  // QB/RB engines return nominal interfaces (all-number fields); cast to the
+  // shared index-signature shape the table consumes.
+  qb: { compute: computeQbCompositeScores as unknown as ScoreEngine["compute"], categories: QB_SCORE_CATEGORIES },
+  rb: { compute: computeRbCompositeScores as unknown as ScoreEngine["compute"], categories: RB_SCORE_CATEGORIES },
+  wr: { compute: computeWrCompositeScores, categories: WR_SCORE_CATEGORIES },
+  te: { compute: computeTeCompositeScores, categories: TE_SCORE_CATEGORIES },
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -231,8 +267,13 @@ export default function PositionStats() {
   const [sortDir, setSortDir]       = useState<SortDir>("asc");
   const [visibleCols, setVisibleCols] = useState<Set<string>>(new Set());
   const [showColPanel, setShowColPanel] = useState(false);
-  // Player keys selected for the Compare sub-tab (in display order, max 5).
-  const [compareIds, setCompareIds] = useState<string[]>([]);
+  // Compare sub-tab: a fixed set of MAX_COMPARE slots, each holding a player key
+  // (or null when empty). openSlot is the slot whose picker dropdown is open.
+  const [compareSlots, setCompareSlots] = useState<(string | null)[]>(() =>
+    Array(MAX_COMPARE).fill(null),
+  );
+  const [openSlot, setOpenSlot] = useState<number | null>(null);
+  const [slotQuery, setSlotQuery] = useState("");
 
   // Load the JSON file whenever position or season changes
   useEffect(() => {
@@ -248,19 +289,16 @@ export default function PositionStats() {
     setSortDir("asc");
     setSearch("");
     setShowColPanel(false);
-    setCompareIds([]);
+    setCompareSlots(Array(MAX_COMPARE).fill(null));
+    setOpenSlot(null);
+    setSlotQuery("");
 
     loader()
       .then((mod) => {
         if (cancelled) return;
-        const d = mod.default as AdvancedStatsData;
-        setData(d);
-        const defaults = new Set<string>(
-          d.columns
-            .filter((c) => c.defaultVisible && !PINNED_KEYS.has(c.key) && !ALWAYS_HIDDEN.has(c.key))
-            .map((c) => c.key),
-        );
-        setVisibleCols(defaults);
+        setData(mod.default as AdvancedStatsData);
+        // Default visible columns are derived from `scoredData` (which adds the
+        // grade columns) in the effect below, so they're not set here.
       })
       .catch((err) => {
         if (cancelled) return;
@@ -273,13 +311,58 @@ export default function PositionStats() {
     return () => { cancelled = true; };
   }, [position, season]);
 
-  // All toggleable stat columns (ordered as in the JSON)
+  // ── Composite scores ────────────────────────────────────────────────────────
+  // Grade columns + descriptions for the active position (Overall first).
+  const scoreCategories = SCORE_ENGINES[position].categories;
+  const scoreKeySet = useMemo(
+    () => new Set(scoreCategories.map((c) => c.key)),
+    [scoreCategories],
+  );
+  const scoreDescByKey = useMemo(() => {
+    const m: Record<string, string> = {};
+    for (const c of scoreCategories) m[c.key] = c.description;
+    return m;
+  }, [scoreCategories]);
+
+  // The loaded data augmented with composite grade columns. Scores are computed
+  // against the FULL pool (every row, unfiltered/unsorted) so percentiles aren't
+  // distorted by the current search/sort, then merged onto each row by index.
+  // Grade columns are appended so they render at the end of the table and trail
+  // the Columns panel.
+  const scoredData = useMemo<AdvancedStatsData | null>(() => {
+    if (!data) return null;
+    const { compute, categories } = SCORE_ENGINES[position];
+    const scores = compute(data.rows);
+    const scoreCols: ColDef[] = categories.map((c) => ({
+      key: c.key,
+      label: c.shortLabel,
+      type: "number",
+      defaultVisible: true,
+    }));
+    const rows = data.rows.map((r, i) => ({ ...r, ...scores[i] }));
+    return { ...data, columns: [...data.columns, ...scoreCols], rows };
+  }, [data, position]);
+
+  // Reset visible columns to defaults (including grades) whenever a new dataset
+  // loads.
+  useEffect(() => {
+    if (!scoredData) return;
+    setVisibleCols(
+      new Set(
+        scoredData.columns
+          .filter((c) => c.defaultVisible && !PINNED_KEYS.has(c.key) && !ALWAYS_HIDDEN.has(c.key))
+          .map((c) => c.key),
+      ),
+    );
+  }, [scoredData]);
+
+  // All toggleable stat columns (grades first, then the JSON columns in order)
   const allStatCols = useMemo<ColDef[]>(() => {
-    if (!data) return [];
-    return data.columns.filter(
+    if (!scoredData) return [];
+    return scoredData.columns.filter(
       (c) => !PINNED_KEYS.has(c.key) && !ALWAYS_HIDDEN.has(c.key),
     );
-  }, [data]);
+  }, [scoredData]);
 
   // Only the currently-visible stat columns
   const activeCols = useMemo(
@@ -327,14 +410,14 @@ export default function PositionStats() {
 
   const colByKey = useMemo<Record<string, ColDef>>(() => {
     const m: Record<string, ColDef> = {};
-    for (const c of data?.columns ?? []) m[c.key] = c;
+    for (const c of scoredData?.columns ?? []) m[c.key] = c;
     return m;
-  }, [data]);
+  }, [scoredData]);
 
   // Filter by search, then sort
   const rows = useMemo(() => {
-    if (!data) return [];
-    let r = data.rows;
+    if (!scoredData) return [];
+    let r = scoredData.rows;
     const q = search.trim().toLowerCase();
     if (q) {
       r = r.filter((row) => {
@@ -362,7 +445,7 @@ export default function PositionStats() {
       });
     }
     return r;
-  }, [data, search, sortKey, sortDir, colByKey]);
+  }, [scoredData, search, sortKey, sortDir, colByKey]);
 
   const handleSort = (key: string) => {
     if (sortKey === key) {
@@ -376,28 +459,29 @@ export default function PositionStats() {
   // ── Compare sub-tab derived data ────────────────────────────────────────────
   // The selected players, resolved to their rows in current display order.
   const compareRows = useMemo(() => {
-    if (!data) return [];
-    const byKey = new Map(data.rows.map((r) => [getPlayerKey(r), r]));
-    return compareIds
+    if (!scoredData) return [];
+    const byKey = new Map(scoredData.rows.map((r) => [getPlayerKey(r), r]));
+    return compareSlots
+      .filter((id): id is string => id != null)
       .map((id) => byKey.get(id))
       .filter((r): r is Record<string, unknown> => r != null);
-  }, [data, compareIds]);
+  }, [scoredData, compareSlots]);
 
-  // Players matching the search box that aren't already selected (typeahead).
-  const pickerMatches = useMemo(() => {
-    if (!data) return [];
-    const selected = new Set(compareIds);
-    const q = search.trim().toLowerCase();
-    let r = data.rows.filter((row) => !selected.has(getPlayerKey(row)));
-    if (q) {
-      r = r.filter(
-        (row) =>
-          getPlayerName(row).toLowerCase().includes(q) ||
-          getPlayerTeam(row).toLowerCase().includes(q),
+  // Players selectable in the currently-open slot picker: the pool minus anyone
+  // already chosen in another slot, filtered by the picker's own search box.
+  const slotMatches = useMemo(() => {
+    if (!scoredData || openSlot == null) return [];
+    const selected = new Set(compareSlots.filter((id): id is string => id != null));
+    const q = slotQuery.trim().toLowerCase();
+    return scoredData.rows.filter((row) => {
+      if (selected.has(getPlayerKey(row))) return false;
+      if (!q) return true;
+      return (
+        getPlayerName(row).toLowerCase().includes(q) ||
+        getPlayerTeam(row).toLowerCase().includes(q)
       );
-    }
-    return r.slice(0, 8);
-  }, [data, search, compareIds]);
+    });
+  }, [scoredData, openSlot, slotQuery, compareSlots]);
 
   // Visible stat columns bucketed by super-header group (the compare table's rows).
   const compareGroups = useMemo(() => {
@@ -412,15 +496,22 @@ export default function PositionStats() {
     return order.map((label) => ({ label, cols: byLabel.get(label)! }));
   }, [activeCols, position]);
 
-  const addCompare = (row: Record<string, unknown>) => {
-    const id = getPlayerKey(row);
-    setCompareIds((prev) =>
-      prev.includes(id) || prev.length >= MAX_COMPARE ? prev : [...prev, id],
-    );
-    setSearch("");
+  const openSlotPicker = (index: number) => {
+    setOpenSlot((cur) => (cur === index ? null : index));
+    setSlotQuery("");
   };
-  const removeCompare = (id: string) =>
-    setCompareIds((prev) => prev.filter((x) => x !== id));
+  const assignSlot = (index: number, row: Record<string, unknown>) => {
+    const id = getPlayerKey(row);
+    setCompareSlots((prev) => prev.map((s, i) => (i === index ? id : s)));
+    setOpenSlot(null);
+    setSlotQuery("");
+  };
+  const clearSlot = (index: number) =>
+    setCompareSlots((prev) => prev.map((s, i) => (i === index ? null : s)));
+  // Clear whichever slot currently holds this player (used by the table's
+  // column-header remove button).
+  const removeById = (id: string) =>
+    setCompareSlots((prev) => prev.map((s) => (s === id ? null : s)));
 
   // Toggleable stat columns bucketed by their super-header group, in order.
   // The Columns panel toggles whole groups rather than individual columns.
@@ -553,68 +644,35 @@ export default function PositionStats() {
           </div>
         </div>
 
-        {/* Search + column toggle row */}
+        {/* Search + column toggle row. The free-text search filters the Data
+            table; Compare selects players via the 5 slot pickers instead. */}
         <div className="flex gap-2">
-          <div className="relative flex-1 min-w-0">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground/60 pointer-events-none" />
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder={subTab === "compare" ? "Search to add a player…" : "Search player or team…"}
-              className="pl-8 h-8 text-xs"
-              data-testid="input-player-search"
-            />
-            {search && (
-              <button
-                onClick={() => setSearch("")}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                data-testid="btn-clear-search"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            )}
-
-            {/* Compare typeahead: pick a player to add to the comparison. */}
-            {subTab === "compare" && search.trim() && data && (
-              <div
-                className="absolute left-0 right-0 top-full mt-1 z-40 rounded-md border border-border bg-[hsl(var(--card))] shadow-lg overflow-hidden"
-                data-testid="compare-player-dropdown"
-              >
-                {compareIds.length >= MAX_COMPARE ? (
-                  <p className="px-3 py-2 text-[11px] text-muted-foreground italic">
-                    Remove a player to add another (max {MAX_COMPARE}).
-                  </p>
-                ) : pickerMatches.length === 0 ? (
-                  <p className="px-3 py-2 text-[11px] text-muted-foreground italic">
-                    No players found.
-                  </p>
-                ) : (
-                  pickerMatches.map((row) => {
-                    const id = getPlayerKey(row);
-                    return (
-                      <button
-                        key={id}
-                        onClick={() => addCompare(row)}
-                        className="w-full flex items-center justify-between gap-2 px-3 py-1.5 text-left text-xs hover:bg-[#0b3a7a]/10 transition-colors"
-                        data-testid={`compare-add-${id}`}
-                      >
-                        <span className="font-medium text-foreground truncate">
-                          {getPlayerName(row)}
-                        </span>
-                        <span className="text-[10px] text-muted-foreground shrink-0">
-                          {getPlayerTeam(row)}
-                        </span>
-                      </button>
-                    );
-                  })
-                )}
-              </div>
-            )}
-          </div>
+          {subTab !== "compare" && (
+            <div className="relative flex-1 min-w-0">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground/60 pointer-events-none" />
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search player or team…"
+                className="pl-8 h-8 text-xs"
+                data-testid="input-player-search"
+              />
+              {search && (
+                <button
+                  onClick={() => setSearch("")}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  data-testid="btn-clear-search"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          )}
           <button
             onClick={() => setShowColPanel((v) => !v)}
             className={cn(
               "flex items-center gap-1.5 px-3 h-8 rounded-md text-xs font-semibold border transition-colors shrink-0",
+              subTab === "compare" && "ml-auto",
               showColPanel
                 ? "bg-[#0b3a7a] text-white border-[#0b3a7a]"
                 : "border-border text-muted-foreground hover:text-foreground hover:border-foreground/30",
@@ -625,35 +683,6 @@ export default function PositionStats() {
             Columns
           </button>
         </div>
-
-        {/* Selected players (Compare sub-tab) */}
-        {subTab === "compare" && compareRows.length > 0 && (
-          <div className="flex flex-wrap items-center gap-1.5" data-testid="compare-chips">
-            {compareRows.map((r) => {
-              const id = getPlayerKey(r);
-              return (
-                <span
-                  key={id}
-                  className="inline-flex items-center gap-1.5 pl-2.5 pr-1.5 py-1 rounded-full text-[11px] font-semibold bg-[#0b3a7a]/12 text-foreground border border-[#0b3a7a]/30"
-                >
-                  {getPlayerName(r)}
-                  <span className="text-[10px] font-normal text-muted-foreground">{getPlayerTeam(r)}</span>
-                  <button
-                    onClick={() => removeCompare(id)}
-                    className="text-muted-foreground hover:text-foreground"
-                    data-testid={`compare-chip-remove-${id}`}
-                    aria-label={`Remove ${getPlayerName(r)}`}
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                </span>
-              );
-            })}
-            <span className="text-[10px] text-muted-foreground/60 ml-1">
-              {compareRows.length} / {MAX_COMPARE}
-            </span>
-          </div>
-        )}
 
         {/* Column visibility panel */}
         {showColPanel && allStatCols.length > 0 && (
@@ -748,25 +777,119 @@ export default function PositionStats() {
         </Card>
       )}
 
-      {/* ── Compare sub-tab — transposed table (stats × players) ─────────── */}
+      {/* ── Compare sub-tab — slot pickers + transposed table ───────────── */}
       {!loading && !error && data && subTab === "compare" && (
-        compareRows.length === 0 ? (
-          <Card className="p-10 text-center" data-testid="compare-empty">
-            <GitCompare className="w-7 h-7 text-muted-foreground/60 mx-auto mb-3" />
-            <p className="text-sm font-semibold text-foreground mb-1">Compare players side-by-side</p>
-            <p className="text-xs text-muted-foreground max-w-md mx-auto">
-              Use the search above to add up to {MAX_COMPARE} {position.toUpperCase()}s. Stats run down
-              the rows so you can scan each metric across players. Use Columns to choose which stats appear.
-            </p>
+        <div className="space-y-5">
+
+          {/* Player slot pickers: MAX_COMPARE slots, each a "+ Add player"
+              dropdown when empty or a filled chip with a clear button. */}
+          <Card className="p-4" data-testid="compare-slots">
+            <span className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-2">
+              Players · {compareRows.length} of {MAX_COMPARE}
+            </span>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+              {compareSlots.map((slotId, i) => {
+                const row = slotId ? scoredData?.rows.find((r) => getPlayerKey(r) === slotId) : null;
+                const isOpen = openSlot === i;
+                return (
+                  <div key={i} className="relative">
+                    {row ? (
+                      <div
+                        className="flex items-center justify-between gap-1.5 h-10 px-2.5 rounded-md border border-[#0b3a7a]/40 bg-[#0b3a7a]/12"
+                        data-testid={`compare-slot-${i}`}
+                      >
+                        <span className="min-w-0">
+                          <span className="block truncate text-xs font-semibold text-foreground">{getPlayerName(row)}</span>
+                          <span className="block text-[10px] text-muted-foreground leading-none">{getPlayerTeam(row)}</span>
+                        </span>
+                        <button
+                          onClick={() => clearSlot(i)}
+                          className="shrink-0 text-muted-foreground/70 hover:text-foreground"
+                          data-testid={`compare-slot-clear-${i}`}
+                          aria-label={`Clear player slot ${i + 1}`}
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => openSlotPicker(i)}
+                        className={cn(
+                          "flex items-center justify-center gap-1.5 w-full h-10 rounded-md border border-dashed text-xs font-semibold transition-colors",
+                          isOpen
+                            ? "border-[#0b3a7a] text-foreground bg-[#0b3a7a]/10"
+                            : "border-border text-muted-foreground hover:border-foreground/40 hover:text-foreground",
+                        )}
+                        data-testid={`compare-slot-add-${i}`}
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        Add player
+                      </button>
+                    )}
+
+                    {/* Per-slot player picker dropdown */}
+                    {isOpen && (
+                      <>
+                        <div className="fixed inset-0 z-30" onClick={() => setOpenSlot(null)} data-testid="compare-slot-backdrop" />
+                        <div className="absolute left-0 right-0 top-full mt-1 z-40 rounded-md border border-border bg-[hsl(var(--card))] shadow-lg overflow-hidden">
+                          <div className="relative border-b border-border/50">
+                            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground/60 pointer-events-none" />
+                            <Input
+                              autoFocus
+                              value={slotQuery}
+                              onChange={(e) => setSlotQuery(e.target.value)}
+                              placeholder={`Search ${position.toUpperCase()}…`}
+                              className="pl-8 h-8 text-xs border-0 rounded-none focus-visible:ring-0"
+                              data-testid={`compare-slot-search-${i}`}
+                            />
+                          </div>
+                          <div className="max-h-60 overflow-y-auto">
+                            {slotMatches.length === 0 ? (
+                              <p className="px-3 py-2 text-[11px] text-muted-foreground italic">No players found.</p>
+                            ) : (
+                              slotMatches.map((pr) => {
+                                const pid = getPlayerKey(pr);
+                                return (
+                                  <button
+                                    key={pid}
+                                    onClick={() => assignSlot(i, pr)}
+                                    className="w-full flex items-center justify-between gap-2 px-3 py-1.5 text-left text-xs hover:bg-[#0b3a7a]/10 transition-colors"
+                                    data-testid={`compare-slot-option-${i}-${pid}`}
+                                  >
+                                    <span className="font-medium text-foreground truncate">{getPlayerName(pr)}</span>
+                                    <span className="text-[10px] text-muted-foreground shrink-0">{getPlayerTeam(pr)}</span>
+                                  </button>
+                                );
+                              })
+                            )}
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           </Card>
-        ) : activeCols.length === 0 ? (
-          <Card className="p-10 text-center" data-testid="compare-no-cols">
-            <p className="text-xs text-amber-500/80 italic">
-              No stat columns visible — open Columns to add some.
-            </p>
-          </Card>
-        ) : (
-          <Card className="overflow-hidden p-0" data-testid="compare-table-card">
+
+          {/* Comparison table (or hints) */}
+          {compareRows.length === 0 ? (
+            <Card className="p-10 text-center" data-testid="compare-empty">
+              <GitCompare className="w-7 h-7 text-muted-foreground/60 mx-auto mb-3" />
+              <p className="text-sm font-semibold text-foreground mb-1">Compare players side-by-side</p>
+              <p className="text-xs text-muted-foreground max-w-md mx-auto">
+                Add up to {MAX_COMPARE} {position.toUpperCase()}s using the slots above. Stats run down
+                the rows so you can scan each metric across players. Use Columns to choose which stats appear.
+              </p>
+            </Card>
+          ) : activeCols.length === 0 ? (
+            <Card className="p-10 text-center" data-testid="compare-no-cols">
+              <p className="text-xs text-amber-500/80 italic">
+                No stat columns visible — open Columns to add some.
+              </p>
+            </Card>
+          ) : (
+            <Card className="overflow-hidden p-0" data-testid="compare-table-card">
             <div className="overflow-x-auto">
               <table className="w-full text-xs border-collapse" data-testid="compare-table">
                 <thead>
@@ -792,7 +915,7 @@ export default function PositionStats() {
                               </span>
                             </span>
                             <button
-                              onClick={() => removeCompare(id)}
+                              onClick={() => removeById(id)}
                               className="text-muted-foreground/60 hover:text-foreground mt-0.5"
                               data-testid={`compare-remove-${id}`}
                               aria-label={`Remove ${getPlayerName(r)}`}
@@ -829,6 +952,7 @@ export default function PositionStats() {
                           }
                         }
                         const hasLeader = max !== -Infinity && compareRows.length > 1;
+                        const isScore = scoreKeySet.has(col.key);
                         const stickyBg = ci % 2 === 1
                           ? "linear-gradient(hsl(var(--muted) / 0.7), hsl(var(--muted) / 0.7)), hsl(var(--card))"
                           : "hsl(var(--card))";
@@ -843,7 +967,11 @@ export default function PositionStats() {
                           >
                             <td
                               style={{ background: stickyBg }}
-                              className="sticky left-0 z-10 px-3 py-2 font-medium text-muted-foreground whitespace-nowrap border-r border-border/25"
+                              title={isScore ? scoreDescByKey[col.key] : undefined}
+                              className={cn(
+                                "sticky left-0 z-10 px-3 py-2 whitespace-nowrap border-r border-border/25",
+                                isScore ? "font-semibold text-foreground/90 cursor-help" : "font-medium text-muted-foreground",
+                              )}
                             >
                               {col.label}
                             </td>
@@ -883,7 +1011,8 @@ export default function PositionStats() {
               </p>
             </div>
           </Card>
-        )
+          )}
+        </div>
       )}
 
       {/* ── Data sub-tab ─────────────────────────────────────────────────── */}
@@ -946,6 +1075,7 @@ export default function PositionStats() {
                     <th
                       key={col.key}
                       onClick={() => handleSort(col.key)}
+                      title={scoreKeySet.has(col.key) ? scoreDescByKey[col.key] : undefined}
                       className={cn(
                         "px-3 py-2.5 text-right font-bold uppercase tracking-wider text-[10px] cursor-pointer hover:text-foreground transition-colors whitespace-nowrap",
                         sortKey === col.key
@@ -1029,12 +1159,16 @@ export default function PositionStats() {
                           const raw = row[col.key];
                           const isEmpty = raw == null;
                           const isSorted = sortKey === col.key;
+                          // Grade cells are bolded so they read as the headline
+                          // numbers, but otherwise styled like any stat cell.
+                          const isScore = scoreKeySet.has(col.key);
                           return (
                             <td
                               key={col.key}
                               className={cn(
                                 "px-3 py-2 text-right tabular-nums whitespace-nowrap",
                                 isSorted && "bg-[#d4af37]/[0.04]",
+                                isScore && "font-semibold",
                                 isEmpty
                                   ? "text-muted-foreground/30"
                                   : "text-foreground/90",

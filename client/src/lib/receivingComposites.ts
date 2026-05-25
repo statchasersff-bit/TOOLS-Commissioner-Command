@@ -64,7 +64,7 @@ export function buildReceivingComposites<T extends Row>(config: ReceivingConfig,
   const stats = new Set<string>();
   for (const comp of Object.values(config.weights)) for (const k of Object.keys(comp)) stats.add(k);
   const pmap: Record<string, number[]> = {};
-  for (const stat of stats) {
+  for (const stat of Array.from(stats)) {
     const dir = INVERTED.has(stat) ? 'lowerIsBetter' : 'higherIsBetter';
     pmap[stat] = percentileColumnAgainst<Row, Row>(rows, accessorFor(stat), baseline, dir);
   }
