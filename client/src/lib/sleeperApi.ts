@@ -566,6 +566,20 @@ export async function fetchTradesForPlayer(
   return records;
 }
 
+// Global trade-database totals. `totalLeagues` is the number of leagues that
+// have been crawled/scanned into the trade corpus — i.e. how many leagues were
+// searched when looking for a player's trades. Cached server-side (5 min).
+export async function fetchTradeLeaguesScanned(): Promise<number | null> {
+  try {
+    const res = await fetch(`${API_BASE}/api/trades/stats`, { credentials: "include" });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return typeof data?.totalLeagues === "number" ? data.totalLeagues : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchSleeperLeagueFull(leagueId: string, userId: string) {
   const [leagueRaw, rostersRaw, usersRaw, tradedPicksRaw, playersDb, draftsRaw] =
     await Promise.all([

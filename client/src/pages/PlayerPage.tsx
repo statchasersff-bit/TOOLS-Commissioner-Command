@@ -31,7 +31,6 @@ import {
   Star,
   Target,
   TrendingUp,
-  Trophy,
   Users,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
@@ -40,7 +39,7 @@ import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { cn } from "@/lib/utils";
 import { useSleeper } from "@/contexts/SleeperContext";
 import { useValueModel } from "@/contexts/ValueModelContext";
-import { getSleeperPlayers, fetchSleeperLeagueFull, fetchPlayerExposure, fetchTradesForPlayer, fetchPlayerGameLogs, fetchPlayerAdpHistory, fetchPlayerAdpAvailability, type PlayerLeagueExposure, type PlayerTradeRecord, type PlayerTradeAsset, type PlayerGameLogRow, type PlayerAdpHistory, type PlayerAdpAvailability, type PlayerAdpAvailabilityCell, type AdpProfileFilters } from "@/lib/sleeperApi";
+import { getSleeperPlayers, fetchSleeperLeagueFull, fetchPlayerExposure, fetchTradesForPlayer, fetchTradeLeaguesScanned, fetchPlayerGameLogs, fetchPlayerAdpHistory, fetchPlayerAdpAvailability, type PlayerLeagueExposure, type PlayerTradeRecord, type PlayerTradeAsset, type PlayerGameLogRow, type PlayerAdpHistory, type PlayerAdpAvailability, type PlayerAdpAvailabilityCell, type AdpProfileFilters } from "@/lib/sleeperApi";
 
 // Default ADP-tab filter: the dominant dynasty-startup configuration in the
 // crawled dataset (Superflex · PPR · TE Premium · 12-team), so the tab opens
@@ -60,10 +59,7 @@ import {
   similarPlayers,
   overallDynastyRank,
   valueTier,
-  dynastyValueAnalysis,
   type SimilarPlayer,
-  type DynastyValueAnalysis,
-  type RecTone,
 } from "@/lib/playerPageInsights";
 import type { League, Player } from "@/types";
 
@@ -184,7 +180,6 @@ const TABS = [
   { id: "overview", label: "Overview", icon: Sparkles },
   { id: "production", label: "Game Log", icon: BarChart3 },
   { id: "advanced", label: "Advanced Stats", icon: Layers },
-  { id: "value", label: "Dynasty Value", icon: Trophy },
   { id: "adp", label: "ADP", icon: Target },
   { id: "trades", label: "Trades", icon: Repeat2 },
   { id: "availability", label: "Availability", icon: Users },
@@ -202,6 +197,9 @@ export default function PlayerPage({ params }: { params?: { playerId?: string } 
   // only when the Trades tab is first opened, and reset when the player changes.
   const [trades, setTrades] = useState<PlayerTradeRecord[] | null>(null);
   const [tradesLoading, setTradesLoading] = useState(false);
+  // Total leagues crawled into the trade DB (the corpus scanned for any
+  // player's trades). Global + cached, so fetched once and reused.
+  const [tradeLeaguesScanned, setTradeLeaguesScanned] = useState<number | null>(null);
   // Tracks which player we've already kicked off a trades fetch for, so the
   // effect doesn't refetch (or cancel itself) on unrelated re-renders.
   const tradesLoadedRef = useRef<string | null>(null);
@@ -238,6 +236,10 @@ export default function PlayerPage({ params }: { params?: { playerId?: string } 
       .then((r) => setTrades(r))
       .catch(() => setTrades([]))
       .finally(() => setTradesLoading(false));
+    // Global trade-corpus size — fetch once, reuse across players.
+    if (tradeLeaguesScanned == null) {
+      fetchTradeLeaguesScanned().then((n) => { if (n != null) setTradeLeaguesScanned(n); });
+    }
   }, [tab, resolvedId, profile?.player.name]);
 
   useEffect(() => {
@@ -291,7 +293,7 @@ export default function PlayerPage({ params }: { params?: { playerId?: string } 
 
           {/* Sticky tab bar */}
           <div className="sticky top-12 z-20 -mx-4 px-4 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/75 border-b border-border/50">
-            <div className="flex gap-1 overflow-x-auto no-scrollbar">
+            <div className="flex flex-wrap gap-1">
               {TABS.map((t) => {
                 const Icon = t.icon;
                 const active = tab === t.id;
@@ -321,9 +323,8 @@ export default function PlayerPage({ params }: { params?: { playerId?: string } 
               )}
               {tab === "production" && <ProductionTab playerId={resolvedId} adv={adv} advLoading={advLoading} pos={profile.player.pos} />}
               {tab === "advanced" && <AdvancedTab adv={adv} advLoading={advLoading} pos={profile.player.pos} />}
-              {tab === "value" && <DynastyValueTab profile={profile} adv={adv} dynRank={dynRank} />}
               {tab === "adp" && <AdpTab history={adpHistory} avail={adpAvail} loading={adpLoading} error={adpError} pos={profile.player.pos} filters={adpFilters} onFiltersChange={setAdpFilters} />}
-              {tab === "trades" && <TradesTab trades={trades} loading={tradesLoading} valuesBySleeperId={valueModel.valuesBySleeperId} />}
+              {tab === "trades" && <TradesTab trades={trades} loading={tradesLoading} valuesBySleeperId={valueModel.valuesBySleeperId} playerName={profile.player.name} leaguesScanned={tradeLeaguesScanned} />}
               {tab === "availability" && (
                 <AvailabilityTab
                   connected={sleeper.isConnected}
@@ -349,9 +350,9 @@ function Hero({ profile, raw, dynRank }: { profile: PlayerProfile; raw: any; dyn
 
   return (
     <Card className="overflow-hidden p-0">
-      <div className="flex flex-col sm:flex-row">
+      <div className="flex flex-row">
         <HeroImage id={p.id} name={p.name} pos={p.pos} team={p.team} />
-        <div className="flex-1 p-5 min-w-0">
+        <div className="flex-1 p-4 sm:p-5 min-w-0">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <h1 className="text-2xl font-black tracking-tight text-foreground truncate" data-testid="player-page-name">{p.name}</h1>
@@ -390,7 +391,7 @@ function HeroImage({ id, name, pos, team, className, initialsClassName, logoClas
   const initials = (name || "?").split(" ").filter(Boolean).map((w) => w[0]).slice(0, 2).join("");
   const showLogo = !!team && team !== "FA" && !logoErr;
   return (
-    <div className={cn("relative w-full sm:w-[180px] h-[180px] flex-shrink-0 overflow-hidden bg-gradient-to-br from-[#0b3a7a]/25 to-transparent", className)}>
+    <div className={cn("relative w-28 sm:w-[180px] h-[180px] flex-shrink-0 overflow-hidden bg-gradient-to-br from-[#0b3a7a]/25 to-transparent", className)}>
       {/* Faint team logo watermark — sits behind the player photo (visible in
           the gradient margins / behind the initials fallback). */}
       {showLogo && (
@@ -500,12 +501,17 @@ function OverviewTab({
         <SectionTitle icon={Users} title="Similar Dynasty Assets" noMargin />
         <div className="h-3" />
         {similar.length ? (
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">
+          // Always one row: as many equal columns as there are cards, so they
+          // never stack on narrow viewports — the cards just get narrower.
+          <div
+            className="grid gap-2 sm:gap-3 mt-3"
+            style={{ gridTemplateColumns: `repeat(${similar.length}, minmax(0, 1fr))` }}
+          >
             {similar.map((s) => (
               <button
                 key={s.sleeperId}
                 onClick={() => onOpenPlayer(toPlayerSlug(s.name, s.team, s.pos))}
-                className="group text-left rounded-xl border border-border bg-muted/20 hover:border-[#d4af37]/40 hover:bg-muted/40 transition-colors overflow-hidden"
+                className="group text-left rounded-xl border border-border bg-muted/20 hover:border-[#d4af37]/40 hover:bg-muted/40 transition-colors overflow-hidden min-w-0"
                 data-testid={`similar-player-${s.sleeperId}`}
               >
                 <HeroImage
@@ -517,9 +523,9 @@ function OverviewTab({
                   initialsClassName="text-3xl"
                   logoClassName="w-[120%] h-[120%] opacity-30"
                 />
-                <div className="p-3">
+                <div className="p-2 sm:p-3 min-w-0">
                   <div className="text-sm font-bold text-foreground truncate">{s.name}</div>
-                  <div className="text-[11px] text-muted-foreground mt-0.5">{s.pos} · {s.team || "FA"} · Age {s.age}</div>
+                  <div className="text-[11px] text-muted-foreground mt-0.5 truncate">{s.pos} · {s.team || "FA"} · Age {s.age}</div>
                   <div className="text-xs font-bold text-[#d4af37] mt-1 tabular-nums">{fmtValue(s.value)}</div>
                 </div>
               </button>
@@ -762,110 +768,6 @@ function AdvancedTab({ adv, advLoading, pos }: { adv: PlayerAdvancedResult | nul
         )}
       </Card>
     </div>
-  );
-}
-
-// ── Dynasty Value (Phase 2: buy/sell/hold + age curve + fit) ─────────────────
-const REC_TONE: Record<RecTone, string> = {
-  "strong-buy": "border-emerald-500/50 bg-emerald-500/10 text-emerald-600 dark-any:text-emerald-400",
-  buy: "border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark-any:text-emerald-400",
-  hold: "border-[#d4af37]/50 bg-[#d4af37]/10 text-[#d4af37]",
-  "soft-sell": "border-orange-500/40 bg-orange-500/10 text-orange-600 dark-any:text-orange-400",
-  sell: "border-rose-500/50 bg-rose-500/10 text-rose-600 dark-any:text-rose-400",
-  contender: "border-sky-500/50 bg-sky-500/10 text-sky-600 dark-any:text-sky-300",
-  avoid: "border-muted-foreground/30 bg-muted/40 text-muted-foreground",
-};
-
-function DynastyValueTab({ profile, adv, dynRank }: { profile: PlayerProfile; adv: PlayerAdvancedResult | null; dynRank: number | null }) {
-  const prodScore = adv?.composites.find((c) => c.label === "Fantasy Production Score")?.score ?? null;
-  const analysis = dynastyValueAnalysis({
-    pos: profile.player.pos,
-    age: profile.player.age,
-    dynastyValue: profile.values.dynasty,
-    redraftValue: profile.values.redraft,
-    posRank: profile.ranks.dynastyPositional,
-    prodScore,
-    injuryStatus: profile.player.injuryStatus,
-  });
-  const rec = analysis.recommendation;
-
-  return (
-    <div className="space-y-4">
-      {/* Recommendation */}
-      <Card className="p-5">
-        <SectionTitle icon={Trophy} title="Recommendation" />
-        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-          <span className={cn("inline-flex items-center justify-center rounded-xl border px-4 py-2 text-base font-black uppercase tracking-wide whitespace-nowrap", REC_TONE[rec.tone])}>
-            {rec.badge}
-          </span>
-          <p className="text-sm leading-relaxed text-foreground/85">{rec.rationale}</p>
-        </div>
-      </Card>
-
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <MetricCard label="Dynasty Rank" value={dynRank ? `#${dynRank}` : "—"} />
-        <MetricCard label="Position Rank" value={profile.ranks.dynastyPositional ? `${profile.player.pos}${profile.ranks.dynastyPositional}` : "—"} />
-        <MetricCard label="Value Tier" value={valueTier(profile.values.dynasty)} small />
-        <MetricCard label="Age" value={profile.player.age != null ? `${profile.player.age}` : "—"} />
-      </div>
-
-      {/* Age curve */}
-      <Card className="p-5">
-        <SectionTitle icon={LineChart} title="Age Curve" />
-        <AgeCurve curve={analysis.ageCurve} pos={profile.player.pos} />
-      </Card>
-
-      {/* Insulation + fit */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <FitCard title="Value Insulation" label={analysis.valueInsulation.label} note={analysis.valueInsulation.note} />
-        <FitCard title="Contender Fit" label={analysis.contenderFit.label} note={analysis.contenderFit.note} />
-        <FitCard title="Rebuilder Fit" label={analysis.rebuilderFit.label} note={analysis.rebuilderFit.note} />
-      </div>
-    </div>
-  );
-}
-
-function AgeCurve({ curve, pos }: { curve: DynastyValueAnalysis["ageCurve"]; pos: string }) {
-  const { minAge, maxAge, primeStart, primeEnd, age, band } = curve;
-  const span = Math.max(1, maxAge - minAge);
-  const pct = (a: number) => `${Math.min(100, Math.max(0, ((a - minAge) / span) * 100))}%`;
-  return (
-    <div>
-      <div className="flex items-center justify-between text-[11px] text-muted-foreground mb-1.5">
-        <span>{minAge}</span>
-        <span className="font-semibold text-foreground/70">{band}{age != null ? ` · Age ${age}` : ""}</span>
-        <span>{maxAge}</span>
-      </div>
-      <div className="relative h-3 rounded-full bg-muted/40 overflow-hidden">
-        {/* prime window */}
-        <div
-          className="absolute top-0 bottom-0 bg-emerald-500/30"
-          style={{ left: pct(primeStart), width: `${((primeEnd - primeStart) / span) * 100}%` }}
-        />
-      </div>
-      {age != null && (
-        <div className="relative h-0">
-          <div className="absolute -top-[18px] -translate-x-1/2 flex flex-col items-center" style={{ left: pct(age) }}>
-            <div className="w-0.5 h-4 bg-[#d4af37]" />
-            <div className="w-2.5 h-2.5 rounded-full bg-[#d4af37] ring-2 ring-background -mt-1" />
-          </div>
-        </div>
-      )}
-      <div className="flex items-center gap-3 mt-3 text-[10px] text-muted-foreground">
-        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-emerald-500/40" /> Prime window ({primeStart}–{primeEnd})</span>
-        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-[#d4af37]" /> {pos} age</span>
-      </div>
-    </div>
-  );
-}
-
-function FitCard({ title, label, note }: { title: string; label: string; note: string }) {
-  return (
-    <Card className="p-4">
-      <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{title}</div>
-      <div className="text-lg font-black text-foreground mt-0.5">{label}</div>
-      <div className="text-[11px] text-muted-foreground leading-snug mt-1">{note}</div>
-    </Card>
   );
 }
 
@@ -1267,10 +1169,10 @@ function fmtTradeDate(ms: number): string {
   try { return new Date(ms).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }); } catch { return "—"; }
 }
 
-function TradesTab({ trades, loading, valuesBySleeperId }: { trades: PlayerTradeRecord[] | null; loading: boolean; valuesBySleeperId: Record<string, number> }) {
+function TradesTab({ trades, loading, valuesBySleeperId, playerName, leaguesScanned }: { trades: PlayerTradeRecord[] | null; loading: boolean; valuesBySleeperId: Record<string, number>; playerName: string; leaguesScanned: number | null }) {
   if (loading && !trades) return <Card className="p-5"><SkeletonLines n={6} /></Card>;
   if (!trades || !trades.length) {
-    return <EmptyBlock icon={Repeat2} text="No trades involving this player were found in your leagues yet." />;
+    return <EmptyBlock icon={Repeat2} text="No trades involving this player were found in the scanned leagues yet." />;
   }
 
   // "Most commonly traded for" = what the giver got back, aggregated.
@@ -1285,7 +1187,7 @@ function TradesTab({ trades, loading, valuesBySleeperId }: { trades: PlayerTrade
         <Repeat2 className="w-4 h-4 text-[#0b3a7a] dark:text-blue-400 flex-shrink-0 mt-0.5" />
         <p className="text-sm leading-snug">
           <span className="font-bold text-[#d4af37]">{trades.length.toLocaleString()}</span>
-          <span className="text-muted-foreground"> trade{trades.length !== 1 ? "s" : ""} involving this player across your leagues</span>
+          <span className="text-muted-foreground"> trade{trades.length !== 1 ? "s" : ""} involving {playerName}{leaguesScanned != null ? ` across ${leaguesScanned.toLocaleString()} leagues scanned` : ""}</span>
         </p>
       </div>
 

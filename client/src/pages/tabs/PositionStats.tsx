@@ -12,6 +12,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { SectionHeader } from "@/components/SectionHeader";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { usePlayerProfile } from "@/contexts/PlayerProfileContext";
 import { cn } from "@/lib/utils";
 import {
   ChevronDown,
@@ -585,6 +586,7 @@ function SuperHeaderRow({ segments, className }: { segments: SuperHeaderSeg[]; c
 
 // ── Component ─────────────────────────────────────────────────────────────────
 export default function PositionStats() {
+  const { openPlayerProfile } = usePlayerProfile();
   const [subTab, setSubTab]         = useState<"data" | "compare">("data");
   const [position, setPosition]     = useState<Position>("qb");
   const [season, setSeason]         = useState<SeasonKey>("2025");
@@ -1415,17 +1417,24 @@ export default function PositionStats() {
                         >
                           {rank ?? idx + 1}
                         </td>
-                        {/* Player name */}
+                        {/* Player name — opens the full player profile. */}
                         <td
                           style={{ background: stickyBg }}
                           className="sticky left-10 z-10 px-3 py-2 font-semibold text-foreground whitespace-nowrap border-r border-border/25 min-w-[148px]"
                         >
-                          {/* Desktop: full name. Non-desktop: "F. Last" + faint team. */}
-                          <span className="hidden md:inline">{name}</span>
-                          <span className="md:hidden">
-                            {shortName}
-                            <span className="ml-1.5 font-normal text-muted-foreground/60">{team}</span>
-                          </span>
+                          <button
+                            type="button"
+                            onClick={() => openPlayerProfile(getPlayerKey(row))}
+                            className="text-left hover:text-[#d4af37] hover:underline transition-colors"
+                            data-testid={`row-player-name-${idx}`}
+                          >
+                            {/* Desktop: full name. Non-desktop: "F. Last" + faint team. */}
+                            <span className="hidden md:inline">{name}</span>
+                            <span className="md:hidden">
+                              {shortName}
+                              <span className="ml-1.5 font-normal text-muted-foreground/60">{team}</span>
+                            </span>
+                          </button>
                         </td>
                         {/* Team badge (hidden on mobile — shown inline next to name) */}
                         <td className="hidden md:table-cell px-3 py-2 whitespace-nowrap border-r border-border/25">

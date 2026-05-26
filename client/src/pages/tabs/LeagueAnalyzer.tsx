@@ -1,4 +1,5 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -496,6 +497,10 @@ export function RosterComparison({ league }: AnalyzerProps) {
     return ids;
   }, [league.id]); // re-seed when the league changes
   const [selectedIds, setSelectedIds] = useState<string[]>(initialIds);
+  // Cap the comparison at 2 managers on non-desktop so the columns stay legible
+  // (3-up is too cramped on phones); desktop keeps the full COMPARE_MAX.
+  const isMobile = useIsMobile();
+  const compareMax = isMobile ? 2 : COMPARE_MAX;
   const [valueMode, setValueMode] = useState<ValueMode>("dynasty");
   const [includePicks, setIncludePicks] = useState(true);
   const [includeBench, setIncludeBench] = useState(true);
@@ -516,6 +521,12 @@ export function RosterComparison({ league }: AnalyzerProps) {
       return [...valid, ...fillers];
     });
   }, [league.id, league.teams]);
+
+  // If the cap drops (e.g. desktop → mobile resize) while more managers are
+  // selected than now allowed, trim the extras so the view honors the limit.
+  useEffect(() => {
+    setSelectedIds((prev) => (prev.length > compareMax ? prev.slice(0, compareMax) : prev));
+  }, [compareMax]);
 
   const selectedTeams = selectedIds
     .map((id) => league.teams.find((t) => t.id === id))
@@ -681,8 +692,8 @@ export function RosterComparison({ league }: AnalyzerProps) {
     setSelectedIds((prev) => prev.filter((_, i) => i !== slotIndex));
   };
   const addSlot = () => {
-    if (selectedIds.length >= COMPARE_MAX) {
-      setLimitMsg("You can compare up to 3 teams at once.");
+    if (selectedIds.length >= compareMax) {
+      setLimitMsg(`You can compare up to ${compareMax} teams at once.`);
       return;
     }
     const next = league.teams.find((t) => !selectedIds.includes(t.id));
@@ -743,7 +754,7 @@ export function RosterComparison({ league }: AnalyzerProps) {
                 </Select>
               </div>
             ))}
-            {selectedIds.length < COMPARE_MAX && (
+            {selectedIds.length < compareMax && (
               <Button
                 variant="outline"
                 size="sm"
