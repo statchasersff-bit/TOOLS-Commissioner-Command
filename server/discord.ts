@@ -4,6 +4,7 @@
 
 import type { Express, Request, Response } from "express";
 import { requireAuth } from "./accessMiddleware";
+import { renderTradePoster } from "./tradeImage";
 
 const DISCORD_API = "https://discord.com/api/v10";
 
@@ -83,21 +84,36 @@ export function registerDiscordRoutes(app: Express): void {
         ? body.tradeLink.slice(0, 300)
         : null;
 
-    // Build the message body (≤2000 chars per Discord).
-    const lines: string[] = ["🚨 **Dynasty Trade Poll**", ""];
-    lines.push(`**League:** ${leagueName}`);
-    if (leagueFormat) lines.push(`**Format:** ${leagueFormat}`);
-    lines.push("", `**Side A — ${sideALabel} receives:**`);
-    for (const a of sideAReceives) lines.push(`• ${a}`);
-    lines.push("", `**Side B — ${sideBLabel} receives:**`);
-    for (const a of sideBReceives) lines.push(`• ${a}`);
-    lines.push("");
-    if (tradeLink) lines.push(`🔗 <${tradeLink}>`, "");
-    lines.push("Vote below: Which side wins?");
-    let content = lines.join("\n");
+    // Render the Dynasty Command-themed trade image. The image carries the
+    // trade detail, so the text stays compact; if rendering fails we fall back
+    // to a full text breakdown so the poll still has context.
+    let poster: Buffer | null = null;
+    try {
+      poster = await renderTradePoster({
+        leagueName, leagueFormat,
+        sideA: { label: sideALabel, receives: sideAReceives },
+        sideB: { label: sideBLabel, receives: sideBReceives },
+      });
+    } catch (e: any) {
+      console.error("[discord] trade poster render failed:", e?.message ?? e);
+    }
+
+    const compact = [`🚨 **Dynasty Trade Poll**`, `**League:** ${leagueName}${leagueFormat ? ` · ${leagueFormat}` : ""}`];
+    if (tradeLink) compact.push(`🔗 <${tradeLink}>`);
+
+    let content: string;
+    if (poster) {
+      content = compact.join("\n");
+    } else {
+      const lines = [...compact, "", `**Side A — ${sideALabel} receives:**`];
+      for (const a of sideAReceives) lines.push(`• ${a}`);
+      lines.push("", `**Side B — ${sideBLabel} receives:**`);
+      for (const a of sideBReceives) lines.push(`• ${a}`);
+      content = lines.join("\n");
+    }
     if (content.length > 1900) content = content.slice(0, 1900) + "…";
 
-    const payload = {
+    const payload: Record<string, unknown> = {
       content,
       // user-derived text is sanitized of pings so a team name can't @everyone.
       allowed_mentions: { parse: [] as string[] },
@@ -115,11 +131,23 @@ export function registerDiscordRoutes(app: Express): void {
     };
 
     try {
-      const resp = await fetch(`${DISCORD_API}/channels/${channelId}/messages`, {
-        method: "POST",
-        headers: { Authorization: `Bot ${token}`, "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+      const url = `${DISCORD_API}/channels/${channelId}/messages`;
+      let resp: globalThis.Response;
+      if (poster) {
+        // Multipart upload so the image attaches alongside the native poll.
+        payload.attachments = [{ id: 0, filename: "dynasty-trade-poll.png" }];
+        const form = new FormData();
+        form.append("payload_json", JSON.stringify(payload));
+        form.append("files[0]", new Blob([poster], { type: "image/png" }), "dynasty-trade-poll.png");
+        // No Content-Type header — fetch sets the multipart boundary.
+        resp = await fetch(url, { method: "POST", headers: { Authorization: `Bot ${token}` }, body: form });
+      } else {
+        resp = await fetch(url, {
+          method: "POST",
+          headers: { Authorization: `Bot ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+      }
       if (!resp.ok) {
         const detail = await resp.text().catch(() => "");
         console.error(`[discord] message create failed: ${resp.status} ${resp.statusText} — ${detail.slice(0, 500)}`);
@@ -133,5 +161,27 @@ export function registerDiscordRoutes(app: Express): void {
       console.error("[discord] message create error:", err?.message ?? err);
       return res.status(502).json({ error: "Could not share trade poll. Please try again." });
     }
+  });
+
+  // Config diagnostic — confirms the bot token + channel are set and reachable
+  // WITHOUT exposing any secret values. Open it in the browser while logged in.
+  app.get("/api/discord/health", requireAuth, async (_req: Request, res: Response) => {
+    const token = process.env.DISCORD_BOT_TOKEN;
+    const channelId = process.env.DISCORD_TRADE_POLLS_CHANNEL_ID;
+    const out: Record<string, unknown> = { hasToken: !!token, hasChannel: !!channelId, configured: !!token && !!channelId };
+    if (!token || !channelId) return res.json(out);
+    try {
+      const me = await fetch(`${DISCORD_API}/users/@me`, { headers: { Authorization: `Bot ${token}` } });
+      out.tokenValid = me.ok;
+      if (me.ok) { const j: any = await me.json(); out.botUser = j?.username ?? null; }
+      else out.tokenError = me.status; // 401 = bad token
+    } catch (e: any) { out.tokenValid = false; out.tokenError = e?.message ?? "fetch failed"; }
+    try {
+      const ch = await fetch(`${DISCORD_API}/channels/${channelId}`, { headers: { Authorization: `Bot ${token}` } });
+      out.channelOk = ch.ok;
+      if (ch.ok) { const j: any = await ch.json(); out.channelName = j?.name ?? null; }
+      else out.channelError = ch.status; // 403 = bot lacks access · 404 = wrong id / bot not in server
+    } catch (e: any) { out.channelOk = false; out.channelError = e?.message ?? "fetch failed"; }
+    res.json(out);
   });
 }
