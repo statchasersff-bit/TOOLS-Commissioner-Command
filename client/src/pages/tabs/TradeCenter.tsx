@@ -10,6 +10,7 @@ import { SectionHeader } from "@/components/SectionHeader";
 import { ManagerNameButton } from "@/components/ManagerNameButton";
 import { useValueModel } from "@/contexts/ValueModelContext";
 import { useSleeper } from "@/contexts/SleeperContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { getLeagueTeamTiers, getTierColor, getTierBg, getTierEmoji, getPositionColor, isContenderTier, isRebuilderTier } from "@/data/mockData";
 import { getStaticPickValue } from "@/data/pickValues";
@@ -3336,9 +3337,13 @@ export function TradeDatabase({ league }: { league: League }) {
 // A-vs-B poll needs exactly two contestants.
 function ShareTradeToDiscordButton({ trade }: { trade: TradeRecord }) {
   const { toast } = useToast();
+  const { isAuthenticatedUser } = useAuth();
   const [sharing, setSharing] = useState(false);
   const inFlight = useRef(false);
 
+  // Only StatChasers-logged-in users can share (matches the server's requireAuth
+  // gate); hide the button entirely for guests / Sleeper-only users.
+  if (!isAuthenticatedUser) return null;
   if (trade.sides.length !== 2) return null;
   const [a, b] = trade.sides;
   const assetsOf = (s: TradeSide): string[] => [
