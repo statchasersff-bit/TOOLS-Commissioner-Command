@@ -40,7 +40,7 @@ export const CURRENT_UPDATE_NOTES: UpdateNotes = {
     {
       heading: "New Features",
       items: [
-        "League Analyzer - Playoff Calculator: See every team's projected odds to make the playoffs, earn a bye, reach the finals, and win the championship — plus a weekly matchups breakdown with win probabilities.",
+        "League Analyzer - Playoff Calculator: See every team's projected odds to make the playoffs, earn a bye, reach the finals, and win the championship, plus a weekly matchups breakdown with win probabilities.",
         "My Team - Overview: New analytical sections added, including roster construction breakdown, age curve, and dynasty window outlook.",
       ],
     },

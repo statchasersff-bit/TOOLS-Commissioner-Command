@@ -116,7 +116,7 @@ export function SettingsModal({ open, onOpenChange }: Props) {
 
             {!isAuthenticatedUser && (
               <p className="text-[11px] text-amber-600 dark:text-amber-400">
-                You're not logged into a StatChasers account — your favorite team will be saved to this browser only.
+                You're not logged into a StatChasers account, your favorite team will be saved to this browser only.
               </p>
             )}
 

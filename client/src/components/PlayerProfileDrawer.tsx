@@ -563,9 +563,9 @@ function buildPlayerSummary(adp: ADPResult, ctxLabel: string): string | null {
   let trendNote = "";
   if (adp.draft_count >= 20) {
     if (adp.trend_30d <= -1.5) {
-      trendNote = ` Value is rising — ADP has tightened about ${Math.abs(adp.trend_30d).toFixed(1)} spots in the last 30 days.`;
+      trendNote = ` Value is rising. ADP has tightened about ${Math.abs(adp.trend_30d).toFixed(1)} spots in the last 30 days.`;
     } else if (adp.trend_30d >= 1.5) {
-      trendNote = ` Value is softening — ADP has slipped about ${Math.abs(adp.trend_30d).toFixed(1)} spots in the last 30 days.`;
+      trendNote = ` Value is softening. ADP has slipped about ${Math.abs(adp.trend_30d).toFixed(1)} spots in the last 30 days.`;
     } else {
       trendNote = " Market position has held steady through the last month.";
     }
@@ -626,9 +626,9 @@ function buildOverviewInsights(adp: ADPResult): string[] {
   }
   // Trend interpretation.
   if (adp.trend_30d <= -1.5) {
-    out.push(`Market value rising — ADP has improved about ${Math.abs(adp.trend_30d).toFixed(1)} spots over the last 30 days.`);
+    out.push(`Market value rising. ADP has improved about ${Math.abs(adp.trend_30d).toFixed(1)} spots over the last 30 days.`);
   } else if (adp.trend_30d >= 1.5) {
-    out.push(`Market cooling — ADP has slipped about ${Math.abs(adp.trend_30d).toFixed(1)} spots over the last 30 days.`);
+    out.push(`Market cooling. ADP has slipped about ${Math.abs(adp.trend_30d).toFixed(1)} spots over the last 30 days.`);
   } else if (adp.draft_count >= 25) {
     out.push("Market position has held steady over the last 30 days.");
   }
@@ -700,7 +700,7 @@ function ProductionTab({ adp, active }: { adp: ADPResult; active: boolean }) {
               <tr>
                 <td colSpan={6} className="px-3 py-6 text-center text-[11px] text-muted-foreground">
                   {isPlaceholder
-                    ? "Rookie-pick placeholder — no NFL production yet."
+                    ? "Rookie-pick placeholder, no NFL production yet."
                     : "No production data available yet."}
                   {adp.team && <span className="block text-[10px] mt-0.5 text-white/40">Current team: {adp.team}</span>}
                 </td>
@@ -886,7 +886,7 @@ function AdpHistoryTab({ playerId, active, ctxLabel, filterQuery, teams }: { pla
         </div>
         {hasMonthly ? <MonthlyAdpLine series={monthly} /> : (
           <div className="rounded-md border border-white/8 bg-white/[0.02] py-6 text-center text-[11px] text-muted-foreground italic">
-            Not enough monthly data yet — this player needs picks in at least two different months.
+            Not enough monthly data yet, this player needs picks in at least two different months.
           </div>
         )}
       </div>
@@ -970,12 +970,12 @@ function buildAdpSummary(data: AdpHistoryResponse): string | null {
   }
   const delta = b30.avgPick - b90.avgPick;
   if (Math.abs(delta) < 0.4) {
-    return `ADP has held within half a pick of ${b30.avgPick.toFixed(1)} across the last 90 days — market position is stable.`;
+    return `ADP has held within half a pick of ${b30.avgPick.toFixed(1)} across the last 90 days, market position is stable.`;
   }
   if (delta < 0) {
-    return `ADP has tightened roughly ${Math.abs(delta).toFixed(1)} spots over the last 30 days — value is rising.`;
+    return `ADP has tightened roughly ${Math.abs(delta).toFixed(1)} spots over the last 30 days, value is rising.`;
   }
-  return `ADP has slipped about ${delta.toFixed(1)} spots over the last 30 days — value is softening.`;
+  return `ADP has slipped about ${delta.toFixed(1)} spots over the last 30 days, value is softening.`;
 }
 
 /** "2025-08" → "Aug 2025". Used for tooltip + axis labels in MonthlyAdpLine.
@@ -1430,7 +1430,7 @@ function buildAvailInsights(
   }
   // Sample size disclaimer when low.
   if (data.totalDrafts > 0 && data.totalDrafts < 25) {
-    out.push(`Sample size is small (${data.totalDrafts} drafts) — values may swing as more drafts come in.`);
+    out.push(`Sample size is small (${data.totalDrafts} drafts), values may swing as more drafts come in.`);
   }
   return out;
 }

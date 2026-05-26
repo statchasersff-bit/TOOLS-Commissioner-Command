@@ -49,10 +49,10 @@ export function PowerDifferential({ league, userTeam }: Props) {
 
   const sentence =
     diff.vsTopPct >= -5
-      ? "You're in striking distance of the league favorite — championship contention is realistic."
+      ? "You're in striking distance of the league favorite, championship contention is realistic."
       : diff.vsTopPct >= -15
-        ? `You're ${Math.abs(diff.vsTopPct).toFixed(1)}% below the projected championship favorite — a smart trade or hot streak closes the gap.`
-        : `You're ${Math.abs(diff.vsTopPct).toFixed(1)}% below the projected championship favorite — climbing here means meaningful upgrades.`;
+        ? `You're ${Math.abs(diff.vsTopPct).toFixed(1)}% below the projected championship favorite, a smart trade or hot streak closes the gap.`
+        : `You're ${Math.abs(diff.vsTopPct).toFixed(1)}% below the projected championship favorite, climbing here means meaningful upgrades.`;
 
   return (
     <Card className="p-4 sm:p-5 space-y-4" data-testid="gm-power-differential">
@@ -80,7 +80,7 @@ export function PowerDifferential({ league, userTeam }: Props) {
             <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Closest comparable team</p>
             <p className="text-sm font-bold truncate">{diff.closestTeam.name}</p>
             <p className="text-[11px] text-muted-foreground">
-              Roster value ≈ yours. Watch this team — your build mirrors theirs.
+              Roster value ≈ yours. Watch this team, your build mirrors theirs.
             </p>
           </div>
         </div>

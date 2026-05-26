@@ -222,7 +222,7 @@ export function AdpCrawlPanel() {
         return;
       }
       if (isHtml || json === null) {
-        setError("Server returned a non-JSON response (likely HTML). The API route may not be registered — restart the dev server.");
+        setError("Server returned a non-JSON response (likely HTML). The API route may not be registered, restart the dev server.");
         setRunState("error");
         return;
       }
@@ -569,7 +569,7 @@ export function AdpCrawlPanel() {
             </div>
             <div className="flex items-center gap-2">
               <div className="text-[10px] text-muted-foreground">
-                Running in background — safe to switch tabs
+                Running in background, safe to switch tabs
               </div>
               {/* Stop button — flags the server-side crawl to halt at the
                   next BFS boundary. Disabled once cancellation has already
@@ -580,7 +580,7 @@ export function AdpCrawlPanel() {
                 disabled={!!liveProgress.cancelRequested}
                 className="px-2 py-1 rounded-md border border-red-500/40 text-[11px] font-semibold text-red-500 hover:bg-red-500/10 disabled:opacity-50 disabled:cursor-not-allowed"
                 data-testid="button-cancel-crawl"
-                title={liveProgress.cancelRequested ? "Stop already requested — finishing the current request." : "Stop the in-flight crawl. Partial progress is preserved."}
+                title={liveProgress.cancelRequested ? "Stop already requested, finishing the current request." : "Stop the in-flight crawl. Partial progress is preserved."}
               >
                 {liveProgress.cancelRequested ? "Stopping…" : "Stop"}
               </button>
@@ -637,7 +637,7 @@ export function AdpCrawlPanel() {
                 if (dup > 0) parts.push(`${dup} already ingested`);
                 if (exc > 0) parts.push(`${exc} excluded by quality gates`);
                 return parts.length > 0
-                  ? `Found ${liveProgress.draftsFound} drafts but ingested none — ${parts.join(", ")}.`
+                  ? `Found ${liveProgress.draftsFound} drafts but ingested none: ${parts.join(", ")}.`
                   : null;
               })()}
             </div>

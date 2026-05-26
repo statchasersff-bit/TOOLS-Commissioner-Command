@@ -1171,7 +1171,7 @@ function BulkClaimsView({
         });
       } else {
         setSubmitPhase({
-          message: "Batch cancelled — you can resume later from the waiver tab.",
+          message: "Batch cancelled, you can resume later from the waiver tab.",
           etaMs: 0,
         });
       }
@@ -1255,7 +1255,7 @@ function BulkClaimsView({
         // more attempts behind it.
         if (sleeperWriteLimiter.looksLikeRateLimit(e)) {
           setSubmitPhase({
-            message: "Sleeper is temporarily rate-limiting requests. Cancelling the rest of the batch — try again later.",
+            message: "Sleeper is temporarily rate-limiting requests. Cancelling the rest of the batch, try again later.",
             etaMs: 0,
           });
           cancelSubmitRef.current = true;

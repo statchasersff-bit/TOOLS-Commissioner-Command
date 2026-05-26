@@ -1467,7 +1467,7 @@ export async function detectLiveDrafts(userId: string) {
         console.log("[LIVE DRAFT DISCOVERY] excluded league", {
           league_id: lg.league_id,
           league_name: lg.name,
-          reason: `template/empty league — only ${ownedRosterCount} roster(s) have owners`,
+          reason: `template/empty league, only ${ownedRosterCount} roster(s) have owners`,
         });
         return;
       }

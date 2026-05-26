@@ -218,7 +218,7 @@ function TradeProposalCard({ proposal, mode, userTeam, league }: { proposal: Tra
               <CheckCircle2 className="w-3 h-3" /> Trade sent!
             </span>
           ) : sendState === "failed" ? (
-            <span className="text-[10px] text-red-400">Failed — check Sleeper connection</span>
+            <span className="text-[10px] text-red-400">Failed: check Sleeper connection</span>
           ) : isSleeperAuthed ? (
             <button
               onClick={handleSend}
@@ -780,7 +780,7 @@ export function TradeFinder({ league, userTeam }: TradeProps) {
             <h3 className="text-base font-bold">Best Chips to Move</h3>
             <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
             <p className="text-[10px] text-muted-foreground mt-2">
-              High dynasty value ÷ low starter impact — ideal trade currency to upgrade weak positions
+              High dynasty value ÷ low starter impact, ideal trade currency to upgrade weak positions
             </p>
           </div>
           <div className="space-y-0">

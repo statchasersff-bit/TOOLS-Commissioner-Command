@@ -1019,7 +1019,7 @@ function ReviewTable(p: ReviewTableProps) {
             <span className="font-semibold text-emerald-600 dark:text-emerald-400">{p.selectedCount}</span>{" "}
             <span className="text-muted-foreground">selected</span>
             {p.eligibleCount === 0 && (
-              <span className="ml-2 text-amber-600 dark:text-amber-400">No eligible leagues yet — finish the offers below.</span>
+              <span className="ml-2 text-amber-600 dark:text-amber-400">No eligible leagues yet, finish the offers below.</span>
             )}
           </div>
           <div className="flex items-center gap-2">

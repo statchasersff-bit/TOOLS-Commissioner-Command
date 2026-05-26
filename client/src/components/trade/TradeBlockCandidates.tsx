@@ -181,7 +181,7 @@ export function TradeBlockCandidates({
           <div>
             <p className="text-sm font-semibold text-foreground">Couldn’t load the trade block</p>
             <p className="text-xs text-muted-foreground mt-1 max-w-[280px]">
-              The live trade-block data failed to load. Your other tools still work — try again.
+              The live trade-block data failed to load. Your other tools still work, try again.
             </p>
           </div>
           {onRetry && (

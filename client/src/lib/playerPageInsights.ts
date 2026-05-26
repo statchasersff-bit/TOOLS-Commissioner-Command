@@ -49,7 +49,7 @@ export function dynastySnapshot(input: {
   } else if (isPremium && aging) {
     core = `a premium win-now ${pos} (${rankPhrase}) whose production still carries elite weekly value, though age introduces gradual long-term risk.`;
   } else if (isStarter && young) {
-    core = `a building-block ${pos} (${rankPhrase}) with an ascending profile — the combination of youth and opportunity gives him real upside for dynasty rosters.`;
+    core = `a building-block ${pos} (${rankPhrase}) with an ascending profile, the combination of youth and opportunity gives him real upside for dynasty rosters.`;
   } else if (isStarter && aging) {
     core = `a steady win-now contributor (${rankPhrase}) with useful production, but a shortening window and age-related decline risk.`;
   } else if (isStarter) {
@@ -198,31 +198,31 @@ export function dynastyValueAnalysis(input: {
   let badge = "Hold", tone: RecTone = "hold", rationale = "";
   if (dynastyValue == null || dv < 400) {
     badge = "Avoid"; tone = "avoid";
-    rationale = "Deep roster flier with minimal dynasty market value — only worth a speculative bench spot.";
+    rationale = "Deep roster flier with minimal dynasty market value, only worth a speculative bench spot.";
   } else if (ascending && starterPlus && !elite) {
     badge = "Strong Buy"; tone = "strong-buy";
-    rationale = "Young, ascending value with an established role and still priced below the elite tier — a strong buy-low window.";
+    rationale = "Young, ascending value with an established role and still priced below the elite tier, a strong buy-low window.";
   } else if (ascending && elite) {
     badge = "Buy"; tone = "buy";
-    rationale = "Young and already elite — acquire before the price climbs further, though it won't come cheap.";
+    rationale = "Young and already elite, acquire before the price climbs further, though it won't come cheap.";
   } else if (prime && elite) {
     badge = "Hold"; tone = "hold";
-    rationale = "Elite, fairly-priced cornerstone that's difficult to replace — hold unless you're being overpaid.";
+    rationale = "Elite, fairly-priced cornerstone that's difficult to replace, hold unless you're being overpaid.";
   } else if (prime && starterPlus) {
     badge = "Buy"; tone = "buy";
-    rationale = "Productive starter in his prime with a stable role — a reasonable value buy.";
+    rationale = "Productive starter in his prime with a stable role, a reasonable value buy.";
   } else if (declining && productive && winNowStrong) {
     badge = "Contender Target"; tone = "contender";
-    rationale = "Older but still highly productive — a strong win-now target for contenders at a discounted dynasty cost.";
+    rationale = "Older but still highly productive, a strong win-now target for contenders at a discounted dynasty cost.";
   } else if (declining && starterPlus) {
     badge = "Soft Sell"; tone = "soft-sell";
     rationale = "Useful production now, but age and a shortening window argue for selling before the value erodes.";
   } else if (declining) {
     badge = "Sell"; tone = "sell";
-    rationale = "Aging profile with limited long-term upside — sell while there's still a market.";
+    rationale = "Aging profile with limited long-term upside, sell while there's still a market.";
   } else {
     badge = "Hold"; tone = "hold";
-    rationale = "A reasonable roster hold at current value — no strong buy or sell signal.";
+    rationale = "A reasonable roster hold at current value, no strong buy or sell signal.";
   }
   if (injuryStatus && injuryStatus !== "Healthy" && injuryStatus.trim() !== "") {
     rationale += ` Note current status: ${injuryStatus}.`;
@@ -241,7 +241,7 @@ export function dynastyValueAnalysis(input: {
   } else if (starterPlus || prime) {
     insLabel = "Moderate"; insNote = "Value is reasonably stable but sensitive to role and age changes.";
   } else {
-    insLabel = "Low"; insNote = "Value is fragile — age, role, or efficiency swings could erode it quickly.";
+    insLabel = "Low"; insNote = "Value is fragile: age, role, or efficiency swings could erode it quickly.";
   }
 
   // ── Contender / rebuilder fit ──
@@ -252,7 +252,7 @@ export function dynastyValueAnalysis(input: {
 
   let rFit: DynastyValueAnalysis["rebuilderFit"];
   if (ascending && starterPlus) rFit = { label: "Strong", note: "A long runway makes him a building block to acquire for a rebuild." };
-  else if (declining) rFit = { label: "Sell", note: "Likely to lose value before a rebuild window opens — flip for youth or picks." };
+  else if (declining) rFit = { label: "Sell", note: "Likely to lose value before a rebuild window opens, flip for youth or picks." };
   else rFit = { label: "Moderate", note: "Fine to hold, but not a core rebuild asset." };
 
   return {

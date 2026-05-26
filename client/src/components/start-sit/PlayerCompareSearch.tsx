@@ -147,7 +147,7 @@ export function PlayerCompareSearch({
             onFocus={() => setDropdownOpen(true)}
             placeholder={
               atCap
-                ? `Max ${maxPlayers} players — remove one to add another`
+                ? `Max ${maxPlayers} players, remove one to add another`
                 : "Search by name, position (WR), or team (BAL)"
             }
             disabled={atCap}

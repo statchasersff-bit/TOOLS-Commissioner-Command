@@ -457,7 +457,7 @@ export function classifyRosterConstruction(
 
   const explanation =
     explanationParts.length === 0
-      ? "Your roster is well-distributed across positions, ages, and capital types — no single trait dominates."
+      ? "Your roster is well-distributed across positions, ages, and capital types, no single trait dominates."
       : `${capitalize(explanationParts.join("; "))}. That combination points to a ${primary.toLowerCase()} profile.`;
 
   const comparable = COMPARABLES[primary] ?? "Similar to balanced dynasty builds.";
@@ -492,7 +492,7 @@ const COMPARABLES: Record<string, string> = {
   "Aging Contender": "Last-call veteran contenders chasing one more run.",
   "Win-Now Aggressive": "All-in builds that mortgage future depth for current ceiling.",
   "Future-Focused": "Patient builds banking on rookie-pick equity.",
-  "Balanced Build": "Similar to balanced dynasty builds — no glaring tilts.",
+  "Balanced Build": "Similar to balanced dynasty builds, no glaring tilts.",
 };
 
 // ── League power differential ───────────────────────────────────────────────

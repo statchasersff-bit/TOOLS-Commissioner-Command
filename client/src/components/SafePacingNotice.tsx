@@ -83,7 +83,7 @@ export function SafePacingNotice({
         data-testid="safe-pacing-notice-active"
       >
         <RefreshCw className="w-3.5 h-3.5 mt-px flex-shrink-0 text-[#d4af37] animate-spin" />
-        <span>{message ?? "Submitting safely — pacing actions like a real user…"}</span>
+        <span>{message ?? "Submitting safely, pacing actions like a real user…"}</span>
       </div>
     );
   }

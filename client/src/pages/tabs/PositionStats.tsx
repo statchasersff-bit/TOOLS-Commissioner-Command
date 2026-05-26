@@ -229,8 +229,8 @@ const STAT_DESCRIPTIONS: Record<string, string> = {
   attempts: "Pass attempts",
   completions: "Completed passes",
   passingYards: "Total passing yards",
-  airYards: "Air yards — total distance the ball traveled in the air on all attempts",
-  completedAirYards: "Completed air yards — air yards on completed passes only",
+  airYards: "Air yards: total distance the ball traveled in the air on all attempts",
+  completedAirYards: "Completed air yards: air yards on completed passes only",
   redZoneAttempts: "Pass attempts inside the opponent's 20-yard line",
   passingTouchdowns: "Passing touchdowns",
   rushAttempts: "Rushing attempts",
@@ -238,7 +238,7 @@ const STAT_DESCRIPTIONS: Record<string, string> = {
   rushTouchdowns: "Rushing touchdowns",
 
   // QB — aggressiveness / play style
-  completedAirYardsPerCompletion: "Completed air yards per completion — average depth of completed passes",
+  completedAirYardsPerCompletion: "Completed air yards per completion: average depth of completed passes",
   yardsPerCatch: "Passing yards per completion",
 
   // QB — accuracy / efficiency
@@ -247,9 +247,9 @@ const STAT_DESCRIPTIONS: Record<string, string> = {
   poorThrows: "Number of poorly thrown, uncatchable passes",
   badThrowPct: "Share of attempts that were bad throws (lower is better)",
   interceptions: "Interceptions thrown",
-  epaPerPlay: "Expected points added per play — efficiency vs. expectation",
+  epaPerPlay: "Expected points added per play: efficiency vs. expectation",
   successRate: "Share of plays that were 'successful' by EPA",
-  cpoe: "Completion % over expected — accuracy above league baseline",
+  cpoe: "Completion % over expected: accuracy above league baseline",
 
   // QB — explosiveness
   passes10Plus: "Completions gaining 10+ yards",
@@ -320,9 +320,9 @@ const STAT_DESCRIPTIONS: Record<string, string> = {
 
   // WR / TE — usage / role
   targetsPerRouteRun: "Targets per route run",
-  airYardsPerTarget: "Air yards per target — average depth of target",
+  airYardsPerTarget: "Air yards per target: average depth of target",
   airYardsSharePct: "Share of team air yards",
-  wopr: "Weighted Opportunity Rating — blends target share and air-yards share",
+  wopr: "Weighted Opportunity Rating: blends target share and air-yards share",
   routePct: "Share of team pass plays on which the player ran a route",
   airYardsPerReception: "Air yards per reception",
 
@@ -332,11 +332,11 @@ const STAT_DESCRIPTIONS: Record<string, string> = {
   totalYards: "Total yards (receiving + rushing)",
 
   // WR / TE — hands
-  catchPct: "Catch rate — receptions per target",
+  catchPct: "Catch rate: receptions per target",
   contestedCatchRate: "Contested-catch rate",
   catchableTargets: "Catchable targets",
   drops: "Dropped passes (lower is better)",
-  dropPct: "Drop rate — drops per catchable target (lower is better)",
+  dropPct: "Drop rate: drops per catchable target (lower is better)",
   interceptionsWhenTargeted: "Interceptions on throws to this player (lower is better)",
 
   // WR / TE — elusiveness
@@ -892,7 +892,7 @@ export default function PositionStats() {
       <div className="flex items-start justify-between gap-4">
         <SectionHeader
           title="Advanced Stats"
-          subtitle="Advanced stats leaderboard — sortable, searchable, with customizable columns."
+          subtitle="Advanced stats leaderboard: sortable, searchable, with customizable columns."
         />
         <div
           className="hidden md:grid flex-shrink-0"
@@ -1125,7 +1125,7 @@ export default function PositionStats() {
           {activeCols.length === 0 ? (
             <Card className="p-10 text-center" data-testid="compare-no-cols">
               <p className="text-xs text-amber-500/80 italic">
-                No stat columns visible — open Columns to add some.
+                No stat columns visible, open Columns to add some.
               </p>
             </Card>
           ) : (
@@ -1476,7 +1476,7 @@ export default function PositionStats() {
               </p>
               {activeCols.length === 0 && (
                 <p className="text-[10px] text-amber-500/80 italic">
-                  No stat columns visible — open Columns to add some.
+                  No stat columns visible, open Columns to add some.
                 </p>
               )}
             </div>

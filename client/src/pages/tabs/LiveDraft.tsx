@@ -2375,7 +2375,7 @@ function PlayersPanel({
                             return (
                               <p className="text-xs text-muted-foreground text-center py-6">
                                 {myRoster && myRoster.length === 0
-                                  ? "No picks yet — your drafted players will appear here."
+                                  ? "No picks yet, your drafted players will appear here."
                                   : `No ${teamFilter} players on your roster.`}
                               </p>
                             );
@@ -2391,7 +2391,7 @@ function PlayersPanel({
                                 </div>
                                 {starters.length === 0 ? (
                                   <p className="text-xs text-muted-foreground text-center py-3">
-                                    No starters yet — draft a {teamFilter === "ALL" ? "player" : teamFilter} to fill this group.
+                                    No starters yet, draft a {teamFilter === "ALL" ? "player" : teamFilter} to fill this group.
                                   </p>
                                 ) : (
                                   <ul className="space-y-1.5">{starters.map(renderRow)}</ul>
@@ -2418,7 +2418,7 @@ function PlayersPanel({
                           return (
                             <p className="text-xs text-muted-foreground text-center py-6">
                               {isStartupDraft && (!myRoster || myRoster.length === 0)
-                                ? "No picks yet — your drafted players will appear here."
+                                ? "No picks yet, your drafted players will appear here."
                                 : `No ${teamFilter} players on your roster.`}
                             </p>
                           );
@@ -4563,7 +4563,7 @@ export default function LiveDraft({ onConnectSleeper }: { onConnectSleeper?: () 
                 {sleeperJwt ? (
                   <>
                     <Key className="w-3.5 h-3.5 text-[#d4af37] shrink-0" />
-                    <span className="text-muted-foreground">Sleeper connected — timing active</span>
+                    <span className="text-muted-foreground">Sleeper connected, timing active</span>
                   </>
                 ) : (
                   <>
@@ -4601,7 +4601,7 @@ export default function LiveDraft({ onConnectSleeper }: { onConnectSleeper?: () 
                       <input
                         type="password"
                         className="flex-1 min-w-0 h-7 px-2.5 text-xs rounded-md border border-border/60 bg-muted/30 text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-[#d4af37]/50"
-                        placeholder="Dev only — paste Sleeper JWT…"
+                        placeholder="Dev only: paste Sleeper JWT…"
                         value={devJwtInput}
                         onChange={(e) => setDevJwtInput(e.target.value)}
                         onKeyDown={(e) => e.key === "Enter" && saveDevJwt()}

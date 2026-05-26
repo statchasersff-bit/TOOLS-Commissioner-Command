@@ -1031,7 +1031,7 @@ export function TradeActionModal({
                 <div className="rounded-md border border-white/10 bg-white/[0.02] px-4 py-6 text-center">
                   <div className="text-[12px] font-semibold text-white/75 mb-1">Messaging temporarily disabled</div>
                   <div className="text-[11px] text-white/45 leading-relaxed">
-                    Dynasty Command's messaging UI is paused right now. Your trade was sent through Sleeper normally — only the in-app DM viewer is hidden. You can still see and reply to messages in the Sleeper app.
+                    Dynasty Command's messaging UI is paused right now. Your trade was sent through Sleeper normally, only the in-app DM viewer is hidden. You can still see and reply to messages in the Sleeper app.
                   </div>
                 </div>
               </div>

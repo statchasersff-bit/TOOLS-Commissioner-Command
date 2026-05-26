@@ -297,7 +297,7 @@ function IntelHeader({
           onClick={onRefresh}
           disabled={loading || refreshing}
           className="flex-shrink-0 p-2 rounded-md border border-white/10 hover:bg-white/[0.06] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-          title="Refresh — bypass cache"
+          title="Refresh: bypass cache"
           data-testid="manager-intel-refresh"
         >
           <RefreshCw className={cn("w-3.5 h-3.5 text-white/70", refreshing && "animate-spin")} />

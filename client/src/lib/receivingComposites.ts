@@ -182,7 +182,7 @@ export const WR_SCORE_CATEGORIES: ReceivingScoreCategory[] = [
   },
   {
     key: 'volumeScore', label: 'Volume', shortLabel: 'Vol',
-    description: 'Volume (0-100): offensive role & opportunity — identifies alpha target-earners. Targets 25%, Target Share% 20%, WOPR 15%, Routes 15%, TPRR 10%, AY Share% 10%, RZ TGT 3%, EZ TGT 2%.',
+    description: 'Volume (0-100): offensive role & opportunity, identifies alpha target-earners. Targets 25%, Target Share% 20%, WOPR 15%, Routes 15%, TPRR 10%, AY Share% 10%, RZ TGT 3%, EZ TGT 2%.',
   },
   {
     key: 'efficiencyScore', label: 'Efficiency', shortLabel: 'Eff',
@@ -208,11 +208,11 @@ export const WR_SCORE_CATEGORIES: ReceivingScoreCategory[] = [
 export const TE_SCORE_CATEGORIES: ReceivingScoreCategory[] = [
   {
     key: 'overallTEGrade', label: 'Overall', shortLabel: 'Overall',
-    description: 'Overall TE Grade (0-100): Volume 30%, Efficiency 25%, Hands 20%, Explosiveness 15%, Elusiveness 10%. Weighted for TE value — opportunity, reliability & efficiency over pure explosiveness. Percentile-based vs. qualified TEs.',
+    description: 'Overall TE Grade (0-100): Volume 30%, Efficiency 25%, Hands 20%, Explosiveness 15%, Elusiveness 10%. Weighted for TE value: opportunity, reliability & efficiency over pure explosiveness. Percentile-based vs. qualified TEs.',
   },
   {
     key: 'volumeScore', label: 'Volume', shortLabel: 'Vol',
-    description: 'Volume (0-100): offensive role & opportunity — paramount for TEs. Targets 25%, Routes 20%, Target Share% 20%, WOPR 15%, TPRR 10%, RZ TGT 5%, EZ TGT 5%.',
+    description: 'Volume (0-100): offensive role & opportunity, paramount for TEs. Targets 25%, Routes 20%, Target Share% 20%, WOPR 15%, TPRR 10%, RZ TGT 5%, EZ TGT 5%.',
   },
   {
     key: 'efficiencyScore', label: 'Efficiency', shortLabel: 'Eff',
@@ -224,7 +224,7 @@ export const TE_SCORE_CATEGORIES: ReceivingScoreCategory[] = [
   },
   {
     key: 'handsScore', label: 'Hands', shortLabel: 'Hnd',
-    description: 'Hands (0-100): reliability & catch consistency — weighted heavier for TEs. Catch% 45%, Catchable TGT 20%, Drops 20% (inv), Drop% 7.5% (inv), INT-when-targeted 7.5% (inv).',
+    description: 'Hands (0-100): reliability & catch consistency, weighted heavier for TEs. Catch% 45%, Catchable TGT 20%, Drops 20% (inv), Drop% 7.5% (inv), INT-when-targeted 7.5% (inv).',
   },
   {
     key: 'elusivenessScore', label: 'Elusiveness', shortLabel: 'Elu',

@@ -40,7 +40,7 @@ export function AgeCurves({ league, userTeam }: Props) {
       <div>
         <h3 className="text-base font-bold tracking-tight text-foreground">Age Curve Analysis</h3>
         <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
-        <p className="text-xs text-muted-foreground mt-2">Roster age health by position — meaningful contributors only.</p>
+        <p className="text-xs text-muted-foreground mt-2">Roster age health by position, meaningful contributors only.</p>
       </div>
 
       <div className="flex flex-wrap gap-2 text-[11px]" data-testid="gm-age-rank-pills">

@@ -60,7 +60,7 @@ export const RB_SCORE_CATEGORIES: RbScoreCategory[] = [
     label: 'Volume',
     shortLabel: 'Vol',
     description:
-      'Volume (0-100): workload & opportunity — identifies bellcows and high-floor backs. Rush Att 30%, Snap% 20%, Targets 20%, RZ Opp 15%, GL Carries 10%, Routes 5%.',
+      'Volume (0-100): workload & opportunity, identifies bellcows and high-floor backs. Rush Att 30%, Snap% 20%, Targets 20%, RZ Opp 15%, GL Carries 10%, Routes 5%.',
   },
   {
     key: 'efficiencyScore',

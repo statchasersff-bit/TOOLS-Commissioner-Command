@@ -1024,7 +1024,7 @@ function AdpTab({ history, avail, loading, error, pos, filters, onFiltersChange 
       ) : error ? (
         <EmptyBlock icon={Target} text="ADP data is temporarily unavailable. Try again later." />
       ) : (!hasHistory && !hasAvail) ? (
-        <ComingSoon icon={Target} title="No ADP data for these filters" body={`No crawled startup drafts match this filter combo for this ${pos}. Try a more common setup — e.g. SF · PPR · TEP · 12-team.`} />
+        <ComingSoon icon={Target} title="No ADP data for these filters" body={`No crawled startup drafts match this filter combo for this ${pos}. Try a more common setup, e.g. SF · PPR · TEP · 12-team.`} />
       ) : (
       <div className="space-y-5">
       <div className="text-[11px] text-muted-foreground">
@@ -1053,7 +1053,7 @@ function AdpTab({ history, avail, loading, error, pos, filters, onFiltersChange 
             <div className="text-[10px] text-muted-foreground mt-1">Hover a point to see its ADP and the number of drafts used for that quarter.</div>
           </>
         ) : (
-          <EmptyLine text="Not enough data yet — needs picks in at least two different quarters." />
+          <EmptyLine text="Not enough data yet, needs picks in at least two different quarters." />
         )}
       </Card>
 
