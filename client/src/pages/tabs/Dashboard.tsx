@@ -42,6 +42,16 @@ function getPercentileLabel(rank: number, total: number): string {
   return `Bottom ${100 - topPct}%`;
 }
 
+// "Justin Jefferson" → "J. Jefferson". Keeps everything after the first token
+// as the surname so multi-word last names (e.g. "St. Brown") stay intact.
+// Used to save horizontal space on the My Roster grid for non-desktop views.
+function abbreviateFirstName(full: string): string {
+  const parts = (full || "").trim().split(/\s+/);
+  if (parts.length < 2) return full;
+  const [first, ...rest] = parts;
+  return `${first[0]}. ${rest.join(" ")}`;
+}
+
 function getPercentileColor(rank: number, total: number): string {
   const topPct = (rank / total) * 100;
   if (topPct <= 25) return "text-emerald-600 dark:text-emerald-400";
@@ -2090,7 +2100,10 @@ export function MyTeam({ league, userTeam, onNavigate }: DashboardOverviewProps)
                                     <div className="flex items-center gap-1.5 min-w-0">
                                       <PlayerAvatar id={p.sleeperId ?? p.id} name={p.name} pos={p.pos} team={p.team ?? ""} size="sm" compact />
                                       <div className="min-w-0">
-                                        <p className="text-[11px] font-semibold text-foreground leading-tight truncate">{p.name}</p>
+                                        <p className="text-[11px] font-semibold text-foreground leading-tight truncate">
+                                          <span className="lg:hidden">{abbreviateFirstName(p.name)}</span>
+                                          <span className="hidden lg:inline">{p.name}</span>
+                                        </p>
                                         <p className="text-[10px] text-muted-foreground leading-tight">{p.team} · {p.age}y</p>
                                       </div>
                                     </div>
@@ -2115,7 +2128,10 @@ export function MyTeam({ league, userTeam, onNavigate }: DashboardOverviewProps)
                                     <div className="flex items-center gap-1.5 min-w-0">
                                       <PlayerAvatar id={p.sleeperId ?? p.id} name={p.name} pos={p.pos} team={p.team ?? ""} size="sm" compact />
                                       <div className="min-w-0">
-                                        <p className="text-[11px] font-medium text-muted-foreground leading-tight truncate">{p.name}</p>
+                                        <p className="text-[11px] font-medium text-muted-foreground leading-tight truncate">
+                                          <span className="lg:hidden">{abbreviateFirstName(p.name)}</span>
+                                          <span className="hidden lg:inline">{p.name}</span>
+                                        </p>
                                         <p className="text-[10px] text-muted-foreground/60 leading-tight">{p.team} · {p.age}y</p>
                                       </div>
                                     </div>

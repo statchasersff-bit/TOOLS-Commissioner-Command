@@ -146,9 +146,13 @@ function pickPoints(row: SleeperStatsRow | undefined | null, scoring: ScoringKey
   return                              row.pts_std      ?? row.pts_half_ppr ?? row.pts_ppr      ?? 0;
 }
 
-/** Number of past seasons we backfill. Five gives a clear five-year trend
- *  without exploding cache size (each season payload is ~3-5 MB). */
+/** Fallback lookback (in seasons) used only when we can't derive a player's
+ *  rookie year from Sleeper years_exp. */
 const SEASONS_TO_FETCH = 5;
+/** Earliest season Sleeper exposes usable season totals. Career lookback is
+ *  clamped here so we never fan out into empty pre-history. Verified that
+ *  /stats/nfl/regular/{season} returns data back to at least 2009. */
+const STATS_DATA_FLOOR = 2009;
 /** Minimum games for a player to be included in the positional-finish
  *  ranking. Filters out cup-of-coffee rosters that would otherwise pad the
  *  ranks and make a real RB1 look like an RB6. */
@@ -165,15 +169,34 @@ export async function getPlayerProduction(
   const myTeamFallback = (meRaw.team as string | null | undefined) ?? null;
 
   const currentYear = new Date().getFullYear();
-  // We pull "previous N completed seasons" — never the in-progress year,
-  // which would mix mid-season partial totals into a "career" table.
-  const seasons = Array.from({ length: SEASONS_TO_FETCH }, (_, i) => currentYear - 1 - i)
-    .filter((s) => s >= 2018);
+  const lastCompleted = currentYear - 1; // never the in-progress year
+
+  // Cover the player's entire NFL career rather than a fixed recent window.
+  // Sleeper years_exp counts completed seasons, so debut ≈ currentYear -
+  // years_exp; we subtract one extra year as a buffer against Sleeper lagging
+  // its offseason increment (extra empty seasons are simply skipped below).
+  // When years_exp is unknown, fall back to the old N-season lookback. Clamp
+  // to STATS_DATA_FLOOR so we never fan out into empty pre-history.
+  const yearsExp = meRaw.years_exp;
+  const careerStart = typeof yearsExp === "number" && yearsExp >= 0
+    ? currentYear - yearsExp - 1
+    : lastCompleted - (SEASONS_TO_FETCH - 1);
+  const firstSeason = Math.max(STATS_DATA_FLOOR, careerStart);
+
+  const seasons: number[] = [];
+  for (let s = lastCompleted; s >= firstSeason; s--) seasons.push(s);
+
+  // Fetch every season payload up front in parallel. They're large (~3-5 MB)
+  // but cached on disk per-season and shared across all players, so the cold
+  // cost is paid once; sequential fetching would make a long career's first
+  // load very slow.
+  const seasonStatsList = await Promise.all(seasons.map((s) => fetchSeasonStats(s)));
 
   const results: ProductionSeason[] = [];
 
-  for (const season of seasons) {
-    const seasonStats = await fetchSeasonStats(season);
+  for (let si = 0; si < seasons.length; si++) {
+    const season = seasons[si];
+    const seasonStats = seasonStatsList[si];
     const myRow = seasonStats[playerId];
     if (!myRow) continue;
     const pts = pickPoints(myRow, scoring);

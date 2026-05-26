@@ -17,10 +17,10 @@ import { useLocation } from "wouter";
 import {
   Activity,
   ArrowLeft,
+  ArrowRightLeft,
   BarChart3,
   ChevronDown,
   CircleUserRound,
-  GitCompare,
   Layers,
   LineChart,
   Loader2,
@@ -29,20 +29,29 @@ import {
   ScrollText,
   Sparkles,
   Star,
+  Target,
   TrendingUp,
   Trophy,
   Users,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { cn } from "@/lib/utils";
 import { useSleeper } from "@/contexts/SleeperContext";
 import { useValueModel } from "@/contexts/ValueModelContext";
-import { getSleeperPlayers, fetchSleeperLeagueFull, fetchPlayerExposure, fetchTradesForPlayer, fetchPlayerGameLogs, type PlayerLeagueExposure, type PlayerTradeRecord, type PlayerTradeAsset, type PlayerGameLogRow } from "@/lib/sleeperApi";
+import { getSleeperPlayers, fetchSleeperLeagueFull, fetchPlayerExposure, fetchTradesForPlayer, fetchPlayerGameLogs, fetchPlayerAdpHistory, fetchPlayerAdpAvailability, type PlayerLeagueExposure, type PlayerTradeRecord, type PlayerTradeAsset, type PlayerGameLogRow, type PlayerAdpHistory, type PlayerAdpAvailability, type PlayerAdpAvailabilityCell, type AdpProfileFilters } from "@/lib/sleeperApi";
+
+// Default ADP-tab filter: the dominant dynasty-startup configuration in the
+// crawled dataset (Superflex · PPR · TE Premium · 12-team), so the tab opens
+// on a well-populated slice rather than a sparse one.
+const DEFAULT_ADP_FILTERS: AdpProfileFilters = { superflex: "yes", scoring: "ppr", tePremium: "yes", teams: 12 };
 import { resolvePlayerId, toPlayerSlug } from "@/lib/playerSlug";
 import { getPlayerProfile, type PlayerProfile } from "@/lib/playerProfile";
 import {
   loadPlayerAdvancedStats,
   type PlayerAdvancedResult,
+  type ProductionRow,
   type AdvStatColumn,
 } from "@/lib/playerAdvancedStats";
 import {
@@ -57,7 +66,6 @@ import {
   type RecTone,
 } from "@/lib/playerPageInsights";
 import type { League, Player } from "@/types";
-import type { RankedPlayer } from "@/contexts/ValueModelContext";
 
 // ── Formatters ────────────────────────────────────────────────────────────────
 function fmtValue(v: number | null): string {
@@ -151,7 +159,7 @@ function usePlayerPageData(param: string) {
     if (!playerId || !userId || !sleeper.leagues.length) { setExposure(null); return; }
     let cancelled = false;
     setExposureLoading(true);
-    fetchPlayerExposure(userId, sleeper.leagues.map((l) => ({ leagueId: l.leagueId, name: l.name })), playerId)
+    fetchPlayerExposure(userId, sleeper.leagues.map((l) => ({ leagueId: l.leagueId, name: l.name, avatar: l.avatar })), playerId)
       .then((rows) => { if (!cancelled) setExposure(rows); })
       .catch(() => { if (!cancelled) setExposure(null); })
       .finally(() => { if (!cancelled) setExposureLoading(false); });
@@ -174,13 +182,13 @@ function usePlayerPageData(param: string) {
 
 const TABS = [
   { id: "overview", label: "Overview", icon: Sparkles },
-  { id: "production", label: "Production", icon: BarChart3 },
+  { id: "production", label: "Game Log", icon: BarChart3 },
   { id: "advanced", label: "Advanced Stats", icon: Layers },
   { id: "value", label: "Dynasty Value", icon: Trophy },
+  { id: "adp", label: "ADP", icon: Target },
   { id: "trades", label: "Trades", icon: Repeat2 },
   { id: "availability", label: "Availability", icon: Users },
   { id: "news", label: "News", icon: Newspaper },
-  { id: "compare", label: "Compare", icon: GitCompare },
 ] as const;
 
 // ── Page ───────────────────────────────────────────────────────────────────────
@@ -198,11 +206,26 @@ export default function PlayerPage({ params }: { params?: { playerId?: string } 
   // effect doesn't refetch (or cancel itself) on unrelated re-renders.
   const tradesLoadedRef = useRef<string | null>(null);
 
+  // ADP analytics — same lazy-load-on-first-open pattern as trades. Two
+  // endpoints (3-year history + per-pick availability) fetched in parallel.
+  const [adpHistory, setAdpHistory] = useState<PlayerAdpHistory | null>(null);
+  const [adpAvail, setAdpAvail] = useState<PlayerAdpAvailability | null>(null);
+  const [adpLoading, setAdpLoading] = useState(false);
+  const [adpError, setAdpError] = useState(false);
+  const [adpFilters, setAdpFilters] = useState<AdpProfileFilters>(DEFAULT_ADP_FILTERS);
+  // Keyed by player + filter combo so changing a filter (or the player) triggers
+  // a refetch, but re-renders / tab toggles within the same combo don't.
+  const adpLoadedRef = useRef<string | null>(null);
+
   useEffect(() => {
     setTab("overview");
     window.scrollTo(0, 0);
     setTrades(null);
     tradesLoadedRef.current = null;
+    setAdpHistory(null);
+    setAdpAvail(null);
+    setAdpError(false);
+    adpLoadedRef.current = null;
   }, [param]);
 
   useEffect(() => {
@@ -216,6 +239,20 @@ export default function PlayerPage({ params }: { params?: { playerId?: string } 
       .catch(() => setTrades([]))
       .finally(() => setTradesLoading(false));
   }, [tab, resolvedId, profile?.player.name]);
+
+  useEffect(() => {
+    if (tab !== "adp") return;
+    if (!resolvedId) return;
+    const key = `${resolvedId}|${adpFilters.superflex}|${adpFilters.scoring}|${adpFilters.tePremium}|${adpFilters.teams}`;
+    if (adpLoadedRef.current === key) return;
+    adpLoadedRef.current = key;
+    setAdpLoading(true);
+    setAdpError(false);
+    Promise.all([fetchPlayerAdpHistory(resolvedId, adpFilters), fetchPlayerAdpAvailability(resolvedId, adpFilters)])
+      .then(([h, a]) => { setAdpHistory(h); setAdpAvail(a); })
+      .catch(() => setAdpError(true))
+      .finally(() => setAdpLoading(false));
+  }, [tab, resolvedId, adpFilters]);
 
   // Derived dynasty intelligence (Overview).
   const dynRank = useMemo(
@@ -281,23 +318,21 @@ export default function PlayerPage({ params }: { params?: { playerId?: string } 
           <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-5 items-start">
             <div className="space-y-5 min-w-0">
               {tab === "overview" && (
-                <OverviewTab profile={profile} adv={adv} advLoading={advLoading} similar={similar} dynRank={dynRank} onOpenPlayer={(id) => setLocation(`/players/${id}`)} onCompare={() => setTab("compare")} />
+                <OverviewTab profile={profile} adv={adv} advLoading={advLoading} similar={similar} dynRank={dynRank} onOpenPlayer={(id) => setLocation(`/players/${id}`)} />
               )}
               {tab === "production" && <ProductionTab playerId={resolvedId} adv={adv} advLoading={advLoading} pos={profile.player.pos} />}
               {tab === "advanced" && <AdvancedTab adv={adv} advLoading={advLoading} pos={profile.player.pos} />}
               {tab === "value" && <DynastyValueTab profile={profile} adv={adv} dynRank={dynRank} />}
-              {tab === "trades" && <TradesTab trades={trades} loading={tradesLoading} />}
+              {tab === "adp" && <AdpTab history={adpHistory} avail={adpAvail} loading={adpLoading} error={adpError} pos={profile.player.pos} filters={adpFilters} onFiltersChange={setAdpFilters} />}
+              {tab === "trades" && <TradesTab trades={trades} loading={tradesLoading} valuesBySleeperId={valueModel.valuesBySleeperId} />}
               {tab === "availability" && (
                 <AvailabilityTab
                   connected={sleeper.isConnected}
                   exposure={exposure}
                   loading={exposureLoading}
-                  activeLeagueId={sleeper.activeLeagueId}
-                  onSetActive={(id) => sleeper.setActiveLeagueById(id)}
                 />
               )}
               {tab === "news" && <ComingSoon icon={Newspaper} title="Player News" body="Beat reports, injury updates, and fantasy-impact analysis will appear here once the news feed is connected." />}
-              {tab === "compare" && <CompareTab base={profile} baseAdv={adv} baseDynRank={dynRank} />}
             </div>
 
             <Sidebar
@@ -307,7 +342,6 @@ export default function PlayerPage({ params }: { params?: { playerId?: string } 
               connected={sleeper.isConnected}
               exposure={exposure}
               exposureLoading={exposureLoading}
-              onCompare={() => setTab("compare")}
             />
           </div>
         </div>
@@ -323,7 +357,6 @@ function Hero({ profile, raw, dynRank }: { profile: PlayerProfile; raw: any; dyn
   const tier = valueTier(dyn);
   const yearsExp = p.yearsExp ?? (typeof raw?.years_exp === "number" ? raw.years_exp : undefined);
   const jersey = raw?.number ?? null;
-  const injured = p.injuryStatus && p.injuryStatus !== "Healthy" && p.injuryStatus.trim() !== "";
 
   return (
     <Card className="overflow-hidden p-0">
@@ -345,23 +378,15 @@ function Hero({ profile, raw, dynRank }: { profile: PlayerProfile; raw: any; dyn
             <div className="text-right flex-shrink-0">
               <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Dynasty Value</div>
               <div className="text-2xl font-black tabular-nums text-[#d4af37]">{fmtValue(dyn)}</div>
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">SF · PPR</div>
             </div>
           </div>
 
           <span className="block h-[2.5px] w-12 bg-[#d4af37] rounded-full my-3" />
 
           <div className="flex flex-wrap gap-2">
-            <HeroBadge label="Dynasty Rank" value={dynRank ? `#${dynRank}` : "—"} />
             <HeroBadge label="Position Rank" value={profile.ranks.dynastyPositional ? `${p.pos}${profile.ranks.dynastyPositional}` : "—"} />
-            {profile.ranks.redraftPositional && <HeroBadge label="Redraft Rank" value={`${p.pos}${profile.ranks.redraftPositional}`} />}
             <HeroBadge label="Value Tier" value={tier} accent />
-            <span className={cn(
-              "inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-bold",
-              injured ? "border-rose-500/40 bg-rose-500/10 text-rose-600 dark-any:text-rose-300" : "border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark-any:text-emerald-400",
-            )}>
-              <Activity className="w-3 h-3" />
-              {injured ? p.injuryStatus : "Healthy"}
-            </span>
           </div>
         </div>
       </div>
@@ -369,14 +394,14 @@ function Hero({ profile, raw, dynRank }: { profile: PlayerProfile; raw: any; dyn
   );
 }
 
-function HeroImage({ id, name, pos, team }: { id: string; name: string; pos: string; team?: string }) {
+function HeroImage({ id, name, pos, team, className, initialsClassName, logoClassName }: { id: string; name: string; pos: string; team?: string; className?: string; initialsClassName?: string; logoClassName?: string }) {
   const [err, setErr] = useState(false);
   const [logoErr, setLogoErr] = useState(false);
   const synthetic = !id || id.startsWith("rookie_") || id.startsWith("pick_") || id.startsWith("mock_");
   const initials = (name || "?").split(" ").filter(Boolean).map((w) => w[0]).slice(0, 2).join("");
   const showLogo = !!team && team !== "FA" && !logoErr;
   return (
-    <div className="relative w-full sm:w-[180px] h-[180px] flex-shrink-0 overflow-hidden bg-gradient-to-br from-[#0b3a7a]/25 to-transparent">
+    <div className={cn("relative w-full sm:w-[180px] h-[180px] flex-shrink-0 overflow-hidden bg-gradient-to-br from-[#0b3a7a]/25 to-transparent", className)}>
       {/* Faint team logo watermark — sits behind the player photo (visible in
           the gradient margins / behind the initials fallback). */}
       {showLogo && (
@@ -384,12 +409,12 @@ function HeroImage({ id, name, pos, team }: { id: string; name: string; pos: str
           src={`https://sleepercdn.com/images/team_logos/nfl/${team!.toLowerCase()}.png`}
           alt=""
           aria-hidden="true"
-          className="absolute inset-0 m-auto w-[85%] h-[85%] object-contain opacity-20 pointer-events-none select-none"
+          className={cn("absolute inset-0 m-auto w-[85%] h-[85%] object-contain opacity-20 pointer-events-none select-none", logoClassName)}
           onError={() => setLogoErr(true)}
         />
       )}
       {err || synthetic ? (
-        <div className="relative w-full h-full flex items-center justify-center text-4xl font-black text-muted-foreground/50">{initials}</div>
+        <div className={cn("relative w-full h-full flex items-center justify-center text-4xl font-black text-muted-foreground/50", initialsClassName)}>{initials}</div>
       ) : (
         <img
           src={`https://sleepercdn.com/content/nfl/players/${id}.jpg`}
@@ -416,7 +441,7 @@ function HeroBadge({ label, value, accent }: { label: string; value: string; acc
 
 // ── Overview ────────────────────────────────────────────────────────────────
 function OverviewTab({
-  profile, adv, advLoading, similar, dynRank, onOpenPlayer, onCompare,
+  profile, adv, advLoading, similar, dynRank, onOpenPlayer,
 }: {
   profile: PlayerProfile;
   adv: PlayerAdvancedResult | null;
@@ -424,7 +449,6 @@ function OverviewTab({
   similar: SimilarPlayer[];
   dynRank: number | null;
   onOpenPlayer: (id: string) => void;
-  onCompare: () => void;
 }) {
   const snapshot = dynastySnapshot({
     name: profile.player.name,
@@ -494,22 +518,31 @@ function OverviewTab({
 
       {/* Similar players */}
       <Card className="p-5">
-        <div className="flex items-center justify-between">
-          <SectionTitle icon={Users} title="Similar Dynasty Assets" noMargin />
-          <button onClick={onCompare} className="text-[11px] font-semibold text-[#d4af37] hover:underline">Compare →</button>
-        </div>
+        <SectionTitle icon={Users} title="Similar Dynasty Assets" noMargin />
+        <div className="h-3" />
         {similar.length ? (
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">
             {similar.map((s) => (
               <button
                 key={s.sleeperId}
                 onClick={() => onOpenPlayer(toPlayerSlug(s.name, s.team, s.pos))}
-                className="text-left rounded-xl border border-border bg-muted/20 hover:border-[#d4af37]/40 hover:bg-muted/40 transition-colors p-3"
+                className="group text-left rounded-xl border border-border bg-muted/20 hover:border-[#d4af37]/40 hover:bg-muted/40 transition-colors overflow-hidden"
                 data-testid={`similar-player-${s.sleeperId}`}
               >
-                <div className="text-sm font-bold text-foreground truncate">{s.name}</div>
-                <div className="text-[11px] text-muted-foreground mt-0.5">{s.pos} · {s.team || "FA"} · Age {s.age}</div>
-                <div className="text-xs font-bold text-[#d4af37] mt-1 tabular-nums">{fmtValue(s.value)}</div>
+                <HeroImage
+                  id={s.sleeperId}
+                  name={s.name}
+                  pos={s.pos}
+                  team={s.team}
+                  className="w-full sm:w-full h-28"
+                  initialsClassName="text-3xl"
+                  logoClassName="w-[120%] h-[120%] opacity-30"
+                />
+                <div className="p-3">
+                  <div className="text-sm font-bold text-foreground truncate">{s.name}</div>
+                  <div className="text-[11px] text-muted-foreground mt-0.5">{s.pos} · {s.team || "FA"} · Age {s.age}</div>
+                  <div className="text-xs font-bold text-[#d4af37] mt-1 tabular-nums">{fmtValue(s.value)}</div>
+                </div>
               </button>
             ))}
           </div>
@@ -562,31 +595,99 @@ function ProductionTab({ playerId, adv, advLoading, pos }: { playerId: string | 
                 </thead>
                 <tbody>
                   {rows.map((r) => (
-                    <tr key={r.season} className="border-b border-border/30">
-                      <td className="px-3 py-2.5 font-semibold text-foreground">{r.season}</td>
-                      <td className="px-3 py-2.5 text-muted-foreground">{r.team}</td>
-                      <td className="px-3 py-2.5 text-right tabular-nums text-foreground/85">{r.games ?? "—"}</td>
-                      <td className="px-3 py-2.5 text-right tabular-nums text-[#d4af37] font-bold border-l border-border/40">{ppg(r.ppgStd)}</td>
-                      <td className="px-3 py-2.5 text-right tabular-nums text-foreground/85">{fin(r.finishStd)}</td>
-                      <td className="px-3 py-2.5 text-right tabular-nums text-[#d4af37] font-bold border-l border-border/40">{ppg(r.ppgHalf)}</td>
-                      <td className="px-3 py-2.5 text-right tabular-nums text-foreground/85">{fin(r.finishHalf)}</td>
-                      <td className="px-3 py-2.5 text-right tabular-nums text-[#d4af37] font-bold border-l border-border/40">{ppg(r.ppgPpr)}</td>
-                      <td className="px-3 py-2.5 text-right tabular-nums text-foreground/85">{fin(r.finishPpr)}</td>
-                    </tr>
+                    <ProductionSeasonRow key={r.season} row={r} pos={pos} playerId={playerId} />
                   ))}
                 </tbody>
               </table>
             </div>
+            <div className="px-3 py-2 text-[10px] text-muted-foreground border-t border-border/40">Click a season to expand its weekly game log.</div>
           </Card>
         </div>
       )}
-
-      {/* Weekly game logs — one collapsible row per season */}
-      <div>
-        <SectionTitle icon={ScrollText} title="Weekly Game Logs" />
-        <GameLogTab playerId={playerId} pos={pos} />
-      </div>
     </div>
+  );
+}
+
+// Number of columns in the Production table — used for the expanded log row's colSpan.
+const PRODUCTION_COLSPAN = 9;
+
+// A single Production-table season row. Clicking it expands an inline row that
+// lazily fetches and shows that season's weekly game log (regular + playoffs).
+function ProductionSeasonRow({ row, pos, playerId }: { row: ProductionRow; pos: string; playerId: string | null }) {
+  const season = Number(row.season);
+  const canExpand = !!playerId && Number.isFinite(season);
+  const [open, setOpen] = useState(false);
+  const [logs, setLogs] = useState<GLRow[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false);
+  const fetched = useRef(false);
+
+  useEffect(() => {
+    if (!open || !canExpand || fetched.current) return;
+    fetched.current = true;
+    let cancelled = false;
+    setLoading(true); setError(false);
+    Promise.allSettled([
+      fetchPlayerGameLogs(playerId!, season, "regular"),
+      fetchPlayerGameLogs(playerId!, season, "post"),
+    ])
+      .then(([reg, post]) => {
+        if (cancelled) return;
+        if (reg.status === "rejected" && post.status === "rejected") {
+          setError(true); setLogs(null); return;
+        }
+        const regRows: GLRow[] = reg.status === "fulfilled" ? reg.value.map((r) => ({ ...r, seasonType: "regular" })) : [];
+        const postRows: GLRow[] = post.status === "fulfilled" ? post.value.map((r) => ({ ...r, seasonType: "post" })) : [];
+        setLogs([...regRows, ...postRows]);
+      })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [open, canExpand, playerId, season]);
+
+  const ppg = (v: number | null) => (v != null ? v.toFixed(1) : "—");
+  const fin = (v: number | null) => (v != null ? `${pos}${v}` : "—");
+
+  return (
+    <>
+      <tr
+        className={cn("border-b border-border/30", canExpand && "cursor-pointer hover:bg-muted/20")}
+        onClick={() => canExpand && setOpen((o) => !o)}
+        aria-expanded={canExpand ? open : undefined}
+      >
+        <td className="px-3 py-2.5 font-semibold text-foreground">
+          <span className="inline-flex items-center gap-1.5">
+            <ChevronDown className={cn("h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform", !canExpand && "invisible", open ? "rotate-0" : "-rotate-90")} />
+            {row.season}
+          </span>
+        </td>
+        <td className="px-3 py-2.5 text-muted-foreground">{row.team}</td>
+        <td className="px-3 py-2.5 text-right tabular-nums text-foreground/85">{row.games ?? "—"}</td>
+        <td className="px-3 py-2.5 text-right tabular-nums text-[#d4af37] font-bold border-l border-border/40">{ppg(row.ppgStd)}</td>
+        <td className="px-3 py-2.5 text-right tabular-nums text-foreground/85">{fin(row.finishStd)}</td>
+        <td className="px-3 py-2.5 text-right tabular-nums text-[#d4af37] font-bold border-l border-border/40">{ppg(row.ppgHalf)}</td>
+        <td className="px-3 py-2.5 text-right tabular-nums text-foreground/85">{fin(row.finishHalf)}</td>
+        <td className="px-3 py-2.5 text-right tabular-nums text-[#d4af37] font-bold border-l border-border/40">{ppg(row.ppgPpr)}</td>
+        <td className="px-3 py-2.5 text-right tabular-nums text-foreground/85">{fin(row.finishPpr)}</td>
+      </tr>
+      {open && (
+        <tr>
+          <td colSpan={PRODUCTION_COLSPAN} className="p-0 bg-muted/10 border-b border-border/30">
+            <div className="px-3 py-3">
+              <div className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{row.season} Weekly Game Log</div>
+              {loading && !logs ? (
+                <SkeletonLines n={4} />
+              ) : error ? (
+                <EmptyBlock icon={ScrollText} text="Game logs are temporarily unavailable from Sleeper. Try again later." />
+              ) : !logs || !logs.length ? (
+                <EmptyBlock icon={ScrollText} text={`No weekly game logs for ${row.season}.`} />
+              ) : (
+                <WeeklyGameLogTable logs={logs} pos={pos} />
+              )}
+            </div>
+          </td>
+        </tr>
+      )}
+    </>
   );
 }
 
@@ -604,14 +705,22 @@ function PpgChart({ rows }: { rows: { season: string; ppg: number | null }[] }) 
     return { x, y, ...p };
   });
   const line = coords.map((c) => `${c.x},${c.y}`).join(" ");
+  // Thin the text labels so a long career (10+ seasons) doesn't overlap; always
+  // keep the most recent season labelled. Dots still render for every season.
+  const labelEvery = Math.ceil(pts.length / 8);
+  const showLabel = (i: number) => i % labelEvery === 0 || i === pts.length - 1;
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-[150px]" preserveAspectRatio="none">
       <polyline points={line} fill="none" stroke="#d4af37" strokeWidth={2} />
-      {coords.map((c) => (
+      {coords.map((c, i) => (
         <g key={c.season}>
           <circle cx={c.x} cy={c.y} r={3.5} fill="#d4af37" />
-          <text x={c.x} y={c.y - 8} textAnchor="middle" className="fill-foreground" fontSize={11} fontWeight={700}>{c.ppg.toFixed(1)}</text>
-          <text x={c.x} y={H - 8} textAnchor="middle" className="fill-muted-foreground" fontSize={10}>{c.season}</text>
+          {showLabel(i) && (
+            <>
+              <text x={c.x} y={c.y - 8} textAnchor="middle" className="fill-foreground" fontSize={11} fontWeight={700}>{c.ppg.toFixed(1)}</text>
+              <text x={c.x} y={H - 8} textAnchor="middle" className="fill-muted-foreground" fontSize={10}>{c.season}</text>
+            </>
+          )}
         </g>
       ))}
     </svg>
@@ -781,15 +890,308 @@ function FitCard({ title, label, note }: { title: string; label: string; note: s
   );
 }
 
+// ── ADP (draft cost over the last 3 years + P(available) by pick) ────────────
+// "2025-08" → "Q3 '25"; returns the input unchanged on a format mismatch.
+function fmtAdpQuarter(month: string): string {
+  const m = /^(\d{4})-(\d{2})$/.exec(month);
+  if (!m) return month;
+  const q = Math.floor((parseInt(m[2], 10) - 1) / 3) + 1;
+  return `Q${q} '${m[1].slice(2)}`;
+}
+
+// Collapse the monthly ADP series into 3-month (calendar quarter) buckets so
+// the 36-month trend reads as ~12 points instead of up to 36. Each bucket's
+// avgPick is weighted by that month's pick count; counts are summed. The
+// representative `month` is the first month of the quarter so existing
+// "YYYY-MM" formatting keeps working.
+function toQuarterlyAdp(monthly: { month: string; avgPick: number; count: number }[]): { month: string; avgPick: number; count: number }[] {
+  const buckets = new Map<string, { firstMonth: string; weighted: number; count: number }>();
+  for (const m of monthly) {
+    const parsed = /^(\d{4})-(\d{2})$/.exec(m.month);
+    if (!parsed) continue;
+    const year = parsed[1];
+    const monthNo = parseInt(parsed[2], 10);
+    const q = Math.floor((monthNo - 1) / 3); // 0..3
+    const key = `${year}-Q${q}`;
+    const firstMonth = `${year}-${String(q * 3 + 1).padStart(2, "0")}`;
+    const w = m.count > 0 ? m.count : 1;
+    const cur = buckets.get(key);
+    if (cur) {
+      cur.weighted += m.avgPick * w;
+      cur.count += w;
+    } else {
+      buckets.set(key, { firstMonth, weighted: m.avgPick * w, count: w });
+    }
+  }
+  return Array.from(buckets.values())
+    .sort((a, z) => a.firstMonth.localeCompare(z.firstMonth))
+    .map((b) => ({ month: b.firstMonth, avgPick: b.weighted / b.count, count: b.count }));
+}
+
+// Tailwind classes for an availability cell, keyed by P(available) bucket.
+function availabilityClass(pct: number): string {
+  if (pct < 10) return "bg-rose-500/20 text-rose-600 dark-any:text-rose-300";
+  if (pct < 30) return "bg-orange-500/20 text-orange-600 dark-any:text-orange-300";
+  if (pct < 60) return "bg-[#d4af37]/20 text-[#d4af37]";
+  if (pct < 85) return "bg-teal-500/20 text-teal-600 dark-any:text-teal-300";
+  return "bg-emerald-500/20 text-emerald-600 dark-any:text-emerald-300";
+}
+
+// A compact segmented toggle used by the ADP filter bar.
+function Segmented<T extends string | number>({ label, value, options, onChange, testid }: {
+  label: string;
+  value: T;
+  options: { value: T; label: string }[];
+  onChange: (v: T) => void;
+  testid: string;
+}) {
+  return (
+    <div className="flex flex-col gap-1" data-testid={testid}>
+      <span className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</span>
+      <div className="inline-flex rounded-lg border border-border bg-muted/20 p-0.5">
+        {options.map((o) => (
+          <button
+            key={String(o.value)}
+            onClick={() => onChange(o.value)}
+            className={cn(
+              "px-2.5 py-1 text-xs font-bold rounded-md transition-colors",
+              value === o.value ? "bg-[#d4af37] text-black" : "text-muted-foreground hover:text-foreground",
+            )}
+            data-testid={`${testid}-${o.value}`}
+          >
+            {o.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Shared filter bar for the ADP tab — drives both the ADP Over Time trend and
+// the per-pick availability grid (league shape: SF/1QB, scoring, TEP, teams).
+function AdpFilterBar({ filters, onChange }: { filters: AdpProfileFilters; onChange: (f: AdpProfileFilters) => void }) {
+  const set = (patch: Partial<AdpProfileFilters>) => onChange({ ...filters, ...patch });
+  return (
+    <Card className="p-3" data-testid="adp-filter-bar">
+      <div className="flex flex-wrap items-end gap-x-5 gap-y-3">
+        <Segmented label="QB" value={filters.superflex} testid="adp-filter-sf"
+          options={[{ value: "no", label: "1QB" }, { value: "yes", label: "SF" }]}
+          onChange={(v) => set({ superflex: v })} />
+        <Segmented label="Scoring" value={filters.scoring} testid="adp-filter-scoring"
+          options={[{ value: "ppr", label: "PPR" }, { value: "half", label: "Half" }, { value: "standard", label: "Std" }]}
+          onChange={(v) => set({ scoring: v })} />
+        <Segmented label="TE Premium" value={filters.tePremium} testid="adp-filter-tep"
+          options={[{ value: "no", label: "No TEP" }, { value: "yes", label: "TEP" }]}
+          onChange={(v) => set({ tePremium: v })} />
+        <Segmented label="Teams" value={filters.teams} testid="adp-filter-teams"
+          options={[{ value: 10, label: "10" }, { value: 12, label: "12" }]}
+          onChange={(v) => set({ teams: v })} />
+      </div>
+    </Card>
+  );
+}
+
+function AdpTab({ history, avail, loading, error, pos, filters, onFiltersChange }: {
+  history: PlayerAdpHistory | null;
+  avail: PlayerAdpAvailability | null;
+  loading: boolean;
+  error: boolean;
+  pos: string;
+  filters: AdpProfileFilters;
+  onFiltersChange: (f: AdpProfileFilters) => void;
+}) {
+  const quarterly = history ? toQuarterlyAdp(history.monthly) : [];
+  const hasHistory = quarterly.length >= 2;
+  const hasAvail = !!avail && avail.totalDrafts > 0;
+
+  const b = (w: "7d" | "30d" | "90d") => history?.buckets.find((x) => x.window === w)?.avgPick ?? null;
+  const teams = avail?.teams ?? filters.teams;
+  const cellsByRound = new Map<number, PlayerAdpAvailabilityCell[]>();
+  if (avail) for (const c of avail.cells) {
+    if (!cellsByRound.has(c.round)) cellsByRound.set(c.round, []);
+    cellsByRound.get(c.round)!.push(c);
+  }
+  const expectedPickNo = avail?.expectedPick != null ? Math.round(avail.expectedPick) : null;
+  const fmtSlot = (pickNo: number) => `${Math.ceil(pickNo / teams)}.${String(((pickNo - 1) % teams) + 1).padStart(2, "0")}`;
+
+  return (
+    <div className="space-y-5">
+      {/* Filters apply to both the ADP Over Time trend and the per-pick grid. */}
+      <AdpFilterBar filters={filters} onChange={onFiltersChange} />
+
+      {loading && !history && !avail ? (
+        <Card className="p-5"><SkeletonLines n={6} /></Card>
+      ) : error ? (
+        <EmptyBlock icon={Target} text="ADP data is temporarily unavailable. Try again later." />
+      ) : (!hasHistory && !hasAvail) ? (
+        <ComingSoon icon={Target} title="No ADP data for these filters" body={`No crawled startup drafts match this filter combo for this ${pos}. Try a more common setup — e.g. SF · PPR · TEP · 12-team.`} />
+      ) : (
+      <div className="space-y-5">
+      <div className="text-[11px] text-muted-foreground">
+        Based on crawled startup drafts · current season for averages, last 3 years for the trend.
+      </div>
+
+      {/* Windowed average draft position */}
+      <div className="grid grid-cols-3 gap-3">
+        <MetricCard label="ADP · 7d" value={b("7d") != null ? b("7d")!.toFixed(1) : "—"} accent />
+        <MetricCard label="ADP · 30d" value={b("30d") != null ? b("30d")!.toFixed(1) : "—"} />
+        <MetricCard label="ADP · 90d" value={b("90d") != null ? b("90d")!.toFixed(1) : "—"} />
+      </div>
+
+      {/* 3-year ADP trend */}
+      <Card className="p-5">
+        <SectionTitle icon={LineChart} title="ADP Over Time" />
+        <div className="text-[11px] text-muted-foreground mb-2">
+          Quarterly average · last 3 years · lower = drafted earlier
+          {hasHistory && (
+            <> · <span className="font-bold text-foreground tabular-nums">{quarterly.length}</span> data points from <span className="font-bold text-foreground tabular-nums">{quarterly.reduce((sum, q) => sum + q.count, 0).toLocaleString()}</span> drafts</>
+          )}
+        </div>
+        {hasHistory ? (
+          <>
+            <AdpHistoryChart series={quarterly} />
+            <div className="text-[10px] text-muted-foreground mt-1">Hover a point to see its ADP and the number of drafts used for that quarter.</div>
+          </>
+        ) : (
+          <EmptyLine text="Not enough data yet — needs picks in at least two different quarters." />
+        )}
+      </Card>
+
+      {/* P(available) by pick */}
+      <Card className="p-5">
+        <SectionTitle icon={Target} title="Chance of Getting This Player by Pick" />
+        {hasAvail ? (
+          <>
+            <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-[11px] text-muted-foreground mb-3">
+              <span>Expected pick <span className="font-bold text-foreground tabular-nums">{expectedPickNo != null ? fmtSlot(expectedPickNo) : "—"}</span></span>
+              <span>Seen in <span className="font-bold text-foreground tabular-nums">{avail!.draftsWithPlayer.toLocaleString()}</span> / {avail!.totalDrafts.toLocaleString()} drafts</span>
+              <span className="ml-auto">{teams}-team · % available when each pick is on the clock</span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="border-separate" style={{ borderSpacing: "3px" }}>
+                <thead>
+                  <tr className="text-[10px] text-muted-foreground">
+                    <th className="px-1 py-0.5 text-left font-semibold sticky left-0 bg-background z-10">Rd</th>
+                    {Array.from({ length: teams }, (_, i) => (
+                      <th key={i} className="px-1 py-0.5 text-center font-semibold tabular-nums w-9">{i + 1}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {Array.from(cellsByRound.keys()).sort((a, z) => a - z).map((round) => {
+                    const row = cellsByRound.get(round) ?? [];
+                    return (
+                      <tr key={round}>
+                        <td className="px-1 py-0.5 text-[10px] font-semibold text-muted-foreground sticky left-0 bg-background z-10">R{round}</td>
+                        {Array.from({ length: teams }, (_, i) => {
+                          const cell = row.find((c) => c.pickInRound === i + 1);
+                          if (!cell) return <td key={i} />;
+                          const isExpected = expectedPickNo != null && cell.pickNo === expectedPickNo;
+                          return (
+                            <td key={i} className="p-0">
+                              <div
+                                className={cn(
+                                  "rounded-[3px] h-8 w-9 flex items-center justify-center text-[11px] font-bold tabular-nums",
+                                  availabilityClass(cell.availabilityPct),
+                                  isExpected && "ring-2 ring-[#d4af37]",
+                                )}
+                                title={`Pick ${fmtSlot(cell.pickNo)} · ${cell.availabilityPct.toFixed(1)}% available`}
+                              >
+                                {Math.round(cell.availabilityPct)}
+                              </div>
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <div className="flex flex-wrap items-center gap-3 mt-3 text-[10px] text-muted-foreground">
+              <span>Likelihood still on the board:</span>
+              {[["<10%", "bg-rose-500/40"], ["10–30%", "bg-orange-500/40"], ["30–60%", "bg-[#d4af37]/50"], ["60–85%", "bg-teal-500/40"], ["85%+", "bg-emerald-500/40"]].map(([label, cls]) => (
+                <span key={label} className="flex items-center gap-1"><span className={cn("w-2.5 h-2.5 rounded-sm", cls)} />{label}</span>
+              ))}
+            </div>
+          </>
+        ) : (
+          <EmptyLine text="No per-pick availability data for the current filters." />
+        )}
+      </Card>
+      </div>
+      )}
+    </div>
+  );
+}
+
+// Theme-aware ADP line chart. Y-axis is inverted vs PpgChart — a *lower* pick
+// number is better, so earlier picks render toward the top.
+function AdpHistoryChart({ series }: { series: { month: string; avgPick: number; count: number }[] }) {
+  const [hover, setHover] = useState<number | null>(null);
+  const W = 600, H = 150, PAD = 30;
+  const pts = series;
+  if (pts.length < 2) return null;
+  const vals = pts.map((p) => p.avgPick);
+  const min = Math.min(...vals);
+  const max = Math.max(...vals);
+  const span = Math.max(1, max - min);
+  const coords = pts.map((p, i) => {
+    const x = PAD + (i / (pts.length - 1)) * (W - PAD * 2);
+    // Inverted: smallest avgPick (earliest) → top of the chart.
+    const y = PAD + ((p.avgPick - min) / span) * (H - PAD * 2);
+    return { x, y, ...p };
+  });
+  const line = coords.map((c) => `${c.x},${c.y}`).join(" ");
+  // Label every Nth point so a long series doesn't overflow the axis.
+  const labelEvery = Math.ceil(pts.length / 8);
+  const active = hover != null ? coords[hover] : null;
+  return (
+    <div className="relative">
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-[160px]" preserveAspectRatio="none">
+        <polyline points={line} fill="none" stroke="#d4af37" strokeWidth={2} />
+        {coords.map((c, i) => (
+          <g key={c.month}>
+            <circle cx={c.x} cy={c.y} r={hover === i ? 5 : 3} fill="#d4af37" />
+            {i % labelEvery === 0 && (
+              <>
+                <text x={c.x} y={c.y - 7} textAnchor="middle" className="fill-foreground" fontSize={10} fontWeight={700}>{c.avgPick.toFixed(0)}</text>
+                <text x={c.x} y={H - 8} textAnchor="middle" className="fill-muted-foreground" fontSize={9}>{fmtAdpQuarter(c.month)}</text>
+              </>
+            )}
+            {/* Wide transparent hit target so the count popup is easy to hover. */}
+            <circle
+              cx={c.x} cy={c.y} r={14} fill="transparent"
+              onMouseEnter={() => setHover(i)}
+              onMouseLeave={() => setHover((h) => (h === i ? null : h))}
+            />
+          </g>
+        ))}
+      </svg>
+      {active && (
+        <div
+          className="absolute z-10 -translate-x-1/2 -translate-y-full pointer-events-none"
+          style={{ left: `${(active.x / W) * 100}%`, top: `calc(${(active.y / H) * 100}% - 8px)` }}
+        >
+          <div className="rounded-md border border-border bg-popover text-popover-foreground px-2 py-1 shadow-md whitespace-nowrap">
+            <div className="text-[11px] font-bold">{fmtAdpQuarter(active.month)}</div>
+            <div className="text-[10px] text-muted-foreground">
+              ADP <span className="font-semibold text-foreground tabular-nums">{active.avgPick.toFixed(1)}</span> · <span className="font-semibold text-foreground tabular-nums">{active.count.toLocaleString()}</span> draft{active.count === 1 ? "" : "s"}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Availability (Phase 3: cross-league exposure) ───────────────────────────
 function AvailabilityTab({
-  connected, exposure, loading, activeLeagueId, onSetActive,
+  connected, exposure, loading,
 }: {
   connected: boolean;
   exposure: PlayerLeagueExposure[] | null;
   loading: boolean;
-  activeLeagueId: string | null;
-  onSetActive: (leagueId: string) => void;
 }) {
   if (!connected) {
     return <ComingSoon icon={Users} title="Connect Sleeper" body="Connect your Sleeper username to see where this player is owned, available, or tradeable across your dynasty leagues." />;
@@ -821,21 +1223,23 @@ function AvailabilityTab({
                 <th className="px-3 py-2.5 text-left">League</th>
                 <th className="px-3 py-2.5 text-left">Status</th>
                 <th className="px-3 py-2.5 text-left">Manager</th>
-                <th className="px-3 py-2.5 text-right">Action</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((e) => (
                 <tr key={e.leagueId} className="border-b border-border/30">
-                  <td className="px-3 py-2.5 font-semibold text-foreground">{e.leagueName}</td>
+                  <td className="px-3 py-2.5">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <AvatarThumb src={e.leagueAvatar} alt={e.leagueName} fallback={e.leagueName} shape="rounded" />
+                      <span className="font-semibold text-foreground truncate">{e.leagueName}</span>
+                    </div>
+                  </td>
                   <td className="px-3 py-2.5"><ExposureBadge status={e.status} starter={e.starter} /></td>
-                  <td className="px-3 py-2.5 text-muted-foreground">{e.status === "owned" ? "You" : e.manager || "—"}</td>
-                  <td className="px-3 py-2.5 text-right">
-                    {activeLeagueId === e.leagueId ? (
-                      <span className="text-[11px] font-bold text-[#d4af37]">Active</span>
-                    ) : (
-                      <button onClick={() => onSetActive(e.leagueId)} className="text-[11px] font-semibold text-muted-foreground hover:text-foreground transition-colors">Set Active</button>
-                    )}
+                  <td className="px-3 py-2.5">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <AvatarThumb src={e.managerAvatar} alt={e.status === "owned" ? "You" : e.manager || ""} fallback={e.status === "owned" ? "You" : e.manager || "?"} shape="circle" />
+                      <span className="text-muted-foreground truncate">{e.status === "owned" ? "You" : e.manager || "—"}</span>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -843,7 +1247,6 @@ function AvailabilityTab({
           </table>
         </div>
       </Card>
-      <p className="text-[11px] text-muted-foreground/60">Deep links to propose trades and manage rosters from here arrive in a later phase.</p>
     </div>
   );
 }
@@ -862,16 +1265,33 @@ function ExposureBadge({ status, starter }: { status: PlayerLeagueExposure["stat
   );
 }
 
+// Small image thumbnail (league crest / manager avatar) with an initials
+// fallback when the source is missing or the CDN 404s.
+function AvatarThumb({ src, alt, fallback, shape }: { src: string | null; alt: string; fallback: string; shape: "circle" | "rounded" }) {
+  const [err, setErr] = useState(false);
+  const initials = (fallback || "?").split(/\s+/).filter(Boolean).map((w) => w[0]).slice(0, 2).join("").toUpperCase();
+  const radius = shape === "circle" ? "rounded-full" : "rounded-md";
+  return (
+    <span className={cn("flex-shrink-0 w-7 h-7 overflow-hidden ring-1 ring-border/50 bg-muted/40", radius)}>
+      {src && !err ? (
+        <img src={src} alt={alt} className="w-full h-full object-cover" onError={() => setErr(true)} />
+      ) : (
+        <span className="w-full h-full flex items-center justify-center text-[10px] font-bold text-muted-foreground">{initials}</span>
+      )}
+    </span>
+  );
+}
+
 // ── Trades (Phase 4: trades involving this player across your leagues) ───────
 function fmtTradeDate(ms: number): string {
   if (!ms) return "—";
   try { return new Date(ms).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }); } catch { return "—"; }
 }
 
-function TradesTab({ trades, loading }: { trades: PlayerTradeRecord[] | null; loading: boolean }) {
+function TradesTab({ trades, loading, valuesBySleeperId }: { trades: PlayerTradeRecord[] | null; loading: boolean; valuesBySleeperId: Record<string, number> }) {
   if (loading && !trades) return <Card className="p-5"><SkeletonLines n={6} /></Card>;
   if (!trades || !trades.length) {
-    return <EmptyBlock icon={Repeat2} text="No trades involving this player were found in the trade database yet." />;
+    return <EmptyBlock icon={Repeat2} text="No trades involving this player were found in your leagues yet." />;
   }
 
   // "Most commonly traded for" = what the giver got back, aggregated.
@@ -880,8 +1300,15 @@ function TradesTab({ trades, loading }: { trades: PlayerTradeRecord[] | null; lo
   const common = Array.from(freq.entries()).sort((a, b) => b[1] - a[1]).slice(0, 6);
 
   return (
-    <div className="space-y-4">
-      <div className="text-[11px] text-muted-foreground">{trades.length} trade{trades.length !== 1 ? "s" : ""} found in the trade database.</div>
+    <div className="space-y-5">
+      {/* Stats banner — mirrors the Trade Database header */}
+      <div className="flex items-start gap-3 p-3 rounded-lg bg-[#0b3a7a]/5 dark:bg-blue-400/5 border border-[#0b3a7a]/10 dark:border-blue-400/10">
+        <Repeat2 className="w-4 h-4 text-[#0b3a7a] dark:text-blue-400 flex-shrink-0 mt-0.5" />
+        <p className="text-sm leading-snug">
+          <span className="font-bold text-[#d4af37]">{trades.length.toLocaleString()}</span>
+          <span className="text-muted-foreground"> trade{trades.length !== 1 ? "s" : ""} involving this player across your leagues</span>
+        </p>
+      </div>
 
       {common.length > 0 && (
         <Card className="p-4">
@@ -896,260 +1323,94 @@ function TradesTab({ trades, loading }: { trades: PlayerTradeRecord[] | null; lo
         </Card>
       )}
 
-      <div className="space-y-3">
+      <div className="mx-auto w-full max-w-[1100px] space-y-3">
         {trades.map((t, i) => (
-          <Card key={`${t.leagueId}-${t.timestamp}-${i}`} className="p-4">
-            <div className="flex items-center justify-between mb-2 text-[11px] text-muted-foreground">
-              <span className="font-semibold text-foreground/80 truncate">{t.leagueName}</span>
-              <span className="flex-shrink-0">{fmtTradeDate(t.timestamp)}</span>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <TradeSide title={t.receiver} subtitle="acquired" assets={t.receiverGot} />
-              <TradeSide title={t.giver} subtitle="got back" assets={t.giverGot} />
-            </div>
-          </Card>
+          <PlayerTradeCard key={`${t.leagueId}-${t.timestamp}-${i}`} trade={t} valuesBySleeperId={valuesBySleeperId} />
         ))}
       </div>
-      <p className="text-[11px] text-muted-foreground/60">Trade calculator and find-partners links arrive in a later phase.</p>
     </div>
   );
 }
 
-function TradeSide({ title, subtitle, assets }: { title: string; subtitle: string; assets: PlayerTradeAsset[] }) {
+// Trade card styled after the Trade Database tab: compact metadata header, a
+// two-column body split by a centered swap-icon divider, photo avatars for
+// players, and the league name in the footer. The profiled player's asset is
+// highlighted in gold. Managers are intentionally omitted — the focus is on
+// what this player was traded for.
+function PlayerTradeCard({ trade: t, valuesBySleeperId }: { trade: PlayerTradeRecord; valuesBySleeperId: Record<string, number> }) {
   return (
-    <div className="rounded-xl border border-border bg-muted/20 p-3">
-      <div className="text-xs font-bold text-foreground truncate">{title}</div>
-      <div className="text-[9px] uppercase tracking-wider text-muted-foreground mb-1.5">{subtitle}</div>
-      <div className="flex flex-wrap gap-1">
-        {assets.length ? assets.map((a, i) => (
-          <span
-            key={i}
-            className={cn(
-              "inline-flex rounded-md px-1.5 py-0.5 text-[11px] font-medium border",
-              a.isThisPlayer
-                ? "border-[#d4af37]/50 bg-[#d4af37]/10 text-[#d4af37]"
-                : a.kind === "pick"
-                  ? "border-purple-500/30 bg-purple-500/10 text-purple-600 dark-any:text-purple-300"
-                  : "border-border bg-card text-foreground/85",
-            )}
-          >
-            {a.label}
-          </span>
-        )) : <span className="text-[11px] text-muted-foreground/60 italic">—</span>}
+    <Card
+      className={cn(
+        "relative overflow-hidden bg-card/40 border-border/40",
+        "transition-[border-color,background-color,transform] duration-200 ease-out",
+        "hover:border-[#d4af37]/30 hover:-translate-y-px",
+      )}
+    >
+      {/* Header: badge + date */}
+      <div className="flex items-center gap-1 px-3 py-1.5 border-b border-border/30 flex-wrap">
+        <Badge variant="outline" className="h-[18px] px-1 text-[9px] font-bold uppercase tracking-wider leading-none">Trade</Badge>
+        <span className="ml-auto text-[10px] text-muted-foreground/80 tabular-nums">{fmtTradeDate(t.timestamp)}</span>
       </div>
-    </div>
-  );
-}
 
-// ── Compare (Phase 5: player-vs-player) ──────────────────────────────────────
-function posRankIn(list: RankedPlayer[], pos: string, id: string, name: string): number | null {
-  const same = list.filter((p) => p.pos === pos);
-  let idx = same.findIndex((p) => p.sleeperId === id);
-  if (idx < 0) {
-    const t = name.toLowerCase().trim();
-    idx = same.findIndex((p) => p.name.toLowerCase().trim() === t);
-  }
-  return idx >= 0 ? idx + 1 : null;
-}
-
-interface CmpMetric {
-  label: string;
-  aDisplay: string; aVal: number | null;
-  bDisplay: string; bVal: number | null;
-  lowerBetter?: boolean;
-}
-
-function CompareTab({ base, baseAdv, baseDynRank }: { base: PlayerProfile; baseAdv: PlayerAdvancedResult | null; baseDynRank: number | null }) {
-  const valueModel = useValueModel();
-  const [query, setQuery] = useState("");
-  const [opp, setOpp] = useState<RankedPlayer | null>(null);
-  const [oppAdv, setOppAdv] = useState<PlayerAdvancedResult | null>(null);
-  const [oppAdvLoading, setOppAdvLoading] = useState(false);
-
-  const results = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (q.length < 2) return [];
-    return valueModel.dynastyPlayerList
-      .filter((p) => p.name.toLowerCase().includes(q) && p.sleeperId !== base.player.id && p.name.toLowerCase().trim() !== base.player.name.toLowerCase().trim())
-      .slice(0, 8);
-  }, [query, valueModel.dynastyPlayerList, base.player.id, base.player.name]);
-
-  useEffect(() => {
-    if (!opp) { setOppAdv(null); return; }
-    let cancelled = false;
-    setOppAdvLoading(true);
-    loadPlayerAdvancedStats(opp.pos, opp.name)
-      .then((r) => { if (!cancelled) setOppAdv(r); })
-      .catch(() => { if (!cancelled) setOppAdv(null); })
-      .finally(() => { if (!cancelled) setOppAdvLoading(false); });
-    return () => { cancelled = true; };
-  }, [opp?.sleeperId]);
-
-  // Search UI (always shown).
-  const search = (
-    <Card className="p-4">
-      <SectionTitle icon={GitCompare} title={`Compare ${base.player.name} to…`} />
-      <div className="relative">
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search a player…"
-          className="w-full h-9 px-3 rounded-lg border border-border bg-background text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-[#d4af37]/50"
-          data-testid="compare-search"
-        />
-        {results.length > 0 && (
-          <div className="absolute z-10 mt-1 w-full rounded-lg border border-border bg-card shadow-lg overflow-hidden">
-            {results.map((p) => (
-              <button
-                key={p.sleeperId}
-                onClick={() => { setOpp(p); setQuery(""); }}
-                className="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-muted/40 transition-colors"
-                data-testid={`compare-result-${p.sleeperId}`}
-              >
-                <span className="text-sm font-semibold text-foreground truncate">{p.name}</span>
-                <span className="text-[11px] text-muted-foreground flex-shrink-0">{p.pos} · {p.team || "FA"} · {fmtValue(p.value)}</span>
-              </button>
-            ))}
-          </div>
-        )}
+      {/* Body: two sides split by a centered swap icon */}
+      <div className="relative px-3 py-2">
+        <div
+          className="hidden md:flex absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10 items-center justify-center w-[26px] h-[26px] rounded-full bg-card border border-[#d4af37]/25 shadow-[0_0_0_3px_rgba(212,175,55,0.03)]"
+          aria-hidden="true"
+        >
+          <ArrowRightLeft className="w-3 h-3 text-[#d4af37]/80" />
+        </div>
+        <div className="grid gap-2 grid-cols-1 md:grid-cols-2 md:gap-x-8 md:divide-x md:divide-border/20">
+          <TradeSide title="Acquired this player" assets={t.receiverGot} valuesBySleeperId={valuesBySleeperId} />
+          <TradeSide title="Received in return" assets={t.giverGot} valuesBySleeperId={valuesBySleeperId} />
+        </div>
       </div>
+
+      {t.leagueName && (
+        <p className="px-3 pb-1.5 text-[10px] text-muted-foreground/60 truncate">{t.leagueName}</p>
+      )}
     </Card>
   );
+}
 
-  if (!opp) {
-    return (
-      <div className="space-y-4">
-        {search}
-        <EmptyBlock icon={GitCompare} text="Search and select a player above to compare dynasty value, ranks, age, and advanced profile side-by-side." />
-      </div>
-    );
-  }
-
-  // Opponent derived metrics.
-  const oppSynthetic: Player = {
-    id: opp.sleeperId, sleeperId: opp.sleeperId, name: opp.name,
-    pos: (["QB", "RB", "WR", "TE"].includes(opp.pos) ? opp.pos : "WR") as Player["pos"],
-    age: opp.age, value: opp.value, team: opp.team,
-  };
-  const oppRedraft = (() => { const v = valueModel.getRedraftValue(oppSynthetic); return Number.isFinite(v) && v > 0 ? v : null; })();
-  const oppDynRank = overallDynastyRank(valueModel.dynastyPlayerList, { id: opp.sleeperId, name: opp.name });
-  const oppPosRank = posRankIn(valueModel.dynastyPlayerList, opp.pos, opp.sleeperId, opp.name);
-
-  const metrics: CmpMetric[] = [
-    { label: "Dynasty Value", aDisplay: fmtValue(base.values.dynasty), aVal: base.values.dynasty, bDisplay: fmtValue(opp.value), bVal: opp.value },
-    { label: "Win-Now Value", aDisplay: fmtValue(base.values.redraft), aVal: base.values.redraft, bDisplay: fmtValue(oppRedraft), bVal: oppRedraft },
-    { label: "Dynasty Rank", aDisplay: baseDynRank ? `#${baseDynRank}` : "—", aVal: baseDynRank, bDisplay: oppDynRank ? `#${oppDynRank}` : "—", bVal: oppDynRank, lowerBetter: true },
-    { label: "Position Rank", aDisplay: base.ranks.dynastyPositional ? `${base.player.pos}${base.ranks.dynastyPositional}` : "—", aVal: base.ranks.dynastyPositional, bDisplay: oppPosRank ? `${opp.pos}${oppPosRank}` : "—", bVal: oppPosRank, lowerBetter: true },
-    { label: "Age", aDisplay: base.player.age != null ? `${base.player.age}` : "—", aVal: base.player.age ?? null, bDisplay: `${opp.age}`, bVal: opp.age, lowerBetter: true },
-    { label: "Value Tier", aDisplay: valueTier(base.values.dynasty), aVal: null, bDisplay: valueTier(opp.value), bVal: null },
-  ];
-
-  // Composite score rows (labels present in either side).
-  const baseComp = new Map((baseAdv?.composites ?? []).map((c) => [c.label, c.score]));
-  const oppComp = new Map((oppAdv?.composites ?? []).map((c) => [c.label, c.score]));
-  const compLabels = Array.from(new Set([...Array.from(baseComp.keys()), ...Array.from(oppComp.keys())]));
-  for (const label of compLabels) {
-    const a = baseComp.get(label) ?? null;
-    const b = oppComp.get(label) ?? null;
-    metrics.push({ label, aDisplay: a != null ? `${a}` : "—", aVal: a, bDisplay: b != null ? `${b}` : "—", bVal: b });
-  }
-
-  const rec = compareRecommendation(base, baseDynRank, opp, oppRedraft);
-
+function TradeSide({ title, assets, valuesBySleeperId }: { title: string; assets: PlayerTradeAsset[]; valuesBySleeperId: Record<string, number> }) {
   return (
-    <div className="space-y-4">
-      {search}
-
-      {/* Header */}
-      <Card className="p-4">
-        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
-          <CmpPlayerHead id={base.player.id} name={base.player.name} pos={base.player.pos} team={base.player.team} age={base.player.age} />
-          <span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">vs</span>
-          <CmpPlayerHead id={opp.sleeperId} name={opp.name} pos={opp.pos} team={opp.team} age={opp.age} right />
-        </div>
-      </Card>
-
-      {/* Recommendation */}
-      <Card className="p-4">
-        <SectionTitle icon={Sparkles} title="Recommendation" />
-        <p className="text-sm leading-relaxed text-foreground/85">{rec}</p>
-      </Card>
-
-      {/* Metric rows */}
-      <Card className="p-0 overflow-hidden">
-        {oppAdvLoading && <div className="px-3 py-2 text-[11px] text-muted-foreground border-b border-border/30">Loading advanced profile…</div>}
-        {metrics.map((m, i) => {
-          const winner = cmpWinner(m);
-          return (
-            <div key={m.label} className={cn("grid grid-cols-[1fr_auto_1fr] items-center gap-2 px-3 py-2.5", i % 2 === 1 && "bg-muted/20")}>
-              <div className={cn("text-right text-sm tabular-nums", winner === "a" ? "font-black text-[#d4af37]" : "text-foreground/80")}>{m.aDisplay}</div>
-              <div className="text-[10px] uppercase tracking-wider text-muted-foreground text-center px-2 whitespace-nowrap">{m.label}</div>
-              <div className={cn("text-left text-sm tabular-nums", winner === "b" ? "font-black text-[#d4af37]" : "text-foreground/80")}>{m.bDisplay}</div>
+    <div className="relative px-1 md:px-2">
+      <div className="mb-1.5 min-w-0">
+        <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70 truncate leading-tight">{title}</p>
+      </div>
+      <div className="space-y-px">
+        {assets.length ? assets.map((a, i) =>
+          a.kind === "player" ? (
+            <div
+              key={i}
+              className={cn(
+                "flex items-center gap-2 py-0.5 px-1 rounded-md",
+                a.isThisPlayer && "bg-[#d4af37]/10 ring-1 ring-[#d4af37]/30",
+              )}
+            >
+              <div className="min-w-0 flex-1">
+                <PlayerAvatar id={a.sleeperId ?? ""} name={a.label} pos={a.pos ?? ""} team={a.team ?? ""} size="sm" />
+              </div>
+              <span className="text-[12px] font-bold tabular-nums text-[#d4af37] shrink-0">
+                {fmtValue(a.sleeperId ? valuesBySleeperId[a.sleeperId] ?? null : null)}
+              </span>
             </div>
-          );
-        })}
-      </Card>
-    </div>
-  );
-}
-
-function cmpWinner(m: CmpMetric): "a" | "b" | null {
-  if (m.aVal == null && m.bVal == null) return null;
-  if (m.aVal == null) return "b";
-  if (m.bVal == null) return "a";
-  if (m.aVal === m.bVal) return null;
-  const aBetter = m.lowerBetter ? m.aVal < m.bVal : m.aVal > m.bVal;
-  return aBetter ? "a" : "b";
-}
-
-function compareRecommendation(base: PlayerProfile, baseDynRank: number | null, opp: RankedPlayer, oppRedraft: number | null): string {
-  const bv = base.values.dynasty ?? 0;
-  const ov = opp.value ?? 0;
-  const winner = bv >= ov ? base.player.name : opp.name;
-  const loser = bv >= ov ? opp.name : base.player.name;
-  const gap = Math.abs(bv - ov);
-  const close = bv > 0 && ov > 0 && gap / Math.max(bv, ov) < 0.12;
-
-  const baseAge = base.player.age ?? 99;
-  const younger = baseAge < opp.age ? base.player.name : opp.age < baseAge ? opp.name : null;
-  const brv = base.values.redraft ?? 0;
-  const orv = oppRedraft ?? 0;
-  const winNow = brv >= orv ? base.player.name : opp.name;
-
-  let main: string;
-  if (close) {
-    main = `${base.player.name} and ${opp.name} carry near-identical dynasty value, so the choice comes down to fit and timeline.`;
-  } else {
-    main = `${winner} holds the clear dynasty-value edge over ${loser}.`;
-  }
-  const contender = `For contenders, lean ${winNow} (stronger win-now value).`;
-  const rebuilder = younger ? `For rebuilders, ${younger} is the safer long-term hold thanks to age.` : `For rebuilders, both profile similarly on age.`;
-  return `${main} ${contender} ${rebuilder}`;
-}
-
-function CmpPlayerHead({ id, name, pos, team, age, right }: { id: string; name: string; pos: string; team: string; age?: number; right?: boolean }) {
-  const [err, setErr] = useState(false);
-  const synthetic = !id || id.startsWith("rookie_") || id.startsWith("pick_") || id.startsWith("mock_");
-  return (
-    <div className={cn("flex items-center gap-2 min-w-0", right ? "flex-row-reverse text-right" : "")}>
-      <div className="w-9 h-9 rounded-full overflow-hidden bg-muted/40 flex-shrink-0">
-        {err || synthetic ? null : (
-          <img src={`https://sleepercdn.com/content/nfl/players/thumb/${id}.jpg`} alt={name} className="w-full h-full object-cover object-top" onError={() => setErr(true)} />
+          ) : (
+            <div key={i} className="flex items-center gap-1.5 py-0.5 px-1">
+              <span className="inline-flex items-center justify-center h-[18px] px-1 rounded text-[9px] font-bold uppercase tracking-wider shrink-0 border leading-none bg-purple-500/8 text-purple-400/90 border-purple-500/25">PK</span>
+              <span className="text-[12px] font-medium text-foreground truncate">{a.label}</span>
+            </div>
+          ),
+        ) : (
+          <p className="text-[10px] text-muted-foreground italic">No assets recorded</p>
         )}
-      </div>
-      <div className="min-w-0">
-        <div className="text-sm font-bold text-foreground truncate">{name}</div>
-        <div className="text-[11px] text-muted-foreground truncate">{pos} · {team || "FA"}{age != null ? ` · ${age}y` : ""}</div>
       </div>
     </div>
   );
 }
 
 // ── Game Log (Phase 5: weekly logs via cached backend) ───────────────────────
-function nflSeasonNow(): number {
-  const now = new Date();
-  return now.getMonth() >= 7 ? now.getFullYear() : now.getFullYear() - 1;
-}
 
 // Combined regular-season + playoff row. Sleeper returns playoff games as
 // weeks 1–4 (Wild Card → Super Bowl), so we tag each row's seasonType to keep
@@ -1194,122 +1455,50 @@ function gameLogColumns(pos: string): GLCol[] {
     fp];
 }
 
-function GameLogTab({ playerId, pos }: { playerId: string | null; pos: string }) {
-  const cur = nflSeasonNow();
-  const seasonOptions = [cur, cur - 1, cur - 2];
-  return (
-    <div className="space-y-2">
-      {seasonOptions.map((s) => (
-        <GameLogSeasonRow key={s} playerId={playerId} pos={pos} season={s} />
-      ))}
-    </div>
-  );
-}
-
-// One collapsible row per season. Regular season + playoffs are fetched in
-// parallel (allSettled, so one failing still shows the other) and merged into a
-// single list. Data is fetched lazily the first time the row is expanded.
-function GameLogSeasonRow({ playerId, pos, season, defaultOpen }: { playerId: string | null; pos: string; season: number; defaultOpen?: boolean }) {
-  const [open, setOpen] = useState(!!defaultOpen);
-  const [logs, setLogs] = useState<GLRow[] | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(false);
-  const fetched = useRef(false);
-
-  useEffect(() => {
-    if (!open || !playerId || fetched.current) return;
-    fetched.current = true;
-    let cancelled = false;
-    setLoading(true); setError(false);
-    Promise.allSettled([
-      fetchPlayerGameLogs(playerId, season, "regular"),
-      fetchPlayerGameLogs(playerId, season, "post"),
-    ])
-      .then(([reg, post]) => {
-        if (cancelled) return;
-        if (reg.status === "rejected" && post.status === "rejected") {
-          setError(true); setLogs(null); return;
-        }
-        const regRows: GLRow[] = reg.status === "fulfilled" ? reg.value.map((r) => ({ ...r, seasonType: "regular" })) : [];
-        const postRows: GLRow[] = post.status === "fulfilled" ? post.value.map((r) => ({ ...r, seasonType: "post" })) : [];
-        setLogs([...regRows, ...postRows]);
-      })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
-  }, [open, playerId, season]);
-
+// Inner weekly game-log table (regular season + playoffs merged). Rendered
+// inside an expanded Production season row.
+function WeeklyGameLogTable({ logs, pos }: { logs: GLRow[]; pos: string }) {
   const cols = gameLogColumns(pos);
-  const firstPostIdx = logs ? logs.findIndex((r) => r.seasonType === "post") : -1;
-  const played = logs?.filter((r) => r.ptsStd != null) ?? [];
-  const summary = played.length
-    ? `${played.length} G · ${(played.reduce((s, r) => s + (r.ptsStd ?? 0), 0) / played.length).toFixed(1)} PPG`
-    : null;
-
+  const firstPostIdx = logs.findIndex((r) => r.seasonType === "post");
   return (
-    <Card className="p-0 overflow-hidden">
-      <button
-        onClick={() => setOpen((o) => !o)}
-        aria-expanded={open}
-        className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-muted/30 transition-colors"
-      >
-        <div className="flex items-center gap-2">
-          <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", open ? "rotate-0" : "-rotate-90")} />
-          <span className="text-sm font-semibold text-foreground">{season}</span>
-        </div>
-        {summary && <span className="text-xs text-muted-foreground tabular-nums">{summary}</span>}
-      </button>
-
-      {open && (
-        <div className="border-t border-border/60 p-4 space-y-4">
-          {loading && !logs ? (
-            <SkeletonLines n={6} />
-          ) : error ? (
-            <EmptyBlock icon={ScrollText} text="Game logs are temporarily unavailable from Sleeper. Try again later." />
-          ) : !logs || !logs.length ? (
-            <EmptyBlock icon={ScrollText} text={`No game logs for ${season}.`} />
-          ) : (
-            <div className="overflow-x-auto rounded-lg border border-border/60">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-border/60 bg-muted/30 text-[10px] uppercase tracking-wider text-muted-foreground">
-                      {cols.map((c) => (
-                        <th key={c.key} className={cn("px-2.5 py-2.5 whitespace-nowrap", c.key === "wk" || c.key === "opp" ? "text-left" : "text-right")}>{c.label}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {logs.map((r, i) => (
-                      <Fragment key={`${r.seasonType}-${r.week}`}>
-                        {i === firstPostIdx && (
-                          <tr className="bg-muted/40">
-                            <td colSpan={cols.length} className="px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-[#d4af37]">Playoffs</td>
-                          </tr>
-                        )}
-                        <tr className={cn("border-b border-border/30", r.seasonType === "post" && "bg-[#0b3a7a]/5")}>
-                          {cols.map((c) => (
-                            <td key={c.key} className={cn(
-                              "px-2.5 py-2 whitespace-nowrap tabular-nums",
-                              c.key === "wk" || c.key === "opp" ? "text-left text-foreground/85" : "text-right",
-                              c.gold ? "text-[#d4af37] font-bold" : "text-foreground/80",
-                              c.key === "wk" && "font-semibold text-foreground",
-                            )}>{c.get(r)}</td>
-                          ))}
-                        </tr>
-                      </Fragment>
-                    ))}
-                  </tbody>
-                </table>
-            </div>
-          )}
-        </div>
-      )}
-    </Card>
+    <div className="overflow-x-auto rounded-lg border border-border/60 bg-card">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-border/60 bg-muted/30 text-[10px] uppercase tracking-wider text-muted-foreground">
+            {cols.map((c) => (
+              <th key={c.key} className={cn("px-2.5 py-2.5 whitespace-nowrap", c.key === "wk" || c.key === "opp" ? "text-left" : "text-right")}>{c.label}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {logs.map((r, i) => (
+            <Fragment key={`${r.seasonType}-${r.week}`}>
+              {i === firstPostIdx && (
+                <tr className="bg-muted/40">
+                  <td colSpan={cols.length} className="px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-[#d4af37]">Playoffs</td>
+                </tr>
+              )}
+              <tr className={cn("border-b border-border/30", r.seasonType === "post" && "bg-[#0b3a7a]/5")}>
+                {cols.map((c) => (
+                  <td key={c.key} className={cn(
+                    "px-2.5 py-2 whitespace-nowrap tabular-nums",
+                    c.key === "wk" || c.key === "opp" ? "text-left text-foreground/85" : "text-right",
+                    c.gold ? "text-[#d4af37] font-bold" : "text-foreground/80",
+                    c.key === "wk" && "font-semibold text-foreground",
+                  )}>{c.get(r)}</td>
+                ))}
+              </tr>
+            </Fragment>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
 // ── Sidebar ────────────────────────────────────────────────────────────────────
 function Sidebar({
-  profile, raw, dynRank, connected, exposure, exposureLoading, onCompare,
+  profile, raw, dynRank, connected, exposure, exposureLoading,
 }: {
   profile: PlayerProfile;
   raw: any;
@@ -1317,7 +1506,6 @@ function Sidebar({
   connected: boolean;
   exposure: PlayerLeagueExposure[] | null;
   exposureLoading: boolean;
-  onCompare: () => void;
 }) {
   const p = profile.player;
   const meta: { label: string; value: string }[] = [
@@ -1334,14 +1522,6 @@ function Sidebar({
 
   return (
     <div className="space-y-4 lg:sticky lg:top-28">
-      <Card className="p-4">
-        <SectionTitle icon={Star} title="Quick Actions" />
-        <div className="grid gap-2">
-          <ActionButton icon={GitCompare} label="Compare Player" onClick={onCompare} />
-        </div>
-        <p className="mt-2 text-[10px] text-muted-foreground/60">Trade calculator, watchlist, and rankings links arrive in later phases.</p>
-      </Card>
-
       <Card className="p-4">
         <SectionTitle icon={CircleUserRound} title="Player Metadata" />
         <dl className="grid grid-cols-2 gap-x-3 gap-y-2">
@@ -1392,17 +1572,6 @@ function ExposureSummary({ exposure }: { exposure: PlayerLeagueExposure[] }) {
         <span className="font-bold tabular-nums text-foreground">{exposure.length} {exposure.length === 1 ? "league" : "leagues"}</span>
       </div>
     </div>
-  );
-}
-
-function ActionButton({ icon: Icon, label, onClick }: { icon: typeof Star; label: string; onClick: () => void }) {
-  return (
-    <button
-      onClick={onClick}
-      className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border bg-muted/20 hover:border-[#d4af37]/40 hover:bg-muted/40 transition-colors text-xs font-semibold text-foreground"
-    >
-      <Icon className="w-3.5 h-3.5 text-[#d4af37]" />{label}
-    </button>
   );
 }
 

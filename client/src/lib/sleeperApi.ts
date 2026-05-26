@@ -245,9 +245,16 @@ export async function getSleeperPlayers(): Promise<Record<string, SleeperPlayerR
 export interface PlayerLeagueExposure {
   leagueId: string;
   leagueName: string;
+  leagueAvatar: string | null;   // ready-to-use thumb URL (or null)
   status: "owned" | "opponent" | "available";
   manager: string | null;
+  managerAvatar: string | null;  // ready-to-use thumb URL (or null)
   starter: boolean;
+}
+
+// Sleeper stores avatars as opaque hashes; consumers render them via the CDN.
+function sleeperAvatarUrl(hash: string | null | undefined): string | null {
+  return hash ? `https://sleepercdn.com/avatars/thumbs/${hash}` : null;
 }
 
 /**
@@ -258,13 +265,14 @@ export interface PlayerLeagueExposure {
  */
 export async function fetchPlayerExposure(
   userId: string,
-  leagues: { leagueId: string; name: string }[],
+  leagues: { leagueId: string; name: string; avatar?: string | null }[],
   playerId: string,
 ): Promise<PlayerLeagueExposure[]> {
   if (!userId || !playerId || !leagues?.length) return [];
   const capped = leagues.slice(0, 50);
   const results = await Promise.all(
     capped.map(async (lg): Promise<PlayerLeagueExposure | null> => {
+      const leagueAvatar = sleeperAvatarUrl(lg.avatar);
       try {
         const [rosters, users] = await Promise.all([
           fetchJson<SleeperRosterRaw[]>(`${SLEEPER_API}/league/${lg.leagueId}/rosters`),
@@ -273,16 +281,17 @@ export async function fetchPlayerExposure(
         if (!Array.isArray(rosters)) return null;
         const owning = rosters.find((r) => Array.isArray(r.players) && r.players.includes(playerId));
         if (!owning) {
-          return { leagueId: lg.leagueId, leagueName: lg.name, status: "available", manager: null, starter: false };
+          return { leagueId: lg.leagueId, leagueName: lg.name, leagueAvatar, status: "available", manager: null, managerAvatar: null, starter: false };
         }
         const isUser = owning.owner_id === userId;
         const starter = Array.isArray(owning.starters) && owning.starters.includes(playerId);
+        const owner = users?.find((x) => x.user_id === owning.owner_id);
+        const managerAvatar = sleeperAvatarUrl(owner?.avatar);
         let manager: string | null = null;
         if (!isUser) {
-          const u = users?.find((x) => x.user_id === owning.owner_id);
-          manager = u?.metadata?.team_name || u?.display_name || u?.username || "Unknown";
+          manager = owner?.metadata?.team_name || owner?.display_name || owner?.username || "Unknown";
         }
-        return { leagueId: lg.leagueId, leagueName: lg.name, status: isUser ? "owned" : "opponent", manager, starter };
+        return { leagueId: lg.leagueId, leagueName: lg.name, leagueAvatar, status: isUser ? "owned" : "opponent", manager, managerAvatar, starter };
       } catch {
         return null;
       }
@@ -296,6 +305,10 @@ export interface PlayerTradeAsset {
   label: string;
   kind: "player" | "pick";
   isThisPlayer: boolean;
+  // Players only — enables photo-avatar rendering on the player page.
+  sleeperId?: string;
+  pos?: string;
+  team?: string;
 }
 export interface PlayerTradeRecord {
   leagueId: string;
@@ -367,7 +380,17 @@ export async function fetchPlayerTrades(
         const assets: PlayerTradeAsset[] = [];
         if (t.adds) {
           for (const [pid, dest] of Object.entries(t.adds)) {
-            if (dest === rid) assets.push({ label: pname(pid), kind: "player", isThisPlayer: pid === playerId });
+            if (dest === rid) {
+              const p = playersDb[pid];
+              assets.push({
+                label: pname(pid),
+                kind: "player",
+                isThisPlayer: pid === playerId,
+                sleeperId: pid,
+                pos: p?.fantasy_positions?.[0] || p?.position || "",
+                team: p?.team || "FA",
+              });
+            }
           }
         }
         if (Array.isArray(t.draft_picks)) {
@@ -430,6 +453,68 @@ export async function fetchPlayerGameLogs(
   return Array.isArray(data?.logs) ? data.logs : [];
 }
 
+// ── ADP analytics (Player Page → ADP tab) ────────────────────────────────────
+// Backed by the same crawled draft_picks dataset as the ADP Explorer. The
+// Player Page calls them with no filter query, so the server applies its
+// defaults (current-season startup snapshots); the history endpoint still
+// re-queries broadly for the 3-year monthly trend regardless.
+export interface PlayerAdpHistory {
+  playerId: string;
+  buckets: { window: "7d" | "30d" | "90d"; draftCount: number; avgPick: number | null; minPick: number | null; maxPick: number | null }[];
+  monthly: { month: string; avgPick: number; count: number }[];
+  pickHistogram: { pickNo: number; count: number }[];
+}
+export interface PlayerAdpAvailabilityCell {
+  pickNo: number;
+  round: number;
+  pickInRound: number;
+  availabilityPct: number;
+}
+export interface PlayerAdpAvailability {
+  playerId: string;
+  teams: number;
+  rounds: number;
+  totalDrafts: number;
+  draftsWithPlayer: number;
+  expectedPick: number | null;
+  biggestDropAt: { fromPick: number; toPick: number; delta: number } | null;
+  cells: PlayerAdpAvailabilityCell[];
+}
+
+async function fetchAdpJson<T>(url: string): Promise<T> {
+  const res = await fetch(url, { credentials: "include" });
+  const ct = res.headers.get("content-type") || "";
+  if (!res.ok || !ct.includes("application/json")) throw new Error(`ADP request failed (${res.status})`);
+  return res.json() as Promise<T>;
+}
+
+// League-shape filters the ADP-tab sections (ADP Over Time + Chance of Getting)
+// pass through to the server, which already understands them via the shared
+// ADP filter parser. `teams` doubles as the per-pick grid width for availability.
+export interface AdpProfileFilters {
+  superflex: "yes" | "no";
+  scoring: "ppr" | "half" | "standard";
+  tePremium: "yes" | "no";
+  teams: number;
+}
+
+function adpFilterQuery(f: AdpProfileFilters): string {
+  return new URLSearchParams({
+    superflex: f.superflex,
+    scoring: f.scoring,
+    tePremium: f.tePremium,
+    teams: String(f.teams),
+  }).toString();
+}
+
+export function fetchPlayerAdpHistory(playerId: string, filters: AdpProfileFilters): Promise<PlayerAdpHistory> {
+  return fetchAdpJson<PlayerAdpHistory>(`${API_BASE}/api/adp/player/${encodeURIComponent(playerId)}/history?${adpFilterQuery(filters)}`);
+}
+
+export function fetchPlayerAdpAvailability(playerId: string, filters: AdpProfileFilters, rounds = 6): Promise<PlayerAdpAvailability> {
+  return fetchAdpJson<PlayerAdpAvailability>(`${API_BASE}/api/adp/player/${encodeURIComponent(playerId)}/availability?${adpFilterQuery(filters)}&rounds=${rounds}`);
+}
+
 /**
  * Trades involving a player, sourced from the crawled global trade DATABASE
  * (GET /api/trades/search?q=name) rather than scanning the user's own leagues.
@@ -452,6 +537,7 @@ export async function fetchTradesForPlayer(
   const toAssets = (side: any, sid: string): PlayerTradeAsset[] => {
     const players = (side?.playersReceived || []).map((p: any) => ({
       label: p.name || "Unknown", kind: "player" as const, isThisPlayer: p.sleeperId === sid,
+      sleeperId: p.sleeperId || "", pos: p.pos || "", team: p.team || "",
     }));
     const picks = (side?.picksReceived || []).map((pk: any) => ({
       label: `${pk.season} R${pk.round}`, kind: "pick" as const, isThisPlayer: false,

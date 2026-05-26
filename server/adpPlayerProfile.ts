@@ -251,6 +251,9 @@ export async function getAdpAvailability(
   // Filter to drafts that match the requested team size when we have it.
   // teams=0 in the source means "unspecified" — we keep those in the pool
   // so small datasets still produce some signal.
+  // buildDraftWhere already excludes zero-pick drafts (abandoned drafts stored
+  // as status='complete' with no picks), so the denominator below counts only
+  // drafts that actually have draft data.
   const filtered = teams > 0
     ? eligible.filter((d) => d.teams === teams || d.teams === 0)
     : eligible;

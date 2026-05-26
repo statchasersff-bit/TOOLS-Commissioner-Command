@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, bigint, boolean, timestamp, serial, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, bigint, boolean, timestamp, serial, jsonb, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -303,7 +303,12 @@ export const draftPicks = pgTable("draft_picks", {
   // available (e.g. placeholder picks, unknown players). Lets us filter
   // Direct Rookies by class year (2026 vs returning players, etc).
   rookieYear: integer("rookie_year"),
-});
+}, (table) => ({
+  // draft_picks is keyed by draft_id everywhere (pick pulls, EXISTS/NOT EXISTS
+  // guards in buildDraftWhere, per-draft histograms). Without this index those
+  // all seq-scan the ~1M-row table; with it they use index scans / semi-joins.
+  draftIdIdx: index("draft_picks_draft_id_idx").on(table.draftId),
+}));
 
 // One row per (filter_key, snapshot_date). Stored as a JSON blob so the
 // expensive aggregation runs once per refresh and the read path is a single

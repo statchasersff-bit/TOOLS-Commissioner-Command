@@ -1094,7 +1094,53 @@ export function buildDraftWhere(f: AdpFilters) {
   // Always exclude drafts flagged excludedFromAdp. This is the IDP/defensive-
   // player guardrail — those drafts have their own ADP curves and shouldn't
   // be mixed with the standard QB/RB/WR/TE dataset.
-  const conds: any[] = [eq(drafts.status, "complete"), eq(drafts.excludedFromAdp, false)];
+  //
+  // Also require the draft to have at least one recorded pick. Sleeper drafts
+  // that were started but abandoned are still stored with status='complete'
+  // and zero pick rows (ingestDraftById records their existence for admin
+  // tooling). They carry no ADP signal, but because they pass the status
+  // filter they silently inflate every draft *count* — e.g. a 1.01 asset
+  // reading as drafted in only 398/568 leagues when 167 of those had no picks
+  // at all. Excluding them here fixes draftCount in computeAdp and the
+  // "seen in X / Y drafts" denominators across the player profile in one place.
+  const conds: any[] = [
+    eq(drafts.status, "complete"),
+    eq(drafts.excludedFromAdp, false),
+    sql`EXISTS (SELECT 1 FROM ${draftPicks} WHERE ${draftPicks.draftId} = ${drafts.draftId})`,
+  ];
+
+  // Startup data-quality gate. A genuine dynasty startup always rosters the
+  // perennial elite, so some drafts labelled "startup" that lack them are not
+  // real startups: keeper/continuation drafts (top players already rostered)
+  // or niche/devy formats. They have full pick data but anomalous order (e.g.
+  // Jayden Reed at 1.01, Chase undrafted) that pollutes startup ADP and skews
+  // "seen in X / Y drafts". Require both anchor studs to be present.
+  //
+  // Scoped to draftType === "startup" ONLY. Rookie/supplemental drafts never
+  // contain veterans, so applying this anywhere else would wipe them out (it
+  // would drop ~100% of rookie drafts). For the same reason it is intentionally
+  // skipped for the mixed "all" view.
+  //
+  // MAINTENANCE: these are era-specific Sleeper player IDs, so the gate is
+  // bounded to the window where they are consensus every-draft picks. Chase
+  // entered the NFL in 2021 (so the rule starts with Jan 2022 startups), and
+  // the upper bound (Feb 2027) makes the gate auto-expire instead of silently
+  // dropping legit startups once these players may age out. Drafts outside the
+  // window — or with no recorded date — are kept regardless of the anchors.
+  const STARTUP_ANCHOR_IDS = ["7564" /* Ja'Marr Chase */, "5859" /* A.J. Brown */];
+  const ANCHOR_WINDOW_START = "2022-01-01"; // inclusive
+  const ANCHOR_WINDOW_END = "2027-03-01";   // exclusive (covers through Feb 2027)
+  if (f.draftType === "startup") {
+    const anchorExists = STARTUP_ANCHOR_IDS.map(
+      (pid) => sql`EXISTS (SELECT 1 FROM ${draftPicks} WHERE ${draftPicks.draftId} = ${drafts.draftId} AND ${draftPicks.playerId} = ${pid})`,
+    );
+    conds.push(sql`(
+      ${drafts.draftDate} IS NULL
+      OR ${drafts.draftDate} < ${ANCHOR_WINDOW_START}::timestamp
+      OR ${drafts.draftDate} >= ${ANCHOR_WINDOW_END}::timestamp
+      OR (${sql.join(anchorExists, sql` AND `)})
+    )`);
+  }
 
   // Season filter. Default = current calendar year. Pass `season: "all"` to
   // disable the filter (admin tooling only — public reads should always be

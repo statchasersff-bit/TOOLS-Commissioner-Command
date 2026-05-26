@@ -891,15 +891,31 @@ export function LineupCommand() {
 
         const [db, projRaw] = await Promise.all([
           getSleeperPlayers(),
+          // NOTE: weekly projections live on api.sleeper.com (NOT the /v1 host in
+          // SLEEPER_API). Hitting /v1 with these query params returns a dict of
+          // EMPTY objects, which silently zeroed every projection — making every
+          // active starter look like a bye. The .com host returns an ARRAY of
+          // { player_id, stats: { pts_ppr, ... } }.
           fetch(
-            `${SLEEPER_API}/projections/nfl/${s}/${w}?season_type=regular` +
+            `https://api.sleeper.com/projections/nfl/${s}/${w}?season_type=regular` +
             `&position[]=QB&position[]=RB&position[]=WR&position[]=TE&position[]=K&position[]=DEF`
-          ).then(r => r.ok ? r.json() : {}).catch(() => ({})),
+          ).then(r => r.ok ? r.json() : []).catch(() => []),
         ]);
         if (cancelled) return;
         setPlayerDb(db);
-        // normalise: projRaw[pid] might be {pts_ppr: N, ...} or the stats object directly
-        setRawProj(projRaw as Record<string, Record<string, number>>);
+        // Index the projection array by player_id → stats so proj(pid) lookups
+        // resolve. An empty array (offseason / not-yet-published) yields an empty
+        // map, which correctly puts the tab into preseason mode.
+        const projMap: Record<string, Record<string, number>> = {};
+        if (Array.isArray(projRaw)) {
+          for (const entry of projRaw as any[]) {
+            const pid = entry?.player_id != null ? String(entry.player_id) : null;
+            if (pid && entry?.stats && typeof entry.stats === "object") {
+              projMap[pid] = entry.stats as Record<string, number>;
+            }
+          }
+        }
+        setRawProj(projMap);
       } catch (e: any) {
         if (!cancelled) setBaseError("Could not load NFL data. Check your connection.");
       } finally {

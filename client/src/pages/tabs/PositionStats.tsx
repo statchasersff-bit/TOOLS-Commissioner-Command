@@ -395,6 +395,23 @@ function numVal(v: unknown): number {
 // Maximum players that can be compared side-by-side at once.
 const MAX_COMPARE = 5;
 
+// Stat columns where a LOWER value is the "better" one, so the Compare sub-tab
+// highlights the minimum across players instead of the maximum (turnovers,
+// pressures, drops, etc.). Keyed by position because column keys differ
+// between positions (e.g. QB "interceptions" vs WR/TE "interceptionsWhenTargeted").
+const LOWER_IS_BETTER_BY_POSITION: Record<Position, Set<string>> = {
+  qb: new Set([
+    "age", "poorThrows", "badThrowPct", "interceptions", "throwaways",
+    "battedPasses", "scrambleRate", "hurries", "blitzes", "knockdowns",
+    "sacks", "sackYardsLost", "fumbles", "pressurePct",
+  ]),
+  rb: new Set([
+    "fumbles", "tacklesForLoss", "tacklesForLossYards", "rushAttForNegativeYards",
+  ]),
+  wr: new Set(["drops", "dropPct", "interceptionsWhenTargeted", "fumbles"]),
+  te: new Set(["drops", "dropPct", "interceptionsWhenTargeted", "fumbles"]),
+};
+
 // Stable identity + display helpers tolerant of the varying key names across
 // the bundled JSON files.
 function getPlayerKey(row: Record<string, unknown>): string {
@@ -1203,16 +1220,22 @@ export default function PositionStats() {
                         </tr>
                       )}
                       {g.cols.map((col, ci) => {
-                        // Highlight the highest numeric value across the compared
-                        // players (string columns get no highlight).
-                        let max = -Infinity;
+                        // Highlight the "best" numeric value across the compared
+                        // players. Higher wins for most stats, but for the
+                        // negative stats listed in LOWER_IS_BETTER_BY_POSITION
+                        // (turnovers, pressures, drops, etc.) the lowest value
+                        // wins. String columns get no highlight; missing values
+                        // are skipped so they can't win as the minimum.
+                        const lowerIsBetter = LOWER_IS_BETTER_BY_POSITION[position]?.has(col.key) ?? false;
+                        let leaderVal = lowerIsBetter ? Infinity : -Infinity;
                         if (col.type !== "string") {
                           for (const r of compareRows) {
                             const v = numVal(r[col.key]);
-                            if (v > max) max = v;
+                            if (!Number.isFinite(v)) continue;
+                            if (lowerIsBetter ? v < leaderVal : v > leaderVal) leaderVal = v;
                           }
                         }
-                        const hasLeader = max !== -Infinity && compareRows.length > 1;
+                        const hasLeader = Number.isFinite(leaderVal) && compareRows.length > 1;
                         const isScore = scoreKeySet.has(col.key);
                         const stickyBg = ci % 2 === 1
                           ? "linear-gradient(hsl(var(--muted) / 0.7), hsl(var(--muted) / 0.7)), hsl(var(--card))"
@@ -1242,7 +1265,7 @@ export default function PositionStats() {
                             ) : compareRows.map((r) => {
                               const raw = r[col.key];
                               const isEmpty = raw == null;
-                              const isLeader = hasLeader && !isEmpty && numVal(raw) === max;
+                              const isLeader = hasLeader && !isEmpty && numVal(raw) === leaderVal;
                               return (
                                 <td
                                   key={getPlayerKey(r)}
