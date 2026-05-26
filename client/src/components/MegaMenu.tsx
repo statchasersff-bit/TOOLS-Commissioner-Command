@@ -86,6 +86,7 @@ const MEGA_DATA: Record<string, MegaSection[]> = {
       items: [
         { subId: "draft-board",  label: "Draft Board",  description: "Dynasty rankings board & live draft integration",     icon: Zap          },
         { subId: "adp-explorer", label: "ADP Explorer", description: "Sleeper startup ADP, rookie picks & market trends",   icon: ClipboardList },
+        { subId: "player-availability", label: "Player Availability", description: "Probability each player is still on the board at every pick — startup & rookie", icon: LayoutGrid },
       ],
     },
   ],

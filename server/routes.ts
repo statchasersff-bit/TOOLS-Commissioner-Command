@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { getFantasyCalcValues, getFantasyCalcRedraftValues } from "./fantasycalc";
 import { computePlayoffCalculator, computeWeeklyMatchups } from "./playoffCalculator";
-import { getAdpHistory, getAdpAvailability } from "./adpPlayerProfile";
+import { getAdpHistory, getAdpAvailability, getAdpAvailabilityMatrix } from "./adpPlayerProfile";
 import { getPlayerMetadata, getPlayerProduction, getPlayerGameLogs, type ScoringKey, type GameLogSeasonType } from "./sleeperPlayerProfile";
 import {
   fetchSleeperUser,
@@ -377,6 +377,25 @@ export async function registerRoutes(
     } catch (err: any) {
       console.error("[AdpPlayerProfile/availability] error:", err);
       res.status(500).json({ error: err?.message || "Failed to load availability" });
+    }
+  });
+
+  // Batch real availability for the Draft Availability Matrix — true per-pick
+  // frequencies for many players from real draft results, in one query.
+  app.get("/api/adp/availability-matrix", async (req, res) => {
+    try {
+      const teams = Math.max(4, Math.min(20, parseInt(String(req.query.teams ?? "12"), 10) || 12));
+      const rounds = Math.max(1, Math.min(20, parseInt(String(req.query.rounds ?? "5"), 10) || 5));
+      const playerIds = String(req.query.playerIds ?? "")
+        .split(",").map((s) => s.trim()).filter(Boolean).slice(0, 250);
+      if (!playerIds.length) return res.json({ totalDrafts: 0, teams, rounds, players: {} });
+      const filters = parsePlayerProfileFilters(req.query);
+      const data = await getAdpAvailabilityMatrix(playerIds, filters, teams, rounds);
+      res.setHeader("Cache-Control", "public, max-age=60");
+      res.json(data);
+    } catch (err: any) {
+      console.error("[AdpPlayerProfile/availability-matrix] error:", err);
+      res.status(500).json({ error: err?.message || "Failed to load availability matrix" });
     }
   });
 

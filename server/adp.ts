@@ -1395,8 +1395,19 @@ export async function computeAdp(f: AdpFilters): Promise<{ rows: AdpRow[]; draft
     return sortedArr[idx];
   };
 
+  // Drop absurd late-pick outliers (junk/devy/abnormal drafts) before computing
+  // range + percentiles, so a consensus 1.01 isn't reported as "max pick 359".
+  // Generous fence (4× median, floor 36) leaves genuine ranges intact.
+  const trimOutliers = (sortedArr: number[]): number[] => {
+    if (sortedArr.length < 4) return sortedArr;
+    const med = sortedArr[Math.floor(sortedArr.length / 2)];
+    const upper = Math.max(med * 4, 36);
+    const kept = sortedArr.filter((p) => p <= upper);
+    return kept.length ? kept : sortedArr;
+  };
+
   const rows: AdpRow[] = Array.from(agg.values()).map((a) => {
-    const sorted = [...a.picks].sort((x, y) => x - y);
+    const sorted = trimOutliers([...a.picks].sort((x, y) => x - y));
     const sum = sorted.reduce((s, v) => s + v, 0);
     const avg = sum / sorted.length;
     const median = sorted[Math.floor(sorted.length / 2)];

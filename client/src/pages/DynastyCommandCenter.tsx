@@ -48,6 +48,7 @@ import PositionStats from "./tabs/PositionStats";
 import { ShareDynastyPopup } from "@/components/ShareDynastyPopup";
 import { WhatsNewModal } from "@/components/WhatsNewModal";
 import { DraftCommand } from "./tabs/DraftCommand";
+import { DraftAvailability } from "./tabs/DraftAvailability";
 import { AboutPage } from "@/components/AboutModal";
 import { FeedbackPage } from "@/components/FeedbackPage";
 import { TermsPage, PrivacyPage, CookiesPage } from "@/components/LegalModals";
@@ -480,6 +481,7 @@ export default function DynastyCommandCenter({ params, playerProfileId }: { para
           }
         />
       );
+      if (activeSubTab === "player-availability") return <DraftAvailability />;
       return <DraftCommand />;
     }
 

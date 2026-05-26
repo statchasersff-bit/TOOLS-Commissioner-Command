@@ -67,6 +67,7 @@ export const MODULE_ACCESS: Record<string, AccessRequirement> = {
   // Draft — ADP data is public. The Draft Board (live Sleeper draft tracker) is
   // an action tool requiring a logged-in StatChasers account (full).
   "draft:adp-explorer": "public",
+  "draft:player-availability": "public", // ADP-derived (startup + rookie toggle), no league required
   "draft:draft-board":  "full",
 
   // Static pages

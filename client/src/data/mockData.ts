@@ -579,6 +579,7 @@ export const NAV_CONFIG: MainTabConfig[] = [
     subTabs: [
       { id: "draft-board", label: "Draft Board" },
       { id: "adp-explorer", label: "ADP Explorer" },
+      { id: "player-availability", label: "Player Availability" },
     ],
   },
 ].filter((tab) => tab.id !== "draft" || FEATURES.SHOW_DRAFT_MODULE);

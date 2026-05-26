@@ -236,6 +236,86 @@ export interface AdpAvailabilityResponse {
   pickHistogram: Array<{ pickNo: number; count: number }>;
 }
 
+// A consensus asset occasionally shows up in a junk/devy/abnormal draft at an
+// absurd slot (e.g. a 1.01 "drafted" at pick 359). Those extreme late outliers
+// flatten the availability curve and bloat the min/max range, so drop them
+// before computing. Generous fence (4× the player's median pick, floor 36) so a
+// player's genuine range is left intact — only egregious outliers are removed.
+function trimPickOutliers(sortedPicks: number[]): number[] {
+  if (sortedPicks.length < 4) return sortedPicks;
+  const median = sortedPicks[Math.floor(sortedPicks.length / 2)];
+  const upper = Math.max(median * 4, 36);
+  const kept = sortedPicks.filter((p) => p <= upper);
+  return kept.length ? kept : sortedPicks; // never trim everything away
+}
+
+export interface AvailabilityMatrixResponse {
+  totalDrafts: number;
+  teams: number;
+  rounds: number;
+  // playerId → probabilities indexed by (pickNo - 1), 0–100, one decimal.
+  players: Record<string, { draftsWithPlayer: number; cells: number[] }>;
+}
+
+/**
+ * Real per-pick availability for MANY players in one pass — powers the Draft
+ * Availability Matrix. Same definition as getAdpAvailability
+ * (P(available at X) = drafts where the player's pick ≥ X, or was undrafted),
+ * computed from the actual draftPicks table over the same filtered pool.
+ */
+export async function getAdpAvailabilityMatrix(
+  playerIds: string[],
+  filters: AdpFilters,
+  teams: number = 12,
+  rounds: number = 5,
+): Promise<AvailabilityMatrixResponse> {
+  const totalSlots = teams * rounds;
+  const eligible = await eligibleDraftIds(filters);
+  const filtered = teams > 0 ? eligible.filter((d) => d.teams === teams || d.teams === 0) : eligible;
+  const eligibleIds = filtered.map((d) => d.draftId);
+  const totalDrafts = eligibleIds.length;
+
+  const players: AvailabilityMatrixResponse["players"] = {};
+  if (!eligibleIds.length || !playerIds.length) {
+    for (const pid of playerIds) players[pid] = { draftsWithPlayer: 0, cells: [] };
+    return { totalDrafts, teams, rounds, players };
+  }
+
+  // One query for all requested players' picks within the eligible pool.
+  const picks = await db
+    .select({ playerId: draftPicks.playerId, pickNo: draftPicks.pickNo })
+    .from(draftPicks)
+    .where(and(inArray(draftPicks.playerId, playerIds), inArray(draftPicks.draftId, eligibleIds)));
+
+  const byPlayer = new Map<string, number[]>();
+  for (const p of picks) {
+    if (!p.playerId) continue;
+    const arr = byPlayer.get(p.playerId);
+    if (arr) arr.push(p.pickNo);
+    else byPlayer.set(p.playerId, [p.pickNo]);
+  }
+
+  for (const pid of playerIds) {
+    const arr = trimPickOutliers((byPlayer.get(pid) ?? []).slice().sort((a, b) => a - b));
+    const drafted = arr.length;
+    // Denominator = drafts where the player was actually drafted (not the whole
+    // slice). This avoids the misleading flat floor that "undrafted = available
+    // everywhere" produces from partial/abandoned drafts, so a consensus pick
+    // reads 100% at his slot then drops cleanly toward 0%.
+    if (!drafted) { players[pid] = { draftsWithPlayer: 0, cells: [] }; continue; }
+    const cells: number[] = [];
+    let idx = 0; // advancing pointer: # of this player's picks strictly before pickNo
+    for (let pickNo = 1; pickNo <= totalSlots; pickNo++) {
+      while (idx < arr.length && arr[idx] < pickNo) idx++;
+      const stillAvailable = drafted - idx; // drafts where his pick was >= pickNo
+      cells.push(Math.round((stillAvailable / drafted) * 1000) / 10);
+    }
+    players[pid] = { draftsWithPlayer: drafted, cells };
+  }
+
+  return { totalDrafts, teams, rounds, players };
+}
+
 export async function getAdpAvailability(
   playerId: string,
   filters: AdpFilters,
@@ -274,21 +354,21 @@ export async function getAdpAvailability(
   for (const p of playerPicks) pickByDraft.set(p.draftId, p.pickNo);
 
   const totalDrafts = eligibleIds.length;
-  const draftsWithPlayer = pickByDraft.size;
   const totalSlots = teams * rounds;
 
-  // P(available at pick X) = (#drafts where pick_no for this player >= X OR
-  //                          player was NOT drafted before slot X) / totalDrafts.
-  // If the player wasn't drafted at all in a draft, they were available at
-  // every observed pick — count them as available everywhere.
+  // P(available at pick X), conditioned on the player actually being drafted in
+  // this slice = (#drafts where his pick >= X) / draftsWithPlayer. Using only
+  // drafts that drafted him (rather than the whole slice, counting undrafted as
+  // "available everywhere") avoids a misleading flat floor from partial drafts,
+  // so a consensus pick reads 100% at his slot then drops cleanly toward 0%.
+  // Outlier picks (junk/devy drafts) are trimmed first.
+  const observedPicks = trimPickOutliers([...pickByDraft.values()].sort((a, b) => a - b));
+  const draftsWithPlayer = observedPicks.length;
   const cells: AvailabilityCell[] = [];
   for (let pickNo = 1; pickNo <= totalSlots; pickNo++) {
-    let available = 0;
-    for (const draftId of eligibleIds) {
-      const playerPick = pickByDraft.get(draftId);
-      if (playerPick == null || playerPick >= pickNo) available++;
-    }
-    const availabilityPct = (available / totalDrafts) * 100;
+    let stillAvailable = 0;
+    for (const pk of observedPicks) if (pk >= pickNo) stillAvailable++;
+    const availabilityPct = draftsWithPlayer > 0 ? (stillAvailable / draftsWithPlayer) * 100 : 0;
     cells.push({
       pickNo,
       round: Math.ceil(pickNo / teams),
@@ -312,16 +392,14 @@ export async function getAdpAvailability(
   }
 
   const expectedPick = draftsWithPlayer > 0
-    ? Math.round(
-        (Array.from(pickByDraft.values()).reduce((s, n) => s + n, 0) / draftsWithPlayer) * 10
-      ) / 10
+    ? Math.round((observedPicks.reduce((s, n) => s + n, 0) / draftsWithPlayer) * 10) / 10
     : null;
 
   // Pick-distribution histogram across the visible grid. Picks beyond the
   // final slot are folded into that slot so a long-tail late pick doesn't
   // silently drop from the chart.
   const histCounts = new Array<number>(totalSlots).fill(0);
-  for (const p of Array.from(pickByDraft.values())) {
+  for (const p of observedPicks) {
     const slot = Math.min(totalSlots, Math.max(1, p));
     histCounts[slot - 1] += 1;
   }
