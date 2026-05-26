@@ -439,6 +439,31 @@ export interface PlayerGameLogRow {
   snapPct: number | null;
 }
 
+// Full-career per-season production (all scoring formats), sourced from
+// Sleeper season totals server-side. Drives the player profile Game Log tab,
+// which lists every season the player has data for (not just recent ones).
+export interface PlayerProductionSeason {
+  season: number;
+  team: string | null;
+  games: number;
+  ppgStd: number | null;
+  ppgHalf: number | null;
+  ppgPpr: number | null;
+  finishStd: number | null;
+  finishHalf: number | null;
+  finishPpr: number | null;
+}
+
+export async function fetchPlayerProduction(playerId: string): Promise<PlayerProductionSeason[]> {
+  const res = await fetch(
+    `${API_BASE}/api/players/${encodeURIComponent(playerId)}/production`,
+    { credentials: "include" },
+  );
+  if (!res.ok) throw new Error(`Production unavailable (${res.status})`);
+  const data = await res.json();
+  return Array.isArray(data?.seasons) ? data.seasons : [];
+}
+
 export async function fetchPlayerGameLogs(
   playerId: string,
   season: number,

@@ -132,9 +132,14 @@ export interface ProductionSeason {
   season: number;
   team: string | null;
   games: number;
-  fantasy_points: number;
-  ppg: number;
-  positional_finish: string | null;
+  // Fantasy PPG by scoring format (null when the player had no games).
+  ppgStd: number | null;
+  ppgHalf: number | null;
+  ppgPpr: number | null;
+  // Positional finish (1 = best) by scoring format. Null when unranked.
+  finishStd: number | null;
+  finishHalf: number | null;
+  finishPpr: number | null;
 }
 
 export type ScoringKey = "ppr" | "half_ppr" | "std";
@@ -199,42 +204,53 @@ export async function getPlayerProduction(
     const seasonStats = seasonStatsList[si];
     const myRow = seasonStats[playerId];
     if (!myRow) continue;
-    const pts = pickPoints(myRow, scoring);
     const games = (myRow.gms_active ?? myRow.gp ?? 0) as number;
-    if (pts <= 0 && games <= 0) continue;
+    const myStd = pickPoints(myRow, "std");
+    const myHalf = pickPoints(myRow, "half_ppr");
+    const myPpr = pickPoints(myRow, "ppr");
+    if (myStd <= 0 && myHalf <= 0 && myPpr <= 0 && games <= 0) continue;
 
-    // Positional finish — rank everyone at this position by their
-    // same-scoring season total. Filtered by MIN_GAMES_FOR_RANK so an
-    // injured 2-game player can't sneak into the top 5 on a tiny sample.
-    let positional_finish: string | null = null;
+    // Positional finish per scoring format — rank everyone at this position by
+    // that format's season total. Peers are collected once (filtered by
+    // MIN_GAMES_FOR_RANK so an injured 2-game player can't pad the ranks),
+    // then ranked three times.
+    let finishStd: number | null = null, finishHalf: number | null = null, finishPpr: number | null = null;
     if (myPos) {
-      const peers: Array<{ pid: string; pts: number }> = [];
+      const peers: Array<{ pid: string; std: number; half: number; ppr: number }> = [];
       for (const pid of Object.keys(seasonStats)) {
         const peerPos = (allPlayers[pid] as unknown as Record<string, unknown> | undefined)?.position;
         if (peerPos !== myPos) continue;
         const row = seasonStats[pid];
         const g = (row?.gms_active ?? row?.gp ?? 0) as number;
         if (g < MIN_GAMES_FOR_RANK && pid !== playerId) continue;
-        const p = pickPoints(row, scoring);
-        if (p <= 0 && pid !== playerId) continue;
-        peers.push({ pid, pts: p });
+        const std = pickPoints(row, "std"), half = pickPoints(row, "half_ppr"), ppr = pickPoints(row, "ppr");
+        if (std <= 0 && half <= 0 && ppr <= 0 && pid !== playerId) continue;
+        peers.push({ pid, std, half, ppr });
       }
-      peers.sort((a, b) => b.pts - a.pts);
-      const rank = peers.findIndex((x) => x.pid === playerId);
-      if (rank >= 0) positional_finish = `${myPos}${rank + 1}`;
+      const rankBy = (key: "std" | "half" | "ppr"): number | null => {
+        const idx = [...peers].sort((a, b) => b[key] - a[key]).findIndex((x) => x.pid === playerId);
+        return idx >= 0 ? idx + 1 : null;
+      };
+      finishStd = rankBy("std");
+      finishHalf = rankBy("half");
+      finishPpr = rankBy("ppr");
     }
 
+    const ppgOf = (pts: number): number | null => (games > 0 ? Math.round((pts / games) * 10) / 10 : null);
     results.push({
       season,
       team: (myRow.team as string | null | undefined) ?? myTeamFallback,
       games,
-      fantasy_points: Math.round(pts * 10) / 10,
-      ppg: games > 0 ? Math.round((pts / games) * 10) / 10 : 0,
-      positional_finish,
+      ppgStd: ppgOf(myStd),
+      ppgHalf: ppgOf(myHalf),
+      ppgPpr: ppgOf(myPpr),
+      finishStd,
+      finishHalf,
+      finishPpr,
     });
   }
 
-  // Newest season first — matches how the modal renders the table.
+  // Newest season first — matches how the table renders.
   return results.sort((a, b) => b.season - a.season);
 }
 

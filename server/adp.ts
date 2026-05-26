@@ -1090,6 +1090,24 @@ function filterKey(f: AdpFilters): string {
   return Object.entries(k).map(([key, val]) => `${key}=${val}`).join("|");
 }
 
+/** Corpus-wide ADP totals for the explorer banner.
+ *   - totalPicks: every real pick ingested (draft_picks rows).
+ *   - dynastyDraftsScanned: completed dynasty drafts in the corpus.
+ *  Two cheap counts; result is cached at the route layer. */
+export async function getAdpStats(): Promise<{ totalPicks: number; dynastyDraftsScanned: number }> {
+  const [picks, dynDrafts] = await Promise.all([
+    db.select({ n: sql<number>`count(*)::int` }).from(draftPicks),
+    db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(drafts)
+      .where(and(eq(drafts.status, "complete"), eq(drafts.leagueMode, "dynasty"))),
+  ]);
+  return {
+    totalPicks: picks[0]?.n ?? 0,
+    dynastyDraftsScanned: dynDrafts[0]?.n ?? 0,
+  };
+}
+
 export function buildDraftWhere(f: AdpFilters) {
   // Always exclude drafts flagged excludedFromAdp. This is the IDP/defensive-
   // player guardrail — those drafts have their own ADP curves and shouldn't

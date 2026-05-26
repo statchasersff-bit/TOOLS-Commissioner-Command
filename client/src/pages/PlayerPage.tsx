@@ -39,7 +39,7 @@ import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { cn } from "@/lib/utils";
 import { useSleeper } from "@/contexts/SleeperContext";
 import { useValueModel } from "@/contexts/ValueModelContext";
-import { getSleeperPlayers, fetchSleeperLeagueFull, fetchPlayerExposure, fetchTradesForPlayer, fetchTradeLeaguesScanned, fetchPlayerGameLogs, fetchPlayerAdpHistory, fetchPlayerAdpAvailability, type PlayerLeagueExposure, type PlayerTradeRecord, type PlayerTradeAsset, type PlayerGameLogRow, type PlayerAdpHistory, type PlayerAdpAvailability, type PlayerAdpAvailabilityCell, type AdpProfileFilters } from "@/lib/sleeperApi";
+import { getSleeperPlayers, fetchSleeperLeagueFull, fetchPlayerExposure, fetchTradesForPlayer, fetchTradeLeaguesScanned, fetchPlayerGameLogs, fetchPlayerProduction, fetchPlayerAdpHistory, fetchPlayerAdpAvailability, type PlayerLeagueExposure, type PlayerTradeRecord, type PlayerTradeAsset, type PlayerGameLogRow, type PlayerAdpHistory, type PlayerAdpAvailability, type PlayerAdpAvailabilityCell, type AdpProfileFilters } from "@/lib/sleeperApi";
 
 // Default ADP-tab filter: the dominant dynasty-startup configuration in the
 // crawled dataset (Superflex · PPR · TE Premium · 12-team), so the tab opens
@@ -195,6 +195,12 @@ export default function PlayerPage({ params, embedded = false }: { params?: { pl
 
   // Trades are heavy to compute (per-league transaction scans) so they lazy-load
   // only when the Trades tab is first opened, and reset when the player changes.
+  // Full-career production for the Game Log tab — lazy-loaded from the server
+  // (the bundled advanced-stats files only cover the last few seasons).
+  const [production, setProduction] = useState<ProductionRow[] | null>(null);
+  const [productionLoading, setProductionLoading] = useState(false);
+  const productionLoadedRef = useRef<string | null>(null);
+
   const [trades, setTrades] = useState<PlayerTradeRecord[] | null>(null);
   const [tradesLoading, setTradesLoading] = useState(false);
   // Total leagues crawled into the trade DB (the corpus scanned for any
@@ -220,11 +226,31 @@ export default function PlayerPage({ params, embedded = false }: { params?: { pl
     window.scrollTo(0, 0);
     setTrades(null);
     tradesLoadedRef.current = null;
+    setProduction(null);
+    productionLoadedRef.current = null;
     setAdpHistory(null);
     setAdpAvail(null);
     setAdpError(false);
     adpLoadedRef.current = null;
   }, [param]);
+
+  // Lazy-load full-career production when the Game Log tab is first opened.
+  useEffect(() => {
+    if (tab !== "production" || !resolvedId) return;
+    if (productionLoadedRef.current === resolvedId) return;
+    productionLoadedRef.current = resolvedId;
+    setProductionLoading(true);
+    fetchPlayerProduction(resolvedId)
+      .then((seasons) => setProduction(seasons.map((s) => ({
+        season: String(s.season),
+        team: s.team ?? "—",
+        games: s.games,
+        ppgStd: s.ppgStd, ppgHalf: s.ppgHalf, ppgPpr: s.ppgPpr,
+        finishStd: s.finishStd, finishHalf: s.finishHalf, finishPpr: s.finishPpr,
+      }))))
+      .catch(() => setProduction([]))
+      .finally(() => setProductionLoading(false));
+  }, [tab, resolvedId]);
 
   useEffect(() => {
     if (tab !== "trades") return;
@@ -328,7 +354,7 @@ export default function PlayerPage({ params, embedded = false }: { params?: { pl
               {tab === "overview" && (
                 <OverviewTab profile={profile} adv={adv} advLoading={advLoading} similar={similar} dynRank={dynRank} onOpenPlayer={(id) => setLocation(`/players/${id}`)} />
               )}
-              {tab === "production" && <ProductionTab playerId={resolvedId} adv={adv} advLoading={advLoading} pos={profile.player.pos} />}
+              {tab === "production" && <ProductionTab playerId={resolvedId} production={production} loading={productionLoading} pos={profile.player.pos} />}
               {tab === "advanced" && <AdvancedTab adv={adv} advLoading={advLoading} pos={profile.player.pos} />}
               {tab === "adp" && <AdpTab history={adpHistory} avail={adpAvail} loading={adpLoading} error={adpError} pos={profile.player.pos} filters={adpFilters} onFiltersChange={setAdpFilters} />}
               {tab === "trades" && <TradesTab trades={trades} loading={tradesLoading} valuesBySleeperId={valueModel.valuesBySleeperId} playerName={profile.player.name} leaguesScanned={tradeLeaguesScanned} />}
@@ -545,14 +571,14 @@ function OverviewTab({
 }
 
 // ── Production ──────────────────────────────────────────────────────────────
-function ProductionTab({ playerId, adv, advLoading, pos }: { playerId: string | null; adv: PlayerAdvancedResult | null; advLoading: boolean; pos: string }) {
-  const rows = adv?.production ?? [];
+function ProductionTab({ playerId, production, loading, pos }: { playerId: string | null; production: ProductionRow[] | null; loading: boolean; pos: string }) {
+  const rows = production ?? [];
   const ppgVals = rows.filter((r) => r.ppgStd != null);
   const ppg = (v: number | null) => (v != null ? v.toFixed(1) : "—");
   const fin = (v: number | null) => (v != null ? `${pos}${v}` : "—");
   return (
     <div className="space-y-6">
-      {advLoading ? (
+      {loading && !production ? (
         <Card className="p-5"><SkeletonLines n={6} /></Card>
       ) : !rows.length ? (
         <ComingSoon icon={BarChart3} title="No production history" body={`Season production for this ${pos} will appear once it has qualifying NFL usage in our dataset.`} />

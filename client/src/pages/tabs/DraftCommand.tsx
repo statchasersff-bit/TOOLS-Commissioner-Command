@@ -18,7 +18,7 @@ import { API_BASE } from "@/lib/apiBase";
 import {
   Search, SlidersHorizontal, List, LayoutGrid, Hexagon,
   TrendingUp, TrendingDown, Minus, AlertCircle, RefreshCw, ChevronUp, ChevronDown, ChevronRight,
-  Calendar, X, Trophy, Rocket, Sparkles,
+  Calendar, X, Trophy, Rocket, Sparkles, Database,
 } from "lucide-react";
 import {
   DEFAULT_FILTERS, toIsoDate,
@@ -210,6 +210,14 @@ export function DraftCommand() {
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [meta, setMeta] = useState<AdpResponseMeta | null>(null);
+  // Corpus-wide ADP totals (real picks + dynasty drafts scanned). Global + cached.
+  const [adpStats, setAdpStats] = useState<{ totalPicks: number; dynastyDraftsScanned: number } | null>(null);
+  useEffect(() => {
+    fetch(`${API_BASE}/api/adp/stats`)
+      .then((r) => r.json())
+      .then((data) => { if (typeof data?.totalPicks === "number") setAdpStats(data); })
+      .catch(() => {});
+  }, []);
   // Stash the AbortController so the Cancel button (and effect cleanup) can
   // actually kill the in-flight HTTP request, not just discard its result.
   const [scanController, setScanController] = useState<AbortController | null>(null);
@@ -377,6 +385,21 @@ export function DraftCommand() {
         })}
           </div>
         </div>
+      </div>
+
+      {/* ── Database stats banner ────────────────────────────────────────── */}
+      <div className="flex items-start justify-center md:justify-start gap-3 p-3 rounded-lg bg-[#0b3a7a]/5 dark:bg-blue-400/5 border border-[#0b3a7a]/10 dark:border-blue-400/10" data-testid="adp-db-stats-banner">
+        <Database className="w-4 h-4 text-[#0b3a7a] dark:text-blue-400 flex-shrink-0 mt-0.5" />
+        {adpStats ? (
+          <p className="text-sm leading-snug text-center md:text-left">
+            <span className="font-bold text-[#d4af37]" data-testid="text-total-picks">{adpStats.totalPicks.toLocaleString()}</span>
+            <span className="text-muted-foreground"> Real Picks | </span>
+            <span className="font-bold text-[#d4af37]" data-testid="text-dynasty-drafts">{adpStats.dynastyDraftsScanned.toLocaleString()}</span>
+            <span className="text-muted-foreground"> Dynasty Drafts Scanned</span>
+          </p>
+        ) : (
+          <p className="text-sm text-muted-foreground text-center md:text-left">Loading draft database stats...</p>
+        )}
       </div>
 
       {/* ── Top controls row ─────────────────────────────────────────────── */}
@@ -557,11 +580,14 @@ class AdminToolsBoundary extends Component<{ children: ReactNode }, { error: Err
 }
 
 function AdminAdpTools() {
-  const { isAdmin, canPerformWriteActions } = useAuth();
-  // Admin allowlist alone isn't enough: a read-only Sleeper-username match
-  // (e.g. @makitrain with no DC login / token) is still isAdmin but has no
-  // write access. Require both so the crawl tools only show with write access.
-  if (!isAdmin || !canPerformWriteActions) return null;
+  const { isServerAdmin } = useAuth();
+  // Gate on the SERVER-confirmed admin flag — this matches exactly what the
+  // backend crawl routes authorize (admin email / secret), and it intentionally
+  // excludes the Sleeper-username frontend hint (e.g. @makitrain synced
+  // read-only with no DC login), whose crawl the server would 403. Note: this
+  // is NOT tied to subscription / write-access domain, because the crawl
+  // endpoints don't require those — only an admin account.
+  if (!isServerAdmin) return null;
   return (
     <AdminToolsBoundary>
       <AdpCrawlPanel />

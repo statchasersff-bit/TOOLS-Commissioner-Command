@@ -41,6 +41,7 @@ import {
   reclassifyAdpDrafts,
   getAdp,
   getAdpInclusionStatus,
+  getAdpStats,
   startAdpScheduler,
   backfillLeagueScoring,
   type AdpFilters,
@@ -1009,6 +1010,19 @@ export async function registerRoutes(
   // before /api/adp so it isn't shadowed by the catch-all query handler.
   app.get("/api/adp/health", (_req, res) => {
     res.json({ ok: true, route: "adp", ts: Date.now() });
+  });
+
+  // Corpus-wide ADP totals for the explorer banner (total drafts ingested).
+  // Defined before the /api/adp catch-all so it isn't shadowed. Cached briefly.
+  app.get("/api/adp/stats", async (_req, res) => {
+    try {
+      const stats = await getAdpStats();
+      res.setHeader("Cache-Control", "public, max-age=300");
+      res.json(stats);
+    } catch (err: any) {
+      console.error("[ADP /api/adp/stats] error:", err);
+      res.status(500).json({ error: err?.message || "Failed to load ADP stats" });
+    }
   });
 
   // ── ADP: cached read endpoint ─────────────────────────────────────────────

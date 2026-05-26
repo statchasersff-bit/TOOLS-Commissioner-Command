@@ -111,6 +111,13 @@ interface AuthContextValue {
    * Backend admin routes do their own strict server-side check.
    */
   isAdmin: boolean;
+  /**
+   * Server-confirmed admin: true only when /me reported the signed-in user as
+   * an admin (admin email). Unlike `isAdmin`, this excludes the Sleeper-username
+   * frontend hint, so it matches exactly what the backend admin routes will
+   * authorize. Use this to gate admin-only write tools (e.g. the ADP crawler).
+   */
+  isServerAdmin: boolean;
 
   // ── Domain-based app mode + subscription entitlement ───────────────────
   // `appMode` is the server's authoritative answer for the current host;
@@ -616,6 +623,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isAuthenticatedUser: effectiveIsAuthenticated,
       hasSleeperToken: effectiveHasSleeperToken,
       isAdmin,
+      isServerAdmin: serverIsAdmin,
       appMode,
       isWriteAccessDomain: isWriteAccessDomainFlag,
       subscription: effectiveSubscription,
