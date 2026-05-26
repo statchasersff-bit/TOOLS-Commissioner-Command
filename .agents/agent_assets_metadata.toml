@@ -60,3 +60,9 @@ id = "VIRaFi4tk5vyTS6dB3MOm"
 uri = "file://dynasty-command-v1.11.zip"
 type = "unspecified"
 title = "Dynasty Command Center v1.11"
+
+[[outputs]]
+id = "O_7sqydMHFry7WqqXu0LY"
+uri = "file://dynasty-command-v1.7.zip"
+type = "unspecified"
+title = "Dynasty Command v1.7 — Static Build"
