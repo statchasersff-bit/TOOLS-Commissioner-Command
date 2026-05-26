@@ -3346,11 +3346,13 @@ function ShareTradeToDiscordButton({ trade }: { trade: TradeRecord }) {
   if (!isAuthenticatedUser) return null;
   if (trade.sides.length !== 2) return null;
   const [a, b] = trade.sides;
-  const assetsOf = (s: TradeSide): string[] => [
-    ...s.playersReceived.map((p) => `${p.name} (${p.pos})`),
-    ...s.picksReceived.map(
-      (p) => `${p.season} Round ${p.round}${p.slot ? `.${String(p.slot).padStart(2, "0")}` : ""}`,
-    ),
+  // Players carry their Sleeper id so the server can render headshots; picks
+  // are label-only. (No owner avatars or names are sent.)
+  const assetsOf = (s: TradeSide): Array<{ label: string; sleeperId?: string }> => [
+    ...s.playersReceived.map((p) => ({ label: `${p.name} (${p.pos})`, sleeperId: p.sleeperId })),
+    ...s.picksReceived.map((p) => ({
+      label: `${p.season} Round ${p.round}${p.slot ? `.${String(p.slot).padStart(2, "0")}` : ""}`,
+    })),
   ];
   const aReceives = assetsOf(a);
   const bReceives = assetsOf(b);
@@ -3375,7 +3377,10 @@ function ShareTradeToDiscordButton({ trade }: { trade: TradeRecord }) {
         }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      toast({ title: "Trade poll shared to Discord." });
+      const data = await res.json().catch(() => ({} as any));
+      toast({
+        title: data?.warning ?? "Trade shared to Discord with reaction voting.",
+      });
     } catch {
       toast({ title: "Could not share trade poll. Please try again.", variant: "destructive" });
     } finally {

@@ -316,7 +316,7 @@ function AvailabilityMatrix({ result, onPlayer }: { result: AvailabilityResult; 
                         style={{ width: PICK_COL_W, minWidth: PICK_COL_W, height: ROW_H }}
                         title={`${p.name} — ${cell.probability}% available at ${cell.pickLabel}`}
                       >
-                        {cell.probability === 0 ? "" : cell.probability}
+                        {cell.probability === 0 ? "0%" : cell.probability}
                       </td>
                     );
                   })}
@@ -362,7 +362,7 @@ function AvailabilityCards({ players, onPlayer }: { players: DraftAvailabilityPl
                 <div key={cell.pickNumber} className="flex flex-col items-center flex-shrink-0">
                   <div className="text-[8px] text-muted-foreground tabular-nums mb-0.5">{cell.pickLabel}</div>
                   <div className={cn("w-9 h-9 rounded-md flex items-center justify-center text-[11px] font-bold tabular-nums", BUCKET_CLASS[getAvailabilityBucket(cell.probability)])} title={`${cell.probability}% available at ${cell.pickLabel}`}>
-                    {cell.probability === 0 ? "—" : cell.probability}
+                    {cell.probability === 0 ? "0%" : cell.probability}
                   </div>
                 </div>
               ))}

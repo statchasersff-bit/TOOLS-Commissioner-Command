@@ -16,6 +16,7 @@ import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import {
   Activity,
+  AlertTriangle,
   ArrowLeft,
   ArrowRight,
   ArrowRightLeft,
@@ -28,12 +29,15 @@ import {
   Newspaper,
   Repeat2,
   ScrollText,
+  Shield,
   Sparkles,
   Star,
   Target,
   TrendingDown,
   TrendingUp,
   Users,
+  Zap,
+  type LucideIcon,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -55,11 +59,13 @@ import {
   type PlayerAdvancedResult,
   type ProductionRow,
   type AdvStatColumn,
+  type PlayerSeasonStats,
   type RankCard as RankCardData,
   type RankCategory,
   type RankTier,
   type SeasonFinish,
 } from "@/lib/playerAdvancedStats";
+import { groupColumns, type ColDef, type StatPosition } from "@/lib/advancedStatsMeta";
 import {
   dynastySnapshot,
   strengthsAndConcerns,
@@ -988,9 +994,119 @@ function PlayerRankSnapshot({ cards, pos }: { cards: RankCardData[]; pos: string
   );
 }
 
+// ── Grouped advanced-stat sections (QB / RB / WR / TE) ────────────────────────
+// Section grouping comes straight from the research module's single source of
+// truth (advancedStatsMeta.groupColumns), so headers + which stats fall under
+// them stay in lockstep with the Position Stats tab. Rendered as labeled value
+// cards (same visual family as the rank-snapshot cards below).
+
+// Section icon by group label. Sections never overlap within a single position,
+// so a few icons are reused across positions; the colour is the research
+// module's per-section accent.
+const SECTION_ICONS: Record<string, LucideIcon> = {
+  "Usage / Workload": Activity,
+  "Usage/Role": Activity,
+  "Volume / Usage": Activity,
+  Production: TrendingUp,
+  Efficiency: Target,
+  Hands: Target,
+  Aggressiveness: Sparkles,
+  Elusiveness: Sparkles,
+  "Explosive Play Ability": Zap,
+  Explosiveness: Zap,
+  "Contact & Tackle Breaking": Shield,
+  "Pressure & Pocket": Shield,
+  "Ball Security / Negative Plays": AlertTriangle,
+};
+
+// Groups surfaced elsewhere (composites → the Metric Scores card) or that aren't
+// real stats (identity columns) — skipped here to avoid duplication.
+const SKIP_SECTIONS = new Set(["Composite Grades", "Player Info", "Other"]);
+
+// Fuller labels than the research module's terse column headers (e.g. "RZ Opp"),
+// shared across positions. Falls back to the column's own label when unmapped.
+const STAT_LABELS: Record<string, string> = {
+  // shared / RB
+  snapPct: "Snap %", routes: "Routes", rushAttempts: "Rush Att",
+  redZoneOpportunities: "Redzone Opportunities", goalLineCarries: "Goal Line Carries",
+  targets: "Targets", targetSharePct: "Target Share %", receptions: "Receptions",
+  redZoneTargets: "Redzone Targets", endZoneTargets: "Endzone Targets",
+  rushYards: "Rush Yards", yardsPerCarry: "Yards / Carry", rushTouchdowns: "Rush TDs",
+  receivingYards: "Receiving Yards", yardsPerReception: "Yards / Reception",
+  receivingYardsAfterCatch: "Receiving YAC", yardsPerRouteRun: "Yards / Route Run",
+  receivingTouchdowns: "Receiving TDs", epaPerPlay: "EPA / Play", successRate: "Success %",
+  rushes10Plus: "Rushes 10+ Yds", rushes20Plus: "Rushes 20+ Yds", rushes30Plus: "Rushes 30+ Yds",
+  rushes40Plus: "Rushes 40+ Yds", rushes50Plus: "Rushes 50+ Yds",
+  explosiveRunPct: "Explosive Run %", breakawayRunPct: "Breakaway Run %",
+  longestRush: "Longest Rush", longestRushTouchdown: "Longest Rush TD",
+  brokenTackles: "Broken Tackles", rushAttemptsPerBrokenTackle: "Rush Att / Broken Tackle",
+  yardsBeforeContactPerAttempt: "Yards Before Contact / Att",
+  yardsAfterContactPerAttempt: "Yards After Contact / Att", tackleEludedRate: "Tackles Eluded %",
+  fumbles: "Fumbles", tacklesForLoss: "Tackles For Loss", tacklesForLossYards: "Tackles For Loss Yards",
+  rushAttForNegativeYards: "Rush Att for Negative Yards",
+  // WR / TE
+  routePct: "Route %", targetsPerRouteRun: "Targets / Route Run",
+  airYardsPerTarget: "Air Yards / Target", airYardsPerReception: "Air Yards / Reception",
+  airYardsSharePct: "Air Yards Share %", wopr: "WOPR",
+  yardsBeforeCatchPerReception: "Yards Before Catch / Rec",
+  yardsAfterCatchPerReception: "Yards After Catch / Rec",
+  catchPct: "Catch %", catchableTargets: "Catchable Targets", drops: "Drops", dropPct: "Drop %",
+  interceptionsWhenTargeted: "INTs When Targeted", avoidedTackleRate: "Avoided Tackle %",
+  receptions10Plus: "Receptions 10+ Yds", receptions20Plus: "Receptions 20+ Yds",
+  receptions30Plus: "Receptions 30+ Yds", receptions40Plus: "Receptions 40+ Yds",
+  receptions50Plus: "Receptions 50+ Yds", longestReception: "Longest Reception",
+  // QB
+  attempts: "Attempts", completions: "Completions", passingYards: "Passing Yards",
+  airYards: "Air Yards", completedAirYards: "Completed Air Yards", redZoneAttempts: "Redzone Attempts",
+  passingTouchdowns: "Passing TDs", airYardsPerAttempt: "Air Yards / Attempt",
+  completedAirYardsPerCompletion: "Comp. Air Yards / Comp", yardsPerCatch: "Yards / Completion",
+  completionPct: "Completion %", onTargetPct: "On-Target %", poorThrows: "Poor Throws",
+  badThrowPct: "Bad Throw %", interceptions: "Interceptions", cpoe: "CPOE",
+  passes10Plus: "Passes 10+ Yds", passes20Plus: "Passes 20+ Yds", passes30Plus: "Passes 30+ Yds",
+  passes40Plus: "Passes 40+ Yds", passes50Plus: "Passes 50+ Yds", longestPass: "Longest Pass",
+  deepAttemptPct: "Deep Attempt %", pocketTime: "Pocket Time", timeToThrow: "Time to Throw",
+  throwaways: "Throwaways", battedPasses: "Batted Passes", scrambleRate: "Scramble %",
+  yardsPerScramble: "Yards / Scramble", hurries: "Hurries", blitzes: "Blitzes",
+  knockdowns: "Knockdowns", sacks: "Sacks", sackYardsLost: "Sack Yards Lost", pressurePct: "Pressure %",
+};
+
+function AdvancedStatSections({ latest, pos }: { latest: PlayerSeasonStats; pos: string }) {
+  const sp = pos.toLowerCase();
+  const sections = useMemo(() => {
+    if (!["qb", "rb", "wr", "te"].includes(sp)) return [];
+    return groupColumns(sp as StatPosition, latest.columns as unknown as ColDef[]).filter(
+      (g) => !SKIP_SECTIONS.has(g.label) && g.cols.length > 0,
+    );
+  }, [sp, latest]);
+  if (sections.length === 0) return null;
+  return (
+    <>
+      {sections.map((sec) => {
+        const Icon = SECTION_ICONS[sec.label] ?? BarChart3;
+        return (
+          <Card key={sec.label} className="p-4 sm:p-5">
+            <div className="mb-3">
+              <h3 className="text-base font-black text-foreground flex items-center gap-2">
+                <Icon className="w-4 h-4" style={{ color: sec.accent }} /> {sec.label}
+              </h3>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5 sm:gap-3">
+              {sec.cols.map((c) => (
+                <div key={c.key} className="rounded-xl border border-border bg-card p-3.5 flex flex-col">
+                  <div className="text-[22px] font-black leading-none tabular-nums text-foreground">{fmtStat(latest.row[c.key], c.type)}</div>
+                  <div className="text-[11px] font-bold text-muted-foreground mt-2.5 leading-tight uppercase tracking-wider">{STAT_LABELS[c.key] ?? c.label}</div>
+                </div>
+              ))}
+            </div>
+          </Card>
+        );
+      })}
+    </>
+  );
+}
+
 // ── Advanced Stats ────────────────────────────────────────────────────────────
 function AdvancedTab({ adv, advLoading, pos }: { adv: PlayerAdvancedResult | null; advLoading: boolean; pos: string }) {
-  const [showRaw, setShowRaw] = useState(false);
   if (advLoading) return <Card className="p-5"><SkeletonLines n={6} /></Card>;
   if (!adv?.latest) {
     return <ComingSoon icon={Layers} title="No advanced stats available" body={`Advanced metrics for this ${pos} will appear once it has qualifying NFL usage in our dataset.`} />;
@@ -1000,6 +1116,10 @@ function AdvancedTab({ adv, advLoading, pos }: { adv: PlayerAdvancedResult | nul
   return (
     <div className="space-y-4">
       {adv.rankCards.length > 0 && <PlayerRankSnapshot cards={adv.rankCards} pos={pos} />}
+
+      {/* Grouped advanced-stat sections (Usage, Production, Explosive, etc.),
+          driven by the research module's column grouping for this position. */}
+      <AdvancedStatSections latest={latest} pos={pos} />
 
       {/* StatChasers 2025 Metric Scores — role metrics shown as positional ranks. */}
       <Card className="p-4 sm:p-5">
@@ -1035,31 +1155,6 @@ function AdvancedTab({ adv, advLoading, pos }: { adv: PlayerAdvancedResult | nul
             );
           })}
         </div>
-      </Card>
-
-      {/* Raw advanced stats table (collapsible) */}
-      <Card className="p-0 overflow-hidden">
-        <button
-          onClick={() => setShowRaw((v) => !v)}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm font-semibold text-foreground hover:bg-muted/20 transition-colors"
-        >
-          <span className="flex items-center gap-2"><Layers className="w-4 h-4 text-[#d4af37]" /> Raw advanced stats ({latest.season})</span>
-          <span className="text-xs text-muted-foreground">{showRaw ? "Hide" : "Show"}</span>
-        </button>
-        {showRaw && (
-          <div className="border-t border-border/40">
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-px bg-border/30">
-              {latest.columns
-                .filter((c) => c.type !== "string" && !["rank", "playerId", "season"].includes(c.key))
-                .map((c) => (
-                  <div key={c.key} className="bg-card px-3 py-2">
-                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground truncate">{c.label}</div>
-                    <div className="text-sm font-semibold tabular-nums text-foreground">{fmtStat(latest.row[c.key], c.type)}</div>
-                  </div>
-                ))}
-            </div>
-          </div>
-        )}
       </Card>
     </div>
   );

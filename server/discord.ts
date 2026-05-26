@@ -4,9 +4,52 @@
 
 import type { Express, Request, Response } from "express";
 import { requireAuth } from "./accessMiddleware";
-import { renderTradePoster } from "./tradeImage";
+import { renderTradePoster, type TradeAsset } from "./tradeImage";
 
 const DISCORD_API = "https://discord.com/api/v10";
+
+// OTC-style vote reactions, seeded onto every trade post (A wins / B wins / fair).
+const REACTIONS = ["🅰️", "🅱️", "⚖️"] as const;
+
+// Adds one reaction, honoring Discord's per-route rate limit (reaction-adds
+// trip 429s easily when fired back-to-back). Retries on 429 using retry_after.
+// Returns true on success, false if it ultimately couldn't be added.
+async function addReaction(channelId: string, messageId: string, emoji: string, token: string): Promise<boolean> {
+  const url = `${DISCORD_API}/channels/${channelId}/messages/${messageId}/reactions/${encodeURIComponent(emoji)}/@me`;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const rr = await fetch(url, { method: "PUT", headers: { Authorization: `Bot ${token}` } });
+    if (rr.ok) return true;
+    if (rr.status === 429) {
+      const body: any = await rr.json().catch(() => ({}));
+      const waitMs = Math.min(3000, Math.ceil((Number(body?.retry_after) || 1) * 1000) + 50);
+      await new Promise((r) => setTimeout(r, waitMs));
+      continue;
+    }
+    const detail = await rr.text().catch(() => "");
+    console.error(`[discord] add reaction ${emoji} failed: ${rr.status} ${rr.statusText} — ${detail.slice(0, 300)}`);
+    return false;
+  }
+  console.error(`[discord] add reaction ${emoji} gave up after repeated 429s`);
+  return false;
+}
+
+// The message-create REST response doesn't include guild_id, but we need it to
+// build a jump link. Resolve it once (env override or a channel lookup) and cache.
+let cachedGuildId: string | null = null;
+async function resolveGuildId(channelId: string, token: string): Promise<string | null> {
+  if (cachedGuildId) return cachedGuildId;
+  if (process.env.DISCORD_GUILD_ID) return (cachedGuildId = process.env.DISCORD_GUILD_ID);
+  try {
+    const r = await fetch(`${DISCORD_API}/channels/${channelId}`, { headers: { Authorization: `Bot ${token}` } });
+    if (r.ok) {
+      const j: any = await r.json();
+      if (j?.guild_id) return (cachedGuildId = j.guild_id);
+    }
+  } catch (e: any) {
+    console.warn("[discord] resolveGuildId failed:", e?.message ?? e);
+  }
+  return null;
+}
 
 // ── Per-user rate limiting (in-memory) ───────────────────────────────────────
 // Prevents a user from spamming the channel. minInterval guards rapid double
@@ -32,13 +75,27 @@ function checkRate(userId: string): { ok: true } | { ok: false; retryAfter: numb
 }
 
 // ── Input shaping ─────────────────────────────────────────────────────────────
-function cleanAssets(input: unknown): string[] | null {
+// Accepts either plain strings (legacy) or `{ label, sleeperId? }` objects. The
+// optional sleeperId drives the player headshot on the rendered image; it's
+// validated to a safe charset so it can't escape the CDN path.
+function cleanAssets(input: unknown): TradeAsset[] | null {
   if (!Array.isArray(input)) return null;
-  const arr = input
-    .map((s) => String(s ?? "").trim())
-    .filter(Boolean)
-    .slice(0, 12)
-    .map((s) => (s.length > 90 ? s.slice(0, 89) + "…" : s));
+  const arr: TradeAsset[] = [];
+  for (const raw of input.slice(0, 12)) {
+    let label = "";
+    let sleeperId: string | undefined;
+    if (typeof raw === "string") {
+      label = raw;
+    } else if (raw && typeof raw === "object") {
+      label = String((raw as any).label ?? (raw as any).text ?? "");
+      const sid = (raw as any).sleeperId;
+      if (typeof sid === "string" && /^[A-Za-z0-9]{1,15}$/.test(sid)) sleeperId = sid;
+    }
+    label = label.trim();
+    if (!label) continue;
+    if (label.length > 90) label = label.slice(0, 89) + "…";
+    arr.push(sleeperId ? { label, sleeperId } : { label });
+  }
   return arr.length ? arr : null;
 }
 
@@ -98,46 +155,37 @@ export function registerDiscordRoutes(app: Express): void {
       console.error("[discord] trade poster render failed:", e?.message ?? e);
     }
 
-    const compact = [`🚨 **Dynasty Trade Poll**`, `**League:** ${leagueName}${leagueFormat ? ` · ${leagueFormat}` : ""}`];
-    if (tradeLink) compact.push(`🔗 <${tradeLink}>`);
-
-    let content: string;
-    if (poster) {
-      content = compact.join("\n");
-    } else {
-      const lines = [...compact, "", `**Side A — ${sideALabel} receives:**`];
-      for (const a of sideAReceives) lines.push(`• ${a}`);
-      lines.push("", `**Side B — ${sideBLabel} receives:**`);
-      for (const a of sideBReceives) lines.push(`• ${a}`);
-      content = lines.join("\n");
+    // Reaction-based voting (OTC-style) replaces the native Discord poll. The
+    // question itself ("which side wins?") lives on the rendered image, so the
+    // text stays lean. When the image fails to render we fall back to listing
+    // the assets in text so no context is lost.
+    const lines: string[] = ["📊 **Dynasty Trade Poll**", `**${leagueName}**${leagueFormat ? ` · ${leagueFormat}` : ""}`];
+    if (tradeLink) lines.push(`🔗 <${tradeLink}>`);
+    if (!poster) {
+      lines.push("", `**${sideALabel} receives:**`);
+      for (const a of sideAReceives) lines.push(`• ${a.label}`);
+      lines.push("", `**${sideBLabel} receives:**`);
+      for (const a of sideBReceives) lines.push(`• ${a.label}`);
     }
+    lines.push("", "React to vote:", `${REACTIONS[0]} Side A wins`, `${REACTIONS[1]} Side B wins`, `${REACTIONS[2]} Fair trade`);
+    let content = lines.join("\n");
     if (content.length > 1900) content = content.slice(0, 1900) + "…";
 
-    const payload: Record<string, unknown> = {
-      content,
-      // user-derived text is sanitized of pings so a team name can't @everyone.
-      allowed_mentions: { parse: [] as string[] },
-      poll: {
-        question: { text: "Which side wins this dynasty trade?" },
-        answers: [
-          { poll_media: { text: "Side A wins" } },
-          { poll_media: { text: "Side B wins" } },
-          { poll_media: { text: "Fair trade" } },
-          { poll_media: { text: "Need more context" } },
-        ],
-        duration: 24,            // hours
-        allow_multiselect: false,
-      },
-    };
+    const url = `${DISCORD_API}/channels/${channelId}/messages`;
+    const failStatus = (s: number) => (s === 429 ? 429 : 502);
 
     try {
-      const url = `${DISCORD_API}/channels/${channelId}/messages`;
+      // Single message: the image (when rendered) attaches directly beneath the
+      // vote prompt. No native poll object, so there's no attachment conflict.
       let resp: globalThis.Response;
       if (poster) {
-        // Multipart upload so the image attaches alongside the native poll.
-        payload.attachments = [{ id: 0, filename: "dynasty-trade-poll.png" }];
         const form = new FormData();
-        form.append("payload_json", JSON.stringify(payload));
+        form.append("payload_json", JSON.stringify({
+          content,
+          // user-derived text is sanitized of pings so a team name can't @everyone.
+          allowed_mentions: { parse: [] as string[] },
+          attachments: [{ id: 0, filename: "dynasty-trade-poll.png" }],
+        }));
         form.append("files[0]", new Blob([poster], { type: "image/png" }), "dynasty-trade-poll.png");
         // No Content-Type header — fetch sets the multipart boundary.
         resp = await fetch(url, { method: "POST", headers: { Authorization: `Bot ${token}` }, body: form });
@@ -145,18 +193,44 @@ export function registerDiscordRoutes(app: Express): void {
         resp = await fetch(url, {
           method: "POST",
           headers: { Authorization: `Bot ${token}`, "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
+          body: JSON.stringify({ content, allowed_mentions: { parse: [] as string[] } }),
         });
       }
       if (!resp.ok) {
         const detail = await resp.text().catch(() => "");
         console.error(`[discord] message create failed: ${resp.status} ${resp.statusText} — ${detail.slice(0, 500)}`);
-        return res.status(resp.status === 429 ? 429 : 502).json({
-          error: "Could not share trade poll. Please try again.",
-        });
+        return res.status(failStatus(resp.status)).json({ error: "Could not share trade poll. Please try again." });
       }
       const msg: any = await resp.json();
-      return res.json({ ok: true, messageId: msg?.id ?? null, channelId: msg?.channel_id ?? channelId });
+      const messageId: string | null = msg?.id ?? null;
+      const msgChannelId: string = msg?.channel_id ?? channelId;
+
+      // Seed the vote reactions. A reaction failure must NOT fail the whole
+      // share — the trade is already posted — so we collect a soft warning.
+      let warning: string | undefined;
+      if (messageId) {
+        for (const emoji of REACTIONS) {
+          const added = await addReaction(msgChannelId, messageId, emoji, token).catch((e: any) => {
+            console.error(`[discord] add reaction ${emoji} error:`, e?.message ?? e);
+            return false;
+          });
+          if (!added) warning = "Trade posted, but reactions could not be added.";
+        }
+      }
+
+      const guildId = await resolveGuildId(msgChannelId, token);
+      const discordMessageUrl = guildId && messageId
+        ? `https://discord.com/channels/${guildId}/${msgChannelId}/${messageId}`
+        : null;
+
+      return res.json({
+        ok: true,
+        success: true,
+        discordMessageId: messageId,
+        discordChannelId: msgChannelId,
+        discordMessageUrl,
+        ...(warning ? { warning } : {}),
+      });
     } catch (err: any) {
       console.error("[discord] message create error:", err?.message ?? err);
       return res.status(502).json({ error: "Could not share trade poll. Please try again." });
