@@ -10,11 +10,12 @@
  *   "readonly" — a Sleeper username must be connected. This may be a
  *                StatChasers-account-linked Sleeper account (full mode) or a
  *                read-only public-API connection (no StatChasers login).
- *                Used for portfolio, my team, league analyzer, research.
+ *                Used for portfolio summary, my team, league analyzer, and the
+ *                trade Finder / Calculator / Intel surfaces.
  *
  *   "full"     — a StatChasers account is logged in AND an authenticated
- *                Sleeper token is attached. Required for action tools that
- *                mutate Sleeper state (lineup, waiver, trade actions).
+ *                Sleeper token is attached. Required for action tools:
+ *                Lineup Command, Waiver Command, My Trades, and the Draft Board.
  *
  * Keys use the existing `<tab>:<sub>` URL convention. Tab-only keys
  * (e.g. "about") match when a sub-tab is not specified.
@@ -26,11 +27,13 @@
 export type AccessRequirement = "public" | "readonly" | "full";
 
 export const MODULE_ACCESS: Record<string, AccessRequirement> = {
-  // Command Center (Portfolio tab)
+  // Command Center (Portfolio tab). The module opens with a Sleeper username;
+  // Lineup Command and Waiver Command are action tools that require a logged-in
+  // StatChasers account (full).
   "portfolio:connect": "public", // legacy connect screen — no gate
   "portfolio:portfolio-summary": "readonly",
-  "portfolio:lineup-command": "readonly",
-  "portfolio:waiver-command": "readonly",
+  "portfolio:lineup-command": "full",
+  "portfolio:waiver-command": "full",
 
   // My Team
   "dashboard:my-team": "readonly",
@@ -42,29 +45,29 @@ export const MODULE_ACCESS: Record<string, AccessRequirement> = {
   "league-analyzer:playoff-calculator": "readonly",
   "league-analyzer:transactions": "readonly",
 
-  // Trade Center — only the Trade Inbox (My Trades) requires a full
-  // StatChasers account + Sleeper token. Everything else in the module is
-  // research/calculator surface and opens with at most a Sleeper username.
+  // Trade Center. My Trades (Trade Inbox) requires a logged-in StatChasers
+  // account (full). Finder / Calculator / Intel / Database are league-scoped
+  // analytics — they can't render without a loaded league, so they need at
+  // least a connected Sleeper username (readonly).
   "trade-center:trade-sync": "full",
-  "trade-center:trade-database": "readonly",
-  "trade-center:positional-analysis": "readonly",
-  "trade-center:trade-calculator": "readonly",
+  "trade-center:trade-database": "readonly",       // Database — needs a league
+  "trade-center:positional-analysis": "readonly",  // Finder
+  "trade-center:trade-calculator": "readonly",      // Calculator
   "trade-center:bulk-trade": "readonly",
   "trade-center:bulk-trades": "readonly",
-  "trade-center:trade-block": "readonly",
+  "trade-center:trade-block": "readonly",           // Intel
 
-  // Research (league-market)
-  "league-market:analysis": "readonly",
-  "league-market:market-value": "readonly",
+  // Research (league-market). Resources (analysis) is self-contained and
+  // viewable by anyone. Market Value is league-scoped, so it needs a Sleeper
+  // username (readonly). Advanced Stats (position-stats) is public.
+  "league-market:analysis": "public",          // Resources
+  "league-market:market-value": "readonly",    // needs a league
   "league-market:position-stats": "public",
 
-  // Draft — public ADP data + Sleeper draft tracker. Both require at
-  // most a Sleeper username for the live tracker (which itself prompts
-  // for a Sleeper connection on click), so the module-level requirement
-  // is readonly. The Draft Board's inner Sleeper-token gate lives
-  // inside the LiveDraft view.
+  // Draft — ADP data is public. The Draft Board (live Sleeper draft tracker) is
+  // an action tool requiring a logged-in StatChasers account (full).
   "draft:adp-explorer": "public",
-  "draft:draft-board":  "readonly",
+  "draft:draft-board":  "full",
 
   // Static pages
   "about": "public",

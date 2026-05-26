@@ -72,6 +72,7 @@ import { upsertTeamSnapshot, getTeamSnapshots } from "./teamValueSnapshots";
 import { registerScAuthRoutes } from "./scAuthRoutes";
 import { registerBillingRoutes } from "./billingRoutes";
 import { registerSleeperDraftPickRoutes } from "./sleeperDraftPickRoutes";
+import { registerDiscordRoutes } from "./discord";
 import { requireReadOnlySleeperContext } from "./accessMiddleware";
 import { getManagerIntel } from "./managerIntel";
 import {
@@ -161,6 +162,7 @@ const searchCache  = makeCache<any>(2 * 60 * 1000);   // 2-min TTL
 const playoffCalcCache = makeCache<any>(10 * 60 * 1000); // 10-min TTL
 const weeklyMatchupsCache = makeCache<any>(5 * 60 * 1000); // 5-min TTL — live scores need fresher data
 const statChasersDataCache = makeCache<any>(10 * 60 * 1000); // 10-min TTL — public-data repo JSON
+const scheduleCache = makeCache<any>(5 * 60 * 1000); // 5-min TTL — NFL week schedule (kickoff/lock state)
 
 // Allowed axes for the StatChasers public-data proxy. Kept in lock-step with
 // client/src/lib/statChasersDataConfig.ts. If the data repo grows new
@@ -181,6 +183,7 @@ export async function registerRoutes(
   registerScAuthRoutes(app);
   registerBillingRoutes(app);
   registerSleeperDraftPickRoutes(app);
+  registerDiscordRoutes(app);
 
   app.get("/api/health", (_req, res) => {
     res.json({ status: "ok", ts: Date.now() });
@@ -1010,6 +1013,53 @@ export async function registerRoutes(
   // before /api/adp so it isn't shadowed by the catch-all query handler.
   app.get("/api/adp/health", (_req, res) => {
     res.json({ ok: true, route: "adp", ts: Date.now() });
+  });
+
+  // ── NFL week schedule (kickoff times + game state) ─────────────────────────
+  // Proxies the public ESPN scoreboard so the Lineup Command engine can lock
+  // players whose game has started. Returns { TEAM: { start: ms, state } } where
+  // state is 'pre' | 'in' | 'post'. Cached 5 min. On upstream failure returns
+  // {} so the client treats everyone as unlocked rather than erroring.
+  app.get("/api/schedule", async (req, res) => {
+    try {
+      const season = String(req.query.season ?? "").trim();
+      const week = String(req.query.week ?? "").trim();
+      if (!/^\d{4}$/.test(season) || !/^\d{1,2}$/.test(week)) {
+        return res.status(400).json({ error: "season (YYYY) and week (N) are required" });
+      }
+      const cacheKey = `${season}-${week}`;
+      const cached = scheduleCache.get(cacheKey);
+      if (cached) {
+        res.setHeader("Cache-Control", "public, max-age=300");
+        return res.json(cached);
+      }
+
+      // seasontype=2 → regular season.
+      const url = `https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?week=${encodeURIComponent(week)}&seasontype=2&year=${encodeURIComponent(season)}`;
+      const espn = await fetch(url);
+      if (!espn.ok) throw new Error(`ESPN scoreboard ${espn.status}`);
+      const data: any = await espn.json();
+
+      const schedule: Record<string, { start: number; state: "pre" | "in" | "post" }> = {};
+      for (const event of (data?.events ?? []) as any[]) {
+        const comp = event?.competitions?.[0];
+        const stateRaw = comp?.status?.type?.state ?? event?.status?.type?.state ?? "pre";
+        const state: "pre" | "in" | "post" = stateRaw === "in" ? "in" : stateRaw === "post" ? "post" : "pre";
+        const start = Date.parse(event?.date ?? comp?.date ?? "") || 0;
+        for (const c of (comp?.competitors ?? []) as any[]) {
+          const abbr = c?.team?.abbreviation;
+          if (abbr) schedule[String(abbr).toUpperCase()] = { start, state };
+        }
+      }
+
+      scheduleCache.set(cacheKey, schedule);
+      res.setHeader("Cache-Control", "public, max-age=300");
+      res.json(schedule);
+    } catch (err: any) {
+      console.error("[/api/schedule] error:", err?.message);
+      // Degrade gracefully — empty schedule means "no one is locked".
+      res.json({});
+    }
   });
 
   // Corpus-wide ADP totals for the explorer banner (total drafts ingested).

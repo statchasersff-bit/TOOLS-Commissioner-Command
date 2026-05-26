@@ -452,6 +452,9 @@ export interface PlayerProductionSeason {
   finishStd: number | null;
   finishHalf: number | null;
   finishPpr: number | null;
+  ppgFinishStd?: number | null;
+  ppgFinishHalf?: number | null;
+  ppgFinishPpr?: number | null;
 }
 
 export async function fetchPlayerProduction(playerId: string): Promise<PlayerProductionSeason[]> {

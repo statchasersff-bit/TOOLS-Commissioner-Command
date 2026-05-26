@@ -504,6 +504,12 @@ export default function DynastyCommandCenter({ params, playerProfileId }: { para
       return <PositionStats />;
     }
 
+    // Resources (analysis) is self-contained — no league/Sleeper required, so
+    // it renders for guests too. Must sit above the active-league guard below.
+    if (activeMainTab === "league-market" && activeSubTab === "analysis") {
+      return <Analysis />;
+    }
+
     // Past this point we need an active league. AccessGate has already
     // ensured the user is at least readonly-connected; if they're connected
     // but haven't loaded a league yet, prompt them.

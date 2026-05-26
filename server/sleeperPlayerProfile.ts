@@ -136,10 +136,14 @@ export interface ProductionSeason {
   ppgStd: number | null;
   ppgHalf: number | null;
   ppgPpr: number | null;
-  // Positional finish (1 = best) by scoring format. Null when unranked.
+  // Positional finish (1 = best) by scoring format, ranked on season TOTAL.
   finishStd: number | null;
   finishHalf: number | null;
   finishPpr: number | null;
+  // Positional finish ranked on points-per-game (min-games gated). Null when unranked.
+  ppgFinishStd: number | null;
+  ppgFinishHalf: number | null;
+  ppgFinishPpr: number | null;
 }
 
 export type ScoringKey = "ppr" | "half_ppr" | "std";
@@ -215,8 +219,9 @@ export async function getPlayerProduction(
     // MIN_GAMES_FOR_RANK so an injured 2-game player can't pad the ranks),
     // then ranked three times.
     let finishStd: number | null = null, finishHalf: number | null = null, finishPpr: number | null = null;
+    let ppgFinishStd: number | null = null, ppgFinishHalf: number | null = null, ppgFinishPpr: number | null = null;
     if (myPos) {
-      const peers: Array<{ pid: string; std: number; half: number; ppr: number }> = [];
+      const peers: Array<{ pid: string; std: number; half: number; ppr: number; games: number }> = [];
       for (const pid of Object.keys(seasonStats)) {
         const peerPos = (allPlayers[pid] as unknown as Record<string, unknown> | undefined)?.position;
         if (peerPos !== myPos) continue;
@@ -225,15 +230,27 @@ export async function getPlayerProduction(
         if (g < MIN_GAMES_FOR_RANK && pid !== playerId) continue;
         const std = pickPoints(row, "std"), half = pickPoints(row, "half_ppr"), ppr = pickPoints(row, "ppr");
         if (std <= 0 && half <= 0 && ppr <= 0 && pid !== playerId) continue;
-        peers.push({ pid, std, half, ppr });
+        peers.push({ pid, std, half, ppr, games: g });
       }
+      // Total-based finish: rank by season total.
       const rankBy = (key: "std" | "half" | "ppr"): number | null => {
         const idx = [...peers].sort((a, b) => b[key] - a[key]).findIndex((x) => x.pid === playerId);
+        return idx >= 0 ? idx + 1 : null;
+      };
+      // PPG-based finish: rank by points-per-game (only peers with games).
+      const ppgRankBy = (key: "std" | "half" | "ppr"): number | null => {
+        const idx = peers
+          .filter((p) => p.games > 0)
+          .sort((a, b) => b[key] / b.games - a[key] / a.games)
+          .findIndex((x) => x.pid === playerId);
         return idx >= 0 ? idx + 1 : null;
       };
       finishStd = rankBy("std");
       finishHalf = rankBy("half");
       finishPpr = rankBy("ppr");
+      ppgFinishStd = ppgRankBy("std");
+      ppgFinishHalf = ppgRankBy("half");
+      ppgFinishPpr = ppgRankBy("ppr");
     }
 
     const ppgOf = (pts: number): number | null => (games > 0 ? Math.round((pts / games) * 10) / 10 : null);
@@ -247,6 +264,9 @@ export async function getPlayerProduction(
       finishStd,
       finishHalf,
       finishPpr,
+      ppgFinishStd,
+      ppgFinishHalf,
+      ppgFinishPpr,
     });
   }
 

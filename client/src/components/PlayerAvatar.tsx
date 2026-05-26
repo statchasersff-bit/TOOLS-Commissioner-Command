@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { cn } from "@/lib/utils";
+import { ResponsivePlayerName } from "@/components/ResponsivePlayerName";
 
 const POS_COLORS: Record<string, string> = {
   QB: "text-rose-400",
@@ -106,9 +107,8 @@ export function PlayerAvatar({
     <div className="flex items-center gap-2.5">
       {circle}
       <div className="min-w-0">
-        <div className={cn("font-bold text-foreground leading-tight truncate", nameSize)}>
-          {name}
-        </div>
+        <ResponsivePlayerName name={name} className={cn("font-bold text-foreground leading-tight", nameSize)} />
+
         <div className={cn("flex items-center gap-1.5 mt-0.5", metaSize)}>
           <span className={cn("font-bold", posColor)}>{pos}</span>
           {team && team !== "FA" && <span className="text-muted-foreground font-medium">{team}</span>}

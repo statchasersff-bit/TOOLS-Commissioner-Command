@@ -17,6 +17,7 @@ import { useLocation } from "wouter";
 import {
   Activity,
   ArrowLeft,
+  ArrowRight,
   ArrowRightLeft,
   BarChart3,
   ChevronDown,
@@ -30,12 +31,14 @@ import {
   Sparkles,
   Star,
   Target,
+  TrendingDown,
   TrendingUp,
   Users,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
+import { ResponsivePlayerName } from "@/components/ResponsivePlayerName";
 import { cn } from "@/lib/utils";
 import { useSleeper } from "@/contexts/SleeperContext";
 import { useValueModel } from "@/contexts/ValueModelContext";
@@ -52,6 +55,10 @@ import {
   type PlayerAdvancedResult,
   type ProductionRow,
   type AdvStatColumn,
+  type RankCard as RankCardData,
+  type RankCategory,
+  type RankTier,
+  type SeasonFinish,
 } from "@/lib/playerAdvancedStats";
 import {
   dynastySnapshot,
@@ -288,7 +295,9 @@ export default function PlayerPage({ params, embedded = false }: { params?: { pl
     [profile, valueModel.dynastyPlayerList],
   );
   const similar = useMemo<SimilarPlayer[]>(
-    () => (profile ? similarPlayers(valueModel.dynastyPlayerList, { id: profile.player.id, name: profile.player.name, pos: profile.player.pos, value: profile.values.dynasty }) : []),
+    // Return up to 7 candidates so the auto-fill grid below can add columns to
+    // fill wide desktop rows instead of stretching a few cards oversized.
+    () => (profile ? similarPlayers(valueModel.dynastyPlayerList, { id: profile.player.id, name: profile.player.name, pos: profile.player.pos, value: profile.values.dynasty }, 7) : []),
     [profile, valueModel.dynastyPlayerList],
   );
 
@@ -318,15 +327,15 @@ export default function PlayerPage({ params, embedded = false }: { params?: { pl
       ) : !profile ? (
         <NotFound playerId={param} onBack={() => setLocation("/")} />
       ) : (
-        <div className="max-w-[1200px] mx-auto px-4 py-5 space-y-5">
+        <div className="max-w-[1200px] mx-auto px-4 sm:px-6 py-5 space-y-5">
           <Hero profile={profile} raw={raw} dynRank={dynRank} />
 
           {/* Tab bar — sticky as a standalone page; static when embedded. */}
           <div className={cn(
-            "-mx-4 px-4 border-b border-border/50",
+            "-mx-4 px-4 sm:-mx-6 sm:px-6 border-b border-border/50",
             !embedded && "sticky top-12 z-20 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/75",
           )}>
-            <div className="flex flex-wrap gap-1">
+            <div className="flex flex-nowrap gap-1 overflow-x-auto scrollbar-hide">
               {TABS.map((t) => {
                 const Icon = t.icon;
                 const active = tab === t.id;
@@ -336,7 +345,7 @@ export default function PlayerPage({ params, embedded = false }: { params?: { pl
                     onClick={() => setTab(t.id)}
                     data-testid={`player-tab-${t.id}`}
                     className={cn(
-                      "relative flex items-center gap-1.5 px-3 py-2.5 text-xs font-semibold whitespace-nowrap transition-colors",
+                      "relative flex flex-shrink-0 items-center gap-1.5 px-3 py-2.5 min-h-[40px] text-xs font-semibold whitespace-nowrap transition-colors",
                       active ? "text-foreground" : "text-muted-foreground hover:text-foreground",
                     )}
                   >
@@ -383,12 +392,16 @@ function Hero({ profile, raw, dynRank }: { profile: PlayerProfile; raw: any; dyn
 
   return (
     <Card className="overflow-hidden p-0">
-      <div className="flex flex-row">
-        <HeroImage id={p.id} name={p.name} pos={p.pos} team={p.team} />
+      <div className="flex flex-row items-stretch">
+        {/* Responsive full-bleed image column: 96px on mobile → 180px on desktop,
+            height follows the card so headshots never distort or dominate. */}
+        <HeroImage id={p.id} name={p.name} pos={p.pos} team={p.team} className="w-24 sm:w-[180px] self-stretch min-h-[128px]" />
         <div className="flex-1 p-4 sm:p-5 min-w-0">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <h1 className="text-2xl font-black tracking-tight text-foreground truncate" data-testid="player-page-name">{p.name}</h1>
+              {/* Wrap to two lines before truncating so "Bijan Robinson" never
+                  becomes "Bijan …" on narrow screens. */}
+              <h1 className="text-xl sm:text-2xl font-black tracking-tight text-foreground leading-[1.1] [overflow-wrap:anywhere] line-clamp-2" data-testid="player-page-name">{p.name}</h1>
               <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
                 <span className="font-bold text-foreground">{p.pos}</span>
                 <span>·</span>
@@ -424,7 +437,7 @@ function HeroImage({ id, name, pos, team, className, initialsClassName, logoClas
   const initials = (name || "?").split(" ").filter(Boolean).map((w) => w[0]).slice(0, 2).join("");
   const showLogo = !!team && team !== "FA" && !logoErr;
   return (
-    <div className={cn("relative w-28 sm:w-[180px] h-[180px] flex-shrink-0 overflow-hidden bg-gradient-to-br from-[#0b3a7a]/25 to-transparent", className)}>
+    <div className={cn("relative flex-shrink-0 overflow-hidden bg-gradient-to-br from-[#0b3a7a]/25 to-transparent", className)}>
       {/* Faint team logo watermark — sits behind the player photo (visible in
           the gradient margins / behind the initials fallback). */}
       {showLogo && (
@@ -534,11 +547,13 @@ function OverviewTab({
         <SectionTitle icon={Users} title="Similar Dynasty Assets" noMargin />
         <div className="h-3" />
         {similar.length ? (
-          // Always one row: as many equal columns as there are cards, so they
-          // never stack on narrow viewports — the cards just get narrower.
+          // Auto-FILL (not auto-fit): tracks are created to fill the row, so
+          // cards stay near the 132px min and the grid adds more columns as the
+          // viewport widens — rather than stretching a few cards larger than the
+          // player hero. Cards wrap to 2–3 per row on narrow viewports.
           <div
             className="grid gap-2 sm:gap-3 mt-3"
-            style={{ gridTemplateColumns: `repeat(${similar.length}, minmax(0, 1fr))` }}
+            style={{ gridTemplateColumns: "repeat(auto-fill, minmax(132px, 1fr))" }}
           >
             {similar.map((s) => (
               <button
@@ -552,12 +567,12 @@ function OverviewTab({
                   name={s.name}
                   pos={s.pos}
                   team={s.team}
-                  className="w-full sm:w-full h-28"
+                  className="w-full aspect-[4/3]"
                   initialsClassName="text-3xl"
                   logoClassName="w-[120%] h-[120%] opacity-30"
                 />
                 <div className="p-2 sm:p-3 min-w-0">
-                  <div className="text-sm font-bold text-foreground truncate">{s.name}</div>
+                  <ResponsivePlayerName name={s.name} className="text-sm font-bold text-foreground" />
                   <div className="text-[11px] text-muted-foreground mt-0.5 truncate">{s.pos} · {s.team || "FA"} · Age {s.age}</div>
                   <div className="text-xs font-bold text-[#d4af37] mt-1 tabular-nums">{fmtValue(s.value)}</div>
                 </div>
@@ -571,13 +586,183 @@ function OverviewTab({
 }
 
 // ── Production ──────────────────────────────────────────────────────────────
+// ── Season-End Finishes ─────────────────────────────────────────────────────
+// Horizontal timeline of PPR positional finishes by season. Reusable for QB/RB/
+// WR/TE. Ranks come from playerAdvancedStats (PPG-gated + total); this is pure
+// presentation, including the per-position finish tiers used for card color.
+type FinishTier = "elite" | "starter" | "usable" | "depth" | "poor";
+
+function finishTier(pos: string, rank: number): FinishTier {
+  const p = pos.toUpperCase();
+  if (p === "QB") return rank <= 6 ? "elite" : rank <= 12 ? "starter" : rank <= 18 ? "usable" : rank <= 24 ? "depth" : "poor";
+  if (p === "TE") return rank <= 3 ? "elite" : rank <= 6 ? "starter" : rank <= 12 ? "usable" : rank <= 18 ? "depth" : "poor";
+  return rank <= 12 ? "elite" : rank <= 24 ? "starter" : rank <= 36 ? "usable" : rank <= 48 ? "depth" : "poor"; // RB/WR
+}
+
+// Same tool gradient as the rank snapshot: emerald → white → gold → orange → rose.
+const FINISH_TIER_STYLE: Record<FinishTier, { text: string; chip: string; label: string }> = {
+  elite:   { text: "text-emerald-600 dark-any:text-emerald-400", chip: "bg-emerald-500/10 text-emerald-600 dark-any:text-emerald-400", label: "Elite" },
+  starter: { text: "text-foreground",                            chip: "bg-foreground/10 text-foreground",                              label: "Starter" },
+  usable:  { text: "text-[#d4af37]",                             chip: "bg-[#d4af37]/15 text-[#d4af37]",                                label: "Usable" },
+  depth:   { text: "text-orange-600 dark-any:text-orange-400",   chip: "bg-orange-500/10 text-orange-600 dark-any:text-orange-400",    label: "Depth" },
+  poor:    { text: "text-rose-600 dark-any:text-rose-400",       chip: "bg-rose-500/10 text-rose-600 dark-any:text-rose-400",          label: "Poor" },
+};
+
+function SeasonFinishesTimeline({ finishes, pos }: { finishes: SeasonFinish[]; pos: string }) {
+  const [mode, setMode] = useState<"ppg" | "total">("ppg");
+  if (!finishes.length) return null;
+
+  const rankOf = (f: SeasonFinish) => (mode === "ppg" ? f.ppgRank : f.totalRank);
+  const ordered = finishes; // already chronological ascending
+
+  // Summary: best finish (lowest rank) + season-over-season movement.
+  const best = ordered.reduce((b, f) => (rankOf(f) < rankOf(b) ? f : b), ordered[0]);
+  const last = ordered[ordered.length - 1];
+  const prev = ordered.length >= 2 ? ordered[ordered.length - 2] : null;
+  let movement: { dir: "up" | "down" | "flat"; text: string } | null = null;
+  if (prev) {
+    const a = rankOf(prev), z = rankOf(last);
+    const verb = z < a ? "Improved" : z > a ? "Declined" : "Held steady";
+    const dir = z < a ? "up" : z > a ? "down" : "flat";
+    movement = dir === "flat"
+      ? { dir, text: `Held steady at ${pos}${z} from ${prev.season} to ${last.season}` }
+      : { dir, text: `${verb} from ${pos}${a} (${prev.season}) to ${pos}${z} (${last.season})` };
+  }
+
+  return (
+    <Card className="p-4 sm:p-5">
+      {/* Header + mode toggle */}
+      <div className="flex items-start justify-between gap-3 mb-3">
+        <div>
+          <h3 className="text-base font-black text-foreground flex items-center gap-2">
+            <BarChart3 className="w-4 h-4 text-[#d4af37]" /> Season-End Finishes
+          </h3>
+          <p className="text-[11px] text-muted-foreground mt-1">PPR positional finishes by season.</p>
+        </div>
+        <div className="flex items-center gap-0.5 p-0.5 rounded-full border border-border bg-muted/30 flex-shrink-0">
+          {(["ppg", "total"] as const).map((m) => (
+            <button
+              key={m}
+              onClick={() => setMode(m)}
+              data-testid={`finish-mode-${m}`}
+              className={cn(
+                "text-[10px] font-bold uppercase tracking-wide px-2.5 py-1 rounded-full transition-colors",
+                mode === m ? "bg-[var(--sc-blue)] text-white dark-any:bg-[#d4af37]/20 dark-any:text-[#d4af37]" : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {m === "ppg" ? "PPG Finish" : "Total Finish"}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Summary */}
+      <div className="space-y-1 mb-4 text-[11px]">
+        <div className="font-semibold text-foreground">
+          Best finish: <span className={FINISH_TIER_STYLE[finishTier(pos, rankOf(best))].text}>{pos}{rankOf(best)}</span> in {best.season} · {best.pprPpg} PPG
+        </div>
+        {movement && (
+          <div className="flex items-center gap-1 text-muted-foreground">
+            {movement.dir === "up" ? <TrendingUp className="w-3 h-3 text-emerald-500" />
+              : movement.dir === "down" ? <TrendingDown className="w-3 h-3 text-rose-500" />
+              : <ArrowRight className="w-3 h-3" />}
+            {movement.text}
+          </div>
+        )}
+      </div>
+
+      {/* Timeline (horizontally scrollable) */}
+      <div className="overflow-x-auto -mx-1 px-1" style={{ WebkitOverflowScrolling: "touch" }}>
+        <div className="flex items-stretch gap-1.5 min-w-min py-1">
+          {ordered.map((f, i) => {
+            const rank = rankOf(f);
+            const tier = finishTier(pos, rank);
+            const style = FINISH_TIER_STYLE[tier];
+            const next = ordered[i + 1];
+            // Arrow direction reflects progression into the NEXT season.
+            const arrowDir = next ? (rankOf(next) < rank ? "up" : rankOf(next) > rank ? "down" : "flat") : null;
+            return (
+              <Fragment key={f.season}>
+                <div
+                  data-testid={`finish-card-${f.season}`}
+                  className={cn(
+                    "flex-shrink-0 rounded-2xl border flex flex-col items-center text-center transition-all",
+                    f.isCurrentSeason
+                      ? "w-[124px] p-3.5 border-[#d4af37] bg-[#d4af37]/[0.06] ring-1 ring-[#d4af37]/40 shadow-[0_6px_20px_rgba(212,175,55,0.18)] -translate-y-0.5"
+                      : "w-[108px] p-3 border-border bg-card",
+                  )}
+                >
+                  <div className="flex items-center gap-1 h-4">
+                    <span className="text-[10px] font-bold tabular-nums text-muted-foreground">{f.season}</span>
+                    {f.isCurrentSeason && (
+                      <span className="text-[7px] font-black uppercase tracking-wider px-1 py-0.5 rounded bg-[#d4af37] text-[#0b1f3a]">Now</span>
+                    )}
+                  </div>
+                  <div className={cn("font-black tabular-nums leading-none mt-1.5", f.isCurrentSeason ? "text-[26px]" : "text-[22px]", style.text)}>
+                    {pos}{rank}
+                  </div>
+                  <div className="text-[11px] font-bold tabular-nums text-foreground mt-1">{f.pprPpg} <span className="text-[9px] font-medium text-muted-foreground">PPG</span></div>
+                  <div className={cn("mt-1.5 text-[8px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full", style.chip)}>{style.label}</div>
+                </div>
+                {next && (
+                  <div className="flex items-center flex-shrink-0">
+                    <ArrowRight className={cn(
+                      "w-4 h-4",
+                      arrowDir === "up" ? "text-emerald-500" : arrowDir === "down" ? "text-rose-500" : "text-muted-foreground/50",
+                    )} />
+                  </div>
+                )}
+              </Fragment>
+            );
+          })}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
 function ProductionTab({ playerId, production, loading, pos }: { playerId: string | null; production: ProductionRow[] | null; loading: boolean; pos: string }) {
   const rows = production ?? [];
   const ppgVals = rows.filter((r) => r.ppgStd != null);
   const ppg = (v: number | null) => (v != null ? v.toFixed(1) : "—");
   const fin = (v: number | null) => (v != null ? `${pos}${v}` : "—");
+
+  // Season-End Finishes timeline — built from the full-career production data so
+  // EVERY ranked season shows, not just the last three. PPG mode uses the
+  // server's ppgFinishPpr; rows lacking it fall back to the total finish.
+  const seasonFinishes = useMemo<SeasonFinish[]>(() => {
+    const r = production ?? [];
+    const ranked = r.filter((x) => x.finishPpr != null && x.ppgPpr != null && (x.games ?? 0) > 0);
+    if (!ranked.length) return [];
+    const currentSeason = Math.max(...ranked.map((x) => Number(x.season)));
+    return ranked
+      .map((x) => {
+        const season = Number(x.season);
+        const games = x.games ?? 0;
+        const ppgPpr = x.ppgPpr as number;
+        return {
+          season,
+          position: pos as SeasonFinish["position"],
+          pprPoints: Math.round(ppgPpr * games * 10) / 10,
+          games,
+          pprPpg: ppgPpr,
+          totalRank: x.finishPpr as number,
+          ppgRank: (x.ppgFinishPpr ?? x.finishPpr) as number,
+          isCurrentSeason: season === currentSeason,
+        };
+      })
+      .sort((a, b) => a.season - b.season);
+  }, [production, pos]);
+
   return (
     <div className="space-y-6">
+      {/* Season-End Finishes timeline — all ranked seasons. */}
+      {loading && !production ? (
+        <Card className="p-4 sm:p-5"><SkeletonLines n={3} /></Card>
+      ) : seasonFinishes.length > 0 ? (
+        <SeasonFinishesTimeline finishes={seasonFinishes} pos={pos} />
+      ) : null}
+
       {loading && !production ? (
         <Card className="p-5"><SkeletonLines n={6} /></Card>
       ) : !rows.length ? (
@@ -745,6 +930,103 @@ function PpgChart({ rows }: { rows: { season: string; ppg: number | null }[] }) 
   );
 }
 
+// ── 2025 Player Rank Snapshot ──────────────────────────────────────────────────
+// Per-stat positional rankings (2025 only) shown as color-coded cards with a
+// percentile bar and the players ranked just better/worse. Data + ranking come
+// from playerAdvancedStats (buildRankCards); this is pure presentation.
+// Tiers use the tool's established quality gradient (same as the ADP
+// availability legend / scoreColor): emerald → white → gold → orange → rose.
+const RANK_TIER_STYLE: Record<RankTier, { text: string; bar: string; hover: string }> = {
+  elite:   { text: "text-emerald-600 dark-any:text-emerald-400", bar: "bg-emerald-500", hover: "hover:border-emerald-500/40" },
+  great:   { text: "text-foreground",                            bar: "bg-foreground",  hover: "hover:border-foreground/30" },
+  solid:   { text: "text-[#d4af37]",                             bar: "bg-[#d4af37]",   hover: "hover:border-[#d4af37]/45" },
+  average: { text: "text-orange-600 dark-any:text-orange-400",   bar: "bg-orange-500",  hover: "hover:border-orange-500/40" },
+  poor:    { text: "text-rose-600 dark-any:text-rose-400",       bar: "bg-rose-500",    hover: "hover:border-rose-500/40" },
+};
+
+const RANK_CATEGORY_LABEL: Record<"overview" | RankCategory, string> = {
+  overview: "Overview", production: "Production", usage: "Usage", efficiency: "Efficiency", advanced: "Advanced",
+};
+
+function RankSnapshotCard({ card }: { card: RankCardData }) {
+  const s = RANK_TIER_STYLE[card.tier];
+  // "Top X%" = where the player's rank falls within the position field.
+  const topPct = Math.max(1, Math.round((card.rank / card.total) * 100));
+  return (
+    <div
+      className={cn(
+        "rounded-xl border border-border bg-card p-3.5 flex flex-col transition-all duration-200",
+        "hover:-translate-y-0.5 hover:shadow-[0_8px_24px_rgba(0,0,0,0.10)] dark-any:hover:shadow-[0_8px_24px_rgba(0,0,0,0.35)]",
+        s.hover,
+      )}
+      data-testid={`rank-card-${card.key}`}
+    >
+      <div className="flex items-baseline justify-between gap-1">
+        <span className={cn("text-[26px] font-black leading-none tabular-nums", s.text)}>#{card.rank}</span>
+        <span className="text-[15px] font-black tabular-nums text-foreground">{card.value}</span>
+      </div>
+      <div className="text-[10px] mt-1">
+        <span className={cn("font-bold", s.text)}>Top {topPct}%</span>
+        <span className="text-muted-foreground"> · of {card.total} {card.position}s</span>
+      </div>
+      <div className="text-[11px] font-bold text-foreground mt-2.5 leading-tight">{card.label}</div>
+      <div className="mt-2 h-1.5 rounded-full bg-muted/50 dark-any:bg-white/8 overflow-hidden">
+        <div className={cn("h-full rounded-full transition-all duration-500", s.bar)} style={{ width: `${card.percentile}%` }} />
+      </div>
+      <div className="mt-2.5 space-y-0.5 text-[10px] text-muted-foreground leading-snug">
+        {card.behindPlayer && <div className="truncate"><span className="text-muted-foreground/60">Behind:</span> {card.behindPlayer}</div>}
+        {card.aheadPlayer && <div className="truncate"><span className="text-muted-foreground/60">Ahead of:</span> {card.aheadPlayer}</div>}
+      </div>
+    </div>
+  );
+}
+
+function PlayerRankSnapshot({ cards, pos }: { cards: RankCardData[]; pos: string }) {
+  const categories = useMemo(() => {
+    const present = new Set(cards.map((c) => c.category));
+    return (["production", "usage", "efficiency", "advanced"] as RankCategory[]).filter((c) => present.has(c));
+  }, [cards]);
+  const [active, setActive] = useState<"overview" | RankCategory>("overview");
+  const tabs: ("overview" | RankCategory)[] = ["overview", ...categories];
+  const visible = active === "overview" ? cards.filter((c) => c.overview) : cards.filter((c) => c.category === active);
+
+  return (
+    <Card className="p-4 sm:p-5">
+      <div className="mb-3">
+        <h3 className="text-base font-black text-foreground flex items-center gap-2">
+          <BarChart3 className="w-4 h-4 text-[#d4af37]" /> 2025 Player Rank Snapshot
+        </h3>
+        <p className="text-[11px] text-muted-foreground mt-1">
+          How this {pos} ranks among qualifying {pos}s in 2025.
+        </p>
+      </div>
+      <div className="flex flex-wrap gap-1.5 mb-4">
+        {tabs.map((t) => {
+          const isActive = active === t;
+          return (
+            <button
+              key={t}
+              onClick={() => setActive(t)}
+              data-testid={`rank-tab-${t}`}
+              className={cn(
+                "text-[11px] font-bold px-3 py-1 rounded-full border transition-colors",
+                isActive
+                  ? "bg-[var(--sc-blue)] text-white border-[var(--sc-blue)] dark-any:bg-[#d4af37]/15 dark-any:text-[#d4af37] dark-any:border-[#d4af37]/35"
+                  : "bg-transparent text-muted-foreground border-border hover:text-foreground hover:border-foreground/30",
+              )}
+            >
+              {RANK_CATEGORY_LABEL[t]}
+            </button>
+          );
+        })}
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5 sm:gap-3">
+        {visible.map((c) => <RankSnapshotCard key={c.key} card={c} />)}
+      </div>
+    </Card>
+  );
+}
+
 // ── Advanced Stats ────────────────────────────────────────────────────────────
 function AdvancedTab({ adv, advLoading, pos }: { adv: PlayerAdvancedResult | null; advLoading: boolean; pos: string }) {
   const [showRaw, setShowRaw] = useState(false);
@@ -756,25 +1038,37 @@ function AdvancedTab({ adv, advLoading, pos }: { adv: PlayerAdvancedResult | nul
   const latest = adv.latest;
   return (
     <div className="space-y-4">
-      <div className="text-[11px] text-muted-foreground">Based on {latest.season} season · ranked among qualifying {pos}s</div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {composites.map((c) => (
-          <Card key={c.label} className="p-4">
-            <div className="flex items-start justify-between gap-2">
-              <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{c.label}</div>
-              <div className={cn("text-2xl font-black tabular-nums leading-none", scoreColor(c.score))}>{c.score ?? "—"}</div>
-            </div>
-            {c.percentile != null && c.rank != null && c.total != null ? (
-              <div className="mt-1.5 text-[11px] font-semibold text-foreground/70">
-                Top {c.percentile}% · {pos}{c.rank} of {c.total}
+      {adv.rankCards.length > 0 && <PlayerRankSnapshot cards={adv.rankCards} pos={pos} />}
+
+      {/* StatChasers Composite Scores — 0–100 role grades with what each measures. */}
+      <Card className="p-4 sm:p-5">
+        <div className="mb-3">
+          <h3 className="text-base font-black text-foreground flex items-center gap-2">
+            <Layers className="w-4 h-4 text-[#d4af37]" /> StatChasers Composite Scores for {latest.season}
+          </h3>
+          <p className="text-[11px] text-muted-foreground mt-1">
+            0–100 grades that blend the stats most relevant to each role, then rank the player against qualifying {pos}s. Higher is better.
+          </p>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3">
+          {composites.map((c) => (
+            <div key={c.label} className="rounded-xl border border-border bg-card p-4">
+              <div className="flex items-start justify-between gap-2">
+                <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{c.label}</div>
+                <div className={cn("text-2xl font-black tabular-nums leading-none", scoreColor(c.score))}>{c.score ?? "—"}</div>
               </div>
-            ) : (
-              <div className="mt-1.5 text-[11px] text-muted-foreground/60">Not enough data</div>
-            )}
-            <div className="mt-2 text-[11px] text-muted-foreground leading-snug">{c.explanation}</div>
-          </Card>
-        ))}
-      </div>
+              {c.percentile != null && c.rank != null && c.total != null ? (
+                <div className="mt-1.5 text-[11px] font-semibold text-foreground/70">
+                  Top {c.percentile}% · {pos}{c.rank} of {c.total}
+                </div>
+              ) : (
+                <div className="mt-1.5 text-[11px] text-muted-foreground/60">Not enough data</div>
+              )}
+              <div className="mt-2 text-[11px] text-muted-foreground leading-snug">{c.explanation}</div>
+            </div>
+          ))}
+        </div>
+      </Card>
 
       {/* Raw advanced stats table (collapsible) */}
       <Card className="p-0 overflow-hidden">
@@ -928,6 +1222,26 @@ function AdpTab({ history, avail, loading, error, pos, filters, onFiltersChange 
   const expectedPickNo = avail?.expectedPick != null ? Math.round(avail.expectedPick) : null;
   const fmtSlot = (pickNo: number) => `${Math.ceil(pickNo / teams)}.${String(((pickNo - 1) % teams) + 1).padStart(2, "0")}`;
 
+  // Trim trailing all-zero rounds so an early-round player shows one tidy round
+  // instead of R2–R6 full of 0%. Columns (picks 1..teams) are always kept.
+  const allRounds = Array.from(cellsByRound.keys()).sort((a, z) => a - z);
+  let lastNonZeroIdx = -1;
+  allRounds.forEach((round, idx) => {
+    if ((cellsByRound.get(round) ?? []).some((c) => c.availabilityPct > 0)) lastNonZeroIdx = idx;
+  });
+  const shownRounds = lastNonZeroIdx === -1 ? [] : allRounds.slice(0, lastNonZeroIdx + 1);
+
+  // Summary context: availability at the expected pick + last pick with a
+  // meaningful (≥10%) chance the player is still on the board.
+  const expectedAvailability = expectedPickNo != null && avail
+    ? (avail.cells.find((c) => c.pickNo === expectedPickNo)?.availabilityPct ?? null)
+    : null;
+  let lastMeaningful: PlayerAdpAvailabilityCell | null = null;
+  if (avail) for (const c of avail.cells) {
+    if (c.availabilityPct >= 10 && (!lastMeaningful || c.pickNo > lastMeaningful.pickNo)) lastMeaningful = c;
+  }
+  const showHeatmap = hasAvail && shownRounds.length > 0;
+
   return (
     <div className="space-y-5">
       {/* Filters apply to both the ADP Over Time trend and the per-pick grid. */}
@@ -971,68 +1285,88 @@ function AdpTab({ history, avail, loading, error, pos, filters, onFiltersChange 
         )}
       </Card>
 
-      {/* P(available) by pick */}
-      <Card className="p-5">
-        <SectionTitle icon={Target} title="Chance of Getting This Player by Pick" />
-        {hasAvail ? (
-          <>
-            <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-[11px] text-muted-foreground mb-3">
-              <span>Expected pick <span className="font-bold text-foreground tabular-nums">{expectedPickNo != null ? fmtSlot(expectedPickNo) : "—"}</span></span>
-              <span>Seen in <span className="font-bold text-foreground tabular-nums">{avail!.draftsWithPlayer.toLocaleString()}</span> / {avail!.totalDrafts.toLocaleString()} drafts</span>
-              <span className="ml-auto">{teams}-team · % available when each pick is on the clock</span>
+      {/* Draft Availability Heatmap — only render when there's a non-zero round. */}
+      {showHeatmap && (
+      <Card className="p-4 sm:p-5">
+        {/* Header */}
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h3 className="text-base font-black text-foreground flex items-center gap-2">
+              <Target className="w-4 h-4 text-[#d4af37]" /> Draft Availability Heatmap
+            </h3>
+            <p className="text-[11px] text-muted-foreground mt-1">
+              Percent chance this player is still available when each pick is on the clock.
+            </p>
+          </div>
+          <div className="text-[10px] text-muted-foreground text-right whitespace-nowrap flex-shrink-0 pt-0.5">
+            {teams}-team · Seen in{" "}
+            <span className="font-bold text-foreground tabular-nums">{avail!.draftsWithPlayer.toLocaleString()}</span>
+            {" "}/ {avail!.totalDrafts.toLocaleString()} drafts
+          </div>
+        </div>
+
+        {/* Two-column: summary pills (left) · heatmap (right) */}
+        <div className="grid gap-5 mt-4 lg:grid-cols-[210px_minmax(0,1fr)] lg:gap-7 items-start">
+          <div className="grid grid-cols-3 gap-2.5 lg:grid-cols-1">
+            <MetricCard label="Expected Pick" value={expectedPickNo != null ? fmtSlot(expectedPickNo) : "—"} accent />
+            {expectedAvailability != null && (
+              <MetricCard label={`Available at ${expectedPickNo != null ? fmtSlot(expectedPickNo) : "—"}`} value={`${Math.round(expectedAvailability)}%`} />
+            )}
+            {lastMeaningful && (
+              <MetricCard label="10%+ Chance Until" value={fmtSlot(lastMeaningful.pickNo)} />
+            )}
+          </div>
+
+          {/* Heatmap — fills the column on desktop, scrolls horizontally on mobile. */}
+          <div className="overflow-x-auto pb-1.5" style={{ WebkitOverflowScrolling: "touch" }}>
+            <div className="min-w-[560px] space-y-2">
+              {/* Heading row */}
+              <div className="grid gap-2 items-center" style={{ gridTemplateColumns: `2.25rem repeat(${teams}, minmax(0, 1fr))` }}>
+                <div className="text-[10px] font-bold text-muted-foreground text-center">Rd</div>
+                {Array.from({ length: teams }, (_, i) => (
+                  <div key={i} className="text-[10px] font-bold text-muted-foreground text-center tabular-nums">{i + 1}</div>
+                ))}
+              </div>
+              {/* Round rows */}
+              {shownRounds.map((round) => {
+                const row = cellsByRound.get(round) ?? [];
+                return (
+                  <div key={round} className="grid gap-2 items-center" style={{ gridTemplateColumns: `2.25rem repeat(${teams}, minmax(0, 1fr))` }}>
+                    <div className="text-[10px] font-bold text-muted-foreground text-center">R{round}</div>
+                    {Array.from({ length: teams }, (_, i) => {
+                      const cell = row.find((c) => c.pickInRound === i + 1);
+                      if (!cell) return <div key={i} className="h-9 md:h-11" />;
+                      const isExpected = expectedPickNo != null && cell.pickNo === expectedPickNo;
+                      return (
+                        <div
+                          key={i}
+                          className={cn(
+                            "h-9 md:h-11 rounded-lg flex items-center justify-center text-[12px] md:text-[13px] font-extrabold tabular-nums",
+                            availabilityClass(cell.availabilityPct),
+                            isExpected && "ring-2 ring-[#d4af37] ring-offset-1 ring-offset-card !text-[#d4af37]",
+                          )}
+                          title={`Pick ${fmtSlot(cell.pickNo)} · ${cell.availabilityPct.toFixed(1)}% available`}
+                        >
+                          {Math.round(cell.availabilityPct)}
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })}
             </div>
-            <div className="overflow-x-auto">
-              <table className="border-separate" style={{ borderSpacing: "3px" }}>
-                <thead>
-                  <tr className="text-[10px] text-muted-foreground">
-                    <th className="px-1 py-0.5 text-left font-semibold sticky left-0 bg-background z-10">Rd</th>
-                    {Array.from({ length: teams }, (_, i) => (
-                      <th key={i} className="px-1 py-0.5 text-center font-semibold tabular-nums w-9">{i + 1}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {Array.from(cellsByRound.keys()).sort((a, z) => a - z).map((round) => {
-                    const row = cellsByRound.get(round) ?? [];
-                    return (
-                      <tr key={round}>
-                        <td className="px-1 py-0.5 text-[10px] font-semibold text-muted-foreground sticky left-0 bg-background z-10">R{round}</td>
-                        {Array.from({ length: teams }, (_, i) => {
-                          const cell = row.find((c) => c.pickInRound === i + 1);
-                          if (!cell) return <td key={i} />;
-                          const isExpected = expectedPickNo != null && cell.pickNo === expectedPickNo;
-                          return (
-                            <td key={i} className="p-0">
-                              <div
-                                className={cn(
-                                  "rounded-[3px] h-8 w-9 flex items-center justify-center text-[11px] font-bold tabular-nums",
-                                  availabilityClass(cell.availabilityPct),
-                                  isExpected && "ring-2 ring-[#d4af37]",
-                                )}
-                                title={`Pick ${fmtSlot(cell.pickNo)} · ${cell.availabilityPct.toFixed(1)}% available`}
-                              >
-                                {Math.round(cell.availabilityPct)}
-                              </div>
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-            <div className="flex flex-wrap items-center gap-3 mt-3 text-[10px] text-muted-foreground">
-              <span>Likelihood still on the board:</span>
-              {[["<10%", "bg-rose-500/40"], ["10–30%", "bg-orange-500/40"], ["30–60%", "bg-[#d4af37]/50"], ["60–85%", "bg-teal-500/40"], ["85%+", "bg-emerald-500/40"]].map(([label, cls]) => (
-                <span key={label} className="flex items-center gap-1"><span className={cn("w-2.5 h-2.5 rounded-sm", cls)} />{label}</span>
-              ))}
-            </div>
-          </>
-        ) : (
-          <EmptyLine text="No per-pick availability data for the current filters." />
-        )}
+          </div>
+        </div>
+
+        {/* Legend */}
+        <div className="flex flex-wrap items-center gap-3 mt-4 text-[10px] text-muted-foreground">
+          <span>Likelihood still on the board:</span>
+          {[["<10%", "bg-rose-500/40"], ["10–30%", "bg-orange-500/40"], ["30–60%", "bg-[#d4af37]/50"], ["60–85%", "bg-teal-500/40"], ["85%+", "bg-emerald-500/40"]].map(([label, cls]) => (
+            <span key={label} className="flex items-center gap-1"><span className={cn("w-2.5 h-2.5 rounded-sm", cls)} />{label}</span>
+          ))}
+        </div>
       </Card>
+      )}
       </div>
       )}
     </div>

@@ -138,7 +138,8 @@ export function buildStarterFloors(
 ): Record<Slot, { player_id: string; proj: number } | null> {
   const floors: Record<Slot, { player_id: string; proj: number } | null> = {
     QB: null, RB: null, WR: null, TE: null, K: null, DEF: null,
-    FLEX: null, SUPER_FLEX: null, BN: null,
+    FLEX: null, SUPER_FLEX: null, REC_FLEX: null, WRRB_FLEX: null,
+    IDP_FLEX: null, DL: null, LB: null, DB: null, BN: null,
   };
 
   for (const s of starters) {

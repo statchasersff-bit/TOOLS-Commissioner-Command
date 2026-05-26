@@ -5,15 +5,15 @@
 
 export type Position = 'QB' | 'RB' | 'WR' | 'TE' | 'K' | 'DEF' | 'DL' | 'LB' | 'DB';
 export type Slot = 'QB' | 'RB' | 'WR' | 'TE' | 'FLEX' | 'SUPER_FLEX' | 'K' | 'DEF' |
-                   'REC_FLEX' | 'IDP_FLEX' | 'DL' | 'LB' | 'DB' | 'BN';
+                   'REC_FLEX' | 'WRRB_FLEX' | 'IDP_FLEX' | 'DL' | 'LB' | 'DB' | 'BN';
 
 /**
  * Maps each position to the slots it can legally fill.
  */
 const SLOT_RULES: Record<string, Slot[]> = {
   QB:  ['QB', 'SUPER_FLEX'],
-  RB:  ['RB', 'FLEX', 'SUPER_FLEX', 'REC_FLEX'],
-  WR:  ['WR', 'FLEX', 'SUPER_FLEX', 'REC_FLEX'],
+  RB:  ['RB', 'FLEX', 'SUPER_FLEX', 'WRRB_FLEX'],
+  WR:  ['WR', 'FLEX', 'SUPER_FLEX', 'REC_FLEX', 'WRRB_FLEX'],
   TE:  ['TE', 'FLEX', 'SUPER_FLEX', 'REC_FLEX'],
   K:   ['K'],
   DEF: ['DEF'],
@@ -56,7 +56,7 @@ export function getEligibleSlots(pos: string): Slot[] {
  * Check if a slot is a flex-type slot (can accept multiple positions).
  */
 export function isFlexSlot(slot: string): boolean {
-  return ['FLEX', 'SUPER_FLEX', 'REC_FLEX', 'IDP_FLEX'].includes(slot);
+  return ['FLEX', 'SUPER_FLEX', 'REC_FLEX', 'WRRB_FLEX', 'IDP_FLEX'].includes(slot);
 }
 
 /**
@@ -66,7 +66,7 @@ export function isFlexSlot(slot: string): boolean {
 export function findBestSlot(pos: string, availableSlots: string[]): string | null {
   const eligibleSlots = getEligibleSlots(pos);
   const slotPriority: Slot[] = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF', 'DL', 'LB', 'DB',
-                                 'REC_FLEX', 'FLEX', 'SUPER_FLEX', 'IDP_FLEX'];
+                                 'REC_FLEX', 'WRRB_FLEX', 'FLEX', 'SUPER_FLEX', 'IDP_FLEX'];
   for (const slot of slotPriority) {
     if (eligibleSlots.includes(slot) && availableSlots.includes(slot)) return slot;
   }

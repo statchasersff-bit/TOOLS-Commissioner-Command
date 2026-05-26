@@ -20,6 +20,8 @@ import { proposeTrade as proposeTradeAuthed, rejectTrade, firePostTradeLinkDm, t
 import { FeatureDisabledError } from "@/components/FeatureDisabledDialog";
 import type { League, Team, Tier, Player, Pick, TradeRecord, TradeSide, CrawlStatus } from "@/types";
 import { cn } from "@/lib/utils";
+import { scAuthFetch } from "@/lib/scAuthFetch";
+import { SiDiscord } from "react-icons/si";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { TradeBlockCandidates } from "@/components/trade/TradeBlockCandidates";
 import { ArrowRightLeft, TrendingUp, TrendingDown, Target, X, Plus, Search, Scale, RotateCcw, Database, Play, Pause, Loader2, ChevronLeft, ChevronRight, ChevronDown, Download, Tag, Clock, ArrowRight, Send, CheckCircle2, DollarSign, Undo2, Globe, Trophy } from "lucide-react";
@@ -3329,6 +3331,73 @@ export function TradeDatabase({ league }: { league: League }) {
   );
 }
 
+// Posts the trade to Discord as a native poll via the backend (token stays
+// server-side). Only renders for 2-side trades with assets on both sides — an
+// A-vs-B poll needs exactly two contestants.
+function ShareTradeToDiscordButton({ trade }: { trade: TradeRecord }) {
+  const { toast } = useToast();
+  const [sharing, setSharing] = useState(false);
+  const inFlight = useRef(false);
+
+  if (trade.sides.length !== 2) return null;
+  const [a, b] = trade.sides;
+  const assetsOf = (s: TradeSide): string[] => [
+    ...s.playersReceived.map((p) => `${p.name} (${p.pos})`),
+    ...s.picksReceived.map(
+      (p) => `${p.season} Round ${p.round}${p.slot ? `.${String(p.slot).padStart(2, "0")}` : ""}`,
+    ),
+  ];
+  const aReceives = assetsOf(a);
+  const bReceives = assetsOf(b);
+  if (!aReceives.length || !bReceives.length) return null;
+
+  const onShare = async () => {
+    if (inFlight.current) return; // guard rapid double-clicks
+    inFlight.current = true;
+    setSharing(true);
+    try {
+      const fmt = [trade.leagueFormat, trade.leagueScoringFormat, `${trade.leagueTotalRosters}-team`]
+        .filter(Boolean)
+        .join(" · ");
+      const res = await scAuthFetch("/api/discord/share-trade-poll", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          leagueName: trade.leagueName ?? "",
+          leagueFormat: fmt,
+          sideA: { label: a.teamName || a.ownerName || "Side A", receives: aReceives },
+          sideB: { label: b.teamName || b.ownerName || "Side B", receives: bReceives },
+        }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      toast({ title: "Trade poll shared to Discord." });
+    } catch {
+      toast({ title: "Could not share trade poll. Please try again.", variant: "destructive" });
+    } finally {
+      inFlight.current = false;
+      setSharing(false);
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={onShare}
+      disabled={sharing}
+      data-testid={`share-discord-${trade.tradeId}`}
+      title="Share to Discord Poll"
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[10px] font-semibold transition-colors flex-shrink-0",
+        "border border-[#5865F2]/40 text-[#5865F2] hover:bg-[#5865F2]/10",
+        "disabled:opacity-60 disabled:cursor-not-allowed",
+      )}
+    >
+      {sharing ? <Loader2 className="w-3 h-3 animate-spin" /> : <SiDiscord className="w-3 h-3" />}
+      {sharing ? "Sharing..." : "Share to Discord Poll"}
+    </button>
+  );
+}
+
 function TradeCard({
   trade,
   getPlayerValue,
@@ -3570,14 +3639,22 @@ function TradeCard({
         </div>
       </div>
 
-      {trade.leagueName && (
-        <p
-          className="px-3 pb-1.5 text-[10px] text-muted-foreground/60 truncate"
-          data-testid={`trade-league-name-${trade.tradeId}`}
-        >
-          {trade.leagueName}
-        </p>
-      )}
+      {/* Footer: league name (left) + Share to Discord Poll action (right). */}
+      <div className="flex items-center gap-2 px-3 pb-1.5 pt-0.5">
+        {trade.leagueName ? (
+          <p
+            className="text-[10px] text-muted-foreground/60 truncate min-w-0"
+            data-testid={`trade-league-name-${trade.tradeId}`}
+          >
+            {trade.leagueName}
+          </p>
+        ) : (
+          <span className="min-w-0 flex-1" />
+        )}
+        <div className="ml-auto flex-shrink-0">
+          <ShareTradeToDiscordButton trade={trade} />
+        </div>
+      </div>
     </Card>
   );
 }

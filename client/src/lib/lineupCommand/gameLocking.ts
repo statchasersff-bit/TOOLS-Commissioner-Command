@@ -86,22 +86,7 @@ export function isPlayerLocked(
   
   // Priority 3: Team's game has started (schedule-based fallback)
   const teamLocked = hasGameStarted(player.team, schedule, nowUtc) || isTeamOnBye(player.team, schedule);
-  
-  // DEBUG: Log lock decisions for specific players
-  const debugPlayers = ['Josh Downs', 'Davis Mills'];
-  if (player.name && debugPlayers.some(name => player.name?.includes(name))) {
-    const pts = actualPoints && player.player_id ? actualPoints[player.player_id] : undefined;
-    const played = playedPlayerIds && player.player_id ? playedPlayerIds[player.player_id] : false;
-    console.log(`[LockDebug] ${player.name} (${player.team}):`, {
-      played,
-      actualPoints: pts,
-      teamLocked,
-      scheduleSize: Object.keys(schedule).length,
-      teamInSchedule: player.team ? (player.team in schedule) : false,
-      finalLocked: teamLocked
-    });
-  }
-  
+
   return teamLocked;
 }
 

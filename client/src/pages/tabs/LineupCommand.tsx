@@ -17,22 +17,21 @@ import { OptimizeAllModal } from "@/components/OptimizeAllModal";
 import { toast } from "@/hooks/use-toast";
 import { StartSitCompareTab } from "@/components/start-sit/StartSitCompareTab";
 import type { SleeperLeagueSummary } from "@/types";
+// ── Lineup Command engine (framework-agnostic optimizer) ──────────────────────
+import {
+  buildSlotCounts, toPlayerLite, statusFlags, optimizeLineup, sumProj,
+  buildBenchRecommendations,
+} from "@/lib/lineupCommand/optimizer";
+import type { EnrichedPlayer, RosterSlot } from "@/lib/lineupCommand/types";
+import {
+  getWeekSchedule, isPlayerLocked, isTeamOnBye, type GameSchedule,
+} from "@/lib/lineupCommand/gameLocking";
+import { getLeagueMatchupsForLocking } from "@/lib/lineupCommand/sleeper";
+import { calculateWinProbability } from "@/lib/lineupCommand/winProbability";
 
 const SLEEPER_API = "https://api.sleeper.app/v1";
 
-// ─── Slot eligibility (mirrors FieldView) ────────────────────────────────────
-const SLOT_ELIGIBILITY: Record<string, string[]> = {
-  QB:         ["QB"],
-  RB:         ["RB"],
-  WR:         ["WR"],
-  TE:         ["TE"],
-  FLEX:       ["RB", "WR", "TE"],
-  SUPER_FLEX: ["QB", "RB", "WR", "TE"],
-  REC_FLEX:   ["WR", "TE"],
-  WRRB_FLEX:  ["WR", "RB"],
-  K:          ["K"],
-  DEF:        ["DEF"],
-};
+// Slot eligibility now lives in the engine (lib/lineupCommand/slotRules).
 const NON_STARTER = new Set(["BN", "TAXI", "IR"]);
 const ACTIVE_POS = new Set(["QB", "RB", "WR", "TE", "K", "DEF"]);
 
@@ -137,86 +136,100 @@ function fmt1(n: number): string {
   return n.toFixed(1);
 }
 
-// ─── Core lineup analysis ─────────────────────────────────────────────────────
+// ─── Core lineup analysis (powered by the Lineup Command engine) ───────────────
+// The engine in client/src/lib/lineupCommand is framework-agnostic. We enrich
+// each Sleeper player_id into the engine's EnrichedPlayer shape — pulling proj
+// straight from Sleeper's pre-scored weekly projections (the source this app has
+// always used), zeroing OUT players, and applying game-locking — then run the
+// engine's slot-eligibility-aware optimizer and bench-recommendation logic.
 function analyzeLineup(
   allPlayerIds: string[],
-  actualStarterIds: string[],
+  rawStarters: (string | null)[],                    // unfiltered: index aligns with starting slots
   rawProj: Record<string, Record<string, number>>,  // pid → {pts_ppr, pts_half_ppr, pts_std}
   playerDb: Record<string, any>,
   rosterPositions: string[],
   scoringFormat: string,
+  season: string,
+  week: string,
+  schedule: GameSchedule,
+  playedPlayerIds: Record<string, boolean>,
+  actualPoints: Record<string, number>,
 ): Omit<LeagueAnalysis, "leagueId" | "leagueName" | "format" | "scoringFormat" | "loading" | "error" | "rosterId"> {
   const field = projKey(scoringFormat);
+  const now = Date.now();
 
-  // Build projection map for this league's scoring
-  const proj = (pid: string): number => (rawProj[pid]?.[field] ?? 0);
+  // pid → EnrichedPlayer (proj from Sleeper, OUT zeroed, lock-aware actuals).
+  const enrich = (pid: string): EnrichedPlayer | null => {
+    const lite = toPlayerLite(playerDb, pid);
+    if (!lite) return null;
+    let proj = rawProj[pid]?.[field] ?? 0;
+    // Zero OUT players so they never read as "optimal".
+    if (statusFlags({ ...lite, proj }).includes("OUT")) proj = 0;
+    const locked = isPlayerLocked(lite, schedule, now, playedPlayerIds, actualPoints);
+    // Once a player's game has locked, prefer their actual scored points.
+    if (locked && actualPoints[pid] != null) proj = actualPoints[pid];
+    const opp = isTeamOnBye(lite.team, schedule) ? "BYE" : undefined;
+    return { ...lite, proj, opp, locked };
+  };
 
-  // Player pool (exclude DEF/K if not in roster positions for simplicity)
-  const players = allPlayerIds
+  // Slot labels for the starting lineup, in Sleeper's roster_positions order.
+  const startingSlots = rosterPositions.filter(s => !NON_STARTER.has(s));
+  const validStarters = rawStarters.filter((id): id is string => !!id && id !== "0");
+
+  // Enrich the full roster pool (used as the optimizer's candidate set).
+  const rosterPlayers = allPlayerIds
     .filter(pid => pid && pid !== "0")
-    .map(pid => ({
-      id: pid,
-      pos: playerPos(playerDb, pid),
-      proj: proj(pid),
-      injury: playerDb[pid]?.injury_status as string | undefined,
-      team: playerDb[pid]?.team as string | undefined,
-    }))
-    .filter(p => ACTIVE_POS.has(p.pos));
+    .map(enrich)
+    .filter((p): p is EnrichedPlayer => !!p && ACTIVE_POS.has(p.pos));
+  const enrichedById = new Map(rosterPlayers.map(p => [p.player_id, p]));
 
-  // Active starter slots
-  const activeSlots = rosterPositions.filter(s => !NON_STARTER.has(s) && SLOT_ELIGIBILITY[s]);
-  const positionalSlots = activeSlots.filter(s => (SLOT_ELIGIBILITY[s]?.length === 1) || ["K","DEF"].includes(s));
-  const flexSlots = activeSlots.filter(s => !positionalSlots.includes(s));
+  // Tier 1 — current lineup, placed in its actual slots (for diff + currentProj).
+  const currentSlots: RosterSlot[] = startingSlots.map((slot, i) => {
+    const pid = rawStarters[i];
+    const player = pid && pid !== "0" ? (enrichedById.get(pid) ?? enrich(pid) ?? undefined) : undefined;
+    return player ? { slot, player } : { slot };
+  });
+  const currentProj = currentSlots.reduce((s, slot) => s + (slot.player?.proj ?? 0), 0);
 
-  // Greedy optimal assignment (by projection descending)
-  const sorted = [...players].sort((a, b) => b.proj - a.proj);
-  const used = new Set<string>();
-  const optimalIds: string[] = [];
+  // Tier 2 — bench-optimal lineup (roster only), respecting locks.
+  const slotCounts = buildSlotCounts(rosterPositions);
+  const optimalSlots = optimizeLineup(slotCounts, rosterPlayers, season, week, rawStarters, true);
+  const optimalProj = sumProj(optimalSlots);
 
-  for (const slot of [...positionalSlots, ...flexSlots]) {
-    const eligible = SLOT_ELIGIBILITY[slot] ?? [];
-    const best = sorted.find(p => eligible.includes(p.pos) && !used.has(p.id));
-    if (best) { used.add(best.id); optimalIds.push(best.id); }
-  }
-
-  const optimalSet = new Set(optimalIds);
-  const actualSet  = new Set(
-    actualStarterIds.filter(id => id && id !== "0" && ACTIVE_POS.has(playerPos(playerDb, id)))
+  // Bench→starter recommendations (lock-aware, blocked moves removed).
+  const { filteredRecommendations } = buildBenchRecommendations(
+    currentSlots, optimalSlots, validStarters, rosterPlayers,
   );
+  const swaps: SwapRec[] = filteredRecommendations
+    .map(r => ({
+      inName:   lastName(playerDb, r.in.player_id),
+      outName:  r.out?.player_id ? lastName(playerDb, r.out.player_id) : "—",
+      inPos:    r.in.pos || playerPos(playerDb, r.in.player_id),
+      projGain: r.delta,
+    }))
+    .filter(s => s.projGain > 0.5);
 
-  const currentProj = [...actualSet].reduce((s, id) => s + proj(id), 0);
-  const optimalProj = [...optimalSet].reduce((s, id) => s + proj(id), 0);
-
-  // Swaps: players optimal wants to start that aren't currently starting
-  const shouldStart = [...optimalSet].filter(id => !actualSet.has(id));
-  const shouldBench = [...actualSet].filter(id => !optimalSet.has(id));
-
-  const swaps: SwapRec[] = shouldStart.map((inId, i) => {
-    const outId = shouldBench[i];
-    return {
-      inName:   lastName(playerDb, inId),
-      outName:  outId ? lastName(playerDb, outId) : "—",
-      inPos:    playerPos(playerDb, inId),
-      projGain: (proj(inId)) - (outId ? proj(outId) : 0),
-    };
-  }).filter(s => s.projGain > 0.5);
-
-  // Issues: injured/bye starters
+  // Issues: injured / bye starters (schedule-aware bye detection).
   const issues: LineupIssue[] = [];
-  for (const pid of actualSet) {
+  for (const pid of validStarters) {
     const inj  = playerDb[pid]?.injury_status as string | undefined;
     const team = playerDb[pid]?.team as string | undefined;
     const name = lastName(playerDb, pid);
     const pos  = playerPos(playerDb, pid);
+    const onBye = isTeamOnBye(team, schedule) || (rawProj[pid]?.[field] ?? 0) < 0.5;
     if      (inj === "IR")           issues.push({ type: "ir",           playerName: name, pos });
     else if (inj === "Out")          issues.push({ type: "out",          playerName: name, pos });
     else if (inj === "Doubtful")     issues.push({ type: "doubtful",     playerName: name, pos });
     else if (inj === "Questionable") issues.push({ type: "questionable", playerName: name, pos });
-    else if (proj(pid) < 0.5 && team && pos !== "DEF" && pos !== "K")
+    else if (onBye && team && pos !== "DEF" && pos !== "K")
                                      issues.push({ type: "bye",          playerName: name, pos });
   }
 
-  return { currentProj, optimalProj, gain: optimalProj - currentProj, issues, swaps, optimalStarters: optimalIds };
+  const optimalStarters = optimalSlots
+    .map(s => s.player?.player_id)
+    .filter((id): id is string => !!id);
+
+  return { currentProj, optimalProj, gain: optimalProj - currentProj, issues, swaps, optimalStarters };
 }
 
 // ─── Issue badge ─────────────────────────────────────────────────────────────
@@ -856,6 +869,7 @@ export function LineupCommand() {
   const [season, setSeason]       = useState("2025");
   const [rawProj, setRawProj]     = useState<Record<string, Record<string, number>>>({});
   const [playerDb, setPlayerDb]   = useState<Record<string, any>>({});
+  const [schedule, setSchedule]   = useState<GameSchedule>({});
   const [baseLoading, setBaseLoading] = useState(true);
   const [baseError, setBaseError]   = useState<string | null>(null);
   const [analyses, setAnalyses]   = useState<Record<string, LeagueAnalysis>>({});
@@ -890,7 +904,7 @@ export function LineupCommand() {
         setNflWeek(w);
         setSeason(s);
 
-        const [db, projRaw] = await Promise.all([
+        const [db, projRaw, sched] = await Promise.all([
           getSleeperPlayers(),
           // NOTE: weekly projections live on api.sleeper.com (NOT the /v1 host in
           // SLEEPER_API). Hitting /v1 with these query params returns a dict of
@@ -901,9 +915,13 @@ export function LineupCommand() {
             `https://api.sleeper.com/projections/nfl/${s}/${w}?season_type=regular` +
             `&position[]=QB&position[]=RB&position[]=WR&position[]=TE&position[]=K&position[]=DEF`
           ).then(r => r.ok ? r.json() : []).catch(() => []),
+          // Week schedule (kickoff times + game state) powers player game-locking.
+          // Degrades to {} on failure, which the engine treats as "no one locked".
+          getWeekSchedule(s, String(w)).catch(() => ({} as GameSchedule)),
         ]);
         if (cancelled) return;
         setPlayerDb(db);
+        setSchedule(sched);
         // Index the projection array by player_id → stats so proj(pid) lookups
         // resolve. An empty array (offseason / not-yet-published) yields an empty
         // map, which correctly puts the tab into preseason mode.
@@ -957,11 +975,15 @@ export function LineupCommand() {
       return next;
     });
 
-    // Fetch all rosters in parallel
+    // Fetch rosters + lock data (played/actual points) per league in parallel.
     activeLeagues.forEach(league => {
-      fetch(`${SLEEPER_API}/league/${league.leagueId}/rosters`)
-        .then(r => r.ok ? r.json() : null)
-        .then((rosters: any[] | null) => {
+      Promise.all([
+        fetch(`${SLEEPER_API}/league/${league.leagueId}/rosters`).then(r => r.ok ? r.json() : null),
+        getLeagueMatchupsForLocking([league.leagueId], String(nflWeek)).catch(
+          () => ({ playedPlayerIds: {}, actualPoints: {} }),
+        ),
+      ])
+        .then(([rosters, lock]: [any[] | null, { playedPlayerIds: Record<string, boolean>; actualPoints: Record<string, number> }]) => {
           if (!rosters) throw new Error("no data");
           const myRoster = rosters.find((r: any) => r.owner_id === user.userId);
           if (!myRoster) {
@@ -974,16 +996,21 @@ export function LineupCommand() {
           }
 
           const allPlayerIds: string[] = myRoster.players || [];
-          const actualStarterIds: string[] = (myRoster.starters || []).filter((id: string) => id && id !== "0");
+          const rawStarters: (string | null)[] = myRoster.starters || [];
           const rosterPositions: string[] = league.rosterPositions || [];
 
           const result = analyzeLineup(
             allPlayerIds,
-            actualStarterIds,
+            rawStarters,
             rawProj,
             playerDb,
             rosterPositions,
             league.scoringFormat,
+            season,
+            String(nflWeek),
+            schedule,
+            lock.playedPlayerIds,
+            lock.actualPoints,
           );
 
           setAnalyses(prev => ({
@@ -1005,7 +1032,7 @@ export function LineupCommand() {
         });
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [nflWeek, user?.userId, activeLeagues.length, rawProj, playerDb]);
+  }, [nflWeek, user?.userId, activeLeagues.length, rawProj, playerDb, schedule, season]);
 
   // ── 3. Per-league matchup fetch ───────────────────────────────────────────
   useEffect(() => {
@@ -1094,9 +1121,10 @@ export function LineupCommand() {
               .reduce((s: number, id: string) => s + proj(id), 0)
           : 0;
 
-        const total = myProj + opponentProj;
-        const winPct = total > 0 ? (myProj / total) * 100 : 50;
         const spread = myProj - opponentProj;
+        // Win probability via the engine's normal-distribution model (each team's
+        // weekly score ~ Normal), rather than a naïve proj-share split.
+        const winPct = opponentMatchup ? calculateWinProbability(spread) : 50;
 
         const myTeamName = myRoster.metadata?.team_name || myRoster.metadata?.team_abbrev || "My Team";
         const oppRoster = opponentMatchup ? rosters.find((r: any) => r.roster_id === opponentMatchup.roster_id) : null;
@@ -1158,6 +1186,7 @@ export function LineupCommand() {
     setNflWeek(null);
     setRawProj({});
     setPlayerDb({});
+    setSchedule({});
     setBaseLoading(false);
   }, []);
 

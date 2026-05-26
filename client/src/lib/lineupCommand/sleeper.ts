@@ -74,8 +74,6 @@ export async function getLeagueMatchupsForLocking(leagueIds: string[], week: str
       }
     }
     
-    console.log(`[Sleeper] Found ${Object.keys(playedPlayerIds).length} players who have already played`);
-    console.log(`[Sleeper] Found ${Object.keys(actualPoints).length} players with actual points`);
     return { playedPlayerIds, actualPoints };
   } catch (error) {
     console.error('Failed to fetch league matchups for locking:', error);
