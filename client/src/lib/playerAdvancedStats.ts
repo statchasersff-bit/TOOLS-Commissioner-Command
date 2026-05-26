@@ -200,10 +200,31 @@ function abbrevName(name: string): string {
 }
 
 /** Rank the target player against the full position population for each stat. */
+// Qualification gate for the advanced-stats rankings: a player must clear a
+// games floor plus a position-specific volume floor to be ranked (and to be
+// part of the comparison pool), so low-sample players can't post inflated
+// rate-stat ranks.
+const QUALIFICATION: Record<Pos, { games: number; volumeKey: string; volumeMin: number }> = {
+  QB: { games: 6, volumeKey: "attempts", volumeMin: 50 },
+  RB: { games: 6, volumeKey: "rushAttempts", volumeMin: 20 },
+  WR: { games: 6, volumeKey: "targets", volumeMin: 25 },
+  TE: { games: 6, volumeKey: "targets", volumeMin: 25 },
+};
+
+function isQualified(pos: Pos, r: AdvStatRow): boolean {
+  const q = QUALIFICATION[pos];
+  const games = num(r.games);
+  const volume = num(r[q.volumeKey]);
+  return games != null && games >= q.games && volume != null && volume >= q.volumeMin;
+}
+
 function buildRankCards(pos: Pos, file: AdvStatFile, target: string): RankCard[] {
   const out: RankCard[] = [];
+  // Only qualified players form the ranking pool (and only a qualified target is
+  // ranked — an unqualified player yields no cards, so the snapshot is hidden).
+  const pool = file.rows.filter((r) => isQualified(pos, r));
   for (const def of RANK_STATS[pos]) {
-    const vals = file.rows
+    const vals = pool
       .map((r) => ({ key: rowName(r), name: String(r.playerName ?? ""), v: def.get(r) }))
       .filter((x): x is { key: string; name: string; v: number } => x.v != null);
     if (!vals.length) continue;
@@ -417,11 +438,16 @@ export async function loadPlayerAdvancedStats(
     const file = loadedBySeason[latest.season];
     const defs = COMPOSITES[pos];
     if (file) {
+      // Ranking pool + percentiles use only qualified players; an unqualified
+      // target gets null composites ("Not enough data").
+      const qualifiedRows = file.rows.filter((r) => isQualified(pos, r));
+      const targetQualified = isQualified(pos, latest.row);
+
       // Precompute the numeric value arrays for every component column.
       const colValues: Record<string, number[]> = {};
       const allKeys = Array.from(new Set(defs.flatMap((d) => d.keys)));
       for (const k of allKeys) {
-        colValues[k] = file.rows.map((r) => num(r[k])).filter((v): v is number => v != null);
+        colValues[k] = qualifiedRows.map((r) => num(r[k])).filter((v): v is number => v != null);
       }
 
       // Per-row composite scores (avg of present component percentiles) so we
@@ -438,11 +464,11 @@ export async function loadPlayerAdvancedStats(
       };
 
       composites = defs.map((def) => {
-        const targetScore = rowComposite(latest.row, def);
+        const targetScore = targetQualified ? rowComposite(latest.row, def) : null;
         if (targetScore == null) {
           return { label: def.label, score: null, percentile: null, rank: null, total: null, explanation: def.explanation };
         }
-        const allScores = file.rows
+        const allScores = qualifiedRows
           .map((r) => rowComposite(r, def))
           .filter((s): s is number => s != null);
         const total = allScores.length;

@@ -717,7 +717,6 @@ function SeasonFinishesTimeline({ finishes, pos }: { finishes: SeasonFinish[]; p
 
 function ProductionTab({ playerId, production, loading, pos }: { playerId: string | null; production: ProductionRow[] | null; loading: boolean; pos: string }) {
   const rows = production ?? [];
-  const ppgVals = rows.filter((r) => r.ppgStd != null);
   const ppg = (v: number | null) => (v != null ? v.toFixed(1) : "—");
   const fin = (v: number | null) => (v != null ? `${pos}${v}` : "—");
 
@@ -763,12 +762,6 @@ function ProductionTab({ playerId, production, loading, pos }: { playerId: strin
         <ComingSoon icon={BarChart3} title="No production history" body={`Season production for this ${pos} will appear once it has qualifying NFL usage in our dataset.`} />
       ) : (
         <div className="space-y-4">
-          {ppgVals.length >= 2 && (
-            <Card className="p-5">
-              <SectionTitle icon={LineChart} title="Standard Fantasy PPG by Season" />
-              <PpgChart rows={[...rows].reverse().map((r) => ({ season: r.season, ppg: r.ppgStd }))} />
-            </Card>
-          )}
           <Card className="p-0 overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
@@ -885,42 +878,6 @@ function ProductionSeasonRow({ row, pos, playerId }: { row: ProductionRow; pos: 
         </tr>
       )}
     </>
-  );
-}
-
-function PpgChart({ rows }: { rows: { season: string; ppg: number | null }[] }) {
-  const W = 600, H = 140, PAD = 28;
-  const pts = rows.filter((r) => r.ppg != null) as { season: string; ppg: number }[];
-  if (pts.length < 2) return null;
-  const vals = pts.map((p) => p.ppg);
-  const min = Math.min(...vals, 0);
-  const max = Math.max(...vals);
-  const span = Math.max(1, max - min);
-  const coords = pts.map((p, i) => {
-    const x = PAD + (i / (pts.length - 1)) * (W - PAD * 2);
-    const y = H - PAD - ((p.ppg - min) / span) * (H - PAD * 2);
-    return { x, y, ...p };
-  });
-  const line = coords.map((c) => `${c.x},${c.y}`).join(" ");
-  // Thin the text labels so a long career (10+ seasons) doesn't overlap; always
-  // keep the most recent season labelled. Dots still render for every season.
-  const labelEvery = Math.ceil(pts.length / 8);
-  const showLabel = (i: number) => i % labelEvery === 0 || i === pts.length - 1;
-  return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-[150px]" preserveAspectRatio="none">
-      <polyline points={line} fill="none" stroke="#d4af37" strokeWidth={2} />
-      {coords.map((c, i) => (
-        <g key={c.season}>
-          <circle cx={c.x} cy={c.y} r={3.5} fill="#d4af37" />
-          {showLabel(i) && (
-            <>
-              <text x={c.x} y={c.y - 8} textAnchor="middle" className="fill-foreground" fontSize={11} fontWeight={700}>{c.ppg.toFixed(1)}</text>
-              <text x={c.x} y={H - 8} textAnchor="middle" className="fill-muted-foreground" fontSize={10}>{c.season}</text>
-            </>
-          )}
-        </g>
-      ))}
-    </svg>
   );
 }
 

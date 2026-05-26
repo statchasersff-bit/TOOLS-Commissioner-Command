@@ -1448,15 +1448,23 @@ export async function computeAdp(f: AdpFilters): Promise<{ rows: AdpRow[]; draft
     };
   });
 
-  rows.sort((a, b) => a.avg_pick - b.avg_pick);
+  // Drop very-small-sample players so someone drafted in just 1–2 of N drafts
+  // doesn't get a misleadingly high rank beside full-sample players. Scaled to
+  // the slice (≥5% of its drafts, floor 3), and only applied once the slice is
+  // big enough to judge. Rookie-pick placeholders are exempt.
+  const totalDrafts = eligibleDrafts.length;
+  const minSample = totalDrafts >= 10 ? Math.max(3, Math.ceil(totalDrafts * 0.05)) : 1;
+  const ranked = rows.filter((r) => r.is_rookie_placeholder || r.draft_count >= minSample);
+
+  ranked.sort((a, b) => a.avg_pick - b.avg_pick);
   const posCounters: Record<string, number> = { QB: 0, RB: 0, WR: 0, TE: 0, K: 0, PICK: 0 };
-  rows.forEach((r, idx) => {
+  ranked.forEach((r, idx) => {
     r.overall_rank = idx + 1;
     posCounters[r.position] = (posCounters[r.position] ?? 0) + 1;
     r.positional_rank = posCounters[r.position];
   });
 
-  return { rows, draftCount: eligibleDrafts.length, pickCount: picks.length };
+  return { rows: ranked, draftCount: totalDrafts, pickCount: picks.length };
 }
 
 // ── Reclassify already-ingested drafts ────────────────────────────────────
