@@ -314,9 +314,8 @@ export default function PlayerPage({ params }: { params?: { playerId?: string } 
             </div>
           </div>
 
-          {/* Content grid */}
-          <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-5 items-start">
-            <div className="space-y-5 min-w-0">
+          {/* Content */}
+          <div className="space-y-5 min-w-0">
               {tab === "overview" && (
                 <OverviewTab profile={profile} adv={adv} advLoading={advLoading} similar={similar} dynRank={dynRank} onOpenPlayer={(id) => setLocation(`/players/${id}`)} />
               )}
@@ -333,16 +332,6 @@ export default function PlayerPage({ params }: { params?: { playerId?: string } 
                 />
               )}
               {tab === "news" && <ComingSoon icon={Newspaper} title="Player News" body="Beat reports, injury updates, and fantasy-impact analysis will appear here once the news feed is connected." />}
-            </div>
-
-            <Sidebar
-              profile={profile}
-              raw={raw}
-              dynRank={dynRank}
-              connected={sleeper.isConnected}
-              exposure={exposure}
-              exposureLoading={exposureLoading}
-            />
           </div>
         </div>
       )}
@@ -466,16 +455,6 @@ function OverviewTab({
 
   return (
     <div className="space-y-5">
-      {/* Top metric cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-        <MetricCard label="Dynasty Value" value={fmtValue(profile.values.dynasty)} accent />
-        <MetricCard label="Win-Now Value" value={fmtValue(profile.values.redraft)} />
-        <MetricCard label="Dynasty Rank" value={dynRank ? `#${dynRank}` : "—"} />
-        <MetricCard label="Position Rank" value={profile.ranks.dynastyPositional ? `${profile.player.pos}${profile.ranks.dynastyPositional}` : "—"} />
-        <MetricCard label="Value Tier" value={valueTier(profile.values.dynasty)} small />
-        <MetricCard label="Age" value={profile.player.age != null ? `${profile.player.age}` : "—"} />
-      </div>
-
       {/* Dynasty snapshot */}
       <Card className="p-5">
         <SectionTitle icon={Sparkles} title="Dynasty Snapshot" />
@@ -1492,85 +1471,6 @@ function WeeklyGameLogTable({ logs, pos }: { logs: GLRow[]; pos: string }) {
           ))}
         </tbody>
       </table>
-    </div>
-  );
-}
-
-// ── Sidebar ────────────────────────────────────────────────────────────────────
-function Sidebar({
-  profile, raw, dynRank, connected, exposure, exposureLoading,
-}: {
-  profile: PlayerProfile;
-  raw: any;
-  dynRank: number | null;
-  connected: boolean;
-  exposure: PlayerLeagueExposure[] | null;
-  exposureLoading: boolean;
-}) {
-  const p = profile.player;
-  const meta: { label: string; value: string }[] = [
-    { label: "Sleeper ID", value: p.id },
-    { label: "Team", value: p.team || "FA" },
-    { label: "Position", value: p.pos },
-    { label: "Age", value: p.age != null ? `${p.age}` : "—" },
-    { label: "Experience", value: p.yearsExp != null ? (p.yearsExp === 0 ? "Rookie" : `${p.yearsExp} yrs`) : (typeof raw?.years_exp === "number" ? `${raw.years_exp} yrs` : "—") },
-  ];
-  if (p.height) meta.push({ label: "Height", value: p.height });
-  if (p.weight) meta.push({ label: "Weight", value: `${p.weight} lbs` });
-  if (raw?.college) meta.push({ label: "College", value: String(raw.college) });
-  if (raw?.number != null) meta.push({ label: "Jersey", value: `#${raw.number}` });
-
-  return (
-    <div className="space-y-4 lg:sticky lg:top-28">
-      <Card className="p-4">
-        <SectionTitle icon={CircleUserRound} title="Player Metadata" />
-        <dl className="grid grid-cols-2 gap-x-3 gap-y-2">
-          {meta.map((m) => (
-            <div key={m.label} className="min-w-0">
-              <dt className="text-[9px] uppercase tracking-wider text-muted-foreground">{m.label}</dt>
-              <dd className="text-xs font-semibold text-foreground truncate">{m.value}</dd>
-            </div>
-          ))}
-        </dl>
-      </Card>
-
-      <Card className="p-4">
-        <SectionTitle icon={Trophy} title="My Exposure" />
-        {!connected ? (
-          <p className="text-xs text-muted-foreground leading-relaxed">Connect Sleeper to see your exposure across leagues.</p>
-        ) : exposureLoading && !exposure ? (
-          <SkeletonLines n={3} />
-        ) : exposure && exposure.length ? (
-          <ExposureSummary exposure={exposure} />
-        ) : (
-          <p className="text-xs text-muted-foreground leading-relaxed">No leagues found for your account.</p>
-        )}
-      </Card>
-    </div>
-  );
-}
-
-function ExposureSummary({ exposure }: { exposure: PlayerLeagueExposure[] }) {
-  const owned = exposure.filter((e) => e.status === "owned").length;
-  const opponent = exposure.filter((e) => e.status === "opponent").length;
-  const available = exposure.filter((e) => e.status === "available").length;
-  const rows: { label: string; value: number; cls: string }[] = [
-    { label: "Owned", value: owned, cls: "text-emerald-600 dark-any:text-emerald-400" },
-    { label: "Opponent-owned", value: opponent, cls: "text-sky-600 dark-any:text-sky-300" },
-    { label: "Available", value: available, cls: "text-rose-600 dark-any:text-rose-300" },
-  ];
-  return (
-    <div className="space-y-1.5">
-      {rows.map((r) => (
-        <div key={r.label} className="flex items-center justify-between text-xs">
-          <span className="text-muted-foreground">{r.label}</span>
-          <span className={cn("font-bold tabular-nums", r.cls)}>{r.value} {r.value === 1 ? "league" : "leagues"}</span>
-        </div>
-      ))}
-      <div className="flex items-center justify-between text-xs pt-1.5 mt-1 border-t border-border/40">
-        <span className="text-muted-foreground">Total</span>
-        <span className="font-bold tabular-nums text-foreground">{exposure.length} {exposure.length === 1 ? "league" : "leagues"}</span>
-      </div>
     </div>
   );
 }
