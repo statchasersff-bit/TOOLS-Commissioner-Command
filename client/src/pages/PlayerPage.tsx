@@ -187,7 +187,7 @@ const TABS = [
 ] as const;
 
 // ── Page ───────────────────────────────────────────────────────────────────────
-export default function PlayerPage({ params }: { params?: { playerId?: string } }) {
+export default function PlayerPage({ params, embedded = false }: { params?: { playerId?: string }; embedded?: boolean }) {
   const param = params?.playerId ?? "";
   const [, setLocation] = useLocation();
   const [tab, setTab] = useState<string>("overview");
@@ -267,9 +267,13 @@ export default function PlayerPage({ params }: { params?: { playerId?: string } 
   );
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      {/* Sticky top bar */}
-      <div className="sticky top-0 z-30 h-12 flex items-center gap-3 px-4 border-b border-border/60 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/75">
+    <div className={cn(!embedded && "min-h-screen bg-background", "text-foreground")}>
+      {/* Breadcrumb bar. Sticky as a standalone page; non-sticky when embedded
+          inside the app shell (the shell header is the sticky chrome there). */}
+      <div className={cn(
+        "h-12 flex items-center gap-3 px-4 border-b border-border/60",
+        !embedded && "sticky top-0 z-30 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/75",
+      )}>
         <button
           onClick={() => { if (window.history.length > 1) window.history.back(); else setLocation("/"); }}
           className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
@@ -291,8 +295,11 @@ export default function PlayerPage({ params }: { params?: { playerId?: string } 
         <div className="max-w-[1200px] mx-auto px-4 py-5 space-y-5">
           <Hero profile={profile} raw={raw} dynRank={dynRank} />
 
-          {/* Sticky tab bar */}
-          <div className="sticky top-12 z-20 -mx-4 px-4 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/75 border-b border-border/50">
+          {/* Tab bar — sticky as a standalone page; static when embedded. */}
+          <div className={cn(
+            "-mx-4 px-4 border-b border-border/50",
+            !embedded && "sticky top-12 z-20 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/75",
+          )}>
             <div className="flex flex-wrap gap-1">
               {TABS.map((t) => {
                 const Icon = t.icon;

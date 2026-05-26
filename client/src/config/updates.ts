@@ -16,7 +16,7 @@
 // Version key shape: "YYYY-MM-DD-<slug>-vX.Y". Any change to the string
 // triggers the modal for every user on their next dashboard load.
 
-export const CURRENT_UPDATE_VERSION = "2026-05-19-dynasty-command-v1.6";
+export const CURRENT_UPDATE_VERSION = "2026-05-26-dynasty-command-v1.7";
 
 export interface UpdateSection {
   heading: string;
@@ -33,22 +33,23 @@ export interface UpdateNotes {
 
 export const CURRENT_UPDATE_NOTES: UpdateNotes = {
   version: CURRENT_UPDATE_VERSION,
-  title: "Welcome Back, Commander! 🫡",
-  subtitle: "Fresh upgrades are live. Here's what changed since your last huddle.",
-  date: "May 19, 2026",
+  title: "Commander's Briefing — Player Intel Upgrade 📊",
+  subtitle: "The player analysis suite just got a serious overhaul. Here's what's new.",
+  date: "May 26, 2026",
   sections: [
     {
       heading: "New Features",
       items: [
-        "League Analyzer - Playoff Calculator: See every team's projected odds to make the playoffs, earn a bye, reach the finals, and win the championship, plus a weekly matchups breakdown with win probabilities.",
-        "My Team - Overview: New analytical sections added, including roster construction breakdown, age curve, and dynasty window outlook.",
+        "Advanced Stats added to the Research Module",
+        "Player Profile pages added",
+        "ADP Filters added to player profile pages to allow filter controls for QB format, scoring, TE premium, and team count",
       ],
     },
     {
       heading: "Improvements",
       items: [
-        "League Analyzer - Compare Teams: Rebuilt to support side-by-side comparison of up to 3 teams with cleaner layout and easier controls.",
-        "Finance tab: Fixed a click-out bug that caused the tab to close unexpectedly.",
+        "Light mode more enhanced",
+        "Mobile views for Team comparison feature",
       ],
     },
   ],
@@ -57,6 +58,28 @@ export const CURRENT_UPDATE_NOTES: UpdateNotes = {
 // Past releases shown in the in-app changelog. Newest first. Append the
 // previous CURRENT_UPDATE_NOTES here when bumping CURRENT_UPDATE_VERSION.
 export const CHANGELOG_HISTORY: UpdateNotes[] = [
+  {
+    version: "2026-05-19-dynasty-command-v1.6",
+    title: "Welcome Back, Commander! 🫡",
+    subtitle: "Fresh upgrades are live. Here's what changed since your last huddle.",
+    date: "May 19, 2026",
+    sections: [
+      {
+        heading: "New Features",
+        items: [
+          "League Analyzer - Playoff Calculator: See every team's projected odds to make the playoffs, earn a bye, reach the finals, and win the championship, plus a weekly matchups breakdown with win probabilities.",
+          "My Team - Overview: New analytical sections added, including roster construction breakdown, age curve, and dynasty window outlook.",
+        ],
+      },
+      {
+        heading: "Improvements",
+        items: [
+          "League Analyzer - Compare Teams: Rebuilt to support side-by-side comparison of up to 3 teams with cleaner layout and easier controls.",
+          "Finance tab: Fixed a click-out bug that caused the tab to close unexpectedly.",
+        ],
+      },
+    ],
+  },
   {
     version: "2026-05-18-dynasty-command-v1.5",
     title: "What's New in Dynasty Command",

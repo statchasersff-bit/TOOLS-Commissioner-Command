@@ -16,7 +16,6 @@ import { FavoriteTeamProvider } from "@/contexts/FavoriteTeamContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { AuthGate } from "@/pages/auth/AuthGate";
 import DynastyCommandCenter from "@/pages/DynastyCommandCenter";
-import PlayerPage from "@/pages/PlayerPage";
 import { Component, useEffect, type ReactNode, type ErrorInfo } from "react";
 
 class ErrorBoundary extends Component<{ label?: string; children: ReactNode }, { error: Error | null }> {
@@ -58,7 +57,12 @@ function Router() {
     <WouterRouter base={BASE_PATH}>
       <PlayerProfileNavigator />
       <Switch>
-        <Route path="/players/:playerId" component={PlayerPage} />
+        {/* Player profiles render inside the Command Center shell so the app
+            header / mega-menu stays visible. DCC renders <PlayerPage embedded>
+            as its content when given a playerProfileId. */}
+        <Route path="/players/:playerId">
+          {(params) => <DynastyCommandCenter playerProfileId={params?.playerId} />}
+        </Route>
         <Route path="/:tab/:sub" component={DynastyCommandCenter} />
         <Route path="/:tab" component={DynastyCommandCenter} />
         <Route path="/" component={DynastyCommandCenter} />

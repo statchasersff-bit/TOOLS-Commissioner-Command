@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { MegaMenuNav, MobileBottomNav } from "@/components/MegaMenu";
+import PlayerPage from "@/pages/PlayerPage";
 import { LeagueSelector } from "@/components/LeagueSelector";
 import { HeaderValueSourceBadge } from "@/components/ValueSourceSelector";
 import { ValueSourceManager } from "@/components/ValueSourceManager";
@@ -91,7 +92,7 @@ function getInitialState(pathTab?: string, pathSub?: string) {
 }
 
 
-export default function DynastyCommandCenter({ params }: { params?: { tab?: string; sub?: string } }) {
+export default function DynastyCommandCenter({ params, playerProfileId }: { params?: { tab?: string; sub?: string }; playerProfileId?: string }) {
   useEffect(() => { console.log("[app] DynastyCommandCenter mounted"); }, []);
   const [, setLocation] = useLocation();
   const initial = getInitialState(params?.tab, params?.sub);
@@ -530,6 +531,9 @@ export default function DynastyCommandCenter({ params }: { params?: { tab?: stri
   };
 
   const renderContent = () => {
+    // Player profile is rendered inside the shell (header/mega-menu stay
+    // visible) when the route is /players/:id.
+    if (playerProfileId) return <PlayerPage params={{ playerId: playerProfileId }} embedded />;
     const access = resolveAccess(activeMainTab, activeSubTab);
     const isTradeInbox = activeMainTab === "trade-center" && activeSubTab === "trade-sync";
     return (
