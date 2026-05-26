@@ -13,6 +13,7 @@ import { getPositionColor } from "@/data/mockData";
 import { cn } from "@/lib/utils";
 import { SleeperAuthCard } from "@/components/SleeperAuthCard";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
+import { usePlayerProfile } from "@/contexts/PlayerProfileContext";
 import {
   Link,
   CheckCircle,
@@ -559,6 +560,7 @@ function MobileLeagueRow({ rec, rankCell }: { rec: any; rankCell: (rank: number,
 
 export function PortfolioSummary({ onNavigate }: { onNavigate?: (mainTab: string, subTab: string) => void } = {}) {
   const { isConnected, user, leagues } = useSleeper();
+  const { openPlayerProfile } = usePlayerProfile();
   const { valuesBySleeperId, sourceId, sources } = useValueModel();
   const activeSourceLabel = sources.find(s => s.id === sourceId)?.label ?? sourceId;
 
@@ -1029,6 +1031,7 @@ export function PortfolioSummary({ onNavigate }: { onNavigate?: (mainTab: string
                               pos={player.pos}
                               team={player.team}
                               size="sm"
+                              onClick={() => openPlayerProfile(player.playerId)}
                             />
                           </div>
                           <div className="w-8 md:w-10 flex justify-center">

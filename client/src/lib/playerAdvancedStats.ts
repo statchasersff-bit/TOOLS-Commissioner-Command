@@ -253,6 +253,44 @@ function buildRankCards(pos: Pos, file: AdvStatFile, target: string): RankCard[]
   return out;
 }
 
+// ── Generic per-stat ranking (for the grouped advanced-stat sections) ────────
+// Identity / context columns that aren't ranked stats.
+const STAT_RANK_EXCLUDE = new Set(["rank", "season", "age", "games", "playerId", "position", "team", "playerName"]);
+// Stats where a LOWER value is better (turnovers, pressure faced, drops, etc.).
+// Curated RANK_STATS direction wins where it overlaps; this covers the rest.
+const STAT_LOWER_IS_BETTER = new Set([
+  "fumbles", "interceptions", "interceptionsWhenTargeted", "poorThrows", "badThrowPct",
+  "sacks", "sackYardsLost", "pressurePct", "hurries", "knockdowns", "throwaways", "battedPasses",
+  "drops", "dropPct", "tacklesForLoss", "tacklesForLossYards", "rushAttForNegativeYards",
+]);
+
+// Ranks the target against the qualified pool on every numeric stat column, so
+// each grouped section card can show a positional rank + percentile (not just a
+// raw value). Returns {} when the target isn't qualified / the pool is too thin.
+function buildStatRanks(pos: Pos, file: AdvStatFile, target: string): Record<string, StatRank> {
+  const out: Record<string, StatRank> = {};
+  const pool = file.rows.filter((r) => isQualified(pos, r));
+  if (pool.length < 3) return out;
+  const curatedDir = new Map<string, boolean>();
+  for (const def of RANK_STATS[pos]) curatedDir.set(def.key, def.higherIsBetter);
+  for (const c of file.columns) {
+    if (c.type === "string" || STAT_RANK_EXCLUDE.has(c.key)) continue;
+    const higherIsBetter = curatedDir.get(c.key) ?? !STAT_LOWER_IS_BETTER.has(c.key);
+    const vals = pool
+      .map((r) => ({ key: rowName(r), v: num(r[c.key]) }))
+      .filter((x): x is { key: string; v: number } => x.v != null);
+    if (vals.length < 3) continue;
+    vals.sort((a, b) => (higherIsBetter ? b.v - a.v : a.v - b.v));
+    const idx = vals.findIndex((x) => x.key === target);
+    if (idx < 0) continue;
+    const total = vals.length;
+    const rank = idx + 1;
+    const percentile = Math.round(((total - rank + 1) / total) * 100);
+    out[c.key] = { rank, total, percentile, tier: rankTier(percentile) };
+  }
+  return out;
+}
+
 // ── Public types ─────────────────────────────────────────────────────────────
 export interface ProductionRow {
   season: string;
@@ -308,6 +346,15 @@ export interface RankCard {
   tier: RankTier;
 }
 
+// Positional rank for a single stat, used by the grouped advanced-stat sections
+// (rank-snapshot styling without the neighbor names / percentile bar).
+export interface StatRank {
+  rank: number;        // 1 = best
+  total: number;       // qualifying players at the position
+  percentile: number;  // 0–100 (100 = best)
+  tier: RankTier;
+}
+
 // ── Season-End Finishes (PPR positional finish per season) ───────────────────
 export interface SeasonFinish {
   season: number;
@@ -327,6 +374,7 @@ export interface PlayerAdvancedResult {
   composites: CompositeScore[];
   production: ProductionRow[];
   rankCards: RankCard[];        // 2025-only positional rankings for the snapshot
+  statRanks: Record<string, StatRank>; // 2025 per-stat positional rank, keyed by column key
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -489,10 +537,12 @@ export async function loadPlayerAdvancedStats(
   // Rank snapshot uses the 2025 file specifically (per product spec), regardless
   // of which season is `latest`. Empty when the player has no 2025 row.
   let rankCards: RankCard[] = [];
+  let statRanks: Record<string, StatRank> = {};
   const file2025 = loadedBySeason["2025"];
   if (file2025 && file2025.rows.some((r) => rowName(r) === target)) {
     rankCards = buildRankCards(pos, file2025, target);
+    statRanks = buildStatRanks(pos, file2025, target);
   }
 
-  return { position: pos, seasons, latest, composites, production, rankCards };
+  return { position: pos, seasons, latest, composites, production, rankCards, statRanks };
 }

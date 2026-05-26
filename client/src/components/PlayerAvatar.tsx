@@ -31,6 +31,7 @@ export function PlayerAvatar({
   size = "sm",
   sub,
   compact = false,
+  onClick,
 }: {
   id: string;
   name: string;
@@ -39,6 +40,10 @@ export function PlayerAvatar({
   size?: "xs" | "sm" | "md";
   sub?: string;
   compact?: boolean;
+  /** When set (and the id is a real player), the avatar becomes a button that
+   *  typically opens the player profile. Clicks stop propagation so it works
+   *  inside clickable rows/cards. */
+  onClick?: () => void;
 }) {
   const [imgErr, setImgErr] = useState(false);
 
@@ -101,10 +106,33 @@ export function PlayerAvatar({
     </div>
   );
 
-  if (compact) return circle;
+  // Only real players are clickable — picks/rookies/synthetic ids aren't profiles.
+  const clickable = !!onClick && !isSyntheticId;
+  const interactive = clickable
+    ? {
+        role: "button" as const,
+        tabIndex: 0,
+        title: `View ${name}`,
+        "data-testid": `player-link-${id}`,
+        onClick: (e: React.MouseEvent) => { e.stopPropagation(); onClick!(); },
+        onKeyDown: (e: React.KeyboardEvent) => {
+          if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); onClick!(); }
+        },
+      }
+    : {};
+  const clickCls = clickable
+    ? "cursor-pointer rounded-md transition-opacity hover:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#d4af37]/50"
+    : "";
+
+  if (compact) {
+    if (!clickable) return circle;
+    return (
+      <span {...interactive} className={cn("inline-flex flex-shrink-0", clickCls)}>{circle}</span>
+    );
+  }
 
   return (
-    <div className="flex items-center gap-2.5">
+    <div {...interactive} className={cn("flex items-center gap-2.5", clickCls)}>
       {circle}
       <div className="min-w-0">
         <ResponsivePlayerName name={name} className={cn("font-bold text-foreground leading-tight", nameSize)} />

@@ -8,9 +8,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { DataTable } from "@/components/DataTable";
 import { SectionHeader } from "@/components/SectionHeader";
 import { ManagerNameButton } from "@/components/ManagerNameButton";
-import { useValueModel } from "@/contexts/ValueModelContext";
+import { useValueModel, type RankedPlayer } from "@/contexts/ValueModelContext";
 import { useSleeper } from "@/contexts/SleeperContext";
-import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { getLeagueTeamTiers, getTierColor, getTierBg, getTierEmoji, getPositionColor, isContenderTier, isRebuilderTier } from "@/data/mockData";
 import { getStaticPickValue } from "@/data/pickValues";
@@ -19,11 +18,11 @@ import { fetchRosterDraftPicks, fetchLeaguePlayerSettings } from "@/lib/sleeperA
 import { getSleeperToken, getSleeperSession } from "@/services/sleeperAuth";
 import { proposeTrade as proposeTradeAuthed, rejectTrade, firePostTradeLinkDm, type ProposeTradeResult } from "@/services/sleeperAuthedApi";
 import { FeatureDisabledError } from "@/components/FeatureDisabledDialog";
-import type { League, Team, Tier, Player, Pick, TradeRecord, TradeSide, CrawlStatus } from "@/types";
+import type { League, Team, Tier, Player, Pick, TradeRecord, CrawlStatus } from "@/types";
 import { cn } from "@/lib/utils";
-import { scAuthFetch } from "@/lib/scAuthFetch";
-import { SiDiscord } from "react-icons/si";
+import { ShareTradeToDiscordButton, type PollAsset } from "@/components/trade/ShareTradeToDiscordButton";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
+import { usePlayerProfile } from "@/contexts/PlayerProfileContext";
 import { TradeBlockCandidates } from "@/components/trade/TradeBlockCandidates";
 import { ArrowRightLeft, TrendingUp, TrendingDown, Target, X, Plus, Search, Scale, RotateCcw, Database, Play, Pause, Loader2, ChevronLeft, ChevronRight, ChevronDown, Download, Tag, Clock, ArrowRight, Send, CheckCircle2, DollarSign, Undo2, Globe, Trophy } from "lucide-react";
 
@@ -76,6 +75,7 @@ interface TradeProposal {
 }
 
 function PlayerChip({ player, value }: { player: Player; value: number }) {
+  const { openPlayerProfile } = usePlayerProfile();
   const sid = player.sleeperId ?? player.id;
   return (
     <div className="flex items-center gap-1.5 py-1">
@@ -86,6 +86,7 @@ function PlayerChip({ player, value }: { player: Player; value: number }) {
         team={player.team ?? ""}
         size="sm"
         sub={value.toLocaleString()}
+        onClick={() => openPlayerProfile(sid)}
       />
     </div>
   );
@@ -214,8 +215,15 @@ function TradeProposalCard({ proposal, mode, userTeam, league }: { proposal: Tra
           )}
         </div>
 
-        {/* Send Trade button */}
-        <div className="flex justify-end">
+        {/* Share + Send Trade buttons */}
+        <div className="flex items-center justify-end gap-3">
+          <ShareTradeToDiscordButton
+            testId={`finder-${proposal.partner.id}`}
+            leagueName={league.name}
+            leagueFormat={[league.format, league.scoringFormat, league.totalRosters ? `${league.totalRosters}-team` : ""].filter(Boolean).join(" · ")}
+            sideA={{ label: userTeam.name, receives: proposal.gets.map((p): PollAsset => ({ label: `${p.name} (${p.pos})`, sleeperId: p.sleeperId ?? p.id })) }}
+            sideB={{ label: proposal.partner.name, receives: proposal.gives.map((p): PollAsset => ({ label: `${p.name} (${p.pos})`, sleeperId: p.sleeperId ?? p.id })) }}
+          />
           {sendState === "sent" ? (
             <span className="flex items-center gap-1 text-[10px] text-emerald-400" data-testid={`proposal-sent-${proposal.partner.id}`}>
               <CheckCircle2 className="w-3 h-3" /> Trade sent!
@@ -250,6 +258,7 @@ function TradeProposalCard({ proposal, mode, userTeam, league }: { proposal: Tra
 
 export function TradeFinder({ league, userTeam }: TradeProps) {
   const { getPlayerValue, getRedraftValue, optimizeLineup } = useValueModel();
+  const { openPlayerProfile } = usePlayerProfile();
   const tradeFinderTierMap = useMemo(() => getLeagueTeamTiers(league.teams), [league.teams]);
   const [proposalMode, setProposalMode] = useState<"dynasty" | "redraft">("dynasty");
   const [posFilter, setPosFilter] = useState<string>("all");
@@ -793,7 +802,7 @@ export function TradeFinder({ league, userTeam }: TradeProps) {
                 <div key={sid} className="flex items-center gap-3 py-2.5 border-b border-border/20 last:border-0" data-testid={`chip-row-${sid}`}>
                   <span className="text-xs text-muted-foreground w-5 text-right flex-shrink-0">{i + 1}.</span>
                   <div className="flex-1 min-w-0">
-                    <PlayerAvatar id={sid} name={c.player.name} pos={c.player.pos} team={c.player.team ?? ""} size="sm" />
+                    <PlayerAvatar id={sid} name={c.player.name} pos={c.player.pos} team={c.player.team ?? ""} size="sm" onClick={() => openPlayerProfile(sid)} />
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
                     <Badge
@@ -993,6 +1002,7 @@ export function TradeFinder({ league, userTeam }: TradeProps) {
                 team={p.team ?? ""}
                 size="sm"
                 sub={`${p.ownerName} · Age ${p.age}`}
+                onClick={() => openPlayerProfile(p.sleeperId || p.id)}
               />
               <div className="flex flex-col items-end gap-1 flex-shrink-0">
                 <span className="text-xs font-bold text-[#0b3a7a] dark:text-blue-400 tabular-nums">{p.redraftVal.toLocaleString()}</span>
@@ -1012,6 +1022,7 @@ export function TradeFinder({ league, userTeam }: TradeProps) {
 type UserScanState = { status: "loading" | "done" | "error"; trades: import("@/lib/sleeperApi").CrossLeagueTradeResult[]; leaguesScanned: number; error?: string };
 
 function CrossLeagueTradeIntel({ league }: { league: League }) {
+  const { openPlayerProfile } = usePlayerProfile();
   const teamsWithOwner = useMemo(() => league.teams.filter(t => t.ownerId), [league.teams]);
   const [scanResults, setScanResults] = useState<Map<string, UserScanState>>(new Map());
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -1136,7 +1147,7 @@ function CrossLeagueTradeIntel({ league }: { league: League }) {
                               <div className="space-y-1">
                                 {trade.sent.map((p, j) => (
                                   <div key={`sent-${p.playerId}-${j}`} className="flex items-center gap-1.5">
-                                    <PlayerAvatar id={p.playerId} name={p.name} pos={p.pos} team={(p as any).team ?? ""} size="xs" compact />
+                                    <PlayerAvatar id={p.playerId} name={p.name} pos={p.pos} team={(p as any).team ?? ""} size="xs" compact onClick={() => openPlayerProfile(p.playerId)} />
                                     <span className="text-[11px] truncate flex-1">{p.name}</span>
                                     <Badge variant="outline" className={`text-[8px] px-0.5 py-0 h-3.5 flex-shrink-0 ${getPositionColor(p.pos)}`}>{p.pos}</Badge>
                                   </div>
@@ -1155,7 +1166,7 @@ function CrossLeagueTradeIntel({ league }: { league: League }) {
                               <div className="space-y-1">
                                 {trade.received.map((p, j) => (
                                   <div key={`recv-${p.playerId}-${j}`} className="flex items-center gap-1.5">
-                                    <PlayerAvatar id={p.playerId} name={p.name} pos={p.pos} team={(p as any).team ?? ""} size="xs" compact />
+                                    <PlayerAvatar id={p.playerId} name={p.name} pos={p.pos} team={(p as any).team ?? ""} size="xs" compact onClick={() => openPlayerProfile(p.playerId)} />
                                     <span className="text-[11px] truncate flex-1">{p.name}</span>
                                     <Badge variant="outline" className={`text-[8px] px-0.5 py-0 h-3.5 flex-shrink-0 ${getPositionColor(p.pos)}`}>{p.pos}</Badge>
                                   </div>
@@ -1492,6 +1503,267 @@ function PickAdder({ onAdd, side }: PickAdderProps) {
   );
 }
 
+// ── Quick Trade Calculator (no login / no league) ─────────────────────────────
+// One side of the quick calculator: a value total, asset chips, a searchable
+// player dropdown, and a compact draft-pick adder.
+function QuickCalcSide({ label, assets, total, players, onAddPlayer, onAddPick, onRemove }: {
+  label: string;
+  assets: TradeAsset[];
+  total: number;
+  players: RankedPlayer[];
+  onAddPlayer: (rp: RankedPlayer) => void;
+  onAddPick: (year: number, round: number) => void;
+  onRemove: (id: string) => void;
+}) {
+  const [search, setSearch] = useState("");
+  const [pickYear, setPickYear] = useState("2026");
+  const [pickRound, setPickRound] = useState("1");
+
+  const results = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return [] as RankedPlayer[];
+    const chosen = new Set(assets.filter((a) => a.type === "player" && a.player).map((a) => a.player!.sleeperId || a.player!.id));
+    return players.filter((p) => p.name.toLowerCase().includes(q) && !chosen.has(p.sleeperId)).slice(0, 8);
+  }, [players, search, assets]);
+
+  return (
+    <div className="rounded-xl border border-border bg-muted/10 p-3">
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-sm font-bold text-foreground">{label}</span>
+        <span className="text-[12px] font-black tabular-nums text-[#d4af37]">{Math.round(total).toLocaleString()}</span>
+      </div>
+
+      {/* Added assets */}
+      <div className="space-y-1 mb-2 min-h-[2rem]">
+        {assets.length === 0 && <p className="text-[11px] text-muted-foreground italic px-1 py-1">No assets yet</p>}
+        {assets.map((a) => (
+          <div key={a.id} className="flex items-center gap-2 rounded-lg bg-card border border-border/60 px-2 py-1">
+            {a.type === "player" && a.player ? (
+              <PlayerAvatar id={a.player.sleeperId || a.player.id} name={a.player.name} pos={a.player.pos} team={a.player.team ?? ""} size="xs" />
+            ) : (
+              <span className="text-[12px] font-semibold text-foreground">{a.label}</span>
+            )}
+            <span className="ml-auto text-[11px] font-bold tabular-nums text-muted-foreground">{Math.round(a.value).toLocaleString()}</span>
+            <button onClick={() => onRemove(a.id)} className="text-muted-foreground/50 hover:text-red-400 transition-colors" data-testid={`quick-remove-${label}`}>
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        ))}
+      </div>
+
+      {/* Player search dropdown */}
+      <div className="relative">
+        <div className="flex items-center gap-1.5 rounded-lg border border-border bg-background/60 px-2">
+          <Search className="w-3.5 h-3.5 text-muted-foreground/60 flex-shrink-0" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Add a player…"
+            className="flex-1 bg-transparent py-1.5 text-[12px] focus:outline-none"
+            data-testid={`quick-search-${label}`}
+          />
+        </div>
+        {results.length > 0 && (
+          <div className="absolute z-20 left-0 right-0 mt-1 rounded-lg border border-border bg-popover shadow-lg max-h-56 overflow-y-auto">
+            {results.map((p) => (
+              <button
+                key={p.sleeperId}
+                onClick={() => { onAddPlayer(p); setSearch(""); }}
+                className="w-full flex items-center gap-2 px-2 py-1.5 hover:bg-muted/50 text-left transition-colors"
+                data-testid={`quick-result-${p.sleeperId}`}
+              >
+                <PlayerAvatar id={p.sleeperId} name={p.name} pos={p.pos} team={p.team} size="xs" />
+                <span className="ml-auto text-[11px] font-bold tabular-nums text-muted-foreground">{Math.round(p.value).toLocaleString()}</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Draft-pick adder */}
+      <div className="flex items-center gap-1.5 mt-2">
+        <select value={pickYear} onChange={(e) => setPickYear(e.target.value)} className="rounded-md border border-border bg-background/60 px-1.5 py-1 text-[11px]" data-testid={`quick-pick-year-${label}`}>
+          {["2026", "2027", "2028"].map((y) => <option key={y} value={y}>{y}</option>)}
+        </select>
+        <select value={pickRound} onChange={(e) => setPickRound(e.target.value)} className="rounded-md border border-border bg-background/60 px-1.5 py-1 text-[11px]" data-testid={`quick-pick-round-${label}`}>
+          {["1", "2", "3", "4"].map((r) => <option key={r} value={r}>Round {r}</option>)}
+        </select>
+        <button
+          onClick={() => onAddPick(parseInt(pickYear, 10), parseInt(pickRound, 10))}
+          className="inline-flex items-center gap-1 rounded-md border border-border bg-muted/30 px-2 py-1 text-[11px] font-semibold text-muted-foreground hover:text-foreground transition-colors"
+          data-testid={`quick-add-pick-${label}`}
+        >
+          <Plus className="w-3 h-3" /> Pick
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// No-login calculator: compares two player/pick packages using bundled dynasty
+// values. No rosters, no trade partner — just dropdown selection.
+function QuickTradeCalculator() {
+  const { dynastyPlayerList } = useValueModel();
+  const [sideA, setSideA] = useState<TradeAsset[]>([]);
+  const [sideB, setSideB] = useState<TradeAsset[]>([]);
+
+  const addAsset = (side: "a" | "b", asset: TradeAsset) =>
+    (side === "a" ? setSideA : setSideB)((prev) => [...prev, asset]);
+  const removeAsset = (side: "a" | "b", id: string) =>
+    (side === "a" ? setSideA : setSideB)((prev) => prev.filter((x) => x.id !== id));
+
+  const addPlayer = (side: "a" | "b", rp: RankedPlayer) =>
+    addAsset(side, {
+      id: `qp-${rp.sleeperId}-${Date.now()}`,
+      type: "player",
+      player: { id: rp.sleeperId, sleeperId: rp.sleeperId, name: rp.name, pos: rp.pos as Player["pos"], team: rp.team, age: rp.age, value: rp.value },
+      value: rp.value,
+      label: rp.name,
+      pos: rp.pos,
+    });
+  const addPick = (side: "a" | "b", year: number, round: number) =>
+    addAsset(side, {
+      id: `qk-${year}-${round}-${Date.now()}`,
+      type: "pick",
+      pickYear: year,
+      pickRound: round,
+      pickRange: "Mid",
+      value: getStaticPickValue(year, round, "mid"),
+      label: `${year} Mid ${round}${round === 1 ? "st" : round === 2 ? "nd" : round === 3 ? "rd" : "th"}`,
+    });
+
+  const valA = calculateAdjustedTotal(sideA);
+  const valB = calculateAdjustedTotal(sideB);
+  const diff = Math.abs(valA - valB);
+  const diffPct = (diff / Math.max(valA, valB, 1)) * 100;
+  const fair = diffPct <= 6;
+  const favored = valA === valB ? null : valA > valB ? "A" : "B";
+  const bothSides = sideA.length > 0 && sideB.length > 0;
+
+  return (
+    <div className="space-y-4">
+      <Card className="p-4 sm:p-5">
+        <h3 className="text-base font-black text-foreground flex items-center gap-2">
+          <Scale className="w-4 h-4 text-[#d4af37]" /> Quick Trade Calculator
+        </h3>
+        <p className="text-[11px] text-muted-foreground mt-1 mb-4">
+          Compare any two packages with dynasty trade values — no login or league needed. Pick players and draft picks below.
+        </p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <QuickCalcSide label="Side A" assets={sideA} total={valA} players={dynastyPlayerList} onAddPlayer={(rp) => addPlayer("a", rp)} onAddPick={(y, r) => addPick("a", y, r)} onRemove={(id) => removeAsset("a", id)} />
+          <QuickCalcSide label="Side B" assets={sideB} total={valB} players={dynastyPlayerList} onAddPlayer={(rp) => addPlayer("b", rp)} onAddPick={(y, r) => addPick("b", y, r)} onRemove={(id) => removeAsset("b", id)} />
+        </div>
+      </Card>
+
+      <Card className="p-4 sm:p-5">
+        <div className="flex items-center justify-between gap-3">
+          <h3 className="text-base font-black text-foreground flex items-center gap-2">
+            <Trophy className="w-4 h-4 text-[#d4af37]" /> Verdict
+          </h3>
+          {(sideA.length > 0 || sideB.length > 0) && (
+            <button onClick={() => { setSideA([]); setSideB([]); }} className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors" data-testid="quick-calc-clear">
+              <RotateCcw className="w-3 h-3" /> Clear
+            </button>
+          )}
+        </div>
+        {!bothSides ? (
+          <p className="text-[12px] text-muted-foreground mt-3">Add at least one asset to each side to see the verdict.</p>
+        ) : (
+          <div className="mt-3 space-y-3">
+            <div className={cn(
+              "inline-flex items-center rounded-full px-3 py-1 text-[12px] font-bold border",
+              fair ? "bg-[#d4af37]/10 text-amber-700 dark:text-[#e8c84a] border-[#d4af37]/30"
+                : diffPct <= 20 ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30"
+                : "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/30",
+            )} data-testid="quick-calc-verdict">
+              {fair ? "Even Trade" : `Side ${favored} favored${diffPct > 20 ? " heavily" : ""} · +${Math.round(diff).toLocaleString()} (${Math.round(diffPct)}%)`}
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className={cn("rounded-xl border p-3", favored === "A" ? "border-emerald-500/40 bg-emerald-500/5" : "border-border bg-card")}>
+                <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Side A value</div>
+                <div className="text-xl font-black tabular-nums text-foreground">{Math.round(valA).toLocaleString()}</div>
+              </div>
+              <div className={cn("rounded-xl border p-3", favored === "B" ? "border-emerald-500/40 bg-emerald-500/5" : "border-border bg-card")}>
+                <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Side B value</div>
+                <div className="text-xl font-black tabular-nums text-foreground">{Math.round(valB).toLocaleString()}</div>
+              </div>
+            </div>
+            <p className="text-[10px] text-muted-foreground">Depth-adjusted dynasty values — multi-asset packages are discounted, so quality beats quantity.</p>
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+// Wraps the Trade Calculator with a "Quick" (no-login) ⇄ "My League" mode toggle.
+// Rendered above the active-league guard so guests can reach Quick mode.
+export function TradeCalculatorView({ league, userTeam, onNavigate }: {
+  league: League | null;
+  userTeam: Team | null;
+  onNavigate?: (mainTab: string, subTab: string) => void;
+}) {
+  const hasLeague = !!league && !!userTeam;
+  const [mode, setMode] = useState<"quick" | "league">(hasLeague ? "league" : "quick");
+  // When a league finishes loading (e.g. a "Show in Trade Calc" deep-link),
+  // surface the league calculator so the prefilled trade is visible.
+  useEffect(() => { if (hasLeague) setMode("league"); }, [hasLeague]);
+
+  return (
+    <div className="space-y-4">
+      {/* Segmented sub-tab toggle — mirrors the Portfolio "Overview / Finances" tabs. */}
+      <div
+        className="grid flex-shrink-0 w-full max-w-[320px]"
+        style={{ gridTemplateColumns: "1fr 1fr", height: 48, borderRadius: 16, padding: 4, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", gap: 4 }}
+        data-testid="calc-mode-toggle"
+      >
+        {(["quick", "league"] as const).map((id) => {
+          const isActive = mode === id;
+          const Icon = id === "quick" ? Scale : Trophy;
+          const label = id === "quick" ? "Quick Calculator" : "My League";
+          return (
+            <button
+              key={id}
+              onClick={() => setMode(id)}
+              data-testid={`calc-mode-${id}`}
+              className="relative flex items-center justify-center gap-2 font-semibold whitespace-nowrap transition-all duration-200"
+              style={{
+                borderRadius: 12,
+                fontSize: 13,
+                letterSpacing: "0.01em",
+                background: isActive ? "linear-gradient(135deg, rgba(11,58,122,0.85) 0%, rgba(11,58,122,0.65) 100%)" : "transparent",
+                color: isActive ? "#fff" : "rgba(203,213,225,0.45)",
+                border: isActive ? "1px solid rgba(212,175,55,0.30)" : "1px solid transparent",
+                boxShadow: isActive ? "0 2px 12px rgba(11,58,122,0.40), inset 0 1px 0 rgba(255,255,255,0.06)" : "none",
+              }}
+            >
+              <Icon style={{ width: 15, height: 15, flexShrink: 0 }} />
+              {label}
+              {isActive && <span className="sc-subtab-underline absolute bottom-[3px] left-1/2 -translate-x-1/2 rounded-full" style={{ width: 28, height: 2, background: "#d4af37", opacity: 0.85 }} />}
+            </button>
+          );
+        })}
+      </div>
+
+      {mode === "quick" ? (
+        <QuickTradeCalculator />
+      ) : hasLeague ? (
+        <TradeCalculator league={league!} userTeam={userTeam!} />
+      ) : (
+        <Card className="p-6 text-center">
+          <p className="text-sm font-semibold text-foreground">Connect your Sleeper account to use the league calculator</p>
+          <p className="text-[12px] text-muted-foreground mt-1">It loads your rosters and lets you pick a trade partner. Or use the Quick Calculator above — no login needed.</p>
+          {onNavigate && (
+            <Button className="mt-3 bg-[#d4af37] hover:bg-[#d4af37]/90 text-[#0b1f3a] font-semibold" onClick={() => onNavigate("portfolio", "portfolio-summary")} data-testid="calc-connect-cta">
+              Connect Sleeper
+            </Button>
+          )}
+        </Card>
+      )}
+    </div>
+  );
+}
+
 interface TradeCalculatorProps {
   league: League;
   userTeam: Team;
@@ -1670,6 +1942,51 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
     return () => window.removeEventListener("tc-prefill", handler);
   }, [allPlayers, addPlayer, addPick]);
 
+  // Full-trade prefill from "Show in Trade Calc" (My Trades). Persisted in
+  // localStorage so it survives the active-league switch + tab mount; applied
+  // once the matching league's rosters are loaded so player lookups resolve.
+  useEffect(() => {
+    const raw = localStorage.getItem("tc-trade-prefill");
+    if (!raw) return;
+    let payload: any;
+    try { payload = JSON.parse(raw); } catch { localStorage.removeItem("tc-trade-prefill"); return; }
+    // Drop stale requests; otherwise wait until the right league's rosters load.
+    if (!payload || (payload.ts && Date.now() - payload.ts > 60_000)) { localStorage.removeItem("tc-trade-prefill"); return; }
+    if (payload.leagueId !== league.id || allPlayers.length === 0) return;
+    localStorage.removeItem("tc-trade-prefill");
+
+    const ordinal = (r: number) => `${r}${r === 1 ? "st" : r === 2 ? "nd" : r === 3 ? "rd" : "th"}`;
+    const build = (s: any): TradeAsset[] => {
+      const out: TradeAsset[] = [];
+      for (const sid of (s?.sleeperIds ?? []) as string[]) {
+        const player = allPlayers.find((p) => (p.sleeperId || p.id) === sid);
+        if (player) out.push({ id: `player-${sid}-${out.length}-${Date.now()}`, type: "player", player, value: getPlayerValue(player), label: player.name, pos: player.pos });
+      }
+      for (const pk of (s?.picks ?? []) as Array<{ year: number; round: number; originalRosterId?: number }>) {
+        if (!pk?.year || !pk?.round) continue;
+        out.push({ id: `pick-${pk.year}-${pk.round}-${out.length}-${Date.now()}`, type: "pick", pickYear: pk.year, pickRound: pk.round, pickRange: "Mid", pickOriginalRosterId: pk.originalRosterId, value: getStaticPickValue(pk.year, pk.round, "mid"), label: `${pk.year} Mid ${ordinal(pk.round)}` });
+      }
+      return out;
+    };
+
+    const aAssets = build(payload.sideA);
+    const bAssets = build(payload.sideB);
+    setSideA(aAssets);
+    setSideB(bAssets);
+
+    // Prefer the explicit roster ids; fall back to auto-detecting from each
+    // side's first player (mirrors addPlayer) if they don't match a team.
+    const teamExists = (id?: string) => !!id && league.teams.some((t) => t.id === id);
+    const detect = (assets: TradeAsset[]) => {
+      const fp = assets.find((x) => x.type === "player")?.player;
+      return fp ? playerToTeamMap.get(fp.sleeperId || fp.id) : undefined;
+    };
+    const aRoster = teamExists(payload.sideA?.rosterId) ? payload.sideA.rosterId : detect(aAssets);
+    const bRoster = teamExists(payload.sideB?.rosterId) ? payload.sideB.rosterId : detect(bAssets);
+    if (aRoster) setSideARosterId(aRoster);
+    if (bRoster) { setSideBRosterId(bRoster); setTradePartnerId(bRoster); }
+  }, [league.id, allPlayers, getPlayerValue, playerToTeamMap]);
+
   // Propose trade state
   const [expiry, setExpiry] = useState("24h");
   const [faabOpen, setFaabOpen] = useState(false);
@@ -1830,6 +2147,9 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
         scale: 2,
         useCORS: true,
         logging: false,
+        // Keep action-only controls (e.g. the Discord share button) out of the
+        // saved verdict image.
+        ignoreElements: (el) => el.hasAttribute("data-skip-capture"),
       });
       const link = document.createElement("a");
       link.download = "trade-verdict.png";
@@ -2652,6 +2972,20 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
 
               {/* ── RIGHT: send-trade controls / connect form / success ─ */}
               <div className="md:col-span-3 space-y-2">
+                {/* Share to Discord — needs only a StatChasers login (not Sleeper),
+                    and is excluded from the saved verdict PNG. Side A receives what
+                    side B sends, and vice-versa. */}
+                <div data-skip-capture>
+                  <ShareTradeToDiscordButton
+                    testId="calc"
+                    label="Post in DC Discord"
+                    className="w-full h-10 px-4 text-sm rounded-full bg-[#5865F2] hover:bg-[#5865F2]/90 text-white"
+                    leagueName={league.name}
+                    leagueFormat={[league.format, league.scoringFormat, league.totalRosters ? `${league.totalRosters}-team` : ""].filter(Boolean).join(" · ")}
+                    sideA={{ label: sideATeam?.name || "Side A", receives: sideB.map((a): PollAsset => ({ label: a.label, sleeperId: a.type === "player" ? a.player?.sleeperId : undefined })) }}
+                    sideB={{ label: sideBTeam?.name || "Side B", receives: sideA.map((a): PollAsset => ({ label: a.label, sleeperId: a.type === "player" ? a.player?.sleeperId : undefined })) }}
+                  />
+                </div>
                 {!sleeperJwt ? (
                   // Not connected — compact connect input.
                   <div className="space-y-2">
@@ -2695,7 +3029,7 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
                     <Button
                       onClick={handleProposeTrade}
                       disabled={!canSubmit}
-                      className="w-full h-10 px-4 bg-gradient-to-r from-[#0b3a7a] to-[#1151a8] hover:from-[#0d4a9e] hover:to-[#1362c8] text-white font-semibold gap-2 rounded-full shadow-md shadow-[#0b3a7a]/25 disabled:opacity-40 disabled:shadow-none text-sm"
+                      className="w-full h-10 px-4 bg-gradient-to-r from-[#d4af37] to-[#c8a02e] hover:from-[#e0bd4a] hover:to-[#d4af37] text-[#0b1f3a] font-semibold gap-2 rounded-full shadow-md shadow-[#d4af37]/25 disabled:opacity-40 disabled:shadow-none text-sm"
                       data-testid="button-propose-trade"
                     >
                       {proposing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
@@ -3335,79 +3669,6 @@ export function TradeDatabase({ league }: { league: League }) {
 // Posts the trade to Discord as a native poll via the backend (token stays
 // server-side). Only renders for 2-side trades with assets on both sides — an
 // A-vs-B poll needs exactly two contestants.
-function ShareTradeToDiscordButton({ trade }: { trade: TradeRecord }) {
-  const { toast } = useToast();
-  const { isAuthenticatedUser } = useAuth();
-  const [sharing, setSharing] = useState(false);
-  const inFlight = useRef(false);
-
-  // Only StatChasers-logged-in users can share (matches the server's requireAuth
-  // gate); hide the button entirely for guests / Sleeper-only users.
-  if (!isAuthenticatedUser) return null;
-  if (trade.sides.length !== 2) return null;
-  const [a, b] = trade.sides;
-  // Players carry their Sleeper id so the server can render headshots; picks
-  // are label-only. (No owner avatars or names are sent.)
-  const assetsOf = (s: TradeSide): Array<{ label: string; sleeperId?: string }> => [
-    ...s.playersReceived.map((p) => ({ label: `${p.name} (${p.pos})`, sleeperId: p.sleeperId })),
-    ...s.picksReceived.map((p) => ({
-      label: `${p.season} Round ${p.round}${p.slot ? `.${String(p.slot).padStart(2, "0")}` : ""}`,
-    })),
-  ];
-  const aReceives = assetsOf(a);
-  const bReceives = assetsOf(b);
-  if (!aReceives.length || !bReceives.length) return null;
-
-  const onShare = async () => {
-    if (inFlight.current) return; // guard rapid double-clicks
-    inFlight.current = true;
-    setSharing(true);
-    try {
-      const fmt = [trade.leagueFormat, trade.leagueScoringFormat, `${trade.leagueTotalRosters}-team`]
-        .filter(Boolean)
-        .join(" · ");
-      const res = await scAuthFetch("/api/discord/share-trade-poll", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          leagueName: trade.leagueName ?? "",
-          leagueFormat: fmt,
-          sideA: { label: a.teamName || a.ownerName || "Side A", receives: aReceives },
-          sideB: { label: b.teamName || b.ownerName || "Side B", receives: bReceives },
-        }),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json().catch(() => ({} as any));
-      toast({
-        title: data?.warning ?? "Trade shared to Discord with reaction voting.",
-      });
-    } catch {
-      toast({ title: "Could not share trade poll. Please try again.", variant: "destructive" });
-    } finally {
-      inFlight.current = false;
-      setSharing(false);
-    }
-  };
-
-  return (
-    <button
-      type="button"
-      onClick={onShare}
-      disabled={sharing}
-      data-testid={`share-discord-${trade.tradeId}`}
-      title="Share to Discord Poll"
-      className={cn(
-        "inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[10px] font-semibold transition-colors flex-shrink-0",
-        "border border-[#5865F2]/40 text-[#5865F2] hover:bg-[#5865F2]/10",
-        "disabled:opacity-60 disabled:cursor-not-allowed",
-      )}
-    >
-      {sharing ? <Loader2 className="w-3 h-3 animate-spin" /> : <SiDiscord className="w-3 h-3" />}
-      {sharing ? "Sharing..." : "Share to Discord Poll"}
-    </button>
-  );
-}
-
 function TradeCard({
   trade,
   getPlayerValue,
@@ -3417,6 +3678,7 @@ function TradeCard({
   getPlayerValue: (sleeperId: string) => number;
   formatDate: (ts: number) => string;
 }) {
+  const { openPlayerProfile } = usePlayerProfile();
   const sideValues = trade.sides.map((side) => {
     const playerValue = side.playersReceived.reduce((sum, p) => sum + getPlayerValue(p.sleeperId), 0);
     const pickValue = side.picksReceived.reduce((sum, p) => {
@@ -3574,6 +3836,7 @@ function TradeCard({
                             pos={p.pos}
                             team={p.team ?? ""}
                             size="sm"
+                            onClick={() => p.sleeperId && openPlayerProfile(p.sleeperId)}
                           />
                         </div>
                         <span
@@ -3661,9 +3924,6 @@ function TradeCard({
         ) : (
           <span className="min-w-0 flex-1" />
         )}
-        <div className="ml-auto flex-shrink-0">
-          <ShareTradeToDiscordButton trade={trade} />
-        </div>
       </div>
     </Card>
   );

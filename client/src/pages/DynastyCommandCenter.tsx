@@ -34,7 +34,7 @@ import { RosterComparison } from "./tabs/LeagueAnalyzer";
 import { PlayoffCalculator } from "./tabs/PlayoffCalculator";
 import { FieldView } from "./tabs/FieldView";
 import { ShareTeam } from "./tabs/ShareTeam";
-import { TradeBlockScanner, TradeCalculator, TradeDatabase } from "./tabs/TradeCenter";
+import { TradeBlockScanner, TradeCalculatorView, TradeDatabase } from "./tabs/TradeCenter";
 import { PositionalAnalysis } from "./tabs/PositionalAnalysis";
 import { MarketValue } from "./tabs/LeagueMarket";
 import Analysis from "./tabs/Analysis";
@@ -498,7 +498,7 @@ export default function DynastyCommandCenter({ params, playerProfileId }: { para
 
     // trade-sync doesn't need a selected league
     if (activeMainTab === "trade-center" && activeSubTab === "trade-sync") {
-      return <TradeSync />;
+      return <TradeSync onNavigate={navigateToSubTab} />;
     }
 
     // position-stats is fully self-contained (local bundled data, no Sleeper API)
@@ -510,6 +510,13 @@ export default function DynastyCommandCenter({ params, playerProfileId }: { para
     // it renders for guests too. Must sit above the active-league guard below.
     if (activeMainTab === "league-market" && activeSubTab === "analysis") {
       return <Analysis />;
+    }
+
+    // Trade Calculator has a guest-accessible "Quick" mode (no login/league), so
+    // it renders above the active-league guard. Logged-in users also get the full
+    // league-based calculator inside it.
+    if (activeMainTab === "trade-center" && activeSubTab === "trade-calculator") {
+      return <TradeCalculatorView league={league} userTeam={userTeam} onNavigate={navigateToSubTab} />;
     }
 
     // Past this point we need an active league. AccessGate has already
@@ -528,7 +535,6 @@ export default function DynastyCommandCenter({ params, playerProfileId }: { para
       case "league-analyzer:playoff-calculator": return <PlayoffCalculator />;
       case "league-analyzer:transactions":       return <Transactions leagueId={selectedLeagueId!} />;
       case "trade-center:trade-database":        return <TradeDatabase league={league} />;
-      case "trade-center:trade-calculator":      return <TradeCalculator league={league} userTeam={userTeam} />;
       case "trade-center:positional-analysis":   return <PositionalAnalysis league={league} userTeam={userTeam} />;
       case "trade-center:trade-block":           return <TradeBlockScanner league={league} />;
       case "league-market:market-value":         return <MarketValue league={league} />;
@@ -568,7 +574,7 @@ export default function DynastyCommandCenter({ params, playerProfileId }: { para
           <div className="flex items-center gap-3">
 
             {/* ── Logo (clickable menu trigger) ── */}
-            <div className="relative flex-shrink-0 flex-1" ref={logoMenuRef}>
+            <div className="relative flex-shrink-0 flex-1 flex items-center gap-2" ref={logoMenuRef}>
               <button
                 onClick={() => setLogoMenuOpen(v => !v)}
                 data-testid="button-logo-menu"
@@ -591,6 +597,18 @@ export default function DynastyCommandCenter({ params, playerProfileId }: { para
                 </div>
                 <ChevronDown className={`w-3 h-3 text-muted-foreground/60 group-hover:text-foreground transition-transform duration-200 hidden md:block ${logoMenuOpen ? "rotate-180" : ""}`} />
               </button>
+
+              {/* Discord — moved out of the logo dropdown to sit beside the brand. */}
+              <a
+                href="https://discord.gg/yerHQKBrre"
+                target="_blank"
+                rel="noopener noreferrer"
+                data-testid="button-discord"
+                className="flex items-center gap-1.5 px-2 py-1.5 text-sm font-semibold rounded-md transition-all duration-200 text-[#5865F2] bg-[#5865F2]/10 hover:bg-[#5865F2]/20 border border-[#5865F2]/25 hover:border-[#5865F2]/40 flex-shrink-0"
+              >
+                <SiDiscord className="w-3.5 h-3.5" />
+                <span className="hidden md:inline">Discord</span>
+              </a>
 
               {/* Logo dropdown menu */}
               {logoMenuOpen && (
@@ -637,18 +655,7 @@ export default function DynastyCommandCenter({ params, playerProfileId }: { para
                   </div>
 
                   {/* Footer row */}
-                  <div className="flex items-center justify-between px-4 py-3" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-                    <a
-                      href="https://discord.gg/yerHQKBrre"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={() => setLogoMenuOpen(false)}
-                      className="flex items-center gap-1.5 text-[12px] font-semibold transition-colors"
-                      style={{ color: "#5865F2" }}
-                    >
-                      <SiDiscord className="w-3.5 h-3.5" />
-                      Discord
-                    </a>
+                  <div className="flex items-center justify-end px-4 py-3" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
                     <ThemeToggle />
                   </div>
                 </div>
@@ -835,18 +842,8 @@ export default function DynastyCommandCenter({ params, playerProfileId }: { para
                   )}
                 </div>
               ) : (
-                /* Discord + ThemeToggle inline when not connected */
+                /* ThemeToggle inline when not connected (Discord now lives beside the logo) */
                 <div className="flex items-center gap-1.5 border-l border-border/40 pl-2">
-                  <a
-                    href="https://discord.gg/yerHQKBrre"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    data-testid="button-discord"
-                    className="flex items-center gap-1.5 px-2 py-1.5 text-sm font-semibold rounded-md transition-all duration-200 text-[#5865F2] bg-[#5865F2]/10 hover:bg-[#5865F2]/20 border border-[#5865F2]/25 hover:border-[#5865F2]/40"
-                  >
-                    <SiDiscord className="w-3.5 h-3.5" />
-                    <span className="hidden md:inline">Discord</span>
-                  </a>
                   <ThemeToggle />
                 </div>
               )}

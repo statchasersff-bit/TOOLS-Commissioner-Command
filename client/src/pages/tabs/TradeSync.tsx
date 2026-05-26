@@ -15,8 +15,11 @@ import { PlayerAvatar } from "@/components/PlayerAvatar";
 import {
   ArrowRightLeft, TrendingUp, TrendingDown, RefreshCw, Loader2,
   Clock, AlertTriangle, CheckCircle2, XCircle, Inbox, Send,
-  Lock, Activity,
+  Lock, Activity, Calculator,
 } from "lucide-react";
+import { ShareTradeToDiscordButton } from "@/components/trade/ShareTradeToDiscordButton";
+import { showFeatureDisabled } from "@/components/FeatureDisabledDialog";
+import { usePlayerProfile } from "@/contexts/PlayerProfileContext";
 import {
   TradeActionModal,
   type NormalizedTrade,
@@ -444,6 +447,7 @@ function PlayerHeadshot({ playerId, name }: { playerId: string; name: string }) 
 // ─── Player row for card layout ───────────────────────────────────────────────
 
 function PlayerCardRow({ player, showValue }: { player: AssetPlayer; showValue?: boolean }) {
+  const { openPlayerProfile } = usePlayerProfile();
   return (
     <div className="flex items-center gap-2 py-0.5">
       <PlayerAvatar
@@ -452,6 +456,7 @@ function PlayerCardRow({ player, showValue }: { player: AssetPlayer; showValue?:
         pos={player.pos}
         team={player.team}
         size="sm"
+        onClick={() => openPlayerProfile(player.playerId)}
       />
       {showValue && (
         <span className="ml-auto text-sm font-semibold tabular-nums text-muted-foreground flex-shrink-0">
@@ -526,12 +531,13 @@ function ValueEdgeCell({ edge }: { edge: number }) {
 
 // ─── Trade Card ───────────────────────────────────────────────────────────────
 
-function TradeCard({ trade, myUsername, myAvatar, onView, onCounter }: {
+function TradeCard({ trade, myUsername, myAvatar, onView, onCounter, onShowInCalc }: {
   trade: NormalizedTrade;
   myUsername: string;
   myAvatar: string | null;
   onView: () => void;
   onCounter?: () => void;
+  onShowInCalc?: () => void;
 }) {
   const expiring = isExpiringSoon(trade.expiresAt);
   const isProposed = trade.status === "proposed";
@@ -626,39 +632,73 @@ function TradeCard({ trade, myUsername, myAvatar, onView, onCounter }: {
         className="flex items-center gap-2 px-4 py-2.5 border-t border-border/30"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Review / View Details */}
-        <Button
-          size="sm"
-          variant="ghost"
-          className="h-7 px-3 text-[11px] gap-1 text-muted-foreground hover:text-foreground"
-          onClick={onView}
-          data-testid={`btn-review-${trade.transactionId}`}
-        >
-          Review
-        </Button>
+        {/* Right-aligned action group: "Click for Help", then (for incoming,
+            still-proposed trades) Counter / Reject / Accept. The ml-auto wrapper
+            keeps the group right-aligned even when the help button is hidden. */}
+        <div className="ml-auto flex items-center gap-2">
+          {/* Show in Trade Calc — loads this trade's league and opens the
+              calculator with both sides pre-filled. */}
+          <Button
+            size="sm"
+            onClick={onShowInCalc}
+            className="h-7 px-3 text-[11px] bg-slate-600/80 hover:bg-slate-600 text-white font-semibold"
+            data-testid={`btn-show-in-calc-${trade.transactionId}`}
+          >
+            <Calculator className="w-3 h-3 mr-1" /> Show in Trade Calc
+          </Button>
 
-        {/* Mode-specific actions */}
-        {isProposed && trade.direction === "incoming" && (
-          <>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-7 px-3 text-[11px] gap-1 text-muted-foreground hover:text-foreground"
-              onClick={onCounter}
-              data-testid={`btn-counter-${trade.transactionId}`}
-            >
-              <ArrowRightLeft className="w-3 h-3" /> Counter
-            </Button>
-            <Button
-              size="sm"
-              className="h-7 px-3 text-[11px] ml-auto bg-emerald-600/80 hover:bg-emerald-600 text-white font-semibold"
-              onClick={onView}
-              data-testid={`btn-accept-quick-${trade.transactionId}`}
-            >
-              <CheckCircle2 className="w-3 h-3 mr-1" /> Accept
-            </Button>
-          </>
-        )}
+          {/* "Click for Help" — styled to match the action buttons; sits directly
+              left of Counter. Neutral side labels (no usernames) for an unbiased
+              public vote; players carry their id for headshots. */}
+          <ShareTradeToDiscordButton
+            testId={trade.transactionId}
+            className="h-7 px-3 text-[11px] bg-[#5865F2] hover:bg-[#5865F2]/90 text-white"
+            leagueName={trade.leagueName}
+            leagueFormat={trade.leagueFormat}
+            sideA={{ label: "Side A", receives: [
+              ...myReceives.players.map((p) => ({ label: `${p.name} (${p.pos})`, sleeperId: p.playerId })),
+              ...myReceives.picks.map((p) => ({ label: p.label })),
+            ] }}
+            sideB={{ label: "Side B", receives: [
+              ...theyReceive.players.map((p) => ({ label: `${p.name} (${p.pos})`, sleeperId: p.playerId })),
+              ...theyReceive.picks.map((p) => ({ label: p.label })),
+            ] }}
+          />
+
+          {/* Counter / Reject (both directions) + Accept (incoming only) — write
+              actions that aren't enabled yet, so they open the same "Feature
+              currently disabled" dialog. */}
+          {isProposed && (
+            <>
+              <Button
+                size="sm"
+                onClick={() => showFeatureDisabled()}
+                className="h-7 px-3 text-[11px] bg-[#d4af37] hover:bg-[#d4af37]/90 text-[#0b1f3a] font-semibold"
+                data-testid={`btn-counter-${trade.transactionId}`}
+              >
+                <ArrowRightLeft className="w-3 h-3 mr-1" /> {trade.direction === "outgoing" ? "Revise" : "Counter"}
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => showFeatureDisabled()}
+                className="h-7 px-3 text-[11px] bg-rose-600/80 hover:bg-rose-600 text-white font-semibold"
+                data-testid={`btn-reject-quick-${trade.transactionId}`}
+              >
+                <XCircle className="w-3 h-3 mr-1" /> {trade.direction === "outgoing" ? "Cancel" : "Reject"}
+              </Button>
+              {trade.direction === "incoming" && (
+                <Button
+                  size="sm"
+                  className="h-7 px-3 text-[11px] bg-emerald-600/80 hover:bg-emerald-600 text-white font-semibold"
+                  onClick={onView}
+                  data-testid={`btn-accept-quick-${trade.transactionId}`}
+                >
+                  <CheckCircle2 className="w-3 h-3 mr-1" /> Accept
+                </Button>
+              )}
+            </>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -676,9 +716,33 @@ const VIEWS: Array<{ id: TradeView; label: string; icon: React.ElementType }> = 
   { id: "activity",  label: "All Trades", icon: Activity     },
 ];
 
-export default function TradeSync() {
+export default function TradeSync({ onNavigate }: { onNavigate?: (mainTab: string, subTab: string) => void } = {}) {
   const sleeper = useSleeper();
   const { valuesBySleeperId } = useValueModel();
+
+  // "Show in Trade Calc": stash a full-trade prefill, switch the active league to
+  // the trade's league, then open the calculator (which applies the prefill once
+  // that league's rosters finish loading). Side A = the user (sends iGive),
+  // Side B = the partner (sends iGet) — reconstructing the trade as a comparison.
+  const handleShowInCalc = (trade: NormalizedTrade) => {
+    const payload = {
+      ts: Date.now(),
+      leagueId: trade.leagueId,
+      sideA: {
+        rosterId: `roster_${trade.userRosterId}`,
+        sleeperIds: trade.iGive.players.map((p) => p.playerId),
+        picks: trade.iGive.picks.map((pk) => ({ year: parseInt(pk.season, 10), round: pk.round, originalRosterId: pk.originalRosterId })),
+      },
+      sideB: {
+        rosterId: `roster_${trade.partnerRosterId}`,
+        sleeperIds: trade.iGet.players.map((p) => p.playerId),
+        picks: trade.iGet.picks.map((pk) => ({ year: parseInt(pk.season, 10), round: pk.round, originalRosterId: pk.originalRosterId })),
+      },
+    };
+    try { localStorage.setItem("tc-trade-prefill", JSON.stringify(payload)); } catch { /* ignore quota errors */ }
+    sleeper.setActiveLeagueById(trade.leagueId);
+    onNavigate?.("trade-center", "trade-calculator");
+  };
   const { toast } = useToast();
 
   const [hasSession, setHasSession] = useState(() => {
@@ -984,6 +1048,7 @@ export default function TradeSync() {
                 myAvatar={sleeper.user?.avatar ? `https://sleepercdn.com/avatars/thumbs/${sleeper.user.avatar}` : null}
                 onView={() => openModal(trade, mode)}
                 onCounter={() => openModal(trade, "counter")}
+                onShowInCalc={() => handleShowInCalc(trade)}
               />
             );
           })}

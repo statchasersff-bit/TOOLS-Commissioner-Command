@@ -26,6 +26,7 @@ import {
   Layers,
   LineChart,
   Loader2,
+  Minus,
   Newspaper,
   Repeat2,
   ScrollText,
@@ -60,6 +61,7 @@ import {
   type ProductionRow,
   type AdvStatColumn,
   type PlayerSeasonStats,
+  type StatRank,
   type RankCard as RankCardData,
   type RankCategory,
   type RankTier,
@@ -1070,7 +1072,69 @@ const STAT_LABELS: Record<string, string> = {
   knockdowns: "Knockdowns", sacks: "Sacks", sackYardsLost: "Sack Yards Lost", pressurePct: "Pressure %",
 };
 
-function AdvancedStatSections({ latest, pos }: { latest: PlayerSeasonStats; pos: string }) {
+// One grouped advanced-stat section — collapsed by default, expands on click.
+function AdvancedStatSection({ section, latest, pos, statRanks }: {
+  section: { label: string; accent: string; cols: ColDef[] };
+  latest: PlayerSeasonStats;
+  pos: string;
+  statRanks: Record<string, StatRank>;
+}) {
+  const [open, setOpen] = useState(false);
+  const Icon = SECTION_ICONS[section.label] ?? BarChart3;
+  return (
+    <Card className="p-4 sm:p-5">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        data-testid={`adv-section-toggle-${section.label}`}
+        className="w-full flex items-center justify-between gap-2 text-left"
+      >
+        <h3 className="text-base font-black text-foreground flex items-center gap-2">
+          <Icon className="w-4 h-4" style={{ color: section.accent }} /> {section.label}
+        </h3>
+        <ChevronDown className={cn("w-4 h-4 text-muted-foreground transition-transform duration-200 flex-shrink-0", open && "rotate-180")} />
+      </button>
+      {open && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5 sm:gap-3 mt-3">
+          {section.cols.map((c) => {
+            const value = fmtStat(latest.row[c.key], c.type);
+            const label = STAT_LABELS[c.key] ?? c.label;
+            const r = statRanks[c.key];
+            // Rank-snapshot styling (rank + Top %), minus the bar and the
+            // behind/ahead neighbor lines. Falls back to value-only when the
+            // player isn't ranked for this stat (unqualified / sparse pool).
+            if (!r) {
+              return (
+                <div key={c.key} className="rounded-xl border border-border bg-card p-3.5 flex flex-col">
+                  <div className="text-[22px] font-black leading-none tabular-nums text-foreground">{value}</div>
+                  <div className="text-[11px] font-bold text-muted-foreground mt-2.5 leading-tight uppercase tracking-wider">{label}</div>
+                </div>
+              );
+            }
+            const s = RANK_TIER_STYLE[r.tier];
+            const topPct = Math.max(1, Math.round((r.rank / r.total) * 100));
+            return (
+              <div key={c.key} className="rounded-xl border border-border bg-card p-3.5 flex flex-col">
+                <div className="flex items-baseline justify-between gap-1">
+                  <span className={cn("text-[26px] font-black leading-none tabular-nums", s.text)}>#{r.rank}</span>
+                  <span className="text-[15px] font-black tabular-nums text-foreground">{value}</span>
+                </div>
+                <div className="text-[10px] mt-1">
+                  <span className={cn("font-bold", s.text)}>Top {topPct}%</span>
+                  <span className="text-muted-foreground"> · of {r.total} {pos}s</span>
+                </div>
+                <div className="text-[11px] font-bold text-foreground mt-2.5 leading-tight">{label}</div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function AdvancedStatSections({ latest, pos, statRanks }: { latest: PlayerSeasonStats; pos: string; statRanks: Record<string, StatRank> }) {
   const sp = pos.toLowerCase();
   const sections = useMemo(() => {
     if (!["qb", "rb", "wr", "te"].includes(sp)) return [];
@@ -1081,26 +1145,9 @@ function AdvancedStatSections({ latest, pos }: { latest: PlayerSeasonStats; pos:
   if (sections.length === 0) return null;
   return (
     <>
-      {sections.map((sec) => {
-        const Icon = SECTION_ICONS[sec.label] ?? BarChart3;
-        return (
-          <Card key={sec.label} className="p-4 sm:p-5">
-            <div className="mb-3">
-              <h3 className="text-base font-black text-foreground flex items-center gap-2">
-                <Icon className="w-4 h-4" style={{ color: sec.accent }} /> {sec.label}
-              </h3>
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5 sm:gap-3">
-              {sec.cols.map((c) => (
-                <div key={c.key} className="rounded-xl border border-border bg-card p-3.5 flex flex-col">
-                  <div className="text-[22px] font-black leading-none tabular-nums text-foreground">{fmtStat(latest.row[c.key], c.type)}</div>
-                  <div className="text-[11px] font-bold text-muted-foreground mt-2.5 leading-tight uppercase tracking-wider">{STAT_LABELS[c.key] ?? c.label}</div>
-                </div>
-              ))}
-            </div>
-          </Card>
-        );
-      })}
+      {sections.map((sec) => (
+        <AdvancedStatSection key={sec.label} section={sec} latest={latest} pos={pos} statRanks={statRanks} />
+      ))}
     </>
   );
 }
@@ -1116,10 +1163,6 @@ function AdvancedTab({ adv, advLoading, pos }: { adv: PlayerAdvancedResult | nul
   return (
     <div className="space-y-4">
       {adv.rankCards.length > 0 && <PlayerRankSnapshot cards={adv.rankCards} pos={pos} />}
-
-      {/* Grouped advanced-stat sections (Usage, Production, Explosive, etc.),
-          driven by the research module's column grouping for this position. */}
-      <AdvancedStatSections latest={latest} pos={pos} />
 
       {/* StatChasers 2025 Metric Scores — role metrics shown as positional ranks. */}
       <Card className="p-4 sm:p-5">
@@ -1156,6 +1199,10 @@ function AdvancedTab({ adv, advLoading, pos }: { adv: PlayerAdvancedResult | nul
           })}
         </div>
       </Card>
+
+      {/* Grouped advanced-stat sections (Usage, Production, Explosive, etc.),
+          driven by the research module's column grouping for this position. */}
+      <AdvancedStatSections latest={latest} pos={pos} statRanks={adv.statRanks} />
     </div>
   );
 }
@@ -1275,6 +1322,21 @@ function AdpTab({ history, avail, loading, error, pos, filters, onFiltersChange 
   const hasAvail = !!avail && avail.totalDrafts > 0;
 
   const b = (w: "7d" | "30d" | "90d") => history?.buckets.find((x) => x.window === w)?.avgPick ?? null;
+
+  // Trend summary chips (only meaningful when hasHistory). "Current" prefers the
+  // freshest windowed average, falling back to the latest quarter; the 3-year
+  // change compares the oldest quarter to now (positive = drafted earlier now).
+  const firstQ = quarterly[0];
+  const lastQ = quarterly[quarterly.length - 1];
+  const currentAdp = b("7d") ?? b("30d") ?? b("90d") ?? lastQ?.avgPick ?? null;
+  const bestQ = hasHistory ? quarterly.reduce((bq, q) => (q.avgPick < bq.avgPick ? q : bq), quarterly[0]) : null;
+  const totalSamples = quarterly.reduce((s, q) => s + q.count, 0);
+  const threeYrChange = hasHistory && currentAdp != null ? firstQ.avgPick - currentAdp : null; // + ⇒ earlier now
+  const changeUp = threeYrChange != null && threeYrChange > 0.5;
+  const changeDown = threeYrChange != null && threeYrChange < -0.5;
+  const changeSpots = threeYrChange != null ? Math.round(Math.abs(threeYrChange)) : 0;
+  const changeChip = threeYrChange == null ? "—" : !changeUp && !changeDown ? "Flat" : `${changeUp ? "▲" : "▼"} ${changeSpots} ${changeUp ? "earlier" : "later"}`;
+
   const teams = avail?.teams ?? filters.teams;
   const cellsByRound = new Map<number, PlayerAdpAvailabilityCell[]>();
   if (avail) for (const c of avail.cells) {
@@ -1321,26 +1383,43 @@ function AdpTab({ history, avail, loading, error, pos, filters, onFiltersChange 
         Based on crawled startup drafts · current season for averages, last 3 years for the trend.
       </div>
 
-      {/* Windowed average draft position */}
-      <div className="grid grid-cols-3 gap-3">
-        <MetricCard label="ADP · 7d" value={b("7d") != null ? b("7d")!.toFixed(1) : "—"} accent />
-        <MetricCard label="ADP · 30d" value={b("30d") != null ? b("30d")!.toFixed(1) : "—"} />
-        <MetricCard label="ADP · 90d" value={b("90d") != null ? b("90d")!.toFixed(1) : "—"} />
-      </div>
-
       {/* 3-year ADP trend */}
       <Card className="p-5">
         <SectionTitle icon={LineChart} title="ADP Over Time" />
-        <div className="text-[11px] text-muted-foreground mb-2">
-          Quarterly average · last 3 years · lower = drafted earlier
-          {hasHistory && (
-            <> · <span className="font-bold text-foreground tabular-nums">{quarterly.length}</span> data points from <span className="font-bold text-foreground tabular-nums">{quarterly.reduce((sum, q) => sum + q.count, 0).toLocaleString()}</span> drafts</>
-          )}
+        <div className="text-[11px] text-muted-foreground mb-3">
+          Quarterly average · last 3 years · lower ADP = earlier drafted
         </div>
         {hasHistory ? (
           <>
+            {/* Trend banner — instant read on the 3-year direction. */}
+            {threeYrChange != null && (
+              <div className="mb-3">
+                <span className={cn(
+                  "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold",
+                  changeUp ? "bg-emerald-500/15 text-emerald-600 dark-any:text-emerald-400"
+                    : changeDown ? "bg-rose-500/15 text-rose-600 dark-any:text-rose-400"
+                    : "bg-muted text-muted-foreground",
+                )}>
+                  {changeUp ? <TrendingUp className="w-3.5 h-3.5" /> : changeDown ? <TrendingDown className="w-3.5 h-3.5" /> : <Minus className="w-3.5 h-3.5" />}
+                  {changeUp ? `Trending up · drafted ${changeSpots} spot${changeSpots === 1 ? "" : "s"} earlier over 3 yrs`
+                    : changeDown ? `Trending down · drafted ${changeSpots} spot${changeSpots === 1 ? "" : "s"} later over 3 yrs`
+                    : "Flat over the last 3 years"}
+                </span>
+              </div>
+            )}
+
+            {/* Summary chips */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mb-4">
+              <AdpChip label="Current ADP" value={currentAdp != null ? currentAdp.toFixed(1) : "—"} tone="gold" />
+              <AdpChip label="3-Year Change" value={changeChip} tone={changeUp ? "up" : changeDown ? "down" : "default"} />
+              <AdpChip label="Best Quarter" value={bestQ ? fmtAdpQuarter(bestQ.month) : "—"} />
+              <AdpChip label="Draft Samples" value={totalSamples.toLocaleString()} />
+            </div>
+
             <AdpHistoryChart series={quarterly} />
-            <div className="text-[10px] text-muted-foreground mt-1">Hover a point to see its ADP and the number of drafts used for that quarter.</div>
+            <div className="text-[10px] text-muted-foreground mt-2">
+              Reversed axis — higher on the chart means drafted earlier. Hover any point for its ADP, draft count, and change from the prior quarter.
+            </div>
           </>
         ) : (
           <EmptyLine text="Not enough data yet, needs picks in at least two different quarters." />
@@ -1435,59 +1514,172 @@ function AdpTab({ history, avail, loading, error, pos, filters, onFiltersChange 
   );
 }
 
-// Theme-aware ADP line chart. Y-axis is inverted vs PpgChart — a *lower* pick
-// number is better, so earlier picks render toward the top.
-function AdpHistoryChart({ series }: { series: { month: string; avgPick: number; count: number }[] }) {
-  const [hover, setHover] = useState<number | null>(null);
-  const W = 600, H = 150, PAD = 30;
-  const pts = series;
-  if (pts.length < 2) return null;
-  const vals = pts.map((p) => p.avgPick);
-  const min = Math.min(...vals);
-  const max = Math.max(...vals);
-  const span = Math.max(1, max - min);
-  const coords = pts.map((p, i) => {
-    const x = PAD + (i / (pts.length - 1)) * (W - PAD * 2);
-    // Inverted: smallest avgPick (earliest) → top of the chart.
-    const y = PAD + ((p.avgPick - min) / span) * (H - PAD * 2);
-    return { x, y, ...p };
-  });
-  const line = coords.map((c) => `${c.x},${c.y}`).join(" ");
-  // Label every Nth point so a long series doesn't overflow the axis.
-  const labelEvery = Math.ceil(pts.length / 8);
-  const active = hover != null ? coords[hover] : null;
+// A compact summary chip for the ADP trend (Current ADP, 3-Year Change, etc.).
+function AdpChip({ label, value, tone = "default" }: { label: string; value: string; tone?: "gold" | "up" | "down" | "default" }) {
+  const toneCls =
+    tone === "gold" ? "text-[#d4af37]"
+      : tone === "up" ? "text-emerald-600 dark-any:text-emerald-400"
+      : tone === "down" ? "text-rose-600 dark-any:text-rose-400"
+      : "text-foreground";
   return (
-    <div className="relative">
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-[160px]" preserveAspectRatio="none">
-        <polyline points={line} fill="none" stroke="#d4af37" strokeWidth={2} />
-        {coords.map((c, i) => (
-          <g key={c.month}>
-            <circle cx={c.x} cy={c.y} r={hover === i ? 5 : 3} fill="#d4af37" />
-            {i % labelEvery === 0 && (
-              <>
-                <text x={c.x} y={c.y - 7} textAnchor="middle" className="fill-foreground" fontSize={10} fontWeight={700}>{c.avgPick.toFixed(0)}</text>
-                <text x={c.x} y={H - 8} textAnchor="middle" className="fill-muted-foreground" fontSize={9}>{fmtAdpQuarter(c.month)}</text>
-              </>
-            )}
-            {/* Wide transparent hit target so the count popup is easy to hover. */}
-            <circle
-              cx={c.x} cy={c.y} r={14} fill="transparent"
-              onMouseEnter={() => setHover(i)}
-              onMouseLeave={() => setHover((h) => (h === i ? null : h))}
-            />
-          </g>
-        ))}
+    <Card className={cn("p-3", tone === "gold" && "border-[#d4af37]/30 bg-[#d4af37]/5")}>
+      <div className="text-[10px] uppercase tracking-wider text-muted-foreground truncate">{label}</div>
+      <div className={cn("font-black tabular-nums mt-0.5 text-base sm:text-lg truncate", toneCls)}>{value}</div>
+    </Card>
+  );
+}
+
+// Catmull-Rom → cubic-bezier smoothing (mild tension, so the line is smooth but
+// not balloon-y / overshooting). Returns an SVG path "d" string.
+function smoothPath(p: [number, number][]): string {
+  if (p.length === 0) return "";
+  if (p.length === 1) return `M ${p[0][0]},${p[0][1]}`;
+  let d = `M ${p[0][0]},${p[0][1]}`;
+  for (let i = 0; i < p.length - 1; i++) {
+    const p0 = p[i - 1] ?? p[i];
+    const p1 = p[i];
+    const p2 = p[i + 1];
+    const p3 = p[i + 2] ?? p2;
+    const t = 1 / 6;
+    d += ` C ${p1[0] + (p2[0] - p0[0]) * t},${p1[1] + (p2[1] - p0[1]) * t}` +
+      ` ${p2[0] - (p3[0] - p1[0]) * t},${p2[1] - (p3[1] - p1[1]) * t}` +
+      ` ${p2[0]},${p2[1]}`;
+  }
+  return d;
+}
+
+// "Nice" round gridline values across a numeric domain.
+function niceTicks(min: number, max: number, target = 4): number[] {
+  const span = Math.max(1e-6, max - min);
+  const step0 = span / target;
+  const mag = Math.pow(10, Math.floor(Math.log10(step0)));
+  const norm = step0 / mag;
+  const step = (norm < 1.5 ? 1 : norm < 3 ? 2 : norm < 7 ? 5 : 10) * mag;
+  const out: number[] = [];
+  for (let v = Math.ceil(min / step) * step; v <= max + 1e-9; v += step) out.push(Math.round(v * 100) / 100);
+  return out;
+}
+
+// Theme-aware ADP line chart. Reversed Y-axis — a *lower* pick number is better,
+// so earlier picks render toward the top. Rendered as an SVG sized to the
+// measured container width (1:1 viewBox, no aspect-ratio distortion) so strokes
+// and text stay crisp at any width.
+function AdpHistoryChart({ series }: { series: { month: string; avgPick: number; count: number }[] }) {
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const [w, setW] = useState(680);
+  const [hover, setHover] = useState<number | null>(null);
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver((entries) => {
+      const cw = entries[0]?.contentRect.width;
+      if (cw) setW(Math.max(280, Math.round(cw)));
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  if (series.length < 2) return null;
+
+  const H = 240;
+  const PAD_L = 38, PAD_R = 16, PAD_T = 16, PAD_B = 50;
+  const plotW = w - PAD_L - PAD_R;
+  const plotH = H - PAD_T - PAD_B;
+  const baseY = PAD_T + plotH;
+
+  const vals = series.map((p) => p.avgPick);
+  const rawMin = Math.min(...vals), rawMax = Math.max(...vals);
+  const padV = Math.max(0.5, (rawMax - rawMin) * 0.15);
+  const domMin = Math.max(1, rawMin - padV);
+  const domMax = rawMax + padV;
+  const dom = Math.max(0.5, domMax - domMin);
+
+  const xAt = (i: number) => PAD_L + (i / (series.length - 1)) * plotW;
+  const yAt = (v: number) => PAD_T + ((v - domMin) / dom) * plotH; // reversed: smaller v → higher
+  const coords = series.map((p, i) => ({ ...p, i, x: xAt(i), y: yAt(p.avgPick) }));
+
+  const linePath = smoothPath(coords.map((c) => [c.x, c.y] as [number, number]));
+  const areaPath = `${linePath} L ${coords[coords.length - 1].x},${baseY} L ${coords[0].x},${baseY} Z`;
+  const yTicks = niceTicks(domMin, domMax, 4);
+  const maxCount = Math.max(...series.map((p) => p.count), 1);
+
+  // Annotate only the meaningful points: first, last, best (min ADP), worst (max).
+  const labelIdx = new Set([0, series.length - 1, vals.indexOf(rawMin), vals.indexOf(rawMax)]);
+
+  const active = hover != null ? coords[hover] : null;
+  const prev = hover != null && hover > 0 ? coords[hover - 1] : null;
+
+  return (
+    <div ref={wrapRef} className="relative w-full">
+      <svg width={w} height={H} viewBox={`0 0 ${w} ${H}`} className="block w-full select-none" role="img" aria-label="ADP over time">
+        <defs>
+          <linearGradient id="adpFill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stopColor="#d4af37" stopOpacity="0.22" />
+            <stop offset="1" stopColor="#d4af37" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+
+        {/* Gridlines + Y ticks (reversed: low ADP at top) */}
+        {yTicks.map((t) => {
+          const y = yAt(t);
+          return (
+            <g key={t}>
+              <line x1={PAD_L} y1={y} x2={w - PAD_R} y2={y} className="stroke-border" strokeOpacity={0.4} strokeWidth={1} />
+              <text x={PAD_L - 6} y={y + 3} textAnchor="end" className="fill-muted-foreground tabular-nums" fontSize={10}>{t}</text>
+            </g>
+          );
+        })}
+
+        {/* Y-axis caption */}
+        <text transform={`translate(11 ${PAD_T + plotH / 2}) rotate(-90)`} textAnchor="middle" className="fill-muted-foreground" fontSize={9}>ADP (lower = earlier)</text>
+
+        {/* Per-quarter draft-volume bars (trust context) */}
+        {coords.map((c) => {
+          const bh = (c.count / maxCount) * 14;
+          return <rect key={`v${c.i}`} x={c.x - 3} y={baseY + 9 - bh} width={6} height={bh} rx={1} fill="#d4af37" opacity={0.18} />;
+        })}
+
+        {/* Area + smooth line */}
+        <path d={areaPath} fill="url(#adpFill)" />
+        <path d={linePath} fill="none" stroke="#d4af37" strokeWidth={2.5} strokeLinejoin="round" strokeLinecap="round" />
+
+        {/* Points, sparse value labels, sparse x labels, hover hit-targets */}
+        {coords.map((c) => {
+          const isActive = hover === c.i;
+          const showLabel = labelIdx.has(c.i);
+          return (
+            <g key={c.month}>
+              {showLabel && (
+                <text x={c.x} y={c.y - 9} textAnchor="middle" className="fill-foreground tabular-nums" fontSize={10} fontWeight={700}>{c.avgPick.toFixed(1)}</text>
+              )}
+              <circle cx={c.x} cy={c.y} r={isActive ? 5 : 3.2} fill="#d4af37" className="stroke-card" strokeWidth={isActive ? 2 : 0} />
+              {showLabel && (
+                <text x={c.x} y={H - 28} textAnchor="middle" className="fill-muted-foreground" fontSize={9}>{fmtAdpQuarter(c.month)}</text>
+              )}
+              <circle cx={c.x} cy={c.y} r={16} fill="transparent"
+                onMouseEnter={() => setHover(c.i)}
+                onMouseLeave={() => setHover((h) => (h === c.i ? null : h))} />
+            </g>
+          );
+        })}
       </svg>
+
       {active && (
         <div
           className="absolute z-10 -translate-x-1/2 -translate-y-full pointer-events-none"
-          style={{ left: `${(active.x / W) * 100}%`, top: `calc(${(active.y / H) * 100}% - 8px)` }}
+          style={{ left: `${(active.x / w) * 100}%`, top: `calc(${(active.y / H) * 100}% - 8px)` }}
         >
-          <div className="rounded-md border border-border bg-popover text-popover-foreground px-2 py-1 shadow-md whitespace-nowrap">
+          <div className="rounded-md border border-border bg-popover text-popover-foreground px-2.5 py-1.5 shadow-md whitespace-nowrap">
             <div className="text-[11px] font-bold">{fmtAdpQuarter(active.month)}</div>
-            <div className="text-[10px] text-muted-foreground">
-              ADP <span className="font-semibold text-foreground tabular-nums">{active.avgPick.toFixed(1)}</span> · <span className="font-semibold text-foreground tabular-nums">{active.count.toLocaleString()}</span> draft{active.count === 1 ? "" : "s"}
-            </div>
+            <div className="text-[10px] text-muted-foreground">ADP <span className="font-semibold text-foreground tabular-nums">{active.avgPick.toFixed(1)}</span> · <span className="font-semibold text-foreground tabular-nums">{active.count.toLocaleString()}</span> draft{active.count === 1 ? "" : "s"}</div>
+            {prev && (
+              <div className="text-[10px] text-muted-foreground">
+                Δ prior Q{" "}
+                <span className={cn("font-semibold tabular-nums", active.avgPick < prev.avgPick ? "text-emerald-500" : active.avgPick > prev.avgPick ? "text-rose-500" : "text-foreground")}>
+                  {active.avgPick - prev.avgPick >= 0 ? "+" : ""}{(active.avgPick - prev.avgPick).toFixed(1)}
+                </span>
+              </div>
+            )}
           </div>
         </div>
       )}
