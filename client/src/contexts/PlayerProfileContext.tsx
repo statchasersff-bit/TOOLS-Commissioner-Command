@@ -7,8 +7,6 @@
  * as a thin request bus so the many existing call sites don't have to change;
  * `<PlayerProfileNavigator />` (mounted inside the wouter Router for base-aware
  * navigation) performs the actual redirect.
- *
- * NOTE: separate from the ADP Explorer drawer (PlayerProfileDrawer.tsx).
  */
 
 import {

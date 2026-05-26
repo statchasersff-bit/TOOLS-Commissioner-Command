@@ -1,16 +1,15 @@
 /**
- * Per-player ADP analytics used by the PlayerProfileDrawer in the ADP
- * Explorer. Backed by the same draft_picks table that drives the regular ADP
+ * Per-player ADP analytics powering the ADP tab on the full player profile
+ * page. Backed by the same draft_picks table that drives the regular ADP
  * snapshots; no extra ingestion required.
  *
  *   /api/adp/player/:playerId/history       → time-bucketed ADP (7/30/90 day)
  *   /api/adp/player/:playerId/availability  → P(available at pick X) grid
  *
  * Both endpoints accept the same filter query string as /api/adp so the
- * modal reflects the *currently active* ADP Explorer dataset (rookie vs
- * startup, SF vs 1QB, TEP vs non-TEP, date range, etc.). Without this the
- * modal showed global startup-only data regardless of what the user had
- * selected in DraftCommand.
+ * sections reflect the requested league shape (rookie vs startup, SF vs 1QB,
+ * TEP vs non-TEP, scoring, date range, etc.) rather than global startup-only
+ * data.
  */
 
 import pg from "pg";

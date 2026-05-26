@@ -26,7 +26,7 @@ import {
 } from "@/types/draft";
 import { AdpCrawlPanel } from "@/components/admin/AdpCrawlPanel";
 import { useAuth } from "@/contexts/AuthContext";
-import { PlayerProfileDrawer } from "@/components/PlayerProfileDrawer";
+import { usePlayerProfile } from "@/contexts/PlayerProfileContext";
 
 // The frontend never queries Sleeper for ADP — it reads our cached endpoint
 // which serves the most recent adp_snapshots row for the active filter set.
@@ -223,8 +223,14 @@ export function DraftCommand() {
   // because the cleanup also aborts the in-flight fetch.
   const userCancelledRef = useRef(false);
 
-  const [profilePlayer, setProfilePlayer] = useState<ADPResult | null>(null);
-  const handlePlayerClick = useCallback((row: ADPResult) => setProfilePlayer(row), []);
+  // Clicking a player opens the full-page profile (/players/:slug) via the
+  // global navigator, rather than the old in-explorer side drawer. Rookie-pick
+  // placeholders have no NFL profile page, so they stay non-navigating.
+  const { openPlayerProfile } = usePlayerProfile();
+  const handlePlayerClick = useCallback((row: ADPResult) => {
+    if (row.is_rookie_placeholder) return;
+    openPlayerProfile(row.player_id);
+  }, [openPlayerProfile]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -522,15 +528,6 @@ export function DraftCommand() {
           for Sleeper-username matches. Backend routes do their own strict
           email-based check — this gate only governs UI visibility. */}
       <AdminAdpTools />
-
-      {/* Player profile drawer — opened from any of List/Box/Hex tiles. */}
-      <PlayerProfileDrawer
-        open={profilePlayer != null}
-        adp={profilePlayer}
-        teams={typeof filters.teams === "number" ? filters.teams : 12}
-        filters={filters}
-        onClose={() => setProfilePlayer(null)}
-      />
     </div>
   );
 }
