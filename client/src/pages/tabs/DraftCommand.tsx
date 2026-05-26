@@ -390,7 +390,7 @@ export function DraftCommand() {
       {/* ── Database stats banner ────────────────────────────────────────── */}
       <div className="flex items-start justify-center md:justify-start gap-3 p-3 rounded-lg bg-[#0b3a7a]/5 dark:bg-blue-400/5 border border-[#0b3a7a]/10 dark:border-blue-400/10" data-testid="adp-db-stats-banner">
         <Database className="w-4 h-4 text-[#0b3a7a] dark:text-blue-400 flex-shrink-0 mt-0.5" />
-        {adpStats ? (
+        {adpStats && typeof adpStats.totalPicks === "number" && typeof adpStats.dynastyDraftsScanned === "number" ? (
           <p className="text-sm leading-snug text-center md:text-left">
             <span className="font-bold text-[#d4af37]" data-testid="text-total-picks">{adpStats.totalPicks.toLocaleString()}</span>
             <span className="text-muted-foreground"> Real Picks | </span>
