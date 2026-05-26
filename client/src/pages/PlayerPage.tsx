@@ -85,12 +85,6 @@ function fmtStat(v: unknown, type: AdvStatColumn["type"]): string {
   }
   return String(v);
 }
-function scoreColor(score: number | null): string {
-  if (score == null) return "text-muted-foreground/50";
-  if (score >= 75) return "text-emerald-600 dark-any:text-emerald-400";
-  if (score >= 50) return "text-[#d4af37]";
-  return "text-muted-foreground";
-}
 
 // ── Data hook ──────────────────────────────────────────────────────────────────
 function usePlayerPageData(param: string) {
@@ -935,7 +929,7 @@ function PpgChart({ rows }: { rows: { season: string; ppg: number | null }[] }) 
 // percentile bar and the players ranked just better/worse. Data + ranking come
 // from playerAdvancedStats (buildRankCards); this is pure presentation.
 // Tiers use the tool's established quality gradient (same as the ADP
-// availability legend / scoreColor): emerald → white → gold → orange → rose.
+// availability legend): emerald → white → gold → orange → rose.
 const RANK_TIER_STYLE: Record<RankTier, { text: string; bar: string; hover: string }> = {
   elite:   { text: "text-emerald-600 dark-any:text-emerald-400", bar: "bg-emerald-500", hover: "hover:border-emerald-500/40" },
   great:   { text: "text-foreground",                            bar: "bg-foreground",  hover: "hover:border-foreground/30" },
@@ -943,6 +937,16 @@ const RANK_TIER_STYLE: Record<RankTier, { text: string; bar: string; hover: stri
   average: { text: "text-orange-600 dark-any:text-orange-400",   bar: "bg-orange-500",  hover: "hover:border-orange-500/40" },
   poor:    { text: "text-rose-600 dark-any:text-rose-400",       bar: "bg-rose-500",    hover: "hover:border-rose-500/40" },
 };
+
+// Map a "Top X%" value (lower = better) to a tier — inverse of the rank
+// snapshot's percentile thresholds (90/75/55/35), kept in sync.
+function metricTier(topPct: number): RankTier {
+  if (topPct <= 10) return "elite";
+  if (topPct <= 25) return "great";
+  if (topPct <= 45) return "solid";
+  if (topPct <= 65) return "average";
+  return "poor";
+}
 
 const RANK_CATEGORY_LABEL: Record<"overview" | RankCategory, string> = {
   overview: "Overview", production: "Production", usage: "Usage", efficiency: "Efficiency", advanced: "Advanced",
@@ -1040,33 +1044,39 @@ function AdvancedTab({ adv, advLoading, pos }: { adv: PlayerAdvancedResult | nul
     <div className="space-y-4">
       {adv.rankCards.length > 0 && <PlayerRankSnapshot cards={adv.rankCards} pos={pos} />}
 
-      {/* StatChasers Composite Scores — 0–100 role grades with what each measures. */}
+      {/* StatChasers 2025 Metric Scores — role metrics shown as positional ranks. */}
       <Card className="p-4 sm:p-5">
         <div className="mb-3">
           <h3 className="text-base font-black text-foreground flex items-center gap-2">
-            <Layers className="w-4 h-4 text-[#d4af37]" /> StatChasers Composite Scores for {latest.season}
+            <Layers className="w-4 h-4 text-[#d4af37]" /> StatChasers 2025 Metric Scores
           </h3>
           <p className="text-[11px] text-muted-foreground mt-1">
-            0–100 grades that blend the stats most relevant to each role, then rank the player against qualifying {pos}s. Higher is better.
+            Where this {pos} ranks among qualifying {pos}s on each role-based metric.
           </p>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3">
-          {composites.map((c) => (
-            <div key={c.label} className="rounded-xl border border-border bg-card p-4">
-              <div className="flex items-start justify-between gap-2">
-                <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{c.label}</div>
-                <div className={cn("text-2xl font-black tabular-nums leading-none", scoreColor(c.score))}>{c.score ?? "—"}</div>
-              </div>
-              {c.percentile != null && c.rank != null && c.total != null ? (
-                <div className="mt-1.5 text-[11px] font-semibold text-foreground/70">
-                  Top {c.percentile}% · {pos}{c.rank} of {c.total}
+          {composites.map((c) => {
+            const tierText = c.percentile != null ? RANK_TIER_STYLE[metricTier(c.percentile)].text : "text-muted-foreground";
+            return (
+              <div key={c.label} className="rounded-xl border border-border bg-card p-4">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{c.label}</div>
+                  <div className={cn("text-2xl font-black tabular-nums leading-none", tierText)}>
+                    {c.rank != null ? `${pos}${c.rank}` : "—"}
+                  </div>
                 </div>
-              ) : (
-                <div className="mt-1.5 text-[11px] text-muted-foreground/60">Not enough data</div>
-              )}
-              <div className="mt-2 text-[11px] text-muted-foreground leading-snug">{c.explanation}</div>
-            </div>
-          ))}
+                {c.percentile != null && c.rank != null && c.total != null ? (
+                  <div className="mt-1.5 text-[11px] font-semibold">
+                    <span className={cn("font-bold", tierText)}>Top {c.percentile}%</span>
+                    <span className="text-foreground/55"> · of {c.total} {pos}s</span>
+                  </div>
+                ) : (
+                  <div className="mt-1.5 text-[11px] text-muted-foreground/60">Not enough data</div>
+                )}
+                <div className="mt-2 text-[11px] text-muted-foreground leading-snug">{c.explanation}</div>
+              </div>
+            );
+          })}
         </div>
       </Card>
 
