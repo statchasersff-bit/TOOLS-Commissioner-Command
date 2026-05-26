@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { useOptimizeQueue } from "@/services/optimizeQueue";
 import { OptimizeAllModal } from "@/components/OptimizeAllModal";
+import { toast } from "@/hooks/use-toast";
 import { StartSitCompareTab } from "@/components/start-sit/StartSitCompareTab";
 import type { SleeperLeagueSummary } from "@/types";
 
@@ -1409,37 +1410,20 @@ export function LineupCommand() {
           </div>
 
           {/* ── Optimize All button ────────────────────────────────── */}
-          {(() => {
-            const isRunning = queue.qStatus === "running";
-            const isPaused  = queue.qStatus === "paused";
-            const nothingToDo = leaguesToOptimize.length === 0;
-            const disabled = isRunning || isPaused || nothingToDo;
-            return (
-              <div className="flex justify-end">
-                <button
-                  onClick={() => setOptimizeModalOpen(true)}
-                  disabled={disabled}
-                  data-testid="button-optimize-all"
-                  className={cn(
-                    "inline-flex items-center gap-1.5 text-[11px] font-bold rounded-full px-4 py-1.5 border transition-all",
-                    disabled
-                      ? "bg-muted text-muted-foreground border-border cursor-not-allowed"
-                      : "bg-[#d4af37] hover:bg-[#c8a230] border-[#b8901f] text-[#0b3a7a] hover:text-[#0b3a7a] shadow-[0_2px_8px_rgba(212,175,55,0.3)]",
-                  )}
-                >
-                  {isRunning ? (
-                    <><Loader2 className="w-3 h-3 animate-spin" /> Optimizing…</>
-                  ) : isPaused ? (
-                    <><Pause className="w-3 h-3" /> Paused ({queue.completedCount}/{queue.totalCount})</>
-                  ) : nothingToDo ? (
-                    <><CheckCircle2 className="w-3 h-3" /> All Optimized</>
-                  ) : (
-                    <><Zap className="w-3 h-3" /> Optimize All ({leaguesToOptimize.length})</>
-                  )}
-                </button>
-              </div>
-            );
-          })()}
+          {/* Temporarily disabled: the button stays clickable but only surfaces
+              a "feature disabled" notice instead of running the optimizer. */}
+          <div className="flex justify-end">
+            <button
+              onClick={() => toast({
+                title: "Feature currently disabled",
+                description: "This feature is temporarily disabled. Please check back soon.",
+              })}
+              data-testid="button-optimize-all"
+              className="inline-flex items-center gap-1.5 text-[11px] font-bold rounded-full px-4 py-1.5 border transition-all bg-[#d4af37] hover:bg-[#c8a230] border-[#b8901f] text-[#0b3a7a] hover:text-[#0b3a7a] shadow-[0_2px_8px_rgba(212,175,55,0.3)]"
+            >
+              <Zap className="w-3 h-3" /> Optimize All
+            </button>
+          </div>
 
           {/* ── Lineup table ───────────────────────────────────────── */}
           {/* Swipe hint — mobile only */}
