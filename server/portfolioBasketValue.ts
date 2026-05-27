@@ -40,6 +40,12 @@ const FETCH_CONCURRENCY = 8;
 // The crawled startup-draft corpus begins Jan 2024, so the timeline starts
 // there rather than carrying flat estimates back into months with no data.
 const HISTORY_START = "2024-01-01";
+// Off-season months can have only a handful of startup drafts, making ADP for
+// that month unreliable. Below this many drafts we don't trust the month's
+// ADP — we estimate its value from the trend of the prior months instead.
+const MIN_DRAFTS_PER_MONTH = 10;
+// How many prior months feed the trend projection for a thin month.
+const TREND_LOOKBACK = 3;
 
 type Format = "sf" | "1qb";
 
@@ -217,6 +223,54 @@ async function monthlyAdpByPlayer(
   return out;
 }
 
+/** Distinct startup-dynasty draft count by YYYY-MM since HISTORY_START, for a format. */
+async function monthlyDraftCounts(format: Format): Promise<Map<string, number>> {
+  const monthExpr = sql<string>`to_char(${drafts.draftDate}, 'YYYY-MM')`;
+  const rows = await db
+    .select({ ym: monthExpr, n: sql<number>`count(*)` })
+    .from(drafts)
+    .where(
+      and(
+        buildDraftWhere({
+          season: "all",
+          draftType: "startup",
+          leagueMode: "dynasty",
+          superflex: formatToSuperflex(format),
+        }),
+        isNotNull(drafts.draftDate),
+        gte(drafts.draftDate, sql`${HISTORY_START}::timestamp`),
+      ),
+    )
+    .groupBy(monthExpr);
+  const out = new Map<string, number>();
+  for (const r of rows) if (r.ym) out.set(r.ym, Number(r.n));
+  return out;
+}
+
+/**
+ * Project the next value from up to `TREND_LOOKBACK` prior values (most recent
+ * last) via least-squares linear fit. 1 prior → carry it; 2 → linear
+ * extrapolation; 3 → fitted slope. Clamped to ≥ 0.
+ */
+function projectFromTrend(prior: number[]): number | null {
+  const ys = prior.slice(-TREND_LOOKBACK);
+  if (ys.length === 0) return null;
+  if (ys.length === 1) return ys[0];
+  const n = ys.length;
+  const xs = ys.map((_, i) => i);
+  const xMean = (n - 1) / 2;
+  const yMean = ys.reduce((a, b) => a + b, 0) / n;
+  let num = 0;
+  let den = 0;
+  for (let i = 0; i < n; i++) {
+    num += (xs[i] - xMean) * (ys[i] - yMean);
+    den += (xs[i] - xMean) ** 2;
+  }
+  const slope = den === 0 ? 0 : num / den;
+  const intercept = yMean - slope * xMean;
+  return Math.max(0, intercept + slope * n);
+}
+
 /** Per-player ADP-derived value points (date = month-start), ascending. */
 function buildPlayerValuePoints(
   monthlyAdp: Map<string, number>,
@@ -298,18 +352,22 @@ export async function rebuildBasketSnapshots(
     allIdsByFormat.set(f, Array.from(ids));
   }
 
-  // Per-format: value curve, current FC values, and per-player ADP value points.
+  // Per-format: value curve, current FC values, per-player ADP value points,
+  // and which months are too thin to trust (drive trend estimation below).
   const curves = new Map<Format, ValueCurve>();
   const fcByFormat = new Map<Format, Record<string, number>>();
   const valuePointsByFormat = new Map<Format, Map<string, ValuePoint[]>>();
+  const draftCountsByFormat = new Map<Format, Map<string, number>>();
   for (const f of formats) {
-    const [curve, fc, monthly] = await Promise.all([
+    const [curve, fc, monthly, counts] = await Promise.all([
       buildAdpValueCurve(f),
       getFantasyCalcValues(f).then((r) => r.valuesBySleeperId),
       monthlyAdpByPlayer(allIdsByFormat.get(f) ?? [], f),
+      monthlyDraftCounts(f),
     ]);
     curves.set(f, curve);
     fcByFormat.set(f, fc);
+    draftCountsByFormat.set(f, counts);
     const points = new Map<string, ValuePoint[]>();
     for (const pid of allIdsByFormat.get(f) ?? []) {
       const m = monthly.get(pid);
@@ -324,7 +382,10 @@ export async function rebuildBasketSnapshots(
   for (const basket of baskets) {
     const fc = fcByFormat.get(basket.format)!;
     const points = valuePointsByFormat.get(basket.format)!;
-    for (const date of months) {
+    const counts = draftCountsByFormat.get(basket.format)!;
+
+    // First pass: raw ADP-derived value + confidence per month for this league.
+    const raw = months.map((date) => {
       let rosterValue = 0;
       const confs: Confidence[] = [];
       for (const pid of basket.playerIds) {
@@ -332,18 +393,41 @@ export async function rebuildBasketSnapshots(
         rosterValue += v.value;
         confs.push(v.confidence);
       }
+      const thin = (counts.get(date.slice(0, 7)) ?? 0) < MIN_DRAFTS_PER_MONTH;
+      return { value: rosterValue, confidence: aggregateConfidence(confs), thin };
+    });
+
+    // Second pass: for thin months, replace the noisy ADP value with a trend
+    // projection from prior months. Estimated months are marked low confidence.
+    const finalValues: number[] = [];
+    const finalConfs: string[] = [];
+    for (let i = 0; i < months.length; i++) {
+      if (!raw[i].thin) {
+        finalValues[i] = raw[i].value;
+        finalConfs[i] = raw[i].confidence;
+        continue;
+      }
+      const projected = projectFromTrend(finalValues.slice(0, i));
+      // No prior data (leading thin months): borrow the first trustworthy month.
+      const fallback = raw.find((r) => !r.thin)?.value ?? raw[i].value;
+      finalValues[i] = Math.round(projected ?? fallback);
+      finalConfs[i] = "low";
+    }
+
+    for (let i = 0; i < months.length; i++) {
+      const value = Math.round(finalValues[i]);
       rows.push({
         sleeperUserId,
         leagueId: basket.leagueId,
-        snapshotDate: date,
-        rosterValue: Math.round(rosterValue),
+        snapshotDate: months[i],
+        rosterValue: value,
         pickValue: 0,
-        totalValue: Math.round(rosterValue),
+        totalValue: value,
         costBasis: 0,
-        unrealizedGain: Math.round(rosterValue),
+        unrealizedGain: value,
         realizedGain: 0,
         assetCount: basket.playerIds.length,
-        confidence: aggregateConfidence(confs),
+        confidence: finalConfs[i],
         calculationVersion: CALC_VERSION,
       });
     }

@@ -32,7 +32,7 @@ const SLEEPER_API = "https://api.sleeper.app/v1";
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6h
 // Bump when the payload shape changes so stale cache rows are treated as misses
 // and recomputed rather than served without the newer fields.
-const CACHE_VERSION = 8;
+const CACHE_VERSION = 9;
 const MAX_LEAGUES_SCANNED = 20;
 const TRANSACTION_WEEKS = 18;
 const FETCH_CONCURRENCY = 4;
@@ -1772,14 +1772,14 @@ function buildTeamIdentityFromRanks(
   else if (bottomHalf(dyn) && bottomHalf(win)) label = "Bottom-Tier Roster";
   else label = "Balanced Middle-Roster";
 
+  // Blurb is the positional-strength line only. The rank recap + trade-angle
+  // narrative lives in the league context summary, so don't repeat ranks here.
   const strong = dynasty.filter((p) => p.tier === "Elite" || p.tier === "Strong").map((p) => p.position);
   const weak = dynasty.filter((p) => p.tier === "Weak" || p.tier === "Thin").map((p) => p.position);
-  const parts: string[] = [
-    `Ranks #${dyn} in dynasty value, #${win} in win-now value, and #${youth} in roster youth of ${total}.`,
-  ];
-  if (strong.length) parts.push(`Strongest at ${strong.join(", ")}${weak.length ? `, softest at ${weak.join(", ")}` : ""}.`);
-  else if (weak.length) parts.push(`Softest at ${weak.join(", ")}.`);
-  return { label, blurb: parts.join(" ") };
+  let blurb = "";
+  if (strong.length) blurb = `Strongest at ${strong.join(", ")}${weak.length ? `, softest at ${weak.join(", ")}` : ""}.`;
+  else if (weak.length) blurb = `Softest at ${weak.join(", ")}.`;
+  return { label, blurb };
 }
 
 function buildLeagueContextSummary(ranks: LeagueRosterRank, total: number): string {

@@ -395,12 +395,6 @@ export default function ManagerPage({
             </div>
           </Tabs>
         ) : null}
-
-        {data && (
-          <p className="text-[10px] text-white/30 italic leading-relaxed pt-6">
-            {data.meta.dataSourceNote}
-          </p>
-        )}
       </div>
     </div>
   );
@@ -885,8 +879,10 @@ function CurrentLeagueTab({ data }: { data: ManagerIntelPayload }) {
           <span>Team Identity</span>
         </div>
         <div className="text-[16px] font-bold text-white">{selected.teamIdentity.label}</div>
-        <p className="text-[13px] text-white/70 mt-1 leading-relaxed">{selected.teamIdentity.blurb}</p>
-        <p className="text-[13px] text-white/70 mt-2 leading-relaxed">{selected.contextSummary}</p>
+        <p className="text-[13px] text-white/70 mt-1 leading-relaxed">{selected.contextSummary}</p>
+        {selected.teamIdentity.blurb && (
+          <p className="text-[13px] text-white/70 mt-2 leading-relaxed">{selected.teamIdentity.blurb}</p>
+        )}
       </div>
 
       {viewerRow && targetRow && (
@@ -930,7 +926,25 @@ function LeagueSelector({
 }) {
   const rankFor = (lg: LeagueReport, owner: string | null) =>
     owner ? lg.rosters.find((r) => r.ownerId === owner)?.dynastyRank ?? null : null;
-  const shared = !!(viewerId && selected.rosters.some((r) => r.ownerId === viewerId));
+  const isSharedLeague = (lg: LeagueReport) => !!(viewerId && lg.rosters.some((r) => r.ownerId === viewerId));
+  const shared = isSharedLeague(selected);
+
+  const byName = (a: LeagueReport, b: LeagueReport) => a.name.localeCompare(b.name);
+  const sharedLeagues = leagues.filter(isSharedLeague).sort(byName);
+  const otherLeagues = leagues.filter((lg) => !isSharedLeague(lg)).sort(byName);
+
+  const renderOption = (lg: LeagueReport) => {
+    const their = rankFor(lg, targetId);
+    const yours = rankFor(lg, viewerId);
+    return (
+      <option key={lg.leagueId} value={lg.leagueId}>
+        {lg.name} — {lg.totalRosters}tm {lg.format}
+        {their ? ` · Them #${their}` : ""}
+        {yours ? ` · You #${yours}` : ""}
+      </option>
+    );
+  };
+
   return (
     <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
       <div className="text-[10px] uppercase tracking-wider text-white/40 mb-1.5">Viewing league</div>
@@ -940,19 +954,12 @@ function LeagueSelector({
         className="w-full bg-[#0a1628] border border-white/15 rounded-md text-[13px] font-semibold text-white px-3 py-2 focus:outline-none focus:border-[#d4af37]/50"
         data-testid="league-selector"
       >
-        {leagues.map((lg) => {
-          const their = rankFor(lg, targetId);
-          const isShared = !!(viewerId && lg.rosters.some((r) => r.ownerId === viewerId));
-          const yours = rankFor(lg, viewerId);
-          return (
-            <option key={lg.leagueId} value={lg.leagueId}>
-              {isShared ? "🤝 " : ""}{lg.name} — {lg.totalRosters}tm {lg.format}
-              {their ? ` · Them #${their}` : ""}
-              {yours ? ` · You #${yours}` : ""}
-              {isShared ? " · shared" : ""}
-            </option>
-          );
-        })}
+        {sharedLeagues.length > 0 && (
+          <optgroup label="Shared leagues">{sharedLeagues.map(renderOption)}</optgroup>
+        )}
+        {otherLeagues.length > 0 && (
+          <optgroup label="Other leagues">{otherLeagues.map(renderOption)}</optgroup>
+        )}
       </select>
       <div className="flex flex-wrap gap-1.5 mt-2.5">
         <Chip>{`${selected.totalRosters} Team ${selected.format}`}</Chip>
@@ -1213,9 +1220,6 @@ function CrossLeagueTab({ data }: { data: ManagerIntelPayload }) {
           </div>
         </SectionCard>
       )}
-
-      {/* Exposure Leaders */}
-      {cl.mostRosteredPlayers.length > 0 && <ExposureLeaders players={cl.mostRosteredPlayers} />}
 
       {/* Most Rostered by Position — mini-cards w/ signal headers */}
       {byPos && (
