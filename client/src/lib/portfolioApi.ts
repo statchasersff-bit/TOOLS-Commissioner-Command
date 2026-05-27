@@ -75,10 +75,13 @@ export interface AssetRow {
 }
 
 const TIMEOUT_MS = 20_000;
+// Backfill reconstructs every league from Sleeper (~22 API calls each), so a
+// many-league portfolio needs far longer than the default read timeout.
+const BACKFILL_TIMEOUT_MS = 180_000;
 
-async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
+async function fetchJson<T>(url: string, init?: RequestInit, timeoutMs = TIMEOUT_MS): Promise<T> {
   const ac = new AbortController();
-  const timer = setTimeout(() => ac.abort(), TIMEOUT_MS);
+  const timer = setTimeout(() => ac.abort(), timeoutMs);
   try {
     const res = await fetch(`${API_BASE}${url}`, { credentials: "include", signal: ac.signal, ...init });
     if (!res.ok) throw new Error(`Request failed: HTTP ${res.status}`);
@@ -136,8 +139,19 @@ export function getValueSourceBreakdown(handle: string): Promise<{ sources: Valu
   return fetchJson<{ sources: ValueSourceRow[] }>(`/api/portfolio/${enc(handle)}/value-sources`);
 }
 
-export function runPortfolioBackfill(handle: string): Promise<{ ok: boolean; positions: number; events: number; leagues: number; snapshots: number }> {
-  return fetchJson(`/api/portfolio/${enc(handle)}/backfill`, { method: "POST" });
+export function runPortfolioBackfill(
+  handle: string,
+  leagueIds?: string[],
+): Promise<{ ok: boolean; positions: number; events: number; leagues: number; snapshots: number }> {
+  return fetchJson(
+    `/api/portfolio/${enc(handle)}/backfill`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ leagueIds: leagueIds ?? [] }),
+    },
+    BACKFILL_TIMEOUT_MS,
+  );
 }
 
 export function recalcPortfolio(handle: string): Promise<{ ok: boolean; snapshots: number }> {

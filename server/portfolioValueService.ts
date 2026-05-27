@@ -43,6 +43,13 @@ function daysBetween(a: string, b: string): number {
   return Math.abs((Date.parse(a) - Date.parse(b)) / 86_400_000);
 }
 
+/** Proportional cost-basis allocation for a traded-for asset:
+ *  the value you sent, split across received assets by their trade-date value. */
+export function allocateCostBasis(valueSent: number, receivedValue: number, receivedTotal: number): number {
+  if (receivedTotal <= 0) return 0;
+  return valueSent * (receivedValue / receivedTotal);
+}
+
 export function interpolateValue(
   beforeValue: number,
   afterValue: number,

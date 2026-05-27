@@ -107,6 +107,12 @@ interface LeagueRosterRank {
   rbRank: number;
   wrRank: number;
   teRank: number;
+  // Win-now (redraft) per-position ranks. Optional for back-compat with cached
+  // payloads computed before these were added.
+  qbWinNowRank?: number;
+  rbWinNowRank?: number;
+  wrWinNowRank?: number;
+  teWinNowRank?: number;
 }
 
 interface LeagueReport {
@@ -566,18 +572,27 @@ function OverviewTab({ data }: { data: ManagerIntelPayload }) {
   const cl = data.crossLeague;
   const ta = data.tradeApproach;
   const managerRead = data.managerRead || ta.summary;
-  const rosterIdentity = data.rosterIdentity || `${cl.commonRosterBuild}. ${cl.positionStrengthProfile}`;
   const hasDoDont = (ta.doList?.length ?? 0) > 0 || (ta.dontList?.length ?? 0) > 0;
   return (
     <div className="space-y-4">
       <ManagerReadCard archetype={data.archetype} managerRead={managerRead} takeaway={ta.actionableTakeaway} />
 
-      {hasDoDont && <DoDontCard doList={ta.doList ?? []} dontList={ta.dontList ?? []} />}
-
-      {data.scorecard && data.scorecard.length > 0 && (
-        <SectionCard title="Manager Intel Scorecard" icon={<Gauge className="w-3.5 h-3.5" />}>
-          <Scorecard rows={data.scorecard} />
-        </SectionCard>
+      {data.scorecard && data.scorecard.length > 0 ? (
+        // Scorecard at half width with the Do / Don't cards stacked to its right,
+        // splitting the scorecard's height.
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch">
+          <SectionCard title="Manager Intel Scorecard" icon={<Gauge className="w-3.5 h-3.5" />}>
+            <Scorecard rows={data.scorecard} />
+          </SectionCard>
+          {hasDoDont && (
+            <div className="flex flex-col gap-3">
+              <DoBox items={ta.doList ?? []} className="flex-1" />
+              <DontBox items={ta.dontList ?? []} className="flex-1" />
+            </div>
+          )}
+        </div>
+      ) : (
+        hasDoDont && <DoDontCard doList={ta.doList ?? []} dontList={ta.dontList ?? []} />
       )}
 
       {data.keyTendencies && data.keyTendencies.length > 0 && (
@@ -585,10 +600,6 @@ function OverviewTab({ data }: { data: ManagerIntelPayload }) {
           <KeyTendencies items={data.keyTendencies} />
         </SectionCard>
       )}
-
-      <SectionCard title="Roster identity" icon={<Layers className="w-3.5 h-3.5" />}>
-        <p className="text-[13.5px] text-white/80 leading-relaxed">{rosterIdentity}</p>
-      </SectionCard>
 
       {data.confidence && <DataCoverageCard confidence={data.confidence} meta={data.meta} />}
     </div>
@@ -672,37 +683,49 @@ function ArchetypeWhy({ why }: { why: string }) {
   );
 }
 
+function DoBox({ items, className }: { items: string[]; className?: string }) {
+  return (
+    <div className={cn("rounded-lg border border-emerald-500/25 bg-emerald-500/[0.05] p-3.5", className)}>
+      <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-emerald-300 mb-2">
+        <Check className="w-3.5 h-3.5" />
+        <span>Do</span>
+      </div>
+      <ul className="space-y-1.5">
+        {items.map((d, i) => (
+          <li key={i} className="text-[12.5px] text-white/80 leading-snug flex gap-1.5">
+            <Check className="w-3.5 h-3.5 text-emerald-400/70 mt-0.5 flex-shrink-0" />
+            <span>{d}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function DontBox({ items, className }: { items: string[]; className?: string }) {
+  return (
+    <div className={cn("rounded-lg border border-rose-500/25 bg-rose-500/[0.05] p-3.5", className)}>
+      <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-rose-300 mb-2">
+        <X className="w-3.5 h-3.5" />
+        <span>Don't</span>
+      </div>
+      <ul className="space-y-1.5">
+        {items.map((d, i) => (
+          <li key={i} className="text-[12.5px] text-white/80 leading-snug flex gap-1.5">
+            <X className="w-3.5 h-3.5 text-rose-400/70 mt-0.5 flex-shrink-0" />
+            <span>{d}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function DoDontCard({ doList, dontList }: { doList: string[]; dontList: string[] }) {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-      <div className="rounded-lg border border-emerald-500/25 bg-emerald-500/[0.05] p-3.5">
-        <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-emerald-300 mb-2">
-          <Check className="w-3.5 h-3.5" />
-          <span>Do</span>
-        </div>
-        <ul className="space-y-1.5">
-          {doList.map((d, i) => (
-            <li key={i} className="text-[12.5px] text-white/80 leading-snug flex gap-1.5">
-              <Check className="w-3.5 h-3.5 text-emerald-400/70 mt-0.5 flex-shrink-0" />
-              <span>{d}</span>
-            </li>
-          ))}
-        </ul>
-      </div>
-      <div className="rounded-lg border border-rose-500/25 bg-rose-500/[0.05] p-3.5">
-        <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-rose-300 mb-2">
-          <X className="w-3.5 h-3.5" />
-          <span>Don't</span>
-        </div>
-        <ul className="space-y-1.5">
-          {dontList.map((d, i) => (
-            <li key={i} className="text-[12.5px] text-white/80 leading-snug flex gap-1.5">
-              <X className="w-3.5 h-3.5 text-rose-400/70 mt-0.5 flex-shrink-0" />
-              <span>{d}</span>
-            </li>
-          ))}
-        </ul>
-      </div>
+      <DoBox items={doList} />
+      <DontBox items={dontList} />
     </div>
   );
 }
@@ -858,51 +881,17 @@ function CurrentLeagueTab({ data }: { data: ManagerIntelPayload }) {
 
       <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
         <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-[#d4af37] mb-1.5">
-          <Compass className="w-3.5 h-3.5" />
-          <span>League Context</span>
-        </div>
-        <p className="text-[13px] text-white/80 leading-relaxed">{selected.contextSummary}</p>
-      </div>
-
-      <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
-        <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-[#d4af37] mb-1.5">
           <Trophy className="w-3.5 h-3.5" />
           <span>Team Identity</span>
         </div>
         <div className="text-[16px] font-bold text-white">{selected.teamIdentity.label}</div>
         <p className="text-[13px] text-white/70 mt-1 leading-relaxed">{selected.teamIdentity.blurb}</p>
+        <p className="text-[13px] text-white/70 mt-2 leading-relaxed">{selected.contextSummary}</p>
       </div>
 
       {viewerRow && targetRow && (
         <YouVsThem viewer={viewerRow} target={targetRow} />
       )}
-
-      <SectionCard title="League rank snapshot" icon={<Trophy className="w-3.5 h-3.5" />}>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-          {selected.rankSnapshot.map((r) => (
-            <div key={r.label} className="rounded-md border border-white/8 bg-white/[0.02] px-2 py-2 text-center">
-              <div className="text-[9px] uppercase tracking-wider text-white/40">{r.label}</div>
-              <div className="text-base font-bold tabular-nums text-white mt-0.5">
-                {r.rank ? `#${r.rank}` : "—"}
-                <span className="text-[10px] text-white/40 font-normal"> / {r.total}</span>
-              </div>
-            </div>
-          ))}
-        </div>
-      </SectionCard>
-
-      <StrengthsCard
-        title="Dynasty strengths"
-        subtitle="Long-term positional value compared to the rest of the league."
-        icon={<Trophy className="w-3.5 h-3.5" />}
-        scores={selected.dynastyStrengths}
-      />
-      <StrengthsCard
-        title="Win-now strengths"
-        subtitle="Current-season production strength compared to the rest of the league."
-        icon={<Activity className="w-3.5 h-3.5" />}
-        scores={selected.winNowStrengths}
-      />
 
       <NeedsTable needs={selected.needs} relativeWeakness={selected.relativeWeakness} />
 
@@ -922,16 +911,6 @@ function CurrentLeagueTab({ data }: { data: ManagerIntelPayload }) {
           <p className="text-[13px] text-white/70">{selected.pickCapitalSummary}</p>
         </SectionCard>
       </div>
-
-      {leagues.length > 1 && (
-        <LeaguesInCommon
-          leagues={leagues}
-          viewerId={viewerId}
-          targetId={targetId}
-          selectedId={selected.leagueId}
-          onSelect={setSelectedId}
-        />
-      )}
     </div>
   );
 }
@@ -963,12 +942,14 @@ function LeagueSelector({
       >
         {leagues.map((lg) => {
           const their = rankFor(lg, targetId);
+          const isShared = !!(viewerId && lg.rosters.some((r) => r.ownerId === viewerId));
           const yours = rankFor(lg, viewerId);
           return (
             <option key={lg.leagueId} value={lg.leagueId}>
-              {lg.name} — {lg.totalRosters}tm {lg.format}
+              {isShared ? "🤝 " : ""}{lg.name} — {lg.totalRosters}tm {lg.format}
               {their ? ` · Them #${their}` : ""}
               {yours ? ` · You #${yours}` : ""}
+              {isShared ? " · shared" : ""}
             </option>
           );
         })}
@@ -998,22 +979,47 @@ function Chip({ children, tone = "neutral" }: { children: React.ReactNode; tone?
 }
 
 function YouVsThem({ viewer, target }: { viewer: LeagueRosterRank; target: LeagueRosterRank }) {
-  const rows: Array<{ label: string; you: number | null; them: number | null }> = [
-    { label: "Dynasty value", you: viewer.dynastyRank, them: target.dynastyRank },
-    { label: "Win-now value", you: viewer.winNowRank, them: target.winNowRank },
-    { label: "Roster youth", you: viewer.youthRank, them: target.youthRank },
-    ...(viewer.pickRank != null && target.pickRank != null
-      ? [{ label: "Pick capital", you: viewer.pickRank, them: target.pickRank }]
-      : []),
-    { label: "QB strength", you: viewer.qbRank, them: target.qbRank },
-    { label: "RB strength", you: viewer.rbRank, them: target.rbRank },
-    { label: "WR strength", you: viewer.wrRank, them: target.wrRank },
-    { label: "TE strength", you: viewer.teRank, them: target.teRank },
+  // Win-now positional ranks fall back to the dynasty ranks for older cached
+  // payloads that predate the per-position win-now fields.
+  const winNowRows: ComparisonRow[] = [
+    { label: "Team value", you: viewer.winNowRank, them: target.winNowRank },
+    { label: "QB", you: viewer.qbWinNowRank ?? viewer.qbRank, them: target.qbWinNowRank ?? target.qbRank },
+    { label: "RB", you: viewer.rbWinNowRank ?? viewer.rbRank, them: target.rbWinNowRank ?? target.rbRank },
+    { label: "WR", you: viewer.wrWinNowRank ?? viewer.wrRank, them: target.wrWinNowRank ?? target.wrRank },
+    { label: "TE", you: viewer.teWinNowRank ?? viewer.teRank, them: target.teWinNowRank ?? target.teRank },
+  ];
+  const dynastyRows: ComparisonRow[] = [
+    { label: "Team value", you: viewer.dynastyRank, them: target.dynastyRank },
+    { label: "QB", you: viewer.qbRank, them: target.qbRank },
+    { label: "RB", you: viewer.rbRank, them: target.rbRank },
+    { label: "WR", you: viewer.wrRank, them: target.wrRank },
+    { label: "TE", you: viewer.teRank, them: target.teRank },
   ];
   return (
     <SectionCard title="You vs Them" icon={<Users className="w-3.5 h-3.5" />}>
-      <div className="grid grid-cols-[1fr_auto_auto_auto] items-center gap-x-4 gap-y-0.5 text-[12.5px]">
-        <span className="text-[9px] uppercase tracking-wider text-white/40">Category</span>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <ComparisonColumn title="Win-Now Value" icon={<Activity className="w-3.5 h-3.5" />} rows={winNowRows} />
+        <ComparisonColumn title="Dynasty Value" icon={<Trophy className="w-3.5 h-3.5" />} rows={dynastyRows} />
+      </div>
+    </SectionCard>
+  );
+}
+
+interface ComparisonRow {
+  label: string;
+  you: number | null;
+  them: number | null;
+}
+
+function ComparisonColumn({ title, icon, rows }: { title: string; icon: React.ReactNode; rows: ComparisonRow[] }) {
+  return (
+    <div className="rounded-lg border border-white/8 bg-white/[0.025] p-3">
+      <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-white/45 mb-2">
+        {icon}
+        <span>{title}</span>
+      </div>
+      <div className="grid grid-cols-[1fr_auto_auto_auto] items-center gap-x-3 gap-y-0.5 text-[12.5px]">
+        <span className="text-[9px] uppercase tracking-wider text-white/40" />
         <span className="text-[9px] uppercase tracking-wider text-white/40 text-right">You</span>
         <span className="text-[9px] uppercase tracking-wider text-white/40 text-right">Them</span>
         <span className="text-[9px] uppercase tracking-wider text-white/40 text-right">Edge</span>
@@ -1036,7 +1042,7 @@ function YouVsThem({ viewer, target }: { viewer: LeagueRosterRank; target: Leagu
           );
         })}
       </div>
-    </SectionCard>
+    </div>
   );
 }
 
@@ -1812,7 +1818,6 @@ function OfferIdeas({ data, viewerTeam }: { data: ManagerIntelPayload; viewerTea
 
 function ActivityTab({ data }: { data: ManagerIntelPayload }) {
   const act = data.activity;
-  const cl = data.crossLeague;
   if (!act) return <EmptyNotice text="No activity data available." />;
 
   const signal = act.activitySignal;
@@ -1831,24 +1836,6 @@ function ActivityTab({ data }: { data: ManagerIntelPayload }) {
   const tradeShare = total > 0 ? Math.round((act.tradeCount / total) * 100) : 0;
   const waiverShare = total > 0 ? 100 - tradeShare : 0;
   const arch = act.activityArchetype;
-  const trd = act.tradeability;
-
-  const fmtDate = (iso?: string | null) => {
-    if (!iso) return "—";
-    try {
-      return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
-    } catch {
-      return "—";
-    }
-  };
-  const trendTone =
-    act.activityTrend === "Increasing"
-      ? "text-emerald-300"
-      : act.activityTrend === "Declining"
-      ? "text-rose-300"
-      : act.activityTrend === "Stable"
-      ? "text-sky-300"
-      : "text-white/45";
 
   return (
     <div className="space-y-4">
@@ -1883,18 +1870,6 @@ function ActivityTab({ data }: { data: ManagerIntelPayload }) {
         </div>
       </SectionCard>
 
-      {/* Activity Profile. */}
-      <SectionCard title="Activity profile" icon={<Activity className="w-3.5 h-3.5" />}>
-        <div className="space-y-1">
-          <ProfileRow label="Overall activity" value={signal} />
-          <ProfileRow label="Trade activity" value={cl.tradeActivityRating} />
-          <ProfileRow label="Waiver activity" value={cl.waiverActivityRating} />
-          {trd && <ProfileRow label="Tradeability" value={trd.level} tone={trd.level === "High" ? "positive" : trd.level === "Low" ? "caution" : undefined} />}
-          {arch && <ProfileRow label="Activity archetype" value={arch.label} />}
-        </div>
-        {trd && <p className="text-[11px] text-white/45 mt-2 leading-relaxed">{trd.note}</p>}
-      </SectionCard>
-
       {/* Activity Breakdown — trade vs waiver share. */}
       {total > 0 && (
         <SectionCard title="Activity breakdown" icon={<ArrowRightLeft className="w-3.5 h-3.5" />}>
@@ -1903,44 +1878,6 @@ function ActivityTab({ data }: { data: ManagerIntelPayload }) {
         </SectionCard>
       )}
 
-      {/* Recent Activity. */}
-      <SectionCard title="Recent activity" icon={<Activity className="w-3.5 h-3.5" />}>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
-          <Stat label="Last activity" value={fmtDate(act.lastActivity)} />
-          <Stat label="Last 30 days" value={act.last30Days ?? 0} />
-          <Stat label="Last 90 days" value={act.last90Days ?? 0} />
-          <div className="rounded-md border border-white/8 bg-white/[0.02] px-3 py-2">
-            <div className="text-[9px] uppercase tracking-wider text-white/40">Trend</div>
-            <div className={cn("text-base font-bold", trendTone)}>{act.activityTrend ?? "Unknown"}</div>
-          </div>
-        </div>
-        {act.recent && act.recent.length > 0 ? (
-          <ul className="space-y-1">
-            {act.recent.map((r, i) => (
-              <li key={i} className="flex items-center justify-between gap-2 text-[12.5px] py-1 border-b border-white/[0.05] last:border-0">
-                <span className="text-white/45 tabular-nums w-[78px] flex-shrink-0">{fmtDate(r.date)}</span>
-                <span className="text-white/75 truncate flex-1">{r.type}</span>
-                <span className="text-white/40 text-[11px] truncate max-w-[40%] text-right">{r.league}</span>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="text-[12px] text-white/45">No dated transactions visible in the current season.</p>
-        )}
-      </SectionCard>
-
-      {/* Data Coverage. */}
-      <SectionCard title="Data coverage" icon={<AlertTriangle className="w-3.5 h-3.5" />}>
-        <div className="space-y-1">
-          <ProfileRow label="Visible dynasty leagues" value={String(leagues)} />
-          <ProfileRow label="Current-season transactions" value="Available" tone="positive" />
-          <ProfileRow label="Private leagues / DMs" value="Not included" tone="caution" />
-          <ProfileRow label="Multi-season finishes" value="Limited" tone="caution" />
-        </div>
-        <p className="text-[11px] text-white/40 mt-2 leading-relaxed">
-          Playoff appearances, championships, and historical finishes are limited by Sleeper public-data availability.
-        </p>
-      </SectionCard>
     </div>
   );
 }

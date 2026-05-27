@@ -26,6 +26,7 @@ import {
   loadCurrentValues,
   valueFromSeries,
   getPickValueOnDate,
+  allocateCostBasis,
   type Confidence,
   type PickRef,
 } from "./portfolioValueService";
@@ -34,8 +35,10 @@ const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
 const db = drizzle(pool);
 
 const SLEEPER_API = "https://api.sleeper.app/v1";
-const MAX_LEAGUES = 14;
-const FETCH_CONCURRENCY = 4;
+// Power users can roster players in 100+ leagues; cap high enough to cover
+// them while still bounding worst-case Sleeper traffic (~22 calls/league).
+const MAX_LEAGUES = 120;
+const FETCH_CONCURRENCY = 8;
 const TRANSACTION_WEEKS = 18;
 const MEANINGFUL_DROP_VALUE = 500; // below this, a drop isn't surfaced as an event
 
@@ -449,12 +452,11 @@ async function processLeague(
       // Open received assets with proportional cost-basis allocation from valueSent.
       const recvTotal = valueReceived || 1;
       for (const rp of recvPlayerVals) {
-        const basis = valueSent * (rp.value / recvTotal);
-        addPlayerPosition(rp.pid, date, "trade", basis);
+        addPlayerPosition(rp.pid, date, "trade", allocateCostBasis(valueSent, rp.value, recvTotal));
       }
       for (const idx in recvPickVals) {
         const rp = recvPickVals[idx];
-        const basis = valueSent * (rp.value / recvTotal);
+        const basis = allocateCostBasis(valueSent, rp.value, recvTotal);
         openPickPosition(ctx, lg.leagueId, userId, rid, rp.p, date, "trade", rp.value, basis, rp.confidence);
       }
 

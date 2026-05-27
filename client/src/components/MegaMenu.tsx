@@ -33,6 +33,7 @@ const MEGA_DATA: Record<string, MegaSection[]> = {
       title: "Command Center",
       items: [
         { subId: "portfolio-summary", label: "My Portfolio",     description: "Cross-league exposure, finances & metrics",    icon: BarChart2  },
+        { subId: "portfolio-timeline", label: "Timeline",        description: "Dynasty portfolio value over time & trade impact", icon: LineChart },
         { subId: "lineup-command",    label: "Lineup Command",   description: "Cross-league lineup war room & swap finder",   icon: Crosshair  },
         { subId: "waiver-command",    label: "Waiver Command",   description: "Cross-league waiver wire & FAAB dashboard",    icon: Waves      },
       ],

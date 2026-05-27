@@ -32,7 +32,7 @@ const SLEEPER_API = "https://api.sleeper.app/v1";
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6h
 // Bump when the payload shape changes so stale cache rows are treated as misses
 // and recomputed rather than served without the newer fields.
-const CACHE_VERSION = 7;
+const CACHE_VERSION = 8;
 const MAX_LEAGUES_SCANNED = 20;
 const TRANSACTION_WEEKS = 18;
 const FETCH_CONCURRENCY = 4;
@@ -86,6 +86,12 @@ export interface LeagueRosterRank {
   rbRank: number;
   wrRank: number;
   teRank: number;
+  // Per-position win-now (redraft) ranks. Mirror the dynasty-based *Rank fields
+  // above so the League tab can show a win-now vs dynasty positional split.
+  qbWinNowRank: number;
+  rbWinNowRank: number;
+  wrWinNowRank: number;
+  teWinNowRank: number;
 }
 
 /** A full per-league scouting report for the target manager. */
@@ -1854,12 +1860,16 @@ function buildLeagueReport(scan: LeagueScan, targetUserId: string, requestedLeag
     const as = r.map((p) => p.age).filter((a): a is number => a != null);
     return as.length ? as.reduce((a, b) => a + b, 0) / as.length : 99;
   });
-  const posTotals = (pos: "QB" | "RB" | "WR" | "TE") =>
-    scan.allRosters.map((r) => r.filter((p) => p.pos === pos).reduce((s, p) => s + p.dynasty, 0));
+  const posTotals = (pos: "QB" | "RB" | "WR" | "TE", field: "dynasty" | "redraft" = "dynasty") =>
+    scan.allRosters.map((r) => r.filter((p) => p.pos === pos).reduce((s, p) => s + p[field], 0));
   const qb = posTotals("QB");
   const rb = posTotals("RB");
   const wr = posTotals("WR");
   const te = posTotals("TE");
+  const qbW = posTotals("QB", "redraft");
+  const rbW = posTotals("RB", "redraft");
+  const wrW = posTotals("WR", "redraft");
+  const teW = posTotals("TE", "redraft");
   const pickScores = scan.rosterMeta.map((m) => scan.pickScoreByRoster[m.rosterId] ?? 0);
   const anyPicks = pickScores.some((v) => v > 0);
 
@@ -1874,6 +1884,10 @@ function buildLeagueReport(scan: LeagueScan, targetUserId: string, requestedLeag
     rbRank: rankOf(rb, rb[i]) ?? 0,
     wrRank: rankOf(wr, wr[i]) ?? 0,
     teRank: rankOf(te, te[i]) ?? 0,
+    qbWinNowRank: rankOf(qbW, qbW[i]) ?? 0,
+    rbWinNowRank: rankOf(rbW, rbW[i]) ?? 0,
+    wrWinNowRank: rankOf(wrW, wrW[i]) ?? 0,
+    teWinNowRank: rankOf(teW, teW[i]) ?? 0,
   }));
 
   const targetRanks = rosters[idx];

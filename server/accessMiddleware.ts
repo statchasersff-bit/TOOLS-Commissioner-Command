@@ -52,6 +52,7 @@ import { isDevRuntime, isDevSleeperConnectedOverride } from "@shared/appMode";
  * Recognized identifiers (any one is enough):
  *   - URL param `:userId`
  *   - URL param `:username`
+ *   - URL param `:sleeperUsername`
  *   - header `x-sleeper-user-id`
  *   - body field `userId` (POST endpoints)
  *
@@ -59,7 +60,7 @@ import { isDevRuntime, isDevSleeperConnectedOverride } from "@shared/appMode";
  */
 export function requireReadOnlySleeperContext(req: Request, res: Response, next: NextFunction): void {
   const hasUserId   = !!req.params?.userId;
-  const hasUsername = !!req.params?.username;
+  const hasUsername = !!req.params?.username || !!req.params?.sleeperUsername;
   const hasHeader   = !!req.headers["x-sleeper-user-id"];
   const hasBody     = !!(req.body && typeof req.body === "object" && req.body.userId);
 

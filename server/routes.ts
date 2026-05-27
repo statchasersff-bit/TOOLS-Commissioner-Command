@@ -2,9 +2,8 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { getFantasyCalcValues, getFantasyCalcRedraftValues } from "./fantasycalc";
 import { getKtcValues, getKtcRedraftValues } from "./ktc";
-import { backfillPortfolioTimeline } from "./portfolioLedger";
+import { rebuildBasketSnapshots } from "./portfolioBasketValue";
 import {
-  recalculatePortfolioSnapshots,
   getPortfolioTimeline,
   getPortfolioEvents,
   getLeagueBreakdown,
@@ -382,12 +381,19 @@ export async function registerRoutes(
   app.post("/api/portfolio/:sleeperUsername/backfill", requireReadOnlySleeperContext, async (req, res) => {
     try {
       const { userId, leagues } = await resolvePortfolioUser(req.params.sleeperUsername);
-      if (leagues.length === 0) {
+      // Prefer the league set the client already resolved (the leagues the
+      // user actually rosters players in). Sleeper's /leagues endpoint returns
+      // every league a power-user has *joined* — incl. ones with no roster —
+      // so deriving the set here would scan far more leagues than are real.
+      const bodyIds = Array.isArray(req.body?.leagueIds)
+        ? (req.body.leagueIds as unknown[]).filter((x): x is string => typeof x === "string" && x.length > 0)
+        : [];
+      const leagueIds = bodyIds.length > 0 ? bodyIds : leagues.map((l) => l.leagueId);
+      if (leagueIds.length === 0) {
         return res.status(404).json({ error: "No dynasty leagues found for this user." });
       }
-      const ledger = await backfillPortfolioTimeline(userId, leagues.map((l) => l.leagueId));
-      const snaps = await recalculatePortfolioSnapshots(userId);
-      res.json({ ok: true, ...ledger, snapshots: snaps.snapshots });
+      const result = await rebuildBasketSnapshots(userId, leagueIds);
+      res.json({ ok: true, ...result });
     } catch (err: any) {
       console.error("Portfolio backfill error:", err);
       res.status(500).json({ error: err?.message || "Failed to backfill portfolio" });
@@ -396,9 +402,13 @@ export async function registerRoutes(
 
   app.post("/api/portfolio/:sleeperUsername/recalculate", requireReadOnlySleeperContext, async (req, res) => {
     try {
-      const { userId } = await resolvePortfolioUser(req.params.sleeperUsername);
-      const snaps = await recalculatePortfolioSnapshots(userId);
-      res.json({ ok: true, snapshots: snaps.snapshots });
+      const { userId, leagues } = await resolvePortfolioUser(req.params.sleeperUsername);
+      const bodyIds = Array.isArray(req.body?.leagueIds)
+        ? (req.body.leagueIds as unknown[]).filter((x): x is string => typeof x === "string" && x.length > 0)
+        : [];
+      const leagueIds = bodyIds.length > 0 ? bodyIds : leagues.map((l) => l.leagueId);
+      const result = await rebuildBasketSnapshots(userId, leagueIds);
+      res.json({ ok: true, ...result });
     } catch (err: any) {
       console.error("Portfolio recalculate error:", err);
       res.status(500).json({ error: err?.message || "Failed to recalculate portfolio" });
