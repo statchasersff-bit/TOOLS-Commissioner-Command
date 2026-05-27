@@ -1,10 +1,9 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense, startTransition } from "react";
 import { useRoute, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { MegaMenuNav, MobileBottomNav } from "@/components/MegaMenu";
-import PlayerPage from "@/pages/PlayerPage";
 import { LeagueSelector } from "@/components/LeagueSelector";
 import { HeaderValueSourceBadge } from "@/components/ValueSourceSelector";
 import { ValueSourceManager } from "@/components/ValueSourceManager";
@@ -27,31 +26,40 @@ import { SiDiscord } from "react-icons/si";
 import logoDark from "@assets/statchasers_logo_transparent_dark_1772764844282.png";
 import logoLight from "@assets/statchasers_logo_transparent_light_1772764844283.png";
 
-import { PortfolioConnect, PortfolioSummary } from "./tabs/Portfolio";
-import WaiverCommand from "./tabs/WaiverCommand";
-import { DashboardOverview, DashboardSnapshot, MyTeam } from "./tabs/Dashboard";
-import { RosterComparison } from "./tabs/LeagueAnalyzer";
-import { PlayoffCalculator } from "./tabs/PlayoffCalculator";
-import { FieldView } from "./tabs/FieldView";
-import { ShareTeam } from "./tabs/ShareTeam";
-import { TradeBlockScanner, TradeCalculatorView, TradeDatabase } from "./tabs/TradeCenter";
-import { PositionalAnalysis } from "./tabs/PositionalAnalysis";
-import { MarketValue } from "./tabs/LeagueMarket";
-import Analysis from "./tabs/Analysis";
-import { LeagueEconomy } from "./tabs/LeagueEconomy";
-import LiveDraft from "./tabs/LiveDraft";
 import { API_BASE } from "@/lib/apiBase";
-import Transactions from "./tabs/Transactions";
-import { LineupCommand } from "./tabs/LineupCommand";
-import TradeSync from "./tabs/TradeSync";
-import PositionStats from "./tabs/PositionStats";
 import { ShareDynastyPopup } from "@/components/ShareDynastyPopup";
 import { WhatsNewModal } from "@/components/WhatsNewModal";
-import { DraftCommand } from "./tabs/DraftCommand";
-import { DraftAvailability } from "./tabs/DraftAvailability";
-import { AboutPage } from "@/components/AboutModal";
-import { FeedbackPage } from "@/components/FeedbackPage";
-import { TermsPage, PrivacyPage, CookiesPage } from "@/components/LegalModals";
+
+// ── Lazy-loaded tab components ─────────────────────────────────────────────
+// Each tab is split into its own async chunk so the initial bundle only
+// contains the shell + header. Tabs load on first navigation.
+const PlayerPage        = lazy(() => import("@/pages/PlayerPage"));
+const PortfolioConnect  = lazy(() => import("./tabs/Portfolio").then(m => ({ default: m.PortfolioConnect })));
+const PortfolioSummary  = lazy(() => import("./tabs/Portfolio").then(m => ({ default: m.PortfolioSummary })));
+const WaiverCommand     = lazy(() => import("./tabs/WaiverCommand"));
+const DashboardSnapshot = lazy(() => import("./tabs/Dashboard").then(m => ({ default: m.DashboardSnapshot })));
+const MyTeam            = lazy(() => import("./tabs/Dashboard").then(m => ({ default: m.MyTeam })));
+const ShareTeam         = lazy(() => import("./tabs/ShareTeam").then(m => ({ default: m.ShareTeam })));
+const RosterComparison  = lazy(() => import("./tabs/LeagueAnalyzer").then(m => ({ default: m.RosterComparison })));
+const PlayoffCalculator = lazy(() => import("./tabs/PlayoffCalculator").then(m => ({ default: m.PlayoffCalculator })));
+const Transactions      = lazy(() => import("./tabs/Transactions"));
+const TradeBlockScanner    = lazy(() => import("./tabs/TradeCenter").then(m => ({ default: m.TradeBlockScanner })));
+const TradeCalculatorView  = lazy(() => import("./tabs/TradeCenter").then(m => ({ default: m.TradeCalculatorView })));
+const TradeDatabase        = lazy(() => import("./tabs/TradeCenter").then(m => ({ default: m.TradeDatabase })));
+const TradeSync         = lazy(() => import("./tabs/TradeSync"));
+const PositionalAnalysis= lazy(() => import("./tabs/PositionalAnalysis").then(m => ({ default: m.PositionalAnalysis })));
+const MarketValue       = lazy(() => import("./tabs/LeagueMarket").then(m => ({ default: m.MarketValue })));
+const Analysis          = lazy(() => import("./tabs/Analysis"));
+const LiveDraft         = lazy(() => import("./tabs/LiveDraft"));
+const LineupCommand     = lazy(() => import("./tabs/LineupCommand").then(m => ({ default: m.LineupCommand })));
+const PositionStats     = lazy(() => import("./tabs/PositionStats"));
+const DraftCommand      = lazy(() => import("./tabs/DraftCommand").then(m => ({ default: m.DraftCommand })));
+const DraftAvailability = lazy(() => import("./tabs/DraftAvailability").then(m => ({ default: m.DraftAvailability })));
+const AboutPage         = lazy(() => import("@/components/AboutModal").then(m => ({ default: m.AboutPage })));
+const FeedbackPage      = lazy(() => import("@/components/FeedbackPage").then(m => ({ default: m.FeedbackPage })));
+const TermsPage         = lazy(() => import("@/components/LegalModals").then(m => ({ default: m.TermsPage })));
+const PrivacyPage       = lazy(() => import("@/components/LegalModals").then(m => ({ default: m.PrivacyPage })));
+const CookiesPage       = lazy(() => import("@/components/LegalModals").then(m => ({ default: m.CookiesPage })));
 
 const STORAGE_KEY = "sc-dynasty-state";
 
@@ -277,22 +285,28 @@ export default function DynastyCommandCenter({ params, playerProfileId }: { para
 
   const handleMainTabChange = useCallback((id: string) => {
     setIsTransitioning(true);
-    setActiveMainTab(id);
-    const config = NAV_CONFIG.find((t) => t.id === id);
-    if (config) setActiveSubTab(config.subTabs[0].id);
+    startTransition(() => {
+      setActiveMainTab(id);
+      const config = NAV_CONFIG.find((t) => t.id === id);
+      if (config) setActiveSubTab(config.subTabs[0].id);
+    });
     setTimeout(() => setIsTransitioning(false), 180);
   }, []);
 
   const handleSubTabChange = useCallback((id: string) => {
     setIsTransitioning(true);
-    setActiveSubTab(id);
+    startTransition(() => {
+      setActiveSubTab(id);
+    });
     setTimeout(() => setIsTransitioning(false), 180);
   }, []);
 
   const navigateToSubTab = useCallback((mainTabId: string, subTabId: string) => {
     setIsTransitioning(true);
-    setActiveMainTab(mainTabId);
-    setActiveSubTab(subTabId);
+    startTransition(() => {
+      setActiveMainTab(mainTabId);
+      setActiveSubTab(subTabId);
+    });
     setTimeout(() => setIsTransitioning(false), 180);
   }, []);
 
@@ -901,7 +915,13 @@ export default function DynastyCommandCenter({ params, playerProfileId }: { para
         <div
           className={`transition-opacity duration-180 ${isTransitioning || showLoadingOverlay ? "opacity-30" : "opacity-100"}`}
         >
-          {renderContent()}
+          <Suspense fallback={
+            <div className="flex items-center justify-center min-h-[40vh]">
+              <Loader2 className="w-6 h-6 animate-spin text-[#d4af37]" />
+            </div>
+          }>
+            {renderContent()}
+          </Suspense>
         </div>
       </main>
       <DataDiagnostics />
