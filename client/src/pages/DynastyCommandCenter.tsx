@@ -103,6 +103,38 @@ function getInitialState(pathTab?: string, pathSub?: string) {
 
 export default function DynastyCommandCenter({ params, playerProfileId }: { params?: { tab?: string; sub?: string }; playerProfileId?: string }) {
   useEffect(() => { console.log("[app] DynastyCommandCenter mounted"); }, []);
+
+  // ── Background chunk preloading ────────────────────────────────────────────
+  // Wave 1 (immediate): most-visited tabs — ready before the user clicks.
+  // Wave 2 (1.5 s): remaining tabs, loaded while the user reads the dashboard.
+  // Calling the raw dynamic import() primes the browser cache without rendering
+  // anything; React.lazy reuses the same cached promise on first render.
+  useEffect(() => {
+    import("./tabs/Dashboard");
+    import("./tabs/Portfolio");
+    import("./tabs/TradeCenter");
+    import("./tabs/DraftCommand");
+    const t = setTimeout(() => {
+      import("./tabs/LiveDraft");
+      import("./tabs/LeagueAnalyzer");
+      import("./tabs/PlayoffCalculator");
+      import("./tabs/Transactions");
+      import("./tabs/PositionalAnalysis");
+      import("./tabs/LeagueMarket");
+      import("./tabs/Analysis");
+      import("./tabs/PositionStats");
+      import("./tabs/WaiverCommand");
+      import("./tabs/TradeSync");
+      import("./tabs/LineupCommand");
+      import("./tabs/DraftAvailability");
+      import("./tabs/ShareTeam");
+      import("@/pages/PlayerPage");
+      import("@/components/AboutModal");
+      import("@/components/FeedbackPage");
+      import("@/components/LegalModals");
+    }, 1500);
+    return () => clearTimeout(t);
+  }, []);
   const [, setLocation] = useLocation();
   const initial = getInitialState(params?.tab, params?.sub);
   const [activeMainTab, setActiveMainTab] = useState(initial.tab);
