@@ -465,3 +465,120 @@ export const userPlayerValues = pgTable("user_player_values", {
 
 export type UserValueSet = typeof userValueSets.$inferSelect;
 export type UserPlayerValue = typeof userPlayerValues.$inferSelect;
+
+// ── Portfolio Timeline (asset ledger) ────────────────────────────────────────
+// Reconstructs a manager's dynasty portfolio value over time as an asset
+// ledger: every player and rookie pick is an asset that's acquired, held, and
+// disposed. Historical *ownership* is reconstructed from Sleeper (drafts,
+// traded picks, trades, waivers); historical *values* are estimated from
+// playerValueSnapshots + pick value history with a confidence label.
+
+// One open/closed ownership period for a single asset (player or pick) in one
+// league. Repeated ownership of the same asset produces SEPARATE rows.
+export const assetPositions = pgTable("asset_positions", {
+  id: serial("id").primaryKey(),
+  sleeperUserId: varchar("sleeper_user_id", { length: 32 }).notNull(),
+  leagueId: varchar("league_id", { length: 32 }).notNull(),
+  rosterId: integer("roster_id"),
+  assetType: varchar("asset_type", { length: 8 }).notNull(), // "player" | "pick"
+  // Stable key, e.g. "player_6786" or "pick_2026_round1_origRoster123".
+  assetKey: varchar("asset_key", { length: 80 }).notNull(),
+  playerId: varchar("player_id", { length: 20 }),
+  playerName: text("player_name"),
+  pickSeason: integer("pick_season"),
+  pickRound: integer("pick_round"),
+  pickOriginalRosterId: integer("pick_original_roster_id"),
+  pickSlot: integer("pick_slot"),
+  pickBucket: varchar("pick_bucket", { length: 8 }), // early | mid | late | unknown
+  acquiredDate: varchar("acquired_date", { length: 10 }).notNull(), // YYYY-MM-DD
+  acquiredMethod: varchar("acquired_method", { length: 24 }).notNull(),
+  disposedDate: varchar("disposed_date", { length: 10 }),
+  disposedMethod: varchar("disposed_method", { length: 24 }),
+  acquisitionValue: integer("acquisition_value").notNull().default(0),
+  costBasis: integer("cost_basis").notNull().default(0),
+  sourceEventId: integer("source_event_id"),
+  rawSourceId: varchar("raw_source_id", { length: 64 }),
+  isCurrent: boolean("is_current").notNull().default(true),
+  confidence: varchar("confidence", { length: 16 }).notNull().default("estimated"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  userIdx: index("asset_positions_user_idx").on(table.sleeperUserId),
+  userLeagueIdx: index("asset_positions_user_league_idx").on(table.sleeperUserId, table.leagueId),
+  assetKeyIdx: index("asset_positions_asset_key_idx").on(table.assetKey),
+  currentIdx: index("asset_positions_current_idx").on(table.sleeperUserId, table.isCurrent),
+}));
+
+// Meaningful events that move portfolio value (trades, waivers, drafts, etc.).
+export const portfolioEvents = pgTable("portfolio_events", {
+  id: serial("id").primaryKey(),
+  sleeperUserId: varchar("sleeper_user_id", { length: 32 }).notNull(),
+  leagueId: varchar("league_id", { length: 32 }),
+  rosterId: integer("roster_id"),
+  eventDate: varchar("event_date", { length: 10 }).notNull(), // YYYY-MM-DD
+  eventType: varchar("event_type", { length: 24 }).notNull(),
+  title: text("title").notNull(),
+  description: text("description"),
+  valueBefore: integer("value_before"),
+  valueAfter: integer("value_after"),
+  valueSent: integer("value_sent"),
+  valueReceived: integer("value_received"),
+  netDelta: integer("net_delta").notNull().default(0),
+  rosterValueDelta: integer("roster_value_delta").notNull().default(0),
+  pickValueDelta: integer("pick_value_delta").notNull().default(0),
+  costBasisDelta: integer("cost_basis_delta").notNull().default(0),
+  // Structured detail (sent/received asset lists) for the UI event card.
+  detail: jsonb("detail"),
+  rawTransactionId: varchar("raw_transaction_id", { length: 64 }),
+  rawDraftId: varchar("raw_draft_id", { length: 64 }),
+  confidence: varchar("confidence", { length: 16 }).notNull().default("estimated"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  userIdx: index("portfolio_events_user_idx").on(table.sleeperUserId),
+  userDateIdx: index("portfolio_events_user_date_idx").on(table.sleeperUserId, table.eventDate),
+}));
+
+// Calculated portfolio value per (user, league, date). Aggregated across
+// leagues at query time for the total-portfolio line.
+export const portfolioValueSnapshots = pgTable("portfolio_value_snapshots", {
+  id: serial("id").primaryKey(),
+  sleeperUserId: varchar("sleeper_user_id", { length: 32 }).notNull(),
+  leagueId: varchar("league_id", { length: 32 }).notNull(),
+  snapshotDate: varchar("snapshot_date", { length: 10 }).notNull(),
+  rosterValue: integer("roster_value").notNull().default(0),
+  pickValue: integer("pick_value").notNull().default(0),
+  totalValue: integer("total_value").notNull().default(0),
+  costBasis: integer("cost_basis").notNull().default(0),
+  unrealizedGain: integer("unrealized_gain").notNull().default(0),
+  realizedGain: integer("realized_gain").notNull().default(0),
+  assetCount: integer("asset_count").notNull().default(0),
+  confidence: varchar("confidence", { length: 16 }).notNull().default("estimated"),
+  calculationVersion: integer("calculation_version").notNull().default(1),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  userDateIdx: index("portfolio_snapshots_user_date_idx").on(table.sleeperUserId, table.snapshotDate),
+  userLeagueDateIdx: index("portfolio_snapshots_user_league_date_idx").on(table.sleeperUserId, table.leagueId, table.snapshotDate),
+}));
+
+// Historical rookie-pick values (bucketed and/or exact slot). Player value
+// history reuses the existing playerValueSnapshots table.
+export const pickValueHistory = pgTable("pick_value_history", {
+  id: serial("id").primaryKey(),
+  season: integer("season").notNull(),
+  round: integer("round").notNull(),
+  pickSlot: integer("pick_slot"), // exact overall/slot if known
+  slotBucket: varchar("slot_bucket", { length: 8 }).notNull().default("mid"), // early|mid|late|unknown
+  snapshotDate: varchar("snapshot_date", { length: 10 }).notNull(),
+  value: integer("value").notNull().default(0),
+  leagueFormat: varchar("league_format", { length: 8 }), // sf | 1qb
+  scoringFormat: varchar("scoring_format", { length: 8 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  lookupIdx: index("pick_value_history_lookup_idx").on(table.season, table.round, table.slotBucket, table.snapshotDate),
+}));
+
+export type AssetPosition = typeof assetPositions.$inferSelect;
+export type PortfolioEvent = typeof portfolioEvents.$inferSelect;
+export type PortfolioValueSnapshot = typeof portfolioValueSnapshots.$inferSelect;
+export type PickValueHistory = typeof pickValueHistory.$inferSelect;

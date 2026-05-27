@@ -30,6 +30,9 @@ const db = drizzle(pool);
 
 const SLEEPER_API = "https://api.sleeper.app/v1";
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6h
+// Bump when the payload shape changes so stale cache rows are treated as misses
+// and recomputed rather than served without the newer fields.
+const CACHE_VERSION = 7;
 const MAX_LEAGUES_SCANNED = 20;
 const TRANSACTION_WEEKS = 18;
 const FETCH_CONCURRENCY = 4;
@@ -38,6 +41,81 @@ const VALID_POSITIONS = new Set(["QB", "RB", "WR", "TE"]);
 // ── Public types ─────────────────────────────────────────────────────────────
 
 export type ActivityRating = "Low" | "Moderate" | "Active" | "Aggressive" | "Very Active";
+export type Rating3 = "Low" | "Medium" | "High";
+
+export interface ManagerArchetype {
+  /** Stable machine key, e.g. "rebuilder". */
+  key: string;
+  /** Branded label, e.g. "The Rebuilder". */
+  label: string;
+  /** One-line descriptor. */
+  blurb: string;
+  /** Transparent "why we tagged them this" reasoning for a tooltip. */
+  why: string;
+}
+
+export interface ScorecardRow {
+  category: string;
+  rating: string;
+  tone: "positive" | "neutral" | "caution" | "info";
+}
+
+export interface RankSnapshotRow {
+  label: string;
+  /** 1 = best in league; null when not computable. */
+  rank: number | null;
+  total: number;
+}
+
+export interface NeedRow {
+  position: "QB" | "RB" | "WR" | "TE";
+  level: "Low" | "Medium" | "High";
+  reason: string;
+}
+
+/** Per-roster rank row for a league — enables a consistent You-vs-Them lookup
+ *  by ownerId on the client without any viewer-specific server computation. */
+export interface LeagueRosterRank {
+  ownerId: string;
+  rosterId: number;
+  dynastyRank: number;
+  winNowRank: number;
+  youthRank: number;
+  pickRank: number | null;
+  qbRank: number;
+  rbRank: number;
+  wrRank: number;
+  teRank: number;
+}
+
+/** A full per-league scouting report for the target manager. */
+export interface LeagueReport {
+  leagueId: string;
+  name: string;
+  season: string;
+  format: "SF" | "1QB";
+  scoringFormat: string;
+  totalRosters: number;
+  startersCount: number | null;
+  /** Whether the requested ?leagueId pointed at this league. */
+  isRequested: boolean;
+  ownerId: string;
+  rosterId: number;
+  teamName: string;
+  teamDirection: "Contender" | "Middle" | "Rebuild" | "Unknown";
+  teamIdentity: { label: string; blurb: string };
+  contextSummary: string;
+  dynastyStrengths: PositionScore[];
+  winNowStrengths: PositionScore[];
+  needs: NeedRow[];
+  rankSnapshot: RankSnapshotRow[];
+  relativeWeakness: string | null;
+  tradeOpportunity: string;
+  pickCapitalSummary: string;
+  ageSummary: string;
+  /** Ranks for every roster in the league (target + everyone else). */
+  rosters: LeagueRosterRank[];
+}
 
 export interface ManagerIntelPayload {
   user: {
@@ -45,6 +123,27 @@ export interface ManagerIntelPayload {
     username: string;
     display_name: string;
     avatar: string | null;
+  };
+  /** Branded one-look identity for the manager. */
+  archetype: ManagerArchetype;
+  /** Hero paragraph for the Overview tab. */
+  managerRead: string;
+  /** Polished one-line "what kind of roster this is" statement. */
+  rosterIdentity: string;
+  /** 3 "Label: explanation" tendency lines. */
+  keyTendencies: string[];
+  /** Compact chips for the page header. */
+  headerBadges: string[];
+  /** How much to trust this read, given visible-league coverage. */
+  confidence: { level: Rating3; basis: string };
+  /** At-a-glance ratings table. */
+  scorecard: ScorecardRow[];
+  /** Derived behavioral leanings (also feed the scorecard + client matching). */
+  preferences: {
+    youthPreference: Rating3;
+    veteranPreference: Rating3;
+    pickValue: Rating3;
+    aggressiveness: Rating3;
   };
   currentLeague: {
     league_id: string;
@@ -56,7 +155,16 @@ export interface ManagerIntelPayload {
     teamDirection: "Contender" | "Middle" | "Rebuild" | "Unknown";
     pickCapitalSummary: string;
     ageSummary: string;
+    /** Where this team ranks within the league on key axes. */
+    rankSnapshot: RankSnapshotRow[];
+    /** Plain-language identity card. */
+    teamIdentity: { label: string; blurb: string };
+    /** Softest position group even when there are no hard holes. */
+    relativeWeakness: string | null;
   } | null;
+  /** Per-league scouting reports across every visible league (drives the
+   *  League tab's league selector + You-vs-Them comparison). */
+  leagues: LeagueReport[];
   crossLeague: {
     dynastyLeagueCount: number;
     oldestLeagueSeason: string | null;
@@ -66,10 +174,24 @@ export interface ManagerIntelPayload {
     tradeActivityRating: ActivityRating;
     waiverActivityRating: ActivityRating;
     mostRosteredPlayers: PlayerExposure[];
+    /** Top exposure split out by position for easier scanning. */
+    mostRosteredByPosition: { QB: PlayerExposure[]; RB: PlayerExposure[]; WR: PlayerExposure[]; TE: PlayerExposure[] };
     mostDraftedPlayers: PlayerExposure[] | null;
     commonRosterBuild: string;
     averageTeamAge: number | null;
     positionStrengthProfile: string;
+    /** "What kind of players they collect" tags, with a confidence label. */
+    favoritePlayerTypes: Array<{ type: string; confidence: Rating3 }>;
+    /** Memorable portfolio archetype title, e.g. "Young Upside Builder". */
+    portfolioType: string;
+    /** Sentence summarizing their cross-league portfolio identity. */
+    portfolioIdentity: string;
+    /** Per-position investment read across visible leagues. */
+    positionBias: Array<{ position: "QB" | "RB" | "WR" | "TE"; signal: string; interpretation: string }>;
+    /** 3–5 interpreted "Label: detail" cross-league tendencies. */
+    managerTendencies: string[];
+    /** What this portfolio implies for trading with them. */
+    tradeImplications: { likelyValues: string[]; unlikelyValues: string[]; bestAngle: string };
   };
   performance: {
     playoffAppearances: number | null;
@@ -79,18 +201,87 @@ export interface ManagerIntelPayload {
     avgPointsFor: number | null;
     notes: string;
   };
+  /** Current visible-season activity (the reframed "History"/Track Record tab). */
+  activity: {
+    visibleLeagues: number;
+    oldestVisibleSeason: string | null;
+    estimatedYearsActive: number | null;
+    currentPointsFor: number | null;
+    tradeCount: number;
+    waiverCount: number;
+    totalTransactions: number;
+    activitySignal: "Active" | "Moderate" | "Quiet" | "Ghost";
+    signalNote: string;
+    /** Branded activity persona (Steady Manager, Trade Shark, etc.). */
+    activityArchetype: { key: string; label: string; blurb: string };
+    /** How easy they are to engage in a trade. High = very reachable. */
+    tradeability: { level: Rating3; note: string };
+    /** ISO date of the most recent visible transaction, or null. */
+    lastActivity: string | null;
+    /** Manager transactions in the trailing 30 / 90 days. */
+    last30Days: number;
+    last90Days: number;
+    /** Direction of recent activity vs the prior window. */
+    activityTrend: "Increasing" | "Stable" | "Declining" | "Unknown";
+    /** Most recent visible transactions (newest first). */
+    recent: Array<{ date: string; league: string; type: string }>;
+  };
   tradeApproach: {
     summary: string;
     suggestedAngle: string;
+    /** One-line "what to actually do" recommendation for the Overview hero. */
+    actionableTakeaway: string;
+    /** Quick do / don't trade guidance. */
+    doList: string[];
+    dontList: string[];
     likelyNeeds: string[];
     assetsTheyMayValue: string[];
     cautionNotes: string;
+    /** Structured "how to deal with them" profile. */
+    tradeProfile: {
+      tradeActivity: string;
+      tradeStyle: string;
+      bestOfferType: string;
+      avoidOffering: string;
+      likelyTargets: string[];
+      sellCandidates: string[];
+    };
+    /** Templated opening-offer ideas. */
+    openingOffers: string[];
+    /** Positions they're most likely shopping for — drives client roster-match. */
+    targetPositions: Array<"QB" | "RB" | "WR" | "TE">;
+    /** Whether the client should bias roster-match toward younger players. */
+    preferYouth: boolean;
+    /** How hard they are to deal with, and why. */
+    tradeDifficulty: { level: Rating3; reason: string };
+    /** Consolidated "how to get a deal done" cheat sheet. */
+    playbook: {
+      bestApproach: string;
+      likelyStyle: string;
+      bestDealType: string;
+      likelyMotivation: string;
+      negotiationStyle: string;
+      avoid: string;
+    };
+    /** Which kinds of deals fit them, with a fit rating. */
+    dealTypes: Array<{ dealType: string; fit: Rating3; why: string }>;
+    /** Short negotiation guidance bullets. */
+    negotiationNotes: string[];
+    /** Specific players of theirs worth targeting (current league roster). */
+    targetableAssets: Array<{ name: string; pos: string; age: number | null; value: number; reason: string; difficulty: Rating3 }>;
+    /** Players of theirs they're likely to protect. */
+    protectedAssets: Array<{ name: string; pos: string; value: number; reason: string }>;
+    /** Grouped target/sell reads for clearer scanning. */
+    likelyTargetsGrouped: { high: string[]; conditional: string[] };
+    sellCandidatesGrouped: { mostLikely: string[]; leastLikely: string[] };
   };
   meta: {
     season: string;
     leaguesScanned: number;
     computedAt: string;
     dataSourceNote: string;
+    /** Payload schema version — bumped to invalidate stale cache rows. */
+    version: number;
   };
 }
 
@@ -111,6 +302,8 @@ export interface PlayerExposure {
   name: string;
   pos: string;
   team: string;
+  /** Player age, when known — lets the client tag prospect vs veteran signals. */
+  age: number | null;
   leagueCount: number;
   exposure: number; // 0..100
 }
@@ -149,23 +342,34 @@ async function mapBounded<T, R>(
 // ── Cache layer ──────────────────────────────────────────────────────────────
 
 async function readCache(userId: string, leagueId: string, season: string) {
-  const rows = await db
-    .select()
-    .from(managerIntelCache)
-    .where(
-      and(
-        eq(managerIntelCache.userId, userId),
-        eq(managerIntelCache.leagueId, leagueId),
-        eq(managerIntelCache.season, season),
-      ),
-    )
-    .orderBy(desc(managerIntelCache.computedAt))
-    .limit(1);
-  if (rows.length === 0) return null;
-  const row = rows[0];
-  const age = Date.now() - (row.computedAt?.getTime() ?? 0);
-  if (age > CACHE_TTL_MS) return null;
-  return row.payload as ManagerIntelPayload;
+  // Best-effort: a cache-layer failure (e.g. table not yet migrated, DB blip)
+  // must never take down the endpoint — fall through to a live recompute.
+  try {
+    const rows = await db
+      .select()
+      .from(managerIntelCache)
+      .where(
+        and(
+          eq(managerIntelCache.userId, userId),
+          eq(managerIntelCache.leagueId, leagueId),
+          eq(managerIntelCache.season, season),
+        ),
+      )
+      .orderBy(desc(managerIntelCache.computedAt))
+      .limit(1);
+    if (rows.length === 0) return null;
+    const row = rows[0];
+    const age = Date.now() - (row.computedAt?.getTime() ?? 0);
+    if (age > CACHE_TTL_MS) return null;
+    const payload = row.payload as ManagerIntelPayload;
+    // Treat pre-versioned / older-schema rows as misses so we recompute with
+    // the current field set instead of serving a partial payload.
+    if ((payload?.meta?.version ?? 0) < CACHE_VERSION) return null;
+    return payload;
+  } catch (err: any) {
+    console.error("[ManagerIntel] cache read failed:", err?.message || err);
+    return null;
+  }
 }
 
 async function writeCache(
@@ -389,9 +593,39 @@ function buildTradeApproach(
   return {
     summary: suggestedAngle,
     suggestedAngle,
+    actionableTakeaway: suggestedAngle,
+    doList: [],
+    dontList: [],
     likelyNeeds: needs,
     assetsTheyMayValue,
     cautionNotes,
+    // Filled in by computeManagerIntel via buildTradeProfile/buildOpeningOffers.
+    tradeProfile: {
+      tradeActivity: cross.tradeActivityRating,
+      tradeStyle: "Unknown",
+      bestOfferType: "Balanced upgrade packages",
+      avoidOffering: "Lateral moves with no clear upgrade",
+      likelyTargets: [],
+      sellCandidates: [],
+    },
+    openingOffers: [],
+    targetPositions: [],
+    preferYouth: false,
+    tradeDifficulty: { level: "Medium", reason: "" },
+    playbook: {
+      bestApproach: "Balanced upgrade packages",
+      likelyStyle: "Unknown",
+      bestDealType: "Balanced package",
+      likelyMotivation: "Unclear direction",
+      negotiationStyle: "Unknown",
+      avoid: "Lateral moves with no clear upgrade",
+    },
+    dealTypes: [],
+    negotiationNotes: [],
+    targetableAssets: [],
+    protectedAssets: [],
+    likelyTargetsGrouped: { high: [], conditional: [] },
+    sellCandidatesGrouped: { mostLikely: [], leastLikely: [] },
   };
 }
 
@@ -456,18 +690,28 @@ interface SleeperTradedPickRaw {
 
 interface LeagueScan {
   leagueId: string;
+  name: string;
   season: string;
   format: "SF" | "1QB";
+  scoringFormat: string;
+  /** Starting lineup slot count (excludes BN/IR/TAXI). null if unknown. */
+  startersCount: number | null;
   totalRosters: number;
   managerRoster: RawRosterPick[] | null;
   /** Every roster in this league, hydrated with values + positions. */
   allRosters: RawRosterPick[][];
+  /** { ownerId, rosterId } aligned with allRosters by index. */
+  rosterMeta: Array<{ ownerId: string; rosterId: number }>;
+  /** Weighted future-pick score per rosterId (early picks count double). */
+  pickScoreByRoster: Record<number, number>;
   /** roster_id of the manager in this league, or null if not present. */
   managerRosterId: number | null;
   /** Count of completed trade transactions involving the manager this season. */
   managerTrades: number;
   /** Count of waiver/FA transactions initiated by the manager this season. */
   managerWaivers: number;
+  /** Timestamped manager transactions (epoch ms) for timeline aggregation. */
+  managerTxns: Array<{ ts: number; type: "trade" | "waiver" }>;
   /** Pick capital. */
   picks: RosterAndPicks;
   /** Roster wins/losses for the manager in this league. */
@@ -548,9 +792,44 @@ async function scanLeague(
     picks.earlyPicks = Array.from(owned).filter((k) => k.split("-")[1] === "1" || k.split("-")[1] === "2").length;
   }
 
-  // Trade/waiver counts — page through 18 transaction weeks.
+  // Generalized future-pick ownership for EVERY roster (drives pick-capital
+  // ranks). Each roster starts owning its own (year, round) picks; traded_picks
+  // reassign current ownership. Early picks (rounds 1–2) are weighted double.
+  const pickScoreByRoster: Record<number, number> = {};
+  {
+    const futureYears = [
+      parseInt(league.season, 10) + 1,
+      parseInt(league.season, 10) + 2,
+      parseInt(league.season, 10) + 3,
+    ];
+    const baseRounds = [1, 2, 3, 4];
+    const pickOwner = new Map<string, number>(); // "year-round-originalRoster" -> current owner rosterId
+    for (const r of rosters) {
+      for (const y of futureYears) for (const rd of baseRounds) pickOwner.set(`${y}-${rd}-${r.roster_id}`, r.roster_id);
+    }
+    for (const tp of tradedPicks || []) {
+      const yr = parseInt(tp.season, 10);
+      if (!futureYears.includes(yr)) continue;
+      const key = `${yr}-${tp.round}-${tp.roster_id}`;
+      if (pickOwner.has(key)) pickOwner.set(key, tp.owner_id);
+    }
+    for (const r of rosters) pickScoreByRoster[r.roster_id] = 0;
+    pickOwner.forEach((owner, key) => {
+      const round = parseInt(key.split("-")[1], 10);
+      pickScoreByRoster[owner] = (pickScoreByRoster[owner] || 0) + (round <= 2 ? 2 : 1);
+    });
+  }
+
+  const rosterMeta = rosters.map((r) => ({ ownerId: r.owner_id, rosterId: r.roster_id }));
+  const startersCount = league.rosterPositions
+    ? league.rosterPositions.filter((p) => !["BN", "IR", "TAXI"].includes(p)).length
+    : null;
+
+  // Trade/waiver counts — page through 18 transaction weeks. Also capture each
+  // manager transaction's timestamp so we can build a recent-activity timeline.
   let managerTrades = 0;
   let managerWaivers = 0;
+  const managerTxns: Array<{ ts: number; type: "trade" | "waiver" }> = [];
   if (managerRosterId != null) {
     const weeks = Array.from({ length: TRANSACTION_WEEKS }, (_, i) => i + 1);
     const weekResults = await mapBounded(weeks, 6, async (w) => {
@@ -562,8 +841,14 @@ async function scanLeague(
         if (t.status !== "complete") continue;
         if (!Array.isArray(t.roster_ids)) continue;
         if (!t.roster_ids.includes(managerRosterId)) continue;
-        if (t.type === "trade") managerTrades++;
-        else if (t.type === "waiver" || t.type === "free_agent") managerWaivers++;
+        const ts = Number(t.status_updated ?? t.created ?? 0) || 0;
+        if (t.type === "trade") {
+          managerTrades++;
+          managerTxns.push({ ts, type: "trade" });
+        } else if (t.type === "waiver" || t.type === "free_agent") {
+          managerWaivers++;
+          managerTxns.push({ ts, type: "waiver" });
+        }
       }
     }
   }
@@ -587,18 +872,1057 @@ async function scanLeague(
 
   return {
     leagueId: league.leagueId,
+    name: league.name,
     season: league.season,
     format: league.format as "SF" | "1QB",
+    scoringFormat: league.scoringFormat,
+    startersCount,
     totalRosters: league.totalRosters,
     managerRoster,
     allRosters,
+    rosterMeta,
+    pickScoreByRoster,
     managerRosterId,
     managerTrades,
     managerWaivers,
+    managerTxns,
     picks,
     managerRecord,
     teamName,
     ownedPlayerIds: managerRoster ? managerRoster.map((p) => p.playerId) : [],
+  };
+}
+
+// ── Tendency + archetype synthesis ───────────────────────────────────────────
+
+/** One aggregated exposure entry enriched with age/experience for typing. */
+interface ExposureRich {
+  pos: string;
+  age: number | null;
+  exp: number | null;
+  leagueCount: number;
+}
+
+function youthRating(avgAge: number | null): Rating3 {
+  if (avgAge == null) return "Medium";
+  if (avgAge <= 24.8) return "High";
+  if (avgAge <= 26.6) return "Medium";
+  return "Low";
+}
+
+function veteranRating(avgAge: number | null): Rating3 {
+  if (avgAge == null) return "Medium";
+  if (avgAge >= 28) return "High";
+  if (avgAge >= 26.6) return "Medium";
+  return "Low";
+}
+
+function pickValueRating(avgEarlyPicks: number): Rating3 {
+  if (avgEarlyPicks >= 2) return "High";
+  if (avgEarlyPicks >= 1) return "Medium";
+  return "Low";
+}
+
+function aggressivenessRating(trade: ActivityRating, waiver: ActivityRating): Rating3 {
+  const score = (r: ActivityRating) =>
+    r === "Aggressive" || r === "Very Active" ? 2 : r === "Active" ? 1 : 0;
+  const s = score(trade) + score(waiver);
+  if (s >= 3) return "High";
+  if (s >= 1) return "Medium";
+  return "Low";
+}
+
+interface ArchetypeInputs {
+  direction: "Contender" | "Middle" | "Rebuild" | "Unknown";
+  tradesPerLeague: number;
+  waiversPerLeague: number;
+  youthPreference: Rating3;
+  pickValue: Rating3;
+  aggressiveness: Rating3;
+  qbHeavy: boolean;
+  topPositionConcentration: { pos: string; share: number } | null;
+  hasStrongRosters: boolean;
+}
+
+function classifyArchetype(i: ArchetypeInputs): ManagerArchetype {
+  const a = (key: string, label: string, blurb: string, why: string): ManagerArchetype => ({ key, label, blurb, why });
+  const concPct = i.topPositionConcentration ? Math.round(i.topPositionConcentration.share * 100) : 0;
+  if (i.tradesPerLeague < 0.5 && i.waiversPerLeague < 1.5)
+    return a("ghost", "The Ghost Manager", "Low transaction volume and a largely static roster — slow to engage.",
+      "Very few visible trades or waiver moves across their leagues, and a roster that rarely changes.");
+  if (i.tradesPerLeague >= 4)
+    return a("trader", "The Trader", "High visible trade volume — always working the deal market.",
+      `Averages ${i.tradesPerLeague.toFixed(1)} completed trades per visible league — well above typical.`);
+  if (i.waiversPerLeague >= 15)
+    return a("waiver-grinder", "The Waiver Grinder", "Churns the bench aggressively — wins the waiver wire week to week.",
+      `Very high waiver/free-agent activity (~${Math.round(i.waiversPerLeague)} moves per league).`);
+  if (i.qbHeavy)
+    return a("qb-collector", "The QB Collector", "Stacks quarterbacks across builds — leans into Superflex scarcity.",
+      "Repeatedly carries 3+ quarterbacks and shows QB-stacked construction across visible leagues.");
+  if (i.youthPreference === "High" && i.direction !== "Contender")
+    return a("prospect-chaser", "The Prospect Chaser", "Concentrated on young, high-upside assets and rookie picks.",
+      "Roster age skews young and their exposure clusters on prospects rather than proven veterans.");
+  if (i.topPositionConcentration && i.topPositionConcentration.share >= 0.45)
+    return a("hoarder", "The Hoarder", `Unusually concentrated at ${i.topPositionConcentration.pos} across leagues.`,
+      `${concPct}% of their value-weighted exposure sits at ${i.topPositionConcentration.pos} — well above a balanced split.`);
+  if (i.hasStrongRosters && i.aggressiveness !== "Low" && i.pickValue !== "Low")
+    return a("value-shark", "The Value Shark", "Strong rosters, active trading, and a healthy age/pick balance.",
+      "Top-tier roster value paired with active trading and solid pick capital — they hunt value.");
+  if (i.direction === "Rebuild")
+    return a("rebuilder", "The Rebuilder", "Young roster and pick capital pointed at a future window.",
+      "Young roster, lighter win-now value, and meaningful rookie pick capital point at a future window.");
+  if (i.direction === "Contender")
+    return a("contender", "The Contender", "Win-now roster — older, productive, lighter on future picks.",
+      "Older, productive roster geared to win now and lighter on future draft capital.");
+  return a("balanced", "The Balanced Manager", "No dominant lean — flexible roster and measured activity.",
+    "No single signal dominates — activity, roster age, and construction all read as middle-of-the-road.");
+}
+
+function buildManagerRead(
+  direction: ArchetypeInputs["direction"],
+  build: string,
+  youthPref: Rating3,
+  pickValue: Rating3,
+  tradeRating: ActivityRating,
+): string {
+  const dir =
+    direction === "Rebuild" ? "Rebuilding"
+    : direction === "Contender" ? "Contending"
+    : direction === "Middle" ? "Middling"
+    : "Unclear-direction";
+  // Keep position abbreviations (QB/RB/WR/TE) upper-cased — never lower the build label.
+  const buildShort = build.replace(/ build$/i, "");
+  const youthClause =
+    youthPref === "High" ? "strong young assets"
+    : youthPref === "Low" ? "a veteran-leaning core"
+    : "a balanced age profile";
+  const pickClause =
+    pickValue === "High" ? " and meaningful rookie pick capital"
+    : pickValue === "Low" ? " and little draft capital"
+    : "";
+  const openness =
+    tradeRating === "Aggressive" || tradeRating === "Very Active"
+      ? "Their aggressive trade activity means they are very reachable."
+      : tradeRating === "Active" ? "Their active trade history suggests they are open to deals."
+      : tradeRating === "Moderate" ? "Their moderate trade activity suggests they are reachable, but not reckless."
+      : "Their low trade activity means they are slow to engage.";
+  const angle =
+    direction === "Rebuild" ? "The best approach is to lead with young upside, premium picks, or long-term value instead of aging veterans."
+    : direction === "Contender" ? "The best approach is to dangle proven win-now production for their picks and youth."
+    : "The best approach is a balanced package framed as a clear upgrade.";
+  return `${dir}, ${buildShort} manager with ${youthClause}${pickClause}. ${openness} ${angle}`;
+}
+
+/**
+ * Returns "Label: explanation" lines — the client bolds the label. Each line
+ * gives the tendency *meaning*, not just the rating.
+ */
+function buildKeyTendencies(
+  tradeRating: ActivityRating,
+  waiverRating: ActivityRating,
+  youthPref: Rating3,
+  veteranPref: Rating3,
+  pickValue: Rating3,
+): string[] {
+  const tradeLine =
+    tradeRating === "Aggressive" || tradeRating === "Very Active"
+      ? "Always dealing: High trade volume means they'll engage quickly — and may move big pieces."
+      : tradeRating === "Active"
+      ? "Open for business: Active trade history suggests they'll seriously consider fair offers."
+      : tradeRating === "Moderate"
+      ? "Reachable, not reckless: Moderate trade activity suggests they'll engage, but probably won't overpay."
+      : "Hard to move: Low trade activity means it may take a standout offer to get their attention.";
+
+  const ageLine =
+    youthPref === "High"
+      ? "Youth-focused: Construction leans toward long-term upside over short-term veteran production."
+      : veteranPref === "High"
+      ? "Veteran-reliant: Leans on proven, productive veterans more than speculative youth."
+      : "Age-balanced: Mixes proven veterans with younger upside rather than committing to one side.";
+
+  const pickLine =
+    pickValue === "High"
+      ? "Pick-conscious: Strong rookie pick capital means future value likely matters in negotiations."
+      : pickValue === "Low"
+      ? "Pick-light: Thin on future draft capital, so picks may be especially attractive to them."
+      : "Moderate draft capital: Holds some picks but isn't defined by them.";
+
+  return [tradeLine, ageLine, pickLine];
+}
+
+function ageBadge(youthPref: Rating3, veteranPref: Rating3): string {
+  if (youthPref === "High") return "Young Roster";
+  if (veteranPref === "High") return "Veteran Roster";
+  return "Balanced Age";
+}
+
+function buildConfidence(leagueCount: number, totalTxns: number): { level: Rating3; basis: string } {
+  let level: Rating3 = leagueCount >= 5 ? "High" : leagueCount >= 2 ? "Medium" : "Low";
+  if (totalTxns < 2 && level === "High") level = "Medium";
+  const lg = `${leagueCount} visible dynasty league${leagueCount === 1 ? "" : "s"}`;
+  const txn = `${totalTxns} visible transaction${totalTxns === 1 ? "" : "s"}`;
+  const basis =
+    level === "High"
+      ? `Based on ${lg} and ${txn} — enough roster and activity signal to read tendencies reliably.`
+      : level === "Medium"
+      ? `Based on ${lg} and ${txn} — a moderate sample, so treat finer reads as directional.`
+      : `Based on only ${lg} and ${txn} — limited signal; treat this as a rough first impression.`;
+  return { level, basis };
+}
+
+/** Rank within a league: 1 = highest value. `lowerIsBetter` flips for age. */
+function rankOf(values: number[], mine: number, lowerIsBetter = false): number | null {
+  if (values.length === 0) return null;
+  const better = lowerIsBetter
+    ? values.filter((v) => v < mine).length
+    : values.filter((v) => v > mine).length;
+  return better + 1;
+}
+
+function buildTeamIdentity(
+  dynasty: PositionScore[],
+  direction: ArchetypeInputs["direction"],
+  avgAge: number | null,
+): { label: string; blurb: string } {
+  const strong = dynasty.filter((p) => p.tier === "Elite" || p.tier === "Strong").map((p) => p.position);
+  const weak = dynasty.filter((p) => p.tier === "Weak" || p.tier === "Thin").map((p) => p.position);
+  const ageWord = avgAge == null ? "" : avgAge <= 24.8 ? "Young " : avgAge >= 28 ? "Veteran " : "";
+  const dirWord =
+    direction === "Rebuild" ? "Rebuild"
+    : direction === "Contender" ? "Contender"
+    : direction === "Middle" ? "Core"
+    : "Roster";
+  const coreClause = strong.length ? ` With Strong ${strong.join("/")} Core` : "";
+  const label = `${ageWord}${dirWord}${coreClause}`.trim();
+  const parts: string[] = [];
+  if (strong.length) parts.push(`Strong at ${strong.join(", ")}`);
+  if (weak.length) parts.push(`thin at ${weak.join(", ")}`);
+  const blurb = parts.length ? `${parts.join(", ")}.` : "Balanced positional value across the board.";
+  return { label, blurb };
+}
+
+function buildRelativeWeakness(dynasty: PositionScore[], needs: string[]): string | null {
+  if (needs.length > 0) return null; // hard holes are already surfaced as needs
+  const sorted = [...dynasty].sort((a, b) => a.vsLeagueAvg - b.vsLeagueAvg);
+  const weakest = sorted[0];
+  if (!weakest) return null;
+  const pct = `${weakest.vsLeagueAvg > 0 ? "+" : ""}${weakest.vsLeagueAvg}%`;
+  return `No severe positional holes, but ${weakest.position} is their least valuable group vs league average (${pct}).`;
+}
+
+function buildFavoritePlayerTypes(
+  exposures: ExposureRich[],
+  totalLeagues: number,
+): Array<{ type: string; confidence: Rating3 }> {
+  // Weight by leagueCount so a player carried across many leagues counts more.
+  const w = (es: ExposureRich[]) => es.reduce((s, e) => s + e.leagueCount, 0);
+  const young = exposures.filter((e) => e.age != null && e.age <= 24);
+  const vets = exposures.filter((e) => e.age != null && e.age >= 29);
+  const rookies = exposures.filter((e) => e.exp != null && e.exp <= 1);
+  const tags: Array<{ tag: string; weight: number }> = [];
+  const add = (tag: string, weight: number, min: number) => {
+    if (weight >= min) tags.push({ tag, weight });
+  };
+  add("Rookies & first-year players", w(rookies), 4);
+  add("Young / rookie RBs", w(young.filter((e) => e.pos === "RB")), 3);
+  add("Young WRs", w(young.filter((e) => e.pos === "WR")), 4);
+  add("Young QBs", w(young.filter((e) => e.pos === "QB")), 2);
+  add("TE prospects", w(young.filter((e) => e.pos === "TE")), 2);
+  add("Productive veterans", w(vets), 4);
+  // Confidence scales the cluster weight against how many leagues we can see —
+  // a tag backed by ~1 player per league reads "High", a thin one "Low".
+  const confidenceFor = (weight: number): Rating3 => {
+    if (weight >= Math.max(6, totalLeagues)) return "High";
+    if (weight >= Math.max(4, totalLeagues * 0.6)) return "Medium";
+    return "Low";
+  };
+  return tags
+    .sort((a, b) => b.weight - a.weight)
+    .slice(0, 4)
+    .map((t) => ({ type: t.tag, confidence: confidenceFor(t.weight) }));
+}
+
+function buildPortfolioType(
+  youthPref: Rating3,
+  veteranPref: Rating3,
+  favoriteTypes: Array<{ type: string }>,
+): string {
+  const topRookie = favoriteTypes[0]?.type?.toLowerCase().includes("rookie");
+  if (veteranPref === "High" && youthPref !== "High") return "Veteran-Anchored Portfolio";
+  if (youthPref === "High") return topRookie ? "Prospect-Heavy Portfolio" : "Young Upside Builder";
+  return "Balanced Portfolio Builder";
+}
+
+function buildPortfolioIdentity(
+  portfolioType: string,
+  youthPref: Rating3,
+  veteranPref: Rating3,
+  favoriteTypes: Array<{ type: string }>,
+  topPosConc: { pos: string; share: number } | null,
+): string {
+  const lean =
+    youthPref === "High" ? "lean toward future value and rookie/early-career assets"
+    : veteranPref === "High" ? "lean on proven veteran production over speculative youth"
+    : "balance youth and veteran value";
+  const types = favoriteTypes.length
+    ? `, especially ${favoriteTypes.slice(0, 3).map((t) => t.type.toLowerCase()).join(", ")}`
+    : "";
+  const conc =
+    topPosConc && topPosConc.share >= 0.4 ? ` Their exposure skews heavily toward ${topPosConc.pos}.` : "";
+  const closer =
+    youthPref === "High"
+      ? " They're unlikely to heavily prioritize aging short-term veterans unless the value is obvious."
+      : veteranPref === "High"
+      ? " Speculative youth is unlikely to move them without a clear value edge."
+      : " They can be approached from either the win-now or future-value side.";
+  return `This manager profiles as a ${portfolioType.toLowerCase()}. Their rosters ${lean}${types}.${conc}${closer}`;
+}
+
+function buildPositionBias(
+  exposures: ExposureRich[],
+): Array<{ position: "QB" | "RB" | "WR" | "TE"; signal: string; interpretation: string }> {
+  const positions: Array<"QB" | "RB" | "WR" | "TE"> = ["QB", "RB", "WR", "TE"];
+  return positions.map((pos) => {
+    const entries = exposures.filter((e) => e.pos === pos);
+    const weight = entries.reduce((s, e) => s + e.leagueCount, 0);
+    if (weight === 0) {
+      return { position: pos, signal: "Light", interpretation: "Little cross-league exposure here." };
+    }
+    const aged = entries.filter((e) => e.age != null);
+    const youngWeight = aged.filter((e) => (e.age as number) <= 24).reduce((s, e) => s + e.leagueCount, 0);
+    const agedWeight = aged.reduce((s, e) => s + e.leagueCount, 0) || 1;
+    const young = youngWeight / agedWeight >= 0.5;
+    switch (pos) {
+      case "QB":
+        return young
+          ? { position: pos, signal: "Young-heavy", interpretation: "Invests in young QB upside." }
+          : { position: pos, signal: "Strong", interpretation: "Values QB stability and scarcity." };
+      case "RB":
+        return young
+          ? { position: pos, signal: "Prospect-heavy", interpretation: "Willing to bet on young RB upside." }
+          : { position: pos, signal: "Veteran-leaning", interpretation: "Prefers proven RB production." };
+      case "WR":
+        return young
+          ? { position: pos, signal: "Young-heavy", interpretation: "Prioritizes long-term WR value." }
+          : { position: pos, signal: "Balanced", interpretation: "Mixes proven and developing WRs." };
+      case "TE":
+        return young
+          ? { position: pos, signal: "Prospect-heavy", interpretation: "Likes upside TE stashes." }
+          : { position: pos, signal: "Established", interpretation: "Values reliable TE production." };
+    }
+  });
+}
+
+function buildManagerTendencies(
+  youthPref: Rating3,
+  veteranPref: Rating3,
+  tradeRating: ActivityRating,
+  positionBias: Array<{ position: string; signal: string }>,
+  qbHeavy: boolean,
+): string[] {
+  const out: string[] = [];
+  out.push(
+    youthPref === "High"
+      ? "Youth-first builder: Repeated exposure to rookies and early-career players suggests they value future value over short-term points."
+      : veteranPref === "High"
+      ? "Veteran-anchored: Leans on proven, productive veterans rather than speculative youth."
+      : "Age-balanced: Carries a mix of proven veterans and younger upside.",
+  );
+  if (qbHeavy) {
+    out.push("QB-aware: Their common build is QB-heavy, especially valuable in Superflex formats.");
+  }
+  const te = positionBias.find((p) => p.position === "TE");
+  if (te && te.signal === "Prospect-heavy") {
+    out.push("TE prospect investor: Multiple developmental TEs appear across their portfolio — they're willing to wait on TE value.");
+  }
+  out.push(
+    tradeRating === "Aggressive" || tradeRating === "Very Active"
+      ? "High activity: A frequent dealer — expect them to engage and move pieces."
+      : tradeRating === "Active"
+      ? "Active: Engaged in the market and open to deals."
+      : tradeRating === "Moderate"
+      ? "Moderately active: Active enough to engage, but not a high-volume churner."
+      : "Low activity: Slow to engage — it may take a standout offer.",
+  );
+  return out.slice(0, 5);
+}
+
+function buildTradeImplications(
+  prefs: ManagerIntelPayload["preferences"],
+  positionBias: Array<{ position: string; signal: string }>,
+): { likelyValues: string[]; unlikelyValues: string[]; bestAngle: string } {
+  const likely: string[] = [];
+  const unlikely: string[] = [];
+  const youngWR = positionBias.find((p) => p.position === "WR")?.signal.includes("Young");
+  const youngRB = positionBias.find((p) => p.position === "RB")?.signal.includes("Prospect");
+  const proTE = positionBias.find((p) => p.position === "TE")?.signal === "Prospect-heavy";
+
+  if (prefs.youthPreference !== "Low") {
+    likely.push("Young, high-upside WRs");
+    if (youngRB) likely.push("Rookie / young RBs");
+    if (proTE) likely.push("TE prospects");
+    likely.push("Premium young QBs");
+  } else {
+    likely.push("Proven, productive starters");
+  }
+  if (prefs.pickValue !== "Low") likely.push("Rookie / future draft picks");
+  if (youngWR && !likely.includes("Young, high-upside WRs")) likely.push("Young, high-upside WRs");
+
+  if (prefs.youthPreference !== "Low") {
+    unlikely.push("Aging veterans", "Short-term RB rentals", "Low-upside depth pieces", "Win-now production with no future value");
+  } else {
+    unlikely.push("Multi-year projects with no current impact", "Speculative deep stashes");
+  }
+
+  const bestAngle =
+    prefs.youthPreference !== "Low"
+      ? "Lead with youth, picks, or long-term upside. Avoid framing the offer around immediate production unless the player still carries dynasty value."
+      : "Lead with proven production and clear win-now upgrades rather than speculative youth.";
+
+  return { likelyValues: likely.slice(0, 6), unlikelyValues: unlikely.slice(0, 5), bestAngle };
+}
+
+function buildScorecard(
+  archetype: ManagerArchetype,
+  tradeRating: ActivityRating,
+  waiverRating: ActivityRating,
+  direction: ArchetypeInputs["direction"],
+  prefs: ManagerIntelPayload["preferences"],
+  build: string,
+  bestTradeAngle: string,
+): ScorecardRow[] {
+  const tone3 = (r: Rating3): ScorecardRow["tone"] =>
+    r === "High" ? "positive" : r === "Low" ? "caution" : "neutral";
+  const activityTone = (r: ActivityRating): ScorecardRow["tone"] =>
+    r === "Aggressive" || r === "Very Active" ? "positive" : r === "Active" ? "neutral" : "caution";
+  return [
+    { category: "Trade Activity", rating: tradeRating, tone: activityTone(tradeRating) },
+    { category: "Waiver Activity", rating: waiverRating, tone: activityTone(waiverRating) },
+    { category: "Dynasty Direction", rating: direction, tone: "info" },
+    { category: "Aggressiveness", rating: prefs.aggressiveness, tone: tone3(prefs.aggressiveness) },
+    { category: "Pick Value", rating: prefs.pickValue, tone: tone3(prefs.pickValue) },
+    { category: "Youth Preference", rating: prefs.youthPreference, tone: tone3(prefs.youthPreference) },
+    { category: "Veteran Preference", rating: prefs.veteranPreference, tone: tone3(prefs.veteranPreference) },
+    { category: "Roster Construction", rating: build, tone: "info" },
+    { category: "Archetype", rating: archetype.label.replace(/^The /, ""), tone: "info" },
+    { category: "Best Trade Angle", rating: bestTradeAngle, tone: "positive" },
+  ];
+}
+
+function bestOfferLabel(direction: ArchetypeInputs["direction"]): string {
+  return direction === "Rebuild" ? "Picks + young upside"
+    : direction === "Contender" ? "Proven win-now production"
+    : "Balanced upgrade packages";
+}
+
+function buildTradeProfile(
+  direction: ArchetypeInputs["direction"],
+  tradeRating: ActivityRating,
+  prefs: ManagerIntelPayload["preferences"],
+  dynasty: PositionScore[],
+  needs: string[],
+): { profile: ManagerIntelPayload["tradeApproach"]["tradeProfile"]; targetPositions: Array<"QB" | "RB" | "WR" | "TE">; preferYouth: boolean } {
+  const style =
+    direction === "Rebuild" ? "Patient rebuilder"
+    : direction === "Contender" ? "Win-now buyer"
+    : direction === "Middle" ? "Opportunistic dealer"
+    : "Feeling-out / unclear";
+  const bestOfferType = bestOfferLabel(direction);
+  const avoidOffering =
+    direction === "Rebuild" ? "Aging veterans / short-term RB production"
+    : direction === "Contender" ? "Multi-year projects with no current-season impact"
+    : "Lateral moves with no clear upgrade";
+
+  // Targets: hard needs first, otherwise the softest position group.
+  const sortedWeak = [...dynasty].sort((a, b) => a.vsLeagueAvg - b.vsLeagueAvg);
+  const targetPositions = (needs.length > 0
+    ? needs
+    : sortedWeak.slice(0, 1).map((p) => p.position)) as Array<"QB" | "RB" | "WR" | "TE">;
+
+  const preferYouth = prefs.youthPreference !== "Low" && direction !== "Contender";
+  const likelyTargets: string[] = [];
+  if (targetPositions.length) likelyTargets.push(`Help at ${targetPositions.join(", ")}`);
+  if (preferYouth) likelyTargets.push("Young, high-upside players");
+  else likelyTargets.push("Established, productive players");
+  if (prefs.pickValue !== "High" && direction === "Rebuild") likelyTargets.push("Rookie / future 1st-round picks");
+  if (direction === "Contender") likelyTargets.push("Win-now starters at any position");
+
+  const sellCandidates: string[] = [];
+  const strong = dynasty.filter((p) => p.tier === "Elite" || p.tier === "Strong").map((p) => p.position);
+  if (strong.length) sellCandidates.push(`Surplus depth at ${strong.join(", ")}`);
+  sellCandidates.push(direction === "Rebuild" ? "Aging veterans they're cycling out" : "Younger projects that don't fit the window");
+
+  return {
+    profile: {
+      tradeActivity: tradeRating,
+      tradeStyle: style,
+      bestOfferType,
+      avoidOffering,
+      likelyTargets,
+      sellCandidates,
+    },
+    targetPositions,
+    preferYouth,
+  };
+}
+
+function buildOpeningOffers(
+  direction: ArchetypeInputs["direction"],
+  needs: string[],
+  season: string,
+): string[] {
+  const nextYr = parseInt(season, 10) + 1;
+  const need = needs[0] || "a position of need";
+  if (direction === "Rebuild") {
+    return [
+      `${nextYr} 1st + a young WR for an established producer`,
+      `Two young pieces consolidated into one elite asset they covet`,
+      `Aging veteran on your side for their ${need} youth + a future 2nd`,
+    ];
+  }
+  if (direction === "Contender") {
+    return [
+      `Win-now starter for their picks + a young upside flier`,
+      `Proven ${need} producer for a future 1st + depth`,
+      `Two-for-one: package depth into a clear starter upgrade`,
+    ];
+  }
+  return [
+    `Balanced two-for-two framed as a ${need} upgrade`,
+    `${nextYr} pick + depth for a starter at their weak spot`,
+    `Buy-low on a struggling asset to test their openness`,
+  ];
+}
+
+/** One-line "what to actually do" recommendation for the Overview hero. */
+function buildActionableTakeaway(
+  direction: ArchetypeInputs["direction"],
+  archetypeKey: string,
+  targetPositions: string[],
+  preferYouth: boolean,
+  pickValue: Rating3,
+): string {
+  const leadWith: string[] = [];
+  if (preferYouth) leadWith.push("young upside");
+  if (pickValue !== "High" || direction === "Rebuild") leadWith.push("premium picks");
+  if (archetypeKey === "qb-collector") leadWith.push("QB-related value");
+  if (targetPositions.length) leadWith.push(`help at ${targetPositions.join("/")}`);
+  if (leadWith.length === 0) leadWith.push("a clear, balanced upgrade");
+  const avoid =
+    direction === "Contender"
+      ? "Avoid multi-year projects with no current-season impact."
+      : "Avoid veteran-heavy offers unless they're clearly discounted.";
+  return `Target this manager with ${leadWith.slice(0, 3).join(", ")}. ${avoid}`;
+}
+
+/** Quick do / don't trade guidance for the Overview. */
+function buildDoDont(
+  direction: ArchetypeInputs["direction"],
+  archetypeKey: string,
+  targetPositions: string[],
+  preferYouth: boolean,
+): { doList: string[]; dontList: string[] } {
+  const posLabel = targetPositions.length ? targetPositions.join("/") : "their weak spots";
+  const doList: string[] = [];
+  const dontList: string[] = [];
+
+  if (direction === "Contender") {
+    doList.push("Offer proven win-now starters");
+    doList.push(`Target their need at ${posLabel}`);
+    doList.push("Ask for their future picks in return");
+    dontList.push("Lead with multi-year projects");
+    dontList.push("Assume they'll punt the current season");
+    dontList.push("Send low-upside depth pieces");
+  } else if (direction === "Rebuild") {
+    doList.push("Offer rookie / future picks");
+    doList.push(`Lead with young upside at ${posLabel}`);
+    doList.push("Frame deals around long-term value");
+    dontList.push("Lead with aging veterans");
+    dontList.push("Assume they're chasing short-term points");
+    dontList.push("Send win-now-only assets");
+  } else {
+    doList.push(`Offer a clear upgrade at ${posLabel}`);
+    doList.push(preferYouth ? "Lean on young upside" : "Lean on proven production");
+    doList.push("Keep packages balanced and fair");
+    dontList.push("Send lateral, no-upgrade pieces");
+    dontList.push("Lowball an experienced manager");
+    dontList.push("Overload one side with depth");
+  }
+  if (archetypeKey === "qb-collector") doList.push("Use QB scarcity in Superflex");
+  return { doList, dontList };
+}
+
+/** Polished "what kind of roster this is" statement for the Overview. */
+function buildRosterIdentity(
+  build: string,
+  dynasty: PositionScore[],
+  positionStrengthProfile: string,
+  pickValue: Rating3,
+): string {
+  const buildShort = build.replace(/ build$/i, "");
+  const strong = dynasty.filter((p) => p.tier === "Elite" || p.tier === "Strong").map((p) => p.position);
+  const foundation =
+    strong.length > 0
+      ? ` with a strong ${strong.join("/")} foundation`
+      : positionStrengthProfile && positionStrengthProfile !== "Balanced positional value"
+      ? ` (${positionStrengthProfile})`
+      : "";
+  const pickTail =
+    pickValue === "High" ? " and meaningful rookie pick capital"
+    : pickValue === "Low" ? " but little draft capital"
+    : "";
+  return `${buildShort} build${foundation}${pickTail}.`;
+}
+
+// ── Trade playbook builders ──────────────────────────────────────────────────
+
+function buildTradeDifficulty(
+  tradeRating: ActivityRating,
+  hasStrongRosters: boolean,
+): { level: Rating3; reason: string } {
+  let score = tradeRating === "Low" ? 2 : tradeRating === "Moderate" ? 1 : 0;
+  if (hasStrongRosters) score += 1;
+  const level: Rating3 = score >= 3 ? "High" : score >= 1 ? "Medium" : "Low";
+  const reason =
+    level === "High"
+      ? "A strong, well-built roster paired with limited trade activity — expect a tough negotiation."
+      : level === "Medium"
+      ? "Moderate trade activity suggests they're reachable, but their roster is solid, so they're unlikely to make desperation moves."
+      : "Active in the market and reachable — a fair offer has a real chance.";
+  return { level, reason };
+}
+
+function buildDealTypes(
+  direction: ArchetypeInputs["direction"],
+  needs: string[],
+): Array<{ dealType: string; fit: Rating3; why: string }> {
+  if (direction === "Rebuild") {
+    return [
+      { dealType: "Picks for a veteran producer", fit: "High", why: "A rebuilder may sell short-term production for future value." },
+      { dealType: "Young player + pick for an upgrade", fit: "High", why: "Fits their long-term value mindset." },
+      { dealType: "2-for-1 consolidation", fit: "Medium", why: "Works if they land the best long-term asset." },
+      { dealType: "Aging veteran for a young asset", fit: "Low", why: "The opposite of their likely preference." },
+      ...(needs.length ? [{ dealType: `${needs[0]} help package`, fit: "Medium" as Rating3, why: `${needs[0]} is a relative need.` }] : []),
+    ];
+  }
+  if (direction === "Contender") {
+    return [
+      { dealType: "Win-now starter for their picks", fit: "High", why: "A contender will pay future capital for present help." },
+      { dealType: "Productive vet for a young project", fit: "High", why: "They value current production over upside." },
+      { dealType: "2-for-1 consolidation", fit: "Medium", why: "Works if it upgrades their starting lineup." },
+      { dealType: "Picks-only rebuild offer", fit: "Low", why: "They're not punting the season." },
+    ];
+  }
+  return [
+    { dealType: "Balanced player-for-player upgrade", fit: "High", why: "They're open to either side if it's a clear upgrade." },
+    { dealType: "Pick + depth for a starter", fit: "Medium", why: "Fits an opportunistic dealer." },
+    { dealType: "Lateral swap", fit: "Low", why: "No clear reason for them to move." },
+  ];
+}
+
+function buildNegotiationNotes(direction: ArchetypeInputs["direction"], needs: string[]): string[] {
+  if (direction === "Rebuild") {
+    return [
+      "Start with future value, not veteran production.",
+      "They likely care more about asset insulation than short-term points.",
+      "Don't expect a quick discount on young QBs or premium rookies.",
+      "Use rookie picks as the centerpiece, not a throw-in.",
+      "If offering veterans, attach picks or younger upside so the deal fits their direction.",
+    ];
+  }
+  if (direction === "Contender") {
+    return [
+      "Lead with win-now production they can start immediately.",
+      "They'll pay future picks for present upgrades — use that.",
+      "Don't expect them to value multi-year projects.",
+      "Packaging two pieces into one starter is more appealing than depth.",
+    ];
+  }
+  return [
+    "Frame every offer as a clear upgrade, not a lateral move.",
+    "Feel out whether they lean now vs. future before committing.",
+    needs.length ? `They could use help at ${needs.join("/")} — lead there.` : "No urgent needs, so make the value obvious.",
+  ];
+}
+
+function buildPlaybook(
+  direction: ArchetypeInputs["direction"],
+  tradeRating: ActivityRating,
+  profile: ManagerIntelPayload["tradeApproach"]["tradeProfile"],
+  dealTypes: Array<{ dealType: string; fit: Rating3 }>,
+): ManagerIntelPayload["tradeApproach"]["playbook"] {
+  const likelyMotivation =
+    direction === "Rebuild" ? "Rebuild / long-term value"
+    : direction === "Contender" ? "Win now"
+    : direction === "Middle" ? "Opportunistic value"
+    : "Unclear direction";
+  const negotiationStyle =
+    tradeRating === "Aggressive" || tradeRating === "Very Active" ? "Active dealer — moves quickly"
+    : tradeRating === "Active" ? "Engaged and open to offers"
+    : tradeRating === "Moderate" ? "Patient, not reckless"
+    : "Slow to engage";
+  return {
+    bestApproach: profile.bestOfferType,
+    likelyStyle: profile.tradeStyle,
+    bestDealType: dealTypes.find((d) => d.fit === "High")?.dealType ?? dealTypes[0]?.dealType ?? "Balanced package",
+    likelyMotivation,
+    negotiationStyle,
+    avoid: profile.avoidOffering,
+  };
+}
+
+function buildGroupedTargetsSell(
+  direction: ArchetypeInputs["direction"],
+  preferYouth: boolean,
+  needs: string[],
+): {
+  likelyTargetsGrouped: { high: string[]; conditional: string[] };
+  sellCandidatesGrouped: { mostLikely: string[]; leastLikely: string[] };
+} {
+  const high: string[] = [];
+  if (needs.length) high.push(`Help at ${needs.join("/")}`);
+  if (preferYouth) {
+    high.push("Young, high-upside players", "Rookie / future picks", "Value-insulated young WRs");
+  } else {
+    high.push("Proven, productive starters", "Win-now upgrades at any position");
+  }
+  const conditional = preferYouth
+    ? ["Veteran producers — only if discounted", "Older players — only as add-ons"]
+    : ["Speculative youth — only with a clear value edge"];
+
+  const mostLikely = [
+    "Aging veterans",
+    "Extra depth pieces",
+    direction === "Rebuild" ? "Win-now players off their timeline" : "Younger projects off their window",
+  ];
+  const leastLikely = [
+    "Young QB / WR anchors",
+    "Premium rookie picks",
+    "Their highest-exposure players across leagues",
+  ];
+  return { likelyTargetsGrouped: { high, conditional }, sellCandidatesGrouped: { mostLikely, leastLikely } };
+}
+
+function buildTheirAssets(
+  managerRoster: RawRosterPick[] | null,
+  playersDb: Record<string, any>,
+  youthPref: Rating3,
+): {
+  targetableAssets: ManagerIntelPayload["tradeApproach"]["targetableAssets"];
+  protectedAssets: ManagerIntelPayload["tradeApproach"]["protectedAssets"];
+} {
+  if (!managerRoster) return { targetableAssets: [], protectedAssets: [] };
+  const nameOf = (pid: string) => {
+    const p = playersDb[pid];
+    return p?.full_name || (p ? `${p.first_name ?? ""} ${p.last_name ?? ""}`.trim() : pid);
+  };
+  const named = managerRoster.map((p) => ({ ...p, name: nameOf(p.playerId) }));
+  const diff = (v: number): Rating3 => (v >= 4000 ? "High" : v >= 2000 ? "Medium" : "Low");
+
+  const targetableAssets = named
+    .filter((p) => p.age != null && p.age >= 28 && p.dynasty > 0)
+    .sort((a, b) => b.dynasty - a.dynasty)
+    .slice(0, 5)
+    .map((p) => ({
+      name: p.name,
+      pos: p.pos,
+      age: p.age,
+      value: Math.round(p.dynasty),
+      reason: youthPref === "High" ? "Doesn't fit their youth-heavy build" : "Veteran they may cycle out",
+      difficulty: diff(p.dynasty),
+    }));
+
+  const protectedAssets = named
+    .filter((p) => p.age != null && p.age <= 24 && p.dynasty > 0)
+    .sort((a, b) => b.dynasty - a.dynasty)
+    .slice(0, 5)
+    .map((p) => ({ name: p.name, pos: p.pos, value: Math.round(p.dynasty), reason: `Young cornerstone ${p.pos}` }));
+
+  return { targetableAssets, protectedAssets };
+}
+
+function activitySignalOf(
+  tradesPerLeague: number,
+  waiversPerLeague: number,
+): { signal: ManagerIntelPayload["activity"]["activitySignal"]; note: string } {
+  if (tradesPerLeague < 0.5 && waiversPerLeague < 1.5)
+    return {
+      signal: "Ghost",
+      note: "Very little visible roster movement. They may be hard to reach — expect a slow response to offers.",
+    };
+  const total = tradesPerLeague + waiversPerLeague;
+  if (total < 4)
+    return {
+      signal: "Quiet",
+      note: "Light transaction volume. Engaged occasionally, so a compelling offer is more likely to land than a routine one.",
+    };
+  if (total < 10)
+    return {
+      signal: "Moderate",
+      note: "Steady, moderate transaction activity. Engaged enough to trade and work waivers, but not so active they're likely to make reckless moves.",
+    };
+  return {
+    signal: "Active",
+    note: "High transaction activity — frequently tinkering. Very reachable and quick to engage on deals.",
+  };
+}
+
+/** Branded activity persona from per-league trade/waiver rates. */
+function buildActivityArchetype(
+  tradesPerLeague: number,
+  waiversPerLeague: number,
+  visibleLeagues: number,
+): { key: string; label: string; blurb: string } {
+  if (visibleLeagues === 0 || tradesPerLeague + waiversPerLeague < 0.5) {
+    return { key: "dormant", label: "Dormant / Low Signal", blurb: "Little visible activity, or not enough data to read them." };
+  }
+  if (tradesPerLeague < 0.5 && waiversPerLeague < 1.5) {
+    return { key: "passive", label: "Passive Manager", blurb: "Low transaction activity — may be harder to engage." };
+  }
+  if (tradesPerLeague + waiversPerLeague >= 18) {
+    return { key: "churner", label: "High-Volume Churner", blurb: "Constantly adjusting — heavy waivers and frequent trades." };
+  }
+  if (tradesPerLeague >= 3 && tradesPerLeague >= waiversPerLeague * 0.8) {
+    return { key: "trade-shark", label: "Trade Shark", blurb: "Trade volume outpaces waivers — likely open to negotiation." };
+  }
+  if (waiversPerLeague >= 10 && waiversPerLeague > tradesPerLeague * 2) {
+    return { key: "waiver-grinder", label: "Waiver Grinder", blurb: "Works the wire harder than the trade market." };
+  }
+  return { key: "steady", label: "Steady Manager", blurb: "Moderate trades and waivers — engaged, but not constantly churning." };
+}
+
+/** Tradeability (responsiveness) from trade-activity rating. High = reachable. */
+function buildTradeability(tradeRating: ActivityRating): { level: Rating3; note: string } {
+  if (tradeRating === "Aggressive" || tradeRating === "Very Active" || tradeRating === "Active") {
+    return { level: "High", note: "Active in the trade market — they engage readily on fair offers." };
+  }
+  if (tradeRating === "Moderate") {
+    return {
+      level: "Medium",
+      note: "Reachable, but not reckless. Send clean, value-aligned offers rather than fishing for quick wins.",
+    };
+  }
+  return { level: "Low", note: "Rarely trades — it may take a standout offer to get their attention." };
+}
+
+/**
+ * Build the recent-activity timeline from timestamped manager transactions
+ * across all visible leagues. `txns` carry epoch-ms timestamps + league name.
+ */
+function buildTimeline(
+  txns: Array<{ ts: number; type: "trade" | "waiver"; league: string }>,
+): {
+  lastActivity: string | null;
+  last30Days: number;
+  last90Days: number;
+  activityTrend: "Increasing" | "Stable" | "Declining" | "Unknown";
+  recent: Array<{ date: string; league: string; type: string }>;
+} {
+  const dated = txns.filter((t) => t.ts > 0).sort((a, b) => b.ts - a.ts);
+  if (dated.length === 0) {
+    return { lastActivity: null, last30Days: 0, last90Days: 0, activityTrend: "Unknown", recent: [] };
+  }
+  const now = Date.now();
+  const DAY = 24 * 60 * 60 * 1000;
+  const last30Days = dated.filter((t) => now - t.ts <= 30 * DAY).length;
+  const last90Days = dated.filter((t) => now - t.ts <= 90 * DAY).length;
+
+  // Trend: trailing-30 rate vs the prior 60-day window (per-30-day rate).
+  const prior = dated.filter((t) => now - t.ts > 30 * DAY && now - t.ts <= 90 * DAY).length / 2;
+  let activityTrend: "Increasing" | "Stable" | "Declining" | "Unknown";
+  if (last90Days < 3) activityTrend = "Unknown";
+  else if (last30Days > prior * 1.3) activityTrend = "Increasing";
+  else if (last30Days < prior * 0.7) activityTrend = "Declining";
+  else activityTrend = "Stable";
+
+  const recent = dated.slice(0, 8).map((t) => ({
+    date: new Date(t.ts).toISOString(),
+    league: t.league,
+    type: t.type === "trade" ? "Trade completed" : "Waiver / FA add",
+  }));
+
+  return { lastActivity: new Date(dated[0].ts).toISOString(), last30Days, last90Days, activityTrend, recent };
+}
+
+// ── Per-league scouting report ───────────────────────────────────────────────
+
+function buildTeamIdentityFromRanks(
+  ranks: LeagueRosterRank,
+  total: number,
+  dynasty: PositionScore[],
+): { label: string; blurb: string } {
+  const top3 = (r: number) => r > 0 && r <= 3;
+  const bottomHalf = (r: number) => r > total / 2;
+  const { dynastyRank: dyn, winNowRank: win, youthRank: youth, pickRank: pick } = ranks;
+
+  let label: string;
+  if (top3(dyn) && top3(win) && top3(youth)) label = "Elite Young Contender";
+  else if (top3(dyn) && top3(youth) && bottomHalf(win)) label = "Premium Rebuild";
+  else if (top3(win) && bottomHalf(youth)) label = "Aging Contender";
+  else if (top3(dyn) && top3(win)) label = "Loaded Contender";
+  else if (top3(youth) && pick != null && top3(pick)) label = "Young Rebuild";
+  else if (top3(dyn)) label = "Future Powerhouse";
+  else if (top3(win)) label = "Win-Now Roster";
+  else if (bottomHalf(dyn) && bottomHalf(win)) label = "Bottom-Tier Roster";
+  else label = "Balanced Middle-Roster";
+
+  const strong = dynasty.filter((p) => p.tier === "Elite" || p.tier === "Strong").map((p) => p.position);
+  const weak = dynasty.filter((p) => p.tier === "Weak" || p.tier === "Thin").map((p) => p.position);
+  const parts: string[] = [
+    `Ranks #${dyn} in dynasty value, #${win} in win-now value, and #${youth} in roster youth of ${total}.`,
+  ];
+  if (strong.length) parts.push(`Strongest at ${strong.join(", ")}${weak.length ? `, softest at ${weak.join(", ")}` : ""}.`);
+  else if (weak.length) parts.push(`Softest at ${weak.join(", ")}.`);
+  return { label, blurb: parts.join(" ") };
+}
+
+function buildLeagueContextSummary(ranks: LeagueRosterRank, total: number): string {
+  const top3 = (r: number) => r > 0 && r <= 3;
+  const topHalf = (r: number) => r > 0 && r <= total / 2;
+  const { dynastyRank: dyn, winNowRank: win, youthRank: youth, pickRank: pick } = ranks;
+  const strongNow = top3(win);
+  const strongFuture = top3(dyn);
+  let lead: string;
+  if (strongNow && strongFuture) lead = "One of the strongest teams in this league by both present and future value";
+  else if (strongFuture) lead = "One of the strongest long-term rosters in this league";
+  else if (strongNow) lead = "One of the strongest win-now rosters in this league";
+  else if (topHalf(dyn)) lead = "An above-average roster in this league";
+  else lead = "A middle-to-lower roster in this league";
+  const ranksClause = `They rank #${dyn} in dynasty value, #${win} in win-now value, and #${youth} in roster youth${
+    pick != null ? `, #${pick} in pick capital` : ""
+  }.`;
+  const tail =
+    strongNow && strongFuture
+      ? "That makes them a difficult trade target unless you offer premium long-term assets."
+      : strongFuture && !strongNow
+      ? "They're positioned for the future, so win-now help may pry value loose."
+      : strongNow && !strongFuture
+      ? "They're built to win now and may part with youth or picks for immediate upgrades."
+      : "There may be room to buy low or target a clear need.";
+  return `${lead}. ${ranksClause} ${tail}`;
+}
+
+function buildNeedsTable(dynasty: PositionScore[], winNow: PositionScore[]): NeedRow[] {
+  const positions: Array<"QB" | "RB" | "WR" | "TE"> = ["QB", "RB", "WR", "TE"];
+  return positions.map((pos) => {
+    const d = dynasty.find((p) => p.position === pos);
+    const w = winNow.find((p) => p.position === pos);
+    const dWeak = d ? d.tier === "Weak" || d.tier === "Thin" : false;
+    const wWeak = w ? w.tier === "Weak" || w.tier === "Thin" : false;
+    let level: NeedRow["level"] = "Low";
+    if (dWeak && wWeak) level = "High";
+    else if (dWeak || wWeak) level = "Medium";
+    const nuance =
+      dWeak && wWeak ? " — weak both ways"
+      : !dWeak && wWeak ? " — strong long-term, thin win-now"
+      : dWeak && !wWeak ? " — thin long-term"
+      : "";
+    return {
+      position: pos,
+      level,
+      reason: `#${d?.leagueRank ?? "—"} dynasty, #${w?.leagueRank ?? "—"} win-now${nuance}`,
+    };
+  });
+}
+
+function buildTradeOpportunity(dynasty: PositionScore[], winNow: PositionScore[]): string {
+  // Prefer the nuanced "strong long-term but thin win-now" angle.
+  const split = (["QB", "RB", "WR", "TE"] as const)
+    .map((pos) => ({ pos, d: dynasty.find((p) => p.position === pos), w: winNow.find((p) => p.position === pos) }))
+    .find((x) => x.d && x.w && x.d.tier !== "Weak" && x.d.tier !== "Thin" && (x.w.tier === "Weak" || x.w.tier === "Thin"));
+  if (split) {
+    return `Their ${split.pos} group is thin for win-now production despite holding up long-term — a productive veteran ${split.pos} could be a useful add-on in trade talks.`;
+  }
+  const sortedWeak = [...dynasty].sort((a, b) => a.vsLeagueAvg - b.vsLeagueAvg);
+  const weakest = sortedWeak[0];
+  if (weakest && (weakest.tier === "Weak" || weakest.tier === "Thin")) {
+    return `${weakest.position} is their weakest relative dynasty group, but they're strong enough overall that they may not feel desperate — lead with consolidation or future value rather than just "filling a hole".`;
+  }
+  if (weakest) {
+    return `No glaring holes — ${weakest.position} is their softest group vs league average. The best angle is a clear upgrade or consolidating two pieces into one they covet.`;
+  }
+  return "Roster data is too thin to surface a specific trade angle in this league.";
+}
+
+function buildLeagueReport(scan: LeagueScan, targetUserId: string, requestedLeagueId: string): LeagueReport | null {
+  const idx = scan.rosterMeta.findIndex((m) => m.ownerId === targetUserId);
+  if (idx < 0) return null; // target isn't rostered here — skip
+
+  const dynTotals = scan.allRosters.map((r) => r.reduce((s, p) => s + p.dynasty, 0));
+  const redTotals = scan.allRosters.map((r) => r.reduce((s, p) => s + p.redraft, 0));
+  const ageAvgs = scan.allRosters.map((r) => {
+    const as = r.map((p) => p.age).filter((a): a is number => a != null);
+    return as.length ? as.reduce((a, b) => a + b, 0) / as.length : 99;
+  });
+  const posTotals = (pos: "QB" | "RB" | "WR" | "TE") =>
+    scan.allRosters.map((r) => r.filter((p) => p.pos === pos).reduce((s, p) => s + p.dynasty, 0));
+  const qb = posTotals("QB");
+  const rb = posTotals("RB");
+  const wr = posTotals("WR");
+  const te = posTotals("TE");
+  const pickScores = scan.rosterMeta.map((m) => scan.pickScoreByRoster[m.rosterId] ?? 0);
+  const anyPicks = pickScores.some((v) => v > 0);
+
+  const rosters: LeagueRosterRank[] = scan.rosterMeta.map((m, i) => ({
+    ownerId: m.ownerId,
+    rosterId: m.rosterId,
+    dynastyRank: rankOf(dynTotals, dynTotals[i]) ?? 0,
+    winNowRank: rankOf(redTotals, redTotals[i]) ?? 0,
+    youthRank: rankOf(ageAvgs, ageAvgs[i], true) ?? 0,
+    pickRank: anyPicks ? rankOf(pickScores, pickScores[i]) : null,
+    qbRank: rankOf(qb, qb[i]) ?? 0,
+    rbRank: rankOf(rb, rb[i]) ?? 0,
+    wrRank: rankOf(wr, wr[i]) ?? 0,
+    teRank: rankOf(te, te[i]) ?? 0,
+  }));
+
+  const targetRanks = rosters[idx];
+  const managerRoster = scan.allRosters[idx];
+  const dynasty = summarizeStrengths(managerRoster, scan.allRosters, "dynasty");
+  const winNow = summarizeStrengths(managerRoster, scan.allRosters, "redraft");
+  const needsArr = deriveTeamNeeds(dynasty);
+  const ages = managerRoster.map((p) => p.age).filter((a): a is number => a != null);
+  const teamAvgAge = ages.length ? Math.round((ages.reduce((a, b) => a + b, 0) / ages.length) * 10) / 10 : 0;
+  const direction = deriveTeamDirection(dynasty, winNow, teamAvgAge);
+  const youngCount = ages.filter((a) => a <= 24).length;
+  const vetCount = ages.filter((a) => a >= 29).length;
+  const ageSummary =
+    ages.length === 0
+      ? "Roster age data not available."
+      : `Avg age ${teamAvgAge}. ${youngCount} young (≤24), ${vetCount} vet (≥29).`;
+
+  const total = scan.totalRosters || scan.allRosters.length;
+  const rankSnapshot: RankSnapshotRow[] = [
+    { label: "Dynasty value", rank: targetRanks.dynastyRank, total },
+    { label: "Win-now value", rank: targetRanks.winNowRank, total },
+    { label: "Roster youth", rank: targetRanks.youthRank, total },
+    ...(targetRanks.pickRank != null ? [{ label: "Pick capital", rank: targetRanks.pickRank, total }] : []),
+  ];
+
+  return {
+    leagueId: scan.leagueId,
+    name: scan.name,
+    season: scan.season,
+    format: scan.format,
+    scoringFormat: scan.scoringFormat,
+    totalRosters: total,
+    startersCount: scan.startersCount,
+    isRequested: scan.leagueId === requestedLeagueId,
+    ownerId: targetUserId,
+    rosterId: scan.managerRosterId ?? 0,
+    teamName: scan.teamName,
+    teamDirection: direction,
+    teamIdentity: buildTeamIdentityFromRanks(targetRanks, total, dynasty),
+    contextSummary: buildLeagueContextSummary(targetRanks, total),
+    dynastyStrengths: dynasty,
+    winNowStrengths: winNow,
+    needs: buildNeedsTable(dynasty, winNow),
+    rankSnapshot,
+    relativeWeakness: buildRelativeWeakness(dynasty, needsArr),
+    tradeOpportunity: buildTradeOpportunity(dynasty, winNow),
+    pickCapitalSummary: summarisePickCapital(scan.picks),
+    ageSummary,
+    rosters,
   };
 }
 
@@ -667,8 +1991,12 @@ async function computeManagerIntel(
   const currentScan =
     scans.find((s) => s.leagueId === currentLeagueId) ?? scans[0] ?? null;
 
-  // Cross-league exposure across visible dynasty rosters.
-  const exposureMap = new Map<string, { name: string; pos: string; team: string; count: number }>();
+  // Cross-league exposure across visible dynasty rosters. Capture age/exp so we
+  // can type their "favorite player types" downstream.
+  const exposureMap = new Map<
+    string,
+    { name: string; pos: string; team: string; age: number | null; exp: number | null; count: number }
+  >();
   for (const s of scans) {
     for (const pid of s.ownedPlayerIds) {
       const p = playersDb[pid];
@@ -682,22 +2010,68 @@ async function computeManagerIntel(
           name: p.full_name || `${p.first_name} ${p.last_name}`,
           pos,
           team: p.team || "FA",
+          age: p.age ?? null,
+          exp: p.years_exp ?? null,
           count: 1,
         });
     }
   }
   const totalLeagues = scans.length || 1;
-  const mostRosteredPlayers: PlayerExposure[] = Array.from(exposureMap.entries())
+  const exposureList: Array<PlayerExposure & { age: number | null; exp: number | null }> = Array.from(
+    exposureMap.entries(),
+  )
     .map(([playerId, d]) => ({
       playerId,
       name: d.name,
       pos: d.pos,
       team: d.team,
+      age: d.age,
+      exp: d.exp,
       leagueCount: d.count,
       exposure: Math.round((d.count / totalLeagues) * 100),
     }))
-    .sort((a, b) => b.leagueCount - a.leagueCount)
-    .slice(0, 8);
+    .sort((a, b) => b.leagueCount - a.leagueCount);
+  const stripExposure = (e: PlayerExposure & { exp: number | null }): PlayerExposure => ({
+    playerId: e.playerId,
+    name: e.name,
+    pos: e.pos,
+    team: e.team,
+    age: e.age,
+    leagueCount: e.leagueCount,
+    exposure: e.exposure,
+  });
+  const mostRosteredPlayers: PlayerExposure[] = exposureList.slice(0, 8).map(stripExposure);
+  const mostRosteredByPosition = {
+    QB: exposureList.filter((e) => e.pos === "QB").slice(0, 4).map(stripExposure),
+    RB: exposureList.filter((e) => e.pos === "RB").slice(0, 4).map(stripExposure),
+    WR: exposureList.filter((e) => e.pos === "WR").slice(0, 4).map(stripExposure),
+    TE: exposureList.filter((e) => e.pos === "TE").slice(0, 4).map(stripExposure),
+  };
+
+  // Position concentration (count-weighted share of the dominant position) and
+  // QB-stacking signal — both feed the archetype classifier.
+  const posWeight: Record<string, number> = { QB: 0, RB: 0, WR: 0, TE: 0 };
+  for (const e of exposureList) posWeight[e.pos] = (posWeight[e.pos] || 0) + e.leagueCount;
+  const totalPosWeight = Object.values(posWeight).reduce((a, b) => a + b, 0) || 1;
+  const topPosEntry = Object.entries(posWeight).sort((a, b) => b[1] - a[1])[0];
+  const topPositionConcentration = topPosEntry
+    ? { pos: topPosEntry[0], share: topPosEntry[1] / totalPosWeight }
+    : null;
+  const avgQbCount =
+    scans.filter((s) => s.managerRoster).length > 0
+      ? scans.reduce((sum, s) => sum + (s.managerRoster?.filter((p) => p.pos === "QB").length ?? 0), 0) /
+        scans.filter((s) => s.managerRoster).length
+      : 0;
+  const qbHeavy = avgQbCount >= 2.5;
+
+  const exposureRich: ExposureRich[] = exposureList.map((e) => ({
+    pos: e.pos,
+    age: e.age,
+    exp: e.exp,
+    leagueCount: e.leagueCount,
+  }));
+  const favoritePlayerTypes = buildFavoritePlayerTypes(exposureRich, totalLeagues);
+  const positionBias = buildPositionBias(exposureRich);
 
   // Activity counts + rating.
   const totalTrades = scans.reduce((s, x) => s + x.managerTrades, 0);
@@ -748,6 +2122,26 @@ async function computeManagerIntel(
         ? "Roster age data not available."
         : `Avg age ${teamAvgAge}. ${youngCount} young (≤24), ${vetCount} vet (≥29).`;
 
+    // League rank snapshot — where this team sits vs the rest of the league.
+    const total = currentScan.allRosters.length;
+    const myIdx = currentScan.managerRoster
+      ? currentScan.allRosters.indexOf(currentScan.managerRoster)
+      : -1;
+    const dynTotals = currentScan.allRosters.map((r) => r.reduce((s, p) => s + p.dynasty, 0));
+    const redTotals = currentScan.allRosters.map((r) => r.reduce((s, p) => s + p.redraft, 0));
+    const ageAvgs = currentScan.allRosters.map((r) => {
+      const as = r.map((p) => p.age).filter((a): a is number => a != null);
+      return as.length ? as.reduce((a, b) => a + b, 0) / as.length : 99;
+    });
+    const rankSnapshot: RankSnapshotRow[] =
+      myIdx >= 0
+        ? [
+            { label: "Dynasty value", rank: rankOf(dynTotals, dynTotals[myIdx]), total },
+            { label: "Win-now value", rank: rankOf(redTotals, redTotals[myIdx]), total },
+            { label: "Roster youth", rank: rankOf(ageAvgs, ageAvgs[myIdx], true), total },
+          ]
+        : [];
+
     currentLeague = {
       league_id: currentScan.leagueId,
       teamName: currentScan.teamName,
@@ -758,6 +2152,9 @@ async function computeManagerIntel(
       teamDirection: direction,
       pickCapitalSummary: summarisePickCapital(currentScan.picks),
       ageSummary,
+      rankSnapshot,
+      teamIdentity: buildTeamIdentity(dynasty, direction, teamAvgAge || null),
+      relativeWeakness: buildRelativeWeakness(dynasty, needs),
     };
   }
 
@@ -787,6 +2184,59 @@ async function computeManagerIntel(
     .map((s) => s.season)
     .sort()[0] || null;
 
+  // ── Derived tendencies ──────────────────────────────────────────────────
+  const direction = currentLeague?.teamDirection ?? "Unknown";
+  const needs = currentLeague?.teamNeeds ?? [];
+  const dynasty = currentLeague?.dynastyStrengths ?? [];
+  const avgEarlyPicks =
+    scans.length > 0 ? scans.reduce((s, x) => s + x.picks.earlyPicks, 0) / scans.length : 0;
+
+  const preferences: ManagerIntelPayload["preferences"] = {
+    youthPreference: youthRating(averageTeamAge),
+    veteranPreference: veteranRating(averageTeamAge),
+    pickValue: pickValueRating(avgEarlyPicks),
+    aggressiveness: aggressivenessRating(tradeActivityRating, waiverActivityRating),
+  };
+
+  // "Strong rosters" = ranks in the top third of the current league on dynasty
+  // value. Used to distinguish a Value Shark from a generic dealer.
+  const dynRankRow = currentLeague?.rankSnapshot.find((r) => r.label === "Dynasty value");
+  const hasStrongRosters =
+    !!dynRankRow && dynRankRow.rank != null && dynRankRow.rank <= Math.ceil(dynRankRow.total / 3);
+
+  const archetype = classifyArchetype({
+    direction,
+    tradesPerLeague,
+    waiversPerLeague,
+    youthPreference: preferences.youthPreference,
+    pickValue: preferences.pickValue,
+    aggressiveness: preferences.aggressiveness,
+    qbHeavy,
+    topPositionConcentration,
+    hasStrongRosters,
+  });
+
+  const portfolioType = buildPortfolioType(
+    preferences.youthPreference,
+    preferences.veteranPreference,
+    favoritePlayerTypes,
+  );
+  const portfolioIdentity = buildPortfolioIdentity(
+    portfolioType,
+    preferences.youthPreference,
+    preferences.veteranPreference,
+    favoritePlayerTypes,
+    topPositionConcentration,
+  );
+  const managerTendencies = buildManagerTendencies(
+    preferences.youthPreference,
+    preferences.veteranPreference,
+    tradeActivityRating,
+    positionBias,
+    qbHeavy,
+  );
+  const tradeImplications = buildTradeImplications(preferences, positionBias);
+
   const crossLeague: ManagerIntelPayload["crossLeague"] = {
     dynastyLeagueCount: leagues.length,
     oldestLeagueSeason,
@@ -798,10 +2248,17 @@ async function computeManagerIntel(
     tradeActivityRating,
     waiverActivityRating,
     mostRosteredPlayers,
+    mostRosteredByPosition,
     mostDraftedPlayers: null, // Reliable draft attribution requires per-draft picks data we don't fetch in v1.
     commonRosterBuild,
     averageTeamAge,
     positionStrengthProfile,
+    favoritePlayerTypes,
+    portfolioType,
+    portfolioIdentity,
+    positionBias,
+    managerTendencies,
+    tradeImplications,
   };
 
   const performance: ManagerIntelPayload["performance"] = {
@@ -811,16 +2268,111 @@ async function computeManagerIntel(
     avgRegularSeasonFinish: null,
     avgPointsFor,
     notes:
-      "Multi-season playoff and championship data isn't reliably exposed by the Sleeper public API. Showing current-season points only.",
+      "Multi-season playoff and championship data isn't reliably exposed by the Sleeper public API. Showing current-season activity only.",
+  };
+
+  const { signal, note: signalNote } = activitySignalOf(tradesPerLeague, waiversPerLeague);
+  const timeline = buildTimeline(
+    scans.flatMap((s) => s.managerTxns.map((t) => ({ ts: t.ts, type: t.type, league: s.name }))),
+  );
+  const activity: ManagerIntelPayload["activity"] = {
+    visibleLeagues: scans.length,
+    oldestVisibleSeason: oldestLeagueSeason,
+    estimatedYearsActive: crossLeague.estimatedYearsActive,
+    currentPointsFor: avgPointsFor,
+    tradeCount: totalTrades,
+    waiverCount: totalWaivers,
+    totalTransactions: totalTrades + totalWaivers,
+    activitySignal: signal,
+    signalNote,
+    activityArchetype: buildActivityArchetype(tradesPerLeague, waiversPerLeague, scans.length),
+    tradeability: buildTradeability(tradeActivityRating),
+    lastActivity: timeline.lastActivity,
+    last30Days: timeline.last30Days,
+    last90Days: timeline.last90Days,
+    activityTrend: timeline.activityTrend,
+    recent: timeline.recent,
   };
 
   const tradeApproach = buildTradeApproach(currentLeague, crossLeague, mostRosteredPlayers);
+  const { profile: tradeProfile, targetPositions, preferYouth } = buildTradeProfile(
+    direction,
+    tradeActivityRating,
+    preferences,
+    dynasty,
+    needs,
+  );
+  tradeApproach.tradeProfile = tradeProfile;
+  tradeApproach.openingOffers = buildOpeningOffers(direction, needs, season);
+  tradeApproach.targetPositions = targetPositions;
+  tradeApproach.preferYouth = preferYouth;
+  tradeApproach.actionableTakeaway = buildActionableTakeaway(
+    direction,
+    archetype.key,
+    targetPositions,
+    preferYouth,
+    preferences.pickValue,
+  );
+  const { doList, dontList } = buildDoDont(direction, archetype.key, targetPositions, preferYouth);
+  tradeApproach.doList = doList;
+  tradeApproach.dontList = dontList;
 
-  // Replace tradeApproach.summary with the holistic narrative summary used on
-  // the Overview tab. The drawer renders both; keeping `suggestedAngle` short
-  // and `summary` paragraph-length.
-  const summary = buildSummary(user, currentLeague, crossLeague);
-  tradeApproach.summary = summary;
+  // Trade playbook extras.
+  const dealTypes = buildDealTypes(direction, needs);
+  tradeApproach.dealTypes = dealTypes;
+  tradeApproach.tradeDifficulty = buildTradeDifficulty(tradeActivityRating, hasStrongRosters);
+  tradeApproach.playbook = buildPlaybook(direction, tradeActivityRating, tradeProfile, dealTypes);
+  tradeApproach.negotiationNotes = buildNegotiationNotes(direction, needs);
+  const grouped = buildGroupedTargetsSell(direction, preferYouth, needs);
+  tradeApproach.likelyTargetsGrouped = grouped.likelyTargetsGrouped;
+  tradeApproach.sellCandidatesGrouped = grouped.sellCandidatesGrouped;
+  const theirAssets = buildTheirAssets(currentScan?.managerRoster ?? null, playersDb, preferences.youthPreference);
+  tradeApproach.targetableAssets = theirAssets.targetableAssets;
+  tradeApproach.protectedAssets = theirAssets.protectedAssets;
+
+  // Keep the paragraph-length narrative summary too.
+  tradeApproach.summary = buildSummary(user, currentLeague, crossLeague);
+
+  const managerRead = buildManagerRead(
+    direction,
+    commonRosterBuild,
+    preferences.youthPreference,
+    preferences.pickValue,
+    tradeActivityRating,
+  );
+  const rosterIdentity = buildRosterIdentity(
+    commonRosterBuild,
+    dynasty,
+    positionStrengthProfile,
+    preferences.pickValue,
+  );
+  const keyTendencies = buildKeyTendencies(
+    tradeActivityRating,
+    waiverActivityRating,
+    preferences.youthPreference,
+    preferences.veteranPreference,
+    preferences.pickValue,
+  );
+  const confidence = buildConfidence(leagues.length, totalTrades + totalWaivers);
+  const leagueReports = scans
+    .map((s) => buildLeagueReport(s, user.userId, currentLeagueId))
+    .filter((r): r is LeagueReport => r !== null);
+  const scorecard = buildScorecard(
+    archetype,
+    tradeActivityRating,
+    waiverActivityRating,
+    direction,
+    preferences,
+    commonRosterBuild,
+    tradeProfile.bestOfferType,
+  );
+  const headerBadges = [
+    `${leagues.length} Dynasty League${leagues.length === 1 ? "" : "s"}`,
+    `${tradeActivityRating} Trader`,
+    archetype.label.replace(/^The /, ""),
+    commonRosterBuild.replace(/ build$/i, ""),
+    ageBadge(preferences.youthPreference, preferences.veteranPreference),
+  ];
 
   return {
     user: {
@@ -829,9 +2381,19 @@ async function computeManagerIntel(
       display_name: user.displayName,
       avatar: user.avatar,
     },
+    archetype,
+    managerRead,
+    rosterIdentity,
+    keyTendencies,
+    headerBadges,
+    confidence,
+    scorecard,
+    preferences,
     currentLeague,
+    leagues: leagueReports,
     crossLeague,
     performance,
+    activity,
     tradeApproach,
     meta: {
       season,
@@ -839,6 +2401,7 @@ async function computeManagerIntel(
       computedAt: new Date().toISOString(),
       dataSourceNote:
         "Visible Sleeper leagues only. Private leagues and DMs are not included.",
+      version: CACHE_VERSION,
     },
   };
 }
@@ -856,7 +2419,26 @@ function emptyPayload(
       display_name: user?.displayName ?? userId,
       avatar: user?.avatar ?? null,
     },
+    archetype: {
+      key: "unknown",
+      label: "Unknown Manager",
+      blurb: note,
+      why: note,
+    },
+    managerRead: note,
+    rosterIdentity: "Insufficient data.",
+    keyTendencies: [],
+    headerBadges: [],
+    confidence: { level: "Low", basis: note },
+    scorecard: [],
+    preferences: {
+      youthPreference: "Medium",
+      veteranPreference: "Medium",
+      pickValue: "Low",
+      aggressiveness: "Low",
+    },
     currentLeague: null,
+    leagues: [],
     crossLeague: {
       dynastyLeagueCount: 0,
       oldestLeagueSeason: null,
@@ -866,10 +2448,17 @@ function emptyPayload(
       tradeActivityRating: "Low",
       waiverActivityRating: "Low",
       mostRosteredPlayers: [],
+      mostRosteredByPosition: { QB: [], RB: [], WR: [], TE: [] },
       mostDraftedPlayers: null,
       commonRosterBuild: "Insufficient data",
       averageTeamAge: null,
       positionStrengthProfile: "Insufficient data",
+      favoritePlayerTypes: [],
+      portfolioType: "Unknown",
+      portfolioIdentity: note,
+      positionBias: [],
+      managerTendencies: [],
+      tradeImplications: { likelyValues: [], unlikelyValues: [], bestAngle: note },
     },
     performance: {
       playoffAppearances: null,
@@ -879,18 +2468,66 @@ function emptyPayload(
       avgPointsFor: null,
       notes: note,
     },
+    activity: {
+      visibleLeagues: 0,
+      oldestVisibleSeason: null,
+      estimatedYearsActive: null,
+      currentPointsFor: null,
+      tradeCount: 0,
+      waiverCount: 0,
+      totalTransactions: 0,
+      activitySignal: "Ghost",
+      signalNote: note,
+      activityArchetype: { key: "dormant", label: "Dormant / Low Signal", blurb: note },
+      tradeability: { level: "Low", note: note },
+      lastActivity: null,
+      last30Days: 0,
+      last90Days: 0,
+      activityTrend: "Unknown",
+      recent: [],
+    },
     tradeApproach: {
       summary: note,
       suggestedAngle: "Insufficient data — no actionable read available.",
+      actionableTakeaway: "Insufficient data — no actionable read available.",
+      doList: [],
+      dontList: [],
       likelyNeeds: [],
       assetsTheyMayValue: [],
       cautionNotes: "Visible Sleeper leagues only.",
+      tradeProfile: {
+        tradeActivity: "Low",
+        tradeStyle: "Unknown",
+        bestOfferType: "Insufficient data",
+        avoidOffering: "Insufficient data",
+        likelyTargets: [],
+        sellCandidates: [],
+      },
+      openingOffers: [],
+      targetPositions: [],
+      preferYouth: false,
+      tradeDifficulty: { level: "Low", reason: note },
+      playbook: {
+        bestApproach: "Insufficient data",
+        likelyStyle: "Unknown",
+        bestDealType: "Insufficient data",
+        likelyMotivation: "Unknown",
+        negotiationStyle: "Unknown",
+        avoid: "Insufficient data",
+      },
+      dealTypes: [],
+      negotiationNotes: [],
+      targetableAssets: [],
+      protectedAssets: [],
+      likelyTargetsGrouped: { high: [], conditional: [] },
+      sellCandidatesGrouped: { mostLikely: [], leastLikely: [] },
     },
     meta: {
       season,
       leaguesScanned: 0,
       computedAt: new Date().toISOString(),
       dataSourceNote: note,
+      version: CACHE_VERSION,
     },
   };
 }

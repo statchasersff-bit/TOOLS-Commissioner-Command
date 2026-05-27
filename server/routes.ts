@@ -1,6 +1,16 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { getFantasyCalcValues, getFantasyCalcRedraftValues } from "./fantasycalc";
+import { getKtcValues, getKtcRedraftValues } from "./ktc";
+import { backfillPortfolioTimeline } from "./portfolioLedger";
+import {
+  recalculatePortfolioSnapshots,
+  getPortfolioTimeline,
+  getPortfolioEvents,
+  getLeagueBreakdown,
+  getPortfolioAssets,
+  getValueSourceBreakdown,
+} from "./portfolioSnapshots";
 import { computePlayoffCalculator, computeWeeklyMatchups } from "./playoffCalculator";
 import { getAdpHistory, getAdpAvailability, getAdpAvailabilityMatrix } from "./adpPlayerProfile";
 import { getPlayerMetadata, getPlayerProduction, getPlayerGameLogs, type ScoringKey, type GameLogSeasonType } from "./sleeperPlayerProfile";
@@ -203,6 +213,34 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/values/ktc", async (req, res) => {
+    try {
+      const format = (req.query.format as string) || "sf";
+      if (format !== "sf" && format !== "1qb") {
+        return res.status(400).json({ error: "format must be 'sf' or '1qb'" });
+      }
+      const data = await getKtcValues(format);
+      res.json(data);
+    } catch (err: any) {
+      console.error("KTC fetch error:", err);
+      res.status(500).json({ error: err.message || "Failed to fetch KTC values" });
+    }
+  });
+
+  app.get("/api/values/ktc/redraft", async (req, res) => {
+    try {
+      const format = (req.query.format as string) || "sf";
+      if (format !== "sf" && format !== "1qb") {
+        return res.status(400).json({ error: "format must be 'sf' or '1qb'" });
+      }
+      const data = await getKtcRedraftValues(format);
+      res.json(data);
+    } catch (err: any) {
+      console.error("KTC redraft fetch error:", err);
+      res.status(500).json({ error: err.message || "Failed to fetch KTC redraft values" });
+    }
+  });
+
   app.get("/api/values/fantasycalc/redraft", async (req, res) => {
     try {
       const format = (req.query.format as string) || "sf";
@@ -262,6 +300,108 @@ export async function registerRoutes(
     } catch (err: any) {
       console.error("Portfolio summary error:", err);
       res.status(500).json({ error: err.message || "Failed to fetch portfolio summary" });
+    }
+  });
+
+  // ── Portfolio Timeline ──────────────────────────────────────────────────
+  // Asset-ledger reconstruction of a manager's dynasty portfolio value over
+  // time. :sleeperUsername accepts a username or a Sleeper user_id.
+  const resolvePortfolioUser = async (handle: string) => {
+    const user = await fetchSleeperUser(handle);
+    const season = String(new Date().getFullYear());
+    const leagues = await fetchSleeperLeagues(user.userId, season).catch(() => []);
+    const leagueNames: Record<string, string> = {};
+    for (const lg of leagues) leagueNames[lg.leagueId] = lg.name;
+    return { userId: user.userId, leagues, leagueNames };
+  };
+
+  app.get("/api/portfolio/:sleeperUsername/timeline", requireReadOnlySleeperContext, async (req, res) => {
+    try {
+      const { userId } = await resolvePortfolioUser(req.params.sleeperUsername);
+      const range = (req.query.range as string) || "all";
+      const leagueId = (req.query.leagueId as string) || undefined;
+      const sameLeague = req.query.sameLeague === "1" || req.query.sameLeague === "true";
+      const data = await getPortfolioTimeline(userId, { range, leagueId, sameLeague });
+      res.setHeader("Cache-Control", "private, max-age=60");
+      res.json({ sleeperUsername: req.params.sleeperUsername, range, mode: (req.query.mode as string) || "total", ...data });
+    } catch (err: any) {
+      console.error("Portfolio timeline error:", err);
+      res.status(500).json({ error: err?.message || "Failed to load portfolio timeline" });
+    }
+  });
+
+  app.get("/api/portfolio/:sleeperUsername/events", requireReadOnlySleeperContext, async (req, res) => {
+    try {
+      const { userId } = await resolvePortfolioUser(req.params.sleeperUsername);
+      const events = await getPortfolioEvents(userId, {
+        eventType: (req.query.eventType as string) || undefined,
+        leagueId: (req.query.leagueId as string) || undefined,
+        minImpact: req.query.minImpact ? Number(req.query.minImpact) : undefined,
+        limit: req.query.limit ? Number(req.query.limit) : undefined,
+      });
+      res.json({ events });
+    } catch (err: any) {
+      console.error("Portfolio events error:", err);
+      res.status(500).json({ error: err?.message || "Failed to load portfolio events" });
+    }
+  });
+
+  app.get("/api/portfolio/:sleeperUsername/league-breakdown", requireReadOnlySleeperContext, async (req, res) => {
+    try {
+      const { userId, leagueNames } = await resolvePortfolioUser(req.params.sleeperUsername);
+      const leagues = await getLeagueBreakdown(userId, leagueNames);
+      res.json({ leagues });
+    } catch (err: any) {
+      console.error("Portfolio league-breakdown error:", err);
+      res.status(500).json({ error: err?.message || "Failed to load league breakdown" });
+    }
+  });
+
+  app.get("/api/portfolio/:sleeperUsername/assets", requireReadOnlySleeperContext, async (req, res) => {
+    try {
+      const { userId, leagueNames } = await resolvePortfolioUser(req.params.sleeperUsername);
+      const assets = await getPortfolioAssets(userId, leagueNames);
+      res.json({ assets });
+    } catch (err: any) {
+      console.error("Portfolio assets error:", err);
+      res.status(500).json({ error: err?.message || "Failed to load portfolio assets" });
+    }
+  });
+
+  app.get("/api/portfolio/:sleeperUsername/value-sources", requireReadOnlySleeperContext, async (req, res) => {
+    try {
+      const { userId } = await resolvePortfolioUser(req.params.sleeperUsername);
+      const sources = await getValueSourceBreakdown(userId);
+      res.json({ sources });
+    } catch (err: any) {
+      console.error("Portfolio value-sources error:", err);
+      res.status(500).json({ error: err?.message || "Failed to load value sources" });
+    }
+  });
+
+  app.post("/api/portfolio/:sleeperUsername/backfill", requireReadOnlySleeperContext, async (req, res) => {
+    try {
+      const { userId, leagues } = await resolvePortfolioUser(req.params.sleeperUsername);
+      if (leagues.length === 0) {
+        return res.status(404).json({ error: "No dynasty leagues found for this user." });
+      }
+      const ledger = await backfillPortfolioTimeline(userId, leagues.map((l) => l.leagueId));
+      const snaps = await recalculatePortfolioSnapshots(userId);
+      res.json({ ok: true, ...ledger, snapshots: snaps.snapshots });
+    } catch (err: any) {
+      console.error("Portfolio backfill error:", err);
+      res.status(500).json({ error: err?.message || "Failed to backfill portfolio" });
+    }
+  });
+
+  app.post("/api/portfolio/:sleeperUsername/recalculate", requireReadOnlySleeperContext, async (req, res) => {
+    try {
+      const { userId } = await resolvePortfolioUser(req.params.sleeperUsername);
+      const snaps = await recalculatePortfolioSnapshots(userId);
+      res.json({ ok: true, snapshots: snaps.snapshots });
+    } catch (err: any) {
+      console.error("Portfolio recalculate error:", err);
+      res.status(500).json({ error: err?.message || "Failed to recalculate portfolio" });
     }
   });
 

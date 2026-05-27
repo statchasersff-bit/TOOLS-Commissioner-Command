@@ -137,6 +137,47 @@ async function getPlayerIndex(): Promise<PlayerIndex> {
   return idx;
 }
 
+// ── Reusable name → Sleeper-ID matcher ───────────────────────────────────────
+// Shared by other value sources (e.g. KTC) that arrive as player names without
+// Sleeper IDs. Mirrors the CSV matching precedence: name+pos → name+team →
+// unique-name. Returns the canonical Sleeper player so callers can key by the
+// app's own name/pos rather than the upstream's.
+export interface MatchedSleeperPlayer {
+  id: string;
+  name: string;
+  pos: string;
+  team: string;
+  method: "name_pos" | "name_team" | "name_unique";
+}
+
+export async function matchPlayerByName(
+  name: string,
+  pos: string | null,
+  team: string | null,
+): Promise<MatchedSleeperPlayer | null> {
+  const idx = await getPlayerIndex();
+  const normName = normalizeName(name);
+  const p = normalizePos(pos);
+  let id: string | undefined;
+  let method: MatchedSleeperPlayer["method"] | null = null;
+
+  if (p) {
+    const m = idx.byNamePos.get(`${normName}|${p}`);
+    if (m) { id = m; method = "name_pos"; }
+  }
+  if (!id && team) {
+    const m = idx.byNameTeam.get(`${normName}|${team.toUpperCase()}`);
+    if (m) { id = m; method = "name_team"; }
+  }
+  if (!id) {
+    const candidates = idx.byName.get(normName) ?? [];
+    if (candidates.length === 1) { id = candidates[0]; method = "name_unique"; }
+  }
+  if (!id || !method) return null;
+  const info = idx.byId.get(id)!;
+  return { id, name: info.name, pos: info.pos, team: info.team, method };
+}
+
 // ── Preview / matching ───────────────────────────────────────────────────────
 
 export interface ParsedRow {

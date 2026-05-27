@@ -5,8 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ValueModelProvider } from "@/contexts/ValueModelContext";
 import { PlayerProfileProvider, PlayerProfileNavigator } from "@/contexts/PlayerProfileContext";
-import { ManagerIntelProvider } from "@/contexts/ManagerIntelContext";
-import { GlobalManagerIntelDrawer } from "@/components/GlobalManagerIntelDrawer";
+import { ManagerIntelProvider, ManagerIntelNavigator } from "@/contexts/ManagerIntelContext";
 import { SleeperProvider } from "@/contexts/SleeperContext";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { WriteAccessModalProvider } from "@/contexts/WriteAccessModalContext";
@@ -56,12 +55,18 @@ function Router() {
   return (
     <WouterRouter base={BASE_PATH}>
       <PlayerProfileNavigator />
+      <ManagerIntelNavigator />
       <Switch>
         {/* Player profiles render inside the Command Center shell so the app
             header / mega-menu stays visible. DCC renders <PlayerPage embedded>
             as its content when given a playerProfileId. */}
         <Route path="/players/:playerId">
           {(params) => <DynastyCommandCenter playerProfileId={params?.playerId} />}
+        </Route>
+        {/* Manager profiles follow the same embedded-shell pattern as players.
+            DCC renders <ManagerPage embedded> when given a managerProfileId. */}
+        <Route path="/managers/:userId">
+          {(params) => <DynastyCommandCenter managerProfileId={params?.userId} />}
         </Route>
         <Route path="/:tab/:sub" component={DynastyCommandCenter} />
         <Route path="/:tab" component={DynastyCommandCenter} />
@@ -149,7 +154,6 @@ function AuthenticatedTree({ probe }: { probe: Probe }) {
             <ErrorBoundary label="Router/DynastyCommandCenter">
               <Router />
             </ErrorBoundary>
-            <GlobalManagerIntelDrawer />
           </ManagerIntelProvider>
         </PlayerProfileProvider>
       </ValueModelProvider>

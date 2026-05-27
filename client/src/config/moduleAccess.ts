@@ -32,6 +32,7 @@ export const MODULE_ACCESS: Record<string, AccessRequirement> = {
   // StatChasers account (full).
   "portfolio:connect": "public", // legacy connect screen — no gate
   "portfolio:portfolio-summary": "readonly",
+  "portfolio:portfolio-timeline": "readonly",
   "portfolio:lineup-command": "full",
   "portfolio:waiver-command": "full",
 

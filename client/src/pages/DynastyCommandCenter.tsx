@@ -34,8 +34,10 @@ import { WhatsNewModal } from "@/components/WhatsNewModal";
 // Each tab is split into its own async chunk so the initial bundle only
 // contains the shell + header. Tabs load on first navigation.
 const PlayerPage        = lazy(() => import("@/pages/PlayerPage"));
+const ManagerPage       = lazy(() => import("@/pages/ManagerPage"));
 const PortfolioConnect  = lazy(() => import("./tabs/Portfolio").then(m => ({ default: m.PortfolioConnect })));
 const PortfolioSummary  = lazy(() => import("./tabs/Portfolio").then(m => ({ default: m.PortfolioSummary })));
+const PortfolioTimeline = lazy(() => import("./tabs/PortfolioTimeline"));
 const WaiverCommand     = lazy(() => import("./tabs/WaiverCommand"));
 const DashboardSnapshot = lazy(() => import("./tabs/Dashboard").then(m => ({ default: m.DashboardSnapshot })));
 const MyTeam            = lazy(() => import("./tabs/Dashboard").then(m => ({ default: m.MyTeam })));
@@ -101,7 +103,7 @@ function getInitialState(pathTab?: string, pathSub?: string) {
 }
 
 
-export default function DynastyCommandCenter({ params, playerProfileId }: { params?: { tab?: string; sub?: string }; playerProfileId?: string }) {
+export default function DynastyCommandCenter({ params, playerProfileId, managerProfileId }: { params?: { tab?: string; sub?: string }; playerProfileId?: string; managerProfileId?: string }) {
   useEffect(() => { console.log("[app] DynastyCommandCenter mounted"); }, []);
 
   // ── Background chunk preloading ────────────────────────────────────────────
@@ -110,28 +112,32 @@ export default function DynastyCommandCenter({ params, playerProfileId }: { para
   // Calling the raw dynamic import() primes the browser cache without rendering
   // anything; React.lazy reuses the same cached promise on first render.
   useEffect(() => {
-    import("./tabs/Dashboard");
-    import("./tabs/Portfolio");
-    import("./tabs/TradeCenter");
-    import("./tabs/DraftCommand");
+    // Preload errors (e.g. during HMR restart) are intentionally swallowed —
+    // they only affect warm-up speed, never the active render path.
+    const p = (fn: () => Promise<unknown>) => fn().catch(() => {});
+    p(() => import("./tabs/Dashboard"));
+    p(() => import("./tabs/Portfolio"));
+    p(() => import("./tabs/TradeCenter"));
+    p(() => import("./tabs/DraftCommand"));
     const t = setTimeout(() => {
-      import("./tabs/LiveDraft");
-      import("./tabs/LeagueAnalyzer");
-      import("./tabs/PlayoffCalculator");
-      import("./tabs/Transactions");
-      import("./tabs/PositionalAnalysis");
-      import("./tabs/LeagueMarket");
-      import("./tabs/Analysis");
-      import("./tabs/PositionStats");
-      import("./tabs/WaiverCommand");
-      import("./tabs/TradeSync");
-      import("./tabs/LineupCommand");
-      import("./tabs/DraftAvailability");
-      import("./tabs/ShareTeam");
-      import("@/pages/PlayerPage");
-      import("@/components/AboutModal");
-      import("@/components/FeedbackPage");
-      import("@/components/LegalModals");
+      p(() => import("./tabs/LiveDraft"));
+      p(() => import("./tabs/LeagueAnalyzer"));
+      p(() => import("./tabs/PlayoffCalculator"));
+      p(() => import("./tabs/Transactions"));
+      p(() => import("./tabs/PositionalAnalysis"));
+      p(() => import("./tabs/LeagueMarket"));
+      p(() => import("./tabs/Analysis"));
+      p(() => import("./tabs/PositionStats"));
+      p(() => import("./tabs/WaiverCommand"));
+      p(() => import("./tabs/TradeSync"));
+      p(() => import("./tabs/LineupCommand"));
+      p(() => import("./tabs/DraftAvailability"));
+      p(() => import("./tabs/ShareTeam"));
+      p(() => import("./tabs/PortfolioTimeline"));
+      p(() => import("@/pages/PlayerPage"));
+      p(() => import("@/components/AboutModal"));
+      p(() => import("@/components/FeedbackPage"));
+      p(() => import("@/components/LegalModals"));
     }, 1500);
     return () => clearTimeout(t);
   }, []);
@@ -537,6 +543,7 @@ export default function DynastyCommandCenter({ params, playerProfileId }: { para
         case "portfolio:connect":          return <PortfolioConnect onNavigate={navigateToSubTab} />;
         case "portfolio:lineup-command":   return <LineupCommand />;
         case "portfolio:portfolio-summary":return <PortfolioSummary onNavigate={navigateToSubTab} />;
+        case "portfolio:portfolio-timeline":return <PortfolioTimeline />;
         case "portfolio:waiver-command":   return <WaiverCommand />;
         default:                           return <PortfolioConnect onNavigate={navigateToSubTab} />;
       }
@@ -594,6 +601,10 @@ export default function DynastyCommandCenter({ params, playerProfileId }: { para
     // Player profile is rendered inside the shell (header/mega-menu stay
     // visible) when the route is /players/:id.
     if (playerProfileId) return <PlayerPage params={{ playerId: playerProfileId }} embedded />;
+    // Manager profile uses the same embedded-shell pattern at /managers/:userId.
+    // Pass the viewer's team so the Trade tab can match their roster to the
+    // target manager's tendencies (null when no active league is loaded).
+    if (managerProfileId) return <ManagerPage userId={managerProfileId} embedded viewerTeam={userTeam} />;
     const access = resolveAccess(activeMainTab, activeSubTab);
     const isTradeInbox = activeMainTab === "trade-center" && activeSubTab === "trade-sync";
     return (

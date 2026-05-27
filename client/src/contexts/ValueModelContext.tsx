@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useCallback, useMemo, useEffect } 
 import type { ValueSourceId, ValueSourceOption, Player, Pick, Team, TeamMetrics } from "../types";
 import { getStaticPickValue } from "../data/pickValues";
 import { getFantasyCalcValues, getFantasyCalcRedraftValues } from "@/lib/fantasycalcApi";
+import { getKtcValues, getKtcRedraftValues } from "@/lib/ktcApi";
 import { scAuthFetch } from "@/lib/scAuthFetch";
 import dynastySnapshot from "@/data/fantasycalc_snapshot_sf.json";
 import redraftSnapshot from "@/data/fantasycalc_snapshot_redraft_sf.json";
@@ -50,7 +51,7 @@ interface ResolvedCustomValuesResponse {
 
 const VALUE_SOURCES: ValueSourceOption[] = [
   { id: "fantasycalc", label: "FantasyCalc", description: "FantasyCalc values update daily. StatChasers caches values once per day.", active: true },
-  { id: "ktc", label: "KeepTradeCut", description: "KeepTradeCut crowd-sourced dynasty trade values. Coming soon.", active: false },
+  { id: "ktc", label: "KeepTradeCut", description: "KeepTradeCut crowd-sourced values (non-TEP) — dynasty, redraft, and rookie picks. Refreshed daily.", active: true },
   { id: "dlf", label: "DLF", description: "Dynasty League Football expert-driven dynasty valuations. Coming soon.", active: false },
   { id: "flock", label: "Flock Fantasy", description: "Flock Fantasy dynasty player valuations. Coming soon.", active: false },
   { id: "custom", label: "Custom Upload", description: "Upload your own CSV of player values. Coming soon.", active: false },
@@ -112,8 +113,8 @@ interface ValueModel {
    * Like getPlayerValue but also returns the source. Useful for UI badges
    * that want to show "Custom" / "FC" per row.
    */
-  getPlayerValueWithSource: (player: Player) => { value: number; source: "custom" | "fantasycalc" };
-  getRedraftValueWithSource: (player: Player) => { value: number; source: "custom" | "fantasycalc" };
+  getPlayerValueWithSource: (player: Player) => { value: number; source: "custom" | "fantasycalc" | "ktc" };
+  getRedraftValueWithSource: (player: Player) => { value: number; source: "custom" | "fantasycalc" | "ktc" };
   getPickValue: (pick: Pick) => number;
   calculateTeamValue: (team: Team) => number;
   calculateAllTeamMetrics: (teams: Team[], rosterPositions?: string[]) => Map<string, TeamMetrics>;
@@ -150,6 +151,9 @@ export function ValueModelProvider({ children }: { children: React.ReactNode }) 
   const [dynastyPlayerList, setDynastyPlayerList] = useState<RankedPlayer[]>(() => buildRankedList(BUNDLED_DYNASTY));
   const [customDynasty, setCustomDynasty] = useState<ResolvedCustomSet | null>(null);
   const [customRedraft, setCustomRedraft] = useState<ResolvedCustomSet | null>(null);
+  // Exact KTC rookie-pick values keyed `${season}_${round}_${bucket}`. Empty
+  // unless KTC is the active source.
+  const [ktcPickMap, setKtcPickMap] = useState<Record<string, number>>({});
   const [diagnostics, setDiagnostics] = useState<ValueDiagnostics>({
     updatedAt: "",
     mappedCount: 0,
@@ -192,24 +196,33 @@ export function ValueModelProvider({ children }: { children: React.ReactNode }) 
   }, [refreshCustomValues]);
 
   useEffect(() => {
-    if (sourceId !== "fantasycalc") return;
+    // Both FantasyCalc and KTC are "online" base sources loaded into the same
+    // value state. KTC has no redraft feed of its own, so we use FantasyCalc
+    // redraft for win-now values either way.
+    if (sourceId !== "fantasycalc" && sourceId !== "ktc") return;
     let cancelled = false;
     // We deliberately do NOT setIsLoading(true) here — state is already
     // seeded from the bundled snapshot, so the upgrade happens silently
     // in the background and the user never sees a blocking spinner.
 
-    Promise.all([
-      getFantasyCalcValues("sf"),
-      getFantasyCalcRedraftValues("sf").catch((err) => {
-        console.warn("[ValueModel] Redraft fetch failed, will use dynasty fallback:", err);
-        return null;
-      }),
-    ])
+    const isKtc = sourceId === "ktc";
+    const dynastyFetch = isKtc ? getKtcValues("sf") : getFantasyCalcValues("sf");
+    // KTC has its own redraft feed (fantasy-rankings); FantasyCalc uses its own.
+    const redraftFetch = (isKtc ? getKtcRedraftValues("sf") : getFantasyCalcRedraftValues("sf")).catch((err) => {
+      console.warn("[ValueModel] Redraft fetch failed, will use dynasty fallback:", err);
+      return null;
+    });
+
+    Promise.all([dynastyFetch, redraftFetch])
       .then(([dynastyData, redraftData]: [any, any]) => {
         if (cancelled) return;
-        // Defensive: if the server somehow returned malformed data, keep
-        // the bundled snapshot in place rather than nuking it.
-        if (!dynastyData || !dynastyData.valuesBySleeperId) {
+        // Defensive: if the source returned malformed OR empty data (e.g. a KTC
+        // scrape miss), keep the existing/bundled values rather than nuking them.
+        if (
+          !dynastyData ||
+          !dynastyData.valuesBySleeperId ||
+          Object.keys(dynastyData.valuesBySleeperId).length === 0
+        ) {
           setIsLoading(false);
           return;
         }
@@ -225,6 +238,15 @@ export function ValueModelProvider({ children }: { children: React.ReactNode }) 
             .filter((p: any) => p.sleeperId && p.value > 0)
             .sort((a: any, b: any) => b.value - a.value)
         );
+
+        // KTC ships exact rookie-pick values; index them for getPickValue.
+        if (isKtc && Array.isArray(dynastyData.picks)) {
+          const pm: Record<string, number> = {};
+          for (const pk of dynastyData.picks) pm[`${pk.season}_${pk.round}_${pk.bucket}`] = pk.value;
+          setKtcPickMap(pm);
+        } else {
+          setKtcPickMap({});
+        }
 
         if (redraftData && redraftData.valuesBySleeperId && Object.keys(redraftData.valuesBySleeperId).length > 0) {
           setRedraftValuesBySleeperId(redraftData.valuesBySleeperId);
@@ -292,41 +314,43 @@ export function ValueModelProvider({ children }: { children: React.ReactNode }) 
     return null;
   };
 
-  const getPlayerValueWithSource = useCallback((player: Player): { value: number; source: "custom" | "fantasycalc" } => {
+  const baseSource: "fantasycalc" | "ktc" = sourceId === "ktc" ? "ktc" : "fantasycalc";
+
+  const getPlayerValueWithSource = useCallback((player: Player): { value: number; source: "custom" | "fantasycalc" | "ktc" } => {
     const customVal = lookupCustom(customDynasty, player);
     if (customVal !== null) return { value: customVal, source: "custom" };
 
-    if (sourceId === "fantasycalc" && valuesBySleeperId && Object.keys(valuesBySleeperId).length > 0) {
+    if ((sourceId === "fantasycalc" || sourceId === "ktc") && valuesBySleeperId && Object.keys(valuesBySleeperId).length > 0) {
       if (player.sleeperId && valuesBySleeperId[player.sleeperId] !== undefined) {
-        return { value: valuesBySleeperId[player.sleeperId], source: "fantasycalc" };
+        return { value: valuesBySleeperId[player.sleeperId], source: baseSource };
       }
       const nameKey = `${player.name.toLowerCase().trim()}|${player.pos}`;
       if (nameValueMap && nameValueMap[nameKey] !== undefined) {
-        return { value: nameValueMap[nameKey], source: "fantasycalc" };
+        return { value: nameValueMap[nameKey], source: baseSource };
       }
     }
-    return { value: player.value, source: "fantasycalc" };
-  }, [customDynasty, sourceId, valuesBySleeperId, nameValueMap]);
+    return { value: player.value, source: baseSource };
+  }, [customDynasty, sourceId, baseSource, valuesBySleeperId, nameValueMap]);
 
   const getPlayerValue = useCallback((player: Player): number => {
     return getPlayerValueWithSource(player).value;
   }, [getPlayerValueWithSource]);
 
-  const getRedraftValueWithSource = useCallback((player: Player): { value: number; source: "custom" | "fantasycalc" } => {
+  const getRedraftValueWithSource = useCallback((player: Player): { value: number; source: "custom" | "fantasycalc" | "ktc" } => {
     const customVal = lookupCustom(customRedraft, player);
     if (customVal !== null) return { value: customVal, source: "custom" };
 
-    if (sourceId === "fantasycalc" && redraftValuesBySleeperId && Object.keys(redraftValuesBySleeperId).length > 0) {
+    if ((sourceId === "fantasycalc" || sourceId === "ktc") && redraftValuesBySleeperId && Object.keys(redraftValuesBySleeperId).length > 0) {
       if (player.sleeperId && redraftValuesBySleeperId[player.sleeperId] !== undefined) {
-        return { value: redraftValuesBySleeperId[player.sleeperId], source: "fantasycalc" };
+        return { value: redraftValuesBySleeperId[player.sleeperId], source: baseSource };
       }
       const nameKey = `${player.name.toLowerCase().trim()}|${player.pos}`;
       if (redraftNameValueMap && redraftNameValueMap[nameKey] !== undefined) {
-        return { value: redraftNameValueMap[nameKey], source: "fantasycalc" };
+        return { value: redraftNameValueMap[nameKey], source: baseSource };
       }
     }
     return getPlayerValueWithSource(player);
-  }, [customRedraft, sourceId, redraftValuesBySleeperId, redraftNameValueMap, getPlayerValueWithSource]);
+  }, [customRedraft, sourceId, baseSource, redraftValuesBySleeperId, redraftNameValueMap, getPlayerValueWithSource]);
 
   const getRedraftValue = useCallback((player: Player): number => {
     return getRedraftValueWithSource(player).value;
@@ -334,6 +358,10 @@ export function ValueModelProvider({ children }: { children: React.ReactNode }) 
 
   const getPickValue = useCallback((pick: Pick, totalRosters?: number): number => {
     const range = (pick.projectedRange || "mid").toLowerCase() as "early" | "mid" | "late";
+
+    // KTC ships exact early/mid/late pick values — prefer them when active.
+    const ktcPick = ktcPickMap[`${pick.year}_${pick.round}_${range}`];
+    if (ktcPick != null && ktcPick > 0) return ktcPick;
 
     // For 2026 picks with a known draft slot, use exact values regardless of FantasyCalc
     if (pick.year === 2026 && pick.pickSlot != null && pick.pickSlot > 0 && totalRosters != null) {
@@ -350,7 +378,7 @@ export function ValueModelProvider({ children }: { children: React.ReactNode }) 
     const roundMults = PICK_RANGE_MULTIPLIERS[pick.round] ?? { early: 1.15, mid: 1.0, late: 0.90 };
     const mult = roundMults[range] ?? 1.0;
     return Math.round(baseValue * mult);
-  }, [valuesBySleeperId]);
+  }, [valuesBySleeperId, ktcPickMap]);
 
   const calculateTeamValue = useCallback((team: Team): number => {
     const rosterValue = team.roster.reduce((s, p) => s + getPlayerValue(p), 0);

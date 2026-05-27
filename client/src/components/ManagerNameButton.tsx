@@ -2,9 +2,9 @@
  * ManagerNameButton — clickable wrapper for plain-text Sleeper manager names.
  *
  * Use this anywhere you render `team.owner` / `partner.ownerName` / etc. as
- * naked text. It opens the global Manager Intel drawer pre-scoped to the
- * current league. When `userId` is missing it falls back to a plain span so
- * the caller doesn't have to guard every render site.
+ * naked text. It navigates to the Manager Intel page (/managers/:userId)
+ * pre-scoped to the current league. When `userId` is missing it falls back to
+ * a plain span so the caller doesn't have to guard every render site.
  *
  * For avatar+name pairs, prefer adding the `onClick` prop directly to
  * `<SleeperUserAvatar>` — that styles the whole pill as the click target.
