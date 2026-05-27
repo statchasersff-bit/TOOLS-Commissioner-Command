@@ -39,6 +39,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { KpiCard } from "@/components/KpiCard";
+import { PortfolioValueChart } from "@/components/PortfolioValueChart";
 import { cn } from "@/lib/utils";
 import { useSleeper } from "@/contexts/SleeperContext";
 import {
@@ -75,12 +76,14 @@ function kfmt(n: number): string {
 function signed(n: number): string {
   return `${n >= 0 ? "+" : ""}${fmt(n)}`;
 }
+const MONTH_ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+// Snapshots are month-start dates; label them "MMM 'YY" (e.g. Dec '25). Parse
+// the YYYY-MM prefix directly so local-timezone offset can't shift the month.
 function shortDate(iso: string): string {
-  try {
-    return new Date(iso + "T00:00:00Z").toLocaleDateString(undefined, { month: "short", day: "numeric" });
-  } catch {
-    return iso;
-  }
+  const m = /^(\d{4})-(\d{2})/.exec(iso);
+  if (!m) return iso;
+  const mon = MONTH_ABBR[parseInt(m[2], 10) - 1] ?? "";
+  return `${mon} '${m[1].slice(2)}`;
 }
 
 const EVENT_COLOR: Record<string, string> = {
@@ -168,6 +171,17 @@ export default function PortfolioTimeline() {
     () => points.map((p) => ({ ...p, x: shortDate(p.date), value: p[activeMode.field] as number })),
     [points, activeMode.field],
   );
+  // Fit the Y-axis to the actual data range (with padding) instead of anchoring
+  // at 0 — otherwise small month-to-month moves look flat against a 0–max scale.
+  const yDomain = useMemo<[number, number] | undefined>(() => {
+    const vals = chartData.map((d) => d.value).filter((v) => Number.isFinite(v));
+    if (vals.length === 0) return undefined;
+    const min = Math.min(...vals);
+    const max = Math.max(...vals);
+    if (min === max) return [Math.max(0, min * 0.95), max * 1.05];
+    const pad = (max - min) * 0.12;
+    return [Math.max(0, Math.floor(min - pad)), Math.ceil(max + pad)];
+  }, [chartData]);
   if (!isConnected || !handle) {
     return <EmptyShell text="Connect your Sleeper account to track your dynasty portfolio over time." />;
   }
@@ -231,42 +245,7 @@ export default function PortfolioTimeline() {
           </div>
 
           {/* Chart */}
-          <Card className="p-3 sm:p-4">
-            <div className="flex items-center justify-between gap-2 flex-wrap mb-3">
-              <Segmented options={MODES.map((m) => ({ id: m.id, label: m.label }))} value={mode} onChange={(v) => setMode(v as ModeId)} />
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={onToggleSameLeague}
-                  title="Only include leagues that were already tracked at the start of the selected range, so adding a new league doesn't fake a jump."
-                  className={cn(
-                    "rounded-md border px-2 py-1 text-[10px] font-semibold transition-colors",
-                    sameLeagueOnly
-                      ? "border-[#d4af37]/50 bg-[#d4af37]/15 text-[#d4af37]"
-                      : "border-border/60 text-muted-foreground hover:text-foreground",
-                  )}
-                  data-testid="portfolio-same-league"
-                >
-                  Same-league
-                </button>
-                <Segmented options={RANGES} value={range} onChange={onRangeChange} />
-              </div>
-            </div>
-            <div className="h-[300px] sm:h-[360px] w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={chartData} margin={{ top: 8, right: 12, bottom: 0, left: 4 }}>
-                  <CartesianGrid stroke="rgba(255,255,255,0.06)" vertical={false} />
-                  <XAxis dataKey="x" tickLine={false} axisLine={false} tick={{ fontSize: 10, fill: "#9ca3af" }} minTickGap={24} />
-                  <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 10, fill: "#9ca3af" }} width={48} tickFormatter={kfmt} />
-                  <RechartsTooltip content={<ChartTooltip />} />
-                  <Line type="monotone" dataKey="value" stroke="#38bdf8" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-            <p className="text-[10px] text-muted-foreground/70 italic mt-2">
-              Your current roster valued at each month's market (from startup-draft ADP). Older months are estimated; confidence is shown above.
-            </p>
-          </Card>
+          <PortfolioValueChart handle={handle} />
 
           {/* League breakdown */}
           <Card className="p-3 sm:p-4">

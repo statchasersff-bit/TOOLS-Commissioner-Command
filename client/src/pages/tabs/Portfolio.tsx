@@ -12,6 +12,8 @@ import { useValueModel } from "@/contexts/ValueModelContext";
 import { getPositionColor } from "@/data/mockData";
 import { cn } from "@/lib/utils";
 import { SleeperAuthCard } from "@/components/SleeperAuthCard";
+import { PortfolioValueChart } from "@/components/PortfolioValueChart";
+import { getPortfolioTimeline } from "@/lib/portfolioApi";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { usePlayerProfile } from "@/contexts/PlayerProfileContext";
 import {
@@ -570,9 +572,12 @@ export function PortfolioSummary({ onNavigate }: { onNavigate?: (mainTab: string
   const [exposureSortCol, setExposureSortCol] = useState<"name" | "pos" | "value" | "exposure" | "leagueCount">("exposure");
   const [exposureSortDir, setExposureSortDir] = useState<"asc" | "desc">("desc");
   const [exposureVisible, setExposureVisible] = useState(25);
+  const [exposureCollapsed, setExposureCollapsed] = useState(true);
   const [leagueFilter, setLeagueFilter] = useState<"all" | "contender" | "middle" | "rebuild">("all");
   const [pendingTradeCount, setPendingTradeCount] = useState<number | null>(null);
   const [pendingTradeLoading, setPendingTradeLoading] = useState(false);
+  const [portfolioValue, setPortfolioValue] = useState<number | null>(null);
+  const [portfolioValueLoading, setPortfolioValueLoading] = useState(false);
   // Live startup drafts the user is in. Fresh startup leagues don't make it
   // into useSleeper().leagues (their roster has no players yet, so
   // fetchSleeperLeagues filters them out) — but the user still wants them
@@ -593,6 +598,30 @@ export function PortfolioSummary({ onNavigate }: { onNavigate?: (mainTab: string
     picksAway: number | null;
   }>>([]);
   const [liveStartupDraftsLoading, setLiveStartupDraftsLoading] = useState(false);
+
+  // Total dynasty portfolio value (latest basket-timeline snapshot) for the KPI.
+  useEffect(() => {
+    if (!isConnected || !user?.userId) {
+      setPortfolioValue(null);
+      return;
+    }
+    let cancelled = false;
+    setPortfolioValueLoading(true);
+    getPortfolioTimeline(user.userId, { range: "all" })
+      .then((tl) => {
+        if (cancelled) return;
+        setPortfolioValue(tl.summary.totalPortfolioValue);
+        setPortfolioValueLoading(false);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setPortfolioValue(null);
+        setPortfolioValueLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isConnected, user?.userId]);
 
   useEffect(() => {
     if (!isConnected || !user?.userId) {
@@ -808,11 +837,19 @@ export function PortfolioSummary({ onNavigate }: { onNavigate?: (mainTab: string
           loading={summaryLoading}
         />
         <KpiCard
-          label="Avg Rank"
-          value={summaryLoading ? "..." : summaryData ? summaryData.avgRank : "--"}
-          icon={BarChart3}
-          subtitle="Season hasn't started"
-          loading={summaryLoading}
+          label="Portfolio Value"
+          value={
+            portfolioValueLoading
+              ? "..."
+              : portfolioValue != null
+              ? portfolioValue >= 1_000_000
+                ? `${(portfolioValue / 1_000_000).toFixed(2)}M`
+                : portfolioValue.toLocaleString()
+              : "--"
+          }
+          icon={Coins}
+          subtitle="Current dynasty value"
+          loading={portfolioValueLoading}
         />
       </div>
 
@@ -915,6 +952,8 @@ export function PortfolioSummary({ onNavigate }: { onNavigate?: (mainTab: string
 
       {summaryData && (
         <>
+          <PortfolioValueChart handle={user?.userId ?? null} />
+
           <Card className="p-6" data-testid="portfolio-performance">
             <div className="mb-4">
               <h3 className="text-base font-bold text-foreground">League Breakdown</h3>
@@ -970,11 +1009,25 @@ export function PortfolioSummary({ onNavigate }: { onNavigate?: (mainTab: string
           </Card>
 
           <Card className="p-6" data-testid="player-exposure">
-            <div className="mb-5">
-              <h3 className="text-base font-bold text-foreground">Most Rostered Players</h3>
-              <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
-            </div>
+            <button
+              type="button"
+              onClick={() => setExposureCollapsed((c) => !c)}
+              className={cn("flex items-center justify-between w-full text-left", exposureCollapsed ? "" : "mb-5")}
+              data-testid="toggle-player-exposure"
+            >
+              <div>
+                <h3 className="text-base font-bold text-foreground">Most Rostered Players</h3>
+                <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
+              </div>
+              {exposureCollapsed ? (
+                <ArrowDown className="w-4 h-4 text-muted-foreground" />
+              ) : (
+                <ArrowUp className="w-4 h-4 text-muted-foreground" />
+              )}
+            </button>
 
+            {!exposureCollapsed && (
+              <div className="space-y-4">
             {summaryData.playerExposure.length > 0 ? (() => {
               const handleExposureSort = (col: typeof exposureSortCol) => {
                 if (exposureSortCol === col) {
@@ -1077,6 +1130,8 @@ export function PortfolioSummary({ onNavigate }: { onNavigate?: (mainTab: string
                     </p>
                   ))}
                 </div>
+              </div>
+            )}
               </div>
             )}
           </Card>

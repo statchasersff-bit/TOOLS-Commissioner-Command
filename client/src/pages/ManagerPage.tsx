@@ -51,6 +51,7 @@ import {
 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, Legend } from "recharts";
 import { cn } from "@/lib/utils";
 import { API_BASE } from "@/lib/apiBase";
 import { useSleeper } from "@/contexts/SleeperContext";
@@ -132,6 +133,7 @@ interface LeagueReport {
   contextSummary: string;
   dynastyStrengths: PositionScore[];
   winNowStrengths: PositionScore[];
+  pickValue?: number;
   needs: NeedRow[];
   rankSnapshot: RankSnapshotRow[];
   relativeWeakness: string | null;
@@ -217,6 +219,8 @@ interface ManagerIntelPayload {
     last90Days?: number;
     activityTrend?: "Increasing" | "Stable" | "Declining" | "Unknown";
     recent?: Array<{ date: string; league: string; type: string }>;
+    tradeHistory?: Array<{ date: string; league: string; added: string[]; dropped: string[]; partner: string }>;
+    waiverHistory?: Array<{ date: string; league: string; kind: "waiver" | "free_agent"; added: string[]; dropped: string[] }>;
   };
   tradeApproach: {
     summary: string;
@@ -885,19 +889,17 @@ function CurrentLeagueTab({ data }: { data: ManagerIntelPayload }) {
         )}
       </div>
 
+      <ValueByPosition
+        dynasty={selected.dynastyStrengths}
+        winNow={selected.winNowStrengths}
+        pickValue={selected.pickValue ?? 0}
+      />
+
       {viewerRow && targetRow && (
         <YouVsThem viewer={viewerRow} target={targetRow} />
       )}
 
       <NeedsTable needs={selected.needs} relativeWeakness={selected.relativeWeakness} />
-
-      <div className="rounded-xl border border-[#d4af37]/25 bg-gradient-to-br from-[#d4af37]/[0.06] to-transparent p-4">
-        <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-[#d4af37] mb-1.5">
-          <Handshake className="w-3.5 h-3.5" />
-          <span>Trade opportunity in this league</span>
-        </div>
-        <p className="text-[13px] text-white/80 leading-relaxed">{selected.tradeOpportunity}</p>
-      </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <SectionCard title="Roster age" icon={<User className="w-3.5 h-3.5" />}>
@@ -1049,6 +1051,81 @@ function ComparisonColumn({ title, icon, rows }: { title: string; icon: React.Re
           );
         })}
       </div>
+    </div>
+  );
+}
+
+// Donut color per position (+ picks for the dynasty view).
+const POS_COLORS: Record<string, string> = {
+  QB: "#f87171",
+  RB: "#34d399",
+  WR: "#38bdf8",
+  TE: "#fbbf24",
+  Picks: "#a855f7",
+};
+
+function ValueByPosition({
+  dynasty,
+  winNow,
+  pickValue,
+}: {
+  dynasty: PositionScore[];
+  winNow: PositionScore[];
+  pickValue: number;
+}) {
+  const dynastyData = [
+    ...dynasty.map((p) => ({ name: p.position, value: p.value })),
+    ...(pickValue > 0 ? [{ name: "Picks", value: pickValue }] : []),
+  ].filter((d) => d.value > 0);
+  const winNowData = winNow.map((p) => ({ name: p.position, value: p.value })).filter((d) => d.value > 0);
+
+  return (
+    <SectionCard title="Value by position" icon={<TrendingUp className="w-3.5 h-3.5" />}>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <ValueDonut title="Dynasty (incl. picks)" data={dynastyData} />
+        <ValueDonut title="Win-Now" data={winNowData} />
+      </div>
+    </SectionCard>
+  );
+}
+
+function ValueDonut({ title, data }: { title: string; data: Array<{ name: string; value: number }> }) {
+  const total = data.reduce((s, d) => s + d.value, 0);
+  return (
+    <div className="rounded-lg border border-white/8 bg-white/[0.025] p-3">
+      <div className="text-[10px] font-semibold uppercase tracking-wider text-white/45 mb-1 text-center">{title}</div>
+      {data.length === 0 ? (
+        <p className="text-[12px] text-white/45 py-8 text-center">No value data.</p>
+      ) : (
+        <div className="h-[200px] w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
+              <Pie
+                data={data}
+                dataKey="value"
+                nameKey="name"
+                cx="50%"
+                cy="50%"
+                innerRadius={45}
+                outerRadius={72}
+                paddingAngle={2}
+                stroke="none"
+                label={(e: any) => `${e.name} ${Math.round((e.value / total) * 100)}%`}
+                labelLine={false}
+              >
+                {data.map((d) => (
+                  <Cell key={d.name} fill={POS_COLORS[d.name] ?? "#94a3b8"} />
+                ))}
+              </Pie>
+              <RechartsTooltip
+                contentStyle={{ background: "rgba(8,16,32,0.96)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, fontSize: 11 }}
+                formatter={(v: any, n: any) => [`${Math.round(Number(v)).toLocaleString()} (${Math.round((Number(v) / total) * 100)}%)`, n]}
+              />
+              <Legend verticalAlign="bottom" height={20} iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 10 }} />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+      )}
     </div>
   );
 }
@@ -1882,6 +1959,89 @@ function ActivityTab({ data }: { data: ManagerIntelPayload }) {
         </SectionCard>
       )}
 
+      {/* Trade history across all dynasty leagues. */}
+      <SectionCard title={`Trade history (${act.tradeHistory?.length ?? 0})`} icon={<ArrowRightLeft className="w-3.5 h-3.5" />}>
+        {act.tradeHistory && act.tradeHistory.length > 0 ? (
+          <div className="space-y-1.5 max-h-[440px] overflow-y-auto pr-1">
+            {act.tradeHistory.map((t, i) => (
+              <TxnRow
+                key={i}
+                date={t.date}
+                league={t.league}
+                added={t.added}
+                dropped={t.dropped}
+                subtitle={t.partner ? `with ${t.partner}` : undefined}
+              />
+            ))}
+          </div>
+        ) : (
+          <p className="text-[12px] text-white/45 py-2">No trades found in visible dynasty leagues this season.</p>
+        )}
+      </SectionCard>
+
+      {/* Waiver / FA history across all dynasty leagues. */}
+      <SectionCard title={`Waiver history (${act.waiverHistory?.length ?? 0})`} icon={<Activity className="w-3.5 h-3.5" />}>
+        {act.waiverHistory && act.waiverHistory.length > 0 ? (
+          <div className="space-y-1.5 max-h-[440px] overflow-y-auto pr-1">
+            {act.waiverHistory.map((w, i) => (
+              <TxnRow
+                key={i}
+                date={w.date}
+                league={w.league}
+                added={w.added}
+                dropped={w.dropped}
+                subtitle={w.kind === "free_agent" ? "free agent" : "waiver"}
+              />
+            ))}
+          </div>
+        ) : (
+          <p className="text-[12px] text-white/45 py-2">No waiver / FA moves found in visible dynasty leagues this season.</p>
+        )}
+      </SectionCard>
+    </div>
+  );
+}
+
+function TxnRow({
+  date,
+  league,
+  added,
+  dropped,
+  subtitle,
+}: {
+  date: string;
+  league: string;
+  added: string[];
+  dropped: string[];
+  subtitle?: string;
+}) {
+  const fmtDate = (iso: string) => {
+    try {
+      return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+    } catch {
+      return "—";
+    }
+  };
+  return (
+    <div className="rounded-md border border-white/8 bg-white/[0.02] px-3 py-2">
+      <div className="flex items-center justify-between gap-2 text-[10px] text-white/40">
+        <span className="truncate">{league}{subtitle ? ` · ${subtitle}` : ""}</span>
+        <span className="tabular-nums flex-shrink-0">{fmtDate(date)}</span>
+      </div>
+      <div className="mt-1 space-y-0.5 text-[12.5px]">
+        {added.length > 0 && (
+          <div className="flex gap-1.5">
+            <span className="text-emerald-300/80 font-semibold flex-shrink-0">+</span>
+            <span className="text-white/85">{added.join(", ")}</span>
+          </div>
+        )}
+        {dropped.length > 0 && (
+          <div className="flex gap-1.5">
+            <span className="text-rose-300/80 font-semibold flex-shrink-0">−</span>
+            <span className="text-white/55">{dropped.join(", ")}</span>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

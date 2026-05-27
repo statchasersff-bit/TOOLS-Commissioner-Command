@@ -8,8 +8,8 @@
  *
  * Cost shape: a single call hits ~1 + N_leagues + 18*N_leagues endpoints
  * (league fetch + 18 weekly transaction pages per league). We cap N at
- * MAX_LEAGUES_SCANNED so the worst case stays in the 100-call range; the
- * route layer caches by (userId, leagueId, season) for 6h on top.
+ * MAX_LEAGUES_SCANNED to bound the worst case; the route layer caches by
+ * (userId, leagueId, season) for 6h on top so the cost is paid rarely.
  */
 
 import pg from "pg";
@@ -32,8 +32,8 @@ const SLEEPER_API = "https://api.sleeper.app/v1";
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6h
 // Bump when the payload shape changes so stale cache rows are treated as misses
 // and recomputed rather than served without the newer fields.
-const CACHE_VERSION = 9;
-const MAX_LEAGUES_SCANNED = 20;
+const CACHE_VERSION = 12;
+const MAX_LEAGUES_SCANNED = 50;
 const TRANSACTION_WEEKS = 18;
 const FETCH_CONCURRENCY = 4;
 const VALID_POSITIONS = new Set(["QB", "RB", "WR", "TE"]);
@@ -113,6 +113,8 @@ export interface LeagueReport {
   contextSummary: string;
   dynastyStrengths: PositionScore[];
   winNowStrengths: PositionScore[];
+  /** Dynasty value of the target's owned future picks (for the dynasty pie). */
+  pickValue: number;
   needs: NeedRow[];
   rankSnapshot: RankSnapshotRow[];
   relativeWeakness: string | null;
@@ -231,6 +233,10 @@ export interface ManagerIntelPayload {
     activityTrend: "Increasing" | "Stable" | "Declining" | "Unknown";
     /** Most recent visible transactions (newest first). */
     recent: Array<{ date: string; league: string; type: string }>;
+    /** Detailed trade history across all visible dynasty leagues (newest first). */
+    tradeHistory: Array<{ date: string; league: string; added: string[]; dropped: string[]; partner: string }>;
+    /** Detailed waiver/FA add history across all visible dynasty leagues (newest first). */
+    waiverHistory: Array<{ date: string; league: string; kind: "waiver" | "free_agent"; added: string[]; dropped: string[] }>;
   };
   tradeApproach: {
     summary: string;
@@ -710,6 +716,8 @@ interface LeagueScan {
   rosterMeta: Array<{ ownerId: string; rosterId: number }>;
   /** Weighted future-pick score per rosterId (early picks count double). */
   pickScoreByRoster: Record<number, number>;
+  /** Dynasty value of owned future picks per rosterId (FantasyCalc baselines). */
+  pickValueByRoster: Record<number, number>;
   /** roster_id of the manager in this league, or null if not present. */
   managerRosterId: number | null;
   /** Count of completed trade transactions involving the manager this season. */
@@ -718,6 +726,10 @@ interface LeagueScan {
   managerWaivers: number;
   /** Timestamped manager transactions (epoch ms) for timeline aggregation. */
   managerTxns: Array<{ ts: number; type: "trade" | "waiver" }>;
+  /** Detailed manager trade events in this league (what they got/gave). */
+  managerTradeEvents: Array<{ ts: number; leagueName: string; added: string[]; dropped: string[]; partner: string }>;
+  /** Detailed manager waiver/FA add events in this league. */
+  managerWaiverEvents: Array<{ ts: number; leagueName: string; kind: "waiver" | "free_agent"; added: string[]; dropped: string[] }>;
   /** Pick capital. */
   picks: RosterAndPicks;
   /** Roster wins/losses for the manager in this league. */
@@ -802,6 +814,7 @@ async function scanLeague(
   // ranks). Each roster starts owning its own (year, round) picks; traded_picks
   // reassign current ownership. Early picks (rounds 1–2) are weighted double.
   const pickScoreByRoster: Record<number, number> = {};
+  const pickValueByRoster: Record<number, number> = {};
   {
     const futureYears = [
       parseInt(league.season, 10) + 1,
@@ -824,6 +837,15 @@ async function scanLeague(
       const round = parseInt(key.split("-")[1], 10);
       pickScoreByRoster[owner] = (pickScoreByRoster[owner] || 0) + (round <= 2 ? 2 : 1);
     });
+
+    // Dynasty value of each roster's owned picks, using FantasyCalc round
+    // baselines (FP_{season}_{round}) so picks are on the same scale as players.
+    for (const r of rosters) pickValueByRoster[r.roster_id] = 0;
+    pickOwner.forEach((owner, key) => {
+      const [yStr, rdStr] = key.split("-");
+      const baseline = fcDyn[`FP_${yStr}_${rdStr}`] || 0;
+      pickValueByRoster[owner] = (pickValueByRoster[owner] || 0) + baseline;
+    });
   }
 
   const rosterMeta = rosters.map((r) => ({ ownerId: r.owner_id, rosterId: r.roster_id }));
@@ -836,7 +858,21 @@ async function scanLeague(
   let managerTrades = 0;
   let managerWaivers = 0;
   const managerTxns: Array<{ ts: number; type: "trade" | "waiver" }> = [];
+  const managerTradeEvents: LeagueScan["managerTradeEvents"] = [];
+  const managerWaiverEvents: LeagueScan["managerWaiverEvents"] = [];
   if (managerRosterId != null) {
+    // rosterId → display team name (for trade partners).
+    const teamNameByRoster = new Map<number, string>();
+    for (const r of rosters) {
+      const u = users?.find((x) => x.user_id === r.owner_id);
+      teamNameByRoster.set(r.roster_id, u?.metadata?.team_name || u?.display_name || `Team ${r.roster_id}`);
+    }
+    const nameOf = (pid: string): string => {
+      const p = playersDb[pid];
+      return p?.full_name || (p ? `${p.first_name ?? ""} ${p.last_name ?? ""}`.trim() : pid);
+    };
+    const pickLabel = (dp: any): string => `${dp.season} R${dp.round} pick`;
+
     const weeks = Array.from({ length: TRANSACTION_WEEKS }, (_, i) => i + 1);
     const weekResults = await mapBounded(weeks, 6, async (w) => {
       const txns = await fetchJson<any[]>(`${SLEEPER_API}/league/${league.leagueId}/transactions/${w}`);
@@ -848,12 +884,34 @@ async function scanLeague(
         if (!Array.isArray(t.roster_ids)) continue;
         if (!t.roster_ids.includes(managerRosterId)) continue;
         const ts = Number(t.status_updated ?? t.created ?? 0) || 0;
+
+        const added: string[] = [];
+        const dropped: string[] = [];
+        for (const [pid, rid] of Object.entries(t.adds || {})) if (rid === managerRosterId) added.push(nameOf(pid));
+        for (const [pid, rid] of Object.entries(t.drops || {})) if (rid === managerRosterId) dropped.push(nameOf(pid));
+
         if (t.type === "trade") {
           managerTrades++;
           managerTxns.push({ ts, type: "trade" });
+          for (const dp of t.draft_picks || []) {
+            if (dp.owner_id === managerRosterId) added.push(pickLabel(dp));
+            else if (dp.previous_owner_id === managerRosterId) dropped.push(pickLabel(dp));
+          }
+          const partner = (t.roster_ids as number[])
+            .filter((rid) => rid !== managerRosterId)
+            .map((rid) => teamNameByRoster.get(rid) || `Team ${rid}`)
+            .join(", ");
+          managerTradeEvents.push({ ts, leagueName: league.name, added, dropped, partner });
         } else if (t.type === "waiver" || t.type === "free_agent") {
           managerWaivers++;
           managerTxns.push({ ts, type: "waiver" });
+          managerWaiverEvents.push({
+            ts,
+            leagueName: league.name,
+            kind: t.type === "waiver" ? "waiver" : "free_agent",
+            added,
+            dropped,
+          });
         }
       }
     }
@@ -888,10 +946,13 @@ async function scanLeague(
     allRosters,
     rosterMeta,
     pickScoreByRoster,
+    pickValueByRoster,
     managerRosterId,
     managerTrades,
     managerWaivers,
     managerTxns,
+    managerTradeEvents,
+    managerWaiverEvents,
     picks,
     managerRecord,
     teamName,
@@ -1930,6 +1991,7 @@ function buildLeagueReport(scan: LeagueScan, targetUserId: string, requestedLeag
     contextSummary: buildLeagueContextSummary(targetRanks, total),
     dynastyStrengths: dynasty,
     winNowStrengths: winNow,
+    pickValue: Math.round(scan.pickValueByRoster[scan.rosterMeta[idx].rosterId] ?? 0),
     needs: buildNeedsTable(dynasty, winNow),
     rankSnapshot,
     relativeWeakness: buildRelativeWeakness(dynasty, needsArr),
@@ -2289,6 +2351,19 @@ async function computeManagerIntel(
   const timeline = buildTimeline(
     scans.flatMap((s) => s.managerTxns.map((t) => ({ ts: t.ts, type: t.type, league: s.name }))),
   );
+  const HISTORY_LIMIT = 100;
+  const tradeHistory = scans
+    .flatMap((s) => s.managerTradeEvents)
+    .filter((e) => e.ts > 0)
+    .sort((a, b) => b.ts - a.ts)
+    .slice(0, HISTORY_LIMIT)
+    .map((e) => ({ date: new Date(e.ts).toISOString(), league: e.leagueName, added: e.added, dropped: e.dropped, partner: e.partner }));
+  const waiverHistory = scans
+    .flatMap((s) => s.managerWaiverEvents)
+    .filter((e) => e.ts > 0)
+    .sort((a, b) => b.ts - a.ts)
+    .slice(0, HISTORY_LIMIT)
+    .map((e) => ({ date: new Date(e.ts).toISOString(), league: e.leagueName, kind: e.kind, added: e.added, dropped: e.dropped }));
   const activity: ManagerIntelPayload["activity"] = {
     visibleLeagues: scans.length,
     oldestVisibleSeason: oldestLeagueSeason,
@@ -2306,6 +2381,8 @@ async function computeManagerIntel(
     last90Days: timeline.last90Days,
     activityTrend: timeline.activityTrend,
     recent: timeline.recent,
+    tradeHistory,
+    waiverHistory,
   };
 
   const tradeApproach = buildTradeApproach(currentLeague, crossLeague, mostRosteredPlayers);
@@ -2499,6 +2576,8 @@ function emptyPayload(
       last90Days: 0,
       activityTrend: "Unknown",
       recent: [],
+      tradeHistory: [],
+      waiverHistory: [],
     },
     tradeApproach: {
       summary: note,
