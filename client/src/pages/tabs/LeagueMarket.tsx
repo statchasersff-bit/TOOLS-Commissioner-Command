@@ -331,6 +331,7 @@ export function MarketValue({ league }: MarketProps) {
                       pos={row.pos}
                       team={row.team}
                       size="sm"
+                      shortName={tableOverflows && !isPick}
                       metaTrailing={myPlayerIds.has(row.sleeperId) && tableOverflows ? (
                         <span
                           className="inline-flex"

@@ -32,6 +32,7 @@ export function PlayerAvatar({
   sub,
   metaTrailing,
   compact = false,
+  shortName = false,
   onClick,
 }: {
   id: string;
@@ -43,6 +44,8 @@ export function PlayerAvatar({
   /** Optional node rendered at the end of the meta row (after pos · team). */
   metaTrailing?: ReactNode;
   compact?: boolean;
+  /** Force the short "C. Lamb" name form (e.g. when a table is overflowing). */
+  shortName?: boolean;
   /** When set (and the id is a real player), the avatar becomes a button that
    *  typically opens the player profile. Clicks stop propagation so it works
    *  inside clickable rows/cards. */
@@ -138,7 +141,7 @@ export function PlayerAvatar({
     <div {...interactive} className={cn("flex items-center gap-2.5", clickCls)}>
       {circle}
       <div className="min-w-0">
-        <ResponsivePlayerName name={name} className={cn("font-bold text-foreground leading-tight", nameSize)} />
+        <ResponsivePlayerName name={name} forceShort={shortName} className={cn("font-bold text-foreground leading-tight", nameSize)} />
 
         <div className={cn("flex items-center gap-1.5 mt-0.5", metaSize)}>
           <span className={cn("font-bold", posColor)}>{pos}</span>
