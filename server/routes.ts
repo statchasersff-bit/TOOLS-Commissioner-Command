@@ -66,6 +66,12 @@ import {
   type SeedInput,
 } from "./adpCrawler";
 import {
+  startUnifiedCrawler,
+  runOnce as runUnifiedCrawlOnce,
+  isUnifiedCrawlRunning,
+  getRecentRuns as getUnifiedCrawlRuns,
+} from "./unifiedCrawler";
+import {
   previewCsv,
   saveValueSet,
   listValueSets,
@@ -1972,6 +1978,27 @@ export async function registerRoutes(
       console.error("[Admin] cleanup-one-sided-trades error:", err);
       res.status(500).json({ error: err.message || "Cleanup failed" });
     }
+  });
+
+  // ── Unified scheduled crawler (trades + drafts) ──────────────────────────
+  app.get("/api/admin/unified-crawl/status", async (_req, res) => {
+    try {
+      const runs = await getUnifiedCrawlRuns(20);
+      res.json({ running: isUnifiedCrawlRunning(), runs });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || "Failed to get unified-crawl status" });
+    }
+  });
+
+  app.post("/api/admin/unified-crawl/run-once", async (_req, res) => {
+    if (isUnifiedCrawlRunning()) {
+      return res.json({ ok: true, started: false, reason: "already-running" });
+    }
+    // Fire-and-forget — a full run can take a while; the run-log row tracks it.
+    runUnifiedCrawlOnce().catch((err) =>
+      console.error("[UnifiedCrawl] Manual run errored:", err),
+    );
+    res.json({ ok: true, started: true });
   });
 
   startSnapshotScheduler();

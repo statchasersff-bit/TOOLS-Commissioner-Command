@@ -133,7 +133,10 @@ function MoversPanel({ rows, teams, totalDrafts }: { rows: ADPResult[]; teams: n
             {risers.length ? risers.map((r) => (
               <div key={r.player_id} className="flex items-center justify-between text-[12px] py-0.5">
                 <span className="truncate text-foreground">{r.player_name}</span>
-                <span className="font-bold tabular-nums text-emerald-600 dark-any:text-emerald-400 flex items-center gap-0.5"><TrendingUp className="w-3 h-3" />{Math.abs(r.trend_7d).toFixed(1)}</span>
+                <span className="flex items-center gap-1.5 tabular-nums shrink-0">
+                  <span className="text-muted-foreground">ADP {r.avg_pick.toFixed(1)}</span>
+                  <span className="font-bold text-emerald-600 dark-any:text-emerald-400 flex items-center gap-0.5"><TrendingUp className="w-3 h-3" />{Math.abs(r.trend_7d).toFixed(1)}</span>
+                </span>
               </div>
             )) : <p className="text-[11px] text-muted-foreground">No risers.</p>}
           </div>
@@ -142,7 +145,10 @@ function MoversPanel({ rows, teams, totalDrafts }: { rows: ADPResult[]; teams: n
             {fallers.length ? fallers.map((r) => (
               <div key={r.player_id} className="flex items-center justify-between text-[12px] py-0.5">
                 <span className="truncate text-foreground">{r.player_name}</span>
-                <span className="font-bold tabular-nums text-rose-600 dark-any:text-rose-400 flex items-center gap-0.5"><TrendingDown className="w-3 h-3" />{Math.abs(r.trend_7d).toFixed(1)}</span>
+                <span className="flex items-center gap-1.5 tabular-nums shrink-0">
+                  <span className="text-muted-foreground">ADP {r.avg_pick.toFixed(1)}</span>
+                  <span className="font-bold text-rose-600 dark-any:text-rose-400 flex items-center gap-0.5"><TrendingDown className="w-3 h-3" />{Math.abs(r.trend_7d).toFixed(1)}</span>
+                </span>
               </div>
             )) : <p className="text-[11px] text-muted-foreground">No fallers.</p>}
           </div>

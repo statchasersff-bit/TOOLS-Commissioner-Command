@@ -187,7 +187,6 @@ export async function enqueueSleeperUser(
     force?: boolean;
   } = {},
 ): Promise<EnqueueSleeperUserResult> {
-  const seasons = opts.seasons && opts.seasons.length > 0 ? opts.seasons : DEFAULT_SEASONS;
   const source = opts.source ?? "user_login_depth1";
 
   // Cooldown gate. Read the most recent event for this Sleeper user; decide
@@ -215,25 +214,19 @@ export async function enqueueSleeperUser(
     }
   }
 
-  // Insert the event row first so any concurrent enqueue for the same user
-  // sees an "already_running" gate above.
+  // Record the event so this user enters the seed pool consumed by the unified
+  // scheduled crawler (server/unifiedCrawler.ts). We no longer enqueue per-user
+  // queue items or run the old passive worker — the unified crawler now owns all
+  // trade + draft gathering. The row is marked "skipped" to make clear no
+  // queue work is pending; its sleeper_user_id is all the seed pool needs.
   const [event] = await db.insert(adpUserCrawlEvents).values({
     sleeperUserId,
     sleeperUsername: opts.sleeperUsername ?? null,
     source,
-    status: "queued",
+    status: "skipped",
+    completedAt: new Date(),
   }).returning({ id: adpUserCrawlEvents.id });
 
-  let queuedItems = 0;
-  for (const s of seasons) {
-    if (await enqueueOnce("user", sleeperUserId, s, 30, sleeperUserId)) queuedItems++;
-  }
-
-  await db.update(adpUserCrawlEvents)
-    .set({ queuedItems, updatedAt: new Date() })
-    .where(eq(adpUserCrawlEvents.id, event.id));
-
-  if (queuedItems > 0 && !workerRunning) startCrawlWorker();
   return { enqueued: true, eventId: event.id };
 }
 

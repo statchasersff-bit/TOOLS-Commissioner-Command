@@ -46,7 +46,11 @@ const SLEEPER_STAT_TO_SCORING: Record<string, string> = {
   pass_att: "pass_att", pass_cmp: "pass_comp", pass_yd: "pass_yd",
   pass_td: "pass_td", pass_int: "pass_int", rush_att: "rush_att",
   rush_yd: "rush_yd", rush_td: "rush_td", rec: "rec", rec_yd: "rec_yd",
-  rec_td: "rec_td", fum_lost: "fum_lost", fum: "fum_lost",
+  // Only `fum_lost` (fumbles LOST) carries the scoring penalty. Do NOT alias the
+  // `fum` stat (total projected fumbles) onto it — Sleeper projects both, and
+  // mapping both here let `fum` overwrite `fum_lost`, applying the -2 to total
+  // fumbles and shaving ~0.5 pt off every fumble-prone player vs Sleeper.
+  rec_td: "rec_td", fum_lost: "fum_lost",
   pass_2pt: "two_pt", rush_2pt: "two_pt", rec_2pt: "two_pt",
   xpm: "xpm", xpa: "xpa", fgm_0_19: "fgm_0_19", fgm_20_29: "fgm_20_29",
   fgm_30_39: "fgm_30_39", fgm_40_49: "fgm_40_49", fgm_50p: "fgm_50p",

@@ -3485,10 +3485,6 @@ export function TradeDatabase({ league }: { league: League }) {
                     onClick={() => openPlayerProfile(p.sleeperId)}
                   />
                 </div>
-                <span className="flex items-center gap-1 text-xs font-semibold text-muted-foreground whitespace-nowrap flex-shrink-0">
-                  <ArrowRightLeft className="w-3 h-3" />
-                  {p.tradeCount.toLocaleString()}
-                </span>
               </div>
             ))}
           </div>

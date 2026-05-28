@@ -1,6 +1,5 @@
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { KpiCard } from "@/components/KpiCard";
 import {
   Accordion,
   AccordionItem,
@@ -8,17 +7,7 @@ import {
   AccordionContent,
 } from "@/components/ui/accordion";
 import { cn } from "@/lib/utils";
-import { Trophy, Flame, DollarSign, Activity, TrendingDown, TrendingUp } from "lucide-react";
 import type { RecapResult, Article, ToneId, Claim } from "@/lib/commandersReportApi";
-
-const AWARD_ICONS: Record<string, typeof Trophy> = {
-  biggest_reach: TrendingDown,
-  best_value: TrendingUp,
-  largest_faab_spend: DollarSign,
-  best_trade: Trophy,
-  most_active: Activity,
-  most_chaotic: Flame,
-};
 
 /**
  * Presentational render of a Commander's Report — hero headline, award cards,
@@ -47,9 +36,6 @@ export function CommandersReportView({
       <Card className="p-5 md:p-6 bg-gradient-to-br from-[#0b3a7a]/10 to-transparent">
         <div className="flex items-start justify-end gap-4">
           <div className="flex flex-col items-end gap-1.5 shrink-0">
-            <Badge variant="outline" className="text-[10px] whitespace-nowrap">
-              <Flame className="w-3 h-3 mr-1" /> Chaos {recap.chaosScore.score} · {recap.chaosScore.tier}
-            </Badge>
             {recap.meta.confidence !== "high" && (
               <Badge variant="outline" className="text-[10px] text-amber-600 dark:text-amber-400">
                 {recap.meta.confidence} confidence
@@ -58,21 +44,6 @@ export function CommandersReportView({
           </div>
         </div>
       </Card>
-
-      {/* Award cards */}
-      {recap.awards.length > 0 && (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-          {recap.awards.map((a) => (
-            <KpiCard
-              key={a.key}
-              label={a.label}
-              value={a.value}
-              icon={AWARD_ICONS[a.key] ?? Trophy}
-              subtitle={`${a.manager} · ${a.detail}`}
-            />
-          ))}
-        </div>
-      )}
 
       {/* Article */}
       {article ? (

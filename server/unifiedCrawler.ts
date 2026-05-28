@@ -18,11 +18,11 @@
  *          floor is enforced by only fetching seasons >= 2023)
  *      Already-indexed leagues are skipped cheaply (crawled_leagues marker),
  *      so existing trade/draft data is preserved and never re-fetched.
- *   5. Re-schedules itself every randomized 4–6 hours.
+ *   5. Re-schedules itself every randomized 30–60 minutes.
  */
 import pg from "pg";
 import { drizzle } from "drizzle-orm/node-postgres";
-import { eq, sql } from "drizzle-orm";
+import { desc, eq, sql } from "drizzle-orm";
 import { unifiedCrawlRuns } from "@shared/schema";
 import {
   ingestLeagueTrades,
@@ -46,9 +46,9 @@ const TRADE_WINDOW_MS = 30 * 24 * 60 * 60 * 1000; // last 30 days only
 const MIN_LEAGUES = 800;
 const MAX_LEAGUES = 1200;
 
-// Auto-run cadence varies between 4 and 6 hours.
-const MIN_INTERVAL_MS = 4 * 60 * 60 * 1000;
-const MAX_INTERVAL_MS = 6 * 60 * 60 * 1000;
+// Auto-run cadence varies between 30 and 60 minutes.
+const MIN_INTERVAL_MS = 30 * 60 * 1000;
+const MAX_INTERVAL_MS = 60 * 60 * 1000;
 
 // Short delay after boot before the first run, so startup isn't blocked.
 const FIRST_RUN_DELAY_MS = 60 * 1000;
@@ -304,7 +304,7 @@ let timer: NodeJS.Timeout | null = null;
 
 function scheduleNext() {
   const delay = randInt(MIN_INTERVAL_MS, MAX_INTERVAL_MS);
-  console.log(`[UnifiedCrawl] Next run in ~${Math.round(delay / 3.6e6 * 10) / 10}h`);
+  console.log(`[UnifiedCrawl] Next run in ~${Math.round(delay / 60000)}m`);
   timer = setTimeout(() => {
     runOnce()
       .catch((err) => console.error("[UnifiedCrawl] Scheduled run errored:", err))
@@ -333,4 +333,13 @@ export function stopUnifiedCrawler() {
 
 export function isUnifiedCrawlRunning() {
   return isRunning;
+}
+
+/** Most-recent crawl runs for the admin status endpoint. */
+export async function getRecentRuns(limit = 20) {
+  return db
+    .select()
+    .from(unifiedCrawlRuns)
+    .orderBy(desc(unifiedCrawlRuns.startedAt))
+    .limit(limit);
 }

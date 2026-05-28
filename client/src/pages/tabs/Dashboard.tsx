@@ -1809,38 +1809,37 @@ function percentileLabel(rank: number, total: number): string {
   return `Bot ${100 - pct}%`;
 }
 
-// Compact full-width strip below the position grid for reserve players (IR /
-// Taxi), which are excluded from each position's Bench so they don't double up.
-function ReserveSection({ title, players, accent }: { title: string; players: Player[]; accent: string }) {
+// One clickable roster row, shared by every sub-section of a position column
+// (Starters, Bench, IR, Taxi). `muted` dims non-starters; `testIdPrefix` keeps
+// the per-section test ids distinct.
+function GroupPlayerRow({ p, posTextColor, muted, testIdPrefix }: { p: Player; posTextColor: string; muted: boolean; testIdPrefix: string }) {
   const { openPlayerProfile } = usePlayerProfile();
-  if (players.length === 0) return null;
   return (
-    <div className="border-t border-border/30 px-3 py-2.5">
-      <div className="flex items-center gap-1.5 mb-1.5">
-        <span className={cn("text-[9px] font-bold uppercase tracking-wider", accent)}>{title}</span>
-        <Badge variant="secondary" className="text-[10px] px-1 h-4">{players.length}</Badge>
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={() => openPlayerProfile(p.sleeperId ?? p.id)}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openPlayerProfile(p.sleeperId ?? p.id); } }}
+      className="flex items-center justify-between py-1.5 border-b border-border/10 last:border-0 cursor-pointer rounded -mx-1 px-1 hover:bg-muted/40 transition-colors"
+      data-testid={`${testIdPrefix}-${p.id}`}
+    >
+      <div className="flex items-center gap-1.5 min-w-0">
+        <PlayerAvatar id={p.sleeperId ?? p.id} name={p.name} pos={p.pos} team={p.team ?? ""} size="sm" compact />
+        <div className="min-w-0">
+          <p className={cn("text-[11px] leading-tight truncate", muted ? "font-medium text-muted-foreground" : "font-semibold text-foreground")}>
+            <span className="lg:hidden">{abbreviateFirstName(p.name)}</span>
+            <span className="hidden lg:inline">{p.name}</span>
+          </p>
+          <p className={cn("text-[10px] leading-tight", muted ? "text-muted-foreground/60" : "text-muted-foreground")}>{p.team} · {p.age}y</p>
+        </div>
       </div>
-      <div className="flex flex-wrap gap-x-4 gap-y-1.5">
-        {players.map(p => (
-          <button
-            key={p.id}
-            onClick={() => openPlayerProfile(p.sleeperId ?? p.id)}
-            className="flex items-center gap-1.5 text-left rounded px-1 -mx-1 py-0.5 hover:bg-muted/40 transition-colors"
-            data-testid={`roster-reserve-${p.id}`}
-          >
-            <PlayerAvatar id={p.sleeperId ?? p.id} name={p.name} pos={p.pos} team={p.team ?? ""} size="sm" compact />
-            <span className="text-[11px] font-medium text-foreground leading-tight truncate max-w-[140px]">{p.name}</span>
-            <span className="text-[10px] text-muted-foreground tabular-nums">{p.value}</span>
-          </button>
-        ))}
-      </div>
+      <span className={cn("text-[10px] tabular-nums ml-1 flex-shrink-0", muted ? "text-muted-foreground" : cn("font-bold", posTextColor))}>{p.value}</span>
     </div>
   );
 }
 
 export function MyTeam({ league, userTeam, onNavigate }: DashboardOverviewProps) {
   const { getPlayerValue, getRedraftValue, optimizeLineup } = useValueModel();
-  const { openPlayerProfile } = usePlayerProfile();
   const [posGroupOpen, setPosGroupOpen] = useState(true);
 
   const total = league.teams.length;
@@ -1933,6 +1932,9 @@ export function MyTeam({ league, userTeam, onNavigate }: DashboardOverviewProps)
 
     positions.forEach(pos => {
       const redraftTotals = league.teams.map(t => {
+        // Win-Now rank sums each team's optimal best-ball starters at this
+        // position, so the ranking reflects roster ceiling rather than whatever
+        // lineup happens to be set.
         const roster = rosterPositions.length > 0 ? optimizeLineup(t.roster, rosterPositions) : t.roster;
         const starters = roster.filter(p => p.starter && p.pos === pos);
         return { id: t.id, total: starters.reduce((s, p) => s + getRedraftValue(p), 0) };
@@ -1964,10 +1966,6 @@ export function MyTeam({ league, userTeam, onNavigate }: DashboardOverviewProps)
     players: [...userTeam.roster.filter(p => p.pos === pos)]
       .sort((a, b) => (b.starter ? 1 : 0) - (a.starter ? 1 : 0) || b.value - a.value),
   }));
-
-  const irPlayers = userTeam.roster.filter(p => p.onReserve);
-  const taxiPlayers = userTeam.roster.filter(p => p.onTaxi);
-
 
   return (
     <div className="space-y-8">
@@ -2086,6 +2084,8 @@ export function MyTeam({ league, userTeam, onNavigate }: DashboardOverviewProps)
                 {positionData.map(({ pos, redraftRank, dynastyRank, players }) => {
                   const starters = players.filter(p => p.starter);
                   const bench    = players.filter(p => !p.starter && !p.onReserve && !p.onTaxi);
+                  const ir       = players.filter(p => p.onReserve);
+                  const taxi     = players.filter(p => p.onTaxi);
                   const rStyle   = rankBg(redraftRank, total);
                   const dStyle   = rankBg(dynastyRank, total);
                   const posTextColor: Record<string, string> = {
@@ -2120,27 +2120,7 @@ export function MyTeam({ league, userTeam, onNavigate }: DashboardOverviewProps)
                               <>
                                 <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider pt-1 pb-1">Starters</p>
                                 {starters.map(p => (
-                                  <div
-                                    key={p.id}
-                                    role="button"
-                                    tabIndex={0}
-                                    onClick={() => openPlayerProfile(p.sleeperId ?? p.id)}
-                                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openPlayerProfile(p.sleeperId ?? p.id); } }}
-                                    className="flex items-center justify-between py-1.5 border-b border-border/10 last:border-0 cursor-pointer rounded -mx-1 px-1 hover:bg-muted/40 transition-colors"
-                                    data-testid={`group-player-${p.id}`}
-                                  >
-                                    <div className="flex items-center gap-1.5 min-w-0">
-                                      <PlayerAvatar id={p.sleeperId ?? p.id} name={p.name} pos={p.pos} team={p.team ?? ""} size="sm" compact />
-                                      <div className="min-w-0">
-                                        <p className="text-[11px] font-semibold text-foreground leading-tight truncate">
-                                          <span className="lg:hidden">{abbreviateFirstName(p.name)}</span>
-                                          <span className="hidden lg:inline">{p.name}</span>
-                                        </p>
-                                        <p className="text-[10px] text-muted-foreground leading-tight">{p.team} · {p.age}y</p>
-                                      </div>
-                                    </div>
-                                    <span className={cn("text-[10px] font-bold tabular-nums ml-1 flex-shrink-0", posTextColor[pos] ?? "text-foreground")}>{p.value}</span>
-                                  </div>
+                                  <GroupPlayerRow key={p.id} p={p} posTextColor={posTextColor[pos] ?? "text-foreground"} muted={false} testIdPrefix="group-player" />
                                 ))}
                               </>
                             )}
@@ -2148,27 +2128,23 @@ export function MyTeam({ league, userTeam, onNavigate }: DashboardOverviewProps)
                               <>
                                 <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider pt-2 pb-1">Bench</p>
                                 {bench.map(p => (
-                                  <div
-                                    key={p.id}
-                                    role="button"
-                                    tabIndex={0}
-                                    onClick={() => openPlayerProfile(p.sleeperId ?? p.id)}
-                                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openPlayerProfile(p.sleeperId ?? p.id); } }}
-                                    className="flex items-center justify-between py-1.5 border-b border-border/10 last:border-0 cursor-pointer rounded -mx-1 px-1 hover:bg-muted/40 transition-colors"
-                                    data-testid={`group-bench-${p.id}`}
-                                  >
-                                    <div className="flex items-center gap-1.5 min-w-0">
-                                      <PlayerAvatar id={p.sleeperId ?? p.id} name={p.name} pos={p.pos} team={p.team ?? ""} size="sm" compact />
-                                      <div className="min-w-0">
-                                        <p className="text-[11px] font-medium text-muted-foreground leading-tight truncate">
-                                          <span className="lg:hidden">{abbreviateFirstName(p.name)}</span>
-                                          <span className="hidden lg:inline">{p.name}</span>
-                                        </p>
-                                        <p className="text-[10px] text-muted-foreground/60 leading-tight">{p.team} · {p.age}y</p>
-                                      </div>
-                                    </div>
-                                    <span className="text-[10px] text-muted-foreground tabular-nums ml-1 flex-shrink-0">{p.value}</span>
-                                  </div>
+                                  <GroupPlayerRow key={p.id} p={p} posTextColor={posTextColor[pos] ?? "text-foreground"} muted testIdPrefix="group-bench" />
+                                ))}
+                              </>
+                            )}
+                            {ir.length > 0 && (
+                              <>
+                                <p className="text-[9px] font-bold uppercase tracking-wider pt-2 pb-1 text-amber-600 dark:text-amber-400">IR</p>
+                                {ir.map(p => (
+                                  <GroupPlayerRow key={p.id} p={p} posTextColor={posTextColor[pos] ?? "text-foreground"} muted testIdPrefix="group-ir" />
+                                ))}
+                              </>
+                            )}
+                            {taxi.length > 0 && (
+                              <>
+                                <p className="text-[9px] font-bold uppercase tracking-wider pt-2 pb-1 text-cyan-600 dark:text-cyan-400">Taxi</p>
+                                {taxi.map(p => (
+                                  <GroupPlayerRow key={p.id} p={p} posTextColor={posTextColor[pos] ?? "text-foreground"} muted testIdPrefix="group-taxi" />
                                 ))}
                               </>
                             )}
@@ -2247,8 +2223,6 @@ export function MyTeam({ league, userTeam, onNavigate }: DashboardOverviewProps)
                   );
                 })()}
               </div>
-              <ReserveSection title="Injured Reserve" players={irPlayers} accent="text-amber-600 dark:text-amber-400" />
-              <ReserveSection title="Taxi Squad" players={taxiPlayers} accent="text-cyan-600 dark:text-cyan-400" />
             </div>
           )}
         </Card>

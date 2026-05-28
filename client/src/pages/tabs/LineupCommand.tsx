@@ -178,6 +178,7 @@ function analyzeLineup(
   playedPlayerIds: Record<string, boolean>,
   actualPoints: Record<string, number>,
   scoring: Record<string, number> | null,
+  lockingEnabled: boolean,
 ): Omit<LeagueAnalysis, "leagueId" | "leagueName" | "format" | "scoringFormat" | "loading" | "error" | "rosterId"> {
   const field = projKey(scoringFormat);
   const now = Date.now();
@@ -201,9 +202,17 @@ function analyzeLineup(
     let proj = projFor(pid);
     // Zero OUT players so they never read as "optimal".
     if (statusFlags({ ...lite, proj }).includes("OUT")) proj = 0;
-    const locked = isPlayerLocked(lite, schedule, now, playedPlayerIds, actualPoints);
-    // Once a player's game has locked, prefer their actual scored points.
-    if (locked && actualPoints[pid] != null) proj = actualPoints[pid];
+    // In the offseason there is no live week to lock against; skip locking so the
+    // optimizer can freely rank the full roster (otherwise every player reads as
+    // locked and the optimal lineup is forced to equal the current one).
+    const locked = lockingEnabled && isPlayerLocked(lite, schedule, now, playedPlayerIds, actualPoints);
+    // Once a player's game has locked, prefer their actual scored points — but only
+    // once they've genuinely played (playedPlayerIds is set only for non-zero
+    // points, mirroring isPlayerLocked's own "0 before kickoff doesn't count"
+    // rule). A recorded 0 must not overwrite the projection: that's what preseason
+    // matchups report, and in the offseason the schedule resolves to a prior
+    // season's finished games, so every starter would otherwise read as 0.
+    if (locked && playedPlayerIds[pid] && actualPoints[pid] != null) proj = actualPoints[pid];
     const opp = isTeamOnBye(lite.team, schedule) ? "BYE" : undefined;
     return { ...lite, proj, opp, locked };
   };
@@ -906,6 +915,10 @@ export function LineupCommand() {
   const [rawProj, setRawProj]     = useState<Record<string, Record<string, number>>>({});
   const [playerDb, setPlayerDb]   = useState<Record<string, any>>({});
   const [schedule, setSchedule]   = useState<GameSchedule>({});
+  // Offseason (Sleeper season_type "off"): there is no live week, so the week
+  // schedule resolves to last season's finished games — which would lock every
+  // player and freeze the optimizer. We disable game-locking in this state.
+  const [isOffseason, setIsOffseason] = useState(false);
   const [baseLoading, setBaseLoading] = useState(true);
   const [baseError, setBaseError]   = useState<string | null>(null);
   const [analyses, setAnalyses]   = useState<Record<string, LeagueAnalysis>>({});
@@ -939,6 +952,7 @@ export function LineupCommand() {
         if (cancelled) return;
         setNflWeek(w);
         setSeason(s);
+        setIsOffseason(state.season_type === "off");
 
         const [db, projRaw, sched] = await Promise.all([
           getSleeperPlayers(),
@@ -1052,6 +1066,7 @@ export function LineupCommand() {
             lock.playedPlayerIds,
             lock.actualPoints,
             scoring,
+            !isOffseason,
           );
 
           setAnalyses(prev => ({
@@ -1073,7 +1088,7 @@ export function LineupCommand() {
         });
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [nflWeek, user?.userId, activeLeagues.length, rawProj, playerDb, schedule, season]);
+  }, [nflWeek, user?.userId, activeLeagues.length, rawProj, playerDb, schedule, season, isOffseason]);
 
   // ── 3. Per-league matchup fetch ───────────────────────────────────────────
   useEffect(() => {

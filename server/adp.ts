@@ -1925,11 +1925,8 @@ export async function refreshDefaultSnapshots(): Promise<{ combos: number; rows:
 // ── Scheduler ────────────────────────────────────────────────────────────────
 
 let adpInterval: NodeJS.Timeout | null = null;
-let ingestInterval: NodeJS.Timeout | null = null;
 
 const SNAPSHOT_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6h
-const INGEST_INTERVAL_MS = 12 * 60 * 60 * 1000;  // 12h
-const INGEST_BATCH = 100;
 
 export function startAdpScheduler() {
   // Don't block server startup — kick the first refresh off-thread.
@@ -1940,28 +1937,16 @@ export function startAdpScheduler() {
     .then((r) => console.log(`[ADP] Initial snapshot refresh: ${r.combos} combos, ${r.rows} total rows`))
     .catch((err) => console.error("[ADP] Initial snapshot refresh failed:", err));
 
-  ingestCrawledLeagueDrafts(INGEST_BATCH)
-    .then((r) => {
-      if (r.completed > 0) {
-        console.log(`[ADP] Initial ingest: ${r.leagues} leagues, ${r.completed} completed drafts`);
-      }
-    })
-    .catch((err) => console.error("[ADP] Initial ingest failed:", err));
-
+  // NOTE: Draft ingestion is now driven by the unified scheduled crawler
+  // (server/unifiedCrawler.ts), so the periodic ingestCrawledLeagueDrafts pass
+  // is retired. We only keep the snapshot refresh here — it recomputes the ADP
+  // read-model from whatever drafts the unified crawler has ingested.
   adpInterval = setInterval(() => {
     refreshDefaultSnapshots().catch((err) => console.error("[ADP] Snapshot refresh failed:", err));
   }, SNAPSHOT_INTERVAL_MS);
-
-  ingestInterval = setInterval(() => {
-    ingestCrawledLeagueDrafts(INGEST_BATCH).catch((err) =>
-      console.error("[ADP] Crawled-league ingest failed:", err)
-    );
-  }, INGEST_INTERVAL_MS);
 }
 
 export function stopAdpScheduler() {
   if (adpInterval) clearInterval(adpInterval);
-  if (ingestInterval) clearInterval(ingestInterval);
   adpInterval = null;
-  ingestInterval = null;
 }
