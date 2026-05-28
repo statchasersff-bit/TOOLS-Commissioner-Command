@@ -467,6 +467,26 @@ export async function fetchPlayerProduction(playerId: string): Promise<PlayerPro
   return Array.isArray(data?.seasons) ? data.seasons : [];
 }
 
+export type PlayerNewsItem = {
+  id: string;
+  source: string;
+  title: string;
+  url: string;
+  playerName: string | null;
+  publishedAt: string | null;
+};
+
+/** Stored Rotowire headlines matched to this Sleeper player (metadata only). */
+export async function fetchPlayerNews(playerId: string, limit = 8): Promise<PlayerNewsItem[]> {
+  const res = await fetch(
+    `${API_BASE}/api/news/player/${encodeURIComponent(playerId)}?limit=${limit}`,
+    { credentials: "include" },
+  );
+  if (!res.ok) return [];
+  const data = await res.json();
+  return Array.isArray(data?.items) ? data.items : [];
+}
+
 export async function fetchPlayerGameLogs(
   playerId: string,
   season: number,

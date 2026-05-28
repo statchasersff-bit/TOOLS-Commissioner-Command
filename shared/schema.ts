@@ -112,6 +112,24 @@ export const playerValueSnapshots = pgTable("player_value_snapshots", {
   capturedAt: timestamp("captured_at").defaultNow(),
 });
 
+// Player news headlines (metadata only — no article bodies). Sourced from public
+// RSS feeds (currently Rotowire NFL) and matched to a Sleeper player_id so player
+// profile pages can show recent headlines linking back to the source. `source`
+// is kept generic so additional feeds can be added later.
+export const playerNews = pgTable("player_news", {
+  id: text("id").primaryKey(),                       // `${source}:${guid||url}` — stable upsert key
+  source: text("source").notNull(),                  // e.g. "rotowire"
+  sourceGuid: text("source_guid"),
+  sleeperPlayerId: text("sleeper_player_id"),
+  playerName: text("player_name"),
+  title: text("title").notNull(),
+  url: text("url").notNull(),
+  publishedAt: timestamp("published_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+}, (t) => ({
+  byPlayer: index("player_news_player_idx").on(t.sleeperPlayerId, t.publishedAt),
+}));
+
 export const financePasswords = pgTable("finance_passwords", {
   sleeperUserId: varchar("sleeper_user_id").primaryKey(),
   passwordHash: text("password_hash").notNull(),

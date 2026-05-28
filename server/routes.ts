@@ -1,6 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import Parser from "rss-parser";
+import { fetchRotowireNfl, getNflNameIndex, matchSleeperId, playerNameFromTitle, sleeperHeadshot } from "./nflNews";
+import { getPlayerNews, startPlayerNewsIngestion } from "./playerNews";
 import { getFantasyCalcValues, getFantasyCalcRedraftValues } from "./fantasycalc";
 import { getKtcValues, getKtcRedraftValues } from "./ktc";
 import { rebuildBasketSnapshots } from "./portfolioBasketValue";
@@ -21,7 +22,6 @@ import {
   fetchPortfolioSummary,
   fetchCrossLeagueTrades,
   fetchLeagueTransactions,
-  getSleeperPlayers,
 } from "./sleeper";
 import {
   startCrawl,
@@ -215,46 +215,12 @@ export async function registerRoutes(
   // article body), fetch server-side to dodge CORS, and cache for 10 minutes.
   // On failure we return 200 with the last good items (or empty) so the client
   // ticker hides itself instead of breaking the page.
-  const ROTOWIRE_NFL_RSS = "https://www.rotowire.com/rss/news.php?sport=NFL";
   const NFL_NEWS_TTL_MS = 10 * 60 * 1000;
-  const NFL_NAME_INDEX_TTL_MS = 24 * 60 * 60 * 1000;
-  const nflNewsParser = new Parser({ timeout: 10_000 });
-  type NflNewsItem = {
+  type NflTickerItem = {
     id: string; title: string; link: string; pubDate: string | null;
     playerName: string | null; image: string | null;
   };
-  let nflNewsCache: { items: NflNewsItem[]; ts: number } | null = null;
-  let nflNameIndex: { map: Map<string, string>; ts: number } | null = null;
-
-  // Normalize a name for matching: lowercase, drop accents/punctuation/suffixes.
-  const normName = (s: string): string =>
-    s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "")
-      .replace(/[^a-z\s]/g, " ").replace(/\b(jr|sr|ii|iii|iv|v)\b/g, "")
-      .replace(/\s+/g, " ").trim();
-
-  // Build (and cache) a "full name" → Sleeper player_id map from the on-disk
-  // player DB, so we can attach headshots to headlines. Best-effort: on any
-  // failure we return an empty map and the ticker simply shows no images.
-  const getNflNameIndex = async (): Promise<Map<string, string>> => {
-    if (nflNameIndex && Date.now() - nflNameIndex.ts < NFL_NAME_INDEX_TTL_MS) return nflNameIndex.map;
-    const map = new Map<string, string>();
-    try {
-      const players = await getSleeperPlayers();
-      for (const [id, p] of Object.entries(players)) {
-        const pos = (p as any)?.position;
-        if (!pos || !["QB", "RB", "WR", "TE", "K"].includes(pos)) continue;
-        const full = `${(p as any).first_name ?? ""} ${(p as any).last_name ?? ""}`.trim();
-        const key = normName(full);
-        if (!key) continue;
-        // Prefer an active player when two share a normalized name.
-        if (!map.has(key) || (p as any).active) map.set(key, id);
-      }
-      nflNameIndex = { map, ts: Date.now() };
-    } catch (e) {
-      console.error("[news/nfl] name index build failed:", e instanceof Error ? e.message : e);
-    }
-    return map;
-  };
+  let nflNewsCache: { items: NflTickerItem[]; ts: number } | null = null;
 
   app.get("/api/news/nfl", async (_req, res) => {
     try {
@@ -262,33 +228,45 @@ export async function registerRoutes(
         res.set("Cache-Control", "public, max-age=600");
         return res.json({ items: nflNewsCache.items });
       }
-      const [feed, nameIndex] = await Promise.all([
-        nflNewsParser.parseURL(ROTOWIRE_NFL_RSS),
-        getNflNameIndex(),
-      ]);
-      const items: NflNewsItem[] = (feed.items ?? []).slice(0, 10).map((item, index) => {
-        const title = item.title || "NFL News";
-        // Rotowire headlines are "Player Name: blurb" — take the name half.
-        const playerName = title.includes(":") ? title.split(":")[0].trim() : null;
-        const sleeperId = playerName ? nameIndex.get(normName(playerName)) ?? null : null;
+      const [items, nameIndex] = await Promise.all([fetchRotowireNfl(), getNflNameIndex()]);
+      const mapped: NflTickerItem[] = items.slice(0, 10).map((it, index) => {
+        const sleeperId = matchSleeperId(it.title, nameIndex);
         return {
-          id: item.guid || item.link || `nfl-news-${index}`,
-          title,
-          link: item.link || "https://www.rotowire.com/football/news.php",
-          pubDate: item.pubDate || null,
-          playerName,
-          image: sleeperId ? `https://sleepercdn.com/content/nfl/players/thumb/${sleeperId}.jpg` : null,
+          id: it.guid || it.link || `nfl-news-${index}`,
+          title: it.title,
+          link: it.link,
+          pubDate: it.pubDate,
+          playerName: playerNameFromTitle(it.title),
+          image: sleeperId ? sleeperHeadshot(sleeperId) : null,
         };
       });
-      nflNewsCache = { items, ts: Date.now() };
+      nflNewsCache = { items: mapped, ts: Date.now() };
       res.set("Cache-Control", "public, max-age=600");
-      res.json({ items });
+      res.json({ items: mapped });
     } catch (error) {
       console.error("[news/nfl] feed fetch failed:", error instanceof Error ? error.message : error);
       // Serve stale cache if we have one; otherwise empty so the ticker hides.
       res.json({ items: nflNewsCache?.items ?? [] });
     }
   });
+
+  // Persistent player news for profile pages — newest stored headlines for a
+  // Sleeper player_id (metadata only). Empty array on any error so the UI can
+  // show a clean empty state instead of breaking.
+  app.get("/api/news/player/:playerId", async (req, res) => {
+    try {
+      const limit = parseInt(String(req.query.limit ?? "10"), 10) || 10;
+      const items = await getPlayerNews(req.params.playerId, limit);
+      res.set("Cache-Control", "public, max-age=300");
+      res.json({ items });
+    } catch (error) {
+      console.error("[news/player] query failed:", error instanceof Error ? error.message : error);
+      res.json({ items: [] });
+    }
+  });
+
+  // Kick off the background RSS → player_news ingestion loop (idempotent).
+  startPlayerNewsIngestion();
 
   app.get("/api/values/fantasycalc", async (req, res) => {
     try {

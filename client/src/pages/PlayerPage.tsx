@@ -27,6 +27,7 @@ import {
   LineChart,
   Loader2,
   Minus,
+  ExternalLink,
   Newspaper,
   Repeat2,
   ScrollText,
@@ -47,7 +48,7 @@ import { ResponsivePlayerName } from "@/components/ResponsivePlayerName";
 import { cn } from "@/lib/utils";
 import { useSleeper } from "@/contexts/SleeperContext";
 import { useValueModel } from "@/contexts/ValueModelContext";
-import { getSleeperPlayers, fetchSleeperLeagueFull, fetchPlayerExposure, fetchTradesForPlayer, fetchTradeLeaguesScanned, fetchPlayerGameLogs, fetchPlayerProduction, fetchPlayerAdpHistory, fetchPlayerAdpAvailability, type PlayerLeagueExposure, type PlayerTradeRecord, type PlayerTradeAsset, type PlayerGameLogRow, type PlayerAdpHistory, type PlayerAdpAvailability, type PlayerAdpAvailabilityCell, type AdpProfileFilters } from "@/lib/sleeperApi";
+import { getSleeperPlayers, fetchSleeperLeagueFull, fetchPlayerExposure, fetchTradesForPlayer, fetchTradeLeaguesScanned, fetchPlayerGameLogs, fetchPlayerProduction, fetchPlayerAdpHistory, fetchPlayerAdpAvailability, type PlayerLeagueExposure, type PlayerTradeRecord, type PlayerTradeAsset, type PlayerGameLogRow, type PlayerAdpHistory, type PlayerAdpAvailability, type PlayerAdpAvailabilityCell, type AdpProfileFilters, fetchPlayerNews, type PlayerNewsItem } from "@/lib/sleeperApi";
 
 // Default ADP-tab filter: the dominant dynasty-startup configuration in the
 // crawled dataset (Superflex · PPR · TE Premium · 12-team), so the tab opens
@@ -376,7 +377,7 @@ export default function PlayerPage({ params, embedded = false }: { params?: { pl
                   loading={exposureLoading}
                 />
               )}
-              {tab === "news" && <ComingSoon icon={Newspaper} title="Player News" body="Beat reports, injury updates, and fantasy-impact analysis will appear here once the news feed is connected." />}
+              {tab === "news" && <NewsTab playerId={resolvedId} />}
           </div>
         </div>
       )}
@@ -2027,6 +2028,66 @@ function EmptyBlock({ icon: Icon, text }: { icon: typeof Activity; text: string 
       <Icon className="w-5 h-5 text-muted-foreground/40 mx-auto mb-2" />
       <p className="text-xs text-muted-foreground max-w-sm mx-auto">{text}</p>
     </div>
+  );
+}
+
+// Latest News — stored Rotowire headlines matched to this player. Headline +
+// source + date + outbound link only (no article bodies); links open in a new
+// tab. Clean empty state when nothing has been ingested for the player yet.
+function NewsTab({ playerId }: { playerId: string | null }) {
+  const [items, setItems] = useState<PlayerNewsItem[] | null>(null);
+
+  useEffect(() => {
+    if (!playerId) { setItems([]); return; }
+    let cancelled = false;
+    setItems(null);
+    fetchPlayerNews(playerId, 8)
+      .then((rows) => { if (!cancelled) setItems(rows); })
+      .catch(() => { if (!cancelled) setItems([]); });
+    return () => { cancelled = true; };
+  }, [playerId]);
+
+  if (items === null) return <Card className="p-6"><SkeletonLines n={5} /></Card>;
+  if (!items.length) {
+    return <ComingSoon icon={Newspaper} title="No recent news found" body="The latest Rotowire headlines for this player will appear here as they're published." />;
+  }
+
+  const sourceLabel = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+  const fmtDate = (s: string | null) => {
+    if (!s) return null;
+    const d = new Date(s);
+    return Number.isNaN(d.getTime()) ? null : d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  };
+
+  return (
+    <Card className="divide-y divide-border/40 overflow-hidden">
+      <div className="px-4 py-3 flex items-center gap-2">
+        <Newspaper className="w-4 h-4 text-[#d4af37]" />
+        <p className="text-sm font-bold text-foreground">Latest News</p>
+      </div>
+      {items.map((it) => {
+        const date = fmtDate(it.publishedAt);
+        return (
+          <a
+            key={it.id}
+            href={it.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="block px-4 py-3 hover:bg-muted/30 transition-colors group"
+            data-testid={`player-news-${it.id}`}
+          >
+            <p className="text-sm font-semibold text-foreground group-hover:text-[#d4af37] transition-colors leading-snug">{it.title}</p>
+            <div className="mt-1 flex items-center gap-2 text-[11px] text-muted-foreground">
+              <span>{sourceLabel(it.source)}</span>
+              {date && <><span aria-hidden>·</span><span>{date}</span></>}
+              <span className="ml-auto inline-flex items-center gap-1 text-[#d4af37]/80 group-hover:text-[#d4af37] whitespace-nowrap">
+                View on {sourceLabel(it.source)} <ExternalLink className="w-3 h-3" />
+              </span>
+            </div>
+          </a>
+        );
+      })}
+    </Card>
   );
 }
 
