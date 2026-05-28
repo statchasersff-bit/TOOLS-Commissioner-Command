@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { MegaMenuNav, MobileBottomNav } from "@/components/MegaMenu";
 import { LeagueSelector } from "@/components/LeagueSelector";
 import { HeaderValueSourceBadge } from "@/components/ValueSourceSelector";
+import { NFLNewsTicker } from "@/components/NFLNewsTicker";
 import { ValueSourceManager, ValueSourcePage } from "@/components/ValueSourceManager";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useValueModel } from "@/contexts/ValueModelContext";
@@ -996,6 +997,8 @@ export default function DynastyCommandCenter({ params, playerProfileId, managerP
         setActiveTab={handleMainTabChange}
         onNavigate={(tab, sub) => { handleMainTabChange(tab); handleSubTabChange(sub); }}
       />
+
+      <NFLNewsTicker />
 
       <main className="max-w-7xl mx-auto px-2 sm:px-3 md:px-4 pt-5 pb-4 sm:py-6 md:py-8 md:pb-8 relative" style={{ paddingBottom: "calc(80px + env(safe-area-inset-bottom, 0px))" }}>
         {showLoadingOverlay && (

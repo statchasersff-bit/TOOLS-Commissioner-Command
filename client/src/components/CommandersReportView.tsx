@@ -1,19 +1,12 @@
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import {
-  Accordion,
-  AccordionItem,
-  AccordionTrigger,
-  AccordionContent,
-} from "@/components/ui/accordion";
-import { cn } from "@/lib/utils";
-import type { RecapResult, Article, ToneId, Claim } from "@/lib/commandersReportApi";
+import type { RecapResult, Article, ToneId } from "@/lib/commandersReportApi";
 
 /**
  * Presentational render of a Commander's Report — hero headline, award cards,
- * the narrated article (when present), and the expandable "Data Receipts".
- * Shared by the authenticated tab and the public read-only share page so the
- * two never drift. No data fetching or controls live here.
+ * and the narrated article (when present). Shared by the authenticated tab and
+ * the public read-only share page so the two never drift. No data fetching or
+ * controls live here.
  */
 export function CommandersReportView({
   recap,
@@ -73,51 +66,6 @@ export function CommandersReportView({
           </p>
         </Card>
       )}
-
-      {/* Data Receipts */}
-      {recap.claims.length > 0 && (
-        <Card className="p-4 md:p-5">
-          <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-2">
-            Data Receipts — every claim, with the numbers behind it
-          </p>
-          <Accordion type="multiple" className="w-full">
-            {recap.claims.map((c) => (
-              <ClaimRow key={c.id} claim={c} />
-            ))}
-          </Accordion>
-        </Card>
-      )}
     </div>
-  );
-}
-
-const SEVERITY_STYLE: Record<Claim["severity"], string> = {
-  spicy: "text-rose-500 bg-rose-500/10",
-  notable: "text-amber-600 dark:text-amber-400 bg-amber-500/10",
-  info: "text-muted-foreground bg-muted/40",
-};
-
-function ClaimRow({ claim }: { claim: Claim }) {
-  return (
-    <AccordionItem value={claim.id}>
-      <AccordionTrigger className="text-left text-sm py-3">
-        <span className="flex items-center gap-2 min-w-0">
-          <Badge variant="outline" className={cn("text-[9px] uppercase shrink-0", SEVERITY_STYLE[claim.severity])}>
-            {claim.claim_type.replace("_", " ")}
-          </Badge>
-          <span className="truncate">{claim.headline}</span>
-        </span>
-      </AccordionTrigger>
-      <AccordionContent>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-1 text-xs pl-1 pb-2">
-          {Object.entries(claim.evidence).map(([k, v]) => (
-            <div key={k} className="flex flex-col">
-              <span className="text-[10px] uppercase tracking-wider text-muted-foreground/70">{k}</span>
-              <span className="text-foreground tabular-nums break-words">{v == null ? "—" : String(v)}</span>
-            </div>
-          ))}
-        </div>
-      </AccordionContent>
-    </AccordionItem>
   );
 }

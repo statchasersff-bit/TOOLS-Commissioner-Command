@@ -15,7 +15,7 @@
 
 import { SLEEPER_WEB_GQL_URL } from "@/config/sleeperAuthEndpoints";
 import { FeatureDisabledError, showFeatureDisabled } from "@/components/FeatureDisabledDialog";
-import { getSleeperSession, getSleeperToken } from "@/services/sleeperAuth";
+import { getSleeperSession, getSleeperToken, clearSleeperSession } from "@/services/sleeperAuth";
 import {
   sleeperWriteLimiter,
   type SleeperWriteAction,
@@ -60,7 +60,9 @@ interface GQLRequest {
  * when introducing them. Reads (queries) are not pre-paced.
  */
 const WRITE_OPERATIONS = new Set<string>([
-  "submit_lineup",
+  "roster_update_starters",
+  "update_matchup_leg",
+  "roster_update_taxi",
   "submit_waiver_claim",
   "propose_trade",
   "accept_trade",
@@ -72,7 +74,7 @@ const WRITE_OPERATIONS = new Set<string>([
 /** Default action type derived from operation name when callers don't pass
  *  one explicitly. */
 function deriveActionType(op: string): SleeperWriteAction {
-  if (op === "submit_lineup") return "lineup";
+  if (op === "roster_update_starters" || op === "update_matchup_leg" || op === "roster_update_taxi") return "lineup";
   if (op === "submit_waiver_claim") return "waiver";
   if (op === "propose_trade" || op === "accept_trade" || op === "reject_trade") return "trade";
   if (op === "create_message") return "chat";
@@ -183,6 +185,7 @@ export async function sleeperGraphQLRequest<T = unknown>(
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        "Accept": "application/json",
         "authorization": token,
         "x-sleeper-graphql-op": op,
       },
@@ -224,6 +227,15 @@ export async function sleeperGraphQLRequest<T = unknown>(
     // raw status and the parsed message so the matcher catches either.
     if (res.status === 429 || sleeperWriteLimiter.looksLikeRateLimit(message)) {
       sleeperWriteLimiter.noteRateLimit(`HTTP ${res.status}`);
+    }
+
+    // An expired/invalid JWT can't be salvaged — clear the session so the UI
+    // prompts a reconnect instead of retrying with a dead token.
+    if (res.status === 401 || res.status === 403) {
+      clearSleeperSession();
+      // eslint-disable-next-line no-console
+      console.warn(`${logPrefix} ${res.status} — cleared Sleeper session (expired/invalid token)`);
+      throw new Error("Your Sleeper session has expired. Please reconnect your Sleeper account and try again.");
     }
 
     // eslint-disable-next-line no-console
@@ -488,45 +500,231 @@ export async function submitWaiverClaim(
   return data.submit_waiver_claim;
 }
 
-// ─── Future operation stubs ───────────────────────────────────────────────────
+// ─── roster_update_starters (set lineup) ──────────────────────────────────────
 //
-// These will be implemented once their exact mutation shapes are discovered.
-// Each uses sleeperGraphQLRequest with operationName matching the Sleeper op.
+// Sets a roster's starting lineup. league_id / roster_id / starters are embedded
+// as literals in the mutation body (same pattern as submit_waiver_claim) — that's
+// how Sleeper's endpoint expects them. JWT is NEVER logged.
+//
+// Op name is `roster_update_starters` (NOT `submit_lineup`, which does not exist
+// on Sleeper's RootMutationType). For normal pre-game lineup saving use this —
+// not `update_matchup_leg`, which requires a valid existing matchup leg and
+// errors ("could not find this matchup leg") otherwise.
 
-/**
- * Submit a lineup update via sleeper.com/graphql.
- *
- * Uses the `submit_lineup` operation as identified from Sleeper's web app.
- * league_id and roster_id are embedded as literals (same pattern as waiver/trade mutations).
- * JWT is NEVER logged.
- *
- * Always show a confirmation UI before calling this — never call silently.
- */
-function buildSubmitLineupMutation(leagueId: string, rosterId: number): string {
+export interface RosterUpdateStartersResult {
+  league_id: string;
+  roster_id: number;
+  owner_id: string;
+  co_owners: string[] | null;
+  players: string[] | null;
+  player_map: unknown;
+  reserve: string[] | null;
+  taxi: string[] | null;
+  settings: unknown;
+  metadata: unknown;
+  starters: string[];
+}
+
+function buildRosterUpdateStartersMutation(leagueId: string, rosterId: number, starters: string[]): string {
   return `
-    mutation submit_lineup($starters: [String]) {
-      submit_lineup(
-        league_id: "${leagueId}"
-        roster_id: ${rosterId}
-        starters: $starters
+    mutation roster_update_starters {
+      roster_update_starters(
+        league_id: "${leagueId}",
+        roster_id: ${rosterId},
+        starters: ${JSON.stringify(starters)}
       ) {
+        league_id
+        co_owners
+        metadata
+        owner_id
+        players
+        player_map
         roster_id
+        reserve
+        taxi
+        settings
         starters
       }
     }
   `;
 }
 
+/**
+ * Set a roster's starting lineup via sleeper.com/graphql (op: roster_update_starters).
+ * Returns the updated roster on success; throws if Sleeper returns errors or a
+ * null payload. Routes through the shared write transport (limiter + kill switch).
+ * Callers are responsible for validating ownership / slots and previewing first.
+ */
 export async function submitLineup(
   leagueId: string,
   rosterId: number,
   starters: string[]
-): Promise<void> {
-  await sleeperGraphQLRequest<{ submit_lineup: unknown }>({
-    operationName: "submit_lineup",
-    query: buildSubmitLineupMutation(leagueId, rosterId),
-    variables: { starters },
+): Promise<RosterUpdateStartersResult> {
+  if (!Array.isArray(starters) || starters.some((s) => typeof s !== "string")) {
+    throw new Error("Invalid lineup: starters must be an array of Sleeper player IDs.");
+  }
+  const data = await sleeperGraphQLRequest<{ roster_update_starters: RosterUpdateStartersResult | null }>({
+    operationName: "roster_update_starters",
+    query: buildRosterUpdateStartersMutation(leagueId, rosterId, starters),
+    variables: {},
+    meta: { actionType: "lineup", leagueId },
   });
+  if (!data.roster_update_starters) {
+    // Null payload with no GraphQL error → treat as a failed write.
+    throw new Error("Sleeper did not confirm the lineup update (empty response). Please try again.");
+  }
+  return data.roster_update_starters;
+}
+
+// ─── update_matchup_leg (set an active week's lineup) ──────────────────────────
+//
+// For a league that is in an active matchup week, the displayed/editable lineup
+// lives in the matchup leg — NOT roster.starters. Sleeper's web app writes it via
+// update_matchup_leg (league_id, roster_id, leg, round, starters). roster.starters
+// is a separate bucket and does not drive the week's matchup, so writing only
+// there leaves the visible lineup unchanged.
+
+export interface UpdateMatchupLegResult {
+  league_id: string;
+  leg: number;
+  matchup_id: number;
+  roster_id: number;
+  round: number;
+  starters: string[];
+  players: string[] | null;
+  player_map: unknown;
+  points: number | null;
+  starters_games: unknown;
+  custom_points: number | null;
+  proj_points: number | null;
+  max_points: number | null;
+  subs: unknown;
+}
+
+function buildUpdateMatchupLegMutation(leagueId: string, rosterId: number, leg: number, round: number, starters: string[]): string {
+  return `
+    mutation update_matchup_leg($starters_games: Map) {
+      update_matchup_leg(
+        league_id: "${leagueId}",
+        roster_id: ${rosterId},
+        leg: ${leg},
+        round: ${round},
+        starters: ${JSON.stringify(starters)},
+        starters_games: $starters_games
+      ) {
+        league_id
+        leg
+        matchup_id
+        roster_id
+        round
+        starters
+        players
+        player_map
+        points
+        starters_games
+        custom_points
+        proj_points
+        max_points
+        subs
+      }
+    }
+  `;
+}
+
+// ─── roster_update_taxi (preserve taxi during a lineup change) ─────────────────
+//
+// Sleeper's web app re-sends the existing taxi array before a matchup update. We
+// mirror that to avoid disturbing taxi state — send the CURRENT taxi exactly as
+// the roster reports it. Never alter taxi here unless taxi is being changed on
+// purpose.
+
+function buildRosterUpdateTaxiMutation(leagueId: string, rosterId: number, taxi: string[]): string {
+  return `
+    mutation roster_update_taxi {
+      roster_update_taxi(
+        league_id: "${leagueId}",
+        roster_id: ${rosterId},
+        taxi: ${JSON.stringify(taxi)}
+      ) {
+        league_id
+        co_owners
+        metadata
+        owner_id
+        players
+        player_map
+        roster_id
+        reserve
+        taxi
+        settings
+        starters
+      }
+    }
+  `;
+}
+
+const MATCHUP_LEG_NOT_FOUND = /could not find this matchup leg/i;
+
+/**
+ * Smart lineup write. Mirrors Sleeper's web-app sequence:
+ *   1. (if taxi exists) roster_update_taxi — re-send current taxi unchanged.
+ *   2. If an active matchup leg exists → update_matchup_leg for that week.
+ *      Falls back to roster_update_starters if Sleeper says the leg doesn't exist.
+ *   3. Otherwise (offseason / no matchup leg) → roster_update_starters.
+ * Returns the updated record (matchup leg or roster); both expose `.starters`.
+ * Each call is individually paced by the shared write limiter — no Promise.all.
+ */
+export async function submitSleeperLineupChange(params: {
+  leagueId: string;
+  rosterId: number;
+  starters: string[];
+  currentTaxi?: string[] | null;
+  hasMatchupLeg?: boolean;
+  leg?: number | null;
+  round?: number | null;
+}): Promise<UpdateMatchupLegResult | RosterUpdateStartersResult> {
+  const { leagueId, rosterId, starters, currentTaxi, hasMatchupLeg, leg, round } = params;
+  if (!Array.isArray(starters) || starters.some((s) => typeof s !== "string")) {
+    throw new Error("Invalid lineup: starters must be an array of Sleeper player IDs.");
+  }
+
+  // 1) Preserve taxi first (only when present) — exactly as currently rostered.
+  if (currentTaxi && currentTaxi.length > 0) {
+    await sleeperGraphQLRequest<{ roster_update_taxi: unknown }>({
+      operationName: "roster_update_taxi",
+      query: buildRosterUpdateTaxiMutation(leagueId, rosterId, currentTaxi),
+      variables: {},
+      meta: { actionType: "lineup", leagueId },
+    });
+  }
+
+  // 2) Active matchup week → write the matchup leg; fall back if it doesn't exist.
+  if (hasMatchupLeg && leg != null && round != null) {
+    try {
+      const data = await sleeperGraphQLRequest<{ update_matchup_leg: UpdateMatchupLegResult | null }>({
+        operationName: "update_matchup_leg",
+        query: buildUpdateMatchupLegMutation(leagueId, rosterId, leg, round, starters),
+        variables: {},
+        meta: { actionType: "lineup", leagueId },
+      });
+      if (data.update_matchup_leg) return data.update_matchup_leg;
+      // Null payload without an error → fall through to roster_update_starters.
+    } catch (e: any) {
+      // Only the "no such leg" case is a fallback signal; anything else is real.
+      if (!MATCHUP_LEG_NOT_FOUND.test(e?.message ?? "")) throw e;
+    }
+  }
+
+  // 3) Base roster starters (offseason / no leg / leg-not-found fallback).
+  const data = await sleeperGraphQLRequest<{ roster_update_starters: RosterUpdateStartersResult | null }>({
+    operationName: "roster_update_starters",
+    query: buildRosterUpdateStartersMutation(leagueId, rosterId, starters),
+    variables: {},
+    meta: { actionType: "lineup", leagueId },
+  });
+  if (!data.roster_update_starters) {
+    throw new Error("Sleeper did not confirm the lineup update (empty response). Please try again.");
+  }
+  return data.roster_update_starters;
 }
 
 // ─── propose_trade ────────────────────────────────────────────────────────────

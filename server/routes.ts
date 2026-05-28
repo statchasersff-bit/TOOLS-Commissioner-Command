@@ -1,5 +1,6 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
+import Parser from "rss-parser";
 import { getFantasyCalcValues, getFantasyCalcRedraftValues } from "./fantasycalc";
 import { getKtcValues, getKtcRedraftValues } from "./ktc";
 import { rebuildBasketSnapshots } from "./portfolioBasketValue";
@@ -206,6 +207,40 @@ export async function registerRoutes(
 
   app.get("/api/health", (_req, res) => {
     res.json({ status: "ok", ts: Date.now() });
+  });
+
+  // ─── NFL News ticker — Rotowire RSS, fetched server-side + cached ──────────
+  // We only ever expose the headline title + outbound Rotowire link (never the
+  // article body), fetch server-side to dodge CORS, and cache for 10 minutes.
+  // On failure we return 200 with the last good items (or empty) so the client
+  // ticker hides itself instead of breaking the page.
+  const ROTOWIRE_NFL_RSS = "https://www.rotowire.com/rss/news.php?sport=NFL";
+  const NFL_NEWS_TTL_MS = 10 * 60 * 1000;
+  const nflNewsParser = new Parser({ timeout: 10_000 });
+  type NflNewsItem = { id: string; title: string; link: string; pubDate: string | null };
+  let nflNewsCache: { items: NflNewsItem[]; ts: number } | null = null;
+
+  app.get("/api/news/nfl", async (_req, res) => {
+    try {
+      if (nflNewsCache && Date.now() - nflNewsCache.ts < NFL_NEWS_TTL_MS) {
+        res.set("Cache-Control", "public, max-age=600");
+        return res.json({ items: nflNewsCache.items });
+      }
+      const feed = await nflNewsParser.parseURL(ROTOWIRE_NFL_RSS);
+      const items: NflNewsItem[] = (feed.items ?? []).slice(0, 10).map((item, index) => ({
+        id: item.guid || item.link || `nfl-news-${index}`,
+        title: item.title || "NFL News",
+        link: item.link || "https://www.rotowire.com/football/news.php",
+        pubDate: item.pubDate || null,
+      }));
+      nflNewsCache = { items, ts: Date.now() };
+      res.set("Cache-Control", "public, max-age=600");
+      res.json({ items });
+    } catch (error) {
+      console.error("[news/nfl] feed fetch failed:", error instanceof Error ? error.message : error);
+      // Serve stale cache if we have one; otherwise empty so the ticker hides.
+      res.json({ items: nflNewsCache?.items ?? [] });
+    }
   });
 
   app.get("/api/values/fantasycalc", async (req, res) => {
@@ -2006,7 +2041,16 @@ export async function registerRoutes(
   // The old ADP passive-crawl queue worker is retired in favor of the unified
   // scheduled crawler below, which gathers BOTH trades and drafts. (The worker
   // can still be started manually via the admin endpoints for debugging.)
-  startUnifiedCrawler();
+  //
+  // Gate auto-crawling to the published website only: it runs solely when
+  // ENABLE_CRAWLER=true is set in the deployment's secrets. The Replit instance
+  // leaves this unset, so it never crawls (avoids double Sleeper API load). The
+  // manual /api/admin/unified-crawl/run-once endpoint still works everywhere.
+  if (process.env.ENABLE_CRAWLER === "true") {
+    startUnifiedCrawler();
+  } else {
+    console.log("[UnifiedCrawl] Scheduler disabled (set ENABLE_CRAWLER=true to enable auto-crawling)");
+  }
 
   // Reap any scan log row or queue item that the previous process left
   // dangling. Without this, a crashed scan stays in status="running"

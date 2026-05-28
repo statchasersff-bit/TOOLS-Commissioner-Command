@@ -243,7 +243,7 @@ export function PlayoffOdds({ leagueId }: { leagueId: string }) {
     },
     {
       key: "projected_record",
-      header: "Projected Record",
+      header: "Proj Record",
       sortable: true,
       sortAccessor: (r: PlayoffTeam & { change: number | null }) => r.projected_wins,
       render: (r: PlayoffTeam & { change: number | null }) => (
@@ -276,7 +276,7 @@ export function PlayoffOdds({ leagueId }: { leagueId: string }) {
     },
     {
       key: "first_round_bye_pct",
-      header: "1st-Round Bye",
+      header: "1st Rd Bye",
       sortable: true,
       sortAccessor: (r: PlayoffTeam & { change: number | null }) => r.first_round_bye_pct,
       render: (r: PlayoffTeam & { change: number | null }) => {
@@ -286,7 +286,7 @@ export function PlayoffOdds({ leagueId }: { leagueId: string }) {
     },
     {
       key: "semifinals_pct",
-      header: "Make Semi-Finals",
+      header: "Make Semis",
       sortable: true,
       sortAccessor: (r: PlayoffTeam & { change: number | null }) => r.semifinals_pct,
       render: (r: PlayoffTeam & { change: number | null }) => {

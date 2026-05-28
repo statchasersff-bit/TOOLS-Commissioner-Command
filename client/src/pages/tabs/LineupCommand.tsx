@@ -27,6 +27,8 @@ import {
   getWeekSchedule, isPlayerLocked, isTeamOnBye, type GameSchedule,
 } from "@/lib/lineupCommand/gameLocking";
 import { getLeagueMatchupsForLocking } from "@/lib/lineupCommand/sleeper";
+import { isBestBallLeague } from "@/lib/lineupCommand/isBestBall";
+import { submitLineup } from "@/services/sleeperAuthedApi";
 import { calculateWinProbability } from "@/lib/lineupCommand/winProbability";
 import { scoreByLeague } from "@/lib/lineupCommand/scoring";
 import { mapSleeperStatsToScoring } from "@/lib/lineupCommand/projectionProviders";
@@ -347,9 +349,48 @@ function KpiCard({
 }
 
 // ─── League row ───────────────────────────────────────────────────────────────
-function LeagueRow({ analysis, preseason }: { analysis: LeagueAnalysis; preseason?: boolean }) {
+function LeagueRow({ analysis, preseason, onApplied }: { analysis: LeagueAnalysis; preseason?: boolean; onApplied: (leagueId: string) => void }) {
   const [expanded, setExpanded] = useState(false);
+  const [applying, setApplying] = useState(false);
   const { leagueName, format, scoringFormat, avatar, currentProj, gain, issues, swaps, loading, error } = analysis;
+
+  // Push the optimal lineup straight to Sleeper for this league. One click, no
+  // confirm (by product choice): submitLineup still runs through the safety
+  // kill-switch + write rate-limiter and throws a clear message if Sleeper
+  // isn't connected or writes are paused.
+  const apply = async () => {
+    if (applying) return;
+    setApplying(true);
+    try {
+      const result = await submitLineup(analysis.leagueId, analysis.rosterId, analysis.optimalStarters);
+      // Verify Sleeper actually applied our lineup. It can accept the call but
+      // keep the old lineup when a target player can't be started (IR/taxi/locked),
+      // so don't trust a non-null response alone — compare the returned starters.
+      const norm = (a: string[]) => [...a].filter(x => x && x !== "0").sort().join(",");
+      if (norm(result.starters ?? []) !== norm(analysis.optimalStarters)) {
+        toast({
+          title: "Lineup not changed",
+          description: `${leagueName}: Sleeper kept your current lineup — the players needed may be on IR/taxi or already locked.`,
+          variant: "destructive",
+        });
+        return;
+      }
+      toast({
+        title: "Lineup updated on Sleeper",
+        description: `${leagueName}: optimal lineup set${gain > 0.1 ? ` (+${fmt1(gain)} projected pts)` : ""}.`,
+      });
+      onApplied(analysis.leagueId);
+      setExpanded(false);
+    } catch (e: any) {
+      toast({
+        title: "Couldn't update lineup",
+        description: e?.message ?? "Sleeper rejected the request. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setApplying(false);
+    }
+  };
 
   // Improvement (gain) color — emerald for real gains, muted for none. Light
   // mode uses a darker green so it stays readable on a white background.
@@ -471,13 +512,14 @@ function LeagueRow({ analysis, preseason }: { analysis: LeagueAnalysis; preseaso
             </span>
           ) : (
             <button
-              className="inline-flex items-center gap-1 text-[10px] font-bold rounded-full px-2 md:px-2.5 py-1 transition-colors bg-[var(--sc-gold)] hover:bg-[var(--sc-gold-deep)] text-[var(--sc-blue)] hover:text-white border border-[var(--sc-gold-deep)] dark-any:bg-[#d4af37]/15 dark-any:hover:bg-[#d4af37]/25 dark-any:border-[#d4af37]/35 dark-any:hover:border-[#d4af37]/55 dark-any:text-[#d4af37] dark-any:hover:text-[#d4af37]"
-              onClick={() => setExpanded(v => !v)}
+              className="inline-flex items-center gap-1 text-[10px] font-bold rounded-full px-2 md:px-2.5 py-1 transition-colors bg-[var(--sc-gold)] hover:bg-[var(--sc-gold-deep)] text-[var(--sc-blue)] hover:text-white border border-[var(--sc-gold-deep)] disabled:opacity-60 disabled:cursor-not-allowed dark-any:bg-[#d4af37]/15 dark-any:hover:bg-[#d4af37]/25 dark-any:border-[#d4af37]/35 dark-any:hover:border-[#d4af37]/55 dark-any:text-[#d4af37] dark-any:hover:text-[#d4af37]"
+              onClick={apply}
+              disabled={applying}
+              title="Apply the optimal lineup to Sleeper"
               data-testid={`button-optimize-${analysis.leagueId}`}
             >
-              <Zap className="w-3 h-3 flex-shrink-0" />
-              <span className="hidden md:inline">Optimize</span>
-              {expanded ? <ChevronUp className="w-2.5 h-2.5" /> : <ChevronDown className="w-2.5 h-2.5" />}
+              {applying ? <Loader2 className="w-3 h-3 flex-shrink-0 animate-spin" /> : <Zap className="w-3 h-3 flex-shrink-0" />}
+              <span className="hidden md:inline">{applying ? "Applying…" : "Optimize"}</span>
             </button>
           )}
         </div>
@@ -932,7 +974,21 @@ export function LineupCommand() {
   const [optimizeModalOpen, setOptimizeModalOpen] = useState(false);
   const queue = useOptimizeQueue();
 
-  const activeLeagues = leagues.filter(l => l.status !== "archived");
+  // After a row pushes its optimal lineup to Sleeper, reflect it locally: no
+  // remaining swaps, no gain, current = optimal. Flips the row to "Optimized"
+  // without a full refetch.
+  const handleApplied = useCallback((leagueId: string) => {
+    setAnalyses(prev => {
+      const a = prev[leagueId];
+      if (!a) return prev;
+      return { ...prev, [leagueId]: { ...a, swaps: [], gain: 0, currentProj: a.optimalProj } };
+    });
+  }, []);
+
+  // Best-ball leagues auto-set lineups — there's nothing to optimize — so they're
+  // excluded here. `isBestBall` comes from Sleeper's settings.best_ball; the helper
+  // adds a name-tag fallback for leagues whose flag isn't set.
+  const activeLeagues = leagues.filter(l => l.status !== "archived" && !l.isBestBall && !isBestBallLeague(l));
 
   // Preseason = projections finished loading but Sleeper returned no data
   const isPreseason = !baseLoading && Object.keys(rawProj).length === 0;
@@ -1049,7 +1105,14 @@ export function LineupCommand() {
             return;
           }
 
-          const allPlayerIds: string[] = myRoster.players || [];
+          // Sleeper's `players` array includes IR (reserve) and taxi players, who
+          // can't be put in a starting slot. Exclude them from the optimizer's
+          // candidate pool — otherwise (especially in the offseason, when
+          // injury_status is stale/null and they aren't projection-zeroed) the
+          // optimizer "starts" an IR/taxi player, producing a phantom improvement
+          // that Sleeper silently refuses to apply.
+          const ineligible = new Set<string>([...(myRoster.reserve || []), ...(myRoster.taxi || [])]);
+          const allPlayerIds: string[] = (myRoster.players || []).filter((pid: string) => !ineligible.has(pid));
           const rawStarters: (string | null)[] = myRoster.starters || [];
           const rosterPositions: string[] = league.rosterPositions || [];
 
@@ -1590,7 +1653,7 @@ export function LineupCommand() {
                     <p className="text-xs text-[var(--sc-text-muted)] dark-any:text-white/25 mt-1">Connect leagues in the Portfolio tab to get started.</p>
                   </div>
                 ) : (
-                  sortedAnalyses.map(a => <LeagueRow key={a.leagueId} analysis={a} preseason={isPreseason} />)
+                  sortedAnalyses.map(a => <LeagueRow key={a.leagueId} analysis={a} preseason={isPreseason} onApplied={handleApplied} />)
                 )}
               </div>
             </div>

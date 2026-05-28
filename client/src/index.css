@@ -1127,3 +1127,19 @@
 [data-team-theme="ARI"] .hover\:shadow-\[\#0b3a7a\]\/30:hover { --tw-shadow-color: rgb(151 35 63 / 0.3) !important; --tw-shadow: var(--tw-shadow-colored) !important; }
 [data-team-theme="ARI"] .hover\:shadow-\[\#0b3a7a\]\/5:hover { --tw-shadow-color: rgb(151 35 63 / 0.05) !important; --tw-shadow: var(--tw-shadow-colored) !important; }
 [data-team-theme="ARI"] .hover\:text-\[\#0b3a7a\]:hover { color: rgb(151 35 63) !important; }
+
+/* ─── NFL News ticker marquee ─────────────────────────────────────────────── */
+@keyframes news-ticker {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+.animate-news-ticker {
+  animation: news-ticker 45s linear infinite;
+  will-change: transform;
+}
+.animate-news-ticker:hover {
+  animation-play-state: paused;
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-news-ticker { animation: none; }
+}
