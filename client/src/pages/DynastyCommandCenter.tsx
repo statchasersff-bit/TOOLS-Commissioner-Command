@@ -721,11 +721,6 @@ export default function DynastyCommandCenter({ params, playerProfileId, managerP
                       <span className="sc-logo-menu-text" style={{ fontSize: 13, fontWeight: 500, color: "rgba(203,213,225,0.55)" }}>Feedback</span>
                     </button>
                   </div>
-
-                  {/* Footer row */}
-                  <div className="sc-logo-menu-divider flex items-center justify-end px-4 py-3" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-                    <ThemeToggle />
-                  </div>
                 </div>
               )}
             </div>
@@ -857,7 +852,15 @@ export default function DynastyCommandCenter({ params, playerProfileId, managerP
                         data-testid="button-menu-favorite-team"
                         className="w-full flex items-center gap-2.5 px-3 py-2.5 text-xs font-medium text-foreground hover:bg-muted/40 transition-colors border-b border-border/30"
                       >
-                        <Star className="w-3.5 h-3.5 flex-shrink-0 text-[#d4af37]" />
+                        {favoriteTeam ? (
+                          <img
+                            src={favoriteTeam.logoUrl}
+                            alt={favoriteTeam.name}
+                            className="w-4 h-4 flex-shrink-0 object-contain"
+                          />
+                        ) : (
+                          <Star className="w-3.5 h-3.5 flex-shrink-0 text-[#d4af37]" />
+                        )}
                         <span className="flex-1 text-left min-w-0">
                           <span className="block text-[10px] uppercase tracking-wider text-muted-foreground font-semibold leading-tight">
                             Favorite NFL Team

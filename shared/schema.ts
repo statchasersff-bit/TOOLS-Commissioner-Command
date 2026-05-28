@@ -50,6 +50,7 @@ export const trades = pgTable("trades", {
   leagueFormat: varchar("league_format", { length: 10 }),
   leagueScoringFormat: varchar("league_scoring_format", { length: 20 }),
   leagueTotalRosters: integer("league_total_rosters"),
+  bestBall: boolean("best_ball").notNull().default(false),
 });
 
 export const tradeAssets = pgTable("trade_assets", {

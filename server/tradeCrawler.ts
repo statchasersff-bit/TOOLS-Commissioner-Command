@@ -330,6 +330,7 @@ async function processLeague(leagueId: string, degree: number) {
 
   const format = deriveFormat(primaryLeague.roster_positions || []);
   const scoringFormat = deriveScoringFormat(primaryLeague.scoring_settings || {});
+  const bestBall = primaryLeague.settings?.best_ball === 1;
 
   for (const leagueInfo of leagueChain) {
     const existingLeague = await d.select().from(crawledLeagues).where(eq(crawledLeagues.id, leagueInfo.league_id)).limit(1);
@@ -369,6 +370,7 @@ async function processLeague(leagueId: string, degree: number) {
         leagueFormat: format,
         leagueScoringFormat: scoringFormat,
         leagueTotalRosters: leagueInfo.total_rosters || 0,
+        bestBall,
       }).onConflictDoNothing().returning({ id: trades.id });
 
       // If no row was returned, this trade already exists — skip asset insertion
@@ -511,7 +513,7 @@ async function discoverUserLeagues(userId: string, degree: number, maxDegree: nu
     if (!leagues || !Array.isArray(leagues)) continue;
 
     const dynastyLeagues = leagues.filter(
-      (lg) => lg.settings?.type === 2 && lg.settings?.best_ball !== 1
+      (lg) => lg.settings?.type === 2
     );
 
     for (const lg of dynastyLeagues) {
@@ -629,7 +631,7 @@ export async function startCrawl(seedUsername: string) {
     if (!leagues || !Array.isArray(leagues)) continue;
 
     const dynastyLeagues = leagues.filter(
-      (lg) => lg.settings?.type === 2 && lg.settings?.best_ball !== 1
+      (lg) => lg.settings?.type === 2
     );
 
     for (const lg of dynastyLeagues) {
@@ -698,6 +700,7 @@ export async function searchTrades(params: {
   scoring?: string;
   leagueSize?: number;
   season?: string;
+  bestBall?: string;
   page?: number;
   limit?: number;
 }) {
@@ -720,6 +723,11 @@ export async function searchTrades(params: {
   }
   if (params.leagueSize && params.leagueSize > 0) {
     conditions.push(eq(trades.leagueTotalRosters, params.leagueSize));
+  }
+  if (params.bestBall === "yes") {
+    conditions.push(eq(trades.bestBall, true));
+  } else if (params.bestBall === "no") {
+    conditions.push(eq(trades.bestBall, false));
   }
 
   let tradeIds: string[] | null = null;
@@ -850,6 +858,7 @@ export async function ingestLeagueTrades(params: {
   teamCount: number;
   format: string;
   scoringFormat: string;
+  bestBall?: boolean;
   sinceMs?: number;
 }): Promise<{ inserted: number; skipped: number; alreadyIndexed: boolean }> {
   const d = getDb();
@@ -864,6 +873,13 @@ export async function ingestLeagueTrades(params: {
   if (existingLeague.length > 0) {
     return { inserted: 0, skipped: 0, alreadyIndexed: true };
   }
+
+  // Callers with the league's settings in hand (e.g. ingestUserLeagues) pass the
+  // flag directly; the single-league route omits it, so fetch it once here.
+  const bestBall = params.bestBall ?? await (async () => {
+    const lg = await fetchJson<SleeperLeagueInfo>(`${SLEEPER_API}/league/${params.leagueId}`);
+    return lg?.settings?.best_ball === 1;
+  })();
 
   const rawTransactions = await fetchLeagueTransactions(params.leagueId);
   const { slotMap: draftSlots, seasonDraftType } = await fetchLeagueDraftInfo(params.leagueId, params.season);
@@ -906,6 +922,7 @@ export async function ingestLeagueTrades(params: {
       leagueFormat: params.format,
       leagueScoringFormat: params.scoringFormat,
       leagueTotalRosters: params.teamCount,
+      bestBall,
     }).onConflictDoNothing().returning({ id: trades.id });
 
     // If no row was returned, this trade already exists — skip asset insertion
@@ -1043,7 +1060,7 @@ export async function ingestUserLeagues(username: string): Promise<{ started: nu
       );
       if (!leagues) continue;
       leagues
-        .filter((lg) => lg.settings?.type === 2 && lg.settings?.best_ball !== 1)
+        .filter((lg) => lg.settings?.type === 2)
         .forEach((lg) => result.push(lg));
     }
     return result;
@@ -1065,7 +1082,7 @@ export async function ingestUserLeagues(username: string): Promise<{ started: nu
   }
 
   // 4. Collect all dynasty leagues across every member (deduplicated by league_id)
-  const allLeagueMap = new Map<string, { season: string; format: string; scoringFormat: string; teamCount: number }>();
+  const allLeagueMap = new Map<string, { season: string; format: string; scoringFormat: string; teamCount: number; bestBall: boolean }>();
 
   for (const memberId of allMemberIds) {
     const memberLeagues = await fetchDynastyLeaguesForUser(memberId);
@@ -1076,6 +1093,7 @@ export async function ingestUserLeagues(username: string): Promise<{ started: nu
           format: deriveFormat(lg.roster_positions || []),
           scoringFormat: deriveScoringFormat(lg.scoring_settings || {}),
           teamCount: lg.total_rosters || 12,
+          bestBall: lg.settings?.best_ball === 1,
         });
       }
     }
@@ -1084,7 +1102,7 @@ export async function ingestUserLeagues(username: string): Promise<{ started: nu
   console.log(`[UserIngest] Discovered ${allLeagueMap.size} unique leagues across ${allMemberIds.size} members for ${username}`);
 
   // 5. Filter out already-indexed leagues
-  const toProcess: Array<{ leagueId: string; season: string; format: string; scoringFormat: string; teamCount: number }> = [];
+  const toProcess: Array<{ leagueId: string; season: string; format: string; scoringFormat: string; teamCount: number; bestBall: boolean }> = [];
   let alreadyIndexed = 0;
 
   for (const [leagueId, info] of allLeagueMap) {

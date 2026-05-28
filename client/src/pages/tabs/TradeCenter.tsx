@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useRef, useEffect } from "react";
+import { useState, useMemo, useCallback, useRef, useEffect, type ReactNode } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -3286,6 +3286,20 @@ function getTradeShape(trade: TradeRecord | null | undefined): TradeShape {
   return "large";
 }
 
+// A labeled filter group: an uppercase category label beside (desktop) or above
+// (mobile) its row of pills/controls. Keeps the filter panel reading like a
+// dashboard rather than a loose blob of buttons.
+function FilterGroup({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-3">
+      <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground sm:w-28 sm:shrink-0">
+        {label}
+      </span>
+      <div className="flex flex-wrap gap-1.5">{children}</div>
+    </div>
+  );
+}
+
 export function TradeDatabase({ league }: { league: League }) {
   const { valuesBySleeperId, dynastyPlayerList } = useValueModel();
 
@@ -3295,6 +3309,7 @@ export function TradeDatabase({ league }: { league: League }) {
   const [format, setFormat] = useState("all");
   const [scoring, setScoring] = useState("all");
   const [teamSize, setTeamSize] = useState("all");
+  const [bestBall, setBestBall] = useState<"all" | "yes" | "no">("all");
   const [tradeShape, setTradeShape] = useState<"all" | TradeShape>("all");
   const [tradeResults, setTradeResults] = useState<TradeRecord[]>([]);
   const [total, setTotal] = useState(0);
@@ -3344,6 +3359,7 @@ export function TradeDatabase({ league }: { league: League }) {
     if (format !== "all") params.set("format", format);
     if (scoring !== "all") params.set("scoring", scoring);
     if (teamSize !== "all") params.set("leagueSize", teamSize);
+    if (bestBall !== "all") params.set("bestBall", bestBall);
 
     fetch(`${API_BASE}/api/trades/search?${params}`)
       .then((r) => r.json())
@@ -3358,7 +3374,7 @@ export function TradeDatabase({ league }: { league: League }) {
       });
 
     return () => { cancelled = true; };
-  }, [debouncedQuery, format, scoring, teamSize]);
+  }, [debouncedQuery, format, scoring, teamSize, bestBall]);
 
   const loadMore = useCallback(() => {
     const nextPage = page + 1;
@@ -3369,6 +3385,7 @@ export function TradeDatabase({ league }: { league: League }) {
     if (format !== "all") params.set("format", format);
     if (scoring !== "all") params.set("scoring", scoring);
     if (teamSize !== "all") params.set("leagueSize", teamSize);
+    if (bestBall !== "all") params.set("bestBall", bestBall);
 
     fetch(`${API_BASE}/api/trades/search?${params}`)
       .then((r) => r.json())
@@ -3379,7 +3396,7 @@ export function TradeDatabase({ league }: { league: League }) {
         setIsLoadingMore(false);
       })
       .catch(() => setIsLoadingMore(false));
-  }, [page, debouncedQuery, format, scoring, teamSize]);
+  }, [page, debouncedQuery, format, scoring, teamSize, bestBall]);
 
   const formatDate = useCallback((ts: number) => {
     return new Date(ts).toLocaleDateString("en-US", {
@@ -3481,68 +3498,85 @@ export function TradeDatabase({ league }: { league: League }) {
           )}
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 justify-center md:justify-start">
-          <div className="flex gap-1">
-            {(["all", "SF", "1QB"] as const).map((f) => (
-              <button
-                key={f}
-                onClick={() => setFormat(f)}
-                className={cn(
-                  "px-3 py-1 rounded-full text-xs font-medium border transition-colors",
-                  format === f
-                    ? "bg-[#0b3a7a] text-white border-[#0b3a7a] dark:bg-blue-500 dark:border-blue-500"
-                    : "bg-transparent text-muted-foreground border-border hover:border-foreground/30"
-                )}
-                data-testid={`button-format-${f}`}
-              >
-                {f === "all" ? "All Formats" : f}
-              </button>
-            ))}
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-2.5">
+            <FilterGroup label="Format">
+              {(["all", "SF", "1QB"] as const).map((f) => (
+                <button
+                  key={f}
+                  onClick={() => setFormat(f)}
+                  className={cn(
+                    "px-3 py-1 rounded-full text-xs font-medium border transition-colors",
+                    format === f
+                      ? "bg-[#0b3a7a] text-white border-[#0b3a7a] dark:bg-blue-500 dark:border-blue-500"
+                      : "bg-transparent text-muted-foreground border-border hover:border-foreground/30"
+                  )}
+                  data-testid={`button-format-${f}`}
+                >
+                  {f === "all" ? "All Formats" : f}
+                </button>
+              ))}
+            </FilterGroup>
+
+            <FilterGroup label="Scoring">
+              {(["all", "PPR", "Half", "Standard"] as const).map((s) => (
+                <button
+                  key={s}
+                  onClick={() => setScoring(s)}
+                  className={cn(
+                    "px-3 py-1 rounded-full text-xs font-medium border transition-colors",
+                    scoring === s
+                      ? "bg-[#0b3a7a] text-white border-[#0b3a7a] dark:bg-blue-500 dark:border-blue-500"
+                      : "bg-transparent text-muted-foreground border-border hover:border-foreground/30"
+                  )}
+                  data-testid={`button-scoring-${s}`}
+                >
+                  {s === "all" ? "All Scoring" : s}
+                </button>
+              ))}
+            </FilterGroup>
           </div>
 
-          <div className="hidden sm:block w-px h-5 bg-[#d4af37]/50 flex-shrink-0" />
+          <div className="flex flex-col gap-2.5">
+            <FilterGroup label="Size">
+              {(["all", "10", "12", "14"] as const).map((size) => (
+                <button
+                  key={size}
+                  onClick={() => setTeamSize(size)}
+                  className={cn(
+                    "px-3 py-1 rounded-full text-xs font-medium border transition-colors",
+                    teamSize === size
+                      ? "bg-[#0b3a7a] text-white border-[#0b3a7a] dark:bg-blue-500 dark:border-blue-500"
+                      : "bg-transparent text-muted-foreground border-border hover:border-foreground/30"
+                  )}
+                  data-testid={`button-teamsize-${size}`}
+                >
+                  {size === "all" ? "All Sizes" : `${size}-team`}
+                </button>
+              ))}
+            </FilterGroup>
 
-          <div className="flex gap-1">
-            {(["all", "PPR", "Half", "Standard"] as const).map((s) => (
-              <button
-                key={s}
-                onClick={() => setScoring(s)}
-                className={cn(
-                  "px-3 py-1 rounded-full text-xs font-medium border transition-colors",
-                  scoring === s
-                    ? "bg-[#0b3a7a] text-white border-[#0b3a7a] dark:bg-blue-500 dark:border-blue-500"
-                    : "bg-transparent text-muted-foreground border-border hover:border-foreground/30"
-                )}
-                data-testid={`button-scoring-${s}`}
-              >
-                {s === "all" ? "All Scoring" : s}
-              </button>
-            ))}
+            <FilterGroup label="Type">
+              {(["all", "yes", "no"] as const).map((bb) => (
+                <button
+                  key={bb}
+                  onClick={() => setBestBall(bb)}
+                  className={cn(
+                    "px-3 py-1 rounded-full text-xs font-medium border transition-colors",
+                    bestBall === bb
+                      ? "bg-[#0b3a7a] text-white border-[#0b3a7a] dark:bg-blue-500 dark:border-blue-500"
+                      : "bg-transparent text-muted-foreground border-border hover:border-foreground/30"
+                  )}
+                  data-testid={`button-bestball-${bb}`}
+                >
+                  {bb === "all" ? "All Types" : bb === "yes" ? "Best Ball" : "Lineup"}
+                </button>
+              ))}
+            </FilterGroup>
           </div>
 
-          <div className="hidden sm:block w-px h-5 bg-[#d4af37]/50 flex-shrink-0" />
-
-          <div className="flex gap-1">
-            {(["all", "10", "12", "14"] as const).map((size) => (
-              <button
-                key={size}
-                onClick={() => setTeamSize(size)}
-                className={cn(
-                  "px-3 py-1 rounded-full text-xs font-medium border transition-colors",
-                  teamSize === size
-                    ? "bg-[#0b3a7a] text-white border-[#0b3a7a] dark:bg-blue-500 dark:border-blue-500"
-                    : "bg-transparent text-muted-foreground border-border hover:border-foreground/30"
-                )}
-                data-testid={`button-teamsize-${size}`}
-              >
-                {size === "all" ? "All Sizes" : `${size}-team`}
-              </button>
-            ))}
-          </div>
-
-          <div className="hidden sm:block w-px h-5 bg-[#d4af37]/50 flex-shrink-0" />
-
-          <Select
+          <FilterGroup label="Trade Shape">
+            <Select
             value={tradeShape}
             onValueChange={(v) => setTradeShape(v as "all" | TradeShape)}
           >
@@ -3581,6 +3615,7 @@ export function TradeDatabase({ league }: { league: League }) {
               ))}
             </SelectContent>
           </Select>
+          </FilterGroup>
         </div>
       </div>
 
@@ -3609,7 +3644,7 @@ export function TradeDatabase({ league }: { league: League }) {
           <Database className="w-8 h-8 text-muted-foreground mb-3" />
           <p className="text-sm font-medium text-foreground mb-1">No trades found</p>
           <p className="text-xs text-muted-foreground mb-4">
-            {debouncedQuery || format !== "all" || scoring !== "all" || teamSize !== "all" || shapeFilterActive
+            {debouncedQuery || format !== "all" || scoring !== "all" || teamSize !== "all" || bestBall !== "all" || shapeFilterActive
               ? "Try adjusting your search or filters"
               : "The database grows as users analyze their leagues"}
           </p>

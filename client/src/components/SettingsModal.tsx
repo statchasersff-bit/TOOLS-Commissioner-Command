@@ -93,6 +93,7 @@ export function SettingsModal({ open, onOpenChange }: Props) {
                 current={themeMode}
                 onSelect={setThemeMode}
                 icon={Star}
+                logoUrl={favoriteTeam?.logoUrl}
                 label={favoriteAbbr ? `My Team · ${favoriteAbbr}` : "My Team · Select team"}
               />
             </div>
@@ -163,13 +164,14 @@ function favoriteTeamLabel(abbr: string | null): string {
 }
 
 function ThemeChoice({
-  mode, current, onSelect, icon: Icon, label,
+  mode, current, onSelect, icon: Icon, label, logoUrl,
 }: {
   mode: ThemeMode;
   current: ThemeMode;
   onSelect: (m: ThemeMode) => void;
   icon: typeof Sun;
   label: string;
+  logoUrl?: string | null;
 }) {
   const active = current === mode;
   return (
@@ -185,7 +187,11 @@ function ThemeChoice({
           : "border-border/40 text-muted-foreground hover:text-foreground hover:bg-muted/30",
       )}
     >
-      <Icon className={cn("w-3.5 h-3.5 flex-shrink-0", active ? "text-[#d4af37]" : "text-muted-foreground")} />
+      {logoUrl ? (
+        <img src={logoUrl} alt="" className="w-4 h-4 flex-shrink-0 object-contain" />
+      ) : (
+        <Icon className={cn("w-3.5 h-3.5 flex-shrink-0", active ? "text-[#d4af37]" : "text-muted-foreground")} />
+      )}
       <span className="truncate">{label}</span>
     </button>
   );

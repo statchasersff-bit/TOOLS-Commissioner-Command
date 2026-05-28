@@ -28,6 +28,7 @@ import {
   ArrowLeft,
   ArrowRightLeft,
   Check,
+  ChevronDown,
   Compass,
   Crown,
   Gauge,
@@ -50,6 +51,14 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, Legend } from "recharts";
 import { cn } from "@/lib/utils";
@@ -926,6 +935,17 @@ function LeagueSelector({
   viewerId: string | null;
   targetId: string;
 }) {
+  const sleeper = useSleeper();
+  // League photos come from the viewer's own Sleeper leagues (which carry an
+  // avatar) — i.e. exactly the shared leagues. Other leagues fall back to an icon.
+  const avatarById = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const l of sleeper.leagues) {
+      if (l.avatar) m.set(l.leagueId, l.avatar.startsWith("http") ? l.avatar : `https://sleepercdn.com/avatars/thumbs/${l.avatar}`);
+    }
+    return m;
+  }, [sleeper.leagues]);
+
   const rankFor = (lg: LeagueReport, owner: string | null) =>
     owner ? lg.rosters.find((r) => r.ownerId === owner)?.dynastyRank ?? null : null;
   const isSharedLeague = (lg: LeagueReport) => !!(viewerId && lg.rosters.some((r) => r.ownerId === viewerId));
@@ -935,34 +955,88 @@ function LeagueSelector({
   const sharedLeagues = leagues.filter(isSharedLeague).sort(byName);
   const otherLeagues = leagues.filter((lg) => !isSharedLeague(lg)).sort(byName);
 
-  const renderOption = (lg: LeagueReport) => {
+  const metaFor = (lg: LeagueReport) => {
     const their = rankFor(lg, targetId);
     const yours = rankFor(lg, viewerId);
+    const bits = [`${lg.totalRosters}-team ${lg.scoringFormat} ${lg.format}`];
+    if (their) bits.push(`Them #${their}`);
+    if (yours) bits.push(`You #${yours}`);
+    return bits.join(" · ");
+  };
+
+  const LeagueAvatar = ({ lg, size }: { lg: LeagueReport; size: number }) => {
+    const src = avatarById.get(lg.leagueId) ?? null;
     return (
-      <option key={lg.leagueId} value={lg.leagueId} style={{ color: "#fff", fontWeight: 600 }}>
-        {lg.name} — {lg.totalRosters}tm {lg.format}
-        {their ? ` · Them #${their}` : ""}
-        {yours ? ` · You #${yours}` : ""}
-      </option>
+      <div
+        className="rounded-md overflow-hidden flex-shrink-0 bg-white/10 ring-1 ring-white/10 flex items-center justify-center"
+        style={{ width: size, height: size }}
+      >
+        {src ? (
+          <img src={src} alt="" className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+        ) : (
+          <Trophy className="w-3.5 h-3.5 text-white/40" />
+        )}
+      </div>
     );
   };
+
+  const renderItem = (lg: LeagueReport) => {
+    const isActive = lg.leagueId === selected.leagueId;
+    return (
+      <DropdownMenuItem
+        key={lg.leagueId}
+        onSelect={() => onSelect(lg.leagueId)}
+        data-testid={`league-option-${lg.leagueId}`}
+        className="gap-2.5 px-2.5 py-2 cursor-pointer text-white focus:bg-white/10 focus:text-white data-[highlighted]:bg-white/10"
+      >
+        <LeagueAvatar lg={lg} size={28} />
+        <div className="min-w-0 flex-1">
+          <div className="text-[13px] font-semibold text-white truncate leading-tight">{lg.name}</div>
+          <div className="text-[11px] text-white/45 truncate leading-tight mt-0.5">{metaFor(lg)}</div>
+        </div>
+        {isActive && <Check className="w-3.5 h-3.5 text-[#d4af37] flex-shrink-0" />}
+      </DropdownMenuItem>
+    );
+  };
+
+  const groupLabel = "text-[11px] font-extrabold uppercase tracking-wider text-[#d4af37] px-2.5 pt-1.5 pb-1";
 
   return (
     <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
       <div className="text-[10px] uppercase tracking-wider text-white/40 mb-1.5">Viewing league</div>
-      <select
-        value={selected.leagueId}
-        onChange={(e) => onSelect(e.target.value)}
-        className="w-full bg-[#0a1628] border border-white/15 rounded-md text-[13px] font-semibold text-white px-3 py-2 focus:outline-none focus:border-[#d4af37]/50"
-        data-testid="league-selector"
-      >
-        {sharedLeagues.length > 0 && (
-          <optgroup label="Shared leagues" style={{ fontWeight: 800, color: "#d4af37" }}>{sharedLeagues.map(renderOption)}</optgroup>
-        )}
-        {otherLeagues.length > 0 && (
-          <optgroup label="Other leagues" style={{ fontWeight: 800, color: "#d4af37" }}>{otherLeagues.map(renderOption)}</optgroup>
-        )}
-      </select>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            data-testid="league-selector"
+            className="w-full flex items-center gap-2.5 bg-[#0a1628] border border-white/15 rounded-md px-3 py-2 text-left hover:border-white/25 focus:outline-none focus:border-[#d4af37]/50 transition-colors"
+          >
+            <LeagueAvatar lg={selected} size={28} />
+            <div className="min-w-0 flex-1">
+              <div className="text-[13px] font-semibold text-white truncate leading-tight">{selected.name}</div>
+              <div className="text-[11px] text-white/45 truncate leading-tight mt-0.5">{metaFor(selected)}</div>
+            </div>
+            <ChevronDown className="w-4 h-4 text-white/40 flex-shrink-0" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent
+          align="start"
+          className="w-[var(--radix-dropdown-menu-trigger-width)] min-w-[280px] max-h-[360px] bg-[#0a1628] border-white/15 text-white p-1.5"
+        >
+          {sharedLeagues.length > 0 && (
+            <>
+              <DropdownMenuLabel className={groupLabel}>Shared leagues</DropdownMenuLabel>
+              {sharedLeagues.map(renderItem)}
+            </>
+          )}
+          {otherLeagues.length > 0 && (
+            <>
+              {sharedLeagues.length > 0 && <DropdownMenuSeparator className="bg-white/10" />}
+              <DropdownMenuLabel className={groupLabel}>Other leagues</DropdownMenuLabel>
+              {otherLeagues.map(renderItem)}
+            </>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
       <div className="flex flex-wrap gap-1.5 mt-2.5">
         <Chip>{`${selected.totalRosters} Team ${selected.format}`}</Chip>
         <Chip>{selected.scoringFormat}</Chip>
@@ -1097,17 +1171,17 @@ function ValueDonut({ title, data }: { title: string; data: Array<{ name: string
       {data.length === 0 ? (
         <p className="text-[12px] text-white/45 py-8 text-center">No value data.</p>
       ) : (
-        <div className="h-[200px] w-full">
+        <div className="h-[230px] w-full">
           <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
+            <PieChart margin={{ top: 18, right: 18, bottom: 0, left: 18 }}>
               <Pie
                 data={data}
                 dataKey="value"
                 nameKey="name"
                 cx="50%"
                 cy="50%"
-                innerRadius={45}
-                outerRadius={72}
+                innerRadius={40}
+                outerRadius={60}
                 paddingAngle={2}
                 stroke="none"
                 label={(e: any) => `${e.name} ${Math.round((e.value / total) * 100)}%`}
@@ -1960,7 +2034,7 @@ function ActivityTab({ data }: { data: ManagerIntelPayload }) {
       )}
 
       {/* Trade history across all dynasty leagues. */}
-      <SectionCard title={`Trade history (${act.tradeHistory?.length ?? 0})`} icon={<ArrowRightLeft className="w-3.5 h-3.5" />}>
+      <SectionCard title={`Trade history (${act.tradeHistory?.length ?? 0})`} icon={<ArrowRightLeft className="w-3.5 h-3.5" />} collapsible>
         {act.tradeHistory && act.tradeHistory.length > 0 ? (
           <div className="space-y-1.5 max-h-[440px] overflow-y-auto pr-1">
             {act.tradeHistory.map((t, i) => (
@@ -1980,7 +2054,7 @@ function ActivityTab({ data }: { data: ManagerIntelPayload }) {
       </SectionCard>
 
       {/* Waiver / FA history across all dynasty leagues. */}
-      <SectionCard title={`Waiver history (${act.waiverHistory?.length ?? 0})`} icon={<Activity className="w-3.5 h-3.5" />}>
+      <SectionCard title={`Waiver history (${act.waiverHistory?.length ?? 0})`} icon={<Activity className="w-3.5 h-3.5" />} collapsible>
         {act.waiverHistory && act.waiverHistory.length > 0 ? (
           <div className="space-y-1.5 max-h-[440px] overflow-y-auto pr-1">
             {act.waiverHistory.map((w, i) => (
@@ -2062,14 +2136,29 @@ function ShareBar({ label, count, pct, tone }: { label: string; count: number; p
 
 // ── Subcomponents ───────────────────────────────────────────────────────────
 
-function SectionCard({ title, icon, children }: { title: string; icon?: React.ReactNode; children: React.ReactNode }) {
+function SectionCard({ title, icon, children, collapsible = false }: { title: string; icon?: React.ReactNode; children: React.ReactNode; collapsible?: boolean }) {
+  // Collapsible sections start closed so long history lists don't dominate the tab.
+  const [open, setOpen] = useState(!collapsible);
   return (
     <div className="rounded-lg border border-white/8 bg-white/[0.025] p-4">
-      <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-white/45 mb-2">
-        {icon}
-        <span>{title}</span>
-      </div>
-      {children}
+      {collapsible ? (
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          aria-expanded={open}
+          className="w-full flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-white/45 hover:text-white/70 transition-colors"
+        >
+          {icon}
+          <span>{title}</span>
+          <ChevronDown className={cn("w-3.5 h-3.5 ml-auto transition-transform", open && "rotate-180")} />
+        </button>
+      ) : (
+        <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-white/45 mb-2">
+          {icon}
+          <span>{title}</span>
+        </div>
+      )}
+      {open && <div className={collapsible ? "mt-2" : undefined}>{children}</div>}
     </div>
   );
 }

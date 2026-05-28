@@ -689,6 +689,7 @@ export async function registerRoutes(
         scoring: req.query.scoring as string,
         leagueSize: req.query.leagueSize ? parseInt(req.query.leagueSize as string) : undefined,
         season: req.query.season as string,
+        bestBall: req.query.bestBall as string,
         page: req.query.page ? parseInt(req.query.page as string) : 1,
         limit: req.query.limit ? parseInt(req.query.limit as string) : 50,
       };
