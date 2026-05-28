@@ -1976,7 +1976,10 @@ export async function registerRoutes(
 
   startSnapshotScheduler();
   startAdpScheduler();
-  startCrawlWorker();
+  // The old ADP passive-crawl queue worker is retired in favor of the unified
+  // scheduled crawler below, which gathers BOTH trades and drafts. (The worker
+  // can still be started manually via the admin endpoints for debugging.)
+  startUnifiedCrawler();
 
   // Reap any scan log row or queue item that the previous process left
   // dangling. Without this, a crashed scan stays in status="running"

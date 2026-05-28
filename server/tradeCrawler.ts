@@ -164,11 +164,11 @@ interface SleeperUserInfo {
   metadata?: { team_name?: string };
 }
 
-function deriveFormat(rosterPositions: string[]): string {
+export function deriveFormat(rosterPositions: string[]): string {
   return rosterPositions?.includes("SUPER_FLEX") ? "SF" : "1QB";
 }
 
-function deriveScoringFormat(scoringSettings: { rec?: number }): string {
+export function deriveScoringFormat(scoringSettings: { rec?: number }): string {
   const rec = scoringSettings?.rec ?? 0;
   if (rec === 1) return "PPR";
   if (rec === 0.5) return "Half";
@@ -224,7 +224,7 @@ async function incrementCrawlStats(field: "leaguesCrawled" | "tradesCollected" |
     .where(eq(crawlState.id, state.id));
 }
 
-async function discoverUser(userId: string, username: string | null, displayName: string | null) {
+export async function discoverUser(userId: string, username: string | null, displayName: string | null) {
   const d = getDb();
   const existing = await d.select().from(crawledUsers).where(eq(crawledUsers.id, userId)).limit(1);
   if (existing.length > 0) return false;

@@ -428,6 +428,29 @@ export type AdpCrawlSeed = typeof adpCrawlSeeds.$inferSelect;
 export type AdpCrawlQueueItem = typeof adpCrawlQueue.$inferSelect;
 export type AdpCrawlLogEntry = typeof adpCrawlLog.$inferSelect;
 
+// ── Unified scheduled crawler ─────────────────────────────────────────────
+// Audit trail for the scheduled crawler that gathers BOTH trades and drafts.
+// Each run picks one random seed user (from the pool of users who entered a
+// username, or their league-mates), expands depth-1 across their leagues up to
+// a randomized per-run cap, and ingests recent trades + startup/rookie drafts.
+export const unifiedCrawlRuns = pgTable("unified_crawl_runs", {
+  id: serial("id").primaryKey(),
+  status: varchar("status", { length: 20 }).notNull().default("running"),
+  seedUserId: varchar("seed_user_id", { length: 32 }),
+  seedUsername: text("seed_username"),
+  leagueCapTarget: integer("league_cap_target").notNull().default(0),
+  leaguesDiscovered: integer("leagues_discovered").notNull().default(0),
+  leaguesScanned: integer("leagues_scanned").notNull().default(0),
+  tradesInserted: integer("trades_inserted").notNull().default(0),
+  draftsIngested: integer("drafts_ingested").notNull().default(0),
+  membersDiscovered: integer("members_discovered").notNull().default(0),
+  message: text("message"),
+  startedAt: timestamp("started_at").defaultNow(),
+  completedAt: timestamp("completed_at"),
+});
+
+export type UnifiedCrawlRun = typeof unifiedCrawlRuns.$inferSelect;
+
 // ── Passive ADP enrichment events ────────────────────────────────────────────
 // One row per "user connected their Sleeper account → kick off a depth-1
 // crawl" event. Doubles as audit log AND cooldown table — enqueueSleeperUser

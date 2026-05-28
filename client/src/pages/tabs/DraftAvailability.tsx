@@ -94,14 +94,30 @@ function Segmented<T extends string | number>({ label, options, value, onChange,
 }
 
 // ── Biggest ADP movers (7-day) ───────────────────────────────────────────────
-function MoversPanel({ rows }: { rows: ADPResult[] }) {
+// A "mover" is only meaningful for players being taken in the startable core of
+// the board. Back-of-board picks swing dozens of slots on pure draft-to-draft
+// jitter (a 60-pick wobble at ADP 290 is noise; a 10-pick move at ADP 30 is
+// news), so we cap by overall rank. We also require a healthy draft presence so
+// a thinly-drafted name can't post a phantom trend.
+const MOVERS_DEPTH_ROUNDS = 12; // eligible if overall_rank ≤ teams × this (~top 12 rounds)
+const MOVERS_MIN_PRESENCE = 0.25; // and drafted in ≥25% of the slice's drafts
+
+function MoversPanel({ rows, teams, totalDrafts }: { rows: ADPResult[]; teams: number; totalDrafts: number | null }) {
   const [open, setOpen] = useState(false);
   const { risers, fallers } = useMemo(() => {
-    const moved = rows.filter((r) => !r.is_rookie_placeholder && r.trend_7d !== 0);
+    const depthCap = teams * MOVERS_DEPTH_ROUNDS;
+    const minPresence = totalDrafts ? totalDrafts * MOVERS_MIN_PRESENCE : 0;
+    const moved = rows.filter(
+      (r) =>
+        !r.is_rookie_placeholder &&
+        r.trend_7d !== 0 &&
+        r.overall_rank <= depthCap &&
+        r.draft_count >= minPresence,
+    );
     const risers = [...moved].filter((r) => r.trend_7d < 0).sort((a, b) => a.trend_7d - b.trend_7d).slice(0, 5);
     const fallers = [...moved].filter((r) => r.trend_7d > 0).sort((a, b) => b.trend_7d - a.trend_7d).slice(0, 5);
     return { risers, fallers };
-  }, [rows]);
+  }, [rows, teams, totalDrafts]);
   if (!risers.length && !fallers.length) return null;
 
   return (
@@ -560,7 +576,7 @@ export function DraftAvailability() {
         )}
       </Card>
 
-      <MoversPanel rows={rows} />
+      <MoversPanel rows={rows} teams={teams} totalDrafts={draftCount} />
 
       {loading ? (
         <Card className="p-10 flex items-center justify-center text-muted-foreground"><Loader2 className="w-5 h-5 animate-spin mr-2" /> Loading ADP data…</Card>
