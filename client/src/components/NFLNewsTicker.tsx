@@ -6,7 +6,27 @@ type NewsItem = {
   title: string;
   link: string;
   pubDate?: string | null;
+  playerName?: string | null;
+  image?: string | null;
 };
+
+/** Player headshot for a headline, falling back to the gold dot when there's no
+ *  match or the image 404s (many deep players have no Sleeper headshot). */
+function NewsIcon({ src, name }: { src?: string | null; name?: string | null }) {
+  const [failed, setFailed] = useState(false);
+  if (!src || failed) {
+    return <span className="h-1.5 w-1.5 rounded-full bg-[#d4af37] flex-shrink-0" />;
+  }
+  return (
+    <img
+      src={src}
+      alt={name ?? ""}
+      loading="lazy"
+      onError={() => setFailed(true)}
+      className="h-5 w-5 rounded-full object-cover bg-white/10 ring-1 ring-[#d4af37]/30 flex-shrink-0"
+    />
+  );
+}
 
 /**
  * StatChasers NFL News ticker — scrolling Rotowire headline links.
@@ -52,10 +72,10 @@ export function NFLNewsTicker() {
             return (
               <div
                 key={`${item.id}-${index}`}
-                className="flex items-center gap-2.5 px-5 py-2 whitespace-nowrap"
+                className="flex items-center gap-2.5 px-5 py-1.5 whitespace-nowrap"
                 aria-hidden={isClone}
               >
-                <span className="h-1.5 w-1.5 rounded-full bg-[#d4af37] flex-shrink-0" />
+                <NewsIcon src={item.image} name={item.playerName ?? item.title} />
                 <a
                   href={item.link}
                   target="_blank"
