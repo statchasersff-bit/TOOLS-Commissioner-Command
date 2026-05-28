@@ -361,7 +361,7 @@ export function DraftCommand() {
         <div className="flex justify-center md:justify-end flex-shrink-0">
           <div
             className="grid w-[90vw] md:w-fit"
-            style={{ gridTemplateColumns: "repeat(2, 1fr)", height: 48, borderRadius: 16, padding: 4, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", gap: 4, minWidth: 0 }}
+            style={{ gridTemplateColumns: "repeat(2, 1fr)", height: 48, borderRadius: 16, padding: 4, background: "var(--sc-toggle-bg)", border: "1px solid var(--sc-toggle-border)", gap: 4, minWidth: 0 }}
             data-testid="draft-command-top-tabs"
           >
         {TOP_TABS.map((t) => {
@@ -375,7 +375,7 @@ export function DraftCommand() {
               title={t.label}
               data-testid={`draft-tab-${t.id}`}
               className="relative flex items-center justify-center gap-1.5 font-semibold transition-all duration-200"
-              style={{ borderRadius: 12, fontSize: 12, letterSpacing: "0.01em", background: active ? "linear-gradient(135deg, rgba(11,58,122,0.85) 0%, rgba(11,58,122,0.65) 100%)" : "transparent", color: active ? "#fff" : "rgba(203,213,225,0.45)", border: active ? "1px solid rgba(212,175,55,0.30)" : "1px solid transparent", boxShadow: active ? "0 2px 12px rgba(11,58,122,0.40), inset 0 1px 0 rgba(255,255,255,0.06)" : "none", paddingLeft: 12, paddingRight: 12 }}
+              style={{ borderRadius: 12, fontSize: 12, letterSpacing: "0.01em", background: active ? "linear-gradient(135deg, rgba(11,58,122,0.85) 0%, rgba(11,58,122,0.65) 100%)" : "transparent", color: active ? "#fff" : "var(--sc-toggle-inactive-text)", border: active ? "1px solid rgba(212,175,55,0.30)" : "1px solid transparent", boxShadow: active ? "0 2px 12px rgba(11,58,122,0.40), inset 0 1px 0 rgba(255,255,255,0.06)" : "none", paddingLeft: 12, paddingRight: 12 }}
             >
               <Icon style={{ width: 14, height: 14, flexShrink: 0 }} />
               <span>{t.label}</span>

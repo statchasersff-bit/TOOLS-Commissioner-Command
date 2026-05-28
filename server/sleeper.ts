@@ -806,12 +806,27 @@ export async function fetchLeagueTransactions(leagueId: string) {
         teamName: rosterOwnerMap.get(rid) || `Team ${rid}`,
       }));
 
-      return { type, timestamp, week, adds, drops, draftPicks, involvedTeams };
+      // FAAB bid on a waiver claim (0 for free-agent/trade moves).
+      const waiverBid: number = t.settings?.waiver_bid ?? 0;
+      // FAAB transferred as part of a trade: Sleeper's waiver_budget entries are
+      // { sender, receiver, amount } keyed by roster_id.
+      const faabTransfers: Array<{ fromTeam: string; toTeam: string; amount: number }> =
+        Array.isArray(t.waiver_budget)
+          ? t.waiver_budget.map((wb: any) => ({
+              fromTeam: rosterOwnerMap.get(wb.sender) || `Team ${wb.sender}`,
+              toTeam: rosterOwnerMap.get(wb.receiver) || `Team ${wb.receiver}`,
+              amount: wb.amount ?? 0,
+            }))
+          : [];
+
+      return { type, timestamp, week, adds, drops, draftPicks, involvedTeams, waiverBid, faabTransfers };
     });
 
   return {
     transactions: formatted,
     leagueName: leagueRaw.name,
     totalRosters: leagueRaw.total_rosters,
+    // 0 when the league doesn't use FAAB; engine treats that as "FAAB disabled".
+    waiverBudgetTotal: leagueRaw.settings?.waiver_budget ?? 100,
   };
 }

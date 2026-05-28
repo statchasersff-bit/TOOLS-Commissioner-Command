@@ -178,46 +178,192 @@
  * ────────────────────────────────────────────────────────────────────────── */
 [data-theme="light"] {
   /* Surfaces — crisp white cards on a neutral off-white page (no washed blue) */
-  --background: 210 40% 98%;            /* #f8fafc */
-  --sc-page-bg: #f8fafc;
+  --background: 210 38% 98%;            /* #f7fafc — brand --sc-bg */
+  --sc-page-bg: #f7fafc;
+  --sc-bg: #f7fafc;                     /* brand alias */
   --sc-card-bg: #ffffff;
+  --sc-card: #ffffff;                   /* brand alias */
   --sc-card-soft: #f1f5f9;              /* defined secondary surface */
   --sc-nav-bg: #ffffff;
   --sc-nav-bg-translucent: rgba(255, 255, 255, 0.85);
   --sc-table-header-bg: #f1f5f9;
   --sc-table-row-hover: #f8fafc;
 
-  /* Navy — secondary brand color (#18376d), richer than the old near-black */
-  --foreground: 214 68% 14%;            /* #0b1f3a navy text */
-  --sc-blue: #18376d;
-  --sc-blue-2: #234c86;                 /* lighter navy line on navy surfaces */
+  /* Navy — deep StatChasers navy (#031B3D), with structural blue (#0B3978).
+     navy = darkest brand ink (headers/bars); navy-2 = mid depth; blue = the
+     structural navy used for chips, table headers, section headings. */
+  --foreground: 213 67% 14%;            /* #0b1f3a — deep navy body/number text */
+  --sc-navy: #031b3d;
+  --sc-navy-2: #062b5f;                 /* brand mid-navy for gradients/depth */
+  --sc-navy-soft: #062b5f;
+  --sc-blue: #0b3978;                   /* structural brand blue */
+  --sc-blue-2: #1f4f97;                 /* lighter navy line on navy surfaces */
   --sc-blue-soft: #eef3fb;
-  --sc-navy: #18376d;
-  --sc-navy-soft: #10264f;              /* navy-dark for depth/gradients */
 
   /* Text */
   --sc-text: #0b1f3a;
   --sc-text-primary: #0b1f3a;
-  --sc-text-muted: #64748b;
-  --sc-text-secondary: #64748b;
+  --sc-text-muted: #5a6b83;             /* brand --sc-muted */
+  --sc-text-secondary: #5a6b83;
+  --sc-muted: #5a6b83;                  /* brand alias */
+  --muted-foreground: 215 19% 43%;      /* #5a6b83 */
 
   /* Borders */
-  --border: 214 32% 91%;                /* #dbe3ef */
-  --sc-border: #dbe3ef;
-  --sc-border-strong: #c5d1e0;
+  --border: 213 30% 88%;                /* #d8e0ea */
+  --sc-border: #d8e0ea;
+  --sc-border-strong: #c2cfde;
 
-  /* Gold — accent only (#d4af37, classic StatChasers gold) */
-  --primary: 46 65% 52%;                /* #d4af37 */
-  --ring: 46 65% 52%;
-  --sidebar-ring: 46 65% 52%;
-  --sc-gold: #d4af37;
-  --sc-gold-deep: #b8901f;
-  --sc-gold-soft: #fbf3d6;              /* pale tint surface — kept soft, not neon */
+  /* Gold — premium accent only (#D6A728), with a lighter highlight tone */
+  --primary: 44 68% 50%;                /* #d6a728 */
+  --ring: 44 68% 50%;
+  --sidebar-ring: 44 68% 50%;
+  --sc-gold: #d6a728;
+  --sc-gold-light: #f4d06f;             /* brand highlight gold */
+  --sc-gold-deep: #b8881a;
+  --sc-gold-soft: #fdf6e0;              /* pale tint surface — kept soft, not neon */
 
-  /* Premium, tighter card shadow */
-  --sc-shadow-card: 0 6px 18px rgba(15, 23, 42, 0.08);
-  --sc-shadow-card-hover: 0 10px 26px rgba(15, 23, 42, 0.12);
-  --sc-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
+  /* Premium card shadow — navy-tinted, not generic slate */
+  --sc-shadow-card: 0 6px 18px rgba(3, 27, 61, 0.08);
+  --sc-shadow-card-hover: 0 12px 30px rgba(3, 27, 61, 0.14);
+  --sc-shadow-sm: 0 1px 2px rgba(3, 27, 61, 0.06);
+}
+
+/* ── Light mode brand pass (data-theme="light" only; dark/x-mode untouched) ──
+ * These rules out-specify Tailwind utilities (they're unlayered + compound) so
+ * no per-element class edits are needed, and none of them match dark/x-mode. */
+
+/* 1) Top header bar → deep StatChasers navy. We redefine --foreground and
+ *    --muted-foreground *scoped to the bar* so every text-foreground /
+ *    text-muted-foreground child flips to light automatically (no markup edits),
+ *    and recolor the bar's own bottom border into a thin premium gold rule. */
+[data-theme="light"] .sc-topbar {
+  --foreground: 0 0% 100%;
+  --muted-foreground: 213 28% 82%;
+  --sc-border: rgba(214, 167, 40, 0.25);
+  background: linear-gradient(180deg, var(--sc-navy) 0%, var(--sc-navy-2) 100%) !important;
+  box-shadow: 0 6px 20px rgba(3, 27, 61, 0.28);
+}
+/* Logo swap: show the light-on-dark mark, hide the dark-on-light one, on navy. */
+[data-theme="light"] .sc-topbar .sc-topbar-logo-dark { display: block; }
+[data-theme="light"] .sc-topbar .sc-topbar-logo-light { display: none; }
+
+/* 5) Secondary (main) nav, light mode.
+ *    Active tab → deep navy text on a light-gold wash with a crisp gold ring +
+ *    soft navy lift, so it reads as a selected pill rather than a disabled one.
+ *    The ring uses inset box-shadow (not border) to avoid a 1px layout shift.
+ *    Inactive tabs → a touch darker/bolder for legibility on the white strip. */
+[data-theme="light"] [data-testid="main-tabs"] button[aria-selected="true"] {
+  /* gold wash is forced so team themes (which recolor the .bg-[#0b3a7a]/8 class)
+     can't turn the active pill red — the gold accent is intentional in all
+     light-based themes. Text color stays overridable so ARI can go cardinal. */
+  background-color: rgba(214, 167, 40, 0.12) !important;
+  color: #031b3d;
+  box-shadow: inset 0 0 0 1px rgba(214, 167, 40, 0.35), 0 2px 8px rgba(3, 27, 61, 0.06);
+}
+[data-theme="light"] [data-testid="main-tabs"] button[aria-selected="false"] {
+  color: #4a5c73;
+  font-weight: 600;
+}
+
+/* 2) Top metric tiles (Snapshot stats) → white surface, defined border, a thin
+ *    gold top accent, and a stronger navy lift so the headline numbers pop. */
+[data-theme="light"] .sc-metric-tile {
+  background-color: #ffffff;
+  border-color: var(--sc-border);
+  border-top: 3px solid var(--sc-gold);
+  box-shadow: 0 8px 22px rgba(3, 27, 61, 0.08);
+}
+
+/* 5) Inner "mini" cards (Roster Strength, tier breakdown) → slightly lifted off
+ *    the page with a defined border, and a gold-border + navy-shadow hover. */
+[data-theme="light"] .sc-mini-card {
+  background-color: #fafcff;
+  border-color: #dde5ef;
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+[data-theme="light"] .sc-mini-card:hover {
+  border-color: rgba(214, 167, 40, 0.45);
+  box-shadow: 0 6px 18px rgba(3, 27, 61, 0.08);
+}
+
+/* 6) Asset-tier badges → branded tag palette (light mode only; the bars/dots
+ *    keep the tier hues). box-shadow draws the 1px ring so the existing ring-1
+ *    utility is replaced cleanly without a border-driven layout shift. */
+[data-theme="light"] .sc-tier-badge-elite {
+  color: #8a6512;
+  background-color: rgba(214, 167, 40, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(214, 167, 40, 0.45);
+}
+[data-theme="light"] .sc-tier-badge-core {
+  color: #031b3d;
+  background-color: rgba(3, 27, 61, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(3, 27, 61, 0.2);
+}
+[data-theme="light"] .sc-tier-badge-flex {
+  color: #0b3978;
+  background-color: rgba(59, 130, 246, 0.1);
+  box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.25);
+}
+[data-theme="light"] .sc-tier-badge-depth {
+  color: #526174;
+  background-color: rgba(148, 163, 184, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.3);
+}
+[data-theme="light"] .sc-tier-badge-lottery {
+  color: #6d3ff2;
+  background-color: rgba(139, 92, 246, 0.1);
+  box-shadow: inset 0 0 0 1px rgba(139, 92, 246, 0.25);
+}
+
+/* 3 + 10) Premium card hover — additive only (base shadow/radius untouched so
+ *    cards with custom radii/shadows aren't clobbered): a soft navy lift. */
+[data-theme="light"] .shadcn-card {
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+[data-theme="light"] .shadcn-card:hover {
+  box-shadow: var(--sc-shadow-card);
+  border-color: var(--sc-border-strong);
+}
+
+/* 3) Optional 3px gold top accent on major metric (KPI) cards. */
+[data-theme="light"] .sc-kpi-card {
+  border-top: 3px solid var(--sc-gold);
+}
+
+/* Header dropdown panels, light mode.
+ * The nav mega-menu keeps the rich StatChasers navy slab (branded, reads as
+ * connected to the page). The logo "About/Feedback" menu and the user-profile
+ * menu instead match the app's other dropdowns (Select/DropdownMenu use the
+ * white --popover surface with dark navy text) so their contents stay legible.
+ * Both header menus live inside .sc-topbar, which flips --foreground /
+ * --muted-foreground to white for the navy bar — so the light menus reset those
+ * vars back to the page's dark text. !important is required because each panel
+ * sets its background via an inline style. */
+[data-theme="light"] .sc-mega-panel {
+  background: linear-gradient(180deg, #081a36 0%, #0b1f42 100%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  box-shadow: 0 16px 40px rgba(3, 27, 61, 0.28) !important;
+}
+[data-theme="light"] .sc-logo-menu {
+  --foreground: 213 67% 14%;
+  --muted-foreground: 215 19% 43%;
+  background: hsl(var(--popover)) !important;
+  border: 1px solid hsl(var(--border)) !important;
+  box-shadow: 0 16px 40px rgba(3, 27, 61, 0.18) !important;
+}
+[data-theme="light"] .sc-logo-menu .sc-logo-menu-text {
+  color: hsl(var(--foreground)) !important;
+}
+[data-theme="light"] .sc-logo-menu .sc-logo-menu-divider {
+  border-color: hsl(var(--border)) !important;
+}
+[data-theme="light"] .sc-logo-menu .sc-logo-menu-item:hover {
+  background-color: hsl(var(--muted)) !important;
+}
+[data-theme="light"] .sc-topbar .sc-user-menu {
+  --foreground: 213 67% 14%;
+  --muted-foreground: 215 19% 43%;
+  background: hsl(var(--popover)) !important;
 }
 
 /* Light mode only: mega-menu section header row is a filled StatChasers blue bar
@@ -880,3 +1026,104 @@
   }
   .hex-scan-line { animation: hex-scan 9s linear infinite; }
 }
+
+/* ════════════════════════════════════════════════════════════════════════════
+ * ARIZONA CARDINALS team theme — data-team-theme="ARI" (light base).
+ * Identical to standard light mode EXCEPT the StatChasers navy/blue is recolored
+ * to cardinal red (#97233F). Scoped entirely to [data-team-theme="ARI"], an
+ * attribute plain light mode never carries, so light mode is byte-for-byte
+ * unchanged. Gold accents are intentionally preserved.
+ * ════════════════════════════════════════════════════════════════════════════ */
+
+/* Tokenized navy/blue → cardinal: recolors the top header gradient, section
+ * headings (var(--sc-blue)), light-mode table headers, and mega-menu title bars. */
+[data-team-theme="ARI"] {
+  --sc-navy: #6b1229;        /* deep maroon — header gradient top */
+  --sc-navy-2: #97233f;      /* cardinal red — header gradient bottom */
+  --sc-navy-soft: #7a1b32;
+  --sc-blue: #97233f;        /* structural brand blue → cardinal */
+  --sc-blue-2: #b03a54;      /* lighter cardinal */
+}
+
+/* Page grid texture → cardinal tint (was navy rgba(15,36,71)). Keeps the same
+ * subtle 32px grid, just recolored to match the Cardinal theme. */
+[data-team-theme="ARI"] .sc-page-bg {
+  background-image:
+    linear-gradient(rgba(151, 35, 63, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(151, 35, 63, 0.04) 1px, transparent 1px);
+}
+
+/* Heading text → black (not cardinal). The section-heading treatment uses
+ * text-[var(--sc-blue)]; on the Cardinal theme we keep the red bars/accents but
+ * render heading copy in near-black for stronger contrast on the white canvas. */
+[data-team-theme="ARI"] .text-\[var\(--sc-blue\)\] {
+  color: #0a0a0a !important;
+}
+
+/* Header dropdown panels → cardinal gradient (were navy). */
+[data-team-theme="ARI"] .sc-logo-menu,
+[data-team-theme="ARI"] .sc-mega-panel {
+  background: linear-gradient(180deg, #5c1124 0%, #7a1b32 100%) !important;
+}
+
+/* Hardcoded #0b3a7a-family navy → cardinal red. Generated to cover every
+ * bg/text/border/ring/shadow/gradient class form (and opacity) used app-wide. */
+[data-team-theme="ARI"] .bg-\[\#0b3978\] { background-color: rgb(151 35 63) !important; }
+[data-team-theme="ARI"] .bg-\[\#0b3978\]\/10 { background-color: rgb(151 35 63 / 0.1) !important; }
+[data-team-theme="ARI"] .bg-\[\#0b3a7a\] { background-color: rgb(151 35 63) !important; }
+[data-team-theme="ARI"] .bg-\[\#0b3a7a\]\/10 { background-color: rgb(151 35 63 / 0.1) !important; }
+[data-team-theme="ARI"] .bg-\[\#0b3a7a\]\/12 { background-color: rgb(151 35 63 / 0.12) !important; }
+[data-team-theme="ARI"] .bg-\[\#0b3a7a\]\/15 { background-color: rgb(151 35 63 / 0.15) !important; }
+[data-team-theme="ARI"] .bg-\[\#0b3a7a\]\/20 { background-color: rgb(151 35 63 / 0.2) !important; }
+[data-team-theme="ARI"] .bg-\[\#0b3a7a\]\/25 { background-color: rgb(151 35 63 / 0.25) !important; }
+[data-team-theme="ARI"] .bg-\[\#0b3a7a\]\/30 { background-color: rgb(151 35 63 / 0.3) !important; }
+[data-team-theme="ARI"] .bg-\[\#0b3a7a\]\/40 { background-color: rgb(151 35 63 / 0.4) !important; }
+[data-team-theme="ARI"] .bg-\[\#0b3a7a\]\/5 { background-color: rgb(151 35 63 / 0.05) !important; }
+[data-team-theme="ARI"] .bg-\[\#0b3a7a\]\/50 { background-color: rgb(151 35 63 / 0.5) !important; }
+[data-team-theme="ARI"] .bg-\[\#0b3a7a\]\/6 { background-color: rgb(151 35 63 / 0.06) !important; }
+[data-team-theme="ARI"] .bg-\[\#0b3a7a\]\/60 { background-color: rgb(151 35 63 / 0.6) !important; }
+[data-team-theme="ARI"] .bg-\[\#0b3a7a\]\/65 { background-color: rgb(151 35 63 / 0.65) !important; }
+[data-team-theme="ARI"] .bg-\[\#0b3a7a\]\/8 { background-color: rgb(151 35 63 / 0.08) !important; }
+[data-team-theme="ARI"] .bg-\[\#0b3a7a\]\/80 { background-color: rgb(151 35 63 / 0.8) !important; }
+[data-team-theme="ARI"] .bg-\[\#0b3a7a\]\/85 { background-color: rgb(151 35 63 / 0.85) !important; }
+[data-team-theme="ARI"] .bg-\[\#0b3a7a\]\/90 { background-color: rgb(151 35 63 / 0.9) !important; }
+[data-team-theme="ARI"] .bg-\[\#0d4a9a\] { background-color: rgb(176 58 84) !important; }
+[data-team-theme="ARI"] .border-\[\#0b3a7a\] { border-color: rgb(151 35 63) !important; }
+[data-team-theme="ARI"] .border-\[\#0b3a7a\]\/10 { border-color: rgb(151 35 63 / 0.1) !important; }
+[data-team-theme="ARI"] .border-\[\#0b3a7a\]\/15 { border-color: rgb(151 35 63 / 0.15) !important; }
+[data-team-theme="ARI"] .border-\[\#0b3a7a\]\/20 { border-color: rgb(151 35 63 / 0.2) !important; }
+[data-team-theme="ARI"] .border-\[\#0b3a7a\]\/30 { border-color: rgb(151 35 63 / 0.3) !important; }
+[data-team-theme="ARI"] .border-\[\#0b3a7a\]\/40 { border-color: rgb(151 35 63 / 0.4) !important; }
+[data-team-theme="ARI"] .border-\[\#0b3a7a\]\/80 { border-color: rgb(151 35 63 / 0.8) !important; }
+[data-team-theme="ARI"] .from-\[\#0b3a7a\] { --tw-gradient-from: rgb(151 35 63) var(--tw-gradient-from-position) !important; --tw-gradient-to: rgb(151 35 63 / 0) var(--tw-gradient-to-position) !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important; }
+[data-team-theme="ARI"] .from-\[\#0b3a7a\]\/10 { --tw-gradient-from: rgb(151 35 63 / 0.1) var(--tw-gradient-from-position) !important; --tw-gradient-to: rgb(151 35 63 / 0) var(--tw-gradient-to-position) !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important; }
+[data-team-theme="ARI"] .from-\[\#0b3a7a\]\/20 { --tw-gradient-from: rgb(151 35 63 / 0.2) var(--tw-gradient-from-position) !important; --tw-gradient-to: rgb(151 35 63 / 0) var(--tw-gradient-to-position) !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important; }
+[data-team-theme="ARI"] .from-\[\#0b3a7a\]\/25 { --tw-gradient-from: rgb(151 35 63 / 0.25) var(--tw-gradient-from-position) !important; --tw-gradient-to: rgb(151 35 63 / 0) var(--tw-gradient-to-position) !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important; }
+[data-team-theme="ARI"] .from-\[\#0b3a7a\]\/3 { --tw-gradient-from: rgb(151 35 63 / 0.03) var(--tw-gradient-from-position) !important; --tw-gradient-to: rgb(151 35 63 / 0) var(--tw-gradient-to-position) !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important; }
+[data-team-theme="ARI"] .from-\[\#0b3a7a\]\/30 { --tw-gradient-from: rgb(151 35 63 / 0.3) var(--tw-gradient-from-position) !important; --tw-gradient-to: rgb(151 35 63 / 0) var(--tw-gradient-to-position) !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important; }
+[data-team-theme="ARI"] .from-\[\#0b3a7a\]\/5 { --tw-gradient-from: rgb(151 35 63 / 0.05) var(--tw-gradient-from-position) !important; --tw-gradient-to: rgb(151 35 63 / 0) var(--tw-gradient-to-position) !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important; }
+[data-team-theme="ARI"] .ring-\[\#0b3978\]\/30 { --tw-ring-color: rgb(151 35 63 / 0.3) !important; }
+[data-team-theme="ARI"] .ring-\[\#0b3a7a\]\/15 { --tw-ring-color: rgb(151 35 63 / 0.15) !important; }
+[data-team-theme="ARI"] .ring-\[\#0b3a7a\]\/20 { --tw-ring-color: rgb(151 35 63 / 0.2) !important; }
+[data-team-theme="ARI"] .ring-\[\#0b3a7a\]\/30 { --tw-ring-color: rgb(151 35 63 / 0.3) !important; }
+[data-team-theme="ARI"] .shadow-\[\#0b3a7a\]\/20 { --tw-shadow-color: rgb(151 35 63 / 0.2) !important; --tw-shadow: var(--tw-shadow-colored) !important; }
+[data-team-theme="ARI"] .shadow-\[\#0b3a7a\]\/25 { --tw-shadow-color: rgb(151 35 63 / 0.25) !important; --tw-shadow: var(--tw-shadow-colored) !important; }
+[data-team-theme="ARI"] .shadow-\[\#0b3a7a\]\/30 { --tw-shadow-color: rgb(151 35 63 / 0.3) !important; --tw-shadow: var(--tw-shadow-colored) !important; }
+[data-team-theme="ARI"] .shadow-\[\#0b3a7a\]\/5 { --tw-shadow-color: rgb(151 35 63 / 0.05) !important; --tw-shadow: var(--tw-shadow-colored) !important; }
+[data-team-theme="ARI"] .text-\[\#0b3978\] { color: rgb(151 35 63) !important; }
+[data-team-theme="ARI"] .text-\[\#0b3a7a\] { color: rgb(151 35 63) !important; }
+[data-team-theme="ARI"] .to-\[\#0b3a7a\]\/5 { --tw-gradient-to: rgb(151 35 63 / 0.05) var(--tw-gradient-to-position) !important; }
+
+/* Hover/focus variants of the navy classes → cardinal (keeps interactive states on-brand). */
+[data-team-theme="ARI"] .hover\:bg-\[\#0b3a7a\]:hover { background-color: rgb(151 35 63) !important; }
+[data-team-theme="ARI"] .hover\:bg-\[\#0b3a7a\]\/15:hover { background-color: rgb(151 35 63 / 0.15) !important; }
+[data-team-theme="ARI"] .hover\:bg-\[\#0b3a7a\]\/20:hover { background-color: rgb(151 35 63 / 0.2) !important; }
+[data-team-theme="ARI"] .hover\:bg-\[\#0b3a7a\]\/5:hover { background-color: rgb(151 35 63 / 0.05) !important; }
+[data-team-theme="ARI"] .hover\:bg-\[\#0b3a7a\]\/80:hover { background-color: rgb(151 35 63 / 0.8) !important; }
+[data-team-theme="ARI"] .hover\:bg-\[\#0b3a7a\]\/85:hover { background-color: rgb(151 35 63 / 0.85) !important; }
+[data-team-theme="ARI"] .hover\:bg-\[\#0b3a7a\]\/90:hover { background-color: rgb(151 35 63 / 0.9) !important; }
+[data-team-theme="ARI"] .hover\:bg-\[\#0d4a9a\]:hover { background-color: rgb(176 58 84) !important; }
+[data-team-theme="ARI"] .hover\:border-\[\#0b3a7a\]\/40:hover { border-color: rgb(151 35 63 / 0.4) !important; }
+[data-team-theme="ARI"] .hover\:shadow-\[\#0b3a7a\]\/30:hover { --tw-shadow-color: rgb(151 35 63 / 0.3) !important; --tw-shadow: var(--tw-shadow-colored) !important; }
+[data-team-theme="ARI"] .hover\:shadow-\[\#0b3a7a\]\/5:hover { --tw-shadow-color: rgb(151 35 63 / 0.05) !important; --tw-shadow: var(--tw-shadow-colored) !important; }
+[data-team-theme="ARI"] .hover\:text-\[\#0b3a7a\]:hover { color: rgb(151 35 63) !important; }

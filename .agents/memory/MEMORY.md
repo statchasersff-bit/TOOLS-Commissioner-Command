@@ -1,0 +1,1 @@
+- [Stale Vite HMR after checkpoint](stale-vite-hmr.md) — checkpoint merges cause Vite to serve old compiled modules; fix is always a workflow restart.

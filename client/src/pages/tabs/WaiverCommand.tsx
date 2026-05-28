@@ -534,7 +534,7 @@ export default function WaiverCommand() {
               <span>Fetching…</span>
             </div>
           )}
-          <div className="grid grid-cols-3 flex-shrink-0" style={{ height: 48, borderRadius: 16, padding: 4, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", gap: 4 }}>
+          <div className="grid grid-cols-3 flex-shrink-0" style={{ height: 48, borderRadius: 16, padding: 4, background: "var(--sc-toggle-bg)", border: "1px solid var(--sc-toggle-border)", gap: 4 }}>
             {([
               { id: "overview" as const, icon: LayoutList, label: "Overview" },
               { id: "league"   as const, icon: BarChart3,  label: "League View" },
@@ -558,7 +558,7 @@ export default function WaiverCommand() {
                 title={label}
                 data-testid={`view-toggle-${id}-desktop`}
                 className="relative flex items-center justify-center gap-1.5 font-semibold transition-all duration-200"
-                style={{ borderRadius: 12, fontSize: 12, letterSpacing: "0.01em", background: active ? "linear-gradient(135deg, rgba(11,58,122,0.85) 0%, rgba(11,58,122,0.65) 100%)" : "transparent", color: active ? "#fff" : "rgba(203,213,225,0.45)", border: active ? "1px solid rgba(212,175,55,0.30)" : "1px solid transparent", boxShadow: active ? "0 2px 12px rgba(11,58,122,0.40), inset 0 1px 0 rgba(255,255,255,0.06)" : "none", paddingLeft: 10, paddingRight: 10 }}
+                style={{ borderRadius: 12, fontSize: 12, letterSpacing: "0.01em", background: active ? "linear-gradient(135deg, rgba(11,58,122,0.85) 0%, rgba(11,58,122,0.65) 100%)" : "transparent", color: active ? "#fff" : "var(--sc-toggle-inactive-text)", border: active ? "1px solid rgba(212,175,55,0.30)" : "1px solid transparent", boxShadow: active ? "0 2px 12px rgba(11,58,122,0.40), inset 0 1px 0 rgba(255,255,255,0.06)" : "none", paddingLeft: 10, paddingRight: 10 }}
               >
                 <Icon style={{ width: 14, height: 14, flexShrink: 0 }} />
                 <span>{label}</span>
@@ -572,7 +572,7 @@ export default function WaiverCommand() {
       {/* Mobile toggle */}
       <div className="md:hidden flex flex-col items-center gap-2">
         {/* View toggle — spans 90% of screen width */}
-        <div className="grid grid-cols-3 w-[90vw]" style={{ height: 48, borderRadius: 16, padding: 4, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", gap: 4 }}>
+        <div className="grid grid-cols-3 w-[90vw]" style={{ height: 48, borderRadius: 16, padding: 4, background: "var(--sc-toggle-bg)", border: "1px solid var(--sc-toggle-border)", gap: 4 }}>
           {([
             { id: "overview" as const, icon: LayoutList, label: "Overview" },
             { id: "league"   as const, icon: BarChart3,  label: "League View" },
@@ -596,7 +596,7 @@ export default function WaiverCommand() {
               title={label}
               data-testid={`view-toggle-${id}`}
               className="relative flex items-center justify-center gap-1.5 font-semibold transition-all duration-200 whitespace-nowrap"
-              style={{ borderRadius: 12, fontSize: 12, letterSpacing: "0.01em", background: active ? "linear-gradient(135deg, rgba(11,58,122,0.85) 0%, rgba(11,58,122,0.65) 100%)" : "transparent", color: active ? "#fff" : "rgba(203,213,225,0.45)", border: active ? "1px solid rgba(212,175,55,0.30)" : "1px solid transparent", boxShadow: active ? "0 2px 12px rgba(11,58,122,0.40), inset 0 1px 0 rgba(255,255,255,0.06)" : "none", paddingLeft: 8, paddingRight: 8 }}
+              style={{ borderRadius: 12, fontSize: 12, letterSpacing: "0.01em", background: active ? "linear-gradient(135deg, rgba(11,58,122,0.85) 0%, rgba(11,58,122,0.65) 100%)" : "transparent", color: active ? "#fff" : "var(--sc-toggle-inactive-text)", border: active ? "1px solid rgba(212,175,55,0.30)" : "1px solid transparent", boxShadow: active ? "0 2px 12px rgba(11,58,122,0.40), inset 0 1px 0 rgba(255,255,255,0.06)" : "none", paddingLeft: 8, paddingRight: 8 }}
             >
               <Icon style={{ width: 14, height: 14, flexShrink: 0 }} />
               <span>{label}</span>

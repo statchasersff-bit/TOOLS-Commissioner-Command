@@ -87,7 +87,7 @@ interface SnapshotStatProps {
 
 function SnapshotStat({ label, value, context, contextColor, icon: Icon, testId }: SnapshotStatProps) {
   return (
-    <div className="flex flex-col items-center text-center p-4 rounded-lg bg-muted/30 border border-border/40" data-testid={testId}>
+    <div className="sc-metric-tile flex flex-col items-center text-center p-4 rounded-lg bg-muted/30 border border-border/40" data-testid={testId}>
       <div className="p-2 rounded-md bg-[#0b3a7a]/8 dark:bg-blue-400/10 mb-2.5">
         <Icon className="w-4 h-4 text-[#0b3a7a] dark:text-blue-400" />
       </div>
@@ -1043,7 +1043,7 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
 
   // ── View toggle ──────────────────────────────────────────────────
   const viewToggle = (
-    <div className="grid flex-shrink-0 w-[90vw] md:w-auto" style={{ gridTemplateColumns: "repeat(4, 1fr)", height: 48, borderRadius: 16, padding: 4, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", gap: 4, minWidth: 0 }}>
+    <div className="grid flex-shrink-0 w-[90vw] md:w-auto" style={{ gridTemplateColumns: "repeat(4, 1fr)", height: 48, borderRadius: 16, padding: 4, background: "var(--sc-toggle-bg)", border: "1px solid var(--sc-toggle-border)", gap: 4, minWidth: 0 }}>
       {([
         { id: "table",   icon: List,      label: "Table"    },
         { id: "economy", icon: Coins,     label: "Plot"     },
@@ -1058,7 +1058,7 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
             title={label}
             data-testid={`view-toggle-${id}`}
             className="relative flex items-center justify-center gap-1.5 font-semibold transition-all duration-200"
-            style={{ borderRadius: 12, fontSize: 12, letterSpacing: "0.01em", background: isActive ? "linear-gradient(135deg, rgba(11,58,122,0.85) 0%, rgba(11,58,122,0.65) 100%)" : "transparent", color: isActive ? "#fff" : "rgba(203,213,225,0.45)", border: isActive ? "1px solid rgba(212,175,55,0.30)" : "1px solid transparent", boxShadow: isActive ? "0 2px 12px rgba(11,58,122,0.40), inset 0 1px 0 rgba(255,255,255,0.06)" : "none", paddingLeft: 8, paddingRight: 8 }}
+            style={{ borderRadius: 12, fontSize: 12, letterSpacing: "0.01em", background: isActive ? "linear-gradient(135deg, rgba(11,58,122,0.85) 0%, rgba(11,58,122,0.65) 100%)" : "transparent", color: isActive ? "#fff" : "var(--sc-toggle-inactive-text)", border: isActive ? "1px solid rgba(212,175,55,0.30)" : "1px solid transparent", boxShadow: isActive ? "0 2px 12px rgba(11,58,122,0.40), inset 0 1px 0 rgba(255,255,255,0.06)" : "none", paddingLeft: 8, paddingRight: 8 }}
           >
             <Icon style={{ width: 14, height: 14, flexShrink: 0 }} />
             <span>{label}</span>

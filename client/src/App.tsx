@@ -15,6 +15,7 @@ import { FavoriteTeamProvider } from "@/contexts/FavoriteTeamContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { AuthGate } from "@/pages/auth/AuthGate";
 import DynastyCommandCenter from "@/pages/DynastyCommandCenter";
+import { PublicReport } from "@/pages/PublicReport";
 import { Component, useEffect, type ReactNode, type ErrorInfo } from "react";
 
 class ErrorBoundary extends Component<{ label?: string; children: ReactNode }, { error: Error | null }> {
@@ -51,6 +52,16 @@ class ErrorBoundary extends Component<{ label?: string; children: ReactNode }, {
 
 const BASE_PATH = import.meta.env.DEV ? "" : (import.meta.env.BASE_URL.replace(/\/$/, "") || "");
 
+// Public, login-free share path: /share/report/:token. Matched against the raw
+// pathname so it can render entirely outside the authenticated app shell.
+function matchPublicReportToken(): string | null {
+  if (typeof window === "undefined") return null;
+  let path = window.location.pathname;
+  if (BASE_PATH && path.startsWith(BASE_PATH)) path = path.slice(BASE_PATH.length);
+  const m = path.match(/^\/share\/report\/([^/?#]+)\/?$/);
+  return m ? decodeURIComponent(m[1]) : null;
+}
+
 function Router() {
   return (
     <WouterRouter base={BASE_PATH}>
@@ -67,6 +78,11 @@ function Router() {
             DCC renders <ManagerPage embedded> when given a managerProfileId. */}
         <Route path="/managers/:userId">
           {(params) => <DynastyCommandCenter managerProfileId={params?.userId} />}
+        </Route>
+        {/* The value-source manager opens as a full page inside the shell,
+            following the same embedded pattern as player/manager profiles. */}
+        <Route path="/value-sources">
+          {() => <DynastyCommandCenter valueSourcesPage />}
         </Route>
         <Route path="/:tab/:sub" component={DynastyCommandCenter} />
         <Route path="/:tab" component={DynastyCommandCenter} />
@@ -163,6 +179,22 @@ function AuthenticatedTree({ probe }: { probe: Probe }) {
 
 function App() {
   const probe = getProbe();
+
+  // A shared report renders standalone — no auth, no Sleeper/Value providers,
+  // just enough context (theme + query client) for the presentational view.
+  const publicToken = matchPublicReportToken();
+  if (publicToken) {
+    return (
+      <ErrorBoundary label="public-report">
+        <QueryClientProvider client={queryClient}>
+          <ThemeProvider>
+            <PublicReport token={publicToken} />
+          </ThemeProvider>
+        </QueryClientProvider>
+      </ErrorBoundary>
+    );
+  }
+
   return (
     <ErrorBoundary label="root">
       <ProbeBanner probe={probe} />

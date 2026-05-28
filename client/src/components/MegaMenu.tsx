@@ -6,7 +6,7 @@ import {
   Trophy, GitCompare, Coins, ArrowLeftRight, Database, Search,
   Calculator, Eye, LineChart, TrendingUp, Zap, ChevronDown, BarChart3,
   LucideIcon, Waves, Crosshair, LayoutGrid, Inbox, MessageCircle,
-  Hexagon, ClipboardList, Target,
+  Hexagon, ClipboardList, Target, ScrollText,
 } from "lucide-react";
 import type { MainTabConfig } from "../types";
 import logoDark from "@assets/statchasers_logo_transparent_dark_1772764844282.png";
@@ -33,7 +33,6 @@ const MEGA_DATA: Record<string, MegaSection[]> = {
       title: "Command Center",
       items: [
         { subId: "portfolio-summary", label: "My Portfolio",     description: "Cross-league exposure, finances & metrics",    icon: BarChart2  },
-        { subId: "portfolio-timeline", label: "Timeline",        description: "Dynasty portfolio value over time & trade impact", icon: LineChart },
         { subId: "lineup-command",    label: "Lineup Command",   description: "Cross-league lineup war room & swap finder",   icon: Crosshair  },
         { subId: "waiver-command",    label: "Waiver Command",   description: "Cross-league waiver wire & FAAB dashboard",    icon: Waves      },
       ],
@@ -56,6 +55,7 @@ const MEGA_DATA: Record<string, MegaSection[]> = {
         { subId: "roster-comparison",  label: "Compare",            description: "Head-to-head roster comparison",                  icon: GitCompare     },
         { subId: "playoff-calculator", label: "Playoff Calculator", description: "Monte Carlo playoff odds, byes & championship %", icon: Target         },
         { subId: "transactions",       label: "Transactions",       description: "Recent adds, drops & trades league-wide",         icon: ArrowLeftRight },
+        { subId: "commanders-report",  label: "Commander's Report", description: "Monthly recap — trades graded, picks judged, waivers roasted", icon: ScrollText },
       ],
     },
   ],
@@ -151,7 +151,7 @@ function MegaMenuPanel({ tabId, isOpen, onNavigate, activeSub, onMouseEnter, onM
       <div className="absolute -top-2 left-0 right-0 h-2" />
 
       <div
-        className="rounded-[18px] border border-white/[0.07] shadow-2xl shadow-black/60 overflow-hidden"
+        className="sc-mega-panel rounded-[18px] border border-white/[0.07] shadow-2xl shadow-black/60 overflow-hidden"
         style={{
           background: "rgba(8,11,20,0.97)",
           backdropFilter: "blur(20px)",

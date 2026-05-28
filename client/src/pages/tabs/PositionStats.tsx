@@ -877,7 +877,7 @@ export default function PositionStats() {
           style={{
             borderRadius: 12, fontSize: 13, letterSpacing: "0.01em",
             background: isActive ? "linear-gradient(135deg, rgba(11,58,122,0.85) 0%, rgba(11,58,122,0.65) 100%)" : "transparent",
-            color: isActive ? "#fff" : "rgba(203,213,225,0.45)",
+            color: isActive ? "#fff" : "var(--sc-toggle-inactive-text)",
             border: isActive ? "1px solid rgba(212,175,55,0.30)" : "1px solid transparent",
             boxShadow: isActive ? "0 2px 12px rgba(11,58,122,0.40), inset 0 1px 0 rgba(255,255,255,0.06)" : "none",
           }}
@@ -898,7 +898,7 @@ export default function PositionStats() {
         />
         <div
           className="hidden md:grid flex-shrink-0"
-          style={{ gridTemplateColumns: "1fr 1fr", height: 48, borderRadius: 16, padding: 4, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", gap: 4, width: 240 }}
+          style={{ gridTemplateColumns: "1fr 1fr", height: 48, borderRadius: 16, padding: 4, background: "var(--sc-toggle-bg)", border: "1px solid var(--sc-toggle-border)", gap: 4, width: 240 }}
         >
           {renderSubTabToggle("stats-subtab")}
         </div>
@@ -908,7 +908,7 @@ export default function PositionStats() {
       <div className="md:hidden flex justify-center">
         <div
           className="grid w-[90vw]"
-          style={{ gridTemplateColumns: "1fr 1fr", height: 48, borderRadius: 16, padding: 4, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", gap: 4 }}
+          style={{ gridTemplateColumns: "1fr 1fr", height: 48, borderRadius: 16, padding: 4, background: "var(--sc-toggle-bg)", border: "1px solid var(--sc-toggle-border)", gap: 4 }}
         >
           {renderSubTabToggle("stats-subtab-mobile")}
         </div>

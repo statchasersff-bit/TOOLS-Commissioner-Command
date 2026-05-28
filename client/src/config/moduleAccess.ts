@@ -32,7 +32,6 @@ export const MODULE_ACCESS: Record<string, AccessRequirement> = {
   // StatChasers account (full).
   "portfolio:connect": "public", // legacy connect screen — no gate
   "portfolio:portfolio-summary": "readonly",
-  "portfolio:portfolio-timeline": "readonly",
   "portfolio:lineup-command": "full",
   "portfolio:waiver-command": "full",
 
@@ -45,6 +44,7 @@ export const MODULE_ACCESS: Record<string, AccessRequirement> = {
   "league-analyzer:roster-comparison": "readonly",
   "league-analyzer:playoff-calculator": "readonly",
   "league-analyzer:transactions": "readonly",
+  "league-analyzer:commanders-report": "readonly",
 
   // Trade Center. My Trades (Trade Inbox) requires a logged-in StatChasers
   // account (full). Finder / Calculator / Intel / Database are league-scoped

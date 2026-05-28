@@ -532,7 +532,6 @@ export const NAV_CONFIG: MainTabConfig[] = [
     label: "Command Center",
     subTabs: [
       { id: "portfolio-summary", label: "My Portfolio" },
-      { id: "portfolio-timeline", label: "Timeline" },
       { id: "lineup-command", label: "Lineup Command" },
       { id: "waiver-command", label: "Waiver Command" },
     ],

@@ -4,10 +4,13 @@
  * Three modes:
  *   - "light"    → no class on <html>            (StatChasers light palette)
  *   - "x-mode"   → .x-mode class                 (existing tactical theme)
- *   - "my_team"  → .dark + .my-team-mode class + per-team CSS variables
+ *   - "my_team"  → per-team theme. Dark-based teams (the default) apply
+ *                  .dark + .my-team-mode + tinted CSS vars; light-based teams
+ *                  (see getTeamThemeBase) render as standard light mode until
+ *                  per-team accents are layered on. Arizona is light-based today.
  *
- * (The standalone deep-navy "dark" mode was removed; My Team Mode still rides
- * on the .dark base palette for its team-tinted canvas.)
+ * (The standalone deep-navy "dark" mode was removed; dark-based My Team modes
+ * still ride on the .dark base palette for their team-tinted canvas.)
  *
  * "My Team Mode" sits on top of the dark base — most NFL color combinations
  * read more safely on a dark foundation, per the spec. When the user has no
@@ -25,7 +28,7 @@ import {
   type ReactNode,
 } from "react";
 import { useFavoriteTeam } from "./FavoriteTeamContext";
-import { generateTeamTheme, validateTeamTheme } from "@/lib/themeColors";
+import { generateTeamTheme, validateTeamTheme, getTeamThemeBase } from "@/lib/themeColors";
 
 export type ThemeMode = "light" | "x-mode" | "my_team";
 
@@ -107,16 +110,29 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     const root = document.documentElement;
     const isMyTeam = themeMode === "my_team";
     const teamReady = isMyTeam && favoriteTeam != null;
+    // A team can build on the LIGHT base instead of the dark team-tinted one.
+    // A light-based team renders exactly like standard light mode (until per-team
+    // accents are added): we apply the light setup and skip the dark classes and
+    // team tokens entirely. Dark-based teams keep the existing behavior.
+    const lightTeam = teamReady && getTeamThemeBase(favoriteTeam?.abbreviation ?? "") === "light";
+    const darkTeam = teamReady && !lightTeam;
 
-    // Class toggles — my_team rides on the dark base because most NFL
+    // Class toggles — dark-based my_team rides on the .dark base because most NFL
     // palettes read safer there (spec: "My Team Mode = dark team-tinted base").
-    root.classList.toggle("dark", teamReady);
+    root.classList.toggle("dark", darkTeam);
     root.classList.toggle("x-mode", themeMode === "x-mode");
-    root.classList.toggle("my-team-mode", teamReady);
-    root.setAttribute("data-theme", teamReady ? "my_team" : themeMode);
+    root.classList.toggle("my-team-mode", darkTeam);
+    root.setAttribute("data-theme", lightTeam ? "light" : darkTeam ? "my_team" : themeMode);
 
-    // CSS variable application.
-    if (teamReady && favoriteTeam) {
+    // Light-based teams render on the light base but carry a data-team-theme hook
+    // so per-team accents (e.g. Arizona's cardinal red) can override the brand
+    // navy WITHOUT affecting plain light mode, which never has this attribute.
+    if (lightTeam && favoriteTeam) root.setAttribute("data-team-theme", favoriteTeam.abbreviation);
+    else root.removeAttribute("data-team-theme");
+
+    // CSS variable application — only dark-based teams get tinted tokens. A
+    // light-based team clears tokens so it's byte-for-byte standard light mode.
+    if (darkTeam && favoriteTeam) {
       const tokens = generateTeamTheme(favoriteTeam);
       applyTeamTokens(root, tokens as unknown as Record<string, string>);
       const key = `${themeMode}:${favoriteTeam.abbreviation}`;

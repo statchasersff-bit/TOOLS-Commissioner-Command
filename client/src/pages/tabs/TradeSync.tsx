@@ -541,6 +541,7 @@ function TradeCard({ trade, myUsername, myAvatar, onView, onCounter, onShowInCal
 }) {
   const expiring = isExpiringSoon(trade.expiresAt);
   const isProposed = trade.status === "proposed";
+  const isCancelled = trade.status === "failed" || trade.status === "cancelled";
 
   const sentByLabel = trade.direction === "outgoing"
     ? "Sent by You"
@@ -552,11 +553,10 @@ function TradeCard({ trade, myUsername, myAvatar, onView, onCounter, onShowInCal
   return (
     <div
       className={cn(
-        "border border-border/50 rounded-xl bg-card hover:border-[#0b3a7a]/40 hover:shadow-md hover:shadow-[#0b3a7a]/5 transition-all cursor-pointer",
+        "border border-border/50 rounded-xl bg-card",
         expiring && isProposed && "border-amber-500/40"
       )}
       data-testid={`trade-row-${trade.transactionId}`}
-      onClick={onView}
     >
       {/* ── Header ── */}
       <div className="flex items-center gap-2.5 px-4 pt-3.5 pb-2.5 flex-wrap">
@@ -628,10 +628,7 @@ function TradeCard({ trade, myUsername, myAvatar, onView, onCounter, onShowInCal
       </div>
 
       {/* ── Footer: Quick action buttons ── */}
-      <div
-        className="flex items-center gap-2 px-4 py-2.5 border-t border-border/30"
-        onClick={(e) => e.stopPropagation()}
-      >
+      <div className="flex items-center gap-2 px-4 py-2.5 border-t border-border/30">
         {/* Right-aligned action group: "Click for Help", then (for incoming,
             still-proposed trades) Counter / Reject / Accept. The ml-auto wrapper
             keeps the group right-aligned even when the help button is hidden. */}
@@ -652,6 +649,7 @@ function TradeCard({ trade, myUsername, myAvatar, onView, onCounter, onShowInCal
               public vote; players carry their id for headshots. */}
           <ShareTradeToDiscordButton
             testId={trade.transactionId}
+            label={trade.status === "complete" ? "Rate my Trade" : (trade.status === "rejected" || trade.status === "failed" || trade.status === "cancelled") ? "Post to Discord" : undefined}
             className="h-7 px-3 text-[11px] bg-[#5865F2] hover:bg-[#5865F2]/90 text-white"
             leagueName={trade.leagueName}
             leagueFormat={trade.leagueFormat}
@@ -697,6 +695,18 @@ function TradeCard({ trade, myUsername, myAvatar, onView, onCounter, onShowInCal
                 </Button>
               )}
             </>
+          )}
+
+          {/* Revise — for cancelled trades, mirrors the outgoing-trade action. */}
+          {isCancelled && (
+            <Button
+              size="sm"
+              onClick={() => showFeatureDisabled()}
+              className="h-7 px-3 text-[11px] bg-[#d4af37] hover:bg-[#d4af37]/90 text-[#0b1f3a] font-semibold"
+              data-testid={`btn-revise-${trade.transactionId}`}
+            >
+              <ArrowRightLeft className="w-3 h-3 mr-1" /> Revise
+            </Button>
           )}
         </div>
       </div>

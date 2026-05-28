@@ -1,8 +1,8 @@
 /**
  * Portfolio value-over-time chart. Self-contained: given a Sleeper handle
- * (user_id), it fetches the basket timeline and renders a line chart with
- * Total / Avg-Team modes, range + same-league controls, and a data-fitted
- * Y-axis. Used on the My Portfolio tab (and the standalone Timeline view).
+ * (user_id), it fetches the basket timeline and renders a total-value line
+ * chart with a range control and a data-fitted Y-axis. Used on the My
+ * Portfolio tab.
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -20,14 +20,7 @@ import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { getPortfolioTimeline, type TimelineResponse, type TimelinePoint } from "@/lib/portfolioApi";
 
-type ModeId = "total" | "average";
-const MODES: Array<{ id: ModeId; label: string; field: keyof TimelinePoint }> = [
-  { id: "total", label: "Total", field: "totalValue" },
-  { id: "average", label: "Avg Team", field: "averageTeamValue" },
-];
 const RANGES: Array<{ id: string; label: string }> = [
-  { id: "30d", label: "30D" },
-  { id: "90d", label: "90D" },
   { id: "1y", label: "1Y" },
   { id: "all", label: "All" },
 ];
@@ -53,17 +46,15 @@ export function PortfolioValueChart({ handle }: { handle: string | null }) {
   const [timeline, setTimeline] = useState<TimelineResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [mode, setMode] = useState<ModeId>("total");
   const [range, setRange] = useState("all");
-  const [sameLeagueOnly, setSameLeagueOnly] = useState(false);
 
   const load = useCallback(
-    async (rng: string, sameLeague: boolean) => {
+    async (rng: string) => {
       if (!handle) return;
       setLoading(true);
       setError(null);
       try {
-        setTimeline(await getPortfolioTimeline(handle, { range: rng, sameLeague }));
+        setTimeline(await getPortfolioTimeline(handle, { range: rng }));
       } catch (err: any) {
         setError(err?.message || "Failed to load portfolio timeline");
       } finally {
@@ -74,15 +65,14 @@ export function PortfolioValueChart({ handle }: { handle: string | null }) {
   );
 
   useEffect(() => {
-    if (handle) void load(range, sameLeagueOnly);
+    if (handle) void load(range);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [handle]);
 
-  const activeMode = MODES.find((m) => m.id === mode)!;
   const points = timeline?.points ?? [];
   const chartData = useMemo(
-    () => points.map((p) => ({ ...p, x: shortDate(p.date), value: p[activeMode.field] as number })),
-    [points, activeMode.field],
+    () => points.map((p) => ({ ...p, x: shortDate(p.date), value: p.totalValue })),
+    [points],
   );
   const yDomain = useMemo<[number, number] | undefined>(() => {
     const vals = chartData.map((d) => d.value).filter((v) => Number.isFinite(v));
@@ -103,30 +93,12 @@ export function PortfolioValueChart({ handle }: { handle: string | null }) {
           <LineChartIcon className="w-4 h-4 text-[#d4af37]" /> Portfolio value over time
         </h3>
         <div className="flex items-center gap-2">
-          <Segmented options={MODES.map((m) => ({ id: m.id, label: m.label }))} value={mode} onChange={(v) => setMode(v as ModeId)} />
-          <button
-            type="button"
-            onClick={() => {
-              const next = !sameLeagueOnly;
-              setSameLeagueOnly(next);
-              void load(range, next);
-            }}
-            title="Only include leagues that were already tracked at the start of the selected range, so adding a new league doesn't fake a jump."
-            className={cn(
-              "rounded-md border px-2 py-1 text-[10px] font-semibold transition-colors",
-              sameLeagueOnly
-                ? "border-[#d4af37]/50 bg-[#d4af37]/15 text-[#d4af37]"
-                : "border-border/60 text-muted-foreground hover:text-foreground",
-            )}
-          >
-            Same-league
-          </button>
           <Segmented
             options={RANGES}
             value={range}
             onChange={(r) => {
               setRange(r);
-              void load(r, sameLeagueOnly);
+              void load(r);
             }}
           />
         </div>
@@ -139,7 +111,7 @@ export function PortfolioValueChart({ handle }: { handle: string | null }) {
           <Loader2 className="w-5 h-5 animate-spin text-[#d4af37]" />
         </div>
       ) : chartData.length === 0 ? (
-        <p className="text-[12px] text-muted-foreground py-8 text-center">No timeline data yet. Build your portfolio history from the Timeline tab.</p>
+        <p className="text-[12px] text-muted-foreground py-8 text-center">No portfolio value history yet.</p>
       ) : (
         <div className="h-[300px] sm:h-[360px] w-full">
           <ResponsiveContainer width="100%" height="100%">

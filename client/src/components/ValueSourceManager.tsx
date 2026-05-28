@@ -1,12 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { useEffect, useRef, useState } from "react";
+import { useLocation } from "wouter";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -19,14 +12,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 import { useValueModel } from "@/contexts/ValueModelContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { scAuthFetch } from "@/lib/scAuthFetch";
 import {
+  ArrowLeft,
   BarChart3,
   ChevronDown,
   Upload,
-  RefreshCw,
   CheckCircle2,
   AlertTriangle,
   Loader2,
@@ -63,24 +57,25 @@ interface PreviewResponse {
 
 // ── Header dropdown ──────────────────────────────────────────────────────────
 export function ValueSourceManager() {
-  const { dynastySource, redraftSource, dynastyCustom, redraftCustom, isLoading, refreshCustomValues } =
+  const { dynastySource, redraftSource, dynastyCustom, redraftCustom, isLoading } =
     useValueModel();
   const { status } = useAuth();
-  const [modalOpen, setModalOpen] = useState(false);
-  const [defaultTab, setDefaultTab] = useState<ValueType>("dynasty");
+  const [, setLocation] = useLocation();
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const anyCustom = dynastySource === "custom" || redraftSource === "custom";
   const labelText = anyCustom ? "Custom" : "FC";
 
-  const openUpload = (type: ValueType) => {
-    setDefaultTab(type);
-    setModalOpen(true);
+  // Open the value-source manager as a full page inside the app shell (mirrors
+  // how player/manager profiles open) rather than a modal overlay.
+  const openManager = (type?: ValueType) => {
+    setMenuOpen(false);
+    setLocation(type ? `/value-sources?type=${type}` : "/value-sources");
   };
 
   return (
-    <>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
+    <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
+      <DropdownMenuTrigger asChild>
           <button
             data-testid="header-value-source-trigger"
             className="hidden sm:inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-semibold tracking-wide bg-[#0b3a7a]/6 dark:bg-[#0b3a7a]/25 border border-[#d4af37]/20 dark:border-[#d4af37]/20 text-[#d4af37]/85 hover:border-[#d4af37]/60 hover:text-[#d4af37] transition-colors cursor-pointer select-none"
@@ -103,19 +98,19 @@ export function ValueSourceManager() {
             title="Dynasty"
             source={dynastySource}
             custom={dynastyCustom}
-            onUpload={() => openUpload("dynasty")}
+            onUpload={() => openManager("dynasty")}
           />
           <DropdownMenuSeparator />
           <SourceRow
             title="Redraft"
             source={redraftSource}
             custom={redraftCustom}
-            onUpload={() => openUpload("redraft")}
+            onUpload={() => openManager("redraft")}
           />
 
           <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={() => setModalOpen(true)} data-testid="menu-manage-values">
-            <Upload className="w-3.5 h-3.5 mr-2" /> Manage value sources
+          <DropdownMenuItem onClick={() => openManager()} data-testid="menu-manage-values">
+            <Upload className="w-3.5 h-3.5 mr-2" /> Change value sources
           </DropdownMenuItem>
           {status !== "ready" && (
             <div className="px-2 py-1.5 text-[10px] text-muted-foreground">
@@ -124,14 +119,6 @@ export function ValueSourceManager() {
           )}
         </DropdownMenuContent>
       </DropdownMenu>
-
-      <ValueSourceModal
-        open={modalOpen}
-        onOpenChange={setModalOpen}
-        defaultTab={defaultTab}
-        onChanged={refreshCustomValues}
-      />
-    </>
   );
 }
 
@@ -193,31 +180,48 @@ function formatDate(iso: string): string {
   }
 }
 
-// ── Modal ────────────────────────────────────────────────────────────────────
-function ValueSourceModal({
-  open,
-  onOpenChange,
-  defaultTab,
-  onChanged,
-}: {
-  open: boolean;
-  onOpenChange: (v: boolean) => void;
-  defaultTab: ValueType;
-  onChanged: () => void;
-}) {
-  const [tab, setTab] = useState<ValueType>(defaultTab);
-  useEffect(() => { if (open) setTab(defaultTab); }, [defaultTab, open]);
+// ── Full-page manager (rendered inside the app shell at /value-sources) ───────
+export function ValueSourcePage({ embedded = false }: { embedded?: boolean }) {
+  const [, setLocation] = useLocation();
+  const { refreshCustomValues } = useValueModel();
+  const [tab, setTab] = useState<ValueType>(() => {
+    try {
+      return new URLSearchParams(window.location.search).get("type") === "redraft"
+        ? "redraft"
+        : "dynasty";
+    } catch {
+      return "dynasty";
+    }
+  });
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Value Source Manager</DialogTitle>
-          <DialogDescription className="text-xs">
-            Upload your own dynasty or redraft values. Custom values override FantasyCalc anywhere
-            player values are used. Missing players fall back to FantasyCalc.
-          </DialogDescription>
-        </DialogHeader>
+    <div className={cn(!embedded && "min-h-screen bg-background", "text-foreground")}>
+      {/* Breadcrumb/back bar — non-sticky when embedded; the shell header is the
+          sticky chrome there (mirrors the player/manager profile pages). */}
+      <div
+        className={cn(
+          "h-12 flex items-center gap-3 px-4 border-b border-border/60",
+          !embedded && "sticky top-0 z-30 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/75",
+        )}
+      >
+        <button
+          onClick={() => { if (window.history.length > 1) window.history.back(); else setLocation("/"); }}
+          className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
+          data-testid="value-sources-back"
+        >
+          <ArrowLeft className="w-4 h-4" /> Back
+        </button>
+        <span className="text-xs font-semibold text-foreground/80 truncate">Value Sources</span>
+        <span className="ml-auto text-[10px] font-bold uppercase tracking-wider text-[#d4af37]">
+          Value Source Manager
+        </span>
+      </div>
+
+      <div className="max-w-2xl mx-auto px-4 sm:px-6 py-5 space-y-4">
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          Upload your own dynasty or redraft values. Custom values override FantasyCalc anywhere
+          player values are used. Missing players fall back to FantasyCalc.
+        </p>
 
         {/* Tab bar */}
         <div className="flex items-center gap-1 p-1 rounded-lg bg-white/[0.03] border border-white/6 w-fit">
@@ -231,16 +235,16 @@ function ValueSourceModal({
                   ? "bg-[#0b3a7a]/60 text-white border border-[#d4af37]/25"
                   : "text-white/40 hover:text-white/70")
               }
-              data-testid={`modal-tab-${t}`}
+              data-testid={`vs-tab-${t}`}
             >
               {t === "dynasty" ? "Dynasty Values" : "Redraft Values"}
             </button>
           ))}
         </div>
 
-        <UploadSection valueType={tab} onChanged={onChanged} />
-      </DialogContent>
-    </Dialog>
+        <UploadSection valueType={tab} onChanged={refreshCustomValues} />
+      </div>
+    </div>
   );
 }
 

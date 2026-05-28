@@ -939,7 +939,7 @@ function LeagueSelector({
     const their = rankFor(lg, targetId);
     const yours = rankFor(lg, viewerId);
     return (
-      <option key={lg.leagueId} value={lg.leagueId}>
+      <option key={lg.leagueId} value={lg.leagueId} style={{ color: "#fff", fontWeight: 600 }}>
         {lg.name} — {lg.totalRosters}tm {lg.format}
         {their ? ` · Them #${their}` : ""}
         {yours ? ` · You #${yours}` : ""}
@@ -957,10 +957,10 @@ function LeagueSelector({
         data-testid="league-selector"
       >
         {sharedLeagues.length > 0 && (
-          <optgroup label="Shared leagues">{sharedLeagues.map(renderOption)}</optgroup>
+          <optgroup label="Shared leagues" style={{ fontWeight: 800, color: "#d4af37" }}>{sharedLeagues.map(renderOption)}</optgroup>
         )}
         {otherLeagues.length > 0 && (
-          <optgroup label="Other leagues">{otherLeagues.map(renderOption)}</optgroup>
+          <optgroup label="Other leagues" style={{ fontWeight: 800, color: "#d4af37" }}>{otherLeagues.map(renderOption)}</optgroup>
         )}
       </select>
       <div className="flex flex-wrap gap-1.5 mt-2.5">

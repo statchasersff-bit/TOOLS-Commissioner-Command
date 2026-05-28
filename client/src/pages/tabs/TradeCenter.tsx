@@ -1327,7 +1327,7 @@ export function TradeBlockScanner({ league }: { league: League }) {
         <SectionHeader title="Trade Intel" subtitle="Identify likely sellers and buyers in your league" />
         <div
           className="hidden md:grid flex-shrink-0"
-          style={{ gridTemplateColumns: "1fr 1fr", height: 48, borderRadius: 16, padding: 4, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", gap: 4, width: 300 }}
+          style={{ gridTemplateColumns: "1fr 1fr", height: 48, borderRadius: 16, padding: 4, background: "var(--sc-toggle-bg)", border: "1px solid var(--sc-toggle-border)", gap: 4, width: 300 }}
         >
           {INTEL_TABS.map(({ id, label, Icon }) => {
             const isActive = intelMode === id;
@@ -1337,7 +1337,7 @@ export function TradeBlockScanner({ league }: { league: League }) {
                 onClick={() => setIntelMode(id)}
                 data-testid={`tab-intel-${id}-desktop`}
                 className="relative flex items-center justify-center gap-2 font-semibold transition-all duration-200"
-                style={{ borderRadius: 12, fontSize: 12, letterSpacing: "0.01em", background: isActive ? "linear-gradient(135deg, rgba(11,58,122,0.85) 0%, rgba(11,58,122,0.65) 100%)" : "transparent", color: isActive ? "#fff" : "rgba(203,213,225,0.45)", border: isActive ? "1px solid rgba(212,175,55,0.30)" : "1px solid transparent", boxShadow: isActive ? "0 2px 12px rgba(11,58,122,0.40), inset 0 1px 0 rgba(255,255,255,0.06)" : "none" }}
+                style={{ borderRadius: 12, fontSize: 12, letterSpacing: "0.01em", background: isActive ? "linear-gradient(135deg, rgba(11,58,122,0.85) 0%, rgba(11,58,122,0.65) 100%)" : "transparent", color: isActive ? "#fff" : "var(--sc-toggle-inactive-text)", border: isActive ? "1px solid rgba(212,175,55,0.30)" : "1px solid transparent", boxShadow: isActive ? "0 2px 12px rgba(11,58,122,0.40), inset 0 1px 0 rgba(255,255,255,0.06)" : "none" }}
               >
                 <Icon style={{ width: 14, height: 14, flexShrink: 0 }} />
                 {label}
@@ -1352,7 +1352,7 @@ export function TradeBlockScanner({ league }: { league: League }) {
       <div className="md:hidden flex justify-center !mt-0">
         <div
           className="grid w-[90vw]"
-          style={{ gridTemplateColumns: "1fr 1fr", height: 48, borderRadius: 16, padding: 4, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", gap: 4 }}
+          style={{ gridTemplateColumns: "1fr 1fr", height: 48, borderRadius: 16, padding: 4, background: "var(--sc-toggle-bg)", border: "1px solid var(--sc-toggle-border)", gap: 4 }}
         >
           {INTEL_TABS.map(({ id, label, Icon }) => {
             const isActive = intelMode === id;
@@ -1362,7 +1362,7 @@ export function TradeBlockScanner({ league }: { league: League }) {
                 onClick={() => setIntelMode(id)}
                 data-testid={`tab-intel-${id}`}
                 className="relative flex items-center justify-center gap-2 font-semibold transition-all duration-200"
-                style={{ borderRadius: 12, fontSize: 12, letterSpacing: "0.01em", background: isActive ? "linear-gradient(135deg, rgba(11,58,122,0.85) 0%, rgba(11,58,122,0.65) 100%)" : "transparent", color: isActive ? "#fff" : "rgba(203,213,225,0.45)", border: isActive ? "1px solid rgba(212,175,55,0.30)" : "1px solid transparent", boxShadow: isActive ? "0 2px 12px rgba(11,58,122,0.40), inset 0 1px 0 rgba(255,255,255,0.06)" : "none" }}
+                style={{ borderRadius: 12, fontSize: 12, letterSpacing: "0.01em", background: isActive ? "linear-gradient(135deg, rgba(11,58,122,0.85) 0%, rgba(11,58,122,0.65) 100%)" : "transparent", color: isActive ? "#fff" : "var(--sc-toggle-inactive-text)", border: isActive ? "1px solid rgba(212,175,55,0.30)" : "1px solid transparent", boxShadow: isActive ? "0 2px 12px rgba(11,58,122,0.40), inset 0 1px 0 rgba(255,255,255,0.06)" : "none" }}
               >
                 <Icon style={{ width: 14, height: 14, flexShrink: 0 }} />
                 {label}
@@ -1714,7 +1714,7 @@ export function TradeCalculatorView({ league, userTeam, onNavigate }: {
       {/* Segmented sub-tab toggle — mirrors the Portfolio "Overview / Finances" tabs. */}
       <div
         className="grid flex-shrink-0 w-full max-w-[320px]"
-        style={{ gridTemplateColumns: "1fr 1fr", height: 48, borderRadius: 16, padding: 4, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", gap: 4 }}
+        style={{ gridTemplateColumns: "1fr 1fr", height: 48, borderRadius: 16, padding: 4, background: "var(--sc-toggle-bg)", border: "1px solid var(--sc-toggle-border)", gap: 4 }}
         data-testid="calc-mode-toggle"
       >
         {(["quick", "league"] as const).map((id) => {
@@ -1732,7 +1732,7 @@ export function TradeCalculatorView({ league, userTeam, onNavigate }: {
                 fontSize: 13,
                 letterSpacing: "0.01em",
                 background: isActive ? "linear-gradient(135deg, rgba(11,58,122,0.85) 0%, rgba(11,58,122,0.65) 100%)" : "transparent",
-                color: isActive ? "#fff" : "rgba(203,213,225,0.45)",
+                color: isActive ? "#fff" : "var(--sc-toggle-inactive-text)",
                 border: isActive ? "1px solid rgba(212,175,55,0.30)" : "1px solid transparent",
                 boxShadow: isActive ? "0 2px 12px rgba(11,58,122,0.40), inset 0 1px 0 rgba(255,255,255,0.06)" : "none",
               }}

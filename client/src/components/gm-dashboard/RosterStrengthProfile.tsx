@@ -144,7 +144,7 @@ function StatCard({
   children?: React.ReactNode;
 }) {
   return (
-    <div className="rounded-lg border border-border/40 bg-muted/20 p-3 flex flex-col">
+    <div className="sc-mini-card rounded-lg border border-border/40 bg-muted/20 p-3 flex flex-col">
       <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
         {icon}
         {label}

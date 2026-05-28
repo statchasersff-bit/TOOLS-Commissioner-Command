@@ -341,6 +341,36 @@ export const managerIntelCache = pgTable("manager_intel_cache", {
 
 export type ManagerIntelCache = typeof managerIntelCache.$inferSelect;
 
+// ── Commander's Report ─────────────────────────────────────────────────────
+// One row per (league, season, month, tone). `recap` is the deterministic
+// engine output (computed on first GET, no LLM). `article`/`model`/`generatedBy`
+// /`generatedAt` are filled only when a user explicitly generates the narrated
+// prose via POST /generate.
+export const commandersReports = pgTable("commanders_reports", {
+  id: serial("id").primaryKey(),
+  leagueId: varchar("league_id", { length: 32 }).notNull(),
+  season: varchar("season", { length: 10 }).notNull(),
+  month: integer("month").notNull(),
+  tone: varchar("tone", { length: 32 }).notNull(),
+  recap: jsonb("recap").notNull(),
+  article: jsonb("article"),
+  model: varchar("model", { length: 64 }),
+  generatedBy: varchar("generated_by", { length: 32 }),
+  generatedAt: timestamp("generated_at"),
+  // Public read-only share. Null = not shared; set to a URL-safe random token
+  // when a user enables sharing, cleared on revoke.
+  shareToken: varchar("share_token", { length: 32 }),
+  sharedAt: timestamp("shared_at"),
+  computedAt: timestamp("computed_at").defaultNow().notNull(),
+}, (table) => ({
+  lookupIdx: index("commanders_reports_lookup_idx").on(
+    table.leagueId, table.season, table.month, table.tone,
+  ),
+  shareTokenIdx: index("commanders_reports_share_token_idx").on(table.shareToken),
+}));
+
+export type CommandersReport = typeof commandersReports.$inferSelect;
+
 // ── ADP crawl pipeline ───────────────────────────────────────────────────────
 // Seeds are the operator's "I trust this entry point" list — usernames /
 // user_ids / league_ids / draft_ids that we explicitly want to expand from.

@@ -493,7 +493,7 @@ export function DraftAvailability() {
           style={{
             borderRadius: 12, fontSize: 13, letterSpacing: "0.01em",
             background: isActive ? "linear-gradient(135deg, rgba(11,58,122,0.85) 0%, rgba(11,58,122,0.65) 100%)" : "transparent",
-            color: isActive ? "#fff" : "rgba(203,213,225,0.45)",
+            color: isActive ? "#fff" : "var(--sc-toggle-inactive-text)",
             border: isActive ? "1px solid rgba(212,175,55,0.30)" : "1px solid transparent",
             boxShadow: isActive ? "0 2px 12px rgba(11,58,122,0.40), inset 0 1px 0 rgba(255,255,255,0.06)" : "none",
           }}
@@ -514,7 +514,7 @@ export function DraftAvailability() {
         />
         <div
           className="grid flex-shrink-0 w-full sm:w-[220px]"
-          style={{ gridTemplateColumns: "1fr 1fr", height: 44, borderRadius: 14, padding: 4, gap: 4, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)" }}
+          style={{ gridTemplateColumns: "1fr 1fr", height: 44, borderRadius: 14, padding: 4, gap: 4, background: "var(--sc-toggle-bg)", border: "1px solid var(--sc-toggle-border)" }}
         >
           {renderModeToggle()}
         </div>

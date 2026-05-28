@@ -13,7 +13,7 @@ import { getPositionColor } from "@/data/mockData";
 import { cn } from "@/lib/utils";
 import { SleeperAuthCard } from "@/components/SleeperAuthCard";
 import { PortfolioValueChart } from "@/components/PortfolioValueChart";
-import { getPortfolioTimeline } from "@/lib/portfolioApi";
+import { getPortfolioTimeline, type TimelinePoint } from "@/lib/portfolioApi";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { usePlayerProfile } from "@/contexts/PlayerProfileContext";
 import {
@@ -41,6 +41,25 @@ import {
   Coins,
   Info,
 } from "lucide-react";
+
+// Percent change in total portfolio value versus the snapshot closest to six
+// months before the latest one. Returns null when history doesn't span six
+// months, so the caller can fall back to a plain label.
+function sixMonthChangePct(points: TimelinePoint[]): number | null {
+  if (!points || points.length < 2) return null;
+  const sorted = [...points].sort((a, b) => a.date.localeCompare(b.date));
+  const latest = sorted[sorted.length - 1];
+  if (!latest.totalValue) return null;
+  const target = new Date(latest.date);
+  target.setMonth(target.getMonth() - 6);
+  let baseline: TimelinePoint | undefined;
+  for (const p of sorted) {
+    if (new Date(p.date) <= target) baseline = p;
+    else break;
+  }
+  if (!baseline?.totalValue) return null;
+  return ((latest.totalValue - baseline.totalValue) / baseline.totalValue) * 100;
+}
 
 export function PortfolioConnect({ onNavigate }: { onNavigate?: (mainTab: string, subTab: string) => void }) {
   const { isConnected, user, isLoading, error, lastSyncTime, connect, disconnect, refresh } = useSleeper();
@@ -577,6 +596,7 @@ export function PortfolioSummary({ onNavigate }: { onNavigate?: (mainTab: string
   const [pendingTradeCount, setPendingTradeCount] = useState<number | null>(null);
   const [pendingTradeLoading, setPendingTradeLoading] = useState(false);
   const [portfolioValue, setPortfolioValue] = useState<number | null>(null);
+  const [portfolioChange6mo, setPortfolioChange6mo] = useState<number | null>(null);
   const [portfolioValueLoading, setPortfolioValueLoading] = useState(false);
   // Live startup drafts the user is in. Fresh startup leagues don't make it
   // into useSleeper().leagues (their roster has no players yet, so
@@ -603,6 +623,7 @@ export function PortfolioSummary({ onNavigate }: { onNavigate?: (mainTab: string
   useEffect(() => {
     if (!isConnected || !user?.userId) {
       setPortfolioValue(null);
+      setPortfolioChange6mo(null);
       return;
     }
     let cancelled = false;
@@ -611,11 +632,13 @@ export function PortfolioSummary({ onNavigate }: { onNavigate?: (mainTab: string
       .then((tl) => {
         if (cancelled) return;
         setPortfolioValue(tl.summary.totalPortfolioValue);
+        setPortfolioChange6mo(sixMonthChangePct(tl.points));
         setPortfolioValueLoading(false);
       })
       .catch(() => {
         if (cancelled) return;
         setPortfolioValue(null);
+        setPortfolioChange6mo(null);
         setPortfolioValueLoading(false);
       });
     return () => {
@@ -740,7 +763,7 @@ export function PortfolioSummary({ onNavigate }: { onNavigate?: (mainTab: string
   const seasons = Array.from(new Set(leagues.map((l) => l.season)));
 
   const portfolioToggle = (
-    <div className="grid flex-shrink-0" style={{ gridTemplateColumns: "1fr 1fr", height: 48, borderRadius: 16, padding: 4, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", gap: 4, width: 240 }}>
+    <div className="grid flex-shrink-0" style={{ gridTemplateColumns: "1fr 1fr", height: 48, borderRadius: 16, padding: 4, background: "var(--sc-toggle-bg)", border: "1px solid var(--sc-toggle-border)", gap: 4, width: 240 }}>
       {(["overview", "finances"] as const).map((tab) => {
         const isActive = innerTab === tab;
         const Icon = tab === "overview" ? BarChart3 : Coins;
@@ -748,7 +771,7 @@ export function PortfolioSummary({ onNavigate }: { onNavigate?: (mainTab: string
         return (
           <button key={tab} onClick={() => setInnerTab(tab)} data-testid={`inner-tab-${tab}`}
             className="relative flex items-center justify-center gap-2 font-semibold transition-all duration-200"
-            style={{ borderRadius: 12, fontSize: 13, letterSpacing: "0.01em", background: isActive ? "linear-gradient(135deg, rgba(11,58,122,0.85) 0%, rgba(11,58,122,0.65) 100%)" : "transparent", color: isActive ? "#fff" : "rgba(203,213,225,0.45)", border: isActive ? "1px solid rgba(212,175,55,0.30)" : "1px solid transparent", boxShadow: isActive ? "0 2px 12px rgba(11,58,122,0.40), inset 0 1px 0 rgba(255,255,255,0.06)" : "none" }}>
+            style={{ borderRadius: 12, fontSize: 13, letterSpacing: "0.01em", background: isActive ? "linear-gradient(135deg, rgba(11,58,122,0.85) 0%, rgba(11,58,122,0.65) 100%)" : "transparent", color: isActive ? "#fff" : "var(--sc-toggle-inactive-text)", border: isActive ? "1px solid rgba(212,175,55,0.30)" : "1px solid transparent", boxShadow: isActive ? "0 2px 12px rgba(11,58,122,0.40), inset 0 1px 0 rgba(255,255,255,0.06)" : "none" }}>
             <Icon style={{ width: 15, height: 15, flexShrink: 0 }} />
             {label}
             {isActive && <span className="sc-subtab-underline absolute bottom-[3px] left-1/2 -translate-x-1/2 rounded-full" style={{ width: 28, height: 2, background: "#d4af37", opacity: 0.85 }} />}
@@ -766,7 +789,7 @@ export function PortfolioSummary({ onNavigate }: { onNavigate?: (mainTab: string
           <div className="hidden md:block pt-1">{portfolioToggle}</div>
         </div>
         <div className="md:hidden flex justify-center !mt-0">
-          <div className="grid w-[90vw]" style={{ gridTemplateColumns: "1fr 1fr", height: 48, borderRadius: 16, padding: 4, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", gap: 4 }}>
+          <div className="grid w-[90vw]" style={{ gridTemplateColumns: "1fr 1fr", height: 48, borderRadius: 16, padding: 4, background: "var(--sc-toggle-bg)", border: "1px solid var(--sc-toggle-border)", gap: 4 }}>
             {(["overview", "finances"] as const).map((tab) => {
               const isActive = innerTab === tab;
               const Icon = tab === "overview" ? BarChart3 : Coins;
@@ -774,7 +797,7 @@ export function PortfolioSummary({ onNavigate }: { onNavigate?: (mainTab: string
               return (
                 <button key={tab} onClick={() => setInnerTab(tab)} data-testid={`inner-tab-mobile-${tab}`}
                   className="relative flex items-center justify-center gap-2 font-semibold transition-all duration-200"
-                  style={{ borderRadius: 12, fontSize: 13, letterSpacing: "0.01em", background: isActive ? "linear-gradient(135deg, rgba(11,58,122,0.85) 0%, rgba(11,58,122,0.65) 100%)" : "transparent", color: isActive ? "#fff" : "rgba(203,213,225,0.45)", border: isActive ? "1px solid rgba(212,175,55,0.30)" : "1px solid transparent", boxShadow: isActive ? "0 2px 12px rgba(11,58,122,0.40), inset 0 1px 0 rgba(255,255,255,0.06)" : "none" }}>
+                  style={{ borderRadius: 12, fontSize: 13, letterSpacing: "0.01em", background: isActive ? "linear-gradient(135deg, rgba(11,58,122,0.85) 0%, rgba(11,58,122,0.65) 100%)" : "transparent", color: isActive ? "#fff" : "var(--sc-toggle-inactive-text)", border: isActive ? "1px solid rgba(212,175,55,0.30)" : "1px solid transparent", boxShadow: isActive ? "0 2px 12px rgba(11,58,122,0.40), inset 0 1px 0 rgba(255,255,255,0.06)" : "none" }}>
                   <Icon style={{ width: 15, height: 15, flexShrink: 0 }} />
                   {label}
                   {isActive && <span className="sc-subtab-underline absolute bottom-[3px] left-1/2 -translate-x-1/2 rounded-full" style={{ width: 28, height: 2, background: "#d4af37", opacity: 0.85 }} />}
@@ -802,7 +825,7 @@ export function PortfolioSummary({ onNavigate }: { onNavigate?: (mainTab: string
         <div className="hidden md:block pt-1">{portfolioToggle}</div>
       </div>
       <div className="md:hidden flex justify-center !mt-0">
-        <div className="grid w-[90vw]" style={{ gridTemplateColumns: "1fr 1fr", height: 48, borderRadius: 16, padding: 4, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", gap: 4 }}>
+        <div className="grid w-[90vw]" style={{ gridTemplateColumns: "1fr 1fr", height: 48, borderRadius: 16, padding: 4, background: "var(--sc-toggle-bg)", border: "1px solid var(--sc-toggle-border)", gap: 4 }}>
           {(["overview", "finances"] as const).map((tab) => {
             const isActive = innerTab === tab;
             const Icon = tab === "overview" ? BarChart3 : Coins;
@@ -810,7 +833,7 @@ export function PortfolioSummary({ onNavigate }: { onNavigate?: (mainTab: string
             return (
               <button key={tab} onClick={() => setInnerTab(tab)} data-testid={`inner-tab-mobile-${tab}`}
                 className="relative flex items-center justify-center gap-2 font-semibold transition-all duration-200"
-                style={{ borderRadius: 12, fontSize: 13, letterSpacing: "0.01em", background: isActive ? "linear-gradient(135deg, rgba(11,58,122,0.85) 0%, rgba(11,58,122,0.65) 100%)" : "transparent", color: isActive ? "#fff" : "rgba(203,213,225,0.45)", border: isActive ? "1px solid rgba(212,175,55,0.30)" : "1px solid transparent", boxShadow: isActive ? "0 2px 12px rgba(11,58,122,0.40), inset 0 1px 0 rgba(255,255,255,0.06)" : "none" }}>
+                style={{ borderRadius: 12, fontSize: 13, letterSpacing: "0.01em", background: isActive ? "linear-gradient(135deg, rgba(11,58,122,0.85) 0%, rgba(11,58,122,0.65) 100%)" : "transparent", color: isActive ? "#fff" : "var(--sc-toggle-inactive-text)", border: isActive ? "1px solid rgba(212,175,55,0.30)" : "1px solid transparent", boxShadow: isActive ? "0 2px 12px rgba(11,58,122,0.40), inset 0 1px 0 rgba(255,255,255,0.06)" : "none" }}>
                 <Icon style={{ width: 15, height: 15, flexShrink: 0 }} />
                 {label}
                 {isActive && <span className="sc-subtab-underline absolute bottom-[3px] left-1/2 -translate-x-1/2 rounded-full" style={{ width: 28, height: 2, background: "#d4af37", opacity: 0.85 }} />}
@@ -848,7 +871,20 @@ export function PortfolioSummary({ onNavigate }: { onNavigate?: (mainTab: string
               : "--"
           }
           icon={Coins}
-          subtitle="Current dynasty value"
+          subtitle={
+            portfolioChange6mo != null
+              ? `${portfolioChange6mo >= 0 ? "▲" : "▼"} ${Math.abs(portfolioChange6mo).toFixed(1)}% past 6 mo`
+              : "Current dynasty value"
+          }
+          trend={
+            portfolioChange6mo == null
+              ? undefined
+              : portfolioChange6mo > 0
+              ? "up"
+              : portfolioChange6mo < 0
+              ? "down"
+              : "neutral"
+          }
           loading={portfolioValueLoading}
         />
       </div>

@@ -1,18 +1,20 @@
-import { Sun, Zap, Star } from "lucide-react";
+import { Sun, Moon, Star } from "lucide-react";
 import { useTheme, type ThemeMode } from "@/contexts/ThemeContext";
 import { useFavoriteTeam } from "@/contexts/FavoriteTeamContext";
 import { cn } from "@/lib/utils";
 
 const CYCLE: ThemeMode[] = ["light", "x-mode", "my_team"];
 
+// "x-mode" is the internal id for the app's Dark Mode (kept for back-compat with
+// saved prefs); it is presented to users everywhere as "Dark Mode".
 const ICONS: Record<ThemeMode, typeof Sun> = {
   light: Sun,
-  "x-mode": Zap,
+  "x-mode": Moon,
   my_team: Star,
 };
 
 const NEXT_LABEL: Record<ThemeMode, string> = {
-  light: "Switch to X-Mode",
+  light: "Switch to Dark mode",
   "x-mode": "Switch to My Team mode",
   my_team: "Switch to light mode",
 };

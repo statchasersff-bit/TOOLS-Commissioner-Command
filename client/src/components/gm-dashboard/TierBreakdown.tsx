@@ -16,11 +16,13 @@ const TIER_COLORS: Record<TierName, { label: string; bar: string; text: string; 
     ring: "ring-[#d4af37]/40",
   },
   Core: {
+    // Light mode → StatChasers navy (brand). Dark/x-mode keep the legible
+    // emerald they already used (navy would vanish on a dark canvas).
     label: "Core",
-    bar: "bg-emerald-500",
-    text: "text-emerald-500 dark:text-emerald-400",
-    bg: "bg-emerald-500/10",
-    ring: "ring-emerald-500/30",
+    bar: "bg-[#0b3978] dark-any:bg-emerald-500",
+    text: "text-[#0b3978] dark-any:text-emerald-400",
+    bg: "bg-[#0b3978]/10 dark-any:bg-emerald-500/10",
+    ring: "ring-[#0b3978]/30 dark-any:ring-emerald-500/30",
   },
   Flex: {
     label: "Flex",
@@ -96,11 +98,11 @@ export function TierBreakdown({ league, userTeam }: Props) {
           return (
             <div
               key={t}
-              className="rounded-lg border border-border/40 bg-muted/20 p-3 flex flex-col gap-2 min-h-[140px]"
+              className="sc-mini-card rounded-lg border border-border/40 bg-muted/20 p-3 flex flex-col gap-2 min-h-[140px]"
               data-testid={`gm-tier-card-${t}`}
             >
               <div className="flex items-center justify-between">
-                <span className={cn("text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ring-1", col.text, col.bg, col.ring)}>
+                <span className={cn(`sc-tier-badge-${t.toLowerCase()} text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ring-1`, col.text, col.bg, col.ring)}>
                   {col.label}
                 </span>
                 <span className="text-xl font-bold tabular-nums">{players.length}</span>

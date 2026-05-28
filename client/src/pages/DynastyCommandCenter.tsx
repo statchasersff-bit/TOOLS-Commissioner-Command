@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { MegaMenuNav, MobileBottomNav } from "@/components/MegaMenu";
 import { LeagueSelector } from "@/components/LeagueSelector";
 import { HeaderValueSourceBadge } from "@/components/ValueSourceSelector";
-import { ValueSourceManager } from "@/components/ValueSourceManager";
+import { ValueSourceManager, ValueSourcePage } from "@/components/ValueSourceManager";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useValueModel } from "@/contexts/ValueModelContext";
 import { useSleeper } from "@/contexts/SleeperContext";
@@ -37,7 +37,6 @@ const PlayerPage        = lazy(() => import("@/pages/PlayerPage"));
 const ManagerPage       = lazy(() => import("@/pages/ManagerPage"));
 const PortfolioConnect  = lazy(() => import("./tabs/Portfolio").then(m => ({ default: m.PortfolioConnect })));
 const PortfolioSummary  = lazy(() => import("./tabs/Portfolio").then(m => ({ default: m.PortfolioSummary })));
-const PortfolioTimeline = lazy(() => import("./tabs/PortfolioTimeline"));
 const WaiverCommand     = lazy(() => import("./tabs/WaiverCommand"));
 const DashboardSnapshot = lazy(() => import("./tabs/Dashboard").then(m => ({ default: m.DashboardSnapshot })));
 const MyTeam            = lazy(() => import("./tabs/Dashboard").then(m => ({ default: m.MyTeam })));
@@ -45,6 +44,7 @@ const ShareTeam         = lazy(() => import("./tabs/ShareTeam").then(m => ({ def
 const RosterComparison  = lazy(() => import("./tabs/LeagueAnalyzer").then(m => ({ default: m.RosterComparison })));
 const PlayoffCalculator = lazy(() => import("./tabs/PlayoffCalculator").then(m => ({ default: m.PlayoffCalculator })));
 const Transactions      = lazy(() => import("./tabs/Transactions"));
+const CommandersReport  = lazy(() => import("./tabs/CommandersReport").then(m => ({ default: m.CommandersReport })));
 const TradeBlockScanner    = lazy(() => import("./tabs/TradeCenter").then(m => ({ default: m.TradeBlockScanner })));
 const TradeCalculatorView  = lazy(() => import("./tabs/TradeCenter").then(m => ({ default: m.TradeCalculatorView })));
 const TradeDatabase        = lazy(() => import("./tabs/TradeCenter").then(m => ({ default: m.TradeDatabase })));
@@ -103,7 +103,7 @@ function getInitialState(pathTab?: string, pathSub?: string) {
 }
 
 
-export default function DynastyCommandCenter({ params, playerProfileId, managerProfileId }: { params?: { tab?: string; sub?: string }; playerProfileId?: string; managerProfileId?: string }) {
+export default function DynastyCommandCenter({ params, playerProfileId, managerProfileId, valueSourcesPage }: { params?: { tab?: string; sub?: string }; playerProfileId?: string; managerProfileId?: string; valueSourcesPage?: boolean }) {
   useEffect(() => { console.log("[app] DynastyCommandCenter mounted"); }, []);
 
   // ── Background chunk preloading ────────────────────────────────────────────
@@ -133,7 +133,6 @@ export default function DynastyCommandCenter({ params, playerProfileId, managerP
       p(() => import("./tabs/LineupCommand"));
       p(() => import("./tabs/DraftAvailability"));
       p(() => import("./tabs/ShareTeam"));
-      p(() => import("./tabs/PortfolioTimeline"));
       p(() => import("@/pages/PlayerPage"));
       p(() => import("@/components/AboutModal"));
       p(() => import("@/components/FeedbackPage"));
@@ -284,7 +283,17 @@ export default function DynastyCommandCenter({ params, playerProfileId, managerP
 
   const currentMainConfig = NAV_CONFIG.find((t) => t.id === activeMainTab);
 
+  // When the app first renders directly on the /value-sources sub-page (a fresh
+  // load or refresh), don't immediately rewrite the URL to the active tab — that
+  // would bounce the user off the deep-linked page. Tab changes after mount sync
+  // normally. (Player/manager profiles survive because their state doesn't
+  // change on navigation, so this effect simply never fires for them.)
+  const skipInitialUrlSync = useRef(!!valueSourcesPage);
   useEffect(() => {
+    if (skipInitialUrlSync.current) {
+      skipInitialUrlSync.current = false;
+      return;
+    }
     setLocation(`/${activeMainTab}/${activeSubTab}`, { replace: true });
 
     try {
@@ -543,7 +552,6 @@ export default function DynastyCommandCenter({ params, playerProfileId, managerP
         case "portfolio:connect":          return <PortfolioConnect onNavigate={navigateToSubTab} />;
         case "portfolio:lineup-command":   return <LineupCommand />;
         case "portfolio:portfolio-summary":return <PortfolioSummary onNavigate={navigateToSubTab} />;
-        case "portfolio:portfolio-timeline":return <PortfolioTimeline />;
         case "portfolio:waiver-command":   return <WaiverCommand />;
         default:                           return <PortfolioConnect onNavigate={navigateToSubTab} />;
       }
@@ -587,6 +595,7 @@ export default function DynastyCommandCenter({ params, playerProfileId, managerP
       case "league-analyzer:roster-comparison":  return <RosterComparison league={league} />;
       case "league-analyzer:playoff-calculator": return <PlayoffCalculator />;
       case "league-analyzer:transactions":       return <Transactions leagueId={selectedLeagueId!} />;
+      case "league-analyzer:commanders-report":  return <CommandersReport leagueId={selectedLeagueId!} leagueName={league.name} />;
       case "trade-center:trade-database":        return <TradeDatabase league={league} />;
       case "trade-center:positional-analysis":   return <PositionalAnalysis league={league} userTeam={userTeam} />;
       case "trade-center:trade-block":           return <TradeBlockScanner league={league} />;
@@ -605,6 +614,8 @@ export default function DynastyCommandCenter({ params, playerProfileId, managerP
     // Pass the viewer's team so the Trade tab can match their roster to the
     // target manager's tendencies (null when no active league is loaded).
     if (managerProfileId) return <ManagerPage userId={managerProfileId} embedded viewerTeam={userTeam} />;
+    // Value-source manager renders inside the shell at /value-sources.
+    if (valueSourcesPage) return <ValueSourcePage embedded />;
     const access = resolveAccess(activeMainTab, activeSubTab);
     const isTradeInbox = activeMainTab === "trade-center" && activeSubTab === "trade-sync";
     return (
@@ -625,7 +636,7 @@ export default function DynastyCommandCenter({ params, playerProfileId, managerP
   return (
     <div className="min-h-screen sc-page-bg">
       <header
-        className="sticky top-0 z-50 backdrop-blur-sm dark:bg-[rgba(5,10,24,0.98)] dark:border-b dark:border-[rgba(212,175,55,0.16)] dark:shadow-[0_10px_24px_rgba(0,0,0,0.30)] bg-[var(--sc-nav-bg-translucent)] border-b border-[var(--sc-border)] shadow-[var(--sc-shadow-sm)]"
+        className="sc-topbar sticky top-0 z-50 backdrop-blur-sm dark:bg-[rgba(5,10,24,0.98)] dark:border-b dark:border-[rgba(212,175,55,0.16)] dark:shadow-[0_10px_24px_rgba(0,0,0,0.30)] bg-[var(--sc-nav-bg-translucent)] border-b border-[var(--sc-border)] shadow-[var(--sc-shadow-sm)]"
       >
         <div className="max-w-7xl mx-auto px-4 md:px-3 py-[14px] md:py-3">
           <div className="flex items-center gap-3">
@@ -645,8 +656,8 @@ export default function DynastyCommandCenter({ params, playerProfileId, managerP
                   </span>
                 )}
                 <div className="w-8 h-8 md:w-9 md:h-9 rounded-lg flex items-center justify-center flex-shrink-0">
-                  <img src={logoDark} alt="StatChasers" className="w-8 h-8 md:w-9 md:h-9 hidden dark-any:block" />
-                  <img src={logoLight} alt="StatChasers" className="w-8 h-8 md:w-9 md:h-9 block dark-any:hidden" />
+                  <img src={logoDark} alt="StatChasers" className="sc-topbar-logo-dark w-8 h-8 md:w-9 md:h-9 hidden dark-any:block" />
+                  <img src={logoLight} alt="StatChasers" className="sc-topbar-logo-light w-8 h-8 md:w-9 md:h-9 block dark-any:hidden" />
                 </div>
                 <div className="leading-none hidden md:block text-left">
                   <h1 className="text-sm md:text-base font-bold text-foreground leading-tight tracking-tight" data-testid="text-app-title">StatChasers</h1>
@@ -670,16 +681,16 @@ export default function DynastyCommandCenter({ params, playerProfileId, managerP
               {/* Logo dropdown menu */}
               {logoMenuOpen && (
                 <div
-                  className="absolute left-0 top-full mt-2 z-[55] overflow-hidden"
+                  className="sc-logo-menu absolute left-0 top-full mt-2 z-[55] overflow-hidden"
                   style={{ width: 240, borderRadius: 16, background: "rgba(5,10,24,0.98)", border: "1px solid rgba(255,255,255,0.08)", boxShadow: "0 20px 40px rgba(0,0,0,0.50), 0 0 0 1px rgba(212,175,55,0.06)" }}
                 >
                   {/* Brand header */}
-                  <div className="px-4 py-3.5" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)", background: "linear-gradient(135deg, rgba(11,58,122,0.18) 0%, transparent 100%)" }}>
+                  <div className="sc-logo-menu-divider px-4 py-3.5" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)", background: "linear-gradient(135deg, rgba(11,58,122,0.18) 0%, transparent 100%)" }}>
                     <div className="flex items-center gap-2.5">
                       <img src={logoDark} alt="StatChasers" className="w-7 h-7 hidden dark-any:block" />
                       <img src={logoLight} alt="StatChasers" className="w-7 h-7 block dark-any:hidden" />
                       <div>
-                        <p className="text-[13px] font-black text-white leading-tight">StatChasers</p>
+                        <p className="sc-logo-menu-text text-[13px] font-black text-white leading-tight">StatChasers</p>
                         <p className="text-[10px] font-semibold leading-tight" style={{ color: "#d4af37" }}>Dynasty Command</p>
                       </div>
                     </div>
@@ -690,10 +701,10 @@ export default function DynastyCommandCenter({ params, playerProfileId, managerP
                     <button
                       onClick={() => { setLogoMenuOpen(false); handleMainTabChange("about"); }}
                       data-testid="button-logo-about"
-                      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-all duration-150 hover:bg-white/5"
+                      className="sc-logo-menu-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-all duration-150 hover:bg-white/5"
                     >
                       <HelpCircle style={{ width: 14, height: 14, flexShrink: 0, color: "rgba(212,175,55,0.65)" }} />
-                      <span style={{ fontSize: 13, fontWeight: 500, color: "rgba(203,213,225,0.55)" }}>About</span>
+                      <span className="sc-logo-menu-text" style={{ fontSize: 13, fontWeight: 500, color: "rgba(203,213,225,0.55)" }}>About</span>
                       {!hasSeenAbout && (
                         <span className="ml-auto flex h-2 w-2 flex-shrink-0">
                           <span className="animate-ping absolute inline-flex h-2 w-2 rounded-full bg-red-500 opacity-70" />
@@ -704,15 +715,15 @@ export default function DynastyCommandCenter({ params, playerProfileId, managerP
                     <button
                       onClick={() => { setLogoMenuOpen(false); handleMainTabChange("feedback"); }}
                       data-testid="button-logo-feedback"
-                      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-all duration-150 hover:bg-white/5"
+                      className="sc-logo-menu-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-all duration-150 hover:bg-white/5"
                     >
                       <MessageSquare style={{ width: 14, height: 14, flexShrink: 0, color: "rgba(212,175,55,0.65)" }} />
-                      <span style={{ fontSize: 13, fontWeight: 500, color: "rgba(203,213,225,0.55)" }}>Feedback</span>
+                      <span className="sc-logo-menu-text" style={{ fontSize: 13, fontWeight: 500, color: "rgba(203,213,225,0.55)" }}>Feedback</span>
                     </button>
                   </div>
 
                   {/* Footer row */}
-                  <div className="flex items-center justify-end px-4 py-3" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+                  <div className="sc-logo-menu-divider flex items-center justify-end px-4 py-3" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
                     <ThemeToggle />
                   </div>
                 </div>
@@ -817,7 +828,7 @@ export default function DynastyCommandCenter({ params, playerProfileId, managerP
                   </button>
 
                   {userDropdownOpen && (
-                    <div className="absolute right-0 top-full mt-1.5 w-60 rounded-xl border border-border/60 bg-background shadow-lg shadow-black/10 dark:shadow-black/30 z-50 overflow-hidden">
+                    <div className="sc-user-menu absolute right-0 top-full mt-1.5 w-60 rounded-xl border border-border/60 bg-background shadow-lg shadow-black/10 dark:shadow-black/30 z-50 overflow-hidden">
                       {/* Sleeper identity */}
                       <div className="px-3 py-2.5 border-b border-border/40 flex items-center gap-2.5">
                         <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0 ring-1 ring-border/40 bg-muted flex items-center justify-center">

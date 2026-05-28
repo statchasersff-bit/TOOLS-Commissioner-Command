@@ -247,6 +247,25 @@ export interface TeamThemeTokens {
   "--favorite-team-accent": string;
 }
 
+/**
+ * Per-team theme base. Every team defaults to the dark, team-tinted base
+ * produced by generateTeamTheme(). Teams listed here instead build on the
+ * LIGHT base — i.e. the app's standard light mode — which is the baseline we
+ * start from before layering per-team accents on top.
+ *
+ * Arizona is the first team being designed, so it currently renders as plain
+ * light mode (no overrides yet).
+ */
+export type TeamThemeBase = "light" | "dark";
+
+const TEAM_THEME_BASE: Record<string, TeamThemeBase> = {
+  ARI: "light",
+};
+
+export function getTeamThemeBase(abbreviation: string): TeamThemeBase {
+  return TEAM_THEME_BASE[abbreviation] ?? "dark";
+}
+
 /** Generate the complete CSS-variable map for a team. Always produces a
  *  contrast-safe palette — verified by validateTeamTheme below. */
 export function generateTeamTheme(team: NflTeam): TeamThemeTokens {
