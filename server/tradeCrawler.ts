@@ -1180,6 +1180,46 @@ export async function getTradeStats() {
 }
 
 /**
+ * Most-traded players over a recent window. Counts distinct trades each player
+ * appears in (asset_type = 'player') where the trade timestamp falls within the
+ * last `days` days. Trade timestamps are stored in milliseconds (Sleeper's
+ * status_updated), so the cutoff is computed in ms.
+ */
+export async function getMostTradedPlayers(days = 7, limit = 10) {
+  const d = getDb();
+  const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
+
+  const rows = await d
+    .select({
+      sleeperId: tradeAssets.playerSleeperId,
+      name: sql<string>`max(${tradeAssets.playerName})`,
+      pos: sql<string>`max(${tradeAssets.playerPos})`,
+      team: sql<string>`max(${tradeAssets.playerTeam})`,
+      tradeCount: sql<number>`count(distinct ${tradeAssets.tradeId})`,
+    })
+    .from(tradeAssets)
+    .innerJoin(trades, eq(tradeAssets.tradeId, trades.id))
+    .where(
+      and(
+        eq(tradeAssets.assetType, "player"),
+        sql`${tradeAssets.playerSleeperId} IS NOT NULL`,
+        sql`${trades.timestamp} >= ${cutoff}`,
+      ),
+    )
+    .groupBy(tradeAssets.playerSleeperId)
+    .orderBy(sql`count(distinct ${tradeAssets.tradeId}) DESC`)
+    .limit(limit);
+
+  return rows.map((r) => ({
+    sleeperId: r.sleeperId,
+    name: r.name,
+    pos: r.pos,
+    team: r.team,
+    tradeCount: Number(r.tradeCount),
+  }));
+}
+
+/**
  * One-time cleanup: null out pick_slot for any pick asset whose season is
  * different from the league season it was traded in. These slots were written
  * using the current year's draft order as a false stand-in for future picks.

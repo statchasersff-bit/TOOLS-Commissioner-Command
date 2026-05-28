@@ -28,6 +28,7 @@ import {
   getCrawlStatus,
   searchTrades,
   getTradeStats,
+  getMostTradedPlayers,
   ingestLeagueTrades,
   ingestUserLeagues,
   backfillPickSlots,
@@ -168,6 +169,7 @@ function makeCache<T>(ttlMs: number) {
 }
 
 const statsCache   = makeCache<any>(5 * 60 * 1000);   // 5-min TTL
+const mostTradedCache = makeCache<any>(10 * 60 * 1000); // 10-min TTL
 const searchCache  = makeCache<any>(2 * 60 * 1000);   // 2-min TTL
 const playoffCalcCache = makeCache<any>(10 * 60 * 1000); // 10-min TTL
 const weeklyMatchupsCache = makeCache<any>(5 * 60 * 1000); // 5-min TTL — live scores need fresher data
@@ -754,6 +756,23 @@ export async function registerRoutes(
       res.json(stats);
     } catch (err: any) {
       res.status(500).json({ error: err.message || "Failed to get trade stats" });
+    }
+  });
+
+  app.get("/api/trades/most-traded-players", async (_req, res) => {
+    try {
+      const cached = mostTradedCache.get("week");
+      if (cached) {
+        res.setHeader("Cache-Control", "public, max-age=600");
+        return res.json(cached);
+      }
+      const players = await getMostTradedPlayers(7, 10);
+      const payload = { players };
+      mostTradedCache.set("week", payload);
+      res.setHeader("Cache-Control", "public, max-age=600");
+      res.json(payload);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || "Failed to get most-traded players" });
     }
   });
 

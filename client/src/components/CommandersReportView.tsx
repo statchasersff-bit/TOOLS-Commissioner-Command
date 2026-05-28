@@ -41,25 +41,11 @@ export function CommandersReportView({
   tone?: ToneId;
   leagueName?: string;
 }) {
-  const heroHeadline = article?.headline
-    ?? `${recap.period.label}: ${recap.tradeRecap.count} trades, ${recap.waiverRecap.count} waiver moves, $${recap.waiverRecap.totalFaab} FAAB in play.`;
-
   return (
     <div className="space-y-4 md:space-y-5">
       {/* Hero */}
       <Card className="p-5 md:p-6 bg-gradient-to-br from-[#0b3a7a]/10 to-transparent">
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-              {leagueName || recap.meta.leagueName} · {recap.period.label} · {recap.meta.format} {recap.meta.scoringFormat}
-            </p>
-            <h2 className="text-lg md:text-2xl font-bold mt-1.5 leading-snug">{heroHeadline}</h2>
-            {article?.shareText && (
-              <p className="text-sm md:text-base italic text-muted-foreground mt-2 leading-relaxed">
-                {article.shareText}
-              </p>
-            )}
-          </div>
+        <div className="flex items-start justify-end gap-4">
           <div className="flex flex-col items-end gap-1.5 shrink-0">
             <Badge variant="outline" className="text-[10px] whitespace-nowrap">
               <Flame className="w-3 h-3 mr-1" /> Chaos {recap.chaosScore.score} · {recap.chaosScore.tier}

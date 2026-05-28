@@ -931,8 +931,6 @@ function CurrentLeagueTab({ data }: { data: ManagerIntelPayload }) {
         <YouVsThem viewer={viewerRow} target={targetRow} />
       )}
 
-      <NeedsTable needs={selected.needs} relativeWeakness={selected.relativeWeakness} />
-
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <SectionCard title="Roster age" icon={<User className="w-3.5 h-3.5" />}>
           <p className="text-[13px] text-white/70">{selected.ageSummary}</p>
@@ -1247,27 +1245,6 @@ function StrengthsCard({
       <p className="text-[11px] text-white/40 mb-2.5 mt-0.5">{subtitle}</p>
       <PositionGrid scores={scores} />
     </div>
-  );
-}
-
-function NeedsTable({ needs, relativeWeakness }: { needs: NeedRow[]; relativeWeakness: string | null }) {
-  const levelCls = (l: NeedRow["level"]) =>
-    l === "High" ? "text-rose-300 border-rose-500/40" : l === "Medium" ? "text-amber-300 border-amber-500/40" : "text-white/50 border-white/15";
-  return (
-    <SectionCard title="Needs by position" icon={<AlertTriangle className="w-3.5 h-3.5" />}>
-      <div className="space-y-1">
-        {needs.map((n) => (
-          <div key={n.position} className="flex items-center gap-3 py-1.5 border-b border-white/[0.05] last:border-0">
-            <span className="text-[12.5px] font-bold text-white w-8">{n.position}</span>
-            <Badge variant="outline" className={cn("text-[9px] font-bold", levelCls(n.level))}>
-              {n.level}
-            </Badge>
-            <span className="text-[11.5px] text-white/55 ml-auto text-right">{n.reason}</span>
-          </div>
-        ))}
-      </div>
-      {relativeWeakness && <p className="text-[11px] text-white/45 mt-2 leading-relaxed">{relativeWeakness}</p>}
-    </SectionCard>
   );
 }
 

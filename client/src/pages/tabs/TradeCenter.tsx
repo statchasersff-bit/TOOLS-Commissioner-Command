@@ -3318,8 +3318,12 @@ function FilterGroup({ label, children }: { label: string; children: ReactNode }
 
 export function TradeDatabase({ league }: { league: League }) {
   const { valuesBySleeperId, dynastyPlayerList } = useValueModel();
+  const { openPlayerProfile } = usePlayerProfile();
 
   const [stats, setStats] = useState<{ totalTrades: number; totalLeagues: number } | null>(null);
+  const [mostTraded, setMostTraded] = useState<
+    { sleeperId: string; name: string; pos: string; team: string | null; tradeCount: number }[] | null
+  >(null);
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [format, setFormat] = useState("all");
@@ -3362,6 +3366,13 @@ export function TradeDatabase({ league }: { league: League }) {
     fetch(`${API_BASE}/api/trades/stats`)
       .then((r) => r.json())
       .then((data) => setStats(data))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    fetch(`${API_BASE}/api/trades/most-traded-players`)
+      .then((r) => r.json())
+      .then((data) => setMostTraded(data.players || []))
       .catch(() => {});
   }, []);
 
@@ -3448,6 +3459,41 @@ export function TradeDatabase({ league }: { league: League }) {
         title="Trade Database"
         subtitle="Real dynasty trades contributed by the StatChasers community"
       />
+
+      {mostTraded && mostTraded.length > 0 && (
+        <div className="rounded-lg border border-border bg-card/40 p-3" data-testid="most-traded-players">
+          <div className="flex items-center gap-2 mb-3">
+            <TrendingUp className="w-4 h-4 text-[#d4af37]" />
+            <h3 className="text-sm font-semibold">Most Traded Players</h3>
+            <span className="text-xs text-muted-foreground">· past 7 days</span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5">
+            {mostTraded.map((p, i) => (
+              <div
+                key={p.sleeperId}
+                className="flex items-center gap-2.5 py-1"
+                data-testid={`most-traded-row-${i}`}
+              >
+                <span className="text-xs font-bold text-muted-foreground w-5 flex-shrink-0 text-right">{i + 1}</span>
+                <div className="flex-1 min-w-0">
+                  <PlayerAvatar
+                    id={p.sleeperId}
+                    name={p.name}
+                    pos={p.pos}
+                    team={p.team ?? ""}
+                    size="sm"
+                    onClick={() => openPlayerProfile(p.sleeperId)}
+                  />
+                </div>
+                <span className="flex items-center gap-1 text-xs font-semibold text-muted-foreground whitespace-nowrap flex-shrink-0">
+                  <ArrowRightLeft className="w-3 h-3" />
+                  {p.tradeCount.toLocaleString()}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="flex items-start justify-center md:justify-start gap-3 p-3 rounded-lg bg-[#0b3a7a]/5 dark:bg-blue-400/5 border border-[#0b3a7a]/10 dark:border-blue-400/10" data-testid="trade-db-stats-banner">
         <Database className="w-4 h-4 text-[#0b3a7a] dark:text-blue-400 flex-shrink-0 mt-0.5" />

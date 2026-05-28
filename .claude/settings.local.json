@@ -7,7 +7,19 @@
       "Bash(git stash *)",
       "Bash(npm run *)",
       "Bash(unzip -l /home/runner/workspace/dynasty-command-launch.zip)",
-      "Bash(unzip -l /home/runner/workspace/dynasty-command-bluehost.zip)"
+      "Bash(unzip -l /home/runner/workspace/dynasty-command-bluehost.zip)",
+      "Bash(git status *)",
+      "Read(//tmp/**)",
+      "Bash(git show *)",
+      "Bash(grep -n \"currentProj\\\\|rawStarters\\\\|startingSlots\\\\|projFor\\\\|rawProj\\\\|setRawProj\\\\|const enrich\\\\|starters\\\\|roster_positions\\\\|projMap\\\\|leagueScoring\" /tmp/LineupCommand.tsx)",
+      "Bash(grep -n \"export function\\\\|export const\\\\|return\\\\|pts_ppr\\\\|field\\\\|stats\\\\|scoring\" /tmp/projection_n.txt)",
+      "Bash(awk 'NR>=1 && NR<=4' /tmp/g2.txt)",
+      "Bash(awk 'NR>=10' /tmp/lcgrep.txt)",
+      "Bash(awk -v s=170 '{print \\(s+NR-1\\)\": \"$0}')",
+      "Bash(awk -v s=3 '{print \\(s+NR-1\\)\": \"$0}')",
+      "Bash(awk NR==3 *)",
+      "Bash(awk NR==4 *)",
+      "Bash(awk NR==5{print} NR==6{print} NR==7{print} NR==8{print} NR==9{print} *)"
     ]
   }
 }

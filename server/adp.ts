@@ -1386,6 +1386,11 @@ export async function computeAdp(f: AdpFilters): Promise<{ rows: AdpRow[]; draft
 
   const now = Date.now();
   const DAY = 24 * 60 * 60 * 1000;
+  // A window needs at least this many observed picks before its mean is trusted
+  // to define a trend. Below it, a single stray draft could masquerade as a
+  // "mover", so we report no movement instead. Tune down (→2) on sparse slices
+  // if the movers panel comes up empty.
+  const MIN_TREND_PICKS = 3;
 
   // Nearest-rank percentile (no interpolation) — keeps values aligned to a
   // real observed pick. q in [0,1].
@@ -1414,13 +1419,30 @@ export async function computeAdp(f: AdpFilters): Promise<{ rows: AdpRow[]; draft
     const p10 = percentile(sorted, 0.10);
     const p90 = percentile(sorted, 0.90);
 
+    // Trend = recent window mean − prior (non-overlapping) window mean. Negative
+    // means the player is going earlier than before (riser); positive means
+    // slipping later (faller). Windows must not overlap, or the delta is diluted
+    // by shared picks: 7d vs the prior 7d (days 8–14), 30d vs the prior 30d.
     const last7 = a.timed.filter((x) => now - x.t <= 7 * DAY).map((x) => x.p);
+    const prev7 = a.timed.filter((x) => now - x.t > 7 * DAY && now - x.t <= 14 * DAY).map((x) => x.p);
     const last30 = a.timed.filter((x) => now - x.t <= 30 * DAY).map((x) => x.p);
     const prior30 = a.timed.filter((x) => now - x.t > 30 * DAY && now - x.t <= 60 * DAY).map((x) => x.p);
-    const meanOr = (arr: number[]) => (arr.length ? arr.reduce((s, v) => s + v, 0) / arr.length : avg);
 
-    const trend7 = Math.round(meanOr(last7) - meanOr(last30));
-    const trend30 = Math.round(meanOr(last30) - meanOr(prior30));
+    // Mean of a window only once it clears MIN_TREND_PICKS, else null — no
+    // fallback to the all-time average, which used to fabricate a delta whenever
+    // one side of the comparison was empty.
+    const meanIf = (arr: number[]) =>
+      arr.length >= MIN_TREND_PICKS ? arr.reduce((s, v) => s + v, 0) / arr.length : null;
+    // Only a trend when BOTH windows have enough data; otherwise 0 (no movement),
+    // which the movers panel filters out.
+    const trendBetween = (recent: number[], prior: number[]) => {
+      const r = meanIf(recent);
+      const p = meanIf(prior);
+      return r != null && p != null ? Math.round(r - p) : 0;
+    };
+
+    const trend7 = trendBetween(last7, prev7);
+    const trend30 = trendBetween(last30, prior30);
 
     const validPos = (["QB", "RB", "WR", "TE", "K", "PICK"] as const).includes(a.position as any)
       ? (a.position as AdpRow["position"])
