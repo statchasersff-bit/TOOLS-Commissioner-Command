@@ -2,7 +2,7 @@ import { API_BASE } from "@/lib/apiBase";
 
 // ── Types (mirror server/commandersReport.ts) ───────────────────────────────
 
-export type ToneId = "light_roast" | "clean_analyst" | "full_chaos" | "commissioner_safe";
+export type ToneId = "full_chaos";
 
 export interface Claim {
   id: string;
@@ -49,6 +49,7 @@ export interface TradeRow {
   lopsidedness: number;
   grade: string;
   reason: string;
+  mysteryBox?: { victim: string; stud: string; studValue: number; package: string[] } | null;
 }
 
 export interface WaiverRow {
@@ -136,7 +137,8 @@ const TIMEOUT_MS = 30_000;
 
 async function fetchJson<T>(url: string, init?: RequestInit, timeoutMs = TIMEOUT_MS): Promise<T> {
   const ac = new AbortController();
-  const timer = setTimeout(() => ac.abort(), timeoutMs);
+  let timedOut = false;
+  const timer = setTimeout(() => { timedOut = true; ac.abort(); }, timeoutMs);
   try {
     const res = await fetch(`${API_BASE}${url}`, { credentials: "include", signal: ac.signal, ...init });
     if (!res.ok) {
@@ -150,6 +152,13 @@ async function fetchJson<T>(url: string, init?: RequestInit, timeoutMs = TIMEOUT
       throw new Error(msg);
     }
     return (await res.json()) as T;
+  } catch (err: any) {
+    // Surface our own timeout as a clear message instead of the raw DOMException
+    // ("signal is aborted without reason") the browser throws on abort().
+    if (timedOut || err?.name === "AbortError") {
+      throw new Error(`Timed out after ${Math.round(timeoutMs / 1000)}s — leagues with a lot of activity can take a while. Please try again.`);
+    }
+    throw err;
   } finally {
     clearTimeout(timer);
   }
@@ -158,12 +167,16 @@ async function fetchJson<T>(url: string, init?: RequestInit, timeoutMs = TIMEOUT
 const enc = encodeURIComponent;
 
 export function fetchPeriods(leagueId: string): Promise<PeriodsResponse> {
-  return fetchJson<PeriodsResponse>(`/api/commanders-report/periods?leagueId=${enc(leagueId)}`);
+  // Builds from a full season of Sleeper transactions on a cold cache — give it room.
+  return fetchJson<PeriodsResponse>(`/api/commanders-report/periods?leagueId=${enc(leagueId)}`, undefined, 60_000);
 }
 
 export function fetchReport(leagueId: string, year: number, month: number, tone: ToneId): Promise<ReportResponse> {
+  // First load computes the recap from Sleeper data; subsequent loads are cached.
   return fetchJson<ReportResponse>(
     `/api/commanders-report?leagueId=${enc(leagueId)}&year=${year}&month=${month}&tone=${tone}`,
+    undefined,
+    60_000,
   );
 }
 
@@ -206,8 +219,5 @@ export function shareUrl(path: string): string {
 }
 
 export const TONE_OPTIONS: Array<{ id: ToneId; label: string }> = [
-  { id: "light_roast", label: "Light Roast" },
-  { id: "clean_analyst", label: "Clean Analyst" },
   { id: "full_chaos", label: "Full Chaos" },
-  { id: "commissioner_safe", label: "Commissioner Safe" },
 ];

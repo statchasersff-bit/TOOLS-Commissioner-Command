@@ -18,7 +18,7 @@ import { FEATURES } from "@/config/features";
 import type { League, Team } from "@/types";
 import { fetchSleeperLeagueFull } from "@/lib/sleeperApi";
 import { DataDiagnostics } from "@/components/DataDiagnostics";
-import { LayoutDashboard, Loader2, Lock, Check, User, RefreshCw, AlertCircle, Wifi, WifiOff, ChevronDown, LogOut, Trophy, ArrowRightLeft, TrendingUp, Zap, X, MessageSquare, HelpCircle, Eye, Unlink, Star, Settings } from "lucide-react";
+import { LayoutDashboard, Loader2, Lock, Check, User, RefreshCw, AlertCircle, Wifi, WifiOff, ChevronDown, LogOut, Trophy, ArrowRightLeft, TrendingUp, Zap, X, MessageSquare, HelpCircle, Eye, Unlink, Star, Settings, Shield } from "lucide-react";
 import { AccessGate } from "@/components/AccessGate";
 import { UpgradeFlow } from "@/components/UpgradeFlow";
 import { resolveAccess } from "@/config/moduleAccess";
@@ -59,6 +59,9 @@ const DraftCommand      = lazy(() => import("./tabs/DraftCommand").then(m => ({ 
 const DraftAvailability = lazy(() => import("./tabs/DraftAvailability").then(m => ({ default: m.DraftAvailability })));
 const AboutPage         = lazy(() => import("@/components/AboutModal").then(m => ({ default: m.AboutPage })));
 const FeedbackPage      = lazy(() => import("@/components/FeedbackPage").then(m => ({ default: m.FeedbackPage })));
+const RedraftCommandPage       = lazy(() => import("@/components/ComingSoonCommand").then(m => ({ default: m.RedraftCommandPage })));
+const CommissionerCommandPage  = lazy(() => import("@/components/ComingSoonCommand").then(m => ({ default: m.CommissionerCommandPage })));
+const ManageAccount            = lazy(() => import("./tabs/ManageAccount").then(m => ({ default: m.ManageAccount })));
 const TermsPage         = lazy(() => import("@/components/LegalModals").then(m => ({ default: m.TermsPage })));
 const PrivacyPage       = lazy(() => import("@/components/LegalModals").then(m => ({ default: m.PrivacyPage })));
 const CookiesPage       = lazy(() => import("@/components/LegalModals").then(m => ({ default: m.CookiesPage })));
@@ -136,6 +139,8 @@ export default function DynastyCommandCenter({ params, playerProfileId, managerP
       p(() => import("@/pages/PlayerPage"));
       p(() => import("@/components/AboutModal"));
       p(() => import("@/components/FeedbackPage"));
+      p(() => import("@/components/ComingSoonCommand"));
+      p(() => import("./tabs/ManageAccount"));
       p(() => import("@/components/LegalModals"));
     }, 1500);
     return () => clearTimeout(t);
@@ -526,6 +531,9 @@ export default function DynastyCommandCenter({ params, playerProfileId, managerP
     }
 
     if (activeMainTab === "feedback") return <FeedbackPage />;
+    if (activeMainTab === "manage-account") return <ManageAccount />;
+    if (activeMainTab === "redraft-command") return <RedraftCommandPage onBack={() => handleMainTabChange("portfolio")} />;
+    if (activeMainTab === "commissioner-command") return <CommissionerCommandPage onBack={() => handleMainTabChange("portfolio")} />;
     if (activeMainTab === "terms") return <TermsPage onNavigate={handleMainTabChange} />;
     if (activeMainTab === "privacy") return <PrivacyPage onNavigate={handleMainTabChange} />;
     if (activeMainTab === "cookies") return <CookiesPage onNavigate={handleMainTabChange} />;
@@ -720,6 +728,27 @@ export default function DynastyCommandCenter({ params, playerProfileId, managerP
                       <MessageSquare style={{ width: 14, height: 14, flexShrink: 0, color: "rgba(212,175,55,0.65)" }} />
                       <span className="sc-logo-menu-text" style={{ fontSize: 13, fontWeight: 500, color: "rgba(203,213,225,0.55)" }}>Feedback</span>
                     </button>
+
+                    <div className="my-1.5 mx-1" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }} />
+
+                    <button
+                      onClick={() => { setLogoMenuOpen(false); handleMainTabChange("redraft-command"); }}
+                      data-testid="button-logo-redraft-command"
+                      className="sc-logo-menu-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-all duration-150 hover:bg-white/5"
+                    >
+                      <Zap style={{ width: 14, height: 14, flexShrink: 0, color: "rgba(212,175,55,0.65)" }} />
+                      <span className="sc-logo-menu-text" style={{ fontSize: 13, fontWeight: 500, color: "rgba(203,213,225,0.55)" }}>Redraft Command</span>
+                      <span className="ml-auto flex-shrink-0 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded" style={{ color: "#d4af37", background: "rgba(212,175,55,0.12)", border: "1px solid rgba(212,175,55,0.25)" }}>Soon</span>
+                    </button>
+                    <button
+                      onClick={() => { setLogoMenuOpen(false); handleMainTabChange("commissioner-command"); }}
+                      data-testid="button-logo-commissioner-command"
+                      className="sc-logo-menu-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-all duration-150 hover:bg-white/5"
+                    >
+                      <Shield style={{ width: 14, height: 14, flexShrink: 0, color: "rgba(212,175,55,0.65)" }} />
+                      <span className="sc-logo-menu-text" style={{ fontSize: 13, fontWeight: 500, color: "rgba(203,213,225,0.55)" }}>Commissioner Command</span>
+                      <span className="ml-auto flex-shrink-0 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded" style={{ color: "#d4af37", background: "rgba(212,175,55,0.12)", border: "1px solid rgba(212,175,55,0.25)" }}>Soon</span>
+                    </button>
                   </div>
                 </div>
               )}
@@ -845,6 +874,16 @@ export default function DynastyCommandCenter({ params, playerProfileId, managerP
                             : <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">Read-only mode</p>}
                         </div>
                       </div>
+
+                      {/* Manage Account — opens the account page (Profile / Connections / Feedback) */}
+                      <button
+                        onClick={() => { setUserDropdownOpen(false); handleMainTabChange("manage-account"); }}
+                        data-testid="button-menu-manage-account"
+                        className="w-full flex items-center gap-2.5 px-3 py-2.5 text-xs font-medium text-foreground hover:bg-muted/40 transition-colors border-b border-border/30"
+                      >
+                        <Settings className="w-3.5 h-3.5 flex-shrink-0 text-[#d4af37]" />
+                        <span className="flex-1 text-left">Manage Account</span>
+                      </button>
 
                       {/* Favorite NFL Team row — always visible, opens Settings */}
                       <button

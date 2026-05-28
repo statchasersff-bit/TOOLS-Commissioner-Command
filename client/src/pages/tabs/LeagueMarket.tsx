@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useLayoutEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -13,7 +13,7 @@ import { ROOKIE_BOARD_2026_SF } from "@/data/rookieBoard2026";
 import type { League } from "@/types";
 import { cn } from "@/lib/utils";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
-import { Search } from "lucide-react";
+import { Search, Star } from "lucide-react";
 
 interface MarketProps {
   league: League;
@@ -40,6 +40,11 @@ export function MarketValue({ league }: MarketProps) {
   const [posFilter, setPosFilter] = useState("all");
   const [sortKey, setSortKey] = useState<SortKey>("dynastyValue");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const scrollRef = useRef<HTMLDivElement>(null);
+  // True when the value table is wider than its viewport (needs horizontal
+  // scrolling). When set, the wide "On Your Team" pill collapses to a compact
+  // gold star next to the team abbreviation so all columns stay reachable.
+  const [tableOverflows, setTableOverflows] = useState(false);
 
   // Set of sleeperIds owned by the signed-in user in this league — used to
   // tag rows with the "On Your Team" pill. Matches by Sleeper user_id against
@@ -186,6 +191,19 @@ export function MarketValue({ league }: MarketProps) {
     return rows;
   }, [allPlayers, rookieRows, search, posFilter, sortKey, sortDir]);
 
+  // Re-measure horizontal overflow on container resize (device/orientation) and
+  // whenever the row set changes. Swapping the pill for a star only changes the
+  // table's scrollWidth (not the container's width), so this never oscillates.
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const measure = () => setTableOverflows(el.scrollWidth - el.clientWidth > 1);
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [filtered]);
+
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) {
       setSortDir((d) => (d === "desc" ? "asc" : "desc"));
@@ -239,7 +257,7 @@ export function MarketValue({ league }: MarketProps) {
       </div>
 
       <Card className="overflow-hidden">
-        <div className="overflow-x-auto">
+        <div ref={scrollRef} className="overflow-x-auto">
         <table className="w-full" data-testid="table-market-values">
           <thead>
             <tr className="border-b bg-muted/40">
@@ -249,13 +267,6 @@ export function MarketValue({ league }: MarketProps) {
                 data-testid="th-name"
               >
                 Player{sortIndicator("name")}
-              </th>
-              <th
-                className="text-right px-2 md:px-4 py-2.5 font-semibold text-xs uppercase tracking-wider cursor-pointer hover:text-[#d4af37] select-none w-10 md:w-16"
-                onClick={() => toggleSort("age")}
-                data-testid="th-age"
-              >
-                Age{sortIndicator("age")}
               </th>
               <th
                 className="text-left px-2 md:px-4 py-2.5 font-semibold text-xs uppercase tracking-wider cursor-pointer hover:text-[#d4af37] select-none w-12 md:w-20"
@@ -277,6 +288,13 @@ export function MarketValue({ league }: MarketProps) {
                 data-testid="th-dynasty"
               >
                 Dynasty{sortIndicator("dynastyValue")}
+              </th>
+              <th
+                className="text-right px-2 md:px-4 py-2.5 font-semibold text-xs uppercase tracking-wider cursor-pointer hover:text-[#d4af37] select-none w-10 md:w-16"
+                onClick={() => toggleSort("age")}
+                data-testid="th-age"
+              >
+                Age{sortIndicator("age")}
               </th>
             </tr>
           </thead>
@@ -305,8 +323,17 @@ export function MarketValue({ league }: MarketProps) {
                       pos={row.pos}
                       team={row.team}
                       size="sm"
+                      metaTrailing={myPlayerIds.has(row.sleeperId) && tableOverflows ? (
+                        <span
+                          className="inline-flex"
+                          data-testid={`star-on-your-team-${row.sleeperId}`}
+                          title="This player is on your roster in this league"
+                        >
+                          <Star className="w-3 h-3 fill-[#d4af37] text-[#d4af37]" />
+                        </span>
+                      ) : undefined}
                     />
-                    {myPlayerIds.has(row.sleeperId) && (
+                    {myPlayerIds.has(row.sleeperId) && !tableOverflows && (
                       <span
                         className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] md:text-[10px] font-bold uppercase tracking-wide bg-blue-500/15 text-blue-700 dark:text-blue-400 border border-blue-500/40 whitespace-nowrap"
                         data-testid={`pill-on-your-team-${row.sleeperId}`}
@@ -316,9 +343,6 @@ export function MarketValue({ league }: MarketProps) {
                       </span>
                     )}
                   </div>
-                </td>
-                <td className="px-2 md:px-4 py-2 text-right font-mono text-xs md:text-sm tabular-nums text-muted-foreground" data-testid={`text-age-${row.sleeperId}`}>
-                  {row.age != null ? row.age.toFixed(1) : "—"}
                 </td>
                 <td className="px-2 md:px-4 py-2">
                   <Badge variant="outline" className={`text-[9px] md:text-[10px] px-1 md:px-2 h-4 md:h-5 md:min-w-[36px] justify-center ${getPositionColor(row.pos)}`}>
@@ -330,6 +354,9 @@ export function MarketValue({ league }: MarketProps) {
                 </td>
                 <td className="px-2 md:px-4 py-2 text-right font-mono text-xs md:text-sm font-semibold" data-testid={`text-dynasty-${row.sleeperId}`}>
                   {row.dynastyValue.toLocaleString()}
+                </td>
+                <td className="px-2 md:px-4 py-2 text-right font-mono text-xs md:text-sm tabular-nums text-muted-foreground" data-testid={`text-age-${row.sleeperId}`}>
+                  {row.age != null ? row.age.toFixed(1) : "—"}
                 </td>
               </tr>
               );

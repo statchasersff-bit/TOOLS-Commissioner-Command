@@ -3,16 +3,19 @@
  *
  * Turns the deterministic engine's RecapResult into a written, funny article
  * WITHOUT any LLM call. Every sentence is composed from real recap fields
- * (counts, awards, chaos score, manager stats, claim headlines), so the prose
- * is grounded by construction — it cannot invent trades, picks, or numbers.
+ * (awards, manager summaries, trade sides, chaos score), so the prose is
+ * grounded by construction — it cannot invent trades, picks, or numbers.
  *
- * A seeded RNG drives word choice and phrase selection so reports vary between
- * leagues/months (and on "Regenerate") while staying deterministic for a given
- * seed. Tone shifts the vocabulary from neutral (commissioner_safe / analyst)
- * to spicy (light_roast / full_chaos) — but the humor always rides on the data,
- * never on personal attacks.
+ * The output is NOT a category recap. It is a ranked roast column: it opens on
+ * the month's biggest disaster, then walks down the ranked storylines —
+ * second-dumbest move, accidental genius (backhanded), the ghosts who did
+ * nothing, an optional roastable trade / waiver — and ends with a "Looking
+ * Ahead" callback to the opening villain. Storylines with no data are skipped,
+ * never forced. A seeded RNG drives phrasing so reports vary on "Regenerate"
+ * while staying deterministic for a given seed. The humor always rides on the
+ * data, never on personal attacks.
  */
-import type { Article, RecapResult, ToneId, Claim, Award } from "./commandersReport";
+import type { Article, RecapResult, Award, ManagerSummary } from "./commandersReport";
 
 // ── Seeded RNG (xmur3 seed → mulberry32) ─────────────────────────────────────
 
@@ -35,403 +38,291 @@ function makeRng(seedStr: string): () => number {
 type Rng = () => number;
 const pick = <T>(rng: Rng, arr: T[]): T => arr[Math.floor(rng() * arr.length)];
 
-// ── Tone profile ─────────────────────────────────────────────────────────────
-
-interface ToneProfile {
-  spicy: boolean; // full_chaos only — the theatrical, sarcastic roast-column voice
-  jokes: boolean; // allowed to joke at all (light_roast + full_chaos)
-}
-const TONE_PROFILE: Record<ToneId, ToneProfile> = {
-  commissioner_safe: { spicy: false, jokes: false },
-  clean_analyst: { spicy: false, jokes: false },
-  light_roast: { spicy: false, jokes: true },
-  full_chaos: { spicy: true, jokes: true },
-};
-
 // ── Small grammar helpers ─────────────────────────────────────────────────────
 
 const plural = (n: number, one: string, many = one + "s") => (n === 1 ? one : many);
-const cap = (s: string) => (s ? s[0].toUpperCase() + s.slice(1) : s);
-const directionWord = (d: string) =>
-  d === "contender" ? "win-now" : d === "rebuild" ? "rebuilding" : "middle-of-the-pack";
 
 function awardByKey(recap: RecapResult, key: string): Award | undefined {
   return recap.awards.find((a) => a.key === key);
 }
-function claimsOfType(recap: RecapResult, type: Claim["claim_type"]): Claim[] {
-  return recap.claims.filter((c) => c.claim_type === type);
+
+// "a, b and c" — Oxford-free natural list join.
+function joinAnd(items: string[]): string {
+  if (items.length <= 1) return items[0] ?? "";
+  if (items.length === 2) return `${items[0]} and ${items[1]}`;
+  return `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
 }
 
-// ── Section builders ──────────────────────────────────────────────────────────
+const PICK_ORDINAL: Record<string, string> = { "1": "1st", "2": "2nd", "3": "3rd", "4": "4th", "5": "5th" };
+// "2026 R1" → "a 2026 1st" so picks read like prose, not database rows.
+function prettyPick(label: string): string {
+  const m = label.match(/^(\d{4})\s*R(\d+)$/);
+  return m ? `a ${m[1]} ${PICK_ORDINAL[m[2]] ?? `${m[2]}th`}` : label;
+}
 
-function buildHeadline(recap: RecapResult, tone: ToneId, rng: Rng): { text: string; claimIds: string[] } {
-  const prof = TONE_PROFILE[tone];
+// Turn one side's received assets into a natural phrase ("Breece Hall",
+// "a 2026 1st and a 2027 1st", "$30 FAAB").
+function describeHaul(side: { players: string[]; picks: string[]; faab: number }): string {
+  const parts: string[] = [];
+  if (side.players.length) parts.push(joinAnd(side.players));
+  if (side.picks.length) parts.push(joinAnd(side.picks.map(prettyPick)));
+  if (side.faab > 0) parts.push(`$${side.faab} FAAB`);
+  return parts.length ? joinAnd(parts) : "little more than cap space";
+}
+
+// "Carson Beck at 3.11" → "Carson Beck" for cleaner callbacks.
+function playerName(awardValue: string): string {
+  return awardValue.split(" at ")[0];
+}
+
+function summaryOf(recap: RecapResult, manager: string): ManagerSummary | undefined {
+  return recap.managerSummaries.find((m) => m.manager === manager);
+}
+
+// A manager's month, woven into one phrase: "8 transactions, 7 waiver moves,
+// $99 of FAAB, 11 rookie picks, and 3 draft reaches".
+function activityProfile(s: ManagerSummary): string {
+  const bits = [`${s.transactions} ${plural(s.transactions, "transaction")}`];
+  if (s.waivers > 0) bits.push(`${s.waivers} waiver ${plural(s.waivers, "move")}`);
+  if (s.faabSpent > 0) bits.push(`$${s.faabSpent} of FAAB`);
+  if (s.draftPicks > 0) bits.push(`${s.draftPicks} rookie ${plural(s.draftPicks, "pick")}`);
+  if (s.reaches > 0) bits.push(`${s.reaches} draft ${plural(s.reaches, "reach", "reaches")}`);
+  return joinAnd(bits);
+}
+
+const isGhost = (s: ManagerSummary): boolean => s.transactions === 0 && s.draftPicks === 0;
+
+// Metaphors for the "sold the boat for mystery boxes" trade.
+const MB_METAPHORS = [
+  "This is the classic mystery box trade: sell the boat, buy a few boxes, and spend the next two years convincing yourself one of them might contain a better boat.",
+  "This is the dynasty equivalent of selling your house because someone offered you two tents and a blueprint.",
+  "That's not rebuilding so much as turning a dollar into four quarters and insisting the quarters have more upside.",
+];
+
+// ── Headline + share caption ────────────────────────────────────────────────
+
+function buildHeadline(recap: RecapResult, rng: Rng): string {
   const reach = awardByKey(recap, "biggest_reach");
   const faab = awardByKey(recap, "largest_faab_spend");
   const trade = awardByKey(recap, "best_trade");
   const chaotic = awardByKey(recap, "most_chaotic");
-  const ids: string[] = [];
-  const cite = (key: string) => ids.push(`award-${key}`);
 
-  // Pick the juiciest available storyline, biased toward spice when allowed.
-  if (prof.jokes && reach) {
-    cite("biggest_reach");
-    const lines = prof.spicy
-      ? [
-          `${reach.manager} reached ${reach.detail} to draft ${reach.value}, a leap of faith the ADP sheet is still filing a complaint about.`,
-          `${reach.manager} saw where ${reach.value} was supposed to go, added ${reach.detail}, and hit the pick anyway — conviction you can't teach and probably shouldn't.`,
-        ]
-      : [
-          `${reach.manager} reached for the future like ADP was a polite suggestion.`,
-          `${reach.manager} ran the rookie draft on vibes — and the vibes were expensive.`,
-        ];
-    return { text: pick(rng, lines), claimIds: ids };
-  }
-  if (prof.jokes && faab) {
-    cite("largest_faab_spend");
-    const lines = prof.spicy
-      ? [
-          `${faab.manager} set ${faab.detail} on fire for ${faab.value} and filed the ashes under "roster construction."`,
-          `${faab.manager} spent ${faab.detail} on ${faab.value}, which is less a bid than a public statement.`,
-        ]
-      : [`${faab.manager} opened the FAAB wallet on ${faab.value} and never looked back.`];
-    return { text: pick(rng, lines), claimIds: ids };
-  }
-  if (prof.jokes && chaotic) {
-    cite("most_chaotic");
-    return {
-      text: prof.spicy
-        ? `${chaotic.manager} spent the month auditioning for Most Chaotic Manager and refused to let anyone else read for the part.`
-        : `${chaotic.manager} spent the month auditioning for Most Chaotic Manager — and got the part.`,
-      claimIds: ids,
-    };
-  }
-  if (trade) {
-    cite("best_trade");
-    return {
-      text: prof.spicy
-        ? `${trade.manager} won a trade so quietly the rest of the league is still pretending it didn't happen, ${trade.detail} richer.`
-        : prof.jokes
-        ? `${trade.manager} quietly won a trade while the rest of the league was busy refreshing the waiver wire.`
-        : `${trade.manager} made the month's most lopsided trade, gaining a ${trade.detail}.`,
-      claimIds: ids,
-    };
-  }
-  // Fallback: chaos tier.
-  ids.push("chaos-league");
-  return {
-    text: prof.spicy
-      ? `${recap.meta.leagueName} posted ${recap.chaosScore.score}/100 on the Chaos Score and earned every single point of it.`
-      : prof.jokes
-      ? `${recap.meta.leagueName}: ${recap.chaosScore.tier} energy, ${recap.tradeRecap.count} ${plural(recap.tradeRecap.count, "trade")}, and a league chat that earned it.`
-      : `${recap.period.label} recap for ${recap.meta.leagueName}: ${recap.chaosScore.tier}.`,
-    claimIds: ids,
-  };
-}
-
-function buildOverview(recap: RecapResult, tone: ToneId, rng: Rng): { title: string; body: string; claimIds: string[] } {
-  const prof = TONE_PROFILE[tone];
-  const { tradeRecap, waiverRecap, rookieRecap, chaosScore } = recap;
-  const mostActive = awardByKey(recap, "most_active");
-  const ids = ["chaos-league"];
-  if (mostActive) ids.push("award-most_active");
-
-  const totalMoves = tradeRecap.count + waiverRecap.count + rookieRecap.drafted;
-  const opener = prof.spicy
-    ? pick(rng, [
-        `The smoke has cleared over ${recap.meta.leagueName}, and the wreckage is, frankly, beautiful.`,
-        `Pour one out for the group chat: another month has rolled through ${recap.meta.leagueName}, and the notifications never stood a chance.`,
-        `Gather around, because the month in ${recap.meta.leagueName} did not happen quietly.`,
-      ])
-    : prof.jokes
-    ? pick(rng, [
-        `The past month in ${recap.meta.leagueName} was less of an offseason and more of a group project where a few people did all the work.`,
-        `${recap.meta.leagueName} had itself a month — the kind that keeps the group chat employed.`,
-        `Another month in the books for ${recap.meta.leagueName}, and the receipts are in.`,
-      ])
-    : `Here is the ${recap.period.label} summary for ${recap.meta.leagueName}.`;
-
-  const activity =
-    totalMoves === 0
-      ? prof.spicy
-        ? "Except, plot twist: nothing happened at all — no trades, no waivers, no picks. A month so still you could hear the rosters gathering dust."
-        : prof.jokes
-        ? "It was quiet. Suspiciously quiet. The kind of quiet where Dynasty Command had to dig through the couch cushions for drama."
-        : "Activity was minimal across trades, waivers, and the rookie draft."
-      : prof.spicy
-      ? `By the time the dust settled, ${tradeRecap.count} ${plural(tradeRecap.count, "trade")} had cleared${
-          waiverRecap.totalFaab > 0 ? `, $${waiverRecap.totalFaab} of FAAB had evaporated on the wire` : `, the waiver wire had taken ${waiverRecap.count} ${plural(waiverRecap.count, "hit")}`
-        }${rookieRecap.drafted > 0 ? `, and ${rookieRecap.drafted} rookie ${plural(rookieRecap.drafted, "pick")} had been added to the list of decisions everyone will relitigate at 1am` : ""}.`
-      : `${tradeRecap.count} ${plural(tradeRecap.count, "trade")}, ${waiverRecap.count} waiver/FA ${plural(
-          waiverRecap.count,
-          "move",
-        )}${waiverRecap.totalFaab > 0 ? ` and $${waiverRecap.totalFaab} of FAAB` : ""} changed hands${
-          rookieRecap.drafted > 0 ? `, on top of a ${rookieRecap.drafted}-pick rookie draft` : ""
-        }.`;
-
-  const chaos = prof.spicy
-    ? `The Chaos Score settled at ${chaosScore.score}/100 — officially "${chaosScore.tier}" — and the drivers read like an incident report: ${chaosScore.drivers.join(" ")}`
-    : prof.jokes
-    ? `The league's Chaos Score landed at ${chaosScore.score}/100 — officially "${chaosScore.tier}." ${chaosScore.drivers.join(" ")}`
-    : `League Chaos Score: ${chaosScore.score}/100 (${chaosScore.tier}). ${chaosScore.drivers.join(" ")}`;
-
-  const active = mostActive
-    ? prof.spicy
-      ? `${mostActive.manager} treated the transaction page like a stress ball, leading everyone with ${mostActive.value}.`
-      : prof.jokes
-      ? `${mostActive.manager} led the league in moves (${mostActive.value}), proving once again that doing the most is a personality.`
-      : `${mostActive.manager} was the most active manager with ${mostActive.value}.`
-    : "";
-
-  return {
-    title: "League Overview",
-    body: [opener, activity, chaos, active].filter(Boolean).join(" "),
-    claimIds: ids,
-  };
-}
-
-function buildRookieSection(recap: RecapResult, tone: ToneId, rng: Rng): { title: string; body: string; claimIds: string[] } | null {
-  if (recap.rookieRecap.drafted === 0) return null;
-  const prof = TONE_PROFILE[tone];
-  const reach = awardByKey(recap, "biggest_reach");
-  const value = awardByKey(recap, "best_value");
-  const rookieClaims = claimsOfType(recap, "rookie_pick").slice(0, 4);
-  const ids = rookieClaims.map((c) => c.id);
-  if (reach) ids.push("award-biggest_reach");
-  if (value) ids.push("award-best_value");
-
-  const parts: string[] = [];
-  parts.push(
-    prof.spicy
-      ? pick(rng, [
-          `The rookie draft was ${recap.rookieRecap.drafted} picks of pure self-belief, and at least one of them is going to need a support group by December.`,
-          `${recap.rookieRecap.drafted} rookies came off the board, ranging from "sharp" to "what did we just watch," and we have it all on tape.`,
-        ])
-      : prof.jokes
-      ? pick(rng, [
-          `The rookie draft brought plenty of confidence, some genuine value, and a few picks that should probably be investigated by a wellness committee.`,
-          `${recap.rookieRecap.drafted} rookie picks went off the board, ranging from "sharp" to "what did we just watch."`,
-        ])
-      : `${recap.rookieRecap.drafted} rookie picks were made this period.`,
-  );
-  if (value) {
-    parts.push(
-      prof.spicy
-        ? `${value.manager} robbed the room blind, landing ${value.value} (${value.detail}) while everyone else was still scrolling their queue.`
-        : prof.jokes
-        ? `${value.manager} found the steal of the draft, landing ${value.value} (${value.detail}).`
-        : `Best value: ${value.manager} selected ${value.value}, ${value.detail}.`,
-    );
-  }
   if (reach) {
-    parts.push(
-      prof.spicy
-        ? `On the other end, ${reach.manager} took ${reach.value} a full ${reach.detail} early — less a reach than a hostage negotiation with the draft board.`
-        : prof.jokes
-        ? `${reach.manager}, meanwhile, reached for ${reach.value} (${reach.detail}) and dared anyone to question it.`
-        : `Biggest reach: ${reach.manager} took ${reach.value}, ${reach.detail}.`,
-    );
+    return pick(rng, [
+      `${reach.manager} selected ${reach.value} like a man who saw "average draft position" and thought it was a dare.`,
+      `${reach.manager} took ${playerName(reach.value)} ${reach.detail} like he had insider information from a fortune cookie.`,
+      `${reach.manager} drafted ${reach.value} with the confidence of a man buying beachfront property in Nebraska.`,
+      `${reach.manager} reached ${reach.detail} for ${reach.value}, a leap of faith the ADP sheet is still filing a complaint about.`,
+    ]);
   }
-  return { title: "Rookie Draft", body: parts.join(" "), claimIds: ids };
+  if (faab) return `${faab.manager} set ${faab.detail} on fire for ${faab.value} and called it roster construction.`;
+  if (trade) return `${trade.manager} won a trade so quietly the rest of the league is still pretending it didn't happen.`;
+  if (chaotic) return `${chaotic.manager} spent the month auditioning for Most Chaotic Manager and refused to let anyone else read for the part.`;
+  return `${recap.meta.leagueName} posted ${recap.chaosScore.score}/100 on the Chaos Score and earned every single point of it.`;
 }
 
-function buildTradeSection(recap: RecapResult, tone: ToneId, rng: Rng): { title: string; body: string; claimIds: string[] } {
-  const prof = TONE_PROFILE[tone];
-  if (recap.tradeRecap.count === 0) {
-    return {
-      title: "Trades",
-      body: prof.spicy
-        ? "Zero trades. The whole league hoarded its assets like the last lifeboat off a sinking ship and dared someone else to blink first. Nobody blinked."
-        : prof.jokes
-        ? "The trade market was a ghost town. Everyone clutched their assets like the last slice of pizza and dared someone else to move first."
-        : "No trades were completed this period.",
-      claimIds: [],
-    };
-  }
-  const tradeClaims = claimsOfType(recap, "trade").slice(0, 3);
-  const ids = tradeClaims.map((c) => c.id);
-  const top = awardByKey(recap, "best_trade");
-  if (top) ids.push("award-best_trade");
-
-  const parts: string[] = [];
-  parts.push(
-    prof.spicy
-      ? pick(rng, [
-          `${recap.tradeRecap.count} ${plural(recap.tradeRecap.count, "trade")} crossed the wire, and at least one manager is going to wake up at 3am rereading the screen.`,
-          `${recap.tradeRecap.count} ${plural(recap.tradeRecap.count, "deal")} got done, and not all of them will age like fine wine — some will age like milk.`,
-        ])
-      : prof.jokes
-      ? pick(rng, [
-          `${recap.tradeRecap.count} ${plural(recap.tradeRecap.count, "trade")} hit the wire, and not all of them will age gracefully.`,
-          `The trade market woke up just long enough to produce ${recap.tradeRecap.count} ${plural(recap.tradeRecap.count, "deal")}.`,
-        ])
-      : `${recap.tradeRecap.count} ${plural(recap.tradeRecap.count, "trade")} were completed.`,
-  );
-  // Lead with the headline claim (most lopsided) verbatim — it's already factual.
-  if (tradeClaims[0]) parts.push(tradeClaims[0].headline);
-  if (top) {
-    parts.push(
-      prof.spicy
-        ? `${top.manager} walked away with the better end of it (${top.detail}), the kind of edge that makes the other manager start rereading the trade screen to see what they missed.`
-        : prof.jokes
-        ? `${top.manager} walked away with the clearest edge (${top.detail}).`
-        : `${top.manager} gained the most value (${top.detail}).`,
-    );
-  }
-  return { title: "Trades", body: parts.join(" "), claimIds: ids };
-}
-
-function buildWaiverSection(recap: RecapResult, tone: ToneId, rng: Rng): { title: string; body: string; claimIds: string[] } {
-  const prof = TONE_PROFILE[tone];
-  if (recap.waiverRecap.count === 0) {
-    return {
-      title: "Waivers & FAAB",
-      body: prof.spicy
-        ? "The waiver wire sat there collecting dust. Everyone's either perfectly content or quietly given up, and in dynasty those two wear the exact same jersey."
-        : prof.jokes
-        ? "Nobody touched the waiver wire. Either everyone is content, or everyone has given up. In dynasty, those look identical."
-        : "No waiver or free-agent activity this period.",
-      claimIds: [],
-    };
-  }
-  const faab = awardByKey(recap, "largest_faab_spend");
-  const waiverClaims = claimsOfType(recap, "waiver");
-  // Skip spicy claims that just re-describe the FAAB award's player (avoids
-  // saying the same Geno-Smith bid twice in one paragraph).
-  const spicyClaims = waiverClaims
-    .filter((c) => c.severity === "spicy" && (!faab || !c.headline.includes(faab.value)))
-    .slice(0, 2);
-  const ids = [...spicyClaims.map((c) => c.id)];
-  if (faab) ids.push("award-largest_faab_spend");
-
-  const parts: string[] = [];
-  parts.push(
-    prof.spicy
-      ? `${recap.waiverRecap.count} waiver/FA ${plural(recap.waiverRecap.count, "move")} went through${
-          recap.waiverRecap.totalFaab > 0 ? `, with $${recap.waiverRecap.totalFaab} of FAAB lit on fire in the process` : ""
-        }.`
-      : prof.jokes
-      ? `${recap.waiverRecap.count} waiver/FA ${plural(recap.waiverRecap.count, "move")} went through${
-          recap.waiverRecap.totalFaab > 0 ? `, with $${recap.waiverRecap.totalFaab} of FAAB set on fire` : ""
-        }.`
-      : `${recap.waiverRecap.count} waiver/FA ${plural(recap.waiverRecap.count, "move")} were processed${
-          recap.waiverRecap.totalFaab > 0 ? `, totaling $${recap.waiverRecap.totalFaab} of FAAB` : ""
-        }.`,
-  );
-  if (faab) {
-    parts.push(
-      prof.spicy
-        ? `${faab.manager} spent ${faab.detail} on ${faab.value}, which reads less like a bid and more like a public cry for help.`
-        : prof.jokes
-        ? `${faab.manager} made the splashiest bid: ${faab.detail} on ${faab.value}.`
-        : `Largest FAAB spend: ${faab.manager}, ${faab.detail} on ${faab.value}.`,
-    );
-  }
-  if (prof.jokes && spicyClaims[0]) parts.push(spicyClaims[0].headline);
-  return { title: "Waivers & FAAB", body: parts.join(" "), claimIds: ids };
-}
-
-function buildSpotlight(recap: RecapResult, tone: ToneId, rng: Rng): { title: string; body: string; claimIds: string[] } | null {
-  const prof = TONE_PROFILE[tone];
-  // Most chaotic manager with real activity makes the best spotlight.
-  const summaries = [...recap.managerSummaries].filter((m) => m.transactions > 0 || m.draftPicks > 0);
-  if (summaries.length === 0) return null;
-  const star = summaries.sort((a, b) => b.chaosScore - a.chaosScore)[0];
-  const ids: string[] = [];
-  const chaotic = awardByKey(recap, "most_chaotic");
-  if (chaotic && chaotic.manager === star.manager) ids.push("award-most_chaotic");
-
-  const statLine = `${star.transactions} ${plural(star.transactions, "transaction")} (${star.trades} ${plural(
-    star.trades,
-    "trade",
-  )}, ${star.waivers} waiver ${plural(star.waivers, "move")})${star.faabSpent > 0 ? `, $${star.faabSpent} FAAB` : ""}${
-    star.draftPicks > 0 ? `, ${star.draftPicks} rookie ${plural(star.draftPicks, "pick")}` : ""
-  }`;
-
-  const body = prof.spicy
-    ? `Manager of the Month: ${star.manager}. ${statLine}. For a ${directionWord(
-        star.direction,
-      )} roster, that is ${star.reaches > 0 ? `${star.reaches} draft ${plural(star.reaches, "reach", "reaches")} and ` : ""}a whole lot of activity in search of a plan. We respect the commitment to motion, if not always the direction.`
-    : prof.jokes
-    ? `Manager of the Month: ${star.manager}. ${statLine}. A ${directionWord(
-        star.direction,
-      )} team that clearly believes standing still is for cowards.`
-    : `Manager spotlight: ${star.manager} — ${statLine}. Roster direction: ${directionWord(star.direction)}.`;
-
-  return { title: "Manager Spotlight", body, claimIds: ids };
-}
-
-function buildLookingAhead(recap: RecapResult, tone: ToneId, rng: Rng): { title: string; body: string; claimIds: string[] } {
-  const prof = TONE_PROFILE[tone];
-  const body = prof.spicy
-    ? pick(rng, [
-        `Next month, someone overpays, someone gets robbed in broad daylight, and someone declares they're "one move away" while sitting on a ${recap.chaosScore.score} chaos rating. Dynasty Command will be here, taking names.`,
-        `The board is set for an encore in ${recap.meta.leagueName}. The receipts never lie, the group chat never sleeps, and we never miss. See you next month.`,
-      ])
-    : prof.jokes
-    ? pick(rng, [
-        "Next month brings more trades, more questionable FAAB bids, and at least one move that makes the group chat go quiet for a second. Dynasty Command will be watching, judging, and taking notes.",
-        "The board is set for next month. Someone will overpay, someone will steal a deal, and someone will swear they're 'one move away.' See you then.",
-      ])
-    : `Dynasty Command will compile the next ${recap.meta.leagueName} briefing at the close of the following month.`;
-  return { title: "Looking Ahead", body, claimIds: [] };
-}
-
-/**
- * A short, punchy line built for the share button / social caption. Returned
- * only for the joke tones (light_roast, full_chaos); the neutral tones get none.
- * Drawn from the juiciest available award so it always rides on a real number.
- */
-function buildShareText(recap: RecapResult, tone: ToneId, rng: Rng): string | undefined {
-  const prof = TONE_PROFILE[tone];
-  if (!prof.jokes) return undefined;
-
-  const faab = awardByKey(recap, "largest_faab_spend");
+/** Short, punchy share caption drawn from the juiciest available award. */
+function buildShareText(recap: RecapResult): string {
   const reach = awardByKey(recap, "biggest_reach");
+  const faab = awardByKey(recap, "largest_faab_spend");
   const trade = awardByKey(recap, "best_trade");
   const chaotic = awardByKey(recap, "most_chaotic");
 
-  if (prof.spicy) {
-    if (faab) return `${faab.manager} torched ${faab.detail} on ${faab.value}. The Commander's Report kept the receipts.`;
-    if (reach) return `${reach.manager} reached ${reach.detail} for ${reach.value}. Full receipts inside.`;
-    if (trade) return `${trade.manager} fleeced the league for ${trade.detail}. Don't take our word for it — read it.`;
-    if (chaotic) return `${chaotic.manager} ran the month's chaos. ${recap.meta.leagueName} hit ${recap.chaosScore.score}/100 — somebody had to write it down.`;
-    return `${recap.meta.leagueName} clocked ${recap.chaosScore.score}/100 on the Chaos Score. The Commander's Report has thoughts.`;
-  }
-
-  // light_roast — same idea, softer.
-  if (trade) return `${trade.manager} won the month's best trade (${trade.detail}). The full ${recap.meta.leagueName} report is in.`;
-  if (faab) return `${faab.manager} made the month's splashiest bid: ${faab.detail} on ${faab.value}. Read the full report.`;
-  if (reach) return `${reach.manager} made the boldest pick of the rookie draft: ${reach.value}. See the full report.`;
-  return `The ${recap.period.label} ${recap.meta.leagueName} report is in — Chaos Score ${recap.chaosScore.score}/100.`;
+  if (reach) return `${reach.manager} reached ${reach.detail} for ${reach.value}. The Commander's Report kept the receipts.`;
+  if (faab) return `${faab.manager} torched ${faab.detail} on ${faab.value}. Full receipts inside.`;
+  if (trade) return `${trade.manager} fleeced the league for ${trade.detail}. Don't take our word for it — read it.`;
+  if (chaotic)
+    return `${chaotic.manager} ran the month's chaos. ${recap.meta.leagueName} hit ${recap.chaosScore.score}/100 — somebody had to write it down.`;
+  return `${recap.meta.leagueName} clocked ${recap.chaosScore.score}/100 on the Chaos Score. The Commander's Report has thoughts.`;
 }
 
-// ── Entry point ────────────────────────────────────────────────────────────────
+// ── Entry point: rank the storylines, then roast them ────────────────────────
+
+type Para = { body: string; claimIds: string[] };
 
 /**
  * Build a written article from a recap, deterministically. `seed` controls the
  * random phrasing — pass a stable string for reproducible output, or vary it
  * (e.g. append a timestamp) to "reroll" on regenerate.
  */
-export function narrateReportTemplate(recap: RecapResult, tone: ToneId, seed: string): Article {
+export function narrateReportTemplate(recap: RecapResult, seed: string): Article {
   const rng = makeRng(seed);
-  const headline = buildHeadline(recap, tone, rng);
-  const shareText = buildShareText(recap, tone, rng);
+  const headline = buildHeadline(recap, rng);
+  const shareText = buildShareText(recap);
 
-  const sectionBuilders = [
-    buildOverview(recap, tone, rng),
-    buildRookieSection(recap, tone, rng),
-    buildTradeSection(recap, tone, rng),
-    buildWaiverSection(recap, tone, rng),
-    buildSpotlight(recap, tone, rng),
-    buildLookingAhead(recap, tone, rng),
+  const reach = awardByKey(recap, "biggest_reach");
+  const faab = awardByKey(recap, "largest_faab_spend");
+  const value = awardByKey(recap, "best_value");
+  const top = awardByKey(recap, "best_trade");
+  const topRow = [...recap.tradeRecap.rows].sort((a, b) => b.lopsidedness - a.lopsidedness)[0];
+  const tradeRoastable = !!(
+    top &&
+    topRow &&
+    topRow.winner &&
+    topRow.sides.length === 2 &&
+    ["Robbery", "Clear Win"].includes(topRow.grade)
+  );
+  const winnerSide = tradeRoastable ? topRow.sides.find((s) => s.manager === topRow.winner)! : null;
+  const loserSide = tradeRoastable ? topRow.sides.find((s) => s.manager !== topRow.winner)! : null;
+  // Picks carry only season+round (e.g. "2026 R3"), no slot — so when the same
+  // label sits on both sides ("a 2026 3rd for a 2026 3rd"), the literal retelling
+  // is meaningless. Fall back to a generic "draft-pick swap" framing in that case
+  // while keeping the (value-model-backed) edge and grade.
+  const tradeAmbiguous = !!(winnerSide && loserSide && loserSide.picks.some((p) => winnerSide.picks.includes(p)));
+  const tradeGiveTake = (): string =>
+    tradeAmbiguous
+      ? `came out on the wrong end of a draft-pick swap`
+      : `pushed ${describeHaul(winnerSide!)} across the table for ${describeHaul(loserSide!)}`;
+
+  // The mystery-box trade (cornerstone shipped out for a pile of upside) is its
+  // own archetype, detected in the recap engine and read straight off the row.
+  const mb = recap.tradeRecap.rows.find((r) => r.mysteryBox)?.mysteryBox ?? null;
+
+  const paras: Para[] = [];
+  let villain: string | null = null;
+  let callback: string | null = null;
+  let usedFaab = false;
+  let usedTrade = false;
+  let usedMb = false;
+
+  // 1 ── The villain: the month's worst / funniest decision opens the column.
+  if (reach) {
+    villain = reach.manager;
+    const s = summaryOf(recap, reach.manager);
+    const sentences = [
+      `We are gathered here today to discuss ${reach.manager}, who turned our league into a one-man case study in what happens with too many rookie picks and not enough adult supervision.`,
+      `Taking ${reach.value} a full ${reach.detail} is ${pick(rng, [
+        "less a draft pick and more a man trying to prove he can see ghosts in the spreadsheet",
+        "the dynasty equivalent of paying full airport prices for a quarterback scratch-off ticket and calling it roster construction",
+        "less a reach than a man climbing onto the roof of the draft board to announce that the market simply does not understand his vision",
+      ])}.`,
+    ];
+    if (s && (s.transactions >= 5 || s.faabSpent > 0 || s.reaches > 1)) {
+      sentences.push(
+        `And it wasn't a one-off: ${activityProfile(s)} is the activity profile of a manager trying to fix a roster by shaking it until loose change falls out.`,
+      );
+    }
+    paras.push({ body: sentences.join(" "), claimIds: ["award-biggest_reach"] });
+    callback = `${reach.manager} better hope ${playerName(reach.value)} turns into ${pick(rng, [
+      "the kind of player who makes everyone apologize in writing",
+      "a dynasty cheat code",
+    ])}, because taking him a full ${reach.detail} is the type of decision that follows a manager around like a haunted draft queue. If it hits, this becomes vision. If it doesn't, it becomes the exact receipt Dynasty Command laminates and brings back out when the group chat needs a victim.`;
+  } else if (mb) {
+    villain = mb.victim;
+    usedMb = true;
+    usedTrade = true;
+    paras.push({
+      body: `We are gathered here today to discuss ${mb.victim}, who decided that owning ${mb.stud} was simply too stressful and shipped him out for ${joinAnd(mb.package)} — a package whose best argument is that none of them are old enough to disappoint anyone yet. ${pick(rng, MB_METAPHORS)} ${mb.victim} traded production for imagination, which is great if this league starts handing out points for theoretical upside.`,
+      claimIds: ["award-best_trade"],
+    });
+    callback = `${mb.victim} better hope one of those mystery boxes actually contains a starter, because shipping out ${mb.stud} for a group project is the exact receipt Dynasty Command laminates and brings back out when the group chat needs a victim.`;
+  } else if (tradeRoastable) {
+    villain = loserSide!.manager;
+    usedTrade = true;
+    paras.push({
+      body: `We are gathered here today to discuss ${loserSide!.manager}, who ${tradeGiveTake()}. Dynasty Command stamped it a ${topRow.grade} for ${winnerSide!.manager} and a ${top!.detail} the other way — the kind of deal that sounds fine until the math walks in wearing gloves and starts dusting for fingerprints.`,
+      claimIds: ["award-best_trade"],
+    });
+    callback = `${loserSide!.manager} better hope those picks never amount to anything, because handing ${winnerSide!.manager} a ${top!.detail} is the type of receipt Dynasty Command laminates for the group chat.`;
+  } else if (faab) {
+    villain = faab.manager;
+    usedFaab = true;
+    paras.push({
+      body: `We are gathered here today to discuss ${faab.manager}, who spent ${faab.detail} on ${faab.value} as if the waiver wire takes prayers as payment. That isn't a bid so much as a flare gun fired into the offseason night.`,
+      claimIds: ["award-largest_faab_spend"],
+    });
+    callback = `${faab.manager} better hope ${playerName(faab.value)} was worth ${faab.detail}, because that bid is the kind of receipt the group chat brings up every time it needs a cheap laugh.`;
+  } else {
+    paras.push({
+      body: `For once, ${recap.meta.leagueName} kept its hands mostly clean — no draft heists, no FAAB bonfires, no trade-screen crime scenes worth prosecuting. Suspicious, frankly.`,
+      claimIds: ["chaos-league"],
+    });
+  }
+
+  // 2 ── Second-dumbest: a different manager's questionable move (FAAB overpay).
+  if (faab && !usedFaab && faab.manager !== villain) {
+    usedFaab = true;
+    paras.push({
+      body: `Then came ${faab.manager}, who spent ${faab.detail} on ${faab.value} as if ${pick(rng, [
+        "quarterback stability is something you solve by throwing FAAB into a wishing well",
+        "roster depth could be summoned with enough offseason cash and enough hope",
+      ])}. Right now that reads less like a bid and more like ${pick(rng, [
+        "a public cry for help",
+        "buying insurance for a car you don't own yet because you had a dream about traffic",
+      ])}.`,
+      claimIds: ["award-largest_faab_spend"],
+    });
+  }
+
+  // 3 ── Accidental genius: a smart move, framed backhanded. If it's the same
+  //      manager as the villain, the contradiction is the whole joke.
+  if (value) {
+    if (value.manager === villain) {
+      paras.push({
+        body: `In the middle of all this, ${value.manager} somehow also did something smart, which is honestly the most suspicious part of the entire month. Landing ${value.value} a full ${value.detail} was real value — patient, reasonable, almost impressive, which is exactly why it feels like it happened by accident. For one brief moment ${value.manager} looked like the only person in the room reading the board correctly, and then the rest of the month reopened the investigation.`,
+        claimIds: ["award-best_value"],
+      });
+    } else {
+      paras.push({
+        body: `Somewhere in the wreckage, ${value.manager} accidentally looked competent, landing ${value.value} a full ${value.detail} — not because of any master plan, but because everyone else was too busy faceplanting to notice the value sitting there in plain sight.`,
+        claimIds: ["award-best_value"],
+      });
+    }
+  }
+
+  // 4 ── The ghosts: managers who did nothing while the league burned. The
+  //      league-wide counts live here, as the backdrop the ghosts ignored.
+  const ghosts = recap.managerSummaries.filter(isGhost).map((m) => m.manager);
+  if (ghosts.length) {
+    const names = joinAnd(ghosts.slice(0, 4)) + (ghosts.length > 4 ? `, and ${ghosts.length - 4} others` : "");
+    const { tradeRecap, waiverRecap, rookieRecap } = recap;
+    paras.push({
+      body: `Then there are the ghosts. While the rest of the league set fire to the transaction feed, ${names} watched ${rookieRecap.drafted} rookie ${plural(rookieRecap.drafted, "pick")}, ${waiverRecap.count} waiver ${plural(waiverRecap.count, "move")}, and ${tradeRecap.count} ${plural(tradeRecap.count, "trade")} drift past like traffic outside a window. In a month this loud, silence isn't discipline — it's patience, paralysis, or someone forgetting they downloaded Sleeper in the first place.`,
+      claimIds: ["chaos-league"],
+    });
+  }
+
+  // 5 ── Optional dumb trade: a mystery-box deal if one exists (the funnier,
+  //      more specific story), otherwise a genuinely lopsided trade.
+  if (mb && !usedMb) {
+    usedMb = true;
+    usedTrade = true;
+    paras.push({
+      body: `The trade market wasn't innocent either. ${mb.victim} decided owning a proven dynasty asset was simply too stressful and shipped ${mb.stud} out for ${joinAnd(mb.package)} — younger pieces whose best argument is that they aren't old enough to disappoint anyone yet. ${pick(rng, MB_METAPHORS)} Maybe one of them hits. Maybe they all become weekly starters. Or maybe ${mb.victim} just traded certainty for a group project and called it roster construction.`,
+      claimIds: ["award-best_trade"],
+    });
+  } else if (tradeRoastable && !usedTrade) {
+    usedTrade = true;
+    paras.push({
+      body: `The trade market wasn't innocent either. ${loserSide!.manager} ${tradeGiveTake()}, letting ${winnerSide!.manager} walk away with a ${top!.detail}. Dynasty Command called it a ${topRow.grade} for ${winnerSide!.manager} — the kind of deal that sounds boring until the math walks in wearing gloves and starts dusting for fingerprints.`,
+      claimIds: ["award-best_trade"],
+    });
+  }
+
+  // 6 ── Optional waiver: only if a FAAB overpay (by someone other than the
+  //      villain) hasn't already been spent on a paragraph.
+  if (faab && !usedFaab && faab.manager !== villain) {
+    usedFaab = true;
+    paras.push({
+      body: `Over on the waiver wire, ${faab.manager} lit ${faab.detail} on fire for ${faab.value}, which is one way to announce a need and a lack of impulse control in the same transaction.`,
+      claimIds: ["award-largest_faab_spend"],
+    });
+  }
+
+  // 7 ── Looking Ahead: call back to the villain's dumbest idea.
+  const lookingAhead =
+    callback ??
+    pick(rng, [
+      `Next month someone overpays, someone gets robbed in broad daylight, and someone swears they're "one move away." Dynasty Command will be here, taking names.`,
+      `The board is set for an encore in ${recap.meta.leagueName}. The receipts never lie, the group chat never sleeps, and Dynasty Command never misses. See you next month.`,
+    ]);
+
+  const sections = [
+    ...paras.map((p) => ({ title: "", body: p.body, claimIds: p.claimIds })),
+    { title: "Looking Ahead", body: lookingAhead, claimIds: [] as string[] },
   ];
 
-  const sections = sectionBuilders
-    .filter((s): s is NonNullable<typeof s> => s != null)
-    .map((s) => ({ title: s.title, body: s.body, claimIds: s.claimIds }));
-
-  return { headline: headline.text, shareText, sections };
+  return { headline, shareText, sections };
 }
 
 /** Stable identifier for the "model" field shown in the UI. */

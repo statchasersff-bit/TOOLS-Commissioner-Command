@@ -19,10 +19,13 @@ import { rateLimitedFetchJson } from "./adp";
 
 // ── Shared types (mirrored by client/src/lib/commandersReportApi.ts) ─────────
 
-export type ToneId = "light_roast" | "clean_analyst" | "full_chaos" | "commissioner_safe";
-export const TONES: ToneId[] = ["light_roast", "clean_analyst", "full_chaos", "commissioner_safe"];
+// Full Chaos is the only tone the report ships. Kept as a one-member union (and
+// a DB-keyed value) rather than removed outright so report rows / share links
+// stay keyed by a stable "tone" and re-adding tones later is a small change.
+export type ToneId = "full_chaos";
+export const TONES: ToneId[] = ["full_chaos"];
 export function isTone(s: unknown): s is ToneId {
-  return typeof s === "string" && (TONES as string[]).includes(s);
+  return s === "full_chaos";
 }
 
 export type Severity = "info" | "notable" | "spicy";
@@ -35,7 +38,7 @@ export interface Claim {
   manager: string;
   headline: string;
   evidence: Record<string, number | string | null>;
-  /** Tones permitted to use this claim. "spicy" claims are withheld from Commissioner Safe. */
+  /** Tones permitted to use this claim (single-tone now; retained in the data contract). */
   allowed_tone: ToneId[];
 }
 
@@ -74,6 +77,10 @@ export interface TradeRow {
   lopsidedness: number; // 0..1
   grade: string; // Robbery | Clear Win | Slight Win | Fair Deal | Confusing
   reason: string;
+  // Set when the deal is a "mystery box" — one side shipped a single proven,
+  // high-value player out for a multi-player package with no comparable piece
+  // coming back. `victim` is the manager who sold the cornerstone.
+  mysteryBox?: { victim: string; stud: string; studValue: number; package: string[] } | null;
 }
 
 export interface WaiverRow {
@@ -125,16 +132,6 @@ export interface RecapResult {
   chaosScore: { score: number; tier: string; drivers: string[] };
   managerSummaries: ManagerSummary[];
   claims: Claim[];
-}
-
-// ── Tone / severity gating ───────────────────────────────────────────────────
-
-function allowedTonesFor(severity: Severity): ToneId[] {
-  // Spicy claims are kept out of Commissioner Safe; everything else is fair game
-  // in every tone (each tone decides how sharply to phrase it).
-  return severity === "spicy"
-    ? ["light_roast", "clean_analyst", "full_chaos"]
-    : [...TONES];
 }
 
 // ── Time helpers ─────────────────────────────────────────────────────────────
@@ -296,6 +293,33 @@ function inferTeamDirections(
   return out;
 }
 
+// ── Mystery Box detection ────────────────────────────────────────────────────
+// The "sold the boat for three mystery boxes" trade: one side ships out a single
+// proven, high-value player and gets back a multi-player package, none of which
+// is a comparable cornerstone. Detected purely on value shape, so it's
+// scale-independent via a league-relative `eliteFloor`.
+type SideValueInfo = { side: TradeSide; playerDetails: Array<{ name: string; value: number }> };
+
+function detectMysteryBox(sideInfos: SideValueInfo[], eliteFloor: number): TradeRow["mysteryBox"] {
+  if (sideInfos.length !== 2 || eliteFloor <= 0) return null;
+  const [a, b] = sideInfos;
+  for (const [studS, victimS] of [[a, b], [b, a]] as const) {
+    if (studS.playerDetails.length !== 1) continue; // one side received a lone player...
+    if (victimS.playerDetails.length < 2) continue; // ...the other received a multi-player package
+    const studValue = studS.playerDetails[0].value;
+    if (studValue < eliteFloor) continue; // the lone player must be a proven, high-value asset
+    const pkgMax = Math.max(...victimS.playerDetails.map((p) => p.value));
+    if (pkgMax >= studValue * 0.7) continue; // a comparable cornerstone came back → not a mystery box
+    return {
+      victim: victimS.side.manager, // gave the stud, received the boxes
+      stud: studS.playerDetails[0].name,
+      studValue: Math.round(studValue),
+      package: victimS.playerDetails.map((p) => p.name),
+    };
+  }
+  return null;
+}
+
 // ── Draft fetching ────────────────────────────────────────────────────────────
 
 async function fetchLeagueDraftsInMonth(
@@ -345,6 +369,14 @@ export async function buildRecap(leagueId: string, year: number, month: number):
   const teams = leagueFull.league.teams;
   const totalRosters = txnResult.totalRosters || teams.length || 12;
   const directions = inferTeamDirections(teams, vals);
+  // League-relative "proven, high-value" floor (top ~15% of rostered players),
+  // used to spot a cornerstone in Mystery Box trade detection without hardcoding
+  // a value scale.
+  const rosterValues = teams
+    .flatMap((t) => t.roster.filter((p): p is NonNullable<typeof p> => p != null).map((p) => vals.playerValue(p.sleeperId)))
+    .filter((v) => v > 0)
+    .sort((x, y) => y - x);
+  const eliteFloor = rosterValues.length ? rosterValues[Math.floor(rosterValues.length * 0.15)] : 0;
   const faabBudget = txnResult.waiverBudgetTotal || 100;
   const faabEnabled = faabBudget > 0;
 
@@ -419,7 +451,7 @@ export async function buildRecap(leagueId: string, year: number, month: number):
               deltaSlots: delta,
               classification: cls.label,
             },
-            allowed_tone: allowedTonesFor(cls.severity),
+            allowed_tone: [...TONES],
           },
         });
       }
@@ -441,23 +473,28 @@ export async function buildRecap(leagueId: string, year: number, month: number):
   const tradeRows: TradeRow[] = [];
   for (const t of tradeTxns) {
     const tradeId = `trade-${t.timestamp}-${t.involvedTeams.map((x) => x.rosterId).sort().join("-")}`;
-    const sides: TradeSide[] = t.involvedTeams.map((team) => {
+    const sideInfos: SideValueInfo[] = t.involvedTeams.map((team) => {
       const playersReceived = t.adds.filter((a) => a.rosterId === team.rosterId);
       const picksReceived = t.draftPicks.filter((dp) => dp.toTeam === team.teamName);
       const faabReceived = t.faabTransfers
         .filter((f) => f.toTeam === team.teamName)
         .reduce((s, f) => s + f.amount, 0);
-      const playerVal = playersReceived.reduce((s, a) => s + vals.playerValue(a.playerId), 0);
+      const playerDetails = playersReceived.map((a) => ({ name: a.name, value: vals.playerValue(a.playerId) }));
+      const playerVal = playerDetails.reduce((s, p) => s + p.value, 0);
       const pickVal = picksReceived.reduce((s, dp) => s + vals.pickValue(parseInt(dp.season, 10), dp.round), 0);
       const faabVal = faabReceived * 50; // same value-per-$ yardstick as waivers
       return {
-        manager: team.teamName,
-        players: playersReceived.map((a) => a.name),
-        picks: picksReceived.map((dp) => `${dp.season} R${dp.round}`),
-        faab: faabReceived,
-        value: Math.round(playerVal + pickVal + faabVal),
+        side: {
+          manager: team.teamName,
+          players: playerDetails.map((p) => p.name),
+          picks: picksReceived.map((dp) => `${dp.season} R${dp.round}`),
+          faab: faabReceived,
+          value: Math.round(playerVal + pickVal + faabVal),
+        },
+        playerDetails,
       };
     });
+    const sides: TradeSide[] = sideInfos.map((x) => x.side);
     // Winner = side that received the most value; lopsidedness = value gap share.
     const sideValues = sides.map((s) => s.value);
     const maxVal = sideValues.length ? Math.max(...sideValues) : 0;
@@ -475,6 +512,7 @@ export async function buildRecap(leagueId: string, year: number, month: number):
       lopsidedness: lop,
       grade,
       reason,
+      mysteryBox: haveValues ? detectMysteryBox(sideInfos, eliteFloor) : null,
     });
   }
   // Claims + UI rows: the most lopsided trades are the most worth narrating.
@@ -499,7 +537,7 @@ export async function buildRecap(leagueId: string, year: number, month: number):
         ),
         valueConfidence: haveValues ? "high" : "low",
       },
-      allowed_tone: allowedTonesFor(sev),
+      allowed_tone: [...TONES],
     });
   }
 
@@ -563,7 +601,7 @@ export async function buildRecap(leagueId: string, year: number, month: number):
         addedValue: row.addedValue,
         classification: row.classification,
       },
-      allowed_tone: allowedTonesFor(sev),
+      allowed_tone: [...TONES],
     });
   }
 

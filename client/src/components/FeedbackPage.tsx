@@ -111,8 +111,8 @@ export function FeedbackPage() {
         </p>
       </div>
 
-      {/* Form card — centered, capped width */}
-      <div className="max-w-lg">
+      {/* Form card — fills the page width like the other modules */}
+      <div>
         <div className="overflow-hidden rounded-2xl bg-card border border-border/60 shadow-sm">
           {/* Card header */}
           <div className="flex items-center gap-3 px-6 py-5 border-b border-border/50">

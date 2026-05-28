@@ -35,6 +35,15 @@ export type ThemeMode = "light" | "x-mode" | "my_team";
 const THEME_KEY = "theme";
 const VALID_MODES = new Set<ThemeMode>(["light", "x-mode", "my_team"]);
 
+// Teams whose My Team theme is production-ready. The rest are temporarily gated
+// off until their palettes are finished — only these abbreviations can use the
+// "my_team" mode.
+const MY_TEAM_READY_ABBRS = new Set<string>(["ARI"]);
+
+export function isMyTeamThemeReady(abbr?: string | null): boolean {
+  return !!abbr && MY_TEAM_READY_ABBRS.has(abbr);
+}
+
 function readInitialMode(): ThemeMode {
   if (typeof window === "undefined") return "x-mode";
   try {
@@ -52,6 +61,9 @@ interface ThemeContextValue {
   /** True when the user has picked "my_team" but no favorite team is set,
    *  so the UI can prompt them to pick one. */
   needsTeamForMyTeamMode: boolean;
+  /** True when the current favorite team's My Team theme is ready to use
+   *  (temporarily limited to Arizona). The UI gates the option on this. */
+  myTeamReady: boolean;
 }
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
@@ -99,6 +111,7 @@ function applyTeamTokens(root: HTMLElement, tokens: Record<string, string>) {
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [themeMode, setThemeModeState] = useState<ThemeMode>(readInitialMode);
   const { favoriteTeam } = useFavoriteTeam();
+  const myTeamReady = isMyTeamThemeReady(favoriteTeam?.abbreviation);
 
   // Track the last team we validated so we don't spam the console on every
   // render — only when the (mode, team) tuple actually changes.
@@ -155,16 +168,25 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   const setThemeMode = useCallback((m: ThemeMode) => {
     if (!VALID_MODES.has(m)) return;
+    // Temporarily gate "My Team" to teams whose palette is ready (Arizona only).
+    if (m === "my_team" && !isMyTeamThemeReady(favoriteTeam?.abbreviation)) return;
     setThemeModeState(m);
-  }, []);
+  }, [favoriteTeam]);
+
+  // If the active mode is My Team but the favorite team isn't ready yet, fall
+  // back to Dark so users never sit on an unfinished team theme.
+  useEffect(() => {
+    if (themeMode === "my_team" && !myTeamReady) setThemeModeState("x-mode");
+  }, [themeMode, myTeamReady]);
 
   const value = useMemo<ThemeContextValue>(
     () => ({
       themeMode,
       setThemeMode,
       needsTeamForMyTeamMode: themeMode === "my_team" && favoriteTeam == null,
+      myTeamReady,
     }),
-    [themeMode, setThemeMode, favoriteTeam],
+    [themeMode, setThemeMode, favoriteTeam, myTeamReady],
   );
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;

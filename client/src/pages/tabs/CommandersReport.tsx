@@ -4,7 +4,6 @@ import { Button } from "@/components/ui/button";
 import { SectionHeader } from "@/components/SectionHeader";
 import { CommandersReportView } from "@/components/CommandersReportView";
 import { useToast } from "@/hooks/use-toast";
-import { cn } from "@/lib/utils";
 import {
   Sparkles,
   RefreshCw,
@@ -18,7 +17,6 @@ import {
   generateReport,
   shareReport,
   shareUrl,
-  TONE_OPTIONS,
   type ToneId,
   type ReportResponse,
 } from "@/lib/commandersReportApi";
@@ -36,7 +34,8 @@ export function CommandersReport({ leagueId, leagueName }: { leagueId: string; l
   const { toast } = useToast();
   const [periods, setPeriods] = useState<Array<{ year: number; month: number; activityCount: number }>>([]);
   const [selected, setSelected] = useState<{ year: number; month: number } | null>(null);
-  const [tone, setTone] = useState<ToneId>("light_roast");
+  // Full Chaos is the only tone the report ships now — the other tones were retired.
+  const tone: ToneId = "full_chaos";
   const [report, setReport] = useState<ReportResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
@@ -173,25 +172,6 @@ export function CommandersReport({ leagueId, leagueName }: { leagueId: string; l
             Copy link
           </Button>
         </div>
-      </div>
-
-      {/* Tone toggle */}
-      <div className="flex flex-wrap gap-1.5">
-        {TONE_OPTIONS.map((t) => (
-          <button
-            key={t.id}
-            onClick={() => setTone(t.id)}
-            className={cn(
-              "px-3 h-8 rounded-full text-xs font-semibold transition-colors border",
-              tone === t.id
-                ? "bg-[#0b3a7a] text-white border-[#d4af37]/40"
-                : "bg-transparent text-muted-foreground border-border hover:border-foreground/30",
-            )}
-            data-testid={`commanders-tone-${t.id}`}
-          >
-            {t.label}
-          </button>
-        ))}
       </div>
 
       {error && (

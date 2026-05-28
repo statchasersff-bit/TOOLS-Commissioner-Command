@@ -1809,6 +1809,35 @@ function percentileLabel(rank: number, total: number): string {
   return `Bot ${100 - pct}%`;
 }
 
+// Compact full-width strip below the position grid for reserve players (IR /
+// Taxi), which are excluded from each position's Bench so they don't double up.
+function ReserveSection({ title, players, accent }: { title: string; players: Player[]; accent: string }) {
+  const { openPlayerProfile } = usePlayerProfile();
+  if (players.length === 0) return null;
+  return (
+    <div className="border-t border-border/30 px-3 py-2.5">
+      <div className="flex items-center gap-1.5 mb-1.5">
+        <span className={cn("text-[9px] font-bold uppercase tracking-wider", accent)}>{title}</span>
+        <Badge variant="secondary" className="text-[10px] px-1 h-4">{players.length}</Badge>
+      </div>
+      <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+        {players.map(p => (
+          <button
+            key={p.id}
+            onClick={() => openPlayerProfile(p.sleeperId ?? p.id)}
+            className="flex items-center gap-1.5 text-left rounded px-1 -mx-1 py-0.5 hover:bg-muted/40 transition-colors"
+            data-testid={`roster-reserve-${p.id}`}
+          >
+            <PlayerAvatar id={p.sleeperId ?? p.id} name={p.name} pos={p.pos} team={p.team ?? ""} size="sm" compact />
+            <span className="text-[11px] font-medium text-foreground leading-tight truncate max-w-[140px]">{p.name}</span>
+            <span className="text-[10px] text-muted-foreground tabular-nums">{p.value}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function MyTeam({ league, userTeam, onNavigate }: DashboardOverviewProps) {
   const { getPlayerValue, getRedraftValue, optimizeLineup } = useValueModel();
   const { openPlayerProfile } = usePlayerProfile();
@@ -1936,6 +1965,9 @@ export function MyTeam({ league, userTeam, onNavigate }: DashboardOverviewProps)
       .sort((a, b) => (b.starter ? 1 : 0) - (a.starter ? 1 : 0) || b.value - a.value),
   }));
 
+  const irPlayers = userTeam.roster.filter(p => p.onReserve);
+  const taxiPlayers = userTeam.roster.filter(p => p.onTaxi);
+
 
   return (
     <div className="space-y-8">
@@ -2053,7 +2085,7 @@ export function MyTeam({ league, userTeam, onNavigate }: DashboardOverviewProps)
               <div className="grid grid-cols-2 md:grid-cols-5 divide-x divide-border/30">
                 {positionData.map(({ pos, redraftRank, dynastyRank, players }) => {
                   const starters = players.filter(p => p.starter);
-                  const bench    = players.filter(p => !p.starter);
+                  const bench    = players.filter(p => !p.starter && !p.onReserve && !p.onTaxi);
                   const rStyle   = rankBg(redraftRank, total);
                   const dStyle   = rankBg(dynastyRank, total);
                   const posTextColor: Record<string, string> = {
@@ -2215,6 +2247,8 @@ export function MyTeam({ league, userTeam, onNavigate }: DashboardOverviewProps)
                   );
                 })()}
               </div>
+              <ReserveSection title="Injured Reserve" players={irPlayers} accent="text-amber-600 dark:text-amber-400" />
+              <ReserveSection title="Taxi Squad" players={taxiPlayers} accent="text-cyan-600 dark:text-cyan-400" />
             </div>
           )}
         </Card>

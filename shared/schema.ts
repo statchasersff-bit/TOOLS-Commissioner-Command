@@ -356,7 +356,9 @@ export const commandersReports = pgTable("commanders_reports", {
   recap: jsonb("recap").notNull(),
   article: jsonb("article"),
   model: varchar("model", { length: 64 }),
-  generatedBy: varchar("generated_by", { length: 32 }),
+  // Stores the SC user id (a 36-char UUID from gen_random_uuid()), so this must
+  // be wider than the 32-char ids used elsewhere — a varchar(32) here overflowed.
+  generatedBy: varchar("generated_by", { length: 64 }),
   generatedAt: timestamp("generated_at"),
   // Public read-only share. Null = not shared; set to a URL-safe random token
   // when a user enables sharing, cleared on revoke.

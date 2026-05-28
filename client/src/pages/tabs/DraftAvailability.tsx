@@ -234,7 +234,21 @@ function AvailabilityMatrix({ result, onPlayer }: { result: AvailabilityResult; 
               style={{ left: PLAYER_COL_W + hoveredCol * PICK_COL_W, width: PICK_COL_W, height: "100%", zIndex: 5 }}
             />
           )}
-          <table ref={tableRef} className="border-separate" style={{ borderSpacing: 0 }}>
+          {/* Fixed layout + colgroup pin every column to exactly PLAYER_COL_W /
+              PICK_COL_W, so the hover-crosshair math (which assumes those widths)
+              stays aligned — auto layout let content widen columns and the
+              highlight drifted across neighbours. */}
+          <table
+            ref={tableRef}
+            className="border-separate"
+            style={{ borderSpacing: 0, tableLayout: "fixed", width: PLAYER_COL_W + totalCols * PICK_COL_W }}
+          >
+            <colgroup>
+              <col style={{ width: PLAYER_COL_W }} />
+              {picks.map((c) => (
+                <col key={c.pickNumber} style={{ width: PICK_COL_W }} />
+              ))}
+            </colgroup>
             <thead ref={theadRef}>
               <tr>
                 <th

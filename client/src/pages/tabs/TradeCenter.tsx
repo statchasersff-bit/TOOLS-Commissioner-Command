@@ -1709,40 +1709,58 @@ export function TradeCalculatorView({ league, userTeam, onNavigate }: {
   // surface the league calculator so the prefilled trade is visible.
   useEffect(() => { if (hasLeague) setMode("league"); }, [hasLeague]);
 
+  // Mode toggle styled/positioned like the other tools' sub-tabs: top-right of
+  // the header on desktop, centered full-width on mobile.
+  const renderModeButtons = (suffix: string) =>
+    (["quick", "league"] as const).map((id) => {
+      const isActive = mode === id;
+      const Icon = id === "quick" ? Scale : Trophy;
+      const label = id === "quick" ? "Quick Calculator" : "My League";
+      return (
+        <button
+          key={id}
+          onClick={() => setMode(id)}
+          data-testid={`calc-mode-${id}${suffix}`}
+          className="relative flex items-center justify-center gap-2 font-semibold whitespace-nowrap transition-all duration-200"
+          style={{
+            borderRadius: 12,
+            fontSize: 13,
+            letterSpacing: "0.01em",
+            background: isActive ? "linear-gradient(135deg, rgba(11,58,122,0.85) 0%, rgba(11,58,122,0.65) 100%)" : "transparent",
+            color: isActive ? "#fff" : "var(--sc-toggle-inactive-text)",
+            border: isActive ? "1px solid rgba(212,175,55,0.30)" : "1px solid transparent",
+            boxShadow: isActive ? "0 2px 12px rgba(11,58,122,0.40), inset 0 1px 0 rgba(255,255,255,0.06)" : "none",
+          }}
+        >
+          <Icon style={{ width: 15, height: 15, flexShrink: 0 }} />
+          {label}
+          {isActive && <span className="sc-subtab-underline absolute bottom-[3px] left-1/2 -translate-x-1/2 rounded-full" style={{ width: 28, height: 2, background: "#d4af37", opacity: 0.85 }} />}
+        </button>
+      );
+    });
+
   return (
     <div className="space-y-4">
-      {/* Segmented sub-tab toggle — mirrors the Portfolio "Overview / Finances" tabs. */}
-      <div
-        className="grid flex-shrink-0 w-full max-w-[320px]"
-        style={{ gridTemplateColumns: "1fr 1fr", height: 48, borderRadius: 16, padding: 4, background: "var(--sc-toggle-bg)", border: "1px solid var(--sc-toggle-border)", gap: 4 }}
-        data-testid="calc-mode-toggle"
-      >
-        {(["quick", "league"] as const).map((id) => {
-          const isActive = mode === id;
-          const Icon = id === "quick" ? Scale : Trophy;
-          const label = id === "quick" ? "Quick Calculator" : "My League";
-          return (
-            <button
-              key={id}
-              onClick={() => setMode(id)}
-              data-testid={`calc-mode-${id}`}
-              className="relative flex items-center justify-center gap-2 font-semibold whitespace-nowrap transition-all duration-200"
-              style={{
-                borderRadius: 12,
-                fontSize: 13,
-                letterSpacing: "0.01em",
-                background: isActive ? "linear-gradient(135deg, rgba(11,58,122,0.85) 0%, rgba(11,58,122,0.65) 100%)" : "transparent",
-                color: isActive ? "#fff" : "var(--sc-toggle-inactive-text)",
-                border: isActive ? "1px solid rgba(212,175,55,0.30)" : "1px solid transparent",
-                boxShadow: isActive ? "0 2px 12px rgba(11,58,122,0.40), inset 0 1px 0 rgba(255,255,255,0.06)" : "none",
-              }}
-            >
-              <Icon style={{ width: 15, height: 15, flexShrink: 0 }} />
-              {label}
-              {isActive && <span className="sc-subtab-underline absolute bottom-[3px] left-1/2 -translate-x-1/2 rounded-full" style={{ width: 28, height: 2, background: "#d4af37", opacity: 0.85 }} />}
-            </button>
-          );
-        })}
+      <div className="flex items-start justify-between gap-4">
+        <SectionHeader title="Trade Calculator" subtitle="Evaluate trades with dynasty values and diminishing returns" />
+        <div className="hidden md:block flex-shrink-0 pt-1">
+          <div
+            className="grid"
+            style={{ gridTemplateColumns: "1fr 1fr", height: 48, borderRadius: 16, padding: 4, background: "var(--sc-toggle-bg)", border: "1px solid var(--sc-toggle-border)", gap: 4, width: 300 }}
+            data-testid="calc-mode-toggle"
+          >
+            {renderModeButtons("")}
+          </div>
+        </div>
+      </div>
+      {/* Mode toggle (mobile) — centered, full width, matching the other sub-tabs. */}
+      <div className="md:hidden flex justify-center !mt-0">
+        <div
+          className="grid w-[90vw]"
+          style={{ gridTemplateColumns: "1fr 1fr", height: 48, borderRadius: 16, padding: 4, background: "var(--sc-toggle-bg)", border: "1px solid var(--sc-toggle-border)", gap: 4 }}
+        >
+          {renderModeButtons("-mobile")}
+        </div>
       </div>
 
       {mode === "quick" ? (
@@ -2801,8 +2819,6 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
 
   return (
     <div className="space-y-4 md:space-y-5">
-      <SectionHeader title="Trade Calculator" subtitle="Evaluate trades with dynasty values and diminishing returns" />
-
       {/* ── Compact Trade Verdict + Action panel ─────────────────────────
          One card that fuses the four old sections (verdict / proposal /
          position impact / save) so the user can read the trade and act on
@@ -3286,16 +3302,16 @@ function getTradeShape(trade: TradeRecord | null | undefined): TradeShape {
   return "large";
 }
 
-// A labeled filter group: an uppercase category label beside (desktop) or above
-// (mobile) its row of pills/controls. Keeps the filter panel reading like a
-// dashboard rather than a loose blob of buttons.
+// A labeled filter group: a subtle uppercase tag sitting inline beside its pills
+// on desktop, stacking above them on mobile. Groups flow inline (flex-wrap) so
+// the filter area reads like a compact toolbar rather than a settings form.
 function FilterGroup({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-3">
-      <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground sm:w-28 sm:shrink-0">
+    <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-2">
+      <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground whitespace-nowrap">
         {label}
       </span>
-      <div className="flex flex-wrap gap-1.5">{children}</div>
+      <div className="flex flex-wrap items-center gap-1.5">{children}</div>
     </div>
   );
 }
@@ -3498,8 +3514,8 @@ export function TradeDatabase({ league }: { league: League }) {
           )}
         </div>
 
-        <div className="flex flex-col gap-4">
-          <div className="flex flex-col gap-2.5">
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-6 sm:gap-y-3">
             <FilterGroup label="Format">
               {(["all", "SF", "1QB"] as const).map((f) => (
                 <button
@@ -3537,7 +3553,7 @@ export function TradeDatabase({ league }: { league: League }) {
             </FilterGroup>
           </div>
 
-          <div className="flex flex-col gap-2.5">
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-6 sm:gap-y-3">
             <FilterGroup label="Size">
               {(["all", "10", "12", "14"] as const).map((size) => (
                 <button
@@ -3573,16 +3589,15 @@ export function TradeDatabase({ league }: { league: League }) {
                 </button>
               ))}
             </FilterGroup>
-          </div>
 
-          <FilterGroup label="Trade Shape">
-            <Select
-            value={tradeShape}
+            <FilterGroup label="Trade Shape">
+              <Select
+              value={tradeShape}
             onValueChange={(v) => setTradeShape(v as "all" | TradeShape)}
           >
             <SelectTrigger
               className={cn(
-                "h-7 w-auto min-w-[160px] px-3 rounded-full text-xs font-medium border gap-2",
+                "h-7 w-full sm:w-auto min-w-[160px] px-3 rounded-full text-xs font-medium border gap-2",
                 shapeFilterActive
                   ? "bg-[#0b3a7a] text-white border-[#0b3a7a] dark:bg-blue-500 dark:border-blue-500 [&_svg]:text-white"
                   : "bg-transparent text-muted-foreground border-border hover:border-foreground/30"
@@ -3615,7 +3630,8 @@ export function TradeDatabase({ league }: { league: League }) {
               ))}
             </SelectContent>
           </Select>
-          </FilterGroup>
+            </FilterGroup>
+          </div>
         </div>
       </div>
 

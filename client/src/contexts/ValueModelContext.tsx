@@ -101,8 +101,8 @@ interface ValueModel {
   diagnostics: ValueDiagnostics;
   // Per-type source labels for the header UI. "custom" when a user-uploaded
   // set is active, otherwise "fantasycalc".
-  dynastySource: "custom" | "fantasycalc";
-  redraftSource: "custom" | "fantasycalc";
+  dynastySource: "custom" | "fantasycalc" | "ktc";
+  redraftSource: "custom" | "fantasycalc" | "ktc";
   dynastyCustom: CustomSourceStatus;
   redraftCustom: CustomSourceStatus;
   /** Force-reload custom values from the server — call after upload/activate. */
@@ -135,7 +135,13 @@ const PICK_RANGE_MULTIPLIERS: Record<number, Record<string, number>> = {
 
 export function ValueModelProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => { console.log("[app] ValueModelProvider mounted"); }, []);
-  const [sourceId, setSourceIdRaw] = useState<ValueSourceId>("fantasycalc");
+  const [sourceId, setSourceIdRaw] = useState<ValueSourceId>(() => {
+    try {
+      const saved = localStorage.getItem("sc-value-source");
+      if (saved && VALUE_SOURCES.some((s) => s.id === saved && s.active)) return saved as ValueSourceId;
+    } catch {}
+    return "fantasycalc";
+  });
   const [isRecalculating, setIsRecalculating] = useState(false);
   // Start `isLoading=false` — the bundled snapshot below means we have
   // usable values from the first render, so the "Loading FantasyCalc
@@ -290,6 +296,7 @@ export function ValueModelProvider({ children }: { children: React.ReactNode }) 
   const setSourceId = useCallback((id: ValueSourceId) => {
     const source = VALUE_SOURCES.find((s) => s.id === id);
     if (!source?.active) return;
+    try { localStorage.setItem("sc-value-source", id); } catch {}
     setIsRecalculating(true);
     setTimeout(() => {
       setSourceIdRaw(id);
@@ -564,8 +571,8 @@ export function ValueModelProvider({ children }: { children: React.ReactNode }) 
     isSnapshot,
     unmatchedCount,
     diagnostics,
-    dynastySource: customDynasty ? "custom" : "fantasycalc",
-    redraftSource: customRedraft ? "custom" : "fantasycalc",
+    dynastySource: customDynasty ? "custom" : baseSource,
+    redraftSource: customRedraft ? "custom" : baseSource,
     dynastyCustom,
     redraftCustom,
     refreshCustomValues,

@@ -94,7 +94,7 @@ export function CommandersReportView({
           <div className="space-y-5">
             {article.sections.map((s, i) => (
               <div key={i}>
-                <h3 className="text-base font-bold text-foreground mb-1.5">{s.title}</h3>
+                {s.title && <h3 className="text-base font-bold text-foreground mb-1.5">{s.title}</h3>}
                 {s.body.split(/\n\n+/).map((para, j) => (
                   <p key={j} className="text-sm text-muted-foreground leading-relaxed mb-2">{para}</p>
                 ))}

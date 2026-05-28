@@ -3,8 +3,6 @@ import { useTheme, type ThemeMode } from "@/contexts/ThemeContext";
 import { useFavoriteTeam } from "@/contexts/FavoriteTeamContext";
 import { cn } from "@/lib/utils";
 
-const CYCLE: ThemeMode[] = ["light", "x-mode", "my_team"];
-
 // "x-mode" is the internal id for the app's Dark Mode (kept for back-compat with
 // saved prefs); it is presented to users everywhere as "Dark Mode".
 const ICONS: Record<ThemeMode, typeof Sun> = {
@@ -13,10 +11,10 @@ const ICONS: Record<ThemeMode, typeof Sun> = {
   my_team: Star,
 };
 
-const NEXT_LABEL: Record<ThemeMode, string> = {
-  light: "Switch to Dark mode",
-  "x-mode": "Switch to My Team mode",
-  my_team: "Switch to light mode",
+const MODE_NAME: Record<ThemeMode, string> = {
+  light: "light",
+  "x-mode": "Dark",
+  my_team: "My Team",
 };
 
 /**
@@ -25,17 +23,19 @@ const NEXT_LABEL: Record<ThemeMode, string> = {
  * aria-label describes what the next click will do.
  */
 export function ThemeToggle() {
-  const { themeMode, setThemeMode, needsTeamForMyTeamMode } = useTheme();
+  const { themeMode, setThemeMode, needsTeamForMyTeamMode, myTeamReady } = useTheme();
   const { favoriteAbbr } = useFavoriteTeam();
 
-  const cycle = () => {
-    const idx = CYCLE.indexOf(themeMode);
-    const next = CYCLE[(idx + 1) % CYCLE.length];
-    setThemeMode(next);
-  };
+  // My Team is temporarily limited to ready teams (Arizona); skip it in the
+  // cycle when unavailable so the toggle only offers Light ↔ Dark.
+  const modes: ThemeMode[] = myTeamReady ? ["light", "x-mode", "my_team"] : ["light", "x-mode"];
+  const idx = modes.indexOf(themeMode);
+  const nextMode = modes[idx === -1 ? 0 : (idx + 1) % modes.length];
 
-  const Icon = ICONS[themeMode];
-  const label = NEXT_LABEL[themeMode];
+  const cycle = () => setThemeMode(nextMode);
+
+  const Icon = ICONS[themeMode] ?? Moon;
+  const label = `Switch to ${MODE_NAME[nextMode]} mode`;
 
   // When My Team Mode is the *current* mode, show a tiny "ATL Mode" / etc.
   // pill next to the icon so users know personalization is active. If they

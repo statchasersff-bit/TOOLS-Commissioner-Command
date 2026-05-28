@@ -285,6 +285,7 @@ export default function ManagerPage({
   const [, setLocation] = useLocation();
   const [tab, setTab] = useState<string>("overview");
   const [data, setData] = useState<ManagerIntelPayload | null>(null);
+  const [basicUser, setBasicUser] = useState<{ username: string; displayName: string; avatar: string | null } | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -319,8 +320,21 @@ export default function ManagerPage({
   useEffect(() => {
     if (!userId) return;
     setData(null);
+    setBasicUser(null);
     setTab("overview");
     void fetchIntel(false);
+
+    // Fetch the lightweight Sleeper identity (name + avatar) in parallel so the
+    // header shows the manager immediately instead of the raw user id while the
+    // heavier intel payload loads. Sleeper's /user/:id endpoint accepts an id.
+    let cancelled = false;
+    import("@/lib/sleeperApi")
+      .then(({ fetchSleeperUser }) => fetchSleeperUser(userId))
+      .then((u) => {
+        if (!cancelled) setBasicUser({ username: u.username, displayName: u.displayName, avatar: u.avatar });
+      })
+      .catch(() => { /* fall back to the intel payload's user once it arrives */ });
+    return () => { cancelled = true; };
   }, [userId, fetchIntel]);
 
   const handleRefresh = () => {
@@ -352,7 +366,7 @@ export default function ManagerPage({
       <div className="max-w-7xl mx-auto px-4 pb-12">
         <IntelHero
           data={data}
-          fallbackName={userId}
+          basicUser={basicUser}
           loading={loading}
           onRefresh={handleRefresh}
           refreshing={refreshing}
@@ -417,19 +431,22 @@ export default function ManagerPage({
 
 function IntelHero({
   data,
-  fallbackName,
+  basicUser,
   loading,
   onRefresh,
   refreshing,
 }: {
   data: ManagerIntelPayload | null;
-  fallbackName: string;
+  basicUser: { username: string; displayName: string; avatar: string | null } | null;
   loading: boolean;
   onRefresh: () => void;
   refreshing: boolean;
 }) {
-  const name = data?.user.display_name || data?.user.username || fallbackName || "Manager";
-  const rawAvatar = data?.user.avatar || null;
+  const name =
+    data?.user.display_name || data?.user.username ||
+    basicUser?.displayName || basicUser?.username ||
+    "Manager";
+  const rawAvatar = data?.user.avatar || basicUser?.avatar || null;
   const avatarSrc = rawAvatar
     ? rawAvatar.startsWith("http")
       ? rawAvatar
@@ -475,9 +492,15 @@ function IntelHero({
             {name}
           </div>
           <div className="text-[12px] text-white/55 mt-1 flex items-center gap-2 flex-wrap">
-            <Badge variant="outline" className="text-[10px] font-bold text-[#d4af37] border-[#d4af37]/40">
-              {archetype?.label ?? "Manager Intel"}
-            </Badge>
+            {archetype?.label ? (
+              <Badge variant="outline" className="text-[10px] font-bold text-[#d4af37] border-[#d4af37]/40">
+                {archetype.label}
+              </Badge>
+            ) : (
+              <Badge variant="outline" className="text-[10px] font-medium text-white/40 border-white/15">
+                {loading ? "Analyzing manager…" : "Manager Intel"}
+              </Badge>
+            )}
             {confidence && <ConfidenceBadge level={confidence.level} basis={confidence.basis} />}
           </div>
         </div>

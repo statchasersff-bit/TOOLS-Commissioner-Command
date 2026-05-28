@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { ResponsivePlayerName } from "@/components/ResponsivePlayerName";
 
@@ -30,6 +30,7 @@ export function PlayerAvatar({
   team = "",
   size = "sm",
   sub,
+  metaTrailing,
   compact = false,
   onClick,
 }: {
@@ -39,6 +40,8 @@ export function PlayerAvatar({
   team?: string;
   size?: "xs" | "sm" | "md";
   sub?: string;
+  /** Optional node rendered at the end of the meta row (after pos · team). */
+  metaTrailing?: ReactNode;
   compact?: boolean;
   /** When set (and the id is a real player), the avatar becomes a button that
    *  typically opens the player profile. Clicks stop propagation so it works
@@ -141,6 +144,7 @@ export function PlayerAvatar({
           <span className={cn("font-bold", posColor)}>{pos}</span>
           {team && team !== "FA" && <span className="text-muted-foreground font-medium">{team}</span>}
           {sub && <span className="text-muted-foreground">{sub}</span>}
+          {metaTrailing}
         </div>
       </div>
     </div>

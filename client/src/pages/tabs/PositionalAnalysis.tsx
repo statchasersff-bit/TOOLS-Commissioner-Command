@@ -20,10 +20,10 @@ import type { ProposeTradeResult, SleeperTransactionPick, SleeperDmMessage } fro
 import { BulkTrades } from "@/pages/tabs/BulkTrades";
 import {
   ArrowRightLeft, Target, TrendingUp, TrendingDown, Zap, ShieldCheck,
-  ChevronRight, Send, Loader2, CheckCircle2, AlertTriangle, X, Pencil, Search, Layers
+  ChevronRight, ChevronDown, Send, Loader2, CheckCircle2, AlertTriangle, X, Pencil, Search, Layers, Lightbulb
 } from "lucide-react";
 
-type FinderInnerTab = "finder" | "bulk-trades";
+type FinderInnerTab = "finder" | "bulk-trades" | "idea-generator";
 
 interface PositionalAnalysisProps {
   league: League;
@@ -164,6 +164,586 @@ function adjustedTotal(values: number[]): number {
   return sorted.reduce((s, v, i) => s + v * getWeight(i), 0);
 }
 
+// ── Idea Generator ────────────────────────────────────────────────────────────
+// Selectable table of the user's roster + picks with dynasty and redraft values.
+const IDEA_POSITION_FILTERS = ["QB", "RB", "WR", "TE", "PICK"] as const;
+const IDEA_POSITION_LABELS: Record<(typeof IDEA_POSITION_FILTERS)[number], string> = {
+  QB: "QB", RB: "RB", WR: "WR", TE: "TE", PICK: "Picks",
+};
+
+type IdeaRow =
+  | { kind: "player"; id: string; player: Player; dynasty: number; redraft: number }
+  | { kind: "pick"; id: string; pick: Pick; dynasty: number; redraft: number };
+
+interface IdeaAsset {
+  id: string;
+  label: string;
+  pos?: string;
+  team?: string;        // NFL team abbr (players) — drives the logo badge
+  sleeperId?: string;   // player photo id
+  isPick: boolean;
+  value: number;
+}
+
+interface TradeIdea {
+  id: string;
+  get: IdeaAsset[];
+  getValue: number;
+  diff: number; // getValue - offerValue (positive = lands in your favor)
+}
+
+interface ManagerIdeaGroup {
+  managerId: string;
+  managerName: string;
+  managerOwner?: string;
+  managerAvatar?: string | null;
+  ideas: TradeIdea[];
+}
+
+// Generate fair-ish trade ideas grouped by manager: for each targeted manager,
+// find packages of their position-eligible players/picks whose total dynasty
+// value lands within a fairness band of the offered value. Considers singles,
+// pairs, and one greedy multi-piece package, then keeps the most even ideas.
+function generateTradeIdeas(
+  offerValue: number,
+  managers: Team[],
+  posFilters: Set<string>,
+  returnSizes: Set<number>,
+  getPlayerValue: (p: Player) => number,
+  getPickValue: (pk: Pick) => number,
+): ManagerIdeaGroup[] {
+  if (offerValue <= 0) return [];
+  const BAND = 0.15;
+  const lo = offerValue * (1 - BAND);
+  const hi = offerValue * (1 + BAND);
+  const groups: ManagerIdeaGroup[] = [];
+
+  for (const m of managers) {
+    const eligible: IdeaAsset[] = [];
+    for (const p of m.roster) {
+      if (posFilters.has(p.pos)) {
+        eligible.push({
+          id: `player:${p.id}`,
+          label: p.name,
+          pos: p.pos,
+          team: p.team,
+          sleeperId: p.sleeperId || p.id,
+          isPick: false,
+          value: getPlayerValue(p),
+        });
+      }
+    }
+    if (posFilters.has("PICK")) {
+      m.picks.forEach((pk, i) =>
+        eligible.push({ id: `pick:${pk.year}-${pk.round}-${i}`, label: formatPickLabel(pk), isPick: true, value: getPickValue(pk) }),
+      );
+    }
+    eligible.sort((a, b) => b.value - a.value);
+    const top = eligible.slice(0, 50);
+
+    const seen = new Set<string>();
+    const ideas: TradeIdea[] = [];
+    const consider = (assets: IdeaAsset[]) => {
+      if (assets.length === 0) return;
+      const getValue = assets.reduce((s, a) => s + a.value, 0);
+      if (getValue < lo || getValue > hi) return;
+      const key = assets.map((a) => a.id).sort().join("+");
+      if (seen.has(key)) return;
+      seen.add(key);
+      ideas.push({ id: `${m.id}:${key}`, get: assets, getValue, diff: getValue - offerValue });
+    };
+
+    // Singles — {offer}for1.
+    if (returnSizes.has(1)) {
+      for (const a of top) consider([a]);
+    }
+    // Pairs — {offer}for2 (top is sorted desc → prune once the sum drops below the band).
+    if (returnSizes.has(2)) {
+      for (let i = 0; i < top.length; i++) {
+        if (top[i].value >= hi) continue;
+        for (let j = i + 1; j < top.length; j++) {
+          const sum = top[i].value + top[j].value;
+          if (sum < lo) break;
+          if (sum <= hi) consider([top[i], top[j]]);
+        }
+      }
+    }
+    // Triples — {offer}for3.
+    if (returnSizes.has(3)) {
+      for (let i = 0; i < top.length; i++) {
+        if (top[i].value >= hi) continue;
+        for (let j = i + 1; j < top.length; j++) {
+          const s2 = top[i].value + top[j].value;
+          if (s2 >= hi) continue; // any third piece pushes over the band
+          for (let k = j + 1; k < top.length; k++) {
+            const s3 = s2 + top[k].value;
+            if (s3 < lo) break; // top[k] descending → all further triples fall short
+            if (s3 <= hi) consider([top[i], top[j], top[k]]);
+          }
+        }
+      }
+    }
+
+    if (ideas.length > 0) {
+      ideas.sort((a, b) => Math.abs(a.diff) - Math.abs(b.diff));
+      groups.push({
+        managerId: m.id,
+        managerName: m.name,
+        managerOwner: m.owner,
+        managerAvatar: m.avatar,
+        ideas: ideas.slice(0, 5),
+      });
+    }
+  }
+
+  // Most-even managers (best single idea) first.
+  groups.sort((a, b) => Math.abs(a.ideas[0].diff) - Math.abs(b.ideas[0].diff));
+  return groups;
+}
+
+function IdeaGenerator({ userTeam, league }: { userTeam: Team; league: League }) {
+  const { getPlayerValue, getRedraftValue, getPickValue } = useValueModel();
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [posFilters, setPosFilters] = useState<Set<string>>(new Set(IDEA_POSITION_FILTERS));
+  const [returnSizes, setReturnSizes] = useState<Set<number>>(new Set([1, 2, 3]));
+  const [membersOpen, setMembersOpen] = useState(false);
+  const [result, setResult] = useState<{ offer: IdeaAsset[]; offerValue: number; groups: ManagerIdeaGroup[] } | null>(null);
+
+  const otherTeams = useMemo(
+    () => league.teams.filter((t) => t.id !== userTeam.id),
+    [league.teams, userTeam.id],
+  );
+  const [targetMembers, setTargetMembers] = useState<Set<string>>(
+    () => new Set(otherTeams.map((t) => t.id)),
+  );
+
+  const togglePos = (p: string) =>
+    setPosFilters((prev) => {
+      const next = new Set(prev);
+      if (next.has(p)) next.delete(p);
+      else next.add(p);
+      return next;
+    });
+  const toggleReturnSize = (n: number) =>
+    setReturnSizes((prev) => {
+      const next = new Set(prev);
+      if (next.has(n)) next.delete(n);
+      else next.add(n);
+      return next;
+    });
+  const toggleMember = (id: string) =>
+    setTargetMembers((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const allMembersSelected = otherTeams.length > 0 && targetMembers.size === otherTeams.length;
+  const toggleAllMembers = () =>
+    setTargetMembers(allMembersSelected ? new Set() : new Set(otherTeams.map((t) => t.id)));
+
+  const canGenerate =
+    selected.size > 0 && posFilters.size > 0 && targetMembers.size > 0 && returnSizes.size > 0;
+
+  const handleGenerate = () => {
+    const offer: IdeaAsset[] = rows
+      .filter((r) => selected.has(r.id))
+      .map((r) =>
+        r.kind === "player"
+          ? { id: r.id, label: r.player.name, pos: r.player.pos, team: r.player.team, sleeperId: r.player.sleeperId || r.player.id, isPick: false, value: r.dynasty }
+          : { id: r.id, label: formatPickLabel(r.pick), isPick: true, value: r.dynasty },
+      );
+    if (offer.length === 0) return;
+    const offerValue = offer.reduce((s, a) => s + a.value, 0);
+    const managers = otherTeams.filter((t) => targetMembers.has(t.id));
+    setResult({
+      offer,
+      offerValue,
+      groups: generateTradeIdeas(offerValue, managers, posFilters, returnSizes, getPlayerValue, getPickValue),
+    });
+  };
+
+  const rows = useMemo<IdeaRow[]>(() => {
+    const playerRows: IdeaRow[] = userTeam.roster.map((p) => ({
+      kind: "player",
+      id: `player:${p.id}`,
+      player: p,
+      dynasty: getPlayerValue(p),
+      redraft: getRedraftValue(p),
+    }));
+    const pickRows: IdeaRow[] = userTeam.picks.map((pk, i) => ({
+      kind: "pick",
+      id: `pick:${pk.year}-${pk.round}-${pk.originalRosterId ?? "own"}-${i}`,
+      pick: pk,
+      dynasty: getPickValue(pk),
+      redraft: 0,
+    }));
+    playerRows.sort((a, b) => b.dynasty - a.dynasty);
+    pickRows.sort((a, b) => b.dynasty - a.dynasty);
+    return [...playerRows, ...pickRows];
+  }, [userTeam, getPlayerValue, getRedraftValue, getPickValue]);
+
+  const allSelected = rows.length > 0 && rows.every((r) => selected.has(r.id));
+  const toggle = (id: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const toggleAll = () =>
+    setSelected(allSelected ? new Set() : new Set(rows.map((r) => r.id)));
+
+  if (rows.length === 0) {
+    return (
+      <div className="rounded-2xl border border-border/60 bg-card/40 px-6 py-16 text-center">
+        <p className="text-sm font-semibold text-foreground">No players or picks found</p>
+        <p className="text-xs text-muted-foreground mt-1">Connect a league with a roster to get started.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-end justify-between gap-3 px-1">
+        <div>
+          <h3 className="text-sm font-bold text-foreground">Assets You Want to Move</h3>
+          <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
+          <p className="text-[11px] text-muted-foreground mt-1.5">{rows.length} assets</p>
+        </div>
+        <span className="text-[12px] font-semibold text-[#d4af37]">{selected.size} selected</span>
+      </div>
+
+      <div className="rounded-2xl border border-border/60 overflow-hidden">
+        <table className="w-full text-sm" data-testid="idea-generator-table">
+          <thead>
+            <tr className="bg-muted/30 text-[11px] uppercase tracking-wider text-muted-foreground">
+              <th className="text-left font-semibold px-4 py-2.5">
+                <div className="flex items-center gap-2.5">
+                  <input
+                    type="checkbox"
+                    checked={allSelected}
+                    onChange={toggleAll}
+                    aria-label="Select all"
+                    data-testid="idea-select-all"
+                    className="w-4 h-4 accent-[#d4af37] cursor-pointer"
+                  />
+                  Player
+                </div>
+              </th>
+              <th className="text-right font-semibold px-4 py-2.5 w-28">Dynasty</th>
+              <th className="text-right font-semibold px-4 py-2.5 w-28">Redraft</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => {
+              const isSel = selected.has(row.id);
+              return (
+                <tr
+                  key={row.id}
+                  className={cn(
+                    "border-t border-border/40 transition-colors",
+                    isSel ? "bg-[#d4af37]/[0.06]" : "hover:bg-muted/20",
+                  )}
+                  data-testid={`idea-row-${row.id}`}
+                >
+                  <td className="px-4 py-1">
+                    <div className="flex items-center gap-2.5">
+                      <input
+                        type="checkbox"
+                        checked={isSel}
+                        onChange={() => toggle(row.id)}
+                        aria-label={row.kind === "player" ? row.player.name : formatPickLabel(row.pick)}
+                        data-testid={`idea-check-${row.id}`}
+                        className="w-4 h-4 accent-[#d4af37] cursor-pointer flex-shrink-0"
+                      />
+                      {row.kind === "player" ? (
+                        <PlayerAvatar
+                          id={row.player.sleeperId || row.player.id}
+                          name={row.player.name}
+                          pos={row.player.pos}
+                          team={row.player.team}
+                          size="xs"
+                        />
+                      ) : (
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-7 h-7 rounded-full bg-[#0b3a7a]/30 ring-1 ring-white/10 flex items-center justify-center text-[8px] font-bold text-[#d4af37] flex-shrink-0">
+                            PICK
+                          </div>
+                          <div className="leading-tight">
+                            <div className="text-[12px] font-semibold text-foreground">{formatPickLabel(row.pick)}</div>
+                            <div className="text-[10px] text-muted-foreground">Draft Pick</div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-4 py-1 text-right tabular-nums font-semibold text-foreground">
+                    {row.dynasty ? row.dynasty.toLocaleString() : "—"}
+                  </td>
+                  <td className="px-4 py-1 text-right tabular-nums font-semibold text-foreground">
+                    {row.redraft ? row.redraft.toLocaleString() : "—"}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {/* ── Generate controls ─────────────────────────────────────────────── */}
+      <div className="space-y-3 pt-1">
+        {/* Target positions */}
+        <div>
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Target positions</span>
+          <div className="flex flex-wrap gap-1.5 mt-1.5">
+            {IDEA_POSITION_FILTERS.map((p) => {
+              const on = posFilters.has(p);
+              return (
+                <button
+                  key={p}
+                  onClick={() => togglePos(p)}
+                  data-testid={`idea-pos-${p}`}
+                  aria-pressed={on}
+                  className={cn(
+                    "px-3 py-1.5 rounded-lg text-[12px] font-semibold border transition-colors",
+                    on
+                      ? "bg-[#d4af37]/15 border-[#d4af37]/40 text-[#d4af37]"
+                      : "border-border/50 text-muted-foreground hover:text-foreground hover:bg-muted/30",
+                  )}
+                >
+                  {IDEA_POSITION_LABELS[p]}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Trade shape — how many pieces come back ({offer}for1 / 2 / 3) */}
+        <div>
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Trade shape <span className="normal-case font-medium text-muted-foreground/70">(optional)</span>
+          </span>
+          <div className="flex flex-wrap gap-1.5 mt-1.5">
+            {[1, 2, 3].map((n) => {
+              const on = returnSizes.has(n);
+              return (
+                <button
+                  key={n}
+                  onClick={() => toggleReturnSize(n)}
+                  data-testid={`idea-shape-${n}`}
+                  aria-pressed={on}
+                  className={cn(
+                    "px-3 py-1.5 rounded-lg text-[12px] font-semibold border transition-colors tabular-nums",
+                    on
+                      ? "bg-[#d4af37]/15 border-[#d4af37]/40 text-[#d4af37]"
+                      : "border-border/50 text-muted-foreground hover:text-foreground hover:bg-muted/30",
+                  )}
+                >
+                  {selected.size || 1}for{n}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Target managers + generate */}
+        <div className="flex flex-col sm:flex-row sm:items-end gap-3">
+          <div className="sm:flex-1">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Target managers</span>
+            <div className="relative mt-1.5">
+              <button
+                onClick={() => setMembersOpen((v) => !v)}
+                data-testid="idea-managers-trigger"
+                className="w-full sm:w-72 flex items-center justify-between gap-2 px-3 py-2 rounded-lg border border-border/60 bg-muted/20 hover:bg-muted/30 text-[13px] text-foreground transition-colors"
+              >
+                <span className="truncate">
+                  {allMembersSelected
+                    ? "All managers"
+                    : `${targetMembers.size} of ${otherTeams.length} managers`}
+                </span>
+                <ChevronDown className={cn("w-4 h-4 text-muted-foreground transition-transform flex-shrink-0", membersOpen && "rotate-180")} />
+              </button>
+              {membersOpen && (
+                <>
+                  <div className="fixed inset-0 z-10" onClick={() => setMembersOpen(false)} />
+                  <div className="absolute left-0 top-full mt-1.5 w-full sm:w-72 z-20 rounded-lg border border-border bg-popover shadow-lg shadow-black/20 overflow-hidden">
+                    <button
+                      onClick={toggleAllMembers}
+                      data-testid="idea-managers-select-all"
+                      className="w-full text-left px-3 py-2 text-[12px] font-semibold text-[#d4af37] hover:bg-muted/40 border-b border-border/40"
+                    >
+                      {allMembersSelected ? "Deselect all" : "Select all"}
+                    </button>
+                    <div className="max-h-56 overflow-y-auto py-1">
+                      {otherTeams.map((t) => (
+                        <label
+                          key={t.id}
+                          data-testid={`idea-manager-${t.id}`}
+                          className="flex items-center gap-2.5 px-3 py-2 text-[13px] cursor-pointer hover:bg-muted/40"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={targetMembers.has(t.id)}
+                            onChange={() => toggleMember(t.id)}
+                            className="w-4 h-4 accent-[#d4af37] cursor-pointer flex-shrink-0"
+                          />
+                          <span className="flex-1 min-w-0">
+                            <span className="block truncate text-foreground">{t.name}</span>
+                            {t.owner && <span className="block truncate text-[11px] text-muted-foreground">@{t.owner}</span>}
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-1 sm:items-end">
+            <button
+              onClick={handleGenerate}
+              disabled={!canGenerate}
+              data-testid="idea-generate"
+              className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold text-[#060d1a] transition-all hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
+              style={{ background: "linear-gradient(135deg, #d4af37 0%, #c9a227 60%, #b8921f 100%)", boxShadow: "0 4px 18px rgba(212,175,55,0.28)" }}
+            >
+              <Lightbulb className="w-4 h-4" /> Generate Trade Ideas
+            </button>
+            {!canGenerate && (
+              <span className="text-[10px] text-muted-foreground">
+                {selected.size === 0
+                  ? "Select assets above"
+                  : posFilters.size === 0
+                  ? "Pick at least one position"
+                  : returnSizes.size === 0
+                  ? "Pick at least one trade shape"
+                  : "Pick at least one manager"}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Generated ideas (grouped by manager) ──────────────────────────── */}
+      {result && (
+        <div className="space-y-4 pt-2">
+          <div>
+            <h3 className="text-sm font-bold text-foreground">Trade Ideas</h3>
+            <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
+            <p className="text-[11px] text-muted-foreground mt-1.5">
+              Offering {result.offer.map((a) => a.label).join(", ")} · {result.offerValue.toLocaleString()} value
+            </p>
+          </div>
+
+          {result.groups.length === 0 ? (
+            <div className="rounded-2xl border border-border/60 bg-card/40 px-6 py-12 text-center">
+              <p className="text-sm font-semibold text-foreground">No fair trade ideas found</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Try selecting more positions or managers, or adjusting the assets you're offering.
+              </p>
+            </div>
+          ) : (
+            result.groups.map((group) => (
+              <div key={group.managerId} className="space-y-2" data-testid={`idea-group-${group.managerId}`}>
+                {/* Manager header */}
+                <div className="flex items-center gap-2.5">
+                  <ManagerAvatar url={group.managerAvatar} name={group.managerName} />
+                  <div className="min-w-0">
+                    <span className="block text-[13px] font-bold text-foreground truncate">{group.managerName}</span>
+                    {group.managerOwner && (
+                      <span className="block text-[10px] text-muted-foreground truncate">@{group.managerOwner}</span>
+                    )}
+                  </div>
+                  <span className="ml-auto text-[10px] text-muted-foreground flex-shrink-0">
+                    {group.ideas.length} idea{group.ideas.length === 1 ? "" : "s"}
+                  </span>
+                </div>
+                {/* Idea cards */}
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {group.ideas.map((idea) => (
+                    <IdeaCard key={idea.id} idea={idea} offerValue={result.offerValue} />
+                  ))}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ManagerAvatar({ url, name }: { url?: string | null; name: string }) {
+  const [err, setErr] = useState(false);
+  const initial = (name || "?").charAt(0).toUpperCase();
+  if (!url || err) {
+    return (
+      <span className="w-8 h-8 rounded-full bg-[#0b3a7a]/20 dark:bg-blue-400/20 flex items-center justify-center text-[12px] font-bold text-[#0b3a7a] dark:text-blue-400 flex-shrink-0">
+        {initial}
+      </span>
+    );
+  }
+  return (
+    <img
+      src={url}
+      alt={name}
+      className="w-8 h-8 rounded-full object-cover flex-shrink-0 ring-1 ring-white/10"
+      onError={() => setErr(true)}
+    />
+  );
+}
+
+function IdeaCard({ idea, offerValue }: { idea: TradeIdea; offerValue: number }) {
+  const even = Math.abs(idea.diff) <= offerValue * 0.04;
+  const favorYou = idea.diff > 0;
+  const badge = even
+    ? "Even"
+    : `${favorYou ? "+" : "−"}${Math.abs(Math.round(idea.diff)).toLocaleString()}`;
+  const badgeCls = even
+    ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
+    : favorYou
+    ? "bg-emerald-500/10 text-emerald-300 border-emerald-500/20"
+    : "bg-amber-500/10 text-amber-300 border-amber-500/25";
+
+  return (
+    <div className="rounded-xl border border-border/60 bg-card/40 p-3 space-y-2" data-testid={`idea-card-${idea.id}`}>
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">You get</span>
+        <span
+          className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded border flex-shrink-0 tabular-nums", badgeCls)}
+          title="Net dynasty value vs. your offer"
+        >
+          {badge}
+        </span>
+      </div>
+
+      <div className="space-y-1.5">
+        {idea.get.map((a) => (
+          <div key={a.id} className="flex items-center justify-between gap-2">
+            {a.isPick ? (
+              <div className="flex items-center gap-2.5">
+                <span className="w-7 h-7 rounded-full bg-[#0b3a7a]/30 ring-1 ring-white/10 flex items-center justify-center text-[8px] font-bold text-[#d4af37] flex-shrink-0">
+                  PICK
+                </span>
+                <span className="text-[12px] font-semibold text-foreground">{a.label}</span>
+              </div>
+            ) : (
+              <PlayerAvatar id={a.sleeperId || a.id} name={a.label} pos={a.pos || ""} team={a.team} size="xs" />
+            )}
+            <span className="text-[11px] text-muted-foreground tabular-nums flex-shrink-0">{a.value.toLocaleString()}</span>
+          </div>
+        ))}
+      </div>
+
+      <div className="text-[10px] text-muted-foreground tabular-nums">
+        Get {idea.getValue.toLocaleString()} for {offerValue.toLocaleString()}
+      </div>
+    </div>
+  );
+}
+
 export function PositionalAnalysis({ league, userTeam, onNavigateToCalculator }: PositionalAnalysisProps) {
   const [activeSubTab, setActiveSubTab] = useState<"opportunities">("opportunities");
   const [innerTab, setInnerTab] = useState<FinderInnerTab>("finder");
@@ -225,9 +805,9 @@ export function PositionalAnalysis({ league, userTeam, onNavigateToCalculator }:
 
   const innerToggle = (
     <div
-      className="grid flex-shrink-0 w-[90vw] md:w-[260px]"
+      className="grid flex-shrink-0 w-[90vw] md:w-[420px]"
       style={{
-        gridTemplateColumns: "1fr 1fr",
+        gridTemplateColumns: "1fr 1fr 1fr",
         height: 48,
         borderRadius: 16,
         padding: 4,
@@ -237,10 +817,10 @@ export function PositionalAnalysis({ league, userTeam, onNavigateToCalculator }:
       }}
       data-testid="finder-inner-toggle"
     >
-      {(["finder", "bulk-trades"] as const).map((tab) => {
+      {(["finder", "bulk-trades", "idea-generator"] as const).map((tab) => {
         const isActive = innerTab === tab;
-        const Icon = tab === "finder" ? Search : Layers;
-        const label = tab === "finder" ? "Matched Trades" : "Bulk Trades";
+        const Icon = tab === "finder" ? Search : tab === "bulk-trades" ? Layers : Lightbulb;
+        const label = tab === "finder" ? "Matched Trades" : tab === "bulk-trades" ? "Bulk Trades" : "Idea Generator";
         return (
           <button
             key={tab}
@@ -293,6 +873,26 @@ export function PositionalAnalysis({ league, userTeam, onNavigateToCalculator }:
           <div className="w-full md:w-auto md:ml-auto flex justify-center">{innerToggle}</div>
         </div>
         <BulkTrades />
+      </div>
+    );
+  }
+
+  if (innerTab === "idea-generator") {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div className="hidden md:block">
+            <h2 className="text-2xl font-bold tracking-tight text-foreground" data-testid="text-idea-generator-title">
+              Idea Generator
+            </h2>
+            <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
+            <p className="text-sm text-muted-foreground mt-2">
+              Generate fresh trade ideas across your dynasty portfolio.
+            </p>
+          </div>
+          <div className="w-full md:w-auto md:ml-auto flex justify-center">{innerToggle}</div>
+        </div>
+        <IdeaGenerator key={league.id} userTeam={userTeam} league={league} />
       </div>
     );
   }

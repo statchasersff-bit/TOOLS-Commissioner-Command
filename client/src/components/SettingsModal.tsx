@@ -29,8 +29,8 @@ interface Props {
 export function SettingsModal({ open, onOpenChange }: Props) {
   const { toast } = useToast();
   const { isAuthenticatedUser } = useAuth();
-  const { favoriteAbbr, favoriteTeam, saving, setFavoriteTeam, clearFavoriteTeam } = useFavoriteTeam();
-  const { themeMode, setThemeMode, needsTeamForMyTeamMode } = useTheme();
+  const { favoriteAbbr, saving, setFavoriteTeam, clearFavoriteTeam } = useFavoriteTeam();
+  const { themeMode, setThemeMode, myTeamReady } = useTheme();
 
   // Draft state so the user can browse around before committing.
   const [draftAbbr, setDraftAbbr] = useState<string | null>(favoriteAbbr);
@@ -42,6 +42,11 @@ export function SettingsModal({ open, onOpenChange }: Props) {
   }, [open, favoriteAbbr]);
 
   const dirty = draftAbbr !== favoriteAbbr;
+
+  // The Theme section's "My Team" option mirrors the team currently picked in
+  // Personalization (the draft), so it updates the moment a team is selected —
+  // before the user commits with Save.
+  const draftTeam = draftAbbr ? NFL_TEAMS.find((t) => t.abbreviation === draftAbbr) ?? null : null;
 
   const handleSave = async () => {
     if (!dirty || !draftAbbr) {
@@ -93,14 +98,15 @@ export function SettingsModal({ open, onOpenChange }: Props) {
                 current={themeMode}
                 onSelect={setThemeMode}
                 icon={Star}
-                logoUrl={favoriteTeam?.logoUrl}
-                label={favoriteAbbr ? `My Team · ${favoriteAbbr}` : "My Team · Select team"}
+                logoUrl={draftTeam?.logoUrl}
+                label={draftAbbr ? `My Team · ${draftAbbr}` : "My Team · Select team"}
+                disabled={!myTeamReady}
               />
             </div>
 
-            {needsTeamForMyTeamMode && (
-              <p className="text-[11px] text-amber-500 dark:text-amber-400" data-testid="my-team-mode-prompt">
-                Pick your favorite NFL team below to unlock My Team Mode.
+            {!myTeamReady && (
+              <p className="text-[11px] text-amber-500 dark:text-amber-400" data-testid="my-team-mode-gated">
+                My Team theme is available for the Arizona Cardinals only right now — more teams coming soon.
               </p>
             )}
           </section>
@@ -164,7 +170,7 @@ function favoriteTeamLabel(abbr: string | null): string {
 }
 
 function ThemeChoice({
-  mode, current, onSelect, icon: Icon, label, logoUrl,
+  mode, current, onSelect, icon: Icon, label, logoUrl, disabled = false,
 }: {
   mode: ThemeMode;
   current: ThemeMode;
@@ -172,17 +178,21 @@ function ThemeChoice({
   icon: typeof Sun;
   label: string;
   logoUrl?: string | null;
+  disabled?: boolean;
 }) {
   const active = current === mode;
   return (
     <button
       type="button"
       onClick={() => onSelect(mode)}
+      disabled={disabled}
       data-on={active}
       data-testid={`theme-choice-${mode}`}
       className={cn(
         "flex items-center gap-2 px-2.5 py-2 rounded-lg border text-xs font-semibold text-left transition-colors",
-        active
+        disabled
+          ? "border-border/40 text-muted-foreground/50 opacity-50 cursor-not-allowed"
+          : active
           ? "bg-[#d4af37]/12 border-[#d4af37]/40 text-foreground"
           : "border-border/40 text-muted-foreground hover:text-foreground hover:bg-muted/30",
       )}

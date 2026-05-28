@@ -23,7 +23,7 @@ import { narrateReportTemplate, TEMPLATE_NARRATOR_ID } from "./templateNarrator"
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
 const db = drizzle(pool);
 
-const DEFAULT_TONE: ToneId = "light_roast";
+const DEFAULT_TONE: ToneId = "full_chaos";
 
 function parseIntStrict(v: unknown): number | null {
   const n = typeof v === "string" ? parseInt(v, 10) : typeof v === "number" ? v : NaN;
@@ -76,7 +76,7 @@ async function ensureRecap(
       return { recap, rowId: existing.id, article: existing.article, generatedAt: existing.generatedAt, model: existing.model };
     }
     // Backfill prose for rows cached before the template narrator existed.
-    const article = narrateReportTemplate(recap, tone, stableSeed(leagueId, season, month, tone));
+    const article = narrateReportTemplate(recap, stableSeed(leagueId, season, month, tone));
     const now = new Date();
     await db
       .update(commandersReports)
@@ -85,7 +85,7 @@ async function ensureRecap(
     return { recap, rowId: existing.id, article, generatedAt: now, model: TEMPLATE_NARRATOR_ID };
   }
   const recap = await buildRecap(leagueId, year, month);
-  const article = narrateReportTemplate(recap, tone, stableSeed(leagueId, season, month, tone));
+  const article = narrateReportTemplate(recap, stableSeed(leagueId, season, month, tone));
   const now = new Date();
   const [inserted] = await db
     .insert(commandersReports)
@@ -170,7 +170,7 @@ export function registerCommandersReportRoutes(app: Express): void {
     try {
       const { recap, rowId } = await ensureRecap(String(leagueId), yr, mo, tone);
       const seed = `${leagueId}-${yr}-${mo}-${tone}-${Date.now()}-${Math.random()}`;
-      const article = narrateReportTemplate(recap, tone, seed);
+      const article = narrateReportTemplate(recap, seed);
       const now = new Date();
       await db
         .update(commandersReports)

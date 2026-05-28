@@ -19,6 +19,7 @@ import { scAuthFetch } from "@/lib/scAuthFetch";
 import {
   ArrowLeft,
   BarChart3,
+  Check,
   ChevronDown,
   Upload,
   CheckCircle2,
@@ -57,14 +58,16 @@ interface PreviewResponse {
 
 // ── Header dropdown ──────────────────────────────────────────────────────────
 export function ValueSourceManager() {
-  const { dynastySource, redraftSource, dynastyCustom, redraftCustom, isLoading } =
+  const { sourceId, sources, setSourceId, dynastySource, redraftSource, isLoading } =
     useValueModel();
   const { status } = useAuth();
   const [, setLocation] = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
 
   const anyCustom = dynastySource === "custom" || redraftSource === "custom";
-  const labelText = anyCustom ? "Custom" : "FC";
+  const labelText = anyCustom ? "Custom" : sourceId === "ktc" ? "KTC" : "FC";
+  // Live base sources, switchable straight from this menu.
+  const baseSources = sources.filter((s) => s.id !== "custom" && s.active);
 
   // Open the value-source manager as a full page inside the app shell (mirrors
   // how player/manager profiles open) rather than a modal overlay.
@@ -94,23 +97,22 @@ export function ValueSourceManager() {
           <DropdownMenuLabel className="text-xs">Value Source Manager</DropdownMenuLabel>
           <DropdownMenuSeparator />
 
-          <SourceRow
-            title="Dynasty"
-            source={dynastySource}
-            custom={dynastyCustom}
-            onUpload={() => openManager("dynasty")}
-          />
-          <DropdownMenuSeparator />
-          <SourceRow
-            title="Redraft"
-            source={redraftSource}
-            custom={redraftCustom}
-            onUpload={() => openManager("redraft")}
-          />
+          {baseSources.map((s) => (
+            <DropdownMenuItem
+              key={s.id}
+              onClick={() => setSourceId(s.id)}
+              data-testid={`menu-source-${s.id}`}
+              className="gap-2 text-xs"
+            >
+              <Check className={cn("w-3.5 h-3.5 shrink-0", s.id === sourceId ? "text-[#d4af37]" : "opacity-0")} />
+              <span className="flex-1">{s.label}</span>
+              {s.id === sourceId && <span className="text-[10px] font-semibold text-[#d4af37]">Active</span>}
+            </DropdownMenuItem>
+          ))}
 
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={() => openManager()} data-testid="menu-manage-values">
-            <Upload className="w-3.5 h-3.5 mr-2" /> Change value sources
+            <Upload className="w-3.5 h-3.5 mr-2" /> Upload Custom Values
           </DropdownMenuItem>
           {status !== "ready" && (
             <div className="px-2 py-1.5 text-[10px] text-muted-foreground">
@@ -119,55 +121,6 @@ export function ValueSourceManager() {
           )}
         </DropdownMenuContent>
       </DropdownMenu>
-  );
-}
-
-function SourceRow({
-  title,
-  source,
-  custom,
-  onUpload,
-}: {
-  title: string;
-  source: "custom" | "fantasycalc";
-  custom: ReturnType<typeof useValueModel>["dynastyCustom"];
-  onUpload: () => void;
-}) {
-  return (
-    <div className="px-2 py-2 space-y-1.5">
-      <div className="flex items-center justify-between">
-        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-          {title} value source
-        </span>
-        <Badge
-          className={
-            source === "custom"
-              ? "text-[10px] bg-[#d4af37]/15 text-[#d4af37] border border-[#d4af37]/30"
-              : "text-[10px] bg-[#0b3a7a]/10 text-blue-300 border border-blue-500/20"
-          }
-        >
-          {source === "custom" ? "Custom" : "FantasyCalc"}
-        </Badge>
-      </div>
-      {source === "custom" && custom.name && (
-        <div className="text-[10px] text-muted-foreground leading-tight">
-          <div className="text-foreground/80 font-medium truncate">{custom.name}</div>
-          <div>
-            {custom.matchedCount} matched · {custom.unmatchedCount} unmatched
-            {custom.updatedAt && ` · ${formatDate(custom.updatedAt)}`}
-          </div>
-        </div>
-      )}
-      <Button
-        variant="outline"
-        size="sm"
-        className="w-full h-7 text-[10px]"
-        onClick={onUpload}
-        data-testid={`btn-manage-${title.toLowerCase()}`}
-      >
-        <Upload className="w-3 h-3 mr-1.5" /> Upload {title.toLowerCase()} CSV
-      </Button>
-    </div>
   );
 }
 
@@ -180,24 +133,66 @@ function formatDate(iso: string): string {
   }
 }
 
+// Base (online) value-source picker for the full /value-sources page. Lists every
+// registered source (FantasyCalc, KeepTradeCut, plus "soon" placeholders). Custom
+// uploads handled by UploadSection below override whichever base source is active.
+function BaseSourceSection() {
+  const { sourceId, sources, setSourceId, isLoading } = useValueModel();
+  // Only live sources — "custom" is the dedicated upload section below, and
+  // not-yet-available sources are hidden rather than shown as "coming soon".
+  const baseSources = sources.filter((s) => s.id !== "custom" && s.active);
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2">
+        <BarChart3 className="w-4 h-4 text-[#d4af37]" />
+        <h2 className="text-sm font-bold text-foreground">Base value source</h2>
+        {isLoading && <Loader2 className="w-3.5 h-3.5 animate-spin text-[#d4af37]" />}
+      </div>
+      <p className="text-[12px] text-muted-foreground">
+        Powers rankings, the trade calculator, and portfolio. Custom uploads below override these per player.
+      </p>
+      <div className="grid gap-2 sm:grid-cols-2">
+        {baseSources.map((s) => {
+          const selected = s.id === sourceId;
+          return (
+            <button
+              key={s.id}
+              type="button"
+              aria-pressed={selected}
+              onClick={() => setSourceId(s.id)}
+              data-testid={`base-source-${s.id}`}
+              className={cn(
+                "text-left rounded-lg border p-3 transition-colors",
+                selected
+                  ? "border-[#d4af37]/60 bg-[#d4af37]/10"
+                  : "border-border hover:border-[#d4af37]/40 hover:bg-muted/30",
+              )}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[13px] font-bold text-foreground">{s.label}</span>
+                {selected && (
+                  <Badge className="text-[10px] bg-[#d4af37]/15 text-[#d4af37] border border-[#d4af37]/30">Active</Badge>
+                )}
+              </div>
+              <p className="text-[11px] text-muted-foreground leading-snug mt-1">{s.description}</p>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ── Full-page manager (rendered inside the app shell at /value-sources) ───────
 export function ValueSourcePage({ embedded = false }: { embedded?: boolean }) {
   const [, setLocation] = useLocation();
   const { refreshCustomValues } = useValueModel();
-  const [tab, setTab] = useState<ValueType>(() => {
-    try {
-      return new URLSearchParams(window.location.search).get("type") === "redraft"
-        ? "redraft"
-        : "dynasty";
-    } catch {
-      return "dynasty";
-    }
-  });
 
   return (
     <div className={cn(!embedded && "min-h-screen bg-background", "text-foreground")}>
-      {/* Breadcrumb/back bar — non-sticky when embedded; the shell header is the
-          sticky chrome there (mirrors the player/manager profile pages). */}
+      {/* Back bar — non-sticky when embedded; the shell header is the sticky
+          chrome there (mirrors the player/manager profile pages). */}
       <div
         className={cn(
           "h-12 flex items-center gap-3 px-4 border-b border-border/60",
@@ -211,38 +206,22 @@ export function ValueSourcePage({ embedded = false }: { embedded?: boolean }) {
         >
           <ArrowLeft className="w-4 h-4" /> Back
         </button>
-        <span className="text-xs font-semibold text-foreground/80 truncate">Value Sources</span>
-        <span className="ml-auto text-[10px] font-bold uppercase tracking-wider text-[#d4af37]">
-          Value Source Manager
-        </span>
       </div>
 
-      <div className="max-w-2xl mx-auto px-4 sm:px-6 py-5 space-y-4">
-        <p className="text-xs text-muted-foreground leading-relaxed">
-          Upload your own dynasty or redraft values. Custom values override FantasyCalc anywhere
-          player values are used. Missing players fall back to FantasyCalc.
-        </p>
-
-        {/* Tab bar */}
-        <div className="flex items-center gap-1 p-1 rounded-lg bg-white/[0.03] border border-white/6 w-fit">
-          {(["dynasty", "redraft"] as const).map((t) => (
-            <button
-              key={t}
-              onClick={() => setTab(t)}
-              className={
-                "px-3 py-1.5 rounded-md text-[11px] font-semibold transition-all " +
-                (tab === t
-                  ? "bg-[#0b3a7a]/60 text-white border border-[#d4af37]/25"
-                  : "text-white/40 hover:text-white/70")
-              }
-              data-testid={`vs-tab-${t}`}
-            >
-              {t === "dynasty" ? "Dynasty Values" : "Redraft Values"}
-            </button>
-          ))}
+      <div className="max-w-2xl mx-auto px-4 sm:px-6 py-5 space-y-5">
+        {/* Title */}
+        <div>
+          <h1 className="text-xl font-bold tracking-tight text-foreground">Value Sources</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Manage the value sources used across Dynasty Command.
+          </p>
         </div>
 
-        <UploadSection valueType={tab} onChanged={refreshCustomValues} />
+        <BaseSourceSection />
+
+        <div className="border-t border-border/60" />
+
+        <UploadSection valueType="dynasty" onChanged={refreshCustomValues} />
       </div>
     </div>
   );
@@ -255,8 +234,11 @@ function UploadSection({ valueType, onChanged }: { valueType: ValueType; onChang
   const [preview, setPreview] = useState<PreviewResponse | null>(null);
   const [name, setName] = useState<string>("");
   const [activeSets, setActiveSets] = useState<any[]>([]);
-  const { dynastyCustom, redraftCustom } = useValueModel();
+  const [dragOver, setDragOver] = useState(false);
+  const { sourceId, dynastyCustom, redraftCustom } = useValueModel();
   const currentCustom = valueType === "dynasty" ? dynastyCustom : redraftCustom;
+  // The base source custom values fall back to when a player isn't in the upload.
+  const baseLabel = sourceId === "ktc" ? "KeepTradeCut" : "FantasyCalc";
 
   const refreshSets = async () => {
     try {
@@ -292,7 +274,7 @@ function UploadSection({ valueType, onChanged }: { valueType: ValueType; onChang
       const body = await r.json();
       if (!r.ok) throw new Error(body?.error || `Preview failed (${r.status})`);
       setPreview(body as PreviewResponse);
-      setName((body.totalRows ? `Custom ${valueType} (${new Date().toLocaleDateString()})` : ""));
+      setName((body.totalRows ? `Custom values (${new Date().toLocaleDateString()})` : ""));
     } catch (err: any) {
       setError(err.message || "Upload failed");
     } finally {
@@ -311,7 +293,7 @@ function UploadSection({ valueType, onChanged }: { valueType: ValueType; onChang
         body: JSON.stringify({
           token: preview.token,
           valueType,
-          name: name || `Custom ${valueType} values`,
+          name: name || "Custom values",
           activate: true,
         }),
       });
@@ -346,6 +328,21 @@ function UploadSection({ valueType, onChanged }: { valueType: ValueType; onChang
     }
   };
 
+  const downloadTemplate = () => {
+    const csv = [
+      "player_name,position,team,value,player_id",
+      "Ja'Marr Chase,WR,CIN,9999,",
+      "Bijan Robinson,RB,ATL,9650,",
+    ].join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "value-source-template.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const downloadUnmatched = () => {
     if (!preview) return;
     const header = "player_name,position,team,value,reason\n";
@@ -360,56 +357,61 @@ function UploadSection({ valueType, onChanged }: { valueType: ValueType; onChang
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${valueType}-unmatched.csv`;
+    a.download = "unmatched-players.csv";
     a.click();
     URL.revokeObjectURL(url);
   };
 
   return (
     <div className="space-y-3 pt-2">
-      {/* Current status */}
-      <Card className="p-3 text-xs space-y-1">
-        <div className="flex items-center justify-between">
-          <span className="font-semibold">Currently using</span>
-          <Badge
-            className={
-              currentCustom.active
-                ? "text-[10px] bg-[#d4af37]/15 text-[#d4af37] border border-[#d4af37]/30"
-                : "text-[10px] bg-[#0b3a7a]/10 text-blue-300 border border-blue-500/20"
-            }
-          >
-            {currentCustom.active ? "Custom" : "FantasyCalc Default"}
-          </Badge>
-        </div>
-        {currentCustom.active && (
-          <div className="text-[11px] text-muted-foreground space-y-0.5">
-            <div>{currentCustom.name}</div>
-            <div>
-              {currentCustom.matchedCount} players matched · {currentCustom.unmatchedCount} unmatched ·{" "}
-              {currentCustom.updatedAt ? formatDate(currentCustom.updatedAt) : ""}
-            </div>
+      {/* Current Source */}
+      <Card className="p-4 space-y-1.5">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Current Source</span>
+          {currentCustom.active && (
             <button
               onClick={handleReset}
-              className="text-[11px] text-muted-foreground underline hover:text-foreground"
               disabled={busy}
+              className="text-[11px] text-muted-foreground underline hover:text-foreground disabled:opacity-50"
               data-testid={`btn-reset-${valueType}`}
             >
-              Reset to FantasyCalc
+              Reset to {baseLabel}
             </button>
-          </div>
+          )}
+        </div>
+        {currentCustom.active ? (
+          <>
+            <div className="text-sm font-bold text-foreground">{currentCustom.name || "Custom values"}</div>
+            <div className="text-[11px] text-muted-foreground">
+              {currentCustom.updatedAt ? `Uploaded ${formatDate(currentCustom.updatedAt)} · ` : ""}
+              {currentCustom.matchedCount.toLocaleString()} players
+              {currentCustom.unmatchedCount ? ` · ${currentCustom.unmatchedCount.toLocaleString()} unmatched` : ""}
+            </div>
+            <div className="text-[11px] text-muted-foreground">Missing players fall back to {baseLabel}.</div>
+          </>
+        ) : (
+          <>
+            <div className="text-sm font-bold text-foreground">{baseLabel} Default</div>
+            <div className="text-[11px] text-muted-foreground">No custom value file is currently active.</div>
+          </>
         )}
       </Card>
 
-      {/* CSV format help */}
-      <div className="text-[11px] text-muted-foreground leading-relaxed">
-        Upload a CSV with at least <code className="text-foreground">player_name</code> and{" "}
-        <code className="text-foreground">value</code> columns. Optional columns:{" "}
-        <code className="text-foreground">position</code>,<code className="text-foreground">team</code>,{" "}
-        <code className="text-foreground">player_id</code>.
-      </div>
+      {/* Upload custom values */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Upload Custom Values</span>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={downloadTemplate}
+            className="h-7 text-[11px]"
+            data-testid={`btn-template-${valueType}`}
+          >
+            <Download className="w-3.5 h-3.5 mr-1.5" /> Download CSV Template
+          </Button>
+        </div>
 
-      {/* File picker */}
-      <div className="flex items-center gap-2">
         <input
           ref={fileRef}
           type="file"
@@ -422,16 +424,56 @@ function UploadSection({ valueType, onChanged }: { valueType: ValueType; onChang
           }}
           data-testid={`file-input-${valueType}`}
         />
-        <Button
-          onClick={() => fileRef.current?.click()}
-          disabled={busy}
-          variant="outline"
-          size="sm"
-          data-testid={`btn-choose-${valueType}`}
+
+        {/* Dropzone */}
+        <div
+          onClick={() => { if (!busy) fileRef.current?.click(); }}
+          onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setDragOver(false);
+            const f = e.dataTransfer.files?.[0];
+            if (f) void handleFile(f);
+          }}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => { if ((e.key === "Enter" || e.key === " ") && !busy) fileRef.current?.click(); }}
+          data-testid={`dropzone-${valueType}`}
+          className={cn(
+            "flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-4 py-8 text-center cursor-pointer transition-colors",
+            dragOver
+              ? "border-[#d4af37]/60 bg-[#d4af37]/5"
+              : "border-border/60 hover:border-border/80 bg-muted/10 hover:bg-muted/20",
+          )}
         >
-          {busy ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <Upload className="w-3.5 h-3.5 mr-1.5" />}
-          Choose CSV
-        </Button>
+          {busy ? (
+            <Loader2 className="w-6 h-6 text-[#d4af37] animate-spin" />
+          ) : (
+            <Upload className="w-6 h-6 text-muted-foreground" />
+          )}
+          <div className="text-sm font-semibold text-foreground">Drag and drop your CSV here</div>
+          <div className="text-[11px] text-muted-foreground">or choose a file from your computer</div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="mt-1"
+            disabled={busy}
+            onClick={(e) => { e.stopPropagation(); fileRef.current?.click(); }}
+            data-testid={`btn-choose-${valueType}`}
+          >
+            <Upload className="w-3.5 h-3.5 mr-1.5" /> Choose CSV
+          </Button>
+        </div>
+
+        <p className="text-[11px] text-muted-foreground leading-relaxed">
+          CSV needs at least <code className="text-foreground">player_name</code> and{" "}
+          <code className="text-foreground">value</code> columns. Optional:{" "}
+          <code className="text-foreground">position</code>, <code className="text-foreground">team</code>,{" "}
+          <code className="text-foreground">player_id</code>.
+        </p>
+
         {preview && (
           <Button
             variant="ghost"
@@ -514,7 +556,7 @@ function UploadSection({ valueType, onChanged }: { valueType: ValueType; onChang
             <Input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder={`Custom ${valueType} values`}
+              placeholder="Custom values"
               className="h-8 text-xs"
               data-testid={`input-name-${valueType}`}
             />
@@ -530,7 +572,7 @@ function UploadSection({ valueType, onChanged }: { valueType: ValueType; onChang
       {activeSets.filter((s) => s.valueType === valueType).length > 0 && (
         <div className="space-y-1">
           <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
-            Your {valueType} sets
+            Saved value sets
           </div>
           <div className="space-y-1">
             {activeSets.filter((s: any) => s.valueType === valueType).map((s: any) => (

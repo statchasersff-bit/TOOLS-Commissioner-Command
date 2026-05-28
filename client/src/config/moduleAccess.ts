@@ -74,6 +74,9 @@ export const MODULE_ACCESS: Record<string, AccessRequirement> = {
   // Static pages
   "about": "public",
   "feedback": "public",
+  "redraft-command": "public",
+  "commissioner-command": "public",
+  "manage-account": "public",
   "terms": "public",
   "privacy": "public",
   "cookies": "public",
