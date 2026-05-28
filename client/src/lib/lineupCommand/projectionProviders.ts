@@ -39,6 +39,38 @@ export interface ProjectionResult {
   cachedAt?: number;
 }
 
+// Sleeper projection/stat keys → the keys our league scoring engine (scoring.ts)
+// reads. Shared by the projection converter below and by callers that score a
+// raw Sleeper stat line against a league's scoring settings.
+const SLEEPER_STAT_TO_SCORING: Record<string, string> = {
+  pass_att: "pass_att", pass_cmp: "pass_comp", pass_yd: "pass_yd",
+  pass_td: "pass_td", pass_int: "pass_int", rush_att: "rush_att",
+  rush_yd: "rush_yd", rush_td: "rush_td", rec: "rec", rec_yd: "rec_yd",
+  rec_td: "rec_td", fum_lost: "fum_lost", fum: "fum_lost",
+  pass_2pt: "two_pt", rush_2pt: "two_pt", rec_2pt: "two_pt",
+  xpm: "xpm", xpa: "xpa", fgm_0_19: "fgm_0_19", fgm_20_29: "fgm_20_29",
+  fgm_30_39: "fgm_30_39", fgm_40_49: "fgm_40_49", fgm_50p: "fgm_50p",
+  sack: "sacks", def_int: "defs_int", fum_rec: "defs_fum_rec",
+  def_td: "defs_td", safe: "safety", blk_kick: "blk_kick",
+  def_st_td: "ret_td", pts_allow: "pts_allowed",
+};
+
+/** Convert a Sleeper projection/stat `stats` object into the engine's stat keys. */
+export function mapSleeperStatsToScoring(
+  rowStats: Record<string, any> | null | undefined,
+): Record<string, number> {
+  const out: Record<string, number> = {};
+  if (!rowStats) return out;
+  for (const [sleeperKey, ourKey] of Object.entries(SLEEPER_STAT_TO_SCORING)) {
+    const val = rowStats[sleeperKey];
+    if (val !== undefined && val !== null && Number.isFinite(Number(val))) {
+      if (ourKey === "two_pt") out[ourKey] = (out[ourKey] || 0) + Number(val);
+      else out[ourKey] = Number(val);
+    }
+  }
+  return out;
+}
+
 const sleeperCache: Record<string, { data: any[]; timestamp: number }> = {};
 const CACHE_TTL = 30 * 60 * 1000;
 
@@ -96,31 +128,7 @@ function sleeperRowToProjection(
   if (!pos) return null;
 
   const rowStats = row.stats || {};
-  const stats: Record<string, number> = {};
-
-  const statMap: Record<string, string> = {
-    pass_att: "pass_att", pass_cmp: "pass_comp", pass_yd: "pass_yd",
-    pass_td: "pass_td", pass_int: "pass_int", rush_att: "rush_att",
-    rush_yd: "rush_yd", rush_td: "rush_td", rec: "rec", rec_yd: "rec_yd",
-    rec_td: "rec_td", fum_lost: "fum_lost", fum: "fum_lost",
-    pass_2pt: "two_pt", rush_2pt: "two_pt", rec_2pt: "two_pt",
-    xpm: "xpm", xpa: "xpa", fgm_0_19: "fgm_0_19", fgm_20_29: "fgm_20_29",
-    fgm_30_39: "fgm_30_39", fgm_40_49: "fgm_40_49", fgm_50p: "fgm_50p",
-    sack: "sacks", def_int: "defs_int", fum_rec: "defs_fum_rec",
-    def_td: "defs_td", safe: "safety", blk_kick: "blk_kick",
-    def_st_td: "ret_td", pts_allow: "pts_allowed",
-  };
-
-  for (const [sleeperKey, ourKey] of Object.entries(statMap)) {
-    const val = rowStats[sleeperKey];
-    if (val !== undefined && val !== null && Number.isFinite(Number(val))) {
-      if (ourKey === "two_pt") {
-        stats[ourKey] = (stats[ourKey] || 0) + Number(val);
-      } else {
-        stats[ourKey] = Number(val);
-      }
-    }
-  }
+  const stats = mapSleeperStatsToScoring(rowStats);
 
   const proj = rowStats.pts_ppr ?? rowStats.pts_half_ppr ?? rowStats.pts_std ?? 0;
 

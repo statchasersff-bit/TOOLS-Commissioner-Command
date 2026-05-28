@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useLayoutEffect } from "react";
+import { useState, useMemo, useRef, useLayoutEffect, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -41,6 +41,11 @@ export function MarketValue({ league }: MarketProps) {
   const [sortKey, setSortKey] = useState<SortKey>("dynastyValue");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const scrollRef = useRef<HTMLDivElement>(null);
+  // Show 50 rows at a time; "Show more" reveals the next 50. Resets whenever the
+  // result set changes (search / position filter) so each new view starts at 50.
+  const PAGE_SIZE = 50;
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  useEffect(() => { setVisibleCount(PAGE_SIZE); }, [search, posFilter]);
   // True when the value table is wider than its viewport (needs horizontal
   // scrolling). When set, the wide "On Your Team" pill collapses to a compact
   // gold star next to the team abbreviation so all columns stay reachable.
@@ -191,6 +196,9 @@ export function MarketValue({ league }: MarketProps) {
     return rows;
   }, [allPlayers, rookieRows, search, posFilter, sortKey, sortDir]);
 
+  const visibleRows = useMemo(() => filtered.slice(0, visibleCount), [filtered, visibleCount]);
+  const remaining = filtered.length - visibleRows.length;
+
   // Re-measure horizontal overflow on container resize (device/orientation) and
   // whenever the row set changes. Swapping the pill for a star only changes the
   // table's scrollWidth (not the container's width), so this never oscillates.
@@ -202,7 +210,7 @@ export function MarketValue({ league }: MarketProps) {
     const ro = new ResizeObserver(measure);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [filtered]);
+  }, [filtered, visibleCount]);
 
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -306,7 +314,7 @@ export function MarketValue({ league }: MarketProps) {
                 </td>
               </tr>
             )}
-            {filtered.map((row) => {
+            {visibleRows.map((row) => {
               const isPick = row.sleeperId.startsWith("FP_") || row.pos === "PICK";
               return (
               <tr
@@ -364,6 +372,15 @@ export function MarketValue({ league }: MarketProps) {
           </tbody>
         </table>
         </div>
+        {remaining > 0 && (
+          <button
+            onClick={() => setVisibleCount((c) => c + PAGE_SIZE)}
+            className="w-full py-3 text-sm font-semibold text-[#0b3a7a] dark:text-blue-400 hover:bg-muted/40 border-t border-border/40 transition-colors"
+            data-testid="button-market-show-more"
+          >
+            Show {Math.min(PAGE_SIZE, remaining)} more ({remaining} of {filtered.length} hidden)
+          </button>
+        )}
       </Card>
     </div>
   );

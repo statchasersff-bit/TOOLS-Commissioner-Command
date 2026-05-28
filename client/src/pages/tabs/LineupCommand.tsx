@@ -28,6 +28,8 @@ import {
 } from "@/lib/lineupCommand/gameLocking";
 import { getLeagueMatchupsForLocking } from "@/lib/lineupCommand/sleeper";
 import { calculateWinProbability } from "@/lib/lineupCommand/winProbability";
+import { scoreByLeague } from "@/lib/lineupCommand/scoring";
+import { mapSleeperStatsToScoring } from "@/lib/lineupCommand/projectionProviders";
 
 const SLEEPER_API = "https://api.sleeper.app/v1";
 
@@ -115,6 +117,26 @@ function projKey(scoringFormat: string): "pts_ppr" | "pts_half_ppr" | "pts_std" 
   return "pts_std";
 }
 
+// Shared, memoized fetch of a league's scoring_settings so the Matchups and
+// Lineups effects (and re-runs triggered by projection refreshes) issue a single
+// /league/:id request per league. Returns null when unavailable so callers fall
+// back to Sleeper's canned PPR/Half/Std totals. Cleared by the tab's refresh().
+const leagueScoringCache = new Map<string, Promise<Record<string, number> | null>>();
+function getLeagueScoring(leagueId: string): Promise<Record<string, number> | null> {
+  let cached = leagueScoringCache.get(leagueId);
+  if (!cached) {
+    cached = fetch(`${SLEEPER_API}/league/${leagueId}`)
+      .then(r => (r.ok ? r.json() : null))
+      .then(obj => {
+        const s = obj?.scoring_settings;
+        return s && Object.keys(s).length > 0 ? (s as Record<string, number>) : null;
+      })
+      .catch(() => null);
+    leagueScoringCache.set(leagueId, cached);
+  }
+  return cached;
+}
+
 function lastName(playerDb: Record<string, any>, pid: string): string {
   const p = playerDb[pid];
   if (!p) return pid.slice(0, 8);
@@ -138,10 +160,11 @@ function fmt1(n: number): string {
 
 // ─── Core lineup analysis (powered by the Lineup Command engine) ───────────────
 // The engine in client/src/lib/lineupCommand is framework-agnostic. We enrich
-// each Sleeper player_id into the engine's EnrichedPlayer shape — pulling proj
-// straight from Sleeper's pre-scored weekly projections (the source this app has
-// always used), zeroing OUT players, and applying game-locking — then run the
-// engine's slot-eligibility-aware optimizer and bench-recommendation logic.
+// each Sleeper player_id into the engine's EnrichedPlayer shape — scoring each
+// player's projected stat line with the league's scoring_settings (falling back
+// to Sleeper's canned PPR/Half/Std total), zeroing OUT players, and applying
+// game-locking — then run the engine's slot-eligibility-aware optimizer and
+// bench-recommendation logic.
 function analyzeLineup(
   allPlayerIds: string[],
   rawStarters: (string | null)[],                    // unfiltered: index aligns with starting slots
@@ -154,15 +177,28 @@ function analyzeLineup(
   schedule: GameSchedule,
   playedPlayerIds: Record<string, boolean>,
   actualPoints: Record<string, number>,
+  scoring: Record<string, number> | null,
 ): Omit<LeagueAnalysis, "leagueId" | "leagueName" | "format" | "scoringFormat" | "loading" | "error" | "rosterId"> {
   const field = projKey(scoringFormat);
   const now = Date.now();
+
+  // League-accurate projection: score the player's projected stat line with this
+  // league's scoring_settings (falls back to Sleeper's canned PPR/Half/Std total
+  // when settings are unavailable or there's no stat line; the engine also uses
+  // the canned total for K/DEF by design).
+  const projFor = (pid: string): number => {
+    const rawStats = rawProj[pid];
+    if (!rawStats) return 0;
+    const fallback = rawStats[field] ?? 0;
+    if (!scoring) return fallback;
+    return scoreByLeague(playerPos(playerDb, pid), mapSleeperStatsToScoring(rawStats), scoring, fallback);
+  };
 
   // pid → EnrichedPlayer (proj from Sleeper, OUT zeroed, lock-aware actuals).
   const enrich = (pid: string): EnrichedPlayer | null => {
     const lite = toPlayerLite(playerDb, pid);
     if (!lite) return null;
-    let proj = rawProj[pid]?.[field] ?? 0;
+    let proj = projFor(pid);
     // Zero OUT players so they never read as "optimal".
     if (statusFlags({ ...lite, proj }).includes("OUT")) proj = 0;
     const locked = isPlayerLocked(lite, schedule, now, playedPlayerIds, actualPoints);
@@ -216,7 +252,7 @@ function analyzeLineup(
     const team = playerDb[pid]?.team as string | undefined;
     const name = lastName(playerDb, pid);
     const pos  = playerPos(playerDb, pid);
-    const onBye = isTeamOnBye(team, schedule) || (rawProj[pid]?.[field] ?? 0) < 0.5;
+    const onBye = isTeamOnBye(team, schedule) || projFor(pid) < 0.5;
     if      (inj === "IR")           issues.push({ type: "ir",           playerName: name, pos });
     else if (inj === "Out")          issues.push({ type: "out",          playerName: name, pos });
     else if (inj === "Doubtful")     issues.push({ type: "doubtful",     playerName: name, pos });
@@ -982,8 +1018,12 @@ export function LineupCommand() {
         getLeagueMatchupsForLocking([league.leagueId], String(nflWeek)).catch(
           () => ({ playedPlayerIds: {}, actualPoints: {} }),
         ),
+        // Shared scoring_settings fetch — the optimizer scores projections with
+        // this league's rules instead of Sleeper's canned totals. Degrades to
+        // the canned total if it can't be loaded.
+        getLeagueScoring(league.leagueId),
       ])
-        .then(([rosters, lock]: [any[] | null, { playedPlayerIds: Record<string, boolean>; actualPoints: Record<string, number> }]) => {
+        .then(([rosters, lock, scoring]: [any[] | null, { playedPlayerIds: Record<string, boolean>; actualPoints: Record<string, number> }, Record<string, number> | null]) => {
           if (!rosters) throw new Error("no data");
           const myRoster = rosters.find((r: any) => r.owner_id === user.userId);
           if (!myRoster) {
@@ -1011,6 +1051,7 @@ export function LineupCommand() {
             schedule,
             lock.playedPlayerIds,
             lock.actualPoints,
+            scoring,
           );
 
           setAnalyses(prev => ({
@@ -1074,7 +1115,11 @@ export function LineupCommand() {
       Promise.all([
         fetch(`${SLEEPER_API}/league/${league.leagueId}/rosters`).then(r => r.ok ? r.json() : null),
         fetch(`${SLEEPER_API}/league/${league.leagueId}/matchups/${nflWeek}`).then(r => r.ok ? r.json() : null),
-      ]).then(([rosters, weekMatchups]: [any[] | null, any[] | null]) => {
+        // Shared scoring_settings fetch — lets us score each projected stat line
+        // against THIS league's rules instead of Sleeper's canned PPR/Half/Std
+        // totals. Degrades to the canned total if it can't be loaded.
+        getLeagueScoring(league.leagueId),
+      ]).then(([rosters, weekMatchups, scoring]: [any[] | null, any[] | null, Record<string, number> | null]) => {
         if (!rosters || !weekMatchups) throw new Error("no data");
 
         const myRoster = rosters.find((r: any) => r.owner_id === user.userId);
@@ -1111,7 +1156,18 @@ export function LineupCommand() {
           }
         }
 
-        const proj = (pid: string): number => (rawProj[pid]?.[field] ?? 0);
+        // League-accurate projection: score each player's projected stat line
+        // with this league's scoring_settings (handles 6pt pass TDs, TE premium,
+        // custom DST, etc.). Falls back to Sleeper's canned PPR/Half/Std total
+        // when the league settings are unavailable or the player has no stat line
+        // (the engine also uses the canned total for K/DEF by design).
+        const proj = (pid: string): number => {
+          const rawStats = rawProj[pid];
+          if (!rawStats) return 0;
+          const fallback = rawStats[field] ?? 0;
+          if (!scoring) return fallback;
+          return scoreByLeague(playerPos(playerDb, pid), mapSleeperStatsToScoring(rawStats), scoring, fallback);
+        };
         const myProj = (myMatchup.starters || [])
           .filter((id: string) => id && id !== "0")
           .reduce((s: number, id: string) => s + proj(id), 0);
@@ -1187,6 +1243,7 @@ export function LineupCommand() {
     setRawProj({});
     setPlayerDb({});
     setSchedule({});
+    leagueScoringCache.clear();
     setBaseLoading(false);
   }, []);
 
@@ -1688,7 +1745,7 @@ export function LineupCommand() {
           </div>
 
           <p className="text-[9px] text-[var(--sc-text-muted)] dark-any:text-white/20 text-center px-4">
-            Matchup projections from Sleeper starters · Win % = projected pts / combined projected pts · Records from current standings
+            Projections scored with your league's settings · Win % from the projected spread (normal model) · Records from current standings
           </p>
         </>
       )}
