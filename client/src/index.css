@@ -1143,3 +1143,165 @@
 @media (prefers-reduced-motion: reduce) {
   .animate-news-ticker { animation: none; }
 }
+
+/* ════════════════════════════════════════════════════════════════════════════
+ * DYNASTY COMMAND RESPONSIVE SYSTEM
+ * Reusable, theme-aware layout primitives shared by every page. These pair with
+ * the JS utilities in hooks/useResponsive.ts and the <ResponsiveTable> /
+ * <ResponsiveFilterBar> components. Prefer these classes over one-off media
+ * queries so new pages inherit the same behavior for free.
+ *
+ * Breakpoints mirror BREAKPOINTS in useResponsive.ts:
+ *   2xs 360 · xs 480 · md 768 · lg 1024 · xl 1280 · 2xl 1536
+ * ════════════════════════════════════════════════════════════════════════════ */
+@layer utilities {
+
+  /* ── Horizontal-scroll table wrapper ──────────────────────────────────────
+   * Wrap a wide/dense table so it scrolls inside its own box instead of pushing
+   * the whole page sideways. The right/left edge fades hint that more columns
+   * exist; <ResponsiveTable> toggles data-at-start / data-at-end so the fade
+   * only shows on the side you can still scroll toward. Theme-aware: the fade
+   * dissolves into the surrounding card surface in light, dark and x-mode. */
+  .dc-scroll-x {
+    position: relative;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+    scrollbar-width: thin;
+  }
+  .dc-scroll-x::before,
+  .dc-scroll-x::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 28px;
+    pointer-events: none;
+    z-index: 3;
+    opacity: 0;
+    transition: opacity 0.18s ease;
+  }
+  .dc-scroll-x::before {
+    left: 0;
+    background: linear-gradient(to right, var(--sc-card-bg), transparent);
+  }
+  .dc-scroll-x::after {
+    right: 0;
+    background: linear-gradient(to left, var(--sc-card-bg), transparent);
+  }
+  /* data-* are set by ResponsiveTable's scroll listener. When JS hasn't run yet
+   * (no attrs) we show the right fade by default so the affordance still reads. */
+  .dc-scroll-x:not([data-at-start])::after,
+  .dc-scroll-x[data-at-start="false"]::after { opacity: 1; }
+  .dc-scroll-x[data-at-end="false"]::after { opacity: 1; }
+  .dc-scroll-x[data-at-end="true"]::after { opacity: 0; }
+  .dc-scroll-x[data-at-start="false"]::before { opacity: 1; }
+  .dc-scroll-x[data-at-start="true"]::before { opacity: 0; }
+
+  /* Sticky first column for scroll tables — keeps the player/identity column
+   * pinned while stats scroll. Apply to BOTH the th and the matching td. The
+   * opaque card background covers the columns sliding underneath. */
+  .dc-sticky-col {
+    position: sticky;
+    left: 0;
+    z-index: 2;
+    background-color: var(--sc-card-bg);
+  }
+  /* Header sticky cells sit above body sticky cells. */
+  thead .dc-sticky-col { z-index: 4; }
+  /* In light mode the global `thead th` rule paints headers brand-blue; keep the
+   * sticky header cell that color (not card-bg) so it matches its row. */
+  [data-theme="light"] thead .dc-sticky-col { background-color: var(--sc-blue); }
+
+  /* Sticky table header — pairs with a scroll container that has a max-height. */
+  .dc-sticky-head thead th {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+  }
+
+  /* ── Responsive card / stat grids ─────────────────────────────────────────
+   * Auto-fit grids that collapse cleanly instead of crushing cards to unreadable
+   * widths. Use .dc-card-grid for content cards, .dc-stat-grid for compact KPIs. */
+  .dc-card-grid {
+    display: grid;
+    gap: 16px;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  }
+  @media (max-width: 480px) {
+    .dc-card-grid { grid-template-columns: 1fr; gap: 12px; }
+  }
+
+  .dc-stat-grid {
+    display: grid;
+    gap: 14px;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  }
+  @media (max-width: 480px) {
+    .dc-stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  }
+  @media (max-width: 360px) {
+    .dc-stat-grid { grid-template-columns: 1fr; }
+  }
+
+  /* ── Detail-page two-column layout ────────────────────────────────────────
+   * Main content + context sidebar on desktop; single stacked column at/below
+   * the laptop breakpoint so the sidebar never squeezes the main content. */
+  .dc-detail-layout {
+    display: grid;
+    gap: 24px;
+    grid-template-columns: minmax(0, 1fr) 340px;
+  }
+  @media (max-width: 1024px) {
+    .dc-detail-layout { grid-template-columns: 1fr; gap: 16px; }
+  }
+
+  /* ── Mobile sticky action bar ─────────────────────────────────────────────
+   * Pins primary actions (Analyze, Save, Send, Apply) to the bottom of the
+   * viewport on phones; static (inline) from the tablet breakpoint up. */
+  .dc-sticky-actions {
+    position: sticky;
+    bottom: 0;
+    z-index: 40;
+    padding: 12px;
+    padding-bottom: max(12px, env(safe-area-inset-bottom));
+    background-color: var(--sc-nav-bg-translucent, var(--sc-card-bg));
+    border-top: 1px solid var(--sc-border);
+    backdrop-filter: blur(12px);
+  }
+  .dark .dc-sticky-actions,
+  .x-mode .dc-sticky-actions {
+    border-top-color: rgba(212, 175, 55, 0.18);
+  }
+  @media (min-width: 768px) {
+    .dc-sticky-actions {
+      position: static;
+      padding: 0;
+      background: none;
+      border-top: none;
+      backdrop-filter: none;
+    }
+  }
+
+  /* ── Touch targets ────────────────────────────────────────────────────────
+   * Guarantee comfortable tap sizes on touch screens without bloating dense
+   * desktop UIs. Opt-in via .dc-touch on interactive controls. */
+  @media (max-width: 768px) {
+    .dc-touch { min-height: 44px; }
+  }
+
+  /* ── Fluid type ───────────────────────────────────────────────────────────
+   * clamp()-based sizes so headings shrink gracefully on phones and never blow
+   * out on wide screens. */
+  .dc-page-title    { font-size: clamp(1.5rem, 1rem + 2vw, 2.5rem); line-height: 1.1; }
+  .dc-section-title { font-size: clamp(1.125rem, 0.9rem + 1vw, 1.5rem); line-height: 1.2; }
+  .dc-card-value    { font-size: clamp(1.25rem, 1rem + 1.5vw, 2rem); line-height: 1.1; }
+
+  /* ── Overflow safety ──────────────────────────────────────────────────────
+   * Flex/grid children with long text overflow their track unless allowed to
+   * shrink below content width. .dc-min-w-0 is shorthand for that fix; apply to
+   * a flex child wrapping a truncating label or a nested table. */
+  .dc-min-w-0 { min-width: 0; }
+  .dc-clip { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+}

@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useScrollEdges } from "@/hooks/useResponsive";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -918,12 +919,15 @@ function SummaryStrip({
     rows.push({ key: "picks", label: "Picks Value", value: (b) => compactValue(b.picksValue), higherIsBetter: true, numeric: (b) => b.picksValue });
   }
 
+  const { ref: scrollRef } = useScrollEdges<HTMLDivElement>();
+
   return (
-    <Card className="p-3 md:p-4 overflow-x-auto" data-testid="compare-summary">
+    <Card className="p-3 md:p-4" data-testid="compare-summary">
+      <div ref={scrollRef} className="dc-scroll-x">
       <table className="w-full text-[12px]">
         <thead>
           <tr className="border-b border-border/40">
-            <th className="text-left font-semibold uppercase tracking-wide text-[10px] text-muted-foreground py-1.5 pr-3">Metric</th>
+            <th className="dc-sticky-col text-left font-semibold uppercase tracking-wide text-[10px] text-muted-foreground py-1.5 pr-3">Metric</th>
             {breakdowns.map((b) => (
               <th key={b.team.id} className="text-right font-semibold py-1.5 pl-3 min-w-[90px]">
                 <div className="truncate max-w-[160px]" title={b.team.owner || b.team.name}>
@@ -947,7 +951,7 @@ function SummaryStrip({
             ).idx;
             return (
               <tr key={row.key} className="border-b border-border/20 last:border-0">
-                <td className="py-1.5 pr-3 text-muted-foreground">{row.label}</td>
+                <td className="dc-sticky-col py-1.5 pr-3 text-muted-foreground">{row.label}</td>
                 {breakdowns.map((b, i) => (
                   <td
                     key={b.team.id}
@@ -964,6 +968,7 @@ function SummaryStrip({
           })}
         </tbody>
       </table>
+      </div>
     </Card>
   );
 }

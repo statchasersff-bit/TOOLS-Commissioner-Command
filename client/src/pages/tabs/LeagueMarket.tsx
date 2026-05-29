@@ -13,6 +13,7 @@ import { ROOKIE_BOARD_2026_SF } from "@/data/rookieBoard2026";
 import type { League } from "@/types";
 import { cn } from "@/lib/utils";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
+import { ResponsiveFilterBar } from "@/components/ResponsiveFilterBar";
 import { Search, Star } from "lucide-react";
 
 interface MarketProps {
@@ -205,11 +206,22 @@ export function MarketValue({ league }: MarketProps) {
   useLayoutEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
-    const measure = () => setTableOverflows(el.scrollWidth - el.clientWidth > 1);
+    const measure = () => {
+      const overflows = el.scrollWidth - el.clientWidth > 1;
+      setTableOverflows(overflows);
+      // Drive the .dc-scroll-x edge fades: hide them when there's nothing more
+      // to scroll toward on that side (or no overflow at all).
+      el.setAttribute("data-at-start", String(!overflows || el.scrollLeft <= 1));
+      el.setAttribute("data-at-end", String(!overflows || el.scrollLeft + el.clientWidth >= el.scrollWidth - 1));
+    };
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(el);
-    return () => ro.disconnect();
+    el.addEventListener("scroll", measure, { passive: true });
+    return () => {
+      ro.disconnect();
+      el.removeEventListener("scroll", measure);
+    };
   }, [filtered, visibleCount]);
 
   const toggleSort = (key: SortKey) => {
@@ -236,41 +248,49 @@ export function MarketValue({ league }: MarketProps) {
       />
 
       <div className="flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 min-w-[200px] max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            placeholder="Search player..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9 h-9 text-sm"
-            data-testid="input-market-search"
-          />
-        </div>
-        <Select value={posFilter} onValueChange={setPosFilter}>
-          <SelectTrigger className="w-[115px] h-9 text-xs" data-testid="select-market-pos">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Pos</SelectItem>
-            <SelectItem value="QB">QB</SelectItem>
-            <SelectItem value="RB">RB</SelectItem>
-            <SelectItem value="WR">WR</SelectItem>
-            <SelectItem value="TE">TE</SelectItem>
-            <SelectItem value="rookies">Rookies '26</SelectItem>
-          </SelectContent>
-        </Select>
-        <Badge variant="secondary" className="text-xs" data-testid="badge-player-count">
+        <ResponsiveFilterBar
+          className="min-w-0 flex-1"
+          activeCount={posFilter !== "all" ? 1 : 0}
+          onReset={() => { setSearch(""); setPosFilter("all"); }}
+          search={
+            <div className="relative w-full sm:max-w-sm">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                placeholder="Search player..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="pl-9 h-9 text-sm w-full"
+                data-testid="input-market-search"
+              />
+            </div>
+          }
+        >
+          <Select value={posFilter} onValueChange={setPosFilter}>
+            <SelectTrigger className="w-[115px] h-9 text-xs dc-touch" data-testid="select-market-pos">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Pos</SelectItem>
+              <SelectItem value="QB">QB</SelectItem>
+              <SelectItem value="RB">RB</SelectItem>
+              <SelectItem value="WR">WR</SelectItem>
+              <SelectItem value="TE">TE</SelectItem>
+              <SelectItem value="rookies">Rookies '26</SelectItem>
+            </SelectContent>
+          </Select>
+        </ResponsiveFilterBar>
+        <Badge variant="secondary" className="text-xs shrink-0" data-testid="badge-player-count">
           {filtered.length} players
         </Badge>
       </div>
 
       <Card className="overflow-hidden">
-        <div ref={scrollRef} className="overflow-x-auto">
+        <div ref={scrollRef} className="dc-scroll-x">
         <table className="w-full" data-testid="table-market-values">
           <thead>
             <tr className="border-b bg-muted/40">
               <th
-                className="text-left px-2 md:px-4 py-2.5 font-semibold text-xs uppercase tracking-wider cursor-pointer hover:text-[#d4af37] select-none"
+                className="dc-sticky-col text-left px-2 md:px-4 py-2.5 font-semibold text-xs uppercase tracking-wider cursor-pointer hover:text-[#d4af37] select-none bg-muted/40"
                 onClick={() => toggleSort("name")}
                 data-testid="th-name"
               >
@@ -323,7 +343,7 @@ export function MarketValue({ league }: MarketProps) {
                 className={`border-b border-border/30 hover:bg-muted/20 transition-colors ${isPick ? "" : "cursor-pointer"}`}
                 data-testid={`row-player-${row.sleeperId}`}
               >
-                <td className="px-2 md:px-4 py-2">
+                <td className="dc-sticky-col px-2 md:px-4 py-2">
                   <div className="flex items-center gap-2 min-w-0">
                     <PlayerAvatar
                       id={row.sleeperId}

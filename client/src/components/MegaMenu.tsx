@@ -414,7 +414,10 @@ export function MobileBottomNav({ tabs, activeTab, activeSub, onNavigate }: Mobi
           zIndex: 999,
           transform: openMenu ? "translateY(0)" : "translateY(110%)",
           transition: "transform 0.22s cubic-bezier(0.32,0.72,0,1)",
-          background: "rgba(8,15,34,0.97)",
+          // Match the top header bar's brand navy (turns cardinal under the ARI
+          // team theme via --sc-navy). --sc-navy-2 is light-mode only, so fall
+          // back to --sc-navy for dark / x-mode.
+          background: "linear-gradient(180deg, var(--sc-navy) 0%, var(--sc-navy-2, var(--sc-navy)) 100%)",
           backdropFilter: "blur(18px)",
           WebkitBackdropFilter: "blur(18px)",
           borderTop: "1px solid rgba(212,175,55,0.28)",
@@ -471,7 +474,7 @@ export function MobileBottomNav({ tabs, activeTab, activeSub, onNavigate }: Mobi
           zIndex: 1000,
           height: "calc(72px + env(safe-area-inset-bottom, 0px))",
           paddingBottom: "env(safe-area-inset-bottom, 0px)",
-          background: "rgba(8,15,34,0.94)",
+          background: "linear-gradient(180deg, var(--sc-navy) 0%, var(--sc-navy-2, var(--sc-navy)) 100%)",
           backdropFilter: "blur(14px)",
           WebkitBackdropFilter: "blur(14px)",
           borderTop: "1px solid rgba(212,175,55,0.18)",

@@ -12,6 +12,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { SectionHeader } from "@/components/SectionHeader";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useScrollEdges } from "@/hooks/useResponsive";
 import { usePlayerProfile } from "@/contexts/PlayerProfileContext";
 import { cn } from "@/lib/utils";
 import {
@@ -599,6 +600,8 @@ function SuperHeaderRow({ segments, className }: { segments: SuperHeaderSeg[]; c
 // ── Component ─────────────────────────────────────────────────────────────────
 export default function PositionStats() {
   const { openPlayerProfile } = usePlayerProfile();
+  // Edge-fade affordance for the horizontally-scrollable stats table.
+  const { ref: tableScrollRef, refresh: refreshTableEdges } = useScrollEdges<HTMLDivElement>();
   const [subTab, setSubTab]         = useState<"data" | "compare">("data");
   const [position, setPosition]     = useState<Position>("qb");
   const [season, setSeason]         = useState<SeasonKey>("2025");
@@ -804,6 +807,10 @@ export default function PositionStats() {
     }
     return r;
   }, [scoredData, search, sortKey, sortDir, colByKey]);
+
+  // Re-evaluate the scroll-edge fades when the row/column set changes (toggling
+  // columns changes scrollWidth without resizing the container box).
+  useEffect(() => { refreshTableEdges(); }, [rows.length, activeCols.length, subTab, refreshTableEdges]);
 
   const handleSort = (key: string) => {
     if (sortKey === key) {
@@ -1332,7 +1339,7 @@ export default function PositionStats() {
       {/* ── Data sub-tab ─────────────────────────────────────────────────── */}
       {!loading && !error && data && subTab === "data" && (
         <Card className="overflow-hidden p-0" data-testid="stats-table-card">
-          <div className="overflow-x-auto">
+          <div ref={tableScrollRef} className="dc-scroll-x">
             <table className="w-full text-xs border-collapse" data-testid="stats-table">
               <thead>
                 {/* Section super-headers — desktop includes Team, mobile omits it */}

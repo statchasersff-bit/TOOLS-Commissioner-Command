@@ -321,10 +321,10 @@ export default function Transactions({ leagueId }: { leagueId: string }) {
 
       {!isLoading && !error && (
         <>
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-hide -mx-1 px-1">
             {filters.map((f) => (
               <button key={f.key}
-                className={cn("px-3 py-1.5 rounded-full text-xs font-medium transition-all",
+                className={cn("px-3 py-1.5 rounded-full text-xs font-medium transition-all shrink-0 whitespace-nowrap",
                   filter === f.key ? "bg-[#0b3a7a] text-white shadow-sm" : "bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground"
                 )}
                 onClick={() => { setFilter(f.key); setShowCount(50); }}

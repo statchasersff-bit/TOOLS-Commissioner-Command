@@ -935,6 +935,16 @@ function CurrentLeagueTab({ data }: { data: ManagerIntelPayload }) {
         <YouVsThem viewer={viewerRow} target={targetRow} />
       )}
 
+      {viewerRow && targetRow && (
+        <TradeAnalysisSection
+          viewer={viewerRow}
+          target={targetRow}
+          total={selected.totalRosters}
+          tradeOpportunity={selected.tradeOpportunity}
+          relativeWeakness={selected.relativeWeakness}
+        />
+      )}
+
       <ManagerMatchupsSection
         leagueId={selected.leagueId}
         rosterId={targetRow?.rosterId ?? null}
@@ -1406,6 +1416,257 @@ function ComparisonColumn({ title, icon, rows }: { title: string; icon: React.Re
           );
         })}
       </div>
+    </div>
+  );
+}
+
+const TRADE_POSITIONS = ["QB", "RB", "WR", "TE"] as const;
+type TradePos = (typeof TRADE_POSITIONS)[number];
+
+// Dynasty league rank for a position (lower = stronger).
+function dynRankFor(row: LeagueRosterRank, pos: TradePos): number {
+  switch (pos) {
+    case "QB": return row.qbRank;
+    case "RB": return row.rbRank;
+    case "WR": return row.wrRank;
+    case "TE": return row.teRank;
+  }
+}
+
+interface PositionFit {
+  pos: TradePos;
+  you: number;
+  them: number;
+  diff: number; // them - you; positive = you hold the edge at this position
+}
+
+// ── Competitive window ────────────────────────────────────────────────────
+// We classify both rosters off their in-league ranks (lower = stronger) rather
+// than the server's tier+age direction, because the viewer's roster only comes
+// through as a LeagueRosterRank. Using one rank-based model for both keeps the
+// head-to-head symmetric and explainable: win-now standing is the primary axis,
+// since trade posture hinges on whether you're buying or selling for this year.
+type Window = "Contender" | "Bubble" | "Rebuilding";
+
+interface WindowVerdict {
+  window: Window;
+  winNowPct: number;  // 0 = strongest win-now in league, 1 = weakest
+  dynastyPct: number; // 0 = strongest dynasty value, 1 = weakest
+  youthPct: number;   // 0 = youngest, 1 = oldest
+}
+
+function classifyWindow(row: LeagueRosterRank, total: number): WindowVerdict {
+  const pct = (rank: number) => (total > 1 ? (rank - 1) / (total - 1) : 0);
+  const winNowPct = pct(row.winNowRank);
+  const dynastyPct = pct(row.dynastyRank);
+  const youthPct = pct(row.youthRank);
+  const window: Window =
+    winNowPct <= 1 / 3 ? "Contender" : winNowPct >= 2 / 3 ? "Rebuilding" : "Bubble";
+  return { window, winNowPct, dynastyPct, youthPct };
+}
+
+const WINDOW_META: Record<Window, { icon: LucideIcon; cls: string; label: string }> = {
+  Contender:   { icon: Crown,  cls: "text-emerald-300 border-emerald-500/40 bg-emerald-500/[0.08]", label: "Contender" },
+  Bubble:      { icon: Scale,  cls: "text-amber-300 border-amber-500/40 bg-amber-500/[0.08]",        label: "Bubble" },
+  Rebuilding:  { icon: Sprout, cls: "text-sky-300 border-sky-500/40 bg-sky-500/[0.08]",              label: "Rebuilding" },
+};
+
+function WindowBadge({ who, window }: { who: string; window: Window }) {
+  const meta = WINDOW_META[window];
+  const Icon = meta.icon;
+  return (
+    <div className={cn("flex items-center gap-2 rounded-lg border px-3 py-2", meta.cls)}>
+      <Icon className="w-4 h-4 flex-shrink-0" />
+      <div className="leading-tight">
+        <div className="text-[9px] uppercase tracking-wider text-white/45">{who}</div>
+        <div className="text-[13px] font-bold">{meta.label}</div>
+      </div>
+    </div>
+  );
+}
+
+// Strategy is driven by the (viewer window × target window) pairing, then made
+// concrete with the strongest positional edge on each side.
+function tradeStrategy(
+  you: Window,
+  them: Window,
+  yourEdge: PositionFit[],
+  theirEdge: PositionFit[],
+): { headline: string; detail: string } {
+  const sendPos = yourEdge[0]?.pos;
+  const getPos = theirEdge[0]?.pos;
+  const posClause =
+    sendPos && getPos
+      ? ` Make it concrete: package your ${sendPos} depth to land their ${getPos}.`
+      : sendPos
+        ? ` Your ${sendPos} surplus is the asset to move.`
+        : getPos
+          ? ` Their ${getPos} strength is your most realistic target.`
+          : "";
+
+  const key = `${you}|${them}`;
+  const base: Record<string, { headline: string; detail: string }> = {
+    "Contender|Rebuilding": {
+      headline: "Buy now — they're selling.",
+      detail: "You're chasing a title and they're stocking the future. Offer picks and younger upside for their proven win-now production.",
+    },
+    "Contender|Contender": {
+      headline: "Pry value through need, not window.",
+      detail: "You're both buying, so neither will sell a star cheap. Trade from a positional surplus to fix a mutual gap rather than chasing their best players.",
+    },
+    "Contender|Bubble": {
+      headline: "Push them off the fence.",
+      detail: "They're undecided. Offer to consolidate their depth into one of your win-now upgrades, or buy a productive veteran with a pick before they commit to a push.",
+    },
+    "Rebuilding|Contender": {
+      headline: "Sell the present for the future.",
+      detail: "They want to win now and you're building. Move your aging, productive starters to them for picks and young assets.",
+    },
+    "Rebuilding|Rebuilding": {
+      headline: "Swap for fit, not urgency.",
+      detail: "Neither of you is in a hurry. Trade overlapping young pieces or picks to round out positional needs — there's no leverage on either side.",
+    },
+    "Rebuilding|Bubble": {
+      headline: "Fuel their push, bank the future.",
+      detail: "Sell your veterans to a team chasing the playoffs in exchange for picks and youth that fit your timeline.",
+    },
+    "Bubble|Contender": {
+      headline: "Decide if you're buying or selling.",
+      detail: "If you're fading, cash win-now pieces in for their picks and youth. If you're pushing, swap a surplus for the one piece that closes the gap.",
+    },
+    "Bubble|Rebuilding": {
+      headline: "Consolidate for a push.",
+      detail: "Buy their veterans with depth or picks to tip a fence-sitting roster toward contention.",
+    },
+    "Bubble|Bubble": {
+      headline: "Edge out a coin-flip rival.",
+      detail: "Marginal moves decide it. Exploit the positional mismatch to gain a small but real weekly edge over a team at your level.",
+    },
+  };
+  const chosen = base[key] ?? {
+    headline: "Trade off the positional mismatch.",
+    detail: "Lean on where your rosters differ most.",
+  };
+  return { headline: chosen.headline, detail: chosen.detail + posClause };
+}
+
+// Trade Analysis: classifies both teams' competitive windows, recommends a
+// strategy off that pairing, then grounds it in the You-vs-Them dynasty rank
+// gaps — which positions you can sell from, which to target, and the cleanest
+// angle — alongside the league's precomputed trade-opportunity note.
+function TradeAnalysisSection({
+  viewer,
+  target,
+  total,
+  tradeOpportunity,
+  relativeWeakness,
+}: {
+  viewer: LeagueRosterRank;
+  target: LeagueRosterRank;
+  total: number;
+  tradeOpportunity: string;
+  relativeWeakness: string | null;
+}) {
+  const yourWindow = classifyWindow(viewer, total).window;
+  const theirWindow = classifyWindow(target, total).window;
+  // A lower rank is stronger, so diff = theirRank - yourRank. A position only
+  // counts as a real mismatch once the two sides are at least EDGE_GAP apart.
+  const EDGE_GAP = 2;
+  const fits: PositionFit[] = TRADE_POSITIONS.map((pos) => {
+    const you = dynRankFor(viewer, pos);
+    const them = dynRankFor(target, pos);
+    return { pos, you, them, diff: them - you };
+  });
+  const yourEdge = fits.filter((f) => f.diff >= EDGE_GAP).sort((a, b) => b.diff - a.diff);
+  const theirEdge = fits.filter((f) => f.diff <= -EDGE_GAP).sort((a, b) => a.diff - b.diff);
+
+  const sendPos = yourEdge[0]?.pos;
+  const getPos = theirEdge[0]?.pos;
+  const angle =
+    sendPos && getPos
+      ? `Sell from your ${sendPos} surplus to target their ${getPos} — the clearest mismatch between your rosters.`
+      : sendPos
+        ? `You hold the edge at ${yourEdge.map((f) => f.pos).join(", ")}. Shop that surplus to fill gaps elsewhere.`
+        : getPos
+          ? `They're stronger at ${theirEdge.map((f) => f.pos).join(", ")} — your most realistic acquisition targets.`
+          : "Rosters are evenly matched by position — no obvious mismatch to exploit.";
+
+  const strategy = tradeStrategy(yourWindow, theirWindow, yourEdge, theirEdge);
+
+  return (
+    <SectionCard title="Trade Analysis" icon={<Handshake className="w-3.5 h-3.5" />}>
+      {/* Competitive windows — the lens for everything below. */}
+      <div className="grid grid-cols-2 gap-3 mb-3">
+        <WindowBadge who="You" window={yourWindow} />
+        <WindowBadge who="Them" window={theirWindow} />
+      </div>
+
+      {/* Strategy driven by the window pairing + positional edges. */}
+      <div className="mb-3 rounded-md border border-[#d4af37]/25 bg-[#d4af37]/[0.06] px-3 py-2.5">
+        <div className="flex items-center gap-1.5 text-[9px] font-semibold uppercase tracking-wider text-[#d4af37] mb-1">
+          <Target className="w-3 h-3" />
+          <span>Strategy</span>
+        </div>
+        <p className="text-[13.5px] font-bold text-white leading-snug">{strategy.headline}</p>
+        <p className="text-[13px] text-white/75 mt-1 leading-relaxed">{strategy.detail}</p>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <EdgeColumn title="Your edge — assets to send" tone="you" fits={yourEdge} />
+        <EdgeColumn title="Their edge — assets to target" tone="them" fits={theirEdge} />
+      </div>
+
+      <div className="mt-3 rounded-md border border-white/10 bg-white/[0.025] px-3 py-2">
+        <div className="flex items-center gap-1.5 text-[9px] font-semibold uppercase tracking-wider text-white/45 mb-1">
+          <ArrowRightLeft className="w-3 h-3" />
+          <span>Suggested angle</span>
+        </div>
+        <p className="text-[13px] text-white/80 leading-relaxed">{angle}</p>
+      </div>
+
+      {tradeOpportunity && (
+        <p className="text-[12.5px] text-white/60 mt-2 leading-relaxed">{tradeOpportunity}</p>
+      )}
+      {relativeWeakness && (
+        <p className="text-[12px] text-white/45 mt-1 leading-relaxed">
+          <span className="text-white/55 font-semibold">What they're light on: </span>
+          {relativeWeakness}
+        </p>
+      )}
+    </SectionCard>
+  );
+}
+
+function EdgeColumn({ title, tone, fits }: { title: string; tone: "you" | "them"; fits: PositionFit[] }) {
+  const accent = tone === "you" ? "text-emerald-300" : "text-rose-300";
+  return (
+    <div className="rounded-lg border border-white/8 bg-white/[0.025] p-3">
+      <div
+        className={cn(
+          "flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider mb-2",
+          tone === "you" ? "text-emerald-300/70" : "text-rose-300/70",
+        )}
+      >
+        <span>{title}</span>
+      </div>
+      {fits.length === 0 ? (
+        <p className="text-[12px] text-white/40 py-1">No clear edge.</p>
+      ) : (
+        <div className="text-[12.5px]">
+          {fits.map((f) => (
+            <div
+              key={f.pos}
+              className="flex items-center justify-between py-1 border-t border-white/[0.05] first:border-t-0"
+            >
+              <span className="font-semibold text-white/80">{f.pos}</span>
+              <span className="text-white/55 tabular-nums">
+                #{f.you} <span className="text-white/30">vs</span> #{f.them}
+              </span>
+              <span className={cn("font-bold tabular-nums", accent)}>{Math.abs(f.diff)} ranks</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
