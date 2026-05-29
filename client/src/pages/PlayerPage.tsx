@@ -676,7 +676,7 @@ function SeasonFinishesTimeline({ finishes, pos }: { finishes: SeasonFinish[]; p
 
       {/* Timeline (horizontally scrollable) */}
       <div className="overflow-x-auto -mx-1 px-1" style={{ WebkitOverflowScrolling: "touch" }}>
-        <div className="flex items-stretch gap-1.5 min-w-min py-1">
+        <div className="flex items-stretch gap-1.5 w-fit mx-auto py-1">
           {ordered.map((f, i) => {
             const rank = rankOf(f);
             const tier = finishTier(pos, rank);
@@ -1718,53 +1718,35 @@ function AvailabilityTab({
         <MetricCard label="Available" value={`${available.length}`} />
       </div>
 
-      <Card className="p-0 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border/60 bg-muted/30 text-[10px] uppercase tracking-wider text-muted-foreground">
-                <th className="px-3 py-2.5 text-left">League</th>
-                <th className="px-3 py-2.5 text-left">Status</th>
-                <th className="px-3 py-2.5 text-left">Manager</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((e) => (
-                <tr key={e.leagueId} className="border-b border-border/30">
-                  <td className="px-3 py-2.5">
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <AvatarThumb src={e.leagueAvatar} alt={e.leagueName} fallback={e.leagueName} shape="rounded" />
-                      <span className="font-semibold text-foreground truncate">{e.leagueName}</span>
-                    </div>
-                  </td>
-                  <td className="px-3 py-2.5"><ExposureBadge status={e.status} starter={e.starter} /></td>
-                  <td className="px-3 py-2.5">
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <AvatarThumb src={e.managerAvatar} alt={e.status === "owned" ? "You" : e.manager || ""} fallback={e.status === "owned" ? "You" : e.manager || "?"} shape="circle" />
-                      <span className="text-muted-foreground truncate">{e.status === "owned" ? "You" : e.manager || "—"}</span>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </Card>
+      {/* Responsive league grid: 2 columns by default, 4 on large screens. */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {rows.map((e) => (
+          <div
+            key={e.leagueId}
+            data-testid={`availability-card-${e.leagueId}`}
+            className="rounded-xl border border-border/50 bg-card p-3 flex flex-col gap-2"
+          >
+            <div className="flex items-center gap-2.5 min-w-0">
+              <AvatarThumb src={e.leagueAvatar} alt={e.leagueName} fallback={e.leagueName} shape="rounded" />
+              <span className="font-semibold text-foreground truncate text-sm">{e.leagueName}</span>
+            </div>
+            <div className="flex items-center gap-2 min-w-0 pt-2 border-t border-border/30">
+              {e.status === "available" ? (
+                <span className="text-xs text-muted-foreground italic">Available</span>
+              ) : (
+                <>
+                  <AvatarThumb src={e.managerAvatar} alt={e.status === "owned" ? "You" : e.manager || ""} fallback={e.status === "owned" ? "You" : e.manager || "?"} shape="circle" />
+                  <span className="text-xs text-muted-foreground truncate">{e.status === "owned" ? "You" : e.manager || "—"}</span>
+                  {e.status === "owned" && e.starter && (
+                    <span className="ml-auto text-[9px] uppercase tracking-wider text-muted-foreground flex-shrink-0">Starter</span>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
-  );
-}
-
-function ExposureBadge({ status, starter }: { status: PlayerLeagueExposure["status"]; starter: boolean }) {
-  const map = {
-    owned: { text: "Owned", cls: "border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark-any:text-emerald-400" },
-    opponent: { text: "Opponent", cls: "border-sky-500/40 bg-sky-500/10 text-sky-600 dark-any:text-sky-300" },
-    available: { text: "Available", cls: "border-rose-500/40 bg-rose-500/10 text-rose-600 dark-any:text-rose-300" },
-  }[status];
-  return (
-    <span className="inline-flex items-center gap-1.5">
-      <span className={cn("inline-flex rounded-full border px-2 py-0.5 text-[11px] font-bold", map.cls)}>{map.text}</span>
-      {status === "owned" && starter && <span className="text-[9px] uppercase tracking-wider text-muted-foreground">Starter</span>}
-    </span>
   );
 }
 

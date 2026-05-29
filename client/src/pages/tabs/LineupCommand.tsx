@@ -57,6 +57,15 @@ interface SwapRec {
   projGain: number;
 }
 
+// A roster-health problem that blocks Sleeper from accepting an optimized
+// lineup until the user fixes it in Sleeper: players sitting in an IR slot who
+// are no longer IR-eligible, and/or a roster carrying more players than the
+// active roster allows (over-rostered). Surfaced as a pill next to the league.
+interface RosterAlert {
+  illegalIrNames: string[]; // reserve players whose status no longer qualifies for IR
+  overBy: number;           // how many players over the active-roster limit (0 if none)
+}
+
 interface LeagueAnalysis {
   leagueId: string;
   leagueName: string;
@@ -70,6 +79,7 @@ interface LeagueAnalysis {
   gain: number;
   issues: LineupIssue[];
   swaps: SwapRec[];
+  rosterAlert?: RosterAlert | null;
   loading: boolean;
   error: boolean;
 }
@@ -160,6 +170,70 @@ function playerPos(playerDb: Record<string, any>, pid: string): string {
 
 function fmt1(n: number): string {
   return n.toFixed(1);
+}
+
+// A reserve (IR) slot can only hold a player with a qualifying injury
+// designation. A player who is healthy/active again — null/empty status, or
+// "Questionable"/"Active" (which mean they're playable) — is NOT IR-eligible in
+// any Sleeper league, so leaving them in an IR slot makes the roster illegal
+// and blocks lineup submission. We deliberately do NOT flag Out/Doubtful/PUP/
+// Sus/COV/NA/DNR: those can be reserve-eligible depending on league settings,
+// so flagging them would produce false positives.
+function isReserveIneligible(status: string | null | undefined): boolean {
+  if (!status) return true;
+  const s = status.trim().toLowerCase();
+  return s === "" || s === "active" || s === "questionable";
+}
+
+// Detect roster-health problems that block Sleeper from accepting an optimized
+// lineup: (a) players in IR slots who are no longer IR-eligible, and
+// (b) an over-rostered team (more active players than the roster allows — which
+// an ineligible IR player can itself cause, since Sleeper counts them against
+// the active roster). Returns null when the roster is clean.
+//
+// NOTE: only meaningful in-season. Sleeper clears injury_status in the
+// offseason, which would make every reserve player look ineligible — callers
+// must skip this off-season.
+function computeRosterAlert(
+  myRoster: any,
+  rosterPositions: string[],
+  playerDb: Record<string, any>,
+): RosterAlert | null {
+  const reserve: string[] = myRoster?.reserve || [];
+  const taxi: string[] = myRoster?.taxi || [];
+  const players: string[] = myRoster?.players || [];
+
+  const illegalIrNames: string[] = [];
+  const validReserve = new Set<string>();
+  for (const pid of reserve) {
+    if (isReserveIneligible(playerDb[pid]?.injury_status)) illegalIrNames.push(lastName(playerDb, pid));
+    else validReserve.add(pid);
+  }
+
+  // Active-roster capacity = every slot that isn't IR or TAXI (starters + bench).
+  // Players that count against it = everyone except taxi members and players
+  // validly stashed on IR. An ineligible IR player therefore counts here.
+  const activeCapacity = rosterPositions.filter((s) => s !== "IR" && s !== "TAXI").length;
+  const taxiSet = new Set(taxi);
+  const activeOccupants = players.filter((p) => !taxiSet.has(p) && !validReserve.has(p)).length;
+  const overBy = Math.max(0, activeOccupants - activeCapacity);
+
+  if (illegalIrNames.length === 0 && overBy === 0) return null;
+  return { illegalIrNames, overBy };
+}
+
+// Human-readable explanation for the roster-alert pill's tooltip.
+function rosterAlertText(a: RosterAlert): string {
+  const parts: string[] = [];
+  if (a.illegalIrNames.length > 0) {
+    const n = a.illegalIrNames.length;
+    parts.push(`${n} player${n > 1 ? "s" : ""} in an IR slot ${n > 1 ? "are" : "is"} no longer IR-eligible (${a.illegalIrNames.join(", ")}).`);
+  }
+  if (a.overBy > 0) {
+    parts.push(`Roster is ${a.overBy} player${a.overBy > 1 ? "s" : ""} over the limit.`);
+  }
+  parts.push("Fix this in Sleeper to enable Optimize for this league.");
+  return parts.join(" ");
 }
 
 // ─── Core lineup analysis (powered by the Lineup Command engine) ───────────────
@@ -358,7 +432,7 @@ function KpiCard({
 function LeagueRow({ analysis, preseason, onApplied }: { analysis: LeagueAnalysis; preseason?: boolean; onApplied: (leagueId: string) => void }) {
   const [expanded, setExpanded] = useState(false);
   const [applying, setApplying] = useState(false);
-  const { leagueName, format, scoringFormat, avatar, currentProj, gain, issues, swaps, loading, error } = analysis;
+  const { leagueName, format, scoringFormat, avatar, currentProj, gain, issues, swaps, rosterAlert, loading, error } = analysis;
 
   // Push the optimal lineup straight to Sleeper for this league. One click, no
   // confirm (by product choice): submitLineup still runs through the safety
@@ -440,7 +514,20 @@ function LeagueRow({ analysis, preseason, onApplied }: { analysis: LeagueAnalysi
             </div>
           )}
           <div className="min-w-0">
-            <p className="text-[12px] md:text-sm font-bold truncate leading-tight text-[var(--sc-blue)] dark-any:text-white/90">{leagueName}</p>
+            <div className="flex items-center gap-1.5 min-w-0">
+              <p className="text-[12px] md:text-sm font-bold truncate leading-tight text-[var(--sc-blue)] dark-any:text-white/90">{leagueName}</p>
+              {rosterAlert && (
+                <span
+                  className="inline-flex items-center gap-0.5 text-[8px] md:text-[9px] font-bold rounded-full px-1 md:px-1.5 py-0.5 bg-amber-500/15 text-amber-600 dark-any:text-amber-400 border border-amber-500/30 flex-shrink-0 cursor-help"
+                  title={rosterAlertText(rosterAlert)}
+                  onClick={(e) => e.stopPropagation()}
+                  data-testid={`roster-alert-${analysis.leagueId}`}
+                >
+                  <AlertTriangle className="w-2.5 h-2.5 flex-shrink-0" />
+                  <span className="hidden md:inline">Fix in Sleeper</span>
+                </span>
+              )}
+            </div>
             <div className="flex items-center gap-1 mt-0.5">
               <span className="text-[8px] md:text-[9px] font-medium truncate text-[var(--sc-text-muted)] dark-any:text-white/30">{format} · {scoringFormat}</span>
             </div>
@@ -1141,12 +1228,16 @@ export function LineupCommand() {
             !isOffseason,
           );
 
+          // Roster-health check (in-season only — see computeRosterAlert note).
+          const rosterAlert = isOffseason ? null : computeRosterAlert(myRoster, rosterPositions, playerDb);
+
           setAnalyses(prev => ({
             ...prev,
             [league.leagueId]: {
               ...prev[league.leagueId],
               ...result,
               rosterId: myRoster.roster_id,
+              rosterAlert,
               loading: false,
               error:   false,
             },

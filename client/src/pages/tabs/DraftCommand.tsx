@@ -25,6 +25,8 @@ import {
   type ADPResult, type DraftFilters, type Position, type RookieMode,
 } from "@/types/draft";
 import { AdpCrawlPanel } from "@/components/admin/AdpCrawlPanel";
+import { UsageLogPanel } from "@/components/admin/UsageLogPanel";
+import { MoversPanel } from "@/components/draft/MoversPanel";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePlayerProfile } from "@/contexts/PlayerProfileContext";
 
@@ -402,6 +404,14 @@ export function DraftCommand() {
         )}
       </div>
 
+      {/* ── Biggest 7-day ADP movers (startup + rookie drafts) ───────────── */}
+      <MoversPanel
+        rows={rows}
+        teams={typeof filters.teams === "number" ? filters.teams : 12}
+        totalDrafts={meta?.draft_count ?? null}
+        mode={topTab}
+      />
+
       {/* ── Top controls row ─────────────────────────────────────────────── */}
       <div className="space-y-2.5">
         {/* Search + filter button */}
@@ -591,6 +601,7 @@ function AdminAdpTools() {
   return (
     <AdminToolsBoundary>
       <AdpCrawlPanel />
+      <UsageLogPanel />
       <ReclassifyDraftsButton />
     </AdminToolsBoundary>
   );

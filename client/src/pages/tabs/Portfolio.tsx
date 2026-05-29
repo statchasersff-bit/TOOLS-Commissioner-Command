@@ -1002,6 +1002,20 @@ export function PortfolioSummary({ onNavigate }: { onNavigate?: (mainTab: string
                 Shows your active dynasty leagues only. Redraft &amp; keeper leagues,
                 undrafted leagues, leagues where you aren&apos;t assigned a team, and
                 mostly-unclaimed (orphan) pools are filtered out automatically.
+                {onNavigate && (
+                  <>
+                    {" "}
+                    <button
+                      type="button"
+                      onClick={() => onNavigate("settings", "leagues")}
+                      className="font-semibold text-[#d4af37] hover:underline"
+                      data-testid="link-manage-leagues"
+                    >
+                      Manage leagues
+                    </button>{" "}
+                    to show one that isn&apos;t here.
+                  </>
+                )}
               </span>
             </p>
 

@@ -55,7 +55,10 @@ const MEGA_DATA: Record<string, MegaSection[]> = {
         { subId: "roster-comparison",  label: "Compare",            description: "Head-to-head roster comparison",                  icon: GitCompare     },
         { subId: "playoff-calculator", label: "Playoff Calculator", description: "Monte Carlo playoff odds, byes & championship %", icon: Target         },
         { subId: "transactions",       label: "Transactions",       description: "Recent adds, drops & trades league-wide",         icon: ArrowLeftRight },
-        { subId: "commanders-report",  label: "Commander's Report", description: "Monthly recap — trades graded, picks judged, waivers roasted", icon: ScrollText },
+        // TEMPORARILY HIDDEN: Commander's Report nav entry. Component, route
+        // (DynastyCommandCenter "league-analyzer:commanders-report"), API, and
+        // public-share page are all still in place — re-enable by uncommenting.
+        // { subId: "commanders-report",  label: "Commander's Report", description: "Monthly recap — trades graded, picks judged, waivers roasted", icon: ScrollText },
       ],
     },
   ],

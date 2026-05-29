@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { useValueModel } from "@/contexts/ValueModelContext";
 import { getLeagueTeamTiers, getTierColor, getTierEmoji, getPositionColor, isContenderTier, isRebuilderTier } from "@/data/mockData";
 import { cn } from "@/lib/utils";
+import { sideValue } from "@/lib/tradeValue";
 import type { League, Team, Player, Pick, Tier } from "@/types";
 import { formatPickLabel } from "@/types";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
@@ -157,13 +158,6 @@ function getStarterCountForPos(pos: PosLabel, rosterPositions?: string[]): numbe
 }
 
 
-const DIMINISHING_WEIGHTS = [1.00, 0.85, 0.72, 0.60, 0.50, 0.42, 0.36, 0.31];
-function getWeight(i: number): number { return i < DIMINISHING_WEIGHTS.length ? DIMINISHING_WEIGHTS[i] : 0.31; }
-function adjustedTotal(values: number[]): number {
-  const sorted = [...values].sort((a, b) => b - a);
-  return sorted.reduce((s, v, i) => s + v * getWeight(i), 0);
-}
-
 // ── Idea Generator ────────────────────────────────────────────────────────────
 // Selectable table of the user's roster + picks with dynasty and redraft values.
 const IDEA_POSITION_FILTERS = ["QB", "RB", "WR", "TE", "PICK"] as const;
@@ -201,9 +195,10 @@ interface ManagerIdeaGroup {
 }
 
 // Generate fair-ish trade ideas grouped by manager: for each targeted manager,
-// find packages of their position-eligible players/picks whose total dynasty
-// value lands within a fairness band of the offered value. Considers singles,
-// pairs, and one greedy multi-piece package, then keeps the most even ideas.
+// find packages of their position-eligible players/picks whose ADJUSTED trade
+// value (diminishing returns + overpay tax, same as the Trade Calculator) lands
+// within a fairness band of the offered package's adjusted value. Considers
+// singles, pairs, and triples, then keeps the most even ideas.
 function generateTradeIdeas(
   offerValue: number,
   managers: Team[],
@@ -245,7 +240,9 @@ function generateTradeIdeas(
     const ideas: TradeIdea[] = [];
     const consider = (assets: IdeaAsset[]) => {
       if (assets.length === 0) return;
-      const getValue = assets.reduce((s, a) => s + a.value, 0);
+      // Adjusted value (diminishing returns + overpay tax) — same model the Trade
+      // Calculator uses — compared against the equally-adjusted offer value.
+      const getValue = sideValue(assets.map((a) => a.value));
       if (getValue < lo || getValue > hi) return;
       const key = assets.map((a) => a.id).sort().join("+");
       if (seen.has(key)) return;
@@ -253,32 +250,34 @@ function generateTradeIdeas(
       ideas.push({ id: `${m.id}:${key}`, get: assets, getValue, diff: getValue - offerValue });
     };
 
+    // The loops below prune only on the LOWER band bound using raw sums. The
+    // adjusted value is always <= the raw sum (diminishing/overpay only reduce),
+    // so a raw sum below `lo` can never land in-band → safe to break. We do NOT
+    // prune on the upper bound, since a raw sum above `hi` can still adjust down
+    // into the band; consider() does the precise adjusted check.
+
     // Singles — {offer}for1.
     if (returnSizes.has(1)) {
       for (const a of top) consider([a]);
     }
-    // Pairs — {offer}for2 (top is sorted desc → prune once the sum drops below the band).
+    // Pairs — {offer}for2 (top is sorted desc → prune once the raw sum drops below the band).
     if (returnSizes.has(2)) {
       for (let i = 0; i < top.length; i++) {
-        if (top[i].value >= hi) continue;
         for (let j = i + 1; j < top.length; j++) {
-          const sum = top[i].value + top[j].value;
-          if (sum < lo) break;
-          if (sum <= hi) consider([top[i], top[j]]);
+          if (top[i].value + top[j].value < lo) break;
+          consider([top[i], top[j]]);
         }
       }
     }
     // Triples — {offer}for3.
     if (returnSizes.has(3)) {
       for (let i = 0; i < top.length; i++) {
-        if (top[i].value >= hi) continue;
         for (let j = i + 1; j < top.length; j++) {
           const s2 = top[i].value + top[j].value;
-          if (s2 >= hi) continue; // any third piece pushes over the band
           for (let k = j + 1; k < top.length; k++) {
             const s3 = s2 + top[k].value;
             if (s3 < lo) break; // top[k] descending → all further triples fall short
-            if (s3 <= hi) consider([top[i], top[j], top[k]]);
+            consider([top[i], top[j], top[k]]);
           }
         }
       }
@@ -354,7 +353,9 @@ function IdeaGenerator({ userTeam, league }: { userTeam: Team; league: League })
           : { id: r.id, label: formatPickLabel(r.pick), isPick: true, value: r.dynasty },
       );
     if (offer.length === 0) return;
-    const offerValue = offer.reduce((s, a) => s + a.value, 0);
+    // Adjusted value of the offered package (diminishing returns + overpay tax),
+    // matching the Trade Calculator — not a plain sum of dynasty values.
+    const offerValue = sideValue(offer.map((a) => a.value));
     const managers = otherTeams.filter((t) => targetMembers.has(t.id));
     setResult({
       offer,

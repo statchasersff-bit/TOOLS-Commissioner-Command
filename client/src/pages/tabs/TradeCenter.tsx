@@ -20,6 +20,11 @@ import { proposeTrade as proposeTradeAuthed, rejectTrade, firePostTradeLinkDm, t
 import { FeatureDisabledError } from "@/components/FeatureDisabledDialog";
 import type { League, Team, Tier, Player, Pick, TradeRecord, CrawlStatus } from "@/types";
 import { cn } from "@/lib/utils";
+import {
+  adjustedTotal as adjustedTotalOf,
+  rawTotal as rawTotalOf,
+  applyOverpayPenalty as applyOverpayPenaltyTo,
+} from "@/lib/tradeValue";
 import { ShareTradeToDiscordButton, type PollAsset } from "@/components/trade/ShareTradeToDiscordButton";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { usePlayerProfile } from "@/contexts/PlayerProfileContext";
@@ -1395,8 +1400,6 @@ export function TradeBlockScanner({ league }: { league: League }) {
 }
 
 
-const DIMINISHING_WEIGHTS = [1.00, 0.85, 0.72, 0.60, 0.50, 0.42, 0.36, 0.31];
-
 interface TradeAsset {
   id: string;
   type: "player" | "pick";
@@ -1410,17 +1413,14 @@ interface TradeAsset {
   pos?: string;
 }
 
-function getWeight(index: number): number {
-  return index < DIMINISHING_WEIGHTS.length ? DIMINISHING_WEIGHTS[index] : 0.31;
-}
-
+// Diminishing returns + overpay tax live in @/lib/tradeValue so the Trade
+// Calculator and the Finder's Idea Generator value packages identically.
 function calculateAdjustedTotal(assets: TradeAsset[]): number {
-  const sorted = [...assets].sort((a, b) => b.value - a.value);
-  return sorted.reduce((sum, asset, i) => sum + asset.value * getWeight(i), 0);
+  return adjustedTotalOf(assets.map((a) => a.value));
 }
 
 function calculateRawTotal(assets: TradeAsset[]): number {
-  return assets.reduce((sum, a) => sum + a.value, 0);
+  return rawTotalOf(assets.map((a) => a.value));
 }
 
 
@@ -2202,12 +2202,8 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
   const adjB = calculateAdjustedTotal(sideB);
 
   const applyOverpayPenalty = useCallback((assets: TradeAsset[], adjustedTotal: number, rawTotal: number): number => {
-    if (!overpayTax || assets.length === 0) return adjustedTotal;
-    const topAsset = Math.max(...assets.map((a) => a.value));
-    if (topAsset > rawTotal * 0.35) {
-      return adjustedTotal * 0.97;
-    }
-    return adjustedTotal;
+    if (!overpayTax) return adjustedTotal;
+    return applyOverpayPenaltyTo(assets.map((a) => a.value), adjustedTotal, rawTotal);
   }, [overpayTax]);
 
   const finalA = valueAdjustment ? applyOverpayPenalty(sideA, adjA, rawA) : rawA;
@@ -3460,6 +3456,20 @@ export function TradeDatabase({ league }: { league: League }) {
         subtitle="Real dynasty trades contributed by the StatChasers community"
       />
 
+      <div className="flex items-start justify-center md:justify-start gap-3 p-3 rounded-lg bg-[#0b3a7a]/5 dark:bg-blue-400/5 border border-[#0b3a7a]/10 dark:border-blue-400/10" data-testid="trade-db-stats-banner">
+        <Database className="w-4 h-4 text-[#0b3a7a] dark:text-blue-400 flex-shrink-0 mt-0.5" />
+        {stats ? (
+          <p className="text-sm leading-snug text-center md:text-left">
+            <span className="font-bold text-[#d4af37]" data-testid="text-total-trades">{stats.totalTrades.toLocaleString()}</span>
+            <span className="text-muted-foreground"> Real Trades | </span>
+            <span className="font-bold text-[#d4af37]" data-testid="text-total-leagues">{stats.totalLeagues.toLocaleString()}</span>
+            <span className="text-muted-foreground"> Leagues Scanned</span>
+          </p>
+        ) : (
+          <p className="text-sm text-muted-foreground text-center md:text-left">Loading database stats...</p>
+        )}
+      </div>
+
       {mostTraded && mostTraded.length > 0 && (
         <div className="rounded-lg border border-border bg-card/40 p-3" data-testid="most-traded-players">
           <div className="flex items-center gap-2 mb-3">
@@ -3490,20 +3500,6 @@ export function TradeDatabase({ league }: { league: League }) {
           </div>
         </div>
       )}
-
-      <div className="flex items-start justify-center md:justify-start gap-3 p-3 rounded-lg bg-[#0b3a7a]/5 dark:bg-blue-400/5 border border-[#0b3a7a]/10 dark:border-blue-400/10" data-testid="trade-db-stats-banner">
-        <Database className="w-4 h-4 text-[#0b3a7a] dark:text-blue-400 flex-shrink-0 mt-0.5" />
-        {stats ? (
-          <p className="text-sm leading-snug text-center md:text-left">
-            <span className="font-bold text-[#d4af37]" data-testid="text-total-trades">{stats.totalTrades.toLocaleString()}</span>
-            <span className="text-muted-foreground"> Real Trades | </span>
-            <span className="font-bold text-[#d4af37]" data-testid="text-total-leagues">{stats.totalLeagues.toLocaleString()}</span>
-            <span className="text-muted-foreground"> Leagues Scanned</span>
-          </p>
-        ) : (
-          <p className="text-sm text-muted-foreground text-center md:text-left">Loading database stats...</p>
-        )}
-      </div>
 
       <div className="space-y-3">
         <div className="relative" ref={searchContainerRef}>

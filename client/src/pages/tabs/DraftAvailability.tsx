@@ -11,7 +11,7 @@ import {
   buildAvailability, getAvailabilityBucket, BUCKET_CLASS,
   type DraftAvailabilityPlayer, type AvailabilityResult,
 } from "@/lib/draftAvailability";
-import { ChevronDown, TrendingUp, TrendingDown, LayoutGrid, Table2, Loader2, AlertTriangle, Trophy, Sparkles } from "lucide-react";
+import { TrendingUp, TrendingDown, LayoutGrid, Table2, Loader2, AlertTriangle, Trophy, Sparkles } from "lucide-react";
 
 type Format = "SF" | "1QB";
 export type AdpMode = "startup" | "rookie";
@@ -90,71 +90,6 @@ function Segmented<T extends string | number>({ label, options, value, onChange,
         ))}
       </div>
     </div>
-  );
-}
-
-// ── Biggest ADP movers (7-day) ───────────────────────────────────────────────
-// A "mover" is only meaningful for players being taken in the startable core of
-// the board. Back-of-board picks swing dozens of slots on pure draft-to-draft
-// jitter (a 60-pick wobble at ADP 290 is noise; a 10-pick move at ADP 30 is
-// news), so we cap by overall rank. We also require a healthy draft presence so
-// a thinly-drafted name can't post a phantom trend.
-const MOVERS_DEPTH_ROUNDS = 12; // eligible if overall_rank ≤ teams × this (~top 12 rounds)
-const MOVERS_MIN_PRESENCE = 0.25; // and drafted in ≥25% of the slice's drafts
-
-function MoversPanel({ rows, teams, totalDrafts }: { rows: ADPResult[]; teams: number; totalDrafts: number | null }) {
-  const [open, setOpen] = useState(false);
-  const { risers, fallers } = useMemo(() => {
-    const depthCap = teams * MOVERS_DEPTH_ROUNDS;
-    const minPresence = totalDrafts ? totalDrafts * MOVERS_MIN_PRESENCE : 0;
-    const moved = rows.filter(
-      (r) =>
-        !r.is_rookie_placeholder &&
-        r.trend_7d !== 0 &&
-        r.overall_rank <= depthCap &&
-        r.draft_count >= minPresence,
-    );
-    const risers = [...moved].filter((r) => r.trend_7d < 0).sort((a, b) => a.trend_7d - b.trend_7d).slice(0, 5);
-    const fallers = [...moved].filter((r) => r.trend_7d > 0).sort((a, b) => b.trend_7d - a.trend_7d).slice(0, 5);
-    return { risers, fallers };
-  }, [rows, teams, totalDrafts]);
-  if (!risers.length && !fallers.length) return null;
-
-  return (
-    <Card className="overflow-hidden">
-      <button onClick={() => setOpen((v) => !v)} className="w-full flex items-center justify-between px-4 py-2.5 text-sm font-semibold hover:bg-muted/20 transition-colors">
-        <span className="flex items-center gap-2"><TrendingUp className="w-4 h-4 text-[#d4af37]" /> Biggest 7-day ADP movers</span>
-        <ChevronDown className={cn("w-4 h-4 text-muted-foreground transition-transform", open && "rotate-180")} />
-      </button>
-      {open && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 px-4 pb-4 pt-1 border-t border-border/40">
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark-any:text-emerald-400 mb-1.5">Risers</p>
-            {risers.length ? risers.map((r) => (
-              <div key={r.player_id} className="flex items-center justify-between text-[12px] py-0.5">
-                <span className="truncate text-foreground">{r.player_name}</span>
-                <span className="flex items-center gap-1.5 tabular-nums shrink-0">
-                  <span className="text-muted-foreground">ADP {r.avg_pick.toFixed(1)}</span>
-                  <span className="font-bold text-emerald-600 dark-any:text-emerald-400 flex items-center gap-0.5"><TrendingUp className="w-3 h-3" />{Math.abs(r.trend_7d).toFixed(1)}</span>
-                </span>
-              </div>
-            )) : <p className="text-[11px] text-muted-foreground">No risers.</p>}
-          </div>
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-wider text-rose-600 dark-any:text-rose-400 mb-1.5">Fallers</p>
-            {fallers.length ? fallers.map((r) => (
-              <div key={r.player_id} className="flex items-center justify-between text-[12px] py-0.5">
-                <span className="truncate text-foreground">{r.player_name}</span>
-                <span className="flex items-center gap-1.5 tabular-nums shrink-0">
-                  <span className="text-muted-foreground">ADP {r.avg_pick.toFixed(1)}</span>
-                  <span className="font-bold text-rose-600 dark-any:text-rose-400 flex items-center gap-0.5"><TrendingDown className="w-3 h-3" />{Math.abs(r.trend_7d).toFixed(1)}</span>
-                </span>
-              </div>
-            )) : <p className="text-[11px] text-muted-foreground">No fallers.</p>}
-          </div>
-        </div>
-      )}
-    </Card>
   );
 }
 
@@ -555,8 +490,6 @@ export function DraftAvailability() {
           {renderModeToggle()}
         </div>
       </div>
-
-      <MoversPanel rows={rows} teams={teams} totalDrafts={draftCount} />
 
       {/* Filters */}
       <Card className="p-3 sm:p-4">

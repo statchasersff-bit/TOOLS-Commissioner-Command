@@ -656,3 +656,55 @@ export type AssetPosition = typeof assetPositions.$inferSelect;
 export type PortfolioEvent = typeof portfolioEvents.$inferSelect;
 export type PortfolioValueSnapshot = typeof portfolioValueSnapshots.$inferSelect;
 export type PickValueHistory = typeof pickValueHistory.$inferSelect;
+
+// ── Product analytics: sessions + page views ─────────────────────────────────
+// Lightweight first-party usage tracking so we can answer "who used the tool,
+// for how long, on which pages, and did they connect Sleeper". Two tables:
+//   • analytics_sessions  — one row per browser visit (sessionStorage id). Holds
+//     the identity we learn during the visit (SC account id, set server-side
+//     from the auth cookie; Sleeper user/username, sent by the client on
+//     connect) plus the duration window (started_at → last_seen_at) maintained
+//     by heartbeats. visitor_id (localStorage) ties repeat visits together.
+//   • analytics_page_views — one row per route change, ts + path.
+// Connected-token status is NOT stored here; it's derived at report time by
+// joining sc_user_id / sleeper_user_id against sc_connected_accounts so the
+// untrusted client can never assert write-access.
+export const analyticsSessions = pgTable("analytics_sessions", {
+  // Client-generated, opaque. Per browser tab/visit (sessionStorage).
+  sessionId: varchar("session_id", { length: 40 }).primaryKey(),
+  // Persistent across visits in the same browser (localStorage). Lets us count
+  // returning visitors without an account.
+  visitorId: varchar("visitor_id", { length: 40 }),
+  // Authoritative — written server-side from the auth cookie/JWT, never trusted
+  // from the request body. Null for anonymous visitors.
+  scUserId: varchar("sc_user_id"),
+  // Learned client-side once a Sleeper username resolves (read-only connect or
+  // the authed connect flow). Username is a public handle, not a credential.
+  sleeperUserId: varchar("sleeper_user_id", { length: 32 }),
+  sleeperUsername: text("sleeper_username"),
+  userAgent: text("user_agent"),
+  referrer: text("referrer"),
+  startedAt: timestamp("started_at").defaultNow().notNull(),
+  lastSeenAt: timestamp("last_seen_at").defaultNow().notNull(),
+  pageviewCount: integer("pageview_count").notNull().default(0),
+}, (t) => ({
+  visitorIdx: index("analytics_sessions_visitor_idx").on(t.visitorId),
+  scUserIdx: index("analytics_sessions_sc_user_idx").on(t.scUserId),
+  sleeperIdx: index("analytics_sessions_sleeper_idx").on(t.sleeperUserId),
+  lastSeenIdx: index("analytics_sessions_last_seen_idx").on(t.lastSeenAt),
+}));
+
+export const analyticsPageViews = pgTable("analytics_page_views", {
+  id: serial("id").primaryKey(),
+  sessionId: varchar("session_id", { length: 40 }).notNull(),
+  // Normalized in-app route, e.g. "/draft/availability". Player/manager ids are
+  // collapsed to ":id" client-side to keep cardinality low.
+  path: text("path").notNull(),
+  ts: timestamp("ts").defaultNow().notNull(),
+}, (t) => ({
+  sessionIdx: index("analytics_page_views_session_idx").on(t.sessionId),
+  tsIdx: index("analytics_page_views_ts_idx").on(t.ts),
+}));
+
+export type AnalyticsSession = typeof analyticsSessions.$inferSelect;
+export type AnalyticsPageView = typeof analyticsPageViews.$inferSelect;

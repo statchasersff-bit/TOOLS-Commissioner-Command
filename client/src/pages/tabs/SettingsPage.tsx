@@ -34,18 +34,23 @@ const PILL_INACTIVE =
  * the Manage Account page. Theme and league selections persist immediately;
  * the favorite-team picker uses a draft + Save so users can browse first.
  */
-export function SettingsPage() {
+export function SettingsPage({ initialTab = "general" }: { initialTab?: SettingsTab } = {}) {
   const { toast } = useToast();
   const { isAuthenticatedUser } = useAuth();
   const { favoriteAbbr, saving, setFavoriteTeam, clearFavoriteTeam } = useFavoriteTeam();
   const { themeMode, setThemeMode, myTeamReady } = useTheme();
   const { isConnected, allLeagues, includedLeagueIds, setLeagueIncluded } = useSleeper();
 
-  const [activeTab, setActiveTab] = useState<SettingsTab>("general");
+  const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab);
 
   const includedSet = new Set(includedLeagueIds);
   const selectedLeagues = allLeagues.filter((l) => includedSet.has(l.leagueId));
   const filteredOutLeagues = allLeagues.filter((l) => !includedSet.has(l.leagueId));
+
+  // Group filtered-out leagues by WHY they were filtered, so we show one
+  // category sub-heading per reason instead of repeating a pill on every row.
+  // Eligible leagues the user manually hid have no reason → "Hidden by you".
+  const filteredOutGroups = groupByFilterReason(filteredOutLeagues);
 
   // Draft the favorite team so the user can browse around before committing.
   const [draftAbbr, setDraftAbbr] = useState<string | null>(favoriteAbbr);
@@ -252,12 +257,23 @@ export function SettingsPage() {
               emptyText="No leagues selected — pick at least one below."
             />
             {filteredOutLeagues.length > 0 && (
-              <LeagueGroup
-                label={`Filtered out (${filteredOutLeagues.length})`}
-                leagues={filteredOutLeagues}
-                includedSet={includedSet}
-                onToggle={setLeagueIncluded}
-              />
+              <div className="space-y-3">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Filtered out ({filteredOutLeagues.length})
+                </p>
+                <div className="space-y-3 border-l-2 border-border/40 pl-3">
+                  {filteredOutGroups.map((g) => (
+                    <LeagueGroup
+                      key={g.label}
+                      label={`${g.label} · ${g.leagues.length}`}
+                      leagues={g.leagues}
+                      includedSet={includedSet}
+                      onToggle={setLeagueIncluded}
+                      showReason={false}
+                    />
+                  ))}
+                </div>
+              </div>
             )}
           </div>
         )}
@@ -267,14 +283,47 @@ export function SettingsPage() {
   );
 }
 
+// Leagues the user manually hid (eligible by default, opted out) have no
+// filterReason — bucket them here.
+const HIDDEN_BY_USER = "Hidden by you";
+// Preferred display order for the reason categories; anything not listed
+// (defensive — should match fetchSleeperLeagues' reasons) sorts after these.
+const FILTER_REASON_ORDER = [
+  "Not drafted yet",
+  "Draft not scheduled",
+  "Inactive",
+  "No team in this league",
+  HIDDEN_BY_USER,
+];
+
+function groupByFilterReason(
+  leagues: SleeperLeagueSummary[],
+): Array<{ label: string; leagues: SleeperLeagueSummary[] }> {
+  const byReason = new Map<string, SleeperLeagueSummary[]>();
+  for (const lg of leagues) {
+    const key = lg.filterReason ?? HIDDEN_BY_USER;
+    const bucket = byReason.get(key);
+    if (bucket) bucket.push(lg);
+    else byReason.set(key, [lg]);
+  }
+  const rank = (k: string) => {
+    const i = FILTER_REASON_ORDER.indexOf(k);
+    return i === -1 ? FILTER_REASON_ORDER.length : i;
+  };
+  return Array.from(byReason.keys())
+    .sort((a, b) => rank(a) - rank(b) || a.localeCompare(b))
+    .map((label) => ({ label, leagues: byReason.get(label)! }));
+}
+
 function LeagueGroup({
-  label, leagues, includedSet, onToggle, emptyText,
+  label, leagues, includedSet, onToggle, emptyText, showReason = true,
 }: {
   label: string;
   leagues: SleeperLeagueSummary[];
   includedSet: Set<string>;
   onToggle: (leagueId: string, included: boolean) => void;
   emptyText?: string;
+  showReason?: boolean;
 }) {
   return (
     <div className="space-y-1.5">
@@ -289,6 +338,7 @@ function LeagueGroup({
               league={lg}
               checked={includedSet.has(lg.leagueId)}
               onToggle={onToggle}
+              showReason={showReason}
             />
           ))}
         </ul>
@@ -298,11 +348,12 @@ function LeagueGroup({
 }
 
 function LeagueRow({
-  league, checked, onToggle,
+  league, checked, onToggle, showReason = true,
 }: {
   league: SleeperLeagueSummary;
   checked: boolean;
   onToggle: (leagueId: string, included: boolean) => void;
+  showReason?: boolean;
 }) {
   const avatarUrl = league.avatar ? `https://sleepercdn.com/avatars/thumbs/${league.avatar}` : null;
   const initials = league.name.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase();
@@ -331,7 +382,7 @@ function LeagueRow({
             {league.scoringFormat} {league.format} · {league.totalRosters}-team
           </span>
         </span>
-        {league.filterReason && (
+        {showReason && league.filterReason && (
           <span className="text-[9px] font-medium uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 flex-shrink-0">
             {league.filterReason}
           </span>

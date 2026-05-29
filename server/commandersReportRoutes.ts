@@ -19,6 +19,28 @@ import { commandersReports } from "@shared/schema";
 import { getUserIdFromRequest } from "./scAuthRoutes";
 import { buildRecap, listActivePeriods, isTone, type ToneId, type RecapResult } from "./commandersReport";
 import { narrateReportTemplate, TEMPLATE_NARRATOR_ID } from "./templateNarrator";
+import { narrateReportClaude, isClaudeNarrationAvailable, CLAUDE_NARRATOR_ID } from "./claudeNarrator";
+
+/**
+ * Produce the narrated article from a recap. Prefers the Claude narrator (the
+ * ranked-storyline roast essay) when ANTHROPIC_API_KEY is set; falls back to the
+ * deterministic template narrator on no key OR any Claude error, so /generate
+ * always returns prose rather than 503-ing.
+ */
+async function generateArticle(
+  recap: RecapResult,
+  seed: string,
+): Promise<{ article: unknown; model: string }> {
+  if (isClaudeNarrationAvailable()) {
+    try {
+      const article = await narrateReportClaude(recap, seed);
+      return { article, model: CLAUDE_NARRATOR_ID };
+    } catch (err) {
+      console.warn("[CommandersReport] Claude narration failed, falling back to template:", err);
+    }
+  }
+  return { article: narrateReportTemplate(recap, seed), model: TEMPLATE_NARRATOR_ID };
+}
 
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
 const db = drizzle(pool);
@@ -145,7 +167,7 @@ export function registerCommandersReportRoutes(app: Express): void {
         generatedAt: generatedAt ?? null,
         model: model ?? null,
         tone,
-        narrationAvailable: true,
+        narrationAvailable: isClaudeNarrationAvailable(),
         cached: article != null,
       });
     } catch (err: any) {
@@ -154,9 +176,10 @@ export function registerCommandersReportRoutes(app: Express): void {
     }
   });
 
-  // ── Regenerate (fresh template spin) ──────────────────────────────────────
-  // No LLM, no API key: re-runs the template narrator with a randomized seed so
-  // the prose varies on each click, then re-caches it.
+  // ── Regenerate (fresh narration) ──────────────────────────────────────────
+  // Prefers the Claude narrator (ranked-storyline roast essay) when a key is
+  // configured; otherwise re-runs the template narrator with a randomized seed so
+  // the prose still varies on each click. Either way the result is re-cached.
   app.post("/api/commanders-report/generate", async (req, res) => {
     const uid = requireUser(req, res);
     if (!uid) return;
@@ -170,13 +193,13 @@ export function registerCommandersReportRoutes(app: Express): void {
     try {
       const { recap, rowId } = await ensureRecap(String(leagueId), yr, mo, tone);
       const seed = `${leagueId}-${yr}-${mo}-${tone}-${Date.now()}-${Math.random()}`;
-      const article = narrateReportTemplate(recap, seed);
+      const { article, model } = await generateArticle(recap, seed);
       const now = new Date();
       await db
         .update(commandersReports)
-        .set({ article: article as unknown as object, model: TEMPLATE_NARRATOR_ID, generatedBy: uid, generatedAt: now })
+        .set({ article: article as unknown as object, model, generatedBy: uid, generatedAt: now })
         .where(eq(commandersReports.id, rowId));
-      res.json({ recap, article, generatedAt: now, model: TEMPLATE_NARRATOR_ID, tone, narrationAvailable: true, cached: false });
+      res.json({ recap, article, generatedAt: now, model, tone, narrationAvailable: isClaudeNarrationAvailable(), cached: false });
     } catch (err: any) {
       const status = /sleeper|fetch/i.test(err?.message || "") ? 502 : 500;
       res.status(status).json({ error: err?.message || "Failed to generate report" });

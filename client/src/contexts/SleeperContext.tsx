@@ -4,6 +4,7 @@ import { fetchSleeperUser, fetchSleeperLeagues } from "@/lib/sleeperApi";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "@/hooks/use-toast";
 import { API_BASE } from "@/lib/apiBase";
+import { identify } from "@/lib/analytics";
 
 // IMPORTANT: there is intentionally no localStorage key for the Sleeper
 // connection. The connection is derived from useAuth().sleeperInfo, which is
@@ -115,6 +116,13 @@ export function SleeperProvider({ children }: { children: React.ReactNode }) {
     try {
       const userData = await fetchSleeperUser(username);
       setUser(userData);
+
+      // Attribute the current analytics session to this Sleeper user so the
+      // usage log can tie page views / duration to a username (covers both the
+      // read-only header connect and the authed connect flow).
+      if (userData?.userId) {
+        identify({ sleeperUserId: userData.userId, sleeperUsername: userData.username });
+      }
 
       // Fire the passive ADP enrichment POST on explicit read-only connects
       // (i.e. the user typed a username in the header). The auth-flow path

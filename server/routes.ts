@@ -92,6 +92,7 @@ import { registerBillingRoutes } from "./billingRoutes";
 import { registerSleeperDraftPickRoutes } from "./sleeperDraftPickRoutes";
 import { registerDiscordRoutes } from "./discord";
 import { registerCommandersReportRoutes } from "./commandersReportRoutes";
+import { registerAnalyticsRoutes } from "./analytics";
 import { requireReadOnlySleeperContext } from "./accessMiddleware";
 import { getManagerIntel } from "./managerIntel";
 import {
@@ -205,6 +206,7 @@ export async function registerRoutes(
   registerSleeperDraftPickRoutes(app);
   registerDiscordRoutes(app);
   registerCommandersReportRoutes(app);
+  registerAnalyticsRoutes(app);
 
   app.get("/api/health", (_req, res) => {
     res.json({ status: "ok", ts: Date.now() });

@@ -77,6 +77,38 @@ export interface ManagerSummary {
   chaosScore: number;
 }
 
+export type StorylineType =
+  | "rookie_reach"
+  | "massive_rookie_reach"
+  | "rookie_value"
+  | "rookie_pick_hoarder"
+  | "position_collector"
+  | "ghost_owner"
+  | "pick_downgrade_trade"
+  | "mystery_box_trade"
+  | "old_name_faab"
+  | "faab_overpay"
+  | "roster_churn_theater"
+  | "confusing_aggression";
+
+// Mirrors server/storylines.ts → Storyline.
+export interface Storyline {
+  storyline_type: StorylineType;
+  manager: string;
+  involved_players: string[];
+  involved_picks: string[];
+  positions: string[];
+  player_archetypes: string[];
+  data_points: Record<string, string | number | null>;
+  why_it_matters: string;
+  suggested_roast_angle: string;
+  safe_for_opening: boolean;
+  good_for_callback: boolean;
+  claimIds: string[];
+  score: number;
+  scoreBreakdown: Record<string, number>;
+}
+
 export interface RecapResult {
   meta: {
     leagueId: string;
@@ -94,6 +126,8 @@ export interface RecapResult {
   chaosScore: { score: number; tier: string; drivers: string[] };
   managerSummaries: ManagerSummary[];
   claims: Claim[];
+  /** Ranked storyline package (top 6-8). Optional: recaps cached before this existed omit it. */
+  storylines?: Storyline[];
 }
 
 export interface Article {

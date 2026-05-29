@@ -61,10 +61,6 @@ export function NFLNewsTicker() {
 
   return (
     <div className="flex border-y border-[#d4af37]/20 bg-[#07111f] overflow-hidden">
-      <div className="flex-shrink-0 bg-[#d4af37] text-[#07111f] px-3 md:px-4 flex items-center font-bold uppercase tracking-wider text-[10px] md:text-xs">
-        NFL News
-      </div>
-
       <div className="relative flex-1 overflow-hidden">
         <div className="flex w-max animate-news-ticker">
           {tickerItems.map((item, index) => {

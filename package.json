@@ -12,6 +12,7 @@
     "test:portfolio": "tsx server/portfolioValueService.test.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.100.1",
     "@hcaptcha/react-hcaptcha": "^2.0.2",
     "@hookform/resolvers": "^3.10.0",
     "@jridgewell/trace-mapping": "^0.3.25",

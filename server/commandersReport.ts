@@ -13,9 +13,17 @@
  * claim the user can audit in the "Data Receipts" UI. No LLM calls anywhere.
  */
 import { fetchLeagueTransactions, fetchSleeperLeagueFull } from "./sleeper";
-import { getFantasyCalcValues } from "./fantasycalc";
+import { getFantasyCalcValues, getFantasyCalcRedraftValues } from "./fantasycalc";
 import { getAdp } from "./adp";
 import { rateLimitedFetchJson } from "./adp";
+import {
+  rankStorylines,
+  type Storyline,
+  type StorylineInput,
+  type SLRookiePick,
+  type SLTrade,
+  type SLWaiver,
+} from "./storylines";
 
 // ── Shared types (mirrored by client/src/lib/commandersReportApi.ts) ─────────
 
@@ -132,6 +140,11 @@ export interface RecapResult {
   chaosScore: { score: number; tier: string; drivers: string[] };
   managerSummaries: ManagerSummary[];
   claims: Claim[];
+  /**
+   * Ranked storyline package (top 6-8). This — not the category recaps — is what
+   * the narrator builds the article from. See server/storylines.ts.
+   */
+  storylines: Storyline[];
 }
 
 // ── Time helpers ─────────────────────────────────────────────────────────────
@@ -366,6 +379,17 @@ export async function buildRecap(leagueId: string, year: number, month: number):
   const vals = makeValueLookup(valuesBySleeperId);
   const haveValues = Object.keys(valuesBySleeperId).length > 0;
 
+  // Per-player dynasty metadata (value, age, market rank) for the storyline
+  // engine — archetype derivation and "marquee name" scoring lean on this.
+  const metaById = new Map<string, { value: number; age: number; marketRank: number }>();
+  for (const p of fc?.players ?? []) {
+    metaById.set(p.sleeperId, { value: p.value, age: p.age, marketRank: p.overallRank });
+  }
+  // Redraft values separate the "still productive name" from "dynasty asset" —
+  // the Old Name FAAB detector compares the two. Cached, so this is cheap.
+  const redraftRaw = await getFantasyCalcRedraftValues(fcFormat).catch(() => null);
+  const redraftById = redraftRaw?.valuesBySleeperId ?? {};
+
   const teams = leagueFull.league.teams;
   const totalRosters = txnResult.totalRosters || teams.length || 12;
   const directions = inferTeamDirections(teams, vals);
@@ -409,6 +433,7 @@ export async function buildRecap(leagueId: string, year: number, month: number):
   // ── Rookie draft recap ──────────────────────────────────────────────────
   const draftsInMonth = await fetchLeagueDraftsInMonth(leagueId, startMs, endMs);
   const rookieRows: RookiePickRow[] = [];
+  const slRookiePicks: SLRookiePick[] = [];
   const rookieClaimCandidates: Array<{ claim: Claim; absDelta: number }> = [];
   for (const { draft, picks } of draftsInMonth) {
     const teamsInDraft = draft.settings?.teams || totalRosters;
@@ -420,15 +445,32 @@ export async function buildRecap(leagueId: string, year: number, month: number):
       const delta = adpPick != null ? round1(adpPick - p.pick_no) : null;
       const cls = delta != null ? classifyRookieDelta(delta) : { label: "Unranked", severity: "info" as Severity };
       const label = pickLabel(p.pick_no, teamsInDraft);
+      const position = p.metadata?.position ?? "?";
+      const meta = metaById.get(p.player_id);
       rookieRows.push({
         pickNo: p.pick_no,
         pickLabel: label,
         player,
-        position: p.metadata?.position ?? "?",
+        position,
         manager,
         adpPick: adpPick != null ? round1(adpPick) : null,
         delta,
         classification: cls.label,
+      });
+      slRookiePicks.push({
+        manager,
+        player,
+        playerId: p.player_id,
+        position,
+        pickNo: p.pick_no,
+        pickLabel: label,
+        round: Math.floor((p.pick_no - 1) / Math.max(teamsInDraft, 1)) + 1,
+        adpPick: adpPick != null ? round1(adpPick) : null,
+        delta,
+        classification: cls.label,
+        marketRank: meta?.marketRank ?? null,
+        value: meta?.value ?? null,
+        age: meta?.age ?? null,
       });
       // Only emit a steal/reach claim when we actually have ADP coverage.
       if (delta != null && cls.label !== "Fair Value") {
@@ -471,18 +513,32 @@ export async function buildRecap(leagueId: string, year: number, month: number):
   // ── Trade recap ───────────────────────────────────────────────────────────
   const tradeTxns = periodTxns.filter((t) => t.type === "trade");
   const tradeRows: TradeRow[] = [];
+  const slTrades: SLTrade[] = [];
   for (const t of tradeTxns) {
     const tradeId = `trade-${t.timestamp}-${t.involvedTeams.map((x) => x.rosterId).sort().join("-")}`;
+    // Per-side pick flows: what each manager received vs. shipped out. Needed for
+    // the Pick Downgrade detector (paid to move backward).
+    const slSidesById = new Map<string, { sentPicks: string[]; sentPickValue: number; sentRounds: number[]; pickValue: number; playerValue: number; receivedRounds: number[] }>();
     const sideInfos: SideValueInfo[] = t.involvedTeams.map((team) => {
       const playersReceived = t.adds.filter((a) => a.rosterId === team.rosterId);
       const picksReceived = t.draftPicks.filter((dp) => dp.toTeam === team.teamName);
+      const picksSent = t.draftPicks.filter((dp) => dp.fromTeam === team.teamName);
       const faabReceived = t.faabTransfers
         .filter((f) => f.toTeam === team.teamName)
         .reduce((s, f) => s + f.amount, 0);
       const playerDetails = playersReceived.map((a) => ({ name: a.name, value: vals.playerValue(a.playerId) }));
       const playerVal = playerDetails.reduce((s, p) => s + p.value, 0);
       const pickVal = picksReceived.reduce((s, dp) => s + vals.pickValue(parseInt(dp.season, 10), dp.round), 0);
+      const sentPickVal = picksSent.reduce((s, dp) => s + vals.pickValue(parseInt(dp.season, 10), dp.round), 0);
       const faabVal = faabReceived * 50; // same value-per-$ yardstick as waivers
+      slSidesById.set(team.teamName, {
+        sentPicks: picksSent.map((dp) => `${dp.season} R${dp.round}`),
+        sentPickValue: Math.round(sentPickVal),
+        sentRounds: picksSent.map((dp) => dp.round),
+        pickValue: Math.round(pickVal),
+        playerValue: Math.round(playerVal),
+        receivedRounds: picksReceived.map((dp) => dp.round),
+      });
       return {
         side: {
           manager: team.teamName,
@@ -501,9 +557,11 @@ export async function buildRecap(leagueId: string, year: number, month: number):
     const minVal = sideValues.length ? Math.min(...sideValues) : 0;
     const lop = maxVal > 0 ? round2((maxVal - minVal) / maxVal) : 0;
     const winner = maxVal > 0 && sides.length >= 2 ? sides.reduce((a, b) => (a.value >= b.value ? a : b)).manager : null;
+    const loser = maxVal > 0 && sides.length >= 2 ? sides.reduce((a, b) => (a.value <= b.value ? a : b)).manager : null;
     const { grade, severity } = gradeFromLopsidedness(lop);
     const reason = describeTradeReason(sides, directions);
     void severity; // severity is re-derived per claim below from lopsidedness
+    const mysteryBox = haveValues ? detectMysteryBox(sideInfos, eliteFloor) : null;
     tradeRows.push({
       id: tradeId,
       date: new Date(t.timestamp).toISOString(),
@@ -512,7 +570,31 @@ export async function buildRecap(leagueId: string, year: number, month: number):
       lopsidedness: lop,
       grade,
       reason,
-      mysteryBox: haveValues ? detectMysteryBox(sideInfos, eliteFloor) : null,
+      mysteryBox,
+    });
+    slTrades.push({
+      id: tradeId,
+      sides: sides.map((s) => {
+        const extra = slSidesById.get(s.manager)!;
+        return {
+          manager: s.manager,
+          players: s.players,
+          picks: s.picks,
+          faab: s.faab,
+          value: s.value,
+          playerValue: extra.playerValue,
+          pickValue: extra.pickValue,
+          receivedRounds: extra.receivedRounds,
+          sentPicks: extra.sentPicks,
+          sentPickValue: extra.sentPickValue,
+          sentRounds: extra.sentRounds,
+        };
+      }),
+      winner,
+      loser,
+      lopsidedness: lop,
+      grade,
+      mysteryBox,
     });
   }
   // Claims + UI rows: the most lopsided trades are the most worth narrating.
@@ -544,6 +626,7 @@ export async function buildRecap(leagueId: string, year: number, month: number):
   // ── Waiver / FAAB recap ─────────────────────────────────────────────────
   const waiverTxns = periodTxns.filter((t) => t.type === "waiver" || t.type === "free_agent");
   const waiverRows: WaiverRow[] = [];
+  const slWaivers: SLWaiver[] = [];
   let totalFaab = 0;
   // "Roster churn" signal: a player picked up this month and then dropped again
   // in a *later* transaction within the same window.
@@ -573,6 +656,21 @@ export async function buildRecap(leagueId: string, year: number, month: number):
         faab,
         spendPct,
         classification: cls.label,
+      });
+      const meta = metaById.get(a.playerId);
+      slWaivers.push({
+        id,
+        manager: a.teamName,
+        player: a.name,
+        playerId: a.playerId,
+        position: a.pos ?? "?",
+        faab,
+        spendPct,
+        addedValue: Math.round(addedValue),
+        classification: cls.label,
+        age: meta?.age ?? null,
+        marketRank: meta?.marketRank ?? null,
+        redraftValue: redraftById[a.playerId] ?? null,
       });
     }
   }
@@ -647,6 +745,28 @@ export async function buildRecap(leagueId: string, year: number, month: number):
     ? "medium"
     : "high";
 
+  // ── Ranked storyline package (the article is built from this) ─────────────
+  // Median rostered-player value: the yardstick the Old Name FAAB detector uses
+  // for "below the league's normal dynasty asset". rosterValues is sorted desc.
+  const leagueMedianValue = rosterValues.length ? rosterValues[Math.floor(rosterValues.length / 2)] : 0;
+  // A "real" manager handle roasts better than a "Team 7" placeholder; flag which
+  // names are genuine so the ranker can weight name relevance.
+  const isPlaceholderName = (n: string) => /^Team \d+$/.test(n) || /^Owner \d+$/.test(n) || n === "Unknown";
+  const realManagers = new Set<string>();
+  for (const s of managerSummaries) if (!isPlaceholderName(s.manager)) realManagers.add(s.manager);
+  const storylineInput: StorylineInput = {
+    leagueName: txnResult.leagueName,
+    format,
+    faabBudget,
+    rookiePicks: slRookiePicks,
+    trades: slTrades,
+    waivers: slWaivers,
+    managerSummaries,
+    leagueMedianValue,
+    realManagers,
+  };
+  const storylines = rankStorylines(storylineInput);
+
   return {
     meta: {
       leagueId,
@@ -664,6 +784,7 @@ export async function buildRecap(leagueId: string, year: number, month: number):
     chaosScore: chaos,
     managerSummaries,
     claims,
+    storylines,
   };
 }
 

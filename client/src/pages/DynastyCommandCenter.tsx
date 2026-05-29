@@ -532,7 +532,7 @@ export default function DynastyCommandCenter({ params, playerProfileId, managerP
 
     if (activeMainTab === "feedback") return <FeedbackPage />;
     if (activeMainTab === "manage-account") return <ManageAccount />;
-    if (activeMainTab === "settings") return <SettingsPage />;
+    if (activeMainTab === "settings") return <SettingsPage initialTab={activeSubTab === "leagues" ? "leagues" : "general"} />;
     if (activeMainTab === "redraft-command") return <RedraftCommandPage onBack={() => handleMainTabChange("portfolio")} />;
     if (activeMainTab === "commissioner-command") return <CommissionerCommandPage onBack={() => handleMainTabChange("portfolio")} />;
     if (activeMainTab === "terms") return <TermsPage onNavigate={handleMainTabChange} />;

@@ -4,6 +4,9 @@ import { getStaticPickValue } from "../data/pickValues";
 import { getFantasyCalcValues, getFantasyCalcRedraftValues } from "@/lib/fantasycalcApi";
 import { getKtcValues, getKtcRedraftValues } from "@/lib/ktcApi";
 import { scAuthFetch } from "@/lib/scAuthFetch";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Info } from "lucide-react";
 import dynastySnapshot from "@/data/fantasycalc_snapshot_sf.json";
 import redraftSnapshot from "@/data/fantasycalc_snapshot_redraft_sf.json";
 
@@ -293,9 +296,17 @@ export function ValueModelProvider({ children }: { children: React.ReactNode }) 
     return () => { cancelled = true; };
   }, [sourceId]);
 
+  // KeepTradeCut only publishes a single trade-value set (it's effectively
+  // 0.5-PPR — KTC has no Standard or full-PPR values). This isn't widely known,
+  // so we surface a one-time-per-selection notice whenever the user switches to
+  // KTC. Only fires on an explicit selection, never on initial load (which uses
+  // setSourceIdRaw from localStorage).
+  const [ktcNoticeOpen, setKtcNoticeOpen] = useState(false);
+
   const setSourceId = useCallback((id: ValueSourceId) => {
     const source = VALUE_SOURCES.find((s) => s.id === id);
     if (!source?.active) return;
+    if (id === "ktc") setKtcNoticeOpen(true);
     try { localStorage.setItem("sc-value-source", id); } catch {}
     setIsRecalculating(true);
     setTimeout(() => {
@@ -592,6 +603,37 @@ export function ValueModelProvider({ children }: { children: React.ReactNode }) 
   return (
     <ValueModelContext.Provider value={value}>
       {children}
+      <Dialog open={ktcNoticeOpen} onOpenChange={setKtcNoticeOpen}>
+        <DialogContent className="max-w-md" data-testid="dialog-ktc-scoring-notice">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Info className="w-4 h-4 text-[#d4af37]" />
+              Heads up about KeepTradeCut
+            </DialogTitle>
+            <DialogDescription className="space-y-2 pt-1 text-left">
+              <span className="block">
+                KeepTradeCut publishes a single set of trade values — effectively{" "}
+                <span className="font-semibold text-foreground">0.5&nbsp;PPR</span>. It does{" "}
+                <span className="font-semibold text-foreground">not</span> offer separate{" "}
+                Standard (non-PPR) or full&nbsp;1&nbsp;PPR values — that's just how their site works.
+              </span>
+              <span className="block">
+                So while your league is shown for context, KTC values won't change between
+                Standard, 0.5&nbsp;PPR, and 1&nbsp;PPR. For PPR-accurate values, use FantasyCalc instead.
+              </span>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              onClick={() => setKtcNoticeOpen(false)}
+              className="bg-[#d4af37] hover:bg-[#c49b2e] text-black font-semibold"
+              data-testid="btn-ktc-notice-ok"
+            >
+              Got it
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </ValueModelContext.Provider>
   );
 }
