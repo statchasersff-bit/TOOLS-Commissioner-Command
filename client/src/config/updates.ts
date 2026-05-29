@@ -16,7 +16,7 @@
 // Version key shape: "YYYY-MM-DD-<slug>-vX.Y". Any change to the string
 // triggers the modal for every user on their next dashboard load.
 
-export const CURRENT_UPDATE_VERSION = "2026-05-26-dynasty-command-v1.7";
+export const CURRENT_UPDATE_VERSION = "2026-05-29-dynasty-command-v1.8";
 
 export interface UpdateSection {
   heading: string;
@@ -33,23 +33,38 @@ export interface UpdateNotes {
 
 export const CURRENT_UPDATE_NOTES: UpdateNotes = {
   version: CURRENT_UPDATE_VERSION,
-  title: "Commander's Briefing — Player Intel Upgrade 📊",
-  subtitle: "The player analysis suite just got a serious overhaul. Here's what's new.",
-  date: "May 26, 2026",
+  title: "Commander's Briefing — Automation Features Opening Again Soon 📊",
+  date: "May 29, 2026",
   sections: [
+    {
+      heading: "Note",
+      items: [
+        "Waiver Command, Lineup Command, and Trade Features access will be re-enabled with a target date of June 15 for all to use. Set lineups, send/accept trades, and make waiver claims directly from Dynasty Command.",
+      ],
+    },
     {
       heading: "New Features",
       items: [
-        "Advanced Stats added to the Research Module",
-        "Player Profile pages added",
-        "ADP Filters added to player profile pages to allow filter controls for QB format, scoring, TE premium, and team count",
+        "Trade Idea Generator added to the Trade Center Module",
+        "Biggest ADP Movers in past 7 days added to the ADP Explorer tab",
+        "KeepTradeCut (KTC) values added as a Value Source Option",
+        "In Personalization Settings: option added to add filtered leagues to your portfolio",
+        "Recent news log added to main page",
+        "Discord feature added to share your trades directly from the tool to StatChasers Discord for people to vote on",
+        "Sleeper user profile pages beta launch — click on any of your leaguemates and see their profile info",
       ],
     },
     {
       heading: "Improvements",
       items: [
         "Light mode more enhanced",
-        "Mobile views for Team comparison feature",
+        "Arizona Cardinals Team Mode added",
+      ],
+    },
+    {
+      heading: "Note from Developer",
+      items: [
+        "Thank you for everyone's patience and support as we build out this tool. The support has been amazing and I appreciate the ones who have been sharing the tool to others. We are getting to a point where I need to figure out ways to make the tool not crash as much due to the high traffic I wasn't ready for this early. Cheers y'all and I hope you enjoy the current new features. Many more to come!",
       ],
     },
   ],
@@ -58,6 +73,29 @@ export const CURRENT_UPDATE_NOTES: UpdateNotes = {
 // Past releases shown in the in-app changelog. Newest first. Append the
 // previous CURRENT_UPDATE_NOTES here when bumping CURRENT_UPDATE_VERSION.
 export const CHANGELOG_HISTORY: UpdateNotes[] = [
+  {
+    version: "2026-05-26-dynasty-command-v1.7",
+    title: "Commander's Briefing — Player Intel Upgrade 📊",
+    subtitle: "The player analysis suite just got a serious overhaul. Here's what's new.",
+    date: "May 26, 2026",
+    sections: [
+      {
+        heading: "New Features",
+        items: [
+          "Advanced Stats added to the Research Module",
+          "Player Profile pages added",
+          "ADP Filters added to player profile pages to allow filter controls for QB format, scoring, TE premium, and team count",
+        ],
+      },
+      {
+        heading: "Improvements",
+        items: [
+          "Light mode more enhanced",
+          "Mobile views for Team comparison feature",
+        ],
+      },
+    ],
+  },
   {
     version: "2026-05-19-dynasty-command-v1.6",
     title: "Welcome Back, Commander! 🫡",

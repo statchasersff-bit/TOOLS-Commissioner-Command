@@ -2092,13 +2092,13 @@ export function MyTeam({ league, userTeam, onNavigate }: DashboardOverviewProps)
                     QB: "text-rose-500 dark:text-rose-400",
                     RB: "text-emerald-500 dark:text-emerald-400",
                     WR: "text-sky-500 dark:text-sky-400",
-                    TE: "text-orange-500 dark:text-orange-400",
+                    TE: "text-yellow-500 dark:text-yellow-400",
                   };
                   const posBgColor: Record<string, string> = {
                     QB: "bg-rose-500/10 border-rose-500/20 text-rose-600 dark:text-rose-400",
                     RB: "bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400",
                     WR: "bg-sky-500/10 border-sky-500/20 text-sky-600 dark:text-sky-400",
-                    TE: "bg-orange-500/10 border-orange-500/20 text-orange-600 dark:text-orange-400",
+                    TE: "bg-yellow-500/10 border-yellow-500/20 text-yellow-600 dark:text-yellow-400",
                   };
                   return (
                     <div key={pos} className="flex flex-col" data-testid={`group-${pos.toLowerCase()}`}>
@@ -2134,7 +2134,7 @@ export function MyTeam({ league, userTeam, onNavigate }: DashboardOverviewProps)
                             )}
                             {ir.length > 0 && (
                               <>
-                                <p className="text-[9px] font-bold uppercase tracking-wider pt-2 pb-1 text-amber-600 dark:text-amber-400">IR</p>
+                                <p className="text-[9px] font-bold uppercase tracking-wider pt-2 pb-1 text-red-600 dark:text-red-400">IR</p>
                                 {ir.map(p => (
                                   <GroupPlayerRow key={p.id} p={p} posTextColor={posTextColor[pos] ?? "text-foreground"} muted testIdPrefix="group-ir" />
                                 ))}
