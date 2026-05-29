@@ -102,7 +102,48 @@ export function optimizeLineup(
     if (idx !== -1) { filled[i].player = sorted[idx]; used.add(sorted[idx].player_id); }
   }
 
+  // Step 3: Game-time-aware slotting. The set of starters above is projection-
+  // optimal; this pass only permutes *which* of those starters occupies *which*
+  // slot, so the lineup total is unchanged. Among interchangeable players we want
+  // earlier kickoffs in the dedicated positional slots (QB/RB/WR/TE/…) and the
+  // latest kickoffs in FLEX/SUPER_FLEX, preserving late-swap optionality.
+  reslotByGameTime(filled);
+
   return filled;
+}
+
+const gameStartOf = (p?: { gameStart?: number }): number => p?.gameStart ?? 0;
+
+/**
+ * In-place: push later-kickoff players out of dedicated slots into flex slots
+ * whenever an eligibility-preserving swap with an earlier-kickoff flex player is
+ * available. Only permutes already-selected starters (total is invariant) and
+ * never moves a locked player (their game has started / they're frozen).
+ */
+function reslotByGameTime(filled: RosterSlot[]): void {
+  const maxIters = filled.length * filled.length + 1;
+  for (let guard = 0; guard < maxIters; guard++) {
+    let swapped = false;
+    for (let d = 0; d < filled.length && !swapped; d++) {
+      const dedicated = filled[d];
+      const a = dedicated.player;
+      if (isFlexSlot(dedicated.slot) || !a || a.locked) continue;
+      for (let f = 0; f < filled.length; f++) {
+        const flex = filled[f];
+        const b = flex.player;
+        if (!isFlexSlot(flex.slot) || !b || b.locked) continue;
+        // Swap only to move a strictly-later-kickoff player into the flex slot.
+        if (gameStartOf(a) <= gameStartOf(b)) continue;
+        // Both placements must remain slot-legal after the swap.
+        if (!canFillSlot(a.pos, flex.slot) || !canFillSlot(b.pos, dedicated.slot)) continue;
+        dedicated.player = b;
+        flex.player = a;
+        swapped = true;
+        break;
+      }
+    }
+    if (!swapped) break;
+  }
 }
 
 export function optimizeLineupWithLockComparison(

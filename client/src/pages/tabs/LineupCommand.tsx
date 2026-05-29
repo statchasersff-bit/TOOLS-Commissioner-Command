@@ -218,7 +218,10 @@ function analyzeLineup(
     // season's finished games, so every starter would otherwise read as 0.
     if (locked && playedPlayerIds[pid] && actualPoints[pid] != null) proj = actualPoints[pid];
     const opp = isTeamOnBye(lite.team, schedule) ? "BYE" : undefined;
-    return { ...lite, proj, opp, locked };
+    // Kickoff time powers game-time-aware slotting (earlier games fill dedicated
+    // slots, later games fill FLEX/SUPER_FLEX) and auto-sub timing.
+    const gameStart = lite.team ? schedule[lite.team.toUpperCase()]?.start : undefined;
+    return { ...lite, proj, opp, locked, gameStart };
   };
 
   // Slot labels for the starting lineup, in Sleeper's roster_positions order.
