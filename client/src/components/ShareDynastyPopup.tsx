@@ -163,6 +163,7 @@ export function ShareDynastyPopup({ blocked = false, forceOpen = false, onForceO
   const [selected, setSelected]     = useState<Set<string>>(new Set());
   const [isExpanded, setIsExpanded] = useState(false);
   const [message, setMessage]       = useState(SHARE_MESSAGE);
+  const [acknowledged, setAcknowledged] = useState(false);
   const [queueState, setQueueState] = useState<ShareQueue | null>(() => {
     const q = loadQueue();
     if (!q) return null;
@@ -354,6 +355,7 @@ export function ShareDynastyPopup({ blocked = false, forceOpen = false, onForceO
     if (permanent) localStorage.setItem(DISMISSED_KEY, String(Date.now()));
     setPopupStep("hidden");
     setSelected(new Set());
+    setAcknowledged(false);
   }
 
   function toggleLeague(id: string) {
@@ -370,6 +372,7 @@ export function ShareDynastyPopup({ blocked = false, forceOpen = false, onForceO
 
   // ── Queue handlers ─────────────────────────────────────────────────────
   function startQueue() {
+    if (!acknowledged) return;
     const toSend = eligibleLeagues.filter(l => selected.has(l.leagueId));
     if (toSend.length === 0) return;
 
@@ -389,6 +392,7 @@ export function ShareDynastyPopup({ blocked = false, forceOpen = false, onForceO
     setQueue(newQueue);
     setPopupStep("hidden");
     setSelected(new Set());
+    setAcknowledged(false);
     setIsExpanded(false);
     processQueueRef.current();
   }
@@ -792,11 +796,28 @@ export function ShareDynastyPopup({ blocked = false, forceOpen = false, onForceO
                       placeholder="Write the message to send to your leagues…"
                       className="text-[11px] text-muted-foreground leading-relaxed bg-transparent border-border/30 resize-y min-h-[88px]"
                     />
+                    <p className="text-[10px] text-muted-foreground/40 text-right mt-1">
+                      {message.trim().length}/1000
+                    </p>
                   </div>
 
                   <p className="text-[11px] text-muted-foreground/50 leading-relaxed">
                     You can pause or cancel from the progress indicator at any time. Dynasty Command remains fully usable while it is being shared
                   </p>
+
+                  {/* Required acknowledgement — user must opt in to posting as themselves */}
+                  <div
+                    className="flex items-start gap-2 cursor-pointer select-none rounded-lg border border-[#d4af37]/25 bg-[#d4af37]/[0.04] px-3 py-2.5"
+                    onClick={() => setAcknowledged(a => !a)}
+                  >
+                    <Checkbox
+                      checked={acknowledged}
+                      className="mt-0.5 pointer-events-none border-[#d4af37]/50 data-[state=checked]:bg-[#d4af37] data-[state=checked]:border-[#d4af37]"
+                    />
+                    <span className="text-[11px] text-muted-foreground leading-relaxed">
+                      I understand this will post in Sleeper league chat as my Sleeper account.
+                    </span>
+                  </div>
 
                   {!isWriteEnabled() && <SafePacingNotice variant="kill" />}
 
@@ -807,7 +828,7 @@ export function ShareDynastyPopup({ blocked = false, forceOpen = false, onForceO
                       <ChevronLeft className="w-3 h-3" /> Back
                     </Button>
                     <Button size="sm"
-                      disabled={!isWriteEnabled()}
+                      disabled={!isWriteEnabled() || !acknowledged}
                       className="flex-1 h-8 text-[12px] bg-gradient-to-r from-[#d4af37] to-[#b8962e] text-black font-bold hover:opacity-90 disabled:opacity-50"
                       onClick={startQueue}>
                       <Share2 className="w-3 h-3 mr-1.5" />

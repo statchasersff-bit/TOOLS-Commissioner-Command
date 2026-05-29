@@ -59,6 +59,11 @@ ENABLE_CRAWLER = "true"
 [userenv.shared]
 VITE_BASE_PATH = "/dynasty-command/launch/"
 VITE_API_BASE_URL = "https://dynasty-command.replit.app"
+# Build-time client flag, inlined by Vite. The published build reads userenv
+# vars (process.env), NOT the gitignored .env — so the league-share gate
+# (isLeagueShareEnabled() in sleeperSafetyGate.ts) was always undefined in prod
+# and silently blocked. Must live here to survive deploys.
+VITE_ENABLE_LEAGUE_SHARE = "true"
 
 [postMerge]
 path = "scripts/post-merge.sh"

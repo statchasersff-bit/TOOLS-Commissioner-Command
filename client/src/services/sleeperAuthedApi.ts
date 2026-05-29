@@ -1433,10 +1433,59 @@ export async function sendDmMessage(dmId: string, text: string): Promise<Sleeper
   return data.create_message;
 }
 
+/** Max characters Sleeper accepts in a single chat message. */
+export const LEAGUE_CHAT_MAX_LENGTH = 2000;
+
+export interface SendLeagueChatMessageOptions {
+  /** Fire the "typing…" indicator in the league chat before sending. Best-effort. */
+  showTyping?: boolean;
+  /** Mark the just-sent message as read so it doesn't show as unread to the sender. Best-effort. */
+  markAsRead?: boolean;
+}
+
+/**
+ * Post a plain-text message into a Sleeper league chat (parent_type: "league")
+ * as the connected user. Routed through the shared write transport (limiter +
+ * kill switch) and gated by the "league-share" messaging intent.
+ *
+ * Mirrors Sleeper's native web sequence: optional typing indicator → create
+ * message → optional read receipt. Typing/receipt failures are swallowed —
+ * they must never fail the actual send. JWT is never logged.
+ *
+ * Text is validated here (not just in the UI) so no caller can send empty or
+ * over-length content.
+ */
 export async function sendLeagueChatMessage(
   leagueId: string,
-  text: string
+  text: string,
+  opts: SendLeagueChatMessageOptions = {}
 ): Promise<SleeperDmMessage> {
+  const { showTyping = true, markAsRead = true } = opts;
+
+  if (!leagueId) throw new Error("A league is required to send a chat message.");
+  const trimmed = (text ?? "").trim();
+  if (!trimmed) throw new Error("Message text is required.");
+  if (trimmed.length > LEAGUE_CHAT_MAX_LENGTH) {
+    throw new Error(`Message is too long (max ${LEAGUE_CHAT_MAX_LENGTH} characters).`);
+  }
+
+  // 1) Typing indicator — best-effort, never blocks the send.
+  if (showTyping) {
+    try {
+      await sleeperGraphQLRequest({
+        operationName: "typing_on_league",
+        query: `
+          mutation typing_on_league {
+            typing(parent_id: "${leagueId}", parent_type: "league")
+          }
+        `,
+        meta: { leagueId },
+      });
+    } catch {
+      /* typing is cosmetic — ignore failures */
+    }
+  }
+
   const clientId = crypto.randomUUID();
   const data = await sleeperGraphQLRequest<{ create_message: SleeperDmMessage }>({
     operationName: "create_message",
@@ -1455,10 +1504,37 @@ export async function sendLeagueChatMessage(
         }
       }
     `,
-    variables: { text },
-    meta: { messagingIntent: "league-share" },
+    variables: { text: trimmed },
+    meta: { messagingIntent: "league-share", leagueId },
   });
-  return data.create_message;
+
+  const message = data.create_message;
+  if (!message?.message_id) {
+    throw new Error("Sleeper did not confirm the league message (empty response). Please try again.");
+  }
+
+  // 2) Read receipt — best-effort, never blocks the result.
+  if (markAsRead) {
+    try {
+      await sleeperGraphQLRequest({
+        operationName: "create_receipt",
+        query: `
+          query create_receipt {
+            create_read_receipt(
+              parent_type: "league",
+              parent_id: "${leagueId}",
+              message_id: "${message.message_id}"
+            )
+          }
+        `,
+        meta: { leagueId },
+      });
+    } catch {
+      /* read receipt is cosmetic — ignore failures */
+    }
+  }
+
+  return message;
 }
 
 /** @todo Discover draft_pick mutation shape from sleeper.com/graphql */

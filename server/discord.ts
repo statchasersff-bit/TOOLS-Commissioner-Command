@@ -11,14 +11,15 @@ const DISCORD_API = "https://discord.com/api/v10";
 // OTC-style vote reactions, seeded onto every trade post (A wins / B wins / fair).
 const REACTIONS = ["🅰️", "🅱️", "⚖️"] as const;
 
-// Adds one reaction, honoring Discord's per-route rate limit (reaction-adds
-// trip 429s easily when fired back-to-back). Retries on 429 using retry_after.
-// Returns true on success, false if it ultimately couldn't be added.
-async function addReaction(channelId: string, messageId: string, emoji: string, token: string): Promise<boolean> {
+// PUTs a single reaction emoji, honoring Discord's per-route rate limit
+// (reaction-adds trip 429s easily when fired back-to-back). Retries on 429
+// using retry_after. Returns the final HTTP status (0 on network error), so the
+// caller can decide whether a 400 warrants retrying with a different emoji form.
+async function putReaction(channelId: string, messageId: string, emoji: string, token: string): Promise<number> {
   const url = `${DISCORD_API}/channels/${channelId}/messages/${messageId}/reactions/${encodeURIComponent(emoji)}/@me`;
   for (let attempt = 0; attempt < 4; attempt++) {
     const rr = await fetch(url, { method: "PUT", headers: { Authorization: `Bot ${token}` } });
-    if (rr.ok) return true;
+    if (rr.ok) return rr.status;
     if (rr.status === 429) {
       const body: any = await rr.json().catch(() => ({}));
       const waitMs = Math.min(3000, Math.ceil((Number(body?.retry_after) || 1) * 1000) + 50);
@@ -27,9 +28,27 @@ async function addReaction(channelId: string, messageId: string, emoji: string, 
     }
     const detail = await rr.text().catch(() => "");
     console.error(`[discord] add reaction ${emoji} failed: ${rr.status} ${rr.statusText} — ${detail.slice(0, 300)}`);
-    return false;
+    return rr.status;
   }
   console.error(`[discord] add reaction ${emoji} gave up after repeated 429s`);
+  return 429;
+}
+
+// Adds one vote reaction. The 🅰️/🅱️/⚖️ glyphs all carry a U+FE0F variation
+// selector, and Discord's reaction endpoint is inconsistent about whether it
+// wants it — including it can yield "400 Unknown Emoji" for some glyphs, while
+// other glyphs need it. So we try the emoji as-is, and on a 400 retry with the
+// variation selector stripped. Returns true on success.
+async function addReaction(channelId: string, messageId: string, emoji: string, token: string): Promise<boolean> {
+  const status = await putReaction(channelId, messageId, emoji, token);
+  if (status >= 200 && status < 300) return true;
+  if (status === 400) {
+    const stripped = emoji.replace(/\uFE0F/g, "");
+    if (stripped !== emoji) {
+      const retry = await putReaction(channelId, messageId, stripped, token);
+      return retry >= 200 && retry < 300;
+    }
+  }
   return false;
 }
 
