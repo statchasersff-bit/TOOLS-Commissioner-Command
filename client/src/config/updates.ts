@@ -48,6 +48,7 @@ export const CURRENT_UPDATE_NOTES: UpdateNotes = {
     {
       heading: "Improvements",
       items: [
+        "My Team Overview got a revamp",
         "LIGHTMODE_BTN:Light mode! Click here to try it now (can always change it back later)",
       ],
     },
