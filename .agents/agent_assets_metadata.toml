@@ -66,3 +66,9 @@ id = "O_7sqydMHFry7WqqXu0LY"
 uri = "file://dynasty-command-v1.7.zip"
 type = "unspecified"
 title = "dynasty-command-v1.7.zip"
+
+[[outputs]]
+id = "JoJDwHGwKhOcj3GKDskIc"
+uri = "file://dynasty-command-v1.8.zip"
+type = "unspecified"
+title = "Dynasty Command v1.8 — Static Build"
