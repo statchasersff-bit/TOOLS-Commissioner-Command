@@ -26,6 +26,7 @@ import {
 } from "@/types/draft";
 import { AdpCrawlPanel } from "@/components/admin/AdpCrawlPanel";
 import { UsageLogPanel } from "@/components/admin/UsageLogPanel";
+import { UnifiedCrawlerPanel } from "@/components/admin/UnifiedCrawlerPanel";
 import { MoversPanel } from "@/components/draft/MoversPanel";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePlayerProfile } from "@/contexts/PlayerProfileContext";
@@ -601,6 +602,7 @@ function AdminAdpTools() {
   return (
     <AdminToolsBoundary>
       <AdpCrawlPanel />
+      <UnifiedCrawlerPanel />
       <UsageLogPanel />
       <ReclassifyDraftsButton />
     </AdminToolsBoundary>

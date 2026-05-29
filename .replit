@@ -51,6 +51,10 @@ waitForPort = 5000
 [userenv.production]
 CORS_ORIGIN = "https://statchasers.com,https://www.statchasers.com,https://dynasty-command.pages.dev"
 NODE_ENV = "production"
+# Enables the unified background crawler (trades + drafts) on the PUBLISHED
+# deployment only. The dev workspace (npm run dev) never sees this, so it never
+# double-crawls Sleeper. See server/routes.ts (ENABLE_CRAWLER gate).
+ENABLE_CRAWLER = "true"
 
 [userenv.shared]
 VITE_BASE_PATH = "/dynasty-command/launch/"

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -7,7 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useFavoriteTeam } from "@/contexts/FavoriteTeamContext";
 import { FavoriteTeamPicker } from "@/components/FavoriteTeamPicker";
 import { useAuth } from "@/contexts/AuthContext";
-import { useTheme, type ThemeMode } from "@/contexts/ThemeContext";
+import { useTheme, isMyTeamThemeReady, type ThemeMode } from "@/contexts/ThemeContext";
 import { useSleeper } from "@/contexts/SleeperContext";
 import type { SleeperLeagueSummary } from "@/types";
 import { NFL_TEAMS } from "@/config/nflTeams";
@@ -59,6 +59,35 @@ export function SettingsPage({ initialTab = "general" }: { initialTab?: Settings
   // The Theme section's "My Team" option mirrors the team currently picked in
   // Personalization (the draft), so it updates the moment a team is selected.
   const draftTeam = draftAbbr ? NFL_TEAMS.find((t) => t.abbreviation === draftAbbr) ?? null : null;
+
+  // "My Team" theme is gated on the *drafted* pick, not just the saved favorite,
+  // so selecting a supported team (Arizona today) unlocks the tile immediately —
+  // the user shouldn't have to Save first and then come back for the theme.
+  const draftMyTeamReady = isMyTeamThemeReady(draftAbbr);
+
+  // Applying "My Team" needs the favorite saved (the theme reads the saved
+  // favorite). When the user picks the tile with an unsaved-but-supported team,
+  // we save it, then apply the theme once `myTeamReady` flips true.
+  const [pendingMyTeam, setPendingMyTeam] = useState(false);
+  useEffect(() => {
+    if (pendingMyTeam && myTeamReady) {
+      setThemeMode("my_team");
+      setPendingMyTeam(false);
+    }
+  }, [pendingMyTeam, myTeamReady, setThemeMode]);
+
+  const handleSelectTheme = (mode: ThemeMode) => {
+    if (mode !== "my_team") { setThemeMode(mode); return; }
+    if (!draftMyTeamReady || !draftAbbr) return; // tile is disabled in this case
+    if (draftAbbr !== favoriteAbbr) {
+      // Commit the drafted team so the theme has a saved favorite to read.
+      void setFavoriteTeam(draftAbbr);
+      toast({ title: "Favorite team set.", description: favoriteTeamLabel(draftAbbr) });
+      setPendingMyTeam(true);
+    } else {
+      setThemeMode("my_team");
+    }
+  };
 
   const handleSave = async () => {
     if (!dirty || !draftAbbr) return;
@@ -160,22 +189,23 @@ export function SettingsPage({ initialTab = "general" }: { initialTab?: Settings
         </p>
 
         <div className="grid grid-cols-3 gap-2" data-testid="theme-mode-picker">
-          <ThemeChoice mode="light"   current={themeMode} onSelect={setThemeMode} icon={Sun}  label="Light" />
-          <ThemeChoice mode="x-mode"  current={themeMode} onSelect={setThemeMode} icon={Moon} label="Dark" />
+          <ThemeChoice mode="light"   current={themeMode} onSelect={handleSelectTheme} icon={Sun}  label="Light" />
+          <ThemeChoice mode="x-mode"  current={themeMode} onSelect={handleSelectTheme} icon={Moon} label="Dark" />
           <ThemeChoice
             mode="my_team"
             current={themeMode}
-            onSelect={setThemeMode}
+            onSelect={handleSelectTheme}
             icon={Star}
             logoUrl={draftTeam?.logoUrl}
             label={draftAbbr ? `My Team · ${draftAbbr}` : "My Team · Select team"}
-            disabled={!myTeamReady}
+            disabled={!draftMyTeamReady}
           />
         </div>
 
-        {!myTeamReady && (
+        {!draftMyTeamReady && (
           <p className="text-[11px] text-amber-500 dark:text-amber-400" data-testid="my-team-mode-gated">
-            My Team theme is available for the Arizona Cardinals only right now — more teams coming soon.
+            My Team theme is available for the Arizona Cardinals only right now — pick them as your
+            favorite team below to use it. More teams coming soon.
           </p>
         )}
       </Card>

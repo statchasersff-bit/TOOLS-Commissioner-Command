@@ -5,6 +5,18 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "@/hooks/use-toast";
 import { API_BASE } from "@/lib/apiBase";
 import { identify } from "@/lib/analytics";
+import type { UserPreferences } from "@shared/schema";
+
+const SC_TOKEN_KEY = "sc_auth_token";
+/** Bearer header from the stored auth token (matches FavoriteTeamContext). */
+function authBearerHeader(): Record<string, string> {
+  try {
+    const token = localStorage.getItem(SC_TOKEN_KEY);
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  } catch {
+    return {};
+  }
+}
 
 // IMPORTANT: there is intentionally no localStorage key for the Sleeper
 // connection. The connection is derived from useAuth().sleeperInfo, which is
@@ -82,7 +94,28 @@ interface SleeperState {
 const SleeperContext = createContext<SleeperState | null>(null);
 
 export function SleeperProvider({ children }: { children: React.ReactNode }) {
-  const { sleeperInfo, readOnlySleeperUser } = useAuth();
+  const { sleeperInfo, readOnlySleeperUser, user: dcUser, isAuthenticatedUser } = useAuth();
+  // Account-synced preferences live on the DC user. Held in refs so the
+  // (deps: []) loaders/persisters can read the latest values without becoming
+  // stale-closure traps or forcing re-creation. The account is the source of
+  // truth when logged in — this is what survives a new deploy origin where the
+  // per-origin localStorage is empty.
+  const isAuthedRef = useRef(isAuthenticatedUser);
+  isAuthedRef.current = isAuthenticatedUser;
+  const accountPrefsRef = useRef<UserPreferences | undefined>(dcUser?.preferences);
+  accountPrefsRef.current = dcUser?.preferences;
+
+  // Best-effort merge-persist of preferences to the account (no-op for guests).
+  const persistPrefs = useCallback((patch: Partial<UserPreferences>) => {
+    if (!isAuthedRef.current) return;
+    fetch(`${API_BASE}/api/sc-auth/me/preferences`, {
+      method: "PUT",
+      credentials: "include",
+      headers: { "Content-Type": "application/json", ...authBearerHeader() },
+      body: JSON.stringify(patch),
+    }).catch((err) => console.error("[sleeper] prefs persist failed:", err));
+  }, []);
+
   const [user, setUser] = useState<SleeperUser | null>(null);
   const [allLeagues, setAllLeagues] = useState<SleeperLeagueSummary[]>([]);
   const [leaguePrefs, setLeaguePrefs] = useState<LeaguePrefs>(EMPTY_LEAGUE_PREFS);
@@ -154,24 +187,40 @@ export function SleeperProvider({ children }: { children: React.ReactNode }) {
       setAllLeagues(leaguesData);
       setLastSyncTime(new Date().toISOString());
 
-      // Load the user's master-list preferences and compute the included set
-      // (the leagues that actually surface across the app).
-      const prefs = readLeaguePrefs(userData.userId);
+      // Master-list preferences: the ACCOUNT wins when logged in (so they
+      // survive a fresh deploy origin); otherwise fall back to localStorage.
+      // On first login with no account value, seed the account from local.
+      const authed = isAuthedRef.current;
+      const acct = accountPrefsRef.current;
+      let prefs: LeaguePrefs;
+      if (authed && acct?.leaguePrefs) {
+        prefs = {
+          added: acct.leaguePrefs.added ?? [],
+          removed: acct.leaguePrefs.removed ?? [],
+        };
+        writeLeaguePrefs(userData.userId, prefs); // mirror down for snappy reloads
+      } else {
+        prefs = readLeaguePrefs(userData.userId);
+        if (authed) persistPrefs({ leaguePrefs: prefs }); // seed account from local
+      }
       setLeaguePrefs(prefs);
       const included = leaguesData.filter((l) => isLeagueIncluded(l, prefs));
 
-      // Restore the user's last-selected league (per-user, never cross-account).
-      const persisted = readPersistedLeague(userData.userId);
-      if (persisted && included.some((l) => l.leagueId === persisted)) {
-        setActiveLeagueId(persisted);
+      // Restore the last-selected league: account value first (if still valid),
+      // then the local per-user value, then a sensible default.
+      const serverActive = authed ? acct?.activeLeagueId ?? null : null;
+      const localActive = readPersistedLeague(userData.userId);
+      let chosen: string | null = null;
+      if (serverActive && included.some((l) => l.leagueId === serverActive)) {
+        chosen = serverActive;
+      } else if (localActive && included.some((l) => l.leagueId === localActive)) {
+        chosen = localActive;
       } else if (included.length > 0) {
-        // Sensible default so league-specific views aren't perma-empty on first load.
-        const fallback = included[0].leagueId;
-        setActiveLeagueId(fallback);
-        writePersistedLeague(userData.userId, fallback);
-      } else {
-        setActiveLeagueId(null);
+        chosen = included[0].leagueId; // avoid perma-empty league views on first load
       }
+      setActiveLeagueId(chosen);
+      writePersistedLeague(userData.userId, chosen);
+      if (authed && chosen && chosen !== serverActive) persistPrefs({ activeLeagueId: chosen });
     } catch (err: any) {
       setError(err.message || "Connection failed");
       // When auth-derived, keep the stub user so the UI stays in "connected" state
@@ -184,7 +233,7 @@ export function SleeperProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [persistPrefs]);
 
   const connect = useCallback(async (username: string) => {
     await fetchUserAndLeagues(username, { triggerPassiveEnrich: true });
@@ -219,21 +268,24 @@ export function SleeperProvider({ children }: { children: React.ReactNode }) {
       }
       const next: LeaguePrefs = { added, removed };
       if (user?.userId) writeLeaguePrefs(user.userId, next);
+      persistPrefs({ leaguePrefs: next }); // durable per-account save
       return next;
     });
-  }, [allLeagues, user?.userId]);
+  }, [allLeagues, user?.userId, persistPrefs]);
 
   const setActiveLeague = useCallback((leagueId: string) => {
     setActiveLeagueId(leagueId);
     if (user?.userId) writePersistedLeague(user.userId, leagueId);
-  }, [user?.userId]);
+    persistPrefs({ activeLeagueId: leagueId });
+  }, [user?.userId, persistPrefs]);
 
   // Same as setActiveLeague but accepts null to clear (used by route handlers
   // that may not have a leagueId yet).
   const setActiveLeagueById = useCallback((leagueId: string | null) => {
     setActiveLeagueId(leagueId);
     if (user?.userId) writePersistedLeague(user.userId, leagueId);
-  }, [user?.userId]);
+    persistPrefs({ activeLeagueId: leagueId });
+  }, [user?.userId, persistPrefs]);
 
   const activeLeague = useMemo(
     () => leagues.find((l) => l.leagueId === activeLeagueId) ?? null,
@@ -251,7 +303,8 @@ export function SleeperProvider({ children }: { children: React.ReactNode }) {
     if (next === activeLeagueId) return;
     setActiveLeagueId(next);
     if (user?.userId) writePersistedLeague(user.userId, next);
-  }, [leagues, activeLeagueId, allLeagues.length, user?.userId]);
+    persistPrefs({ activeLeagueId: next });
+  }, [leagues, activeLeagueId, allLeagues.length, user?.userId, persistPrefs]);
 
   const refresh = useCallback(async () => {
     if (!user) return;

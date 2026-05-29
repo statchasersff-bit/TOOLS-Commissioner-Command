@@ -606,13 +606,17 @@ function LeagueRow({ analysis, preseason, onApplied }: { analysis: LeagueAnalysi
           ) : (
             <button
               className="inline-flex items-center gap-1 text-[10px] font-bold rounded-full px-2 md:px-2.5 py-1 transition-colors bg-[var(--sc-gold)] hover:bg-[var(--sc-gold-deep)] text-[var(--sc-blue)] hover:text-white border border-[var(--sc-gold-deep)] disabled:opacity-60 disabled:cursor-not-allowed dark-any:bg-[#d4af37]/15 dark-any:hover:bg-[#d4af37]/25 dark-any:border-[#d4af37]/35 dark-any:hover:border-[#d4af37]/55 dark-any:text-[#d4af37] dark-any:hover:text-[#d4af37]"
-              onClick={apply}
-              disabled={applying}
-              title="Apply the optimal lineup to Sleeper"
+              // Temporarily disabled: surface a "feature disabled" notice instead
+              // of applying the optimal lineup. Re-enable by restoring onClick={apply}.
+              onClick={() => toast({
+                title: "Feature currently disabled",
+                description: "This feature is currently disabled and will be back up soon.",
+              })}
+              title="Optimize is temporarily disabled"
               data-testid={`button-optimize-${analysis.leagueId}`}
             >
-              {applying ? <Loader2 className="w-3 h-3 flex-shrink-0 animate-spin" /> : <Zap className="w-3 h-3 flex-shrink-0" />}
-              <span className="hidden md:inline">{applying ? "Applying…" : "Optimize"}</span>
+              <Zap className="w-3 h-3 flex-shrink-0" />
+              <span className="hidden md:inline">Optimize</span>
             </button>
           )}
         </div>
@@ -1680,7 +1684,7 @@ export function LineupCommand() {
             <button
               onClick={() => toast({
                 title: "Feature currently disabled",
-                description: "This feature is temporarily disabled. Please check back soon.",
+                description: "This feature is currently disabled and will be back up soon.",
               })}
               data-testid="button-optimize-all"
               className="inline-flex items-center gap-1.5 text-[11px] font-bold rounded-full px-4 py-1.5 border transition-all bg-[#d4af37] hover:bg-[#c8a230] border-[#b8901f] text-[#0b3a7a] hover:text-[#0b3a7a] shadow-[0_2px_8px_rgba(212,175,55,0.3)]"

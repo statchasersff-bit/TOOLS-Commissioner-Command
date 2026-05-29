@@ -190,6 +190,24 @@ export type PlayerValueSnapshot = typeof playerValueSnapshots.$inferSelect;
 
 // ── StatChasers Account System ────────────────────────────────────────────────
 
+/** League include/exclude delta relative to each league's `eligibleByDefault`. */
+export interface UserLeaguePrefs {
+  added: string[];
+  removed: string[];
+}
+
+/**
+ * Per-account UI/session preferences, persisted so they survive a new deploy
+ * origin (where per-origin localStorage is empty). Stored as a single JSONB blob
+ * on the user row — additive and nullable, so existing rows read as `{}`. Each
+ * field is optional; the client merges these over its localStorage fallback.
+ */
+export interface UserPreferences {
+  theme?: "light" | "x-mode" | "my_team";
+  activeLeagueId?: string | null;
+  leaguePrefs?: UserLeaguePrefs;
+}
+
 export const scUsers = pgTable("sc_users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   email: text("email").notNull().unique(),
@@ -202,6 +220,9 @@ export const scUsers = pgTable("sc_users", {
   // directly on the user row; if more prefs accumulate later this can move
   // to a dedicated user_preferences table without changing the API shape.
   favoriteNflTeam: varchar("favorite_nfl_team", { length: 5 }),
+  // Per-account UI/session preferences (theme, active league, league filters).
+  // JSONB so new prefs can be added without a migration. Nullable; absent = {}.
+  preferences: jsonb("preferences").$type<UserPreferences>(),
   // Subscription state — gates Sleeper write actions on the write-access
   // domain. `status` mirrors Stripe vocabulary so the eventual webhook can
   // write through unchanged:

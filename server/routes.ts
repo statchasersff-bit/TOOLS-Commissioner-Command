@@ -72,6 +72,8 @@ import {
   runOnce as runUnifiedCrawlOnce,
   isUnifiedCrawlRunning,
   getRecentRuns as getUnifiedCrawlRuns,
+  getCrawlTotals as getUnifiedCrawlTotals,
+  recoverStuckRuns as recoverUnifiedCrawlRuns,
 } from "./unifiedCrawler";
 import {
   previewCsv,
@@ -2043,16 +2045,28 @@ export async function registerRoutes(
   });
 
   // ── Unified scheduled crawler (trades + drafts) ──────────────────────────
-  app.get("/api/admin/unified-crawl/status", async (_req, res) => {
+  app.get("/api/admin/unified-crawl/status", async (req, res) => {
+    if (!(await requireAdmin(req, res))) return;
     try {
-      const runs = await getUnifiedCrawlRuns(20);
-      res.json({ running: isUnifiedCrawlRunning(), runs });
+      const [runs, totals] = await Promise.all([
+        getUnifiedCrawlRuns(20),
+        getUnifiedCrawlTotals(),
+      ]);
+      // schedulerEnabled reflects the env gate at routes.ts (ENABLE_CRAWLER);
+      // running is the in-process "a run is happening right now" flag.
+      res.json({
+        running: isUnifiedCrawlRunning(),
+        schedulerEnabled: process.env.ENABLE_CRAWLER === "true",
+        totals,
+        runs,
+      });
     } catch (err: any) {
       res.status(500).json({ error: err.message || "Failed to get unified-crawl status" });
     }
   });
 
-  app.post("/api/admin/unified-crawl/run-once", async (_req, res) => {
+  app.post("/api/admin/unified-crawl/run-once", async (req, res) => {
+    if (!(await requireAdmin(req, res))) return;
     if (isUnifiedCrawlRunning()) {
       return res.json({ ok: true, started: false, reason: "already-running" });
     }
@@ -2073,8 +2087,24 @@ export async function registerRoutes(
   // ENABLE_CRAWLER=true is set in the deployment's secrets. The Replit instance
   // leaves this unset, so it never crawls (avoids double Sleeper API load). The
   // manual /api/admin/unified-crawl/run-once endpoint still works everywhere.
+  // Reconcile any run left stranded in "running" by a previous process before
+  // the scheduler can start a fresh one, so the audit log is truthful and the
+  // admin panel doesn't show perpetual zombie runs. Fire-and-forget.
+  recoverUnifiedCrawlRuns().catch((err) =>
+    console.error("[UnifiedCrawl] startup recovery failed:", err?.message),
+  );
+
   if (process.env.ENABLE_CRAWLER === "true") {
     startUnifiedCrawler();
+  } else if (process.env.NODE_ENV === "production") {
+    // Loud warning: in production the crawler being off means NO trades or
+    // drafts are gathered automatically. This is the #1 silent-failure mode —
+    // make it impossible to miss in the deploy logs.
+    console.warn(
+      "[UnifiedCrawl] ⚠️  WARNING: auto-crawling is DISABLED in production. " +
+      "No new trades/drafts will be gathered. Set ENABLE_CRAWLER=true in this " +
+      "deployment's secrets and redeploy to enable background crawling.",
+    );
   } else {
     console.log("[UnifiedCrawl] Scheduler disabled (set ENABLE_CRAWLER=true to enable auto-crawling)");
   }

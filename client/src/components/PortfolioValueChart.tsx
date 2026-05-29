@@ -18,7 +18,7 @@ import {
 import { LineChart as LineChartIcon, Loader2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import { getPortfolioTimeline, type TimelineResponse, type TimelinePoint } from "@/lib/portfolioApi";
+import { getPortfolioTimeline, runPortfolioBackfill, type TimelineResponse, type TimelinePoint } from "@/lib/portfolioApi";
 
 const RANGES: Array<{ id: string; label: string }> = [
   { id: "1y", label: "1Y" },
@@ -45,6 +45,7 @@ function kfmt(n: number): string {
 export function PortfolioValueChart({ handle }: { handle: string | null }) {
   const [timeline, setTimeline] = useState<TimelineResponse | null>(null);
   const [loading, setLoading] = useState(false);
+  const [building, setBuilding] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [range, setRange] = useState("all");
 
@@ -63,6 +64,23 @@ export function PortfolioValueChart({ handle }: { handle: string | null }) {
     },
     [handle],
   );
+
+  // The value timeline is served from persisted snapshots; this builds them on
+  // demand from the user's current rosters (the only place that triggers it now
+  // that the standalone Timeline tab is gone).
+  const buildHistory = useCallback(async () => {
+    if (!handle) return;
+    setBuilding(true);
+    setError(null);
+    try {
+      await runPortfolioBackfill(handle);
+      await load(range);
+    } catch (err: any) {
+      setError(err?.message || "Failed to build portfolio history");
+    } finally {
+      setBuilding(false);
+    }
+  }, [handle, load, range]);
 
   useEffect(() => {
     if (handle) void load(range);
@@ -111,7 +129,24 @@ export function PortfolioValueChart({ handle }: { handle: string | null }) {
           <Loader2 className="w-5 h-5 animate-spin text-[#d4af37]" />
         </div>
       ) : chartData.length === 0 ? (
-        <p className="text-[12px] text-muted-foreground py-8 text-center">No portfolio value history yet.</p>
+        <div className="flex flex-col items-center gap-3 py-10 text-center">
+          <p className="text-[12px] text-muted-foreground">No portfolio value history yet.</p>
+          <button
+            type="button"
+            onClick={buildHistory}
+            disabled={building}
+            className="inline-flex items-center gap-1.5 rounded-md bg-[#d4af37]/15 text-[#d4af37] px-3 py-1.5 text-[11px] font-semibold hover:bg-[#d4af37]/25 transition-colors disabled:opacity-60"
+          >
+            {building ? (
+              <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Building history…</>
+            ) : (
+              "Build portfolio history"
+            )}
+          </button>
+          <p className="text-[10px] text-muted-foreground/60 max-w-[280px]">
+            Reconstructs your value timeline from each league's current roster. Takes a few seconds.
+          </p>
+        </div>
       ) : (
         <div className="h-[300px] sm:h-[360px] w-full">
           <ResponsiveContainer width="100%" height="100%">

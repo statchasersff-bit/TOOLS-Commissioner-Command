@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useCallback, useEffect, useMemo, useRef, type ReactNode } from "react";
 import { toast } from "@/hooks/use-toast";
+import type { UserPreferences } from "@shared/schema";
 import {
   saveSleeperSession,
   clearSleeperSession,
@@ -48,6 +49,12 @@ export interface ScUser {
   email: string;
   /** NFL team abbreviation (e.g. "ATL"). Null when the user hasn't picked one. */
   favoriteNflTeam: string | null;
+  /**
+   * Per-account UI/session preferences (theme, active league, league filters),
+   * mirrored from the server so they survive a new deploy origin where
+   * per-origin localStorage is empty. Absent on legacy rows → treat as {}.
+   */
+  preferences?: UserPreferences;
 }
 
 export interface SleeperInfo {
@@ -155,6 +162,15 @@ export function useAuth(): AuthContextValue {
   const ctx = useContext(AuthContext);
   if (!ctx) throw new Error("useAuth must be used within AuthProvider");
   return ctx;
+}
+
+/**
+ * Non-throwing variant for providers that may render OUTSIDE AuthProvider (e.g.
+ * ThemeProvider also wraps the standalone public-report view). Returns null when
+ * there's no AuthProvider above, so the consumer can degrade to localStorage-only.
+ */
+export function useAuthOptional(): AuthContextValue | null {
+  return useContext(AuthContext);
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {

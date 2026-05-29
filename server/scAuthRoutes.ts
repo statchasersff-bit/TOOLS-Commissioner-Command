@@ -8,12 +8,15 @@ import {
   loginUser,
   resetPassword,
   getUser,
+  getPreferences,
   getConnectedSleeper,
   connectSleeper,
   disconnectSleeper,
   decryptToken,
   updateFavoriteNflTeam,
+  updatePreferences,
 } from "./scAuth";
+import type { UserPreferences } from "@shared/schema";
 import { enqueueSleeperUser } from "./adpCrawler";
 import { isAdminByEmail } from "@shared/admin";
 import { getAppModeFromRequest, getSubscriptionStatusForUser } from "./appMode";
@@ -278,6 +281,9 @@ export function registerScAuthRoutes(app: Express): void {
           id: user.id,
           email: user.email,
           favoriteNflTeam: user.favoriteNflTeam ?? null,
+          // Defensive: returns {} if the preferences column isn't migrated yet,
+          // so /me never fails (which would log the user out).
+          preferences: await getPreferences(userId),
         },
         sleeper: sleeperInfo,
         isAdmin: isAdminByEmail(user.email),
@@ -378,6 +384,48 @@ export function registerScAuthRoutes(app: Express): void {
     } catch (err: any) {
       console.error("[sc-auth] favorite-team error:", err.message);
       res.status(500).json({ error: "Failed to update favorite team." });
+    }
+  });
+
+  // PUT /api/sc-auth/me/preferences
+  // Merge-updates per-account UI/session preferences (theme, active league,
+  // league include/exclude filters) so they survive a new deploy origin where
+  // per-origin localStorage is empty. Body is a partial UserPreferences; only
+  // recognized, validated fields are applied.
+  app.put("/api/sc-auth/me/preferences", async (req, res) => {
+    try {
+      const userId = getUserIdFromRequest(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated" });
+      const body = (req.body ?? {}) as Partial<UserPreferences>;
+      const patch: Partial<UserPreferences> = {};
+
+      if ("theme" in body) {
+        if (body.theme === "light" || body.theme === "x-mode" || body.theme === "my_team") {
+          patch.theme = body.theme;
+        } else {
+          return res.status(400).json({ error: `Invalid theme: ${String(body.theme)}` });
+        }
+      }
+      if ("activeLeagueId" in body) {
+        const id = body.activeLeagueId;
+        if (id === null || typeof id === "string") patch.activeLeagueId = id;
+        else return res.status(400).json({ error: "activeLeagueId must be a string or null" });
+      }
+      if ("leaguePrefs" in body) {
+        const lp = body.leaguePrefs;
+        const okList = (v: unknown): v is string[] => Array.isArray(v) && v.every((x) => typeof x === "string");
+        if (lp && okList(lp.added) && okList(lp.removed)) {
+          patch.leaguePrefs = { added: lp.added, removed: lp.removed };
+        } else {
+          return res.status(400).json({ error: "leaguePrefs must be { added: string[], removed: string[] }" });
+        }
+      }
+
+      const preferences = await updatePreferences(userId, patch);
+      res.json({ ok: true, preferences });
+    } catch (err: any) {
+      console.error("[sc-auth] preferences error:", err.message);
+      res.status(500).json({ error: "Failed to update preferences." });
     }
   });
 }

@@ -28,12 +28,25 @@ import {
   type ReactNode,
 } from "react";
 import { useFavoriteTeam } from "./FavoriteTeamContext";
+import { useAuthOptional } from "./AuthContext";
 import { generateTeamTheme, validateTeamTheme, getTeamThemeBase } from "@/lib/themeColors";
+import { API_BASE } from "@/lib/apiBase";
 
 export type ThemeMode = "light" | "x-mode" | "my_team";
 
 const THEME_KEY = "theme";
+const SC_TOKEN_KEY = "sc_auth_token";
 const VALID_MODES = new Set<ThemeMode>(["light", "x-mode", "my_team"]);
+
+/** Bearer header from the stored auth token (matches FavoriteTeamContext). */
+function authBearerHeader(): Record<string, string> {
+  try {
+    const token = localStorage.getItem(SC_TOKEN_KEY);
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  } catch {
+    return {};
+  }
+}
 
 // Teams whose My Team theme is production-ready. The rest are temporarily gated
 // off until their palettes are finished — only these abbreviations can use the
@@ -113,6 +126,39 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const { favoriteTeam } = useFavoriteTeam();
   const myTeamReady = isMyTeamThemeReady(favoriteTeam?.abbreviation);
 
+  // Account sync (optional — ThemeProvider also wraps the auth-less public
+  // report view, so useAuthOptional may return null).
+  const auth = useAuthOptional();
+  const isAuthed = auth?.isAuthenticatedUser ?? false;
+  const serverTheme = auth?.user?.preferences?.theme;
+  // Keep the latest mode in a ref so the reconcile effect can seed the server
+  // without taking themeMode as a dependency (which would re-run on every change).
+  const themeModeRef = useRef(themeMode);
+  themeModeRef.current = themeMode;
+
+  // Best-effort persist of the theme to the account (no-op for guests).
+  const persistTheme = useCallback((mode: ThemeMode) => {
+    if (!isAuthed) return;
+    fetch(`${API_BASE}/api/sc-auth/me/preferences`, {
+      method: "PUT",
+      credentials: "include",
+      headers: { "Content-Type": "application/json", ...authBearerHeader() },
+      body: JSON.stringify({ theme: mode }),
+    }).catch((err) => console.error("[Theme] persist failed:", err));
+  }, [isAuthed]);
+
+  // Reconcile with the account when /me arrives: a saved theme wins (this is
+  // what survives a new deploy origin where localStorage is empty); if the
+  // account has none yet, seed it from the current local mode.
+  useEffect(() => {
+    if (!isAuthed) return;
+    if (serverTheme && VALID_MODES.has(serverTheme)) {
+      setThemeModeState((cur) => (cur !== serverTheme ? serverTheme : cur));
+    } else {
+      persistTheme(themeModeRef.current);
+    }
+  }, [isAuthed, serverTheme, persistTheme]);
+
   // Track the last team we validated so we don't spam the console on every
   // render — only when the (mode, team) tuple actually changes.
   const lastValidatedRef = useRef<string | null>(null);
@@ -171,7 +217,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     // Temporarily gate "My Team" to teams whose palette is ready (Arizona only).
     if (m === "my_team" && !isMyTeamThemeReady(favoriteTeam?.abbreviation)) return;
     setThemeModeState(m);
-  }, [favoriteTeam]);
+    persistTheme(m); // durable per-account save (localStorage is updated by the effect)
+  }, [favoriteTeam, persistTheme]);
 
   // If the active mode is My Team but the favorite team isn't ready yet, fall
   // back to Dark so users never sit on an unfinished team theme.

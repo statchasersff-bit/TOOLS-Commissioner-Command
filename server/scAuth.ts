@@ -4,7 +4,7 @@ import crypto from "crypto";
 import { eq, and, gt, isNull, desc } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import pg from "pg";
-import { scUsers, emailVerificationCodes, scConnectedAccounts } from "@shared/schema";
+import { scUsers, emailVerificationCodes, scConnectedAccounts, type UserPreferences } from "@shared/schema";
 
 const JWT_SECRET = process.env.SESSION_SECRET || "fallback-dev-secret";
 const CIPHER_KEY = crypto.createHash("sha256").update(JWT_SECRET).digest();
@@ -287,6 +287,69 @@ export async function getUser(userId: string) {
     .where(eq(scUsers.id, userId))
     .limit(1);
   return rows[0] ?? null;
+}
+
+// The `preferences` column is added by a later migration (npm run db:push).
+// Everything below tolerates its absence so that auth (/me, login, admin) keeps
+// working before the migration is applied — a missing column degrades to "no
+// stored preferences" rather than throwing and logging the user out.
+function isMissingPreferencesColumn(err: unknown): boolean {
+  // Postgres undefined_column = 42703; also match by message as a fallback.
+  const code = (err as { code?: string })?.code;
+  const msg = String((err as { message?: string })?.message ?? "");
+  return code === "42703" || /column .*preferences.* does not exist/i.test(msg);
+}
+
+/** Read a user's preferences. Returns {} when the column doesn't exist yet. */
+export async function getPreferences(userId: string): Promise<UserPreferences> {
+  try {
+    const rows = await getDb()
+      .select({ preferences: scUsers.preferences })
+      .from(scUsers)
+      .where(eq(scUsers.id, userId))
+      .limit(1);
+    return (rows[0]?.preferences ?? {}) as UserPreferences;
+  } catch (err) {
+    if (isMissingPreferencesColumn(err)) return {};
+    throw err;
+  }
+}
+
+/**
+ * Shallow-merge a partial preferences object onto the user's stored prefs and
+ * persist. `leaguePrefs` is replaced wholesale when provided (it's a small
+ * {added,removed} delta the client always sends in full). Returns the merged
+ * result so the caller can echo it back to the client. If the column doesn't
+ * exist yet, this is a no-op that echoes the patch back (the client persists
+ * best-effort and falls back to localStorage).
+ */
+export async function updatePreferences(
+  userId: string,
+  partial: Partial<UserPreferences>,
+): Promise<UserPreferences> {
+  try {
+    const rows = await getDb()
+      .select({ preferences: scUsers.preferences })
+      .from(scUsers)
+      .where(eq(scUsers.id, userId))
+      .limit(1);
+    const current = (rows[0]?.preferences ?? {}) as UserPreferences;
+    const next: UserPreferences = { ...current, ...partial };
+    if (partial.leaguePrefs) {
+      next.leaguePrefs = {
+        added: partial.leaguePrefs.added ?? [],
+        removed: partial.leaguePrefs.removed ?? [],
+      };
+    }
+    await getDb()
+      .update(scUsers)
+      .set({ preferences: next, updatedAt: new Date() })
+      .where(eq(scUsers.id, userId));
+    return next;
+  } catch (err) {
+    if (isMissingPreferencesColumn(err)) return { ...partial } as UserPreferences;
+    throw err;
+  }
 }
 
 /**

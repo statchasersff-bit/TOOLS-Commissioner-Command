@@ -6,7 +6,6 @@ import { API_BASE } from "@/lib/apiBase";
 import { usePlayerProfile } from "@/contexts/PlayerProfileContext";
 import { ResponsivePlayerName } from "@/components/ResponsivePlayerName";
 import { PlayerHeadshot } from "@/components/PlayerHeadshot";
-import { MoversPanel } from "@/components/draft/MoversPanel";
 import type { ADPResult } from "@/types/draft";
 import {
   buildAvailability, getAvailabilityBucket, BUCKET_CLASS,
@@ -517,10 +516,6 @@ export function DraftAvailability() {
           </p>
         )}
       </Card>
-
-      {/* Biggest ADP movers for the current slice (rookie or startup). Self-hides
-          when there aren't enough drafts to compute meaningful 7-day trends. */}
-      {!loading && !error && <MoversPanel rows={rows} teams={teams} totalDrafts={draftCount} mode={mode} />}
 
       {loading ? (
         <Card className="p-10 flex items-center justify-center text-muted-foreground"><Loader2 className="w-5 h-5 animate-spin mr-2" /> Loading ADP data…</Card>

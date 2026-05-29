@@ -23,7 +23,7 @@
 import pg from "pg";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { desc, eq, sql } from "drizzle-orm";
-import { unifiedCrawlRuns } from "@shared/schema";
+import { unifiedCrawlRuns, trades, drafts } from "@shared/schema";
 import {
   ingestLeagueTrades,
   deriveFormat,
@@ -246,6 +246,7 @@ export async function runOnce(): Promise<{ ran: boolean; reason?: string }> {
     let scanned = 0;
     let tradesInserted = 0;
     let draftsIngested = 0;
+    let processed = 0;
 
     for (const lg of leagues) {
       try {
@@ -268,6 +269,18 @@ export async function runOnce(): Promise<{ ran: boolean; reason?: string }> {
         }
       } catch (err: any) {
         console.error(`[UnifiedCrawl] Run ${runId}: league ${lg.leagueId} failed:`, err?.message);
+      }
+
+      // Persist progress periodically so a mid-run process restart keeps the
+      // credit (and the admin panel shows live movement). The underlying
+      // trades/drafts/crawled_leagues rows are already written per-league by
+      // the ingest calls; this just keeps the run row's counters in sync so a
+      // run that dies before its final update isn't reported as 0/0/0.
+      if (++processed % 25 === 0) {
+        await db
+          .update(unifiedCrawlRuns)
+          .set({ leaguesScanned: scanned, tradesInserted, draftsIngested })
+          .where(eq(unifiedCrawlRuns.id, runId));
       }
     }
 
@@ -335,6 +348,34 @@ export function isUnifiedCrawlRunning() {
   return isRunning;
 }
 
+/**
+ * Reconcile zombie runs at process start. A run row only reaches a terminal
+ * status (complete/failed/skipped) at the END of runOnce(); if the process is
+ * killed or restarted mid-run (deploy, crash, OOM), the row is stranded in
+ * "running" forever — which blocks nothing (the in-process isRunning guard
+ * resets on restart) but pollutes the audit log and hides the failure.
+ *
+ * Because the crawler runs as a single instance, at process start NOTHING is
+ * running yet, so any row still marked "running" is definitively a zombie from
+ * a previous process. Mark them failed so the log is truthful. Partial trade/
+ * draft work is already durable (ingest writes per-league), so nothing is lost.
+ */
+export async function recoverStuckRuns(): Promise<{ recovered: number }> {
+  const result = await db
+    .update(unifiedCrawlRuns)
+    .set({
+      status: "failed",
+      message: "Recovered at startup — process restarted before the run finished.",
+      completedAt: new Date(),
+    })
+    .where(eq(unifiedCrawlRuns.status, "running"))
+    .returning({ id: unifiedCrawlRuns.id });
+  if (result.length > 0) {
+    console.warn(`[UnifiedCrawl] Recovered ${result.length} stuck "running" run(s) from a previous process.`);
+  }
+  return { recovered: result.length };
+}
+
 /** Most-recent crawl runs for the admin status endpoint. */
 export async function getRecentRuns(limit = 20) {
   return db
@@ -342,4 +383,35 @@ export async function getRecentRuns(limit = 20) {
     .from(unifiedCrawlRuns)
     .orderBy(desc(unifiedCrawlRuns.startedAt))
     .limit(limit);
+}
+
+/** Grand totals in the gathered datasets, plus how much the crawler has added
+ *  over its recent runs — so the admin panel can show "trades added" (which the
+ *  per-user passive-crawl table never tracked) alongside the DB-wide totals. */
+export async function getCrawlTotals(): Promise<{
+  totalTrades: number;
+  totalDrafts: number;
+  addedLast30Runs: { trades: number; drafts: number; leaguesScanned: number };
+  lastRunAt: string | null;
+}> {
+  const [t] = await db.select({ c: sql<number>`count(*)` }).from(trades);
+  const [d] = await db.select({ c: sql<number>`count(*)` }).from(drafts);
+  const [agg] = await db
+    .select({
+      trades: sql<number>`coalesce(sum(${unifiedCrawlRuns.tradesInserted}), 0)`,
+      drafts: sql<number>`coalesce(sum(${unifiedCrawlRuns.draftsIngested}), 0)`,
+      leagues: sql<number>`coalesce(sum(${unifiedCrawlRuns.leaguesScanned}), 0)`,
+      lastRun: sql<string | null>`max(${unifiedCrawlRuns.startedAt})`,
+    })
+    .from(unifiedCrawlRuns);
+  return {
+    totalTrades: Number(t?.c ?? 0),
+    totalDrafts: Number(d?.c ?? 0),
+    addedLast30Runs: {
+      trades: Number(agg?.trades ?? 0),
+      drafts: Number(agg?.drafts ?? 0),
+      leaguesScanned: Number(agg?.leagues ?? 0),
+    },
+    lastRunAt: agg?.lastRun ? new Date(agg.lastRun).toISOString() : null,
+  };
 }
