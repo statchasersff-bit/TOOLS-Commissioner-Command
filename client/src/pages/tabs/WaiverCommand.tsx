@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
+import { useScrollEdges } from "@/hooks/useResponsive";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { usePlayerProfile } from "@/contexts/PlayerProfileContext";
 import { useSleeper } from "@/contexts/SleeperContext";
@@ -267,6 +268,8 @@ function getTierAccent(tier: "Contender" | "Bubble" | "Rebuild") {
 
 
 export default function WaiverCommand() {
+  // Edge-fade affordance for the horizontally-scrollable league overview table.
+  const { ref: waiverScrollRef } = useScrollEdges<HTMLDivElement>();
   const { isConnected, user, leagues, activeLeagueId, setActiveLeague } = useSleeper();
   const { valuesBySleeperId, dynastyPlayerList, isLoading: valuesLoading } = useValueModel();
 
@@ -663,7 +666,7 @@ export default function WaiverCommand() {
           <span className="text-xs text-muted-foreground">{sorted.length} league{sorted.length !== 1 ? "s" : ""}</span>
         </div>
 
-        <div className="overflow-x-auto">
+        <div ref={waiverScrollRef} className="dc-scroll-x">
           <table className="w-full text-sm" data-testid="waiver-table">
             <thead>
               <tr className="border-b border-border/40 dark:border-white/[0.05] bg-muted/30 dark:bg-white/[0.02]">
@@ -683,6 +686,7 @@ export default function WaiverCommand() {
                     className={cn(
                       "px-2 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground whitespace-nowrap",
                       col.align === "center" ? "text-center" : "text-left",
+                      i === 0 && "dc-sticky-col bg-muted/30 dark:bg-white/[0.02]",
                       col.key && "cursor-pointer hover:text-foreground transition-colors select-none"
                     )}
                   >
@@ -771,7 +775,7 @@ function WaiverTableRow({ row, onClaim, onView }: { row: WaiverRow; onClaim: () 
   if (row.error) {
     return (
       <tr className="opacity-60">
-        <td className="px-2 py-2 font-medium text-foreground">{row.leagueName}</td>
+        <td className="dc-sticky-col px-2 py-2 font-medium text-foreground">{row.leagueName}</td>
         <td colSpan={8} className="px-2 py-2">
           <span className="flex items-center gap-1.5 text-xs text-destructive">
             <AlertCircle className="w-3.5 h-3.5" />
@@ -789,7 +793,7 @@ function WaiverTableRow({ row, onClaim, onView }: { row: WaiverRow; onClaim: () 
       onClick={onView}
     >
       {/* League name */}
-      <td className="px-2 py-2">
+      <td className="dc-sticky-col px-2 py-2">
         <div className="flex items-center gap-1.5">
           {row.leagueAvatar ? (
             <img

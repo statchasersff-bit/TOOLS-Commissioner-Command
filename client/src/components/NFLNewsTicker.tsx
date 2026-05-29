@@ -60,7 +60,7 @@ export function NFLNewsTicker() {
   const tickerItems = [...items, ...items];
 
   return (
-    <div className="flex border-y border-[#d4af37]/20 bg-[#07111f] overflow-hidden">
+    <div className="flex border-y border-[#d4af37]/20 bg-card dark-any:bg-[#07111f] overflow-hidden">
       <div className="relative flex-1 overflow-hidden">
         <div className="flex w-max animate-news-ticker">
           {tickerItems.map((item, index) => {
@@ -78,7 +78,7 @@ export function NFLNewsTicker() {
                   rel="noopener noreferrer"
                   title={item.pubDate ?? undefined}
                   tabIndex={isClone ? -1 : 0}
-                  className="text-[13px] text-white/75 hover:text-[#d4af37] transition-colors"
+                  className="text-[13px] text-muted-foreground dark-any:text-white/75 hover:text-[#d4af37] transition-colors"
                 >
                   {item.title}
                 </a>

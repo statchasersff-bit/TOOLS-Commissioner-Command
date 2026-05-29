@@ -32,10 +32,15 @@ const SLEEPER_API = "https://api.sleeper.app/v1";
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6h
 // Bump when the payload shape changes so stale cache rows are treated as misses
 // and recomputed rather than served without the newer fields.
-const CACHE_VERSION = 12;
+const CACHE_VERSION = 13;
 const MAX_LEAGUES_SCANNED = 50;
 const TRANSACTION_WEEKS = 18;
 const FETCH_CONCURRENCY = 4;
+// Career history walks each visible league's previous_league_id chain. Bound
+// both the depth per chain and the total league-seasons fetched so a power user
+// with many deep leagues can't blow up a single request.
+const MAX_CAREER_DEPTH = 12;
+const MAX_CAREER_LEAGUE_SEASONS = 200;
 const VALID_POSITIONS = new Set(["QB", "RB", "WR", "TE"]);
 
 // ── Public types ─────────────────────────────────────────────────────────────
@@ -125,6 +130,43 @@ export interface LeagueReport {
   rosters: LeagueRosterRank[];
 }
 
+/** One (league, season) the manager rostered a team in, newest-first when listed. */
+export interface CareerSeasonRow {
+  season: string;
+  leagueName: string;
+  wins: number;
+  losses: number;
+  ties: number;
+  pointsFor: number;
+  /** Null when the season has no winners-bracket data (in-progress or hidden). */
+  madePlayoffs: boolean | null;
+  champion: boolean | null;
+}
+
+export interface CareerHistory {
+  /** True once at least one league-season was resolved from the chain walk. */
+  available: boolean;
+  /** Distinct seasons the manager fielded a team across all visible chains. */
+  seasonsActive: number;
+  firstSeason: string | null;
+  latestSeason: string | null;
+  /** Total (league, season) entries — a 3-league, 2-season history = 6. */
+  leagueSeasonsPlayed: number;
+  record: { wins: number; losses: number; ties: number } | null;
+  /** 0–100, ties counted as half-wins. */
+  winPct: number | null;
+  /** Average regular-season points-for per league-season. */
+  avgPointsForPerSeason: number | null;
+  /** Best-effort from completed-season brackets; null if no bracket data found. */
+  championships: number | null;
+  playoffAppearances: number | null;
+  /** Per-season breakdown, newest first. */
+  seasons: CareerSeasonRow[];
+  /** True when the chain walk hit the league-season cap and stopped early. */
+  truncated: boolean;
+  note: string;
+}
+
 export interface ManagerIntelPayload {
   user: {
     user_id: string;
@@ -209,6 +251,10 @@ export interface ManagerIntelPayload {
     avgPointsFor: number | null;
     notes: string;
   };
+  /** Multi-season career history, aggregated by walking each visible league's
+   *  previous_league_id chain. All-time, as opposed to crossLeague/activity
+   *  which are current-season only. */
+  careerHistory: CareerHistory;
   /** Current visible-season activity (the reframed "History"/Track Record tab). */
   activity: {
     visibleLeagues: number;
@@ -673,12 +719,16 @@ interface SleeperLeagueRaw {
 interface SleeperRosterRaw {
   roster_id: number;
   owner_id: string;
+  co_owners?: string[] | null;
   players: string[] | null;
   settings?: {
     wins?: number;
     losses?: number;
+    ties?: number;
     fpts?: number;
     fpts_decimal?: number;
+    fpts_against?: number;
+    fpts_against_decimal?: number;
   };
 }
 
@@ -2026,6 +2076,184 @@ export async function getManagerIntel(opts: {
   return payload;
 }
 
+// ── Career history (multi-season) ────────────────────────────────────────────
+//
+// Walks each visible league's previous_league_id chain to assemble the
+// manager's all-time record across seasons. Sleeper exposes one league object
+// per (league, season); the chain links a dynasty league back through its prior
+// seasons. Records (W/L/T, points-for) come from each season's roster settings;
+// playoff/championship results are best-effort from the winners bracket and are
+// only counted for seasons that expose one.
+
+interface CareerLeagueRaw {
+  league_id: string;
+  name: string;
+  season: string;
+  status?: string;
+  settings?: { previous_league_id?: string | null };
+}
+
+// A winners-bracket match. t1/t2 are either a roster_id (resolved) or a
+// reference object ({ w | l: matchId }) before the feeding match completes.
+interface BracketMatch {
+  r?: number;
+  m?: number;
+  t1?: number | { w?: number; l?: number } | null;
+  t2?: number | { w?: number; l?: number } | null;
+  w?: number | null;
+  l?: number | null;
+  p?: number;
+}
+
+/** Roster IDs that appear as concrete entrants anywhere in the bracket = made playoffs. */
+function bracketRosterIds(bracket: BracketMatch[]): Set<number> {
+  const ids = new Set<number>();
+  for (const m of bracket) {
+    if (typeof m.t1 === "number") ids.add(m.t1);
+    if (typeof m.t2 === "number") ids.add(m.t2);
+  }
+  return ids;
+}
+
+/** Champion roster_id: the winner of the placement-1 final, or the deepest-round
+ *  decided match as a fallback. Null when the bracket has no decided winner. */
+function championRosterId(bracket: BracketMatch[]): number | null {
+  const final = bracket.find((m) => m.p === 1 && typeof m.w === "number");
+  if (final && typeof final.w === "number") return final.w;
+  let best: BracketMatch | null = null;
+  for (const m of bracket) {
+    if (typeof m.w !== "number") continue;
+    if (!best || (m.r ?? 0) > (best.r ?? 0)) best = m;
+  }
+  return best && typeof best.w === "number" ? best.w : null;
+}
+
+async function buildCareerHistory(
+  currentLeagues: SleeperLeagueSummary[],
+  userId: string,
+): Promise<CareerHistory> {
+  const empty: CareerHistory = {
+    available: false,
+    seasonsActive: 0,
+    firstSeason: null,
+    latestSeason: null,
+    leagueSeasonsPlayed: 0,
+    record: null,
+    winPct: null,
+    avgPointsForPerSeason: null,
+    championships: null,
+    playoffAppearances: null,
+    seasons: [],
+    truncated: false,
+    note: "No prior-season league history was found for this manager.",
+  };
+
+  // Phase 1 — discover every league-season by walking each chain backward.
+  // Chains run concurrently; each chain is sequential (a step needs the prior
+  // league's previous_league_id). Dedup by league_id so shared ancestors aren't
+  // fetched twice, and stop globally at the league-season cap.
+  const seen = new Set<string>();
+  let truncated = false;
+  const discovered: CareerLeagueRaw[] = [];
+
+  await mapBounded(currentLeagues, FETCH_CONCURRENCY, async (lg) => {
+    let cursor: string | null = lg.leagueId;
+    let depth = 0;
+    while (cursor && depth < MAX_CAREER_DEPTH) {
+      if (seen.has(cursor)) break; // already walked (shared ancestor)
+      if (discovered.length >= MAX_CAREER_LEAGUE_SEASONS) {
+        truncated = true;
+        break;
+      }
+      seen.add(cursor);
+      const raw = await fetchJson<CareerLeagueRaw>(`${SLEEPER_API}/league/${cursor}`);
+      if (!raw) break;
+      discovered.push(raw);
+      cursor = raw.settings?.previous_league_id || null;
+      depth++;
+    }
+  });
+
+  if (discovered.length === 0) return empty;
+
+  // Phase 2 — resolve the manager's record (and playoff/title result) for each
+  // discovered league-season. Skip seasons where the manager wasn't rostered.
+  const rows = (
+    await mapBounded(discovered, FETCH_CONCURRENCY, async (lg) => {
+      const rosters = await fetchJson<SleeperRosterRaw[]>(
+        `${SLEEPER_API}/league/${lg.league_id}/rosters`,
+      );
+      if (!rosters) return null;
+      const mine = rosters.find(
+        (r) => r.owner_id === userId || (r.co_owners?.includes(userId) ?? false),
+      );
+      if (!mine) return null;
+
+      const s = mine.settings ?? {};
+      const pointsFor = (s.fpts ?? 0) + (s.fpts_decimal ?? 0) / 100;
+
+      // Winners bracket is optional — present for completed seasons. Treat any
+      // failure or absence as "no playoff data for this season" (null), not a
+      // negative result.
+      let madePlayoffs: boolean | null = null;
+      let champion: boolean | null = null;
+      const bracket = await fetchJson<BracketMatch[]>(
+        `${SLEEPER_API}/league/${lg.league_id}/winners_bracket`,
+      );
+      if (Array.isArray(bracket) && bracket.length > 0) {
+        madePlayoffs = bracketRosterIds(bracket).has(mine.roster_id);
+        champion = championRosterId(bracket) === mine.roster_id;
+      }
+
+      return {
+        season: lg.season,
+        leagueName: lg.name,
+        wins: s.wins ?? 0,
+        losses: s.losses ?? 0,
+        ties: s.ties ?? 0,
+        pointsFor: Math.round(pointsFor * 10) / 10,
+        madePlayoffs,
+        champion,
+      } satisfies CareerSeasonRow;
+    })
+  ).filter((r): r is CareerSeasonRow => r !== null);
+
+  if (rows.length === 0) return empty;
+
+  rows.sort((a, b) => b.season.localeCompare(a.season));
+
+  const seasonsSet = new Set(rows.map((r) => r.season));
+  const sortedSeasons = [...seasonsSet].sort();
+  const wins = rows.reduce((n, r) => n + r.wins, 0);
+  const losses = rows.reduce((n, r) => n + r.losses, 0);
+  const ties = rows.reduce((n, r) => n + r.ties, 0);
+  const games = wins + losses + ties;
+  const totalPf = rows.reduce((n, r) => n + r.pointsFor, 0);
+
+  // Playoff/title counts only include seasons that actually exposed a bracket,
+  // so an in-progress current season doesn't drag the totals down.
+  const bracketRows = rows.filter((r) => r.madePlayoffs !== null);
+
+  return {
+    available: true,
+    seasonsActive: seasonsSet.size,
+    firstSeason: sortedSeasons[0] ?? null,
+    latestSeason: sortedSeasons[sortedSeasons.length - 1] ?? null,
+    leagueSeasonsPlayed: rows.length,
+    record: { wins, losses, ties },
+    winPct: games > 0 ? Math.round(((wins + ties * 0.5) / games) * 1000) / 10 : null,
+    avgPointsForPerSeason: rows.length > 0 ? Math.round((totalPf / rows.length) * 10) / 10 : null,
+    championships: bracketRows.length > 0 ? bracketRows.filter((r) => r.champion).length : null,
+    playoffAppearances: bracketRows.length > 0 ? bracketRows.filter((r) => r.madePlayoffs).length : null,
+    seasons: rows,
+    truncated,
+    note:
+      "Aggregated from visible Sleeper leagues via prior-season links. Playoff and " +
+      "championship results are read from completed-season brackets; seasons without " +
+      "bracket data are excluded from those two counts.",
+  };
+}
+
 async function computeManagerIntel(
   userId: string,
   currentLeagueId: string,
@@ -2067,6 +2295,29 @@ async function computeManagerIntel(
 
   const currentScan =
     scans.find((s) => s.leagueId === currentLeagueId) ?? scans[0] ?? null;
+
+  // Kick off the multi-season chain walk now so its many fetches overlap with
+  // the synchronous analysis below; awaited just before the payload is built.
+  const careerHistoryPromise = buildCareerHistory(scannedLeagues, user.userId).catch(
+    (err): CareerHistory => {
+      console.error("[ManagerIntel] career history failed:", err?.message || err);
+      return {
+        available: false,
+        seasonsActive: 0,
+        firstSeason: null,
+        latestSeason: null,
+        leagueSeasonsPlayed: 0,
+        record: null,
+        winPct: null,
+        avgPointsForPerSeason: null,
+        championships: null,
+        playoffAppearances: null,
+        seasons: [],
+        truncated: false,
+        note: "Career history could not be loaded.",
+      };
+    },
+  );
 
   // Cross-league exposure across visible dynasty rosters. Capture age/exp so we
   // can type their "favorite player types" downstream.
@@ -2485,6 +2736,7 @@ async function computeManagerIntel(
     leagues: leagueReports,
     crossLeague,
     performance,
+    careerHistory: await careerHistoryPromise,
     activity,
     tradeApproach,
     meta: {
@@ -2559,6 +2811,21 @@ function emptyPayload(
       avgRegularSeasonFinish: null,
       avgPointsFor: null,
       notes: note,
+    },
+    careerHistory: {
+      available: false,
+      seasonsActive: 0,
+      firstSeason: null,
+      latestSeason: null,
+      leagueSeasonsPlayed: 0,
+      record: null,
+      winPct: null,
+      avgPointsForPerSeason: null,
+      championships: null,
+      playoffAppearances: null,
+      seasons: [],
+      truncated: false,
+      note,
     },
     activity: {
       visibleLeagues: 0,

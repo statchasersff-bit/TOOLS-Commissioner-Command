@@ -8,13 +8,14 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Sparkles, TrendingUp, Wrench, Clock } from "lucide-react";
+import { Sparkles, TrendingUp, Wrench, Clock, Sun } from "lucide-react";
 import {
   CURRENT_UPDATE_VERSION,
   CURRENT_UPDATE_NOTES,
   SEEN_UPDATE_STORAGE_KEY,
   type UpdateSection,
 } from "@/config/updates";
+import { useTheme } from "@/contexts/ThemeContext";
 import logoDark from "@assets/statchasers_logo_transparent_dark_1772764844282.png";
 
 interface Props {
@@ -38,6 +39,8 @@ const SECTION_ICON: Record<string, React.ComponentType<{ className?: string; sty
 };
 
 export function WhatsNewModal({ isAuthenticated, onViewChangelog }: Props) {
+  const { setThemeMode } = useTheme();
+
   // Compute initial open synchronously from localStorage so we never flash the
   // modal then close it on the same frame.
   const [open, setOpen] = useState(() => {
@@ -111,7 +114,7 @@ export function WhatsNewModal({ isAuthenticated, onViewChangelog }: Props) {
 
           <div className="mt-4 space-y-4">
             {CURRENT_UPDATE_NOTES.sections.map((section) => (
-              <SectionBlock key={section.heading} section={section} />
+              <SectionBlock key={section.heading} section={section} onLightMode={() => setThemeMode("light")} />
             ))}
           </div>
         </div>
@@ -142,7 +145,9 @@ export function WhatsNewModal({ isAuthenticated, onViewChangelog }: Props) {
   );
 }
 
-function SectionBlock({ section }: { section: UpdateSection }) {
+const LIGHT_MODE_PREFIX = "LIGHTMODE_BTN:";
+
+function SectionBlock({ section, onLightMode }: { section: UpdateSection; onLightMode?: () => void }) {
   const Icon = SECTION_ICON[section.heading] ?? Sparkles;
   return (
     <div>
@@ -151,12 +156,31 @@ function SectionBlock({ section }: { section: UpdateSection }) {
         <h3 className="text-[11px] font-bold uppercase tracking-wider text-white/80">{section.heading}</h3>
       </div>
       <ul className="space-y-1.5 pl-1">
-        {section.items.map((item, i) => (
-          <li key={i} className="flex items-start gap-2 text-sm text-white/75 leading-snug">
-            <span className="text-[#d4af37] mt-1 flex-shrink-0">•</span>
-            <span>{item}</span>
-          </li>
-        ))}
+        {section.items.map((item, i) => {
+          if (item.startsWith(LIGHT_MODE_PREFIX)) {
+            const label = item.slice(LIGHT_MODE_PREFIX.length);
+            return (
+              <li key={i} className="flex items-start gap-2 text-sm leading-snug">
+                <span className="text-[#d4af37] mt-1 flex-shrink-0">•</span>
+                <button
+                  onClick={onLightMode}
+                  className="flex items-center gap-1.5 text-left underline underline-offset-2 decoration-dotted hover:no-underline transition-colors font-medium"
+                  style={{ color: "#d4af37" }}
+                  data-testid="whatsnew-activate-light-mode"
+                >
+                  <Sun className="w-3.5 h-3.5 flex-shrink-0" />
+                  {label}
+                </button>
+              </li>
+            );
+          }
+          return (
+            <li key={i} className="flex items-start gap-2 text-sm text-white/75 leading-snug">
+              <span className="text-[#d4af37] mt-1 flex-shrink-0">•</span>
+              <span>{item}</span>
+            </li>
+          );
+        })}
       </ul>
     </div>
   );

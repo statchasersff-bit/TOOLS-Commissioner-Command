@@ -128,11 +128,13 @@ Recommended primary pattern per surface (apply incrementally):
 | Dashboard / Command Center | KPI tiles, position columns, heatmap | `.dc-stat-grid`; position rows already scroll — wrap in `.dc-scroll-x` |
 | Team page / TeamBreakdown | roster, tier breakdown | roster → **priority**; tiers → `.dc-card-grid` |
 | LeagueMarket ✅ done | market values | **scroll** + sticky player col + filter drawer |
-| LeagueAnalyzer / power rankings | rankings | **priority** (Rank·Player·Pos·Value, expand rest) |
-| PositionStats / PositionalAnalysis | advanced stats | **scroll** + sticky player col (already hand-rolled; migrate to `<ResponsiveTable>`) |
+| LeagueAnalyzer ✅ done | comparison SummaryStrip | `.dc-scroll-x` + sticky Metric col; power rankings & tiers already card grids |
+| Transactions ✅ done | trade/transaction history | already card-based; filter pills now scroll on narrow screens |
+| PositionStats ✅ done | advanced stats | already hand-rolled sticky/scroll; added `.dc-scroll-x` edge fades. Full `<ResponsiveTable>` migration still optional |
+| PositionalAnalysis | advanced stats | **scroll** + sticky player col (migrate to `<ResponsiveTable>`) |
 | WaiverCommand | waiver targets, claims | **scroll** sticky col; filters → `ResponsiveFilterBar` |
 | TradeCenter / BulkTrades | proposals, finder | proposal cards; finder filters → drawer; `.dc-sticky-actions` for Analyze |
-| TradeSync / Transactions | trade/transaction history | **cards** (Date / Side A / Side B / Δ / Winner) |
+| TradeSync | trade history | **cards** (Date / Side A / Side B / Δ / Winner) |
 | ManagerPage | leagues tab, comparisons | leagues → **cards**; comparison → stacked cards; tabs → scrollable |
 | PlayerPage | profile hero + stat tables | `.dc-detail-layout`; weekly/advanced tables → **scroll** sticky col |
 | MatchupDetail | matchup two-column | `.dc-detail-layout`; lineup → **priority** |
