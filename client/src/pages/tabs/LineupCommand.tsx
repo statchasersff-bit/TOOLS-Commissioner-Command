@@ -483,7 +483,7 @@ function KpiCard({
   // Per-accent icon-box style: tinted background + icon color.
   const colorByAccent: Record<string, string> = {
     red:    "bg-red-500/10 text-red-600 dark-any:text-red-400",
-    gold:   "bg-[#d4af37]/10 text-[#d4af37]",
+    gold:   "bg-[#d4af37]/10 text-[var(--sc-gold-deep)] dark-any:text-[#d4af37]",
     blue:   "bg-blue-500/10 text-blue-600 dark-any:text-blue-400",
     emerald:"bg-emerald-500/10 text-emerald-600 dark-any:text-emerald-400",
     yellow: "bg-yellow-500/10 text-yellow-600 dark-any:text-yellow-400",
@@ -844,8 +844,8 @@ function MatchupBattleCard({ m, preseason }: { m: MatchupAnalysis; preseason?: b
   return (
     <div
       className={cn(
-        "group/card border-b border-white/[0.07] last:border-0 transition-colors duration-200",
-        canExpand && "cursor-pointer hover:bg-white/[0.018]"
+        "group/card border-b border-[var(--sc-border)] dark-any:border-white/[0.07] last:border-0 transition-colors duration-200",
+        canExpand && "cursor-pointer hover:bg-black/[0.03] dark-any:hover:bg-white/[0.018]"
       )}
       data-testid={`card-matchup-${m.leagueId}`}
       onClick={() => canExpand && setExpanded(v => !v)}
@@ -881,19 +881,19 @@ function MatchupBattleCard({ m, preseason }: { m: MatchupAnalysis; preseason?: b
                 />
               ) : null}
               <span
-                className="text-base md:text-lg font-black text-[#d4af37] leading-none select-none"
+                className="text-base md:text-lg font-black text-[var(--sc-gold-deep)] dark-any:text-[#d4af37] leading-none select-none"
                 style={{ display: m.myUserAvatar ? "none" : undefined }}
               >{myInitial}</span>
             </div>
             <div className="min-w-0">
-              <p className="text-[12px] md:text-sm font-black text-white/90 truncate leading-tight">{m.myTeamName}</p>
-              <p className="text-[10px] md:text-[11px] text-white/35 tabular-nums leading-tight mt-0.5">
+              <p className="text-[12px] md:text-sm font-black text-[var(--sc-text)] dark-any:text-white/90 truncate leading-tight">{m.myTeamName}</p>
+              <p className="text-[10px] md:text-[11px] text-[var(--sc-text-muted)] dark-any:text-white/35 tabular-nums leading-tight mt-0.5">
                 {fmtRecord(m.myRecord.wins, m.myRecord.losses, m.myRecord.ties)}
               </p>
               {!preseason && !predraft && (
                 <p className={cn(
                   "text-[22px] md:text-[28px] font-black tabular-nums leading-none mt-1",
-                  isFav && !isClose ? theme.txt : "text-white/75"
+                  isFav && !isClose ? theme.txt : "text-[var(--sc-text-muted)] dark-any:text-white/75"
                 )}>
                   {fmt1(m.myProj)}
                 </p>
@@ -904,31 +904,31 @@ function MatchupBattleCard({ m, preseason }: { m: MatchupAnalysis; preseason?: b
           {/* Center */}
           <div className="flex flex-col items-center justify-center flex-shrink-0 w-[80px] md:w-[108px]">
             {m.avatar ? (
-              <img src={m.avatar} alt="" className="w-6 h-6 rounded object-cover flex-shrink-0 ring-1 ring-white/10 mb-1"
+              <img src={m.avatar} alt="" className="w-6 h-6 rounded object-cover flex-shrink-0 ring-1 ring-black/5 dark-any:ring-white/10 mb-1"
                 onError={e => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
             ) : (
-              <div className="w-6 h-6 rounded flex-shrink-0 bg-[#0b3a7a]/40 ring-1 ring-white/10 mb-1" />
+              <div className="w-6 h-6 rounded flex-shrink-0 bg-[#0b3a7a]/40 ring-1 ring-black/5 dark-any:ring-white/10 mb-1" />
             )}
-            <span className="text-[9px] md:text-[10px] font-bold text-white/55 uppercase tracking-wider text-center leading-tight mb-1.5 line-clamp-2">
+            <span className="text-[9px] md:text-[10px] font-bold text-[var(--sc-text-muted)] dark-any:text-white/55 uppercase tracking-wider text-center leading-tight mb-1.5 line-clamp-2">
               {m.leagueName}
             </span>
             {predraft ? (
-              <div className="text-[10px] md:text-[12px] font-black text-[#d4af37]/70 tracking-[0.18em] text-center leading-tight">PRE-<br />DRAFT</div>
+              <div className="text-[10px] md:text-[12px] font-black text-[var(--sc-gold-deep)] dark-any:text-[#d4af37]/70 tracking-[0.18em] text-center leading-tight">PRE-<br />DRAFT</div>
             ) : preseason ? (
-              <div className="text-[11px] md:text-[12px] font-black text-white/22 tracking-[0.3em]">VS</div>
+              <div className="text-[11px] md:text-[12px] font-black text-[var(--sc-text-muted)] dark-any:text-white/22 tracking-[0.3em]">VS</div>
             ) : hasBye ? (
               <>
-                <div className="text-[8px] md:text-[9px] font-bold text-white/25 tracking-[0.25em]">WEEK</div>
-                <div className="text-[15px] md:text-[18px] font-black text-white/30 tracking-wider leading-none mt-1">BYE</div>
+                <div className="text-[8px] md:text-[9px] font-bold text-[var(--sc-text-muted)] dark-any:text-white/25 tracking-[0.25em]">WEEK</div>
+                <div className="text-[15px] md:text-[18px] font-black text-[var(--sc-text-muted)] dark-any:text-white/30 tracking-wider leading-none mt-1">BYE</div>
               </>
             ) : (
               <>
-                <div className="text-[8px] md:text-[9px] font-bold text-white/30 tracking-[0.25em]">WIN&nbsp;%</div>
+                <div className="text-[8px] md:text-[9px] font-bold text-[var(--sc-text-muted)] dark-any:text-white/30 tracking-[0.25em]">WIN&nbsp;%</div>
                 <div className={cn("text-[24px] md:text-[30px] font-black tabular-nums leading-none mt-0.5", theme.txt)}>
                   {Math.round(m.winPct)}
                   <span className="text-[11px] md:text-[13px] ml-0.5 opacity-75">%</span>
                 </div>
-                <div className="text-[9px] md:text-[10px] text-white/40 tabular-nums font-bold mt-0.5">
+                <div className="text-[9px] md:text-[10px] text-[var(--sc-text-muted)] dark-any:text-white/40 tabular-nums font-bold mt-0.5">
                   {isClose ? "Pick 'em" : `${isFav ? "+" : "−"}${fmt1(absSpread)}`}
                 </div>
               </>
@@ -940,17 +940,17 @@ function MatchupBattleCard({ m, preseason }: { m: MatchupAnalysis; preseason?: b
             <div className="min-w-0 text-right">
               <p className={cn(
                 "text-[12px] md:text-sm font-black truncate leading-tight",
-                (hasBye || predraft) ? "text-white/40" : "text-white/65"
+                (hasBye || predraft) ? "text-[var(--sc-text-muted)] dark-any:text-white/40" : "text-[var(--sc-text-muted)] dark-any:text-white/65"
               )}>
                 {predraft ? "Not drafted yet" : hasBye ? "Bye Week" : m.opponentTeamName}
               </p>
-              <p className="text-[10px] md:text-[11px] text-white/25 tabular-nums leading-tight mt-0.5">
+              <p className="text-[10px] md:text-[11px] text-[var(--sc-text-muted)] dark-any:text-white/25 tabular-nums leading-tight mt-0.5">
                 {(hasBye || predraft) ? "" : fmtRecord(m.opponentRecord.wins, m.opponentRecord.losses, m.opponentRecord.ties)}
               </p>
               {!preseason && !hasBye && !predraft && (
                 <p className={cn(
                   "text-[22px] md:text-[28px] font-black tabular-nums leading-none mt-1",
-                  !isFav && !isClose ? theme.txt : "text-white/50"
+                  !isFav && !isClose ? theme.txt : "text-[var(--sc-text-muted)] dark-any:text-white/50"
                 )}>
                   {fmt1(m.opponentProj)}
                 </p>
@@ -958,7 +958,7 @@ function MatchupBattleCard({ m, preseason }: { m: MatchupAnalysis; preseason?: b
             </div>
             <div className={cn(
               "w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center flex-shrink-0 ring-2 shadow-md overflow-hidden",
-              (hasBye || predraft) ? "bg-white/5 ring-white/10" : "bg-white/8 ring-white/18"
+              (hasBye || predraft) ? "bg-black/[0.03] ring-black/5 dark-any:bg-white/5 dark-any:ring-white/10" : "bg-black/[0.03] ring-black/5 dark-any:bg-white/8 dark-any:ring-white/18"
             )}>
               {!hasBye && !predraft && m.opponentUserAvatar ? (
                 <img
@@ -973,7 +973,7 @@ function MatchupBattleCard({ m, preseason }: { m: MatchupAnalysis; preseason?: b
                 />
               ) : null}
               <span
-                className={cn("text-base md:text-lg font-black leading-none select-none", (hasBye || predraft) ? "text-white/25" : "text-white/55")}
+                className={cn("text-base md:text-lg font-black leading-none select-none", (hasBye || predraft) ? "text-[var(--sc-text-muted)] dark-any:text-white/25" : "text-[var(--sc-text-muted)] dark-any:text-white/55")}
                 style={{ display: !hasBye && !predraft && m.opponentUserAvatar ? "none" : undefined }}
               >
                 {oppInitial}
@@ -984,16 +984,16 @@ function MatchupBattleCard({ m, preseason }: { m: MatchupAnalysis; preseason?: b
 
         {/* Preseason hint */}
         {preseason && (
-          <div className="mt-3 flex items-center justify-center gap-1.5 rounded-lg bg-white/[0.025] border border-white/6 py-2">
+          <div className="mt-3 flex items-center justify-center gap-1.5 rounded-lg bg-black/[0.03] dark-any:bg-white/[0.025] border border-[var(--sc-border)] dark-any:border-white/6 py-2">
             <CalendarX className="w-3 h-3 text-yellow-400/45" />
-            <span className="text-[10px] md:text-[11px] text-white/40">Waiting for weekly projections…</span>
+            <span className="text-[10px] md:text-[11px] text-[var(--sc-text-muted)] dark-any:text-white/40">Waiting for weekly projections…</span>
           </div>
         )}
 
         {/* Win-probability bar */}
         {!preseason && !hasBye && !predraft && (
           <div className="mt-3.5">
-            <div className="relative h-2 rounded-full bg-white/6 overflow-hidden ring-1 ring-white/5">
+            <div className="relative h-2 rounded-full bg-black/[0.03] dark-any:bg-white/6 overflow-hidden ring-1 ring-black/5 dark-any:ring-white/5">
               <div
                 className="absolute inset-y-0 left-0 transition-all duration-700"
                 style={{ width: `${m.winPct}%`, backgroundColor: theme.bar, opacity: 0.92 }}
@@ -1003,7 +1003,7 @@ function MatchupBattleCard({ m, preseason }: { m: MatchupAnalysis; preseason?: b
               <span className={cn("text-[9px] md:text-[10px] tabular-nums font-bold", theme.txt)}>
                 {Math.round(m.winPct)}%
               </span>
-              <span className="text-[9px] md:text-[10px] text-white/35 tabular-nums font-bold">
+              <span className="text-[9px] md:text-[10px] text-[var(--sc-text-muted)] dark-any:text-white/35 tabular-nums font-bold">
                 {Math.round(100 - m.winPct)}%
               </span>
             </div>
@@ -1012,7 +1012,7 @@ function MatchupBattleCard({ m, preseason }: { m: MatchupAnalysis; preseason?: b
 
         {/* Expand affordance */}
         {canExpand && (
-          <div className="flex items-center justify-center mt-2 gap-1 text-white/22 group-hover/card:text-white/50 transition-colors">
+          <div className="flex items-center justify-center mt-2 gap-1 text-[var(--sc-text-muted)] dark-any:text-white/22 group-hover/card:text-[var(--sc-text)] dark-any:group-hover/card:text-white/50 transition-colors">
             <span className="text-[9px] md:text-[10px] font-bold uppercase tracking-wider">
               {expanded ? "Hide" : "Show"} lineup
             </span>
@@ -1024,48 +1024,48 @@ function MatchupBattleCard({ m, preseason }: { m: MatchupAnalysis; preseason?: b
       {/* ─── Expanded panel ───────────────────────────────────────── */}
       {expanded && !preseason && (
         <div
-          className="px-3.5 md:px-5 pb-4 pt-3 border-t border-white/4 bg-white/[0.012] space-y-4"
+          className="px-3.5 md:px-5 pb-4 pt-3 border-t border-[var(--sc-border)] dark-any:border-white/4 bg-black/[0.03] dark-any:bg-white/[0.012] space-y-4"
           onClick={e => e.stopPropagation()}
         >
           {/* Starters side-by-side */}
           <div className="grid grid-cols-2 gap-4 md:gap-6">
             <div>
-              <p className="text-[8px] font-bold uppercase tracking-[0.2em] text-[#d4af37]/55 mb-2 truncate">{m.myTeamName}</p>
+              <p className="text-[8px] font-bold uppercase tracking-[0.2em] text-[var(--sc-gold-deep)] dark-any:text-[#d4af37]/55 mb-2 truncate">{m.myTeamName}</p>
               <div className="space-y-1.5">
                 {m.myStarters.filter(s => s.pos !== "K" && s.pos !== "DEF").map((s, i) => {
                   const inj = injLabel(s.injury);
                   return (
                     <div key={i} className="flex items-center gap-1.5">
-                      <span className="text-[8px] font-bold text-white/30 w-7 flex-shrink-0">{s.pos}</span>
-                      <span className="text-[11px] text-white/80 flex-1 truncate">{s.name}</span>
+                      <span className="text-[8px] font-bold text-[var(--sc-text-muted)] dark-any:text-white/30 w-7 flex-shrink-0">{s.pos}</span>
+                      <span className="text-[11px] text-[var(--sc-text)] dark-any:text-white/80 flex-1 truncate">{s.name}</span>
                       {inj && (
                         <span className={cn(
                           "text-[7px] font-bold flex-shrink-0 px-1 rounded",
                           inj === "OUT" ? "text-red-400 bg-red-500/10" : "text-yellow-400 bg-yellow-500/10"
                         )}>{inj}</span>
                       )}
-                      <span className="text-[11px] font-bold text-white/55 tabular-nums flex-shrink-0 ml-1">{fmt1(s.proj)}</span>
+                      <span className="text-[11px] font-bold text-[var(--sc-text-muted)] dark-any:text-white/55 tabular-nums flex-shrink-0 ml-1">{fmt1(s.proj)}</span>
                     </div>
                   );
                 })}
               </div>
             </div>
             <div>
-              <p className="text-[8px] font-bold uppercase tracking-[0.2em] text-white/35 mb-2 truncate">{m.opponentTeamName}</p>
+              <p className="text-[8px] font-bold uppercase tracking-[0.2em] text-[var(--sc-text-muted)] dark-any:text-white/35 mb-2 truncate">{m.opponentTeamName}</p>
               <div className="space-y-1.5">
                 {m.opponentStarters.filter(s => s.pos !== "K" && s.pos !== "DEF").map((s, i) => {
                   const inj = injLabel(s.injury);
                   return (
                     <div key={i} className="flex items-center gap-1.5">
-                      <span className="text-[8px] font-bold text-white/22 w-7 flex-shrink-0">{s.pos}</span>
-                      <span className="text-[11px] text-white/50 flex-1 truncate">{s.name}</span>
+                      <span className="text-[8px] font-bold text-[var(--sc-text-muted)] dark-any:text-white/22 w-7 flex-shrink-0">{s.pos}</span>
+                      <span className="text-[11px] text-[var(--sc-text-muted)] dark-any:text-white/50 flex-1 truncate">{s.name}</span>
                       {inj && (
                         <span className={cn(
                           "text-[7px] font-bold flex-shrink-0 px-1 rounded",
                           inj === "OUT" ? "text-red-400/75 bg-red-500/8" : "text-yellow-400/75 bg-yellow-500/8"
                         )}>{inj}</span>
                       )}
-                      <span className="text-[11px] font-bold text-white/35 tabular-nums flex-shrink-0 ml-1">{fmt1(s.proj)}</span>
+                      <span className="text-[11px] font-bold text-[var(--sc-text-muted)] dark-any:text-white/35 tabular-nums flex-shrink-0 ml-1">{fmt1(s.proj)}</span>
                     </div>
                   );
                 })}
@@ -1077,7 +1077,7 @@ function MatchupBattleCard({ m, preseason }: { m: MatchupAnalysis; preseason?: b
           <button
             onClick={() => setLocation(`/matchup/${m.leagueId}`)}
             data-testid={`button-detailed-matchup-${m.leagueId}`}
-            className="w-full mt-1 flex items-center justify-center gap-1.5 rounded-lg border border-[#d4af37]/30 bg-[#d4af37]/[0.06] hover:bg-[#d4af37]/[0.12] text-[#d4af37] text-[11px] md:text-[12px] font-bold uppercase tracking-wider py-2 transition-colors"
+            className="w-full mt-1 flex items-center justify-center gap-1.5 rounded-lg border border-[#d4af37]/30 bg-[#d4af37]/[0.06] hover:bg-[#d4af37]/[0.12] text-[var(--sc-gold-deep)] dark-any:text-[#d4af37] text-[11px] md:text-[12px] font-bold uppercase tracking-wider py-2 transition-colors"
           >
             <Swords className="w-3.5 h-3.5" />
             Show Detailed Matchup
@@ -1098,7 +1098,7 @@ function IrTaxiPlayerChip({ p, tone }: { p: IrTaxiPlayer; tone?: "danger" | "goo
   const border =
     tone === "danger" ? "border-red-500/30 bg-red-500/[0.05]" :
     tone === "good" ? "border-emerald-500/25 bg-emerald-500/[0.05]" :
-    "border-white/8 bg-white/[0.02]";
+    "border-[var(--sc-border)] bg-black/[0.03] dark-any:border-white/8 dark-any:bg-white/[0.02]";
   return (
     <div className={cn("flex items-center gap-2 rounded-lg border px-2.5 py-1.5", border)}>
       <PlayerAvatar
@@ -1142,21 +1142,21 @@ function IrTaxiLeagueCard({ a }: { a: IrTaxiAnalysis }) {
       {/* League header */}
       <div className="flex items-center gap-2 mb-3">
         {a.avatar ? (
-          <img src={a.avatar} alt="" className="w-6 h-6 rounded object-cover ring-1 ring-white/10"
+          <img src={a.avatar} alt="" className="w-6 h-6 rounded object-cover ring-1 ring-black/5 dark-any:ring-white/10"
             onError={e => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
         ) : (
-          <div className="w-6 h-6 rounded bg-[#0b3a7a]/40 ring-1 ring-white/10" />
+          <div className="w-6 h-6 rounded bg-[#0b3a7a]/40 ring-1 ring-black/5 dark-any:ring-white/10" />
         )}
         <h3 className="text-sm font-semibold truncate flex-1 min-w-0">{a.leagueName}</h3>
         <div className="flex items-center gap-1.5 flex-shrink-0">
           {hasIr && (
             <span className={cn(
               "text-[9px] font-bold uppercase tracking-wider rounded-full border px-2 py-0.5",
-              openIrSlots > 0 ? "text-emerald-300 border-emerald-500/25 bg-emerald-500/10" : "text-white/45 border-white/10 bg-white/5",
+              openIrSlots > 0 ? "text-emerald-600 dark-any:text-emerald-300 border-emerald-500/25 bg-emerald-500/10" : "text-[var(--sc-text-muted)] dark-any:text-white/45 border-[var(--sc-border)] dark-any:border-white/10 bg-black/[0.03] dark-any:bg-white/5",
             )}>IR {a.irPlayers.length}/{a.irCapacity}</span>
           )}
           {a.taxiPlayers.length > 0 && (
-            <span className="text-[9px] font-bold uppercase tracking-wider rounded-full border border-white/10 bg-white/5 text-white/55 px-2 py-0.5">
+            <span className="text-[9px] font-bold uppercase tracking-wider rounded-full border border-[var(--sc-border)] dark-any:border-white/10 bg-black/[0.03] dark-any:bg-white/5 text-[var(--sc-text-muted)] dark-any:text-white/55 px-2 py-0.5">
               Taxi {a.taxiPlayers.length}
             </span>
           )}
@@ -1167,14 +1167,14 @@ function IrTaxiLeagueCard({ a }: { a: IrTaxiAnalysis }) {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Injured Reserve */}
         <div>
-          <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-[#d4af37] mb-2">Injured Reserve</p>
+          <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-[var(--sc-gold-deep)] dark-any:text-[#d4af37] mb-2">Injured Reserve</p>
           {ineligibleCount > 0 && (
             <p className="text-[10px] mb-1 text-red-400/80">
               {ineligibleCount} player{ineligibleCount === 1 ? "" : "s"} no longer IR-eligible — move off IR or it blocks your lineup.
             </p>
           )}
           {!hasIr ? (
-            <p className="text-[11px] text-white/30 py-1">No IR slots in this league.</p>
+            <p className="text-[11px] text-[var(--sc-text-muted)] dark-any:text-white/30 py-1">No IR slots in this league.</p>
           ) : a.irPlayers.length ? (
             <div className="flex flex-wrap gap-1.5">
               {a.irPlayers.map(p => (
@@ -1182,18 +1182,18 @@ function IrTaxiLeagueCard({ a }: { a: IrTaxiAnalysis }) {
               ))}
             </div>
           ) : (
-            <p className="text-[11px] text-white/30 py-1">IR is empty · {openIrSlots} open slot{openIrSlots === 1 ? "" : "s"}.</p>
+            <p className="text-[11px] text-[var(--sc-text-muted)] dark-any:text-white/30 py-1">IR is empty · {openIrSlots} open slot{openIrSlots === 1 ? "" : "s"}.</p>
           )}
         </div>
 
         {/* IR candidates */}
         <div>
-          <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-[#d4af37] mb-2">Can Move to IR</p>
+          <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-[var(--sc-gold-deep)] dark-any:text-[#d4af37] mb-2">Can Move to IR</p>
           {!hasIr ? (
-            <p className="text-[11px] text-white/30 py-1">—</p>
+            <p className="text-[11px] text-[var(--sc-text-muted)] dark-any:text-white/30 py-1">—</p>
           ) : a.irCandidates.length ? (
             <>
-              <p className={cn("text-[10px] mb-1", (openIrSlots > 0 || ineligibleCount > 0) ? "text-emerald-300/80" : "text-white/35")}>
+              <p className={cn("text-[10px] mb-1", (openIrSlots > 0 || ineligibleCount > 0) ? "text-emerald-700/80 dark-any:text-emerald-300/80" : "text-[var(--sc-text-muted)] dark-any:text-white/35")}>
                 {openIrSlots > 0
                   ? `${openIrSlots} open IR slot${openIrSlots === 1 ? "" : "s"} — stash one to free a roster spot.`
                   : ineligibleCount > 0
@@ -1207,14 +1207,14 @@ function IrTaxiLeagueCard({ a }: { a: IrTaxiAnalysis }) {
               </div>
             </>
           ) : (
-            <p className="text-[11px] text-white/30 py-1">No IR-eligible players on your active roster.</p>
+            <p className="text-[11px] text-[var(--sc-text-muted)] dark-any:text-white/30 py-1">No IR-eligible players on your active roster.</p>
           )}
         </div>
         </div>
 
         {/* Taxi squad */}
         <div>
-          <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-[#d4af37] mb-2">Taxi Squad</p>
+          <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-[var(--sc-gold-deep)] dark-any:text-[#d4af37] mb-2">Taxi Squad</p>
           {a.taxiCapacity > 0 || a.taxiPlayers.length ? (
             <div className="flex flex-wrap gap-1.5">
               {a.taxiPlayers.map(p => <IrTaxiPlayerChip key={p.pid} p={p} />)}
@@ -1223,7 +1223,7 @@ function IrTaxiLeagueCard({ a }: { a: IrTaxiAnalysis }) {
               ))}
             </div>
           ) : (
-            <p className="text-[11px] text-white/30 py-1">No taxi squad in this league.</p>
+            <p className="text-[11px] text-[var(--sc-text-muted)] dark-any:text-white/30 py-1">No taxi squad in this league.</p>
           )}
         </div>
       </div>
@@ -1259,8 +1259,8 @@ function IrTaxiView({ items, loading }: { items: IrTaxiAnalysis[]; loading: bool
   if (relevant.length === 0) {
     return (
       <div className="rounded-xl border border-border bg-card/40 p-10 text-center">
-        <Shield className="w-7 h-7 text-white/25 mx-auto mb-3" />
-        <h3 className="text-sm font-bold text-white/80">No IR or Taxi slots</h3>
+        <Shield className="w-7 h-7 text-[var(--sc-text-muted)] dark-any:text-white/25 mx-auto mb-3" />
+        <h3 className="text-sm font-bold text-[var(--sc-text)] dark-any:text-white/80">No IR or Taxi slots</h3>
         <p className="text-[12px] text-muted-foreground mt-1 max-w-sm mx-auto">None of your leagues offer Injured Reserve or Taxi spots, so there's nothing to manage here.</p>
       </div>
     );
@@ -1270,10 +1270,10 @@ function IrTaxiView({ items, loading }: { items: IrTaxiAnalysis[]; loading: bool
     <div className="space-y-3">
       {(totalIneligible > 0 || totalStashable > 0) && (
         <div className="flex flex-wrap items-center gap-2 rounded-xl border border-[#d4af37]/20 bg-[#d4af37]/[0.05] px-3.5 py-2.5">
-          <Shield className="w-4 h-4 text-[#d4af37] flex-shrink-0" />
-          <span className="text-[12px] text-white/80">
-            {totalIneligible > 0 && <><span className="font-bold text-red-300">{totalIneligible}</span> ineligible IR player{totalIneligible === 1 ? "" : "s"} to move. </>}
-            {totalStashable > 0 && <><span className="font-bold text-emerald-300">{totalStashable}</span> player{totalStashable === 1 ? "" : "s"} can be stashed on open IR slots.</>}
+          <Shield className="w-4 h-4 text-[var(--sc-gold-deep)] dark-any:text-[#d4af37] flex-shrink-0" />
+          <span className="text-[12px] text-[var(--sc-text)] dark-any:text-white/80">
+            {totalIneligible > 0 && <><span className="font-bold text-red-600 dark-any:text-red-300">{totalIneligible}</span> ineligible IR player{totalIneligible === 1 ? "" : "s"} to move. </>}
+            {totalStashable > 0 && <><span className="font-bold text-emerald-600 dark-any:text-emerald-300">{totalStashable}</span> player{totalStashable === 1 ? "" : "s"} can be stashed on open IR slots.</>}
           </span>
         </div>
       )}

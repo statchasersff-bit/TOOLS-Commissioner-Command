@@ -3303,11 +3303,11 @@ function getTradeShape(trade: TradeRecord | null | undefined): TradeShape {
 // the filter area reads like a compact toolbar rather than a settings form.
 function FilterGroup({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-2">
+    <div className="flex flex-col items-center gap-1.5 sm:flex-row sm:items-center sm:gap-2">
       <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground whitespace-nowrap">
         {label}
       </span>
-      <div className="flex flex-wrap items-center gap-1.5">{children}</div>
+      <div className="flex flex-wrap items-center justify-center gap-1.5 md:justify-start">{children}</div>
     </div>
   );
 }
@@ -3566,7 +3566,7 @@ export function TradeDatabase({ league }: { league: League }) {
         </div>
 
         <div className="flex flex-col gap-3">
-          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-6 sm:gap-y-3">
+          <div className="flex flex-col items-center justify-center gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-6 sm:gap-y-3 md:justify-start">
             <FilterGroup label="Format">
               {(["all", "SF", "1QB"] as const).map((f) => (
                 <button
@@ -3604,7 +3604,7 @@ export function TradeDatabase({ league }: { league: League }) {
             </FilterGroup>
           </div>
 
-          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-6 sm:gap-y-3">
+          <div className="flex flex-col items-center justify-center gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-6 sm:gap-y-3 md:justify-start">
             <FilterGroup label="Size">
               {(["all", "10", "12", "14"] as const).map((size) => (
                 <button

@@ -1166,7 +1166,7 @@ export default function PositionStats() {
               <table className="w-full text-xs border-collapse" data-testid="compare-table">
                 <thead>
                   <tr className="border-b border-border/50 bg-muted/25">
-                    <th className="sticky left-0 z-20 bg-[hsl(var(--card))] px-3 py-2.5 text-left font-bold uppercase tracking-wider text-[10px] text-muted-foreground border-r border-border/25 min-w-[150px]">
+                    <th className="px-2 py-2.5 text-left font-bold uppercase tracking-wider text-[10px] text-muted-foreground border-r border-border/25 min-w-[90px]">
                       Stat
                     </th>
                     {compareRows.length === 0 ? (
@@ -1223,9 +1223,9 @@ export default function PositionStats() {
                       )}
                       {g.label && (
                         <tr data-testid={`compare-section-${g.label}`}>
-                          {/* Sticky label cell: gradient bar + coloured left accent */}
+                          {/* Section label cell: gradient bar + coloured left accent */}
                           <td
-                            className="sticky left-0 z-10 px-3 py-2.5 whitespace-nowrap"
+                            className="px-2 py-2.5 whitespace-nowrap"
                             style={{
                               background: SECTION_BAR_GRADIENT,
                               borderLeft: `3px solid ${accent}`,
@@ -1269,9 +1269,6 @@ export default function PositionStats() {
                         }
                         const hasLeader = Number.isFinite(leaderVal) && compareRows.length > 1;
                         const isScore = scoreKeySet.has(col.key);
-                        const stickyBg = ci % 2 === 1
-                          ? "linear-gradient(hsl(var(--muted) / 0.7), hsl(var(--muted) / 0.7)), hsl(var(--card))"
-                          : "hsl(var(--card))";
                         return (
                           <tr
                             key={col.key}
@@ -1282,10 +1279,9 @@ export default function PositionStats() {
                             data-testid={`compare-row-${col.key}`}
                           >
                             <td
-                              style={{ background: stickyBg }}
                               title={isScore ? scoreDescByKey[col.key] : STAT_DESCRIPTIONS[col.key]}
                               className={cn(
-                                "sticky left-0 z-10 px-3 py-2 whitespace-nowrap border-r border-border/25",
+                                "px-2 py-2 whitespace-nowrap border-r border-border/25",
                                 isScore ? "font-semibold text-foreground/90" : "font-medium text-muted-foreground",
                                 (isScore ? scoreDescByKey[col.key] : STAT_DESCRIPTIONS[col.key]) && "cursor-help",
                               )}

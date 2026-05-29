@@ -5,7 +5,7 @@ import { API_BASE } from "@/lib/apiBase";
 import { cn } from "@/lib/utils";
 import {
   Loader2, AlertCircle, TrendingDown,
-  Trophy, Flame, Snowflake, Target, Clock,
+  Trophy, Flame, Snowflake, Target,
 } from "lucide-react";
 import { TeamLoader } from "@/components/TeamLoader";
 
@@ -320,37 +320,13 @@ export function PlayoffOdds({ leagueId }: { leagueId: string }) {
     },
   ], []);
 
-  const lastUpdatedLabel = useMemo(() => {
-    if (!data) return "—";
-    const d = new Date(data.lastUpdated);
-    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  }, [data]);
-
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center gap-3">
-          {loading && <TeamLoader size="sm" fallback="Running simulations…" context="Running simulations" />}
-
-          {data && (
-            <div className="flex flex-wrap items-center gap-1.5" data-testid="pc-settings-pills">
-              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-muted/60 text-muted-foreground border border-border/50">
-                <Clock className="w-3 h-3" />
-                {data.settings.remainingWeeks} wks left
-              </span>
-              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-muted/60 text-muted-foreground border border-border/50">
-                Playoff teams: {data.settings.playoffTeams}
-              </span>
-              {data.settings.byes > 0 && (
-                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-muted/60 text-muted-foreground border border-border/50">
-                  Byes: {data.settings.byes}
-                </span>
-              )}
-              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-muted/60 text-muted-foreground border border-border/50">
-                Updated: {lastUpdatedLabel}
-              </span>
-            </div>
-          )}
-      </div>
+      {loading && (
+        <div className="flex flex-wrap items-center gap-3">
+          <TeamLoader size="sm" fallback="Running simulations…" context="Running simulations" />
+        </div>
+      )}
 
       {error && (
         <Card className="p-4 border-rose-500/40 bg-rose-500/5" data-testid="pc-error">

@@ -93,8 +93,11 @@ export function TierBreakdown({ league, userTeam }: Props) {
         </div>
       </div>
 
-      {/* Per-tier expanded cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+      {/* Per-tier expanded cards. Auto-fit packs as many cards per row as the
+          available width allows (down to a ~150px min) instead of jumping
+          between fixed breakpoints — so 5 fit on wide desktop and it steps down
+          5→4→3→2 gracefully as the container narrows. */}
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-3">
         {TIER_ORDER.map((t) => {
           const col = TIER_COLORS[t];
           const players = result.tiers[t];

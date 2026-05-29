@@ -631,11 +631,12 @@ function TradeCard({ trade, myUsername, myAvatar, onView, onCounter, onShowInCal
       </div>
 
       {/* ── Footer: Quick action buttons ── */}
-      <div className="flex items-center gap-2 px-4 py-2.5 border-t border-border/30">
+      <div className="flex flex-wrap items-center gap-2 px-4 py-2.5 border-t border-border/30">
         {/* Right-aligned action group: "Click for Help", then (for incoming,
             still-proposed trades) Counter / Reject / Accept. The ml-auto wrapper
-            keeps the group right-aligned even when the help button is hidden. */}
-        <div className="ml-auto flex items-center gap-2">
+            keeps the group right-aligned even when the help button is hidden;
+            flex-wrap lets the buttons drop to a second row on narrow screens. */}
+        <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
           {/* Show in Trade Calc — loads this trade's league and opens the
               calculator with both sides pre-filled. */}
           <Button

@@ -335,7 +335,7 @@ function DetailBody({ data }: { data: DetailData }) {
       {/* Starters comparison */}
       <section className="rounded-xl border border-border bg-card/40 p-3.5 md:p-4">
         <div className="flex items-center gap-2 mb-3.5">
-          <Swords className="w-4 h-4 text-[#d4af37]" />
+          <Swords className="w-4 h-4 text-[var(--sc-gold-deep)] dark-any:text-[#d4af37]" />
           <h2 className="text-sm font-semibold">Starters</h2>
         </div>
         <StartersComparison data={data} myMode={myMode} setMyMode={setMyMode} oppMode={oppMode} setOppMode={setOppMode} />
@@ -362,11 +362,11 @@ function HeroCard({ data }: { data: DetailData }) {
         {/* League + week strip */}
         <div className="flex items-center justify-center gap-2 mb-4 text-center">
           {data.leagueAvatar ? (
-            <img src={data.leagueAvatar} alt="" className="w-5 h-5 rounded object-cover ring-1 ring-white/10"
+            <img src={data.leagueAvatar} alt="" className="w-5 h-5 rounded object-cover ring-1 ring-black/5 dark-any:ring-white/10"
               onError={e => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
           ) : null}
-          <span className="text-[11px] md:text-xs font-bold uppercase tracking-wider text-white/55">{data.leagueName}</span>
-          <span className="text-[10px] md:text-[11px] text-[#d4af37] font-bold">· Week {data.week}</span>
+          <span className="text-[11px] md:text-xs font-bold uppercase tracking-wider text-[var(--sc-text-muted)] dark-any:text-white/55">{data.leagueName}</span>
+          <span className="text-[10px] md:text-[11px] text-[var(--sc-gold-deep)] dark-any:text-[#d4af37] font-bold">· Week {data.week}</span>
         </div>
 
         {/* Teams + scores */}
@@ -377,13 +377,13 @@ function HeroCard({ data }: { data: DetailData }) {
             <div className="flex items-end gap-2 md:gap-4">
               <ScoreValue value={me.proj} lead={isFav && !hasBye} />
               <div className="flex flex-col items-center pb-2 md:pb-3">
-                <span className="text-[9px] md:text-[10px] font-black uppercase tracking-wider text-white/30 rounded-full border border-white/10 px-2 py-0.5">VS</span>
+                <span className="text-[9px] md:text-[10px] font-black uppercase tracking-wider text-[var(--sc-text-muted)] dark-any:text-white/30 rounded-full border border-[var(--sc-border)] dark-any:border-white/10 px-2 py-0.5">VS</span>
               </div>
               <ScoreValue value={hasBye ? null : (opp?.proj ?? 0)} lead={!isFav && !hasBye} />
             </div>
             <div className="flex items-center gap-6 md:gap-9">
-              <span className="text-[9px] md:text-[10px] uppercase tracking-wider text-white/35 font-bold">Projected</span>
-              <span className="text-[9px] md:text-[10px] uppercase tracking-wider text-white/35 font-bold">Projected</span>
+              <span className="text-[9px] md:text-[10px] uppercase tracking-wider text-[var(--sc-text-muted)] dark-any:text-white/35 font-bold">Projected</span>
+              <span className="text-[9px] md:text-[10px] uppercase tracking-wider text-[var(--sc-text-muted)] dark-any:text-white/35 font-bold">Projected</span>
             </div>
             {!hasBye && (
               <InfoLabel
@@ -399,10 +399,10 @@ function HeroCard({ data }: { data: DetailData }) {
             <TeamIdentity side={opp} align="right" winPct={oppWin} />
           ) : (
             <div className="flex flex-col items-end gap-1 text-right">
-              <div className="w-12 h-12 md:w-16 md:h-16 rounded-full bg-white/5 ring-2 ring-white/10 flex items-center justify-center">
-                <CalendarX className="w-5 h-5 text-white/25" />
+              <div className="w-12 h-12 md:w-16 md:h-16 rounded-full bg-black/[0.03] dark-any:bg-white/5 ring-2 ring-black/5 dark-any:ring-white/10 flex items-center justify-center">
+                <CalendarX className="w-5 h-5 text-[var(--sc-text-muted)] dark-any:text-white/25" />
               </div>
-              <span className="text-sm font-black text-white/40">Bye Week</span>
+              <span className="text-sm font-black text-[var(--sc-text-muted)] dark-any:text-white/40">Bye Week</span>
             </div>
           )}
         </div>
@@ -414,9 +414,9 @@ function HeroCard({ data }: { data: DetailData }) {
               <InfoLabel tip="Win probability from a normal-distribution model on the projected scoring margin." className={cn("text-[11px] md:text-xs font-black tabular-nums", t.txt)}>
                 {myWin}% win
               </InfoLabel>
-              <span className="text-[11px] md:text-xs font-bold tabular-nums text-white/40">{oppWin}%</span>
+              <span className="text-[11px] md:text-xs font-bold tabular-nums text-[var(--sc-text-muted)] dark-any:text-white/40">{oppWin}%</span>
             </div>
-            <div className="relative h-2.5 rounded-full bg-white/6 overflow-hidden ring-1 ring-white/5">
+            <div className="relative h-2.5 rounded-full bg-black/[0.03] dark-any:bg-white/6 overflow-hidden ring-1 ring-black/5 dark-any:ring-white/5">
               <div className="absolute inset-y-0 left-0 transition-all duration-700 rounded-full"
                 style={{ width: `${myWin}%`, backgroundColor: t.bar, opacity: 0.95 }} />
             </div>
@@ -431,7 +431,7 @@ function ScoreValue({ value, lead }: { value: number | null; lead?: boolean }) {
   return (
     <span className={cn(
       "text-4xl md:text-6xl font-black tabular-nums leading-none tracking-tight",
-      value == null ? "text-white/25" : lead ? "text-[#d4af37]" : "text-white/90",
+      value == null ? "text-[var(--sc-text-muted)] dark-any:text-white/25" : lead ? "text-[var(--sc-gold-deep)] dark-any:text-[#d4af37]" : "text-[var(--sc-text)] dark-any:text-white/90",
     )}>
       {value == null ? "—" : fmt1(value)}
     </span>
@@ -446,7 +446,7 @@ function TeamIdentity({ side, align, highlight, winPct }: { side: Side; align: "
     <div className={cn("min-w-0 flex items-center gap-2.5 md:gap-3.5", align === "right" && "flex-row-reverse text-right")}>
       <div className={cn(
         "w-12 h-12 md:w-16 md:h-16 rounded-full flex items-center justify-center flex-shrink-0 ring-2 shadow-md overflow-hidden",
-        highlight ? "bg-[#0b3a7a]/65 ring-[#d4af37]/40" : "bg-white/8 ring-white/18",
+        highlight ? "bg-[#0b3a7a]/65 ring-[#d4af37]/40" : "bg-black/[0.03] dark-any:bg-white/8 ring-black/5 dark-any:ring-white/18",
       )}>
         {side.avatar ? (
           <img src={side.avatar} alt={side.name} className="w-full h-full object-cover"
@@ -456,18 +456,18 @@ function TeamIdentity({ side, align, highlight, winPct }: { side: Side; align: "
               if (sib) sib.style.display = "";
             }} />
         ) : null}
-        <span className={cn("text-lg md:text-2xl font-black leading-none select-none", highlight ? "text-[#d4af37]" : "text-white/55")}
+        <span className={cn("text-lg md:text-2xl font-black leading-none select-none", highlight ? "text-[var(--sc-gold-deep)] dark-any:text-[#d4af37]" : "text-[var(--sc-text-muted)] dark-any:text-white/55")}
           style={{ display: side.avatar ? "none" : undefined }}>{initial}</span>
       </div>
       <div className={cn("min-w-0", align === "right" && "items-end")}>
         {clickTeam ? (
-          <button onClick={clickTeam} className="text-sm md:text-base font-bold text-white/90 hover:text-[#d4af37] transition-colors leading-tight block max-w-full truncate" title={side.name}>
+          <button onClick={clickTeam} className="text-sm md:text-base font-bold text-[var(--sc-text)] dark-any:text-white/90 hover:text-[var(--sc-gold-deep)] dark-any:hover:text-[#d4af37] transition-colors leading-tight block max-w-full truncate" title={side.name}>
             {side.name}
           </button>
         ) : (
-          <p className="text-sm md:text-base font-bold text-white/90 leading-tight truncate" title={side.name}>{side.name}</p>
+          <p className="text-sm md:text-base font-bold text-[var(--sc-text)] dark-any:text-white/90 leading-tight truncate" title={side.name}>{side.name}</p>
         )}
-        <p className="text-[10px] md:text-[11px] text-white/40 tabular-nums leading-tight mt-0.5">
+        <p className="text-[10px] md:text-[11px] text-[var(--sc-text-muted)] dark-any:text-white/40 tabular-nums leading-tight mt-0.5">
           {fmtRecord(side.record.wins, side.record.losses, side.record.ties)} · {winPct}% win
         </p>
       </div>
@@ -526,11 +526,11 @@ function IntelCard({ icon: Icon, label, value, helper, tip, accent }: {
   const ring =
     accent === "gold" ? "before:bg-[#d4af37]" :
     accent === "green" ? "before:bg-emerald-400" :
-    accent === "red" ? "before:bg-red-400" : "before:bg-white/20";
+    accent === "red" ? "before:bg-red-400" : "before:bg-black/[0.03] dark-any:before:bg-white/20";
   const iconCls =
-    accent === "gold" ? "text-[#d4af37]" :
+    accent === "gold" ? "text-[var(--sc-gold-deep)] dark-any:text-[#d4af37]" :
     accent === "green" ? "text-emerald-400" :
-    accent === "red" ? "text-red-400" : "text-white/40";
+    accent === "red" ? "text-red-400" : "text-[var(--sc-text-muted)] dark-any:text-white/40";
   return (
     <div className={cn(
       "relative overflow-hidden rounded-xl border border-border bg-card/40 p-3 pl-3.5",
@@ -555,7 +555,7 @@ function SegmentedControl({ value, onChange }: {
     { id: "optimal", label: "Optimal" },
   ];
   return (
-    <div className="inline-flex rounded-lg border border-white/10 bg-white/[0.03] p-0.5">
+    <div className="inline-flex rounded-lg border border-[var(--sc-border)] dark-any:border-white/10 bg-black/[0.03] dark-any:bg-white/[0.03] p-0.5">
       {opts.map(o => (
         <button
           key={o.id}
@@ -563,7 +563,7 @@ function SegmentedControl({ value, onChange }: {
           data-testid={`seg-${o.id}`}
           className={cn(
             "px-3 py-1 text-[11px] font-bold uppercase tracking-wider rounded-md transition-colors",
-            value === o.id ? "bg-[#d4af37]/15 text-[#d4af37]" : "text-white/45 hover:text-white/75",
+            value === o.id ? "bg-[#d4af37]/15 text-[var(--sc-gold-deep)] dark-any:text-[#d4af37]" : "text-[var(--sc-text-muted)] hover:text-[var(--sc-text)] dark-any:text-white/45 dark-any:hover:text-white/75",
           )}
         >
           {o.label}
@@ -602,11 +602,11 @@ function StartersComparison({ data, myMode, setMyMode, oppMode, setOppMode }: {
     return (
       <div className="space-y-1.5">
         <div className="flex items-center gap-2 mb-2">
-          <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-[#d4af37]/60 truncate">{me.name}</span>
+          <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-[var(--sc-gold-deep)] dark-any:text-[#d4af37]/60 truncate">{me.name}</span>
           <div className="ml-auto"><SegmentedControl value={myMode} onChange={setMyMode} /></div>
         </div>
         {left.map((p, i) => (
-          <div key={i} className="flex items-center gap-2 rounded-lg border border-white/6 bg-white/[0.02] px-2.5 py-1.5">
+          <div key={i} className="flex items-center gap-2 rounded-lg border border-[var(--sc-border)] dark-any:border-white/6 bg-black/[0.03] dark-any:bg-white/[0.02] px-2.5 py-1.5">
             <SlotBadge slot={p.slot} />
             <PlayerCell player={p} align="left" />
             <ProjValue value={p.proj} />
@@ -621,11 +621,11 @@ function StartersComparison({ data, myMode, setMyMode, oppMode, setOppMode }: {
       {/* Per-team toggles (each side controls its own lineup) */}
       <div className="grid grid-cols-2 gap-3 mb-3">
         <div className="flex flex-col items-start gap-1.5 min-w-0">
-          <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-[#d4af37]/60 truncate max-w-full">{leftLabel}</span>
+          <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-[var(--sc-gold-deep)] dark-any:text-[#d4af37]/60 truncate max-w-full">{leftLabel}</span>
           <SegmentedControl value={myMode} onChange={setMyMode} />
         </div>
         <div className="flex flex-col items-end gap-1.5 min-w-0">
-          <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-white/35 truncate max-w-full text-right">{rightLabel}</span>
+          <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-[var(--sc-text-muted)] dark-any:text-white/35 truncate max-w-full text-right">{rightLabel}</span>
           <SegmentedControl value={oppMode} onChange={setOppMode} />
         </div>
       </div>
@@ -653,7 +653,7 @@ function ComparisonRow({ slot, left, right, leftLabel, rightLabel }: {
     ? "border-emerald-500/25 bg-gradient-to-r from-emerald-500/[0.07] to-transparent"
     : rightAdv
       ? "border-red-500/25 bg-gradient-to-l from-red-500/[0.06] to-transparent"
-      : "border-white/8 bg-white/[0.02]";
+      : "border-[var(--sc-border)] dark-any:border-white/8 bg-black/[0.03] dark-any:bg-white/[0.02]";
 
   return (
     <>
@@ -684,7 +684,7 @@ function ComparisonRow({ slot, left, right, leftLabel, rightLabel }: {
         </div>
         <MobilePlayerLine label={leftLabel} player={left} highlight={leftAdv} mine />
         <MobilePlayerLine label={rightLabel} player={right} highlight={rightAdv} />
-        <p className="text-[10px] text-white/45 text-center pt-0.5">
+        <p className="text-[10px] text-[var(--sc-text-muted)] dark-any:text-white/45 text-center pt-0.5">
           {close ? "Even matchup" : edge > 0
             ? <>Your edge: <span className="text-emerald-400 font-bold">{signed(edge)}</span></>
             : <>Opponent edge: <span className="text-red-400 font-bold">{signed(-edge)}</span></>}
@@ -698,7 +698,7 @@ function MobilePlayerLine({ label, player, highlight, mine }: { label: string; p
   return (
     <div className={cn(
       "rounded-lg border px-2.5 py-1.5 flex items-center gap-2",
-      highlight ? (mine ? "border-emerald-500/30 bg-emerald-500/[0.06]" : "border-red-500/30 bg-red-500/[0.05]") : "border-white/6 bg-white/[0.015]",
+      highlight ? (mine ? "border-emerald-500/30 bg-emerald-500/[0.06]" : "border-red-500/30 bg-red-500/[0.05]") : "border-[var(--sc-border)] dark-any:border-white/6 bg-black/[0.03] dark-any:bg-white/[0.015]",
     )}>
       <PlayerCell player={player} align="left" />
       <ProjValue value={player?.proj ?? null} />
@@ -712,10 +712,10 @@ function PlayerCell({ player, align }: { player: SlotPlayer | null; align: "left
   if (!player) {
     return (
       <div className={cn("flex items-center gap-2 min-w-0 flex-1", align === "right" && "flex-row-reverse text-right")}>
-        <div className="w-8 h-8 md:w-9 md:h-9 rounded-full bg-white/5 ring-1 ring-white/10 flex-shrink-0 flex items-center justify-center">
-          <Ban className="w-3.5 h-3.5 text-white/20" />
+        <div className="w-8 h-8 md:w-9 md:h-9 rounded-full bg-black/[0.03] dark-any:bg-white/5 ring-1 ring-black/5 dark-any:ring-white/10 flex-shrink-0 flex items-center justify-center">
+          <Ban className="w-3.5 h-3.5 text-[var(--sc-text-muted)] dark-any:text-white/20" />
         </div>
-        <span className="text-[11px] text-white/30 italic">Empty</span>
+        <span className="text-[11px] text-[var(--sc-text-muted)] dark-any:text-white/30 italic">Empty</span>
       </div>
     );
   }
@@ -731,15 +731,15 @@ function PlayerCell({ player, align }: { player: SlotPlayer | null; align: "left
           <button
             onClick={() => openPlayerProfile(player.pid)}
             data-testid={`player-${player.pid}`}
-            className={cn("block max-w-full text-[12px] md:text-[13px] font-semibold text-white/90 hover:text-[#d4af37] transition-colors leading-tight", align === "right" && "ml-auto")}
+            className={cn("block max-w-full text-[12px] md:text-[13px] font-semibold text-[var(--sc-text)] dark-any:text-white/90 hover:text-[var(--sc-gold-deep)] dark-any:hover:text-[#d4af37] transition-colors leading-tight", align === "right" && "ml-auto")}
           >
             <ResponsivePlayerName name={player.name} />
           </button>
         ) : (
-          <span className="block text-[12px] md:text-[13px] font-semibold text-white/85 leading-tight truncate" title={player.name}>{player.name}</span>
+          <span className="block text-[12px] md:text-[13px] font-semibold text-[var(--sc-text)] dark-any:text-white/85 leading-tight truncate" title={player.name}>{player.name}</span>
         )}
         <div className={cn("flex items-center gap-1 mt-0.5", align === "right" && "justify-end")}>
-          <span className="text-[9px] md:text-[10px] text-white/40 truncate">{meta}</span>
+          <span className="text-[9px] md:text-[10px] text-[var(--sc-text-muted)] dark-any:text-white/40 truncate">{meta}</span>
           {inj && (
             <span className={cn(
               "text-[7px] font-bold px-1 rounded flex-shrink-0",
@@ -766,7 +766,7 @@ function Headshot({ player }: { player: SlotPlayer }) {
   return (
     <div className="relative flex-shrink-0">
       {failed ? (
-        <div className={cn("w-8 h-8 md:w-9 md:h-9 rounded-full flex items-center justify-center text-[9px] font-black", posColor[player.pos] || "text-white/50 bg-white/10")}>
+        <div className={cn("w-8 h-8 md:w-9 md:h-9 rounded-full flex items-center justify-center text-[9px] font-black", posColor[player.pos] || "text-[var(--sc-text-muted)] dark-any:text-white/50 bg-black/[0.03] dark-any:bg-white/10")}>
           {player.pos || "?"}
         </div>
       ) : (
@@ -775,7 +775,7 @@ function Headshot({ player }: { player: SlotPlayer }) {
           alt=""
           loading="lazy"
           onError={() => setFailed(true)}
-          className="w-8 h-8 md:w-9 md:h-9 rounded-full object-cover bg-white/5 ring-1 ring-white/10"
+          className="w-8 h-8 md:w-9 md:h-9 rounded-full object-cover bg-black/[0.03] dark-any:bg-white/5 ring-1 ring-black/5 dark-any:ring-white/10"
         />
       )}
       {showLogo && (
@@ -794,7 +794,7 @@ function Headshot({ player }: { player: SlotPlayer }) {
 function SlotBadge({ slot }: { slot: string }) {
   const label = slot === "SUPER_FLEX" ? "SFLX" : slot === "REC_FLEX" ? "RFLX" : slot;
   return (
-    <span className="text-[9px] md:text-[10px] font-black uppercase tracking-wider text-white/70 bg-white/8 border border-white/10 rounded px-1.5 py-0.5 whitespace-nowrap">
+    <span className="text-[9px] md:text-[10px] font-black uppercase tracking-wider text-[var(--sc-text-muted)] dark-any:text-white/70 bg-black/[0.03] dark-any:bg-white/8 border border-[var(--sc-border)] dark-any:border-white/10 rounded px-1.5 py-0.5 whitespace-nowrap">
       {label}
     </span>
   );
@@ -802,10 +802,10 @@ function SlotBadge({ slot }: { slot: string }) {
 
 function EdgePill({ edge, close }: { edge: number; close: boolean }) {
   const cls = close
-    ? "text-white/40 bg-white/8 border-white/10"
+    ? "text-[var(--sc-text-muted)] dark-any:text-white/40 bg-black/[0.03] dark-any:bg-white/8 border-[var(--sc-border)] dark-any:border-white/10"
     : edge > 0
-      ? "text-emerald-300 bg-emerald-500/12 border-emerald-500/25"
-      : "text-red-300 bg-red-500/12 border-red-500/25";
+      ? "text-emerald-600 dark-any:text-emerald-300 bg-emerald-500/12 border-emerald-500/25"
+      : "text-red-600 dark-any:text-red-300 bg-red-500/12 border-red-500/25";
   return (
     <span className={cn("text-[8px] md:text-[9px] font-black tabular-nums border rounded-full px-1.5 py-0.5 whitespace-nowrap", cls)}>
       {close ? "EVEN" : `${signed(edge)}`}
@@ -817,7 +817,7 @@ function ProjValue({ value, dim }: { value: number | null; dim?: boolean }) {
   return (
     <span className={cn(
       "text-[13px] md:text-base font-black tabular-nums flex-shrink-0 w-11 md:w-12 text-center",
-      value == null ? "text-white/20" : value < 0.5 ? "text-red-400/80" : dim ? "text-white/45" : "text-white/85",
+      value == null ? "text-[var(--sc-text-muted)]/60 dark-any:text-white/20" : value < 0.5 ? "text-red-500 dark-any:text-red-400/80" : dim ? "text-[var(--sc-text-muted)] dark-any:text-white/45" : "text-[var(--sc-text)] dark-any:text-white/85",
     )}>
       {value == null ? "—" : fmt1(value)}
     </span>
@@ -840,7 +840,7 @@ function AlertsSection({ data }: { data: DetailData }) {
             <a.icon className="w-4 h-4 flex-shrink-0 mt-0.5" />
             <div className="min-w-0">
               <p className="text-[12px] font-bold leading-tight">{a.title}</p>
-              <p className="text-[11px] text-white/50 leading-snug mt-0.5">{a.body}</p>
+              <p className="text-[11px] text-[var(--sc-text-muted)] dark-any:text-white/50 leading-snug mt-0.5">{a.body}</p>
             </div>
           </div>
         ))}
@@ -856,22 +856,22 @@ function buildAlerts(data: DetailData): Alert[] {
 
   // Zero-projection starters.
   for (const p of me.starters.filter(s => s.proj < 0.5 && !s.onBye)) {
-    out.push({ icon: Ban, title: `${p.name} projects 0.0`, body: `Your ${p.slot} has no projected points — check status before lock.`, cls: "border-red-500/25 bg-red-500/[0.05] text-red-300" });
+    out.push({ icon: Ban, title: `${p.name} projects 0.0`, body: `Your ${p.slot} has no projected points — check status before lock.`, cls: "border-red-500/25 bg-red-500/[0.05] text-red-600 dark-any:text-red-300" });
   }
   // Bye-week starters.
   for (const p of me.starters.filter(s => s.onBye)) {
-    out.push({ icon: CalendarX, title: `${p.name} is on bye`, body: `Your ${p.slot} starter doesn't play this week.`, cls: "border-orange-500/25 bg-orange-500/[0.05] text-orange-300" });
+    out.push({ icon: CalendarX, title: `${p.name} is on bye`, body: `Your ${p.slot} starter doesn't play this week.`, cls: "border-orange-500/25 bg-orange-500/[0.05] text-orange-600 dark-any:text-orange-300" });
   }
   // Injured / questionable starters.
   for (const p of me.starters) {
     const inj = injLabel(p.injury);
     if (inj && !p.onBye) {
-      out.push({ icon: Activity, title: `${p.name} — ${p.injury}`, body: `Injury designation on your ${p.slot}. Have a backup ready.`, cls: inj === "OUT" ? "border-red-500/25 bg-red-500/[0.05] text-red-300" : "border-yellow-500/25 bg-yellow-500/[0.05] text-yellow-300" });
+      out.push({ icon: Activity, title: `${p.name} — ${p.injury}`, body: `Injury designation on your ${p.slot}. Have a backup ready.`, cls: inj === "OUT" ? "border-red-500/25 bg-red-500/[0.05] text-red-600 dark-any:text-red-300" : "border-yellow-500/25 bg-yellow-500/[0.05] text-yellow-600 dark-any:text-yellow-300" });
     }
   }
   // Optimal-lineup improvement.
   if (me.gain > 0.5) {
-    out.push({ icon: Zap, title: `Optimize for +${fmt1(me.gain)} pts`, body: `Switching to your optimal lineup raises your projection to ${fmt1(me.optimalProj)}.`, cls: "border-emerald-500/25 bg-emerald-500/[0.05] text-emerald-300" });
+    out.push({ icon: Zap, title: `Optimize for +${fmt1(me.gain)} pts`, body: `Switching to your optimal lineup raises your projection to ${fmt1(me.optimalProj)}.`, cls: "border-emerald-500/25 bg-emerald-500/[0.05] text-emerald-600 dark-any:text-emerald-300" });
   }
   // Largest advantage / disadvantage by slot (only when there's an opponent).
   if (opp) {
@@ -880,8 +880,8 @@ function buildAlerts(data: DetailData): Alert[] {
     if (paired.length) {
       const best = paired.reduce((a, b) => (b.edge > a.edge ? b : a));
       const worst = paired.reduce((a, b) => (b.edge < a.edge ? b : a));
-      if (best.edge >= 1) out.push({ icon: TrendingUp, title: `Biggest edge: ${best.p.name}`, body: `Out-projects ${best.o!.name} by ${signed(best.edge)} at ${best.p.slot}.`, cls: "border-[#d4af37]/25 bg-[#d4af37]/[0.05] text-[#d4af37]" });
-      if (worst.edge <= -1) out.push({ icon: TrendingDown, title: `Biggest gap: ${worst.o!.name}`, body: `Their ${worst.o!.slot} out-projects ${worst.p.name} by ${signed(-worst.edge)}.`, cls: "border-red-500/25 bg-red-500/[0.05] text-red-300" });
+      if (best.edge >= 1) out.push({ icon: TrendingUp, title: `Biggest edge: ${best.p.name}`, body: `Out-projects ${best.o!.name} by ${signed(best.edge)} at ${best.p.slot}.`, cls: "border-[#d4af37]/25 bg-[#d4af37]/[0.05] text-[var(--sc-gold-deep)] dark-any:text-[#d4af37]" });
+      if (worst.edge <= -1) out.push({ icon: TrendingDown, title: `Biggest gap: ${worst.o!.name}`, body: `Their ${worst.o!.slot} out-projects ${worst.p.name} by ${signed(-worst.edge)}.`, cls: "border-red-500/25 bg-red-500/[0.05] text-red-600 dark-any:text-red-300" });
     }
   }
   return out;
@@ -901,24 +901,24 @@ function BenchSection({ data }: { data: DetailData }) {
       {/* Best available upgrade */}
       <div className={cn(
         "rounded-lg border px-3 py-2.5 mb-3",
-        topSwap ? "border-emerald-500/25 bg-emerald-500/[0.05]" : "border-white/8 bg-white/[0.02]",
+        topSwap ? "border-emerald-500/25 bg-emerald-500/[0.05]" : "border-[var(--sc-border)] dark-any:border-white/8 bg-black/[0.03] dark-any:bg-white/[0.02]",
       )}>
         {topSwap ? (
           <div className="flex items-center gap-2 flex-wrap">
             <Zap className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-            <span className="text-[12px] text-white/80">
-              Best upgrade: start <span className="font-bold text-emerald-300">{topSwap.inName}</span> over <span className="font-bold text-white/60">{topSwap.outName}</span>
+            <span className="text-[12px] text-[var(--sc-text)] dark-any:text-white/80">
+              Best upgrade: start <span className="font-bold text-emerald-600 dark-any:text-emerald-300">{topSwap.inName}</span> over <span className="font-bold text-[var(--sc-text-muted)] dark-any:text-white/60">{topSwap.outName}</span>
             </span>
             <span className="ml-auto text-[12px] font-black text-emerald-400 tabular-nums">+{fmt1(topSwap.projGain)}</span>
           </div>
         ) : (
           <div className="flex items-center gap-2">
             <Trophy className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-            <span className="text-[12px] text-white/70">Your starters are already your best available lineup.</span>
+            <span className="text-[12px] text-[var(--sc-text-muted)] dark-any:text-white/70">Your starters are already your best available lineup.</span>
           </div>
         )}
         {me.gain > 0.5 && (
-          <p className="text-[11px] text-white/45 mt-1.5">
+          <p className="text-[11px] text-[var(--sc-text-muted)] dark-any:text-white/45 mt-1.5">
             Full optimization adds <span className="font-bold text-emerald-400">+{fmt1(me.gain)}</span> projected points ({fmt1(me.proj)} → {fmt1(me.optimalProj)}).
           </p>
         )}
@@ -936,18 +936,18 @@ function BenchSection({ data }: { data: DetailData }) {
 function BenchColumn({ title, players, mine }: { title: string; players: SlotPlayer[]; mine?: boolean }) {
   return (
     <div>
-      <p className={cn("text-[9px] font-bold uppercase tracking-[0.2em] mb-2 truncate", mine ? "text-[#d4af37]/60" : "text-white/35")}>{title}</p>
+      <p className={cn("text-[9px] font-bold uppercase tracking-[0.2em] mb-2 truncate", mine ? "text-[var(--sc-gold-deep)] dark-any:text-[#d4af37]/60" : "text-[var(--sc-text-muted)] dark-any:text-white/35")}>{title}</p>
       {players.length ? (
         <div className="space-y-1.5">
           {players.map(p => (
-            <div key={p.pid} className="flex items-center gap-2 rounded-lg border border-white/6 bg-white/[0.015] px-2.5 py-1.5">
+            <div key={p.pid} className="flex items-center gap-2 rounded-lg border border-[var(--sc-border)] dark-any:border-white/6 bg-black/[0.03] dark-any:bg-white/[0.015] px-2.5 py-1.5">
               <PlayerCell player={p} align="left" />
               <ProjValue value={p.proj} />
             </div>
           ))}
         </div>
       ) : (
-        <p className="text-[11px] text-white/35 py-1">No bench players.</p>
+        <p className="text-[11px] text-[var(--sc-text-muted)] dark-any:text-white/35 py-1">No bench players.</p>
       )}
     </div>
   );
@@ -978,10 +978,10 @@ function InfoLabel({ tip, children, className }: { tip: string; children: React.
 function EmptyState({ title, body, tone, inline }: { title: string; body: string; tone?: "error"; inline?: boolean }) {
   return (
     <div className={cn(inline ? "rounded-xl border border-border bg-card/40 p-6" : "px-3.5 md:px-5 py-16", "text-center")}>
-      <div className={cn("inline-flex items-center justify-center w-11 h-11 rounded-full mb-3", tone === "error" ? "bg-red-500/10" : "bg-white/5")}>
-        {tone === "error" ? <AlertTriangle className="w-5 h-5 text-red-400" /> : <CalendarX className="w-5 h-5 text-white/40" />}
+      <div className={cn("inline-flex items-center justify-center w-11 h-11 rounded-full mb-3", tone === "error" ? "bg-red-500/10" : "bg-black/[0.03] dark-any:bg-white/5")}>
+        {tone === "error" ? <AlertTriangle className="w-5 h-5 text-red-400" /> : <CalendarX className="w-5 h-5 text-[var(--sc-text-muted)] dark-any:text-white/40" />}
       </div>
-      <h3 className={cn("text-sm font-bold", tone === "error" ? "text-red-300" : "text-white/80")}>{title}</h3>
+      <h3 className={cn("text-sm font-bold", tone === "error" ? "text-red-600 dark-any:text-red-300" : "text-[var(--sc-text)] dark-any:text-white/80")}>{title}</h3>
       <p className="text-[12px] text-muted-foreground mt-1 max-w-sm mx-auto">{body}</p>
     </div>
   );
@@ -993,19 +993,19 @@ function MatchupSkeleton() {
     <div className="pb-12 space-y-5 animate-pulse">
       {/* Hero */}
       <div className="rounded-2xl border border-border bg-card/40 p-6">
-        <div className="h-3 w-40 bg-white/8 rounded mx-auto mb-5" />
+        <div className="h-3 w-40 bg-black/[0.03] dark-any:bg-white/8 rounded mx-auto mb-5" />
         <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4">
           <div className="flex items-center gap-3">
-            <div className="w-14 h-14 rounded-full bg-white/8" />
-            <div className="space-y-2"><div className="h-3 w-24 bg-white/8 rounded" /><div className="h-2 w-16 bg-white/8 rounded" /></div>
+            <div className="w-14 h-14 rounded-full bg-black/[0.03] dark-any:bg-white/8" />
+            <div className="space-y-2"><div className="h-3 w-24 bg-black/[0.03] dark-any:bg-white/8 rounded" /><div className="h-2 w-16 bg-black/[0.03] dark-any:bg-white/8 rounded" /></div>
           </div>
-          <div className="h-12 w-32 bg-white/8 rounded" />
+          <div className="h-12 w-32 bg-black/[0.03] dark-any:bg-white/8 rounded" />
           <div className="flex items-center gap-3 flex-row-reverse">
-            <div className="w-14 h-14 rounded-full bg-white/8" />
-            <div className="space-y-2"><div className="h-3 w-24 bg-white/8 rounded" /><div className="h-2 w-16 bg-white/8 rounded" /></div>
+            <div className="w-14 h-14 rounded-full bg-black/[0.03] dark-any:bg-white/8" />
+            <div className="space-y-2"><div className="h-3 w-24 bg-black/[0.03] dark-any:bg-white/8 rounded" /><div className="h-2 w-16 bg-black/[0.03] dark-any:bg-white/8 rounded" /></div>
           </div>
         </div>
-        <div className="h-2.5 w-full bg-white/8 rounded-full mt-6" />
+        <div className="h-2.5 w-full bg-black/[0.03] dark-any:bg-white/8 rounded-full mt-6" />
       </div>
       {/* Intel strip */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -1013,14 +1013,14 @@ function MatchupSkeleton() {
       </div>
       {/* Rows */}
       <div className="rounded-xl border border-border bg-card/40 p-4 space-y-2">
-        <div className="h-4 w-24 bg-white/8 rounded mb-3" />
-        {Array.from({ length: 6 }).map((_, i) => <div key={i} className="h-12 rounded-xl bg-white/[0.03]" />)}
+        <div className="h-4 w-24 bg-black/[0.03] dark-any:bg-white/8 rounded mb-3" />
+        {Array.from({ length: 6 }).map((_, i) => <div key={i} className="h-12 rounded-xl bg-black/[0.03] dark-any:bg-white/[0.03]" />)}
       </div>
       {/* Bench */}
       <div className="rounded-xl border border-border bg-card/40 p-4 space-y-2">
-        <div className="h-4 w-28 bg-white/8 rounded mb-3" />
+        <div className="h-4 w-28 bg-black/[0.03] dark-any:bg-white/8 rounded mb-3" />
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {Array.from({ length: 6 }).map((_, i) => <div key={i} className="h-10 rounded-lg bg-white/[0.03]" />)}
+          {Array.from({ length: 6 }).map((_, i) => <div key={i} className="h-10 rounded-lg bg-black/[0.03] dark-any:bg-white/[0.03]" />)}
         </div>
       </div>
     </div>

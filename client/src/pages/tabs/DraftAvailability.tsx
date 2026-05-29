@@ -73,7 +73,7 @@ function Segmented<T extends string | number>({ label, options, value, onChange,
   label: string; options: readonly T[]; value: T; onChange: (v: T) => void; fmt?: (v: T) => string;
 }) {
   return (
-    <div className="flex flex-col gap-1">
+    <div className="flex flex-col items-center gap-1 md:items-start">
       <span className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground">{label}</span>
       <div className="flex items-center gap-0.5 p-0.5 rounded-full border border-border bg-muted/30">
         {options.map((o) => (
@@ -493,14 +493,14 @@ export function DraftAvailability() {
 
       {/* Filters */}
       <Card className="p-3 sm:p-4">
-        <div className="flex flex-wrap items-end gap-x-5 gap-y-3">
+        <div className="flex flex-wrap items-end justify-center gap-x-5 gap-y-3 md:justify-start">
           {mode !== "rookie" && (
             <Segmented label="Players" options={BAND_OPTS} value={band} onChange={setBand} fmt={(v) => BAND_LABEL[v]} />
           )}
           <Segmented label="Position" options={POSITIONS} value={position} onChange={setPosition} fmt={(v) => (v === "ALL" ? "All" : String(v))} />
           <Segmented label="Format" options={["SF", "1QB"] as const} value={format} onChange={setFormat} />
           <Segmented label="Teams" options={TEAM_OPTS} value={teams} onChange={setTeams} />
-          <div className="flex flex-col gap-1 ml-auto">
+          <div className="flex flex-col items-center gap-1 md:items-start md:ml-auto">
             <span className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground">View</span>
             <div className="flex items-center gap-0.5 p-0.5 rounded-full border border-border bg-muted/30">
               <button onClick={() => setView("matrix")} className={cn("flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-full transition-colors", view === "matrix" ? "bg-[var(--sc-blue)] text-white dark-any:bg-[#d4af37]/20 dark-any:text-[#d4af37]" : "text-muted-foreground hover:text-foreground")}><Table2 className="w-3 h-3" />Matrix</button>
@@ -509,7 +509,7 @@ export function DraftAvailability() {
           </div>
         </div>
         {draftCount != null && (
-          <p className="text-[10px] text-muted-foreground mt-2">
+          <p className="text-[10px] text-muted-foreground mt-2 text-center md:text-left">
             {usingReal
               ? <>Real availability from {(real?.totalDrafts ?? 0).toLocaleString()} {format} {mode === "rookie" ? "rookie" : "startup"} drafts.</>
               : <>Estimated from {draftCount.toLocaleString()} recent {format} {mode === "rookie" ? "rookie" : "startup"} drafts · modeled from ADP spread{realLoading ? " · loading real results…" : ""}.</>}

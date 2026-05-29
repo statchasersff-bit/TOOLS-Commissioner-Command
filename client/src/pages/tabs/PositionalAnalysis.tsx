@@ -498,9 +498,9 @@ function IdeaGenerator({ userTeam, league }: { userTeam: Team; league: League })
       {/* ── Generate controls ─────────────────────────────────────────────── */}
       <div className="space-y-3 pt-1">
         {/* Target positions */}
-        <div>
+        <div className="flex flex-col items-center">
           <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Target positions</span>
-          <div className="flex flex-wrap gap-1.5 mt-1.5">
+          <div className="flex flex-wrap justify-center gap-1.5 mt-1.5">
             {IDEA_POSITION_FILTERS.map((p) => {
               const on = posFilters.has(p);
               return (
@@ -524,11 +524,11 @@ function IdeaGenerator({ userTeam, league }: { userTeam: Team; league: League })
         </div>
 
         {/* Trade shape — how many pieces come back ({offer}for1 / 2 / 3) */}
-        <div>
+        <div className="flex flex-col items-center">
           <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
             Trade shape <span className="normal-case font-medium text-muted-foreground/70">(optional)</span>
           </span>
-          <div className="flex flex-wrap gap-1.5 mt-1.5">
+          <div className="flex flex-wrap justify-center gap-1.5 mt-1.5">
             {[1, 2, 3].map((n) => {
               const on = returnSizes.has(n);
               return (
@@ -552,9 +552,9 @@ function IdeaGenerator({ userTeam, league }: { userTeam: Team; league: League })
         </div>
 
         {/* Valuation model — adjusted (trade up/down + best-asset tax) vs. raw sum */}
-        <div>
+        <div className="flex flex-col items-center">
           <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Trade values</span>
-          <div className="flex flex-wrap gap-1.5 mt-1.5">
+          <div className="flex flex-wrap justify-center gap-1.5 mt-1.5">
             {[
               { on: true, label: "Adjusted", hint: "Diminishing returns + overpay tax" },
               { on: false, label: "Raw", hint: "Plain sum of values" },
@@ -579,7 +579,7 @@ function IdeaGenerator({ userTeam, league }: { userTeam: Team; league: League })
               );
             })}
           </div>
-          <p className="text-[10px] text-muted-foreground mt-1.5">
+          <p className="text-[10px] text-muted-foreground mt-1.5 text-center max-w-md">
             {useAdjustedValues
               ? "Packages valued like the Trade Calculator. Adjustments made for trading up/down and best asset in the deal"
               : "Packages valued as a plain sum of dynasty values."}
@@ -587,14 +587,14 @@ function IdeaGenerator({ userTeam, league }: { userTeam: Team; league: League })
         </div>
 
         {/* Target managers + generate */}
-        <div className="flex flex-col sm:flex-row sm:items-end gap-3">
-          <div className="sm:flex-1">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-full sm:w-auto flex flex-col items-center">
             <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Target managers</span>
-            <div className="relative mt-1.5">
+            <div className="relative mt-1.5 w-full sm:w-72">
               <button
                 onClick={() => setMembersOpen((v) => !v)}
                 data-testid="idea-managers-trigger"
-                className="w-full sm:w-72 flex items-center justify-between gap-2 px-3 py-2 rounded-lg border border-border/60 bg-muted/20 hover:bg-muted/30 text-[13px] text-foreground transition-colors"
+                className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg border border-border/60 bg-muted/20 hover:bg-muted/30 text-[13px] text-foreground transition-colors"
               >
                 <span className="truncate">
                   {allMembersSelected
@@ -640,7 +640,7 @@ function IdeaGenerator({ userTeam, league }: { userTeam: Team; league: League })
             </div>
           </div>
 
-          <div className="flex flex-col gap-1 sm:items-end">
+          <div className="flex flex-col gap-1 items-center">
             <button
               onClick={handleGenerate}
               disabled={!canGenerate}
@@ -844,16 +844,8 @@ export function PositionalAnalysis({ league, userTeam, onNavigateToCalculator }:
 
   const innerToggle = (
     <div
-      className="grid flex-shrink-0 w-[90vw] md:w-[420px]"
-      style={{
-        gridTemplateColumns: "1fr 1fr 1fr",
-        height: 48,
-        borderRadius: 16,
-        padding: 4,
-        background: "rgba(255,255,255,0.04)",
-        border: "1px solid rgba(255,255,255,0.07)",
-        gap: 4,
-      }}
+      className="grid flex-shrink-0 w-[90vw] md:w-auto"
+      style={{ gridTemplateColumns: "repeat(3, 1fr)", height: 48, borderRadius: 16, padding: 4, background: "var(--sc-toggle-bg)", border: "1px solid var(--sc-toggle-border)", gap: 4, minWidth: 0 }}
       data-testid="finder-inner-toggle"
     >
       {(["finder", "bulk-trades", "idea-generator"] as const).map((tab) => {
@@ -864,32 +856,14 @@ export function PositionalAnalysis({ league, userTeam, onNavigateToCalculator }:
           <button
             key={tab}
             onClick={() => setInnerTab(tab)}
+            title={label}
             data-testid={`finder-inner-tab-${tab}`}
-            className="relative flex items-center justify-center gap-2 font-semibold transition-all duration-200"
-            style={{
-              borderRadius: 12,
-              fontSize: 13,
-              letterSpacing: "0.01em",
-              background: isActive
-                ? "linear-gradient(135deg, rgba(11,58,122,0.85) 0%, rgba(11,58,122,0.65) 100%)"
-                : "transparent",
-              color: isActive ? "#fff" : "var(--sc-toggle-inactive-text)",
-              border: isActive
-                ? "1px solid rgba(212,175,55,0.30)"
-                : "1px solid transparent",
-              boxShadow: isActive
-                ? "0 2px 12px rgba(11,58,122,0.40), inset 0 1px 0 rgba(255,255,255,0.06)"
-                : "none",
-            }}
+            className="relative flex items-center justify-center gap-1.5 font-semibold transition-all duration-200"
+            style={{ borderRadius: 12, fontSize: 12, letterSpacing: "0.01em", background: isActive ? "linear-gradient(135deg, rgba(11,58,122,0.85) 0%, rgba(11,58,122,0.65) 100%)" : "transparent", color: isActive ? "#fff" : "var(--sc-toggle-inactive-text)", border: isActive ? "1px solid rgba(212,175,55,0.30)" : "1px solid transparent", boxShadow: isActive ? "0 2px 12px rgba(11,58,122,0.40), inset 0 1px 0 rgba(255,255,255,0.06)" : "none", paddingLeft: 8, paddingRight: 8 }}
           >
-            <Icon style={{ width: 15, height: 15, flexShrink: 0 }} />
-            {label}
-            {isActive && (
-              <span
-                className="sc-subtab-underline absolute bottom-[3px] left-1/2 -translate-x-1/2 rounded-full"
-                style={{ width: 28, height: 2, background: "#d4af37", opacity: 0.85 }}
-              />
-            )}
+            <Icon style={{ width: 14, height: 14, flexShrink: 0 }} />
+            <span>{label}</span>
+            {isActive && <span className="sc-subtab-underline absolute bottom-[3px] left-1/2 -translate-x-1/2 rounded-full" style={{ width: 24, height: 2, background: "#d4af37", opacity: 0.85 }} />}
           </button>
         );
       })}
@@ -1443,43 +1417,57 @@ function TradeOpportunities({ league, userTeam }: { league: League; userTeam: Te
         </div>
       </div>
 
-      {/* Dynasty valuation model — adjusted (trade up/down + best-asset tax) vs. raw sum */}
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Dynasty values</span>
-        <div className="flex gap-1.5">
-          {[
-            { on: true, label: "Adjusted", hint: "Diminishing returns + overpay tax" },
-            { on: false, label: "Raw", hint: "Plain sum of values" },
-          ].map(({ on, label, hint }) => {
-            const active = useAdjustedValues === on;
-            return (
-              <button
-                key={label}
-                onClick={() => setUseAdjustedValues(on)}
-                data-testid={`matched-values-${on ? "adjusted" : "raw"}`}
-                aria-pressed={active}
-                title={hint}
-                className={cn(
-                  "px-3 py-1.5 rounded-lg text-[12px] font-semibold border transition-colors",
-                  active
-                    ? "bg-[#d4af37]/15 border-[#d4af37]/40 text-[#d4af37]"
-                    : "border-border/50 text-muted-foreground hover:text-foreground hover:bg-muted/30",
-                )}
-              >
-                {label}
-              </button>
-            );
-          })}
-        </div>
-        <p className="text-[10px] text-muted-foreground basis-full sm:basis-auto">
-          {useAdjustedValues
-            ? "Packages valued like the Trade Calculator. Adjustments made for trading up/down and best asset in the deal"
-            : "Packages are valued as a plain sum of dynasty values."}
-        </p>
-      </div>
+      {mode === "win-now" && <WinNowMode  league={league} userTeam={userTeam} useAdjustedValues={useAdjustedValues} setUseAdjustedValues={setUseAdjustedValues} />}
+      {mode === "rebuild" && <RebuildMode league={league} userTeam={userTeam} useAdjustedValues={useAdjustedValues} setUseAdjustedValues={setUseAdjustedValues} />}
+    </div>
+  );
+}
 
-      {mode === "win-now" && <WinNowMode  league={league} userTeam={userTeam} useAdjustedValues={useAdjustedValues} />}
-      {mode === "rebuild" && <RebuildMode league={league} userTeam={userTeam} useAdjustedValues={useAdjustedValues} />}
+// Dynasty valuation model toggle — adjusted (trade up/down + best-asset tax,
+// matching the Trade Calculator) vs. raw sum. Rendered inside each mode directly
+// below its ideas header so the control sits with the ideas it governs.
+function DynastyValuesToggle({
+  useAdjustedValues,
+  setUseAdjustedValues,
+  testIdPrefix,
+}: {
+  useAdjustedValues: boolean;
+  setUseAdjustedValues: (v: boolean) => void;
+  testIdPrefix: string;
+}) {
+  return (
+    <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5 md:justify-start">
+      <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Dynasty values</span>
+      <div className="flex gap-1.5">
+        {[
+          { on: true, label: "Adjusted", hint: "Diminishing returns + overpay tax" },
+          { on: false, label: "Raw", hint: "Plain sum of values" },
+        ].map(({ on, label, hint }) => {
+          const active = useAdjustedValues === on;
+          return (
+            <button
+              key={label}
+              onClick={() => setUseAdjustedValues(on)}
+              data-testid={`${testIdPrefix}-${on ? "adjusted" : "raw"}`}
+              aria-pressed={active}
+              title={hint}
+              className={cn(
+                "px-3 py-1.5 rounded-lg text-[12px] font-semibold border transition-colors",
+                active
+                  ? "bg-[#d4af37]/15 border-[#d4af37]/40 text-[#d4af37]"
+                  : "border-border/50 text-muted-foreground hover:text-foreground hover:bg-muted/30",
+              )}
+            >
+              {label}
+            </button>
+          );
+        })}
+      </div>
+      <p className="text-[10px] text-muted-foreground basis-full sm:basis-auto text-center md:text-left">
+        {useAdjustedValues
+          ? "Packages valued like the Trade Calculator. Adjustments made for trading up/down and best asset in the deal"
+          : "Packages are valued as a plain sum of dynasty values."}
+      </p>
     </div>
   );
 }
@@ -1503,13 +1491,13 @@ function WinNowValStack({ dyn, now }: { dyn: number; now: number }) {
     <div className="flex flex-col gap-[1px] mt-1 mb-2">
       <div className="flex items-center gap-1.5">
         <span className="text-[9px] text-muted-foreground/60 w-[46px] flex-shrink-0">Dynasty</span>
-        <span className={cn("text-[10px] font-semibold tabular-nums", dyn >= 0 ? "text-emerald-400" : "text-red-400")}>
+        <span className={cn("text-[10px] font-semibold tabular-nums", dyn >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400")}>
           {dyn >= 0 ? "+" : "−"}{Math.abs(Math.round(dyn)).toLocaleString()}
         </span>
       </div>
       <div className="flex items-center gap-1.5">
         <span className="text-[9px] text-muted-foreground/60 w-[46px] flex-shrink-0">Win-Now</span>
-        <span className={cn("text-[10px] font-semibold tabular-nums", now >= 0 ? "text-emerald-400" : "text-red-400")}>
+        <span className={cn("text-[10px] font-semibold tabular-nums", now >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400")}>
           {now >= 0 ? "+" : "−"}{Math.abs(Math.round(now)).toLocaleString()}
         </span>
       </div>
@@ -1519,16 +1507,16 @@ function WinNowValStack({ dyn, now }: { dyn: number; now: number }) {
 
 function WinNowAssetPill({ a }: { a: WinNowIdea["youGet"][number] }) {
   return (
-    <div className="flex items-center gap-2.5 rounded-[8px] bg-white/[0.04] border border-white/[0.07] px-2.5 py-1.5 mb-[5px] min-w-0">
+    <div className="flex items-center gap-2.5 rounded-[8px] bg-muted/50 border border-border/60 dark:bg-white/[0.04] dark:border-white/[0.07] px-2.5 py-1.5 mb-[5px] min-w-0">
       {a.type === "player" && a.sleeperId ? (
         <PlayerAvatar id={a.sleeperId} name={a.label} pos={a.pos ?? ""} team={a.team ?? ""} size="sm" compact />
       ) : (
         <div className="w-9 h-9 rounded-full flex-shrink-0 bg-purple-500/10 border border-purple-500/25 flex items-center justify-center">
-          <span className="text-[8px] font-bold text-purple-400 leading-none">PICK</span>
+          <span className="text-[8px] font-bold text-purple-600 dark:text-purple-400 leading-none">PICK</span>
         </div>
       )}
       <div className="min-w-0 flex flex-col gap-[2px]">
-        <span className="text-[12px] font-bold truncate leading-tight text-white">{a.label}</span>
+        <span className="text-[12px] font-bold truncate leading-tight text-foreground">{a.label}</span>
         {(a.pos || a.team) && (
           <div className="flex items-center gap-1.5">
             {a.pos && <span className={cn("text-[10px] font-semibold leading-none", posTextColor(a.pos))}>{a.pos}</span>}
@@ -1560,10 +1548,10 @@ function WinNowIdeaCard({ idea, userTeam, isSleeperAuthed, onSend, testId }: Win
   const pNow = idea.partnerRdDelta;
 
   return (
-    <div className={cn("relative rounded-lg border bg-[#080f1d] overflow-hidden", outerBorder)} data-testid={testId}>
+    <div className={cn("relative rounded-lg border bg-muted/30 dark:bg-[#080f1d] overflow-hidden", outerBorder)} data-testid={testId}>
       <div className="hidden md:block absolute inset-y-0 left-1/2 -translate-x-1/2 w-px bg-border/50 z-0" />
-      <div className="hidden md:block absolute inset-y-0 left-[calc(50%-10px)] w-5 bg-black/20 z-0" />
-      <div className="hidden md:flex absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-20 w-7 h-7 rounded-full bg-[#0b1e3d] border border-[#d4af37]/50 items-center justify-center shadow-[0_0_10px_rgba(212,175,55,0.35)]">
+      <div className="hidden md:block absolute inset-y-0 left-[calc(50%-10px)] w-5 bg-muted/40 dark:bg-black/20 z-0" />
+      <div className="hidden md:flex absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-20 w-7 h-7 rounded-full bg-card dark:bg-[#0b1e3d] border border-[#d4af37]/50 items-center justify-center shadow-[0_0_10px_rgba(212,175,55,0.35)]">
         <ArrowRightLeft className="w-3 h-3 text-[#d4af37]" />
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 divide-border/30">
@@ -1582,7 +1570,7 @@ function WinNowIdeaCard({ idea, userTeam, isSleeperAuthed, onSend, testId }: Win
           <WinNowValStack dyn={uDyn} now={uNow} />
           {idea.youGet.map((a, i) => <WinNowAssetPill key={i} a={a} />)}
         </div>
-        <div className="flex md:hidden items-center gap-2 px-4 py-1 bg-black/20">
+        <div className="flex md:hidden items-center gap-2 px-4 py-1 bg-muted/40 dark:bg-black/20">
           <div className="flex-1 h-px bg-border/30" />
           <ArrowRightLeft className="w-3 h-3 text-muted-foreground flex-shrink-0" />
           <div className="flex-1 h-px bg-border/30" />
@@ -2051,7 +2039,7 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
         <PlayerAvatar id={a.sleeperId} name={a.label} pos={a.pos ?? ""} team={a.team ?? ""} size="sm" compact />
       ) : (
         <div className="w-10 h-10 rounded-full flex-shrink-0 bg-purple-500/10 border border-purple-500/30 flex items-center justify-center">
-          <span className="text-[8px] font-bold text-purple-400 leading-none">PICK</span>
+          <span className="text-[8px] font-bold text-purple-600 dark:text-purple-400 leading-none">PICK</span>
         </div>
       )}
       <div className="min-w-0 flex flex-col gap-0.5">
@@ -2778,7 +2766,7 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
 
 // ─── Win-Now Mode ─────────────────────────────────────────────────
 
-function WinNowMode({ league, userTeam, useAdjustedValues }: { league: League; userTeam: Team; useAdjustedValues: boolean }) {
+function WinNowMode({ league, userTeam, useAdjustedValues, setUseAdjustedValues }: { league: League; userTeam: Team; useAdjustedValues: boolean; setUseAdjustedValues: (v: boolean) => void }) {
   const { getPlayerValue, getRedraftValue, getPickValue, optimizeLineup } = useValueModel();
   // How a multi-asset side's dynasty value is totalled: adjusted (diminishing
   // returns + overpay tax, matching the Trade Calculator) or a plain raw sum.
@@ -3066,6 +3054,13 @@ function WinNowMode({ league, userTeam, useAdjustedValues }: { league: League; u
           <p className="text-[10px] text-muted-foreground mt-1.5">
             Ranked by Win-Now Score = (starter gain × urgency) ÷ dynasty cost. Max 18% dynasty delta.
           </p>
+          <div className="mt-3">
+            <DynastyValuesToggle
+              useAdjustedValues={useAdjustedValues}
+              setUseAdjustedValues={setUseAdjustedValues}
+              testIdPrefix="matched-values"
+            />
+          </div>
         </div>
 
         {tradeIdeas.length === 0 ? (
@@ -3127,13 +3122,13 @@ function WinNowMode({ league, userTeam, useAdjustedValues }: { league: League; u
                         <div className="flex flex-col gap-[1px] mt-1 mb-2">
                           <div className="flex items-center gap-1.5">
                             <span className="text-[9px] text-muted-foreground/60 w-[46px] flex-shrink-0">Dynasty</span>
-                            <span className={cn("text-[10px] font-semibold tabular-nums", dyn >= 0 ? "text-emerald-400" : "text-red-400")}>
+                            <span className={cn("text-[10px] font-semibold tabular-nums", dyn >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400")}>
                               {dyn >= 0 ? "+" : "−"}{Math.abs(Math.round(dyn)).toLocaleString()}
                             </span>
                           </div>
                           <div className="flex items-center gap-1.5">
                             <span className="text-[9px] text-muted-foreground/60 w-[46px] flex-shrink-0">Win-Now</span>
-                            <span className={cn("text-[10px] font-semibold tabular-nums", now >= 0 ? "text-emerald-400" : "text-red-400")}>
+                            <span className={cn("text-[10px] font-semibold tabular-nums", now >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400")}>
                               {now >= 0 ? "+" : "−"}{Math.abs(Math.round(now)).toLocaleString()}
                             </span>
                           </div>
@@ -3141,16 +3136,16 @@ function WinNowMode({ league, userTeam, useAdjustedValues }: { league: League; u
                       );
 
                       const AssetPill = ({ a }: { a: WinNowIdea["youGet"][number] }) => (
-                        <div className="flex items-center gap-2.5 rounded-[8px] bg-white/[0.04] border border-white/[0.07] px-2.5 py-1.5 mb-[5px] min-w-0">
+                        <div className="flex items-center gap-2.5 rounded-[8px] bg-muted/50 border border-border/60 dark:bg-white/[0.04] dark:border-white/[0.07] px-2.5 py-1.5 mb-[5px] min-w-0">
                           {a.type === "player" && a.sleeperId ? (
                             <PlayerAvatar id={a.sleeperId} name={a.label} pos={a.pos ?? ""} team={a.team ?? ""} size="sm" compact />
                           ) : (
                             <div className="w-9 h-9 rounded-full flex-shrink-0 bg-purple-500/10 border border-purple-500/25 flex items-center justify-center">
-                              <span className="text-[8px] font-bold text-purple-400 leading-none">PICK</span>
+                              <span className="text-[8px] font-bold text-purple-600 dark:text-purple-400 leading-none">PICK</span>
                             </div>
                           )}
                           <div className="min-w-0 flex flex-col gap-[2px]">
-                            <span className="text-[12px] font-bold truncate leading-tight text-white">{a.label}</span>
+                            <span className="text-[12px] font-bold truncate leading-tight text-foreground">{a.label}</span>
                             {(a.pos || a.team) && (
                               <div className="flex items-center gap-1.5">
                                 {a.pos && <span className={cn("text-[10px] font-semibold leading-none", posTextColor(a.pos))}>{a.pos}</span>}
@@ -3162,12 +3157,12 @@ function WinNowMode({ league, userTeam, useAdjustedValues }: { league: League; u
                       );
 
                       return (
-                        <div key={idea.id} className={cn("relative rounded-lg border bg-[#080f1d] overflow-hidden", outerBorder)} data-testid={`wn-idea-${pos.toLowerCase()}-${idx}`}>
+                        <div key={idea.id} className={cn("relative rounded-lg border bg-muted/30 dark:bg-[#080f1d] overflow-hidden", outerBorder)} data-testid={`wn-idea-${pos.toLowerCase()}-${idx}`}>
 
                           {/* Center divider: vertical line + darker strip + glowing icon */}
                           <div className="hidden md:block absolute inset-y-0 left-1/2 -translate-x-1/2 w-px bg-border/50 z-0" />
-                          <div className="hidden md:block absolute inset-y-0 left-[calc(50%-10px)] w-5 bg-black/20 z-0" />
-                          <div className="hidden md:flex absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-20 w-7 h-7 rounded-full bg-[#0b1e3d] border border-[#d4af37]/50 items-center justify-center shadow-[0_0_10px_rgba(212,175,55,0.35)]">
+                          <div className="hidden md:block absolute inset-y-0 left-[calc(50%-10px)] w-5 bg-muted/40 dark:bg-black/20 z-0" />
+                          <div className="hidden md:flex absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-20 w-7 h-7 rounded-full bg-card dark:bg-[#0b1e3d] border border-[#d4af37]/50 items-center justify-center shadow-[0_0_10px_rgba(212,175,55,0.35)]">
                             <ArrowRightLeft className="w-3 h-3 text-[#d4af37]" />
                           </div>
 
@@ -3197,7 +3192,7 @@ function WinNowMode({ league, userTeam, useAdjustedValues }: { league: League; u
                             </div>
 
                             {/* Mobile trade divider */}
-                            <div className="flex md:hidden items-center gap-2 px-4 py-1 bg-black/20">
+                            <div className="flex md:hidden items-center gap-2 px-4 py-1 bg-muted/40 dark:bg-black/20">
                               <div className="flex-1 h-px bg-border/30" />
                               <ArrowRightLeft className="w-3 h-3 text-muted-foreground flex-shrink-0" />
                               <div className="flex-1 h-px bg-border/30" />
@@ -3368,7 +3363,7 @@ function rebuildIdeaToWinNow(idea: RebuildIdea): WinNowIdea {
 
 // ─── Rebuild Mode ─────────────────────────────────────────────────
 
-function RebuildMode({ league, userTeam, useAdjustedValues }: { league: League; userTeam: Team; useAdjustedValues: boolean }) {
+function RebuildMode({ league, userTeam, useAdjustedValues, setUseAdjustedValues }: { league: League; userTeam: Team; useAdjustedValues: boolean; setUseAdjustedValues: (v: boolean) => void }) {
   const { getPlayerValue, getRedraftValue, getPickValue, optimizeLineup } = useValueModel();
   // How a multi-asset side's dynasty value is totalled: adjusted (diminishing
   // returns + overpay tax, matching the Trade Calculator) or a plain raw sum.
@@ -3607,6 +3602,13 @@ function RebuildMode({ league, userTeam, useAdjustedValues }: { league: League; 
           <p className="text-[10px] text-muted-foreground mt-1.5">
             Find league-wide opportunities to convert aging or short-term production into younger players, picks, and long-term dynasty value.
           </p>
+          <div className="mt-3">
+            <DynastyValuesToggle
+              useAdjustedValues={useAdjustedValues}
+              setUseAdjustedValues={setUseAdjustedValues}
+              testIdPrefix="rebuild-values"
+            />
+          </div>
         </div>
 
         {/* ── Partner type filter ── */}

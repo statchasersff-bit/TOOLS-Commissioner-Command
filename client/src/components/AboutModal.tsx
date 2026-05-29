@@ -233,8 +233,7 @@ export function AboutPage({ onNavigate, onOpenFeedback, onOpenCookies, onOpenTer
 
       {/* Support / Share banner */}
       <div
-        className="mb-5 rounded-2xl overflow-hidden border"
-        style={{ borderColor: "rgba(212,175,55,0.25)", background: "linear-gradient(135deg, rgba(11,58,122,0.55) 0%, rgba(10,20,40,0.75) 100%)" }}
+        className="mb-5 rounded-2xl overflow-hidden border border-[#d4af37]/40 bg-gradient-to-br from-[#fdf6e3] to-white dark:border-[#d4af37]/25 dark:from-[rgba(11,58,122,0.55)] dark:to-[rgba(10,20,40,0.75)]"
         data-testid="card-about-support"
       >
         {/* Gold accent bar */}
@@ -269,8 +268,8 @@ export function AboutPage({ onNavigate, onOpenFeedback, onOpenCookies, onOpenTer
                   Share with My Leagues
                 </button>
                 <div className="flex items-center gap-1.5">
-                  <ChevronRight className="sc-nudge-arrow w-3.5 h-3.5 flex-shrink-0" style={{ color: "#d4af37" }} />
-                  <span className="text-[11px] font-medium leading-tight" style={{ color: "rgba(212,175,55,0.82)" }}>
+                  <ChevronRight className="sc-nudge-arrow w-3.5 h-3.5 flex-shrink-0 text-[#9a7d2e] dark:text-[#d4af37]" />
+                  <span className="text-[11px] font-medium leading-tight text-[#8a6d1f] dark:text-[#d4af37]/80">
                     One click. We'll handle the rest.
                   </span>
                 </div>
