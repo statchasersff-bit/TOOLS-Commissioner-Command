@@ -93,16 +93,16 @@ function projField(scoringFormat: string): string {
 }
 
 const SLOT_BADGE_COLORS: Record<string, string> = {
-  QB:         "bg-rose-500/25 text-rose-300 border-rose-500/30",
-  RB:         "bg-emerald-500/25 text-emerald-300 border-emerald-500/30",
-  WR:         "bg-sky-500/25 text-sky-300 border-sky-500/30",
-  TE:         "bg-yellow-500/25 text-yellow-300 border-yellow-500/30",
-  FLEX:       "bg-purple-500/25 text-purple-300 border-purple-500/30",
-  SUPER_FLEX: "bg-indigo-500/25 text-indigo-300 border-indigo-500/30",
-  REC_FLEX:   "bg-teal-500/25 text-teal-300 border-teal-500/30",
-  WRRB_FLEX:  "bg-cyan-500/25 text-cyan-300 border-cyan-500/30",
-  K:          "bg-slate-500/25 text-slate-300 border-slate-500/30",
-  DEF:        "bg-orange-500/25 text-orange-300 border-orange-500/30",
+  QB:         "bg-rose-500/15 text-rose-700 border-rose-500/30 dark:bg-rose-500/25 dark:text-rose-300",
+  RB:         "bg-emerald-500/15 text-emerald-700 border-emerald-500/30 dark:bg-emerald-500/25 dark:text-emerald-300",
+  WR:         "bg-sky-500/15 text-sky-700 border-sky-500/30 dark:bg-sky-500/25 dark:text-sky-300",
+  TE:         "bg-yellow-500/15 text-yellow-700 border-yellow-500/30 dark:bg-yellow-500/25 dark:text-yellow-300",
+  FLEX:       "bg-purple-500/15 text-purple-700 border-purple-500/30 dark:bg-purple-500/25 dark:text-purple-300",
+  SUPER_FLEX: "bg-indigo-500/15 text-indigo-700 border-indigo-500/30 dark:bg-indigo-500/25 dark:text-indigo-300",
+  REC_FLEX:   "bg-teal-500/15 text-teal-700 border-teal-500/30 dark:bg-teal-500/25 dark:text-teal-300",
+  WRRB_FLEX:  "bg-cyan-500/15 text-cyan-700 border-cyan-500/30 dark:bg-cyan-500/25 dark:text-cyan-300",
+  K:          "bg-slate-500/15 text-slate-700 border-slate-500/30 dark:bg-slate-500/25 dark:text-slate-300",
+  DEF:        "bg-orange-500/15 text-orange-700 border-orange-500/30 dark:bg-orange-500/25 dark:text-orange-300",
 };
 
 // Compact value formatter for tiny mobile cards (6234 → "6.2k").
@@ -124,7 +124,7 @@ function FieldCard({
   compact?: boolean;
   onSelect?: () => void;
 }) {
-  const slotColor = SLOT_BADGE_COLORS[colorKey] ?? "bg-white/10 text-white/60 border-white/15";
+  const slotColor = SLOT_BADGE_COLORS[colorKey] ?? "bg-muted text-muted-foreground border-border dark:bg-white/10 dark:text-white/60 dark:border-white/15";
   const width = compact ? "w-[100px] md:w-[110px]" : "w-[112px] md:w-[126px]";
 
   if (!player) {
@@ -151,11 +151,11 @@ function FieldCard({
       whileTap={{ scale: 0.985 }}
       transition={{ type: "spring", stiffness: 400, damping: 26 }}
       className={cn(
-      "group rounded-xl overflow-hidden border border-[#d4af37]/25 bg-[#080e1c] shadow-[0_0_16px_rgba(212,175,55,0.10)] hover:border-[#d4af37]/55 hover:shadow-[0_0_26px_rgba(212,175,55,0.28)] select-none flex-shrink-0 cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-[#d4af37]/60",
+      "group rounded-xl overflow-hidden border border-[#d4af37]/25 bg-card dark:bg-[#080e1c] shadow-[0_0_16px_rgba(212,175,55,0.10)] hover:border-[#d4af37]/55 hover:shadow-[0_0_26px_rgba(212,175,55,0.28)] select-none flex-shrink-0 cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-[#d4af37]/60",
       width,
     )}>
       {/* Headshot */}
-      <div className="relative aspect-square w-full overflow-hidden bg-[#0b1628]">
+      <div className="relative aspect-square w-full overflow-hidden bg-muted dark:bg-[#0b1628]">
         {player.team && (
           <img
             src={`https://sleepercdn.com/images/team_logos/nfl/${player.team.toLowerCase()}.png`}
@@ -170,7 +170,7 @@ function FieldCard({
           className="relative w-full h-full object-cover object-top"
           onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-[#080e1c] via-transparent to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-t from-card via-transparent to-transparent dark:from-[#080e1c]" />
         <span className={cn("absolute bottom-1 left-1.5 text-[8px] md:text-[9px] px-1.5 py-0.5 rounded font-bold border backdrop-blur-sm", slotColor)}>
           {label}
         </span>
@@ -183,11 +183,11 @@ function FieldCard({
 
       {/* Identity */}
       <div className="px-2 pt-1.5 pb-1 text-center">
-        <p className="text-[11px] font-bold text-white leading-tight truncate">{player.name}</p>
+        <p className="text-[11px] font-bold text-foreground leading-tight truncate">{player.name}</p>
         <p className="text-[9px] text-[#d4af37] font-semibold leading-tight">
           {player.team || "FA"}
           {typeof player.age === "number" && player.age > 0 && (
-            <span className="text-white/35 font-normal ml-1">Age {player.age}</span>
+            <span className="text-muted-foreground font-normal ml-1">Age {player.age}</span>
           )}
         </p>
       </div>
@@ -196,11 +196,11 @@ function FieldCard({
       <div className="grid grid-cols-2 gap-1 px-1.5 pb-1.5">
         <div className="rounded-lg bg-emerald-500/10 border border-emerald-500/20 px-1 py-0.5 text-center">
           <p className="text-[7px] uppercase tracking-wider text-emerald-500/70 font-semibold leading-none mb-0.5">Dyn</p>
-          <p className="text-[10px] font-bold text-emerald-400 tabular-nums leading-none">{dynVal > 0 ? Math.round(dynVal).toLocaleString() : "—"}</p>
+          <p className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 tabular-nums leading-none">{dynVal > 0 ? Math.round(dynVal).toLocaleString() : "—"}</p>
         </div>
         <div className="rounded-lg bg-[#0b3a7a]/25 border border-[#0b3a7a]/40 px-1 py-0.5 text-center">
-          <p className="text-[7px] uppercase tracking-wider text-blue-400/70 font-semibold leading-none mb-0.5">Win-Now</p>
-          <p className="text-[10px] font-bold text-blue-400 tabular-nums leading-none">{rdVal > 0 ? Math.round(rdVal).toLocaleString() : "—"}</p>
+          <p className="text-[7px] uppercase tracking-wider text-blue-600/70 dark:text-blue-400/70 font-semibold leading-none mb-0.5">Win-Now</p>
+          <p className="text-[10px] font-bold text-blue-600 dark:text-blue-400 tabular-nums leading-none">{rdVal > 0 ? Math.round(rdVal).toLocaleString() : "—"}</p>
         </div>
       </div>
     </motion.div>
@@ -219,7 +219,7 @@ function MobileFieldCard({
   grade: number | null;
   onSelect?: () => void;
 }) {
-  const slotColor = SLOT_BADGE_COLORS[colorKey] ?? "bg-white/10 text-white/60 border-white/15";
+  const slotColor = SLOT_BADGE_COLORS[colorKey] ?? "bg-muted text-muted-foreground border-border dark:bg-white/10 dark:text-white/60 dark:border-white/15";
 
   if (!player) {
     return (
@@ -240,9 +240,9 @@ function MobileFieldCard({
       onClick={onSelect}
       onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelect?.(); } }}
       whileTap={{ scale: 0.97 }}
-      className="w-[80px] flex-shrink-0 rounded-lg overflow-hidden border border-[#d4af37]/25 bg-[#080e1c] cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-[#d4af37]/60"
+      className="w-[80px] flex-shrink-0 rounded-lg overflow-hidden border border-[#d4af37]/25 bg-card dark:bg-[#080e1c] cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-[#d4af37]/60"
     >
-      <div className="relative aspect-square w-full overflow-hidden bg-[#0b1628]">
+      <div className="relative aspect-square w-full overflow-hidden bg-muted dark:bg-[#0b1628]">
         {player.team && (
           <img
             src={`https://sleepercdn.com/images/team_logos/nfl/${player.team.toLowerCase()}.png`}
@@ -257,7 +257,7 @@ function MobileFieldCard({
           className="relative w-full h-full object-cover object-top"
           onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-[#080e1c] via-transparent to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-t from-card via-transparent to-transparent dark:from-[#080e1c]" />
         <span className={cn("absolute bottom-0.5 left-1 text-[6px] px-1 rounded font-bold border backdrop-blur-sm leading-snug", slotColor)}>
           {label}
         </span>
@@ -268,12 +268,12 @@ function MobileFieldCard({
         )}
       </div>
       <div className="px-1 pt-0.5 text-center">
-        <p className="text-[8px] font-bold text-white leading-tight truncate">{lastName}</p>
+        <p className="text-[8px] font-bold text-foreground leading-tight truncate">{lastName}</p>
         <p className="text-[7px] text-[#d4af37] font-semibold leading-none">{player.team || "FA"}</p>
       </div>
       <div className="grid grid-cols-2 gap-0.5 px-1 py-1">
-        <p className="text-[7px] font-bold text-emerald-400 tabular-nums text-center leading-none">{fmtCompact(dynVal)}</p>
-        <p className="text-[7px] font-bold text-blue-400 tabular-nums text-center leading-none">{fmtCompact(rdVal)}</p>
+        <p className="text-[7px] font-bold text-emerald-600 dark:text-emerald-400 tabular-nums text-center leading-none">{fmtCompact(dynVal)}</p>
+        <p className="text-[7px] font-bold text-blue-600 dark:text-blue-400 tabular-nums text-center leading-none">{fmtCompact(rdVal)}</p>
       </div>
     </motion.div>
   );
@@ -402,7 +402,7 @@ function FieldBackground() {
 // ─── Legend ───────────────────────────────────────────────────────────────────
 function FieldLegend() {
   return (
-    <div className="flex items-center gap-3 flex-wrap text-[9px] text-white/40">
+    <div className="flex items-center gap-3 flex-wrap text-[9px] text-muted-foreground">
       <div className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-emerald-400/60" /> Dynasty value</div>
       <div className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-blue-400/60" /> Win-Now value</div>
       <div className="flex items-center gap-1"><span className="font-black text-[#d4af37]">88</span> Overall grade (0–100, QB/RB/WR/TE)</div>
@@ -689,7 +689,7 @@ export const FieldView = forwardRef<FieldViewHandle, FieldViewProps>(function Fi
       <div
         className="flex md:hidden items-center gap-3 rounded-xl px-3 py-2.5 border"
         style={{
-          background: `linear-gradient(135deg, rgba(3,8,15,0.92) 0%, rgba(${glowRgb},0.06) 100%)`,
+          background: `linear-gradient(135deg, hsl(var(--card)) 0%, rgba(${glowRgb},0.10) 100%)`,
           borderColor: `${borderHex}44`,
           boxShadow: `0 0 12px rgba(${glowRgb},0.12)`,
         }}
@@ -711,8 +711,8 @@ export const FieldView = forwardRef<FieldViewHandle, FieldViewProps>(function Fi
 
         {/* Name + tier */}
         <div className="min-w-0 flex-1">
-          <p className="text-[12px] font-bold text-white/90 leading-tight truncate">{userTeam.name || "My Team"}</p>
-          <p className="text-[10px] text-white/40 truncate">by {userTeam.owner || "Manager"}</p>
+          <p className="text-[12px] font-bold text-foreground leading-tight truncate">{userTeam.name || "My Team"}</p>
+          <p className="text-[10px] text-muted-foreground truncate">by {userTeam.owner || "Manager"}</p>
         </div>
 
         {/* Right side: tier + record */}

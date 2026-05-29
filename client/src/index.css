@@ -77,6 +77,36 @@
   --sc-card-bg: #ffffff;
   --sc-card-soft: #f9fbff;
 
+  /* ADP Explorer Box/Hex draft-board surfaces. Light values here; the .dark
+     and .x-mode blocks restore the original dark "draft room" literals so dark
+     mode is unchanged while light mode gets a true light board. */
+  --adp-board: #ffffff;                 /* board card bg + round-label fade */
+  --adp-tile: #f4f7fb;                  /* hex shell base + empty tile */
+  --adp-surface: #e8eef6;               /* headshot / glyph / image-circle plate */
+  --adp-panel: #ffffff;                 /* hex hover panel bg */
+  --adp-overlay: rgba(15,32,51,0.05);   /* faint wash backgrounds */
+  --adp-hairline: rgba(15,32,51,0.12);  /* inset 1px strokes */
+
+  /* Share Team "List" card surfaces. Light values here; .dark/.x-mode restore
+     the original dark "trading-card" literals. The card is forced dark during
+     PNG export (a .dark class is applied to it) so shared images stay branded
+     dark regardless of the on-screen theme. */
+  --share-card-from: #ffffff;
+  --share-card-to: #f6f9fc;
+  --share-card-border: #e2e8f0;
+  --share-card-shadow: 0 1px 3px rgba(16,24,40,0.08), 0 6px 20px rgba(16,24,40,0.06);
+  --share-gold: #b8901f;
+  --share-text: #0f1b2e;
+  --share-text-2: #475569;
+  --share-text-3: #94a3b8;
+  --share-text-4: #aab4c2;
+  --share-pill-bg: #eef2f8;
+  --share-pill-border: #dde5ef;
+  --share-bar-track: #e2e8f0;
+  --share-avatar-bg: #e8eef6;
+  --share-avatar-ring: #dbe4ef;
+  --share-divider: rgba(15,32,51,0.10);
+
   --sc-blue: #0b2344;
   --sc-blue-2: #123a67;
   --sc-blue-soft: #eef4fb;
@@ -472,6 +502,29 @@
 }
 
 .dark {
+  /* ADP Explorer board — original dark "draft room" literals (unchanged look). */
+  --adp-board: #070f1c;
+  --adp-tile: #0e1828;
+  --adp-surface: #0a1424;
+  --adp-panel: #0a1628;
+  --adp-overlay: rgba(255,255,255,0.03);
+  --adp-hairline: rgba(255,255,255,0.08);
+  /* Share Team card — original dark trading-card literals. */
+  --share-card-from: #0d1b2e;
+  --share-card-to: #080f1e;
+  --share-card-border: #1e3050;
+  --share-card-shadow: 0 0 0 1px rgba(212,175,55,0.12), 0 0 32px rgba(11,58,122,0.3);
+  --share-gold: #d4af37;
+  --share-text: #ffffff;
+  --share-text-2: #7a9bbf;
+  --share-text-3: #4a6280;
+  --share-text-4: #2a4060;
+  --share-pill-bg: rgba(30,48,80,0.8);
+  --share-pill-border: #1e3050;
+  --share-bar-track: #1a2d4a;
+  --share-avatar-bg: rgba(11,58,122,0.35);
+  --share-avatar-ring: #1e3050;
+  --share-divider: rgba(212,175,55,0.12);
   --button-outline: rgba(255,255,255, .10);
   --badge-outline: rgba(255,255,255, .05);
   --opaque-button-border-intensity: 9;
@@ -584,6 +637,29 @@
  * names mirror .dark so every component picks up the new palette without
  * any markup changes. */
 .x-mode {
+  /* ADP Explorer board — original dark "draft room" literals (unchanged look). */
+  --adp-board: #070f1c;
+  --adp-tile: #0e1828;
+  --adp-surface: #0a1424;
+  --adp-panel: #0a1628;
+  --adp-overlay: rgba(255,255,255,0.03);
+  --adp-hairline: rgba(255,255,255,0.08);
+  /* Share Team card — original dark trading-card literals. */
+  --share-card-from: #0d1b2e;
+  --share-card-to: #080f1e;
+  --share-card-border: #1e3050;
+  --share-card-shadow: 0 0 0 1px rgba(212,175,55,0.12), 0 0 32px rgba(11,58,122,0.3);
+  --share-gold: #d4af37;
+  --share-text: #ffffff;
+  --share-text-2: #7a9bbf;
+  --share-text-3: #4a6280;
+  --share-text-4: #2a4060;
+  --share-pill-bg: rgba(30,48,80,0.8);
+  --share-pill-border: #1e3050;
+  --share-bar-track: #1a2d4a;
+  --share-avatar-bg: rgba(11,58,122,0.35);
+  --share-avatar-ring: #1e3050;
+  --share-divider: rgba(212,175,55,0.12);
   --button-outline: rgba(255,255,255, .12);
   --badge-outline: rgba(255,255,255, .06);
   --opaque-button-border-intensity: 9;

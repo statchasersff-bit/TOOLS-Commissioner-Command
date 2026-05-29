@@ -11,6 +11,7 @@ import { useValueModel } from "@/contexts/ValueModelContext";
 import { getPositionColor } from "@/data/mockData";
 import type { League, Team, Player, Pick } from "@/types";
 import { cn } from "@/lib/utils";
+import { useTheme } from "@/contexts/ThemeContext";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { FieldView, type FieldViewHandle } from "./FieldView";
 import {
@@ -19,6 +20,7 @@ import {
   Users, TrendingUp, Trophy, LayoutGrid,
 } from "lucide-react";
 import logoDark from "@assets/statchasers_logo_transparent_dark_1772764844282.png";
+import logoLight from "@assets/statchasers_logo_transparent_light_1772764844283.png";
 
 interface Props {
   league: League;
@@ -77,6 +79,7 @@ function pickLabel(p: Pick): string {
 
 export function ShareTeam({ league, userTeam }: Props) {
   const { toast } = useToast();
+  const { themeMode } = useTheme();
   const { getPlayerValue, getRedraftValue, optimizeLineup } = useValueModel();
   const cardRef = useRef<HTMLDivElement>(null);
   const fieldViewRef = useRef<FieldViewHandle>(null);
@@ -191,6 +194,7 @@ export function ShareTeam({ league, userTeam }: Props) {
     };
   }, [league, userTeam, getPlayerValue, getRedraftValue, optimizeLineup]);
 
+  const showDarkLogo = isExporting || themeMode !== "light";
   const displayName   = (hideManagerName || anonMode) ? "Anonymous Manager" : (userTeam.owner || "Your Team");
   const displayLeague = (hideLeagueName  || anonMode) ? `${computed.total}-Team ${computed.format} Dynasty` : league.name;
 
@@ -338,41 +342,41 @@ export function ShareTeam({ league, userTeam }: Props) {
         {/* ── LEFT: Share Card (exported as PNG) ── */}
         <div
           ref={cardRef}
-          className="rounded-xl overflow-hidden min-w-0"
+          className={cn("rounded-xl overflow-hidden min-w-0", isExporting && "dark")}
           style={{
             fontFamily: "system-ui, -apple-system, sans-serif",
-            background: "linear-gradient(160deg, #0d1b2e 0%, #080f1e 100%)",
-            border: "1px solid #1e3050",
-            boxShadow: "0 0 0 1px rgba(212,175,55,0.12), 0 0 32px rgba(11,58,122,0.3)",
+            background: "linear-gradient(160deg, var(--share-card-from) 0%, var(--share-card-to) 100%)",
+            border: "1px solid var(--share-card-border)",
+            boxShadow: "var(--share-card-shadow)",
           }}
         >
           {/* Gold top accent bar */}
           <div style={{ height: 3, background: "linear-gradient(90deg, #d4af37, #0b3a7a, transparent)" }} />
 
           {/* ── Header: Manager + League ── */}
-          <div className="px-5 pt-4 pb-4" style={{ borderBottom: "1px solid rgba(212,175,55,0.12)" }}>
+          <div className="px-5 pt-4 pb-4" style={{ borderBottom: "1px solid var(--share-divider)" }}>
             <div className="flex items-center gap-3.5 mb-3">
               {userTeam.avatar && !anonMode ? (
                 <img
                   src={userTeam.avatar!}
                   alt={displayName}
                   className="w-14 h-14 rounded-full object-cover flex-shrink-0"
-                  style={{ boxShadow: "0 0 0 2px #d4af37, 0 0 12px rgba(212,175,55,0.25)" }}
+                  style={{ boxShadow: "0 0 0 2px var(--share-gold), 0 0 12px rgba(212,175,55,0.25)" }}
                 />
               ) : (
                 <div
                   className="w-14 h-14 rounded-full flex items-center justify-center flex-shrink-0"
-                  style={{ background: "rgba(11,58,122,0.35)", boxShadow: "0 0 0 2px #1e3050" }}
+                  style={{ background: "var(--share-avatar-bg)", boxShadow: "0 0 0 2px var(--share-avatar-ring)" }}
                 >
                   <Shield className="w-6 h-6 text-blue-400" />
                 </div>
               )}
               <div className="min-w-0 flex-1">
-                <div className="text-[10px] font-semibold uppercase tracking-widest mb-0.5" style={{ color: "#d4af37", opacity: 0.8 }}>Dynasty Manager</div>
-                <div className="text-xl font-extrabold text-white leading-tight truncate" data-testid="text-share-manager">
+                <div className="text-[10px] font-semibold uppercase tracking-widest mb-0.5" style={{ color: "var(--share-gold)", opacity: 0.8 }}>Dynasty Manager</div>
+                <div className="text-xl font-extrabold text-[var(--share-text)] leading-tight truncate" data-testid="text-share-manager">
                   {displayName}
                 </div>
-                <div className="text-[11px] mt-0.5 truncate" style={{ color: "#7a9bbf" }} data-testid="text-share-league">
+                <div className="text-[11px] mt-0.5 truncate" style={{ color: "var(--share-text-2)" }} data-testid="text-share-league">
                   {displayLeague}
                 </div>
               </div>
@@ -389,17 +393,17 @@ export function ShareTeam({ league, userTeam }: Props) {
                   {computed.archetype}
                 </div>
               )}
-              <span className="text-[10px] font-semibold px-2 py-0.5 rounded" style={{ background: "rgba(30,48,80,0.8)", color: "#7a9bbf", border: "1px solid #1e3050" }}>
+              <span className="text-[10px] font-semibold px-2 py-0.5 rounded" style={{ background: "var(--share-pill-bg)", color: "var(--share-text-2)", border: "1px solid var(--share-pill-border)" }}>
                 {computed.total}T {computed.format}
               </span>
-              <span className="text-[10px] font-semibold px-2 py-0.5 rounded" style={{ background: "rgba(30,48,80,0.8)", color: "#7a9bbf", border: "1px solid #1e3050" }}>
+              <span className="text-[10px] font-semibold px-2 py-0.5 rounded" style={{ background: "var(--share-pill-bg)", color: "var(--share-text-2)", border: "1px solid var(--share-pill-border)" }}>
                 {computed.scoring}
               </span>
             </div>
           </div>
 
           {/* ── Semantic rank row: Strength / Value Rank / Win Outlook ── */}
-          <div className="grid grid-cols-3" style={{ borderBottom: "1px solid rgba(212,175,55,0.12)" }}>
+          <div className="grid grid-cols-3" style={{ borderBottom: "1px solid var(--share-divider)" }}>
             <SemanticStat
               label="Strength"
               value={computed.overallStrength}
@@ -420,8 +424,8 @@ export function ShareTeam({ league, userTeam }: Props) {
           </div>
 
           {/* ── Team Snapshot ── */}
-          <div className="px-5 py-3.5" style={{ borderBottom: "1px solid rgba(212,175,55,0.12)" }}>
-            <div className="text-[10px] font-bold uppercase tracking-widest mb-2.5" style={{ color: "#d4af37", opacity: 0.75 }}>
+          <div className="px-5 py-3.5" style={{ borderBottom: "1px solid var(--share-divider)" }}>
+            <div className="text-[10px] font-bold uppercase tracking-widest mb-2.5" style={{ color: "var(--share-gold)", opacity: 0.75 }}>
               Team Snapshot
             </div>
             <div className="grid grid-cols-2 gap-x-6 gap-y-1.5">
@@ -437,20 +441,20 @@ export function ShareTeam({ league, userTeam }: Props) {
           </div>
 
           {/* ── League settings mini-card ── */}
-          <div className="px-5 py-3" style={{ borderBottom: "1px solid rgba(212,175,55,0.12)" }}>
-            <div className="text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: "#d4af37", opacity: 0.75 }}>
+          <div className="px-5 py-3" style={{ borderBottom: "1px solid var(--share-divider)" }}>
+            <div className="text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: "var(--share-gold)", opacity: 0.75 }}>
               League Settings
             </div>
             {league.rosterPositions && league.rosterPositions.length > 0 && (
-              <div className="text-[10px] leading-relaxed" style={{ color: "#7a9bbf" }}>
+              <div className="text-[10px] leading-relaxed" style={{ color: "var(--share-text-2)" }}>
                 Lineup: {league.rosterPositions.filter(p => p !== "BN").join(" · ")}
               </div>
             )}
           </div>
 
           {/* ── Positional Strength ── */}
-          <div className="px-5 py-3.5" style={{ borderBottom: "1px solid rgba(212,175,55,0.12)" }}>
-            <div className="text-[10px] font-bold uppercase tracking-widest mb-2.5" style={{ color: "#d4af37", opacity: 0.75 }}>
+          <div className="px-5 py-3.5" style={{ borderBottom: "1px solid var(--share-divider)" }}>
+            <div className="text-[10px] font-bold uppercase tracking-widest mb-2.5" style={{ color: "var(--share-gold)", opacity: 0.75 }}>
               Positional Strength
             </div>
             <div className="space-y-2">
@@ -458,11 +462,11 @@ export function ShareTeam({ league, userTeam }: Props) {
                 const fillPct = Math.max(8, ((computed.total - rank + 1) / computed.total) * 100);
                 return (
                   <div key={pos} className="flex items-center gap-2.5" data-testid={`pos-strength-${pos}`}>
-                    <span className="text-[11px] font-bold w-8 flex-shrink-0" style={{ color: "#7a9bbf" }}>{pos}</span>
-                    <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: "#1a2d4a" }}>
+                    <span className="text-[11px] font-bold w-8 flex-shrink-0" style={{ color: "var(--share-text-2)" }}>{pos}</span>
+                    <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: "var(--share-bar-track)" }}>
                       <div className={cn("h-full rounded-full", strengthBar(label))} style={{ width: `${fillPct}%` }} />
                     </div>
-                    <span className="text-[10px] w-10 text-right flex-shrink-0" style={{ color: "#4a6280" }}>#{rank}/{computed.total}</span>
+                    <span className="text-[10px] w-10 text-right flex-shrink-0" style={{ color: "var(--share-text-3)" }}>#{rank}/{computed.total}</span>
                     <span className={cn("text-[10px] font-bold w-12 flex-shrink-0", strengthColor(label))}>{label}</span>
                   </div>
                 );
@@ -473,10 +477,10 @@ export function ShareTeam({ league, userTeam }: Props) {
           {/* ── Brand footer ── */}
           <div className="px-5 py-2.5 flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <img src={logoDark} alt="StatChasers" className="w-5 h-5 opacity-90" />
-              <span className="text-[10px] font-bold tracking-wide" style={{ color: "#d4af37" }}>StatChasers Dynasty Command</span>
+              <img src={showDarkLogo ? logoDark : logoLight} alt="StatChasers" className="w-5 h-5 opacity-90" />
+              <span className="text-[10px] font-bold tracking-wide" style={{ color: "var(--share-gold)" }}>StatChasers Dynasty Command</span>
             </div>
-            <span className="text-[9px]" style={{ color: "#2a4060" }}>statchasers.com</span>
+            <span className="text-[9px]" style={{ color: "var(--share-text-4)" }}>statchasers.com</span>
           </div>
         </div>
 
@@ -542,42 +546,25 @@ export function ShareTeam({ league, userTeam }: Props) {
             </Card>
           )}
 
-          {/* 2-column position grid: QB+RB | WR+TE */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {/* Left col: QB + RB */}
-            <div className="space-y-3">
-              {(["QB", "RB"] as const).map((pos) => {
-                const players = computed.rosterByPos[pos];
-                if (!players || players.length === 0) return null;
-                return (
-                  <PosGroup
-                    key={pos}
-                    pos={pos}
-                    players={players}
-                    getPlayerValue={getPlayerValue}
-                    hideValues={hideValues}
-                    showAges={showAges}
-                  />
-                );
-              })}
-            </div>
-            {/* Right col: WR + TE */}
-            <div className="space-y-3">
-              {(["WR", "TE"] as const).map((pos) => {
-                const players = computed.rosterByPos[pos];
-                if (!players || players.length === 0) return null;
-                return (
-                  <PosGroup
-                    key={pos}
-                    pos={pos}
-                    players={players}
-                    getPlayerValue={getPlayerValue}
-                    hideValues={hideValues}
-                    showAges={showAges}
-                  />
-                );
-              })}
-            </div>
+          {/* Position groups — each position is its own column, packed with an
+              auto-fitting grid so as many columns fit per row as the available
+              width allows (full-width on mobile, the 62% panel on desktop). This
+              avoids stacking two positions per column and cuts vertical scrolling. */}
+          <div className="grid gap-3 items-start grid-cols-[repeat(auto-fit,minmax(150px,1fr))]">
+            {(["QB", "RB", "WR", "TE"] as const).map((pos) => {
+              const players = computed.rosterByPos[pos];
+              if (!players || players.length === 0) return null;
+              return (
+                <PosGroup
+                  key={pos}
+                  pos={pos}
+                  players={players}
+                  getPlayerValue={getPlayerValue}
+                  hideValues={hideValues}
+                  showAges={showAges}
+                />
+              );
+            })}
           </div>
 
           {/* Picks — full width, grouped by year */}
@@ -638,11 +625,11 @@ function SemanticStat({ label, value, valueClass, sublabel, noBorder }: {
   return (
     <div
       className="px-4 py-3 text-center"
-      style={noBorder ? {} : { borderLeft: "1px solid rgba(212,175,55,0.1)" }}
+      style={noBorder ? {} : { borderLeft: "1px solid var(--share-divider)" }}
     >
-      <div className="text-[9px] font-bold uppercase tracking-widest mb-1" style={{ color: "#4a6280" }}>{label}</div>
-      <div className={cn("text-sm font-extrabold text-white", valueClass)}>{value}</div>
-      <div className="text-[9px] mt-0.5" style={{ color: "#4a6280" }}>{sublabel}</div>
+      <div className="text-[9px] font-bold uppercase tracking-widest mb-1" style={{ color: "var(--share-text-3)" }}>{label}</div>
+      <div className={cn("text-sm font-extrabold text-[var(--share-text)]", valueClass)}>{value}</div>
+      <div className="text-[9px] mt-0.5" style={{ color: "var(--share-text-3)" }}>{sublabel}</div>
     </div>
   );
 }
@@ -652,9 +639,9 @@ function SnapshotRow({ icon: Icon, label, value, gold }: {
 }) {
   return (
     <div className="flex items-center gap-2">
-      <Icon className={cn("w-3 h-3 flex-shrink-0", gold ? "text-[#d4af37]" : "text-blue-400/60")} />
-      <span className="text-[10px] flex-1" style={{ color: "#4a6280" }}>{label}</span>
-      <span className={cn("text-[11px] font-bold", gold ? "text-[#d4af37]" : "text-white")}>{value}</span>
+      <Icon className={cn("w-3 h-3 flex-shrink-0", gold ? "text-[var(--share-gold)]" : "text-blue-400/60")} />
+      <span className="text-[10px] flex-1" style={{ color: "var(--share-text-3)" }}>{label}</span>
+      <span className={cn("text-[11px] font-bold", gold ? "text-[var(--share-gold)]" : "text-[var(--share-text)]")}>{value}</span>
     </div>
   );
 }

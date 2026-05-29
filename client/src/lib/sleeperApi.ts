@@ -1,5 +1,6 @@
 import { getFantasyCalcValues, getFantasyCalcRedraftValues } from "./fantasycalcApi";
 import { buildOptimalStarterIds } from "./lineupUtils";
+import { getStaticPickValue } from "../data/pickValues";
 import { normalizeSleeperDraftOrder, type NormalizedDraftOrder } from "./sleeperDraftOrder";
 import { FeatureDisabledError, showFeatureDisabled } from "@/components/FeatureDisabledDialog";
 import { API_BASE } from "./apiBase";
@@ -937,6 +938,109 @@ export interface PortfolioSummaryData {
   }>;
 }
 
+/**
+ * Total FantasyCalc dynasty value of each roster's owned draft picks (after trades),
+ * keyed by roster_id. Mirrors the pick-building + valuation the GM dashboard uses
+ * (fetchSleeperLeagueFull + ValueModelContext.getPickValue), restricted to the
+ * FantasyCalc model and the default "mid" range (multiplier 1.0). Lets the Portfolio
+ * dynasty rank count players + picks, matching the Overview tab's Roster Strength Profile.
+ */
+function computeRosterPickValues(
+  rostersRaw: SleeperRosterRaw[],
+  tradedPicksRaw: SleeperTradedPickRaw[],
+  draftsRaw: any[],
+  leagueSeason: number,
+  fcDynasty: Record<string, number>
+): Map<number, number> {
+  const totalRosters = rostersRaw.length;
+
+  // Pick years: the next 3 seasons whose rookie draft isn't already complete.
+  const draftStatusByYear = new Map<number, string>();
+  if (Array.isArray(draftsRaw)) {
+    for (const d of draftsRaw) {
+      const yr = parseInt(d.season, 10);
+      if (!isNaN(yr)) draftStatusByYear.set(yr, d.status || "");
+    }
+  }
+  const pickYears: number[] = [];
+  for (let yr = leagueSeason; pickYears.length < 3; yr++) {
+    if (draftStatusByYear.get(yr) !== "complete") pickYears.push(yr);
+  }
+  const pickRounds = [1, 2, 3, 4];
+
+  // Draft slots for the upcoming rookie draft → exact per-pick values when known.
+  const slotPickYear = pickYears[0];
+  const rosterIdToSlot = new Map<number, number>();
+  if (Array.isArray(draftsRaw)) {
+    const upcoming = draftsRaw.find(
+      (d: any) => parseInt(d.season, 10) === slotPickYear
+    );
+    if (upcoming) {
+      const slotToRoster: Record<string, number> =
+        upcoming.slot_to_roster_id || {};
+      if (Object.keys(slotToRoster).length > 0) {
+        for (const [slotStr, rosterId] of Object.entries(slotToRoster)) {
+          rosterIdToSlot.set(rosterId as number, parseInt(slotStr, 10));
+        }
+      } else {
+        const draftOrder: Record<string, number> = upcoming.draft_order || {};
+        if (Object.keys(draftOrder).length > 0) {
+          const ownerToRoster = new Map<string, number>();
+          for (const r of rostersRaw) {
+            if (r.owner_id) ownerToRoster.set(r.owner_id, r.roster_id);
+          }
+          for (const [uid, slot] of Object.entries(draftOrder)) {
+            const rosterId = ownerToRoster.get(uid);
+            if (rosterId !== undefined) rosterIdToSlot.set(rosterId, slot as number);
+          }
+        }
+      }
+    }
+  }
+
+  const valuePick = (year: number, round: number, slot?: number): number => {
+    // 2026 with a known draft slot → exact per-pick table.
+    if (year === 2026 && slot != null && slot > 0) {
+      return getStaticPickValue(year, round, "mid", slot, totalRosters);
+    }
+    // FantasyCalc keyed FP_{year}_{round}; "mid" multiplier is 1.0 so pass through raw.
+    const base = fcDynasty[`FP_${year}_${round}`];
+    if (!base) return getStaticPickValue(year, round, "mid");
+    return Math.round(base);
+  };
+
+  // Every roster starts owning its own picks…
+  const totals = new Map<number, number>();
+  for (const r of rostersRaw) {
+    let sum = 0;
+    for (const year of pickYears) {
+      for (const round of pickRounds) {
+        const slot =
+          year === slotPickYear ? rosterIdToSlot.get(r.roster_id) : undefined;
+        sum += valuePick(year, round, slot);
+      }
+    }
+    totals.set(r.roster_id, sum);
+  }
+
+  // …then each trade moves a pick's value from its previous owner to its current owner.
+  for (const tp of tradedPicksRaw) {
+    const tpYear = parseInt(tp.season, 10);
+    if (!pickYears.includes(tpYear)) continue;
+    const slot =
+      tpYear === slotPickYear ? rosterIdToSlot.get(tp.roster_id) : undefined;
+    const v = valuePick(tpYear, tp.round, slot);
+    if (totals.has(tp.previous_owner_id)) {
+      totals.set(tp.previous_owner_id, (totals.get(tp.previous_owner_id) ?? 0) - v);
+    }
+    if (totals.has(tp.owner_id)) {
+      totals.set(tp.owner_id, (totals.get(tp.owner_id) ?? 0) + v);
+    }
+  }
+
+  return totals;
+}
+
 export async function fetchPortfolioSummary(
   userId: string,
   leagueSummaries: SleeperLeagueSummary[]
@@ -980,12 +1084,19 @@ export async function fetchPortfolioSummary(
 
   const fetchPromises = leagueSummaries.map(async (ls) => {
     try {
-      const [rostersRaw, leagueRaw] = await Promise.all([
-        fetchJson<SleeperRosterRaw[]>(
-          `${SLEEPER_API}/league/${ls.leagueId}/rosters`
-        ),
-        fetchJson<SleeperLeagueRaw>(`${SLEEPER_API}/league/${ls.leagueId}`),
-      ]);
+      const [rostersRaw, leagueRaw, tradedPicksRaw, draftsRaw] =
+        await Promise.all([
+          fetchJson<SleeperRosterRaw[]>(
+            `${SLEEPER_API}/league/${ls.leagueId}/rosters`
+          ),
+          fetchJson<SleeperLeagueRaw>(`${SLEEPER_API}/league/${ls.leagueId}`),
+          fetchJson<SleeperTradedPickRaw[]>(
+            `${SLEEPER_API}/league/${ls.leagueId}/traded_picks`
+          ).catch(() => [] as SleeperTradedPickRaw[]),
+          fetchJson<any[]>(
+            `${SLEEPER_API}/league/${ls.leagueId}/drafts`
+          ).catch(() => [] as any[]),
+        ]);
 
       const userRoster = rostersRaw.find((r) => r.owner_id === userId);
       if (!userRoster) return;
@@ -1021,12 +1132,22 @@ export async function fetchPortfolioSummary(
       const hasDynastyValues = Object.keys(fcDynasty).length > 0;
       let dynastyRank = 0;
       if (hasDynastyValues) {
+        // Dynasty value = rostered players + owned draft picks, matching the
+        // Overview tab's Roster Strength Profile (which counts picks too).
+        const pickValuesByRoster = computeRosterPickValues(
+          rostersRaw,
+          tradedPicksRaw,
+          draftsRaw,
+          parseInt(leagueRaw.season || "2026", 10),
+          fcDynasty
+        );
         const rosterValues = rostersRaw.map((r) => {
-          const totalValue = (r.players || []).reduce(
+          const playerValue = (r.players || []).reduce(
             (sum, pid) => sum + (fcDynasty[pid] || 0),
             0
           );
-          return { rosterId: r.roster_id, totalValue };
+          const pickValue = pickValuesByRoster.get(r.roster_id) || 0;
+          return { rosterId: r.roster_id, totalValue: playerValue + pickValue };
         });
         rosterValues.sort((a, b) => b.totalValue - a.totalValue);
         dynastyRank =

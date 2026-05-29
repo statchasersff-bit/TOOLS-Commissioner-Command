@@ -28,6 +28,7 @@ import { AdpCrawlPanel } from "@/components/admin/AdpCrawlPanel";
 import { UsageLogPanel } from "@/components/admin/UsageLogPanel";
 import { UnifiedCrawlerPanel } from "@/components/admin/UnifiedCrawlerPanel";
 import { MoversPanel } from "@/components/draft/MoversPanel";
+import { useTheme } from "@/contexts/ThemeContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePlayerProfile } from "@/contexts/PlayerProfileContext";
 
@@ -1005,23 +1006,23 @@ function BoxView({ rows, teams, filters, onPlayerClick }: { rows: ADPResult[]; t
   if (totalRounds === 0) return null;
 
   return (
-    <Card className="overflow-hidden border-white/8 bg-[#070f1c]">
-      <div className="px-3 py-1.5 flex items-center justify-between border-b border-white/5">
+    <Card className="overflow-hidden border-[var(--adp-hairline)] dark-any:border-white/8 bg-[var(--adp-board)]">
+      <div className="px-3 py-1.5 flex items-center justify-between border-b border-[var(--adp-hairline)] dark-any:border-white/5">
         <div className="flex items-center gap-2 min-w-0">
-          <LayoutGrid className="w-3.5 h-3.5 text-white/55 flex-shrink-0" />
-          <h3 className="text-[13px] font-bold text-white">Draft Board</h3>
-          <span className="text-[10px] text-white/40 truncate">{teams}-team snake</span>
+          <LayoutGrid className="w-3.5 h-3.5 text-[var(--sc-text-muted)] dark-any:text-white/55 flex-shrink-0" />
+          <h3 className="text-[13px] font-bold text-[var(--sc-text)] dark-any:text-white">Draft Board</h3>
+          <span className="text-[10px] text-[var(--sc-text-muted)] dark-any:text-white/40 truncate">{teams}-team snake</span>
         </div>
         <HexLegend />
       </div>
 
       {draftLabel && (
-        <div className="px-3 py-2 border-b border-white/5 bg-white/[0.02] flex items-center gap-2">
-          <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-white/45">
+        <div className="px-3 py-2 border-b border-[var(--adp-hairline)] dark-any:border-white/5 bg-[var(--adp-overlay)] dark-any:bg-white/[0.02] flex items-center gap-2">
+          <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-[var(--sc-text-muted)] dark-any:text-white/45">
             Draft Type
           </span>
           <span
-            className="inline-flex items-center px-2 py-0.5 rounded-md border border-[#d4af37]/30 bg-[#d4af37]/10 text-[#d4af37] text-[11px] font-bold tabular-nums"
+            className="inline-flex items-center px-2 py-0.5 rounded-md border border-[#d4af37]/30 bg-[#d4af37]/10 text-[#b8901f] dark-any:text-[#d4af37] text-[11px] font-bold tabular-nums"
             data-testid="box-draft-label"
           >
             {draftLabel}
@@ -1032,9 +1033,9 @@ function BoxView({ rows, teams, filters, onPlayerClick }: { rows: ADPResult[]; t
       <div className="overflow-x-auto overflow-y-hidden">
         <div className="inline-block min-w-full">
           {/* Team header row — tighter, Sleeper-style "Team N" labels. */}
-          <div className="flex sticky top-0 z-30 bg-[#070f1c] border-b border-white/[0.08]">
+          <div className="flex sticky top-0 z-30 bg-[var(--adp-board)] border-b border-[var(--adp-hairline)] dark-any:border-white/[0.08]">
             <div
-              className="sticky left-0 z-40 flex items-center justify-center text-[9px] font-bold uppercase tracking-[0.18em] text-white/30 border-r border-white/[0.08] bg-[#070f1c]"
+              className="sticky left-0 z-40 flex items-center justify-center text-[9px] font-bold uppercase tracking-[0.18em] text-[var(--sc-text-muted)] dark-any:text-white/30 border-r border-[var(--adp-hairline)] dark-any:border-white/[0.08] bg-[var(--adp-board)]"
               style={{ width: labelColW, height: 20, flexShrink: 0 }}
             >
               R
@@ -1042,7 +1043,7 @@ function BoxView({ rows, teams, filters, onPlayerClick }: { rows: ADPResult[]; t
             {Array.from({ length: teams }, (_, i) => (
               <div
                 key={i}
-                className="flex items-center justify-center text-[9px] font-semibold uppercase tracking-[0.15em] text-white/45 border-r border-white/[0.04]"
+                className="flex items-center justify-center text-[9px] font-semibold uppercase tracking-[0.15em] text-[var(--sc-text-muted)] dark-any:text-white/45 border-r border-[var(--adp-hairline)] dark-any:border-white/[0.04]"
                 style={{ width: cellW, height: 20, flexShrink: 0 }}
               >
                 <span>T{i + 1}</span>
@@ -1082,10 +1083,10 @@ function BoxView({ rows, teams, filters, onPlayerClick }: { rows: ADPResult[]; t
 function RoundLabel({ round, width, height }: { round: number; isOdd: boolean; width: number; height: number }) {
   return (
     <div
-      className="sticky left-0 z-20 flex items-center justify-center text-[10px] font-bold border-r border-white/8 bg-[#070f1c]"
+      className="sticky left-0 z-20 flex items-center justify-center text-[10px] font-bold border-r border-[var(--adp-hairline)] dark-any:border-white/8 bg-[var(--adp-board)]"
       style={{ width, flexShrink: 0, minHeight: height }}
     >
-      <span className="text-[9px] font-semibold uppercase tracking-[0.18em] text-white/35 tabular-nums">
+      <span className="text-[9px] font-semibold uppercase tracking-[0.18em] text-[var(--sc-text-muted)] dark-any:text-white/35 tabular-nums">
         R{round}
       </span>
     </div>
@@ -1108,39 +1109,39 @@ const BOX_POS_ACCENT: Record<Position, {
   border: string;
 }> = {
   QB:   {
-    stripe: "bg-rose-500/80",    badgeText: "text-rose-200",
-    metaText: "text-rose-200/80",
-    bg: "bg-rose-900/35",        hoverBg: "hover:bg-rose-900/55",
-    border: "border-rose-500/40",
+    stripe: "bg-rose-500 dark-any:bg-rose-500/80",    badgeText: "text-rose-700 dark-any:text-rose-200",
+    metaText: "text-rose-700/80 dark-any:text-rose-200/80",
+    bg: "bg-rose-100 dark-any:bg-rose-900/35",        hoverBg: "hover:bg-rose-200 dark-any:hover:bg-rose-900/55",
+    border: "border-rose-300 dark-any:border-rose-500/40",
   },
   RB:   {
-    stripe: "bg-emerald-500/80", badgeText: "text-emerald-200",
-    metaText: "text-emerald-200/80",
-    bg: "bg-emerald-900/35",     hoverBg: "hover:bg-emerald-900/55",
-    border: "border-emerald-500/40",
+    stripe: "bg-emerald-500 dark-any:bg-emerald-500/80", badgeText: "text-emerald-700 dark-any:text-emerald-200",
+    metaText: "text-emerald-700/80 dark-any:text-emerald-200/80",
+    bg: "bg-emerald-100 dark-any:bg-emerald-900/35",     hoverBg: "hover:bg-emerald-200 dark-any:hover:bg-emerald-900/55",
+    border: "border-emerald-300 dark-any:border-emerald-500/40",
   },
   WR:   {
-    stripe: "bg-sky-500/80",     badgeText: "text-sky-200",
-    metaText: "text-sky-200/80",
-    bg: "bg-sky-900/40",         hoverBg: "hover:bg-sky-900/60",
-    border: "border-sky-500/40",
+    stripe: "bg-sky-500 dark-any:bg-sky-500/80",     badgeText: "text-sky-700 dark-any:text-sky-200",
+    metaText: "text-sky-700/80 dark-any:text-sky-200/80",
+    bg: "bg-sky-100 dark-any:bg-sky-900/40",         hoverBg: "hover:bg-sky-200 dark-any:hover:bg-sky-900/60",
+    border: "border-sky-300 dark-any:border-sky-500/40",
   },
   TE:   {
-    stripe: "bg-amber-500/80",   badgeText: "text-amber-200",
-    metaText: "text-amber-200/80",
-    bg: "bg-amber-900/35",       hoverBg: "hover:bg-amber-900/55",
-    border: "border-amber-500/40",
+    stripe: "bg-amber-500 dark-any:bg-amber-500/80",   badgeText: "text-amber-700 dark-any:text-amber-200",
+    metaText: "text-amber-700/80 dark-any:text-amber-200/80",
+    bg: "bg-amber-100 dark-any:bg-amber-900/35",       hoverBg: "hover:bg-amber-200 dark-any:hover:bg-amber-900/55",
+    border: "border-amber-300 dark-any:border-amber-500/40",
   },
   K:    {
-    stripe: "bg-purple-500/80",  badgeText: "text-purple-200",
-    metaText: "text-purple-200/80",
-    bg: "bg-purple-900/35",      hoverBg: "hover:bg-purple-900/55",
-    border: "border-purple-500/40",
+    stripe: "bg-purple-500 dark-any:bg-purple-500/80",  badgeText: "text-purple-700 dark-any:text-purple-200",
+    metaText: "text-purple-700/80 dark-any:text-purple-200/80",
+    bg: "bg-purple-100 dark-any:bg-purple-900/35",      hoverBg: "hover:bg-purple-200 dark-any:hover:bg-purple-900/55",
+    border: "border-purple-300 dark-any:border-purple-500/40",
   },
   PICK: {
-    stripe: "bg-[#d4af37]/85",   badgeText: "text-[#d4af37]",
-    metaText: "text-[#fde68a]/80",
-    bg: "bg-[#d4af37]/15",       hoverBg: "hover:bg-[#d4af37]/25",
+    stripe: "bg-[#d4af37] dark-any:bg-[#d4af37]/85",   badgeText: "text-[#b8901f] dark-any:text-[#d4af37]",
+    metaText: "text-[#9a7d2e] dark-any:text-[#fde68a]/80",
+    bg: "bg-[#d4af37]/15 dark-any:bg-[#d4af37]/15",       hoverBg: "hover:bg-[#d4af37]/25",
     border: "border-[#d4af37]/45",
   },
 };
@@ -1166,9 +1167,9 @@ function DraftPickCell({
         style={{ width, minHeight: height, flexShrink: 0 }}
         data-testid={`board-cell-${round}-${pickInRound}-empty`}
       >
-        <div className="w-full h-full rounded-[2px] bg-[#0a1424] flex items-center justify-between px-1.5 border border-white/[0.04]">
-          <ChevronRight className="w-3 h-3 text-white/12" />
-          <span className="text-[10px] font-semibold tabular-nums text-white/20">
+        <div className="w-full h-full rounded-[2px] bg-[var(--adp-surface)] flex items-center justify-between px-1.5 border border-[var(--adp-hairline)] dark-any:border-white/[0.04]">
+          <ChevronRight className="w-3 h-3 text-[var(--sc-text-muted)] dark-any:text-white/12" />
+          <span className="text-[10px] font-semibold tabular-nums text-[var(--sc-text-muted)] dark-any:text-white/20">
             {pickLabel}
           </span>
         </div>
@@ -1216,7 +1217,7 @@ function DraftPickCell({
 
       {/* Top-right: pick number — muted, slightly bumped for scannability. */}
       <span
-        className="absolute top-[3px] right-1 text-[10px] font-semibold tabular-nums text-white/40 leading-none"
+        className="absolute top-[3px] right-1 text-[10px] font-semibold tabular-nums text-[var(--sc-text-muted)] dark-any:text-white/40 leading-none"
         data-testid={`box-pick-${round}-${pickInRound}`}
       >
         {pickLabel}
@@ -1228,7 +1229,7 @@ function DraftPickCell({
            with the avatar bleed. */}
       <div className="absolute inset-x-1 top-[14px] bottom-[14px] flex items-center pr-[30px]">
         <span
-          className="block w-full text-[12px] sm:text-[13px] font-bold text-white leading-[1.1] tracking-tight truncate"
+          className="block w-full text-[12px] sm:text-[13px] font-bold text-[var(--sc-text)] dark-any:text-white leading-[1.1] tracking-tight truncate"
           title={pick.player_name}
         >
           {abbreviateFirstName(pick.player_name)}
@@ -1276,11 +1277,11 @@ function PlayerImageCircle({
 
   return (
     <div
-      className="w-7 h-7 sm:w-8 sm:h-8 rounded-full overflow-hidden bg-[#0a1424] flex items-center justify-center"
-      style={{ boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.06)" }}
+      className="w-7 h-7 sm:w-8 sm:h-8 rounded-full overflow-hidden bg-[var(--adp-surface)] flex items-center justify-center"
+      style={{ boxShadow: "inset 0 0 0 1px var(--adp-hairline)" }}
     >
       {isPick ? (
-        <Hexagon className="w-3.5 h-3.5 text-white/40" strokeWidth={2} />
+        <Hexagon className="w-3.5 h-3.5 text-[var(--sc-text-muted)] dark-any:text-white/40" strokeWidth={2} />
       ) : showImage ? (
         <img
           src={`https://sleepercdn.com/content/nfl/players/thumb/${playerId}.jpg`}
@@ -1289,7 +1290,7 @@ function PlayerImageCircle({
           onError={() => setImgErr(true)}
         />
       ) : (
-        <span className="text-[9px] font-bold text-white/65">
+        <span className="text-[9px] font-bold text-[var(--sc-text-muted)] dark-any:text-white/65">
           {initialsOf(name)}
         </span>
       )}
@@ -1322,21 +1323,21 @@ function RoundBoardView({ rows, teams, onPlayerClick }: { rows: ADPResult[]; tea
   if (grouped.length === 0) return null;
 
   return (
-    <Card className="overflow-hidden border-white/8 bg-[#070f1c]">
-      <div className="px-3 py-1.5 flex items-center justify-between border-b border-white/5">
+    <Card className="overflow-hidden border-[var(--adp-hairline)] dark-any:border-white/8 bg-[var(--adp-board)]">
+      <div className="px-3 py-1.5 flex items-center justify-between border-b border-[var(--adp-hairline)] dark-any:border-white/5">
         <div className="flex items-center gap-2 min-w-0">
           <Trophy className="w-3.5 h-3.5 text-[#d4af37]" />
-          <h3 className="text-[13px] font-bold text-white">Rookie Round Board</h3>
-          <span className="text-[10px] text-white/40 truncate">{teams}-team · {grouped.length} {grouped.length === 1 ? "round" : "rounds"}</span>
+          <h3 className="text-[13px] font-bold text-[var(--sc-text)] dark-any:text-white">Rookie Round Board</h3>
+          <span className="text-[10px] text-[var(--sc-text-muted)] dark-any:text-white/40 truncate">{teams}-team · {grouped.length} {grouped.length === 1 ? "round" : "rounds"}</span>
         </div>
         <HexLegend />
       </div>
-      <div className="divide-y divide-white/5">
+      <div className="divide-y divide-[var(--adp-hairline)] dark-any:divide-white/5">
         {grouped.map(([round, picks]) => (
           <div key={round} className="px-3 py-2" data-testid={`round-board-round-${round}`}>
             <div className="flex items-baseline gap-2 mb-1.5">
               <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#d4af37]">Round {round}</span>
-              <span className="text-[9px] text-white/35">{picks.length} {picks.length === 1 ? "pick" : "picks"}</span>
+              <span className="text-[9px] text-[var(--sc-text-muted)] dark-any:text-white/35">{picks.length} {picks.length === 1 ? "pick" : "picks"}</span>
             </div>
             <div className="grid gap-1.5 grid-cols-[repeat(auto-fill,minmax(168px,1fr))]">
               {picks.map((p, idx) => (
@@ -1372,16 +1373,16 @@ function RoundBoardCard({ pick, slot, round, onClick }: { pick: ADPResult; slot:
         <span className={cn("font-bold uppercase tracking-wider", accent.badgeText)}>
           {isPick ? "RP" : `${pick.position}${pick.positional_rank}`}
         </span>
-        <span className="font-semibold tabular-nums text-white/40">
+        <span className="font-semibold tabular-nums text-[var(--sc-text-muted)] dark-any:text-white/40">
           #{slot}
         </span>
       </div>
-      <p className="mt-1 text-[12px] font-bold text-white truncate" title={pick.player_name}>
+      <p className="mt-1 text-[12px] font-bold text-[var(--sc-text)] dark-any:text-white truncate" title={pick.player_name}>
         {abbreviateFirstName(pick.player_name)}
       </p>
       <p className={cn("text-[10px] truncate", accent.metaText)}>{posLine}</p>
-      <div className="mt-1 flex items-center justify-between text-[10px] text-white/55">
-        <span>ADP <span className="tabular-nums text-white/80">{pick.avg_pick.toFixed(1)}</span></span>
+      <div className="mt-1 flex items-center justify-between text-[10px] text-[var(--sc-text-muted)] dark-any:text-white/55">
+        <span>ADP <span className="tabular-nums text-[var(--sc-text)] dark-any:text-white/80">{pick.avg_pick.toFixed(1)}</span></span>
         <span className="tabular-nums">{pick.draft_count} {pick.draft_count === 1 ? "draft" : "drafts"}</span>
       </div>
     </button>
@@ -1536,13 +1537,13 @@ function HexView({ rows, teams, draftFormat, filters, onPlayerClick }: { rows: A
   }, [rows, teams, isSnake]);
 
   return (
-    <Card className="overflow-hidden border-white/8 bg-[#070f1c]">
+    <Card className="overflow-hidden border-[var(--adp-hairline)] dark-any:border-white/8 bg-[var(--adp-board)]">
       {/* ── Title bar ─────────────────────────────────────────────────────── */}
-      <div className="px-4 py-3 flex items-center justify-between border-b border-white/5">
+      <div className="px-4 py-3 flex items-center justify-between border-b border-[var(--adp-hairline)] dark-any:border-white/5">
         <div className="flex items-center gap-2 min-w-0">
-          <Hexagon className="w-3.5 h-3.5 text-white/55 flex-shrink-0" />
-          <h3 className="text-sm font-bold text-white tracking-wide uppercase">Draft Board</h3>
-          <span className="hidden sm:inline-flex items-center px-1.5 py-0.5 rounded-md border border-white/10 bg-white/[0.03] text-[9px] font-bold uppercase tracking-wider text-white/50">
+          <Hexagon className="w-3.5 h-3.5 text-[var(--sc-text-muted)] dark-any:text-white/55 flex-shrink-0" />
+          <h3 className="text-sm font-bold text-[var(--sc-text)] dark-any:text-white tracking-wide uppercase">Draft Board</h3>
+          <span className="hidden sm:inline-flex items-center px-1.5 py-0.5 rounded-md border border-[var(--adp-hairline)] dark-any:border-white/10 bg-[var(--adp-overlay)] dark-any:bg-white/[0.03] text-[9px] font-bold uppercase tracking-wider text-[var(--sc-text-muted)] dark-any:text-white/50">
             {teams}-team
           </span>
         </div>
@@ -1550,12 +1551,12 @@ function HexView({ rows, teams, draftFormat, filters, onPlayerClick }: { rows: A
       </div>
 
       {draftLabel && (
-        <div className="px-4 py-2 border-b border-white/5 bg-white/[0.02] flex items-center gap-2">
-          <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-white/45">
+        <div className="px-4 py-2 border-b border-[var(--adp-hairline)] dark-any:border-white/5 bg-[var(--adp-overlay)] dark-any:bg-white/[0.02] flex items-center gap-2">
+          <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-[var(--sc-text-muted)] dark-any:text-white/45">
             Draft Type
           </span>
           <span
-            className="inline-flex items-center px-2 py-0.5 rounded-md border border-[#d4af37]/30 bg-[#d4af37]/10 text-[#d4af37] text-[11px] font-bold tabular-nums"
+            className="inline-flex items-center px-2 py-0.5 rounded-md border border-[#d4af37]/30 bg-[#d4af37]/10 text-[#b8901f] dark-any:text-[#d4af37] text-[11px] font-bold tabular-nums"
             data-testid="hex-draft-label"
           >
             {draftLabel}
@@ -1625,7 +1626,7 @@ function HexRow({
       <div
         className="sticky left-0 z-20 flex-shrink-0 flex items-start pl-1.5 sm:pl-3 md:pl-4 pr-1.5 sm:pr-3 pt-2 md:pt-3 min-w-[44px] sm:min-w-[60px] md:min-w-[68px]"
         style={{
-          background: "linear-gradient(to right, rgba(6,12,24,1) 70%, rgba(6,12,24,0))",
+          background: "linear-gradient(to right, var(--adp-board) 70%, transparent)",
         }}
       >
         <div
@@ -1633,7 +1634,7 @@ function HexRow({
             "inline-flex items-center gap-0.5 sm:gap-1 px-1 sm:px-1.5 md:px-2 py-0.5 rounded-md text-[9px] sm:text-[10px] font-bold whitespace-nowrap border tabular-nums",
             round === 1
               ? "bg-[#d4af37]/15 border-[#d4af37]/45 text-[#d4af37] shadow-[0_0_12px_-2px_rgba(212,175,55,0.5)]"
-              : "bg-white/[0.04] border-white/15 text-white/75",
+              : "bg-[var(--adp-overlay)] dark-any:bg-white/[0.04] border-[var(--adp-hairline)] dark-any:border-white/15 text-[var(--sc-text)] dark-any:text-white/75",
           )}
         >
           <span className="text-[7px] sm:text-[8px] opacity-60">RD</span>
@@ -1667,11 +1668,11 @@ function HexEmpty({ pickInRound }: { pickInRound: number }) {
         className="absolute inset-[3px]"
         style={{
           clipPath: HEX_CLIP,
-          background: "rgba(255,255,255,0.015)",
-          boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.04)",
+          background: "var(--adp-overlay)",
+          boxShadow: "inset 0 0 0 1px var(--adp-hairline)",
         }}
       />
-      <span className="absolute top-[8%] left-1/2 -translate-x-1/2 text-[8px] font-bold tabular-nums text-white/20">
+      <span className="absolute top-[8%] left-1/2 -translate-x-1/2 text-[8px] font-bold tabular-nums text-[var(--sc-text-muted)] dark-any:text-white/20">
         {String(pickInRound).padStart(2, "0")}
       </span>
     </div>
@@ -1684,12 +1685,12 @@ const HEX_CLIP = "polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)"
 // Small position-color map used for the position badge text/border AND the
 // soft position-tinted hex shell. Kept understated — a wash, not a paint.
 const HEX_BADGE_COLOR: Record<Position, { text: string; border: string }> = {
-  QB:   { text: "text-rose-300",    border: "border-rose-500/40"    },
-  RB:   { text: "text-emerald-300", border: "border-emerald-500/40" },
-  WR:   { text: "text-sky-300",     border: "border-sky-500/40"     },
-  TE:   { text: "text-amber-300",   border: "border-amber-500/40"   },
-  K:    { text: "text-purple-300",  border: "border-purple-500/40"  },
-  PICK: { text: "text-[#d4af37]",   border: "border-[#d4af37]/40"   },
+  QB:   { text: "text-rose-600 dark-any:text-rose-300",    border: "border-rose-400 dark-any:border-rose-500/40"    },
+  RB:   { text: "text-emerald-600 dark-any:text-emerald-300", border: "border-emerald-400 dark-any:border-emerald-500/40" },
+  WR:   { text: "text-sky-600 dark-any:text-sky-300",     border: "border-sky-400 dark-any:border-sky-500/40"     },
+  TE:   { text: "text-amber-600 dark-any:text-amber-300",   border: "border-amber-400 dark-any:border-amber-500/40"   },
+  K:    { text: "text-purple-600 dark-any:text-purple-300",  border: "border-purple-400 dark-any:border-purple-500/40"  },
+  PICK: { text: "text-[#b8901f] dark-any:text-[#d4af37]",   border: "border-[#d4af37]/40"   },
 };
 
 // Soft position tint layered over the dark hex base + a subtle position-
@@ -1759,7 +1760,7 @@ function HexTile({ row, round, pickInRound, onClick }: { row: ADPResult; round: 
         className="absolute inset-[3px] transition-colors duration-150"
         style={{
           clipPath: HEX_CLIP,
-          background: `linear-gradient(${shellColor.tint}, ${shellColor.tint}), #0e1828`,
+          background: `linear-gradient(${shellColor.tint}, ${shellColor.tint}), var(--adp-tile)`,
           boxShadow: `inset 0 0 0 1px ${shellColor.border}`,
         }}
       />
@@ -1782,7 +1783,7 @@ function HexTile({ row, round, pickInRound, onClick }: { row: ADPResult; round: 
             "px-1 sm:px-1.5 py-px rounded border text-[9px] sm:text-[10px] font-bold uppercase tracking-wider leading-none",
             badge.text,
             badge.border,
-            "bg-white/[0.03]",
+            "bg-[var(--adp-overlay)] dark-any:bg-white/[0.03]",
           )}
           data-testid={`hex-posrank-${row.player_id}`}
         >
@@ -1812,21 +1813,21 @@ function HexTile({ row, round, pickInRound, onClick }: { row: ADPResult; round: 
         {/* Name + team abbreviation, tight stack directly below the image. */}
         <div className="w-full text-center mt-1 leading-none">
           <div
-            className="text-[10px] sm:text-[11px] md:text-[12px] font-semibold text-white/90 leading-[1.1] line-clamp-1 tracking-tight px-0.5"
+            className="text-[10px] sm:text-[11px] md:text-[12px] font-semibold text-[var(--sc-text)] dark-any:text-white/90 leading-[1.1] line-clamp-1 tracking-tight px-0.5"
             data-testid={`hex-name-${row.player_id}`}
           >
             {shortenName(row.player_name)}
           </div>
           {row.team && (
             <div
-              className="hidden sm:block text-[9px] font-semibold tabular-nums text-white/45 mt-0.5 uppercase tracking-wider"
+              className="hidden sm:block text-[9px] font-semibold tabular-nums text-[var(--sc-text-muted)] dark-any:text-white/45 mt-0.5 uppercase tracking-wider"
               data-testid={`hex-team-${row.player_id}`}
             >
               {row.team}
             </div>
           )}
           <div
-            className="text-[8px] sm:text-[9px] font-bold tabular-nums text-white/35 mt-0.5"
+            className="text-[8px] sm:text-[9px] font-bold tabular-nums text-[var(--sc-text-muted)] dark-any:text-white/35 mt-0.5"
             data-testid={`hex-pick-${row.player_id}`}
           >
             {pickLabel}
@@ -1858,8 +1859,8 @@ function PlayerHeadshotHex({
 
   return (
     <div
-      className="relative w-[42px] h-[48px] max-[430px]:w-[36px] max-[430px]:h-[42px] sm:w-[50px] sm:h-[58px] md:w-[58px] md:h-[66px] rounded-md overflow-hidden bg-white/[0.04] flex items-center justify-center"
-      style={{ boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.08)" }}
+      className="relative w-[42px] h-[48px] max-[430px]:w-[36px] max-[430px]:h-[42px] sm:w-[50px] sm:h-[58px] md:w-[58px] md:h-[66px] rounded-md overflow-hidden bg-[var(--adp-overlay)] dark-any:bg-white/[0.04] flex items-center justify-center"
+      style={{ boxShadow: "inset 0 0 0 1px var(--adp-hairline)" }}
     >
       {showImage ? (
         <img
@@ -1869,7 +1870,7 @@ function PlayerHeadshotHex({
           onError={() => setErrored(true)}
         />
       ) : (
-        <span className="text-xs sm:text-sm font-bold text-white/70">
+        <span className="text-xs sm:text-sm font-bold text-[var(--sc-text-muted)] dark-any:text-white/70">
           {initialsOf(name)}
         </span>
       )}
@@ -1881,10 +1882,10 @@ function PlayerHeadshotHex({
 function PickGlyph({ label }: { label?: string | null }) {
   return (
     <div
-      className="relative w-[42px] h-[48px] max-[430px]:w-[36px] max-[430px]:h-[42px] sm:w-[50px] sm:h-[58px] md:w-[58px] md:h-[66px] rounded-md flex items-center justify-center bg-white/[0.04]"
-      style={{ boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.08)" }}
+      className="relative w-[42px] h-[48px] max-[430px]:w-[36px] max-[430px]:h-[42px] sm:w-[50px] sm:h-[58px] md:w-[58px] md:h-[66px] rounded-md flex items-center justify-center bg-[var(--adp-overlay)] dark-any:bg-white/[0.04]"
+      style={{ boxShadow: "inset 0 0 0 1px var(--adp-hairline)" }}
     >
-      <Hexagon className="w-4 h-4 sm:w-5 sm:h-5 md:w-6 md:h-6 text-white/40" strokeWidth={2} />
+      <Hexagon className="w-4 h-4 sm:w-5 sm:h-5 md:w-6 md:h-6 text-[var(--sc-text-muted)] dark-any:text-white/40" strokeWidth={2} />
       {label && (
         <span className="absolute bottom-0.5 left-1/2 -translate-x-1/2 px-1 py-px rounded text-[8px] font-bold uppercase tracking-wider whitespace-nowrap bg-black/40 text-white/65 leading-none">
           {label.replace(/^\d{4}\s+Rookie\s+/i, "")}
@@ -1902,6 +1903,8 @@ function PickGlyph({ label }: { label?: string | null }) {
  * startup trend chart, and stack indicators once the live data lands.
  */
 function HexHoverPanel({ row, theme }: { row: ADPResult; theme: PosTheme }) {
+  const { themeMode } = useTheme();
+  const isLight = themeMode === "light";
   const rangeSpan = Math.max(1, row.max_pick - row.min_pick);
   const medianPct = ((row.median_pick - row.min_pick) / rangeSpan) * 100;
   const rising  = row.trend_30d < 0;
@@ -1912,31 +1915,31 @@ function HexHoverPanel({ row, theme }: { row: ADPResult; theme: PosTheme }) {
       role="tooltip"
     >
       <div
-        className="rounded-xl border border-white/10 bg-[#0a1628]/95 backdrop-blur-md p-2.5 shadow-[0_20px_50px_-10px_rgba(0,0,0,0.8)]"
+        className="rounded-xl border border-[var(--adp-hairline)] dark-any:border-white/10 bg-[var(--adp-panel)]/95 backdrop-blur-md p-2.5 shadow-[0_20px_50px_-10px_rgba(0,0,0,0.8)]"
         style={{ boxShadow: `0 0 0 1px ${theme.ring}33, 0 20px 50px -10px rgba(0,0,0,0.8)` }}
       >
         {/* Header row — full name + position rank. */}
         <div className="flex items-center justify-between gap-2">
-          <div className="text-[12px] font-bold text-white truncate">{row.player_name}</div>
+          <div className="text-[12px] font-bold text-[var(--sc-text)] dark-any:text-white truncate">{row.player_name}</div>
           <span
             className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border"
-            style={{ color: theme.text, borderColor: `${theme.ring}99`, background: theme.chipBg }}
+            style={{ color: isLight ? theme.base : theme.text, borderColor: `${theme.ring}99`, background: theme.chipBg }}
           >
             {row.is_rookie_placeholder ? "RP" : row.position}{row.positional_rank}
           </span>
         </div>
-        <div className="text-[9px] text-white/40 uppercase tracking-wider mt-0.5">
+        <div className="text-[9px] text-[var(--sc-text-muted)] dark-any:text-white/40 uppercase tracking-wider mt-0.5">
           {row.team || (row.is_rookie_placeholder ? "Rookie Pick" : "—")} · Overall #{row.overall_rank}
         </div>
 
         {/* ADP range bar. */}
         <div className="mt-2">
-          <div className="flex items-center justify-between text-[9px] text-white/55 mb-1 tabular-nums">
+          <div className="flex items-center justify-between text-[9px] text-[var(--sc-text-muted)] dark-any:text-white/55 mb-1 tabular-nums">
             <span>MIN {row.min_pick}</span>
             <span className="text-[#d4af37] font-bold">ADP {row.avg_pick.toFixed(1)}</span>
             <span>MAX {row.max_pick}</span>
           </div>
-          <div className="relative h-1.5 rounded-full bg-white/5 overflow-hidden border border-white/5">
+          <div className="relative h-1.5 rounded-full bg-[var(--adp-overlay)] dark-any:bg-white/5 overflow-hidden border border-[var(--adp-hairline)] dark-any:border-white/5">
             <div
               className="absolute inset-y-0 left-0 right-0 rounded-full"
               style={{ background: `linear-gradient(90deg, ${theme.ring}55, ${theme.ring}aa, ${theme.ring}55)` }}
@@ -1959,8 +1962,8 @@ function HexHoverPanel({ row, theme }: { row: ADPResult; theme: PosTheme }) {
         {(rising || falling) && (
           <div className={cn(
             "mt-2 flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider px-1.5 py-1 rounded-md border",
-            rising  ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-300"
-                    : "border-red-400/30 bg-red-400/10 text-red-300",
+            rising  ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-600 dark-any:text-emerald-300"
+                    : "border-red-400/30 bg-red-400/10 text-red-600 dark-any:text-red-300",
           )}>
             {rising ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
             {rising ? "Rising in market" : "Falling in market"}
@@ -1974,11 +1977,11 @@ function HexHoverPanel({ row, theme }: { row: ADPResult; theme: PosTheme }) {
 function StatCell({ label, value, accent, mono }: { label: string; value: number; accent?: boolean; mono?: boolean }) {
   const rising = value < 0;
   const flat = Math.abs(value) < 2;
-  const color = !accent ? "text-white" : flat ? "text-white/60" : rising ? "text-emerald-300" : "text-red-300";
+  const color = !accent ? "text-[var(--sc-text)] dark-any:text-white" : flat ? "text-[var(--sc-text-muted)] dark-any:text-white/60" : rising ? "text-emerald-600 dark-any:text-emerald-300" : "text-red-600 dark-any:text-red-300";
   const sign = accent && !flat ? (rising ? "▲" : "▼") : "";
   return (
-    <div className="rounded-md border border-white/10 bg-white/[0.03] px-1.5 py-1">
-      <div className="text-[8px] uppercase tracking-wider text-white/40 leading-none">{label}</div>
+    <div className="rounded-md border border-[var(--adp-hairline)] dark-any:border-white/10 bg-[var(--adp-overlay)] dark-any:bg-white/[0.03] px-1.5 py-1">
+      <div className="text-[8px] uppercase tracking-wider text-[var(--sc-text-muted)] dark-any:text-white/40 leading-none">{label}</div>
       <div className={cn("mt-0.5 text-[11px] font-bold leading-none tabular-nums", color)}>
         {sign} {accent ? Math.abs(value) : value}
         {mono ? "" : ""}
@@ -2010,7 +2013,7 @@ function HexLegend({
           return (
             <span
               key={label}
-              className={cn(baseCls, "bg-white/[0.02]", b.text, b.border)}
+              className={cn(baseCls, "bg-[var(--adp-overlay)] dark-any:bg-white/[0.02]", b.text, b.border)}
             >
               {label}
             </span>
@@ -2026,8 +2029,8 @@ function HexLegend({
               baseCls,
               "cursor-pointer",
               isOn
-                ? cn("bg-white/[0.04]", b.text, b.border)
-                : "bg-transparent border-white/15 text-white/30 line-through decoration-1",
+                ? cn("bg-[var(--adp-overlay)] dark-any:bg-white/[0.04]", b.text, b.border)
+                : "bg-transparent border-[var(--adp-hairline)] dark-any:border-white/15 text-[var(--sc-text-muted)] dark-any:text-white/30 line-through decoration-1",
             )}
             data-testid={`hex-legend-${key.toLowerCase()}`}
           >
