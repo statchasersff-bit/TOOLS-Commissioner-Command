@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { Card } from "@/components/ui/card";
 import { useValueModel } from "@/contexts/ValueModelContext";
 import { cn } from "@/lib/utils";
-import { Zap, Shield, TrendingUp, Activity } from "lucide-react";
+import { Zap, Shield, TrendingUp, Star } from "lucide-react";
 import type { League, Team } from "@/types";
 import { calculateStrengthSnapshot } from "@/lib/gm-analytics";
 
@@ -15,14 +15,6 @@ function rankLabel(rank: number, total: number): { label: string; cls: string } 
   if (pct <= 0.34) return { label: "Top tier", cls: "text-emerald-500 dark:text-emerald-400" };
   if (pct <= 0.66) return { label: "Mid pack", cls: "text-amber-500 dark:text-amber-400" };
   return { label: "Bottom tier", cls: "text-rose-500 dark:text-rose-400" };
-}
-
-function scoreLabel(score: number, thresholds: [number, number]): { label: string; cls: string } {
-  const [hi, mid] = thresholds;
-  if (score >= hi) return { label: "Elite", cls: "text-emerald-500 dark:text-emerald-400" };
-  if (score >= mid) return { label: "Strong", cls: "text-blue-500 dark:text-blue-400" };
-  if (score >= 50) return { label: "Average", cls: "text-amber-500 dark:text-amber-400" };
-  return { label: "Risky", cls: "text-rose-500 dark:text-rose-400" };
 }
 
 function ComparisonBar({ yours, avg, best }: { yours: number; avg: number; best: number }) {
@@ -50,44 +42,71 @@ function Row({ label, value, widthPct, barCls }: { label: string; value: number;
 }
 
 export function RosterStrengthProfile({ league, userTeam }: Props) {
-  const { getPlayerValue, getRedraftValue } = useValueModel();
-  const snap = useMemo(
-    () => calculateStrengthSnapshot(userTeam, league, getRedraftValue, getPlayerValue),
-    [userTeam, league, getRedraftValue, getPlayerValue],
+  const { getPlayerValue, getRedraftValue, getPickValue, optimizeLineup } = useValueModel();
+
+  // Evaluate every team on its OPTIMAL (best-ball) lineup rather than the
+  // manager's currently-set lineup, so Contender Strength / Bench Depth reflect
+  // roster quality instead of lineup-setting mistakes. optimizeLineup rewrites
+  // each player's `starter` flag; downstream helpers key off that flag.
+  const optLeague = useMemo(() => {
+    const rp = league.rosterPositions || [];
+    if (rp.length === 0) return league;
+    return { ...league, teams: league.teams.map((t) => ({ ...t, roster: optimizeLineup(t.roster, rp) })) };
+  }, [league, optimizeLineup]);
+  const optUserTeam = useMemo(
+    () => optLeague.teams.find((t) => t.id === userTeam.id) ?? userTeam,
+    [optLeague, userTeam],
   );
 
-  // League comparison data for the mini bars.
+  const snap = useMemo(
+    () => calculateStrengthSnapshot(optUserTeam, optLeague, getRedraftValue, getPlayerValue, getPickValue),
+    [optUserTeam, optLeague, getRedraftValue, getPlayerValue, getPickValue],
+  );
+
+  // League comparison data for the mini bars — also optimal-lineup based.
   const starterVals = useMemo(
-    () => league.teams.map((t) => t.roster.filter((p) => p.starter).reduce((s, p) => s + getRedraftValue(p), 0)),
-    [league, getRedraftValue],
+    () => optLeague.teams.map((t) => t.roster.filter((p) => p.starter).reduce((s, p) => s + getRedraftValue(p), 0)),
+    [optLeague, getRedraftValue],
   );
   const benchVals = useMemo(
-    () => league.teams.map((t) => t.roster.filter((p) => !p.starter && !p.onTaxi && !p.onReserve).reduce((s, p) => s + getPlayerValue(p), 0)),
-    [league, getPlayerValue],
+    () => optLeague.teams.map((t) => t.roster.filter((p) => !p.starter && !p.onTaxi && !p.onReserve).reduce((s, p) => s + getPlayerValue(p), 0)),
+    [optLeague, getPlayerValue],
+  );
+  const dynastyVals = useMemo(
+    () => optLeague.teams.map((t) =>
+      t.roster.reduce((s, p) => s + getPlayerValue(p), 0) + t.picks.reduce((s, p) => s + getPickValue(p), 0)),
+    [optLeague, getPlayerValue, getPickValue],
+  );
+  const pickVals = useMemo(
+    () => optLeague.teams.map((t) => t.picks.reduce((s, p) => s + getPickValue(p), 0)),
+    [optLeague, getPickValue],
   );
   const starterAvg = Math.round(starterVals.reduce((s, v) => s + v, 0) / Math.max(1, starterVals.length));
   const starterBest = Math.max(0, ...starterVals);
   const benchAvg = Math.round(benchVals.reduce((s, v) => s + v, 0) / Math.max(1, benchVals.length));
   const benchBest = Math.max(0, ...benchVals);
+  const dynastyAvg = Math.round(dynastyVals.reduce((s, v) => s + v, 0) / Math.max(1, dynastyVals.length));
+  const dynastyBest = Math.max(0, ...dynastyVals);
+  const pickAvg = Math.round(pickVals.reduce((s, v) => s + v, 0) / Math.max(1, pickVals.length));
+  const pickBest = Math.max(0, ...pickVals);
 
   const starter = rankLabel(snap.starterRank, snap.totalTeams);
   const bench = rankLabel(snap.benchRank, snap.totalTeams);
-  const ceiling = scoreLabel(snap.ceilingScore, [85, 65]);
-  const floor = scoreLabel(snap.floorScore, [85, 65]);
-  const stability = scoreLabel(snap.stabilityScore, [80, 60]);
+  const dynastyRank = rankLabel(snap.dynastyRank, snap.totalTeams);
+  const pickRank = rankLabel(snap.pickRank, snap.totalTeams);
 
   return (
     <Card className="p-4 sm:p-5 space-y-4" data-testid="gm-roster-strength">
       <div>
         <h3 className="text-base font-bold tracking-tight text-foreground">Roster Strength Profile</h3>
         <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
-        <p className="text-xs text-muted-foreground mt-2">Starters vs depth, ceiling vs floor.</p>
+        <p className="text-xs text-muted-foreground mt-2">Starters, depth, dynasty value &amp; draft capital.</p>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <StatCard
           icon={<Zap className="w-3.5 h-3.5 text-[#d4af37]" />}
-          label="Starter Strength"
+          label="Contender Strength"
           value={`#${snap.starterRank}`}
           context={starter.label}
           contextCls={starter.cls}
@@ -106,28 +125,24 @@ export function RosterStrengthProfile({ league, userTeam }: Props) {
         </StatCard>
 
         <StatCard
-          icon={<TrendingUp className="w-3.5 h-3.5 text-emerald-400" />}
-          label="Weekly Ceiling"
-          value={ceiling.label}
-          context={`${snap.ceilingScore}/100`}
-          contextCls={ceiling.cls}
-        />
+          icon={<TrendingUp className="w-3.5 h-3.5 text-blue-400" />}
+          label="Dynasty Rank"
+          value={`#${snap.dynastyRank}`}
+          context={dynastyRank.label}
+          contextCls={dynastyRank.cls}
+        >
+          <ComparisonBar yours={snap.dynastyValue} avg={dynastyAvg} best={dynastyBest} />
+        </StatCard>
 
         <StatCard
-          icon={<Shield className="w-3.5 h-3.5 text-sky-400" />}
-          label="Weekly Floor"
-          value={floor.label}
-          context={`${snap.floorScore}/100`}
-          contextCls={floor.cls}
-        />
-
-        <StatCard
-          icon={<Activity className="w-3.5 h-3.5 text-violet-400" />}
-          label="Lineup Stability"
-          value={stability.label}
-          context={`${snap.stabilityScore}/100`}
-          contextCls={stability.cls}
-        />
+          icon={<Star className="w-3.5 h-3.5 text-violet-400" />}
+          label="Rookie Pick Strength"
+          value={`#${snap.pickRank}`}
+          context={pickRank.label}
+          contextCls={pickRank.cls}
+        >
+          <ComparisonBar yours={snap.pickValue} avg={pickAvg} best={pickBest} />
+        </StatCard>
       </div>
     </Card>
   );

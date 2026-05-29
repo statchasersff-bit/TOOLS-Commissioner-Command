@@ -41,6 +41,7 @@ import {
   Scale,
   Sparkles,
   Sprout,
+  Swords,
   Target,
   TrendingUp,
   Trophy,
@@ -64,6 +65,10 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, L
 import { cn } from "@/lib/utils";
 import { API_BASE } from "@/lib/apiBase";
 import { useSleeper } from "@/contexts/SleeperContext";
+import { usePlayoffOddsSummary } from "@/hooks/usePlayoffOddsSummary";
+import { useManagerLeagueStats } from "@/hooks/useManagerLeagueStats";
+import { useManagerWeeklyMatchups } from "@/hooks/useManagerWeeklyMatchups";
+import { fetchLeagueTransactions } from "@/lib/sleeperApi";
 import type { Team } from "@/types";
 
 // ── Types — mirrors server/managerIntel.ts (new fields optional for safety) ──
@@ -921,6 +926,12 @@ function CurrentLeagueTab({ data }: { data: ManagerIntelPayload }) {
         )}
       </div>
 
+      <LeagueStandingSection
+        leagueId={selected.leagueId}
+        ownerId={targetId}
+        rosterId={targetRow?.rosterId ?? null}
+      />
+
       <ValueByPosition
         dynasty={selected.dynastyStrengths}
         winNow={selected.winNowStrengths}
@@ -931,6 +942,16 @@ function CurrentLeagueTab({ data }: { data: ManagerIntelPayload }) {
         <YouVsThem viewer={viewerRow} target={targetRow} />
       )}
 
+      <ManagerMatchupsSection
+        leagueId={selected.leagueId}
+        rosterId={targetRow?.rosterId ?? null}
+      />
+
+      <ManagerActivitySection
+        leagueId={selected.leagueId}
+        rosterId={targetRow?.rosterId ?? null}
+      />
+
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <SectionCard title="Roster age" icon={<User className="w-3.5 h-3.5" />}>
           <p className="text-[13px] text-white/70">{selected.ageSummary}</p>
@@ -940,6 +961,208 @@ function CurrentLeagueTab({ data }: { data: ManagerIntelPayload }) {
         </SectionCard>
       </div>
     </div>
+  );
+}
+
+// Ordinal suffix for standings, e.g. 1 → "1st", 3 → "3rd".
+function ordinal(n: number): string {
+  const mod100 = n % 100;
+  if (mod100 >= 11 && mod100 <= 13) return `${n}th`;
+  switch (n % 10) {
+    case 1: return `${n}st`;
+    case 2: return `${n}nd`;
+    case 3: return `${n}rd`;
+    default: return `${n}th`;
+  }
+}
+
+function LeagueStandingSection({
+  leagueId, ownerId, rosterId,
+}: {
+  leagueId: string;
+  ownerId: string;
+  rosterId: number | null;
+}) {
+  const { standing, pfRank, maxPfRank, totalTeams, loading } = useManagerLeagueStats(leagueId, ownerId);
+  const { odds } = usePlayoffOddsSummary(leagueId);
+  const teamOdds = rosterId != null ? odds?.[rosterId] : null;
+
+  const rankValue = (rank: number | null) =>
+    rank != null ? `${ordinal(rank)}${totalTeams ? ` of ${totalTeams}` : ""}` : (loading ? "…" : "—");
+
+  return (
+    <SectionCard title="League standing" icon={<Gauge className="w-3.5 h-3.5" />}>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        <Stat label="Standing" value={rankValue(standing)} />
+        <Stat label="PF Rank" value={rankValue(pfRank)} />
+        <Stat label="Max PF Rank" value={rankValue(maxPfRank)} />
+        <Stat
+          label="Playoff Odds"
+          value={teamOdds ? `${teamOdds.makePlayoffsPct.toFixed(1)}%` : "—"}
+        />
+      </div>
+    </SectionCard>
+  );
+}
+
+// Color the win-probability number: green when favored, rose when an underdog.
+function winProbClass(pct: number): string {
+  if (pct >= 55) return "text-emerald-300";
+  if (pct <= 45) return "text-rose-300";
+  return "text-white/80";
+}
+
+function ManagerMatchupsSection({ leagueId, rosterId }: { leagueId: string; rosterId: number | null }) {
+  const { weeks, currentWeek, loading, error } = useManagerWeeklyMatchups(leagueId, rosterId);
+
+  return (
+    <SectionCard title="Week-by-week matchups" icon={<Swords className="w-3.5 h-3.5" />}>
+      {loading && <p className="text-[13px] text-white/45">Loading matchups…</p>}
+      {!loading && error && <p className="text-[13px] text-white/45">Matchups unavailable.</p>}
+      {!loading && !error && weeks.length === 0 && (
+        <p className="text-[13px] text-white/45">No matchups found for this manager.</p>
+      )}
+      {!loading && weeks.length > 0 && (
+        <div className="space-y-1">
+          {weeks.map((w) => {
+            const isCurrent = currentWeek != null && w.week === currentWeek;
+            return (
+              <div
+                key={w.week}
+                className={cn(
+                  "flex items-center gap-2 rounded-md border border-white/8 bg-white/[0.02] px-2.5 py-1.5",
+                  isCurrent && "border-[#d4af37]/40 bg-[#d4af37]/[0.06]",
+                )}
+              >
+                <span className="text-[10px] font-bold uppercase tracking-wider text-white/40 w-9 flex-shrink-0">Wk {w.week}</span>
+                {w.isBye ? (
+                  <span className="text-[13px] text-white/55 flex-1">Bye week</span>
+                ) : (
+                  <>
+                    {w.opponentAvatar ? (
+                      <img src={w.opponentAvatar} alt="" className="w-5 h-5 rounded-full object-cover flex-shrink-0 ring-1 ring-white/10" />
+                    ) : (
+                      <span className="w-5 h-5 rounded-full bg-white/10 flex-shrink-0" />
+                    )}
+                    <span className="text-[13px] text-white/80 truncate flex-1">
+                      <span className="text-white/40">vs </span>{w.opponentName ?? "TBD"}
+                    </span>
+                    {w.status === "final" ? (
+                      <span className="text-[12px] tabular-nums text-white/55 flex-shrink-0">
+                        {w.pointsFor.toFixed(1)}–{w.opponentPointsFor.toFixed(1)}
+                      </span>
+                    ) : (
+                      <span className={cn("text-[13px] font-bold tabular-nums flex-shrink-0", winProbClass(w.winProbability))}>
+                        {w.winProbability.toFixed(0)}%
+                      </span>
+                    )}
+                  </>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </SectionCard>
+  );
+}
+
+interface ManagerTxn {
+  type: string;
+  timestamp: number;
+  week: number;
+  adds: { name: string; pos: string; rosterId: number }[];
+  drops: { name: string; pos: string; rosterId: number }[];
+  involvedTeams: { rosterId: number }[];
+}
+
+function txnLabel(type: string): string {
+  switch (type) {
+    case "trade": return "Trade";
+    case "waiver": return "Waiver";
+    case "free_agent": return "Free agent";
+    default: return type.replace(/_/g, " ");
+  }
+}
+
+function ManagerActivitySection({ leagueId, rosterId }: { leagueId: string; rosterId: number | null }) {
+  const [txns, setTxns] = useState<ManagerTxn[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    if (!leagueId || rosterId == null) { setTxns(null); return; }
+    let cancelled = false;
+    setLoading(true);
+    setError(false);
+    fetchLeagueTransactions(leagueId)
+      .then((data) => {
+        if (cancelled) return;
+        const mine = (data.transactions as ManagerTxn[])
+          .filter((t) =>
+            t.involvedTeams.some((x) => x.rosterId === rosterId) ||
+            t.adds.some((p) => p.rosterId === rosterId) ||
+            t.drops.some((p) => p.rosterId === rosterId))
+          .sort((a, b) => b.timestamp - a.timestamp);
+        setTxns(mine);
+        setLoading(false);
+      })
+      .catch(() => { if (!cancelled) { setError(true); setLoading(false); } });
+    return () => { cancelled = true; };
+  }, [leagueId, rosterId]);
+
+  const counts = useMemo(() => {
+    const c = { trade: 0, waiver: 0, free_agent: 0 };
+    for (const t of txns ?? []) {
+      if (t.type === "trade") c.trade++;
+      else if (t.type === "waiver") c.waiver++;
+      else if (t.type === "free_agent") c.free_agent++;
+    }
+    return c;
+  }, [txns]);
+
+  return (
+    <SectionCard title="League activity" icon={<ArrowRightLeft className="w-3.5 h-3.5" />}>
+      {loading && <p className="text-[13px] text-white/45">Loading activity…</p>}
+      {!loading && error && <p className="text-[13px] text-white/45">Activity unavailable.</p>}
+      {!loading && !error && txns && (
+        <>
+          <div className="grid grid-cols-3 gap-2 mb-3">
+            <Stat label="Trades" value={counts.trade} />
+            <Stat label="Waivers" value={counts.waiver} />
+            <Stat label="Free agents" value={counts.free_agent} />
+          </div>
+          {txns.length === 0 ? (
+            <p className="text-[13px] text-white/45">No transactions for this manager yet.</p>
+          ) : (
+            <div className="space-y-1.5 max-h-80 overflow-y-auto">
+              {txns.slice(0, 40).map((t, i) => {
+                const adds = t.adds.filter((p) => p.rosterId === rosterId);
+                const drops = t.drops.filter((p) => p.rosterId === rosterId);
+                return (
+                  <div key={i} className="rounded-md border border-white/8 bg-white/[0.02] px-2.5 py-1.5">
+                    <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-white/40">
+                      <span className="font-bold text-white/55">{txnLabel(t.type)}</span>
+                      <span>· Wk {t.week}</span>
+                    </div>
+                    {adds.length > 0 && (
+                      <p className="text-[12px] text-emerald-300 truncate">
+                        + {adds.map((p) => `${p.name}${p.pos ? ` (${p.pos})` : ""}`).join(", ")}
+                      </p>
+                    )}
+                    {drops.length > 0 && (
+                      <p className="text-[12px] text-rose-300 truncate">
+                        − {drops.map((p) => `${p.name}${p.pos ? ` (${p.pos})` : ""}`).join(", ")}
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </>
+      )}
+    </SectionCard>
   );
 }
 

@@ -816,6 +816,17 @@ export async function fetchSleeperLeagueFull(leagueId: string, userId: string) {
       ? `https://sleepercdn.com/avatars/thumbs/${avatarId}`
       : null;
 
+    // Record + scoring (from Sleeper roster.settings). Points are left
+    // undefined when Sleeper hasn't reported any yet (e.g. preseason) so the
+    // UI can render a "—" placeholder instead of a misleading 0.
+    const s = roster.settings;
+    const pointsFor = s?.fpts != null
+      ? s.fpts + (s.fpts_decimal ?? 0) / 100
+      : undefined;
+    const maxPointsFor = s?.ppts != null
+      ? s.ppts + (s.ppts_decimal ?? 0) / 100
+      : undefined;
+
     return {
       id: teamId,
       name: teamName,
@@ -825,6 +836,11 @@ export async function fetchSleeperLeagueFull(leagueId: string, userId: string) {
       roster: rosterPlayers,
       picks: ownedPicks,
       metrics: { ...defaultMetrics },
+      wins: s?.wins,
+      losses: s?.losses,
+      ties: s?.ties,
+      pointsFor,
+      maxPointsFor,
     };
   });
 

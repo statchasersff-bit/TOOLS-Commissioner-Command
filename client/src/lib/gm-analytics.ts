@@ -4,6 +4,10 @@
 
 import type { League, Player, Pick, Team } from "@/types";
 
+// Picks are part of dynasty value but optional for callers that don't have a
+// pick valuer handy; default to 0 so player-only callers still work.
+const NO_PICK_VALUE = (_p: Pick) => 0;
+
 // ── Constants ───────────────────────────────────────────────────────────────
 
 export const POSITIONS = ["QB", "RB", "WR", "TE"] as const;
@@ -41,7 +45,11 @@ export interface StrengthSnapshot {
   benchRank: number;
   ceilingScore: number;      // 0..100
   floorScore: number;        // 0..100
-  stabilityScore: number;    // 0..100
+  dynastyScore: number;      // 0..100 — long-term franchise value vs league best
+  dynastyValue: number;      // total dynasty value (players + picks)
+  dynastyRank: number;       // 1 = best total dynasty value in the league
+  pickValue: number;         // total rookie draft-pick value
+  pickRank: number;          // 1 = best pick capital in the league
   totalTeams: number;
 }
 
@@ -118,50 +126,32 @@ export function calculateFloorScore(
   return Math.round((mine / best) * 100);
 }
 
+/** Total long-term dynasty value of a franchise — every rostered player
+ *  (including IR/taxi shelves, which still hold dynasty value) plus draft picks. */
+export function calculateDynastyValue(
+  team: Team,
+  getPlayerValue: (p: Player) => number,
+  getPickValue: (p: Pick) => number = NO_PICK_VALUE,
+): number {
+  const rosterValue = team.roster.reduce((s, p) => s + getPlayerValue(p), 0);
+  const pickValue = team.picks.reduce((s, p) => s + getPickValue(p), 0);
+  return rosterValue + pickValue;
+}
+
 /**
- * Lineup stability — heuristic 0..100. Factors:
- *  - depth at each starter position (more backups = more stable)
- *  - age dispersion (extreme ages = volatility, esp. RBs)
- *  - QB depth premium (no backup QB = big risk in SF)
+ * Dynasty strength — overall long-term franchise value (players + picks) as a
+ * 0..100 score relative to the league's strongest team. Higher = a deeper,
+ * more valuable dynasty asset base.
  */
-export function calculateStabilityScore(
+export function calculateDynastyScore(
   team: Team,
   league: League,
   getPlayerValue: (p: Player) => number,
+  getPickValue: (p: Pick) => number = NO_PICK_VALUE,
 ): number {
-  const starters = team.roster.filter((p) => p.starter);
-  const bench = team.roster.filter((p) => !p.starter && !p.onTaxi && !p.onReserve);
-  if (starters.length === 0) return 0;
-
-  // Depth ratio per position
-  const posCounts = (list: Player[]) =>
-    POSITIONS.reduce((acc, pos) => {
-      acc[pos] = list.filter((p) => p.pos === pos).length;
-      return acc;
-    }, {} as Record<Position, number>);
-  const sCount = posCounts(starters);
-  const bCount = posCounts(bench);
-
-  // Average backups per starter (clamped at 2.5)
-  const depthRatios = POSITIONS.map((pos) => {
-    if (sCount[pos] === 0) return 1;
-    return Math.min(2.5, bCount[pos] / sCount[pos]);
-  });
-  const depthScore = (depthRatios.reduce((s, r) => s + r, 0) / depthRatios.length / 2.5) * 100;
-
-  // Age volatility — high age stdev at RB drags stability hard.
-  const rbAges = team.roster
-    .filter((p) => p.pos === "RB" && getPlayerValue(p) > 500)
-    .map((p) => p.age);
-  let ageVolPenalty = 0;
-  if (rbAges.length >= 2) {
-    const mean = rbAges.reduce((s, a) => s + a, 0) / rbAges.length;
-    const variance = rbAges.reduce((s, a) => s + (a - mean) ** 2, 0) / rbAges.length;
-    const std = Math.sqrt(variance);
-    ageVolPenalty = Math.min(20, std * 5);
-  }
-
-  return Math.max(0, Math.min(100, Math.round(depthScore - ageVolPenalty)));
+  const mine = calculateDynastyValue(team, getPlayerValue, getPickValue);
+  const best = Math.max(1, ...league.teams.map((t) => calculateDynastyValue(t, getPlayerValue, getPickValue)));
+  return Math.round((mine / best) * 100);
 }
 
 /**
@@ -173,6 +163,7 @@ export function calculateStrengthSnapshot(
   league: League,
   getRedraftValue: (p: Player) => number,
   getPlayerValue: (p: Player) => number,
+  getPickValue: (p: Pick) => number = NO_PICK_VALUE,
 ): StrengthSnapshot {
   const starterStrength = calculateStarterStrength(team, getRedraftValue);
   const benchDepth = calculateBenchDepth(team, getPlayerValue);
@@ -196,7 +187,19 @@ export function calculateStrengthSnapshot(
     benchRank,
     ceilingScore: calculateCeilingScore(team, league, getRedraftValue),
     floorScore: calculateFloorScore(team, league, getRedraftValue),
-    stabilityScore: calculateStabilityScore(team, league, getPlayerValue),
+    dynastyScore: calculateDynastyScore(team, league, getPlayerValue, getPickValue),
+    dynastyValue: calculateDynastyValue(team, getPlayerValue, getPickValue),
+    dynastyRank:
+      [...league.teams]
+        .map((t) => ({ id: t.id, v: calculateDynastyValue(t, getPlayerValue, getPickValue) }))
+        .sort((a, b) => b.v - a.v)
+        .findIndex((t) => t.id === team.id) + 1,
+    pickValue: team.picks.reduce((s, p) => s + getPickValue(p), 0),
+    pickRank:
+      [...league.teams]
+        .map((t) => ({ id: t.id, v: t.picks.reduce((s, p) => s + getPickValue(p), 0) }))
+        .sort((a, b) => b.v - a.v)
+        .findIndex((t) => t.id === team.id) + 1,
     totalTeams: league.teams.length,
   };
 }
@@ -223,32 +226,17 @@ export interface AgeCurveResult {
   totalTeams: number;
 }
 
-/**
- * Only count players whose value clears a small threshold so "deep bench
- * dart throws" don't drag the average toward 22 years old. Threshold is
- * relative to the league's median dynasty value so it adapts to scoring.
- */
-function meaningfulPlayerThreshold(league: League, getPlayerValue: (p: Player) => number): number {
-  const all: number[] = [];
-  for (const t of league.teams) for (const p of t.roster) all.push(getPlayerValue(p));
-  if (all.length === 0) return 0;
-  all.sort((a, b) => a - b);
-  const median = all[Math.floor(all.length / 2)];
-  // 25% of league median, clamped at 200 minimum.
-  return Math.max(200, Math.round(median * 0.25));
-}
-
 export function calculateAgeCurve(
   team: Team,
   league: League,
   getPlayerValue: (p: Player) => number,
 ): AgeCurveResult {
-  const threshold = meaningfulPlayerThreshold(league, getPlayerValue);
-  const meaningful = (p: Player) => getPlayerValue(p) >= threshold;
-
+  // The age curve covers the ENTIRE roster — every rostered player at each
+  // position, no value threshold — so the averages reflect the full roster's
+  // age profile rather than just the headline contributors.
   const entries: AgeCurveEntry[] = POSITIONS.map((pos) => {
-    const mine = team.roster.filter((p) => p.pos === pos && meaningful(p));
-    const all = league.teams.flatMap((t) => t.roster.filter((p) => p.pos === pos && meaningful(p)));
+    const mine = team.roster.filter((p) => p.pos === pos);
+    const all = league.teams.flatMap((t) => t.roster.filter((p) => p.pos === pos));
     const avgAge = mine.length > 0 ? mine.reduce((s, p) => s + p.age, 0) / mine.length : 0;
     const leagueAvgAge = all.length > 0 ? all.reduce((s, p) => s + p.age, 0) / all.length : 0;
     const band: AgeBand = mine.length > 0 ? classifyAge(pos, avgAge) : "Prime";
@@ -259,12 +247,11 @@ export function calculateAgeCurve(
     return { pos, count: mine.length, avgAge, leagueAvgAge, band, agingRisk };
   });
 
-  // Weighted ages (by dynasty value)
+  // Weighted ages (by dynasty value) across the whole roster.
   const weightedAge = (list: Player[]) => {
-    const filtered = list.filter(meaningful);
-    if (filtered.length === 0) return 0;
-    const totalV = filtered.reduce((s, p) => s + Math.max(1, getPlayerValue(p)), 0);
-    return filtered.reduce((s, p) => s + p.age * Math.max(1, getPlayerValue(p)), 0) / totalV;
+    if (list.length === 0) return 0;
+    const totalV = list.reduce((s, p) => s + Math.max(1, getPlayerValue(p)), 0);
+    return list.reduce((s, p) => s + p.age * Math.max(1, getPlayerValue(p)), 0) / totalV;
   };
   const weightedRosterAge = weightedAge(team.roster);
   const weightedStarterAge = weightedAge(team.roster.filter((p) => p.starter));
@@ -353,214 +340,6 @@ export function buildAssetTiers(
   }
 
   return { tiers, positionDistribution, thresholds };
-}
-
-// ── Roster construction archetype ───────────────────────────────────────────
-
-export interface RosterConstruction {
-  primary: string;
-  secondary: string[];
-  explanation: string;
-  comparable: string;
-}
-
-/**
- * Heuristic archetype classifier. Rules are tuned to be readable and
- * defensible (each archetype has a clear trigger), not statistically pure.
- */
-export function classifyRosterConstruction(
-  team: Team,
-  league: League,
-  getPlayerValue: (p: Player) => number,
-  getRedraftValue: (p: Player) => number,
-  getPickValue: (p: Pick) => number,
-): RosterConstruction {
-  const totalDynasty =
-    team.roster.reduce((s, p) => s + getPlayerValue(p), 0) +
-    team.picks.reduce((s, p) => s + getPickValue(p), 0);
-
-  if (totalDynasty <= 0) {
-    return {
-      primary: "Empty Roster",
-      secondary: [],
-      explanation: "Not enough data on this roster yet.",
-      comparable: "—",
-    };
-  }
-
-  const posValue = (pos: Position) =>
-    team.roster.filter((p) => p.pos === pos).reduce((s, p) => s + getPlayerValue(p), 0);
-  const wrShare = posValue("WR") / totalDynasty;
-  const rbShare = posValue("RB") / totalDynasty;
-  const qbShare = posValue("QB") / totalDynasty;
-  const teShare = posValue("TE") / totalDynasty;
-  const picksShare = team.picks.reduce((s, p) => s + getPickValue(p), 0) / totalDynasty;
-
-  const meaningful = team.roster.filter((p) => getPlayerValue(p) > 500);
-  const avgAge = meaningful.length > 0 ? meaningful.reduce((s, p) => s + p.age, 0) / meaningful.length : 26;
-  const winNowValue = team.roster.filter((p) => p.starter).reduce((s, p) => s + getRedraftValue(p), 0);
-  const leagueWinNowAvg =
-    league.teams.reduce(
-      (s, t) => s + t.roster.filter((p) => p.starter).reduce((a, p) => a + getRedraftValue(p), 0),
-      0,
-    ) / Math.max(1, league.teams.length);
-
-  // Quality flags
-  const eliteRBCount = team.roster.filter(
-    (p) => p.pos === "RB" && getPlayerValue(p) >= percentileValue(league, getPlayerValue, 0.85),
-  ).length;
-  const eliteWRCount = team.roster.filter(
-    (p) => p.pos === "WR" && getPlayerValue(p) >= percentileValue(league, getPlayerValue, 0.85),
-  ).length;
-  const eliteQB = team.roster.some(
-    (p) => p.pos === "QB" && getPlayerValue(p) >= percentileValue(league, getPlayerValue, 0.90),
-  );
-
-  // Primary archetype rules — pick the first matching, ordered by specificity
-  let primary = "Balanced Build";
-
-  if (qbShare > 0.20 && eliteQB) primary = "Elite QB Build";
-  else if (picksShare > 0.25 && winNowValue < leagueWinNowAvg * 0.85) primary = "Pick-Heavy Rebuild";
-  else if (wrShare >= 0.42 && eliteWRCount >= 3) primary = "WR Heavy Contender";
-  else if (rbShare >= 0.32 && eliteRBCount >= 2) primary = "Robust RB Build";
-  else if (rbShare >= 0.32 && eliteRBCount <= 1) primary = "Fragile RB Build";
-  else if (avgAge < 24.5 && winNowValue < leagueWinNowAvg * 0.95) primary = "Young Core";
-  else if (avgAge > 27.5 && winNowValue > leagueWinNowAvg * 1.05) primary = "Aging Contender";
-  else if (winNowValue > leagueWinNowAvg * 1.15 && avgAge >= 25 && avgAge <= 27) primary = "Win-Now Aggressive";
-  else if (picksShare > 0.18 && avgAge < 25.5) primary = "Future-Focused";
-
-  // Secondary traits (collected independently)
-  const secondary: string[] = [];
-  if (primary !== "WR Heavy Contender" && wrShare >= 0.40) secondary.push("WR Heavy");
-  if (primary !== "Robust RB Build" && rbShare >= 0.30) secondary.push("RB Concentration");
-  if (eliteWRCount >= 2 && primary !== "WR Heavy Contender") secondary.push("Strong WR core");
-  if (eliteQB && primary !== "Elite QB Build") secondary.push("Elite QB");
-  if (avgAge < 24.5 && primary !== "Young Core") secondary.push("Young Core");
-  if (avgAge > 27.5 && primary !== "Aging Contender") secondary.push("Veteran skew");
-  if (picksShare > 0.20 && primary !== "Pick-Heavy Rebuild") secondary.push("Pick capital");
-  if (teShare >= 0.10) secondary.push("Top-shelf TE");
-  if (secondary.length > 3) secondary.length = 3;
-
-  // Explanation — generated from the same signals, GM-tone
-  const explanationParts: string[] = [];
-  if (wrShare >= 0.40) explanationParts.push(`${Math.round(wrShare * 100)}% of your dynasty value sits at WR`);
-  if (rbShare >= 0.30) explanationParts.push(`${Math.round(rbShare * 100)}% concentrated at RB`);
-  if (eliteQB) explanationParts.push("you have an elite QB anchor");
-  if (avgAge < 25) explanationParts.push(`your meaningful contributors average just ${avgAge.toFixed(1)} years old`);
-  else if (avgAge > 27.5) explanationParts.push(`your contributors average ${avgAge.toFixed(1)} years old`);
-  if (picksShare > 0.20)
-    explanationParts.push(`draft capital represents ${Math.round(picksShare * 100)}% of your asset stack`);
-  if (winNowValue > leagueWinNowAvg * 1.15)
-    explanationParts.push("starting-lineup value is well above the league average");
-  else if (winNowValue < leagueWinNowAvg * 0.85)
-    explanationParts.push("starting-lineup value lags the league average");
-
-  const explanation =
-    explanationParts.length === 0
-      ? "Your roster is well-distributed across positions, ages, and capital types, no single trait dominates."
-      : `${capitalize(explanationParts.join("; "))}. That combination points to a ${primary.toLowerCase()} profile.`;
-
-  const comparable = COMPARABLES[primary] ?? "Similar to balanced dynasty builds.";
-
-  return { primary, secondary, explanation, comparable };
-}
-
-function percentileValue(
-  league: League,
-  getPlayerValue: (p: Player) => number,
-  pctTopShare: number, // 0..1, where 0.9 = top 10%
-): number {
-  const vals = league.teams
-    .flatMap((t) => t.roster.map(getPlayerValue))
-    .filter((v) => v > 0)
-    .sort((a, b) => a - b);
-  if (vals.length === 0) return 0;
-  return vals[Math.floor(vals.length * pctTopShare)] ?? vals[vals.length - 1];
-}
-
-function capitalize(s: string): string {
-  return s.charAt(0).toUpperCase() + s.slice(1);
-}
-
-const COMPARABLES: Record<string, string> = {
-  "Elite QB Build": "Reminiscent of QB-anchored superflex contenders.",
-  "Pick-Heavy Rebuild": "Looks like classic accumulator rebuilds.",
-  "WR Heavy Contender": "Resembles modern WR-led championship squads.",
-  "Robust RB Build": "Built like a Zero-WR-era contender.",
-  "Fragile RB Build": "Productive struggle: one or two injuries reshape the season.",
-  "Young Core": "Trending toward a future powerhouse window.",
-  "Aging Contender": "Last-call veteran contenders chasing one more run.",
-  "Win-Now Aggressive": "All-in builds that mortgage future depth for current ceiling.",
-  "Future-Focused": "Patient builds banking on rookie-pick equity.",
-  "Balanced Build": "Similar to balanced dynasty builds, no glaring tilts.",
-};
-
-// ── League power differential ───────────────────────────────────────────────
-
-export interface PowerDifferential {
-  yourDynasty: number;
-  leagueAvgDynasty: number;
-  topDynasty: number;
-  cutoffDynasty: number;     // dynasty value of team at the playoff cutoff
-  worstDynasty: number;
-  yourStarter: number;
-  topStarter: number;
-  // Deltas in percentage points (your - other) / other * 100, signed
-  vsLeagueAvgPct: number;
-  vsTopPct: number;
-  vsCutoffPct: number;
-  vsWorstPct: number;
-  closestTeam: Team | null;
-}
-
-export function calculatePowerDifferentials(
-  team: Team,
-  league: League,
-  getPlayerValue: (p: Player) => number,
-  getRedraftValue: (p: Player) => number,
-  getPickValue: (p: Pick) => number,
-): PowerDifferential {
-  const dynastyOf = (t: Team) =>
-    t.roster.reduce((s, p) => s + getPlayerValue(p), 0) +
-    t.picks.reduce((s, p) => s + getPickValue(p), 0);
-  const starterOf = (t: Team) =>
-    t.roster.filter((p) => p.starter).reduce((s, p) => s + getRedraftValue(p), 0);
-
-  const dynasties = league.teams.map((t) => ({ id: t.id, v: dynastyOf(t), team: t }));
-  const yourDynasty = dynasties.find((d) => d.id === team.id)?.v ?? 0;
-  const sortedDesc = [...dynasties].sort((a, b) => b.v - a.v);
-  const top = sortedDesc[0]?.v ?? 0;
-  const worst = sortedDesc[sortedDesc.length - 1]?.v ?? 0;
-  const avg = dynasties.reduce((s, d) => s + d.v, 0) / Math.max(1, dynasties.length);
-  const playoffSlots = league.playoffTeams ?? Math.max(2, Math.round(league.teams.length / 3));
-  const cutoff = sortedDesc[Math.min(sortedDesc.length - 1, playoffSlots - 1)]?.v ?? avg;
-
-  const pctDelta = (your: number, other: number) =>
-    other === 0 ? 0 : Math.round(((your - other) / other) * 1000) / 10;
-
-  const yourStarter = starterOf(team);
-  const topStarter = Math.max(...league.teams.map(starterOf), 1);
-
-  // Closest comparable — minimize absolute dynasty diff among other teams.
-  const closestTeam =
-    [...league.teams]
-      .filter((t) => t.id !== team.id)
-      .sort((a, b) => Math.abs(dynastyOf(a) - yourDynasty) - Math.abs(dynastyOf(b) - yourDynasty))[0] ?? null;
-
-  return {
-    yourDynasty,
-    leagueAvgDynasty: avg,
-    topDynasty: top,
-    cutoffDynasty: cutoff,
-    worstDynasty: worst,
-    yourStarter,
-    topStarter,
-    vsLeagueAvgPct: pctDelta(yourDynasty, avg),
-    vsTopPct: pctDelta(yourDynasty, top),
-    vsCutoffPct: pctDelta(yourDynasty, cutoff),
-    vsWorstPct: pctDelta(yourDynasty, worst),
-    closestTeam,
-  };
 }
 
 // ── Aggregate "current snapshot" — used by the trajectory recorder ──────────

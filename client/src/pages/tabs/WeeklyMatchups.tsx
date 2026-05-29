@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Card } from "@/components/ui/card";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { API_BASE } from "@/lib/apiBase";
 import { cn } from "@/lib/utils";
 import { ManagerNameButton } from "@/components/ManagerNameButton";
@@ -55,24 +54,9 @@ interface WMResponse {
   warnings: string[];
 }
 
-type SortKey = "schedule" | "edge" | "closest" | "combined";
-
-const SORT_OPTIONS: { value: SortKey; label: string }[] = [
-  { value: "schedule", label: "Sleeper schedule order" },
-  { value: "edge", label: "Highest win-prob edge" },
-  { value: "closest", label: "Closest matchups" },
-  { value: "combined", label: "Strongest combined teams" },
-];
-
 function formatWinNow(v: number): string {
   if (v >= 1000) return `${(v / 1000).toFixed(1)}k`;
   return v.toString();
-}
-
-function difficultyBadge(winProb: number): { label: string; className: string } {
-  if (winProb >= 55) return { label: "Favorite", className: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 ring-emerald-500/30" };
-  if (winProb > 45) return { label: "Toss-Up", className: "bg-amber-500/15 text-amber-600 dark:text-amber-400 ring-amber-500/30" };
-  return { label: "Underdog", className: "bg-rose-500/15 text-rose-600 dark:text-rose-400 ring-rose-500/30" };
 }
 
 function statusBadge(status: WMStatus) {
@@ -112,7 +96,6 @@ export function WeeklyMatchups({ leagueId }: { leagueId: string }) {
   // `null` means "let the server pick the default week"; otherwise this is the
   // user's explicit selection, which we send to the server every fetch.
   const [selectedWeek, setSelectedWeek] = useState<number | null>(null);
-  const [sortBy, setSortBy] = useState<SortKey>("schedule");
 
   // Reset the selected-week override whenever the league changes — otherwise
   // a user who picked Week 8 in League A would carry that into League B.
@@ -161,39 +144,43 @@ export function WeeklyMatchups({ leagueId }: { leagueId: string }) {
     return () => { cancelled = true; };
   }, [leagueId, selectedWeek]);
 
+  // Schedule order — keep server-provided order (matchup_id ascending).
   const sortedMatchups = useMemo(() => {
     if (!data) return [] as WMCard[];
-    const list = [...data.matchups];
-    switch (sortBy) {
-      case "edge":
-        list.sort((a, b) => b.edgePct - a.edgePct);
-        break;
-      case "closest":
-        // Bye rows have edgePct = 0 — push them last so they don't claim the
-        // "closest" slots when a real head-to-head matchup is genuinely tighter.
-        list.sort((a, b) => {
-          if (a.isBye && !b.isBye) return 1;
-          if (b.isBye && !a.isBye) return -1;
-          return a.edgePct - b.edgePct;
-        });
-        break;
-      case "combined":
-        list.sort((a, b) => b.combinedWinNowScore - a.combinedWinNowScore);
-        break;
-      default:
-        // schedule order — keep server-provided order (matchup_id ascending)
-        break;
-    }
-    return list;
-  }, [data, sortBy]);
+    return [...data.matchups];
+  }, [data]);
 
-  const teamNameFor = (rosterId: number): string | null => {
+  // League-wide points-for rank (1 = most points), shared across all cards.
+  const pfRankByRoster = useMemo(() => {
+    const map = new Map<number, number>();
+    if (!data) return map;
+    const teams: WMTeam[] = [];
+    for (const m of data.matchups) {
+      teams.push(m.teamA);
+      if (m.teamB) teams.push(m.teamB);
+    }
+    teams
+      .sort((a, b) => b.pointsFor - a.pointsFor)
+      .forEach((t, i) => map.set(t.rosterId, i + 1));
+    return map;
+  }, [data]);
+
+  const teamFor = (rosterId: number): WMTeam | null => {
     if (!data) return null;
     for (const m of data.matchups) {
-      if (m.teamA.rosterId === rosterId) return m.teamA.teamName;
-      if (m.teamB?.rosterId === rosterId) return m.teamB.teamName;
+      if (m.teamA.rosterId === rosterId) return m.teamA;
+      if (m.teamB?.rosterId === rosterId) return m.teamB;
     }
     return null;
+  };
+
+  const teamNameFor = (rosterId: number): string | null => teamFor(rosterId)?.teamName ?? null;
+
+  const matchupTeamsFor = (matchupId: number | null): WMTeam[] => {
+    if (!data || matchupId == null) return [];
+    const m = data.matchups.find((x) => x.matchupId === matchupId);
+    if (!m) return [];
+    return m.teamB ? [m.teamA, m.teamB] : [m.teamA];
   };
 
   if (!data && loading) {
@@ -238,26 +225,18 @@ export function WeeklyMatchups({ leagueId }: { leagueId: string }) {
         </Card>
       )}
 
-      <SummaryCards summary={data.summary} teamNameFor={teamNameFor} />
+      <SummaryCards
+        summary={data.summary}
+        teamNameFor={teamNameFor}
+        teamFor={teamFor}
+        matchupTeamsFor={matchupTeamsFor}
+      />
 
       <div className="flex flex-wrap items-center justify-between gap-3" data-testid="wm-controls">
         <div className="text-sm text-muted-foreground">
           Showing <span className="font-semibold text-foreground">{data.matchups.length}</span>{" "}
           matchup{data.matchups.length === 1 ? "" : "s"} for{" "}
           <span className="font-semibold text-foreground">Week {data.week}</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">Sort</span>
-          <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortKey)}>
-            <SelectTrigger className="w-[220px] h-8 text-xs" data-testid="wm-sort">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {SORT_OPTIONS.map((o) => (
-                <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
         </div>
       </div>
 
@@ -268,7 +247,7 @@ export function WeeklyMatchups({ leagueId }: { leagueId: string }) {
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3" data-testid="wm-grid">
           {sortedMatchups.map((m, i) => (
-            <MatchupCard key={`${m.matchupId ?? "synth"}-${i}`} matchup={m} leagueId={leagueId} />
+            <MatchupCard key={`${m.matchupId ?? "synth"}-${i}`} matchup={m} leagueId={leagueId} pfRankByRoster={pfRankByRoster} />
           ))}
         </div>
       )}
@@ -336,20 +315,24 @@ function WeekSelector({
 }
 
 function SummaryCards({
-  summary, teamNameFor,
+  summary, teamNameFor, teamFor, matchupTeamsFor,
 }: {
   summary: WMSummary;
   teamNameFor: (rosterId: number) => string | null;
+  teamFor: (rosterId: number) => WMTeam | null;
+  matchupTeamsFor: (matchupId: number | null) => WMTeam[];
 }) {
-  const items: { icon: JSX.Element; label: string; value: string; sub: string }[] = [];
+  const items: { icon: JSX.Element; label: string; value: string; sub: string; teams: WMTeam[] }[] = [];
 
   if (summary.biggestFavorite) {
-    const name = teamNameFor(summary.biggestFavorite.rosterId) || `Team ${summary.biggestFavorite.rosterId}`;
+    const team = teamFor(summary.biggestFavorite.rosterId);
+    const name = team?.teamName || teamNameFor(summary.biggestFavorite.rosterId) || `Team ${summary.biggestFavorite.rosterId}`;
     items.push({
       icon: <Trophy className="w-4 h-4 text-[#d4af37]" />,
       label: "Biggest Favorite",
       value: name,
       sub: `${summary.biggestFavorite.winProbability.toFixed(1)}% win prob`,
+      teams: team ? [team] : [],
     });
   }
   if (summary.closestMatchup) {
@@ -358,6 +341,7 @@ function SummaryCards({
       label: "Closest Matchup",
       value: `${summary.closestMatchup.edgePct.toFixed(1)}pp edge`,
       sub: "Tightest projected gap",
+      teams: matchupTeamsFor(summary.closestMatchup.matchupId),
     });
   }
   if (summary.highestCombinedScore) {
@@ -366,15 +350,18 @@ function SummaryCards({
       label: "Highest Combined Win-Now",
       value: formatWinNow(summary.highestCombinedScore.combinedWinNowScore),
       sub: "Strongest teams on the field",
+      teams: matchupTeamsFor(summary.highestCombinedScore.matchupId),
     });
   }
   if (summary.upsetWatch) {
-    const name = teamNameFor(summary.upsetWatch.underdogRosterId) || `Team ${summary.upsetWatch.underdogRosterId}`;
+    const team = teamFor(summary.upsetWatch.underdogRosterId);
+    const name = team?.teamName || teamNameFor(summary.upsetWatch.underdogRosterId) || `Team ${summary.upsetWatch.underdogRosterId}`;
     items.push({
       icon: <Swords className="w-4 h-4 text-amber-500" />,
       label: "Upset Watch",
       value: name,
       sub: `${summary.upsetWatch.underdogWinProbability.toFixed(1)}% underdog chance`,
+      teams: team ? [team] : [],
     });
   }
 
@@ -387,9 +374,18 @@ function SummaryCards({
           <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
             {it.icon}{it.label}
           </div>
-          <div className="flex flex-col min-w-0">
-            <span className="text-sm font-bold truncate">{it.value}</span>
-            <span className="text-[10px] text-muted-foreground truncate">{it.sub}</span>
+          <div className="flex items-center gap-2 min-w-0">
+            {it.teams.length > 0 && (
+              <div className="flex -space-x-2 flex-shrink-0">
+                {it.teams.map((t) => (
+                  <span key={t.rosterId} className="inline-flex">{avatar(t, "w-7 h-7")}</span>
+                ))}
+              </div>
+            )}
+            <div className="flex flex-col min-w-0">
+              <span className="text-sm font-bold truncate">{it.value}</span>
+              <span className="text-[10px] text-muted-foreground truncate">{it.sub}</span>
+            </div>
           </div>
         </Card>
       ))}
@@ -397,9 +393,10 @@ function SummaryCards({
   );
 }
 
-function MatchupCard({ matchup, leagueId }: { matchup: WMCard; leagueId: string }) {
+function MatchupCard({ matchup, leagueId, pfRankByRoster }: { matchup: WMCard; leagueId: string; pfRankByRoster: Map<number, number> }) {
   if (matchup.isBye) {
     const t = matchup.teamA;
+    const pfRank = pfRankByRoster.get(t.rosterId);
     return (
       <Card className="p-3 border-dashed" data-testid={`wm-card-bye-${t.rosterId}`}>
         <div className="flex items-center justify-between mb-2">
@@ -408,8 +405,7 @@ function MatchupCard({ matchup, leagueId }: { matchup: WMCard; leagueId: string 
         <div className="flex items-center gap-2">
           {avatar(t)}
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-bold truncate">{t.teamName}</p>
-            <p className="text-[11px] text-muted-foreground truncate">
+            <p className="text-sm font-bold truncate">
               <ManagerNameButton
                 userId={t.ownerId}
                 username={t.ownerName}
@@ -418,7 +414,9 @@ function MatchupCard({ matchup, leagueId }: { matchup: WMCard; leagueId: string 
               >
                 {t.ownerName}
               </ManagerNameButton>
-              {" • "}{t.record} • Win-Now {formatWinNow(t.winNowScore)}
+            </p>
+            <p className="text-[11px] text-muted-foreground truncate">
+              {t.record}{pfRank ? ` • PF #${pfRank}` : ""}
             </p>
           </div>
         </div>
@@ -429,8 +427,6 @@ function MatchupCard({ matchup, leagueId }: { matchup: WMCard; leagueId: string 
   const { teamA, teamB } = matchup;
   if (!teamB) return null;
 
-  const aBadge = difficultyBadge(teamA.winProbability);
-  const bBadge = difficultyBadge(teamB.winProbability);
   const status = statusBadge(matchup.status);
   const StatusIcon = status.Icon;
 
@@ -450,10 +446,15 @@ function MatchupCard({ matchup, leagueId }: { matchup: WMCard; leagueId: string 
         )}
       </div>
 
-      <TeamRow team={teamA} badge={aBadge} highlight={matchup.favoriteRosterId === teamA.rosterId} leagueId={leagueId} />
+      {/* Head-to-head: both teams in line with each other */}
+      <div className="flex items-start gap-2">
+        <TeamRow team={teamA} highlight={matchup.favoriteRosterId === teamA.rosterId} leagueId={leagueId} side="left" pfRank={pfRankByRoster.get(teamA.rosterId)} />
+        <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold self-center flex-shrink-0 pt-1">vs</span>
+        <TeamRow team={teamB} highlight={matchup.favoriteRosterId === teamB.rosterId} leagueId={leagueId} side="right" pfRank={pfRankByRoster.get(teamB.rosterId)} />
+      </div>
 
       {/* probability bar */}
-      <div className="my-2 px-1">
+      <div className="mt-2 px-1">
         <div className="h-2 rounded-full bg-rose-500/20 overflow-hidden relative" data-testid="wm-prob-bar">
           <div
             className="h-full bg-emerald-500/70 transition-all"
@@ -462,35 +463,28 @@ function MatchupCard({ matchup, leagueId }: { matchup: WMCard; leagueId: string 
         </div>
         <div className="flex items-center justify-between text-[10px] text-muted-foreground mt-1 tabular-nums">
           <span>{teamA.winProbability.toFixed(1)}%</span>
-          <span className="uppercase tracking-wider">vs</span>
           <span>{teamB.winProbability.toFixed(1)}%</span>
         </div>
       </div>
-
-      <TeamRow team={teamB} badge={bBadge} highlight={matchup.favoriteRosterId === teamB.rosterId} leagueId={leagueId} />
     </Card>
   );
 }
 
 function TeamRow({
-  team, badge, highlight, leagueId,
+  team, highlight, leagueId, side, pfRank,
 }: {
   team: WMTeam;
-  badge: { label: string; className: string };
   highlight: boolean;
   leagueId: string;
+  side: "left" | "right";
+  pfRank?: number;
 }) {
+  const isRight = side === "right";
   return (
-    <div className={cn("flex items-center gap-2 py-1", highlight && "")}>
+    <div className={cn("flex items-center gap-2 py-1 flex-1 min-w-0", isRight && "flex-row-reverse text-right")}>
       {avatar(team)}
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-1.5 min-w-0">
-          <span className="text-sm font-semibold truncate">{team.teamName}</span>
-          <span className={cn("inline-flex flex-shrink-0 px-1.5 py-0.5 rounded ring-1 text-[9px] font-bold uppercase tracking-wider", badge.className)}>
-            {badge.label}
-          </span>
-        </div>
-        <p className="text-[11px] text-muted-foreground truncate tabular-nums">
+        <div className="text-sm font-semibold truncate">
           <ManagerNameButton
             userId={team.ownerId}
             username={team.ownerName}
@@ -499,10 +493,10 @@ function TeamRow({
           >
             {team.ownerName}
           </ManagerNameButton>
-          {" • "}{team.record} • Win-Now {formatWinNow(team.winNowScore)}
+        </div>
+        <p className="text-[11px] text-muted-foreground truncate tabular-nums">
+          {team.record}{pfRank ? ` • PF #${pfRank}` : ""}
         </p>
-      </div>
-      <div className="text-right flex-shrink-0">
         <span className={cn("text-base font-bold tabular-nums", highlight ? "text-emerald-500 dark:text-emerald-400" : "text-muted-foreground")}>
           {team.winProbability.toFixed(0)}%
         </span>

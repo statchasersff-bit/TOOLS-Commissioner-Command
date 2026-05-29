@@ -96,6 +96,11 @@ function Router() {
         <Route path="/value-sources">
           {() => <DynastyCommandCenter valueSourcesPage />}
         </Route>
+        {/* Detailed single-matchup view, opened from Lineup Command → Matchups.
+            Renders <MatchupDetail embedded> inside the shell. */}
+        <Route path="/matchup/:leagueId">
+          {(params) => <DynastyCommandCenter matchupDetailLeagueId={params?.leagueId} />}
+        </Route>
         <Route path="/:tab/:sub" component={DynastyCommandCenter} />
         <Route path="/:tab" component={DynastyCommandCenter} />
         <Route path="/" component={DynastyCommandCenter} />

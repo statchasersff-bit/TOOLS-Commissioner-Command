@@ -905,6 +905,20 @@ export async function computeWeeklyMatchups(
   }
 
   const matchupsByWeek = await fetchAllMatchups(leagueId, regularSeasonWeeks);
+  // Calibrate the win-prob logistic to THIS league's win-now spread. The fixed
+  // MATCHUP_WIN_PROB_SCALE assumed ~900-unit gaps, but FantasyCalc starter
+  // totals differ by thousands, so a fixed scale saturates every matchup to
+  // ~100/0. Using the league's standard deviation keeps a 1σ roster edge near
+  // ~65% and reserves the extremes for genuine mismatches.
+  const wnValues = Array.from(teamInfo.values())
+    .map((t) => t.winNowScore)
+    .filter((s) => s > 0);
+  const wnMean = wnValues.length > 0 ? wnValues.reduce((a, b) => a + b, 0) / wnValues.length : 0;
+  const wnStdDev = wnValues.length > 1
+    ? Math.sqrt(wnValues.reduce((a, b) => a + (b - wnMean) ** 2, 0) / wnValues.length)
+    : 0;
+  const winProbScale = wnStdDev > 0 ? wnStdDev : MATCHUP_WIN_PROB_SCALE;
+
   const currentWeek = deriveCurrentWeek(matchupsByWeek);
 
   // Clamp requested week into [1, regularSeasonWeeks]. Default = currentWeek
@@ -991,6 +1005,7 @@ export async function computeWeeklyMatchups(
     const probA = calculateMatchupWinProbability(
       aInfo?.winNowScore ?? 0,
       bInfo?.winNowScore ?? 0,
+      winProbScale,
     );
     const teamA = buildTeam(a, probA * 100);
     const teamB = buildTeam(b, (1 - probA) * 100);

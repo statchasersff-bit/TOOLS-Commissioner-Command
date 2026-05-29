@@ -47,6 +47,11 @@ export interface Team {
   wins?: number;
   losses?: number;
   ties?: number;
+  /** Actual points scored this season (Sleeper fpts). Undefined when unavailable. */
+  pointsFor?: number;
+  /** Potential/optimal points — the max points the roster could have scored
+   *  with perfect lineups (Sleeper ppts). Undefined when unavailable. */
+  maxPointsFor?: number;
 }
 
 export interface League {

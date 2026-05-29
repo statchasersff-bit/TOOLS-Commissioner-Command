@@ -35,6 +35,7 @@ import { WhatsNewModal } from "@/components/WhatsNewModal";
 // contains the shell + header. Tabs load on first navigation.
 const PlayerPage        = lazy(() => import("@/pages/PlayerPage"));
 const ManagerPage       = lazy(() => import("@/pages/ManagerPage"));
+const MatchupDetail     = lazy(() => import("@/pages/MatchupDetail"));
 const PortfolioConnect  = lazy(() => import("./tabs/Portfolio").then(m => ({ default: m.PortfolioConnect })));
 const PortfolioSummary  = lazy(() => import("./tabs/Portfolio").then(m => ({ default: m.PortfolioSummary })));
 const WaiverCommand     = lazy(() => import("./tabs/WaiverCommand"));
@@ -107,7 +108,7 @@ function getInitialState(pathTab?: string, pathSub?: string) {
 }
 
 
-export default function DynastyCommandCenter({ params, playerProfileId, managerProfileId, valueSourcesPage }: { params?: { tab?: string; sub?: string }; playerProfileId?: string; managerProfileId?: string; valueSourcesPage?: boolean }) {
+export default function DynastyCommandCenter({ params, playerProfileId, managerProfileId, valueSourcesPage, matchupDetailLeagueId }: { params?: { tab?: string; sub?: string }; playerProfileId?: string; managerProfileId?: string; valueSourcesPage?: boolean; matchupDetailLeagueId?: string }) {
   useEffect(() => { console.log("[app] DynastyCommandCenter mounted"); }, []);
 
   // ── Background chunk preloading ────────────────────────────────────────────
@@ -625,6 +626,8 @@ export default function DynastyCommandCenter({ params, playerProfileId, managerP
     if (managerProfileId) return <ManagerPage userId={managerProfileId} embedded viewerTeam={userTeam} />;
     // Value-source manager renders inside the shell at /value-sources.
     if (valueSourcesPage) return <ValueSourcePage embedded />;
+    // Detailed single-matchup view renders inside the shell at /matchup/:leagueId.
+    if (matchupDetailLeagueId) return <MatchupDetail leagueId={matchupDetailLeagueId} embedded />;
     const access = resolveAccess(activeMainTab, activeSubTab);
     const isTradeInbox = activeMainTab === "trade-center" && activeSubTab === "trade-sync";
     return (

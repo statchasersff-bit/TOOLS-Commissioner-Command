@@ -16,20 +16,24 @@ const TIER_COLORS: Record<TierName, { label: string; bar: string; text: string; 
     ring: "ring-[#d4af37]/40",
   },
   Core: {
-    // Light mode → StatChasers navy (brand). Dark/x-mode keep the legible
-    // emerald they already used (navy would vanish on a dark canvas).
+    // Light mode → StatChasers navy (brand). Dark/x-mode use blue (navy would
+    // vanish on a dark canvas). Blue = value/data; Flex below uses cyan so the
+    // two cool tiers stay distinct, and green stays reserved for "good/strength".
     label: "Core",
-    bar: "bg-[#0b3978] dark-any:bg-emerald-500",
-    text: "text-[#0b3978] dark-any:text-emerald-400",
-    bg: "bg-[#0b3978]/10 dark-any:bg-emerald-500/10",
-    ring: "ring-[#0b3978]/30 dark-any:ring-emerald-500/30",
+    bar: "bg-[#0b3978] dark-any:bg-blue-600",
+    text: "text-[#0b3978] dark-any:text-blue-400",
+    bg: "bg-[#0b3978]/10 dark-any:bg-blue-600/10",
+    ring: "ring-[#0b3978]/30 dark-any:ring-blue-600/30",
   },
   Flex: {
+    // Cyan, not blue — Core already owns navy/blue, and a second blue made the
+    // two tiers hard to tell apart. Cyan stays in the cool family but reads as a
+    // clearly distinct, lighter step down from Core.
     label: "Flex",
-    bar: "bg-blue-500",
-    text: "text-blue-500 dark:text-blue-400",
-    bg: "bg-blue-500/10",
-    ring: "ring-blue-500/30",
+    bar: "bg-cyan-500",
+    text: "text-cyan-600 dark:text-cyan-400",
+    bg: "bg-cyan-500/10",
+    ring: "ring-cyan-500/30",
   },
   Depth: {
     label: "Depth",

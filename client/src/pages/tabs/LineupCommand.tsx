@@ -1,9 +1,12 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
+import { useLocation } from "wouter";
 import { SectionHeader } from "@/components/SectionHeader";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useSleeper } from "@/contexts/SleeperContext";
+import { usePlayerProfile } from "@/contexts/PlayerProfileContext";
+import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { getSleeperPlayers } from "@/lib/sleeperApi";
 import { cn } from "@/lib/utils";
 import { getPositionColor } from "@/data/mockData";
@@ -34,7 +37,7 @@ import { calculateWinProbability } from "@/lib/lineupCommand/winProbability";
 import { scoreByLeague } from "@/lib/lineupCommand/scoring";
 import { mapSleeperStatsToScoring } from "@/lib/lineupCommand/projectionProviders";
 
-const SLEEPER_API = "https://api.sleeper.app/v1";
+export const SLEEPER_API = "https://api.sleeper.app/v1";
 
 // Slot eligibility now lives in the engine (lib/lineupCommand/slotRules).
 const NON_STARTER = new Set(["BN", "TAXI", "IR"]);
@@ -85,7 +88,7 @@ interface LeagueAnalysis {
 }
 
 // ─── Types (matchup) ─────────────────────────────────────────────────────────
-interface StarterDetail {
+export interface StarterDetail {
   pid: string;
   name: string;
   pos: string;
@@ -101,16 +104,42 @@ interface MatchupAnalysis {
   avatar?: string | null;
   myRosterId: number;
   myTeamName: string;
+  myUserAvatar?: string | null;
   myRecord: { wins: number; losses: number; ties: number };
   myProj: number;
   myStarters: StarterDetail[];
   opponentRosterId: number | null;
   opponentTeamName: string;
+  opponentUserAvatar?: string | null;
   opponentRecord: { wins: number; losses: number; ties: number };
   opponentProj: number;
   opponentStarters: StarterDetail[];
   spread: number;
   winPct: number;
+  // League hasn't drafted yet (Sleeper status "pre_draft"/"drafting"): there are
+  // no real rosters or schedule, so it must read as "Pre-Draft", not "Bye Week".
+  predraft: boolean;
+  loading: boolean;
+  error: boolean;
+}
+
+// ─── IR / Taxi types ──────────────────────────────────────────────────────────
+interface IrTaxiPlayer {
+  pid: string;
+  name: string;
+  pos: string;
+  team: string;
+  injury?: string;
+}
+interface IrTaxiAnalysis {
+  leagueId: string;
+  leagueName: string;
+  avatar: string | null;
+  irCapacity: number;                                  // # of IR slots the league offers
+  taxiCapacity: number;                                // # of taxi slots the league offers
+  taxiPlayers: IrTaxiPlayer[];                         // current taxi squad
+  irPlayers: Array<IrTaxiPlayer & { ineligible: boolean }>; // current IR occupants (+ flag)
+  irCandidates: IrTaxiPlayer[];                        // IR-eligible players sitting on the active roster
   loading: boolean;
   error: boolean;
 }
@@ -124,7 +153,7 @@ function recordWinPct(w: number, l: number, t: number): number {
   return total > 0 ? ((w + t * 0.5) / total) * 100 : 0;
 }
 
-function projKey(scoringFormat: string): "pts_ppr" | "pts_half_ppr" | "pts_std" {
+export function projKey(scoringFormat: string): "pts_ppr" | "pts_half_ppr" | "pts_std" {
   const f = scoringFormat.toLowerCase();
   if (f.includes("ppr") && !f.includes("half")) return "pts_ppr";
   if (f.includes("half"))                        return "pts_half_ppr";
@@ -136,7 +165,7 @@ function projKey(scoringFormat: string): "pts_ppr" | "pts_half_ppr" | "pts_std" 
 // /league/:id request per league. Returns null when unavailable so callers fall
 // back to Sleeper's canned PPR/Half/Std totals. Cleared by the tab's refresh().
 const leagueScoringCache = new Map<string, Promise<Record<string, number> | null>>();
-function getLeagueScoring(leagueId: string): Promise<Record<string, number> | null> {
+export function getLeagueScoring(leagueId: string): Promise<Record<string, number> | null> {
   let cached = leagueScoringCache.get(leagueId);
   if (!cached) {
     cached = fetch(`${SLEEPER_API}/league/${leagueId}`)
@@ -157,18 +186,18 @@ function lastName(playerDb: Record<string, any>, pid: string): string {
   return p.last_name || p.full_name?.split(" ").slice(1).join(" ") || p.full_name || pid;
 }
 
-function fullName(playerDb: Record<string, any>, pid: string): string {
+export function fullName(playerDb: Record<string, any>, pid: string): string {
   const p = playerDb[pid];
   if (!p) return "—";
   return p.full_name || [p.first_name, p.last_name].filter(Boolean).join(" ") || pid;
 }
 
-function playerPos(playerDb: Record<string, any>, pid: string): string {
+export function playerPos(playerDb: Record<string, any>, pid: string): string {
   const p = playerDb[pid];
   return p?.position || p?.fantasy_positions?.[0] || "";
 }
 
-function fmt1(n: number): string {
+export function fmt1(n: number): string {
   return n.toFixed(1);
 }
 
@@ -236,6 +265,51 @@ function rosterAlertText(a: RosterAlert): string {
   return parts.join(" ");
 }
 
+// Build the IR / Taxi picture for a single league's roster: who's on taxi, who's
+// in IR (and whether they still qualify), and which rostered players are
+// IR-eligible and could be stashed to free an active-roster spot.
+function buildIrTaxi(
+  myRoster: any,
+  rosterPositions: string[],
+  playerDb: Record<string, any>,
+  taxiSlots: number,
+  reserveSlots: number,
+): Pick<IrTaxiAnalysis, "irCapacity" | "taxiCapacity" | "taxiPlayers" | "irPlayers" | "irCandidates"> {
+  const reserve: string[] = myRoster?.reserve || [];
+  const taxi: string[] = myRoster?.taxi || [];
+  const players: string[] = myRoster?.players || [];
+  // IR/taxi capacity are league settings (settings.reserve_slots / taxi_slots).
+  // Some older leagues instead list "IR" in roster_positions, so take the max.
+  const irCapacity = Math.max(rosterPositions.filter((s) => s === "IR").length, Math.max(0, reserveSlots));
+  const taxiCapacity = Math.max(0, taxiSlots);
+
+  const toPlayer = (pid: string): IrTaxiPlayer => ({
+    pid,
+    name: fullName(playerDb, pid),
+    pos: playerPos(playerDb, pid),
+    team: (playerDb[pid]?.team as string) || "",
+    injury: playerDb[pid]?.injury_status as string | undefined,
+  });
+
+  const taxiPlayers = taxi.map(toPlayer);
+  const irPlayers = reserve.map((pid) => ({
+    ...toPlayer(pid),
+    // Already in an IR slot but no longer carries a qualifying injury → must be moved.
+    ineligible: isReserveIneligible(playerDb[pid]?.injury_status),
+  }));
+
+  // Candidates = active-roster players (not already on IR or taxi) who DO carry a
+  // qualifying injury and could therefore be moved to IR.
+  const reserveSet = new Set(reserve);
+  const taxiSet = new Set(taxi);
+  const irCandidates = players
+    .filter((pid) => pid && pid !== "0" && !reserveSet.has(pid) && !taxiSet.has(pid))
+    .filter((pid) => !isReserveIneligible(playerDb[pid]?.injury_status))
+    .map(toPlayer);
+
+  return { irCapacity, taxiCapacity, taxiPlayers, irPlayers, irCandidates };
+}
+
 // ─── Core lineup analysis (powered by the Lineup Command engine) ───────────────
 // The engine in client/src/lib/lineupCommand is framework-agnostic. We enrich
 // each Sleeper player_id into the engine's EnrichedPlayer shape — scoring each
@@ -243,7 +317,7 @@ function rosterAlertText(a: RosterAlert): string {
 // to Sleeper's canned PPR/Half/Std total), zeroing OUT players, and applying
 // game-locking — then run the engine's slot-eligibility-aware optimizer and
 // bench-recommendation logic.
-function analyzeLineup(
+export function analyzeLineup(
   allPlayerIds: string[],
   rawStarters: (string | null)[],                    // unfiltered: index aligns with starting slots
   rawProj: Record<string, Record<string, number>>,  // pid → {pts_ppr, pts_half_ppr, pts_std}
@@ -403,7 +477,7 @@ function KpiCard({
   icon: typeof AlertTriangle;
   label: string;
   value: string | number;
-  accent: "red" | "gold" | "blue" | "yellow" | "slate";
+  accent: "red" | "gold" | "blue" | "yellow" | "slate" | "emerald";
   sub?: string;
 }) {
   // Per-accent icon-box style: tinted background + icon color.
@@ -411,6 +485,7 @@ function KpiCard({
     red:    "bg-red-500/10 text-red-600 dark-any:text-red-400",
     gold:   "bg-[#d4af37]/10 text-[#d4af37]",
     blue:   "bg-blue-500/10 text-blue-600 dark-any:text-blue-400",
+    emerald:"bg-emerald-500/10 text-emerald-600 dark-any:text-emerald-400",
     yellow: "bg-yellow-500/10 text-yellow-600 dark-any:text-yellow-400",
     slate:  "bg-slate-500/10 text-slate-500 dark-any:text-slate-400",
   };
@@ -732,30 +807,20 @@ function MatchupSkeletonRow() {
 // ─── Matchup battle card ──────────────────────────────────────────────────────
 function MatchupBattleCard({ m, preseason }: { m: MatchupAnalysis; preseason?: boolean }) {
   const [expanded, setExpanded] = useState(false);
+  const [, setLocation] = useLocation();
 
-  const hasBye    = m.opponentRosterId === null;
+  const predraft  = m.predraft;
+  // A predraft league has no opponent yet, but it's NOT a bye — treat it separately.
+  const hasBye    = m.opponentRosterId === null && !predraft;
   const isFav     = m.spread > 0;
   const absSpread = Math.abs(m.spread);
   const isClose   = absSpread < 3;
-  const isLopsided = absSpread >= 15;
 
   const theme =
     m.winPct >= 65 ? { bar: "#22c55e", txt: "text-emerald-400", soft: "text-emerald-400/70" } :
     m.winPct >= 50 ? { bar: "#60a5fa", txt: "text-blue-400",    soft: "text-blue-400/70"    } :
     m.winPct >= 35 ? { bar: "#facc15", txt: "text-yellow-400",  soft: "text-yellow-400/70"  } :
                      { bar: "#f87171", txt: "text-red-400",     soft: "text-red-400/70"     };
-
-  // Status / vibe pill
-  let status: { label: string; cls: string };
-  if (preseason)         status = { label: "Preseason",     cls: "bg-yellow-500/10 text-yellow-300/80 border-yellow-500/25" };
-  else if (hasBye)       status = { label: "Bye Week",       cls: "bg-white/5 text-white/40 border-white/10" };
-  else if (isLopsided)   status = isFav
-                          ? { label: "Big Favorite", cls: "bg-emerald-500/12 text-emerald-300 border-emerald-500/25" }
-                          : { label: "Big Underdog", cls: "bg-red-500/12 text-red-300 border-red-500/25" };
-  else if (isClose)      status = { label: "Toss-Up",       cls: "bg-blue-500/12 text-blue-300 border-blue-500/25" };
-  else                   status = isFav
-                          ? { label: "Favored",      cls: "bg-emerald-500/10 text-emerald-400/90 border-emerald-500/20" }
-                          : { label: "Underdog",     cls: "bg-orange-500/10 text-orange-400/90 border-orange-500/20" };
 
   const canExpand = !preseason && !hasBye && m.myStarters.length > 0;
 
@@ -768,18 +833,7 @@ function MatchupBattleCard({ m, preseason }: { m: MatchupAnalysis; preseason?: b
   };
 
   const myInitial  = m.myTeamName.trim().charAt(0).toUpperCase() || "?";
-  const oppInitial = hasBye ? "—" : (m.opponentTeamName.trim().charAt(0).toUpperCase() || "?");
-
-  // Positional matchup edges (for expanded view)
-  const posEdges = useMemo(() => {
-    if (preseason || hasBye) return [];
-    const groups = ["QB", "RB", "WR", "TE"] as const;
-    return groups.map(g => {
-      const mine = m.myStarters.filter(s => s.pos === g).reduce((s, p) => s + p.proj, 0);
-      const opp  = m.opponentStarters.filter(s => s.pos === g).reduce((s, p) => s + p.proj, 0);
-      return { pos: g, mine, opp, edge: mine - opp };
-    }).filter(e => e.mine > 0 || e.opp > 0);
-  }, [m, preseason, hasBye]);
+  const oppInitial = (hasBye || predraft) ? "—" : (m.opponentTeamName.trim().charAt(0).toUpperCase() || "?");
 
   // Hard injury flags from my starters
   const myInjuryCount = useMemo(
@@ -796,46 +850,47 @@ function MatchupBattleCard({ m, preseason }: { m: MatchupAnalysis; preseason?: b
       data-testid={`card-matchup-${m.leagueId}`}
       onClick={() => canExpand && setExpanded(v => !v)}
     >
-      {/* ─── League strip ─────────────────────────────────────────── */}
-      <div className="flex items-center gap-2 px-3.5 md:px-5 pt-2.5 pb-2 min-w-0">
-        {m.avatar ? (
-          <img src={m.avatar} alt="" className="w-5 h-5 rounded object-cover flex-shrink-0 ring-1 ring-white/10"
-            onError={e => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
-        ) : (
-          <div className="w-5 h-5 rounded flex-shrink-0 bg-[#0b3a7a]/40 ring-1 ring-white/10" />
-        )}
-        <span className="text-[10px] md:text-[11px] font-bold text-white/55 uppercase tracking-wider truncate min-w-0">
-          {m.leagueName}
-        </span>
-        <span className="text-[9px] md:text-[10px] text-white/25 truncate hidden sm:inline">
-          · {m.format} · {m.scoringFormat}
-        </span>
-        {myInjuryCount > 0 && !preseason && (
+      {/* ─── League strip (injury flag only) ──────────────────────── */}
+      {myInjuryCount > 0 && !preseason && (
+        <div className="flex items-center gap-2 px-3.5 md:px-5 pt-2.5 pb-2 min-w-0">
           <span className="inline-flex items-center gap-0.5 text-[9px] font-bold text-red-400 bg-red-500/10 border border-red-500/25 rounded-full px-1.5 py-0.5 flex-shrink-0">
             <AlertTriangle className="w-2.5 h-2.5" />
             {myInjuryCount}
           </span>
-        )}
-        <span className={cn("ml-auto flex-shrink-0 text-[9px] md:text-[10px] font-bold border rounded-full px-2 py-0.5 whitespace-nowrap tracking-wide", status.cls)}>
-          {status.label}
-        </span>
-      </div>
+        </div>
+      )}
 
       {/* ─── Body ─────────────────────────────────────────────────── */}
-      <div className="px-3.5 md:px-5 pb-3.5">
+      <div className="px-3.5 md:px-5 pb-3.5 pt-3.5 md:pt-4">
         <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 md:gap-4">
 
           {/* My team */}
           <div className="min-w-0 flex items-center gap-2 md:gap-3">
-            <div className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-[#0b3a7a]/65 ring-2 ring-[#d4af37]/35 flex items-center justify-center flex-shrink-0 shadow-md">
-              <span className="text-base md:text-lg font-black text-[#d4af37] leading-none select-none">{myInitial}</span>
+            <div className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-[#0b3a7a]/65 ring-2 ring-[#d4af37]/35 flex items-center justify-center flex-shrink-0 shadow-md overflow-hidden">
+              {m.myUserAvatar ? (
+                <img
+                  src={m.myUserAvatar}
+                  alt={m.myTeamName}
+                  className="w-full h-full object-cover"
+                  onError={e => {
+                    // Drop the broken <img> so the initial fallback (sibling) shows.
+                    (e.currentTarget as HTMLImageElement).style.display = "none";
+                    const sib = e.currentTarget.nextElementSibling as HTMLElement | null;
+                    if (sib) sib.style.display = "";
+                  }}
+                />
+              ) : null}
+              <span
+                className="text-base md:text-lg font-black text-[#d4af37] leading-none select-none"
+                style={{ display: m.myUserAvatar ? "none" : undefined }}
+              >{myInitial}</span>
             </div>
             <div className="min-w-0">
               <p className="text-[12px] md:text-sm font-black text-white/90 truncate leading-tight">{m.myTeamName}</p>
               <p className="text-[10px] md:text-[11px] text-white/35 tabular-nums leading-tight mt-0.5">
                 {fmtRecord(m.myRecord.wins, m.myRecord.losses, m.myRecord.ties)}
               </p>
-              {!preseason && (
+              {!preseason && !predraft && (
                 <p className={cn(
                   "text-[22px] md:text-[28px] font-black tabular-nums leading-none mt-1",
                   isFav && !isClose ? theme.txt : "text-white/75"
@@ -847,8 +902,19 @@ function MatchupBattleCard({ m, preseason }: { m: MatchupAnalysis; preseason?: b
           </div>
 
           {/* Center */}
-          <div className="flex flex-col items-center justify-center flex-shrink-0 w-[68px] md:w-[92px]">
-            {preseason ? (
+          <div className="flex flex-col items-center justify-center flex-shrink-0 w-[80px] md:w-[108px]">
+            {m.avatar ? (
+              <img src={m.avatar} alt="" className="w-6 h-6 rounded object-cover flex-shrink-0 ring-1 ring-white/10 mb-1"
+                onError={e => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
+            ) : (
+              <div className="w-6 h-6 rounded flex-shrink-0 bg-[#0b3a7a]/40 ring-1 ring-white/10 mb-1" />
+            )}
+            <span className="text-[9px] md:text-[10px] font-bold text-white/55 uppercase tracking-wider text-center leading-tight mb-1.5 line-clamp-2">
+              {m.leagueName}
+            </span>
+            {predraft ? (
+              <div className="text-[10px] md:text-[12px] font-black text-[#d4af37]/70 tracking-[0.18em] text-center leading-tight">PRE-<br />DRAFT</div>
+            ) : preseason ? (
               <div className="text-[11px] md:text-[12px] font-black text-white/22 tracking-[0.3em]">VS</div>
             ) : hasBye ? (
               <>
@@ -874,14 +940,14 @@ function MatchupBattleCard({ m, preseason }: { m: MatchupAnalysis; preseason?: b
             <div className="min-w-0 text-right">
               <p className={cn(
                 "text-[12px] md:text-sm font-black truncate leading-tight",
-                hasBye ? "text-white/40" : "text-white/65"
+                (hasBye || predraft) ? "text-white/40" : "text-white/65"
               )}>
-                {hasBye ? "Bye Week" : m.opponentTeamName}
+                {predraft ? "Not drafted yet" : hasBye ? "Bye Week" : m.opponentTeamName}
               </p>
               <p className="text-[10px] md:text-[11px] text-white/25 tabular-nums leading-tight mt-0.5">
-                {hasBye ? "" : fmtRecord(m.opponentRecord.wins, m.opponentRecord.losses, m.opponentRecord.ties)}
+                {(hasBye || predraft) ? "" : fmtRecord(m.opponentRecord.wins, m.opponentRecord.losses, m.opponentRecord.ties)}
               </p>
-              {!preseason && !hasBye && (
+              {!preseason && !hasBye && !predraft && (
                 <p className={cn(
                   "text-[22px] md:text-[28px] font-black tabular-nums leading-none mt-1",
                   !isFav && !isClose ? theme.txt : "text-white/50"
@@ -891,10 +957,25 @@ function MatchupBattleCard({ m, preseason }: { m: MatchupAnalysis; preseason?: b
               )}
             </div>
             <div className={cn(
-              "w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center flex-shrink-0 ring-2 shadow-md",
-              hasBye ? "bg-white/5 ring-white/10" : "bg-white/8 ring-white/18"
+              "w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center flex-shrink-0 ring-2 shadow-md overflow-hidden",
+              (hasBye || predraft) ? "bg-white/5 ring-white/10" : "bg-white/8 ring-white/18"
             )}>
-              <span className={cn("text-base md:text-lg font-black leading-none select-none", hasBye ? "text-white/25" : "text-white/55")}>
+              {!hasBye && !predraft && m.opponentUserAvatar ? (
+                <img
+                  src={m.opponentUserAvatar}
+                  alt={m.opponentTeamName}
+                  className="w-full h-full object-cover"
+                  onError={e => {
+                    (e.currentTarget as HTMLImageElement).style.display = "none";
+                    const sib = e.currentTarget.nextElementSibling as HTMLElement | null;
+                    if (sib) sib.style.display = "";
+                  }}
+                />
+              ) : null}
+              <span
+                className={cn("text-base md:text-lg font-black leading-none select-none", (hasBye || predraft) ? "text-white/25" : "text-white/55")}
+                style={{ display: !hasBye && !predraft && m.opponentUserAvatar ? "none" : undefined }}
+              >
                 {oppInitial}
               </span>
             </div>
@@ -910,7 +991,7 @@ function MatchupBattleCard({ m, preseason }: { m: MatchupAnalysis; preseason?: b
         )}
 
         {/* Win-probability bar */}
-        {!preseason && !hasBye && (
+        {!preseason && !hasBye && !predraft && (
           <div className="mt-3.5">
             <div className="relative h-2 rounded-full bg-white/6 overflow-hidden ring-1 ring-white/5">
               <div
@@ -946,55 +1027,6 @@ function MatchupBattleCard({ m, preseason }: { m: MatchupAnalysis; preseason?: b
           className="px-3.5 md:px-5 pb-4 pt-3 border-t border-white/4 bg-white/[0.012] space-y-4"
           onClick={e => e.stopPropagation()}
         >
-          {/* Positional edges */}
-          {posEdges.length > 0 && (
-            <div>
-              <p className="text-[8px] font-bold uppercase tracking-[0.2em] text-white/35 mb-2">Positional Edge</p>
-              <div className="grid grid-cols-4 gap-1.5 md:gap-2">
-                {posEdges.map(e => {
-                  const total = e.mine + e.opp || 1;
-                  const mySplit = (e.mine / total) * 100;
-                  const winning = e.edge >= 0.5;
-                  const losing  = e.edge <= -0.5;
-                  return (
-                    <div
-                      key={e.pos}
-                      className={cn(
-                        "rounded-lg border px-2 py-1.5",
-                        winning ? "border-emerald-500/22 bg-emerald-500/[0.06]" :
-                        losing  ? "border-red-500/22 bg-red-500/[0.06]" :
-                                  "border-white/8 bg-white/[0.02]"
-                      )}
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="text-[9px] font-bold text-white/55 tracking-wider">{e.pos}</span>
-                        <span className={cn(
-                          "text-[9px] tabular-nums font-bold",
-                          winning ? "text-emerald-400" : losing ? "text-red-400" : "text-white/40"
-                        )}>
-                          {e.edge > 0 ? "+" : ""}{fmt1(e.edge)}
-                        </span>
-                      </div>
-                      <div className="h-1 rounded-full bg-white/8 overflow-hidden mt-1">
-                        <div
-                          className={cn(
-                            "h-full transition-all duration-500",
-                            winning ? "bg-emerald-400/85" : losing ? "bg-red-400/85" : "bg-white/30"
-                          )}
-                          style={{ width: `${mySplit}%` }}
-                        />
-                      </div>
-                      <div className="flex justify-between mt-1 text-[8px] text-white/30 tabular-nums font-medium">
-                        <span>{fmt1(e.mine)}</span>
-                        <span>{fmt1(e.opp)}</span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
           {/* Starters side-by-side */}
           <div className="grid grid-cols-2 gap-4 md:gap-6">
             <div>
@@ -1040,8 +1072,212 @@ function MatchupBattleCard({ m, preseason }: { m: MatchupAnalysis; preseason?: b
               </div>
             </div>
           </div>
+
+          {/* Detailed matchup link — opens the full /matchup/:leagueId page. */}
+          <button
+            onClick={() => setLocation(`/matchup/${m.leagueId}`)}
+            data-testid={`button-detailed-matchup-${m.leagueId}`}
+            className="w-full mt-1 flex items-center justify-center gap-1.5 rounded-lg border border-[#d4af37]/30 bg-[#d4af37]/[0.06] hover:bg-[#d4af37]/[0.12] text-[#d4af37] text-[11px] md:text-[12px] font-bold uppercase tracking-wider py-2 transition-colors"
+          >
+            <Swords className="w-3.5 h-3.5" />
+            Show Detailed Matchup
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── IR / Taxi view ────────────────────────────────────────────────────────────
+// One row of player chips, clickable into the player profile.
+function IrTaxiPlayerChip({ p, tone }: { p: IrTaxiPlayer; tone?: "danger" | "good" | "muted" }) {
+  const { openPlayerProfile } = usePlayerProfile();
+  const inj = p.injury;
+  const clickable = /^\d+$/.test(p.pid);
+  const border =
+    tone === "danger" ? "border-red-500/30 bg-red-500/[0.05]" :
+    tone === "good" ? "border-emerald-500/25 bg-emerald-500/[0.05]" :
+    "border-white/8 bg-white/[0.02]";
+  return (
+    <div className={cn("flex items-center gap-2 rounded-lg border px-2.5 py-1.5", border)}>
+      <PlayerAvatar
+        id={p.pid}
+        name={p.name}
+        pos={p.pos}
+        team={p.team}
+        size="sm"
+        onClick={clickable ? () => openPlayerProfile(p.pid) : undefined}
+        metaTrailing={inj ? (
+          <span className={cn(
+            "text-[8px] font-bold px-1 rounded",
+            inj === "Out" || inj === "IR" ? "text-red-400 bg-red-500/10" : "text-yellow-400 bg-yellow-500/10",
+          )}>{inj}</span>
+        ) : undefined}
+      />
+    </div>
+  );
+}
+
+// Placeholder for an unfilled taxi slot — mirrors the player chip's shape but is
+// styled red to flag the open spot.
+function IrTaxiEmptyChip() {
+  return (
+    <div className="flex items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/[0.05] px-2.5 py-1.5">
+      <div className="w-9 h-9 rounded-full border border-dashed border-red-500/40 flex items-center justify-center text-red-400/70 text-[15px] font-bold">
+        +
+      </div>
+      <span className="text-[12px] font-semibold text-red-400/90 pr-1">Empty</span>
+    </div>
+  );
+}
+
+function IrTaxiLeagueCard({ a }: { a: IrTaxiAnalysis }) {
+  const openIrSlots = Math.max(0, a.irCapacity - a.irPlayers.length);
+  const ineligibleCount = a.irPlayers.filter(p => p.ineligible).length;
+  const hasIr = a.irCapacity > 0;
+
+  return (
+    <div className="rounded-xl border border-border bg-card/40 p-3.5 md:p-4" data-testid={`irtaxi-league-${a.leagueId}`}>
+      {/* League header */}
+      <div className="flex items-center gap-2 mb-3">
+        {a.avatar ? (
+          <img src={a.avatar} alt="" className="w-6 h-6 rounded object-cover ring-1 ring-white/10"
+            onError={e => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
+        ) : (
+          <div className="w-6 h-6 rounded bg-[#0b3a7a]/40 ring-1 ring-white/10" />
+        )}
+        <h3 className="text-sm font-semibold truncate flex-1 min-w-0">{a.leagueName}</h3>
+        <div className="flex items-center gap-1.5 flex-shrink-0">
+          {hasIr && (
+            <span className={cn(
+              "text-[9px] font-bold uppercase tracking-wider rounded-full border px-2 py-0.5",
+              openIrSlots > 0 ? "text-emerald-300 border-emerald-500/25 bg-emerald-500/10" : "text-white/45 border-white/10 bg-white/5",
+            )}>IR {a.irPlayers.length}/{a.irCapacity}</span>
+          )}
+          {a.taxiPlayers.length > 0 && (
+            <span className="text-[9px] font-bold uppercase tracking-wider rounded-full border border-white/10 bg-white/5 text-white/55 px-2 py-0.5">
+              Taxi {a.taxiPlayers.length}
+            </span>
+          )}
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Injured Reserve */}
+        <div>
+          <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-white/35 mb-2">Injured Reserve</p>
+          {ineligibleCount > 0 && (
+            <p className="text-[10px] mb-1 text-red-400/80">
+              {ineligibleCount} player{ineligibleCount === 1 ? "" : "s"} no longer IR-eligible — move off IR or it blocks your lineup.
+            </p>
+          )}
+          {!hasIr ? (
+            <p className="text-[11px] text-white/30 py-1">No IR slots in this league.</p>
+          ) : a.irPlayers.length ? (
+            <div className="flex flex-wrap gap-1.5">
+              {a.irPlayers.map(p => (
+                <IrTaxiPlayerChip key={p.pid} p={p} tone={p.ineligible ? "danger" : "muted"} />
+              ))}
+            </div>
+          ) : (
+            <p className="text-[11px] text-white/30 py-1">IR is empty · {openIrSlots} open slot{openIrSlots === 1 ? "" : "s"}.</p>
+          )}
+        </div>
+
+        {/* IR candidates */}
+        <div>
+          <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-white/35 mb-2">Can Move to IR</p>
+          {!hasIr ? (
+            <p className="text-[11px] text-white/30 py-1">—</p>
+          ) : a.irCandidates.length ? (
+            <>
+              <p className={cn("text-[10px] mb-1", (openIrSlots > 0 || ineligibleCount > 0) ? "text-emerald-300/80" : "text-white/35")}>
+                {openIrSlots > 0
+                  ? `${openIrSlots} open IR slot${openIrSlots === 1 ? "" : "s"} — stash one to free a roster spot.`
+                  : ineligibleCount > 0
+                    ? "IR is full, but freeing an ineligible player opens a slot."
+                    : "IR is full — clear a slot first."}
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {a.irCandidates.map(p => (
+                  <IrTaxiPlayerChip key={p.pid} p={p} tone={(openIrSlots > 0 || ineligibleCount > 0) ? "good" : "muted"} />
+                ))}
+              </div>
+            </>
+          ) : (
+            <p className="text-[11px] text-white/30 py-1">No IR-eligible players on your active roster.</p>
+          )}
+        </div>
+        </div>
+
+        {/* Taxi squad */}
+        <div>
+          <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-white/35 mb-2">Taxi Squad</p>
+          {a.taxiCapacity > 0 || a.taxiPlayers.length ? (
+            <div className="flex flex-wrap gap-1.5">
+              {a.taxiPlayers.map(p => <IrTaxiPlayerChip key={p.pid} p={p} />)}
+              {Array.from({ length: Math.max(0, a.taxiCapacity - a.taxiPlayers.length) }).map((_, i) => (
+                <IrTaxiEmptyChip key={`taxi-empty-${i}`} />
+              ))}
+            </div>
+          ) : (
+            <p className="text-[11px] text-white/30 py-1">No taxi squad in this league.</p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function IrTaxiView({ items, loading }: { items: IrTaxiAnalysis[]; loading: boolean }) {
+  // Only surface leagues that actually have an IR slot or a taxi squad — others
+  // have nothing to manage here.
+  const relevant = items.filter(a => a.irCapacity > 0 || a.taxiCapacity > 0 || a.taxiPlayers.length > 0 || a.irCandidates.length > 0);
+  // Most-actionable first: ineligible IR occupants, then available stash slots.
+  const sorted = [...relevant].sort((a, b) => {
+    const score = (x: IrTaxiAnalysis) =>
+      x.irPlayers.filter(p => p.ineligible).length * 100 +
+      (Math.max(0, x.irCapacity - x.irPlayers.length) > 0 ? x.irCandidates.length : 0) * 10 +
+      x.taxiPlayers.length;
+    return score(b) - score(a);
+  });
+
+  const allLoading = items.length > 0 && items.every(a => a.loading);
+  const totalIneligible = relevant.reduce((s, a) => s + a.irPlayers.filter(p => p.ineligible).length, 0);
+  const totalStashable = relevant.reduce((s, a) => s + (Math.max(0, a.irCapacity - a.irPlayers.length) > 0 ? a.irCandidates.length : 0), 0);
+
+  if ((loading || allLoading) && relevant.length === 0) {
+    return (
+      <div className="space-y-3">
+        {Array.from({ length: 3 }).map((_, i) => <div key={i} className="h-40 rounded-xl border border-border bg-card/40 animate-pulse" />)}
+      </div>
+    );
+  }
+
+  if (relevant.length === 0) {
+    return (
+      <div className="rounded-xl border border-border bg-card/40 p-10 text-center">
+        <Shield className="w-7 h-7 text-white/25 mx-auto mb-3" />
+        <h3 className="text-sm font-bold text-white/80">No IR or Taxi slots</h3>
+        <p className="text-[12px] text-muted-foreground mt-1 max-w-sm mx-auto">None of your leagues offer Injured Reserve or Taxi spots, so there's nothing to manage here.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {(totalIneligible > 0 || totalStashable > 0) && (
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-[#d4af37]/20 bg-[#d4af37]/[0.05] px-3.5 py-2.5">
+          <Shield className="w-4 h-4 text-[#d4af37] flex-shrink-0" />
+          <span className="text-[12px] text-white/80">
+            {totalIneligible > 0 && <><span className="font-bold text-red-300">{totalIneligible}</span> ineligible IR player{totalIneligible === 1 ? "" : "s"} to move. </>}
+            {totalStashable > 0 && <><span className="font-bold text-emerald-300">{totalStashable}</span> player{totalStashable === 1 ? "" : "s"} can be stashed on open IR slots.</>}
+          </span>
+        </div>
+      )}
+      {sorted.map(a => <IrTaxiLeagueCard key={a.leagueId} a={a} />)}
     </div>
   );
 }
@@ -1050,7 +1286,7 @@ function MatchupBattleCard({ m, preseason }: { m: MatchupAnalysis; preseason?: b
 export function LineupCommand() {
   const { isConnected, user, leagues } = useSleeper();
 
-  const [activeTab, setActiveTab] = useState<"lineup" | "matchups" | "startsit">("lineup");
+  const [activeTab, setActiveTab] = useState<"lineup" | "matchups" | "startsit" | "irtaxi">("lineup");
 
   const [nflWeek, setNflWeek]     = useState<number | null>(null);
   const [season, setSeason]       = useState("2025");
@@ -1070,6 +1306,8 @@ export function LineupCommand() {
   const [matchups, setMatchups]   = useState<Record<string, MatchupAnalysis>>({});
   const [mSortKey, setMSortKey]   = useState<"league" | "record" | "myProj" | "oppRecord" | "oppProj" | "winPct">("winPct");
   const [mSortDir, setMSortDir]   = useState<"asc" | "desc">("desc");
+
+  const [irTaxi, setIrTaxi]       = useState<Record<string, IrTaxiAnalysis>>({});
 
   const [optimizeModalOpen, setOptimizeModalOpen] = useState(false);
   const queue = useOptimizeQueue();
@@ -1284,6 +1522,7 @@ export function LineupCommand() {
             opponentStarters: [],
             spread: 0,
             winPct: 50,
+            predraft: l.status === "pre_draft" || l.status === "drafting",
             loading: true,
             error: false,
           };
@@ -1301,7 +1540,11 @@ export function LineupCommand() {
         // against THIS league's rules instead of Sleeper's canned PPR/Half/Std
         // totals. Degrades to the canned total if it can't be loaded.
         getLeagueScoring(league.leagueId),
-      ]).then(([rosters, weekMatchups, scoring]: [any[] | null, any[] | null, Record<string, number> | null]) => {
+        // League users — maps roster.owner_id → the Sleeper account, so we can
+        // label each side with the real username + profile picture instead of a
+        // generic "My Team"/"Opponent". Degrades gracefully if it can't load.
+        fetch(`${SLEEPER_API}/league/${league.leagueId}/users`).then(r => r.ok ? r.json() : null),
+      ]).then(([rosters, weekMatchups, scoring, users]: [any[] | null, any[] | null, Record<string, number> | null, any[] | null]) => {
         if (!rosters || !weekMatchups) throw new Error("no data");
 
         const myRoster = rosters.find((r: any) => r.owner_id === user.userId);
@@ -1315,9 +1558,14 @@ export function LineupCommand() {
 
         const myMatchup = weekMatchups.find((m: any) => m.roster_id === myRoster.roster_id);
         if (!myMatchup) {
+          // No matchup row yet — typically a pre-draft league. Still surface the
+          // user's own team name/avatar so the card reads as "Pre-Draft", not blank.
+          const meUser = (users || []).find((u: any) => u.user_id === myRoster.owner_id);
+          const myTeamName = myRoster.metadata?.team_name || myRoster.metadata?.team_abbrev || meUser?.display_name || "My Team";
+          const myUserAvatar = meUser?.avatar ? `https://sleepercdn.com/avatars/thumbs/${meUser.avatar}` : null;
           setMatchups(prev => ({
             ...prev,
-            [league.leagueId]: { ...prev[league.leagueId], loading: false, error: false },
+            [league.leagueId]: { ...prev[league.leagueId], myTeamName, myUserAvatar, loading: false, error: false },
           }));
           return;
         }
@@ -1364,9 +1612,23 @@ export function LineupCommand() {
         // weekly score ~ Normal), rather than a naïve proj-share split.
         const winPct = opponentMatchup ? calculateWinProbability(spread) : 50;
 
-        const myTeamName = myRoster.metadata?.team_name || myRoster.metadata?.team_abbrev || "My Team";
+        // owner_id → Sleeper account, for username + profile picture.
+        const userById = new Map<string, any>((users || []).map((u: any) => [u.user_id, u]));
+        const usernameFor = (roster: any, fallback: string): string => {
+          const u = roster ? userById.get(roster.owner_id) : null;
+          // Prefer a custom team name, then the Sleeper username, then a generic.
+          return roster?.metadata?.team_name || roster?.metadata?.team_abbrev || u?.display_name || fallback;
+        };
+        const avatarFor = (roster: any): string | null => {
+          const u = roster ? userById.get(roster.owner_id) : null;
+          return u?.avatar ? `https://sleepercdn.com/avatars/thumbs/${u.avatar}` : null;
+        };
+
         const oppRoster = opponentMatchup ? rosters.find((r: any) => r.roster_id === opponentMatchup.roster_id) : null;
-        const opponentTeamName = oppRoster?.metadata?.team_name || oppRoster?.metadata?.team_abbrev || "Opponent";
+        const myTeamName = usernameFor(myRoster, "My Team");
+        const opponentTeamName = usernameFor(oppRoster, "Opponent");
+        const myUserAvatar = avatarFor(myRoster);
+        const opponentUserAvatar = avatarFor(oppRoster);
 
         const toStarter = (pid: string): StarterDetail => ({
           pid,
@@ -1393,16 +1655,19 @@ export function LineupCommand() {
             avatar: league.avatar ? `https://sleepercdn.com/avatars/thumbs/${league.avatar}` : null,
             myRosterId: myRoster.roster_id,
             myTeamName,
+            myUserAvatar,
             myRecord,
             myProj,
             myStarters,
             opponentRosterId: opponentMatchup?.roster_id ?? null,
             opponentTeamName,
+            opponentUserAvatar,
             opponentRecord,
             opponentProj,
             opponentStarters,
             spread,
             winPct,
+            predraft: league.status === "pre_draft" || league.status === "drafting",
             loading: false,
             error: false,
           },
@@ -1417,10 +1682,61 @@ export function LineupCommand() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nflWeek, user?.userId, activeLeagues.length, rawProj]);
 
+  // ── 4. Per-league IR / Taxi scan ──────────────────────────────────────────
+  // Independent of projections/scoring — only needs each roster + the player DB
+  // (for injury_status) + the league's IR slot count. Runs once the player DB is
+  // loaded so injury designations resolve.
+  useEffect(() => {
+    if (!isConnected || !user?.userId || activeLeagues.length === 0) return;
+    if (Object.keys(playerDb).length === 0) return;
+    let cancelled = false;
+
+    setIrTaxi(prev => {
+      const next = { ...prev };
+      for (const l of activeLeagues) {
+        if (!next[l.leagueId]) {
+          next[l.leagueId] = {
+            leagueId: l.leagueId, leagueName: l.name,
+            avatar: l.avatar ? `https://sleepercdn.com/avatars/thumbs/${l.avatar}` : null,
+            irCapacity: 0, taxiCapacity: 0, taxiPlayers: [], irPlayers: [], irCandidates: [],
+            loading: true, error: false,
+          };
+        }
+      }
+      return next;
+    });
+
+    activeLeagues.forEach(league => {
+      Promise.all([
+        fetch(`${SLEEPER_API}/league/${league.leagueId}/rosters`).then(r => r.ok ? r.json() : null),
+        fetch(`${SLEEPER_API}/league/${league.leagueId}`).then(r => r.ok ? r.json() : null),
+      ])
+        .then(([rosters, leagueRaw]: [any[] | null, any | null]) => {
+          if (cancelled) return;
+          if (!rosters) throw new Error("no data");
+          const myRoster = rosters.find((r: any) => r.owner_id === user.userId);
+          if (!myRoster) {
+            setIrTaxi(prev => ({ ...prev, [league.leagueId]: { ...prev[league.leagueId], loading: false, error: false } }));
+            return;
+          }
+          const taxiSlots = leagueRaw?.settings?.taxi_slots ?? 0;
+          const reserveSlots = leagueRaw?.settings?.reserve_slots ?? 0;
+          const built = buildIrTaxi(myRoster, league.rosterPositions || [], playerDb, taxiSlots, reserveSlots);
+          setIrTaxi(prev => ({ ...prev, [league.leagueId]: { ...prev[league.leagueId], ...built, loading: false, error: false } }));
+        })
+        .catch(() => {
+          if (!cancelled) setIrTaxi(prev => ({ ...prev, [league.leagueId]: { ...prev[league.leagueId], loading: false, error: true } }));
+        });
+    });
+
+    return () => { cancelled = true; };
+  }, [isConnected, user?.userId, activeLeagues.length, playerDb]);
+
   const refresh = useCallback(() => {
     setBaseLoading(true);
     setAnalyses({});
     setMatchups({});
+    setIrTaxi({});
     setNflWeek(null);
     setRawProj({});
     setPlayerDb({});
@@ -1571,18 +1887,18 @@ export function LineupCommand() {
           )}
           <div
             className={cn(
-              "grid flex-shrink-0 rounded-2xl p-1 gap-1 w-[390px] h-12",
+              "grid flex-shrink-0 rounded-2xl p-1 gap-1 w-[510px] h-12",
               // Light: white inner with slate border.
               "bg-[var(--sc-card-bg)] border border-[var(--sc-border)]",
               // Dark: legacy translucent strip.
               "dark-any:bg-white/[0.04] dark-any:border-white/[0.07]",
             )}
-            style={{ gridTemplateColumns: "1fr 1fr 1fr" }}
+            style={{ gridTemplateColumns: "1fr 1fr 1fr 1fr" }}
           >
-            {(["lineup", "matchups", "startsit"] as const).map(tab => {
+            {(["lineup", "matchups", "startsit", "irtaxi"] as const).map(tab => {
               const isActive = activeTab === tab;
-              const Icon = tab === "lineup" ? Zap : tab === "matchups" ? Swords : Users;
-              const label = tab === "lineup" ? "Lineups" : tab === "matchups" ? "Matchups" : "Start/Sit";
+              const Icon = tab === "lineup" ? Zap : tab === "matchups" ? Swords : tab === "startsit" ? Users : Shield;
+              const label = tab === "lineup" ? "Lineups" : tab === "matchups" ? "Matchups" : tab === "startsit" ? "Start/Sit" : "IR/Taxi";
               return (
                 <button
                   key={tab}
@@ -1633,12 +1949,12 @@ export function LineupCommand() {
             "bg-[var(--sc-card-bg)] border border-[var(--sc-border)]",
             "dark-any:bg-white/[0.04] dark-any:border-white/[0.07]",
           )}
-          style={{ gridTemplateColumns: "1fr 1fr 1fr" }}
+          style={{ gridTemplateColumns: "1fr 1fr 1fr 1fr" }}
         >
-          {(["lineup", "matchups", "startsit"] as const).map(tab => {
+          {(["lineup", "matchups", "startsit", "irtaxi"] as const).map(tab => {
             const isActive = activeTab === tab;
-            const Icon = tab === "lineup" ? Zap : tab === "matchups" ? Swords : Users;
-            const label = tab === "lineup" ? "Lineups" : tab === "matchups" ? "Matchups" : "Start/Sit";
+            const Icon = tab === "lineup" ? Zap : tab === "matchups" ? Swords : tab === "startsit" ? Users : Shield;
+            const label = tab === "lineup" ? "Lineups" : tab === "matchups" ? "Matchups" : tab === "startsit" ? "Start/Sit" : "IR/Taxi";
             return (
               <button
                 key={tab}
@@ -1672,7 +1988,7 @@ export function LineupCommand() {
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
             <KpiCard icon={AlertTriangle} label="Lineup Issues"  value={isPreseason ? "N/A" : hasAnyData ? kpis.totalIssues : "—"} accent="red"    sub="Out · IR · Bye" />
             <KpiCard icon={TrendingUp}   label="Optimal Swaps"  value={isPreseason ? "N/A" : hasAnyData ? kpis.totalSwaps : "—"}  accent="blue"   sub="Available" />
-            <KpiCard icon={Zap}          label="Points Gain"    value={isPreseason ? "N/A" : hasAnyData ? (kpis.totalGain > 0 ? `+${fmt1(kpis.totalGain)}` : "—") : "—"} accent="gold" sub="Projected" />
+            <KpiCard icon={Zap}          label="Points Gain"    value={isPreseason ? "N/A" : hasAnyData ? (kpis.totalGain > 0 ? `+${fmt1(kpis.totalGain)}` : "—") : "—"} accent="emerald" sub="Projected" />
             <KpiCard icon={Activity}     label="Questionable"   value={isPreseason ? "N/A" : hasAnyData ? kpis.questionable : "—"} accent="yellow" sub="Starters" />
             <KpiCard icon={CalendarX}    label="Bye Conflicts"  value={isPreseason ? "N/A" : hasAnyData ? kpis.byeConflicts : "—"} accent="slate"  sub="Active starters" />
           </div>
@@ -1935,6 +2251,10 @@ export function LineupCommand() {
       {/* ══════════════════ START/SIT COMPARE TAB ══════════════════ */}
       {activeTab === "startsit" && (
         <StartSitCompareTab defaultWeek={nflWeek ?? 1} />
+      )}
+
+      {activeTab === "irtaxi" && (
+        <IrTaxiView items={Object.values(irTaxi)} loading={baseLoading} />
       )}
     </div>
   );

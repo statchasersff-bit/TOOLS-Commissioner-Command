@@ -20,11 +20,10 @@ import {
   RosterStrengthProfile,
   AgeCurves,
   TierBreakdown,
-  RosterConstruction,
-  PowerDifferential,
-  NflTeamExposure,
+  DynastyValueByPosition,
 } from "@/components/gm-dashboard";
 import { TeamLoader } from "@/components/TeamLoader";
+import { usePlayoffOddsSummary } from "@/hooks/usePlayoffOddsSummary";
 
 interface DashboardProps {
   league: League;
@@ -1853,18 +1852,6 @@ export function MyTeam({ league, userTeam, onNavigate }: DashboardOverviewProps)
   const tier = tierInfo?.tier ?? "Balanced";
   const tierDescription = tierInfo?.tierDescription ?? "";
 
-  const starterAges = userTeam.roster.filter((p) => p.starter);
-  const avgAge = starterAges.length > 0
-    ? (starterAges.reduce((s, p) => s + p.age, 0) / starterAges.length).toFixed(1)
-    : "N/A";
-  const future1sts = userTeam.picks.filter((p) => p.round === 1).length;
-
-  const leagueAvg1sts = Math.round(league.teams.reduce((s, t) => s + t.picks.filter(p => p.round === 1).length, 0) / total * 10) / 10;
-  const leagueAvgAge = (league.teams.reduce((s, t) => {
-    const st = t.roster.filter(p => p.starter);
-    return s + (st.length > 0 ? st.reduce((a, p) => a + p.age, 0) / st.length : 0);
-  }, 0) / total).toFixed(1);
-
   const playoffSlots = league.playoffTeams ?? Math.max(2, Math.round(total / 3));
   const sortedByRecord = [...league.teams].sort((a, b) => {
     const aW = a.wins ?? 0, bW = b.wins ?? 0;
@@ -1906,7 +1893,42 @@ export function MyTeam({ league, userTeam, onNavigate }: DashboardOverviewProps)
   const standingWeight = 0.15 + 0.70 * seasonProgress;
   const talentWeight = 1 - standingWeight;
   const clampedOdds = Math.min(99, Math.max(1, Math.round((standingWeight * standingScore + talentWeight * talentScore) * 100)));
-  const oddsColor = clampedOdds >= 60 ? "text-emerald-600 dark:text-emerald-400" : clampedOdds >= 40 ? "text-amber-600 dark:text-amber-400" : "text-red-500 dark:text-red-400";
+
+  // ── KPI strip: Monte-Carlo playoff & title odds + points-for ranks ────────
+  // Playoff/championship odds come from the shared playoff-calculator endpoint
+  // (same source as the Playoff Odds tab); PF/Max-PF ranks are computed from
+  // the season points plumbed onto each Team. Both gracefully show "—" when the
+  // underlying data isn't available yet (e.g. preseason / no schedule).
+  const rosterIdNum = Number(userTeam.id.replace(/^roster_/, ""));
+  const { odds: playoffOddsMap, loading: oddsLoading } = usePlayoffOddsSummary(league.id);
+  const myOdds = (Number.isFinite(rosterIdNum) ? playoffOddsMap?.[rosterIdNum] : null) ?? null;
+
+  // 1-based rank of userTeam among league teams by a numeric accessor (desc).
+  // Returns null when no team reports the metric, so the card can show "—".
+  const rankByDesc = (accessor: (t: Team) => number | undefined): number | null => {
+    const vals = league.teams.map((t) => ({ id: t.id, v: accessor(t) }));
+    if (!vals.some((x) => x.v != null && x.v > 0)) return null;
+    vals.sort((a, b) => (b.v ?? 0) - (a.v ?? 0));
+    const idx = vals.findIndex((x) => x.id === userTeam.id);
+    return idx >= 0 ? idx + 1 : null;
+  };
+  const pfRank = rankByDesc((t) => t.pointsFor);
+  const maxPfRank = rankByDesc((t) => t.maxPointsFor);
+  // Standing is only meaningful once games have been played; otherwise every
+  // team is 0-0 and the "rank" is just roster order. Show "—" until then.
+  const hasRecords = league.teams.some((t) => (t.wins ?? 0) + (t.losses ?? 0) + (t.ties ?? 0) > 0);
+  const fmtPts = (v?: number) => v != null ? v.toLocaleString(undefined, { maximumFractionDigits: 1 }) : "—";
+  const rankTextColor = (r: number) =>
+    rankBg(r, total).badge.split(" ").filter((c) => c.startsWith("text-")).join(" ");
+  const pctOutlook = (p: number) =>
+    p >= 70 ? "Strong outlook" : p >= 50 ? "Favorable" : p >= 35 ? "On the bubble" : "Long shot";
+  const champOutlook = (p: number) =>
+    p >= 25 ? "Title favorite" : p >= 12 ? "Live contender" : p >= 5 ? "In the mix" : "Long shot";
+  const oddsTextColor = (p: number) =>
+    p >= 60 ? "text-emerald-600 dark:text-emerald-400" : p >= 40 ? "text-amber-600 dark:text-amber-400" : "text-red-500 dark:text-red-400";
+  const champTextColor = (p: number) =>
+    p >= 20 ? "text-emerald-600 dark:text-emerald-400" : p >= 8 ? "text-amber-600 dark:text-amber-400" : "text-red-500 dark:text-red-400";
+  const fmtChampPct = (p: number) => (p > 0 && p < 1 ? "<1" : String(Math.round(p)));
 
   const winNow = getWinNowScore(userTeam, league);
   const youth = getYouthScore(userTeam, league);
@@ -1973,43 +1995,56 @@ export function MyTeam({ league, userTeam, onNavigate }: DashboardOverviewProps)
       <SectionHeader title="Overview" subtitle={`${userTeam.name} · managed by ${userTeam.owner}`} />
 
       {/* ── 1. KPI STRIP ───────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3" data-testid="myteam-kpi-strip">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3" data-testid="myteam-kpi-strip">
         {[
           {
-            label: "Power Rank",
-            value: `#${rank}`,
-            sub: `of ${total}`,
-            ctx: percentileLabel(rank, total),
-            ctxColor: rankBg(rank, total).badge.split(" ").filter(c => c.startsWith("text-")).join(" "),
-            icon: Trophy,
-            testId: "kpi-power-rank",
+            label: "Standing",
+            value: hasRecords ? `#${standing}` : "—",
+            sub: hasRecords ? `of ${total}` : null,
+            ctx: hasRecords
+              ? `${userTeam.wins ?? 0}-${userTeam.losses ?? 0}${(userTeam.ties ?? 0) > 0 ? `-${userTeam.ties}` : ""}`
+              : "No games yet",
+            ctxColor: hasRecords
+              ? (standing <= playoffSlots ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400")
+              : "text-muted-foreground",
+            icon: Medal,
+            testId: "kpi-standing",
+          },
+          {
+            label: "PF Rank",
+            value: pfRank ? `#${pfRank}` : "—",
+            sub: pfRank ? `of ${total}` : null,
+            ctx: pfRank ? `${fmtPts(userTeam.pointsFor)} pts` : "No points yet",
+            ctxColor: pfRank ? rankTextColor(pfRank) : "text-muted-foreground",
+            icon: TrendingUp,
+            testId: "kpi-pf-rank",
+          },
+          {
+            label: "Max PF Rank",
+            value: maxPfRank ? `#${maxPfRank}` : "—",
+            sub: maxPfRank ? `of ${total}` : null,
+            ctx: maxPfRank ? `${fmtPts(userTeam.maxPointsFor)} max pts` : "No points yet",
+            ctxColor: maxPfRank ? rankTextColor(maxPfRank) : "text-muted-foreground",
+            icon: BarChart2,
+            testId: "kpi-maxpf-rank",
           },
           {
             label: "Playoff Odds",
-            value: `${clampedOdds}%`,
+            value: oddsLoading ? "…" : myOdds ? `${Math.round(myOdds.makePlayoffsPct)}%` : "—",
             sub: null,
-            ctx: clampedOdds >= 70 ? "Strong outlook" : clampedOdds >= 50 ? "Favorable" : clampedOdds >= 35 ? "On the bubble" : "Long shot",
-            ctxColor: oddsColor,
+            ctx: oddsLoading ? "Calculating…" : myOdds ? pctOutlook(myOdds.makePlayoffsPct) : "No schedule data",
+            ctxColor: myOdds ? oddsTextColor(myOdds.makePlayoffsPct) : "text-muted-foreground",
             icon: Target,
             testId: "kpi-playoff-odds",
           },
           {
-            label: "Avg Starter Age",
-            value: avgAge,
+            label: "Championship%",
+            value: oddsLoading ? "…" : myOdds ? `${fmtChampPct(myOdds.championshipPct)}%` : "—",
             sub: null,
-            ctx: `Lg avg: ${leagueAvgAge}`,
-            ctxColor: Number(avgAge) < Number(leagueAvgAge) ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400",
-            icon: Calendar,
-            testId: "kpi-starter-age",
-          },
-          {
-            label: "Future 1sts",
-            value: future1sts,
-            sub: null,
-            ctx: `Lg avg: ${leagueAvg1sts}`,
-            ctxColor: future1sts >= leagueAvg1sts ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400",
-            icon: Users,
-            testId: "kpi-future-1sts",
+            ctx: oddsLoading ? "Calculating…" : myOdds ? champOutlook(myOdds.championshipPct) : "No schedule data",
+            ctxColor: myOdds ? champTextColor(myOdds.championshipPct) : "text-muted-foreground",
+            icon: Trophy,
+            testId: "kpi-championship",
           },
         ].map(({ label, value, sub, ctx, ctxColor, icon: Icon, testId }) => (
           <Card key={label} className="p-4 flex items-center gap-3 hover-elevate" data-testid={testId}>
@@ -2040,17 +2075,12 @@ export function MyTeam({ league, userTeam, onNavigate }: DashboardOverviewProps)
         {/* Asset quality: 5-tier stacked bar + per-tier cards — needs width. */}
         <TierBreakdown league={league} userTeam={userTeam} />
 
-        {/* NFL Team Exposure: roster breakdown by NFL team, highlights favorite. */}
-        <NflTeamExposure userTeam={userTeam} />
-
-        {/* Age health + league standing — both happy at half-width on lg. */}
+        {/* Age health + dynasty value mix — both happy at half-width on lg. */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <AgeCurves league={league} userTeam={userTeam} />
-          <PowerDifferential league={league} userTeam={userTeam} />
+          <DynastyValueByPosition league={league} userTeam={userTeam} />
         </div>
 
-        {/* Qualitative wrap-up: 3 narrative cards inside, reads best full-width. */}
-        <RosterConstruction league={league} userTeam={userTeam} />
       </div>
 
       {/* ── 5. POSITION GROUPS (single collapsible, columns per position) ──── */}
@@ -2092,13 +2122,13 @@ export function MyTeam({ league, userTeam, onNavigate }: DashboardOverviewProps)
                     QB: "text-rose-500 dark:text-rose-400",
                     RB: "text-emerald-500 dark:text-emerald-400",
                     WR: "text-sky-500 dark:text-sky-400",
-                    TE: "text-yellow-500 dark:text-yellow-400",
+                    TE: "text-orange-500 dark:text-orange-400",
                   };
                   const posBgColor: Record<string, string> = {
                     QB: "bg-rose-500/10 border-rose-500/20 text-rose-600 dark:text-rose-400",
                     RB: "bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400",
                     WR: "bg-sky-500/10 border-sky-500/20 text-sky-600 dark:text-sky-400",
-                    TE: "bg-yellow-500/10 border-yellow-500/20 text-yellow-600 dark:text-yellow-400",
+                    TE: "bg-orange-500/10 border-orange-500/20 text-orange-600 dark:text-orange-400",
                   };
                   return (
                     <div key={pos} className="flex flex-col" data-testid={`group-${pos.toLowerCase()}`}>
@@ -2142,7 +2172,7 @@ export function MyTeam({ league, userTeam, onNavigate }: DashboardOverviewProps)
                             )}
                             {taxi.length > 0 && (
                               <>
-                                <p className="text-[9px] font-bold uppercase tracking-wider pt-2 pb-1 text-cyan-600 dark:text-cyan-400">Taxi</p>
+                                <p className="text-[9px] font-bold uppercase tracking-wider pt-2 pb-1 text-violet-600 dark:text-violet-400">Taxi</p>
                                 {taxi.map(p => (
                                   <GroupPlayerRow key={p.id} p={p} posTextColor={posTextColor[pos] ?? "text-foreground"} muted testIdPrefix="group-taxi" />
                                 ))}

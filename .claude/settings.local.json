@@ -19,7 +19,8 @@
       "Bash(awk -v s=3 '{print \\(s+NR-1\\)\": \"$0}')",
       "Bash(awk NR==3 *)",
       "Bash(awk NR==4 *)",
-      "Bash(awk NR==5{print} NR==6{print} NR==7{print} NR==8{print} NR==9{print} *)"
+      "Bash(awk NR==5{print} NR==6{print} NR==7{print} NR==8{print} NR==9{print} *)",
+      "Bash(echo \"EXIT:$?\")"
     ]
   }
 }

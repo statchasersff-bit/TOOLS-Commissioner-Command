@@ -3477,26 +3477,39 @@ export function TradeDatabase({ league }: { league: League }) {
             <h3 className="text-sm font-semibold">Most Traded Players</h3>
             <span className="text-xs text-muted-foreground">· past 7 days</span>
           </div>
+          {/* Column-first ordering: left column holds ranks 1–N/2, right column
+              holds the rest (so top 5 stack on the left, 6–10 on the right). On
+              mobile the two columns stack, preserving 1→N top-to-bottom. */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5">
-            {mostTraded.map((p, i) => (
-              <div
-                key={p.sleeperId}
-                className="flex items-center gap-2.5 py-1"
-                data-testid={`most-traded-row-${i}`}
-              >
-                <span className="text-xs font-bold text-muted-foreground w-5 flex-shrink-0 text-right">{i + 1}</span>
-                <div className="flex-1 min-w-0">
-                  <PlayerAvatar
-                    id={p.sleeperId}
-                    name={p.name}
-                    pos={p.pos}
-                    team={p.team ?? ""}
-                    size="sm"
-                    onClick={() => openPlayerProfile(p.sleeperId)}
-                  />
+            {(() => {
+              const half = Math.ceil(mostTraded.length / 2);
+              return [mostTraded.slice(0, half), mostTraded.slice(half)].map((col, colIdx) => (
+                <div key={colIdx} className="space-y-1.5">
+                  {col.map((p, j) => {
+                    const i = colIdx === 0 ? j : half + j;
+                    return (
+                      <div
+                        key={p.sleeperId}
+                        className="flex items-center gap-2.5 py-1"
+                        data-testid={`most-traded-row-${i}`}
+                      >
+                        <span className="text-xs font-bold text-muted-foreground w-5 flex-shrink-0 text-right">{i + 1}</span>
+                        <div className="flex-1 min-w-0">
+                          <PlayerAvatar
+                            id={p.sleeperId}
+                            name={p.name}
+                            pos={p.pos}
+                            team={p.team ?? ""}
+                            size="sm"
+                            onClick={() => openPlayerProfile(p.sleeperId)}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-              </div>
-            ))}
+              ));
+            })()}
           </div>
         </div>
       )}
@@ -3722,10 +3735,10 @@ export function TradeDatabase({ league }: { league: League }) {
           )}
         </div>
       ) : (
-        // Centered max-width list so cards stop stretching to the full
-        // tab width on large viewports — denser comparisons, less wasted
-        // empty space, more "premium dashboard" feel.
-        <div className="mx-auto w-full max-w-[1100px] space-y-3" data-testid="trade-db-results">
+        // Full-width list so the trade cards line up with the other sections
+        // (stats banner, Most Traded, search) instead of sitting in a narrower
+        // centered column.
+        <div className="w-full space-y-3" data-testid="trade-db-results">
           {displayedTrades.map((trade) => (
             <TradeCard
               key={trade.tradeId}

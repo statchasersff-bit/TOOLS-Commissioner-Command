@@ -213,6 +213,10 @@ export function DraftCommand() {
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [meta, setMeta] = useState<AdpResponseMeta | null>(null);
+  // Separate fetch for MoversPanel — always uses a fixed 7-day window so the
+  // "Biggest ADP movers" section is unaffected by the date range filter.
+  const [moversRows, setMoversRows] = useState<ADPResult[]>([]);
+  const [moversMeta, setMoversMeta] = useState<AdpResponseMeta | null>(null);
   // Corpus-wide ADP totals (real picks + dynasty drafts scanned). Global + cached.
   const [adpStats, setAdpStats] = useState<{ totalPicks: number; dynastyDraftsScanned: number } | null>(null);
   useEffect(() => {
@@ -303,6 +307,33 @@ export function DraftCommand() {
       controller.abort();
     };
   }, [filters, retryNonce]);
+
+  // Movers fetch — always 7-day window, re-runs only when non-date filters change.
+  useEffect(() => {
+    const end = new Date();
+    const start = new Date();
+    start.setDate(end.getDate() - 7);
+    const moversFilters: typeof filters = {
+      ...filters,
+      dateRange: { start: toIsoDate(start), end: toIsoDate(end) },
+    };
+    const url = buildAdpUrl(moversFilters);
+    const controller = new AbortController();
+    fetch(url, { signal: controller.signal })
+      .then((r) => r.json())
+      .then((data: AdpResponse) => {
+        if (controller.signal.aborted) return;
+        setMoversRows(Array.isArray(data.items) ? data.items : []);
+        setMoversMeta(data.meta ?? null);
+      })
+      .catch(() => {});
+    return () => { controller.abort(); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    filters.draftType, filters.rookieMode, filters.leagueMode, filters.draftFormat,
+    filters.scoring, filters.superflex, filters.tePremium, filters.bestBall,
+    filters.teams, filters.passTd, filters.season,
+  ]);
 
   const cancelScan = useCallback(() => {
     userCancelledRef.current = true;
@@ -407,9 +438,9 @@ export function DraftCommand() {
 
       {/* ── Biggest 7-day ADP movers (startup + rookie drafts) ───────────── */}
       <MoversPanel
-        rows={rows}
+        rows={moversRows}
         teams={typeof filters.teams === "number" ? filters.teams : 12}
-        totalDrafts={meta?.draft_count ?? null}
+        totalDrafts={moversMeta?.draft_count ?? null}
         mode={topTab}
       />
 

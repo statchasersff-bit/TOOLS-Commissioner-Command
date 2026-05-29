@@ -25,14 +25,17 @@ import {
   Table2,
   X,
 } from "lucide-react";
-import { computeQbCompositeScores, QB_SCORE_CATEGORIES } from "@/lib/qbCompositeScores";
-import { computeRbCompositeScores, RB_SCORE_CATEGORIES } from "@/lib/rbCompositeScores";
+import { computeQbCompositeScores, QB_SCORE_CATEGORIES, isQualifiedQb } from "@/lib/qbCompositeScores";
+import { computeRbCompositeScores, RB_SCORE_CATEGORIES, isQualifiedRb } from "@/lib/rbCompositeScores";
 import {
   computeWrCompositeScores,
   computeTeCompositeScores,
   WR_SCORE_CATEGORIES,
   TE_SCORE_CATEGORIES,
+  isQualifiedWr,
+  isQualifiedTe,
 } from "@/lib/receivingComposites";
+import { FeaturedGradeCards } from "@/components/player/FeaturedGradeCards";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type Position = "qb" | "rb" | "wr" | "te";
@@ -368,6 +371,15 @@ const SCORE_ENGINES: Record<Position, ScoreEngine> = {
   rb: { compute: computeRbCompositeScores as unknown as ScoreEngine["compute"], categories: RB_SCORE_CATEGORIES },
   wr: { compute: computeWrCompositeScores, categories: WR_SCORE_CATEGORIES },
   te: { compute: computeTeCompositeScores, categories: TE_SCORE_CATEGORIES },
+};
+
+// Percentile-baseline qualifiers per position — keep low-sample players from
+// topping a Featured "category leader" card on a tiny-sample fluke.
+const QUALIFIERS: Record<Position, (row: Record<string, unknown>) => boolean> = {
+  qb: isQualifiedQb,
+  rb: isQualifiedRb,
+  wr: isQualifiedWr,
+  te: isQualifiedTe,
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -1097,6 +1109,17 @@ export default function PositionStats() {
           <p className="text-sm font-semibold text-red-500 mb-1">Failed to load data</p>
           <p className="text-xs text-muted-foreground break-all">{error}</p>
         </Card>
+      )}
+
+      {/* ── Featured category leaders (Data sub-tab) ────────────────────── */}
+      {!loading && !error && data && subTab === "data" && scoredData && (
+        <FeaturedGradeCards
+          position={position}
+          rows={scoredData.rows}
+          categories={scoreCategories}
+          qualify={QUALIFIERS[position]}
+          onPlayerClick={(row) => openPlayerProfile(getPlayerKey(row))}
+        />
       )}
 
       {/* ── Compare sub-tab — selectors + transposed table ──────────────── */}
