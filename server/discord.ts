@@ -175,18 +175,20 @@ export function registerDiscordRoutes(app: Express): void {
     }
 
     // Reaction-based voting (OTC-style) replaces the native Discord poll. The
-    // question itself ("which side wins?") lives on the rendered image, so the
-    // text stays lean. When the image fails to render we fall back to listing
-    // the assets in text so no context is lost.
-    const lines: string[] = ["📊 **Dynasty Trade Poll**", `**${leagueName}**${leagueFormat ? ` · ${leagueFormat}` : ""}`];
-    if (tradeLink) lines.push(`🔗 <${tradeLink}>`);
+    // rendered image carries the league info, the two sides, and the "who wins?"
+    // question, so the message text stays lean and just spells out the vote.
+    // When the image fails to render we fall back to listing league + assets in
+    // text so no context is lost.
+    const lines: string[] = ["📊 **Dynasty Trade Poll**"];
     if (!poster) {
+      lines.push(`**${leagueName}**${leagueFormat ? ` · ${leagueFormat}` : ""}`);
       lines.push("", `**${sideALabel} receives:**`);
       for (const a of sideAReceives) lines.push(`• ${a.label}`);
       lines.push("", `**${sideBLabel} receives:**`);
       for (const a of sideBReceives) lines.push(`• ${a.label}`);
     }
-    lines.push("", "React to vote:", `${REACTIONS[0]} Side A wins`, `${REACTIONS[1]} Side B wins`, `${REACTIONS[2]} Fair trade`);
+    if (tradeLink) lines.push(`🔗 <${tradeLink}>`);
+    lines.push("", "React below:", `${REACTIONS[0]} Side A`, `${REACTIONS[1]} Side B`, `${REACTIONS[2]} Fair trade`);
     let content = lines.join("\n");
     if (content.length > 1900) content = content.slice(0, 1900) + "…";
 

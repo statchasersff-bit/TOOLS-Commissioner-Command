@@ -133,8 +133,11 @@ function ordinalRound(round: number): string {
 }
 
 function formatPickAssetLabel(season: string, round: number, pickNo?: number): string {
-  const base = `${season} ${ordinalRound(round)}`;
-  return pickNo ? `${base} (Pick ${pickNo})` : base;
+  // When Sleeper has assigned the exact draft slot (e.g. the rookie draft order
+  // is set), pickNo is the slot within the round — show dynasty "round.slot"
+  // notation, e.g. "2026 1.03". Otherwise fall back to the round, "2026 1st".
+  if (pickNo && pickNo > 0) return `${season} ${round}.${String(pickNo).padStart(2, "0")}`;
+  return `${season} ${ordinalRound(round)}`;
 }
 
 function formatExpiryLabel(expiresAt: number | null): string {
