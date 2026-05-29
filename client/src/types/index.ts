@@ -116,6 +116,13 @@ export interface SleeperLeagueSummary {
   status: string;
   isBestBall?: boolean;
   avatar?: string | null;
+  // Whether this league passes our automatic filter (active, drafted, with a
+  // roster the user owns). Default-eligible leagues are pre-selected in the
+  // master list; ineligible ones are hidden unless the user opts them in via
+  // Settings → Leagues. `filterReason` explains why an ineligible league was
+  // filtered (shown next to it in the manager).
+  eligibleByDefault: boolean;
+  filterReason?: string;
 }
 
 export interface TradeAssetPlayer {

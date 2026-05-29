@@ -94,6 +94,11 @@ export interface SleeperLeagueSummary {
   status: string;
   draftId: string | null;
   avatar: string | null;
+  // Passes the automatic filter (active, drafted, user owns a roster with
+  // players). Default-eligible leagues populate the master list; ineligible
+  // ones can still be opted into via Settings → Leagues.
+  eligibleByDefault: boolean;
+  filterReason?: string;
 }
 
 function deriveFormat(rosterPositions: string[]): string {
@@ -164,35 +169,44 @@ export async function fetchSleeperLeagues(
   if (!raw || !Array.isArray(raw)) {
     return [];
   }
-  const dynastyOnly = raw.filter((lg) => {
-    if (lg.settings?.type !== 2) return false;
-    if (lg.status === "inactive") return false;
-    if (lg.status === "pre_draft" && !lg.draft_id) return false;
-    return true;
-  });
+  // We surface every dynasty league (settings.type === 2) and tag each with
+  // whether it passes our automatic filter. Leagues that fail the filter are
+  // still returned (so users can opt them into the master list via
+  // Settings → Leagues) but flagged ineligible with a human-readable reason.
+  // Redraft (type 0) and keeper (type 1) leagues remain excluded entirely.
+  const dynastyOnly = raw.filter((lg) => lg.settings?.type === 2);
 
-  // Keep only leagues where the user owns a roster AND has players on it
-  // (excludes pre-draft leagues where the startup draft hasn't happened yet)
-  const rosterChecks = await Promise.all(
+  const evaluated = await Promise.all(
     dynastyOnly.map(async (lg) => {
+      // Status-based ineligibility — cheap, no extra request needed.
+      if (lg.status === "inactive") {
+        return { lg, eligibleByDefault: false, filterReason: "Inactive" };
+      }
+      if (lg.status === "pre_draft" && !lg.draft_id) {
+        return { lg, eligibleByDefault: false, filterReason: "Draft not scheduled" };
+      }
+      // Roster-based ineligibility — user must own a roster that has players
+      // (excludes pre-draft leagues where the startup draft hasn't happened).
       try {
         const rosters = await fetchJson<SleeperRosterRaw[]>(
           `${SLEEPER_API}/league/${lg.league_id}/rosters`
         );
         const userRoster = rosters.find((r) => r.owner_id === userId);
-        if (!userRoster) return null;
-        // Skip undrafted leagues — user has a roster slot but no players yet
-        if (!userRoster.players || userRoster.players.length === 0) return null;
-        return lg;
+        if (!userRoster) {
+          return { lg, eligibleByDefault: false, filterReason: "No team in this league" };
+        }
+        if (!userRoster.players || userRoster.players.length === 0) {
+          return { lg, eligibleByDefault: false, filterReason: "Not drafted yet" };
+        }
+        return { lg, eligibleByDefault: true, filterReason: undefined };
       } catch {
-        return lg; // on error, keep the league rather than silently hide it
+        // On error, treat as eligible rather than silently hiding the league.
+        return { lg, eligibleByDefault: true, filterReason: undefined };
       }
     })
   );
 
-  const withTeam = rosterChecks.filter((lg): lg is SleeperLeagueRaw => lg !== null);
-
-  return withTeam.map((lg) => ({
+  return evaluated.map(({ lg, eligibleByDefault, filterReason }) => ({
     leagueId: lg.league_id,
     name: lg.name,
     season: lg.season,
@@ -204,6 +218,8 @@ export async function fetchSleeperLeagues(
     draftId: lg.draft_id ?? null,
     avatar: (lg as any).avatar ?? null,
     isBestBall: lg.settings?.best_ball === 1,
+    eligibleByDefault,
+    filterReason,
   }));
 }
 

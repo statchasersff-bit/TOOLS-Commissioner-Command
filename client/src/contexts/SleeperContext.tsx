@@ -25,10 +25,45 @@ function writePersistedLeague(userId: string, leagueId: string | null) {
   } catch { /* ignore */ }
 }
 
+// Master-list preferences: which leagues the user has manually opted into or
+// out of, relative to the automatic filter. We persist a DELTA (not the full
+// included set) so that newly-eligible leagues (e.g. a startup that just got
+// drafted) auto-appear, while the user's explicit choices are preserved:
+//   included(lg) = lg.eligibleByDefault ? !removed.has(id) : added.has(id)
+// Scoped per-user, same as the active-league key, to avoid cross-account leak.
+export interface LeaguePrefs { added: string[]; removed: string[] }
+const EMPTY_LEAGUE_PREFS: LeaguePrefs = { added: [], removed: [] };
+const LEAGUE_PREFS_KEY_PREFIX = "sc-league-prefs:";
+function leaguePrefsKey(userId: string) { return `${LEAGUE_PREFS_KEY_PREFIX}${userId}`; }
+function readLeaguePrefs(userId: string): LeaguePrefs {
+  try {
+    const raw = localStorage.getItem(leaguePrefsKey(userId));
+    if (!raw) return EMPTY_LEAGUE_PREFS;
+    const parsed = JSON.parse(raw);
+    return {
+      added: Array.isArray(parsed?.added) ? parsed.added.filter((x: unknown): x is string => typeof x === "string") : [],
+      removed: Array.isArray(parsed?.removed) ? parsed.removed.filter((x: unknown): x is string => typeof x === "string") : [],
+    };
+  } catch { return EMPTY_LEAGUE_PREFS; }
+}
+function writeLeaguePrefs(userId: string, prefs: LeaguePrefs) {
+  try { localStorage.setItem(leaguePrefsKey(userId), JSON.stringify(prefs)); } catch { /* ignore */ }
+}
+function isLeagueIncluded(lg: SleeperLeagueSummary, prefs: LeaguePrefs): boolean {
+  return lg.eligibleByDefault
+    ? !prefs.removed.includes(lg.leagueId)
+    : prefs.added.includes(lg.leagueId);
+}
+
 interface SleeperState {
   isConnected: boolean;
   user: SleeperUser | null;
+  /** The master list — leagues the user has included, consumed app-wide. */
   leagues: SleeperLeagueSummary[];
+  /** Every dynasty league we found, including ones filtered out by default. */
+  allLeagues: SleeperLeagueSummary[];
+  /** IDs currently in the master list (derived from allLeagues + prefs). */
+  includedLeagueIds: string[];
   activeLeagueId: string | null;
   activeLeague: SleeperLeagueSummary | null;
   isLoading: boolean;
@@ -38,6 +73,8 @@ interface SleeperState {
   disconnect: () => void;
   setActiveLeague: (leagueId: string) => void;
   setActiveLeagueById: (leagueId: string | null) => void;
+  /** Opt a league into / out of the master list (persisted per-user). */
+  setLeagueIncluded: (leagueId: string, included: boolean) => void;
   refresh: () => Promise<void>;
 }
 
@@ -46,8 +83,17 @@ const SleeperContext = createContext<SleeperState | null>(null);
 export function SleeperProvider({ children }: { children: React.ReactNode }) {
   const { sleeperInfo, readOnlySleeperUser } = useAuth();
   const [user, setUser] = useState<SleeperUser | null>(null);
-  const [leagues, setLeagues] = useState<SleeperLeagueSummary[]>([]);
+  const [allLeagues, setAllLeagues] = useState<SleeperLeagueSummary[]>([]);
+  const [leaguePrefs, setLeaguePrefs] = useState<LeaguePrefs>(EMPTY_LEAGUE_PREFS);
   const [activeLeagueId, setActiveLeagueId] = useState<string | null>(null);
+
+  // The master list the rest of the app consumes — allLeagues minus the ones
+  // filtered out by default, plus any the user manually opted in.
+  const leagues = useMemo(
+    () => allLeagues.filter((lg) => isLeagueIncluded(lg, leaguePrefs)),
+    [allLeagues, leaguePrefs]
+  );
+  const includedLeagueIds = useMemo(() => leagues.map((l) => l.leagueId), [leagues]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
@@ -97,16 +143,22 @@ export function SleeperProvider({ children }: { children: React.ReactNode }) {
       }
 
       const leaguesData = await fetchSleeperLeagues(userData.userId, "2026");
-      setLeagues(leaguesData);
+      setAllLeagues(leaguesData);
       setLastSyncTime(new Date().toISOString());
+
+      // Load the user's master-list preferences and compute the included set
+      // (the leagues that actually surface across the app).
+      const prefs = readLeaguePrefs(userData.userId);
+      setLeaguePrefs(prefs);
+      const included = leaguesData.filter((l) => isLeagueIncluded(l, prefs));
 
       // Restore the user's last-selected league (per-user, never cross-account).
       const persisted = readPersistedLeague(userData.userId);
-      if (persisted && leaguesData.some((l) => l.leagueId === persisted)) {
+      if (persisted && included.some((l) => l.leagueId === persisted)) {
         setActiveLeagueId(persisted);
-      } else if (leaguesData.length > 0) {
+      } else if (included.length > 0) {
         // Sensible default so league-specific views aren't perma-empty on first load.
-        const fallback = leaguesData[0].leagueId;
+        const fallback = included[0].leagueId;
         setActiveLeagueId(fallback);
         writePersistedLeague(userData.userId, fallback);
       } else {
@@ -118,7 +170,8 @@ export function SleeperProvider({ children }: { children: React.ReactNode }) {
       // and a transient network blip doesn't kick the user back to the connect form.
       if (!opts.preserveStubOnError) {
         setUser(null);
-        setLeagues([]);
+        setAllLeagues([]);
+        setLeaguePrefs(EMPTY_LEAGUE_PREFS);
       }
     } finally {
       setIsLoading(false);
@@ -131,12 +184,36 @@ export function SleeperProvider({ children }: { children: React.ReactNode }) {
 
   const disconnect = useCallback(() => {
     setUser(null);
-    setLeagues([]);
+    setAllLeagues([]);
+    setLeaguePrefs(EMPTY_LEAGUE_PREFS);
     setActiveLeagueId(null);
     setError(null);
     setLastSyncTime(null);
     lastAutoLoadedUsernameRef.current = null;
   }, []);
+
+  // Opt a league into / out of the master list. Persists a delta from the
+  // automatic filter (see LeaguePrefs) so newly-eligible leagues still appear.
+  const setLeagueIncluded = useCallback((leagueId: string, included: boolean) => {
+    const lg = allLeagues.find((l) => l.leagueId === leagueId);
+    if (!lg) return;
+    setLeaguePrefs((prev) => {
+      const addId = (list: string[]) => (list.includes(leagueId) ? list : [...list, leagueId]);
+      const dropId = (list: string[]) => list.filter((id) => id !== leagueId);
+      let added = prev.added;
+      let removed = prev.removed;
+      if (included) {
+        if (lg.eligibleByDefault) removed = dropId(removed);
+        else added = addId(added);
+      } else {
+        if (lg.eligibleByDefault) removed = addId(removed);
+        else added = dropId(added);
+      }
+      const next: LeaguePrefs = { added, removed };
+      if (user?.userId) writeLeaguePrefs(user.userId, next);
+      return next;
+    });
+  }, [allLeagues, user?.userId]);
 
   const setActiveLeague = useCallback((leagueId: string) => {
     setActiveLeagueId(leagueId);
@@ -154,6 +231,19 @@ export function SleeperProvider({ children }: { children: React.ReactNode }) {
     () => leagues.find((l) => l.leagueId === activeLeagueId) ?? null,
     [leagues, activeLeagueId]
   );
+
+  // Keep the active league valid as the master list changes — e.g. the user
+  // unchecks the currently-active league in Settings → Leagues. Fall back to
+  // the first included league, or null when none remain.
+  useEffect(() => {
+    if (allLeagues.length === 0) return; // not loaded yet — don't clobber
+    const stillValid = activeLeagueId != null && leagues.some((l) => l.leagueId === activeLeagueId);
+    if (stillValid) return;
+    const next = leagues.length > 0 ? leagues[0].leagueId : null;
+    if (next === activeLeagueId) return;
+    setActiveLeagueId(next);
+    if (user?.userId) writePersistedLeague(user.userId, next);
+  }, [leagues, activeLeagueId, allLeagues.length, user?.userId]);
 
   const refresh = useCallback(async () => {
     if (!user) return;
@@ -174,7 +264,8 @@ export function SleeperProvider({ children }: { children: React.ReactNode }) {
     const linkedUserId = sleeperInfo?.userId ?? readOnlySleeperUser?.userId ?? null;
     if (!linkedUsername) {
       setUser(null);
-      setLeagues([]);
+      setAllLeagues([]);
+      setLeaguePrefs(EMPTY_LEAGUE_PREFS);
       setActiveLeagueId(null);
       setError(null);
       setLastSyncTime(null);
@@ -200,6 +291,8 @@ export function SleeperProvider({ children }: { children: React.ReactNode }) {
         isConnected,
         user,
         leagues,
+        allLeagues,
+        includedLeagueIds,
         activeLeagueId,
         activeLeague,
         isLoading,
@@ -209,6 +302,7 @@ export function SleeperProvider({ children }: { children: React.ReactNode }) {
         disconnect,
         setActiveLeague,
         setActiveLeagueById,
+        setLeagueIncluded,
         refresh,
       }}
     >

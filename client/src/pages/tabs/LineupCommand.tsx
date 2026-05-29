@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { useSleeper } from "@/contexts/SleeperContext";
 import { getSleeperPlayers } from "@/lib/sleeperApi";
 import { cn } from "@/lib/utils";
+import { getPositionColor } from "@/data/mockData";
 import {
   AlertTriangle, TrendingUp, Zap, Users, CalendarX,
   ChevronDown, ChevronUp, RefreshCw, Lock, CheckCircle2,
@@ -52,6 +53,7 @@ interface SwapRec {
   inName: string;
   outName: string;
   inPos: string;
+  outPos: string;
   projGain: number;
 }
 
@@ -249,9 +251,10 @@ function analyzeLineup(
   );
   const swaps: SwapRec[] = filteredRecommendations
     .map(r => ({
-      inName:   lastName(playerDb, r.in.player_id),
-      outName:  r.out?.player_id ? lastName(playerDb, r.out.player_id) : "—",
+      inName:   fullName(playerDb, r.in.player_id),
+      outName:  r.out?.player_id ? fullName(playerDb, r.out.player_id) : "—",
       inPos:    r.in.pos || playerPos(playerDb, r.in.player_id),
+      outPos:   r.out?.player_id ? (r.out.pos || playerPos(playerDb, r.out.player_id)) : "",
       projGain: r.delta,
     }))
     .filter(s => s.projGain > 0.5);
@@ -537,14 +540,17 @@ function LeagueRow({ analysis, preseason, onApplied }: { analysis: LeagueAnalysi
               </p>
               <div className="space-y-1.5">
                 {swaps.map((swap, i) => (
-                  <div key={i} className="flex items-center gap-2 rounded-lg px-3 py-2 bg-[var(--sc-success-soft)] border border-[var(--sc-success-border)] dark-any:bg-emerald-500/5 dark-any:border-emerald-500/15">
-                    <TrendingUp className="w-3 h-3 text-[var(--sc-success)] dark-any:text-emerald-400 flex-shrink-0" />
-                    <span className="text-[10px] md:text-[11px] text-[var(--sc-text-muted)] dark-any:text-white/50">Start</span>
-                    <span className="text-[11px] md:text-xs font-bold text-[var(--sc-success)] dark-any:text-emerald-300">{swap.inName}</span>
-                    <Badge variant="outline" className="text-[7px] px-1 py-0 h-3.5 border-[var(--sc-success-border)] text-[var(--sc-success)] dark-any:border-emerald-500/30 dark-any:text-emerald-400/70">{swap.inPos}</Badge>
+                  <div key={i} className="flex items-center gap-2 rounded-lg px-3 py-2 border border-[var(--sc-border)] dark-any:border-white/10">
+                    <TrendingUp className="w-3 h-3 text-[var(--sc-text-muted)] dark-any:text-white/40 flex-shrink-0" />
+                    <span className="text-[10px] md:text-[11px] font-semibold text-[var(--sc-success)] dark-any:text-emerald-400">Start</span>
+                    <span className="text-[11px] md:text-xs font-bold text-[var(--sc-text)] dark-any:text-white/90">{swap.inName}</span>
+                    <Badge variant="outline" className={cn("text-[7px] px-1 py-0 h-3.5 border", getPositionColor(swap.inPos))}>{swap.inPos}</Badge>
                     <ArrowRight className="w-3 h-3 text-[var(--sc-text-muted)]/60 dark-any:text-white/20 flex-shrink-0 mx-1" />
                     <span className="text-[10px] md:text-[11px] text-[var(--sc-text-muted)] dark-any:text-white/40">over</span>
                     <span className="text-[11px] md:text-xs font-semibold text-[var(--sc-text)] dark-any:text-white/60">{swap.outName}</span>
+                    {swap.outPos && (
+                      <Badge variant="outline" className={cn("text-[7px] px-1 py-0 h-3.5 border", getPositionColor(swap.outPos))}>{swap.outPos}</Badge>
+                    )}
                     {swap.projGain > 0 && (
                       <span className="ml-auto text-[10px] font-bold tabular-nums text-[var(--sc-success)] dark-any:text-emerald-400">+{fmt1(swap.projGain)} pts</span>
                     )}
