@@ -1855,9 +1855,10 @@ function buildLeagueContextSummary(ranks: LeagueRosterRank, total: number): stri
   else if (strongNow) lead = "One of the strongest win-now rosters in this league";
   else if (topHalf(dyn)) lead = "An above-average roster in this league";
   else lead = "A middle-to-lower roster in this league";
-  const ranksClause = `They rank #${dyn} in dynasty value, #${win} in win-now value, and #${youth} in roster youth${
-    pick != null ? `, #${pick} in pick capital` : ""
-  }.`;
+  const ranksClause =
+    pick != null
+      ? `They rank #${dyn} in dynasty value, #${win} in win-now value, #${youth} in roster youth, and #${pick} in pick capital.`
+      : `They rank #${dyn} in dynasty value, #${win} in win-now value, and #${youth} in roster youth.`;
   const tail =
     strongNow && strongFuture
       ? "That makes them a difficult trade target unless you offer premium long-term assets."

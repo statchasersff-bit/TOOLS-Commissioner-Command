@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Textarea } from "@/components/ui/textarea";
 import { useSleeper } from "@/contexts/SleeperContext";
 import { sendLeagueChatMessage } from "@/services/sleeperAuthedApi";
 import { sleeperWriteLimiter } from "@/services/sleeperWriteLimiter";
@@ -61,6 +62,7 @@ interface ShareQueue {
   paused: boolean;
   createdAt: number;
   rateLimited?: boolean; // true after any 429 — forces Phase 2 delays for all future sends
+  message?: string;      // the (possibly user-edited) chat message to send; falls back to SHARE_MESSAGE
 }
 
 // ── localStorage / sessionStorage helpers ─────────────────────────────────
@@ -160,6 +162,7 @@ export function ShareDynastyPopup({ blocked = false, forceOpen = false, onForceO
   const [popupStep, setPopupStep]   = useState<PopupStep>("hidden");
   const [selected, setSelected]     = useState<Set<string>>(new Set());
   const [isExpanded, setIsExpanded] = useState(false);
+  const [message, setMessage]       = useState(SHARE_MESSAGE);
   const [queueState, setQueueState] = useState<ShareQueue | null>(() => {
     const q = loadQueue();
     if (!q) return null;
@@ -227,7 +230,7 @@ export function ShareDynastyPopup({ blocked = false, forceOpen = false, onForceO
     // Gate every chat send on the global write limiter — protects against
     // overlap with bulk-trade / waiver / lineup queues running concurrently.
     sleeperWriteLimiter.waitTurn("chat")
-      .then(() => sendLeagueChatMessage(q.items[idx].leagueId, SHARE_MESSAGE))
+      .then(() => sendLeagueChatMessage(q.items[idx].leagueId, q.message ?? SHARE_MESSAGE))
       .then(() => {
         markLeagueSent(snap.items[idx].leagueId);
 
@@ -381,6 +384,7 @@ export function ShareDynastyPopup({ blocked = false, forceOpen = false, onForceO
       items: toSend.map(l => ({ leagueId: l.leagueId, name: l.name, status: "pending", retries: 0 })),
       paused: false,
       createdAt: Date.now(),
+      message: message.trim() || SHARE_MESSAGE,
     };
     setQueue(newQueue);
     setPopupStep("hidden");
@@ -623,7 +627,7 @@ export function ShareDynastyPopup({ blocked = false, forceOpen = false, onForceO
                 <div className="flex items-center gap-2">
                   <Share2 className="w-3.5 h-3.5 text-[#d4af37]" />
                   <span className="text-sm font-bold text-white">
-                    {popupStep === "prompt"  ? "Enjoying Dynasty Command?"
+                    {popupStep === "prompt"  ? "Friend, We Need Your Help"
                      : popupStep === "select" ? "Share Dynasty Command"
                      : "Confirm & Start Sharing"}
                   </span>
@@ -646,19 +650,19 @@ export function ShareDynastyPopup({ blocked = false, forceOpen = false, onForceO
               {popupStep === "prompt" && (
                 <>
                   <p className="text-[13px] text-muted-foreground leading-relaxed">
-                    Help keep it free by sharing Dynasty Command with your dynasty leagues.
+                    We spend a hours every day keeping the tool up-to-date and develop new features. Can you take a few seconds and share it with your leaguemates to help keep it free-to-use?
                   </p>
                   <div className="flex gap-2">
                     <Button size="sm" variant="ghost"
-                      className="flex-1 h-8 text-[12px] border border-border/40"
+                      className="flex-1 h-8 text-[12px] border border-red-500/50 text-red-400 hover:bg-red-500/10 hover:text-red-300"
                       onClick={() => dismiss(true)}>
-                      Maybe Later
+                      No, I don't care if you charge
                     </Button>
                     <Button size="sm"
                       className="flex-1 h-8 text-[12px] bg-gradient-to-r from-[#d4af37] to-[#b8962e] text-black font-bold hover:opacity-90"
                       onClick={() => setPopupStep("select")}>
                       <Share2 className="w-3 h-3 mr-1.5" />
-                      Share to League Chat
+                      See My Leagues
                     </Button>
                   </div>
                 </>
@@ -674,7 +678,7 @@ export function ShareDynastyPopup({ blocked = false, forceOpen = false, onForceO
                   ) : (
                     <>
                       <p className="text-[12px] text-muted-foreground leading-relaxed">
-                        Select leagues to share to. The first 5 send quickly (3–6 seconds apart); additional leagues send every 2–4 minutes in the background.
+                        Thank you for helping. Please select the leagues you are able to share the tool with and we'll handle the rest
                       </p>
 
                       {/* Select all */}
@@ -684,8 +688,7 @@ export function ShareDynastyPopup({ blocked = false, forceOpen = false, onForceO
                       >
                         <Checkbox
                           checked={allSelected}
-                          onCheckedChange={toggleAll}
-                          className="border-[#d4af37]/50 data-[state=checked]:bg-[#d4af37] data-[state=checked]:border-[#d4af37]"
+                          className="pointer-events-none border-[#d4af37]/50 data-[state=checked]:bg-[#d4af37] data-[state=checked]:border-[#d4af37]"
                         />
                         <span className="text-[12px] font-semibold text-white">Select All Dynasty Leagues</span>
                         <span className="text-[10px] text-muted-foreground/60 ml-auto">{eligibleLeagues.length} available</span>
@@ -708,8 +711,7 @@ export function ShareDynastyPopup({ blocked = false, forceOpen = false, onForceO
                             >
                               <Checkbox
                                 checked={isChecked}
-                                onCheckedChange={() => toggleLeague(league.leagueId)}
-                                className="border-[#d4af37]/50 data-[state=checked]:bg-[#d4af37] data-[state=checked]:border-[#d4af37]"
+                                className="pointer-events-none border-[#d4af37]/50 data-[state=checked]:bg-[#d4af37] data-[state=checked]:border-[#d4af37]"
                               />
                               <span className="text-[12px] text-white truncate flex-1">{league.name}</span>
                               <span className="text-[10px] text-muted-foreground/60 flex-shrink-0">{league.totalRosters} teams</span>
@@ -730,7 +732,7 @@ export function ShareDynastyPopup({ blocked = false, forceOpen = false, onForceO
                       className="flex-1 h-8 text-[12px] bg-gradient-to-r from-[#d4af37] to-[#b8962e] text-black font-bold hover:opacity-90 disabled:opacity-40"
                       disabled={selected.size === 0}
                       onClick={() => setPopupStep("confirm")}>
-                      Review & Confirm <ChevronRight className="w-3 h-3 ml-1" />
+                      See Message <ChevronRight className="w-3 h-3 ml-1" />
                     </Button>
                   </div>
                 </>
@@ -766,25 +768,37 @@ export function ShareDynastyPopup({ blocked = false, forceOpen = false, onForceO
                     </div>
                   )}
 
-                  {/* Message preview */}
+                  {/* Editable message */}
                   <div className="rounded-lg border border-border/30 bg-white/[0.02] px-3 py-2.5">
-                    <p className="text-[10px] text-muted-foreground/60 mb-1.5 font-medium uppercase tracking-wider">
-                      Message
-                    </p>
-                    <p className="text-[11px] text-muted-foreground whitespace-pre-line leading-relaxed">
-                      {SHARE_MESSAGE}
-                    </p>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <p className="text-[10px] text-muted-foreground/60 font-medium uppercase tracking-wider">
+                        Message
+                      </p>
+                      {message.trim() !== SHARE_MESSAGE.trim() && (
+                        <button
+                          type="button"
+                          className="text-[10px] text-[#d4af37]/70 hover:text-[#d4af37]"
+                          onClick={() => setMessage(SHARE_MESSAGE)}
+                        >
+                          Reset
+                        </button>
+                      )}
+                    </div>
+                    <Textarea
+                      value={message}
+                      onChange={(e) => setMessage(e.target.value)}
+                      rows={5}
+                      maxLength={1000}
+                      placeholder="Write the message to send to your leagues…"
+                      className="text-[11px] text-muted-foreground leading-relaxed bg-transparent border-border/30 resize-y min-h-[88px]"
+                    />
                   </div>
 
                   <p className="text-[11px] text-muted-foreground/50 leading-relaxed">
-                    You can pause or cancel from the progress indicator at any time. Dynasty Command remains fully usable while the queue runs.
+                    You can pause or cancel from the progress indicator at any time. Dynasty Command remains fully usable while it is being shared
                   </p>
 
-                  {isWriteEnabled() ? (
-                    <SafePacingNotice variant="idle" batchSize={selected.size} />
-                  ) : (
-                    <SafePacingNotice variant="kill" />
-                  )}
+                  {!isWriteEnabled() && <SafePacingNotice variant="kill" />}
 
                   <div className="flex items-center gap-2 pt-1">
                     <Button size="sm" variant="ghost"

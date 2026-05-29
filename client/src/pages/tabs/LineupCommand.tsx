@@ -1167,7 +1167,7 @@ function IrTaxiLeagueCard({ a }: { a: IrTaxiAnalysis }) {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Injured Reserve */}
         <div>
-          <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-white/35 mb-2">Injured Reserve</p>
+          <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-[#d4af37] mb-2">Injured Reserve</p>
           {ineligibleCount > 0 && (
             <p className="text-[10px] mb-1 text-red-400/80">
               {ineligibleCount} player{ineligibleCount === 1 ? "" : "s"} no longer IR-eligible — move off IR or it blocks your lineup.
@@ -1188,7 +1188,7 @@ function IrTaxiLeagueCard({ a }: { a: IrTaxiAnalysis }) {
 
         {/* IR candidates */}
         <div>
-          <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-white/35 mb-2">Can Move to IR</p>
+          <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-[#d4af37] mb-2">Can Move to IR</p>
           {!hasIr ? (
             <p className="text-[11px] text-white/30 py-1">—</p>
           ) : a.irCandidates.length ? (
@@ -1214,7 +1214,7 @@ function IrTaxiLeagueCard({ a }: { a: IrTaxiAnalysis }) {
 
         {/* Taxi squad */}
         <div>
-          <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-white/35 mb-2">Taxi Squad</p>
+          <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-[#d4af37] mb-2">Taxi Squad</p>
           {a.taxiCapacity > 0 || a.taxiPlayers.length ? (
             <div className="flex flex-wrap gap-1.5">
               {a.taxiPlayers.map(p => <IrTaxiPlayerChip key={p.pid} p={p} />)}

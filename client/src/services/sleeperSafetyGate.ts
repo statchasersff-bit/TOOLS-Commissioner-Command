@@ -273,6 +273,22 @@ export function isGeneralMessagingEnabled(): boolean {
 }
 
 /**
+ * The opt-in "share Dynasty Command to your league chats" feature. Posts to
+ * league chat (parent_type: "league") only — NOT free-text DMs. Gated
+ * independently of general messaging so the share feature can ship without
+ * re-opening every messaging surface. Default: disabled.
+ * Set VITE_ENABLE_LEAGUE_SHARE=true to enable.
+ */
+export function isLeagueShareEnabled(): boolean {
+  try {
+    const v = (import.meta as any)?.env?.VITE_ENABLE_LEAGUE_SHARE;
+    return typeof v === "string" && v.trim().toLowerCase() === "true";
+  } catch {
+    return false;
+  }
+}
+
+/**
  * The controlled, automatic post-trade "Dynasty Command link" DM. Default:
  * enabled. Set VITE_ENABLE_TRADE_LINK_DM=false to disable.
  */
@@ -413,6 +429,7 @@ export const sleeperSafetyGate = {
   preflightBatch,
   ACTION_CAPS,
   isGeneralMessagingEnabled,
+  isLeagueShareEnabled,
   isTradeLinkDmEnabled,
   canSendTradeLinkDm,
   recordTradeLinkDm,

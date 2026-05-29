@@ -27,6 +27,7 @@ import {
   recordWrite as recordSafetyWrite,
   isGeneralMessagingEnabled,
   isTradeLinkDmEnabled,
+  isLeagueShareEnabled,
   MESSAGING_DISABLED_MESSAGE,
   canSendTradeLinkDm,
   recordTradeLinkDm,
@@ -48,9 +49,11 @@ interface GQLRequest {
     leagueId?: string;
     /** Required when calling create_message. "trade-link" is the controlled
      *  automatic post-trade DM (only allowed when VITE_ENABLE_TRADE_LINK_DM
-     *  is on); "general" covers every other create_message and is only
-     *  allowed when VITE_ENABLE_GENERAL_SLEEPER_MESSAGES is on. */
-    messagingIntent?: "trade-link" | "general";
+     *  is on); "league-share" is the opt-in "share Dynasty Command to your
+     *  league chats" feature (only allowed when VITE_ENABLE_LEAGUE_SHARE is
+     *  on); "general" covers every other create_message and is only allowed
+     *  when VITE_ENABLE_GENERAL_SLEEPER_MESSAGES is on. */
+    messagingIntent?: "trade-link" | "league-share" | "general";
   };
 }
 
@@ -143,6 +146,12 @@ export async function sleeperGraphQLRequest<T = unknown>(
       if (!isTradeLinkDmEnabled()) {
         // eslint-disable-next-line no-console
         console.warn(`${logPrefix} blocked: trade-link DM disabled by env flag`);
+        throw new Error(MESSAGING_DISABLED_MESSAGE);
+      }
+    } else if (intent === "league-share") {
+      if (!isLeagueShareEnabled()) {
+        // eslint-disable-next-line no-console
+        console.warn(`${logPrefix} blocked: league-share disabled by env flag`);
         throw new Error(MESSAGING_DISABLED_MESSAGE);
       }
     } else if (intent === "general") {
@@ -1447,7 +1456,7 @@ export async function sendLeagueChatMessage(
       }
     `,
     variables: { text },
-    meta: { messagingIntent: "general" },
+    meta: { messagingIntent: "league-share" },
   });
   return data.create_message;
 }

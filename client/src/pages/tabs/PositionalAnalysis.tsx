@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { useValueModel } from "@/contexts/ValueModelContext";
 import { getLeagueTeamTiers, getTierColor, getTierEmoji, getPositionColor, isContenderTier, isRebuilderTier } from "@/data/mockData";
 import { cn } from "@/lib/utils";
-import { sideValue } from "@/lib/tradeValue";
+import { sideValue, rawTotal } from "@/lib/tradeValue";
 import type { League, Team, Player, Pick, Tier } from "@/types";
 import { formatPickLabel } from "@/types";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
@@ -206,6 +206,7 @@ function generateTradeIdeas(
   returnSizes: Set<number>,
   getPlayerValue: (p: Player) => number,
   getPickValue: (pk: Pick) => number,
+  valueOf: (values: number[]) => number,
 ): ManagerIdeaGroup[] {
   if (offerValue <= 0) return [];
   const BAND = 0.15;
@@ -240,9 +241,9 @@ function generateTradeIdeas(
     const ideas: TradeIdea[] = [];
     const consider = (assets: IdeaAsset[]) => {
       if (assets.length === 0) return;
-      // Adjusted value (diminishing returns + overpay tax) — same model the Trade
-      // Calculator uses — compared against the equally-adjusted offer value.
-      const getValue = sideValue(assets.map((a) => a.value));
+      // Value the package with the user's chosen model (adjusted or raw),
+      // compared against the offer valued the same way.
+      const getValue = valueOf(assets.map((a) => a.value));
       if (getValue < lo || getValue > hi) return;
       const key = assets.map((a) => a.id).sort().join("+");
       if (seen.has(key)) return;
@@ -305,6 +306,7 @@ function IdeaGenerator({ userTeam, league }: { userTeam: Team; league: League })
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [posFilters, setPosFilters] = useState<Set<string>>(new Set(IDEA_POSITION_FILTERS));
   const [returnSizes, setReturnSizes] = useState<Set<number>>(new Set([1, 2, 3]));
+  const [useAdjustedValues, setUseAdjustedValues] = useState(true);
   const [membersOpen, setMembersOpen] = useState(false);
   const [result, setResult] = useState<{ offer: IdeaAsset[]; offerValue: number; groups: ManagerIdeaGroup[] } | null>(null);
 
@@ -353,14 +355,15 @@ function IdeaGenerator({ userTeam, league }: { userTeam: Team; league: League })
           : { id: r.id, label: formatPickLabel(r.pick), isPick: true, value: r.dynasty },
       );
     if (offer.length === 0) return;
-    // Adjusted value of the offered package (diminishing returns + overpay tax),
-    // matching the Trade Calculator — not a plain sum of dynasty values.
-    const offerValue = sideValue(offer.map((a) => a.value));
+    // Value the offered package with the user's chosen model: adjusted (diminishing
+    // returns + overpay tax, matching the Trade Calculator) or a plain raw sum.
+    const valueOf = useAdjustedValues ? sideValue : rawTotal;
+    const offerValue = valueOf(offer.map((a) => a.value));
     const managers = otherTeams.filter((t) => targetMembers.has(t.id));
     setResult({
       offer,
       offerValue,
-      groups: generateTradeIdeas(offerValue, managers, posFilters, returnSizes, getPlayerValue, getPickValue),
+      groups: generateTradeIdeas(offerValue, managers, posFilters, returnSizes, getPlayerValue, getPickValue, valueOf),
     });
   };
 
@@ -546,6 +549,41 @@ function IdeaGenerator({ userTeam, league }: { userTeam: Team; league: League })
               );
             })}
           </div>
+        </div>
+
+        {/* Valuation model — adjusted (trade up/down + best-asset tax) vs. raw sum */}
+        <div>
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Trade values</span>
+          <div className="flex flex-wrap gap-1.5 mt-1.5">
+            {[
+              { on: true, label: "Adjusted", hint: "Diminishing returns + overpay tax" },
+              { on: false, label: "Raw", hint: "Plain sum of values" },
+            ].map(({ on, label, hint }) => {
+              const active = useAdjustedValues === on;
+              return (
+                <button
+                  key={label}
+                  onClick={() => setUseAdjustedValues(on)}
+                  data-testid={`idea-values-${on ? "adjusted" : "raw"}`}
+                  aria-pressed={active}
+                  title={hint}
+                  className={cn(
+                    "px-3 py-1.5 rounded-lg text-[12px] font-semibold border transition-colors",
+                    active
+                      ? "bg-[#d4af37]/15 border-[#d4af37]/40 text-[#d4af37]"
+                      : "border-border/50 text-muted-foreground hover:text-foreground hover:bg-muted/30",
+                  )}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+          <p className="text-[10px] text-muted-foreground mt-1.5">
+            {useAdjustedValues
+              ? "Packages valued like the Trade Calculator. Adjustments made for trading up/down and best asset in the deal"
+              : "Packages valued as a plain sum of dynasty values."}
+          </p>
         </div>
 
         {/* Target managers + generate */}
@@ -1345,6 +1383,7 @@ interface WinNowIdea {
 
 function TradeOpportunities({ league, userTeam }: { league: League; userTeam: Team }) {
   const [mode, setMode] = useState<"win-now" | "rebuild">("win-now");
+  const [useAdjustedValues, setUseAdjustedValues] = useState(true);
 
   const modeToggle = (
     <div className="grid flex-shrink-0" style={{ gridTemplateColumns: "1fr 1fr", height: 56, borderRadius: 16, padding: 4, background: "var(--sc-toggle-bg)", border: "1px solid var(--sc-toggle-border)", gap: 4, width: 280 }}>
@@ -1404,8 +1443,43 @@ function TradeOpportunities({ league, userTeam }: { league: League; userTeam: Te
         </div>
       </div>
 
-      {mode === "win-now" && <WinNowMode  league={league} userTeam={userTeam} />}
-      {mode === "rebuild" && <RebuildMode league={league} userTeam={userTeam} />}
+      {/* Dynasty valuation model — adjusted (trade up/down + best-asset tax) vs. raw sum */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Dynasty values</span>
+        <div className="flex gap-1.5">
+          {[
+            { on: true, label: "Adjusted", hint: "Diminishing returns + overpay tax" },
+            { on: false, label: "Raw", hint: "Plain sum of values" },
+          ].map(({ on, label, hint }) => {
+            const active = useAdjustedValues === on;
+            return (
+              <button
+                key={label}
+                onClick={() => setUseAdjustedValues(on)}
+                data-testid={`matched-values-${on ? "adjusted" : "raw"}`}
+                aria-pressed={active}
+                title={hint}
+                className={cn(
+                  "px-3 py-1.5 rounded-lg text-[12px] font-semibold border transition-colors",
+                  active
+                    ? "bg-[#d4af37]/15 border-[#d4af37]/40 text-[#d4af37]"
+                    : "border-border/50 text-muted-foreground hover:text-foreground hover:bg-muted/30",
+                )}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+        <p className="text-[10px] text-muted-foreground basis-full sm:basis-auto">
+          {useAdjustedValues
+            ? "Packages valued like the Trade Calculator. Adjustments made for trading up/down and best asset in the deal"
+            : "Packages are valued as a plain sum of dynasty values."}
+        </p>
+      </div>
+
+      {mode === "win-now" && <WinNowMode  league={league} userTeam={userTeam} useAdjustedValues={useAdjustedValues} />}
+      {mode === "rebuild" && <RebuildMode league={league} userTeam={userTeam} useAdjustedValues={useAdjustedValues} />}
     </div>
   );
 }
@@ -2704,8 +2778,11 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
 
 // ─── Win-Now Mode ─────────────────────────────────────────────────
 
-function WinNowMode({ league, userTeam }: { league: League; userTeam: Team }) {
+function WinNowMode({ league, userTeam, useAdjustedValues }: { league: League; userTeam: Team; useAdjustedValues: boolean }) {
   const { getPlayerValue, getRedraftValue, getPickValue, optimizeLineup } = useValueModel();
+  // How a multi-asset side's dynasty value is totalled: adjusted (diminishing
+  // returns + overpay tax, matching the Trade Calculator) or a plain raw sum.
+  const valueOf = useAdjustedValues ? sideValue : rawTotal;
   const tierMap = useMemo(() => getLeagueTeamTiers(league.teams), [league.teams]);
   const [expandedPositions, setExpandedPositions] = useState<Set<string>>(new Set());
   const [sendModal, setSendModal] = useState<{ open: boolean; idea: WinNowIdea | null }>({ open: false, idea: null });
@@ -2819,8 +2896,8 @@ function WinNowMode({ league, userTeam }: { league: League; userTeam: Team }) {
             const rdDiff = Math.abs(chip.rdVal - target.rdv) / Math.max(chip.rdVal, target.rdv, 1);
             if (rdDiff > 0.28) continue;
             // Dynasty fairness: user overpays by at most 18% (trade calculator formula)
-            const dynGive = chip.dynVal;
-            const dynGet  = target.dynv;
+            const dynGive = valueOf([chip.dynVal]);
+            const dynGet  = valueOf([target.dynv]);
             const dynOverpay = (dynGive - dynGet) / Math.max(dynGive, dynGet, 1);
             if (dynOverpay > 0.18) continue;
 
@@ -2862,8 +2939,8 @@ function WinNowMode({ league, userTeam }: { league: League; userTeam: Team }) {
             if (chip.player.pos === needPos || !myPicks[0]) continue;
             const pickVal = myPicks[0].val;
             // Dynasty fairness using trade calculator formula
-            const dynGive    = chip.dynVal + pickVal;
-            const dynGet     = target.dynv;
+            const dynGive    = valueOf([chip.dynVal, pickVal]);
+            const dynGet     = valueOf([target.dynv]);
             const dynOverpay = (dynGive - dynGet) / Math.max(dynGive, dynGet, 1);
             if (dynOverpay > 0.18 || dynOverpay < -0.25) continue;
 
@@ -2917,7 +2994,7 @@ function WinNowMode({ league, userTeam }: { league: League; userTeam: Team }) {
       })
       .sort((a, b) => b.score - a.score)
       .slice(0, 15);
-  }, [league, userTeam, sortedNeeds, sellCandidates, urgency, posRdRanks, tierMap, getPlayerValue, getRedraftValue, getPickValue]);
+  }, [league, userTeam, sortedNeeds, sellCandidates, urgency, posRdRanks, tierMap, getPlayerValue, getRedraftValue, getPickValue, valueOf]);
 
   // Group ideas by upgrade position, ordered by positional urgency
   const byPosition = useMemo(() => {
@@ -3291,8 +3368,11 @@ function rebuildIdeaToWinNow(idea: RebuildIdea): WinNowIdea {
 
 // ─── Rebuild Mode ─────────────────────────────────────────────────
 
-function RebuildMode({ league, userTeam }: { league: League; userTeam: Team }) {
+function RebuildMode({ league, userTeam, useAdjustedValues }: { league: League; userTeam: Team; useAdjustedValues: boolean }) {
   const { getPlayerValue, getRedraftValue, getPickValue, optimizeLineup } = useValueModel();
+  // How a multi-asset side's dynasty value is totalled: adjusted (diminishing
+  // returns + overpay tax, matching the Trade Calculator) or a plain raw sum.
+  const valueOf = useAdjustedValues ? sideValue : rawTotal;
   const [expandedPartners, setExpandedPartners] = useState<Set<string>>(new Set());
   const [sendModal, setSendModal] = useState<{ open: boolean; idea: WinNowIdea | null }>({ open: false, idea: null });
   const [partnerFilter, setPartnerFilter] = useState<"all" | "contender" | "middle" | "rebuilder">("all");
@@ -3349,12 +3429,12 @@ function RebuildMode({ league, userTeam }: { league: League; userTeam: Team }) {
         .sort((a, b) => b.val - a.val);
 
       for (const chip of sellCandidates.slice(0, 4)) {
-        const dynGive = chip.dynVal;
+        const dynGive = valueOf([chip.dynVal]);
         const rdGive  = chip.rdVal;
 
         // Option A: player for young player
         for (const youngTarget of partnerYoung.slice(0, 3)) {
-          const dynGet = youngTarget.dynv;
+          const dynGet = valueOf([youngTarget.dynv]);
           const rdGet  = youngTarget.rdv;
           // User must gain dynasty value (strict: dynGet > dynGive)
           if (dynGet <= dynGive) continue;
@@ -3394,13 +3474,15 @@ function RebuildMode({ league, userTeam }: { league: League; userTeam: Team }) {
         if (partnerPicks.length > 0) {
           const topPick     = partnerPicks[0];
           const secondPick  = partnerPicks[1];
-          const pickDynGet  = topPick.val + (secondPick ? secondPick.val : 0);
-          const useTwo      = !!secondPick && pickDynGet <= dynGive * 1.15;
-          const dynGet      = useTwo ? pickDynGet : topPick.val;
+          // Package-shape heuristic stays on raw values so the toggle doesn't change
+          // which picks get bundled — only how the resulting side is totalled.
+          const rawPickGet  = topPick.val + (secondPick ? secondPick.val : 0);
+          const useTwo      = !!secondPick && rawPickGet <= chip.dynVal * 1.15;
+          const picksArr    = useTwo ? [topPick, secondPick!] : [topPick];
+          const dynGet      = valueOf(picksArr.map(pk => pk.val));
           // User must gain dynasty value (strict: dynGet > dynGive)
           if (dynGet <= dynGive) continue;
 
-          const picksArr = useTwo ? [topPick, secondPick!] : [topPick];
           const rdGet    = 0; // picks have no current-season redraft value
           const score    = Math.max((dynGet - dynGive + rdGive * 0.15) / Math.max(rdGive, 500), 0);
           const scoreLabel = score > 1.5 ? "Elite" : score > 0.5 ? "Strong" : "Moderate";
@@ -3449,7 +3531,7 @@ function RebuildMode({ league, userTeam }: { league: League; userTeam: Team }) {
       })
       .sort((a, b) => b.score - a.score)
       .slice(0, 15);
-  }, [league, userTeam, sellCandidates, tierMap, getPlayerValue, getRedraftValue, getPickValue]);
+  }, [league, userTeam, sellCandidates, tierMap, getPlayerValue, getRedraftValue, getPickValue, valueOf]);
 
   // Group by partner
   const byPartner = useMemo(() => {

@@ -384,7 +384,7 @@ export default function ManagerPage({
         ) : data ? (
           <Tabs value={tab} onValueChange={setTab} className="mt-5">
             <TabsList
-              className={cn("grid grid-cols-5 h-10 bg-white/[0.04]", !embedded && "sticky top-12 z-20")}
+              className={cn("grid grid-cols-4 h-10 bg-white/[0.04]", !embedded && "sticky top-12 z-20")}
             >
               <TabsTrigger value="overview" className="text-[11px] flex items-center gap-1.5">
                 <User className="w-3.5 h-3.5" />
@@ -402,10 +402,6 @@ export default function ManagerPage({
                 <ArrowRightLeft className="w-3.5 h-3.5" />
                 <span className="hidden sm:inline">Trade</span>
               </TabsTrigger>
-              <TabsTrigger value="activity" className="text-[11px] flex items-center gap-1.5">
-                <Gauge className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Activity</span>
-              </TabsTrigger>
             </TabsList>
 
             <div className="mt-5">
@@ -420,9 +416,6 @@ export default function ManagerPage({
               </TabsContent>
               <TabsContent value="trade">
                 <TradeApproachTab data={data} viewerTeam={viewerTeam} />
-              </TabsContent>
-              <TabsContent value="activity">
-                <ActivityTab data={data} />
               </TabsContent>
             </div>
           </Tabs>
@@ -951,15 +944,6 @@ function CurrentLeagueTab({ data }: { data: ManagerIntelPayload }) {
         leagueId={selected.leagueId}
         rosterId={targetRow?.rosterId ?? null}
       />
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <SectionCard title="Roster age" icon={<User className="w-3.5 h-3.5" />}>
-          <p className="text-[13px] text-white/70">{selected.ageSummary}</p>
-        </SectionCard>
-        <SectionCard title="Pick capital" icon={<Trophy className="w-3.5 h-3.5" />}>
-          <p className="text-[13px] text-white/70">{selected.pickCapitalSummary}</p>
-        </SectionCard>
-      </div>
     </div>
   );
 }
@@ -1016,7 +1000,7 @@ function ManagerMatchupsSection({ leagueId, rosterId }: { leagueId: string; rost
   const { weeks, currentWeek, loading, error } = useManagerWeeklyMatchups(leagueId, rosterId);
 
   return (
-    <SectionCard title="Week-by-week matchups" icon={<Swords className="w-3.5 h-3.5" />}>
+    <SectionCard title="Week-by-week matchups" icon={<Swords className="w-3.5 h-3.5" />} collapsible>
       {loading && <p className="text-[13px] text-white/45">Loading matchups…</p>}
       {!loading && error && <p className="text-[13px] text-white/45">Matchups unavailable.</p>}
       {!loading && !error && weeks.length === 0 && (
@@ -1086,30 +1070,35 @@ function txnLabel(type: string): string {
 }
 
 function ManagerActivitySection({ leagueId, rosterId }: { leagueId: string; rosterId: number | null }) {
-  const [txns, setTxns] = useState<ManagerTxn[] | null>(null);
+  const [allTxns, setAllTxns] = useState<ManagerTxn[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
 
   useEffect(() => {
-    if (!leagueId || rosterId == null) { setTxns(null); return; }
+    if (!leagueId) { setAllTxns(null); return; }
     let cancelled = false;
     setLoading(true);
     setError(false);
     fetchLeagueTransactions(leagueId)
       .then((data) => {
         if (cancelled) return;
-        const mine = (data.transactions as ManagerTxn[])
-          .filter((t) =>
-            t.involvedTeams.some((x) => x.rosterId === rosterId) ||
-            t.adds.some((p) => p.rosterId === rosterId) ||
-            t.drops.some((p) => p.rosterId === rosterId))
-          .sort((a, b) => b.timestamp - a.timestamp);
-        setTxns(mine);
+        setAllTxns(data.transactions as ManagerTxn[]);
         setLoading(false);
       })
       .catch(() => { if (!cancelled) { setError(true); setLoading(false); } });
     return () => { cancelled = true; };
-  }, [leagueId, rosterId]);
+  }, [leagueId]);
+
+  // This manager's own transactions, newest first.
+  const txns = useMemo(() => {
+    if (!allTxns || rosterId == null) return null;
+    return allTxns
+      .filter((t) =>
+        t.involvedTeams.some((x) => x.rosterId === rosterId) ||
+        t.adds.some((p) => p.rosterId === rosterId) ||
+        t.drops.some((p) => p.rosterId === rosterId))
+      .sort((a, b) => b.timestamp - a.timestamp);
+  }, [allTxns, rosterId]);
 
   const counts = useMemo(() => {
     const c = { trade: 0, waiver: 0, free_agent: 0 };
@@ -1121,16 +1110,64 @@ function ManagerActivitySection({ leagueId, rosterId }: { leagueId: string; rost
     return c;
   }, [txns]);
 
+  // Rank this manager within the league for each activity type. We tally
+  // per-roster counts across every transaction (a roster "participates" if it
+  // appears in involvedTeams/adds/drops), then rank by count descending using
+  // standard competition ranking (ties share the best rank).
+  const ranks = useMemo(() => {
+    if (!allTxns || rosterId == null) return null;
+    const byRoster = new Map<number, { trade: number; waiver: number; free_agent: number }>();
+    const bump = (rid: number, type: ManagerTxn["type"]) => {
+      let rec = byRoster.get(rid);
+      if (!rec) { rec = { trade: 0, waiver: 0, free_agent: 0 }; byRoster.set(rid, rec); }
+      if (type === "trade") rec.trade++;
+      else if (type === "waiver") rec.waiver++;
+      else if (type === "free_agent") rec.free_agent++;
+    };
+    for (const t of allTxns) {
+      const rids = new Set<number>();
+      t.involvedTeams.forEach((x) => rids.add(x.rosterId));
+      t.adds.forEach((p) => rids.add(p.rosterId));
+      t.drops.forEach((p) => rids.add(p.rosterId));
+      rids.forEach((rid) => bump(rid, t.type));
+    }
+    const totalTeams = byRoster.size;
+    const rankFor = (key: "trade" | "waiver" | "free_agent", mine: number) => {
+      let better = 0;
+      byRoster.forEach((rec) => { if (rec[key] > mine) better++; });
+      return better + 1;
+    };
+    return {
+      totalTeams,
+      trade: rankFor("trade", counts.trade),
+      waiver: rankFor("waiver", counts.waiver),
+      free_agent: rankFor("free_agent", counts.free_agent),
+    };
+  }, [allTxns, rosterId, counts]);
+
+  const rankLabel = (rank: number | undefined) =>
+    rank != null && ranks ? `${ordinal(rank)} of ${ranks.totalTeams}` : undefined;
+
+  // Color the rank by how active the manager is relative to the league:
+  // top third green, bottom third rose, middle neutral.
+  const rankClass = (rank: number | undefined) => {
+    if (rank == null || !ranks || ranks.totalTeams <= 1) return "text-white/45";
+    const pct = (rank - 1) / (ranks.totalTeams - 1);
+    if (pct <= 1 / 3) return "text-emerald-300";
+    if (pct >= 2 / 3) return "text-rose-300";
+    return "text-white/45";
+  };
+
   return (
-    <SectionCard title="League activity" icon={<ArrowRightLeft className="w-3.5 h-3.5" />}>
+    <SectionCard title="League activity" icon={<ArrowRightLeft className="w-3.5 h-3.5" />} collapsible>
       {loading && <p className="text-[13px] text-white/45">Loading activity…</p>}
       {!loading && error && <p className="text-[13px] text-white/45">Activity unavailable.</p>}
       {!loading && !error && txns && (
         <>
           <div className="grid grid-cols-3 gap-2 mb-3">
-            <Stat label="Trades" value={counts.trade} />
-            <Stat label="Waivers" value={counts.waiver} />
-            <Stat label="Free agents" value={counts.free_agent} />
+            <Stat label="Trades" value={counts.trade} sub={rankLabel(ranks?.trade)} subClass={rankClass(ranks?.trade)} />
+            <Stat label="Waivers" value={counts.waiver} sub={rankLabel(ranks?.waiver)} subClass={rankClass(ranks?.waiver)} />
+            <Stat label="Free agents" value={counts.free_agent} sub={rankLabel(ranks?.free_agent)} subClass={rankClass(ranks?.free_agent)} />
           </div>
           {txns.length === 0 ? (
             <p className="text-[13px] text-white/45">No transactions for this manager yet.</p>
@@ -1535,6 +1572,13 @@ function CrossLeagueTab({ data }: { data: ManagerIntelPayload }) {
   const youthLean = data.preferences?.youthPreference ?? "Medium";
   const vetLean = data.preferences?.veteranPreference ?? "Medium";
 
+  // Activity breakdown + transaction history (moved here from the Activity tab),
+  // covering all visible dynasty leagues.
+  const act = data.activity;
+  const actTotal = act?.totalTransactions ?? 0;
+  const tradeShare = actTotal > 0 ? Math.round(((act?.tradeCount ?? 0) / actTotal) * 100) : 0;
+  const waiverShare = actTotal > 0 ? 100 - tradeShare : 0;
+
   // Portfolio Snapshot — derived from existing leans for a quick read.
   const posLean = positionBias
     .filter((p) => p.signal !== "Light" && p.signal !== "Veteran-leaning" && p.signal !== "Balanced")
@@ -1696,6 +1740,58 @@ function CrossLeagueTab({ data }: { data: ManagerIntelPayload }) {
         <p className="text-[13px] text-white/75">{cl.commonRosterBuild}</p>
         <p className="text-[12px] text-white/45 mt-1">{cl.positionStrengthProfile}</p>
       </SectionCard>
+
+      {/* Activity Breakdown — trade vs waiver share. */}
+      {act && actTotal > 0 && (
+        <SectionCard title="Activity breakdown" icon={<ArrowRightLeft className="w-3.5 h-3.5" />}>
+          <ShareBar label="Trades" count={act.tradeCount} pct={tradeShare} tone="bg-[#d4af37]" />
+          <ShareBar label="Waivers" count={act.waiverCount} pct={waiverShare} tone="bg-sky-400" />
+        </SectionCard>
+      )}
+
+      {/* Trade history across all dynasty leagues. */}
+      {act && (
+        <SectionCard title={`Trade history (${act.tradeHistory?.length ?? 0})`} icon={<ArrowRightLeft className="w-3.5 h-3.5" />} collapsible>
+          {act.tradeHistory && act.tradeHistory.length > 0 ? (
+            <div className="space-y-1.5 max-h-[440px] overflow-y-auto pr-1">
+              {act.tradeHistory.map((t, i) => (
+                <TxnRow
+                  key={i}
+                  date={t.date}
+                  league={t.league}
+                  added={t.added}
+                  dropped={t.dropped}
+                  subtitle={t.partner ? `with ${t.partner}` : undefined}
+                />
+              ))}
+            </div>
+          ) : (
+            <p className="text-[12px] text-white/45 py-2">No trades found in visible dynasty leagues this season.</p>
+          )}
+        </SectionCard>
+      )}
+
+      {/* Waiver / FA history across all dynasty leagues. */}
+      {act && (
+        <SectionCard title={`Waiver history (${act.waiverHistory?.length ?? 0})`} icon={<Activity className="w-3.5 h-3.5" />} collapsible>
+          {act.waiverHistory && act.waiverHistory.length > 0 ? (
+            <div className="space-y-1.5 max-h-[440px] overflow-y-auto pr-1">
+              {act.waiverHistory.map((w, i) => (
+                <TxnRow
+                  key={i}
+                  date={w.date}
+                  league={w.league}
+                  added={w.added}
+                  dropped={w.dropped}
+                  subtitle={w.kind === "free_agent" ? "free agent" : "waiver"}
+                />
+              ))}
+            </div>
+          ) : (
+            <p className="text-[12px] text-white/45 py-2">No waiver / FA moves found in visible dynasty leagues this season.</p>
+          )}
+        </SectionCard>
+      )}
 
       <SourceNote text="Counts are visible Sleeper leagues only." />
     </div>
@@ -2192,113 +2288,6 @@ function OfferIdeas({ data, viewerTeam }: { data: ManagerIntelPayload; viewerTea
   );
 }
 
-// ── Activity (reframed History) ──────────────────────────────────────────────
-
-function ActivityTab({ data }: { data: ManagerIntelPayload }) {
-  const act = data.activity;
-  if (!act) return <EmptyNotice text="No activity data available." />;
-
-  const signal = act.activitySignal;
-  const signalTone =
-    signal === "Active"
-      ? "text-emerald-300 border-emerald-500/40"
-      : signal === "Moderate"
-      ? "text-amber-300 border-amber-500/40"
-      : signal === "Quiet"
-      ? "text-sky-300 border-sky-500/40"
-      : "text-white/55 border-white/15";
-
-  const leagues = act.visibleLeagues || 0;
-  const per = (n: number) => (leagues > 0 ? (n / leagues).toFixed(1) : "—");
-  const total = act.totalTransactions;
-  const tradeShare = total > 0 ? Math.round((act.tradeCount / total) * 100) : 0;
-  const waiverShare = total > 0 ? 100 - tradeShare : 0;
-  const arch = act.activityArchetype;
-
-  return (
-    <div className="space-y-4">
-      {/* Activity Signal — persona + meaning. */}
-      <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-[#d4af37] mb-1.5">
-              <Gauge className="w-3.5 h-3.5" />
-              <span>Activity Signal</span>
-            </div>
-            {arch && <div className="text-[16px] font-bold text-white">{arch.label}</div>}
-            <p className="text-[13px] text-white/70 leading-relaxed mt-1">{act.signalNote}</p>
-          </div>
-          <Badge variant="outline" className={cn("text-[11px] font-bold flex-shrink-0", signalTone)}>
-            {signal}
-          </Badge>
-        </div>
-      </div>
-
-      {/* Activity Snapshot — counts + per-league rates. */}
-      <SectionCard title="Activity snapshot" icon={<Gauge className="w-3.5 h-3.5" />}>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-          <Stat label="Visible leagues" value={leagues} />
-          <Stat label="Oldest visible season" value={act.oldestVisibleSeason ?? "—"} />
-          <Stat label="Years active (est.)" value={act.estimatedYearsActive ?? "—"} />
-          <Stat label="Transactions" value={total} />
-          <Stat label="Transactions / league" value={per(total)} />
-          <Stat label="Trades / league" value={per(act.tradeCount)} />
-          <Stat label="Waivers / league" value={per(act.waiverCount)} />
-          {act.currentPointsFor != null && <Stat label="Current points for" value={act.currentPointsFor} />}
-        </div>
-      </SectionCard>
-
-      {/* Activity Breakdown — trade vs waiver share. */}
-      {total > 0 && (
-        <SectionCard title="Activity breakdown" icon={<ArrowRightLeft className="w-3.5 h-3.5" />}>
-          <ShareBar label="Trades" count={act.tradeCount} pct={tradeShare} tone="bg-[#d4af37]" />
-          <ShareBar label="Waivers" count={act.waiverCount} pct={waiverShare} tone="bg-sky-400" />
-        </SectionCard>
-      )}
-
-      {/* Trade history across all dynasty leagues. */}
-      <SectionCard title={`Trade history (${act.tradeHistory?.length ?? 0})`} icon={<ArrowRightLeft className="w-3.5 h-3.5" />} collapsible>
-        {act.tradeHistory && act.tradeHistory.length > 0 ? (
-          <div className="space-y-1.5 max-h-[440px] overflow-y-auto pr-1">
-            {act.tradeHistory.map((t, i) => (
-              <TxnRow
-                key={i}
-                date={t.date}
-                league={t.league}
-                added={t.added}
-                dropped={t.dropped}
-                subtitle={t.partner ? `with ${t.partner}` : undefined}
-              />
-            ))}
-          </div>
-        ) : (
-          <p className="text-[12px] text-white/45 py-2">No trades found in visible dynasty leagues this season.</p>
-        )}
-      </SectionCard>
-
-      {/* Waiver / FA history across all dynasty leagues. */}
-      <SectionCard title={`Waiver history (${act.waiverHistory?.length ?? 0})`} icon={<Activity className="w-3.5 h-3.5" />} collapsible>
-        {act.waiverHistory && act.waiverHistory.length > 0 ? (
-          <div className="space-y-1.5 max-h-[440px] overflow-y-auto pr-1">
-            {act.waiverHistory.map((w, i) => (
-              <TxnRow
-                key={i}
-                date={w.date}
-                league={w.league}
-                added={w.added}
-                dropped={w.dropped}
-                subtitle={w.kind === "free_agent" ? "free agent" : "waiver"}
-              />
-            ))}
-          </div>
-        ) : (
-          <p className="text-[12px] text-white/45 py-2">No waiver / FA moves found in visible dynasty leagues this season.</p>
-        )}
-      </SectionCard>
-    </div>
-  );
-}
-
 function TxnRow({
   date,
   league,
@@ -2386,11 +2375,12 @@ function SectionCard({ title, icon, children, collapsible = false }: { title: st
   );
 }
 
-function Stat({ label, value }: { label: string; value: React.ReactNode }) {
+function Stat({ label, value, sub, subClass }: { label: string; value: React.ReactNode; sub?: string; subClass?: string }) {
   return (
     <div className="rounded-md border border-white/8 bg-white/[0.02] px-3 py-2">
       <div className="text-[9px] uppercase tracking-wider text-white/40">{label}</div>
       <div className="text-base font-bold tabular-nums text-white">{value}</div>
+      {sub && <div className={cn("text-[9px] tabular-nums mt-0.5", subClass ?? "text-white/45")}>{sub}</div>}
     </div>
   );
 }
