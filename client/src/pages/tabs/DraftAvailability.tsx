@@ -556,6 +556,8 @@ export function DraftAvailability() {
         </div>
       </div>
 
+      <MoversPanel rows={rows} teams={teams} totalDrafts={draftCount} />
+
       {/* Filters */}
       <Card className="p-3 sm:p-4">
         <div className="flex flex-wrap items-end gap-x-5 gap-y-3">
@@ -581,8 +583,6 @@ export function DraftAvailability() {
           </p>
         )}
       </Card>
-
-      <MoversPanel rows={rows} teams={teams} totalDrafts={draftCount} />
 
       {loading ? (
         <Card className="p-10 flex items-center justify-center text-muted-foreground"><Loader2 className="w-5 h-5 animate-spin mr-2" /> Loading ADP data…</Card>

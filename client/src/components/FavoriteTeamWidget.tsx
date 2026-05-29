@@ -19,9 +19,9 @@ interface Props {
   /** Free-text scope hint shown in the exposure line, e.g. "in your active league". */
   scopeHint?: string;
   /**
-   * Opens the favorite-team selector. The host page wires this to its
-   * SettingsModal — we don't import the modal directly so the widget stays
-   * decoupled from the auth/header surface.
+   * Opens the favorite-team selector. The host page wires this to the Settings
+   * page (e.g. navigating to the "settings" tab) — we don't reference it
+   * directly so the widget stays decoupled from the auth/header surface.
    */
   onChangeTeam?: () => void;
 }

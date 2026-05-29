@@ -13,7 +13,6 @@ import { useValueModel } from "@/contexts/ValueModelContext";
 import { useSleeper } from "@/contexts/SleeperContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useFavoriteTeam } from "@/contexts/FavoriteTeamContext";
-import { SettingsModal } from "@/components/SettingsModal";
 import { NAV_CONFIG } from "@/data/mockData";
 import { FEATURES } from "@/config/features";
 import type { League, Team } from "@/types";
@@ -30,6 +29,7 @@ import logoLight from "@assets/statchasers_logo_transparent_light_1772764844283.
 import { API_BASE } from "@/lib/apiBase";
 import { ShareDynastyPopup } from "@/components/ShareDynastyPopup";
 import { WhatsNewModal } from "@/components/WhatsNewModal";
+import { SettingsModal } from "@/components/SettingsModal";
 
 // ── Lazy-loaded tab components ─────────────────────────────────────────────
 // Each tab is split into its own async chunk so the initial bundle only
@@ -63,6 +63,7 @@ const FeedbackPage      = lazy(() => import("@/components/FeedbackPage").then(m 
 const RedraftCommandPage       = lazy(() => import("@/components/ComingSoonCommand").then(m => ({ default: m.RedraftCommandPage })));
 const CommissionerCommandPage  = lazy(() => import("@/components/ComingSoonCommand").then(m => ({ default: m.CommissionerCommandPage })));
 const ManageAccount            = lazy(() => import("./tabs/ManageAccount").then(m => ({ default: m.ManageAccount })));
+const SettingsPage             = lazy(() => import("./tabs/SettingsPage").then(m => ({ default: m.SettingsPage })));
 const TermsPage         = lazy(() => import("@/components/LegalModals").then(m => ({ default: m.TermsPage })));
 const PrivacyPage       = lazy(() => import("@/components/LegalModals").then(m => ({ default: m.PrivacyPage })));
 const CookiesPage       = lazy(() => import("@/components/LegalModals").then(m => ({ default: m.CookiesPage })));
@@ -154,7 +155,6 @@ export default function DynastyCommandCenter({ params, playerProfileId, managerP
   const [fetchedLeague, setFetchedLeague] = useState<{ league: League; userTeamId: string | null } | null>(null);
   const [isLeagueLoading, setIsLeagueLoading] = useState(false);
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const { favoriteTeam } = useFavoriteTeam();
   const userDropdownRef = useRef<HTMLDivElement>(null);
   const [logoMenuOpen, setLogoMenuOpen] = useState(false);
@@ -533,6 +533,7 @@ export default function DynastyCommandCenter({ params, playerProfileId, managerP
 
     if (activeMainTab === "feedback") return <FeedbackPage />;
     if (activeMainTab === "manage-account") return <ManageAccount />;
+    if (activeMainTab === "settings") return <SettingsPage />;
     if (activeMainTab === "redraft-command") return <RedraftCommandPage onBack={() => handleMainTabChange("portfolio")} />;
     if (activeMainTab === "commissioner-command") return <CommissionerCommandPage onBack={() => handleMainTabChange("portfolio")} />;
     if (activeMainTab === "terms") return <TermsPage onNavigate={handleMainTabChange} />;
@@ -886,9 +887,9 @@ export default function DynastyCommandCenter({ params, playerProfileId, managerP
                         <span className="flex-1 text-left">Manage Account</span>
                       </button>
 
-                      {/* Favorite NFL Team row — always visible, opens Settings */}
+                      {/* Settings row — always visible, opens the Settings page */}
                       <button
-                        onClick={() => { setUserDropdownOpen(false); setSettingsOpen(true); }}
+                        onClick={() => { setUserDropdownOpen(false); handleMainTabChange("settings"); }}
                         data-testid="button-menu-favorite-team"
                         className="w-full flex items-center gap-2.5 px-3 py-2.5 text-xs font-medium text-foreground hover:bg-muted/40 transition-colors border-b border-border/30"
                       >
@@ -903,14 +904,14 @@ export default function DynastyCommandCenter({ params, playerProfileId, managerP
                         )}
                         <span className="flex-1 text-left min-w-0">
                           <span className="block text-[10px] uppercase tracking-wider text-muted-foreground font-semibold leading-tight">
-                            Favorite NFL Team
+                            Settings
                           </span>
                           <span className="block truncate text-xs">
-                            {favoriteTeam ? favoriteTeam.name : "Not set"}
+                            Theme, team &amp; leagues
                           </span>
                         </span>
                         <span className="text-[10px] text-[#d4af37] flex-shrink-0">
-                          {favoriteTeam ? "Change" : "Choose"}
+                          Open
                         </span>
                       </button>
 
@@ -1035,7 +1036,6 @@ export default function DynastyCommandCenter({ params, playerProfileId, managerP
       <WhatsNewModal
         isAuthenticated={!!scUser}
       />
-      <SettingsModal open={settingsOpen} onOpenChange={setSettingsOpen} />
       <MobileBottomNav
         tabs={NAV_CONFIG}
         activeTab={activeMainTab}
