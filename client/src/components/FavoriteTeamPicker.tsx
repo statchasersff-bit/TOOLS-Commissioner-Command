@@ -43,7 +43,7 @@ export function FavoriteTeamPicker({ selectedAbbr, onSelect }: Props) {
       </div>
 
       <div
-        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 max-h-[420px] overflow-y-auto pr-1"
+        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 max-h-[420px] overflow-y-auto pr-1"
         role="listbox"
         aria-label="NFL teams"
       >

@@ -12,7 +12,21 @@ import { useSleeper } from "@/contexts/SleeperContext";
 import type { SleeperLeagueSummary } from "@/types";
 import { NFL_TEAMS } from "@/config/nflTeams";
 import { cn } from "@/lib/utils";
-import { Loader2, Star, Sun, Moon, Palette, ListChecks } from "lucide-react";
+import { Loader2, Star, Sun, Moon, Palette, ListChecks, SlidersHorizontal, type LucideIcon } from "lucide-react";
+
+type SettingsTab = "general" | "leagues";
+
+const TABS: Array<{ id: SettingsTab; label: string; Icon: LucideIcon }> = [
+  { id: "general", label: "General", Icon: SlidersHorizontal },
+  { id: "leagues", label: "Leagues", Icon: ListChecks },
+];
+
+const PILL_BASE =
+  "relative flex items-center justify-center gap-2 font-semibold transition-all duration-200 rounded-xl text-[13px] tracking-[0.01em]";
+const PILL_ACTIVE =
+  "bg-[var(--sc-blue)] text-white shadow-[0_4px_12px_rgba(11,35,68,0.18)] dark-any:bg-[linear-gradient(135deg,rgba(11,58,122,0.85)_0%,rgba(11,58,122,0.65)_100%)] dark-any:shadow-[0_2px_12px_rgba(11,58,122,0.40),inset_0_1px_0_rgba(255,255,255,0.06)] dark-any:border dark-any:border-[#d4af37]/30";
+const PILL_INACTIVE =
+  "text-[var(--sc-text-muted)] hover:bg-[var(--sc-blue-soft)] hover:text-[var(--sc-blue)] dark-any:text-white/45 dark-any:hover:bg-transparent dark-any:hover:text-white/70";
 
 /**
  * Full-page Settings — Theme, Personalization, and Leagues. Lives in the
@@ -26,6 +40,8 @@ export function SettingsPage() {
   const { favoriteAbbr, saving, setFavoriteTeam, clearFavoriteTeam } = useFavoriteTeam();
   const { themeMode, setThemeMode, myTeamReady } = useTheme();
   const { isConnected, allLeagues, includedLeagueIds, setLeagueIncluded } = useSleeper();
+
+  const [activeTab, setActiveTab] = useState<SettingsTab>("general");
 
   const includedSet = new Set(includedLeagueIds);
   const selectedLeagues = allLeagues.filter((l) => includedSet.has(l.leagueId));
@@ -52,12 +68,81 @@ export function SettingsPage() {
   };
 
   return (
-    <div className="space-y-5 max-w-3xl">
-      <SectionHeader
-        title="Settings"
-        subtitle="Customize your Dynasty Command experience."
-      />
+    <div className="space-y-5">
+      {/* ── Page header + sub-tab switcher (desktop) ─────────────────────── */}
+      <div className="flex items-start justify-between gap-4">
+        <SectionHeader
+          title="Settings"
+          subtitle="Customize your Dynasty Command experience."
+        />
 
+        <div className="hidden md:flex items-center gap-2 flex-shrink-0 pt-1">
+          <div
+            className={cn(
+              "grid flex-shrink-0 rounded-2xl p-1 gap-1 w-[260px] h-12",
+              "bg-[var(--sc-card-bg)] border border-[var(--sc-border)]",
+              "dark-any:bg-white/[0.04] dark-any:border-white/[0.07]",
+            )}
+            style={{ gridTemplateColumns: "1fr 1fr" }}
+          >
+            {TABS.map(({ id, label, Icon }) => {
+              const isActive = activeTab === id;
+              return (
+                <button
+                  key={id}
+                  onClick={() => setActiveTab(id)}
+                  data-testid={`settings-tab-${id}-desktop`}
+                  className={cn(PILL_BASE, isActive ? PILL_ACTIVE : PILL_INACTIVE)}
+                >
+                  <Icon className="w-[15px] h-[15px] flex-shrink-0" />
+                  {label}
+                  {isActive && (
+                    <span
+                      className="sc-subtab-underline absolute bottom-[3px] left-1/2 -translate-x-1/2 rounded-full w-7 h-0.5"
+                      style={{ background: "#d6a21e", opacity: 0.95 }}
+                    />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Sub-tab switcher (mobile only) ───────────────────────────────── */}
+      <div className="md:hidden flex justify-center !mt-0">
+        <div
+          className={cn(
+            "grid w-[90vw] h-12 rounded-2xl p-1 gap-1",
+            "bg-[var(--sc-card-bg)] border border-[var(--sc-border)]",
+            "dark-any:bg-white/[0.04] dark-any:border-white/[0.07]",
+          )}
+          style={{ gridTemplateColumns: "1fr 1fr" }}
+        >
+          {TABS.map(({ id, label, Icon }) => {
+            const isActive = activeTab === id;
+            return (
+              <button
+                key={id}
+                onClick={() => setActiveTab(id)}
+                data-testid={`settings-tab-${id}`}
+                className={cn(PILL_BASE, isActive ? PILL_ACTIVE : PILL_INACTIVE)}
+              >
+                <Icon className="w-[15px] h-[15px] flex-shrink-0" />
+                {label}
+                {isActive && (
+                  <span
+                    className="sc-subtab-underline absolute bottom-[3px] left-1/2 -translate-x-1/2 rounded-full w-7 h-0.5"
+                    style={{ background: "#d6a21e", opacity: 0.95 }}
+                  />
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {activeTab === "general" && (<>
       {/* ── Theme ─────────────────────────────────────────────────────── */}
       <Card className="p-5 sm:p-6 space-y-3" data-testid="settings-theme">
         <div className="flex items-center gap-2">
@@ -136,8 +221,10 @@ export function SettingsPage() {
           )}
         </div>
       </Card>
+      </>)}
 
-      {/* ── Leagues ───────────────────────────────────────────────────── */}
+      {activeTab === "leagues" && (
+      /* ── Leagues ───────────────────────────────────────────────────── */
       <Card className="p-5 sm:p-6 space-y-3" data-testid="settings-leagues">
         <div className="flex items-center gap-2">
           <ListChecks className="w-4 h-4 text-[#d4af37]" />
@@ -175,6 +262,7 @@ export function SettingsPage() {
           </div>
         )}
       </Card>
+      )}
     </div>
   );
 }
@@ -194,7 +282,7 @@ function LeagueGroup({
       {leagues.length === 0 ? (
         emptyText ? <p className="text-[11px] text-muted-foreground italic">{emptyText}</p> : null
       ) : (
-        <ul className="space-y-1">
+        <ul className="grid gap-2 grid-cols-[repeat(auto-fill,minmax(240px,1fr))]">
           {leagues.map((lg) => (
             <LeagueRow
               key={lg.leagueId}

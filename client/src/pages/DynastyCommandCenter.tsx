@@ -29,7 +29,6 @@ import logoLight from "@assets/statchasers_logo_transparent_light_1772764844283.
 import { API_BASE } from "@/lib/apiBase";
 import { ShareDynastyPopup } from "@/components/ShareDynastyPopup";
 import { WhatsNewModal } from "@/components/WhatsNewModal";
-import { SettingsModal } from "@/components/SettingsModal";
 
 // ── Lazy-loaded tab components ─────────────────────────────────────────────
 // Each tab is split into its own async chunk so the initial bundle only
