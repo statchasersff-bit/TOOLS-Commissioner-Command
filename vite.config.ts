@@ -40,6 +40,12 @@ export default defineConfig({
   // the matching path.
   base: process.env.VITE_BASE_PATH || "/",
   root: path.resolve(import.meta.dirname, "client"),
+  // `root` is client/, but our .env (VITE_ENABLE_LEAGUE_SHARE etc.) lives at
+  // the project root. Vite's envDir defaults to `root`, so without this it
+  // looks for client/.env and silently ignores the project-root file —
+  // leaving VITE_ENABLE_LEAGUE_SHARE undefined and the share feature gated off
+  // in the published build. Point envDir back at the project root.
+  envDir: import.meta.dirname,
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
