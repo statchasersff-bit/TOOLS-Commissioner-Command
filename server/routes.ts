@@ -4,6 +4,7 @@ import { fetchRotowireNfl, getNflNameIndex, matchSleeperId, playerNameFromTitle,
 import { getPlayerNews, startPlayerNewsIngestion } from "./playerNews";
 import { getFantasyCalcValues, getFantasyCalcRedraftValues } from "./fantasycalc";
 import { getKtcValues, getKtcRedraftValues } from "./ktc";
+import { buildMarketPlayers, computeSummary, filterMarketPlayers } from "@shared/market/marketModel";
 import { rebuildBasketSnapshots } from "./portfolioBasketValue";
 import {
   getPortfolioTimeline,
@@ -325,6 +326,48 @@ export async function registerRoutes(
     } catch (err: any) {
       console.error("FantasyCalc redraft fetch error:", err);
       res.status(500).json({ error: err.message || "Failed to fetch redraft values" });
+    }
+  });
+
+  // Market Inefficiencies — computes the normalized MarketPlayer dataset + buy/
+  // sell summary for a given value source & format using the shared model, so
+  // the client gets a single source of truth and 1QB/Superflex "just work".
+  // The page also computes Superflex client-side for instant/offline first
+  // paint; this endpoint backs the 1QB toggle and external/API consumers.
+  app.get("/api/market-inefficiencies", async (req, res) => {
+    try {
+      const format = (req.query.format as string) === "1qb" ? "1qb" : "sf";
+      const sourceRaw = (req.query.valueSource as string)?.toLowerCase() || "fantasycalc";
+      const valueSource = sourceRaw === "ktc" ? "ktc" : "fantasycalc";
+
+      const num = (v: unknown) => {
+        const n = Number(v);
+        return Number.isFinite(n) ? n : undefined;
+      };
+      const ageMin = num(req.query.ageMin);
+      const ageMax = num(req.query.ageMax);
+      const minMarketValue = num(req.query.minMarketValue);
+      const position = (req.query.position as string) || undefined;
+      const search = (req.query.search as string) || undefined;
+
+      const [dynasty, redraft] = await Promise.all([
+        valueSource === "ktc" ? getKtcValues(format) : getFantasyCalcValues(format),
+        valueSource === "ktc" ? getKtcRedraftValues(format) : getFantasyCalcRedraftValues(format),
+      ]);
+
+      const sourceLabel = valueSource === "ktc" ? "KeepTradeCut" : "FantasyCalc";
+      const all = buildMarketPlayers(
+        dynasty.players,
+        redraft.valuesBySleeperId,
+        sourceLabel,
+      );
+      const players = filterMarketPlayers(all, { position, ageMin, ageMax, minMarketValue, search });
+      const summary = computeSummary(players);
+
+      res.json({ players, summary });
+    } catch (err: any) {
+      console.error("Market inefficiencies error:", err);
+      res.status(500).json({ error: err.message || "Failed to compute market inefficiencies" });
     }
   });
 

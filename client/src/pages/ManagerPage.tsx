@@ -45,7 +45,6 @@ import {
   Target,
   TrendingUp,
   Trophy,
-  User,
   Users,
   Waves,
   X,
@@ -288,7 +287,7 @@ export default function ManagerPage({
   viewerTeam?: Team | null;
 }) {
   const [, setLocation] = useLocation();
-  const [tab, setTab] = useState<string>("overview");
+  const [tab, setTab] = useState<string>("current");
   const [data, setData] = useState<ManagerIntelPayload | null>(null);
   const [basicUser, setBasicUser] = useState<{ username: string; displayName: string; avatar: string | null } | null>(null);
   const [loading, setLoading] = useState(false);
@@ -326,7 +325,7 @@ export default function ManagerPage({
     if (!userId) return;
     setData(null);
     setBasicUser(null);
-    setTab("overview");
+    setTab("current");
     void fetchIntel(false);
 
     // Fetch the lightweight Sleeper identity (name + avatar) in parallel so the
@@ -384,12 +383,8 @@ export default function ManagerPage({
         ) : data ? (
           <Tabs value={tab} onValueChange={setTab} className="mt-5">
             <TabsList
-              className={cn("grid grid-cols-4 h-10 bg-white/[0.04]", !embedded && "sticky top-12 z-20")}
+              className={cn("grid grid-cols-2 h-10 bg-white/[0.04]", !embedded && "sticky top-12 z-20")}
             >
-              <TabsTrigger value="overview" className="text-[11px] flex items-center gap-1.5">
-                <User className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Overview</span>
-              </TabsTrigger>
               <TabsTrigger value="current" className="text-[11px] flex items-center gap-1.5">
                 <Compass className="w-3.5 h-3.5" />
                 <span className="hidden sm:inline">League</span>
@@ -398,24 +393,14 @@ export default function ManagerPage({
                 <Users className="w-3.5 h-3.5" />
                 <span className="hidden sm:inline">Cross-League</span>
               </TabsTrigger>
-              <TabsTrigger value="trade" className="text-[11px] flex items-center gap-1.5">
-                <ArrowRightLeft className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Trade</span>
-              </TabsTrigger>
             </TabsList>
 
             <div className="mt-5">
-              <TabsContent value="overview">
-                <OverviewTab data={data} />
-              </TabsContent>
               <TabsContent value="current">
                 <CurrentLeagueTab data={data} />
               </TabsContent>
               <TabsContent value="cross">
                 <CrossLeagueTab data={data} />
-              </TabsContent>
-              <TabsContent value="trade">
-                <TradeApproachTab data={data} viewerTeam={viewerTeam} />
               </TabsContent>
             </div>
           </Tabs>
@@ -590,46 +575,6 @@ function ErrorState({ message, onRetry }: { message: string; onRetry: () => void
           Try again
         </button>
       </div>
-    </div>
-  );
-}
-
-// ── Overview ──────────────────────────────────────────────────────────────
-
-function OverviewTab({ data }: { data: ManagerIntelPayload }) {
-  const cl = data.crossLeague;
-  const ta = data.tradeApproach;
-  const managerRead = data.managerRead || ta.summary;
-  const hasDoDont = (ta.doList?.length ?? 0) > 0 || (ta.dontList?.length ?? 0) > 0;
-  return (
-    <div className="space-y-4">
-      <ManagerReadCard archetype={data.archetype} managerRead={managerRead} takeaway={ta.actionableTakeaway} />
-
-      {data.scorecard && data.scorecard.length > 0 ? (
-        // Scorecard at half width with the Do / Don't cards stacked to its right,
-        // splitting the scorecard's height.
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch">
-          <SectionCard title="Manager Intel Scorecard" icon={<Gauge className="w-3.5 h-3.5" />}>
-            <Scorecard rows={data.scorecard} />
-          </SectionCard>
-          {hasDoDont && (
-            <div className="flex flex-col gap-3">
-              <DoBox items={ta.doList ?? []} className="flex-1" />
-              <DontBox items={ta.dontList ?? []} className="flex-1" />
-            </div>
-          )}
-        </div>
-      ) : (
-        hasDoDont && <DoDontCard doList={ta.doList ?? []} dontList={ta.dontList ?? []} />
-      )}
-
-      {data.keyTendencies && data.keyTendencies.length > 0 && (
-        <SectionCard title="Key tendencies" icon={<Target className="w-3.5 h-3.5" />}>
-          <KeyTendencies items={data.keyTendencies} />
-        </SectionCard>
-      )}
-
-      {data.confidence && <DataCoverageCard confidence={data.confidence} meta={data.meta} />}
     </div>
   );
 }
@@ -897,6 +842,10 @@ function CurrentLeagueTab({ data }: { data: ManagerIntelPayload }) {
   const targetRow = selected.rosters.find((r) => r.ownerId === targetId) ?? null;
   const viewerRow = viewerId ? selected.rosters.find((r) => r.ownerId === viewerId) ?? null : null;
 
+  // Manager-level buy/sell read (moved here from the Trade tab).
+  const lt = data.tradeApproach?.likelyTargetsGrouped;
+  const sc = data.tradeApproach?.sellCandidatesGrouped;
+
   return (
     <div className="space-y-4">
       <LeagueSelector
@@ -943,6 +892,17 @@ function CurrentLeagueTab({ data }: { data: ManagerIntelPayload }) {
           tradeOpportunity={selected.tradeOpportunity}
           relativeWeakness={selected.relativeWeakness}
         />
+      )}
+
+      {(lt || sc) && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <SectionCard title="Likely targets" icon={<Target className="w-3.5 h-3.5" />}>
+            <GroupedList primaryLabel="High-fit" primary={lt?.high ?? []} secondaryLabel="Conditional" secondary={lt?.conditional ?? []} />
+          </SectionCard>
+          <SectionCard title="Possible sell candidates" icon={<ArrowRightLeft className="w-3.5 h-3.5" />}>
+            <GroupedList primaryLabel="Most likely" primary={sc?.mostLikely ?? []} secondaryLabel="Least likely" secondary={sc?.leastLikely ?? []} secondaryTone="muted" />
+          </SectionCard>
+        </div>
       )}
 
       <ManagerMatchupsSection
@@ -1437,6 +1397,20 @@ function dynRankFor(row: LeagueRosterRank, pos: TradePos): number {
   }
 }
 
+// Win-now (redraft) league rank for a position (lower = stronger). Falls back
+// to the dynasty rank for payloads cached before win-now ranks were added.
+function winNowRankFor(row: LeagueRosterRank, pos: TradePos): number {
+  switch (pos) {
+    case "QB": return row.qbWinNowRank ?? row.qbRank;
+    case "RB": return row.rbWinNowRank ?? row.rbRank;
+    case "WR": return row.wrWinNowRank ?? row.wrRank;
+    case "TE": return row.teWinNowRank ?? row.teRank;
+  }
+}
+
+// Which value axis a recommendation is shopping on.
+type Metric = "winNow" | "dynasty";
+
 interface PositionFit {
   pos: TradePos;
   you: number;
@@ -1573,27 +1547,58 @@ function TradeAnalysisSection({
 }) {
   const yourWindow = classifyWindow(viewer, total).window;
   const theirWindow = classifyWindow(target, total).window;
-  // A lower rank is stronger, so diff = theirRank - yourRank. A position only
-  // counts as a real mismatch once the two sides are at least EDGE_GAP apart.
+  // Lower rank = stronger, so diff = theirRank - yourRank; a position is a real
+  // mismatch only once the two sides are at least EDGE_GAP apart.
+  //
+  // The value axis depends on YOUR window. A contender shops for win-now help
+  // and spends dynasty/future depth to get it; a rebuilder does the reverse —
+  // buying long-term dynasty value and selling off win-now veterans. A bubble
+  // team has no strong lean, so it stays on dynasty for both sides (the prior
+  // behavior). Targeting on the right axis is what makes "assets to target"
+  // surface players that actually move your window's needle.
+  const acquireMetric: Metric = yourWindow === "Contender" ? "winNow" : "dynasty";
+  const sellMetric: Metric =
+    yourWindow === "Contender" ? "dynasty" : yourWindow === "Rebuilding" ? "winNow" : "dynasty";
+  const acquireAxis = acquireMetric === "winNow" ? "win-now" : "dynasty";
+  const sellAxis = sellMetric === "winNow" ? "win-now" : "dynasty";
+
   const EDGE_GAP = 2;
-  const fits: PositionFit[] = TRADE_POSITIONS.map((pos) => {
-    const you = dynRankFor(viewer, pos);
-    const them = dynRankFor(target, pos);
-    return { pos, you, them, diff: them - you };
-  });
-  const yourEdge = fits.filter((f) => f.diff >= EDGE_GAP).sort((a, b) => b.diff - a.diff);
-  const theirEdge = fits.filter((f) => f.diff <= -EDGE_GAP).sort((a, b) => a.diff - b.diff);
+  const fitsOn = (metric: Metric): PositionFit[] => {
+    const rankFor = metric === "winNow" ? winNowRankFor : dynRankFor;
+    return TRADE_POSITIONS.map((pos) => {
+      const you = rankFor(viewer, pos);
+      const them = rankFor(target, pos);
+      return { pos, you, them, diff: them - you };
+    });
+  };
+
+  // Sell from positions where you hold a surplus on your sell axis.
+  const yourEdge = fitsOn(sellMetric)
+    .filter((f) => f.diff >= EDGE_GAP)
+    .sort((a, b) => b.diff - a.diff);
+
+  // Target positions where they're stronger on your acquire axis. When you're
+  // rebuilding, soft-de-prioritize RB — injury attrition and a short shelf life
+  // make it a poor long-term store of value — so an RB only tops the list when
+  // its edge is big enough to overcome the down-weight. It still appears.
+  const RB_REBUILD_WEIGHT = 0.7;
+  const deprioritizeRb = yourWindow === "Rebuilding";
+  const targetScore = (f: PositionFit) =>
+    deprioritizeRb && f.pos === "RB" ? f.diff * RB_REBUILD_WEIGHT : f.diff;
+  const theirEdge = fitsOn(acquireMetric)
+    .filter((f) => f.diff <= -EDGE_GAP)
+    .sort((a, b) => targetScore(a) - targetScore(b));
 
   const sendPos = yourEdge[0]?.pos;
   const getPos = theirEdge[0]?.pos;
   const angle =
     sendPos && getPos
-      ? `Sell from your ${sendPos} surplus to target their ${getPos} — the clearest mismatch between your rosters.`
+      ? `Sell from your ${sendPos} ${sellAxis} surplus to target their ${getPos} — the clearest mismatch for your window.`
       : sendPos
-        ? `You hold the edge at ${yourEdge.map((f) => f.pos).join(", ")}. Shop that surplus to fill gaps elsewhere.`
+        ? `You hold a ${sellAxis} edge at ${yourEdge.map((f) => f.pos).join(", ")}. Shop that surplus to fill gaps elsewhere.`
         : getPos
-          ? `They're stronger at ${theirEdge.map((f) => f.pos).join(", ")} — your most realistic acquisition targets.`
-          : "Rosters are evenly matched by position — no obvious mismatch to exploit.";
+          ? `They're stronger at ${theirEdge.map((f) => f.pos).join(", ")} on ${acquireAxis} value — your most realistic acquisition targets.`
+          : "Rosters are evenly matched on the axis that fits your window — no obvious mismatch to exploit.";
 
   const strategy = tradeStrategy(yourWindow, theirWindow, yourEdge, theirEdge);
 
@@ -1616,8 +1621,18 @@ function TradeAnalysisSection({
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <EdgeColumn title="Your edge — assets to send" tone="you" fits={yourEdge} />
-        <EdgeColumn title="Their edge — assets to target" tone="them" fits={theirEdge} />
+        <EdgeColumn
+          title="Your edge — assets to send"
+          subtitle={`${sellAxis} surplus`}
+          tone="you"
+          fits={yourEdge}
+        />
+        <EdgeColumn
+          title="Their edge — assets to target"
+          subtitle={deprioritizeRb ? `${acquireAxis} value · RB de-prioritized` : `${acquireAxis} value`}
+          tone="them"
+          fits={theirEdge}
+        />
       </div>
 
       <div className="mt-3 rounded-md border border-white/10 bg-white/[0.025] px-3 py-2">
@@ -1641,18 +1656,20 @@ function TradeAnalysisSection({
   );
 }
 
-function EdgeColumn({ title, tone, fits }: { title: string; tone: "you" | "them"; fits: PositionFit[] }) {
+function EdgeColumn({ title, subtitle, tone, fits }: { title: string; subtitle?: string; tone: "you" | "them"; fits: PositionFit[] }) {
   const accent = tone === "you" ? "text-emerald-300" : "text-rose-300";
   return (
     <div className="rounded-lg border border-white/8 bg-white/[0.025] p-3">
       <div
         className={cn(
-          "flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider mb-2",
+          "flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider",
+          subtitle ? "mb-0.5" : "mb-2",
           tone === "you" ? "text-emerald-300/70" : "text-rose-300/70",
         )}
       >
         <span>{title}</span>
       </div>
+      {subtitle && <div className="text-[9px] text-white/35 mb-2">{subtitle}</div>}
       {fits.length === 0 ? (
         <p className="text-[12px] text-white/40 py-1">No clear edge.</p>
       ) : (
@@ -1836,6 +1853,9 @@ function CrossLeagueTab({ data }: { data: ManagerIntelPayload }) {
   const positionBias = cl.positionBias ?? [];
   const youthLean = data.preferences?.youthPreference ?? "Medium";
   const vetLean = data.preferences?.veteranPreference ?? "Medium";
+  const ta = data.tradeApproach;
+  const managerRead = data.managerRead || ta.summary;
+  const hasDoDont = (ta.doList?.length ?? 0) > 0 || (ta.dontList?.length ?? 0) > 0;
 
   // Activity breakdown + transaction history (moved here from the Activity tab),
   // covering all visible dynasty leagues.
@@ -1843,8 +1863,6 @@ function CrossLeagueTab({ data }: { data: ManagerIntelPayload }) {
   const actTotal = act?.totalTransactions ?? 0;
   const tradeShare = actTotal > 0 ? Math.round(((act?.tradeCount ?? 0) / actTotal) * 100) : 0;
   const waiverShare = actTotal > 0 ? 100 - tradeShare : 0;
-
-  const [identityOpen, setIdentityOpen] = useState(false);
 
   // Portfolio Snapshot — core metrics as a scannable table; leans + the most
   // notable positional biases become quick-read pills below it.
@@ -1863,14 +1881,36 @@ function CrossLeagueTab({ data }: { data: ManagerIntelPayload }) {
     .map((p) => `${p.position} ${p.signal}`);
   const snapshotPills = [`${youthLean} Youth Lean`, `${vetLean} Veteran Lean`, ...biasPills];
 
-  // Portfolio Identity — show the first sentence by default, full text on expand.
-  const identityFull = cl.portfolioIdentity ?? "";
-  const identitySummary = identityFull.match(/^[^.!?]*[.!?]/)?.[0]?.trim() ?? identityFull;
-  const identityHasMore = identityFull.length > identitySummary.length + 1;
-  const favTypes = cl.favoritePlayerTypes ?? [];
-
   return (
     <div className="space-y-4">
+      {/* Manager Read hero (moved here from the Overview tab) */}
+      <ManagerReadCard archetype={data.archetype} managerRead={managerRead} takeaway={ta.actionableTakeaway} />
+
+      {/* Manager Intel Scorecard + Do / Don't (moved here from the Overview tab) */}
+      {data.scorecard && data.scorecard.length > 0 ? (
+        // Scorecard at half width with the Do / Don't cards stacked to its right,
+        // splitting the scorecard's height.
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch">
+          <SectionCard title="Manager Intel Scorecard" icon={<Gauge className="w-3.5 h-3.5" />}>
+            <Scorecard rows={data.scorecard} />
+          </SectionCard>
+          {hasDoDont && (
+            <div className="flex flex-col gap-3">
+              <DoBox items={ta.doList ?? []} className="flex-1" />
+              <DontBox items={ta.dontList ?? []} className="flex-1" />
+            </div>
+          )}
+        </div>
+      ) : (
+        hasDoDont && <DoDontCard doList={ta.doList ?? []} dontList={ta.dontList ?? []} />
+      )}
+
+      {data.keyTendencies && data.keyTendencies.length > 0 && (
+        <SectionCard title="Key tendencies" icon={<Target className="w-3.5 h-3.5" />}>
+          <KeyTendencies items={data.keyTendencies} />
+        </SectionCard>
+      )}
+
       {/* 1. Portfolio Snapshot — metric table + quick-read pills */}
       <SectionCard title="Portfolio snapshot" icon={<Gauge className="w-3.5 h-3.5" />}>
         <div className="divide-y divide-white/[0.06]">
@@ -1890,44 +1930,7 @@ function CrossLeagueTab({ data }: { data: ManagerIntelPayload }) {
         )}
       </SectionCard>
 
-      {/* 2. Portfolio Identity — headline + short summary (expandable) + tendency pills */}
-      {(cl.portfolioType || cl.portfolioIdentity) && (
-        <div className="rounded-xl border border-[#d4af37]/30 bg-gradient-to-br from-[#d4af37]/[0.08] to-transparent p-5">
-          <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-[#d4af37] mb-2">
-            <Users className="w-3.5 h-3.5" />
-            <span>Portfolio Identity</span>
-          </div>
-          {cl.portfolioType && <div className="text-[18px] font-extrabold text-white mb-1.5">{cl.portfolioType}</div>}
-          {identityFull && (
-            <>
-              <p className="text-[13.5px] text-white/85 leading-relaxed">
-                {identityOpen ? identityFull : identitySummary}
-              </p>
-              {identityHasMore && (
-                <button
-                  type="button"
-                  onClick={() => setIdentityOpen((o) => !o)}
-                  className="mt-1.5 text-[11px] font-semibold text-[#d4af37] hover:underline"
-                >
-                  {identityOpen ? "Show less" : "Show more"}
-                </button>
-              )}
-            </>
-          )}
-          {favTypes.length > 0 && (
-            <div className="mt-3">
-              <div className="text-[9px] font-bold uppercase tracking-wider text-white/45 mb-1.5">Primary tendencies</div>
-              <div className="flex flex-wrap gap-1.5">
-                {favTypes.map((t) => (
-                  <Chip key={t.type} tone="gold">{t.type}</Chip>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* 3. What They Value — merges Favorite Player Types + Likely Values into one card */}
+      {/* What They Value — merges Favorite Player Types + Likely Values into one card */}
       {cl.tradeImplications &&
         (cl.tradeImplications.likelyValues.length > 0 || cl.tradeImplications.unlikelyValues.length > 0) && (
           <SectionCard title="What they value" icon={<Sparkles className="w-3.5 h-3.5" />}>
@@ -1997,24 +2000,7 @@ function CrossLeagueTab({ data }: { data: ManagerIntelPayload }) {
         </SectionCard>
       )}
 
-      {/* 5. Position Bias — collapsed; the "why" behind the signals shown on the cards above */}
-      {positionBias.length > 0 && (
-        <SectionCard title="Position bias — why" icon={<Compass className="w-3.5 h-3.5" />} collapsible>
-          <div className="space-y-1">
-            {positionBias.map((b) => (
-              <div key={b.position} className="flex items-center gap-3 py-1.5 border-b border-white/[0.05] last:border-0">
-                <span className="text-[12.5px] font-bold text-white w-8">{b.position}</span>
-                <Badge variant="outline" className="text-[9px] font-bold text-[#d4af37] border-[#d4af37]/35">
-                  {b.signal}
-                </Badge>
-                <span className="text-[11.5px] text-white/55 ml-auto text-right">{b.interpretation}</span>
-              </div>
-            ))}
-          </div>
-        </SectionCard>
-      )}
-
-      {/* 6. Manager Tendencies — scannable two-column table (Tendency | Read) */}
+      {/* Manager Tendencies — scannable two-column table (Tendency | Read) */}
       {cl.managerTendencies && cl.managerTendencies.length > 0 && (
         <SectionCard title="Manager tendencies" icon={<Target className="w-3.5 h-3.5" />}>
           <div className="divide-y divide-white/[0.06]">
@@ -2030,53 +2016,6 @@ function CrossLeagueTab({ data }: { data: ManagerIntelPayload }) {
               );
             })}
           </div>
-        </SectionCard>
-      )}
-
-      {/* 7. Trade Strategy — the action section: lead with the angle, then who to send / avoid */}
-      {cl.tradeImplications && (
-        <div className="rounded-xl border border-[#d4af37]/25 bg-gradient-to-br from-[#d4af37]/[0.06] to-transparent p-4 space-y-3">
-          <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-[#d4af37]">
-            <Handshake className="w-3.5 h-3.5" />
-            <span>Trade strategy</span>
-          </div>
-          {cl.tradeImplications.bestAngle && (
-            <div>
-              <div className="text-[10px] font-bold uppercase tracking-wider text-[#d4af37] mb-1">Best offer angle</div>
-              <p className="text-[13px] text-white/85 leading-relaxed">{cl.tradeImplications.bestAngle}</p>
-            </div>
-          )}
-          {cl.tradeImplications.likelyValues.length > 0 && (
-            <div>
-              <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-300 mb-1.5">Send them</div>
-              <div className="flex flex-wrap gap-1.5">
-                {cl.tradeImplications.likelyValues.map((v, i) => (
-                  <Chip key={i} tone="positive">{v}</Chip>
-                ))}
-              </div>
-            </div>
-          )}
-          {cl.tradeImplications.unlikelyValues.length > 0 && (
-            <div>
-              <div className="text-[10px] font-bold uppercase tracking-wider text-rose-300 mb-1.5">Avoid leading with</div>
-              <div className="flex flex-wrap gap-1.5">
-                {cl.tradeImplications.unlikelyValues.map((v, i) => (
-                  <Chip key={i} tone="negative">{v}</Chip>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* 8. Common build — compact footer */}
-      {(cl.commonRosterBuild || cl.positionStrengthProfile) && (
-        <SectionCard title="Common build" icon={<Layers className="w-3.5 h-3.5" />}>
-          <p className="text-[12.5px] text-white/75">
-            {cl.commonRosterBuild}
-            {cl.commonRosterBuild && cl.positionStrengthProfile ? " · " : ""}
-            <span className="text-white/45">{cl.positionStrengthProfile}</span>
-          </p>
         </SectionCard>
       )}
 
@@ -2131,6 +2070,8 @@ function CrossLeagueTab({ data }: { data: ManagerIntelPayload }) {
           )}
         </SectionCard>
       )}
+
+      {data.confidence && <DataCoverageCard confidence={data.confidence} meta={data.meta} />}
 
       <SourceNote text="Counts are visible Sleeper leagues only." />
     </div>
@@ -2217,141 +2158,6 @@ function ExposureLeaders({ players }: { players: PlayerExposure[] }) {
   );
 }
 
-// ── Trade ─────────────────────────────────────────────────────────────────
-
-function TradeApproachTab({ data, viewerTeam }: { data: ManagerIntelPayload; viewerTeam: Team | null }) {
-  const ta = data.tradeApproach;
-  const diff = ta.tradeDifficulty;
-  const pb = ta.playbook;
-  const lt = ta.likelyTargetsGrouped;
-  const sc = ta.sellCandidatesGrouped;
-  // Reconcile "Likely needs" with the rest of the tab: when there are no hard
-  // holes, surface the softest group instead of a flat "no needs".
-  const needsText =
-    ta.likelyNeeds.length > 0
-      ? null
-      : data.currentLeague?.relativeWeakness ??
-        "No severe positional holes — they don't need to force a trade unless the value fits their plan.";
-
-  return (
-    <div className="space-y-4">
-      {/* Suggested angle — the loudest card on this tab. */}
-      <div className="rounded-xl border border-[#d4af37]/30 bg-gradient-to-br from-[#d4af37]/[0.08] to-transparent p-5">
-        <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-[#d4af37] mb-2">
-          <Handshake className="w-3.5 h-3.5" />
-          <span>Suggested Angle</span>
-        </div>
-        <p className="text-[14px] text-white/90 leading-relaxed">{ta.suggestedAngle}</p>
-      </div>
-
-      {diff && diff.reason && <TradeDifficultyCard difficulty={diff} />}
-
-      {pb && (
-        <SectionCard title="Trade playbook" icon={<ArrowRightLeft className="w-3.5 h-3.5" />}>
-          <div className="space-y-1">
-            <ProfileRow label="Best approach" value={pb.bestApproach} tone="positive" />
-            <ProfileRow label="Best deal type" value={pb.bestDealType} tone="positive" />
-            <ProfileRow label="Likely motivation" value={pb.likelyMotivation} />
-            <ProfileRow label="Likely style" value={pb.likelyStyle} />
-            <ProfileRow label="Negotiation style" value={pb.negotiationStyle} />
-            <ProfileRow label="Avoid" value={pb.avoid} tone="caution" />
-          </div>
-        </SectionCard>
-      )}
-
-      <RosterMatch data={data} viewerTeam={viewerTeam} />
-
-      {((ta.targetableAssets?.length ?? 0) > 0 || (ta.protectedAssets?.length ?? 0) > 0) && (
-        <TheirAssets targetable={ta.targetableAssets ?? []} protectedAssets={ta.protectedAssets ?? []} />
-      )}
-
-      {ta.dealTypes && ta.dealTypes.length > 0 && (
-        <SectionCard title="Deal types that fit" icon={<ArrowRightLeft className="w-3.5 h-3.5" />}>
-          <div className="space-y-1">
-            {ta.dealTypes.map((d, i) => (
-              <div key={i} className="flex items-start gap-3 py-1.5 border-b border-white/[0.05] last:border-0">
-                <span className="text-[12.5px] text-white/80 flex-1">{d.dealType}</span>
-                <FitBadge fit={d.fit} />
-                <span className="text-[11px] text-white/45 w-[44%] text-right hidden sm:block">{d.why}</span>
-              </div>
-            ))}
-          </div>
-        </SectionCard>
-      )}
-
-      {((ta.openingOffers?.length ?? 0) > 0 || viewerTeam) && (
-        <OfferIdeas data={data} viewerTeam={viewerTeam} />
-      )}
-
-      {(lt || sc) && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <SectionCard title="Likely targets" icon={<Target className="w-3.5 h-3.5" />}>
-            <GroupedList primaryLabel="High-fit" primary={lt?.high ?? []} secondaryLabel="Conditional" secondary={lt?.conditional ?? []} />
-          </SectionCard>
-          <SectionCard title="Possible sell candidates" icon={<ArrowRightLeft className="w-3.5 h-3.5" />}>
-            <GroupedList primaryLabel="Most likely" primary={sc?.mostLikely ?? []} secondaryLabel="Least likely" secondary={sc?.leastLikely ?? []} secondaryTone="muted" />
-          </SectionCard>
-        </div>
-      )}
-
-      <SectionCard title="Likely needs" icon={<AlertTriangle className="w-3.5 h-3.5" />}>
-        {ta.likelyNeeds.length > 0 ? (
-          <div className="flex flex-wrap gap-1.5">
-            {ta.likelyNeeds.map((n) => (
-              <Badge key={n} variant="outline" className="text-[10px] font-bold text-rose-300 border-rose-500/40">
-                {n}
-              </Badge>
-            ))}
-          </div>
-        ) : (
-          <p className="text-[13px] text-white/65 leading-relaxed">{needsText}</p>
-        )}
-      </SectionCard>
-
-      {(ta.doList?.length || ta.dontList?.length) && (
-        <DoDontCard doList={ta.doList ?? []} dontList={ta.dontList ?? []} />
-      )}
-
-      {ta.negotiationNotes && ta.negotiationNotes.length > 0 && (
-        <SectionCard title="Negotiation notes" icon={<Target className="w-3.5 h-3.5" />}>
-          <ul className="space-y-1.5">
-            {ta.negotiationNotes.map((n, i) => (
-              <li key={i} className="text-[12.5px] text-white/75 leading-relaxed flex gap-1.5">
-                <span className="text-[#d4af37]/70">•</span>
-                <span>{n}</span>
-              </li>
-            ))}
-          </ul>
-        </SectionCard>
-      )}
-
-      <SectionCard title="Caution" icon={<AlertTriangle className="w-3.5 h-3.5" />}>
-        <p className="text-[12px] text-amber-300/90 leading-relaxed">{ta.cautionNotes}</p>
-      </SectionCard>
-    </div>
-  );
-}
-
-function ProfileRow({ label, value, tone }: { label: string; value: string; tone?: "positive" | "caution" }) {
-  const toneClass = tone === "positive" ? "text-emerald-300" : tone === "caution" ? "text-rose-300" : "text-white/85";
-  return (
-    <div className="flex items-start justify-between gap-3 py-1.5 border-b border-white/[0.05] last:border-0">
-      <span className="text-[12px] text-white/55 flex-shrink-0">{label}</span>
-      <span className={cn("text-[12px] font-semibold text-right", toneClass)}>{value}</span>
-    </div>
-  );
-}
-
-function FitBadge({ fit }: { fit: Rating3 }) {
-  const cls =
-    fit === "High" ? "text-emerald-300 border-emerald-500/40" : fit === "Medium" ? "text-amber-300 border-amber-500/40" : "text-white/45 border-white/15";
-  return (
-    <Badge variant="outline" className={cn("text-[9px] font-bold flex-shrink-0", cls)}>
-      {fit} fit
-    </Badge>
-  );
-}
-
 function GroupedList({
   primaryLabel,
   primary,
@@ -2390,236 +2196,6 @@ function GroupedList({
         </div>
       )}
     </div>
-  );
-}
-
-function TradeDifficultyCard({ difficulty }: { difficulty: { level: Rating3; reason: string } }) {
-  // For trade difficulty, High = harder (caution), Low = easier (good).
-  const tone =
-    difficulty.level === "High"
-      ? "text-rose-300 border-rose-500/40"
-      : difficulty.level === "Medium"
-      ? "text-amber-300 border-amber-500/40"
-      : "text-emerald-300 border-emerald-500/40";
-  return (
-    <div className="rounded-lg border border-white/10 bg-white/[0.03] p-4 flex items-start justify-between gap-3">
-      <div className="min-w-0">
-        <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-white/45 mb-1.5">
-          <Gauge className="w-3.5 h-3.5" />
-          <span>Trade difficulty</span>
-        </div>
-        <p className="text-[12.5px] text-white/70 leading-relaxed">{difficulty.reason}</p>
-      </div>
-      <Badge variant="outline" className={cn("text-[11px] font-bold flex-shrink-0", tone)}>
-        {difficulty.level}
-      </Badge>
-    </div>
-  );
-}
-
-function TheirAssets({
-  targetable,
-  protectedAssets,
-}: {
-  targetable: Array<{ name: string; pos: string; age: number | null; value: number; reason: string; difficulty: Rating3 }>;
-  protectedAssets: Array<{ name: string; pos: string; value: number; reason: string }>;
-}) {
-  return (
-    <SectionCard title="Assets of theirs to target" icon={<Target className="w-3.5 h-3.5" />}>
-      {targetable.length > 0 ? (
-        <ul className="space-y-1.5">
-          {targetable.map((a, i) => (
-            <li key={i} className="flex items-center gap-2 py-1 border-b border-white/[0.05] last:border-0">
-              <span className="text-white/85 text-[13px] truncate min-w-0 flex-1">
-                {a.name}
-                <span className="text-white/40 text-[11px]">
-                  {" "}
-                  · {a.pos}
-                  {a.age ? ` · ${a.age}y` : ""}
-                </span>
-              </span>
-              <span className="text-white/60 tabular-nums text-[11px] whitespace-nowrap">{fmtValue(a.value)}</span>
-              <FitBadge fit={a.difficulty} />
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className="text-[12.5px] text-white/45">No obvious targetable veterans on their current-league roster.</p>
-      )}
-      {targetable[0] && <p className="text-[11px] text-white/40 mt-2">{targetable[0].reason}.</p>}
-
-      {protectedAssets.length > 0 && (
-        <div className="mt-3 pt-3 border-t border-white/[0.06]">
-          <div className="text-[10px] font-bold uppercase tracking-wider text-rose-300/80 mb-1.5">Likely protected — avoid asking</div>
-          <div className="flex flex-wrap gap-1.5">
-            {protectedAssets.map((a, i) => (
-              <Badge key={i} variant="outline" className="text-[10px] font-semibold text-white/60 border-white/15">
-                {a.name} <span className="text-white/35 ml-1">{a.pos}</span>
-              </Badge>
-            ))}
-          </div>
-          <p className="text-[11px] text-white/40 mt-1.5">
-            Also off-limits: premium rookie picks and their highest-exposure players across leagues.
-          </p>
-        </div>
-      )}
-    </SectionCard>
-  );
-}
-
-/**
- * Fit score for one of the viewer's players against this manager's tendencies.
- * Considers position need, age vs their youth lean, and dynasty value.
- */
-function playerFit(
-  player: { pos: string; age: number; value: number },
-  targetPositions: string[],
-  preferYouth: boolean,
-): { score: number; tag: "Strong" | "Moderate" | "Low"; why: string } {
-  let score = 45;
-  const posMatch = targetPositions.includes(player.pos);
-  if (posMatch) score += 25;
-  const age = player.age || 27;
-  if (preferYouth) {
-    if (age <= 23) score += 22;
-    else if (age <= 25) score += 14;
-    else if (age >= 29) score -= 24;
-    else score -= 4;
-  } else if (age >= 26 && age <= 30) {
-    score += 12;
-  } else if (age <= 22) {
-    score -= 6;
-  }
-  if (player.value >= 3000) score += 8;
-  else if (player.value >= 1500) score += 4;
-  score = Math.max(0, Math.min(100, score));
-  const tag = score >= 75 ? "Strong" : score >= 50 ? "Moderate" : "Low";
-
-  let why: string;
-  if (preferYouth && age >= 29) why = "Veteran add-on only";
-  else if (preferYouth && age <= 25 && posMatch) why = `Young ${player.pos} upside`;
-  else if (posMatch && age <= 27) why = `${player.pos} help that fits`;
-  else if (posMatch) why = `${player.pos} help`;
-  else if (age <= 25) why = "Young upside piece";
-  else why = "Depth / add-on";
-  return { score, tag, why };
-}
-
-/**
- * "Players on your roster they may want" — fit-scored against the target's
- * tendencies. Computed client-side so it never pollutes the cached payload.
- */
-function RosterMatch({ data, viewerTeam }: { data: ManagerIntelPayload; viewerTeam: Team | null }) {
-  const targetPositions = data.tradeApproach.targetPositions ?? [];
-  const preferYouth = data.tradeApproach.preferYouth ?? false;
-  const pickValueHigh = data.preferences?.pickValue === "High";
-
-  const matches = useMemo(() => {
-    if (!viewerTeam || targetPositions.length === 0) return [];
-    return viewerTeam.roster
-      .filter((p) => targetPositions.includes(p.pos) && p.value > 0)
-      .map((p) => ({ player: p, ...playerFit({ pos: p.pos, age: p.age, value: p.value }, targetPositions, preferYouth) }))
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 6);
-  }, [viewerTeam, targetPositions, preferYouth]);
-
-  if (!viewerTeam) {
-    return (
-      <div className="rounded-lg border border-dashed border-white/12 bg-white/[0.02] px-4 py-4 text-center">
-        <div className="text-[12px] text-white/55">
-          Connect Sleeper and select an active league to see which of{" "}
-          <span className="text-white/75 font-semibold">your</span> players match this manager's tendencies.
-        </div>
-      </div>
-    );
-  }
-
-  const fitCls = (tag: string) =>
-    tag === "Strong" ? "text-emerald-300" : tag === "Moderate" ? "text-amber-300" : "text-white/45";
-
-  return (
-    <div className="rounded-xl border border-emerald-500/25 bg-gradient-to-br from-emerald-500/[0.07] to-transparent p-4">
-      <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-emerald-300 mb-2">
-        <Handshake className="w-3.5 h-3.5" />
-        <span>Players on your roster they may want</span>
-      </div>
-      {matches.length === 0 ? (
-        <p className="text-[12.5px] text-white/55">
-          Nothing on your roster lines up cleanly with their{" "}
-          {targetPositions.length ? targetPositions.join("/") + " " : ""}targets right now.
-        </p>
-      ) : (
-        <>
-          <ul className="space-y-1.5">
-            {matches.map(({ player: p, score, tag, why }) => (
-              <li key={p.id} className="flex items-center gap-2 text-[13px]">
-                <span className="text-white/85 truncate min-w-0 flex-1">
-                  {p.name}
-                  <span className="text-white/40 text-[11px]">
-                    {" "}
-                    · {p.pos}
-                    {p.age ? ` · ${p.age}y` : ""}
-                  </span>
-                </span>
-                <span className="text-emerald-300/90 tabular-nums text-[11px] whitespace-nowrap">{fmtValue(p.value)}</span>
-                <span className={cn("text-[11px] font-bold tabular-nums w-9 text-right", fitCls(tag))}>{score}%</span>
-                <span className="text-[10px] text-white/45 w-[120px] text-right hidden sm:block truncate">{why}</span>
-              </li>
-            ))}
-          </ul>
-          {pickValueHigh && (
-            <p className="text-[11px] text-white/50 mt-2.5 leading-relaxed">
-              They place a high value on draft capital — your future 1st and 2nd-round rookie picks are likely in
-              play too.
-            </p>
-          )}
-        </>
-      )}
-    </div>
-  );
-}
-
-/** Opening offer ideas + concrete package starters built from the viewer's roster. */
-function OfferIdeas({ data, viewerTeam }: { data: ManagerIntelPayload; viewerTeam: Team | null }) {
-  const targetPositions = data.tradeApproach.targetPositions ?? [];
-  const preferYouth = data.tradeApproach.preferYouth ?? false;
-  const openingOffers = data.tradeApproach.openingOffers ?? [];
-  const nextYr = (() => {
-    const s = parseInt(data.meta.season, 10);
-    return Number.isFinite(s) ? s + 1 : null;
-  })();
-
-  const packages = useMemo(() => {
-    if (!viewerTeam || targetPositions.length === 0 || nextYr == null) return [];
-    const top = viewerTeam.roster
-      .filter((p) => targetPositions.includes(p.pos) && p.value > 0)
-      .map((p) => ({ player: p, ...playerFit({ pos: p.pos, age: p.age, value: p.value }, targetPositions, preferYouth) }))
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 3);
-    const tails = [`${nextYr} 2nd`, `${nextYr} 3rd`, `a future 2nd`];
-    return top.map((m, i) => `${m.player.name} + ${tails[i] ?? "a future pick"}`);
-  }, [viewerTeam, targetPositions, preferYouth, nextYr]);
-
-  return (
-    <SectionCard title="Offer ideas" icon={<Sparkles className="w-3.5 h-3.5" />}>
-      {openingOffers.length > 0 && (
-        <ul className="space-y-1.5">
-          {openingOffers.map((o, i) => (
-            <li key={i} className="text-[12.5px] text-white/75 leading-relaxed">• {o}</li>
-          ))}
-        </ul>
-      )}
-      {packages.length > 0 && (
-        <div className="mt-3 pt-3 border-t border-white/[0.06]">
-          <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-300/80 mb-1.5">Package starters from your roster</div>
-          <ul className="space-y-1">
-            {packages.map((p, i) => (
-              <li key={i} className="text-[12.5px] text-white/80 leading-snug">• {p}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-    </SectionCard>
   );
 }
 

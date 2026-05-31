@@ -52,6 +52,8 @@ const TradeDatabase        = lazy(() => import("./tabs/TradeCenter").then(m => (
 const TradeSync         = lazy(() => import("./tabs/TradeSync"));
 const PositionalAnalysis= lazy(() => import("./tabs/PositionalAnalysis").then(m => ({ default: m.PositionalAnalysis })));
 const MarketValue       = lazy(() => import("./tabs/LeagueMarket").then(m => ({ default: m.MarketValue })));
+const MarketInefficiencies = lazy(() => import("./tabs/MarketInefficiencies").then(m => ({ default: m.MarketInefficiencies })));
+const ValueFinder = lazy(() => import("./tabs/ValueFinder").then(m => ({ default: m.ValueFinder })));
 const Analysis          = lazy(() => import("./tabs/Analysis"));
 const LiveDraft         = lazy(() => import("./tabs/LiveDraft"));
 const LineupCommand     = lazy(() => import("./tabs/LineupCommand").then(m => ({ default: m.LineupCommand })));
@@ -581,6 +583,15 @@ export default function DynastyCommandCenter({ params, playerProfileId, managerP
     // it renders for guests too. Must sit above the active-league guard below.
     if (activeMainTab === "league-market" && activeSubTab === "analysis") {
       return <Analysis />;
+    }
+
+    // Market Inefficiencies runs on the bundled value model (no league/Sleeper
+    // required), so it renders above the active-league guard for guests too.
+    if (activeMainTab === "league-market" && activeSubTab === "value-finder") {
+      return <ValueFinder />;
+    }
+    if (activeMainTab === "league-market" && activeSubTab === "market-inefficiencies") {
+      return <MarketInefficiencies />;
     }
 
     // Trade Calculator has a guest-accessible "Quick" mode (no login/league), so

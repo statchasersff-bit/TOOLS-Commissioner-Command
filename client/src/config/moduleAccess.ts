@@ -63,6 +63,8 @@ export const MODULE_ACCESS: Record<string, AccessRequirement> = {
   // username (readonly). Advanced Stats (position-stats) is public.
   "league-market:analysis": "public",          // Resources
   "league-market:market-value": "readonly",    // needs a league
+  "league-market:market-inefficiencies": "public", // self-contained on bundled values
+  "league-market:value-finder": "public", // self-contained on bundled sample values
   "league-market:position-stats": "public",
 
   // Draft — ADP data is public. The Draft Board (live Sleeper draft tracker) is
