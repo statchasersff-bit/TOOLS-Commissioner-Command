@@ -19,7 +19,12 @@ export interface Player {
   age: number;
   value: number;
   team: string;
+  /** App's OPTIMAL lineup membership (set by optimizeLineup, used for analytics:
+   *  win-now value, strength metrics, etc.). NOT the manager's actual lineup. */
   starter?: boolean;
+  /** The manager's ACTUAL set lineup on Sleeper (from roster.starters). Survives
+   *  optimizeLineup so roster displays can show who's really starting. */
+  lineupStarter?: boolean;
   onTaxi?: boolean;
   onReserve?: boolean;
   sleeperId?: string;
@@ -71,6 +76,10 @@ export interface League {
   irSlots?: number;
   tePremium?: number;
   scoringSettings?: Record<string, number>;
+  /** True for Sleeper best-ball leagues (settings.best_ball === 1). Best-ball
+   *  has no set lineup, so win-now value is measured over the entire roster
+   *  rather than just the optimal starters. */
+  isBestBall?: boolean;
 }
 
 export type Tier = "Juggernaut" | "Win-Now" | "Future Powerhouse" | "Pick Hoarder" | "Taco" | "Contender" | "Pretender" | "Rebuilder" | "Weak / Directionless" | "Balanced";

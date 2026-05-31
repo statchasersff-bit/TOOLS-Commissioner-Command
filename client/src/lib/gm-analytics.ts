@@ -53,13 +53,21 @@ export interface StrengthSnapshot {
   totalTeams: number;
 }
 
-/** Sum win-now (redraft) value of every player flagged as a starter. */
+/**
+ * Sum win-now (redraft) value of a team.
+ *
+ * Standard leagues: only players flagged as starters count, since bench points
+ * never reach the scoreboard. Best-ball leagues have no set lineup — every
+ * rostered player's best weeks auto-score — so win-now value reflects the
+ * ENTIRE roster's redraft value, not just the optimal starters.
+ */
 export function calculateStarterStrength(
   team: Team,
   getRedraftValue: (p: Player) => number,
+  isBestBall = false,
 ): number {
   return team.roster
-    .filter((p) => p.starter)
+    .filter((p) => isBestBall || p.starter)
     .reduce((s, p) => s + getRedraftValue(p), 0);
 }
 
@@ -165,12 +173,13 @@ export function calculateStrengthSnapshot(
   getPlayerValue: (p: Player) => number,
   getPickValue: (p: Pick) => number = NO_PICK_VALUE,
 ): StrengthSnapshot {
-  const starterStrength = calculateStarterStrength(team, getRedraftValue);
+  const isBestBall = league.isBestBall ?? false;
+  const starterStrength = calculateStarterStrength(team, getRedraftValue, isBestBall);
   const benchDepth = calculateBenchDepth(team, getPlayerValue);
 
   const starterRank =
     [...league.teams]
-      .map((t) => ({ id: t.id, v: calculateStarterStrength(t, getRedraftValue) }))
+      .map((t) => ({ id: t.id, v: calculateStarterStrength(t, getRedraftValue, isBestBall) }))
       .sort((a, b) => b.v - a.v)
       .findIndex((t) => t.id === team.id) + 1;
 
@@ -357,10 +366,15 @@ export function buildSnapshotPayload(
   getPlayerValue: (p: Player) => number,
   getRedraftValue: (p: Player) => number,
   getPickValue: (p: Pick) => number,
+  isBestBall = false,
 ): TeamSnapshotPayload {
   const dynastyPlayers = team.roster.reduce((s, p) => s + getPlayerValue(p), 0);
   const pickValue = team.picks.reduce((s, p) => s + getPickValue(p), 0);
-  const winNowValue = team.roster.filter((p) => p.starter).reduce((s, p) => s + getRedraftValue(p), 0);
+  // Best-ball has no set lineup, so win-now spans the entire roster (see
+  // calculateStarterStrength); standard leagues count starters only.
+  const winNowValue = team.roster
+    .filter((p) => isBestBall || p.starter)
+    .reduce((s, p) => s + getRedraftValue(p), 0);
   const starters = team.roster.filter((p) => p.starter);
   const avgAge =
     starters.length > 0 ? starters.reduce((s, p) => s + p.age, 0) / starters.length : 0;

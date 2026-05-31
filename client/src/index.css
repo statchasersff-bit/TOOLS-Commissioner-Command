@@ -501,6 +501,61 @@
   background-color: #ffffff !important;
 }
 
+/* Light mode only: the Sleeper manager-intel profile page (.manager-intel) was
+   built dark-only — ~215 hardcoded text-white/* classes plus translucent
+   white card surfaces and hairline borders. On a white page the text is nearly
+   invisible and the surfaces/borders vanish. Rather than rewrite every call
+   site, remap the white-on-dark utilities to legible navy/slate equivalents,
+   scoped to this page so dark/x-mode (which never carry data-theme="light")
+   are untouched. Opacity tiers map to a text hierarchy:
+     high (≥75%)  → body/headline navy (--foreground)
+     mid (50–70%) → secondary slate
+     low (≤45%)   → muted labels (--muted-foreground), still legible. */
+[data-theme="light"] .manager-intel .text-white,
+[data-theme="light"] .manager-intel .text-white\/90,
+[data-theme="light"] .manager-intel .text-white\/85,
+[data-theme="light"] .manager-intel .text-white\/80,
+[data-theme="light"] .manager-intel .text-white\/75 {
+  color: hsl(var(--foreground)) !important;
+}
+[data-theme="light"] .manager-intel .text-white\/70,
+[data-theme="light"] .manager-intel .text-white\/65,
+[data-theme="light"] .manager-intel .text-white\/60,
+[data-theme="light"] .manager-intel .text-white\/55,
+[data-theme="light"] .manager-intel .text-white\/50 {
+  color: hsl(215 25% 32%) !important;   /* readable secondary slate */
+}
+[data-theme="light"] .manager-intel .text-white\/45,
+[data-theme="light"] .manager-intel .text-white\/40,
+[data-theme="light"] .manager-intel .text-white\/35,
+[data-theme="light"] .manager-intel .text-white\/30 {
+  color: hsl(var(--muted-foreground)) !important;   /* muted labels, still legible */
+}
+/* Translucent white card/chip surfaces → a faint navy tint so sections keep
+   their definition on the white page. Substring match covers every bg-white/*
+   variant (solid arbitrary values and /10-style) without enumerating each. */
+[data-theme="light"] .manager-intel [class*="bg-white"] {
+  background-color: hsl(215 40% 20% / 0.05) !important;
+}
+/* Hairline white separators → a subtle navy border, same substring approach. */
+[data-theme="light"] .manager-intel [class*="border-white"] {
+  border-color: hsl(215 30% 22% / 0.14) !important;
+}
+/* Semantic accent text uses 300-level shades tuned for dark backgrounds; they're
+   too pale on white. Deepen each family to its 700 shade (same hue/meaning, far
+   better contrast). Substring match also covers the /70-/90 opacity variants. */
+[data-theme="light"] .manager-intel [class*="text-emerald-300"] { color: #047857 !important; }
+[data-theme="light"] .manager-intel [class*="text-rose-300"]    { color: #be123c !important; }
+[data-theme="light"] .manager-intel [class*="text-amber-300"]   { color: #b45309 !important; }
+[data-theme="light"] .manager-intel [class*="text-sky-300"]     { color: #0369a1 !important; }
+/* The league-selector trigger uses a solid dark navy fill (bg-[#0a1628]); in
+   light mode flip it to a white control so its (now-navy) text stays legible.
+   The dropdown PANEL shares this class but renders in a Radix portal outside
+   .manager-intel, so it keeps its dark fill + white text — readable as-is. */
+[data-theme="light"] .manager-intel .bg-\[\#0a1628\] {
+  background-color: #ffffff !important;
+}
+
 .dark {
   /* ADP Explorer board — original dark "draft room" literals (unchanged look). */
   --adp-board: #070f1c;

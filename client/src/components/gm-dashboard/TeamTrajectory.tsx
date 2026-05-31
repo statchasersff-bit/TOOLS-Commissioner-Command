@@ -64,8 +64,8 @@ export function TeamTrajectory({ league, userTeam, rosterId }: Props) {
   const { getPlayerValue, getRedraftValue, getPickValue } = useValueModel();
 
   const currentSnapshot = useMemo(
-    () => buildSnapshotPayload(userTeam, getPlayerValue, getRedraftValue, getPickValue),
-    [userTeam, getPlayerValue, getRedraftValue, getPickValue],
+    () => buildSnapshotPayload(userTeam, getPlayerValue, getRedraftValue, getPickValue, league.isBestBall ?? false),
+    [userTeam, getPlayerValue, getRedraftValue, getPickValue, league.isBestBall],
   );
 
   const [history, setHistory] = useState<SnapshotRow[] | null>(null);

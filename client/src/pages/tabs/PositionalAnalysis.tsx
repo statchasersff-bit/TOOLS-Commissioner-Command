@@ -198,7 +198,9 @@ interface ManagerIdeaGroup {
 // find packages of their position-eligible players/picks whose ADJUSTED trade
 // value (diminishing returns + overpay tax, same as the Trade Calculator) lands
 // within a fairness band of the offered package's adjusted value. Considers
-// singles, pairs, and triples, then keeps the most even ideas.
+// singles, pairs, and triples, then keeps a spread per manager: balanced deals
+// (even-to-slight edge, with a modest edge ranked best and overpays sunk) plus a
+// couple of clear-edge steals so clearly-favorable trades always surface too.
 function generateTradeIdeas(
   offerValue: number,
   managers: Team[],
@@ -209,9 +211,23 @@ function generateTradeIdeas(
   valueOf: (values: number[]) => number,
 ): ManagerIdeaGroup[] {
   if (offerValue <= 0) return [];
-  const BAND = 0.15;
-  const lo = offerValue * (1 - BAND);
-  const hi = offerValue * (1 + BAND);
+  // Asymmetric band: cap how far you'll overpay tightly (LO), but allow packages
+  // that land well in YOUR favor (HI) so the generator can surface clear-edge
+  // steals, not just even swaps.
+  const LO_BAND = 0.15;
+  const HI_BAND = 0.40;
+  const lo = offerValue * (1 - LO_BAND);
+  const hi = offerValue * (1 + HI_BAND);
+  // Rank balanced deals toward a slight edge in YOUR favor (a touch above the
+  // card's ±4% "Even" band) rather than dead even. Even deals still rank well,
+  // and overpays (negative diff) are penalized so we never lead with trades
+  // where you lose value. Lower rank = better.
+  const EDGE_TARGET = offerValue * 0.06;
+  const rankByEdge = (diff: number) =>
+    Math.abs(diff - EDGE_TARGET) + (diff < 0 ? -diff : 0);
+  // Anything beyond this much in your favor reads as a clear-edge steal and is
+  // surfaced as its own tier so it isn't crowded out by tightly-even deals.
+  const CLEAR_EDGE = offerValue * 0.15;
   const groups: ManagerIdeaGroup[] = [];
 
   for (const m of managers) {
@@ -285,19 +301,35 @@ function generateTradeIdeas(
     }
 
     if (ideas.length > 0) {
-      ideas.sort((a, b) => Math.abs(a.diff) - Math.abs(b.diff));
+      // Keep a spread per manager: balanced deals (even-to-slight edge) plus a
+      // couple of clear-edge steals, so clearly-favorable trades always surface
+      // instead of being squeezed out by the tightest-even ones.
+      const balanced = ideas
+        .filter((i) => i.diff < CLEAR_EDGE)
+        .sort((a, b) => rankByEdge(a.diff) - rankByEdge(b.diff));
+      const clearEdge = ideas
+        .filter((i) => i.diff >= CLEAR_EDGE)
+        .sort((a, b) => a.diff - b.diff); // most attainable clear wins first
+      const kept = [...balanced.slice(0, 3), ...clearEdge.slice(0, 2)];
+      // Backfill to 5 from whichever bucket had leftovers (still edge-ranked).
+      if (kept.length < 5) {
+        const extra = [...balanced.slice(3), ...clearEdge.slice(2)].sort(
+          (a, b) => rankByEdge(a.diff) - rankByEdge(b.diff),
+        );
+        kept.push(...extra.slice(0, 5 - kept.length));
+      }
       groups.push({
         managerId: m.id,
         managerName: m.name,
         managerOwner: m.owner,
         managerAvatar: m.avatar,
-        ideas: ideas.slice(0, 5),
+        ideas: kept,
       });
     }
   }
 
-  // Most-even managers (best single idea) first.
-  groups.sort((a, b) => Math.abs(a.ideas[0].diff) - Math.abs(b.ideas[0].diff));
+  // Lead with managers whose best idea lands closest to a slight edge in your favor.
+  groups.sort((a, b) => rankByEdge(a.ideas[0].diff) - rankByEdge(b.ideas[0].diff));
   return groups;
 }
 

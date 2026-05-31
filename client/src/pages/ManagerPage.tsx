@@ -348,7 +348,7 @@ export default function ManagerPage({
   };
 
   return (
-    <div className={cn(!embedded && "min-h-screen bg-background", "text-foreground")}>
+    <div className={cn("manager-intel", !embedded && "min-h-screen bg-background", "text-foreground")}>
       <div
         className={cn(
           "flex items-center px-4 py-2.5",
@@ -1338,10 +1338,14 @@ function LeagueSelector({
   );
 }
 
-function Chip({ children, tone = "neutral" }: { children: React.ReactNode; tone?: "neutral" | "good" | "muted" }) {
+function Chip({ children, tone = "neutral" }: { children: React.ReactNode; tone?: "neutral" | "good" | "muted" | "gold" | "positive" | "negative" }) {
   const cls =
-    tone === "good"
-      ? "text-emerald-300 border-emerald-500/40"
+    tone === "gold"
+      ? "text-[#d4af37] border-[#d4af37]/35 bg-[#d4af37]/[0.06]"
+      : tone === "positive" || tone === "good"
+      ? "text-emerald-300 border-emerald-500/40 bg-emerald-500/[0.06]"
+      : tone === "negative"
+      ? "text-rose-300 border-rose-500/40 bg-rose-500/[0.06]"
       : tone === "muted"
       ? "text-white/40 border-white/10"
       : "text-white/70 border-white/15";
@@ -1840,36 +1844,53 @@ function CrossLeagueTab({ data }: { data: ManagerIntelPayload }) {
   const tradeShare = actTotal > 0 ? Math.round(((act?.tradeCount ?? 0) / actTotal) * 100) : 0;
   const waiverShare = actTotal > 0 ? 100 - tradeShare : 0;
 
-  // Portfolio Snapshot — derived from existing leans for a quick read.
-  const posLean = positionBias
-    .filter((p) => p.signal !== "Light" && p.signal !== "Veteran-leaning" && p.signal !== "Balanced")
-    .map((p) => p.position);
-  const snapshot: Array<{ label: string; value: string }> = [
+  const [identityOpen, setIdentityOpen] = useState(false);
+
+  // Portfolio Snapshot — core metrics as a scannable table; leans + the most
+  // notable positional biases become quick-read pills below it.
+  const snapshotRows: Array<{ label: string; value: string }> = [
     { label: "Leagues", value: String(cl.dynastyLeagueCount) },
     { label: "Avg age", value: cl.averageTeamAge != null ? String(cl.averageTeamAge) : "—" },
+    ...(cl.portfolioType ? [{ label: "Build type", value: cl.portfolioType }] : []),
     { label: "Trade style", value: cl.tradeActivityRating },
     { label: "Waiver style", value: cl.waiverActivityRating },
-    { label: "Youth lean", value: youthLean },
-    { label: "Veteran lean", value: vetLean },
-    ...(posLean.length ? [{ label: "Position lean", value: posLean.join("/") }] : []),
-    ...(cl.portfolioType ? [{ label: "Portfolio", value: cl.portfolioType }] : []),
   ];
+  // Skip Balanced/Light signals so we don't list every position — that reads as
+  // noise. Only surface the biases that actually say something.
+  const biasPills = positionBias
+    .filter((p) => p.signal && p.signal !== "Balanced" && p.signal !== "Light")
+    .slice(0, 3)
+    .map((p) => `${p.position} ${p.signal}`);
+  const snapshotPills = [`${youthLean} Youth Lean`, `${vetLean} Veteran Lean`, ...biasPills];
+
+  // Portfolio Identity — show the first sentence by default, full text on expand.
+  const identityFull = cl.portfolioIdentity ?? "";
+  const identitySummary = identityFull.match(/^[^.!?]*[.!?]/)?.[0]?.trim() ?? identityFull;
+  const identityHasMore = identityFull.length > identitySummary.length + 1;
+  const favTypes = cl.favoritePlayerTypes ?? [];
 
   return (
     <div className="space-y-4">
-      {/* Portfolio Snapshot */}
+      {/* 1. Portfolio Snapshot — metric table + quick-read pills */}
       <SectionCard title="Portfolio snapshot" icon={<Gauge className="w-3.5 h-3.5" />}>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-          {snapshot.map((s) => (
-            <div key={s.label} className="rounded-md border border-white/8 bg-white/[0.02] px-3 py-2">
-              <div className="text-[9px] uppercase tracking-wider text-white/40">{s.label}</div>
-              <div className="text-[13px] font-bold text-white truncate">{s.value}</div>
+        <div className="divide-y divide-white/[0.06]">
+          {snapshotRows.map((s) => (
+            <div key={s.label} className="flex items-center justify-between py-1.5">
+              <span className="text-[11px] uppercase tracking-wider text-white/45">{s.label}</span>
+              <span className="text-[13px] font-bold text-white">{s.value}</span>
             </div>
           ))}
         </div>
+        {snapshotPills.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 mt-3">
+            {snapshotPills.map((p) => (
+              <Chip key={p} tone="gold">{p}</Chip>
+            ))}
+          </div>
+        )}
       </SectionCard>
 
-      {/* Portfolio Identity */}
+      {/* 2. Portfolio Identity — headline + short summary (expandable) + tendency pills */}
       {(cl.portfolioType || cl.portfolioIdentity) && (
         <div className="rounded-xl border border-[#d4af37]/30 bg-gradient-to-br from-[#d4af37]/[0.08] to-transparent p-5">
           <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-[#d4af37] mb-2">
@@ -1877,52 +1898,93 @@ function CrossLeagueTab({ data }: { data: ManagerIntelPayload }) {
             <span>Portfolio Identity</span>
           </div>
           {cl.portfolioType && <div className="text-[18px] font-extrabold text-white mb-1.5">{cl.portfolioType}</div>}
-          {cl.portfolioIdentity && <p className="text-[13.5px] text-white/85 leading-relaxed">{cl.portfolioIdentity}</p>}
+          {identityFull && (
+            <>
+              <p className="text-[13.5px] text-white/85 leading-relaxed">
+                {identityOpen ? identityFull : identitySummary}
+              </p>
+              {identityHasMore && (
+                <button
+                  type="button"
+                  onClick={() => setIdentityOpen((o) => !o)}
+                  className="mt-1.5 text-[11px] font-semibold text-[#d4af37] hover:underline"
+                >
+                  {identityOpen ? "Show less" : "Show more"}
+                </button>
+              )}
+            </>
+          )}
+          {favTypes.length > 0 && (
+            <div className="mt-3">
+              <div className="text-[9px] font-bold uppercase tracking-wider text-white/45 mb-1.5">Primary tendencies</div>
+              <div className="flex flex-wrap gap-1.5">
+                {favTypes.map((t) => (
+                  <Chip key={t.type} tone="gold">{t.type}</Chip>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
-      {/* Favorite Player Types — with confidence */}
-      {cl.favoritePlayerTypes && cl.favoritePlayerTypes.length > 0 && (
-        <SectionCard title="Favorite player types" icon={<Sparkles className="w-3.5 h-3.5" />}>
-          <div className="flex flex-wrap gap-2">
-            {cl.favoritePlayerTypes.map((t) => (
-              <div
-                key={t.type}
-                className="inline-flex items-center gap-1.5 rounded-full border border-[#d4af37]/35 bg-[#d4af37]/[0.06] px-2.5 py-1"
-              >
-                <span className="text-[11px] font-bold text-[#d4af37]">{t.type}</span>
-                <span className={cn("text-[9px] font-semibold", confidenceColor(t.confidence))}>
-                  {t.confidence} confidence
-                </span>
-              </div>
-            ))}
-          </div>
-        </SectionCard>
-      )}
+      {/* 3. What They Value — merges Favorite Player Types + Likely Values into one card */}
+      {cl.tradeImplications &&
+        (cl.tradeImplications.likelyValues.length > 0 || cl.tradeImplications.unlikelyValues.length > 0) && (
+          <SectionCard title="What they value" icon={<Sparkles className="w-3.5 h-3.5" />}>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {cl.tradeImplications.likelyValues.length > 0 && (
+                <div>
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-300 mb-1.5">Highest interest</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {cl.tradeImplications.likelyValues.map((v, i) => (
+                      <Chip key={i} tone="positive">{v}</Chip>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {cl.tradeImplications.unlikelyValues.length > 0 && (
+                <div>
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-rose-300 mb-1.5">Lower interest</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {cl.tradeImplications.unlikelyValues.map((v, i) => (
+                      <Chip key={i} tone="negative">{v}</Chip>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </SectionCard>
+        )}
 
-      {/* Most Rostered by Position — mini-cards w/ signal headers */}
+      {/* 4. Most Rostered Players — the main data visual: 4 cards, % only (counts on hover) */}
       {byPos && (
-        <SectionCard title="Most rostered by position" icon={<Users className="w-3.5 h-3.5" />}>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <SectionCard title="Most rostered players" icon={<Users className="w-3.5 h-3.5" />}>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             {(["QB", "RB", "WR", "TE"] as const).map((pos) => {
               const bias = positionBias.find((b) => b.position === pos);
               return (
                 <div key={pos} className="rounded-md border border-white/8 bg-white/[0.02] p-3">
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-white/55">{pos}</span>
-                    {bias && (
-                      <span className="text-[9px] font-semibold text-[#d4af37]">{bias.signal}</span>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[11px] font-black uppercase tracking-widest text-white/70">{pos}</span>
+                    {bias && bias.signal !== "Balanced" && (
+                      <span className="text-[9px] font-semibold text-[#d4af37]" title={bias.interpretation}>
+                        {bias.signal}
+                      </span>
                     )}
                   </div>
                   {byPos[pos].length === 0 ? (
                     <p className="text-[12px] text-white/35">—</p>
                   ) : (
-                    <ul className="space-y-1">
+                    <ul className="space-y-1.5">
                       {byPos[pos].map((p) => (
-                        <li key={p.playerId} className="flex items-center justify-between text-[12.5px]">
-                          <span className="text-white/80 truncate mr-2">{p.name}</span>
-                          <span className={cn("tabular-nums whitespace-nowrap", exposureColor(p.exposure))}>
-                            {p.leagueCount}/{cl.dynastyLeagueCount} · {p.exposure}%
+                        <li
+                          key={p.playerId}
+                          className="flex items-center justify-between text-[12.5px] gap-2"
+                          title={`${p.leagueCount} of ${cl.dynastyLeagueCount} leagues`}
+                        >
+                          <span className="text-white/80 truncate">{p.name}</span>
+                          <span className={cn("tabular-nums whitespace-nowrap font-semibold", exposureColor(p.exposure))}>
+                            {p.exposure}%
                           </span>
                         </li>
                       ))}
@@ -1935,9 +1997,9 @@ function CrossLeagueTab({ data }: { data: ManagerIntelPayload }) {
         </SectionCard>
       )}
 
-      {/* Position Bias */}
+      {/* 5. Position Bias — collapsed; the "why" behind the signals shown on the cards above */}
       {positionBias.length > 0 && (
-        <SectionCard title="Position bias" icon={<Compass className="w-3.5 h-3.5" />}>
+        <SectionCard title="Position bias — why" icon={<Compass className="w-3.5 h-3.5" />} collapsible>
           <div className="space-y-1">
             {positionBias.map((b) => (
               <div key={b.position} className="flex items-center gap-3 py-1.5 border-b border-white/[0.05] last:border-0">
@@ -1952,55 +2014,71 @@ function CrossLeagueTab({ data }: { data: ManagerIntelPayload }) {
         </SectionCard>
       )}
 
-      {/* Manager Tendencies */}
+      {/* 6. Manager Tendencies — scannable two-column table (Tendency | Read) */}
       {cl.managerTendencies && cl.managerTendencies.length > 0 && (
         <SectionCard title="Manager tendencies" icon={<Target className="w-3.5 h-3.5" />}>
-          <KeyTendencies items={cl.managerTendencies} />
+          <div className="divide-y divide-white/[0.06]">
+            {cl.managerTendencies.map((t, i) => {
+              const idx = t.indexOf(": ");
+              const label = idx > 0 ? t.slice(0, idx) : t;
+              const read = idx > 0 ? t.slice(idx + 2) : null;
+              return (
+                <div key={i} className="grid grid-cols-[38%_62%] gap-3 py-2">
+                  <span className="text-[12.5px] font-bold text-white">{label}</span>
+                  {read && <span className="text-[12px] text-white/65 leading-snug">{read}</span>}
+                </div>
+              );
+            })}
+          </div>
         </SectionCard>
       )}
 
-      {/* Trade Implications */}
+      {/* 7. Trade Strategy — the action section: lead with the angle, then who to send / avoid */}
       {cl.tradeImplications && (
         <div className="rounded-xl border border-[#d4af37]/25 bg-gradient-to-br from-[#d4af37]/[0.06] to-transparent p-4 space-y-3">
           <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-[#d4af37]">
             <Handshake className="w-3.5 h-3.5" />
-            <span>Trade implications</span>
+            <span>Trade strategy</span>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {cl.tradeImplications.bestAngle && (
             <div>
-              <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-300 mb-1.5">Likely values</div>
-              <ul className="space-y-1">
+              <div className="text-[10px] font-bold uppercase tracking-wider text-[#d4af37] mb-1">Best offer angle</div>
+              <p className="text-[13px] text-white/85 leading-relaxed">{cl.tradeImplications.bestAngle}</p>
+            </div>
+          )}
+          {cl.tradeImplications.likelyValues.length > 0 && (
+            <div>
+              <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-300 mb-1.5">Send them</div>
+              <div className="flex flex-wrap gap-1.5">
                 {cl.tradeImplications.likelyValues.map((v, i) => (
-                  <li key={i} className="text-[12.5px] text-white/80 flex gap-1.5">
-                    <Check className="w-3.5 h-3.5 text-emerald-400/70 mt-0.5 flex-shrink-0" />
-                    <span>{v}</span>
-                  </li>
+                  <Chip key={i} tone="positive">{v}</Chip>
                 ))}
-              </ul>
+              </div>
             </div>
+          )}
+          {cl.tradeImplications.unlikelyValues.length > 0 && (
             <div>
-              <div className="text-[10px] font-bold uppercase tracking-wider text-rose-300 mb-1.5">Less likely to value</div>
-              <ul className="space-y-1">
+              <div className="text-[10px] font-bold uppercase tracking-wider text-rose-300 mb-1.5">Avoid leading with</div>
+              <div className="flex flex-wrap gap-1.5">
                 {cl.tradeImplications.unlikelyValues.map((v, i) => (
-                  <li key={i} className="text-[12.5px] text-white/80 flex gap-1.5">
-                    <X className="w-3.5 h-3.5 text-rose-400/70 mt-0.5 flex-shrink-0" />
-                    <span>{v}</span>
-                  </li>
+                  <Chip key={i} tone="negative">{v}</Chip>
                 ))}
-              </ul>
+              </div>
             </div>
-          </div>
-          <div className="pt-1 border-t border-white/[0.06]">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-[#d4af37]">Best angle</span>
-            <p className="text-[13px] text-white/85 mt-1 leading-relaxed">{cl.tradeImplications.bestAngle}</p>
-          </div>
+          )}
         </div>
       )}
 
-      <SectionCard title="Common roster construction" icon={<Compass className="w-3.5 h-3.5" />}>
-        <p className="text-[13px] text-white/75">{cl.commonRosterBuild}</p>
-        <p className="text-[12px] text-white/45 mt-1">{cl.positionStrengthProfile}</p>
-      </SectionCard>
+      {/* 8. Common build — compact footer */}
+      {(cl.commonRosterBuild || cl.positionStrengthProfile) && (
+        <SectionCard title="Common build" icon={<Layers className="w-3.5 h-3.5" />}>
+          <p className="text-[12.5px] text-white/75">
+            {cl.commonRosterBuild}
+            {cl.commonRosterBuild && cl.positionStrengthProfile ? " · " : ""}
+            <span className="text-white/45">{cl.positionStrengthProfile}</span>
+          </p>
+        </SectionCard>
+      )}
 
       {/* Activity Breakdown — trade vs waiver share. */}
       {act && actTotal > 0 && (
@@ -2069,10 +2147,6 @@ function exposureStrength(pct: number): { label: string; cls: string } {
 
 function exposureColor(pct: number): string {
   return exposureStrength(pct).cls;
-}
-
-function confidenceColor(c: Rating3): string {
-  return c === "High" ? "text-emerald-300" : c === "Medium" ? "text-amber-300" : "text-white/45";
 }
 
 /** Interpret a single exposure entry into a one-line "signal". */

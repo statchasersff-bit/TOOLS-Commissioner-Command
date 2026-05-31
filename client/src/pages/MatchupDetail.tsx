@@ -319,14 +319,30 @@ function DetailBody({ data }: { data: DetailData }) {
   const [myMode, setMyMode] = useState<"current" | "optimal">("current");
   const [oppMode, setOppMode] = useState<"current" | "optimal">("current");
 
+  // The hero score, projected edge and win% follow each side's toggle, so the
+  // headline numbers always match the lineup the user is looking at.
+  const displayData = useMemo<DetailData>(() => {
+    const myProj  = myMode === "optimal" ? me.optimalProj : me.proj;
+    const oppProj = opp ? (oppMode === "optimal" ? opp.optimalProj : opp.proj) : 0;
+    const spread  = myProj - oppProj;
+    const winPct  = hasBye || !opp ? data.winPct : calculateWinProbability(spread);
+    return {
+      ...data,
+      me:  { ...me, proj: myProj },
+      opp: opp ? { ...opp, proj: oppProj } : opp,
+      spread,
+      winPct,
+    };
+  }, [data, me, opp, hasBye, myMode, oppMode]);
+
   if (!me.starters.length) {
     return <EmptyState title="No lineup set" body="There are no starters set for your team this week." />;
   }
 
   return (
     <div className="pb-12 space-y-5">
-      <HeroCard data={data} />
-      <IntelStrip data={data} />
+      <HeroCard data={displayData} />
+      <IntelStrip data={displayData} />
 
       {hasBye || !opp ? (
         <EmptyState title="Bye week" body="You don't have an opponent this week — enjoy the rest. Your optimal lineup is still below." inline />
@@ -837,9 +853,16 @@ function AlertsSection({ data }: { data: DetailData }) {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         {alerts.map((a, i) => (
           <div key={i} className={cn("flex items-start gap-2.5 rounded-lg border px-2.5 py-2", a.cls)}>
-            <a.icon className="w-4 h-4 flex-shrink-0 mt-0.5" />
+            {a.player ? (
+              <Headshot player={a.player} />
+            ) : (
+              <a.icon className="w-4 h-4 flex-shrink-0 mt-0.5" />
+            )}
             <div className="min-w-0">
-              <p className="text-[12px] font-bold leading-tight">{a.title}</p>
+              <p className="text-[12px] font-bold leading-tight flex items-center gap-1">
+                {a.player && <a.icon className="w-3.5 h-3.5 flex-shrink-0" />}
+                {a.title}
+              </p>
               <p className="text-[11px] text-[var(--sc-text-muted)] dark-any:text-white/50 leading-snug mt-0.5">{a.body}</p>
             </div>
           </div>
@@ -849,40 +872,29 @@ function AlertsSection({ data }: { data: DetailData }) {
   );
 }
 
-interface Alert { icon: typeof AlertTriangle; title: string; body: string; cls: string }
+interface Alert { icon: typeof AlertTriangle; title: string; body: string; cls: string; player?: SlotPlayer }
 function buildAlerts(data: DetailData): Alert[] {
   const out: Alert[] = [];
-  const { me, opp } = data;
+  const { me } = data;
 
   // Zero-projection starters.
   for (const p of me.starters.filter(s => s.proj < 0.5 && !s.onBye)) {
-    out.push({ icon: Ban, title: `${p.name} projects 0.0`, body: `Your ${p.slot} has no projected points — check status before lock.`, cls: "border-red-500/25 bg-red-500/[0.05] text-red-600 dark-any:text-red-300" });
+    out.push({ icon: Ban, title: `${p.name} projects 0.0`, body: `Your ${p.slot} has no projected points — check status before lock.`, cls: "border-red-500/25 bg-red-500/[0.05] text-red-600 dark-any:text-red-300", player: p });
   }
   // Bye-week starters.
   for (const p of me.starters.filter(s => s.onBye)) {
-    out.push({ icon: CalendarX, title: `${p.name} is on bye`, body: `Your ${p.slot} starter doesn't play this week.`, cls: "border-orange-500/25 bg-orange-500/[0.05] text-orange-600 dark-any:text-orange-300" });
+    out.push({ icon: CalendarX, title: `${p.name} is on bye`, body: `Your ${p.slot} starter doesn't play this week.`, cls: "border-orange-500/25 bg-orange-500/[0.05] text-orange-600 dark-any:text-orange-300", player: p });
   }
   // Injured / questionable starters.
   for (const p of me.starters) {
     const inj = injLabel(p.injury);
     if (inj && !p.onBye) {
-      out.push({ icon: Activity, title: `${p.name} — ${p.injury}`, body: `Injury designation on your ${p.slot}. Have a backup ready.`, cls: inj === "OUT" ? "border-red-500/25 bg-red-500/[0.05] text-red-600 dark-any:text-red-300" : "border-yellow-500/25 bg-yellow-500/[0.05] text-yellow-600 dark-any:text-yellow-300" });
+      out.push({ icon: Activity, title: `${p.name} — ${p.injury}`, body: `Injury designation on your ${p.slot}. Have a backup ready.`, cls: inj === "OUT" ? "border-red-500/25 bg-red-500/[0.05] text-red-600 dark-any:text-red-300" : "border-yellow-500/25 bg-yellow-500/[0.05] text-yellow-600 dark-any:text-yellow-300", player: p });
     }
   }
   // Optimal-lineup improvement.
   if (me.gain > 0.5) {
     out.push({ icon: Zap, title: `Optimize for +${fmt1(me.gain)} pts`, body: `Switching to your optimal lineup raises your projection to ${fmt1(me.optimalProj)}.`, cls: "border-emerald-500/25 bg-emerald-500/[0.05] text-emerald-600 dark-any:text-emerald-300" });
-  }
-  // Largest advantage / disadvantage by slot (only when there's an opponent).
-  if (opp) {
-    const paired = me.starters.map((p, i) => ({ p, o: opp.starters[i], edge: p.proj - (opp.starters[i]?.proj ?? 0) }))
-      .filter(x => x.o);
-    if (paired.length) {
-      const best = paired.reduce((a, b) => (b.edge > a.edge ? b : a));
-      const worst = paired.reduce((a, b) => (b.edge < a.edge ? b : a));
-      if (best.edge >= 1) out.push({ icon: TrendingUp, title: `Biggest edge: ${best.p.name}`, body: `Out-projects ${best.o!.name} by ${signed(best.edge)} at ${best.p.slot}.`, cls: "border-[#d4af37]/25 bg-[#d4af37]/[0.05] text-[var(--sc-gold-deep)] dark-any:text-[#d4af37]" });
-      if (worst.edge <= -1) out.push({ icon: TrendingDown, title: `Biggest gap: ${worst.o!.name}`, body: `Their ${worst.o!.slot} out-projects ${worst.p.name} by ${signed(-worst.edge)}.`, cls: "border-red-500/25 bg-red-500/[0.05] text-red-600 dark-any:text-red-300" });
-    }
   }
   return out;
 }

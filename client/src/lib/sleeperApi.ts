@@ -95,6 +95,8 @@ export interface SleeperLeagueSummary {
   status: string;
   draftId: string | null;
   avatar: string | null;
+  /** True for Sleeper best-ball leagues (settings.best_ball === 1). */
+  isBestBall?: boolean;
   // Passes the automatic filter (active, drafted, user owns a roster with
   // players). Default-eligible leagues populate the master list; ineligible
   // ones can still be opted into via Settings → Leagues.
@@ -753,6 +755,9 @@ export async function fetchSleeperLeagueFull(leagueId: string, userId: string) {
           value: 0,
           team: pData.team || "FA",
           starter: starterSet.has(pid),
+          // The manager's actual set lineup. `starter` gets overwritten by
+          // optimizeLineup downstream; this preserves the real lineup for display.
+          lineupStarter: starterSet.has(pid),
           onTaxi: taxiSet.has(pid),
           onReserve: reserveSet.has(pid),
           sleeperId: pid,
@@ -883,6 +888,7 @@ export async function fetchSleeperLeagueFull(leagueId: string, userId: string) {
       irSlots,
       tePremium,
       scoringSettings: (leagueRaw.scoring_settings ?? {}) as Record<string, number>,
+      isBestBall: leagueRaw.settings?.best_ball === 1,
     },
     userTeamId: userTeamIdStr,
     format,
@@ -1157,18 +1163,22 @@ export async function fetchPortfolioSummary(
       }
 
       const hasRedraftValues = Object.keys(fcRedraft).length > 0;
-      // Greedy optimal-lineup redraft rank — same algorithm as ValueModelContext.optimizeLineup
+      // Win-now redraft rank. Standard leagues use the greedy optimal lineup
+      // (same algorithm as ValueModelContext.optimizeLineup). Best-ball has no
+      // set lineup, so win-now spans the ENTIRE roster's redraft value.
       let redraftRank = 0;
       if (hasRedraftValues) {
         const rp: string[] = leagueRaw.roster_positions || [];
         const rosterValues = rostersRaw.map((r) => {
-          const starterIds = buildOptimalStarterIds(
-            r.players || [],
-            (id) => playersDb[id]?.position ?? null,
-            (id) => fcRedraft[id] ?? 0,
-            rp
-          );
-          const value = [...starterIds].reduce((s, id) => s + (fcRedraft[id] ?? 0), 0);
+          const playerIds = r.players || [];
+          const value = ls.isBestBall
+            ? playerIds.reduce((s, id) => s + (fcRedraft[id] ?? 0), 0)
+            : Array.from(buildOptimalStarterIds(
+                playerIds,
+                (id) => playersDb[id]?.position ?? null,
+                (id) => fcRedraft[id] ?? 0,
+                rp
+              )).reduce((s, id) => s + (fcRedraft[id] ?? 0), 0);
           return { rosterId: r.roster_id, value };
         });
         rosterValues.sort((a, b) => b.value - a.value);

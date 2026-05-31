@@ -1585,6 +1585,7 @@ function HexView({ rows, teams, draftFormat, filters, onPlayerClick }: { rows: A
               round={round}
               slots={slots}
               rowIdx={rowIdx}
+              isSnake={isSnake}
               onPlayerClick={onPlayerClick}
               selectedPositions={selectedPositions}
             />
@@ -1596,17 +1597,25 @@ function HexView({ rows, teams, draftFormat, filters, onPlayerClick }: { rows: A
 }
 
 function HexRow({
-  round, slots, rowIdx, onPlayerClick, selectedPositions,
+  round, slots, rowIdx, isSnake, onPlayerClick, selectedPositions,
 }: {
   round: number;
   slots: Array<ADPResult | null>;
   rowIdx: number;
+  /** Snake-format board: even rounds reverse, so the pick number counts back
+   *  down the row (slot 12 in round 2 is pick 2.01, sitting under 1.12). */
+  isSnake: boolean;
   onPlayerClick?: (row: ADPResult) => void;
   /** Positions currently shown. Anything else renders as an empty slot,
    *  preserving pick-number alignment across the board. */
   selectedPositions?: Set<LegendKey>;
 }) {
   const isOffsetRow = rowIdx % 2 === 1;
+  // Pick-in-round shown on the tile. Placement already snakes (see HexView's
+  // `grouped`); the label has to snake with it or the board reads linear —
+  // i.e. slot index alone would print 2.01→2.12 left-to-right every round.
+  const reverseRow = isSnake && round % 2 === 0;
+  const pickAt = (i: number) => (reverseRow ? slots.length - i : i + 1);
   // Translate a player's position to the legend key set we filter by.
   // K is not in the legend, so it's always visible.
   const isVisible = (p: ADPResult): boolean => {
@@ -1648,8 +1657,8 @@ function HexRow({
       >
         {slots.map((p, i) => (
           p && isVisible(p)
-            ? <HexTile key={`${round}-${i}-${p.player_id}`} row={p} round={round} pickInRound={i + 1} onClick={onPlayerClick} />
-            : <HexEmpty key={`${round}-${i}-empty`} pickInRound={i + 1} />
+            ? <HexTile key={`${round}-${i}-${p.player_id}`} row={p} round={round} pickInRound={pickAt(i)} onClick={onPlayerClick} />
+            : <HexEmpty key={`${round}-${i}-empty`} pickInRound={pickAt(i)} />
         ))}
       </div>
     </div>
@@ -1776,7 +1785,7 @@ function HexTile({ row, round, pickInRound, onClick }: { row: ADPResult; round: 
       />
 
       {/* ── Content stack ────────────────────────────────────────────── */}
-      <div className="absolute inset-0 flex flex-col items-center px-1.5 sm:px-2 pt-[14%] sm:pt-[16%] pb-[6%]">
+      <div className="absolute inset-0 flex flex-col items-center px-1.5 sm:px-2 pt-[11%] sm:pt-[16%] pb-[5%] sm:pb-[6%]">
         {/* Position rank — centered above the player image. */}
         <span
           className={cn(
@@ -1793,7 +1802,7 @@ function HexTile({ row, round, pickInRound, onClick }: { row: ADPResult; round: 
         {/* Player image — slightly smaller, centered below the rank, with a
              faint team-logo watermark bleeding around the edges (matches the
              Compare Players card treatment). */}
-        <div className="relative mt-1 flex items-center justify-center">
+        <div className="relative mt-0.5 sm:mt-1 flex items-center justify-center">
           {!isPick && row.team && (
             <img
               src={`https://sleepercdn.com/images/team_logos/nfl/${row.team.toLowerCase()}.png`}
@@ -1811,7 +1820,7 @@ function HexTile({ row, round, pickInRound, onClick }: { row: ADPResult; round: 
         </div>
 
         {/* Name + team abbreviation, tight stack directly below the image. */}
-        <div className="w-full text-center mt-1 leading-none">
+        <div className="w-full text-center mt-0.5 sm:mt-1 leading-none">
           <div
             className="text-[10px] sm:text-[11px] md:text-[12px] font-semibold text-[var(--sc-text)] dark-any:text-white/90 leading-[1.1] line-clamp-1 tracking-tight px-0.5"
             data-testid={`hex-name-${row.player_id}`}
@@ -1859,7 +1868,7 @@ function PlayerHeadshotHex({
 
   return (
     <div
-      className="relative w-[42px] h-[48px] max-[430px]:w-[36px] max-[430px]:h-[42px] sm:w-[50px] sm:h-[58px] md:w-[58px] md:h-[66px] rounded-md overflow-hidden bg-[var(--adp-overlay)] dark-any:bg-white/[0.04] flex items-center justify-center"
+      className="relative w-[40px] h-[42px] max-[430px]:w-[32px] max-[430px]:h-[34px] sm:w-[50px] sm:h-[58px] md:w-[58px] md:h-[66px] rounded-md overflow-hidden bg-[var(--adp-overlay)] dark-any:bg-white/[0.04] flex items-center justify-center"
       style={{ boxShadow: "inset 0 0 0 1px var(--adp-hairline)" }}
     >
       {showImage ? (
@@ -1882,7 +1891,7 @@ function PlayerHeadshotHex({
 function PickGlyph({ label }: { label?: string | null }) {
   return (
     <div
-      className="relative w-[42px] h-[48px] max-[430px]:w-[36px] max-[430px]:h-[42px] sm:w-[50px] sm:h-[58px] md:w-[58px] md:h-[66px] rounded-md flex items-center justify-center bg-[var(--adp-overlay)] dark-any:bg-white/[0.04]"
+      className="relative w-[40px] h-[42px] max-[430px]:w-[32px] max-[430px]:h-[34px] sm:w-[50px] sm:h-[58px] md:w-[58px] md:h-[66px] rounded-md flex items-center justify-center bg-[var(--adp-overlay)] dark-any:bg-white/[0.04]"
       style={{ boxShadow: "inset 0 0 0 1px var(--adp-hairline)" }}
     >
       <Hexagon className="w-4 h-4 sm:w-5 sm:h-5 md:w-6 md:h-6 text-[var(--sc-text-muted)] dark-any:text-white/40" strokeWidth={2} />
@@ -2093,8 +2102,8 @@ function FilterSheet({
 }) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto bg-background">
-        <SheetHeader className="text-left mb-4">
+      <SheetContent side="right" className="w-full sm:max-w-md bg-background flex flex-col">
+        <SheetHeader className="text-left mb-4 flex-shrink-0">
           <SheetTitle className="flex items-center gap-2">
             <SlidersHorizontal className="w-4 h-4 text-[#d4af37]" />
             Draft Filters
@@ -2102,7 +2111,7 @@ function FilterSheet({
           <SheetDescription>Narrow the ADP dataset by draft characteristics.</SheetDescription>
         </SheetHeader>
 
-        <div className="space-y-5">
+        <div className="flex-1 min-h-0 overflow-y-auto space-y-5 -mr-3 pr-3">
           {/* Date range */}
           <FilterGroup label="Date Range">
             <div className="grid grid-cols-2 gap-2">
@@ -2186,7 +2195,7 @@ function FilterSheet({
 
         </div>
 
-        <div className="flex items-center gap-2 mt-6 pb-4">
+        <div className="flex-shrink-0 flex items-center gap-2 mt-4 pt-4 border-t border-border/40 pb-[max(1rem,env(safe-area-inset-bottom))]">
           <Button variant="outline" onClick={onReset} className="flex-1 border-border/60" data-testid="btn-reset-filters">
             Reset
           </Button>

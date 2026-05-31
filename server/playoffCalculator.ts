@@ -282,6 +282,28 @@ function optimalStarterTotal(
 }
 
 /**
+ * Sum the redraft value of every rostered QB/RB/WR/TE — the win-now measure for
+ * best-ball leagues, where there's no set lineup and the whole roster's best
+ * weeks auto-score. Mirrors optimalStarterTotal's position filtering so the two
+ * paths agree on which players carry value.
+ */
+function fullRosterRedraftTotal(
+  playerIds: string[],
+  valuesBySleeperId: Record<string, number>,
+  playersDb: Record<string, any>
+): number {
+  let total = 0;
+  for (const pid of playerIds) {
+    const p = playersDb[pid];
+    if (!p) continue;
+    const pos = p.fantasy_positions?.[0] || p.position;
+    if (!["QB", "RB", "WR", "TE"].includes(pos)) continue;
+    total += valuesBySleeperId[pid] ?? 0;
+  }
+  return total;
+}
+
+/**
  * Fetch all per-week matchup arrays, returning a map week -> matchups.
  * Stops requesting once we've covered up through regularSeasonWeeks.
  */
@@ -496,7 +518,12 @@ export async function computePlayoffCalculator(
   const winNowScores: number[] = [];
   const teams: TeamState[] = rostersRaw.map((r) => {
     const u = r.owner_id ? userMap.get(r.owner_id) : null;
-    const winNow = optimalStarterTotal(r.players || [], rosterPositions, winNowMap, playersDb);
+    // Best-ball has no set lineup — every rostered player's best weeks
+    // auto-score — so win-now reflects the ENTIRE roster's redraft value,
+    // not just the optimal starters.
+    const winNow = isBestBall
+      ? fullRosterRedraftTotal(r.players || [], winNowMap, playersDb)
+      : optimalStarterTotal(r.players || [], rosterPositions, winNowMap, playersDb);
     winNowScores.push(winNow);
     const fpts = (r.settings?.fpts ?? 0) + (r.settings?.fpts_decimal ?? 0) / 100;
     const fptsAgainst = (r.settings?.fpts_against ?? 0) + (r.settings?.fpts_against_decimal ?? 0) / 100;

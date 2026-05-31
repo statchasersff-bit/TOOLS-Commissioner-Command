@@ -1981,12 +1981,17 @@ export function MyTeam({ league, userTeam, onNavigate }: DashboardOverviewProps)
     return { redraftRanks, dynastyRanks };
   }, [league, getRedraftValue, getPlayerValue, optimizeLineup]);
 
+  // "My Roster" shows the manager's ACTUAL Sleeper lineup, not the app's optimal
+  // lineup (`starter`, which optimizeLineup overwrites for analytics). Fall back
+  // to `starter` when lineupStarter is absent (e.g. mock data).
+  const isLineupStarter = (p: Player) => p.lineupStarter ?? p.starter ?? false;
+
   const positionData = (["QB", "RB", "WR", "TE"] as const).map(pos => ({
     pos,
     redraftRank: posRanks.redraftRanks[userTeam.id]?.[pos] ?? total,
     dynastyRank: posRanks.dynastyRanks[userTeam.id]?.[pos] ?? total,
     players: [...userTeam.roster.filter(p => p.pos === pos)]
-      .sort((a, b) => (b.starter ? 1 : 0) - (a.starter ? 1 : 0) || b.value - a.value),
+      .sort((a, b) => (isLineupStarter(b) ? 1 : 0) - (isLineupStarter(a) ? 1 : 0) || b.value - a.value),
   }));
 
   return (
@@ -2112,8 +2117,8 @@ export function MyTeam({ league, userTeam, onNavigate }: DashboardOverviewProps)
               {/* 5-column grid: 4 positions + picks */}
               <div className="grid grid-cols-2 md:grid-cols-5 divide-x divide-border/30">
                 {positionData.map(({ pos, redraftRank, dynastyRank, players }) => {
-                  const starters = players.filter(p => p.starter);
-                  const bench    = players.filter(p => !p.starter && !p.onReserve && !p.onTaxi);
+                  const starters = players.filter(p => isLineupStarter(p));
+                  const bench    = players.filter(p => !isLineupStarter(p) && !p.onReserve && !p.onTaxi);
                   const ir       = players.filter(p => p.onReserve);
                   const taxi     = players.filter(p => p.onTaxi);
                   const rStyle   = rankBg(redraftRank, total);
