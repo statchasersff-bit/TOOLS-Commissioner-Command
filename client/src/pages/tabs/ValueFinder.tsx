@@ -227,7 +227,7 @@ export function ValueFinder() {
         <>
           {tab === "market-gaps" && <MarketGapsTab players={filtered} gapView={gapView} setGapView={setGapView} />}
           {tab === "production-buys" && <ProductionBuysTab players={filtered} />}
-          {tab === "usage-buys" && <UsageBuysTab players={filtered} usageExpected={usageExpected} />}
+          {tab === "usage-buys" && <UsageBuysTab players={filtered} />}
           {tab === "trend-radar" && <TrendRadarTab players={filtered} window={filters.trendWindow} />}
           {tab === "win-now" && <WinNowTab players={filtered} />}
           {tab === "rebuild" && <RebuildTab players={filtered} />}
