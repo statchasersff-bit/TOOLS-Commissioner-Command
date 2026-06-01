@@ -1689,19 +1689,6 @@ function QuickTradeCalculator() {
   return (
     <div className="space-y-4">
       <Card className="p-4 sm:p-5">
-        <h3 className="text-base font-black text-foreground flex items-center gap-2">
-          <Scale className="w-4 h-4 text-[#d4af37]" /> Quick Trade Calculator
-        </h3>
-        <p className="text-[11px] text-muted-foreground mt-1 mb-4">
-          Compare any two packages with dynasty trade values — no login or league needed. Pick players and draft picks below.
-        </p>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <QuickCalcSide label="Side A" assets={sideA} total={valA} players={dynastyPlayerList} onAddPlayer={(rp) => addPlayer("a", rp)} onAddPick={(y, r) => addPick("a", y, r)} onRemove={(id) => removeAsset("a", id)} />
-          <QuickCalcSide label="Side B" assets={sideB} total={valB} players={dynastyPlayerList} onAddPlayer={(rp) => addPlayer("b", rp)} onAddPick={(y, r) => addPick("b", y, r)} onRemove={(id) => removeAsset("b", id)} />
-        </div>
-      </Card>
-
-      <Card className="p-4 sm:p-5">
         {/* Header — matches the My League verdict (icon + gold underline). */}
         <div className="flex items-start justify-between mb-3">
           <div>
@@ -1777,6 +1764,19 @@ function QuickTradeCalculator() {
         </div>
 
         <p className="text-[10px] text-muted-foreground mt-3">Depth-adjusted dynasty values — multi-asset packages are discounted, so quality beats quantity.</p>
+      </Card>
+
+      <Card className="p-4 sm:p-5">
+        <h3 className="text-base font-black text-foreground flex items-center gap-2">
+          <Scale className="w-4 h-4 text-[#d4af37]" /> Quick Trade Calculator
+        </h3>
+        <p className="text-[11px] text-muted-foreground mt-1 mb-4">
+          Compare any two packages with dynasty trade values — no login or league needed. Pick players and draft picks below.
+        </p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <QuickCalcSide label="Side A" assets={sideA} total={valA} players={dynastyPlayerList} onAddPlayer={(rp) => addPlayer("a", rp)} onAddPick={(y, r) => addPick("a", y, r)} onRemove={(id) => removeAsset("a", id)} />
+          <QuickCalcSide label="Side B" assets={sideB} total={valB} players={dynastyPlayerList} onAddPlayer={(rp) => addPlayer("b", rp)} onAddPick={(y, r) => addPick("b", y, r)} onRemove={(id) => removeAsset("b", id)} />
+        </div>
       </Card>
     </div>
   );

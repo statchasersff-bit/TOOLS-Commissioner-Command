@@ -38,7 +38,7 @@ function statsCachePath(season: number): string {
   return path.join(STATS_CACHE_DIR, `regular-${season}.json`);
 }
 
-type SleeperStatsRow = {
+export type SleeperStatsRow = {
   team?: string | null;
   pts_ppr?: number | null;
   pts_half_ppr?: number | null;
@@ -67,6 +67,19 @@ async function fetchSeasonStats(season: number): Promise<Record<string, SleeperS
   const data = (await r.json()) as Record<string, SleeperStatsRow>;
   try { fs.writeFileSync(p, JSON.stringify(data), "utf-8"); } catch { /* ignore */ }
   return data;
+}
+
+/**
+ * Bulk read of Sleeper season totals for every player, keyed by Sleeper ID.
+ * Shares the same on-disk per-season cache used by getPlayerProduction, so
+ * callers that need season totals for the whole player pool (e.g. the Value
+ * Finder aggregator) pay the cold fetch once and reuse it. Returns an empty
+ * map when Sleeper has no data for the season rather than throwing.
+ */
+export async function getSeasonStatsMap(
+  season: number,
+): Promise<Record<string, SleeperStatsRow>> {
+  return fetchSeasonStats(season);
 }
 
 export interface PlayerMetadata {

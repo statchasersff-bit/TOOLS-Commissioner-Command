@@ -44,7 +44,7 @@ export function PlayerValueTooltip({
   if (!p) return null;
 
   const comparison = datum.comparisonValue ?? p.modelValue;
-  const { gap, gapPercent, signal } = getValueSignal({
+  const { signal } = getValueSignal({
     marketValue: p.marketValue,
     comparisonValue: comparison,
   });
@@ -81,11 +81,7 @@ export function PlayerValueTooltip({
       </div>
       <div className="space-y-0.5">
         {row("Market", fmtValue(p.marketValue))}
-        {row(datum.comparisonLabel ?? "Model", fmtValue(comparison))}
-        {row("Gap", fmtValue(gap))}
-        {row("Gap %", fmtSignedPct(gapPercent))}
         {metricRow && row(metricRow[0], metricRow[1])}
-        {p.bestFit && row("Best Fit", p.bestFit)}
       </div>
       {p.buySignals?.length ? (
         <div className="mt-1.5 text-[10px] text-emerald-600 dark-any:text-emerald-400">

@@ -203,6 +203,14 @@ export function getUsageScore(
   player: ValueFinderPlayer,
   positionPlayers: ValueFinderPlayer[],
 ): number | undefined {
+  // Prefer a precomputed, position-relative usage score when one is supplied
+  // (real data: StatChasers ships a 0–1 composite). The cohort-relative
+  // share-based computation below is the fallback for sources that only give
+  // raw usage fields (e.g. the bundled sample pool).
+  if (player.usageScore != null && Number.isFinite(player.usageScore)) {
+    return player.usageScore;
+  }
+
   const pos = player.position;
 
   const pct = (

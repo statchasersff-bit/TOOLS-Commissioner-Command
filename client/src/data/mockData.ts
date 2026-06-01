@@ -571,7 +571,6 @@ export const NAV_CONFIG: MainTabConfig[] = [
     subTabs: [
       { id: "analysis", label: "Resources" },
       { id: "market-value", label: "Market Value" },
-      { id: "market-inefficiencies", label: "Market Inefficiencies" },
       { id: "value-finder", label: "Value Finder" },
     ],
   },

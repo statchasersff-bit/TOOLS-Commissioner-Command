@@ -155,6 +155,72 @@ export async function fetchSleeperLeagues(
   }));
 }
 
+export interface RosterPlayerInfo {
+  playerId: string;
+  name: string;
+  position: "QB" | "RB" | "WR" | "TE";
+  team: string;
+  age: number | null;
+  isStarter: boolean;
+}
+
+export interface ManagerRosterRaw {
+  leagueId: string;
+  rosterId: number;
+  ownerId: string | null;
+  format: "SF" | "1QB";
+  players: RosterPlayerInfo[];
+}
+
+/**
+ * Fetch one team's roster (the players it owns) for a league, hydrated with name,
+ * position, team, age, and starter/bench status from the Sleeper players DB.
+ * Only core skill positions (QB/RB/WR/TE) are included — the same scope the rest
+ * of Manager Intel uses. FantasyCalc values are layered on by the route, not here,
+ * to keep this module free of a fantasycalc dependency. Returns null if the league
+ * or roster can't be found.
+ */
+export async function fetchManagerRoster(
+  leagueId: string,
+  rosterId: number,
+): Promise<ManagerRosterRaw | null> {
+  const [leagueRaw, rostersRaw, playersDb] = await Promise.all([
+    fetchJson<SleeperLeagueRaw>(`${SLEEPER_API}/league/${leagueId}`),
+    fetchJson<SleeperRosterRaw[]>(`${SLEEPER_API}/league/${leagueId}/rosters`),
+    getSleeperPlayers(),
+  ]);
+  if (!Array.isArray(rostersRaw)) return null;
+  const roster = rostersRaw.find((r) => r.roster_id === rosterId);
+  if (!roster) return null;
+
+  const validPositions = new Set(["QB", "RB", "WR", "TE"]);
+  const starterSet = new Set(roster.starters || []);
+  const players = (roster.players || [])
+    .map((pid): RosterPlayerInfo | null => {
+      const p = playersDb[pid];
+      if (!p) return null;
+      const pos = (p.fantasy_positions?.[0] || p.position) as RosterPlayerInfo["position"];
+      if (!validPositions.has(pos)) return null;
+      return {
+        playerId: pid,
+        name: p.full_name || `${p.first_name ?? ""} ${p.last_name ?? ""}`.trim() || pid,
+        position: pos,
+        team: p.team || "FA",
+        age: p.age ?? null,
+        isStarter: starterSet.has(pid),
+      };
+    })
+    .filter((x): x is RosterPlayerInfo => x !== null);
+
+  return {
+    leagueId,
+    rosterId,
+    ownerId: roster.owner_id ?? null,
+    format: deriveFormat(leagueRaw?.roster_positions || []) as "SF" | "1QB",
+    players,
+  };
+}
+
 function isPlayersCacheValid(): boolean {
   try {
     const stat = fs.statSync(PLAYERS_CACHE_PATH);

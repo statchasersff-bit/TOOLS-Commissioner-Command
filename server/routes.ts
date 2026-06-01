@@ -4,6 +4,7 @@ import { fetchRotowireNfl, getNflNameIndex, matchSleeperId, playerNameFromTitle,
 import { getPlayerNews, startPlayerNewsIngestion } from "./playerNews";
 import { getFantasyCalcValues, getFantasyCalcRedraftValues } from "./fantasycalc";
 import { getKtcValues, getKtcRedraftValues } from "./ktc";
+import { getValueFinderPlayers as getValueFinderPlayerPool } from "./valueFinder";
 import { buildMarketPlayers, computeSummary, filterMarketPlayers } from "@shared/market/marketModel";
 import { rebuildBasketSnapshots } from "./portfolioBasketValue";
 import {
@@ -23,6 +24,7 @@ import {
   fetchPortfolioSummary,
   fetchCrossLeagueTrades,
   fetchLeagueTransactions,
+  fetchManagerRoster,
 } from "./sleeper";
 import {
   startCrawl,
@@ -284,6 +286,23 @@ export async function registerRoutes(
     } catch (err: any) {
       console.error("FantasyCalc fetch error:", err);
       res.status(500).json({ error: err.message || "Failed to fetch values" });
+    }
+  });
+
+  // Aggregated Value Finder pool — real market values + Sleeper production +
+  // StatChasers usage + market-value trends, joined by Sleeper ID. Custom
+  // values are overlaid when the request carries an authenticated SC user.
+  app.get("/api/value-finder/players", async (req, res) => {
+    try {
+      const format = (req.query.format as string) === "1qb" ? "1qb" : "sf";
+      const seasonRaw = parseInt(String(req.query.season ?? "2025"), 10);
+      const season = Number.isFinite(seasonRaw) ? seasonRaw : 2025;
+      const userId = getUserIdFromRequest(req) ?? undefined;
+      const players = await getValueFinderPlayerPool({ season, format, userId });
+      res.json({ players });
+    } catch (err: any) {
+      console.error("Value Finder pool error:", err);
+      res.status(500).json({ error: err.message || "Failed to build Value Finder pool" });
     }
   });
 
@@ -725,6 +744,46 @@ export async function registerRoutes(
     } catch (err: any) {
       console.error("[WeeklyMatchups] error:", err);
       const msg = err?.message || "Failed to compute weekly matchups";
+      const status = /sleeper|fantasycalc|fetch/i.test(msg) ? 502 : 500;
+      res.status(status).json({ error: msg });
+    }
+  });
+
+  // One team's roster (players it owns) for a league, hydrated with FantasyCalc
+  // dynasty + redraft values. Powers the Roster card on the manager profile's
+  // League tab. Keyed by leagueId + rosterId; player/value data is stable enough
+  // to cache at the CDN for a few minutes.
+  app.get("/api/leagues/:leagueId/roster/:rosterId", async (req, res) => {
+    const { leagueId, rosterId } = req.params;
+    const rid = parseInt(rosterId, 10);
+    if (!leagueId || !Number.isFinite(rid)) {
+      return res.status(400).json({ error: "leagueId and a numeric rosterId are required" });
+    }
+    try {
+      const base = await fetchManagerRoster(leagueId, rid);
+      if (!base) {
+        return res.status(404).json({ error: "Roster not found" });
+      }
+      const fcFormat = base.format === "SF" ? "sf" : "1qb";
+      const [dyn, red] = await Promise.all([
+        getFantasyCalcValues(fcFormat).catch(() => ({ valuesBySleeperId: {} })),
+        getFantasyCalcRedraftValues(fcFormat).catch(() => ({ valuesBySleeperId: {} })),
+      ]);
+      const dynMap = (dyn as any).valuesBySleeperId || {};
+      const redMap = (red as any).valuesBySleeperId || {};
+      const players = base.players
+        .map((p) => ({
+          ...p,
+          dynastyValue: dynMap[p.playerId] || 0,
+          redraftValue: redMap[p.playerId] || 0,
+        }))
+        // Highest dynasty value first within the team.
+        .sort((a, b) => b.dynastyValue - a.dynastyValue);
+      res.setHeader("Cache-Control", "public, max-age=600");
+      res.json({ ...base, players });
+    } catch (err: any) {
+      console.error("[ManagerRoster] error:", err);
+      const msg = err?.message || "Failed to load roster";
       const status = /sleeper|fantasycalc|fetch/i.test(msg) ? 502 : 500;
       res.status(status).json({ error: msg });
     }

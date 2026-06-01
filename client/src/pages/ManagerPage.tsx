@@ -47,7 +47,6 @@ import {
   Trophy,
   Users,
   Waves,
-  X,
   type LucideIcon,
 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -68,6 +67,7 @@ import { useSleeper } from "@/contexts/SleeperContext";
 import { usePlayoffOddsSummary } from "@/hooks/usePlayoffOddsSummary";
 import { useManagerLeagueStats } from "@/hooks/useManagerLeagueStats";
 import { useManagerWeeklyMatchups } from "@/hooks/useManagerWeeklyMatchups";
+import { useManagerRoster } from "@/hooks/useManagerRoster";
 import { fetchLeagueTransactions } from "@/lib/sleeperApi";
 import type { Team } from "@/types";
 
@@ -157,8 +157,32 @@ interface LeagueReport {
   rosters: LeagueRosterRank[];
 }
 
+// Completed-season finish distribution across standing quartiles.
+interface CareerFinishes {
+  top25: number;
+  upperMid: number;   // 26–50%
+  lowerMid: number;   // 51–75%
+  bottom25: number;
+  total: number;
+}
+
+// All-time career history aggregated across the manager's visible league chains.
+// Mirrors the server CareerHistory shape (only the fields the UI reads).
+interface CareerHistory {
+  available: boolean;
+  seasonsActive: number;
+  leagueSeasonsPlayed: number;
+  record: { wins: number; losses: number; ties: number } | null;
+  winPct: number | null;
+  championships: number | null;
+  playoffAppearances: number | null;
+  finishes: CareerFinishes | null;
+  truncated: boolean;
+}
+
 interface ManagerIntelPayload {
   user: { user_id: string; username: string; display_name: string; avatar: string | null };
+  careerHistory?: CareerHistory;
   archetype?: { key: string; label: string; blurb: string; why?: string };
   managerRead?: string;
   rosterIdentity?: string;
@@ -658,110 +682,6 @@ function ArchetypeWhy({ why }: { why: string }) {
   );
 }
 
-function DoBox({ items, className }: { items: string[]; className?: string }) {
-  return (
-    <div className={cn("rounded-lg border border-emerald-500/25 bg-emerald-500/[0.05] p-3.5", className)}>
-      <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-emerald-300 mb-2">
-        <Check className="w-3.5 h-3.5" />
-        <span>Do</span>
-      </div>
-      <ul className="space-y-1.5">
-        {items.map((d, i) => (
-          <li key={i} className="text-[12.5px] text-white/80 leading-snug flex gap-1.5">
-            <Check className="w-3.5 h-3.5 text-emerald-400/70 mt-0.5 flex-shrink-0" />
-            <span>{d}</span>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-function DontBox({ items, className }: { items: string[]; className?: string }) {
-  return (
-    <div className={cn("rounded-lg border border-rose-500/25 bg-rose-500/[0.05] p-3.5", className)}>
-      <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-rose-300 mb-2">
-        <X className="w-3.5 h-3.5" />
-        <span>Don't</span>
-      </div>
-      <ul className="space-y-1.5">
-        {items.map((d, i) => (
-          <li key={i} className="text-[12.5px] text-white/80 leading-snug flex gap-1.5">
-            <X className="w-3.5 h-3.5 text-rose-400/70 mt-0.5 flex-shrink-0" />
-            <span>{d}</span>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-function DoDontCard({ doList, dontList }: { doList: string[]; dontList: string[] }) {
-  return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-      <DoBox items={doList} />
-      <DontBox items={dontList} />
-    </div>
-  );
-}
-
-/** Maps a rating word to a 1–3 meter level, or null if it isn't a scale. */
-function ratingLevel(rating: string): number | null {
-  const m: Record<string, number> = {
-    Low: 1,
-    Medium: 2,
-    High: 3,
-    Moderate: 2,
-    Active: 3,
-    Aggressive: 3,
-    "Very Active": 3,
-  };
-  return m[rating] ?? null;
-}
-
-function Scorecard({ rows }: { rows: ScorecardRow[] }) {
-  const toneClass = (tone: ScorecardRow["tone"]) =>
-    tone === "positive"
-      ? "text-emerald-300"
-      : tone === "caution"
-      ? "text-rose-300"
-      : tone === "info"
-      ? "text-sky-300"
-      : "text-white/85";
-  return (
-    <div className="space-y-1">
-      {rows.map((r) => {
-        const level = ratingLevel(r.rating);
-        return (
-          <div
-            key={r.category}
-            className="flex items-center justify-between gap-3 py-1.5 border-b border-white/[0.05] last:border-0"
-          >
-            <span className="text-[12px] text-white/55 flex-shrink-0">{r.category}</span>
-            <div className="flex items-center gap-2 min-w-0 justify-end">
-              {level != null && <Meter level={level} />}
-              <span className={cn("text-[12px] font-bold text-right", toneClass(r.tone))}>{r.rating}</span>
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function Meter({ level }: { level: number }) {
-  return (
-    <div className="hidden sm:flex items-center gap-0.5" aria-hidden>
-      {[1, 2, 3].map((i) => (
-        <span
-          key={i}
-          className={cn("h-1.5 w-5 rounded-full", i <= level ? "bg-[#d4af37]" : "bg-white/10")}
-        />
-      ))}
-    </div>
-  );
-}
-
 function KeyTendencies({ items }: { items: string[] }) {
   return (
     <ul className="space-y-2">
@@ -882,6 +802,11 @@ function CurrentLeagueTab({ data }: { data: ManagerIntelPayload }) {
         pickValue={selected.pickValue ?? 0}
       />
 
+      <ManagerRosterSection
+        leagueId={selected.leagueId}
+        rosterId={targetRow?.rosterId ?? null}
+      />
+
       {viewerRow && targetRow && (
         <YouVsThem viewer={viewerRow} target={targetRow} />
       )}
@@ -930,6 +855,75 @@ function ordinal(n: number): string {
     case 3: return `${n}rd`;
     default: return `${n}th`;
   }
+}
+
+// The selected team's roster for the chosen league: the players they own,
+// grouped by position and sorted by dynasty value, with starters flagged.
+function ManagerRosterSection({
+  leagueId, rosterId,
+}: {
+  leagueId: string;
+  rosterId: number | null;
+}) {
+  const { players, loading, error } = useManagerRoster(leagueId, rosterId);
+  const POS_ORDER = ["QB", "RB", "WR", "TE"] as const;
+
+  return (
+    <SectionCard
+      title="Roster"
+      icon={<Users className="w-3.5 h-3.5" />}
+      subtitle={players.length ? `${players.length} players` : undefined}
+    >
+      {loading ? (
+        <p className="text-[12px] text-white/40">Loading roster…</p>
+      ) : error ? (
+        <p className="text-[12px] text-white/40">Roster unavailable.</p>
+      ) : players.length === 0 ? (
+        <p className="text-[12px] text-white/35">No players found for this roster.</p>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            {POS_ORDER.map((pos) => {
+              const group = players.filter((p) => p.position === pos);
+              return (
+                <div key={pos} className="rounded-md border border-white/8 bg-white/[0.02] p-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[11px] font-black uppercase tracking-widest text-white/70">{pos}</span>
+                    <span className="text-[10px] text-white/35">{group.length}</span>
+                  </div>
+                  {group.length === 0 ? (
+                    <p className="text-[12px] text-white/35">—</p>
+                  ) : (
+                    <ul className="space-y-1.5">
+                      {group.map((p) => (
+                        <li key={p.playerId} className="flex items-center justify-between text-[12.5px] gap-2">
+                          <span className="flex items-center gap-1.5 min-w-0">
+                            {p.isStarter && (
+                              <span className="w-1.5 h-1.5 rounded-full bg-[#d4af37] flex-shrink-0" title="Starter" />
+                            )}
+                            <span className="text-white/80 truncate">{p.name}</span>
+                            <span className="text-white/30 text-[10.5px] whitespace-nowrap flex-shrink-0">
+                              {p.team}{p.age != null ? ` · ${p.age}` : ""}
+                            </span>
+                          </span>
+                          <span className="tabular-nums whitespace-nowrap font-semibold text-white/70">
+                            {p.dynastyValue > 0 ? p.dynastyValue.toLocaleString() : "—"}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          <p className="text-[10px] text-white/30 mt-2.5">
+            Gold dot = starter · values are FantasyCalc dynasty values
+          </p>
+        </>
+      )}
+    </SectionCard>
+  );
 }
 
 function LeagueStandingSection({
@@ -1849,15 +1843,89 @@ function LeaguesInCommon({
 
 // ── Cross-League ────────────────────────────────────────────────────────────
 
+// Featured all-time stat cards shown at the top of the Cross-league tab:
+// career win rate, finish distribution by standing quartile, and championships.
+function CareerFeatureCards({ career }: { career: CareerHistory }) {
+  const { winPct, championships, finishes, playoffAppearances, record } = career;
+
+  const finishBuckets = finishes
+    ? ([
+        { label: "Top 25%", n: finishes.top25, cls: "bg-emerald-400/70" },
+        { label: "26–50%", n: finishes.upperMid, cls: "bg-sky-400/60" },
+        { label: "51–75%", n: finishes.lowerMid, cls: "bg-amber-400/60" },
+        { label: "Bottom 25%", n: finishes.bottom25, cls: "bg-rose-400/60" },
+      ] as const)
+    : [];
+
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      {/* Career win rate */}
+      <div className="rounded-lg border border-white/8 bg-white/[0.025] p-4">
+        <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-white/45 mb-2">
+          <Gauge className="w-3.5 h-3.5" />
+          <span>Career win rate</span>
+        </div>
+        <div className="text-[26px] font-black tabular-nums text-white leading-none">
+          {winPct != null ? `${winPct}%` : "—"}
+        </div>
+        <div className="text-[11px] text-white/45 mt-1.5 tabular-nums">
+          {record
+            ? `${record.wins}-${record.losses}${record.ties ? `-${record.ties}` : ""} · ${career.leagueSeasonsPlayed} league-season${career.leagueSeasonsPlayed === 1 ? "" : "s"}`
+            : "—"}
+        </div>
+      </div>
+
+      {/* Career finishes */}
+      <div className="rounded-lg border border-white/8 bg-white/[0.025] p-4">
+        <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-white/45 mb-2">
+          <Layers className="w-3.5 h-3.5" />
+          <span>Career finishes</span>
+        </div>
+        {finishes ? (
+          <div className="space-y-1.5">
+            {finishBuckets.map((b) => (
+              <div key={b.label} className="flex items-center gap-2">
+                <span className="text-[10.5px] text-white/55 w-[60px] flex-shrink-0">{b.label}</span>
+                <div className="flex-1 h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
+                  <div
+                    className={cn("h-full rounded-full", b.cls)}
+                    style={{ width: `${finishes.total ? (b.n / finishes.total) * 100 : 0}%` }}
+                  />
+                </div>
+                <span className="text-[11px] font-semibold tabular-nums text-white/70 w-4 text-right">{b.n}</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-[12px] text-white/35 mt-1">No completed seasons yet.</div>
+        )}
+      </div>
+
+      {/* Career championships */}
+      <div className="rounded-lg border border-white/8 bg-white/[0.025] p-4">
+        <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-white/45 mb-2">
+          <Crown className="w-3.5 h-3.5" />
+          <span>Championships</span>
+        </div>
+        <div className="text-[26px] font-black tabular-nums text-[#d4af37] leading-none">
+          {championships != null ? championships : "—"}
+        </div>
+        <div className="text-[11px] text-white/45 mt-1.5 tabular-nums">
+          {playoffAppearances != null
+            ? `${playoffAppearances} playoff appearance${playoffAppearances === 1 ? "" : "s"}`
+            : "—"}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function CrossLeagueTab({ data }: { data: ManagerIntelPayload }) {
   const cl = data.crossLeague;
   const byPos = cl.mostRosteredByPosition;
   const positionBias = cl.positionBias ?? [];
-  const youthLean = data.preferences?.youthPreference ?? "Medium";
-  const vetLean = data.preferences?.veteranPreference ?? "Medium";
   const ta = data.tradeApproach;
   const managerRead = data.managerRead || ta.summary;
-  const hasDoDont = (ta.doList?.length ?? 0) > 0 || (ta.dontList?.length ?? 0) > 0;
 
   // Activity breakdown + transaction history (moved here from the Activity tab),
   // covering all visible dynasty leagues.
@@ -1866,46 +1934,13 @@ function CrossLeagueTab({ data }: { data: ManagerIntelPayload }) {
   const tradeShare = actTotal > 0 ? Math.round(((act?.tradeCount ?? 0) / actTotal) * 100) : 0;
   const waiverShare = actTotal > 0 ? 100 - tradeShare : 0;
 
-  // Portfolio Snapshot — core metrics as a scannable table; leans + the most
-  // notable positional biases become quick-read pills below it.
-  const snapshotRows: Array<{ label: string; value: string }> = [
-    { label: "Leagues", value: String(cl.dynastyLeagueCount) },
-    { label: "Avg age", value: cl.averageTeamAge != null ? String(cl.averageTeamAge) : "—" },
-    ...(cl.portfolioType ? [{ label: "Build type", value: cl.portfolioType }] : []),
-    { label: "Trade style", value: cl.tradeActivityRating },
-    { label: "Waiver style", value: cl.waiverActivityRating },
-  ];
-  // Skip Balanced/Light signals so we don't list every position — that reads as
-  // noise. Only surface the biases that actually say something.
-  const biasPills = positionBias
-    .filter((p) => p.signal && p.signal !== "Balanced" && p.signal !== "Light")
-    .slice(0, 3)
-    .map((p) => `${p.position} ${p.signal}`);
-  const snapshotPills = [`${youthLean} Youth Lean`, `${vetLean} Veteran Lean`, ...biasPills];
-
   return (
     <div className="space-y-4">
       {/* Manager Read hero (moved here from the Overview tab) */}
       <ManagerReadCard archetype={data.archetype} managerRead={managerRead} takeaway={ta.actionableTakeaway} />
 
-      {/* Manager Intel Scorecard + Do / Don't (moved here from the Overview tab) */}
-      {data.scorecard && data.scorecard.length > 0 ? (
-        // Scorecard at half width with the Do / Don't cards stacked to its right,
-        // splitting the scorecard's height.
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch">
-          <SectionCard title="Manager Intel Scorecard" icon={<Gauge className="w-3.5 h-3.5" />}>
-            <Scorecard rows={data.scorecard} />
-          </SectionCard>
-          {hasDoDont && (
-            <div className="flex flex-col gap-3">
-              <DoBox items={ta.doList ?? []} className="flex-1" />
-              <DontBox items={ta.dontList ?? []} className="flex-1" />
-            </div>
-          )}
-        </div>
-      ) : (
-        hasDoDont && <DoDontCard doList={ta.doList ?? []} dontList={ta.dontList ?? []} />
-      )}
+      {/* Featured all-time career stats */}
+      {data.careerHistory?.available && <CareerFeatureCards career={data.careerHistory} />}
 
       {data.keyTendencies && data.keyTendencies.length > 0 && (
         <SectionCard title="Key tendencies" icon={<Target className="w-3.5 h-3.5" />}>
@@ -1913,63 +1948,15 @@ function CrossLeagueTab({ data }: { data: ManagerIntelPayload }) {
         </SectionCard>
       )}
 
-      {/* 1. Portfolio Snapshot — metric table + quick-read pills */}
-      <SectionCard title="Portfolio snapshot" icon={<Gauge className="w-3.5 h-3.5" />}>
-        <div className="divide-y divide-white/[0.06]">
-          {snapshotRows.map((s) => (
-            <div key={s.label} className="flex items-center justify-between py-1.5">
-              <span className="text-[11px] uppercase tracking-wider text-white/45">{s.label}</span>
-              <span className="text-[13px] font-bold text-white">{s.value}</span>
-            </div>
-          ))}
-        </div>
-        {snapshotPills.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 mt-3">
-            {snapshotPills.map((p) => (
-              <Chip key={p} tone="gold">{p}</Chip>
-            ))}
-          </div>
-        )}
-      </SectionCard>
-
       {data.draftProfile?.available && (
         <SectionCard
           title="Draft tendencies"
           icon={<Layers className="w-3.5 h-3.5" />}
-          subtitle="Across all visible dynasty drafts"
+          subtitle="Startup drafts, current + last season"
         >
           <DraftProfileContent profile={data.draftProfile} />
         </SectionCard>
       )}
-
-      {/* What They Value — merges Favorite Player Types + Likely Values into one card */}
-      {cl.tradeImplications &&
-        (cl.tradeImplications.likelyValues.length > 0 || cl.tradeImplications.unlikelyValues.length > 0) && (
-          <SectionCard title="What they value" icon={<Sparkles className="w-3.5 h-3.5" />}>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {cl.tradeImplications.likelyValues.length > 0 && (
-                <div>
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-300 mb-1.5">Highest interest</div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {cl.tradeImplications.likelyValues.map((v, i) => (
-                      <Chip key={i} tone="positive">{v}</Chip>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {cl.tradeImplications.unlikelyValues.length > 0 && (
-                <div>
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-rose-300 mb-1.5">Lower interest</div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {cl.tradeImplications.unlikelyValues.map((v, i) => (
-                      <Chip key={i} tone="negative">{v}</Chip>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          </SectionCard>
-        )}
 
       {/* 4. Most Rostered Players — the main data visual: 4 cards, % only (counts on hover) */}
       {byPos && (

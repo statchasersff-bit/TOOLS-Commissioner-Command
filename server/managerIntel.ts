@@ -32,11 +32,11 @@ const SLEEPER_API = "https://api.sleeper.app/v1";
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6h
 // Bump when the payload shape changes so stale cache rows are treated as misses
 // and recomputed rather than served without the newer fields.
-const CACHE_VERSION = 14;
+const CACHE_VERSION = 16;
 // Cap the number of drafts pulled for the draft-tendencies profile. Each draft
 // is one /draft/{id}/picks call; the chain discovery is shared with career
 // history so no extra league fetches are incurred.
-const MAX_DRAFTS_ANALYZED = 40;
+const MAX_DRAFTS_ANALYZED = 50;
 const MAX_LEAGUES_SCANNED = 50;
 const TRANSACTION_WEEKS = 18;
 const FETCH_CONCURRENCY = 4;
@@ -45,6 +45,11 @@ const FETCH_CONCURRENCY = 4;
 // with many deep leagues can't blow up a single request.
 const MAX_CAREER_DEPTH = 12;
 const MAX_CAREER_LEAGUE_SEASONS = 200;
+// Prior seasons whose leagues seed the career walk directly (in addition to the
+// current season's). Commissioners who don't renew break the previous_league_id
+// chain, so without direct seeding a manager's completed prior seasons — and thus
+// their win rate, finishes, and titles — would be invisible.
+const CAREER_SEED_PRIOR_SEASONS = 4;
 const VALID_POSITIONS = new Set(["QB", "RB", "WR", "TE"]);
 
 // ── Public types ─────────────────────────────────────────────────────────────
@@ -145,6 +150,24 @@ export interface CareerSeasonRow {
   /** Null when the season has no winners-bracket data (in-progress or hidden). */
   madePlayoffs: boolean | null;
   champion: boolean | null;
+  /** Finish bucket by final regular-season standing: 1 = top 25%, 2 = 26–50%,
+   *  3 = 51–75%, 4 = bottom 25%. Null for in-progress seasons (not yet a finish)
+   *  or when standings can't be resolved. */
+  finishQuartile: number | null;
+}
+
+/** Distribution of completed-season finishes across standing quartiles. */
+export interface CareerFinishes {
+  /** Finished in the top quarter of the standings. */
+  top25: number;
+  /** 26–50%. */
+  upperMid: number;
+  /** 51–75%. */
+  lowerMid: number;
+  /** Bottom quarter. */
+  bottom25: number;
+  /** Completed seasons counted (sum of the four buckets). */
+  total: number;
 }
 
 export interface CareerHistory {
@@ -164,6 +187,9 @@ export interface CareerHistory {
   /** Best-effort from completed-season brackets; null if no bracket data found. */
   championships: number | null;
   playoffAppearances: number | null;
+  /** Completed-season finishes bucketed by standing quartile; null when no
+   *  season has completed yet. */
+  finishes: CareerFinishes | null;
   /** Per-season breakdown, newest first. */
   seasons: CareerSeasonRow[];
   /** True when the chain walk hit the league-season cap and stopped early. */
@@ -2233,6 +2259,7 @@ async function buildCareerHistory(
     avgPointsForPerSeason: null,
     championships: null,
     playoffAppearances: null,
+    finishes: null,
     seasons: [],
     truncated: false,
     note: "No prior-season league history was found for this manager.",
@@ -2269,6 +2296,25 @@ async function buildCareerHistory(
         champion = championRosterId(bracket) === mine.roster_id;
       }
 
+      // Finish bucket from the final regular-season standings (Sleeper tiebreak:
+      // wins, then points-for). Only completed seasons count — an in-progress
+      // season isn't a finish yet.
+      let finishQuartile: number | null = null;
+      if (lg.status === "complete" && rosters.length > 0) {
+        const fptsOf = (st?: SleeperRosterRaw["settings"]) =>
+          (st?.fpts ?? 0) + (st?.fpts_decimal ?? 0) / 100;
+        const ranked = [...rosters].sort((a, b) => {
+          const aw = a.settings?.wins ?? 0;
+          const bw = b.settings?.wins ?? 0;
+          if (bw !== aw) return bw - aw;
+          return fptsOf(b.settings) - fptsOf(a.settings);
+        });
+        const rank = ranked.findIndex((r) => r.roster_id === mine.roster_id) + 1;
+        if (rank > 0) {
+          finishQuartile = Math.min(4, Math.max(1, Math.ceil((rank / rosters.length) * 4)));
+        }
+      }
+
       return {
         season: lg.season,
         leagueName: lg.name,
@@ -2278,6 +2324,7 @@ async function buildCareerHistory(
         pointsFor: Math.round(pointsFor * 10) / 10,
         madePlayoffs,
         champion,
+        finishQuartile,
       } satisfies CareerSeasonRow;
     })
   ).filter((r): r is CareerSeasonRow => r !== null);
@@ -2298,6 +2345,19 @@ async function buildCareerHistory(
   // so an in-progress current season doesn't drag the totals down.
   const bracketRows = rows.filter((r) => r.madePlayoffs !== null);
 
+  // Finish distribution across completed seasons only.
+  const finishRows = rows.filter((r) => r.finishQuartile != null);
+  const finishes: CareerFinishes | null =
+    finishRows.length > 0
+      ? {
+          top25: finishRows.filter((r) => r.finishQuartile === 1).length,
+          upperMid: finishRows.filter((r) => r.finishQuartile === 2).length,
+          lowerMid: finishRows.filter((r) => r.finishQuartile === 3).length,
+          bottom25: finishRows.filter((r) => r.finishQuartile === 4).length,
+          total: finishRows.length,
+        }
+      : null;
+
   return {
     available: true,
     seasonsActive: seasonsSet.size,
@@ -2309,12 +2369,14 @@ async function buildCareerHistory(
     avgPointsForPerSeason: rows.length > 0 ? Math.round((totalPf / rows.length) * 10) / 10 : null,
     championships: bracketRows.length > 0 ? bracketRows.filter((r) => r.champion).length : null,
     playoffAppearances: bracketRows.length > 0 ? bracketRows.filter((r) => r.madePlayoffs).length : null,
+    finishes,
     seasons: rows,
     truncated,
     note:
       "Aggregated from visible Sleeper leagues via prior-season links. Playoff and " +
       "championship results are read from completed-season brackets; seasons without " +
-      "bracket data are excluded from those two counts.",
+      "bracket data are excluded from those two counts. Finishes are bucketed by " +
+      "final regular-season standing across completed seasons.",
   };
 }
 
@@ -2326,6 +2388,16 @@ const CORE_POSITIONS: CorePos[] = ["QB", "RB", "WR", "TE"];
 // drafts run deeper. 12 captures the meaningful early/mid signal without a long
 // sparse tail.
 const MAX_DRAFT_ROUND = 12;
+// Startup vs. rookie draft separation. Startup drafts fill entire rosters and run
+// deep (commonly 15-25+ rounds); annual rookie drafts add a few prospects and
+// rarely exceed ~6 rounds. We analyze startup drafts only — rookie drafts are
+// rookie-RB/WR heavy and skew the positional mix vs. roster-building drafts. The
+// draft's planned `settings.rounds` is the primary signal (from the per-user
+// drafts endpoint); the pick-derived round count is a backstop inside the loop.
+const STARTUP_MIN_ROUNDS = 10;
+// Seasons of startup drafts to include: the current season plus this many prior
+// seasons. 1 → current + last season (e.g. 2026 + 2025).
+const DRAFT_PROFILE_PRIOR_SEASONS = 1;
 
 interface DraftPickRaw {
   round: number;
@@ -2334,6 +2406,17 @@ interface DraftPickRaw {
   /** The Sleeper user_id who made the pick. */
   picked_by: string;
   metadata?: { position?: string };
+}
+
+/** A draft as returned by the per-user drafts endpoint
+ *  (/user/{id}/drafts/nfl/{season}). `settings.rounds` is the planned length —
+ *  used to separate deep startup drafts from short rookie drafts. `league_id` is
+ *  null for mock drafts, which we skip. */
+interface UserDraftRaw {
+  draft_id: string;
+  league_id: string | null;
+  status?: string;
+  settings?: { rounds?: number };
 }
 
 type SleeperPlayersDb = Awaited<ReturnType<typeof getSleeperPlayers>>;
@@ -2364,8 +2447,50 @@ function emptyDraftProfile(note: string): DraftProfile {
 }
 
 /**
- * Build the manager's draft profile across every visible dynasty draft (startup
- * + every season's rookie draft, discovered via the previous_league_id chain).
+ * Resolve the manager's dynasty STARTUP draft IDs across the current and prior
+ * season(s). We list every draft the user took part in per season
+ * (/user/{id}/drafts/nfl/{season}) and keep only those that (a) belong to one of
+ * their dynasty leagues that season and (b) ran deep enough to be a startup
+ * rather than a rookie draft (>= STARTUP_MIN_ROUNDS planned rounds).
+ *
+ * This deliberately does NOT rely on league.draft_id (which points to a league's
+ * latest draft — the rookie draft for any continuing league) or the
+ * previous_league_id chain (which breaks whenever a commissioner spins up a fresh
+ * league each year instead of renewing), so fresh startups are no longer missed.
+ */
+async function collectStartupDraftIds(userId: string, season: string): Promise<string[]> {
+  const seasons: string[] = [];
+  const base = Number(season);
+  for (let i = 0; i <= DRAFT_PROFILE_PRIOR_SEASONS; i++) {
+    seasons.push(Number.isFinite(base) ? String(base - i) : season);
+  }
+
+  const ids = new Set<string>();
+  await mapBounded(seasons, FETCH_CONCURRENCY, async (s) => {
+    const [leagues, drafts] = await Promise.all([
+      fetchSleeperLeagues(userId, s), // dynasty-only (settings.type === 2)
+      fetchJson<UserDraftRaw[]>(`${SLEEPER_API}/user/${userId}/drafts/nfl/${s}`),
+    ]);
+    const dynastyLeagueIds = new Set(leagues.map((l) => l.leagueId));
+    for (const d of drafts ?? []) {
+      if (!d.draft_id) continue;
+      // Dynasty leagues only; mock drafts (null league_id) are excluded here too.
+      if (!d.league_id || !dynastyLeagueIds.has(d.league_id)) continue;
+      if ((d.settings?.rounds ?? 0) < STARTUP_MIN_ROUNDS) continue; // skip rookie drafts
+      ids.add(d.draft_id);
+    }
+  });
+  return Array.from(ids);
+}
+
+/**
+ * Build the manager's draft profile from their dynasty STARTUP drafts. The
+ * draft IDs are resolved up front by collectStartupDraftIds() across the current
+ * and prior season, so annual rookie drafts are already filtered out (they're
+ * short and rookie-RB/WR heavy, and would skew the positional mix vs. roster-
+ * building startup drafts — see STARTUP_MIN_ROUNDS). A length backstop below
+ * re-checks each fetched draft in case a draft's planned rounds disagreed with
+ * its actual picks.
  *
  * Two distributions come from the SAME pick arrays — no extra API calls beyond
  * one /picks fetch per draft:
@@ -2375,22 +2500,14 @@ function emptyDraftProfile(note: string): DraftProfile {
  * leagues they actually play in" read instead of a hardcoded flat baseline.
  */
 async function buildDraftProfile(
-  discovered: CareerLeagueRaw[],
+  draftIds: string[],
   userId: string,
   playersDb: SleeperPlayersDb,
 ): Promise<DraftProfile> {
-  // One draft per discovered league-season; dedup shared draft_ids defensively.
-  const seen = new Set<string>();
-  const draftIds: string[] = [];
-  for (const lg of discovered) {
-    const did = lg.draft_id;
-    if (did && !seen.has(did)) {
-      seen.add(did);
-      draftIds.push(did);
-    }
-  }
   if (draftIds.length === 0) {
-    return emptyDraftProfile("No drafts were found in this manager's visible dynasty leagues.");
+    return emptyDraftProfile(
+      "No startup drafts were found for this manager in the current or prior season.",
+    );
   }
 
   const truncated = draftIds.length > MAX_DRAFTS_ANALYZED;
@@ -2406,9 +2523,17 @@ async function buildDraftProfile(
   let userTotal = 0;
   let leagueTotal = 0;
   let draftsAnalyzed = 0;
+  let rookieDraftsSkipped = 0;
 
   for (const picks of pickLists) {
     if (!Array.isArray(picks) || picks.length === 0) continue;
+    // Skip rookie drafts: a draft that doesn't run deep enough to be a startup
+    // is the annual rookie draft, which we exclude (see STARTUP_MIN_ROUNDS).
+    const draftRounds = picks.reduce((m, p) => (p.round > m ? p.round : m), 0);
+    if (draftRounds < STARTUP_MIN_ROUNDS) {
+      rookieDraftsSkipped++;
+      continue;
+    }
     draftsAnalyzed++;
     for (const pick of picks) {
       const pos = draftPickPosition(pick, playersDb);
@@ -2429,8 +2554,13 @@ async function buildDraftProfile(
     }
   }
 
+  if (draftsAnalyzed === 0) {
+    return emptyDraftProfile(
+      "No startup drafts were found in this manager's visible dynasty leagues.",
+    );
+  }
   if (userTotal === 0) {
-    return emptyDraftProfile("No attributable draft picks were found for this manager.");
+    return emptyDraftProfile("No attributable startup draft picks were found for this manager.");
   }
 
   // Heatmap rows 1..maxRound (only rounds the manager actually drafted in).
@@ -2469,9 +2599,9 @@ async function buildDraftProfile(
     tendencyAnalysis: generateDraftTendencyAnalysis(userByRound, userByPos, userTotal),
     biasAnalysis: generatePositionalBiasAnalysis(positionalBias),
     note:
-      `Aggregated from ${draftsAnalyzed} draft${draftsAnalyzed === 1 ? "" : "s"} ` +
-      "(startup + rookie) across this manager's visible dynasty leagues. The " +
-      "league average pools every drafter's picks from those same drafts.",
+      `Aggregated from ${draftsAnalyzed} dynasty startup draft${draftsAnalyzed === 1 ? "" : "s"} ` +
+      "across the manager's current and prior season. Annual rookie drafts are " +
+      "excluded. The league average pools every drafter's picks from those same drafts.",
   };
 }
 
@@ -2616,16 +2746,30 @@ async function computeManagerIntel(
   const currentScan =
     scans.find((s) => s.leagueId === currentLeagueId) ?? scans[0] ?? null;
 
-  // Kick off the multi-season chain walk now so its many fetches overlap with
-  // the synchronous analysis below; awaited just before the payload is built.
-  // Career history and the draft profile share this one discovery so the
-  // per-league fetches aren't duplicated.
-  const discoveryPromise = discoverCareerLeagues(scannedLeagues).catch(
-    (err): { discovered: CareerLeagueRaw[]; truncated: boolean } => {
-      console.error("[ManagerIntel] league discovery failed:", err?.message || err);
-      return { discovered: [], truncated: false };
-    },
-  );
+  // Kick off the multi-season walk now so its many fetches overlap with the
+  // synchronous analysis below; awaited just before the payload is built. The
+  // walk is seeded with the current season's leagues PLUS the manager's dynasty
+  // leagues from recent prior seasons (fetched directly) so broken
+  // previous_league_id chains don't hide completed history. discoverCareerLeagues
+  // dedups by league_id and still walks each seed's chain for older seasons.
+  const discoveryPromise = (async () => {
+    const priorSeasons: string[] = [];
+    const baseSeason = Number(season);
+    if (Number.isFinite(baseSeason)) {
+      for (let i = 1; i <= CAREER_SEED_PRIOR_SEASONS; i++) priorSeasons.push(String(baseSeason - i));
+    }
+    const priorSeedLists = await Promise.all(
+      priorSeasons.map((s) => fetchSleeperLeagues(user.userId, s).catch(() => [])),
+    );
+    const seedMap = new Map<string, SleeperLeagueSummary>();
+    for (const lg of [...scannedLeagues, ...priorSeedLists.flat()]) {
+      if (!seedMap.has(lg.leagueId)) seedMap.set(lg.leagueId, lg);
+    }
+    return discoverCareerLeagues(Array.from(seedMap.values()));
+  })().catch((err): { discovered: CareerLeagueRaw[]; truncated: boolean } => {
+    console.error("[ManagerIntel] league discovery failed:", err?.message || err);
+    return { discovered: [], truncated: false };
+  });
 
   const careerHistoryPromise = discoveryPromise
     .then(({ discovered, truncated }) => buildCareerHistory(discovered, truncated, user.userId))
@@ -2642,14 +2786,18 @@ async function computeManagerIntel(
         avgPointsForPerSeason: null,
         championships: null,
         playoffAppearances: null,
+        finishes: null,
         seasons: [],
         truncated: false,
         note: "Career history could not be loaded.",
       };
     });
 
-  const draftProfilePromise = discoveryPromise
-    .then(({ discovered }) => buildDraftProfile(discovered, user.userId, playersDb))
+  // Draft tendencies source their startup drafts directly from the user's
+  // current + prior season drafts (not the previous_league_id chain, which breaks
+  // for leagues that aren't renewed year-over-year), so fresh startups are found.
+  const draftProfilePromise = collectStartupDraftIds(user.userId, season)
+    .then((draftIds) => buildDraftProfile(draftIds, user.userId, playersDb))
     .catch((err): DraftProfile => {
       console.error("[ManagerIntel] draft profile failed:", err?.message || err);
       return emptyDraftProfile("Draft tendencies could not be loaded.");
@@ -3160,6 +3308,7 @@ function emptyPayload(
       avgPointsForPerSeason: null,
       championships: null,
       playoffAppearances: null,
+      finishes: null,
       seasons: [],
       truncated: false,
       note,

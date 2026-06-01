@@ -208,10 +208,12 @@ function Filters({ filters, setFilters, maxMarket, sources, sourceId, setSourceI
 }
 
 // ── Page ──────────────────────────────────────────────────────────────────────
-export function MarketInefficiencies() {
+// Embeddable market-inefficiency panels. The active panel (value / gap / age)
+// is driven by the parent (the Value Finder tab bar), so this component has no
+// internal tab bar of its own; it keeps its own filters + market data pipeline.
+export function MarketInsights({ activeTab }: { activeTab: TabId }) {
   const vm = useValueModel();
   const [filters, setFilters] = useState<MarketFilters>(DEFAULT_FILTERS);
-  const [tab, setTab] = useState<TabId>("value");
   const [gapView, setGapView] = useState<GapView>("all");
   const [format, setFormat] = useState<MarketFormat>("sf");
 
@@ -277,12 +279,6 @@ export function MarketInefficiencies() {
   const discountedVets = useMemo(() => rankable.filter((p) => (p.age ?? 0) >= 26 && (p.gap ?? 0) > 0).sort((a, b) => (b.gap ?? 0) - (a.gap ?? 0)).slice(0, 10), [rankable]);
   const youthRisks = useMemo(() => rankable.filter((p) => (p.age ?? 99) <= 23 && (p.gap ?? 0) < 0).sort((a, b) => (a.gap ?? 0) - (b.gap ?? 0)).slice(0, 10), [rankable]);
 
-  const tabs: Array<{ id: TabId; label: string }> = [
-    { id: "value", label: "Value vs Production" },
-    { id: "gap", label: "Market Gap" },
-    { id: "age", label: "Age Curve" },
-  ];
-
   // Full-page empty state only for the synchronous Superflex path — if even the
   // bundled values are missing there's nothing to show. The 1QB path keeps the
   // header/filters mounted and surfaces loading/error inline (below) so the user
@@ -303,24 +299,11 @@ export function MarketInefficiencies() {
   const showPanels = !oqbLoading && !oqbError && allPlayers.length > 0;
 
   return (
-    <div className="space-y-4 pb-12">
-      {/* Header */}
-      <div className="rounded-2xl border border-[#d4af37]/20 bg-gradient-to-b from-[#0b3a7a]/[0.1] to-card/40 p-4 md:p-5">
-        <div className="flex items-center gap-2">
-          <Scale className="w-4 h-4 text-[var(--sc-gold-deep)] dark-any:text-[#d4af37]" />
-          <h1 className="text-base md:text-lg font-black text-foreground">Market Inefficiencies</h1>
-        </div>
-        <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5 mb-2" />
-        <p className="text-[12px] md:text-[13px] text-muted-foreground max-w-2xl leading-snug">
-          Find buy-low and sell-high opportunities by comparing dynasty market value against production,
-          age, and model-based value. <span className="text-muted-foreground/70">Production uses win-now (redraft) value; model
-          value blends production with a position age curve.</span>
-        </p>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-3">
-          <StatCard icon={TrendingUp} label="Best Buy" player={summary.bestBuy} accent="text-emerald-600 dark-any:text-emerald-400" />
-          <StatCard icon={TrendingDown} label="Biggest Sell" player={summary.biggestSell} accent="text-red-600 dark-any:text-red-400" />
-          <StatCard icon={Scale} label="Largest Market Gap" player={summary.largestGap} accent="text-[var(--sc-gold-deep)] dark-any:text-[#d4af37]" />
-        </div>
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+        <StatCard icon={TrendingUp} label="Best Buy" player={summary.bestBuy} accent="text-emerald-600 dark-any:text-emerald-400" />
+        <StatCard icon={TrendingDown} label="Biggest Sell" player={summary.biggestSell} accent="text-red-600 dark-any:text-red-400" />
+        <StatCard icon={Scale} label="Largest Market Gap" player={summary.largestGap} accent="text-[var(--sc-gold-deep)] dark-any:text-[#d4af37]" />
       </div>
 
       <Filters
@@ -333,23 +316,6 @@ export function MarketInefficiencies() {
         format={format}
         setFormat={setFormat}
       />
-
-      {/* Tabs */}
-      <div className="flex gap-1 p-1 rounded-xl bg-muted/20 border border-border w-full sm:w-auto">
-        {tabs.map((t) => (
-          <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
-            data-testid={`market-tab-${t.id}`}
-            className={cn(
-              "relative flex-1 sm:flex-none px-3 py-1.5 rounded-lg text-[11px] sm:text-[12px] font-semibold transition-colors",
-              tab === t.id ? "bg-[#0b3a7a]/60 text-white border border-[#d4af37]/25" : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
 
       {/* 1QB async states (Superflex renders synchronously). */}
       {oqbLoading && (
@@ -370,7 +336,7 @@ export function MarketInefficiencies() {
         </div>
       )}
 
-      {showPanels && tab === "value" && (
+      {showPanels && activeTab === "value" && (
         <div className="space-y-3">
           <HowToRead>
             Players below the expected value curve may be underpriced because their production is stronger than
@@ -389,7 +355,7 @@ export function MarketInefficiencies() {
         </div>
       )}
 
-      {showPanels && tab === "gap" && (
+      {showPanels && activeTab === "gap" && (
         <div className="space-y-3">
           <HowToRead>
             This compares market value against Dynasty Command’s internal model. Positive gaps may indicate
@@ -417,7 +383,7 @@ export function MarketInefficiencies() {
         </div>
       )}
 
-      {showPanels && tab === "age" && (
+      {showPanels && activeTab === "age" && (
         <div className="space-y-3">
           <HowToRead>
             Dynasty markets often price players differently by age and position. Use this chart to find productive
@@ -438,4 +404,4 @@ export function MarketInefficiencies() {
   );
 }
 
-export default MarketInefficiencies;
+export default MarketInsights;
