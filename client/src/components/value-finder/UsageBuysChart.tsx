@@ -49,7 +49,7 @@ export function UsageBuysChart({
             tone,
           };
         }),
-    [players, usageExpected],
+    [players],
   );
 
   if (!data.length) {

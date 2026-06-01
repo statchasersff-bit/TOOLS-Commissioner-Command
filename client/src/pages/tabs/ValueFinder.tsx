@@ -25,7 +25,6 @@ import {
 import { ValueFinderHeader } from "@/components/value-finder/ValueFinderHeader";
 import { ValueFinderFilters } from "@/components/value-finder/ValueFinderFilters";
 import { HowToReadCard } from "@/components/value-finder/HowToReadCard";
-import { ValueSignalBadge } from "@/components/value-finder/ValueSignalBadge";
 import { ValueLabelBadge } from "@/components/value-finder/ValueLabelBadge";
 import {
   ValueFinderTable,
@@ -111,13 +110,6 @@ const gapCol = (): VFColumn => ({
   mobile: true,
   cell: (p) => <GapPctCell p={p} />,
   sortValue: (p) => p.gapPercent ?? 0,
-});
-const signalCol = (): VFColumn => ({
-  key: "signal",
-  header: "Signal",
-  align: "right",
-  mobile: true,
-  cell: (p) => <ValueSignalBadge signal={p.signal} compact />,
 });
 const labelCol = (): VFColumn => ({
   key: "label",
@@ -250,7 +242,7 @@ function MarketGapsTab({
   const rows = useMemo(
     () =>
       [...players]
-        .map((p) => withSignal(p, p.modelValue))
+        .map((p) => withSignal(p, p.dynastyValue))
         .sort((a, b) => Math.abs(b.gapPercent ?? 0) - Math.abs(a.gapPercent ?? 0))
         .slice(0, 25),
     [players],
@@ -260,16 +252,18 @@ function MarketGapsTab({
     posCol(),
     ageCol(),
     marketCol(),
-    { key: "model", header: "Model", align: "right", cell: (p) => fmtValue(p.modelValue), sortValue: (p) => p.modelValue ?? 0 },
+    { key: "dynasty", header: "Dynasty", align: "right", cell: (p) => fmtValue(p.dynastyValue), sortValue: (p) => p.dynastyValue ?? 0 },
     gapCol(),
-    signalCol(),
+    labelCol(),
   ];
 
   return (
     <div className="space-y-3">
       <HowToReadCard defaultOpen>
-        This chart compares player market value against Dynasty Command's internal model.
-        Positive gaps may indicate buy-low targets. Negative gaps may indicate sell-high candidates.
+        This chart compares market value against Dynasty Value — a longevity-aware blend of usage,
+        production, age/role durability, trend, and market insulation. Positive gaps may indicate
+        buy-low targets; negative gaps may indicate sell-high candidates. The Label column gives the
+        final, fit-aware recommendation.
       </HowToReadCard>
       <div className="flex gap-1.5">
         {([["all", "All"], ["buys", "Biggest Buys"], ["sells", "Biggest Sells"]] as Array<[GapView, string]>).map(
@@ -304,9 +298,9 @@ function MarketGapsTab({
   );
 }
 
-// ── Tab 2: Production Buys ──────────────────────────────────────────────────
+// ── Tab 2: Production Discounts ─────────────────────────────────────────────
 function ProductionBuysTab({ players }: { players: ValueFinderPlayer[] }) {
-  const rows = useMemo(() => players.map((p) => withSignal(p, p.expectedValue)), [players]);
+  const rows = useMemo(() => players.map((p) => withSignal(p, p.productionValue)), [players]);
   const buys = rows.filter((p) => (p.gapPercent ?? 0) > 0).sort((a, b) => (b.gapPercent ?? 0) - (a.gapPercent ?? 0)).slice(0, 12);
   const sells = rows.filter((p) => (p.gapPercent ?? 0) < 0).sort((a, b) => (a.gapPercent ?? 0) - (b.gapPercent ?? 0)).slice(0, 12);
 
@@ -316,40 +310,34 @@ function ProductionBuysTab({ players }: { players: ValueFinderPlayer[] }) {
     ageCol(),
     { key: "ppg", header: "PPG", align: "right", cell: (p) => fmtPpg(p.pointsPerGame), sortValue: (p) => p.pointsPerGame ?? 0 },
     marketCol(),
-    { key: "expected", header: "Expected", align: "right", cell: (p) => fmtValue(p.expectedValue), sortValue: (p) => p.expectedValue ?? 0 },
+    { key: "expected", header: "Expected", align: "right", cell: (p) => fmtValue(p.productionValue), sortValue: (p) => p.productionValue ?? 0 },
     gapCol(),
-    signalCol(),
+    labelCol(),
   ];
 
   return (
     <div className="space-y-3">
       <HowToReadCard defaultOpen>
-        This chart compares fantasy production against dynasty market value. Players producing more
-        than their price suggests may be buy-low targets. Players priced above their production profile
-        may be sell-high candidates.
+        This compares fantasy production against market value. A production discount is not
+        automatically a dynasty buy — an older player can out-produce his price while still being a
+        poor long-term hold. Check the Label and the Win-Now / Rebuild tabs for fit.
       </HowToReadCard>
       <Panel>
         <ProductionBuysChart players={players} />
       </Panel>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-        <ValueFinderTable title="Production-Based Buys" rows={buys} columns={columns} defaultSortKey="gap" testId="vf-table-prod-buys" emptyText="No production-based buys in this filter set." />
-        <ValueFinderTable title="Production-Based Sells" rows={sells} columns={columns} defaultSortKey="gap" defaultSortDir="asc" testId="vf-table-prod-sells" emptyText="No production-based sells in this filter set." />
+        <ValueFinderTable title="Production Discounts" rows={buys} columns={columns} defaultSortKey="gap" testId="vf-table-prod-buys" emptyText="No production discounts in this filter set." />
+        <ValueFinderTable title="Overpriced Production" rows={sells} columns={columns} defaultSortKey="gap" defaultSortDir="asc" testId="vf-table-prod-sells" emptyText="No overpriced production in this filter set." />
       </div>
     </div>
   );
 }
 
 // ── Tab 3: Usage Buys ───────────────────────────────────────────────────────
-function UsageBuysTab({
-  players,
-  usageExpected,
-}: {
-  players: ValueFinderPlayer[];
-  usageExpected: Map<string, number>;
-}) {
+function UsageBuysTab({ players }: { players: ValueFinderPlayer[] }) {
   const rows = useMemo(
-    () => players.map((p) => withSignal(p, usageExpected.get(p.playerId))),
-    [players, usageExpected],
+    () => players.map((p) => withSignal(p, p.usageValue)),
+    [players],
   );
   const buys = rows.filter((p) => (p.gapPercent ?? 0) > 0 && p.usageScore != null).sort((a, b) => (b.gapPercent ?? 0) - (a.gapPercent ?? 0)).slice(0, 12);
   const sells = rows.filter((p) => (p.gapPercent ?? 0) < 0 && p.usageScore != null).sort((a, b) => (a.gapPercent ?? 0) - (b.gapPercent ?? 0)).slice(0, 12);
@@ -361,25 +349,25 @@ function UsageBuysTab({
     cell: (p) => fmtScore(p.usageScore),
     sortValue: (p) => p.usageScore ?? 0,
   };
-  const buyColumns: VFColumn[] = [
+  // Player · Age · Usage · Market · Longevity · Best Fit · Label
+  const columns: VFColumn[] = [
     playerCol(), posCol(), ageCol(), usageCol, marketCol(),
-    { key: "expected", header: "Expected", align: "right", cell: (p) => fmtValue(usageExpected.get(p.playerId)), sortValue: (p) => usageExpected.get(p.playerId) ?? 0 },
-    gapCol(), signalCol(),
+    longevityCol(), bestFitCol(), labelCol(),
   ];
-  const sellColumns: VFColumn[] = [playerCol(), posCol(), ageCol(), usageCol, marketCol(), gapCol(), signalCol()];
 
   return (
     <div className="space-y-3">
       <HowToReadCard defaultOpen>
-        This chart compares player usage and role strength against market value. Strong usage at a low
-        price may signal a buy window before production fully catches up.
+        This compares usage / role strength against market value. Strong usage at a low price may signal
+        a buy window before production catches up — but a strong role doesn't mean "buy for everyone."
+        The Longevity and Best Fit columns separate long-term holds from short-term rentals.
       </HowToReadCard>
       <Panel>
-        <UsageBuysChart players={players} usageExpected={usageExpected} />
+        <UsageBuysChart players={players} />
       </Panel>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-        <ValueFinderTable title="Usage-Based Buys" rows={buys} columns={buyColumns} defaultSortKey="gap" testId="vf-table-usage-buys" emptyText="No usage-based buys in this filter set." />
-        <ValueFinderTable title="Role-Based Sells" rows={sells} columns={sellColumns} defaultSortKey="gap" defaultSortDir="asc" testId="vf-table-usage-sells" emptyText="No role-based sells in this filter set." />
+        <ValueFinderTable title="Usage-Based Buys" rows={buys} columns={columns} defaultSortKey="gap" testId="vf-table-usage-buys" emptyText="No usage-based buys in this filter set." />
+        <ValueFinderTable title="Role-Based Sells" rows={sells} columns={columns} defaultSortKey="gap" defaultSortDir="asc" testId="vf-table-usage-sells" emptyText="No role-based sells in this filter set." />
       </div>
     </div>
   );
@@ -413,7 +401,9 @@ function TrendRadarTab({
     { key: "vtrend", header: "Value", align: "right", cell: (p) => <TrendNum v={getMarketTrend(p, window)} /> },
     { key: "rtrend", header: "Role", align: "right", cell: (p) => <TrendNum v={getRoleTrend(p)} /> },
     { key: "ptrend", header: "Prod", align: "right", cell: (p) => <TrendNum v={getProductionTrend(p)} /> },
-    signalCol(),
+    longevityCol(),
+    bestFitCol(),
+    labelCol(),
   ];
 
   return (
@@ -421,7 +411,8 @@ function TrendRadarTab({
       <HowToReadCard defaultOpen>
         This chart compares market movement against role and production trends. Hidden risers may be
         gaining opportunity before their value reacts. Hype risers may be gaining value without enough
-        role improvement.
+        role improvement. Longevity and Best Fit matter here: a 30-year-old whose role is rising is not
+        the same asset as a 22-year-old with the same trend.
       </HowToReadCard>
       <Panel>
         <TrendRadarChart players={players} trendWindow={window} />
@@ -459,7 +450,7 @@ function WinNowTab({ players }: { players: ValueFinderPlayer[] }) {
     marketCol(),
     { key: "contender", header: "Contender", align: "right", cell: (p) => fmtValue(p.contenderValue), sortValue: (p) => p.contenderValue ?? 0 },
     gapCol(),
-    signalCol(),
+    labelCol(),
   ];
 
   return (
@@ -494,7 +485,7 @@ function RebuildTab({ players }: { players: ValueFinderPlayer[] }) {
     marketCol(),
     { key: "rebuilder", header: "Rebuilder", align: "right", cell: (p) => fmtValue(p.rebuilderValue), sortValue: (p) => p.rebuilderValue ?? 0 },
     gapCol(),
-    signalCol(),
+    labelCol(),
   ];
 
   return (

@@ -43,10 +43,10 @@ function weightedAvailable(
 }
 
 /**
- * Dynasty value (0–10,000) — the longevity-aware headline value.
+ * Dynasty score (0–1) — the longevity-aware headline blend.
  * usage*0.25 + production*0.20 + longevity*0.30 + trend*0.15 + insulation*0.10
  */
-export function calculateDynastyValue(
+export function getDynastyScore(
   player: ValueFinderPlayer,
   positionPlayers: ValueFinderPlayer[],
 ): number {
@@ -56,14 +56,21 @@ export function calculateDynastyValue(
   const trendScore = getTrendScore(player, positionPlayers);
   const insulationScore = getMarketInsulationScore(player, positionPlayers);
 
-  const weighted =
+  return (
     usageScore * 0.25 +
     productionScore * 0.2 +
     longevityScore * 0.3 +
     trendScore * 0.15 +
-    insulationScore * 0.1;
+    insulationScore * 0.1
+  );
+}
 
-  return Math.round(weighted * 10000);
+/** Dynasty value (0–10,000) — score scaled. (Display/back-compat.) */
+export function calculateDynastyValue(
+  player: ValueFinderPlayer,
+  positionPlayers: ValueFinderPlayer[],
+): number {
+  return Math.round(getDynastyScore(player, positionPlayers) * 10000);
 }
 
 /** Back-compat alias — the model value IS the dynasty value now. */
@@ -269,12 +276,12 @@ function getUsageTrendScore(
 }
 
 /**
- * Contender value (0–10,000), tuned for win-now rosters.
+ * Contender score (0–1), tuned for win-now rosters.
  * production*0.35 + usage*0.30 + startRate*0.20 + trend*0.10 + longevity(age)*0.05
  * Longevity weight is small and uses the lenient contender age score so productive
  * veterans are not punished.
  */
-export function calculateContenderValue(
+export function getContenderScore(
   player: ValueFinderPlayer,
   positionPlayers: ValueFinderPlayer[],
 ): number {
@@ -292,25 +299,30 @@ export function calculateContenderValue(
   const ageScore = getContenderAgeScore(player);
   const trendScore = getTrendScore(player, positionPlayers);
 
-  const weighted =
+  return (
     productionScore * 0.35 +
     usageScore * 0.3 +
     startRateScore * 0.2 +
     trendScore * 0.1 +
-    ageScore * 0.05;
+    ageScore * 0.05
+  );
+}
 
-  return Math.round(weighted * 10000);
+export function calculateContenderValue(
+  player: ValueFinderPlayer,
+  positionPlayers: ValueFinderPlayer[],
+): number {
+  return Math.round(getContenderScore(player, positionPlayers) * 10000);
 }
 
 /**
- * Rebuilder value (0–10,000), tuned for long-term builds.
+ * Rebuilder score (0–1), tuned for long-term builds.
  * longevity*0.35 + usageGrowth*0.25 + ageAdjustedUpside*0.20
  *   + marketInsulation*0.10 + productionFlash*0.10
  */
-export function calculateRebuilderValue(
+export function getRebuilderScore(
   player: ValueFinderPlayer,
   positionPlayers: ValueFinderPlayer[],
-  source: ValueSourceVF,
 ): number {
   const longevityScore = getLongevityScore(player, positionPlayers);
   const usageGrowthScore = getUsageTrendScore(player, positionPlayers);
@@ -318,12 +330,19 @@ export function calculateRebuilderValue(
   const marketInsulationScore = getMarketInsulationScore(player, positionPlayers);
   const productionFlash = getPpgScore(player, positionPlayers);
 
-  const weighted =
+  return (
     longevityScore * 0.35 +
     usageGrowthScore * 0.25 +
     ageAdjustedUpside * 0.2 +
     marketInsulationScore * 0.1 +
-    productionFlash * 0.1;
+    productionFlash * 0.1
+  );
+}
 
-  return Math.round(weighted * 10000);
+export function calculateRebuilderValue(
+  player: ValueFinderPlayer,
+  positionPlayers: ValueFinderPlayer[],
+  source: ValueSourceVF,
+): number {
+  return Math.round(getRebuilderScore(player, positionPlayers) * 10000);
 }

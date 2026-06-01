@@ -62,6 +62,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, Legend } from "recharts";
 import { cn } from "@/lib/utils";
+import { DraftProfileContent, type DraftProfile } from "@/components/manager/DraftProfileCard";
 import { API_BASE } from "@/lib/apiBase";
 import { useSleeper } from "@/contexts/SleeperContext";
 import { usePlayoffOddsSummary } from "@/hooks/usePlayoffOddsSummary";
@@ -215,6 +216,7 @@ interface ManagerIntelPayload {
     avgPointsFor: number | null;
     notes: string;
   };
+  draftProfile?: DraftProfile;
   activity?: {
     visibleLeagues: number;
     oldestVisibleSeason: string | null;
@@ -1930,6 +1932,16 @@ function CrossLeagueTab({ data }: { data: ManagerIntelPayload }) {
         )}
       </SectionCard>
 
+      {data.draftProfile?.available && (
+        <SectionCard
+          title="Draft tendencies"
+          icon={<Layers className="w-3.5 h-3.5" />}
+          subtitle="Across all visible dynasty drafts"
+        >
+          <DraftProfileContent profile={data.draftProfile} />
+        </SectionCard>
+      )}
+
       {/* What They Value — merges Favorite Player Types + Likely Values into one card */}
       {cl.tradeImplications &&
         (cl.tradeImplications.likelyValues.length > 0 || cl.tradeImplications.unlikelyValues.length > 0) && (
@@ -2259,7 +2271,7 @@ function ShareBar({ label, count, pct, tone }: { label: string; count: number; p
 
 // ── Subcomponents ───────────────────────────────────────────────────────────
 
-function SectionCard({ title, icon, children, collapsible = false }: { title: string; icon?: React.ReactNode; children: React.ReactNode; collapsible?: boolean }) {
+function SectionCard({ title, icon, children, collapsible = false, subtitle }: { title: string; icon?: React.ReactNode; children: React.ReactNode; collapsible?: boolean; subtitle?: string }) {
   // Collapsible sections start closed so long history lists don't dominate the tab.
   const [open, setOpen] = useState(!collapsible);
   return (
@@ -2276,12 +2288,13 @@ function SectionCard({ title, icon, children, collapsible = false }: { title: st
           <ChevronDown className={cn("w-3.5 h-3.5 ml-auto transition-transform", open && "rotate-180")} />
         </button>
       ) : (
-        <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-white/45 mb-2">
+        <div className={cn("flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-white/45", subtitle ? "mb-0.5" : "mb-2")}>
           {icon}
           <span>{title}</span>
+          {subtitle && <span className="ml-1.5 normal-case tracking-normal text-white/30 font-normal">{subtitle}</span>}
         </div>
       )}
-      {open && <div className={collapsible ? "mt-2" : undefined}>{children}</div>}
+      {open && <div className={collapsible ? "mt-2" : subtitle ? "mt-2" : undefined}>{children}</div>}
     </div>
   );
 }

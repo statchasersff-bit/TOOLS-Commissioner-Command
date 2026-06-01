@@ -32,7 +32,11 @@ const SLEEPER_API = "https://api.sleeper.app/v1";
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6h
 // Bump when the payload shape changes so stale cache rows are treated as misses
 // and recomputed rather than served without the newer fields.
-const CACHE_VERSION = 13;
+const CACHE_VERSION = 14;
+// Cap the number of drafts pulled for the draft-tendencies profile. Each draft
+// is one /draft/{id}/picks call; the chain discovery is shared with career
+// history so no extra league fetches are incurred.
+const MAX_DRAFTS_ANALYZED = 40;
 const MAX_LEAGUES_SCANNED = 50;
 const TRANSACTION_WEEKS = 18;
 const FETCH_CONCURRENCY = 4;
@@ -167,6 +171,49 @@ export interface CareerHistory {
   note: string;
 }
 
+/** A single position-frequency row for the draft heatmap. Values are the % of
+ *  the manager's picks in that round that were each position (each row ~100%). */
+export interface DraftHeatmapRow {
+  round: number;
+  QB: number;
+  RB: number;
+  WR: number;
+  TE: number;
+}
+
+/** Per-position draft investment vs the real pooled league baseline. */
+export interface DraftBiasRow {
+  position: "QB" | "RB" | "WR" | "TE";
+  /** Share of the manager's core picks at this position. */
+  userPct: number;
+  /** Share of ALL drafters' core picks at this position, same drafts. */
+  leagueAvgPct: number;
+  /** userPct − leagueAvgPct, positive = over-drafts this position. */
+  difference: number;
+}
+
+/** How a manager drafts across every visible dynasty draft (startup + rookie),
+ *  aggregated across all seasons via the previous_league_id chain. */
+export interface DraftProfile {
+  /** True once the manager has at least one attributable core pick. */
+  available: boolean;
+  /** Drafts that returned picks and were included. */
+  draftsAnalyzed: number;
+  /** The manager's core (QB/RB/WR/TE) picks counted. */
+  totalPicksAnalyzed: number;
+  /** True when the draft count was capped (older drafts were skipped). */
+  truncated: boolean;
+  /** Round-by-round position frequency for the manager's picks. */
+  heatmap: DraftHeatmapRow[];
+  /** Per-position over/under-draft vs the pooled league baseline. */
+  positionalBias: DraftBiasRow[];
+  /** Rule-based read of the round-by-round tendencies. */
+  tendencyAnalysis: string;
+  /** Rule-based read of the positional bias. */
+  biasAnalysis: string;
+  note: string;
+}
+
 export interface ManagerIntelPayload {
   user: {
     user_id: string;
@@ -255,6 +302,9 @@ export interface ManagerIntelPayload {
    *  previous_league_id chain. All-time, as opposed to crossLeague/activity
    *  which are current-season only. */
   careerHistory: CareerHistory;
+  /** How the manager drafts across every visible dynasty draft (startup +
+   *  rookie, all seasons). Powers the League tab's draft-tendencies card. */
+  draftProfile: DraftProfile;
   /** Current visible-season activity (the reframed "History"/Track Record tab). */
   activity: {
     visibleLeagues: number;
@@ -2090,6 +2140,9 @@ interface CareerLeagueRaw {
   name: string;
   season: string;
   status?: string;
+  /** The league-season's primary draft (startup in the oldest season, the
+   *  rookie draft in later seasons). Used by the draft-tendencies profile. */
+  draft_id?: string | null;
   settings?: { previous_league_id?: string | null };
 }
 
@@ -2128,30 +2181,17 @@ function championRosterId(bracket: BracketMatch[]): number | null {
   return best && typeof best.w === "number" ? best.w : null;
 }
 
-async function buildCareerHistory(
+/**
+ * Phase 1 of the multi-season walk: discover every league-season by following
+ * each visible league's previous_league_id chain backward. Chains run
+ * concurrently; each chain is sequential (a step needs the prior league's
+ * previous_league_id). Dedup by league_id so shared ancestors aren't fetched
+ * twice, and stop globally at the league-season cap. Shared by career history
+ * and the draft-tendencies profile so the league fetches happen only once.
+ */
+async function discoverCareerLeagues(
   currentLeagues: SleeperLeagueSummary[],
-  userId: string,
-): Promise<CareerHistory> {
-  const empty: CareerHistory = {
-    available: false,
-    seasonsActive: 0,
-    firstSeason: null,
-    latestSeason: null,
-    leagueSeasonsPlayed: 0,
-    record: null,
-    winPct: null,
-    avgPointsForPerSeason: null,
-    championships: null,
-    playoffAppearances: null,
-    seasons: [],
-    truncated: false,
-    note: "No prior-season league history was found for this manager.",
-  };
-
-  // Phase 1 — discover every league-season by walking each chain backward.
-  // Chains run concurrently; each chain is sequential (a step needs the prior
-  // league's previous_league_id). Dedup by league_id so shared ancestors aren't
-  // fetched twice, and stop globally at the league-season cap.
+): Promise<{ discovered: CareerLeagueRaw[]; truncated: boolean }> {
   const seen = new Set<string>();
   let truncated = false;
   const discovered: CareerLeagueRaw[] = [];
@@ -2173,6 +2213,30 @@ async function buildCareerHistory(
       depth++;
     }
   });
+
+  return { discovered, truncated };
+}
+
+async function buildCareerHistory(
+  discovered: CareerLeagueRaw[],
+  truncated: boolean,
+  userId: string,
+): Promise<CareerHistory> {
+  const empty: CareerHistory = {
+    available: false,
+    seasonsActive: 0,
+    firstSeason: null,
+    latestSeason: null,
+    leagueSeasonsPlayed: 0,
+    record: null,
+    winPct: null,
+    avgPointsForPerSeason: null,
+    championships: null,
+    playoffAppearances: null,
+    seasons: [],
+    truncated: false,
+    note: "No prior-season league history was found for this manager.",
+  };
 
   if (discovered.length === 0) return empty;
 
@@ -2254,6 +2318,262 @@ async function buildCareerHistory(
   };
 }
 
+// ── Draft tendencies + positional bias ───────────────────────────────────────
+
+type CorePos = "QB" | "RB" | "WR" | "TE";
+const CORE_POSITIONS: CorePos[] = ["QB", "RB", "WR", "TE"];
+// Round the heatmap covers. Rookie drafts rarely exceed ~6 rounds; startup
+// drafts run deeper. 12 captures the meaningful early/mid signal without a long
+// sparse tail.
+const MAX_DRAFT_ROUND = 12;
+
+interface DraftPickRaw {
+  round: number;
+  roster_id: number | null;
+  player_id: string | null;
+  /** The Sleeper user_id who made the pick. */
+  picked_by: string;
+  metadata?: { position?: string };
+}
+
+type SleeperPlayersDb = Awaited<ReturnType<typeof getSleeperPlayers>>;
+
+/** Core position of a pick, preferring the players DB and falling back to the
+ *  pick metadata. Returns null for non-core (K/DEF) or unresolved picks. */
+function draftPickPosition(pick: DraftPickRaw, playersDb: SleeperPlayersDb): CorePos | null {
+  const p = pick.player_id ? playersDb[pick.player_id] : null;
+  const pos = (p?.fantasy_positions?.[0] || p?.position || pick.metadata?.position) as string | undefined;
+  return pos && (CORE_POSITIONS as string[]).includes(pos) ? (pos as CorePos) : null;
+}
+
+const round1 = (n: number) => Math.round(n * 10) / 10;
+const zeroCounts = (): Record<CorePos, number> => ({ QB: 0, RB: 0, WR: 0, TE: 0 });
+
+function emptyDraftProfile(note: string): DraftProfile {
+  return {
+    available: false,
+    draftsAnalyzed: 0,
+    totalPicksAnalyzed: 0,
+    truncated: false,
+    heatmap: [],
+    positionalBias: [],
+    tendencyAnalysis: "",
+    biasAnalysis: "",
+    note,
+  };
+}
+
+/**
+ * Build the manager's draft profile across every visible dynasty draft (startup
+ * + every season's rookie draft, discovered via the previous_league_id chain).
+ *
+ * Two distributions come from the SAME pick arrays — no extra API calls beyond
+ * one /picks fetch per draft:
+ *   • the manager's own picks (picked_by === userId) → tendencies + their share
+ *   • every drafter's picks (incl. the manager) → the real league baseline
+ * Comparing the two gives a meaningful "over/under-drafts position X vs the
+ * leagues they actually play in" read instead of a hardcoded flat baseline.
+ */
+async function buildDraftProfile(
+  discovered: CareerLeagueRaw[],
+  userId: string,
+  playersDb: SleeperPlayersDb,
+): Promise<DraftProfile> {
+  // One draft per discovered league-season; dedup shared draft_ids defensively.
+  const seen = new Set<string>();
+  const draftIds: string[] = [];
+  for (const lg of discovered) {
+    const did = lg.draft_id;
+    if (did && !seen.has(did)) {
+      seen.add(did);
+      draftIds.push(did);
+    }
+  }
+  if (draftIds.length === 0) {
+    return emptyDraftProfile("No drafts were found in this manager's visible dynasty leagues.");
+  }
+
+  const truncated = draftIds.length > MAX_DRAFTS_ANALYZED;
+  const toScan = draftIds.slice(0, MAX_DRAFTS_ANALYZED);
+
+  const pickLists = await mapBounded(toScan, FETCH_CONCURRENCY, (did) =>
+    fetchJson<DraftPickRaw[]>(`${SLEEPER_API}/draft/${did}/picks`),
+  );
+
+  const userByRound = new Map<number, Record<CorePos, number>>();
+  const userByPos = zeroCounts();
+  const leagueByPos = zeroCounts();
+  let userTotal = 0;
+  let leagueTotal = 0;
+  let draftsAnalyzed = 0;
+
+  for (const picks of pickLists) {
+    if (!Array.isArray(picks) || picks.length === 0) continue;
+    draftsAnalyzed++;
+    for (const pick of picks) {
+      const pos = draftPickPosition(pick, playersDb);
+      if (!pos) continue;
+      // Baseline pools every drafter's picks, including the manager's.
+      leagueByPos[pos]++;
+      leagueTotal++;
+      if (pick.picked_by && pick.picked_by === userId) {
+        userByPos[pos]++;
+        userTotal++;
+        const r = pick.round;
+        if (r >= 1 && r <= MAX_DRAFT_ROUND) {
+          const row = userByRound.get(r) ?? zeroCounts();
+          row[pos]++;
+          userByRound.set(r, row);
+        }
+      }
+    }
+  }
+
+  if (userTotal === 0) {
+    return emptyDraftProfile("No attributable draft picks were found for this manager.");
+  }
+
+  // Heatmap rows 1..maxRound (only rounds the manager actually drafted in).
+  const maxRound = Math.max(0, ...Array.from(userByRound.keys()));
+  const heatmap: DraftHeatmapRow[] = [];
+  for (let r = 1; r <= maxRound; r++) {
+    const row = userByRound.get(r) ?? zeroCounts();
+    const tot = row.QB + row.RB + row.WR + row.TE;
+    heatmap.push({
+      round: r,
+      QB: tot ? Math.round((row.QB / tot) * 100) : 0,
+      RB: tot ? Math.round((row.RB / tot) * 100) : 0,
+      WR: tot ? Math.round((row.WR / tot) * 100) : 0,
+      TE: tot ? Math.round((row.TE / tot) * 100) : 0,
+    });
+  }
+
+  const positionalBias: DraftBiasRow[] = CORE_POSITIONS.map((position) => {
+    const userPct = (userByPos[position] / userTotal) * 100;
+    const leagueAvgPct = leagueTotal ? (leagueByPos[position] / leagueTotal) * 100 : 0;
+    return {
+      position,
+      userPct: round1(userPct),
+      leagueAvgPct: round1(leagueAvgPct),
+      difference: round1(userPct - leagueAvgPct),
+    };
+  });
+
+  return {
+    available: true,
+    draftsAnalyzed,
+    totalPicksAnalyzed: userTotal,
+    truncated,
+    heatmap,
+    positionalBias,
+    tendencyAnalysis: generateDraftTendencyAnalysis(userByRound, userByPos, userTotal),
+    biasAnalysis: generatePositionalBiasAnalysis(positionalBias),
+    note:
+      `Aggregated from ${draftsAnalyzed} draft${draftsAnalyzed === 1 ? "" : "s"} ` +
+      "(startup + rookie) across this manager's visible dynasty leagues. The " +
+      "league average pools every drafter's picks from those same drafts.",
+  };
+}
+
+/** Sum the manager's core picks across a contiguous round range (inclusive). */
+function sumRounds(
+  byRound: Map<number, Record<CorePos, number>>,
+  from: number,
+  to: number,
+): Record<CorePos, number> {
+  const out = zeroCounts();
+  for (let r = from; r <= to; r++) {
+    const row = byRound.get(r);
+    if (!row) continue;
+    for (const pos of CORE_POSITIONS) out[pos] += row[pos];
+  }
+  return out;
+}
+
+/** Rule-based sentence describing early-round leanings and QB/TE timing. */
+function generateDraftTendencyAnalysis(
+  byRound: Map<number, Record<CorePos, number>>,
+  byPos: Record<CorePos, number>,
+  total: number,
+): string {
+  const fragments: string[] = [];
+
+  // Early rounds (1–3): which skill position leads.
+  const early = sumRounds(byRound, 1, 3);
+  const earlyTotal = early.QB + early.RB + early.WR + early.TE;
+  if (earlyTotal > 0) {
+    const rbShare = early.RB / earlyTotal;
+    const wrShare = early.WR / earlyTotal;
+    if (rbShare >= 0.4 && rbShare > wrShare) fragments.push("opens RB-heavy");
+    else if (wrShare >= 0.4 && wrShare > rbShare) fragments.push("opens WR-heavy");
+    else fragments.push("opens with a balanced RB/WR mix");
+  }
+
+  // QB timing — earliest round where QB is a meaningful share of picks.
+  const firstQbRound = earliestPositionRound(byRound, "QB", 0.3);
+  if (firstQbRound != null) {
+    if (firstQbRound >= 5) fragments.push("waits on QB");
+    else if (firstQbRound <= 2) fragments.push("targets QB early");
+  }
+
+  // TE timing.
+  const firstTeRound = earliestPositionRound(byRound, "TE", 0.3);
+  if (firstTeRound != null) {
+    if (firstTeRound >= 6) fragments.push("grabs TEs late");
+    else if (firstTeRound <= 3) fragments.push("invests early at TE");
+  }
+
+  // Overall positional lean as a fallback so we always say something.
+  if (fragments.length === 0 && total > 0) {
+    const top = CORE_POSITIONS.reduce((a, b) => (byPos[b] > byPos[a] ? b : a));
+    fragments.push(`leans toward ${top}`);
+  }
+
+  if (fragments.length === 0) return "Not enough draft history to read a clear tendency yet.";
+  return `Typically ${joinList(fragments)}.`;
+}
+
+/** Earliest round (1-based) where `pos` made up at least `threshold` of picks. */
+function earliestPositionRound(
+  byRound: Map<number, Record<CorePos, number>>,
+  pos: CorePos,
+  threshold: number,
+): number | null {
+  const rounds = Array.from(byRound.keys()).sort((a, b) => a - b);
+  for (const r of rounds) {
+    const row = byRound.get(r)!;
+    const tot = row.QB + row.RB + row.WR + row.TE;
+    if (tot > 0 && row[pos] / tot >= threshold) return r;
+  }
+  return null;
+}
+
+/** Rule-based sentence describing the largest over/under-draft vs the league. */
+function generatePositionalBiasAnalysis(bias: DraftBiasRow[]): string {
+  const sorted = [...bias].sort((a, b) => b.difference - a.difference);
+  const over = sorted[0];
+  const under = sorted[sorted.length - 1];
+  const parts: string[] = [];
+  // Only call out gaps of at least ~5 points so noise doesn't read as a trend.
+  if (over && over.difference >= 5) {
+    parts.push(`drafts more ${over.position} than the league (+${over.difference} pts)`);
+  }
+  if (under && under.difference <= -5) {
+    parts.push(`and fewer ${under.position} (${under.difference} pts)`);
+  }
+  if (parts.length === 0) {
+    return "Positional draft mix closely tracks the leagues they play in — no strong lean.";
+  }
+  return `Relative to league average, ${parts.join(" ")}.`;
+}
+
+/** Join fragments as "a, b, and c". */
+function joinList(items: string[]): string {
+  if (items.length <= 1) return items[0] ?? "";
+  if (items.length === 2) return `${items[0]} and ${items[1]}`;
+  return `${items.slice(0, -1).join(", ")}, and ${items[items.length - 1]}`;
+}
+
 async function computeManagerIntel(
   userId: string,
   currentLeagueId: string,
@@ -2298,8 +2618,18 @@ async function computeManagerIntel(
 
   // Kick off the multi-season chain walk now so its many fetches overlap with
   // the synchronous analysis below; awaited just before the payload is built.
-  const careerHistoryPromise = buildCareerHistory(scannedLeagues, user.userId).catch(
-    (err): CareerHistory => {
+  // Career history and the draft profile share this one discovery so the
+  // per-league fetches aren't duplicated.
+  const discoveryPromise = discoverCareerLeagues(scannedLeagues).catch(
+    (err): { discovered: CareerLeagueRaw[]; truncated: boolean } => {
+      console.error("[ManagerIntel] league discovery failed:", err?.message || err);
+      return { discovered: [], truncated: false };
+    },
+  );
+
+  const careerHistoryPromise = discoveryPromise
+    .then(({ discovered, truncated }) => buildCareerHistory(discovered, truncated, user.userId))
+    .catch((err): CareerHistory => {
       console.error("[ManagerIntel] career history failed:", err?.message || err);
       return {
         available: false,
@@ -2316,8 +2646,14 @@ async function computeManagerIntel(
         truncated: false,
         note: "Career history could not be loaded.",
       };
-    },
-  );
+    });
+
+  const draftProfilePromise = discoveryPromise
+    .then(({ discovered }) => buildDraftProfile(discovered, user.userId, playersDb))
+    .catch((err): DraftProfile => {
+      console.error("[ManagerIntel] draft profile failed:", err?.message || err);
+      return emptyDraftProfile("Draft tendencies could not be loaded.");
+    });
 
   // Cross-league exposure across visible dynasty rosters. Capture age/exp so we
   // can type their "favorite player types" downstream.
@@ -2737,6 +3073,7 @@ async function computeManagerIntel(
     crossLeague,
     performance,
     careerHistory: await careerHistoryPromise,
+    draftProfile: await draftProfilePromise,
     activity,
     tradeApproach,
     meta: {
@@ -2827,6 +3164,7 @@ function emptyPayload(
       truncated: false,
       note,
     },
+    draftProfile: emptyDraftProfile(note),
     activity: {
       visibleLeagues: 0,
       oldestVisibleSeason: null,

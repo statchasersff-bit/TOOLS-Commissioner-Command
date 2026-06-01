@@ -147,9 +147,11 @@ export function classify(p: ValueFinderPlayer): Classification {
     } else if (rebGap <= SELL && conGap > SELL) {
       finalLabel = "Rebuild Sell"; // fine for win-now, bad long-term hold
     } else if (conGap <= SELL && rebGap > SELL) {
-      finalLabel = "Contender Sell";
+      finalLabel = "Contender Sell"; // fine long-term, overpriced for win-now
     } else {
-      finalLabel = "Universal Sell";
+      // Overpriced on the dynasty lens but neutral on win-now / rebuild — a soft,
+      // generic sell rather than a "universal" one (which needs both lenses red).
+      finalLabel = "Contender Sell";
     }
   } else {
     // Neutral tree.

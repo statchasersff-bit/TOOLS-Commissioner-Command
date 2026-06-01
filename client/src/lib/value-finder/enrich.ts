@@ -12,20 +12,36 @@ import type {
 import { POSITIONS } from "./types";
 import {
   getMarketValue,
-  calculateDynastyValue,
-  calculateContenderValue,
-  calculateRebuilderValue,
+  getDynastyScore,
+  getContenderScore,
+  getRebuilderScore,
   getUsageScore,
   getProductionScore,
   getLongevityScore,
   getMarketInsulationScore,
   getTrendScore,
   getPpgScore,
-  getMaxMarketValue,
 } from "./valueModel";
 import { getValueSignal } from "./valueFinderScoring";
 import { classify } from "./valueFinderLabels";
-import { percentileRank } from "./valueNormalization";
+
+/**
+ * Rank-matching calibration. Assigns the i-th best score the i-th highest market
+ * value in the cohort, so the SET of expected values equals the SET of market
+ * values (a permutation). This makes the model market-neutral: a player only
+ * shows a gap when the model ranks him differently than the market does — which
+ * is exactly what a value finder should surface. Robust to the right-skew of
+ * market values that a flat score×constant scaling would distort.
+ */
+function expectedByRank<T extends { id: string; market: number; score: number }>(
+  rows: T[],
+): Map<string, number> {
+  const marketsDesc = rows.map((r) => r.market).sort((a, b) => b - a);
+  const byScore = [...rows].sort((a, b) => b.score - a.score);
+  const out = new Map<string, number>();
+  byScore.forEach((r, i) => out.set(r.id, marketsDesc[i]));
+  return out;
+}
 
 /**
  * Enrich every player with absolute derived values for the selected source:
@@ -45,39 +61,81 @@ export function enrichPlayers(
   };
   for (const p of players) cohorts[p.position]?.push(p);
 
-  // Cohort usage-share values per position, for the usage-implied expected value.
-  const usageShareByPos: Record<Position, number[]> = {
-    QB: [], RB: [], WR: [], TE: [],
-  };
-  for (const p of players) {
-    const share = p.opportunityShare ?? p.targetShare ?? p.routeShare ?? 0;
-    usageShareByPos[p.position]?.push(share);
-  }
-
-  const enriched = players.map((player) => {
+  // Pass 1 — raw sub-scores and per-purpose blended scores (0–1) per player.
+  const raw = players.map((player) => {
     const cohort = cohorts[player.position] ?? [];
-    const marketValue = getMarketValue(player, source);
-    const maxMarket = getMaxMarketValue(cohort, source);
-
-    // Sub-scores (0–1).
     const usageScore = getUsageScore(player, cohort);
     const productionScore = getProductionScore(player, cohort);
-    const longevityScore = getLongevityScore(player, cohort);
-    const trendScore = getTrendScore(player, cohort);
-    const marketInsulationScore = getMarketInsulationScore(player, cohort);
+    return {
+      player,
+      cohort,
+      marketValue: getMarketValue(player, source),
+      usageScore,
+      productionScore,
+      longevityScore: getLongevityScore(player, cohort),
+      trendScore: getTrendScore(player, cohort),
+      marketInsulationScore: getMarketInsulationScore(player, cohort),
+      dynastyScore: getDynastyScore(player, cohort),
+      contenderScore: getContenderScore(player, cohort),
+      rebuilderScore: getRebuilderScore(player, cohort),
+      ppgScore: getPpgScore(player, cohort),
+      usageRoleScore: usageScore ?? productionScore,
+    };
+  });
 
-    // Purpose-specific values (0–10,000 or market-scaled), each comparable to market.
-    const dynastyValue = calculateDynastyValue(player, cohort);
-    const contenderValue = calculateContenderValue(player, cohort);
-    const rebuilderValue = calculateRebuilderValue(player, cohort, source);
+  // Build per-cohort rank-matched expected values for the "is the market
+  // mispricing him?" lenses (dynasty / production / usage). Only players with a
+  // market value participate (others can't have a gap). Contender & rebuilder are
+  // handled separately below — they re-price the market through each lens.
+  const KEYS = ["dynasty", "production", "usage"] as const;
+  const scoreOf: Record<(typeof KEYS)[number], (r: (typeof raw)[number]) => number> = {
+    dynasty: (r) => r.dynastyScore,
+    production: (r) => r.ppgScore,
+    usage: (r) => r.usageRoleScore,
+  };
+  const expected: Record<string, Map<string, number>> = {};
+  for (const pos of POSITIONS) {
+    const cohortRows = raw.filter(
+      (r) => r.player.position === pos && r.marketValue != null,
+    );
+    for (const key of KEYS) {
+      expected[`${pos}:${key}`] = expectedByRank(
+        cohortRows.map((r) => ({
+          id: r.player.playerId,
+          market: r.marketValue as number,
+          score: scoreOf[key](r),
+        })),
+      );
+    }
+  }
+  const exp = (pos: Position, key: (typeof KEYS)[number], id: string) =>
+    expected[`${pos}:${key}`]?.get(id);
 
-    // Production-implied expected value: PPG percentile * max market value.
-    const productionValue = Math.round(getPpgScore(player, cohort) * maxMarket);
-    // Usage-implied expected value: usage-share percentile * max market value.
-    const usageShare =
-      player.opportunityShare ?? player.targetShare ?? player.routeShare ?? 0;
-    const usagePct = percentileRank(usageShare, usageShareByPos[player.position] ?? []);
-    const usageValue = Math.round(usagePct * maxMarket);
+  // How much a win-now / rebuild team should pay: re-price the dynasty consensus
+  // value by how much each lens likes the player relative to that consensus. A
+  // productive-but-old player is worth more to a contender than the age-discounting
+  // dynasty value says; a young ascending player is worth more to a rebuilder.
+  // Anchoring on the consensus (not raw market) avoids inheriting market mispricing.
+  // K controls sensitivity; clamp keeps values sane.
+  const LENS_K = 1.5;
+  const reprice = (anchor: number, lensScore: number, dynastyScore: number) =>
+    Math.round(
+      anchor * Math.min(2.5, Math.max(0.3, 1 + LENS_K * (lensScore - dynastyScore))),
+    );
+
+  // Pass 2 — attach values, headline signal, and the recommendation label.
+  const enriched = raw.map((r) => {
+    const { player, marketValue } = r;
+    const pos = player.position;
+    const id = player.playerId;
+
+    const dynastyValue = exp(pos, "dynasty", id);
+    const productionValue = exp(pos, "production", id);
+    const usageValue = exp(pos, "usage", id);
+    const contenderValue =
+      dynastyValue != null ? reprice(dynastyValue, r.contenderScore, r.dynastyScore) : undefined;
+    const rebuilderValue =
+      dynastyValue != null ? reprice(dynastyValue, r.rebuilderScore, r.dynastyScore) : undefined;
 
     // Headline signal uses dynasty value vs market (the "Market Gaps" lens).
     const { gap, gapPercent, signal, tone } = getValueSignal({
@@ -91,11 +149,11 @@ export function enrichPlayers(
       marketValue,
       dynastyValue,
       modelValue: dynastyValue, // back-compat alias
-      usageScore,
-      productionScore,
-      longevityScore,
-      trendScore,
-      marketInsulationScore,
+      usageScore: r.usageScore,
+      productionScore: r.productionScore,
+      longevityScore: r.longevityScore,
+      trendScore: r.trendScore,
+      marketInsulationScore: r.marketInsulationScore,
       contenderValue,
       rebuilderValue,
       productionValue,
