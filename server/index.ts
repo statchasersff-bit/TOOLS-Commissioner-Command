@@ -4,6 +4,7 @@ import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
+import { installVitals, startVitalsHeartbeat, getVitals } from "./vitals";
 import { createServer } from "http";
 import { readFileSync, readdirSync, readlinkSync } from "fs";
 
@@ -59,6 +60,11 @@ async function freePort(port: number): Promise<void> {
 const app = express();
 const httpServer = createServer(app);
 
+// Track in-flight requests as early as possible — registered before the session
+// and body middleware so a request that hangs *inside* that middleware (the
+// suspected pool-exhaustion failure mode) is still counted and surfaced.
+installVitals(app);
+
 // Build/runtime identity. BUILD_TIME and GIT_COMMIT are inlined at build time
 // by esbuild (see script/build.ts). In dev (tsx) they're undefined and fall
 // back to sensible defaults.
@@ -80,6 +86,20 @@ app.get(["/health", "/healthz"], (_req, res) => {
     builtAt: BUILD_TIME,
     ts: new Date().toISOString(),
   });
+});
+
+// ── Deep vitals probe ────────────────────────────────────────────────────────
+// Unlike /health (pure liveness), this reports the resource metrics that
+// precede a hang — Postgres connection count vs. ceiling, in-flight/hung
+// requests, event-loop lag, and memory — as JSON. Point an external uptime
+// monitor at it and alert when pg.total approaches pg.max or hung > 0, so you
+// learn the VM is saturating *before* it locks up.
+app.get(["/health/vitals", "/healthz/vitals"], async (_req, res) => {
+  try {
+    res.status(200).json({ status: "ok", commit: GIT_COMMIT, ...(await getVitals()) });
+  } catch (err) {
+    res.status(200).json({ status: "vitals-error", error: err instanceof Error ? err.message : String(err) });
+  }
 });
 
 // CORS — always allow the production domains plus any additional origins
@@ -302,6 +322,11 @@ process.on("uncaughtException", (err) => {
     log(`  build time:  ${BUILD_TIME}`);
     log(`  commit:      ${GIT_COMMIT}`);
     log(`  health:      GET /health`);
+    log(`  vitals:      GET /health/vitals`);
+    // Begin periodic vitals logging (memory, event-loop lag, in-flight/hung
+    // requests, Postgres connection census). Surfaces resource saturation in
+    // the deploy logs in the minutes before a hang.
+    startVitalsHeartbeat();
     // Kick a self-request so Vite compiles the module graph immediately on
     // startup rather than on the first real browser request (which causes a
     // white screen while Vite cold-compiles).

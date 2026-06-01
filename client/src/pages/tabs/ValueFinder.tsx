@@ -39,7 +39,6 @@ type TabId =
   | "usage-buys"
   | "trend-radar"
   | "value-vs-production"
-  | "market-gap"
   | "age-curve";
 
 const TABS: Array<{ id: TabId; label: string }> = [
@@ -47,16 +46,14 @@ const TABS: Array<{ id: TabId; label: string }> = [
   { id: "usage-buys", label: "Usage Buys" },
   { id: "trend-radar", label: "Trend Radar" },
   { id: "value-vs-production", label: "Value vs Production" },
-  { id: "market-gap", label: "Market Gap" },
   { id: "age-curve", label: "Age Curve" },
 ];
 
-// The last three tabs are the relocated Market Inefficiency views; they run on
+// The trailing tabs are the relocated Market Inefficiency views; they run on
 // their own market data pipeline (see MarketInsights), so they render
 // independently of the Value Finder's player fetch.
 const MARKET_TAB_VIEW: Partial<Record<TabId, "value" | "gap" | "age">> = {
   "value-vs-production": "value",
-  "market-gap": "gap",
   "age-curve": "age",
 };
 
