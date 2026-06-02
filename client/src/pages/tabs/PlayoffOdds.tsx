@@ -8,6 +8,7 @@ import {
   Trophy, Flame, Snowflake, Target,
 } from "lucide-react";
 import { TeamLoader } from "@/components/TeamLoader";
+import { ManagerNameButton } from "@/components/ManagerNameButton";
 
 interface PlayoffTeam {
   roster_id: number;
@@ -236,7 +237,16 @@ export function PlayoffOdds({ leagueId }: { leagueId: string }) {
           {teamAvatar(r, "w-7 h-7")}
           <div className="flex flex-col leading-tight">
             <span className="text-sm font-semibold truncate max-w-[140px]" data-testid={`pc-team-${r.roster_id}`}>{r.team_name}</span>
-            <span className="text-[10px] text-muted-foreground truncate max-w-[140px]">{r.owner_name}</span>
+            <ManagerNameButton
+              userId={r.owner_id}
+              username={r.owner_name}
+              avatar={r.avatar}
+              leagueId={leagueId}
+              className="text-[10px] text-muted-foreground truncate max-w-[140px]"
+              data-testid={`pc-owner-${r.roster_id}`}
+            >
+              {r.owner_name}
+            </ManagerNameButton>
           </div>
         </div>
       ),

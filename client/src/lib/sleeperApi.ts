@@ -2359,6 +2359,9 @@ export async function fetchLeagueTransactions(leagueId: string) {
     );
   }
   const rosterAvatarMap = new Map<number, string | null>();
+  // roster-id → Sleeper user id, so transaction team labels can link to the
+  // owner's Manager Intel profile (ManagerNameButton needs the user id).
+  const rosterOwnerIdMap = new Map<number, string>();
   for (const r of rostersRaw) {
     rosterOwnerMap.set(
       r.roster_id,
@@ -2368,6 +2371,7 @@ export async function fetchLeagueTransactions(leagueId: string) {
       r.roster_id,
       ownerAvatarMap.get(r.owner_id) ?? null
     );
+    if (r.owner_id) rosterOwnerIdMap.set(r.roster_id, r.owner_id);
   }
 
   const totalWeeks = 18;
@@ -2479,6 +2483,7 @@ export async function fetchLeagueTransactions(leagueId: string) {
         rosterId: rid,
         teamName: rosterOwnerMap.get(rid) || `Team ${rid}`,
         avatar: rosterAvatarMap.get(rid) ?? null,
+        ownerId: rosterOwnerIdMap.get(rid) ?? null,
       }));
 
       return { type, timestamp, week, adds, drops, draftPicks, involvedTeams };
@@ -2510,7 +2515,7 @@ export async function fetchLeagueTransactions(leagueId: string) {
       }
       const pRosterIds = new Set<number>();
       if (t.roster_ids) t.roster_ids.forEach((r: number) => pRosterIds.add(r));
-      const pInvolvedTeams = [...pRosterIds].map((rid) => ({ rosterId: rid, teamName: rosterOwnerMap.get(rid) || `Team ${rid}`, avatar: rosterAvatarMap.get(rid) ?? null }));
+      const pInvolvedTeams = [...pRosterIds].map((rid) => ({ rosterId: rid, teamName: rosterOwnerMap.get(rid) || `Team ${rid}`, avatar: rosterAvatarMap.get(rid) ?? null, ownerId: rosterOwnerIdMap.get(rid) ?? null }));
       const waiverBudget: Array<{ senderId: number; receiverId: number; amount: number }> =
         (t.waiver_budget || []).map((wb: any) => ({ senderId: wb.sender, receiverId: wb.receiver, amount: wb.amount }));
       return {

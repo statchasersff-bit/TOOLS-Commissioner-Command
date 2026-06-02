@@ -12,6 +12,7 @@ import { fetchLeagueTransactionsFiltered, acceptTrade, rejectTrade } from "@/ser
 import type { SleeperTransaction, SleeperTransactionPick } from "@/services/sleeperAuthedApi";
 import { getPositionColor } from "@/data/mockData";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
+import { ManagerNameButton } from "@/components/ManagerNameButton";
 import {
   ArrowRightLeft, TrendingUp, TrendingDown, RefreshCw, Loader2,
   Clock, AlertTriangle, CheckCircle2, XCircle, Inbox, Send,
@@ -534,8 +535,9 @@ function ValueEdgeCell({ edge }: { edge: number }) {
 
 // ─── Trade Card ───────────────────────────────────────────────────────────────
 
-function TradeCard({ trade, myUsername, myAvatar, onView, onCounter, onShowInCalc }: {
+function TradeCard({ trade, myUserId, myUsername, myAvatar, onView, onCounter, onShowInCalc }: {
   trade: NormalizedTrade;
+  myUserId: string | null;
   myUsername: string;
   myAvatar: string | null;
   onView: () => void;
@@ -545,10 +547,6 @@ function TradeCard({ trade, myUsername, myAvatar, onView, onCounter, onShowInCal
   const expiring = isExpiringSoon(trade.expiresAt);
   const isProposed = trade.status === "proposed";
   const isCancelled = trade.status === "failed" || trade.status === "cancelled";
-
-  const sentByLabel = trade.direction === "outgoing"
-    ? "Sent by You"
-    : `Sent by ${trade.partnerName}`;
 
   const myReceives = { players: trade.iGet.players, picks: trade.iGet.picks, faab: trade.iGet.faab };
   const theyReceive = { players: trade.iGive.players, picks: trade.iGive.picks, faab: trade.iGive.faab };
@@ -572,7 +570,20 @@ function TradeCard({ trade, myUsername, myAvatar, onView, onCounter, onShowInCal
         <span className="text-muted-foreground text-xs">·</span>
         <span className="text-xs text-muted-foreground">{formatTradeDate(trade.created)}</span>
         <span className="text-muted-foreground text-xs">·</span>
-        <span className="text-xs text-muted-foreground">{sentByLabel}</span>
+        {trade.direction === "outgoing" ? (
+          <span className="text-xs text-muted-foreground">Sent by You</span>
+        ) : (
+          <span className="text-xs text-muted-foreground">
+            Sent by{" "}
+            <ManagerNameButton
+              userId={trade.partnerUserId}
+              username={trade.partnerName}
+              avatar={trade.partnerAvatar}
+              leagueId={trade.leagueId}
+              className="text-xs text-muted-foreground"
+            />
+          </span>
+        )}
 
         {expiring && isProposed && (
           <>
@@ -599,7 +610,13 @@ function TradeCard({ trade, myUsername, myAvatar, onView, onCounter, onShowInCal
         <div className="pb-3 sm:pb-0 sm:pr-6 pt-1">
           <div className="flex items-center gap-2 mb-2.5">
             <TeamAvatar name={myUsername} avatar={myAvatar} size="md" />
-            <span className="text-sm font-bold text-foreground">{myUsername}</span>
+            <ManagerNameButton
+              userId={myUserId}
+              username={myUsername}
+              avatar={myAvatar}
+              leagueId={trade.leagueId}
+              className="text-sm font-bold text-foreground"
+            />
             <span className="text-sm text-muted-foreground">receives</span>
           </div>
           <div className="space-y-0.5 pl-1">
@@ -616,7 +633,13 @@ function TradeCard({ trade, myUsername, myAvatar, onView, onCounter, onShowInCal
         <div className="pt-3 sm:pt-1 sm:pl-6">
           <div className="flex items-center gap-2 mb-2.5">
             <TeamAvatar name={trade.partnerName} avatar={trade.partnerAvatar} size="md" />
-            <span className="text-sm font-bold text-foreground">{trade.partnerName}</span>
+            <ManagerNameButton
+              userId={trade.partnerUserId}
+              username={trade.partnerName}
+              avatar={trade.partnerAvatar}
+              leagueId={trade.leagueId}
+              className="text-sm font-bold text-foreground"
+            />
             <span className="text-sm text-muted-foreground">receives</span>
           </div>
           <div className="space-y-0.5 pl-1">
@@ -1058,6 +1081,7 @@ export default function TradeSync({ onNavigate }: { onNavigate?: (mainTab: strin
               <TradeCard
                 key={trade.transactionId}
                 trade={trade}
+                myUserId={sleeper.user?.userId ?? null}
                 myUsername={sleeper.user?.username ?? sleeper.user?.displayName ?? "Me"}
                 myAvatar={sleeper.user?.avatar ? `https://sleepercdn.com/avatars/thumbs/${sleeper.user.avatar}` : null}
                 onView={() => openModal(trade, mode)}

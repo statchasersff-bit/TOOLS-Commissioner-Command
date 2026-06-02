@@ -56,6 +56,7 @@ import {
   refreshDefaultSnapshots,
   reclassifyAdpDrafts,
   getAdp,
+  filterKey,
   getAdpInclusionStatus,
   getAdpStats,
   startAdpScheduler,
@@ -221,6 +222,18 @@ const weeklyMatchupsCache = makeCache<any>(5 * 60 * 1000); // 5-min TTL — live
 const statChasersDataCache = makeCache<any>(10 * 60 * 1000); // 10-min TTL — public-data repo JSON
 const scheduleCache = makeCache<any>(5 * 60 * 1000); // 5-min TTL — NFL week schedule (kickoff/lock state)
 const adpStatsCache = makeCache<any>(5 * 60 * 1000); // 5-min TTL — two count(*) queries, hit on every Draft tab load
+// /api/adp read-model cache. THE pool-exhaustion fix: getAdp() runs a DB query
+// per request (getCachedAdp pulls a large JSONB snapshot row, or — on a cold
+// filter — a multi-second live aggregation), and the Draft tab loads this on
+// every visit for the same default filter. Under real traffic that meant ~500
+// concurrent /api/adp requests each pinning one of the 60 app-pool connections,
+// saturating the pool (waiting ≈ 500) so EVERY other DB endpoint — /api/adp/stats,
+// /api/admin/*, /api/trades/* — timed out acquiring a connection and returned 500.
+// TTL+single-flight (getOrCompute) collapses identical concurrent reads to ONE DB
+// query + ONE connection and serves the rest from memory. 5-min staleness is fine:
+// snapshots are refreshed by the 6-hour scheduler and date-range snapshots already
+// self-expire after 1h server-side.
+const adpReadCache = makeCache<any>(5 * 60 * 1000);
 // Sleeper fan-out endpoints: not DB-pool bound, but each does several (or N-per-
 // league) rate-limited Sleeper calls and is hit on page load, so concurrent
 // duplicates pile up long-held requests and burn Sleeper rate budget. Short TTL
@@ -1539,7 +1552,12 @@ export async function registerRoutes(
       console.log("[ADP /api/adp] query:", q);
       console.log("[ADP /api/adp] filters:", filters);
 
-      const result = await getAdp(filters);
+      // Serve from the in-memory read-model cache when possible so repeated
+      // identical reads (the hot default filter, hit on every Draft tab load)
+      // don't each pin a DB connection — see adpReadCache rationale above. A
+      // throwing getAdp() rejects all awaiters and is NOT cached, so the catch
+      // below still surfaces a real error instead of caching a failure.
+      const result = await adpReadCache.getOrCompute(filterKey(filters), () => getAdp(filters));
 
       console.log(
         `[ADP /api/adp] key=${result.filterKey} cached=${result.cached} ` +

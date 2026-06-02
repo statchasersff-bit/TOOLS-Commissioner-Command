@@ -9,6 +9,7 @@ import { useValueModel } from "@/contexts/ValueModelContext";
 import { useSleeper } from "@/contexts/SleeperContext";
 import { cn } from "@/lib/utils";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
+import { ManagerNameButton } from "@/components/ManagerNameButton";
 import {
   ArrowRightLeft, UserPlus, UserMinus, Loader2, RefreshCw, ChevronDown,
   ShieldCheck, CheckCircle2, AlertTriangle, Key, XCircle, Undo2,
@@ -41,7 +42,7 @@ interface Transaction {
   adds: TransactionPlayer[];
   drops: TransactionPlayer[];
   draftPicks: TransactionPick[];
-  involvedTeams: Array<{ rosterId: number; teamName: string; avatar?: string | null }>;
+  involvedTeams: Array<{ rosterId: number; teamName: string; avatar?: string | null; ownerId?: string | null }>;
 }
 
 interface PendingTrade {
@@ -54,7 +55,7 @@ interface PendingTrade {
   adds: TransactionPlayer[];
   drops: TransactionPlayer[];
   draftPicks: TransactionPick[];
-  involvedTeams: Array<{ rosterId: number; teamName: string; avatar?: string | null }>;
+  involvedTeams: Array<{ rosterId: number; teamName: string; avatar?: string | null; ownerId?: string | null }>;
   week: number;
   created: number;
 }
@@ -359,7 +360,7 @@ export default function Transactions({ leagueId }: { leagueId: string }) {
                         <div className="flex items-center gap-1.5 min-w-0" data-testid="transaction-team-name">
                           <span className="text-border/60">·</span>
                           <TeamAvatar rosterId={involved.rosterId} teamName={involved.teamName} avatar={involved.avatar} size="sm" />
-                          <span className="text-[11px] font-medium text-foreground truncate">{involved.teamName}</span>
+                          <ManagerNameButton userId={involved.ownerId} username={involved.teamName} avatar={involved.avatar} leagueId={leagueId} className="text-[11px] font-medium text-foreground truncate" />
                         </div>
                       )}
                       {txn.type === "trade" && txn.involvedTeams.length > 0 && (
@@ -373,10 +374,10 @@ export default function Transactions({ leagueId }: { leagueId: string }) {
                             ))}
                           </div>
                           {txn.involvedTeams.length === 2 ? (
-                            <span className="text-[11px] font-medium text-foreground truncate">
-                              {txn.involvedTeams[0].teamName}
+                            <span className="text-[11px] font-medium text-foreground truncate inline-flex items-center">
+                              <ManagerNameButton userId={txn.involvedTeams[0].ownerId} username={txn.involvedTeams[0].teamName} avatar={txn.involvedTeams[0].avatar} leagueId={leagueId} className="truncate" />
                               <span className="text-muted-foreground mx-1">↔</span>
-                              {txn.involvedTeams[1].teamName}
+                              <ManagerNameButton userId={txn.involvedTeams[1].ownerId} username={txn.involvedTeams[1].teamName} avatar={txn.involvedTeams[1].avatar} leagueId={leagueId} className="truncate" />
                             </span>
                           ) : (
                             <span className="text-[11px] font-medium text-foreground shrink-0">
@@ -390,7 +391,7 @@ export default function Transactions({ leagueId }: { leagueId: string }) {
                   </div>
                   <div className="px-4 py-3">
                     {txn.type === "trade"
-                      ? <TradeTransaction txn={txn} valuesBySleeperId={valuesBySleeperId} getPickValue={getPickValue} />
+                      ? <TradeTransaction txn={txn} valuesBySleeperId={valuesBySleeperId} getPickValue={getPickValue} leagueId={leagueId} />
                       : <AddDropTransaction txn={txn} valuesBySleeperId={valuesBySleeperId} />
                     }
                   </div>
@@ -439,7 +440,7 @@ interface PendingTradeCardProps {
 }
 
 function PendingTradeCard({
-  trade, myUserId, sleeperJwt,
+  trade, myUserId, sleeperJwt, leagueId,
   isConfirming, isRejecting, accepting, rejecting,
   acceptResult, rejectResult, acceptError, rejectError,
   valuesBySleeperId, getPickValue,
@@ -458,7 +459,7 @@ function PendingTradeCard({
       const toTeam = trade.involvedTeams.find(t => t.teamName === dp.toTeam);
       return toTeam?.rosterId === rid;
     });
-    return { rosterId: rid, teamName: team?.teamName || `Team ${rid}`, avatar: team?.avatar, received, picksReceived };
+    return { rosterId: rid, teamName: team?.teamName || `Team ${rid}`, avatar: team?.avatar, ownerId: team?.ownerId ?? null, received, picksReceived };
   });
 
   const formatDate = (ts: number) =>
@@ -499,7 +500,7 @@ function PendingTradeCard({
             <div key={side.rosterId} className="rounded-lg border border-border/40 bg-muted/10 overflow-hidden">
               <div className="flex items-center gap-2 px-3 py-2 border-b border-border/30 bg-muted/20">
                 <TeamAvatar rosterId={side.rosterId} teamName={side.teamName} avatar={side.avatar} size="md" />
-                <p className="text-xs font-semibold truncate" data-testid={`pending-trade-team-${side.rosterId}`}>{side.teamName}</p>
+                <ManagerNameButton userId={side.ownerId} username={side.teamName} avatar={side.avatar} leagueId={leagueId} className="text-xs font-semibold truncate" data-testid={`pending-trade-team-${side.rosterId}`} />
                 <span className="ml-auto text-[10px] text-muted-foreground shrink-0">receives</span>
               </div>
               <div className={cn("px-3 py-2", side.received.length + side.picksReceived.length > 3 ? "grid grid-cols-2 gap-x-2 gap-y-0.5" : "space-y-0.5")}>
@@ -573,7 +574,7 @@ function PendingTradeCard({
                 </p>
               </div>
             </div>
-            <TradeSummaryBox sides={sides} waiverBudget={trade.waiverBudget} involvedTeams={trade.involvedTeams} />
+            <TradeSummaryBox sides={sides} waiverBudget={trade.waiverBudget} involvedTeams={trade.involvedTeams} leagueId={leagueId} />
             {acceptError && (
               <div className="flex items-center gap-1.5 text-xs text-red-500" data-testid={`accept-error-${trade.transactionId}`}>
                 <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" /><span>{acceptError}</span>
@@ -606,7 +607,7 @@ function PendingTradeCard({
                 </p>
               </div>
             </div>
-            <TradeSummaryBox sides={sides} waiverBudget={trade.waiverBudget} involvedTeams={trade.involvedTeams} />
+            <TradeSummaryBox sides={sides} waiverBudget={trade.waiverBudget} involvedTeams={trade.involvedTeams} leagueId={leagueId} />
             {rejectError && (
               <div className="flex items-center gap-1.5 text-xs text-red-500" data-testid={`reject-error-${trade.transactionId}`}>
                 <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" /><span>{rejectError}</span>
@@ -653,17 +654,18 @@ function PendingTradeCard({
 
 // ─── Trade Summary Box (shared between confirm panels) ──────────────────────
 
-function TradeSummaryBox({ sides, waiverBudget, involvedTeams }: {
-  sides: Array<{ rosterId: number; teamName: string; received: TransactionPlayer[]; picksReceived: TransactionPick[] }>;
+function TradeSummaryBox({ sides, waiverBudget, involvedTeams, leagueId }: {
+  sides: Array<{ rosterId: number; teamName: string; ownerId?: string | null; received: TransactionPlayer[]; picksReceived: TransactionPick[] }>;
   waiverBudget: PendingTrade["waiverBudget"];
   involvedTeams: PendingTrade["involvedTeams"];
+  leagueId: string;
 }) {
   return (
     <div className="rounded bg-muted/30 border border-border/30 px-3 py-2 space-y-1">
       <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground mb-1">Trade Summary</p>
       {sides.map(side => (
         <div key={side.rosterId} className="text-[11px]">
-          <span className="font-semibold">{side.teamName}</span>
+          <ManagerNameButton userId={side.ownerId} username={side.teamName} leagueId={leagueId} className="font-semibold" />
           <span className="text-muted-foreground"> receives: </span>
           <span>
             {[
@@ -721,7 +723,7 @@ function ordinalRound(round: number): string {
   return `${round}th`;
 }
 
-function TradeTransaction({ txn, valuesBySleeperId, getPickValue }: { txn: Transaction; valuesBySleeperId: Record<string, number>; getPickValue: (pick: any) => number }) {
+function TradeTransaction({ txn, valuesBySleeperId, getPickValue, leagueId }: { txn: Transaction; valuesBySleeperId: Record<string, number>; getPickValue: (pick: any) => number; leagueId: string }) {
   const teamIds = [...new Set([...txn.adds.map(a => a.rosterId), ...txn.drops.map(d => d.rosterId)])];
   const sides = teamIds.map((rid) => {
     const team = txn.involvedTeams.find(t => t.rosterId === rid);
@@ -730,7 +732,7 @@ function TradeTransaction({ txn, valuesBySleeperId, getPickValue }: { txn: Trans
       const toTeam = txn.involvedTeams.find(t => t.teamName === dp.toTeam);
       return toTeam?.rosterId === rid;
     });
-    return { rosterId: rid, teamName: team?.teamName || `Team ${rid}`, avatar: team?.avatar, received, picksReceived };
+    return { rosterId: rid, teamName: team?.teamName || `Team ${rid}`, avatar: team?.avatar, ownerId: team?.ownerId ?? null, received, picksReceived };
   });
 
   return (
@@ -739,7 +741,7 @@ function TradeTransaction({ txn, valuesBySleeperId, getPickValue }: { txn: Trans
         <div key={side.rosterId} className="rounded-lg border border-border/40 bg-muted/10 overflow-hidden">
           <div className="flex items-center gap-2 px-3 py-2 border-b border-border/30 bg-muted/20">
             <TeamAvatar rosterId={side.rosterId} teamName={side.teamName} avatar={side.avatar} size="md" />
-            <p className="text-xs font-semibold truncate" data-testid={`trade-team-${side.rosterId}`}>{side.teamName}</p>
+            <ManagerNameButton userId={side.ownerId} username={side.teamName} avatar={side.avatar} leagueId={leagueId} className="text-xs font-semibold truncate" data-testid={`trade-team-${side.rosterId}`} />
             <span className="ml-auto text-[10px] text-muted-foreground shrink-0">receives</span>
           </div>
           <div className={cn("px-3 py-2", side.received.length + side.picksReceived.length > 3 ? "grid grid-cols-2 gap-x-2 gap-y-0.5" : "space-y-0.5")}>

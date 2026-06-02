@@ -1067,7 +1067,7 @@ function normalizeSeasonFilter(f: AdpFilters): string {
   return String(new Date().getFullYear());
 }
 
-function filterKey(f: AdpFilters): string {
+export function filterKey(f: AdpFilters): string {
   // Deterministic key for cache lookups. Keep keys human-readable so logs
   // are usable.
   const k = {
@@ -1797,6 +1797,10 @@ export async function refreshAdpSnapshot(f: AdpFilters): Promise<{ rows: number;
     computedAt: new Date(),
   });
 
+  // Bust the in-process RAM cache so the very next read gets the new snapshot
+  // instead of serving the just-superseded result for another 5 minutes.
+  invalidateAdpMemCache(key);
+
   return { rows: rows.length, drafts: draftCount, picks: pickCount, key };
 }
 
@@ -1885,6 +1889,41 @@ async function computeAndCacheAdp(
   return work;
 }
 
+// ── In-process memory cache for getAdp ───────────────────────────────────────
+// getCachedAdp() issues a Postgres SELECT on every request — even when a
+// snapshot exists — and that SELECT routinely takes 9–36 seconds under load
+// (large JSON blob + cold pool contention). When multiple users arrive at the
+// same time this pins every pool connection for the full read duration,
+// exhausting all 40 slots and 500-ing auth / custom-values / ingest-league.
+//
+// This two-layer guard fixes that:
+//   1. Memory cache  — serves results straight from RAM for 5 minutes, zero
+//                      DB calls.
+//   2. Request coalescing — if the cache is cold and two requests race in,
+//                      only ONE fires the DB query; the other waits on the
+//                      same Promise.  N simultaneous misses → 1 connection.
+interface _AdpMemEntry {
+  result: {
+    rows: AdpRow[];
+    draftCount: number;
+    pickCount: number;
+    filterKey: string;
+    snapshotDate: string | null;
+    computedAt: string;
+    cached: boolean;
+  };
+  expiresAt: number;
+}
+const _adpMemCache = new Map<string, _AdpMemEntry>();
+const _adpInFlight  = new Map<string, Promise<_AdpMemEntry["result"]>>();
+const ADP_MEM_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+/** Call this from refreshAdpSnapshot so a fresh DB write immediately busts RAM. */
+export function invalidateAdpMemCache(key?: string) {
+  if (key) _adpMemCache.delete(key);
+  else      _adpMemCache.clear();
+}
+
 /**
  * Read-time entry point: returns the cached snapshot when available, falls
  * back to a live computation against our own draft_picks table when no
@@ -1901,6 +1940,41 @@ export async function getAdp(f: AdpFilters): Promise<{
   cached: boolean;
 }> {
   const key = filterKey(f);
+
+  // 1. Hot path: serve from RAM if still fresh.
+  const mem = _adpMemCache.get(key);
+  if (mem && Date.now() < mem.expiresAt) return mem.result;
+
+  // 2. Coalesce: if another request is already fetching this key, share it.
+  const flying = _adpInFlight.get(key);
+  if (flying) return flying;
+
+  // 3. Cold path: fetch from DB (or recompute).  Wrap in a shared promise so
+  //    any concurrent requests that arrive while this is pending use the same
+  //    DB call rather than spawning their own.
+  const work: Promise<_AdpMemEntry["result"]> = (async () => {
+    try {
+      const result = await _getAdpFromDb(f, key);
+      _adpMemCache.set(key, { result, expiresAt: Date.now() + ADP_MEM_TTL_MS });
+      return result;
+    } finally {
+      _adpInFlight.delete(key);
+    }
+  })();
+  _adpInFlight.set(key, work);
+  return work;
+}
+
+/** Internal: performs the actual DB read / compute.  Never called directly. */
+async function _getAdpFromDb(f: AdpFilters, key: string): Promise<{
+  rows: AdpRow[];
+  draftCount: number;
+  pickCount: number;
+  filterKey: string;
+  snapshotDate: string | null;
+  computedAt: string;
+  cached: boolean;
+}> {
   const cached = await getCachedAdp(f);
 
   // Stale-cache guard 1: under the new Direct-Rookies rule, kicker rows must
