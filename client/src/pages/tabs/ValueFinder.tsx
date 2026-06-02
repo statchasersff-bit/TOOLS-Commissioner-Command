@@ -261,9 +261,8 @@ function ProductionBuysTab({ players }: { players: ValueFinderPlayer[] }) {
   return (
     <div className="space-y-3">
       <HowToReadCard defaultOpen>
-        This compares fantasy production against market value. A production discount is not
-        automatically a dynasty buy — an older player can out-produce his price while still being a
-        poor long-term hold. Check the Label and the Win-Now / Rebuild tabs for fit.
+        This compares Fantasy Points scored per game against dynasty market value. An older player
+        can out-produce his price while still being a poor long-term hold.
       </HowToReadCard>
       <Panel>
         <ProductionBuysChart players={players} />

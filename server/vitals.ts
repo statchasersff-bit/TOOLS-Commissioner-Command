@@ -161,7 +161,8 @@ export async function getVitals(): Promise<Vitals> {
       total: appPool.totalCount,
       idle: appPool.idleCount,
       waiting: appPool.waitingCount,
-      max: (appPool.options as { max?: number }).max ?? 0,
+      // Mirrors the cap set in server/db.ts (same env, same default).
+      max: Number(process.env.PG_POOL_MAX || 10),
     },
   };
 }
@@ -201,13 +202,17 @@ export function startVitalsHeartbeat(): void {
       const pgStr = v.pg
         ? `pg=${v.pg.total}/${v.pg.max}(act:${v.pg.active} idle:${v.pg.idle} idletx:${v.pg.idleInTxn})`
         : "pg=unavailable";
+      const appPoolStr =
+        `apppool=${v.appPool.total}/${v.appPool.max}(idle:${v.appPool.idle} wait:${v.appPool.waiting})`;
       const line =
         `[vitals] up=${v.uptimeSec}s rss=${v.memory.rssMb}MB heap=${v.memory.heapUsedMb}/${v.memory.heapTotalMb}MB ` +
-        `loopLag=${v.eventLoopLagMs}ms inflight=${v.inFlight} hung=${v.hung.length} ${pgStr}`;
+        `loopLag=${v.eventLoopLagMs}ms inflight=${v.inFlight} hung=${v.hung.length} ${appPoolStr} ${pgStr}`;
 
       const pgHot = !!v.pg && v.pg.max > 0 && v.pg.total >= v.pg.max * WARN_PG_UTIL;
+      const appPoolStarved = v.appPool.waiting >= WARN_APP_POOL_WAITING;
       const warn =
         pgHot ||
+        appPoolStarved ||
         v.eventLoopLagMs >= WARN_LOOP_LAG_MS ||
         v.inFlight >= WARN_INFLIGHT ||
         v.memory.rssMb >= WARN_RSS_MB ||
@@ -216,6 +221,7 @@ export function startVitalsHeartbeat(): void {
       if (warn) {
         const reasons: string[] = [];
         if (pgHot) reasons.push(`PG_CONNECTIONS_HOT(${v.pg!.total}/${v.pg!.max})`);
+        if (appPoolStarved) reasons.push(`APP_POOL_STARVED(wait:${v.appPool.waiting} of ${v.appPool.total}/${v.appPool.max})`);
         if (v.eventLoopLagMs >= WARN_LOOP_LAG_MS) reasons.push(`EVENT_LOOP_LAG(${v.eventLoopLagMs}ms)`);
         if (v.inFlight >= WARN_INFLIGHT) reasons.push(`INFLIGHT_HIGH(${v.inFlight})`);
         if (v.memory.rssMb >= WARN_RSS_MB) reasons.push(`RSS_HIGH(${v.memory.rssMb}MB)`);

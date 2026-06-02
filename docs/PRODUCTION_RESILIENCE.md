@@ -158,3 +158,48 @@ exact steps for either provider:
 3. Watch deploy logs for `server started` lines after a restart, and for
    `unhandledRejection (process kept alive)` entries — those are now survivable
    events instead of fatal ones.
+
+## Second root cause — unbounded queries saturating the capped pools
+
+Capping the pools (`server/db.ts` app pool, `server/index.ts` session pool)
+fixed *too many connections*. But it exposed a second, subtler version of the
+same "hangs every few hours, Publish fixes it" symptom — this time reported as
+the browser console error:
+
+```
+[sc-auth] session check timed out — token preserved, retry 1/5
+AbortError: signal is aborted without reason
+```
+
+That `AbortError` is the **client's** 25s timeout firing because `/api/sc-auth/me`
+never responded. The server side:
+
+- node-postgres puts **no timeout** on how long `pool.query()` waits for a free
+  slot. (`connectionTimeoutMillis` only bounds *establishing* a new connection,
+  not waiting for the pool.)
+- So if even one query never returns — lock contention, a stuck/leaked
+  transaction, a DB hiccup — it pins its pooled connection indefinitely. Once
+  all `max` slots are pinned, **every** subsequent query queues forever, and
+  every request that touches the DB hangs. `/me` is one of them → spinner.
+- The vitals DB census (`pg=total/max_connections`) does **not** catch this: the
+  app pool can be 10/10 saturated while Postgres only sees ~16/100 connections,
+  so the old `PG_CONNECTIONS_HOT` warning never tripped.
+
+**The fix (code):**
+
+1. Per-query timeouts on both the app pool and the session pool
+   (`statement_timeout`, `query_timeout`, `idle_in_transaction_session_timeout`,
+   defaults 30s/30s/60s, env-tunable via `PG_STATEMENT_TIMEOUT_MS` /
+   `PG_IDLE_TXN_TIMEOUT_MS`). Now a query that runs too long is aborted and its
+   connection released — an indefinitely-held slot is structurally impossible.
+   A failed query becomes a fast `500` (process stays up) instead of a site-wide
+   hang.
+2. `server/vitals.ts` now reports the **app pool** directly:
+   `apppool=total/max(idle:.. wait:..)` and warns `APP_POOL_STARVED` the moment
+   `waiting > 0`. A sustained `wait:` count in the deploy logs is the early
+   signal that something is pinning connections — investigate that endpoint
+   before it locks the site.
+
+**How to confirm:** hit `/health/vitals` and check the `appPool` block — under
+normal load `waiting` is `0`. If you ever see it climbing, the heartbeat will
+also be logging `APP_POOL_STARVED` with the count.

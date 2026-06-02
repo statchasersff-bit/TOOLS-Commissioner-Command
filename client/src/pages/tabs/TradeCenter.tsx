@@ -2904,9 +2904,11 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
       {/* ── Compact Trade Verdict + Action panel ─────────────────────────
          One card that fuses the four old sections (verdict / proposal /
          position impact / save) so the user can read the trade and act on
-         it without scrolling. Only renders once at least one asset is
-         picked; before that, the user just sees the roster selectors.    */}
-      {(sideA.length > 0 || sideB.length > 0) && (() => {
+         it without scrolling. The shell renders by default — before any
+         asset is picked it shows the "Trade not yet complete" empty state
+         and per-side "Nothing added yet" boxes; the send-trade controls
+         only appear once at least one asset is on the board.             */}
+      {(() => {
         const bothSidesSelected = sideA.length > 0 && sideB.length > 0;
         const missingIds = [...sideA, ...sideB].some(a => a.type === "player" && !a.player?.sleeperId);
         const canSubmit = !!sleeperJwt && !!sideBRosterId && !missingIds && (sideA.length > 0 || sideB.length > 0) && !proposing && !proposedTrade;
@@ -3184,7 +3186,10 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
                 </>
               );
             })()}
-            {/* ── Send-trade controls — moved directly below Position Impact ─ */}
+            {/* ── Send-trade controls — moved directly below Position Impact ─
+                 Hidden until at least one asset is on the board so the default
+                 shell stays a clean verdict placeholder. */}
+            {(sideA.length > 0 || sideB.length > 0) && (
             <div className="mt-4 md:mt-5 max-w-md mx-auto space-y-2">
               {/* Share to Discord — needs only a StatChasers login (not Sleeper),
                   and is excluded from the saved verdict PNG. Side A receives what
@@ -3310,6 +3315,7 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
                 </>
               )}
             </div>
+            )}
           </Card>
         );
       })()}
