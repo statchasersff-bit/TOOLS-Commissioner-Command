@@ -506,6 +506,35 @@ export async function fetchPlayerNews(playerId: string, limit = 8): Promise<Play
   return Array.isArray(data?.items) ? data.items : [];
 }
 
+/**
+ * Curated "Dynasty Command News" — original items we generate from credited
+ * sources and attribute back to them. Safe public projection only: never any
+ * discovery/scraping URLs or internal audit fields.
+ */
+export type CuratedNewsItem = {
+  id: string;
+  playerName: string;
+  team: string | null;
+  position: string | null;
+  headline: string | null;
+  summary: string | null;
+  fantasyImpact: string | null;
+  category: string | null;
+  sourceName: string;
+  sourceUrl: string;
+  publishedAt: string | null;
+};
+
+export async function fetchCuratedPlayerNews(playerId: string, limit = 6): Promise<CuratedNewsItem[]> {
+  const res = await fetch(
+    `${API_BASE}/api/news/curated/player/${encodeURIComponent(playerId)}?limit=${limit}`,
+    { credentials: "include" },
+  );
+  if (!res.ok) return [];
+  const data = await res.json();
+  return Array.isArray(data?.items) ? data.items : [];
+}
+
 export async function fetchPlayerGameLogs(
   playerId: string,
   season: number,

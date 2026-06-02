@@ -48,7 +48,7 @@ import { ResponsivePlayerName } from "@/components/ResponsivePlayerName";
 import { cn } from "@/lib/utils";
 import { useSleeper } from "@/contexts/SleeperContext";
 import { useValueModel } from "@/contexts/ValueModelContext";
-import { getSleeperPlayers, fetchSleeperLeagueFull, fetchPlayerExposure, fetchTradesForPlayer, fetchTradeLeaguesScanned, fetchPlayerGameLogs, fetchPlayerProduction, fetchPlayerAdpHistory, fetchPlayerAdpAvailability, type PlayerLeagueExposure, type PlayerTradeRecord, type PlayerTradeAsset, type PlayerGameLogRow, type PlayerAdpHistory, type PlayerAdpAvailability, type PlayerAdpAvailabilityCell, type AdpProfileFilters, fetchPlayerNews, type PlayerNewsItem } from "@/lib/sleeperApi";
+import { getSleeperPlayers, fetchSleeperLeagueFull, fetchPlayerExposure, fetchTradesForPlayer, fetchTradeLeaguesScanned, fetchPlayerGameLogs, fetchPlayerProduction, fetchPlayerAdpHistory, fetchPlayerAdpAvailability, type PlayerLeagueExposure, type PlayerTradeRecord, type PlayerTradeAsset, type PlayerGameLogRow, type PlayerAdpHistory, type PlayerAdpAvailability, type PlayerAdpAvailabilityCell, type AdpProfileFilters, fetchPlayerNews, type PlayerNewsItem, fetchCuratedPlayerNews, type CuratedNewsItem } from "@/lib/sleeperApi";
 
 // Default ADP-tab filter: the dominant dynasty-startup configuration in the
 // crawled dataset (Superflex · PPR · TE Premium · 12-team), so the tab opens

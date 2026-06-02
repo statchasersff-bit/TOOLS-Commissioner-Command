@@ -2,6 +2,13 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { fetchRotowireNfl, getNflNameIndex, matchSleeperId, playerNameFromTitle, sleeperHeadshot } from "./nflNews";
 import { getPlayerNews, startPlayerNewsIngestion } from "./playerNews";
+import {
+  getCuratedPlayerNews,
+  listCuratedNewsByStatus,
+  setCuratedNewsStatus,
+  runCuratedIngestion,
+  startCuratedNewsIngestion,
+} from "./news/curatedNews";
 import { getFantasyCalcValues, getFantasyCalcRedraftValues } from "./fantasycalc";
 import { getKtcValues, getKtcRedraftValues } from "./ktc";
 import { getValueFinderPlayers as getValueFinderPlayerPool } from "./valueFinder";
@@ -56,7 +63,6 @@ import {
   refreshDefaultSnapshots,
   reclassifyAdpDrafts,
   getAdp,
-  filterKey,
   getAdpInclusionStatus,
   getAdpStats,
   startAdpScheduler,
@@ -222,18 +228,6 @@ const weeklyMatchupsCache = makeCache<any>(5 * 60 * 1000); // 5-min TTL — live
 const statChasersDataCache = makeCache<any>(10 * 60 * 1000); // 10-min TTL — public-data repo JSON
 const scheduleCache = makeCache<any>(5 * 60 * 1000); // 5-min TTL — NFL week schedule (kickoff/lock state)
 const adpStatsCache = makeCache<any>(5 * 60 * 1000); // 5-min TTL — two count(*) queries, hit on every Draft tab load
-// /api/adp read-model cache. THE pool-exhaustion fix: getAdp() runs a DB query
-// per request (getCachedAdp pulls a large JSONB snapshot row, or — on a cold
-// filter — a multi-second live aggregation), and the Draft tab loads this on
-// every visit for the same default filter. Under real traffic that meant ~500
-// concurrent /api/adp requests each pinning one of the 60 app-pool connections,
-// saturating the pool (waiting ≈ 500) so EVERY other DB endpoint — /api/adp/stats,
-// /api/admin/*, /api/trades/* — timed out acquiring a connection and returned 500.
-// TTL+single-flight (getOrCompute) collapses identical concurrent reads to ONE DB
-// query + ONE connection and serves the rest from memory. 5-min staleness is fine:
-// snapshots are refreshed by the 6-hour scheduler and date-range snapshots already
-// self-expire after 1h server-side.
-const adpReadCache = makeCache<any>(5 * 60 * 1000);
 // Sleeper fan-out endpoints: not DB-pool bound, but each does several (or N-per-
 // league) rate-limited Sleeper calls and is hit on page load, so concurrent
 // duplicates pile up long-held requests and burn Sleeper rate budget. Short TTL
@@ -327,6 +321,39 @@ export async function registerRoutes(
 
   // Kick off the background RSS → player_news ingestion loop (idempotent).
   startPlayerNewsIngestion();
+
+  // Curated, compliance-first "Dynasty Command News" for a player. Only ever
+  // returns a SAFE public projection — original headline/summary/impact +
+  // attribution to the credited source. Internal audit fields (discovery_source,
+  // discovery_url, raw_facts_json, ai_model, external_hash) are NEVER exposed to
+  // the browser, per the no-scraping-URLs/keys rule.
+  app.get("/api/news/curated/player/:playerId", async (req, res) => {
+    try {
+      const limit = parseInt(String(req.query.limit ?? "8"), 10) || 8;
+      const rows = await getCuratedPlayerNews(req.params.playerId, limit);
+      const items = rows.map((r) => ({
+        id: r.id,
+        playerName: r.playerName,
+        team: r.team,
+        position: r.position,
+        headline: r.headline,
+        summary: r.summary,
+        fantasyImpact: r.fantasyImpact,
+        category: r.category,
+        sourceName: r.sourceName, // credited original source
+        sourceUrl: r.sourceUrl,   // attribution link to that source
+        publishedAt: r.publishedAt,
+      }));
+      res.set("Cache-Control", "public, max-age=300");
+      res.json({ items });
+    } catch (error) {
+      console.error("[news/curated] query failed:", error instanceof Error ? error.message : error);
+      res.json({ items: [] });
+    }
+  });
+
+  // Kick off the background curated-news ingestion loop (idempotent).
+  startCuratedNewsIngestion();
 
   app.get("/api/values/fantasycalc", async (req, res) => {
     try {
@@ -1552,12 +1579,14 @@ export async function registerRoutes(
       console.log("[ADP /api/adp] query:", q);
       console.log("[ADP /api/adp] filters:", filters);
 
-      // Serve from the in-memory read-model cache when possible so repeated
-      // identical reads (the hot default filter, hit on every Draft tab load)
-      // don't each pin a DB connection — see adpReadCache rationale above. A
-      // throwing getAdp() rejects all awaiters and is NOT cached, so the catch
-      // below still surfaces a real error instead of caching a failure.
-      const result = await adpReadCache.getOrCompute(filterKey(filters), () => getAdp(filters));
+      // getAdp() now owns an in-process memory cache + request coalescing (see
+      // server/adp.ts), so identical concurrent reads — the hot default filter
+      // hit on every Draft tab load — collapse to ONE DB query + ONE pool
+      // connection instead of stampeding all 60 slots. That cache is busted on
+      // snapshot refresh via invalidateAdpMemCache, so we deliberately do NOT
+      // add a second cache layer here (it couldn't see that invalidation and
+      // would serve stale data after a refresh).
+      const result = await getAdp(filters);
 
       console.log(
         `[ADP /api/adp] key=${result.filterKey} cached=${result.cached} ` +
@@ -1640,6 +1669,52 @@ export async function registerRoutes(
     res.status(403).json({ error: "Forbidden", reason });
     return false;
   };
+
+  // ── Curated player news (admin) ─────────────────────────────────────────────
+  // Full audit-trail access for review: discovery_source vs summary_source,
+  // raw extracted facts, model used. Admin-only; never exposed publicly.
+  app.get("/api/admin/news/curated", async (req, res) => {
+    if (!(await requireAdmin(req, res))) return;
+    try {
+      const status = typeof req.query.status === "string" ? req.query.status : "needs_review";
+      const limit = parseInt(String(req.query.limit ?? "100"), 10) || 100;
+      const items = await listCuratedNewsByStatus(status, limit);
+      res.json({ items });
+    } catch (err: any) {
+      console.error("[Admin] news/curated list error:", err);
+      res.status(500).json({ error: err.message || "Query failed" });
+    }
+  });
+
+  // Approve / reject / re-queue an item. body: { status: "published"|"rejected"|"needs_review"|"auto" }
+  app.post("/api/admin/news/curated/:id/status", async (req, res) => {
+    if (!(await requireAdmin(req, res))) return;
+    try {
+      const allowed = ["auto", "published", "needs_review", "rejected"];
+      const status = String(req.body?.status ?? "");
+      if (!allowed.includes(status)) {
+        return res.status(400).json({ error: `status must be one of ${allowed.join(", ")}` });
+      }
+      const ok = await setCuratedNewsStatus(req.params.id, status);
+      if (!ok) return res.status(404).json({ error: "Item not found" });
+      res.json({ ok: true, id: req.params.id, status });
+    } catch (err: any) {
+      console.error("[Admin] news/curated status error:", err);
+      res.status(500).json({ error: err.message || "Update failed" });
+    }
+  });
+
+  // Manually trigger an ingestion pass (handy for testing / backfill).
+  app.post("/api/admin/news/curated/run", async (req, res) => {
+    if (!(await requireAdmin(req, res))) return;
+    try {
+      const stats = await runCuratedIngestion();
+      res.json({ ok: true, stats });
+    } catch (err: any) {
+      console.error("[Admin] news/curated run error:", err);
+      res.status(500).json({ error: err.message || "Ingestion failed" });
+    }
+  });
 
   app.post("/api/admin/adp/ingest-draft/:draftId", async (req, res) => {
     if (!(await requireAdmin(req, res))) return;
