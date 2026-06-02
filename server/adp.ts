@@ -1988,13 +1988,17 @@ let adpInterval: NodeJS.Timeout | null = null;
 const SNAPSHOT_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6h
 
 export function startAdpScheduler() {
-  // Don't block server startup — kick the first refresh off-thread.
-  // Backfill league-derived flags first so the snapshot refresh sees correct
-  // tePremium / scoringType values when keying snapshots.
-  backfillLeagueScoring()
-    .then(() => refreshDefaultSnapshots())
-    .then((r) => console.log(`[ADP] Initial snapshot refresh: ${r.combos} combos, ${r.rows} total rows`))
-    .catch((err) => console.error("[ADP] Initial snapshot refresh failed:", err));
+  // Delay the first refresh by 45 seconds so it doesn't compete with the
+  // initial burst of user traffic right after a fresh deploy. The pool has
+  // 40 connections but backfillLeagueScoring + refreshDefaultSnapshots can
+  // hold several simultaneously; staggering avoids connection-timeout 500s
+  // on /api/adp and /api/values/custom/resolved in the first minute of boot.
+  setTimeout(() => {
+    backfillLeagueScoring()
+      .then(() => refreshDefaultSnapshots())
+      .then((r) => console.log(`[ADP] Initial snapshot refresh: ${r.combos} combos, ${r.rows} total rows`))
+      .catch((err) => console.error("[ADP] Initial snapshot refresh failed:", err));
+  }, 45_000);
 
   // NOTE: Draft ingestion is now driven by the unified scheduled crawler
   // (server/unifiedCrawler.ts), so the periodic ingestCrawledLeagueDrafts pass

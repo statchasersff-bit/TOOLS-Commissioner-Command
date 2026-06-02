@@ -1,0 +1,202 @@
+Access to fetch at 'https://dynasty-command.replit.app/api/sc-auth/me' from origin 'https://statchasers.com' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource.Understand this error
+index-C4jRUBCQ.js:111  GET https://dynasty-command.replit.app/api/sc-auth/me net::ERR_FAILED
+(anonymous) @ index-C4jRUBCQ.js:111
+(anonymous) @ index-C4jRUBCQ.js:111
+Hl @ index-C4jRUBCQ.js:9
+ts @ index-C4jRUBCQ.js:9
+Tg @ index-C4jRUBCQ.js:9
+Ir @ index-C4jRUBCQ.js:7
+Y3 @ index-C4jRUBCQ.js:9
+fa @ index-C4jRUBCQ.js:9
+Ng @ index-C4jRUBCQ.js:9
+T @ index-C4jRUBCQ.js:2
+M @ index-C4jRUBCQ.js:2
+postMessage
+X @ index-C4jRUBCQ.js:2
+ee @ index-C4jRUBCQ.js:2
+e.unstable_scheduleCallback @ index-C4jRUBCQ.js:2
+Bg @ index-C4jRUBCQ.js:9
+rn @ index-C4jRUBCQ.js:9
+An @ index-C4jRUBCQ.js:9
+ni @ index-C4jRUBCQ.js:9
+ai.render.Nd.render @ index-C4jRUBCQ.js:9
+(anonymous) @ index-C4jRUBCQ.js:247Understand this error
+index-C4jRUBCQ.js:111 [sc-auth] session check failed — token preserved, retry 1/5 TypeError: Failed to fetch
+    at index-C4jRUBCQ.js:111:5203
+    at index-C4jRUBCQ.js:111:8059
+    at Hl (index-C4jRUBCQ.js:9:24477)
+    at ts (index-C4jRUBCQ.js:9:42924)
+    at Tg (index-C4jRUBCQ.js:9:36975)
+    at Ir (index-C4jRUBCQ.js:7:3272)
+    at Y3 (index-C4jRUBCQ.js:9:41733)
+    at fa (index-C4jRUBCQ.js:9:40698)
+    at Ng (index-C4jRUBCQ.js:9:36079)
+    at T (index-C4jRUBCQ.js:2:10357)
+(anonymous) @ index-C4jRUBCQ.js:111
+await in (anonymous)
+(anonymous) @ index-C4jRUBCQ.js:111
+Hl @ index-C4jRUBCQ.js:9
+ts @ index-C4jRUBCQ.js:9
+Tg @ index-C4jRUBCQ.js:9
+Ir @ index-C4jRUBCQ.js:7
+Y3 @ index-C4jRUBCQ.js:9
+fa @ index-C4jRUBCQ.js:9
+Ng @ index-C4jRUBCQ.js:9
+T @ index-C4jRUBCQ.js:2
+M @ index-C4jRUBCQ.js:2
+postMessage
+X @ index-C4jRUBCQ.js:2
+ee @ index-C4jRUBCQ.js:2
+e.unstable_scheduleCallback @ index-C4jRUBCQ.js:2
+Bg @ index-C4jRUBCQ.js:9
+rn @ index-C4jRUBCQ.js:9
+An @ index-C4jRUBCQ.js:9
+ni @ index-C4jRUBCQ.js:9
+ai.render.Nd.render @ index-C4jRUBCQ.js:9
+(anonymous) @ index-C4jRUBCQ.js:247Understand this warning
+index-C4jRUBCQ.js:111 [sc-auth] scheduling retry 1 in 5s
+index-C4jRUBCQ.js:111 [sc-auth] auth check finished — status: loading
+index-C4jRUBCQ.js:111 [sc-auth] auth check started
+index-C4jRUBCQ.js:111 [sc-auth] /api/sc-auth/me status: 200
+index-C4jRUBCQ.js:111 [auth] Sleeper source: server-linked | DC user: e688fa34-a19d-4d87-b9e8-664fcf5484a2 | Sleeper user: 1126320389791096800 | linked Sleeper: makitrain
+index-C4jRUBCQ.js:111 [sc-auth] auth check finished — status: ready
+index-C4jRUBCQ.js:245 [app] DynastyCommandCenter mounted
+index-C4jRUBCQ.js:53 [app] ValueModelProvider mounted
+index-C4jRUBCQ.js:111 [sleeper] loading leagues for Sleeper user: makitrain (sleeper_user_id: 1126320389791096800 source: auth-context )
+index-C4jRUBCQ.js:247 [app] rendering authenticated shell — probe: app
+index-C4jRUBCQ.js:245 [app] league load start {leagueId: '1312325046022205440', sleeperUserId: '1126320389791096832'}
+index-C4jRUBCQ.js:245 [app] league load ok {leagueId: '1312325046022205440', teams: 12, userTeamId: 'roster_12'}
+index-C4jRUBCQ.js:245 [app] league load finished — isLeagueLoading: false
+index-C4jRUBCQ.js:9  GET https://dynasty-command.replit.app/api/values/custom/resolved 500 (Internal Server Error)
+xa @ index-C4jRUBCQ.js:9
+(anonymous) @ index-C4jRUBCQ.js:53
+(anonymous) @ index-C4jRUBCQ.js:53
+Hl @ index-C4jRUBCQ.js:9
+ts @ index-C4jRUBCQ.js:9
+Tg @ index-C4jRUBCQ.js:9
+Ir @ index-C4jRUBCQ.js:7
+Y3 @ index-C4jRUBCQ.js:9
+fa @ index-C4jRUBCQ.js:9
+Ng @ index-C4jRUBCQ.js:9
+T @ index-C4jRUBCQ.js:2
+M @ index-C4jRUBCQ.js:2
+postMessage
+X @ index-C4jRUBCQ.js:2
+ee @ index-C4jRUBCQ.js:2
+e.unstable_scheduleCallback @ index-C4jRUBCQ.js:2
+Bg @ index-C4jRUBCQ.js:9
+rn @ index-C4jRUBCQ.js:9
+An @ index-C4jRUBCQ.js:9
+P3 @ index-C4jRUBCQ.js:7
+(anonymous) @ index-C4jRUBCQ.js:111
+await in (anonymous)
+(anonymous) @ index-C4jRUBCQ.js:111
+setTimeout
+(anonymous) @ index-C4jRUBCQ.js:111
+await in (anonymous)
+(anonymous) @ index-C4jRUBCQ.js:111
+Hl @ index-C4jRUBCQ.js:9
+ts @ index-C4jRUBCQ.js:9
+Tg @ index-C4jRUBCQ.js:9
+Ir @ index-C4jRUBCQ.js:7
+Y3 @ index-C4jRUBCQ.js:9
+fa @ index-C4jRUBCQ.js:9
+Ng @ index-C4jRUBCQ.js:9
+T @ index-C4jRUBCQ.js:2
+M @ index-C4jRUBCQ.js:2
+postMessage
+X @ index-C4jRUBCQ.js:2
+ee @ index-C4jRUBCQ.js:2
+e.unstable_scheduleCallback @ index-C4jRUBCQ.js:2
+Bg @ index-C4jRUBCQ.js:9
+rn @ index-C4jRUBCQ.js:9
+An @ index-C4jRUBCQ.js:9
+ni @ index-C4jRUBCQ.js:9
+ai.render.Nd.render @ index-C4jRUBCQ.js:9
+(anonymous) @ index-C4jRUBCQ.js:247Understand this error
+index-C4jRUBCQ.js:245  POST https://dynasty-command.replit.app/api/trades/ingest-league 500 (Internal Server Error)
+(anonymous) @ index-C4jRUBCQ.js:245
+Hl @ index-C4jRUBCQ.js:9
+ts @ index-C4jRUBCQ.js:9
+Tg @ index-C4jRUBCQ.js:9
+Ir @ index-C4jRUBCQ.js:7
+Y3 @ index-C4jRUBCQ.js:9
+fa @ index-C4jRUBCQ.js:9
+Ng @ index-C4jRUBCQ.js:9
+T @ index-C4jRUBCQ.js:2
+M @ index-C4jRUBCQ.js:2
+postMessage
+X @ index-C4jRUBCQ.js:2
+ee @ index-C4jRUBCQ.js:2
+e.unstable_scheduleCallback @ index-C4jRUBCQ.js:2
+Bg @ index-C4jRUBCQ.js:9
+rn @ index-C4jRUBCQ.js:9
+An @ index-C4jRUBCQ.js:9
+P3 @ index-C4jRUBCQ.js:7
+(anonymous) @ index-C4jRUBCQ.js:245
+Promise.then
+(anonymous) @ index-C4jRUBCQ.js:245
+Hl @ index-C4jRUBCQ.js:9
+ts @ index-C4jRUBCQ.js:9
+Tg @ index-C4jRUBCQ.js:9
+Ir @ index-C4jRUBCQ.js:7
+Y3 @ index-C4jRUBCQ.js:9
+fa @ index-C4jRUBCQ.js:9
+Ng @ index-C4jRUBCQ.js:9
+T @ index-C4jRUBCQ.js:2
+M @ index-C4jRUBCQ.js:2
+postMessage
+X @ index-C4jRUBCQ.js:2
+ee @ index-C4jRUBCQ.js:2
+e.unstable_scheduleCallback @ index-C4jRUBCQ.js:2
+Bg @ index-C4jRUBCQ.js:9
+rn @ index-C4jRUBCQ.js:9
+An @ index-C4jRUBCQ.js:9
+P3 @ index-C4jRUBCQ.js:7
+(anonymous) @ index-C4jRUBCQ.js:111
+await in (anonymous)
+(anonymous) @ index-C4jRUBCQ.js:111
+Hl @ index-C4jRUBCQ.js:9
+ts @ index-C4jRUBCQ.js:9
+Tg @ index-C4jRUBCQ.js:9
+Ir @ index-C4jRUBCQ.js:7
+Y3 @ index-C4jRUBCQ.js:9
+fa @ index-C4jRUBCQ.js:9
+Ng @ index-C4jRUBCQ.js:9
+T @ index-C4jRUBCQ.js:2
+M @ index-C4jRUBCQ.js:2
+postMessage
+X @ index-C4jRUBCQ.js:2
+ee @ index-C4jRUBCQ.js:2
+e.unstable_scheduleCallback @ index-C4jRUBCQ.js:2
+Bg @ index-C4jRUBCQ.js:9
+rn @ index-C4jRUBCQ.js:9
+An @ index-C4jRUBCQ.js:9
+P3 @ index-C4jRUBCQ.js:7
+(anonymous) @ index-C4jRUBCQ.js:111
+await in (anonymous)
+(anonymous) @ index-C4jRUBCQ.js:111
+setTimeout
+(anonymous) @ index-C4jRUBCQ.js:111
+await in (anonymous)
+(anonymous) @ index-C4jRUBCQ.js:111
+Hl @ index-C4jRUBCQ.js:9
+ts @ index-C4jRUBCQ.js:9
+Tg @ index-C4jRUBCQ.js:9
+Ir @ index-C4jRUBCQ.js:7
+Y3 @ index-C4jRUBCQ.js:9
+fa @ index-C4jRUBCQ.js:9
+Ng @ index-C4jRUBCQ.js:9
+T @ index-C4jRUBCQ.js:2
+M @ index-C4jRUBCQ.js:2
+postMessage
+X @ index-C4jRUBCQ.js:2
+ee @ index-C4jRUBCQ.js:2
+e.unstable_scheduleCallback @ index-C4jRUBCQ.js:2
+Bg @ index-C4jRUBCQ.js:9
+rn @ index-C4jRUBCQ.js:9
+An @ index-C4jRUBCQ.js:9
+ni @ index-C4jRUBCQ.js:9
+ai.render.Nd.render @ index-C4jRUBCQ.js:9
+(anonymous) @ index-C4jRUBCQ.js:247Understand this error
+ValueFinder-DbodQx1C.js:1  GET https://statchasers.com/api/value-finder/players?season=2025&format=sf&scoring=ppr 404 (Not Found)

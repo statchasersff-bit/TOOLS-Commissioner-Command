@@ -198,12 +198,17 @@ export async function getAvailableSnapshotDates(): Promise<string[]> {
 let snapshotInterval: NodeJS.Timeout | null = null;
 
 export function startSnapshotScheduler() {
-  captureValueSnapshot()
-    .then(r => {
-      if (r.skipped) console.log("[ValueSnapshots] Today's snapshot already exists, skipped.");
-      else console.log(`[ValueSnapshots] Initial snapshot: ${r.inserted} players captured.`);
-    })
-    .catch(err => console.error("[ValueSnapshots] Failed to capture initial snapshot:", err));
+  // Delay 20 seconds so snapshot capture doesn't compete with the initial
+  // user-traffic burst right after a fresh deploy (same staggering approach
+  // as startAdpScheduler — see server/adp.ts for the full rationale).
+  setTimeout(() => {
+    captureValueSnapshot()
+      .then(r => {
+        if (r.skipped) console.log("[ValueSnapshots] Today's snapshot already exists, skipped.");
+        else console.log(`[ValueSnapshots] Initial snapshot: ${r.inserted} players captured.`);
+      })
+      .catch(err => console.error("[ValueSnapshots] Failed to capture initial snapshot:", err));
+  }, 20_000);
 
   snapshotInterval = setInterval(() => {
     captureValueSnapshot().catch(err =>
