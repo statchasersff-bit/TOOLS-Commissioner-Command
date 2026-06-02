@@ -1555,32 +1555,6 @@ function QuickCalcSide({ label, assets, total, players, onAddPlayer, onAddPick }
         <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
       </div>
 
-      {/* Sliding quick-add row — top 50 by dynasty value, highest → lowest. */}
-      {topPlayers.length > 0 && (
-        <div className="mb-3">
-          <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70 mb-1.5">Top values · tap to add</p>
-          <div className="flex gap-2 overflow-x-auto pb-1.5 -mx-0.5 px-0.5">
-            {topPlayers.map((p) => (
-              <button
-                key={p.sleeperId}
-                onClick={() => onAddPlayer(p)}
-                className="group flex-shrink-0 flex items-center gap-2 rounded-full border border-border/50 bg-background/50 hover:border-[#d4af37]/50 hover:bg-[#d4af37]/5 pl-1 pr-3 py-1 transition-colors"
-                data-testid={`quick-top-${label}-${p.sleeperId}`}
-              >
-                <PlayerAvatar id={p.sleeperId} name={p.name} pos={p.pos} team={p.team} size="xs" compact />
-                <div className="flex flex-col items-start leading-tight">
-                  <span className="text-[11px] font-semibold text-foreground whitespace-nowrap">{p.name}</span>
-                  <span className="text-[9px] text-muted-foreground/80 tabular-nums whitespace-nowrap">
-                    {p.pos}{p.team ? " · " + p.team : ""}
-                    <span className="ml-1 text-[#d4af37]/90">{Math.round(p.value).toLocaleString()}</span>
-                  </span>
-                </div>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* Player search dropdown */}
       <div className="relative">
         <div className="flex items-center gap-1.5 rounded-lg border border-border bg-background/60 px-2">
@@ -1629,6 +1603,32 @@ function QuickCalcSide({ label, assets, total, players, onAddPlayer, onAddPick }
           <Plus className="w-3 h-3" /> Pick
         </button>
       </div>
+
+      {/* Sliding quick-add row — top 50 by dynasty value, highest → lowest. */}
+      {topPlayers.length > 0 && (
+        <div className="mt-3">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70 mb-1.5">Top values · tap to add</p>
+          <div className="flex gap-2 overflow-x-auto pb-1.5 -mx-0.5 px-0.5">
+            {topPlayers.map((p) => (
+              <button
+                key={p.sleeperId}
+                onClick={() => onAddPlayer(p)}
+                className="group flex-shrink-0 flex items-center gap-2 rounded-full border border-border/50 bg-background/50 hover:border-[#d4af37]/50 hover:bg-[#d4af37]/5 pl-1 pr-3 py-1 transition-colors"
+                data-testid={`quick-top-${label}-${p.sleeperId}`}
+              >
+                <PlayerAvatar id={p.sleeperId} name={p.name} pos={p.pos} team={p.team} size="xs" compact />
+                <div className="flex flex-col items-start leading-tight">
+                  <span className="text-[11px] font-semibold text-foreground whitespace-nowrap">{p.name}</span>
+                  <span className="text-[9px] text-muted-foreground/80 tabular-nums whitespace-nowrap">
+                    {p.pos}{p.team ? " · " + p.team : ""}
+                    <span className="ml-1 text-[#d4af37]/90">{Math.round(p.value).toLocaleString()}</span>
+                  </span>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -89,25 +89,45 @@ function toMarketFilters(f: Filters): MarketFilters {
 const toMarketFormat = (f: Filters["format"]): MarketFormat => (f === "1QB" ? "1qb" : "sf");
 
 // ── Tab switcher ──────────────────────────────────────────────────────────
+// Desktop shows the full segmented button row; on mobile that row turns into a
+// horizontal scrollbar, so below sm we swap to a native dropdown instead.
 function TabBar({ tab, setTab }: { tab: TabId; setTab: (t: TabId) => void }) {
   return (
-    <div className="flex gap-1 p-1 rounded-xl bg-muted/20 border border-border overflow-x-auto">
-      {TABS.map((t) => (
-        <button
-          key={t.id}
-          onClick={() => setTab(t.id)}
-          data-testid={`vf-tab-${t.id}`}
-          className={cn(
-            "flex-shrink-0 px-3 py-1.5 rounded-lg text-[11px] sm:text-[12px] font-semibold transition-colors whitespace-nowrap",
-            tab === t.id
-              ? "bg-[#0b3a7a]/60 text-white border border-[#d4af37]/25"
-              : "text-muted-foreground hover:text-foreground",
-          )}
-        >
-          {t.label}
-        </button>
-      ))}
-    </div>
+    <>
+      {/* Mobile: dropdown selector */}
+      <select
+        value={tab}
+        onChange={(e) => setTab(e.target.value as TabId)}
+        data-testid="vf-tab-select"
+        aria-label="Chart view"
+        className="sm:hidden w-full h-10 rounded-xl bg-card/40 border border-border px-3 text-[13px] font-semibold text-foreground"
+      >
+        {TABS.map((t) => (
+          <option key={t.id} value={t.id}>
+            {t.label}
+          </option>
+        ))}
+      </select>
+
+      {/* Desktop/tablet: segmented button row */}
+      <div className="hidden sm:flex gap-1 p-1 rounded-xl bg-muted/20 border border-border overflow-x-auto">
+        {TABS.map((t) => (
+          <button
+            key={t.id}
+            onClick={() => setTab(t.id)}
+            data-testid={`vf-tab-${t.id}`}
+            className={cn(
+              "flex-shrink-0 px-3 py-1.5 rounded-lg text-[11px] sm:text-[12px] font-semibold transition-colors whitespace-nowrap",
+              tab === t.id
+                ? "bg-[#0b3a7a]/60 text-white border border-[#d4af37]/25"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+    </>
   );
 }
 

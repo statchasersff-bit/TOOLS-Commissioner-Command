@@ -1,10 +1,12 @@
 import { useState, type ReactNode } from "react";
 import { ChevronDown, HelpCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 // Collapsible "How to read this" helper — keeps each tab scannable while the
-// explanation stays one tap away. Defaults open on first paint so new users get
-// context, but folds away cleanly.
+// explanation stays one tap away. Defaults open on desktop so new users get
+// context, but on mobile it starts collapsed (a "Tap to expand" hint) so it
+// doesn't push the chart below the fold.
 export function HowToReadCard({
   children,
   defaultOpen = false,
@@ -12,7 +14,9 @@ export function HowToReadCard({
   children: ReactNode;
   defaultOpen?: boolean;
 }) {
-  const [open, setOpen] = useState(defaultOpen);
+  const isMobile = useIsMobile();
+  // Open by default only on desktop; mobile starts folded regardless.
+  const [open, setOpen] = useState(defaultOpen && !isMobile);
   return (
     <div className="rounded-lg border border-border/60 bg-muted/10">
       <button
@@ -25,7 +29,14 @@ export function HowToReadCard({
           <HelpCircle className="w-3.5 h-3.5" />
           How to read this
         </span>
-        <ChevronDown className={cn("w-3.5 h-3.5 transition-transform", open && "rotate-180")} />
+        <span className="flex items-center gap-2">
+          {!open && (
+            <span className="sm:hidden text-[10px] font-medium normal-case tracking-normal text-muted-foreground/70">
+              Tap to expand
+            </span>
+          )}
+          <ChevronDown className={cn("w-3.5 h-3.5 transition-transform", open && "rotate-180")} />
+        </span>
       </button>
       {open && (
         <p className="px-3 pb-2.5 text-[12px] text-muted-foreground leading-snug">{children}</p>

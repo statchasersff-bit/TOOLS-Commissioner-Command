@@ -16,6 +16,7 @@ import { POSITION_COLORS } from "@/lib/value-finder/types";
 import { PlayerValueTooltip } from "./PlayerValueTooltip";
 import { useBoxZoom } from "./useBoxZoom";
 import { ZoomResetButton } from "./ZoomResetButton";
+import { useScatterLayout } from "./useScatterLayout";
 
 // Production vs market value. Players below the production-implied curve (high
 // PPG, low price) read as buys; above it as sells. Dots are colored by position;
@@ -47,6 +48,7 @@ export function ProductionBuysChart({ players }: { players: ValueFinderPlayer[] 
   }, [data]);
 
   const zoom = useBoxZoom();
+  const layout = useScatterLayout();
 
   if (!data.length) {
     return (
@@ -59,7 +61,7 @@ export function ProductionBuysChart({ players }: { players: ValueFinderPlayer[] 
   return (
     <div className={zoom.enabled ? "relative select-none" : "relative"}>
       {zoom.isZoomed && <ZoomResetButton onReset={zoom.reset} />}
-      <ResponsiveContainer width="100%" aspect={2.31}>
+      <ResponsiveContainer width="100%" {...layout.containerSize}>
         <ScatterChart margin={{ top: 8, right: 16, bottom: 24, left: 8 }} {...zoom.zoomProps}>
           <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border)/0.4)" />
           <XAxis
@@ -68,8 +70,9 @@ export function ProductionBuysChart({ players }: { players: ValueFinderPlayer[] 
             name="PPG"
             domain={zoom.xDomain ?? xDomain}
             allowDataOverflow
-            tick={{ fontSize: 10 }}
-            label={{ value: "Points / Game", position: "insideBottom", offset: -12, fontSize: 11 }}
+            tickCount={layout.xTickCount}
+            tick={{ fontSize: layout.tickFontSize }}
+            label={{ value: "Points / Game", position: "insideBottom", offset: -12, fontSize: layout.labelFontSize }}
           />
           <YAxis
             type="number"
@@ -77,11 +80,11 @@ export function ProductionBuysChart({ players }: { players: ValueFinderPlayer[] 
             name="Market"
             domain={zoom.yDomain}
             allowDataOverflow
-            tick={{ fontSize: 10 }}
-            width={48}
-            label={{ value: "Dynasty Market Value", angle: -90, position: "insideLeft", fontSize: 11 }}
+            tick={{ fontSize: layout.tickFontSize }}
+            width={layout.yAxisWidth}
+            label={{ value: layout.isMobile ? "Value" : "Dynasty Market Value", angle: -90, position: "insideLeft", fontSize: layout.labelFontSize }}
           />
-          <ZAxis range={[40, 40]} />
+          <ZAxis range={layout.pointRange} />
           <Tooltip cursor={{ strokeDasharray: "3 3" }} content={<PlayerValueTooltip metric="ppg" />} />
           <Scatter data={data} isAnimationActive={false}>
             {data.map((d) => (

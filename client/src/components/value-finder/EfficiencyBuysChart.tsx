@@ -16,6 +16,7 @@ import { POSITION_COLORS } from "@/lib/value-finder/types";
 import { PlayerValueTooltip } from "./PlayerValueTooltip";
 import { useBoxZoom } from "./useBoxZoom";
 import { ZoomResetButton } from "./ZoomResetButton";
+import { useScatterLayout } from "./useScatterLayout";
 
 // Efficiency score (production per opportunity) vs market value. Strong efficiency
 // at a low price reads as a buy window — the player is doing more with his touches
@@ -39,6 +40,7 @@ export function EfficiencyBuysChart({
   );
 
   const zoom = useBoxZoom();
+  const layout = useScatterLayout();
 
   if (!data.length) {
     return (
@@ -51,7 +53,7 @@ export function EfficiencyBuysChart({
   return (
     <div className={zoom.enabled ? "relative select-none" : "relative"}>
       {zoom.isZoomed && <ZoomResetButton onReset={zoom.reset} />}
-      <ResponsiveContainer width="100%" aspect={2.31}>
+      <ResponsiveContainer width="100%" {...layout.containerSize}>
         <ScatterChart margin={{ top: 8, right: 16, bottom: 24, left: 8 }} {...zoom.zoomProps}>
           <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border)/0.4)" />
           <XAxis
@@ -60,8 +62,9 @@ export function EfficiencyBuysChart({
             name="Efficiency"
             domain={zoom.xDomain ?? [0, 100]}
             allowDataOverflow
-            tick={{ fontSize: 10 }}
-            label={{ value: "Efficiency Score", position: "insideBottom", offset: -12, fontSize: 11 }}
+            tickCount={layout.xTickCount}
+            tick={{ fontSize: layout.tickFontSize }}
+            label={{ value: "Efficiency Score", position: "insideBottom", offset: -12, fontSize: layout.labelFontSize }}
           />
           <YAxis
             type="number"
@@ -69,11 +72,11 @@ export function EfficiencyBuysChart({
             name="Market"
             domain={zoom.yDomain}
             allowDataOverflow
-            tick={{ fontSize: 10 }}
-            width={48}
-            label={{ value: "Dynasty Market Value", angle: -90, position: "insideLeft", fontSize: 11 }}
+            tick={{ fontSize: layout.tickFontSize }}
+            width={layout.yAxisWidth}
+            label={{ value: layout.isMobile ? "Value" : "Dynasty Market Value", angle: -90, position: "insideLeft", fontSize: layout.labelFontSize }}
           />
-          <ZAxis range={[40, 40]} />
+          <ZAxis range={layout.pointRange} />
           <Tooltip cursor={{ strokeDasharray: "3 3" }} content={<PlayerValueTooltip metric="efficiency" />} />
           <Scatter data={data} isAnimationActive={false}>
             {data.map((d) => (

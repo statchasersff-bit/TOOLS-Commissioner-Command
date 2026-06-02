@@ -18,6 +18,7 @@ import { getMarketTrend, getRoleTrend } from "@/lib/value-finder/trends";
 import { PlayerValueTooltip } from "./PlayerValueTooltip";
 import { useBoxZoom } from "./useBoxZoom";
 import { ZoomResetButton } from "./ZoomResetButton";
+import { useScatterLayout } from "./useScatterLayout";
 
 // Quadrant scatter: role/production trend (x) vs market value trend (y). The
 // quadrant region labels (below) describe each corner; dots are colored by
@@ -44,6 +45,7 @@ export function TrendRadarChart({
   );
 
   const zoom = useBoxZoom();
+  const layout = useScatterLayout();
 
   if (!data.length) {
     return (
@@ -67,7 +69,7 @@ export function TrendRadarChart({
         <div className="absolute bottom-8 right-3">{label("Hidden Riser", "text-sky-500")}</div>
         <div className="absolute bottom-8 left-12">{label("Falling Asset", "text-red-500")}</div>
       </div>
-      <ResponsiveContainer width="100%" aspect={2.31}>
+      <ResponsiveContainer width="100%" {...layout.containerSize}>
         <ScatterChart margin={{ top: 8, right: 16, bottom: 24, left: 8 }} {...zoom.zoomProps}>
           <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border)/0.4)" />
           <XAxis
@@ -76,9 +78,10 @@ export function TrendRadarChart({
             name="Role Trend"
             domain={zoom.xDomain}
             allowDataOverflow
-            tick={{ fontSize: 10 }}
+            tickCount={layout.xTickCount}
+            tick={{ fontSize: layout.tickFontSize }}
             tickFormatter={(v) => `${v > 0 ? "+" : ""}${v}%`}
-            label={{ value: "Role / Production Trend", position: "insideBottom", offset: -12, fontSize: 11 }}
+            label={{ value: layout.isMobile ? "Role Trend" : "Role / Production Trend", position: "insideBottom", offset: -12, fontSize: layout.labelFontSize }}
           />
           <YAxis
             type="number"
@@ -86,12 +89,12 @@ export function TrendRadarChart({
             name="Value Trend"
             domain={zoom.yDomain}
             allowDataOverflow
-            tick={{ fontSize: 10 }}
-            width={48}
+            tick={{ fontSize: layout.tickFontSize }}
+            width={layout.yAxisWidth}
             tickFormatter={(v) => `${v > 0 ? "+" : ""}${v}%`}
-            label={{ value: "Dynasty Market Value Trend", angle: -90, position: "insideLeft", fontSize: 11 }}
+            label={{ value: layout.isMobile ? "Value Trend" : "Dynasty Market Value Trend", angle: -90, position: "insideLeft", fontSize: layout.labelFontSize }}
           />
-          <ZAxis range={[45, 45]} />
+          <ZAxis range={layout.pointRange} />
           <ReferenceLine x={0} stroke="hsl(var(--border))" />
           <ReferenceLine y={0} stroke="hsl(var(--border))" />
           <Tooltip cursor={{ strokeDasharray: "3 3" }} content={<PlayerValueTooltip metric="trend" />} />
