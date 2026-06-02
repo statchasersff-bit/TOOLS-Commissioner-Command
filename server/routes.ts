@@ -2018,7 +2018,15 @@ export async function registerRoutes(
         maxLeagues?: unknown;
         maxDrafts?: unknown;
         maxRequests?: unknown;
+        mode?: unknown;
+        tradeSinceMs?: unknown;
       };
+
+      // ── Mode ──────────────────────────────────────────────────────────────
+      // "adp" (default): ingest drafts → ADP snapshots. "trade": reuse the same
+      // depth-2 discovery BFS but ingest the discovered leagues' trades into the
+      // trade DB instead. Trade mode doesn't touch ADP snapshots or drafts.
+      const isTradeMode = body.mode === "trade";
 
       // ── Validation ────────────────────────────────────────────────────────
       if (!body.seedUsername || typeof body.seedUsername !== "string" || !body.seedUsername.trim()) {
@@ -2036,7 +2044,9 @@ export async function registerRoutes(
       const rawCats = Array.isArray(body.draftCategories)
         ? body.draftCategories.filter((c: any): c is DraftCategory => validCats.includes(c))
         : [];
-      if (rawCats.length === 0) {
+      // Draft categories are only meaningful in ADP mode; trade mode ignores
+      // them (it ingests trades, not drafts), so don't reject an empty list.
+      if (rawCats.length === 0 && !isTradeMode) {
         return res.status(400).json({ error: "At least one draft category is required" });
       }
 
@@ -2045,6 +2055,7 @@ export async function registerRoutes(
 
       // ── Start log ─────────────────────────────────────────────────────────
       console.log("[NetworkCrawl] request received", {
+        mode: isTradeMode ? "trade" : "adp",
         seedUsername: body.seedUsername.trim(),
         seasons: rawSeasons,
         maxDepth,
@@ -2064,7 +2075,12 @@ export async function registerRoutes(
         seasons: rawSeasons,
         maxDepth,
         draftCategories: rawCats,
-        refreshSnapshots: body.refreshSnapshots !== false,
+        // Trade mode: ingest trades, not drafts, and skip the ADP snapshot
+        // refresh (trades don't feed the ADP Explorer).
+        ingestDrafts: !isTradeMode,
+        ingestTrades: isTradeMode,
+        tradeSinceMs: isTradeMode && typeof body.tradeSinceMs === "number" ? body.tradeSinceMs : undefined,
+        refreshSnapshots: isTradeMode ? false : body.refreshSnapshots !== false,
         maxUsers: typeof body.maxUsers === "number" ? body.maxUsers : undefined,
         maxLeagues: typeof body.maxLeagues === "number" ? body.maxLeagues : undefined,
         maxDrafts: typeof body.maxDrafts === "number" ? body.maxDrafts : undefined,

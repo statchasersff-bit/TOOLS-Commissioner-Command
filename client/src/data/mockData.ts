@@ -569,9 +569,11 @@ export const NAV_CONFIG: MainTabConfig[] = [
     id: "league-market",
     label: "Research",
     subTabs: [
-      { id: "analysis", label: "Resources" },
-      { id: "market-value", label: "Market Value" },
+      { id: "position-stats", label: "Advanced Stats" },
       { id: "value-finder", label: "Value Finder" },
+      { id: "user-search", label: "User Search" },
+      { id: "market-value", label: "Market Value" },
+      { id: "analysis", label: "Resources" },
     ],
   },
   {

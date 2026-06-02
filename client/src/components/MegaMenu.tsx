@@ -78,10 +78,11 @@ const MEGA_DATA: Record<string, MegaSection[]> = {
     {
       title: "Research",
       items: [
-        { subId: "analysis",        label: "Resources",       description: "League trends & positional insights",           icon: LineChart  },
-        { subId: "market-value",    label: "Market Value",    description: "Player market values across formats",           icon: TrendingUp },
-        { subId: "value-finder", label: "Value Finder", description: "Buy-low & sell-high vs production, usage, age, trends, model value & roster fit", icon: Scale },
         { subId: "position-stats",  label: "Advanced Stats",  description: "Season QB/RB/WR/TE usage, efficiency, overview", icon: BarChart3  },
+        { subId: "value-finder", label: "Value Finder", description: "Buy-low & sell-high vs production, usage, age, trends, model value & roster fit", icon: Scale },
+        { subId: "user-search",     label: "User Search",     description: "Find any Sleeper user & open their profile",     icon: Search     },
+        { subId: "market-value",    label: "Market Value",    description: "Player market values across formats",           icon: TrendingUp },
+        { subId: "analysis",        label: "Resources",       description: "League trends & positional insights",           icon: LineChart  },
       ],
     },
   ],

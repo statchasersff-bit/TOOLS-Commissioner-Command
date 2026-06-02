@@ -7,7 +7,10 @@
 // raw inputs, exactly as it did for the bundled sample pool.
 
 import { useQuery } from "@tanstack/react-query";
-import { loadUsageCompositeScores } from "@/lib/playerAdvancedStats";
+import {
+  loadPositionCompositeScores,
+  type PositionCompositeScore,
+} from "./positionComposites";
 import type {
   ValueFinderPlayer,
   SeasonFilter,
@@ -60,15 +63,16 @@ export function useValueFinderPlayers(
 }
 
 /**
- * Usage composite scores (0–100, by Sleeper playerId) for the selected season,
- * computed exactly as the Advanced Stats tab does. The Value Finder overlays
- * these onto the pool so the Dyn x Usage score matches Advanced Stats. The data
- * is bundled (lazy-imported JSON), so it never changes — cache it indefinitely.
+ * Volume + Efficiency composite scores (0–100, by Sleeper playerId) for the
+ * selected season, computed by the SAME engines and SAME data as the Position
+ * Stats table. The Value Finder overlays these so its Usage (= Volume composite)
+ * and Efficiency charts match that table exactly. Bundled (lazy-imported JSON),
+ * so it never changes — cache indefinitely.
  */
-export function useUsageCompositeScores(season: SeasonFilter) {
-  return useQuery<Record<string, number>>({
-    queryKey: ["value-finder-usage-composites", season],
-    queryFn: () => loadUsageCompositeScores(season),
+export function usePositionCompositeScores(season: SeasonFilter) {
+  return useQuery<Record<string, PositionCompositeScore>>({
+    queryKey: ["value-finder-position-composites", season],
+    queryFn: () => loadPositionCompositeScores(season),
     staleTime: Infinity,
     gcTime: Infinity,
   });

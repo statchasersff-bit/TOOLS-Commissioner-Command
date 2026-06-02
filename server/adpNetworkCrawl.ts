@@ -33,6 +33,11 @@ import {
   ingestDraftById,
   refreshDefaultSnapshots,
 } from "./adp";
+import {
+  ingestLeagueTrades,
+  deriveFormat,
+  deriveScoringFormat,
+} from "./tradeCrawler";
 
 // Shared, capped Postgres pool (see server/db.ts).
 
@@ -111,6 +116,17 @@ export interface NetworkCrawlOpts {
   maxLeagues?: number;
   maxDrafts?: number;
   maxRequests?: number;
+  /**
+   * What to ingest from each discovered league. The classic ADP crawl ingests
+   * drafts only (the defaults). "Trade mode" flips these to ingest trades into
+   * the trade DB instead, reusing the exact same depth-2 discovery BFS.
+   * Defaults: ingestDrafts=true, ingestTrades=false.
+   */
+  ingestDrafts?: boolean;
+  ingestTrades?: boolean;
+  /** Trade-mode only: when set, trades older than this epoch-ms are skipped.
+   *  Omitted = ingest all trades found in each newly-discovered league. */
+  tradeSinceMs?: number;
 }
 
 export interface NetworkCrawlResult {
@@ -130,6 +146,13 @@ export interface NetworkCrawlResult {
   categoryFilteredSkipped: number;
   /** Drafts dropped by ADP quality gates (too few rounds/teams, IDP, etc.). */
   excludedSkipped: number;
+  /** Trade-mode counters (0 in a drafts-only crawl). */
+  tradesFound: number;
+  tradesIngested: number;
+  /** Leagues whose trades were ingested fresh this run (not already indexed). */
+  tradeLeaguesScanned: number;
+  /** Leagues skipped because their trades were already indexed in a prior run. */
+  tradeLeaguesAlreadyIndexed: number;
   errors: string[];
   capsHit: string[];
   requestCount: number;
@@ -160,6 +183,9 @@ export interface CrawlLiveState extends NetworkCrawlResult {
   // Inputs echoed for UI display
   seedUsername: string;
   draftCategories: DraftCategory[];
+  /** True when this run is a trade scan (ingests trades, not drafts). Lets the
+   *  admin panel pick which counters to render. */
+  ingestTrades: boolean;
 
   // Phase/activity
   phase: "seed" | "depth" | "snapshots" | "done";
@@ -174,9 +200,15 @@ interface SleeperLeagueListItem {
   league_id: string;
   name?: string | null;
   status?: string | null;
+  season?: string | null;
   previous_league_id?: string | null;
   total_rosters?: number | null;
-  settings?: { type?: number; [k: string]: unknown };
+  // The /user/{id}/leagues endpoint returns the full league object, so these
+  // are available without an extra /league/{id} fetch. Used by trade mode to
+  // derive the league format/scoring for ingestLeagueTrades.
+  roster_positions?: string[] | null;
+  scoring_settings?: { rec?: number; [k: string]: unknown } | null;
+  settings?: { type?: number; best_ball?: number; [k: string]: unknown };
 }
 
 interface SleeperLeagueUser {
@@ -252,13 +284,18 @@ function estimateDraftCategory(d: SleeperDraftListItem): DraftCategory {
 
 export type CrawlLogStatus = "running" | "completed" | "failed" | "partial" | "cancelled";
 
-async function openCrawlLog(seedUsername: string, seasons: string[], maxDepth: number): Promise<number | null> {
+async function openCrawlLog(
+  seedUsername: string,
+  seasons: string[],
+  maxDepth: number,
+  jobType: string = "network-crawl",
+): Promise<number | null> {
   try {
     const message = `seed=${seedUsername} depth=${maxDepth} seasons=${seasons.join(",")} (started)`;
     const inserted = await db
       .insert(adpCrawlLog)
       .values({
-        jobType: "network-crawl",
+        jobType,
         status: "running",
         message,
         draftsFound: 0,
@@ -285,6 +322,7 @@ async function finalizeCrawlLog(
       `seasons=${result.seasons.join(",")} ` +
       `users=${result.usersProcessed} leagues=${result.leaguesProcessed} ` +
       `dupSkipped=${result.duplicatesSkipped} ` +
+      `trades=${result.tradesIngested}/${result.tradesFound} tradeLeagues=${result.tradeLeaguesScanned} ` +
       `caps=${result.capsHit.join("|") || "none"} ` +
       `errors=${result.errors.length} ` +
       `reqs=${result.requestCount}` +
@@ -342,6 +380,7 @@ function makeIdleState(): CrawlLiveState {
     seasons: [],
     maxDepth: 0,
     draftCategories: [],
+    ingestTrades: false,
     seedUser: null,
     usersDiscoveredByDepth: {},
     usersProcessed: 0,
@@ -353,6 +392,10 @@ function makeIdleState(): CrawlLiveState {
     notCompleteSkipped: 0,
     categoryFilteredSkipped: 0,
     excludedSkipped: 0,
+    tradesFound: 0,
+    tradesIngested: 0,
+    tradeLeaguesScanned: 0,
+    tradeLeaguesAlreadyIndexed: 0,
     errors: [],
     capsHit: [],
     requestCount: 0,
@@ -379,6 +422,7 @@ function makeRunningState(opts: NetworkCrawlOpts): CrawlLiveState {
     seasons,
     maxDepth,
     draftCategories: (opts.draftCategories ?? []) as DraftCategory[],
+    ingestTrades: opts.ingestTrades === true,
     seedUser: null,
     usersDiscoveredByDepth: {},
     usersProcessed: 0,
@@ -390,6 +434,10 @@ function makeRunningState(opts: NetworkCrawlOpts): CrawlLiveState {
     notCompleteSkipped: 0,
     categoryFilteredSkipped: 0,
     excludedSkipped: 0,
+    tradesFound: 0,
+    tradesIngested: 0,
+    tradeLeaguesScanned: 0,
+    tradeLeaguesAlreadyIndexed: 0,
     errors: [],
     capsHit: [],
     requestCount: 0,
@@ -477,16 +525,20 @@ export function startCrawlInBackground(opts: NetworkCrawlOpts): CrawlLiveState {
     // Open the audit row IMMEDIATELY with status="running" so a process
     // kill before the work completes still leaves a trail. The recovery
     // sweep at startup will flip stale running rows to "failed".
-    state.logId = await openCrawlLog(opts.seedUsername, state.seasons, state.maxDepth);
+    state.logId = await openCrawlLog(
+      opts.seedUsername, state.seasons, state.maxDepth,
+      opts.ingestTrades === true ? "network-trade-crawl" : "network-crawl",
+    );
 
     try {
       await runNetworkCrawl(opts, state);
       const wasCancelled = !!state.cancelRequested;
-      // "partial" when we stored some drafts but also hit errors; "completed"
-      // is reserved for clean finishes (no errors).
+      // "partial" when we stored some drafts/trades but also hit errors;
+      // "completed" is reserved for clean finishes (no errors).
+      const ingestedSomething = state.draftsIngested > 0 || state.tradesIngested > 0;
       const finalStatus: CrawlLogStatus = wasCancelled
         ? "cancelled"
-        : state.errors.length > 0 && state.draftsIngested > 0
+        : state.errors.length > 0 && ingestedSomething
           ? "partial"
           : state.errors.length > 0
             ? "failed"
@@ -508,9 +560,10 @@ export function startCrawlInBackground(opts: NetworkCrawlOpts): CrawlLiveState {
       await finalizeCrawlLog(state.logId, state, finalStatus);
     } catch (err: any) {
       console.error("[NetworkCrawl] background run failed:", err);
-      // Any drafts we successfully ingested before the throw are real — mark
-      // the scan partial when there's work to recover, otherwise failed.
-      const finalStatus: CrawlLogStatus = state.draftsIngested > 0 ? "partial" : "failed";
+      // Any drafts/trades we successfully ingested before the throw are real —
+      // mark the scan partial when there's work to recover, otherwise failed.
+      const finalStatus: CrawlLogStatus =
+        state.draftsIngested > 0 || state.tradesIngested > 0 ? "partial" : "failed";
       state.status = finalStatus === "partial" ? "partial" : "failed";
       state.completedAt = Date.now();
       state.durationMs = state.completedAt - (state.startedAt ?? state.completedAt);
@@ -552,6 +605,11 @@ export async function runNetworkCrawl(
     ? new Set<DraftCategory>(opts.draftCategories)
     : null;
 
+  // What to ingest per league. Defaults preserve the classic ADP crawl
+  // (drafts only). Trade mode flips these to ingest trades instead.
+  const ingestDrafts = opts.ingestDrafts !== false;
+  const ingestTrades = opts.ingestTrades === true;
+
   const caps = {
     maxUsers: opts.maxUsers ?? DEFAULT_CAPS.maxUsers,
     maxLeagues: opts.maxLeagues ?? DEFAULT_CAPS.maxLeagues,
@@ -570,6 +628,7 @@ export async function runNetworkCrawl(
     completedAt: null,
     seedUsername: opts.seedUsername,
     draftCategories: (opts.draftCategories ?? []) as DraftCategory[],
+    ingestTrades: opts.ingestTrades === true,
     seedUser: null,
     seasons,
     maxDepth,
@@ -583,6 +642,10 @@ export async function runNetworkCrawl(
     notCompleteSkipped: 0,
     categoryFilteredSkipped: 0,
     excludedSkipped: 0,
+    tradesFound: 0,
+    tradesIngested: 0,
+    tradeLeaguesScanned: 0,
+    tradeLeaguesAlreadyIndexed: 0,
     errors: [],
     capsHit: [],
     requestCount: 0,
@@ -599,6 +662,7 @@ export async function runNetworkCrawl(
   result.seasons = seasons;
   result.maxDepth = maxDepth;
   result.draftCategories = (opts.draftCategories ?? []) as DraftCategory[];
+  result.ingestTrades = ingestTrades;
 
   const processedUsers = new Set<string>();
   const processedLeagues = new Set<string>();
@@ -722,6 +786,7 @@ export async function runNetworkCrawl(
           result.currentActivity = `Depth ${depth}: league ${(lg.name ?? lg.league_id).slice(0, 40)} (${season})`;
 
           // ── 1) Ingest drafts for this league ─────────────────────────────
+          if (ingestDrafts) {
           if (requestCapHit() || cancelHit()) { depthCapped = true; break; }
           result.requestCount++;
           const draftList = await fetchLeagueDrafts(lg.league_id);
@@ -794,6 +859,40 @@ export async function runNetworkCrawl(
               if (requestCapHit() || cancelHit()) { depthCapped = true; break; }
             }
           }
+          } // end if (ingestDrafts)
+
+          // ── 1b) Ingest trades for this league (trade mode) ───────────────
+          // Reuses the same depth-2 league discovery; instead of drafts we
+          // pull the league's trade transactions into the trade DB via
+          // ingestLeagueTrades (the same function the unified crawler uses).
+          // Already-indexed leagues are skipped cheaply by that function.
+          if (ingestTrades) {
+            if (requestCapHit() || cancelHit()) { depthCapped = true; break; }
+            // ingestLeagueTrades fetches transactions + draft slot info
+            // internally (~2 requests for a fresh league).
+            result.requestCount += 2;
+            try {
+              const tradeRes = await ingestLeagueTrades({
+                leagueId: lg.league_id,
+                season: season,
+                teamCount: lg.total_rosters ?? 12,
+                format: deriveFormat(lg.roster_positions ?? []),
+                scoringFormat: deriveScoringFormat(lg.scoring_settings ?? {}),
+                bestBall: lg.settings?.best_ball === 1,
+                sinceMs: opts.tradeSinceMs,
+              });
+              if (tradeRes.alreadyIndexed) {
+                result.tradeLeaguesAlreadyIndexed++;
+              } else {
+                result.tradeLeaguesScanned++;
+                result.tradesFound += tradeRes.inserted + tradeRes.skipped;
+                result.tradesIngested += tradeRes.inserted;
+              }
+            } catch (err: any) {
+              result.errors.push(`trades ${lg.league_id} threw: ${err?.message ?? "unknown"}`);
+            }
+            if (requestCapHit() || cancelHit()) { depthCapped = true; break; }
+          }
 
           // ── 2) Discover next-depth users (only when we have room) ────────
           if (depth < maxDepth && !depthCapped) {
@@ -849,7 +948,9 @@ export async function runNetworkCrawl(
     `drafts=${result.draftsFound} ingested=${result.draftsIngested} ` +
     `picks=${result.picksIngested} dupSkipped=${result.duplicatesSkipped} ` +
     `notComplete=${result.notCompleteSkipped} catFiltered=${result.categoryFilteredSkipped} ` +
-    `excluded=${result.excludedSkipped} errors=${result.errors.length} ` +
+    `excluded=${result.excludedSkipped} ` +
+    `trades=${result.tradesIngested}/${result.tradesFound} tradeLeagues=${result.tradeLeaguesScanned} ` +
+    `errors=${result.errors.length} ` +
     `caps=${result.capsHit.join("|") || "none"} reqs=${result.requestCount}`
   );
   // When called from startCrawlInBackground the wrapper opens + finalizes
@@ -857,9 +958,13 @@ export async function runNetworkCrawl(
   // Standalone callers still get one terminal row written here so scripts
   // and tests don't lose their audit trail.
   if (!externalState) {
-    const logId = await openCrawlLog(opts.seedUsername, result.seasons, result.maxDepth);
+    const logId = await openCrawlLog(
+      opts.seedUsername, result.seasons, result.maxDepth,
+      ingestTrades ? "network-trade-crawl" : "network-crawl",
+    );
+    const ingestedSomething = result.draftsIngested > 0 || result.tradesIngested > 0;
     const finalStatus: CrawlLogStatus =
-      result.errors.length > 0 && result.draftsIngested > 0 ? "partial"
+      result.errors.length > 0 && ingestedSomething ? "partial"
       : result.errors.length > 0 ? "failed"
       : "completed";
     await finalizeCrawlLog(logId, result, finalStatus);

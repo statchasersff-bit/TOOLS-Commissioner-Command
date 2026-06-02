@@ -5,7 +5,10 @@ import type {
   ValueFinderFilters as Filters,
   AgeRange,
 } from "@/lib/value-finder/types";
-import { useValueFinderPlayers, useUsageCompositeScores } from "@/lib/value-finder/loadPlayers";
+import {
+  useValueFinderPlayers,
+  usePositionCompositeScores,
+} from "@/lib/value-finder/loadPlayers";
 import {
   enrichPlayers,
   filterPlayers,
@@ -20,12 +23,14 @@ import { ValueFinderFilters } from "@/components/value-finder/ValueFinderFilters
 import { HowToReadCard } from "@/components/value-finder/HowToReadCard";
 import { ProductionBuysChart } from "@/components/value-finder/ProductionBuysChart";
 import { UsageBuysChart } from "@/components/value-finder/UsageBuysChart";
+import { EfficiencyBuysChart } from "@/components/value-finder/EfficiencyBuysChart";
 import { TrendRadarChart } from "@/components/value-finder/TrendRadarChart";
 import { MarketInsights, type MarketFormat } from "@/pages/tabs/MarketInefficiencies";
 
 type TabId =
   | "production-buys"
   | "usage-buys"
+  | "efficiency-buys"
   | "trend-radar"
   | "value-vs-production"
   | "age-curve";
@@ -33,8 +38,9 @@ type TabId =
 const TABS: Array<{ id: TabId; label: string }> = [
   { id: "production-buys", label: "PPG" },
   { id: "usage-buys", label: "Usage" },
+  { id: "efficiency-buys", label: "Efficiency" },
   { id: "trend-radar", label: "Trend" },
-  { id: "value-vs-production", label: "Production" },
+  { id: "value-vs-production", label: "Value" },
   { id: "age-curve", label: "Age" },
 ];
 
@@ -124,9 +130,11 @@ export function ValueFinder() {
   // request fails or returns nothing we surface that explicitly rather than
   // showing fabricated players.
   const playersQuery = useValueFinderPlayers(filters.season, filters.format, filters.scoring);
-  // Usage scores come from the Advanced Stats composites (by Sleeper playerId) so
-  // the Dyn x Usage chart matches the Advanced Stats tab exactly.
-  const usageQuery = useUsageCompositeScores(filters.season);
+  // Usage + Efficiency scores come from the Position Stats table's composite
+  // engines (by Sleeper playerId): the exact same 0–100 Volume and Efficiency
+  // grades that table shows. The Usage chart plots the Volume composite; the
+  // Efficiency chart plots the Efficiency composite.
+  const compositeQuery = usePositionCompositeScores(filters.season);
 
   const loading = playersQuery.isLoading;
 
@@ -136,21 +144,29 @@ export function ValueFinder() {
   const { enriched, enrichError } = useMemo(() => {
     const pool = playersQuery.data ?? [];
     if (pool.length === 0) return { enriched: [] as ValueFinderPlayer[], enrichError: false };
-    // Overlay the Advanced Stats usage composite (0–100 → 0–1) by Sleeper id.
-    // Players without a qualified composite get no usage score, matching the
-    // tab's "not enough data" gating — and we also clear the raw fields that
-    // getUsageScore would otherwise blend into a fallback, so an unqualified
-    // player can't surface a usage number that disagrees with the tab. (Trend
-    // fields are left untouched; they drive separate signals.) Until the
-    // (bundled) composites resolve, use the pool as-is.
-    const usageMap = usageQuery.data;
-    const pool2 = usageMap
+    // Overlay the Position Stats composites (Volume → usageScore, Efficiency →
+    // efficiencyScore; 0–100 → 0–1) by Sleeper id, so both charts show the exact
+    // same grades that table does. A player present in the composite data gets
+    // those scores; a player absent from it gets none — and for usage we also
+    // clear the raw fields that getUsageScore would otherwise blend into a
+    // fallback, so an off-data player can't surface a usage number that disagrees
+    // with the table. (Trend fields are left untouched; they drive separate
+    // signals.) Until the (bundled) composites resolve, use the pool as-is.
+    const compositeMap = compositeQuery.data;
+    const pool2 = compositeMap
       ? pool.map((p) => {
-          const u = usageMap[p.playerId];
-          if (u != null) return { ...p, usageScore: u / 100 };
+          const c = compositeMap[p.playerId];
+          if (c != null) {
+            return {
+              ...p,
+              usageScore: c.volumeScore / 100,
+              efficiencyScore: c.efficiencyScore / 100,
+            };
+          }
           return {
             ...p,
             usageScore: undefined,
+            efficiencyScore: undefined,
             snapShare: undefined,
             redZoneTouches: undefined,
             redZoneTargets: undefined,
@@ -165,7 +181,7 @@ export function ValueFinder() {
       console.error("[ValueFinder] enrichment failed:", e);
       return { enriched: [] as ValueFinderPlayer[], enrichError: true };
     }
-  }, [playersQuery.data, usageQuery.data, filters.valueSource]);
+  }, [playersQuery.data, compositeQuery.data, filters.valueSource]);
 
   const filtered = useMemo(() => filterPlayers(enriched, filters), [enriched, filters]);
 
@@ -243,6 +259,7 @@ export function ValueFinder() {
         <>
           {tab === "production-buys" && <ProductionBuysTab players={filtered} />}
           {tab === "usage-buys" && <UsageBuysTab players={filtered} />}
+          {tab === "efficiency-buys" && <EfficiencyBuysTab players={filtered} />}
           {tab === "trend-radar" && (
             <TrendRadarTab
               players={filtered}
@@ -276,9 +293,9 @@ function UsageBuysTab({ players }: { players: ValueFinderPlayer[] }) {
   return (
     <div className="space-y-3">
       <HowToReadCard defaultOpen>
-        This compares usage / role strength against market value. Strong usage at a low price may signal
-        a buy window before production catches up — but a strong role doesn't mean "buy for everyone."
-        The Longevity and Best Fit columns separate long-term holds from short-term rentals.
+        This compares StatChasers Usage Score against dynasty market value. Strong usage at a low price
+        may signal a buy window before production catches up, but a strong role doesn't mean "buy for
+        everyone" as player age is important to consider as well.
       </HowToReadCard>
       <Panel>
         <UsageBuysChart players={players} />
@@ -287,7 +304,23 @@ function UsageBuysTab({ players }: { players: ValueFinderPlayer[] }) {
   );
 }
 
-// ── Tab 4: Trend Radar ──────────────────────────────────────────────────────
+// ── Tab 4: Efficiency Buys ──────────────────────────────────────────────────
+function EfficiencyBuysTab({ players }: { players: ValueFinderPlayer[] }) {
+  return (
+    <div className="space-y-3">
+      <HowToReadCard defaultOpen>
+        This compares StatChasers Efficiency Score against dynasty market value. Strong efficiency at a
+        low price may signal a buy window — the player is doing more with his opportunities than the
+        market has priced in — but efficiency on light usage can be noisy, so weigh role and age too.
+      </HowToReadCard>
+      <Panel>
+        <EfficiencyBuysChart players={players} />
+      </Panel>
+    </div>
+  );
+}
+
+// ── Tab 5: Trend Radar ──────────────────────────────────────────────────────
 // The trend window lives here (not in the shared filter bar) since it only
 // applies to this view.
 const TREND_WINDOWS: Array<Filters["trendWindow"]> = ["7D", "30D", "90D"];

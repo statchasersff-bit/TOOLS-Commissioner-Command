@@ -400,11 +400,11 @@ export default function ManagerPage({
             >
               <TabsTrigger value="current" className="text-[11px] flex items-center gap-1.5">
                 <Compass className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">League</span>
+                <span className="hidden sm:inline">Single League View</span>
               </TabsTrigger>
               <TabsTrigger value="cross" className="text-[11px] flex items-center gap-1.5">
                 <Users className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Cross-League</span>
+                <span className="hidden sm:inline">Multi-League View</span>
               </TabsTrigger>
             </TabsList>
 

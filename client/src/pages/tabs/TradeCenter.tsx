@@ -1506,50 +1506,80 @@ function PickAdder({ onAdd, side }: PickAdderProps) {
 // ── Quick Trade Calculator (no login / no league) ─────────────────────────────
 // One side of the quick calculator: a value total, asset chips, a searchable
 // player dropdown, and a compact draft-pick adder.
-function QuickCalcSide({ label, assets, total, players, onAddPlayer, onAddPick, onRemove }: {
+function QuickCalcSide({ label, assets, total, players, onAddPlayer, onAddPick }: {
   label: string;
   assets: TradeAsset[];
   total: number;
   players: RankedPlayer[];
   onAddPlayer: (rp: RankedPlayer) => void;
   onAddPick: (year: number, round: number) => void;
-  onRemove: (id: string) => void;
 }) {
   const [search, setSearch] = useState("");
+  const [searchFocused, setSearchFocused] = useState(false);
   const [pickYear, setPickYear] = useState("2026");
   const [pickRound, setPickRound] = useState("1");
 
+  const chosenIds = useMemo(
+    () => new Set(assets.filter((a) => a.type === "player" && a.player).map((a) => a.player!.sleeperId || a.player!.id)),
+    [assets],
+  );
+
+  // With a query: name matches. Without one: the highest-value players, so the
+  // dropdown is useful the instant the box is focused (before anything typed).
   const results = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return [] as RankedPlayer[];
-    const chosen = new Set(assets.filter((a) => a.type === "player" && a.player).map((a) => a.player!.sleeperId || a.player!.id));
-    return players.filter((p) => p.name.toLowerCase().includes(q) && !chosen.has(p.sleeperId)).slice(0, 8);
-  }, [players, search, assets]);
+    const pool = q
+      ? players.filter((p) => p.name.toLowerCase().includes(q))
+      : [...players].sort((a, b) => b.value - a.value);
+    return pool.filter((p) => !chosenIds.has(p.sleeperId)).slice(0, 8);
+  }, [players, search, chosenIds]);
+
+  // Top 50 players by dynasty value (highest → lowest), already-added removed —
+  // rendered as a horizontally sliding quick-add row under the header.
+  const topPlayers = useMemo(
+    () => [...players].sort((a, b) => b.value - a.value).filter((p) => !chosenIds.has(p.sleeperId)).slice(0, 50),
+    [players, chosenIds],
+  );
 
   return (
-    <div className="rounded-xl border border-border bg-muted/10 p-3">
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-sm font-bold text-foreground">{label}</span>
-        <span className="text-[12px] font-black tabular-nums text-[#d4af37]">{Math.round(total).toLocaleString()}</span>
+    <div className="flex flex-col rounded-xl border border-border/30 bg-muted/5 p-3 md:p-3.5">
+      {/* Header — mirrors the My League side column (avatar + "sends" + underline). */}
+      <div className="mb-3">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-full bg-muted/40 border border-border/40 flex items-center justify-center flex-shrink-0">
+            <Scale className="w-4 h-4 text-muted-foreground" />
+          </div>
+          <h3 className="text-sm font-bold truncate">{label} sends</h3>
+          <span className="ml-auto text-[12px] font-black tabular-nums text-[#d4af37]">{Math.round(total).toLocaleString()}</span>
+        </div>
+        <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
       </div>
 
-      {/* Added assets */}
-      <div className="space-y-1 mb-2 min-h-[2rem]">
-        {assets.length === 0 && <p className="text-[11px] text-muted-foreground italic px-1 py-1">No assets yet</p>}
-        {assets.map((a) => (
-          <div key={a.id} className="flex items-center gap-2 rounded-lg bg-card border border-border/60 px-2 py-1">
-            {a.type === "player" && a.player ? (
-              <PlayerAvatar id={a.player.sleeperId || a.player.id} name={a.player.name} pos={a.player.pos} team={a.player.team ?? ""} size="xs" />
-            ) : (
-              <span className="text-[12px] font-semibold text-foreground">{a.label}</span>
-            )}
-            <span className="ml-auto text-[11px] font-bold tabular-nums text-muted-foreground">{Math.round(a.value).toLocaleString()}</span>
-            <button onClick={() => onRemove(a.id)} className="text-muted-foreground/50 hover:text-red-400 transition-colors" data-testid={`quick-remove-${label}`}>
-              <X className="w-3.5 h-3.5" />
-            </button>
+      {/* Sliding quick-add row — top 50 by dynasty value, highest → lowest. */}
+      {topPlayers.length > 0 && (
+        <div className="mb-3">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70 mb-1.5">Top values · tap to add</p>
+          <div className="flex gap-2 overflow-x-auto pb-1.5 -mx-0.5 px-0.5">
+            {topPlayers.map((p) => (
+              <button
+                key={p.sleeperId}
+                onClick={() => onAddPlayer(p)}
+                className="group flex-shrink-0 flex items-center gap-2 rounded-full border border-border/50 bg-background/50 hover:border-[#d4af37]/50 hover:bg-[#d4af37]/5 pl-1 pr-3 py-1 transition-colors"
+                data-testid={`quick-top-${label}-${p.sleeperId}`}
+              >
+                <PlayerAvatar id={p.sleeperId} name={p.name} pos={p.pos} team={p.team} size="xs" compact />
+                <div className="flex flex-col items-start leading-tight">
+                  <span className="text-[11px] font-semibold text-foreground whitespace-nowrap">{p.name}</span>
+                  <span className="text-[9px] text-muted-foreground/80 tabular-nums whitespace-nowrap">
+                    {p.pos}{p.team ? " · " + p.team : ""}
+                    <span className="ml-1 text-[#d4af37]/90">{Math.round(p.value).toLocaleString()}</span>
+                  </span>
+                </div>
+              </button>
+            ))}
           </div>
-        ))}
-      </div>
+        </div>
+      )}
 
       {/* Player search dropdown */}
       <div className="relative">
@@ -1558,16 +1588,19 @@ function QuickCalcSide({ label, assets, total, players, onAddPlayer, onAddPick, 
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
+            onFocus={() => setSearchFocused(true)}
+            onBlur={() => setTimeout(() => setSearchFocused(false), 120)}
             placeholder="Add a player…"
             className="flex-1 bg-transparent py-1.5 text-[12px] focus:outline-none"
             data-testid={`quick-search-${label}`}
           />
         </div>
-        {results.length > 0 && (
+        {searchFocused && results.length > 0 && (
           <div className="absolute z-20 left-0 right-0 mt-1 rounded-lg border border-border bg-popover shadow-lg max-h-56 overflow-y-auto">
             {results.map((p) => (
               <button
                 key={p.sleeperId}
+                onMouseDown={(e) => e.preventDefault()}
                 onClick={() => { onAddPlayer(p); setSearch(""); }}
                 className="w-full flex items-center gap-2 px-2 py-1.5 hover:bg-muted/50 text-left transition-colors"
                 data-testid={`quick-result-${p.sleeperId}`}
@@ -1632,8 +1665,11 @@ function QuickTradeCalculator() {
       label: `${year} Mid ${round}${round === 1 ? "st" : round === 2 ? "nd" : round === 3 ? "rd" : "th"}`,
     });
 
-  const valA = calculateAdjustedTotal(sideA);
-  const valB = calculateAdjustedTotal(sideB);
+  // Match the My League calculator's value math exactly: diminishing-returns
+  // adjustment (calculateAdjustedTotal) followed by the overpay penalty, so a
+  // package of many smaller pieces is taxed the same way in both calculators.
+  const valA = applyOverpayPenaltyTo(sideA.map((a) => a.value), calculateAdjustedTotal(sideA), calculateRawTotal(sideA));
+  const valB = applyOverpayPenaltyTo(sideB.map((a) => a.value), calculateAdjustedTotal(sideB), calculateRawTotal(sideB));
   const diff = Math.abs(valA - valB);
   const diffPct = (diff / Math.max(valA, valB, 1)) * 100;
   const fair = diffPct <= 6;
@@ -1644,7 +1680,7 @@ function QuickTradeCalculator() {
   // but league-agnostic (no teams, no position impact, no Sleeper send).
   const total = valA + valB;
   const fillPctA = total > 0 ? Math.max(5, Math.min(95, (valA / total) * 100)) : 50;
-  const headline = fair ? "Even Trade" : `Side ${favored} Favored`;
+  const headline = fair ? "Dead Even Trade" : `Side ${favored} Wins The Trade`;
   const verdictLabel = fair ? "Fair Deal" : diffPct <= 20 ? `Side ${favored} · Slight Edge` : `Side ${favored} · Lopsided`;
   const badgeStyle = fair
     ? "bg-[#d4af37]/10 text-amber-700 dark:text-[#e8c84a] border-[#d4af37]/30"
@@ -1687,95 +1723,89 @@ function QuickTradeCalculator() {
   );
 
   return (
-    <div className="space-y-4">
-      <Card className="p-4 sm:p-5">
-        {/* Header — matches the My League verdict (icon + gold underline). */}
-        <div className="flex items-start justify-between mb-3">
+    <div className="space-y-4 md:space-y-5">
+      {/* ── Unified Quick Trade Builder card — mirrors the My League layout:
+         header → verdict panel → two builder columns. League-agnostic, so no
+         trade partner, no Position Impact, no rosters — players come from the
+         searchable dynasty list instead.                                    */}
+      <Card className="p-3.5 md:p-6" data-testid="card-quick-trade-builder">
+
+        {/* ── Header: title + subtitle + gold underline; Clear on the right ── */}
+        <div className="flex items-start justify-between gap-3">
           <div>
-            <h3 className="text-sm font-bold flex items-center gap-2">
+            <h2 className="text-base md:text-lg font-bold flex items-center gap-2">
               <ArrowRightLeft className="w-4 h-4 text-[#0b3a7a] dark:text-blue-400" />
-              Trade Verdict
-            </h3>
-            <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1" />
+              Quick Trade Calculator
+            </h2>
+            <p className="text-[12px] text-muted-foreground mt-0.5">Search any two packages to evaluate the trade — no login or league needed.</p>
+            <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
           </div>
           {(sideA.length > 0 || sideB.length > 0) && (
-            <button onClick={() => { setSideA([]); setSideB([]); }} className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors" data-testid="quick-calc-clear">
+            <button onClick={() => { setSideA([]); setSideB([]); }} className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors flex-shrink-0" data-testid="quick-calc-clear">
               <RotateCcw className="w-3 h-3" /> Clear
             </button>
           )}
         </div>
 
-        {/* Verdict headline + badge + compact value bar. */}
-        {bothSides ? (
-          <div className="space-y-2.5 max-w-md mx-auto">
-            <div className="space-y-1.5 text-center">
-              <p className="text-[15px] font-extrabold tracking-tight text-foreground uppercase leading-tight" data-testid="quick-calc-verdict">
-                {headline}
-              </p>
-              <Badge className={`text-[11px] px-2.5 py-0.5 font-bold border ${badgeStyle}`} data-testid="quick-calc-verdict-badge">
-                {verdictLabel}
-              </Badge>
+        {/* ── Verdict panel (directly under the header) ── */}
+        <div className="mt-4">
+          {bothSides ? (
+            <div className="space-y-2.5">
+              <div className="space-y-1.5 text-center">
+                <p className="text-[15px] font-extrabold tracking-tight text-foreground uppercase leading-tight" data-testid="quick-calc-verdict">
+                  {headline}
+                </p>
+                <Badge className={`text-[11px] px-2.5 py-0.5 font-bold border ${badgeStyle}`} data-testid="quick-calc-verdict-badge">
+                  {verdictLabel}
+                </Badge>
+              </div>
+              <div className="space-y-1">
+                <div className="flex items-center justify-between text-[9px] font-bold text-muted-foreground uppercase tracking-wider">
+                  <span>Side A</span>
+                  <span className="text-muted-foreground/40">Fair</span>
+                  <span>Side B</span>
+                </div>
+                <div className="relative h-3 rounded-full overflow-hidden" style={{ background: "#12284a" }}>
+                  <div
+                    className="absolute inset-y-0 left-0 rounded-l-full transition-all duration-700"
+                    style={{ width: `${fillPctA}%`, background: barColor }}
+                  />
+                  <div className="absolute top-0 bottom-0 w-0.5 bg-white/30 z-10" style={{ left: "50%" }} />
+                </div>
+                <div className="flex justify-between text-[10px] tabular-nums text-muted-foreground/80">
+                  <span>{Math.round(valA).toLocaleString()}</span>
+                  <span>{Math.round(valB).toLocaleString()}</span>
+                </div>
+              </div>
             </div>
-            <div className="space-y-1">
-              <div className="flex items-center justify-between text-[9px] font-bold text-muted-foreground uppercase tracking-wider">
-                <span>Side A</span>
-                <span className="text-muted-foreground/40">Fair</span>
-                <span>Side B</span>
-              </div>
-              <div className="relative h-3 rounded-full overflow-hidden" style={{ background: "#12284a" }}>
-                <div
-                  className="absolute inset-y-0 left-0 rounded-l-full transition-all duration-700"
-                  style={{ width: `${fillPctA}%`, background: barColor }}
-                />
-                <div className="absolute top-0 bottom-0 w-0.5 bg-white/30 z-10" style={{ left: "50%" }} />
-              </div>
-              <div className="flex justify-between text-[10px] tabular-nums text-muted-foreground/80">
-                <span>{Math.round(valA).toLocaleString()}</span>
-                <span>{Math.round(valB).toLocaleString()}</span>
-              </div>
+          ) : (
+            <div className="rounded-lg border border-dashed border-border/50 px-3 py-3">
+              <p className="text-xs font-semibold text-foreground">Trade not yet complete</p>
+              <p className="text-[11px] text-muted-foreground mt-1">Add at least one asset to each side to see the verdict.</p>
             </div>
-          </div>
-        ) : (
-          <div className="rounded-lg border border-dashed border-border/50 px-3 py-3">
-            <p className="text-xs font-semibold text-foreground">Trade not yet complete</p>
-            <p className="text-[11px] text-muted-foreground mt-1">Add at least one asset to each side to see the verdict.</p>
-          </div>
-        )}
+          )}
 
-        {/* Per-side asset summaries — what each side sends. */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-3 md:mt-4">
-          {(["a", "b"] as const).map((side) => {
-            const assets = side === "a" ? sideA : sideB;
-            const label  = side === "a" ? "Side A" : "Side B";
-            const sideAccent = side === "a" ? "text-rose-500 dark:text-rose-400" : "text-emerald-600 dark:text-emerald-400";
-            return (
-              <div key={side} className="rounded-lg border border-border/60 bg-muted/10 overflow-hidden">
-                <div className="px-2.5 py-1.5 flex items-center gap-2 border-b border-border/40 bg-background/30">
-                  <span className={cn("text-[11px] font-bold tracking-wide truncate", sideAccent)}>{label} sends</span>
+          {/* Per-side asset summaries — what each side sends. */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-3 md:mt-4">
+            {(["a", "b"] as const).map((side) => {
+              const assets = side === "a" ? sideA : sideB;
+              return (
+                <div key={side} className="rounded-lg border border-border/60 bg-muted/10 overflow-hidden">
+                  <div className="px-2.5 py-2 flex flex-wrap gap-1.5 min-h-[44px] items-center">
+                    {assets.length === 0
+                      ? <p className="text-[11px] text-muted-foreground/60 italic">Nothing added yet</p>
+                      : assets.map(a => renderQuickChip(a, side))}
+                  </div>
                 </div>
-                <div className="px-2.5 py-2 flex flex-wrap gap-1.5 min-h-[44px] items-center">
-                  {assets.length === 0
-                    ? <p className="text-[11px] text-muted-foreground/60 italic">Nothing added yet</p>
-                    : assets.map(a => renderQuickChip(a, side))}
-                </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
 
-        <p className="text-[10px] text-muted-foreground mt-3">Depth-adjusted dynasty values — multi-asset packages are discounted, so quality beats quantity.</p>
-      </Card>
-
-      <Card className="p-4 sm:p-5">
-        <h3 className="text-base font-black text-foreground flex items-center gap-2">
-          <Scale className="w-4 h-4 text-[#d4af37]" /> Quick Trade Calculator
-        </h3>
-        <p className="text-[11px] text-muted-foreground mt-1 mb-4">
-          Compare any two packages with dynasty trade values — no login or league needed. Pick players and draft picks below.
-        </p>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <QuickCalcSide label="Side A" assets={sideA} total={valA} players={dynastyPlayerList} onAddPlayer={(rp) => addPlayer("a", rp)} onAddPick={(y, r) => addPick("a", y, r)} onRemove={(id) => removeAsset("a", id)} />
-          <QuickCalcSide label="Side B" assets={sideB} total={valB} players={dynastyPlayerList} onAddPlayer={(rp) => addPlayer("b", rp)} onAddPick={(y, r) => addPick("b", y, r)} onRemove={(id) => removeAsset("b", id)} />
+        {/* ── Builder columns (search + draft-pick adder per side) ── */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4 mt-4">
+          <QuickCalcSide label="Side A" assets={sideA} total={valA} players={dynastyPlayerList} onAddPlayer={(rp) => addPlayer("a", rp)} onAddPick={(y, r) => addPick("a", y, r)} />
+          <QuickCalcSide label="Side B" assets={sideB} total={valB} players={dynastyPlayerList} onAddPlayer={(rp) => addPlayer("b", rp)} onAddPick={(y, r) => addPick("b", y, r)} />
         </div>
       </Card>
     </div>
@@ -2766,11 +2796,6 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
       a.pickOriginalRosterId != null ? `${a.pickYear}-${a.pickRound}-${a.pickOriginalRosterId}` : `${a.pickYear}-${a.pickRound}`
     ));
 
-    // Selected-asset chips for this side — shown near the top of the column
-    // (desktop) so the current package is visible above the roster table.
-    // Mobile already surfaces chips inside RosterCollapsible's picker block.
-    const rdLabelShort = (r?: number) => r === 1 ? "1st" : r === 2 ? "2nd" : r === 3 ? "3rd" : `${r}th`;
-
     return (
       <div
         className="flex flex-col rounded-xl border border-border/30 bg-muted/5 p-3 md:p-3.5"
@@ -2792,7 +2817,7 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
               </div>
             )}
             <h3 className="text-sm font-bold truncate">
-              {rosterTeam ? `${rosterTeam.owner} sends` : `Side ${sideLabel} sends`}
+              {rosterTeam ? `${rosterTeam.owner} sends` : side === "b" ? "Partner Sends" : `Side ${sideLabel} sends`}
             </h3>
             {side === "a" && (
               <Select value={sideARosterId} onValueChange={handleSideATeamChange}>
@@ -2832,33 +2857,6 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
           </div>
           <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
         </div>
-
-        {/* Selected assets — chips near the top of the column (desktop). */}
-        {assets.length > 0 && (
-          <div className="hidden md:flex flex-wrap gap-1.5 mb-3" data-testid={`selected-assets-${side}`}>
-            {assets.map((asset) => (
-              <button
-                key={asset.id}
-                type="button"
-                onClick={() => removeAsset(side, asset.id)}
-                className="group flex items-center gap-1.5 pl-1 pr-2 py-0.5 rounded-full border border-[#d4af37]/35 bg-[#d4af37]/10 hover:bg-red-500/10 hover:border-red-500/40 transition-colors max-w-full"
-                data-testid={`chip-selected-${side}-${asset.id}`}
-              >
-                {asset.type === "player" && asset.player ? (
-                  <PlayerAvatar id={asset.player.sleeperId || asset.player.id} name={asset.player.name} pos={asset.player.pos} team={asset.player.team ?? ""} size="sm" compact />
-                ) : (
-                  <span className="w-6 h-6 rounded-full bg-purple-900/40 border border-purple-700/40 flex items-center justify-center flex-shrink-0 text-[9px] font-bold text-purple-400">
-                    {rdLabelShort(asset.pickRound)}
-                  </span>
-                )}
-                <span className="text-[11px] font-semibold text-foreground truncate max-w-[120px]">
-                  {asset.type === "player" && asset.player ? asset.player.name : asset.label}
-                </span>
-                <X className="w-3 h-3 text-muted-foreground/40 group-hover:text-red-400 transition-colors flex-shrink-0" />
-              </button>
-            ))}
-          </div>
-        )}
 
         <div className="space-y-3">
           {side === "b" && !tradePartnerId && (
@@ -2934,6 +2932,15 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
   const ordRound = (r: number) =>
     r === 1 ? "1st" : r === 2 ? "2nd" : r === 3 ? "3rd" : `${r}th`;
 
+  // Submit-eligibility + blocking issues — lifted to component scope so both
+  // the verdict panel and the bottom send-trade controls can read them.
+  const bothSidesSelected = sideA.length > 0 && sideB.length > 0;
+  const missingIds = [...sideA, ...sideB].some(a => a.type === "player" && !a.player?.sleeperId);
+  const canSubmit = !!sleeperJwt && !!sideBRosterId && !missingIds && (sideA.length > 0 || sideB.length > 0) && !proposing && !proposedTrade;
+  const issues: string[] = [];
+  if (!proposedTrade && !!sleeperJwt && !sideBRosterId) issues.push("Select a trade partner (Side B) to enable submit");
+  if (!proposedTrade && !!sleeperJwt && missingIds) issues.push("Some players are missing Sleeper IDs. Add them via the roster picker.");
+
   return (
     <div className="space-y-4 md:space-y-5">
       {/* ── Unified Trade Builder card ────────────────────────────────────
@@ -2967,24 +2974,11 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
           )}
         </div>
 
-        {/* ── Trade sides grid: My side (A) | Partner side (B) ── */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4 mt-4" data-testid="trade-sides-grid">
-          {renderSide("a", sideA, rawA)}
-          {renderSide("b", sideB, rawB)}
-        </div>
-
-        {/* ── Trade Verdict panel (full width, below the two sides) ─────────
+        {/* ── Trade Verdict panel (full width, directly under the header) ───
            The shell renders by default — before any asset is picked it shows
            the "Trade not yet complete" empty state; the send-trade controls
            only appear once at least one asset is on the board.             */}
         {(() => {
-        const bothSidesSelected = sideA.length > 0 && sideB.length > 0;
-        const missingIds = [...sideA, ...sideB].some(a => a.type === "player" && !a.player?.sleeperId);
-        const canSubmit = !!sleeperJwt && !!sideBRosterId && !missingIds && (sideA.length > 0 || sideB.length > 0) && !proposing && !proposedTrade;
-        const issues: string[] = [];
-        if (!proposedTrade && !!sleeperJwt && !sideBRosterId) issues.push("Select a trade partner (Side B) to enable submit");
-        if (!proposedTrade && !!sleeperJwt && missingIds) issues.push("Some players are missing Sleeper IDs. Add them via the roster picker.");
-
         // Value-bar fill — compressed height vs the old panel.
         const fillPct = finalA === 0 && finalB === 0
           ? 50
@@ -3043,20 +3037,10 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
 
         return (
           <div
-            className="mt-[18px] pt-[18px] border-t border-border/40"
+            className="mt-4"
             ref={verdictCardRef}
             data-testid="trade-verdict-panel"
           >
-            {/* Panel eyebrow — the verdict reads as the output of the builder
-                above it; the export action lives in the card header. */}
-            <div className="mb-3">
-              <h3 className="text-sm font-bold flex items-center gap-2">
-                <ArrowRightLeft className="w-4 h-4 text-[#0b3a7a] dark:text-blue-400" />
-                Trade Verdict
-              </h3>
-              <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1" />
-            </div>
-
             {/* Verdict headline + badge + value bar (full width). */}
             <div className="grid grid-cols-1 md:grid-cols-12 gap-4 md:gap-5">
 
@@ -3105,36 +3089,7 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
 
             </div>
 
-            {/* ── Per-side asset summaries (what each side sends) ─────
-                 Side A (left) sits directly above its Position Impact
-                 column; Side B (right) above its own.                  */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-3 md:mt-4">
-              {(["a", "b"] as const).map((side) => {
-                const assets = side === "a" ? sideA : sideB;
-                const team   = side === "a" ? sideATeam : sideBTeam;
-                const label  = `${team?.owner || team?.name || (side === "a" ? "You" : "Partner")} sends`;
-                const sideAccent = side === "a" ? "text-rose-500 dark:text-rose-400" : "text-emerald-600 dark:text-emerald-400";
-                return (
-                  <div key={side} className="rounded-lg border border-border/60 bg-muted/10 overflow-hidden">
-                    <div className="px-2.5 py-1.5 flex items-center gap-2 border-b border-border/40 bg-background/30">
-                      {team?.avatar ? (
-                        <img src={team.avatar} alt="" className="w-4 h-4 rounded-full object-cover flex-shrink-0 ring-1 ring-border/40" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
-                      ) : (
-                        <div className="w-4 h-4 rounded-full bg-muted flex-shrink-0" />
-                      )}
-                      <span className={cn("text-[11px] font-bold tracking-wide truncate", sideAccent)}>{label}</span>
-                    </div>
-                    <div className="px-2.5 py-2 flex flex-wrap gap-1.5 min-h-[44px] items-center">
-                      {assets.length === 0
-                        ? <p className="text-[11px] text-muted-foreground/60 italic">Nothing added yet</p>
-                        : assets.map(a => renderAssetChip(a, side))}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* ── Position Impact preview (full width, bottom of card) ── */}
+            {/* ── Position Impact preview (directly below the value bar) ── */}
             {league && userTeam && bothSidesSelected && positionImpact && (() => {
               const sides = [
                 { key: "sideA", label: sideATeam?.owner || sideATeam?.name || "Side A", data: positionImpact.sideA, testId: "table-position-impact-a" },
@@ -3152,7 +3107,7 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
                     <button
                       type="button"
                       onClick={() => setShowFullImpact(v => !v)}
-                      className="text-[10px] font-semibold text-[#0b3a7a] dark:text-blue-400 hover:underline flex items-center gap-0.5"
+                      className="text-[10px] font-semibold text-white hover:underline flex items-center gap-0.5"
                       data-testid="button-toggle-full-impact"
                     >
                       {showFullImpact ? "Hide detail" : "View full impact"}
@@ -3247,139 +3202,162 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
                 </>
               );
             })()}
-            {/* ── Send-trade controls — moved directly below Position Impact ─
-                 Hidden until at least one asset is on the board so the default
-                 shell stays a clean verdict placeholder. */}
-            {(sideA.length > 0 || sideB.length > 0) && (
-            <div className="mt-4 md:mt-5 max-w-md mx-auto space-y-2">
-              {/* Share to Discord — needs only a StatChasers login (not Sleeper),
-                  and is excluded from the saved verdict PNG. Side A receives what
-                  side B sends, and vice-versa. */}
-              <div data-skip-capture>
-                <ShareTradeToDiscordButton
-                  testId="calc"
-                  label="Post in DC Discord"
-                  className="w-full h-10 px-4 text-sm rounded-full bg-[#5865F2] hover:bg-[#5865F2]/90 text-white"
-                  leagueName={league.name}
-                  leagueFormat={[league.format, league.scoringFormat, league.totalRosters ? `${league.totalRosters}-team` : ""].filter(Boolean).join(" · ")}
-                  sideA={{ label: sideATeam?.name || "Side A", receives: sideB.map((a): PollAsset => ({ label: a.label, sleeperId: a.type === "player" ? a.player?.sleeperId : undefined })) }}
-                  sideB={{ label: sideBTeam?.name || "Side B", receives: sideA.map((a): PollAsset => ({ label: a.label, sleeperId: a.type === "player" ? a.player?.sleeperId : undefined })) }}
-                />
-              </div>
-              {!sleeperJwt ? (
-                // Not connected — compact connect input.
-                <div className="space-y-2">
-                  <p className="text-[11px] text-muted-foreground leading-snug">
-                    Connect Sleeper to send trade offers directly.
-                  </p>
-                  <Input
-                    type="password"
-                    placeholder="Sleeper JWT…"
-                    value={jwtInput}
-                    onChange={e => setJwtInput(e.target.value)}
-                    onKeyDown={e => e.key === "Enter" && handleSaveJwt()}
-                    className="font-mono text-xs h-8"
-                    data-testid="input-trade-calc-jwt"
-                  />
-                  <Button size="sm" onClick={handleSaveJwt} disabled={!jwtInput.trim()} className="w-full h-8 text-xs" data-testid="button-trade-calc-jwt-save">
-                    Connect Sleeper
-                  </Button>
-                </div>
-              ) : proposedTrade ? (
-                // Sent state — sits in place of the Send button.
-                <div className="rounded-lg bg-emerald-500/8 border border-emerald-500/20 p-3 space-y-2" data-testid="card-propose-success">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                    <p className="text-[12px] font-semibold text-emerald-400">Trade offer sent</p>
-                  </div>
-                  <p className="text-[9px] text-emerald-400/50 font-mono break-all">ID: {proposedTrade.transaction_id}</p>
-                  <Button size="sm" variant="outline" className="w-full h-7 text-[11px] border-red-500/30 text-red-400 hover:bg-red-500/10 gap-1.5 rounded-full" onClick={handleWithdraw} disabled={withdrawing} data-testid="button-withdraw-trade">
-                    {withdrawing ? <Loader2 className="w-3 h-3 animate-spin" /> : <Undo2 className="w-3 h-3" />}
-                    Withdraw
-                  </Button>
-                  {withdrawError && <p className="text-[10px] text-red-400">{withdrawError}</p>}
-                  {dmStatus === "sending" && <div className="flex items-center gap-1.5 text-[10px] text-emerald-400/60"><Loader2 className="w-3 h-3 animate-spin" />Sending Dynasty Command link…</div>}
-                  {dmStatus === "sent"    && <div className="flex items-center gap-1.5 text-[10px] text-emerald-400"><CheckCircle2 className="w-3 h-3" />Dynasty Command link shared with the manager.</div>}
-                  {dmStatus === "skipped" && <div className="text-[10px] text-amber-400">Trade sent. Link message skipped to stay within safe messaging limits.</div>}
-                  {dmStatus === "failed"  && <div className="text-[10px] text-amber-400">Trade sent. Link message could not be delivered.</div>}
-                </div>
-              ) : (
-                // Send + secondary controls.
-                <>
-                  <Button
-                    onClick={handleProposeTrade}
-                    disabled={!canSubmit}
-                    className="w-full h-10 px-4 bg-gradient-to-r from-[#d4af37] to-[#c8a02e] hover:from-[#e0bd4a] hover:to-[#d4af37] text-[#0b1f3a] font-semibold gap-2 rounded-full shadow-md shadow-[#d4af37]/25 disabled:opacity-40 disabled:shadow-none text-sm"
-                    data-testid="button-propose-trade"
-                  >
-                    {proposing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                    {proposing ? "Sending…" : "Send Trade Offer"}
-                  </Button>
 
-                  {/* Expiry + FAAB row — tight, single line. */}
-                  <div className="flex items-center gap-1.5">
-                    <Select value={expiry} onValueChange={setExpiry}>
-                      <SelectTrigger className="h-7 flex-1 text-[10px] rounded-full border-border/50 bg-background/60" data-testid="select-trade-expiry">
-                        <Clock className="w-3 h-3 mr-1 opacity-60" />
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {EXPIRY_OPTIONS.map(opt => (
-                          <SelectItem key={opt.value} value={opt.value} className="text-xs">{opt.label}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <button
-                      type="button"
-                      onClick={() => setFaabOpen(v => !v)}
-                      data-testid="button-toggle-faab"
-                      className={cn(
-                        "flex items-center gap-1 text-[10px] rounded-full px-2 h-7 border transition-colors flex-shrink-0",
-                        faabOpen ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400" : "bg-muted/30 border-border/50 text-muted-foreground hover:text-foreground hover:border-border",
-                      )}
-                    >
-                      <DollarSign className="w-3 h-3" />
-                      FAAB
-                    </button>
-                  </div>
-
-                  {faabOpen && (
-                    <div className="rounded-md bg-muted/20 border border-border/40 p-2 space-y-1.5">
-                      <p className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Include FAAB</p>
-                      {(["a", "b"] as const).map(side => {
-                        const team = side === "a" ? sideATeam : sideBTeam;
-                        const val  = side === "a" ? faabASends : faabBSends;
-                        const setv = side === "a" ? setFaabASends : setFaabBSends;
-                        return (
-                          <div key={side} className="flex items-center gap-2">
-                            <span className="text-[10px] text-muted-foreground flex-1 truncate">{team?.owner || (side === "a" ? "You" : "Partner")}</span>
-                            <div className="relative">
-                              <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground pointer-events-none">$</span>
-                              <Input type="number" min={0} className="w-16 h-6 text-[11px] pl-4" value={val} onChange={e => setv(e.target.value)} placeholder="0" data-testid={`input-faab-${side}`} />
-                            </div>
-                          </div>
-                        );
-                      })}
+            {/* ── Per-side asset summaries (what each side sends) ───── */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-3 md:mt-4">
+              {(["a", "b"] as const).map((side) => {
+                const assets = side === "a" ? sideA : sideB;
+                return (
+                  <div key={side} className="rounded-lg border border-border/60 bg-muted/10 overflow-hidden">
+                    <div className="px-2.5 py-2 flex flex-wrap gap-1.5 min-h-[44px] items-center">
+                      {assets.length === 0
+                        ? <p className="text-[11px] text-muted-foreground/60 italic">Nothing added yet</p>
+                        : assets.map(a => renderAssetChip(a, side))}
                     </div>
-                  )}
-
-                  {issues.length > 0 && (
-                    <div className="rounded-md bg-amber-500/8 border border-amber-500/20 px-2 py-1.5 space-y-0.5">
-                      {issues.map((msg, i) => (
-                        <p key={i} className="text-[10px] text-amber-400 leading-snug flex items-start gap-1"><span className="shrink-0">⚠</span>{msg}</p>
-                      ))}
-                    </div>
-                  )}
-                  {proposeError && (
-                    <div className="rounded-md bg-red-500/8 border border-red-500/20 px-2 py-1.5 text-[10px] text-red-400" data-testid="text-propose-error">{proposeError}</div>
-                  )}
-                </>
-              )}
+                  </div>
+                );
+              })}
             </div>
-            )}
+
           </div>
         );
       })()}
+
+        {/* ── Trade sides grid: My side (A) | Partner side (B) ── */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4 mt-4" data-testid="trade-sides-grid">
+          {renderSide("a", sideA, rawA)}
+          {renderSide("b", sideB, rawB)}
+        </div>
+
+        {/* ── Send-trade controls — pinned to the bottom of the section ─
+             Hidden until at least one asset is on the board so the default
+             shell stays a clean verdict placeholder. */}
+        {(sideA.length > 0 || sideB.length > 0) && (
+          <div className="mt-4 md:mt-5 max-w-md mx-auto space-y-2">
+            {/* Share to Discord — needs only a StatChasers login (not Sleeper).
+                Side A receives what side B sends, and vice-versa. */}
+            <div data-skip-capture>
+              <ShareTradeToDiscordButton
+                testId="calc"
+                label="Post in DC Discord"
+                className="w-full h-10 px-4 text-sm rounded-full bg-[#5865F2] hover:bg-[#5865F2]/90 text-white"
+                leagueName={league.name}
+                leagueFormat={[league.format, league.scoringFormat, league.totalRosters ? `${league.totalRosters}-team` : ""].filter(Boolean).join(" · ")}
+                sideA={{ label: sideATeam?.name || "Side A", receives: sideB.map((a): PollAsset => ({ label: a.label, sleeperId: a.type === "player" ? a.player?.sleeperId : undefined })) }}
+                sideB={{ label: sideBTeam?.name || "Side B", receives: sideA.map((a): PollAsset => ({ label: a.label, sleeperId: a.type === "player" ? a.player?.sleeperId : undefined })) }}
+              />
+            </div>
+            {!sleeperJwt ? (
+              // Not connected — compact connect input.
+              <div className="space-y-2">
+                <p className="text-[11px] text-muted-foreground leading-snug">
+                  Connect Sleeper to send trade offers directly.
+                </p>
+                <Input
+                  type="password"
+                  placeholder="Sleeper JWT…"
+                  value={jwtInput}
+                  onChange={e => setJwtInput(e.target.value)}
+                  onKeyDown={e => e.key === "Enter" && handleSaveJwt()}
+                  className="font-mono text-xs h-8"
+                  data-testid="input-trade-calc-jwt"
+                />
+                <Button size="sm" onClick={handleSaveJwt} disabled={!jwtInput.trim()} className="w-full h-8 text-xs" data-testid="button-trade-calc-jwt-save">
+                  Connect Sleeper
+                </Button>
+              </div>
+            ) : proposedTrade ? (
+              // Sent state — sits in place of the Send button.
+              <div className="rounded-lg bg-emerald-500/8 border border-emerald-500/20 p-3 space-y-2" data-testid="card-propose-success">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <p className="text-[12px] font-semibold text-emerald-400">Trade offer sent</p>
+                </div>
+                <p className="text-[9px] text-emerald-400/50 font-mono break-all">ID: {proposedTrade.transaction_id}</p>
+                <Button size="sm" variant="outline" className="w-full h-7 text-[11px] border-red-500/30 text-red-400 hover:bg-red-500/10 gap-1.5 rounded-full" onClick={handleWithdraw} disabled={withdrawing} data-testid="button-withdraw-trade">
+                  {withdrawing ? <Loader2 className="w-3 h-3 animate-spin" /> : <Undo2 className="w-3 h-3" />}
+                  Withdraw
+                </Button>
+                {withdrawError && <p className="text-[10px] text-red-400">{withdrawError}</p>}
+                {dmStatus === "sending" && <div className="flex items-center gap-1.5 text-[10px] text-emerald-400/60"><Loader2 className="w-3 h-3 animate-spin" />Sending Dynasty Command link…</div>}
+                {dmStatus === "sent"    && <div className="flex items-center gap-1.5 text-[10px] text-emerald-400"><CheckCircle2 className="w-3 h-3" />Dynasty Command link shared with the manager.</div>}
+                {dmStatus === "skipped" && <div className="text-[10px] text-amber-400">Trade sent. Link message skipped to stay within safe messaging limits.</div>}
+                {dmStatus === "failed"  && <div className="text-[10px] text-amber-400">Trade sent. Link message could not be delivered.</div>}
+              </div>
+            ) : (
+              // Send + secondary controls.
+              <>
+                <Button
+                  onClick={handleProposeTrade}
+                  disabled={!canSubmit}
+                  className="w-full h-10 px-4 bg-gradient-to-r from-[#d4af37] to-[#c8a02e] hover:from-[#e0bd4a] hover:to-[#d4af37] text-[#0b1f3a] font-semibold gap-2 rounded-full shadow-md shadow-[#d4af37]/25 disabled:opacity-40 disabled:shadow-none text-sm"
+                  data-testid="button-propose-trade"
+                >
+                  {proposing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                  {proposing ? "Sending…" : "Send Trade Offer"}
+                </Button>
+
+                {/* Expiry + FAAB row — tight, single line. */}
+                <div className="flex items-center gap-1.5">
+                  <Select value={expiry} onValueChange={setExpiry}>
+                    <SelectTrigger className="h-7 flex-1 text-[10px] rounded-full border-border/50 bg-background/60" data-testid="select-trade-expiry">
+                      <Clock className="w-3 h-3 mr-1 opacity-60" />
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {EXPIRY_OPTIONS.map(opt => (
+                        <SelectItem key={opt.value} value={opt.value} className="text-xs">{opt.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <button
+                    type="button"
+                    onClick={() => setFaabOpen(v => !v)}
+                    data-testid="button-toggle-faab"
+                    className={cn(
+                      "flex items-center gap-1 text-[10px] rounded-full px-2 h-7 border transition-colors flex-shrink-0",
+                      faabOpen ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400" : "bg-muted/30 border-border/50 text-muted-foreground hover:text-foreground hover:border-border",
+                    )}
+                  >
+                    <DollarSign className="w-3 h-3" />
+                    FAAB
+                  </button>
+                </div>
+
+                {faabOpen && (
+                  <div className="rounded-md bg-muted/20 border border-border/40 p-2 space-y-1.5">
+                    <p className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Include FAAB</p>
+                    {(["a", "b"] as const).map(side => {
+                      const team = side === "a" ? sideATeam : sideBTeam;
+                      const val  = side === "a" ? faabASends : faabBSends;
+                      const setv = side === "a" ? setFaabASends : setFaabBSends;
+                      return (
+                        <div key={side} className="flex items-center gap-2">
+                          <span className="text-[10px] text-muted-foreground flex-1 truncate">{team?.owner || (side === "a" ? "You" : "Partner")}</span>
+                          <div className="relative">
+                            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground pointer-events-none">$</span>
+                            <Input type="number" min={0} className="w-16 h-6 text-[11px] pl-4" value={val} onChange={e => setv(e.target.value)} placeholder="0" data-testid={`input-faab-${side}`} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {issues.length > 0 && (
+                  <div className="rounded-md bg-amber-500/8 border border-amber-500/20 px-2 py-1.5 space-y-0.5">
+                    {issues.map((msg, i) => (
+                      <p key={i} className="text-[10px] text-amber-400 leading-snug flex items-start gap-1"><span className="shrink-0">⚠</span>{msg}</p>
+                    ))}
+                  </div>
+                )}
+                {proposeError && (
+                  <div className="rounded-md bg-red-500/8 border border-red-500/20 px-2 py-1.5 text-[10px] text-red-400" data-testid="text-propose-error">{proposeError}</div>
+                )}
+              </>
+            )}
+          </div>
+        )}
 
       </Card>
     </div>

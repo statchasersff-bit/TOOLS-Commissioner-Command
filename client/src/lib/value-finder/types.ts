@@ -141,6 +141,7 @@ export type ValueFinderPlayer = {
 
   // Derived sub-scores (0–1, position-relative)
   usageScore?: number;
+  efficiencyScore?: number;
   productionScore?: number;
   longevityScore?: number;
   trendScore?: number;

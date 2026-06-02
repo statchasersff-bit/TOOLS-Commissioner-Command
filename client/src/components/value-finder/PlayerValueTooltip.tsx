@@ -11,6 +11,7 @@ import {
 export type TooltipMetric =
   | "ppg"
   | "usage"
+  | "efficiency"
   | "trend"
   | "startRate"
   | "rebuild"
@@ -45,6 +46,8 @@ export function PlayerValueTooltip({
         return ["PPG", fmtPpg(p.pointsPerGame)];
       case "usage":
         return ["Usage Score", fmtScore(p.usageScore)];
+      case "efficiency":
+        return ["Efficiency Score", fmtScore(p.efficiencyScore)];
       case "trend":
         return ["Role Trend", fmtSignedPct(p.roleTrend ?? p.usageTrend)];
       case "startRate":

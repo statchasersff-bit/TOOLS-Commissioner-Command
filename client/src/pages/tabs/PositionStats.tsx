@@ -19,6 +19,7 @@ import {
   ChevronDown,
   ChevronUp,
   ChevronsUpDown,
+  Filter,
   GitCompare,
   Loader2,
   Search,
@@ -406,6 +407,39 @@ function numVal(v: unknown): number {
   return -Infinity;
 }
 
+// Position-specific table qualification minimums. Applied by default (the
+// "Qualified" toggle on the Data table) so low-sample players don't show; a player
+// must clear every threshold for the loaded season. Evaluated against the row's
+// raw columns. NOTE: the QB dataset has no snap-share column, so QBs are gated on
+// games + pass attempts only (no snap% floor is possible there).
+const TABLE_MIN: Record<
+  Position,
+  { games: number; snapPct?: number; volumeKey: string; volumeMin: number; volumeLabel: string }
+> = {
+  qb: { games: 6, volumeKey: "attempts", volumeMin: 50, volumeLabel: "Pass Att" },
+  rb: { games: 6, snapPct: 10, volumeKey: "rushAttempts", volumeMin: 20, volumeLabel: "Rush Att" },
+  wr: { games: 6, snapPct: 25, volumeKey: "targets", volumeMin: 25, volumeLabel: "TGT" },
+  te: { games: 6, snapPct: 25, volumeKey: "targets", volumeMin: 25, volumeLabel: "TGT" },
+};
+
+function meetsTableMinimums(position: Position, row: Record<string, unknown>): boolean {
+  const m = TABLE_MIN[position];
+  if (numVal(row.games) < m.games) return false;
+  if (m.snapPct != null && numVal(row.snapPct) < m.snapPct) return false;
+  if (numVal(row[m.volumeKey]) < m.volumeMin) return false;
+  return true;
+}
+
+// Human-readable threshold summary for the toggle tooltip, e.g.
+// "GP ≥ 6 · Snap% ≥ 25 · TGT ≥ 25".
+function tableMinLabel(position: Position): string {
+  const m = TABLE_MIN[position];
+  const parts = [`GP ≥ ${m.games}`];
+  if (m.snapPct != null) parts.push(`Snap% ≥ ${m.snapPct}`);
+  parts.push(`${m.volumeLabel} ≥ ${m.volumeMin}`);
+  return parts.join(" · ");
+}
+
 // Maximum players that can be compared side-by-side at once.
 const MAX_COMPARE = 5;
 
@@ -609,6 +643,7 @@ export default function PositionStats() {
   const [loading, setLoading]       = useState(false);
   const [error, setError]           = useState<string | null>(null);
   const [search, setSearch]         = useState("");
+  const [qualifiedOnly, setQualifiedOnly] = useState(true);
   const [sortKey, setSortKey]       = useState("rank");
   const [sortDir, setSortDir]       = useState<SortDir>("asc");
   const [visibleCols, setVisibleCols] = useState<Set<string>>(new Set());
@@ -779,6 +814,10 @@ export default function PositionStats() {
   const rows = useMemo(() => {
     if (!scoredData) return [];
     let r = scoredData.rows;
+    // Default qualification gate: hide players who don't clear the season minimums
+    // for their position (games / snap% / volume). Toggleable so the full pool is
+    // still reachable.
+    if (qualifiedOnly) r = r.filter((row) => meetsTableMinimums(position, row));
     const q = search.trim().toLowerCase();
     if (q) {
       r = r.filter((row) => {
@@ -806,7 +845,7 @@ export default function PositionStats() {
       });
     }
     return r;
-  }, [scoredData, search, sortKey, sortDir, colByKey]);
+  }, [scoredData, search, sortKey, sortDir, colByKey, qualifiedOnly, position]);
 
   // Re-evaluate the scroll-edge fades when the row/column set changes (toggling
   // columns changes scrollWidth without resizing the container box).
@@ -1009,6 +1048,22 @@ export default function PositionStats() {
               )}
             </div>
           )}
+          {subTab !== "compare" && (
+            <button
+              onClick={() => setQualifiedOnly((v) => !v)}
+              title={`Qualified players only — ${tableMinLabel(position)}`}
+              className={cn(
+                "flex items-center gap-1.5 px-3 h-8 rounded-md text-xs font-semibold border transition-colors shrink-0",
+                qualifiedOnly
+                  ? "bg-[#0b3a7a] text-white border-[#0b3a7a]"
+                  : "border-border text-muted-foreground hover:text-foreground hover:border-foreground/30",
+              )}
+              data-testid="btn-toggle-qualified"
+            >
+              <Filter className="w-3.5 h-3.5" />
+              Qualified
+            </button>
+          )}
           <button
             onClick={() => setShowColPanel((v) => !v)}
             className={cn(
@@ -1094,7 +1149,7 @@ export default function PositionStats() {
             {position.toUpperCase()} · {season === "all" ? "All Seasons" : `${season} Season`}
             {subTab === "compare"
               ? ` · comparing ${compareRows.length} of ${maxCompare} players`
-              : ` · ${rows.length} of ${data.rows.length} players`}
+              : ` · ${rows.length} of ${data.rows.length} players${qualifiedOnly ? " · qualified only" : ""}`}
             {updatedAt && ` · Updated ${updatedAt}`}
           </p>
         )}

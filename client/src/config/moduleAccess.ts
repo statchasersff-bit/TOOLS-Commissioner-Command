@@ -61,6 +61,7 @@ export const MODULE_ACCESS: Record<string, AccessRequirement> = {
   // Research (league-market). Resources (analysis) is self-contained and
   // viewable by anyone. Market Value is league-scoped, so it needs a Sleeper
   // username (readonly). Advanced Stats (position-stats) is public.
+  "league-market:user-search": "public",        // self-contained Sleeper lookup
   "league-market:analysis": "public",          // Resources
   "league-market:market-value": "readonly",    // needs a league
   "league-market:value-finder": "public", // self-contained; includes the former Market Inefficiency views

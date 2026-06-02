@@ -33,6 +33,12 @@ interface CrawlResult {
   notCompleteSkipped?: number;
   categoryFilteredSkipped?: number;
   excludedSkipped?: number;
+  // Trade-mode marker + counters (present/non-zero only when a trade scan ran).
+  ingestTrades?: boolean;
+  tradesFound?: number;
+  tradesIngested?: number;
+  tradeLeaguesScanned?: number;
+  tradeLeaguesAlreadyIndexed?: number;
   errors: string[];
   capsHit: string[];
   requestCount: number;
@@ -151,6 +157,9 @@ export function AdpCrawlPanel() {
   const [maxLeagues, setMaxLeagues] = useState<number>(2500);
   const [maxDrafts, setMaxDrafts] = useState<number>(1000);
 
+  // Trade Mode: how far back to ingest trades. 0 = all time (no cutoff).
+  const [tradeLookbackDays, setTradeLookbackDays] = useState<number>(0);
+
   // ── Optional admin secret override (for testing as a guest) ─────────────
   const [showSecretOverride, setShowSecretOverride] = useState(false);
   const [adminSecretOverride, setAdminSecretOverride] = useState("");
@@ -171,7 +180,7 @@ export function AdpCrawlPanel() {
   const [statusLoading, setStatusLoading] = useState(false);
   const [status, setStatus] = useState<CrawlStatus | null>(null);
 
-  const runCrawl = useCallback(async (depth: Depth) => {
+  const runCrawl = useCallback(async (depth: Depth, mode: "adp" | "trade" = "adp") => {
     const trimmedSeed = seedUsername.trim();
     if (!trimmedSeed) { setError("Seed username required."); setRunState("error"); return; }
 
@@ -200,6 +209,13 @@ export function AdpCrawlPanel() {
       maxUsers,
       maxLeagues,
       maxDrafts,
+      mode,
+      // Trade mode only: cut off trades older than the selected lookback.
+      // 0 = all time → omit so the server ingests every trade.
+      tradeSinceMs:
+        mode === "trade" && tradeLookbackDays > 0
+          ? Date.now() - tradeLookbackDays * 24 * 60 * 60 * 1000
+          : undefined,
     };
 
     try {
@@ -252,7 +268,7 @@ export function AdpCrawlPanel() {
     // NOTE: we intentionally do NOT clear runStartedAt on success here — the
     // server-side crawl is still running. The polling effect keeps the badge
     // ticking from state.startedAt, and clears it when the crawl terminates.
-  }, [seedUsername, seasons, categories, refreshSnapshots, maxUsers, maxLeagues, maxDrafts, adminSecretOverride]);
+  }, [seedUsername, seasons, categories, refreshSnapshots, maxUsers, maxLeagues, maxDrafts, tradeLookbackDays, adminSecretOverride]);
 
   // ── Live-progress polling ───────────────────────────────────────────────
   // Single long-lived poller. Fires once on mount (so a crawl started in a
@@ -549,6 +565,57 @@ export function AdpCrawlPanel() {
         />
       </div>
 
+      {/* ── Trade Mode ──────────────────────────────────────────────────────
+          Reuses the seed username + seasons + safety caps above, but instead
+          of ingesting drafts (ADP), it walks the same depth-2 network and
+          ingests each discovered league's trades into the trade DB. */}
+      <div className="mt-4 border-t border-border/40 pt-3">
+        <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">
+          Trade Mode
+        </div>
+        <p className="text-[11px] text-muted-foreground mb-2 max-w-prose">
+          Scan the seed user's network for <span className="font-semibold">trades</span> and ingest
+          them into the trade database. Uses the same seed username, seasons, and safety caps above.
+          Depth&nbsp;2 walks the seed → league-mates → their league-mates.
+        </p>
+        <div className="mb-2 max-w-[220px]">
+          <Field label="Look back">
+            <select
+              value={tradeLookbackDays}
+              onChange={e => setTradeLookbackDays(Number(e.target.value))}
+              disabled={running}
+              data-testid="select-trade-lookback"
+              className="w-full bg-background border border-border rounded-md px-3 py-2 text-sm disabled:opacity-50"
+            >
+              <option value={0}>All time</option>
+              <option value={7}>Last 7 days</option>
+              <option value={14}>Last 14 days</option>
+              <option value={30}>Last 30 days</option>
+              <option value={90}>Last 90 days</option>
+              <option value={180}>Last 6 months</option>
+              <option value={365}>Last year</option>
+              <option value={730}>Last 2 years</option>
+            </select>
+          </Field>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <RunButton
+            label="Scan Trades — Depth 1"
+            variant="ghost"
+            onClick={() => runCrawl(1, "trade")}
+            disabled={running}
+            testId="button-trade-scan-depth-1"
+          />
+          <RunButton
+            label="Scan Trades — Depth 2"
+            variant="primary"
+            onClick={() => runCrawl(2, "trade")}
+            disabled={running}
+            testId="button-trade-scan-depth-2"
+          />
+        </div>
+      </div>
+
       {error && (
         <div
           data-testid="text-crawl-error"
@@ -613,18 +680,29 @@ export function AdpCrawlPanel() {
             <Stat label="Requests" value={formatNum(liveProgress.requestCount)} />
             <Stat label="Users processed" value={formatNum(liveProgress.usersProcessed)} />
             <Stat label="Leagues processed" value={formatNum(liveProgress.leaguesProcessed)} />
-            <Stat label="Drafts found" value={formatNum(liveProgress.draftsFound)} />
-            <Stat label="Drafts ingested" value={formatNum(liveProgress.draftsIngested)} />
-            <Stat label="Picks ingested" value={formatNum(liveProgress.picksIngested)} />
-            <Stat label="Already in DB" value={formatNum(liveProgress.duplicatesSkipped)} />
-            <Stat label="Not complete" value={formatNum(liveProgress.notCompleteSkipped ?? 0)} />
-            <Stat label="Category filtered" value={formatNum(liveProgress.categoryFilteredSkipped ?? 0)} />
-            <Stat label="Excluded" value={formatNum(liveProgress.excludedSkipped ?? 0)} />
+            {liveProgress.ingestTrades ? (
+              <>
+                <Stat label="Trades found" value={formatNum(liveProgress.tradesFound ?? 0)} />
+                <Stat label="Trades ingested" value={formatNum(liveProgress.tradesIngested ?? 0)} />
+                <Stat label="Trade leagues scanned" value={formatNum(liveProgress.tradeLeaguesScanned ?? 0)} />
+                <Stat label="Already indexed" value={formatNum(liveProgress.tradeLeaguesAlreadyIndexed ?? 0)} />
+              </>
+            ) : (
+              <>
+                <Stat label="Drafts found" value={formatNum(liveProgress.draftsFound)} />
+                <Stat label="Drafts ingested" value={formatNum(liveProgress.draftsIngested)} />
+                <Stat label="Picks ingested" value={formatNum(liveProgress.picksIngested)} />
+                <Stat label="Already in DB" value={formatNum(liveProgress.duplicatesSkipped)} />
+                <Stat label="Not complete" value={formatNum(liveProgress.notCompleteSkipped ?? 0)} />
+                <Stat label="Category filtered" value={formatNum(liveProgress.categoryFilteredSkipped ?? 0)} />
+                <Stat label="Excluded" value={formatNum(liveProgress.excludedSkipped ?? 0)} />
+              </>
+            )}
           </div>
 
           {/* Skip-reason hint: if drafts are being found but none ingested,
               surface the most likely cause so the user isn't left guessing. */}
-          {liveProgress.draftsFound > 0 && liveProgress.draftsIngested === 0 && (
+          {!liveProgress.ingestTrades && liveProgress.draftsFound > 0 && liveProgress.draftsIngested === 0 && (
             <div className="mt-2 text-[11px] text-amber-500/90 leading-snug">
               {(() => {
                 const nc = liveProgress.notCompleteSkipped ?? 0;
@@ -684,7 +762,9 @@ export function AdpCrawlPanel() {
 
       {runState === "success" && result && (
         <div className="mt-4 border border-border/60 rounded-md p-3 bg-background/40" data-testid="crawl-result-summary">
-          <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-2">Last crawl result</div>
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-2">
+            {result.ingestTrades ? "Last trade scan result" : "Last crawl result"}
+          </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-[12px]">
             <Stat label="Seed" value={result.seedUser?.username ?? "—"} />
             <Stat label="Depth" value={formatNum(result.maxDepth)} />
@@ -692,13 +772,24 @@ export function AdpCrawlPanel() {
             <Stat label="Requests" value={formatNum(result.requestCount)} />
             <Stat label="Users processed" value={formatNum(result.usersProcessed)} testId="stat-users-processed" />
             <Stat label="Leagues processed" value={formatNum(result.leaguesProcessed)} testId="stat-leagues-processed" />
-            <Stat label="Drafts found" value={formatNum(result.draftsFound)} testId="stat-drafts-found" />
-            <Stat label="Drafts ingested" value={formatNum(result.draftsIngested)} testId="stat-drafts-ingested" />
-            <Stat label="Picks ingested" value={formatNum(result.picksIngested)} testId="stat-picks-ingested" />
-            <Stat label="Already in DB" value={formatNum(result.duplicatesSkipped)} testId="stat-duplicates-skipped" />
-            <Stat label="Not complete" value={formatNum(result.notCompleteSkipped ?? 0)} testId="stat-not-complete-skipped" />
-            <Stat label="Category filtered" value={formatNum(result.categoryFilteredSkipped ?? 0)} testId="stat-category-filtered" />
-            <Stat label="Excluded" value={formatNum(result.excludedSkipped ?? 0)} testId="stat-excluded-skipped" />
+            {result.ingestTrades ? (
+              <>
+                <Stat label="Trades found" value={formatNum(result.tradesFound ?? 0)} testId="stat-trades-found" />
+                <Stat label="Trades ingested" value={formatNum(result.tradesIngested ?? 0)} testId="stat-trades-ingested" />
+                <Stat label="Trade leagues scanned" value={formatNum(result.tradeLeaguesScanned ?? 0)} testId="stat-trade-leagues-scanned" />
+                <Stat label="Already indexed" value={formatNum(result.tradeLeaguesAlreadyIndexed ?? 0)} testId="stat-trade-leagues-indexed" />
+              </>
+            ) : (
+              <>
+                <Stat label="Drafts found" value={formatNum(result.draftsFound)} testId="stat-drafts-found" />
+                <Stat label="Drafts ingested" value={formatNum(result.draftsIngested)} testId="stat-drafts-ingested" />
+                <Stat label="Picks ingested" value={formatNum(result.picksIngested)} testId="stat-picks-ingested" />
+                <Stat label="Already in DB" value={formatNum(result.duplicatesSkipped)} testId="stat-duplicates-skipped" />
+                <Stat label="Not complete" value={formatNum(result.notCompleteSkipped ?? 0)} testId="stat-not-complete-skipped" />
+                <Stat label="Category filtered" value={formatNum(result.categoryFilteredSkipped ?? 0)} testId="stat-category-filtered" />
+                <Stat label="Excluded" value={formatNum(result.excludedSkipped ?? 0)} testId="stat-excluded-skipped" />
+              </>
+            )}
             <Stat label="Caps hit" value={(result.capsHit ?? []).length === 0 ? "none" : (result.capsHit ?? []).join(", ")} testId="stat-caps-hit" />
             <Stat label="Errors" value={formatNum((result.errors ?? []).length)} testId="stat-errors-count" />
           </div>

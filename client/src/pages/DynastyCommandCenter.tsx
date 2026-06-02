@@ -54,6 +54,7 @@ const PositionalAnalysis= lazy(() => import("./tabs/PositionalAnalysis").then(m 
 const MarketValue       = lazy(() => import("./tabs/LeagueMarket").then(m => ({ default: m.MarketValue })));
 const ValueFinder = lazy(() => import("./tabs/ValueFinder").then(m => ({ default: m.ValueFinder })));
 const Analysis          = lazy(() => import("./tabs/Analysis"));
+const UserSearch        = lazy(() => import("./tabs/UserSearch"));
 const LiveDraft         = lazy(() => import("./tabs/LiveDraft"));
 const LineupCommand     = lazy(() => import("./tabs/LineupCommand").then(m => ({ default: m.LineupCommand })));
 const PositionStats     = lazy(() => import("./tabs/PositionStats"));
@@ -576,6 +577,12 @@ export default function DynastyCommandCenter({ params, playerProfileId, managerP
     // position-stats is fully self-contained (local bundled data, no Sleeper API)
     if (activeMainTab === "league-market" && activeSubTab === "position-stats") {
       return <PositionStats />;
+    }
+
+    // User Search is a self-contained Sleeper username lookup — no league/login
+    // required, so it renders for guests above the active-league guard.
+    if (activeMainTab === "league-market" && activeSubTab === "user-search") {
+      return <UserSearch />;
     }
 
     // Resources (analysis) is self-contained — no league/Sleeper required, so

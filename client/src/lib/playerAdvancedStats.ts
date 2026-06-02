@@ -547,7 +547,7 @@ export async function loadPlayerAdvancedStats(
   return { position: pos, seasons, latest, composites, production, rankCards, statRanks };
 }
 
-// ── Usage composite map (shared with the Value Finder's Dyn x Usage chart) ────
+// ── Composite maps (shared with the Value Finder's Dyn x {Usage,Efficiency}) ──
 // Which composite(s) represent "usage/volume" per position, so the Value Finder
 // can show the exact same number the Advanced Stats tab does. QB/RB/WR each have
 // a single usage composite; TE has no single one, so we take the highest of its
@@ -559,15 +559,34 @@ const USAGE_COMPOSITE_LABELS: Record<Pos, string[]> = {
   TE: ["Route Involvement Score", "Target Role Score"],
 };
 
+// Efficiency composite — every position exposes a single "Efficiency Score"
+// (how much a player does with his opportunities), so the Value Finder's
+// Dyn x Efficiency chart agrees with the Advanced Stats tab.
+const EFFICIENCY_COMPOSITE_LABELS: Record<Pos, string[]> = {
+  QB: ["Efficiency Score"],
+  RB: ["Efficiency Score"],
+  WR: ["Efficiency Score"],
+  TE: ["Efficiency Score"],
+};
+
 /**
- * Per-player usage composite (0–100) for a position+season, computed identically
- * to the Advanced Stats tab (percentile blend over *qualified* players), keyed by
- * Sleeper `playerId`. Only qualified players are included — matching the tab's
- * "Not enough data" gating — so the Value Finder's Dyn x Usage score agrees with
- * the Advanced Stats Usage/Workload/Volume score for the same player.
+ * Per-player composite score (0–100, higher = better) for a position+season, keyed
+ * by Sleeper `playerId`. This is the *same number the Advanced Stats tab displays*
+ * on the matching composite card: the player's percentile rank among qualified
+ * players, expressed as `100 − "Top X%"` (so the elite "Top 1%" → 99). The tab
+ * shows the rank/"Top X%" form; the Value Finder plots the higher-=-better
+ * complement on its axis. Only qualified players are included — matching the tab's
+ * "Not enough data" gating — so the two views agree for the same player.
+ *
+ * `labelsByPos` selects which composite(s) to read per position (e.g. usage vs
+ * efficiency); when a position has more than one, the best percentile is taken,
+ * mirroring the tab. The underlying composite (percentile blend of the component
+ * stats over qualified players) and the rank/"Top X%" derivation are computed
+ * identically to `loadPlayerAdvancedStats` above; see it for the canonical version.
  */
-export async function loadUsageCompositeScores(
+async function loadCompositeScores(
   season: string,
+  labelsByPos: Record<Pos, string[]>,
 ): Promise<Record<string, number>> {
   const out: Record<string, number> = {};
   const positions: Pos[] = ["QB", "RB", "WR", "TE"];
@@ -584,7 +603,7 @@ export async function loadUsageCompositeScores(
       }
 
       const defs = COMPOSITES[pos].filter((d) =>
-        USAGE_COMPOSITE_LABELS[pos].includes(d.label),
+        labelsByPos[pos].includes(d.label),
       );
       if (!defs.length) return;
 
@@ -608,19 +627,51 @@ export async function loadUsageCompositeScores(
         return parts.reduce((s, p) => s + p, 0) / parts.length;
       };
 
+      // Per-composite score distribution across qualified players, so each player
+      // can be ranked exactly as the Advanced Stats tab does (rank → "Top X%").
+      const defScores = defs.map((def) =>
+        qualifiedRows
+          .map((r) => rowComposite(r, def))
+          .filter((s): s is number => s != null),
+      );
+
       for (const r of qualifiedRows) {
         const id = String(r.playerId ?? "");
         if (!id) continue;
-        // Highest of the position's usage composites (a single one for QB/RB/WR).
+        // Convert each composite to the tab's "Top X%" percentile, then expose
+        // its higher-=-better complement (100 − Top X%). When a position has more
+        // than one composite in this set (e.g. TE usage), take the best percentile,
+        // mirroring the tab's "highest of the two" decision.
         let best: number | null = null;
-        for (const def of defs) {
-          const s = rowComposite(r, def);
-          if (s != null && (best == null || s > best)) best = s;
-        }
-        if (best != null) out[id] = Math.round(best);
+        defs.forEach((def, i) => {
+          const score = rowComposite(r, def);
+          if (score == null) return;
+          const all = defScores[i];
+          const total = all.length;
+          if (total === 0) return;
+          const rank = all.filter((s) => s > score).length + 1;
+          const topPct = Math.max(1, Math.round((rank / total) * 100));
+          const pctScore = 100 - topPct;
+          if (best == null || pctScore > best) best = pctScore;
+        });
+        if (best != null) out[id] = best;
       }
     }),
   );
 
   return out;
+}
+
+/** Usage/volume score map (see {@link loadCompositeScores}), keyed by playerId. */
+export function loadUsageCompositeScores(
+  season: string,
+): Promise<Record<string, number>> {
+  return loadCompositeScores(season, USAGE_COMPOSITE_LABELS);
+}
+
+/** Efficiency score map (see {@link loadCompositeScores}), keyed by playerId. */
+export function loadEfficiencyCompositeScores(
+  season: string,
+): Promise<Record<string, number>> {
+  return loadCompositeScores(season, EFFICIENCY_COMPOSITE_LABELS);
 }
