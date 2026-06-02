@@ -1516,23 +1516,42 @@ function QuickCalcSide({ label, assets, total, players, onAddPlayer, onAddPick }
 }) {
   const [search, setSearch] = useState("");
   const [searchFocused, setSearchFocused] = useState(false);
-  const [pickYear, setPickYear] = useState("2026");
-  const [pickRound, setPickRound] = useState("1");
 
   const chosenIds = useMemo(
     () => new Set(assets.filter((a) => a.type === "player" && a.player).map((a) => a.player!.sleeperId || a.player!.id)),
     [assets],
   );
 
-  // With a query: name matches. Without one: the highest-value players, so the
-  // dropdown is useful the instant the box is focused (before anything typed).
+  // Rookie/draft picks live in the same search box as players. Every year ×
+  // round combo is a searchable option (match on year, round, or "pick").
+  const pickOptions = useMemo(() => {
+    const ord = (r: number) => (r === 1 ? "1st" : r === 2 ? "2nd" : r === 3 ? "3rd" : `${r}th`);
+    return ["2026", "2027", "2028"].flatMap((y) =>
+      [1, 2, 3, 4].map((r) => ({
+        year: Number(y),
+        round: r,
+        label: `${y} ${ord(r)} Round Pick`,
+        value: getStaticPickValue(Number(y), r, "mid"),
+      })),
+    );
+  }, []);
+
+  // Unified search results — players and picks together. With a query we match
+  // names / pick labels; with an empty (but focused) box we surface the top
+  // players plus the full pick list so both are discoverable without typing.
   const results = useMemo(() => {
     const q = search.trim().toLowerCase();
-    const pool = q
+    const playerPool = q
       ? players.filter((p) => p.name.toLowerCase().includes(q))
       : [...players].sort((a, b) => b.value - a.value);
-    return pool.filter((p) => !chosenIds.has(p.sleeperId)).slice(0, 8);
-  }, [players, search, chosenIds]);
+    const playerItems = playerPool
+      .filter((p) => !chosenIds.has(p.sleeperId))
+      .slice(0, 8)
+      .map((p) => ({ kind: "player" as const, player: p }));
+    const pickPool = q ? pickOptions.filter((pk) => pk.label.toLowerCase().includes(q)) : pickOptions;
+    const pickItems = pickPool.map((pk) => ({ kind: "pick" as const, pick: pk }));
+    return [...playerItems, ...pickItems];
+  }, [players, search, chosenIds, pickOptions]);
 
   // Top 50 players by dynasty value (highest → lowest), already-added removed —
   // rendered as a horizontally sliding quick-add row under the header.
@@ -1564,44 +1583,43 @@ function QuickCalcSide({ label, assets, total, players, onAddPlayer, onAddPick }
             onChange={(e) => setSearch(e.target.value)}
             onFocus={() => setSearchFocused(true)}
             onBlur={() => setTimeout(() => setSearchFocused(false), 120)}
-            placeholder="Add a player…"
+            placeholder="Add a player or pick…"
             className="flex-1 bg-transparent py-1.5 text-[12px] focus:outline-none"
             data-testid={`quick-search-${label}`}
           />
         </div>
         {searchFocused && results.length > 0 && (
           <div className="absolute z-20 left-0 right-0 mt-1 rounded-lg border border-border bg-popover shadow-lg max-h-56 overflow-y-auto">
-            {results.map((p) => (
-              <button
-                key={p.sleeperId}
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => { onAddPlayer(p); setSearch(""); }}
-                className="w-full flex items-center gap-2 px-2 py-1.5 hover:bg-muted/50 text-left transition-colors"
-                data-testid={`quick-result-${p.sleeperId}`}
-              >
-                <PlayerAvatar id={p.sleeperId} name={p.name} pos={p.pos} team={p.team} size="xs" />
-                <span className="ml-auto text-[11px] font-bold tabular-nums text-muted-foreground">{Math.round(p.value).toLocaleString()}</span>
-              </button>
-            ))}
+            {results.map((item) =>
+              item.kind === "player" ? (
+                <button
+                  key={item.player.sleeperId}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => { onAddPlayer(item.player); setSearch(""); }}
+                  className="w-full flex items-center gap-2 px-2 py-1.5 hover:bg-muted/50 text-left transition-colors"
+                  data-testid={`quick-result-${item.player.sleeperId}`}
+                >
+                  <PlayerAvatar id={item.player.sleeperId} name={item.player.name} pos={item.player.pos} team={item.player.team} size="xs" />
+                  <span className="ml-auto text-[11px] font-bold tabular-nums text-muted-foreground">{Math.round(item.player.value).toLocaleString()}</span>
+                </button>
+              ) : (
+                <button
+                  key={`pick-${item.pick.year}-${item.pick.round}`}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => { onAddPick(item.pick.year, item.pick.round); setSearch(""); }}
+                  className="w-full flex items-center gap-2 px-2 py-1.5 hover:bg-muted/50 text-left transition-colors"
+                  data-testid={`quick-result-pick-${item.pick.year}-${item.pick.round}`}
+                >
+                  <span className="w-7 h-7 rounded-full bg-purple-900/40 border border-purple-700/40 flex items-center justify-center flex-shrink-0 text-[10px] font-bold text-purple-400">
+                    {item.pick.round === 1 ? "1st" : item.pick.round === 2 ? "2nd" : item.pick.round === 3 ? "3rd" : `${item.pick.round}th`}
+                  </span>
+                  <span className="text-[12px] font-semibold text-foreground">{item.pick.label}</span>
+                  <span className="ml-auto text-[11px] font-bold tabular-nums text-muted-foreground">{Math.round(item.pick.value).toLocaleString()}</span>
+                </button>
+              ),
+            )}
           </div>
         )}
-      </div>
-
-      {/* Draft-pick adder */}
-      <div className="flex items-center gap-1.5 mt-2">
-        <select value={pickYear} onChange={(e) => setPickYear(e.target.value)} className="rounded-md border border-border bg-background/60 px-1.5 py-1 text-[11px]" data-testid={`quick-pick-year-${label}`}>
-          {["2026", "2027", "2028"].map((y) => <option key={y} value={y}>{y}</option>)}
-        </select>
-        <select value={pickRound} onChange={(e) => setPickRound(e.target.value)} className="rounded-md border border-border bg-background/60 px-1.5 py-1 text-[11px]" data-testid={`quick-pick-round-${label}`}>
-          {["1", "2", "3", "4"].map((r) => <option key={r} value={r}>Round {r}</option>)}
-        </select>
-        <button
-          onClick={() => onAddPick(parseInt(pickYear, 10), parseInt(pickRound, 10))}
-          className="inline-flex items-center gap-1 rounded-md border border-border bg-muted/30 px-2 py-1 text-[11px] font-semibold text-muted-foreground hover:text-foreground transition-colors"
-          data-testid={`quick-add-pick-${label}`}
-        >
-          <Plus className="w-3 h-3" /> Pick
-        </button>
       </div>
 
       {/* Sliding quick-add row — top 50 by dynasty value, highest → lowest. */}
@@ -1737,7 +1755,7 @@ function QuickTradeCalculator() {
               <ArrowRightLeft className="w-4 h-4 text-[#0b3a7a] dark:text-blue-400" />
               Quick Trade Calculator
             </h2>
-            <p className="text-[12px] text-muted-foreground mt-0.5">Search any two packages to evaluate the trade — no login or league needed.</p>
+            <p className="text-[12px] text-muted-foreground mt-0.5">Search any two packages to evaluate the trade. No login or league needed.</p>
             <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
           </div>
           {(sideA.length > 0 || sideB.length > 0) && (
@@ -1886,7 +1904,7 @@ export function TradeCalculatorView({ league, userTeam, onNavigate }: {
       ) : (
         <Card className="p-6 text-center">
           <p className="text-sm font-semibold text-foreground">Connect your Sleeper account to use the league calculator</p>
-          <p className="text-[12px] text-muted-foreground mt-1">It loads your rosters and lets you pick a trade partner. Or use the Quick Calculator above — no login needed.</p>
+          <p className="text-[12px] text-muted-foreground mt-1">It loads your rosters and lets you pick a trade partner. Or use the Quick Calculator above. No login needed.</p>
           {onNavigate && (
             <Button className="mt-3 bg-[#d4af37] hover:bg-[#d4af37]/90 text-[#0b1f3a] font-semibold" onClick={() => onNavigate("portfolio", "portfolio-summary")} data-testid="calc-connect-cta">
               Connect Sleeper

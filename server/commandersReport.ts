@@ -481,7 +481,7 @@ export async function buildRecap(leagueId: string, year: number, month: number):
             claim_type: "rookie_pick",
             severity: cls.severity,
             manager,
-            headline: `${manager} took ${player} at ${label} — ${
+            headline: `${manager} took ${player} at ${label}, ${
               delta >= 0 ? `${delta} picks later than` : `${Math.abs(delta)} picks ahead of`
             } rookie ADP (${cls.label}).`,
             evidence: {
@@ -689,8 +689,8 @@ export async function buildRecap(leagueId: string, year: number, month: number):
       severity: sev,
       manager: row.manager,
       headline: row.faab > 0
-        ? `${row.manager} spent $${row.faab} FAAB (${Math.round(row.spendPct * 100)}% of budget) on ${row.added} — ${row.classification}.`
-        : `${row.manager} added ${row.added} off waivers — ${row.classification}.`,
+        ? `${row.manager} spent $${row.faab} FAAB (${Math.round(row.spendPct * 100)}% of budget) on ${row.added}: ${row.classification}.`
+        : `${row.manager} added ${row.added} off waivers: ${row.classification}.`,
       evidence: {
         player: row.added,
         faab: row.faab,
@@ -720,7 +720,7 @@ export async function buildRecap(leagueId: string, year: number, month: number):
     claim_type: "chaos",
     severity: chaos.score >= 60 ? "notable" : "info",
     manager: "League",
-    headline: `League Chaos Score: ${chaos.score}/100 — "${chaos.tier}". ${chaos.drivers.join(" ")}`,
+    headline: `League Chaos Score: ${chaos.score}/100. "${chaos.tier}". ${chaos.drivers.join(" ")}`,
     evidence: { score: chaos.score, tier: chaos.tier, trades: tradeRows.length, waivers: waiverRows.length, totalFaab },
     allowed_tone: [...TONES],
   });
@@ -733,7 +733,7 @@ export async function buildRecap(leagueId: string, year: number, month: number):
       claim_type: "award",
       severity: "notable",
       manager: aw.manager,
-      headline: `${aw.label}: ${aw.manager} — ${aw.value} (${aw.detail}).`,
+      headline: `${aw.label}: ${aw.manager}, ${aw.value} (${aw.detail}).`,
       evidence: { award: aw.label, manager: aw.manager, value: aw.value, detail: aw.detail },
       allowed_tone: [...TONES],
     });

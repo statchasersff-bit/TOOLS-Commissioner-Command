@@ -525,7 +525,7 @@ function LeagueRow({ analysis, preseason, onApplied }: { analysis: LeagueAnalysi
       if (norm(result.starters ?? []) !== norm(analysis.optimalStarters)) {
         toast({
           title: "Lineup not changed",
-          description: `${leagueName}: Sleeper kept your current lineup — the players needed may be on IR/taxi or already locked.`,
+          description: `${leagueName}: Sleeper kept your current lineup. The players needed may be on IR/taxi or already locked.`,
           variant: "destructive",
         });
         return;
@@ -1170,7 +1170,7 @@ function IrTaxiLeagueCard({ a }: { a: IrTaxiAnalysis }) {
           <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-[var(--sc-gold-deep)] dark-any:text-[#d4af37] mb-2">Injured Reserve</p>
           {ineligibleCount > 0 && (
             <p className="text-[10px] mb-1 text-red-400/80">
-              {ineligibleCount} player{ineligibleCount === 1 ? "" : "s"} no longer IR-eligible — move off IR or it blocks your lineup.
+              {ineligibleCount} player{ineligibleCount === 1 ? "" : "s"} no longer IR-eligible. Move off IR or it blocks your lineup.
             </p>
           )}
           {!hasIr ? (
@@ -1195,10 +1195,10 @@ function IrTaxiLeagueCard({ a }: { a: IrTaxiAnalysis }) {
             <>
               <p className={cn("text-[10px] mb-1", (openIrSlots > 0 || ineligibleCount > 0) ? "text-emerald-700/80 dark-any:text-emerald-300/80" : "text-[var(--sc-text-muted)] dark-any:text-white/35")}>
                 {openIrSlots > 0
-                  ? `${openIrSlots} open IR slot${openIrSlots === 1 ? "" : "s"} — stash one to free a roster spot.`
+                  ? `${openIrSlots} open IR slot${openIrSlots === 1 ? "" : "s"}. Stash one to free a roster spot.`
                   : ineligibleCount > 0
                     ? "IR is full, but freeing an ineligible player opens a slot."
-                    : "IR is full — clear a slot first."}
+                    : "IR is full. Clear a slot first."}
               </p>
               <div className="flex flex-wrap gap-1.5">
                 {a.irCandidates.map(p => (

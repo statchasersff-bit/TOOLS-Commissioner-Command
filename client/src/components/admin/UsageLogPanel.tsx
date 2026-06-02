@@ -139,7 +139,7 @@ export function UsageLogPanel() {
         </div>
       </div>
       <p className="text-[12px] text-muted-foreground mb-3">
-        Everyone who used the tool — time on site, pages viewed, and whether they connected Sleeper.
+        Everyone who used the tool: time on site, pages viewed, and whether they connected Sleeper.
         Page views &amp; duration are tracked going forward only.
       </p>
 

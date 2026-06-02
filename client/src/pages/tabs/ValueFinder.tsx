@@ -297,13 +297,13 @@ export function ValueFinder() {
 function ProductionBuysTab({ players }: { players: ValueFinderPlayer[] }) {
   return (
     <div className="space-y-3">
-      <HowToReadCard defaultOpen>
-        This compares Fantasy Points scored per game against dynasty market value. An older player
-        can out-produce his price while still being a poor long-term hold.
-      </HowToReadCard>
       <Panel>
         <ProductionBuysChart players={players} />
       </Panel>
+      <HowToReadCard>
+        This compares Fantasy Points scored per game against dynasty market value. An older player
+        can out-produce his price while still being a poor long-term hold.
+      </HowToReadCard>
     </div>
   );
 }
@@ -312,14 +312,14 @@ function ProductionBuysTab({ players }: { players: ValueFinderPlayer[] }) {
 function UsageBuysTab({ players }: { players: ValueFinderPlayer[] }) {
   return (
     <div className="space-y-3">
-      <HowToReadCard defaultOpen>
+      <Panel>
+        <UsageBuysChart players={players} />
+      </Panel>
+      <HowToReadCard>
         This compares StatChasers Usage Score against dynasty market value. Strong usage at a low price
         may signal a buy window before production catches up, but a strong role doesn't mean "buy for
         everyone" as player age is important to consider as well.
       </HowToReadCard>
-      <Panel>
-        <UsageBuysChart players={players} />
-      </Panel>
     </div>
   );
 }
@@ -328,14 +328,14 @@ function UsageBuysTab({ players }: { players: ValueFinderPlayer[] }) {
 function EfficiencyBuysTab({ players }: { players: ValueFinderPlayer[] }) {
   return (
     <div className="space-y-3">
-      <HowToReadCard defaultOpen>
-        This compares StatChasers Efficiency Score against dynasty market value. Strong efficiency at a
-        low price may signal a buy window — the player is doing more with his opportunities than the
-        market has priced in — but efficiency on light usage can be noisy, so weigh role and age too.
-      </HowToReadCard>
       <Panel>
         <EfficiencyBuysChart players={players} />
       </Panel>
+      <HowToReadCard>
+        This compares StatChasers Efficiency Score against dynasty market value. Strong efficiency at a
+        low price may signal a buy window: the player is doing more with his opportunities than the
+        market has priced in, but efficiency on light usage can be noisy, so weigh role and age too.
+      </HowToReadCard>
     </div>
   );
 }
@@ -356,12 +356,6 @@ function TrendRadarTab({
 }) {
   return (
     <div className="space-y-3">
-      <HowToReadCard defaultOpen>
-        This chart compares market movement against role and production trends. Hidden risers may be
-        gaining opportunity before their value reacts. Hype risers may be gaining value without enough
-        role improvement. Longevity and Best Fit matter here: a 30-year-old whose role is rising is not
-        the same asset as a 22-year-old with the same trend.
-      </HowToReadCard>
       <div className="flex flex-wrap items-center gap-1.5">
         <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground w-16">Trend</span>
         {TREND_WINDOWS.map((w) => (
@@ -383,6 +377,12 @@ function TrendRadarTab({
       <Panel>
         <TrendRadarChart players={players} trendWindow={window} />
       </Panel>
+      <HowToReadCard>
+        This chart compares market movement against role and production trends. Hidden risers may be
+        gaining opportunity before their value reacts. Hype risers may be gaining value without enough
+        role improvement. Longevity and Best Fit matter here: a 30-year-old whose role is rising is not
+        the same asset as a 22-year-old with the same trend.
+      </HowToReadCard>
     </div>
   );
 }

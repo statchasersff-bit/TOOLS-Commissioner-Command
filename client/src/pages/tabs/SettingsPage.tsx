@@ -204,7 +204,7 @@ export function SettingsPage({ initialTab = "general" }: { initialTab?: Settings
 
         {!draftMyTeamReady && (
           <p className="text-[11px] text-amber-500 dark:text-amber-400" data-testid="my-team-mode-gated">
-            My Team theme is available for the Arizona Cardinals only right now — pick them as your
+            My Team theme is available for the Arizona Cardinals only right now. Pick them as your
             favorite team below to use it. More teams coming soon.
           </p>
         )}
@@ -267,7 +267,7 @@ export function SettingsPage({ initialTab = "general" }: { initialTab?: Settings
         </div>
         <p className="text-xs text-muted-foreground">
           Choose which dynasty leagues appear across Dynasty Command. We pre-select your
-          active, drafted leagues — check any we filtered out to add them to your list, or
+          active, drafted leagues. Check any we filtered out to add them to your list, or
           uncheck ones you'd rather hide. Changes save automatically.
         </p>
 
@@ -284,7 +284,7 @@ export function SettingsPage({ initialTab = "general" }: { initialTab?: Settings
               leagues={selectedLeagues}
               includedSet={includedSet}
               onToggle={setLeagueIncluded}
-              emptyText="No leagues selected — pick at least one below."
+              emptyText="No leagues selected. Pick at least one below."
             />
             {filteredOutLeagues.length > 0 && (
               <div className="space-y-3">

@@ -686,10 +686,10 @@ function buildTradeApproach(
       "Lead with rookie picks and young upside. Aging veterans are unlikely to move the needle.";
   } else if (direction === "Middle") {
     suggestedAngle =
-      "Offer balanced packages — they're open to either side. Frame deals as upgrades, not pivots.";
+      "Offer balanced packages. They're open to either side. Frame deals as upgrades, not pivots.";
   } else {
     suggestedAngle =
-      "Direction is unclear — feel them out with a low-cost opener before tailoring.";
+      "Direction is unclear. Feel them out with a low-cost opener before tailoring.";
   }
 
   const assetsTheyMayValue: string[] = [];
@@ -711,16 +711,16 @@ function buildTradeApproach(
     assetsTheyMayValue.push(`Players they keep gravitating to: ${names}`);
   }
   if (assetsTheyMayValue.length === 0) {
-    assetsTheyMayValue.push("Insufficient signal — open with a balanced two-for-two.");
+    assetsTheyMayValue.push("Insufficient signal. Open with a balanced two-for-two.");
   }
 
   let cautionNotes: string;
   if (cross.tradeActivityRating === "Low") {
     cautionNotes =
-      "Manager rarely trades. Confidence in this read is low — treat suggestions as a starting point only.";
+      "Manager rarely trades. Confidence in this read is low. Treat suggestions as a starting point only.";
   } else if (cross.dynastyLeagueCount <= 1) {
     cautionNotes =
-      "Only one visible dynasty league — cross-league tendencies are not reliable here.";
+      "Only one visible dynasty league. Cross-league tendencies are not reliable here.";
   } else {
     cautionNotes = "Based on visible Sleeper leagues only; private leagues are not included.";
   }
@@ -776,7 +776,7 @@ function summarisePickCapital(picks: RosterAndPicks): string {
     return "No future rookie picks visible in this league.";
   }
   if (picks.earlyPicks >= 3) {
-    return `${picks.ownedPickCount} rookie picks total (${picks.earlyPicks} early — strong asset base).`;
+    return `${picks.ownedPickCount} rookie picks total (${picks.earlyPicks} early, strong asset base).`;
   }
   return `${picks.ownedPickCount} rookie picks (${picks.earlyPicks} early).`;
 }
@@ -1155,10 +1155,10 @@ function buildConfidence(leagueCount: number, totalTxns: number): { level: Ratin
   const txn = `${totalTxns} visible transaction${totalTxns === 1 ? "" : "s"}`;
   const basis =
     level === "High"
-      ? `Based on ${lg} and ${txn} — enough roster and activity signal to read tendencies reliably.`
+      ? `Based on ${lg} and ${txn}: enough roster and activity signal to read tendencies reliably.`
       : level === "Medium"
-      ? `Based on ${lg} and ${txn} — a moderate sample, so treat finer reads as directional.`
-      : `Based on only ${lg} and ${txn} — limited signal; treat this as a rough first impression.`;
+      ? `Based on ${lg} and ${txn}: a moderate sample, so treat finer reads as directional.`
+      : `Based on only ${lg} and ${txn}: limited signal. Treat this as a rough first impression.`;
   return { level, basis };
 }
 
@@ -1537,10 +1537,10 @@ function buildTradeDifficulty(
   const level: Rating3 = score >= 3 ? "High" : score >= 1 ? "Medium" : "Low";
   const reason =
     level === "High"
-      ? "A strong, well-built roster paired with limited trade activity — expect a tough negotiation."
+      ? "A strong, well-built roster paired with limited trade activity. Expect a tough negotiation."
       : level === "Medium"
       ? "Moderate trade activity suggests they're reachable, but their roster is solid, so they're unlikely to make desperation moves."
-      : "Active in the market and reachable — a fair offer has a real chance.";
+      : "Active in the market and reachable. A fair offer has a real chance.";
   return { level, reason };
 }
 
@@ -1585,7 +1585,7 @@ function buildNegotiationNotes(direction: TeamDirection, needs: string[]): strin
   if (direction === "Contender") {
     return [
       "Lead with win-now production they can start immediately.",
-      "They'll pay future picks for present upgrades — use that.",
+      "They'll pay future picks for present upgrades. Use that.",
       "Don't expect them to value multi-year projects.",
       "Packaging two pieces into one starter is more appealing than depth.",
     ];
@@ -1593,7 +1593,7 @@ function buildNegotiationNotes(direction: TeamDirection, needs: string[]): strin
   return [
     "Frame every offer as a clear upgrade, not a lateral move.",
     "Feel out whether they lean now vs. future before committing.",
-    needs.length ? `They could use help at ${needs.join("/")} — lead there.` : "No urgent needs, so make the value obvious.",
+    needs.length ? `They could use help at ${needs.join("/")}. Lead there.` : "No urgent needs, so make the value obvious.",
   ];
 }
 
@@ -1609,7 +1609,7 @@ function buildPlaybook(
     : direction === "Middle" ? "Opportunistic value"
     : "Unclear direction";
   const negotiationStyle =
-    tradeRating === "Aggressive" || tradeRating === "Very Active" ? "Active dealer — moves quickly"
+    tradeRating === "Aggressive" || tradeRating === "Very Active" ? "Active dealer, moves quickly"
     : tradeRating === "Active" ? "Engaged and open to offers"
     : tradeRating === "Moderate" ? "Patient, not reckless"
     : "Slow to engage";
@@ -1639,8 +1639,8 @@ function buildGroupedTargetsSell(
     high.push("Proven, productive starters", "Win-now upgrades at any position");
   }
   const conditional = preferYouth
-    ? ["Veteran producers — only if discounted", "Older players — only as add-ons"]
-    : ["Speculative youth — only with a clear value edge"];
+    ? ["Veteran producers, only if discounted", "Older players, only as add-ons"]
+    : ["Speculative youth, only with a clear value edge"];
 
   const mostLikely = [
     "Aging veterans",
@@ -1700,7 +1700,7 @@ function activitySignalOf(
   if (tradesPerLeague < 0.5 && waiversPerLeague < 1.5)
     return {
       signal: "Ghost",
-      note: "Very little visible roster movement. They may be hard to reach — expect a slow response to offers.",
+      note: "Very little visible roster movement. They may be hard to reach. Expect a slow response to offers.",
     };
   const total = tradesPerLeague + waiversPerLeague;
   if (total < 4)
@@ -1715,7 +1715,7 @@ function activitySignalOf(
     };
   return {
     signal: "Active",
-    note: "High transaction activity — frequently tinkering. Very reachable and quick to engage on deals.",
+    note: "High transaction activity. Frequently tinkering. Very reachable and quick to engage on deals.",
   };
 }
 
@@ -1729,24 +1729,24 @@ function buildActivityArchetype(
     return { key: "dormant", label: "Dormant / Low Signal", blurb: "Little visible activity, or not enough data to read them." };
   }
   if (tradesPerLeague < 0.5 && waiversPerLeague < 1.5) {
-    return { key: "passive", label: "Passive Manager", blurb: "Low transaction activity — may be harder to engage." };
+    return { key: "passive", label: "Passive Manager", blurb: "Low transaction activity. May be harder to engage." };
   }
   if (tradesPerLeague + waiversPerLeague >= 18) {
-    return { key: "churner", label: "High-Volume Churner", blurb: "Constantly adjusting — heavy waivers and frequent trades." };
+    return { key: "churner", label: "High-Volume Churner", blurb: "Constantly adjusting: heavy waivers and frequent trades." };
   }
   if (tradesPerLeague >= 3 && tradesPerLeague >= waiversPerLeague * 0.8) {
-    return { key: "trade-shark", label: "Trade Shark", blurb: "Trade volume outpaces waivers — likely open to negotiation." };
+    return { key: "trade-shark", label: "Trade Shark", blurb: "Trade volume outpaces waivers. Likely open to negotiation." };
   }
   if (waiversPerLeague >= 10 && waiversPerLeague > tradesPerLeague * 2) {
     return { key: "waiver-grinder", label: "Waiver Grinder", blurb: "Works the wire harder than the trade market." };
   }
-  return { key: "steady", label: "Steady Manager", blurb: "Moderate trades and waivers — engaged, but not constantly churning." };
+  return { key: "steady", label: "Steady Manager", blurb: "Moderate trades and waivers. Engaged, but not constantly churning." };
 }
 
 /** Tradeability (responsiveness) from trade-activity rating. High = reachable. */
 function buildTradeability(tradeRating: ActivityRating): { level: Rating3; note: string } {
   if (tradeRating === "Aggressive" || tradeRating === "Very Active" || tradeRating === "Active") {
-    return { level: "High", note: "Active in the trade market — they engage readily on fair offers." };
+    return { level: "High", note: "Active in the trade market. They engage readily on fair offers." };
   }
   if (tradeRating === "Moderate") {
     return {
@@ -1754,7 +1754,7 @@ function buildTradeability(tradeRating: ActivityRating): { level: Rating3; note:
       note: "Reachable, but not reckless. Send clean, value-aligned offers rather than fishing for quick wins.",
     };
   }
-  return { level: "Low", note: "Rarely trades — it may take a standout offer to get their attention." };
+  return { level: "Low", note: "Rarely trades. It may take a standout offer to get their attention." };
 }
 
 /**
@@ -1866,9 +1866,9 @@ function buildNeedsTable(dynasty: PositionScore[], winNow: PositionScore[]): Nee
     if (dWeak && wWeak) level = "High";
     else if (dWeak || wWeak) level = "Medium";
     const nuance =
-      dWeak && wWeak ? " — weak both ways"
-      : !dWeak && wWeak ? " — strong long-term, thin win-now"
-      : dWeak && !wWeak ? " — thin long-term"
+      dWeak && wWeak ? ": weak both ways"
+      : !dWeak && wWeak ? ": strong long-term, thin win-now"
+      : dWeak && !wWeak ? ": thin long-term"
       : "";
     return {
       position: pos,
@@ -1884,15 +1884,15 @@ function buildTradeOpportunity(dynasty: PositionScore[], winNow: PositionScore[]
     .map((pos) => ({ pos, d: dynasty.find((p) => p.position === pos), w: winNow.find((p) => p.position === pos) }))
     .find((x) => x.d && x.w && x.d.tier !== "Weak" && x.d.tier !== "Thin" && (x.w.tier === "Weak" || x.w.tier === "Thin"));
   if (split) {
-    return `Their ${split.pos} group is thin for win-now production despite holding up long-term — a productive veteran ${split.pos} could be a useful add-on in trade talks.`;
+    return `Their ${split.pos} group is thin for win-now production despite holding up long-term. A productive veteran ${split.pos} could be a useful add-on in trade talks.`;
   }
   const sortedWeak = [...dynasty].sort((a, b) => a.vsLeagueAvg - b.vsLeagueAvg);
   const weakest = sortedWeak[0];
   if (weakest && (weakest.tier === "Weak" || weakest.tier === "Thin")) {
-    return `${weakest.position} is their weakest relative dynasty group, but they're strong enough overall that they may not feel desperate — lead with consolidation or future value rather than just "filling a hole".`;
+    return `${weakest.position} is their weakest relative dynasty group, but they're strong enough overall that they may not feel desperate. Lead with consolidation or future value rather than just "filling a hole".`;
   }
   if (weakest) {
-    return `No glaring holes — ${weakest.position} is their softest group vs league average. The best angle is a clear upgrade or consolidating two pieces into one they covet.`;
+    return `No glaring holes. ${weakest.position} is their softest group vs league average. The best angle is a clear upgrade or consolidating two pieces into one they covet.`;
   }
   return "Roster data is too thin to surface a specific trade angle in this league.";
 }
@@ -2569,7 +2569,7 @@ function generatePositionalBiasAnalysis(bias: DraftBiasRow[]): string {
     parts.push(`and fewer ${under.position} (${under.difference} pts)`);
   }
   if (parts.length === 0) {
-    return "Positional draft mix closely tracks the leagues they play in — no strong lean.";
+    return "Positional draft mix closely tracks the leagues they play in. No strong lean.";
   }
   return `Relative to league average, ${parts.join(" ")}.`;
 }
@@ -3211,8 +3211,8 @@ function emptyPayload(
     },
     tradeApproach: {
       summary: note,
-      suggestedAngle: "Insufficient data — no actionable read available.",
-      actionableTakeaway: "Insufficient data — no actionable read available.",
+      suggestedAngle: "Insufficient data. No actionable read available.",
+      actionableTakeaway: "Insufficient data. No actionable read available.",
       doList: [],
       dontList: [],
       likelyNeeds: [],

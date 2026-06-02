@@ -1051,7 +1051,7 @@ export default function PositionStats() {
           {subTab !== "compare" && (
             <button
               onClick={() => setQualifiedOnly((v) => !v)}
-              title={`Qualified players only — ${tableMinLabel(position)}`}
+              title={`Qualified players only: ${tableMinLabel(position)}`}
               className={cn(
                 "flex items-center gap-1.5 px-3 h-8 rounded-md text-xs font-semibold border transition-colors shrink-0",
                 qualifiedOnly

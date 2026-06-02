@@ -130,9 +130,9 @@ function buildShareText(recap: RecapResult): string {
 
   if (reach) return `${reach.manager} reached ${reach.detail} for ${reach.value}. The Commander's Report kept the receipts.`;
   if (faab) return `${faab.manager} torched ${faab.detail} on ${faab.value}. Full receipts inside.`;
-  if (trade) return `${trade.manager} fleeced the league for ${trade.detail}. Don't take our word for it — read it.`;
+  if (trade) return `${trade.manager} fleeced the league for ${trade.detail}. Don't take our word for it. Read it.`;
   if (chaotic)
-    return `${chaotic.manager} ran the month's chaos. ${recap.meta.leagueName} hit ${recap.chaosScore.score}/100 — somebody had to write it down.`;
+    return `${chaotic.manager} ran the month's chaos. ${recap.meta.leagueName} hit ${recap.chaosScore.score}/100. Somebody had to write it down.`;
   return `${recap.meta.leagueName} clocked ${recap.chaosScore.score}/100 on the Chaos Score. The Commander's Report has thoughts.`;
 }
 
@@ -212,7 +212,7 @@ export function narrateReportTemplate(recap: RecapResult, seed: string): Article
     usedMb = true;
     usedTrade = true;
     paras.push({
-      body: `We are gathered here today to discuss ${mb.victim}, who decided that owning ${mb.stud} was simply too stressful and shipped him out for ${joinAnd(mb.package)} — a package whose best argument is that none of them are old enough to disappoint anyone yet. ${pick(rng, MB_METAPHORS)} ${mb.victim} traded production for imagination, which is great if this league starts handing out points for theoretical upside.`,
+      body: `We are gathered here today to discuss ${mb.victim}, who decided that owning ${mb.stud} was simply too stressful and shipped him out for ${joinAnd(mb.package)}, a package whose best argument is that none of them are old enough to disappoint anyone yet. ${pick(rng, MB_METAPHORS)} ${mb.victim} traded production for imagination, which is great if this league starts handing out points for theoretical upside.`,
       claimIds: ["award-best_trade"],
     });
     callback = `${mb.victim} better hope one of those mystery boxes actually contains a starter, because shipping out ${mb.stud} for a group project is the exact receipt Dynasty Command laminates and brings back out when the group chat needs a victim.`;
@@ -220,7 +220,7 @@ export function narrateReportTemplate(recap: RecapResult, seed: string): Article
     villain = loserSide!.manager;
     usedTrade = true;
     paras.push({
-      body: `We are gathered here today to discuss ${loserSide!.manager}, who ${tradeGiveTake()}. Dynasty Command stamped it a ${topRow.grade} for ${winnerSide!.manager} and a ${top!.detail} the other way — the kind of deal that sounds fine until the math walks in wearing gloves and starts dusting for fingerprints.`,
+      body: `We are gathered here today to discuss ${loserSide!.manager}, who ${tradeGiveTake()}. Dynasty Command stamped it a ${topRow.grade} for ${winnerSide!.manager} and a ${top!.detail} the other way, the kind of deal that sounds fine until the math walks in wearing gloves and starts dusting for fingerprints.`,
       claimIds: ["award-best_trade"],
     });
     callback = `${loserSide!.manager} better hope those picks never amount to anything, because handing ${winnerSide!.manager} a ${top!.detail} is the type of receipt Dynasty Command laminates for the group chat.`;
@@ -234,7 +234,7 @@ export function narrateReportTemplate(recap: RecapResult, seed: string): Article
     callback = `${faab.manager} better hope ${playerName(faab.value)} was worth ${faab.detail}, because that bid is the kind of receipt the group chat brings up every time it needs a cheap laugh.`;
   } else {
     paras.push({
-      body: `For once, ${recap.meta.leagueName} kept its hands mostly clean — no draft heists, no FAAB bonfires, no trade-screen crime scenes worth prosecuting. Suspicious, frankly.`,
+      body: `For once, ${recap.meta.leagueName} kept its hands mostly clean: no draft heists, no FAAB bonfires, no trade-screen crime scenes worth prosecuting. Suspicious, frankly.`,
       claimIds: ["chaos-league"],
     });
   }
@@ -259,12 +259,12 @@ export function narrateReportTemplate(recap: RecapResult, seed: string): Article
   if (value) {
     if (value.manager === villain) {
       paras.push({
-        body: `In the middle of all this, ${value.manager} somehow also did something smart, which is honestly the most suspicious part of the entire month. Landing ${value.value} a full ${value.detail} was real value — patient, reasonable, almost impressive, which is exactly why it feels like it happened by accident. For one brief moment ${value.manager} looked like the only person in the room reading the board correctly, and then the rest of the month reopened the investigation.`,
+        body: `In the middle of all this, ${value.manager} somehow also did something smart, which is honestly the most suspicious part of the entire month. Landing ${value.value} a full ${value.detail} was real value: patient, reasonable, almost impressive, which is exactly why it feels like it happened by accident. For one brief moment ${value.manager} looked like the only person in the room reading the board correctly, and then the rest of the month reopened the investigation.`,
         claimIds: ["award-best_value"],
       });
     } else {
       paras.push({
-        body: `Somewhere in the wreckage, ${value.manager} accidentally looked competent, landing ${value.value} a full ${value.detail} — not because of any master plan, but because everyone else was too busy faceplanting to notice the value sitting there in plain sight.`,
+        body: `Somewhere in the wreckage, ${value.manager} accidentally looked competent, landing ${value.value} a full ${value.detail}, not because of any master plan, but because everyone else was too busy faceplanting to notice the value sitting there in plain sight.`,
         claimIds: ["award-best_value"],
       });
     }
@@ -277,7 +277,7 @@ export function narrateReportTemplate(recap: RecapResult, seed: string): Article
     const names = joinAnd(ghosts.slice(0, 4)) + (ghosts.length > 4 ? `, and ${ghosts.length - 4} others` : "");
     const { tradeRecap, waiverRecap, rookieRecap } = recap;
     paras.push({
-      body: `Then there are the ghosts. While the rest of the league set fire to the transaction feed, ${names} watched ${rookieRecap.drafted} rookie ${plural(rookieRecap.drafted, "pick")}, ${waiverRecap.count} waiver ${plural(waiverRecap.count, "move")}, and ${tradeRecap.count} ${plural(tradeRecap.count, "trade")} drift past like traffic outside a window. In a month this loud, silence isn't discipline — it's patience, paralysis, or someone forgetting they downloaded Sleeper in the first place.`,
+      body: `Then there are the ghosts. While the rest of the league set fire to the transaction feed, ${names} watched ${rookieRecap.drafted} rookie ${plural(rookieRecap.drafted, "pick")}, ${waiverRecap.count} waiver ${plural(waiverRecap.count, "move")}, and ${tradeRecap.count} ${plural(tradeRecap.count, "trade")} drift past like traffic outside a window. In a month this loud, silence isn't discipline. It's patience, paralysis, or someone forgetting they downloaded Sleeper in the first place.`,
       claimIds: ["chaos-league"],
     });
   }
@@ -288,13 +288,13 @@ export function narrateReportTemplate(recap: RecapResult, seed: string): Article
     usedMb = true;
     usedTrade = true;
     paras.push({
-      body: `The trade market wasn't innocent either. ${mb.victim} decided owning a proven dynasty asset was simply too stressful and shipped ${mb.stud} out for ${joinAnd(mb.package)} — younger pieces whose best argument is that they aren't old enough to disappoint anyone yet. ${pick(rng, MB_METAPHORS)} Maybe one of them hits. Maybe they all become weekly starters. Or maybe ${mb.victim} just traded certainty for a group project and called it roster construction.`,
+      body: `The trade market wasn't innocent either. ${mb.victim} decided owning a proven dynasty asset was simply too stressful and shipped ${mb.stud} out for ${joinAnd(mb.package)}, younger pieces whose best argument is that they aren't old enough to disappoint anyone yet. ${pick(rng, MB_METAPHORS)} Maybe one of them hits. Maybe they all become weekly starters. Or maybe ${mb.victim} just traded certainty for a group project and called it roster construction.`,
       claimIds: ["award-best_trade"],
     });
   } else if (tradeRoastable && !usedTrade) {
     usedTrade = true;
     paras.push({
-      body: `The trade market wasn't innocent either. ${loserSide!.manager} ${tradeGiveTake()}, letting ${winnerSide!.manager} walk away with a ${top!.detail}. Dynasty Command called it a ${topRow.grade} for ${winnerSide!.manager} — the kind of deal that sounds boring until the math walks in wearing gloves and starts dusting for fingerprints.`,
+      body: `The trade market wasn't innocent either. ${loserSide!.manager} ${tradeGiveTake()}, letting ${winnerSide!.manager} walk away with a ${top!.detail}. Dynasty Command called it a ${topRow.grade} for ${winnerSide!.manager}, the kind of deal that sounds boring until the math walks in wearing gloves and starts dusting for fingerprints.`,
       claimIds: ["award-best_trade"],
     });
   }

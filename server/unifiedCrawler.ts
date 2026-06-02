@@ -363,7 +363,7 @@ export async function recoverStuckRuns(): Promise<{ recovered: number }> {
     .update(unifiedCrawlRuns)
     .set({
       status: "failed",
-      message: "Recovered at startup — process restarted before the run finished.",
+      message: "Recovered at startup. Process restarted before the run finished.",
       completedAt: new Date(),
     })
     .where(eq(unifiedCrawlRuns.status, "running"))

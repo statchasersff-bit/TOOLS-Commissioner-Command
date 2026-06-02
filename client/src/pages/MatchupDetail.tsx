@@ -345,7 +345,7 @@ function DetailBody({ data }: { data: DetailData }) {
       <IntelStrip data={displayData} />
 
       {hasBye || !opp ? (
-        <EmptyState title="Bye week" body="You don't have an opponent this week — enjoy the rest. Your optimal lineup is still below." inline />
+        <EmptyState title="Bye week" body="You don't have an opponent this week. Enjoy the rest. Your optimal lineup is still below." inline />
       ) : null}
 
       {/* Starters comparison */}
@@ -879,7 +879,7 @@ function buildAlerts(data: DetailData): Alert[] {
 
   // Zero-projection starters.
   for (const p of me.starters.filter(s => s.proj < 0.5 && !s.onBye)) {
-    out.push({ icon: Ban, title: `${p.name} projects 0.0`, body: `Your ${p.slot} has no projected points — check status before lock.`, cls: "border-red-500/25 bg-red-500/[0.05] text-red-600 dark-any:text-red-300", player: p });
+    out.push({ icon: Ban, title: `${p.name} projects 0.0`, body: `Your ${p.slot} has no projected points. Check status before lock.`, cls: "border-red-500/25 bg-red-500/[0.05] text-red-600 dark-any:text-red-300", player: p });
   }
   // Bye-week starters.
   for (const p of me.starters.filter(s => s.onBye)) {
@@ -889,7 +889,7 @@ function buildAlerts(data: DetailData): Alert[] {
   for (const p of me.starters) {
     const inj = injLabel(p.injury);
     if (inj && !p.onBye) {
-      out.push({ icon: Activity, title: `${p.name} — ${p.injury}`, body: `Injury designation on your ${p.slot}. Have a backup ready.`, cls: inj === "OUT" ? "border-red-500/25 bg-red-500/[0.05] text-red-600 dark-any:text-red-300" : "border-yellow-500/25 bg-yellow-500/[0.05] text-yellow-600 dark-any:text-yellow-300", player: p });
+      out.push({ icon: Activity, title: `${p.name} (${p.injury})`, body: `Injury designation on your ${p.slot}. Have a backup ready.`, cls: inj === "OUT" ? "border-red-500/25 bg-red-500/[0.05] text-red-600 dark-any:text-red-300" : "border-yellow-500/25 bg-yellow-500/[0.05] text-yellow-600 dark-any:text-yellow-300", player: p });
     }
   }
   // Optimal-lineup improvement.
@@ -938,8 +938,8 @@ function BenchSection({ data }: { data: DetailData }) {
 
       {/* Top 3 bench each */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <BenchColumn title={`${me.name} — Bench`} players={me.bench.slice(0, 3)} mine />
-        {opp ? <BenchColumn title={`${opp.name} — Bench`} players={opp.bench.slice(0, 3)} /> : null}
+        <BenchColumn title={`${me.name} (Bench)`} players={me.bench.slice(0, 3)} mine />
+        {opp ? <BenchColumn title={`${opp.name} (Bench)`} players={opp.bench.slice(0, 3)} /> : null}
       </div>
     </section>
   );

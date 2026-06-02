@@ -190,7 +190,7 @@ async function fetchJson<T>(url: string, init?: RequestInit, timeoutMs = TIMEOUT
     // Surface our own timeout as a clear message instead of the raw DOMException
     // ("signal is aborted without reason") the browser throws on abort().
     if (timedOut || err?.name === "AbortError") {
-      throw new Error(`Timed out after ${Math.round(timeoutMs / 1000)}s — leagues with a lot of activity can take a while. Please try again.`);
+      throw new Error(`Timed out after ${Math.round(timeoutMs / 1000)}s. Leagues with a lot of activity can take a while. Please try again.`);
     }
     throw err;
   } finally {

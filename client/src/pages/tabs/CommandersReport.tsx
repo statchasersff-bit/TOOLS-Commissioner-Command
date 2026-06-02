@@ -109,7 +109,7 @@ export function CommandersReport({ leagueId, leagueName }: { leagueId: string; l
       const clipboardText = shareText ? `${shareText}\n${url}` : url;
       try {
         await navigator.clipboard.writeText(clipboardText);
-        toast({ title: "Public link copied", description: "Anyone with this link can view the report — no login needed." });
+        toast({ title: "Public link copied", description: "Anyone with this link can view the report. No login needed." });
       } catch {
         // Clipboard blocked (insecure context / permissions): surface the URL so it can be copied manually.
         toast({ title: "Public link ready", description: url });
@@ -129,7 +129,7 @@ export function CommandersReport({ leagueId, leagueName }: { leagueId: string; l
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between md:gap-4">
         <SectionHeader
           title="Commander's Report"
-          subtitle="Your monthly dynasty briefing — trades graded, picks judged, waivers analyzed, and managers respectfully roasted."
+          subtitle="Your monthly dynasty briefing: trades graded, picks judged, waivers analyzed, and managers respectfully roasted."
         />
         <div className="flex flex-wrap items-center gap-2">
           {/* Month picker */}

@@ -1419,7 +1419,7 @@ function AdpTab({ history, avail, loading, error, pos, filters, onFiltersChange 
 
             <AdpHistoryChart series={quarterly} />
             <div className="text-[10px] text-muted-foreground mt-2">
-              Reversed axis — higher on the chart means drafted earlier. Hover any point for its ADP, draft count, and change from the prior quarter.
+              Reversed axis. Higher on the chart means drafted earlier. Hover any point for its ADP, draft count, and change from the prior quarter.
             </div>
           </>
         ) : (

@@ -600,14 +600,14 @@ export function AdpCrawlPanel() {
         </div>
         <div className="flex flex-wrap gap-2">
           <RunButton
-            label="Scan Trades — Depth 1"
+            label="Scan Trades: Depth 1"
             variant="ghost"
             onClick={() => runCrawl(1, "trade")}
             disabled={running}
             testId="button-trade-scan-depth-1"
           />
           <RunButton
-            label="Scan Trades — Depth 2"
+            label="Scan Trades: Depth 2"
             variant="primary"
             onClick={() => runCrawl(2, "trade")}
             disabled={running}

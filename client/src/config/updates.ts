@@ -35,7 +35,7 @@ export interface UpdateNotes {
 
 export const CURRENT_UPDATE_NOTES: UpdateNotes = {
   version: CURRENT_UPDATE_VERSION,
-  title: "Commander's Briefing — Check Those Taxi Spots!!",
+  title: "Commander's Briefing: Check Those Taxi Spots!!",
   date: "May 29, 2026",
   sections: [
     {
@@ -60,7 +60,7 @@ export const CURRENT_UPDATE_NOTES: UpdateNotes = {
 export const CHANGELOG_HISTORY: UpdateNotes[] = [
   {
     version: "2026-05-29-dynasty-command-v1.8",
-    title: "Commander's Briefing — Automation Features Opening Again Soon 📊",
+    title: "Commander's Briefing: Automation Features Opening Again Soon 📊",
     date: "May 29, 2026",
     sections: [
       {
@@ -78,7 +78,7 @@ export const CHANGELOG_HISTORY: UpdateNotes[] = [
           "In Personalization Settings: option added to add filtered leagues to your portfolio",
           "Recent news log added to main page",
           "Discord feature added to share your trades directly from the tool to StatChasers Discord for people to vote on",
-          "Sleeper user profile pages beta launch — click on any of your leaguemates and see their profile info",
+          "Sleeper user profile pages beta launch. Click on any of your leaguemates and see their profile info",
         ],
       },
       {
@@ -98,7 +98,7 @@ export const CHANGELOG_HISTORY: UpdateNotes[] = [
   },
   {
     version: "2026-05-26-dynasty-command-v1.7",
-    title: "Commander's Briefing — Player Intel Upgrade 📊",
+    title: "Commander's Briefing: Player Intel Upgrade 📊",
     subtitle: "The player analysis suite just got a serious overhaul. Here's what's new.",
     date: "May 26, 2026",
     sections: [

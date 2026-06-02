@@ -285,7 +285,7 @@ function AvailabilityMatrix({ result, onPlayer }: { result: AvailabilityResult; 
                           isRoundStart && "border-l border-border",
                         )}
                         style={{ width: PICK_COL_W, minWidth: PICK_COL_W, height: ROW_H }}
-                        title={`${p.name} — ${cell.probability}% available at ${cell.pickLabel}`}
+                        title={`${p.name}: ${cell.probability}% available at ${cell.pickLabel}`}
                       >
                         {cell.probability === 0 ? "0%" : cell.probability}
                       </td>

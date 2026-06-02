@@ -131,7 +131,7 @@ export default function UserSearch() {
 
           {status === "idle" && !result && !trimmed && (
             <p className="text-xs text-muted-foreground">
-              Sleeper usernames are matched exactly — type the full username to find a manager.
+              Sleeper usernames are matched exactly. Type the full username to find a manager.
             </p>
           )}
         </div>

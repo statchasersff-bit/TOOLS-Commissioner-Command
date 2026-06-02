@@ -725,7 +725,7 @@ export async function runNetworkCrawl(
 
     // Initialize phase + per-depth progress for the live state
     result.phase = "depth";
-    result.phaseLabel = `Depth ${depth} of ${maxDepth} — processing users`;
+    result.phaseLabel = `Depth ${depth} of ${maxDepth}: processing users`;
     result.currentDepth = depth;
     const existingDp = result.depthProgress.find((p) => p.depth === depth);
     if (existingDp) {

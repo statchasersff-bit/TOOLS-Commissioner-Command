@@ -54,7 +54,7 @@ interface ResolvedCustomValuesResponse {
 
 const VALUE_SOURCES: ValueSourceOption[] = [
   { id: "fantasycalc", label: "FantasyCalc", description: "FantasyCalc values update daily. StatChasers caches values once per day.", active: true },
-  { id: "ktc", label: "KeepTradeCut", description: "KeepTradeCut crowd-sourced values (non-TEP) — dynasty, redraft, and rookie picks. Refreshed daily.", active: true },
+  { id: "ktc", label: "KeepTradeCut", description: "KeepTradeCut crowd-sourced values (non-TEP): dynasty, redraft, and rookie picks. Refreshed daily.", active: true },
   { id: "dlf", label: "DLF", description: "Dynasty League Football expert-driven dynasty valuations. Coming soon.", active: false },
   { id: "flock", label: "Flock Fantasy", description: "Flock Fantasy dynasty player valuations. Coming soon.", active: false },
   { id: "custom", label: "Custom Upload", description: "Upload your own CSV of player values. Coming soon.", active: false },
@@ -612,10 +612,10 @@ export function ValueModelProvider({ children }: { children: React.ReactNode }) 
             </DialogTitle>
             <DialogDescription className="space-y-2 pt-1 text-left">
               <span className="block">
-                KeepTradeCut publishes a single set of trade values — effectively{" "}
+                KeepTradeCut publishes a single set of trade values, effectively{" "}
                 <span className="font-semibold text-foreground">0.5&nbsp;PPR</span>. It does{" "}
                 <span className="font-semibold text-foreground">not</span> offer separate{" "}
-                Standard (non-PPR) or full&nbsp;1&nbsp;PPR values — that's just how their site works.
+                Standard (non-PPR) or full&nbsp;1&nbsp;PPR values. That's just how their site works.
               </span>
               <span className="block">
                 So while your league is shown for context, KTC values won't change between

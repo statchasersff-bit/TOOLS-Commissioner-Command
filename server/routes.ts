@@ -1582,7 +1582,7 @@ export async function registerRoutes(
 
     // Specific reason so the panel can tell the user what to do next.
     const reason = !userId
-      ? "Not signed in — log in to a StatChasers admin account and retry."
+      ? "Not signed in. Log in to a StatChasers admin account and retry."
       : !userEmail
         ? "Signed in but the user record has no email."
         : `Email ${userEmail} is not in the admin allowlist.`;
@@ -1957,7 +1957,7 @@ export async function registerRoutes(
         if (!draftRaw) skipReasons.push("Sleeper /draft/{id} returned no payload");
         else {
           const completed = draftRaw.status === "complete" || picksMade >= (draftRaw.settings?.teams ?? 12) * (draftRaw.settings?.rounds ?? 4);
-          if (!completed) skipReasons.push(`status='${draftRaw.status}' — only 'complete' drafts contribute to ADP`);
+          if (!completed) skipReasons.push(`status='${draftRaw.status}': only 'complete' drafts contribute to ADP`);
           const teams = draftRaw.settings?.teams ?? 0;
           const rounds = draftRaw.settings?.rounds ?? 0;
           const draftType = (() => {

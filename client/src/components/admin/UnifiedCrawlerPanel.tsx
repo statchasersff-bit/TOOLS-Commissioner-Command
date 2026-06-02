@@ -124,7 +124,7 @@ export function UnifiedCrawlerPanel() {
       if (!res.ok) throw new Error(body?.error || `${res.status}`);
       setNotice(
         body.started
-          ? "Crawl started — a full run takes several minutes. Refresh to watch progress."
+          ? "Crawl started. A full run takes several minutes. Refresh to watch progress."
           : `Not started: ${body.reason ?? "unknown"}.`,
       );
     } catch (err: any) {
@@ -174,7 +174,7 @@ export function UnifiedCrawlerPanel() {
         </div>
       </div>
       <p className="text-[12px] text-muted-foreground mb-3">
-        Trades aren&apos;t tracked in the per-user Passive Crawls table — they&apos;re gathered here.
+        Trades aren&apos;t tracked in the per-user Passive Crawls table. They&apos;re gathered here.
       </p>
 
       {error && (
@@ -190,20 +190,20 @@ export function UnifiedCrawlerPanel() {
 
       {disabled && (
         <div className="mb-3 px-3 py-2 rounded-md border border-red-500/40 bg-red-500/10 text-[12px] text-red-500" data-testid="unified-crawl-disabled">
-          ⚠️ Auto-crawling is <strong>disabled</strong> — the scheduler only runs when
+          ⚠️ Auto-crawling is <strong>disabled</strong>. The scheduler only runs when
           {" "}<code className="font-mono">ENABLE_CRAWLER=true</code> is set in this deployment&apos;s secrets.
           No new trades or drafts are being gathered automatically. Use “Run once” to crawl manually, or set the env var and redeploy.
         </div>
       )}
       {stale && (
         <div className="mb-3 px-3 py-2 rounded-md border border-amber-500/40 bg-amber-500/10 text-[12px] text-amber-600 dark:text-amber-400" data-testid="unified-crawl-stale">
-          ⚠️ Scheduler is enabled but the last run was {Math.round(lastAge!)}h ago (expected every 30–60m). It may be wedged — check deployment logs.
+          ⚠️ Scheduler is enabled but the last run was {Math.round(lastAge!)}h ago (expected every 30–60m). It may be wedged. Check deployment logs.
         </div>
       )}
       {stuckRuns.length > 0 && (
         <div className="mb-3 px-3 py-2 rounded-md border border-red-500/40 bg-red-500/10 text-[12px] text-red-500" data-testid="unified-crawl-stuck">
           ⚠️ {stuckRuns.length} run{stuckRuns.length === 1 ? "" : "s"} stuck in “running” (started over an hour ago, no longer active).
-          These died mid-run — the process restarted before they finished, so 0 trades/drafts were credited. Each discovered leagues but never scanned them.
+          These died mid-run. The process restarted before they finished, so 0 trades/drafts were credited. Each discovered leagues but never scanned them.
         </div>
       )}
 
