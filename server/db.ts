@@ -32,20 +32,23 @@ export type PoolConfigWithLifetime = pg.PoolConfig & { maxLifetimeSeconds?: numb
 // the database's ceiling allows more headroom. Keep this comfortably below
 // `max_connections` so the session store and vitals monitor always get a slot.
 //
-// WHY 25 — every server module now shares THIS one pool (see the consolidation
+// WHY 60 — every server module now shares THIS one pool (see the consolidation
 // note above), so the old "23 pools × 10 = 230 connections" math no longer
 // applies; the whole app's app-query footprint is bounded by this single number.
-// The DB's actual `max_connections` is 112 (measured against the live TimescaleDB
-// instance — NOT the ~450 an earlier comment assumed). Steady-state usage sits
-// under 20, so 10 artificially starved normal traffic: a single slow endpoint
-// (e.g. the user/trade ingest crawl) could pin the handful of slots and queue
-// hundreds of requests behind them — including /api/sc-auth/me and /login, which
-// then time out (→ 500, spinner, "Login failed"). 25 app + 3 auth + 5 session +
-// 1 vitals = 34 per instance, so even TWO overlapping instances during a deploy
-// (~68) plus TimescaleDB's own background workers stay comfortably under 112,
-// while giving auth and normal reads room to get a connection even while a crawl
-// runs. (40 would have left only ~14 headroom under a deploy overlap.)
-const POOL_MAX = Number(process.env.PG_POOL_MAX || 25);
+// The PRODUCTION database's `max_connections` is ~450 (confirmed live via
+// /health/vitals → pg.max). NOTE: the workspace/dev DATABASE_URL points at a
+// DIFFERENT database whose ceiling is only 112 — do NOT size this pool off the
+// dev DB. Under load the production app pool SATURATES: /health/vitals has shown
+// all slots busy with ~470 requests queued (appPool.waiting) while the DB itself
+// sat at only ~73/450 connections — i.e. the pool, not the DB, was the
+// bottleneck, and every queued request waited out connectionTimeoutMillis (10s)
+// then failed with "timeout exceeded when trying to connect" (that message is the
+// pool-ACQUIRE timeout, not a TCP-connect failure). 40 was not enough headroom
+// for that load and 25 made it worse; 60 uses the idle DB capacity to drain the
+// queue. Footprint: 60 app + 3 auth + 5 session + 1 vitals = 69 per instance, so
+// even TWO overlapping instances during a deploy (~138) stay well under ~450.
+// Tune via PG_POOL_MAX if the DB shows CPU/connection pressure.
+const POOL_MAX = Number(process.env.PG_POOL_MAX || 60);
 
 // ── Stale-connection self-healing — the "timeout exceeded when trying to connect"
 // fix. ── A pg.Pool counts a checked-out client against `max` until that client
