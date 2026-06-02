@@ -546,3 +546,81 @@ export async function loadPlayerAdvancedStats(
 
   return { position: pos, seasons, latest, composites, production, rankCards, statRanks };
 }
+
+// ── Usage composite map (shared with the Value Finder's Dyn x Usage chart) ────
+// Which composite(s) represent "usage/volume" per position, so the Value Finder
+// can show the exact same number the Advanced Stats tab does. QB/RB/WR each have
+// a single usage composite; TE has no single one, so we take the highest of its
+// two volume composites (per product decision).
+const USAGE_COMPOSITE_LABELS: Record<Pos, string[]> = {
+  QB: ["Volume Score"],
+  RB: ["Workload Score"],
+  WR: ["Usage Score"],
+  TE: ["Route Involvement Score", "Target Role Score"],
+};
+
+/**
+ * Per-player usage composite (0–100) for a position+season, computed identically
+ * to the Advanced Stats tab (percentile blend over *qualified* players), keyed by
+ * Sleeper `playerId`. Only qualified players are included — matching the tab's
+ * "Not enough data" gating — so the Value Finder's Dyn x Usage score agrees with
+ * the Advanced Stats Usage/Workload/Volume score for the same player.
+ */
+export async function loadUsageCompositeScores(
+  season: string,
+): Promise<Record<string, number>> {
+  const out: Record<string, number> = {};
+  const positions: Pos[] = ["QB", "RB", "WR", "TE"];
+
+  await Promise.all(
+    positions.map(async (pos) => {
+      const loader = LOADERS[`${pos.toLowerCase()}_${season}`];
+      if (!loader) return;
+      let file: AdvStatFile;
+      try {
+        file = (await loader()).default;
+      } catch {
+        return;
+      }
+
+      const defs = COMPOSITES[pos].filter((d) =>
+        USAGE_COMPOSITE_LABELS[pos].includes(d.label),
+      );
+      if (!defs.length) return;
+
+      // Same ranking pool + per-column value arrays the tab uses.
+      const qualifiedRows = file.rows.filter((r) => isQualified(pos, r));
+      const colValues: Record<string, number[]> = {};
+      for (const k of Array.from(new Set(defs.flatMap((d) => d.keys)))) {
+        colValues[k] = qualifiedRows
+          .map((r) => num(r[k]))
+          .filter((v): v is number => v != null);
+      }
+
+      const rowComposite = (r: AdvStatRow, def: CompositeDef): number | null => {
+        const parts: number[] = [];
+        for (const k of def.keys) {
+          const v = num(r[k]);
+          if (v == null || !colValues[k]?.length) continue;
+          parts.push(percentileOf(colValues[k], v));
+        }
+        if (!parts.length) return null;
+        return parts.reduce((s, p) => s + p, 0) / parts.length;
+      };
+
+      for (const r of qualifiedRows) {
+        const id = String(r.playerId ?? "");
+        if (!id) continue;
+        // Highest of the position's usage composites (a single one for QB/RB/WR).
+        let best: number | null = null;
+        for (const def of defs) {
+          const s = rowComposite(r, def);
+          if (s != null && (best == null || s > best)) best = s;
+        }
+        if (best != null) out[id] = Math.round(best);
+      }
+    }),
+  );
+
+  return out;
+}

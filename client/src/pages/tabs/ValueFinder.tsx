@@ -1,11 +1,11 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import type {
   ValueFinderPlayer,
   ValueFinderFilters as Filters,
   AgeRange,
 } from "@/lib/value-finder/types";
-import { useValueFinderPlayers } from "@/lib/value-finder/loadPlayers";
+import { useValueFinderPlayers, useUsageCompositeScores } from "@/lib/value-finder/loadPlayers";
 import {
   enrichPlayers,
   filterPlayers,
@@ -31,11 +31,11 @@ type TabId =
   | "age-curve";
 
 const TABS: Array<{ id: TabId; label: string }> = [
-  { id: "production-buys", label: "Dyn x PPG" },
-  { id: "usage-buys", label: "Dyn x Usage" },
-  { id: "trend-radar", label: "Dyn x Trend" },
-  { id: "value-vs-production", label: "Dyn x Production" },
-  { id: "age-curve", label: "Dyn x Age" },
+  { id: "production-buys", label: "PPG" },
+  { id: "usage-buys", label: "Usage" },
+  { id: "trend-radar", label: "Trend" },
+  { id: "value-vs-production", label: "Production" },
+  { id: "age-curve", label: "Age" },
 ];
 
 // The trailing tabs are the relocated Market Inefficiency views; they run on
@@ -124,6 +124,9 @@ export function ValueFinder() {
   // request fails or returns nothing we surface that explicitly rather than
   // showing fabricated players.
   const playersQuery = useValueFinderPlayers(filters.season, filters.format, filters.scoring);
+  // Usage scores come from the Advanced Stats composites (by Sleeper playerId) so
+  // the Dyn x Usage chart matches the Advanced Stats tab exactly.
+  const usageQuery = useUsageCompositeScores(filters.season);
 
   const loading = playersQuery.isLoading;
 
@@ -133,13 +136,36 @@ export function ValueFinder() {
   const { enriched, enrichError } = useMemo(() => {
     const pool = playersQuery.data ?? [];
     if (pool.length === 0) return { enriched: [] as ValueFinderPlayer[], enrichError: false };
+    // Overlay the Advanced Stats usage composite (0–100 → 0–1) by Sleeper id.
+    // Players without a qualified composite get no usage score, matching the
+    // tab's "not enough data" gating — and we also clear the raw fields that
+    // getUsageScore would otherwise blend into a fallback, so an unqualified
+    // player can't surface a usage number that disagrees with the tab. (Trend
+    // fields are left untouched; they drive separate signals.) Until the
+    // (bundled) composites resolve, use the pool as-is.
+    const usageMap = usageQuery.data;
+    const pool2 = usageMap
+      ? pool.map((p) => {
+          const u = usageMap[p.playerId];
+          if (u != null) return { ...p, usageScore: u / 100 };
+          return {
+            ...p,
+            usageScore: undefined,
+            snapShare: undefined,
+            redZoneTouches: undefined,
+            redZoneTargets: undefined,
+            dropbacks: undefined,
+            designedRushAttempts: undefined,
+          };
+        })
+      : pool;
     try {
-      return { enriched: enrichPlayers(pool, filters.valueSource), enrichError: false };
+      return { enriched: enrichPlayers(pool2, filters.valueSource), enrichError: false };
     } catch (e) {
       console.error("[ValueFinder] enrichment failed:", e);
       return { enriched: [] as ValueFinderPlayer[], enrichError: true };
     }
-  }, [playersQuery.data, filters.valueSource]);
+  }, [playersQuery.data, usageQuery.data, filters.valueSource]);
 
   const filtered = useMemo(() => filterPlayers(enriched, filters), [enriched, filters]);
 
@@ -158,13 +184,15 @@ export function ValueFinder() {
   const noMarket = !hasMarketValues(filtered);
   const empty = filtered.length === 0;
 
-  // The market-driven tabs share the same source as the rest of the app, so the
-  // Source control drives the global value-model source (which the market pool
-  // is built from) and the client-side Value Finder source in one click.
-  const onSelectSource = (id: string) => {
-    vm.setSourceId(id as typeof vm.sourceId);
-    setFilters((prev) => ({ ...prev, valueSource: id === "ktc" ? "KTC" : "FantasyCalc" }));
-  };
+  // Source is driven by the global control in the app header (no duplicate
+  // control here) — keep the client-side Value Finder source in lockstep with
+  // the global value-model source so the enrichment uses the right market feed.
+  useEffect(() => {
+    setFilters((prev) => {
+      const next = vm.sourceId === "ktc" ? "KTC" : "FantasyCalc";
+      return prev.valueSource === next ? prev : { ...prev, valueSource: next };
+    });
+  }, [vm.sourceId]);
 
   // ── Market Inefficiency tabs ──────────────────────────────────────────────
   // These run on their own market data pipeline but are now driven by the same
@@ -177,9 +205,6 @@ export function ValueFinder() {
         filters={filters}
         setFilters={setFilters}
         maxMarket={maxMarket}
-        sources={vm.sources}
-        sourceId={vm.sourceId}
-        onSelectSource={onSelectSource}
       />
       <TabBar tab={tab} setTab={setTab} />
 

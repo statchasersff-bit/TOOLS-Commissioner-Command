@@ -28,6 +28,7 @@
  */
 import type { Express, Request, Response, NextFunction } from "express";
 import pg from "pg";
+import { pool as appPool } from "./db";
 
 const HEARTBEAT_MS = 60_000;     // how often we log a vitals line
 const HUNG_MS = 25_000;          // a request still open this long is "hung"
@@ -39,6 +40,11 @@ const WARN_PG_UTIL = 0.8;        // ≥80% of max_connections in use
 const WARN_LOOP_LAG_MS = 500;    // event loop stalled ≥0.5s
 const WARN_INFLIGHT = 40;        // ≥40 concurrent in-flight requests
 const WARN_RSS_MB = Number(process.env.VITALS_WARN_RSS_MB || 1500);
+// Any client waiting for a free app-pool slot is the leading indicator of the
+// "hangs every few hours" failure: the pool is full and queries are queuing.
+// The DB-side census (total vs max_connections) does NOT catch this — the app
+// pool can be saturated at 10/10 while the DB only sees ~16/100 connections.
+const WARN_APP_POOL_WAITING = 1;
 
 // ── In-flight request tracking ───────────────────────────────────────────────
 type OpenReq = { method: string; path: string; start: number; done: boolean };
@@ -127,6 +133,9 @@ export type Vitals = {
   inFlight: number;
   hung: Array<{ method: string; path: string; ageSec: number }>;
   pg: PgCensus;
+  // Client-side view of the shared app pool (server/db.ts). `waiting` > 0 means
+  // queries are queued behind a full pool — the precursor to a site-wide hang.
+  appPool: { total: number; idle: number; waiting: number; max: number };
 };
 
 export async function getVitals(): Promise<Vitals> {
@@ -148,6 +157,12 @@ export async function getVitals(): Promise<Vitals> {
     inFlight: openRequests.size,
     hung,
     pg: await pgCensus(),
+    appPool: {
+      total: appPool.totalCount,
+      idle: appPool.idleCount,
+      waiting: appPool.waitingCount,
+      max: (appPool.options as { max?: number }).max ?? 0,
+    },
   };
 }
 

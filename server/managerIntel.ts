@@ -30,7 +30,7 @@ const SLEEPER_API = "https://api.sleeper.app/v1";
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6h
 // Bump when the payload shape changes so stale cache rows are treated as misses
 // and recomputed rather than served without the newer fields.
-const CACHE_VERSION = 21;
+const CACHE_VERSION = 22;
 // Cap the number of drafts pulled for the draft-tendencies profile. Each draft
 // is one /draft/{id}/picks call; the chain discovery is shared with career
 // history so no extra league fetches are incurred.
@@ -93,6 +93,17 @@ export interface LeagueRosterRank {
   rbWinNowRank: number;
   wrWinNowRank: number;
   teWinNowRank: number;
+  // Raw values powering the Roster Strength Profile (You/Avg/Best bars). The
+  // client derives rank/avg/best across the league from these per-roster
+  // values, mirroring the My Team Overview section.
+  /** Sum of redraft value of the roster's top-`startersCount` players (win-now starters). */
+  contenderValue: number;
+  /** Sum of dynasty value of the remaining (non-starter) players. */
+  benchValue: number;
+  /** Total dynasty value of all rostered players plus owned future picks. */
+  dynastyTotalValue: number;
+  /** Dynasty value of owned future rookie picks. */
+  pickCapitalValue: number;
 }
 
 /** A full per-league scouting report for the target manager. */
@@ -1909,22 +1920,40 @@ function buildLeagueReport(scan: LeagueScan, targetUserId: string, requestedLeag
   const pickScores = scan.rosterMeta.map((m) => scan.pickScoreByRoster[m.rosterId] ?? 0);
   const anyPicks = pickScores.some((v) => v > 0);
 
-  const rosters: LeagueRosterRank[] = scan.rosterMeta.map((m, i) => ({
-    ownerId: m.ownerId,
-    rosterId: m.rosterId,
-    dynastyRank: rankOf(dynTotals, dynTotals[i]) ?? 0,
-    winNowRank: rankOf(redTotals, redTotals[i]) ?? 0,
-    youthRank: rankOf(ageAvgs, ageAvgs[i], true) ?? 0,
-    pickRank: anyPicks ? rankOf(pickScores, pickScores[i]) : null,
-    qbRank: rankOf(qb, qb[i]) ?? 0,
-    rbRank: rankOf(rb, rb[i]) ?? 0,
-    wrRank: rankOf(wr, wr[i]) ?? 0,
-    teRank: rankOf(te, te[i]) ?? 0,
-    qbWinNowRank: rankOf(qbW, qbW[i]) ?? 0,
-    rbWinNowRank: rankOf(rbW, rbW[i]) ?? 0,
-    wrWinNowRank: rankOf(wrW, wrW[i]) ?? 0,
-    teWinNowRank: rankOf(teW, teW[i]) ?? 0,
-  }));
+  // Roster Strength Profile values. We have no set-lineup data server-side, so
+  // "starters" are approximated as each roster's top-`startersCount` players by
+  // redraft value (a win-now contributors proxy); the rest are bench depth.
+  const startN = scan.startersCount && scan.startersCount > 0 ? scan.startersCount : 9;
+  const contenderVals = scan.allRosters.map((r) =>
+    [...r].sort((a, b) => b.redraft - a.redraft).slice(0, startN).reduce((s, p) => s + p.redraft, 0),
+  );
+  const benchVals = scan.allRosters.map((r) =>
+    [...r].sort((a, b) => b.redraft - a.redraft).slice(startN).reduce((s, p) => s + p.dynasty, 0),
+  );
+
+  const rosters: LeagueRosterRank[] = scan.rosterMeta.map((m, i) => {
+    const pickCapitalValue = scan.pickValueByRoster[m.rosterId] ?? 0;
+    return {
+      ownerId: m.ownerId,
+      rosterId: m.rosterId,
+      dynastyRank: rankOf(dynTotals, dynTotals[i]) ?? 0,
+      winNowRank: rankOf(redTotals, redTotals[i]) ?? 0,
+      youthRank: rankOf(ageAvgs, ageAvgs[i], true) ?? 0,
+      pickRank: anyPicks ? rankOf(pickScores, pickScores[i]) : null,
+      qbRank: rankOf(qb, qb[i]) ?? 0,
+      rbRank: rankOf(rb, rb[i]) ?? 0,
+      wrRank: rankOf(wr, wr[i]) ?? 0,
+      teRank: rankOf(te, te[i]) ?? 0,
+      qbWinNowRank: rankOf(qbW, qbW[i]) ?? 0,
+      rbWinNowRank: rankOf(rbW, rbW[i]) ?? 0,
+      wrWinNowRank: rankOf(wrW, wrW[i]) ?? 0,
+      teWinNowRank: rankOf(teW, teW[i]) ?? 0,
+      contenderValue: Math.round(contenderVals[i]),
+      benchValue: Math.round(benchVals[i]),
+      dynastyTotalValue: Math.round(dynTotals[i] + pickCapitalValue),
+      pickCapitalValue: Math.round(pickCapitalValue),
+    };
+  });
 
   const targetRanks = rosters[idx];
   const managerRoster = scan.allRosters[idx];

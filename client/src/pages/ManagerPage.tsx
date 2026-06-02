@@ -20,7 +20,7 @@
  * never crash the render.
  */
 
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import {
   Activity,
@@ -32,16 +32,14 @@ import {
   Compass,
   Crown,
   Gauge,
-  Handshake,
   Layers,
-  Scale,
-  Sprout,
+  Shield,
+  Star,
   Swords,
-  Target,
   TrendingUp,
   Trophy,
   Users,
-  type LucideIcon,
+  Zap,
 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
@@ -53,7 +51,7 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, Legend } from "recharts";
+import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
 import { cn } from "@/lib/utils";
 import { DraftProfileContent, type DraftProfile } from "@/components/manager/DraftProfileCard";
 import { API_BASE } from "@/lib/apiBase";
@@ -122,6 +120,12 @@ interface LeagueRosterRank {
   rbWinNowRank?: number;
   wrWinNowRank?: number;
   teWinNowRank?: number;
+  // Raw values for the Roster Strength Profile (You/Avg/Best bars). Optional for
+  // back-compat with cached payloads computed before they were added.
+  contenderValue?: number;
+  benchValue?: number;
+  dynastyTotalValue?: number;
+  pickCapitalValue?: number;
 }
 
 interface LeagueReport {
@@ -460,19 +464,19 @@ function IntelHero({
     : [];
 
   return (
-    <div className="rounded-xl border border-white/8 bg-gradient-to-b from-white/[0.05] to-transparent px-5 py-5">
-      <div className="flex items-center gap-4">
+    <div className="rounded-xl border border-white/8 bg-gradient-to-b from-white/[0.05] to-transparent pl-px pr-5 h-[104px]">
+      <div className="flex items-center gap-4 h-full">
         {avatarSrc ? (
           <img
             src={avatarSrc}
             alt={name}
-            className="w-16 h-16 rounded-full object-cover flex-shrink-0"
+            className="h-[99%] aspect-square rounded-l-[11px] rounded-r-md object-cover flex-shrink-0"
             onError={(e) => {
               (e.target as HTMLImageElement).style.display = "none";
             }}
           />
         ) : (
-          <span className="w-16 h-16 rounded-full bg-[#d4af37]/15 flex items-center justify-center text-2xl font-bold text-[#d4af37] flex-shrink-0">
+          <span className="h-[99%] aspect-square rounded-l-[11px] rounded-r-md bg-[#d4af37]/15 flex items-center justify-center text-2xl font-bold text-[#d4af37] flex-shrink-0">
             {initial}
           </span>
         )}
@@ -594,10 +598,6 @@ function CurrentLeagueTab({ data }: { data: ManagerIntelPayload }) {
   const targetRow = selected.rosters.find((r) => r.ownerId === targetId) ?? null;
   const viewerRow = viewerId ? selected.rosters.find((r) => r.ownerId === viewerId) ?? null : null;
 
-  // Manager-level buy/sell read (moved here from the Trade tab).
-  const lt = data.tradeApproach?.likelyTargetsGrouped;
-  const sc = data.tradeApproach?.sellCandidatesGrouped;
-
   return (
     <div className="space-y-4">
       <LeagueSelector
@@ -608,59 +608,32 @@ function CurrentLeagueTab({ data }: { data: ManagerIntelPayload }) {
         targetId={targetId}
       />
 
-      <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
-        <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-[#d4af37] mb-1.5">
-          <Trophy className="w-3.5 h-3.5" />
-          <span>Team Identity</span>
-        </div>
-        <div className="text-[16px] font-bold text-white">{selected.teamIdentity.label}</div>
-        <p className="text-[13px] text-white/70 mt-1 leading-relaxed">{selected.contextSummary}</p>
-        {selected.teamIdentity.blurb && (
-          <p className="text-[13px] text-white/70 mt-2 leading-relaxed">{selected.teamIdentity.blurb}</p>
-        )}
-      </div>
-
       <LeagueStandingSection
         leagueId={selected.leagueId}
         ownerId={targetId}
         rosterId={targetRow?.rosterId ?? null}
       />
 
+      <RosterStrengthProfile
+        rosters={selected.rosters}
+        targetOwnerId={targetId}
+        targetName={data.user.username || data.user.display_name || "Them"}
+        viewer={viewerRow}
+      />
+
       <ValueByPosition
         dynasty={selected.dynastyStrengths}
         winNow={selected.winNowStrengths}
         pickValue={selected.pickValue ?? 0}
+        target={targetRow}
+        viewer={viewerRow}
+        totalTeams={selected.totalRosters}
       />
 
       <ManagerRosterSection
         leagueId={selected.leagueId}
         rosterId={targetRow?.rosterId ?? null}
       />
-
-      {viewerRow && targetRow && (
-        <YouVsThem viewer={viewerRow} target={targetRow} />
-      )}
-
-      {viewerRow && targetRow && (
-        <TradeAnalysisSection
-          viewer={viewerRow}
-          target={targetRow}
-          total={selected.totalRosters}
-          tradeOpportunity={selected.tradeOpportunity}
-          relativeWeakness={selected.relativeWeakness}
-        />
-      )}
-
-      {(lt || sc) && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <SectionCard title="Likely targets" icon={<Target className="w-3.5 h-3.5" />}>
-            <GroupedList primaryLabel="High-fit" primary={lt?.high ?? []} secondaryLabel="Conditional" secondary={lt?.conditional ?? []} />
-          </SectionCard>
-          <SectionCard title="Possible sell candidates" icon={<ArrowRightLeft className="w-3.5 h-3.5" />}>
-            <GroupedList primaryLabel="Most likely" primary={sc?.mostLikely ?? []} secondaryLabel="Least likely" secondary={sc?.leastLikely ?? []} secondaryTone="muted" />
-          </SectionCard>
-        </div>
-      )}
 
       <ManagerMatchupsSection
         leagueId={selected.leagueId}
@@ -1142,74 +1115,6 @@ function Chip({ children, tone = "neutral" }: { children: React.ReactNode; tone?
   );
 }
 
-function YouVsThem({ viewer, target }: { viewer: LeagueRosterRank; target: LeagueRosterRank }) {
-  // Win-now positional ranks fall back to the dynasty ranks for older cached
-  // payloads that predate the per-position win-now fields.
-  const winNowRows: ComparisonRow[] = [
-    { label: "Team value", you: viewer.winNowRank, them: target.winNowRank },
-    { label: "QB", you: viewer.qbWinNowRank ?? viewer.qbRank, them: target.qbWinNowRank ?? target.qbRank },
-    { label: "RB", you: viewer.rbWinNowRank ?? viewer.rbRank, them: target.rbWinNowRank ?? target.rbRank },
-    { label: "WR", you: viewer.wrWinNowRank ?? viewer.wrRank, them: target.wrWinNowRank ?? target.wrRank },
-    { label: "TE", you: viewer.teWinNowRank ?? viewer.teRank, them: target.teWinNowRank ?? target.teRank },
-  ];
-  const dynastyRows: ComparisonRow[] = [
-    { label: "Team value", you: viewer.dynastyRank, them: target.dynastyRank },
-    { label: "QB", you: viewer.qbRank, them: target.qbRank },
-    { label: "RB", you: viewer.rbRank, them: target.rbRank },
-    { label: "WR", you: viewer.wrRank, them: target.wrRank },
-    { label: "TE", you: viewer.teRank, them: target.teRank },
-  ];
-  return (
-    <SectionCard title="You vs Them" icon={<Users className="w-3.5 h-3.5" />}>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <ComparisonColumn title="Win-Now Value" icon={<Activity className="w-3.5 h-3.5" />} rows={winNowRows} />
-        <ComparisonColumn title="Dynasty Value" icon={<Trophy className="w-3.5 h-3.5" />} rows={dynastyRows} />
-      </div>
-    </SectionCard>
-  );
-}
-
-interface ComparisonRow {
-  label: string;
-  you: number | null;
-  them: number | null;
-}
-
-function ComparisonColumn({ title, icon, rows }: { title: string; icon: React.ReactNode; rows: ComparisonRow[] }) {
-  return (
-    <div className="rounded-lg border border-white/8 bg-white/[0.025] p-3">
-      <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-white/45 mb-2">
-        {icon}
-        <span>{title}</span>
-      </div>
-      <div className="grid grid-cols-[1fr_auto_auto_auto] items-center gap-x-3 gap-y-0.5 text-[12.5px]">
-        <span className="text-[9px] uppercase tracking-wider text-white/40" />
-        <span className="text-[9px] uppercase tracking-wider text-white/40 text-right">You</span>
-        <span className="text-[9px] uppercase tracking-wider text-white/40 text-right">Them</span>
-        <span className="text-[9px] uppercase tracking-wider text-white/40 text-right">Edge</span>
-        {rows.map((r) => {
-          const edge =
-            r.you == null || r.them == null ? "—" : r.you < r.them ? "You" : r.them < r.you ? "Them" : "Even";
-          const edgeCls =
-            edge === "You" ? "text-emerald-300" : edge === "Them" ? "text-rose-300" : "text-white/50";
-          return (
-            <Fragment key={r.label}>
-              <span className="text-white/70 py-1 border-t border-white/[0.05]">{r.label}</span>
-              <span className="text-white/80 tabular-nums text-right py-1 border-t border-white/[0.05]">
-                {r.you ? `#${r.you}` : "—"}
-              </span>
-              <span className="text-white/80 tabular-nums text-right py-1 border-t border-white/[0.05]">
-                {r.them ? `#${r.them}` : "—"}
-              </span>
-              <span className={cn("font-bold text-right py-1 border-t border-white/[0.05]", edgeCls)}>{edge}</span>
-            </Fragment>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
 const TRADE_POSITIONS = ["QB", "RB", "WR", "TE"] as const;
 type TradePos = (typeof TRADE_POSITIONS)[number];
 
@@ -1234,359 +1139,373 @@ function winNowRankFor(row: LeagueRosterRank, pos: TradePos): number {
   }
 }
 
-// Which value axis a recommendation is shopping on.
-type Metric = "winNow" | "dynasty";
-
-interface PositionFit {
-  pos: TradePos;
-  you: number;
-  them: number;
-  diff: number; // them - you; positive = you hold the edge at this position
-}
-
-// ── Competitive window ────────────────────────────────────────────────────
-// We classify both rosters off their in-league ranks (lower = stronger) rather
-// than the server's tier+age direction, because the viewer's roster only comes
-// through as a LeagueRosterRank. Using one rank-based model for both keeps the
-// head-to-head symmetric and explainable: win-now standing is the primary axis,
-// since trade posture hinges on whether you're buying or selling for this year.
-type Window = "Contender" | "Bubble" | "Rebuilding";
-
-interface WindowVerdict {
-  window: Window;
-  winNowPct: number;  // 0 = strongest win-now in league, 1 = weakest
-  dynastyPct: number; // 0 = strongest dynasty value, 1 = weakest
-  youthPct: number;   // 0 = youngest, 1 = oldest
-}
-
-function classifyWindow(row: LeagueRosterRank, total: number): WindowVerdict {
-  const pct = (rank: number) => (total > 1 ? (rank - 1) / (total - 1) : 0);
-  const winNowPct = pct(row.winNowRank);
-  const dynastyPct = pct(row.dynastyRank);
-  const youthPct = pct(row.youthRank);
-  const window: Window =
-    winNowPct <= 1 / 3 ? "Contender" : winNowPct >= 2 / 3 ? "Rebuilding" : "Bubble";
-  return { window, winNowPct, dynastyPct, youthPct };
-}
-
-const WINDOW_META: Record<Window, { icon: LucideIcon; cls: string; label: string }> = {
-  Contender:   { icon: Crown,  cls: "text-emerald-300 border-emerald-500/40 bg-emerald-500/[0.08]", label: "Contender" },
-  Bubble:      { icon: Scale,  cls: "text-amber-300 border-amber-500/40 bg-amber-500/[0.08]",        label: "Bubble" },
-  Rebuilding:  { icon: Sprout, cls: "text-sky-300 border-sky-500/40 bg-sky-500/[0.08]",              label: "Rebuilding" },
+// Donut color per position (+ picks for the dynasty view).
+// Canonical position-identity colors, matched to the My Team "Dynasty Value by
+// Position" chart (QB rose, RB emerald, WR sky, TE orange, Picks violet).
+const POS_COLORS: Record<string, string> = {
+  QB: "#f43f5e",   // rose-500
+  RB: "#10b981",   // emerald-500
+  WR: "#0ea5e9",   // sky-500
+  TE: "#f97316",   // orange-500
+  Picks: "#8b5cf6", // violet-500
 };
 
-function WindowBadge({ who, window }: { who: string; window: Window }) {
-  const meta = WINDOW_META[window];
-  const Icon = meta.icon;
-  return (
-    <div className={cn("flex items-center gap-2 rounded-lg border px-3 py-2", meta.cls)}>
-      <Icon className="w-4 h-4 flex-shrink-0" />
-      <div className="leading-tight">
-        <div className="text-[9px] uppercase tracking-wider text-white/45">{who}</div>
-        <div className="text-[13px] font-bold">{meta.label}</div>
+// ── Roster Strength Profile ─────────────────────────────────────────────────
+// Mirrors the My Team Overview section: four cards (Contender Strength, Bench
+// Depth, Dynasty Rank, Rookie Pick Strength), each showing the manager's
+// league rank, a coarse tier label, and a You / Avg / Best comparison. Rank,
+// average and best are derived client-side from the per-roster raw values the
+// server attaches to every LeagueRosterRank.
+
+function strengthTier(rank: number, total: number): { label: string; cls: string } {
+  if (total <= 1) return { label: "—", cls: "text-white/50" };
+  if (rank === 1) return { label: "Best", cls: "text-emerald-300" };
+  const pct = rank / total;
+  if (pct <= 0.34) return { label: "Top tier", cls: "text-emerald-300" };
+  if (pct <= 0.66) return { label: "Mid pack", cls: "text-amber-300" };
+  return { label: "Bottom tier", cls: "text-rose-300" };
+}
+
+function StrengthBar({
+  themLabel,
+  them,
+  you,
+  avg,
+  best,
+}: {
+  themLabel: string;
+  them: number;
+  /** Viewer's value — present only when they share this league. */
+  you: number | null;
+  avg: number;
+  best: number;
+}) {
+  const max = Math.max(1, them, you ?? 0, avg, best);
+  const w = (v: number) => `${Math.max(1, Math.round((v / max) * 100))}%`;
+  const row = (label: string, value: number, width: string, barCls: string) => (
+    <div className="flex items-center gap-2">
+      <span className="w-12 text-[9px] uppercase tracking-wider text-white/40 truncate" title={label}>
+        {label}
+      </span>
+      <div className="flex-1 h-1.5 bg-white/10 rounded-full overflow-hidden">
+        <div className={cn("h-full rounded-full transition-all", barCls)} style={{ width }} />
       </div>
+      <span className="w-12 text-right text-[10px] tabular-nums text-white/55">{value.toLocaleString()}</span>
+    </div>
+  );
+  return (
+    <div className="mt-2 space-y-1">
+      {row(themLabel, them, w(them), "bg-[#d4af37]")}
+      {you != null && row("You", you, w(you), "bg-sky-400/70")}
+      {row("Avg", avg, w(avg), "bg-white/30")}
+      {row("Best", best, w(best), "bg-emerald-400/60")}
     </div>
   );
 }
 
-// Strategy is driven by the (viewer window × target window) pairing, then made
-// concrete with the strongest positional edge on each side.
-function tradeStrategy(
-  you: Window,
-  them: Window,
-  yourEdge: PositionFit[],
-  theirEdge: PositionFit[],
-): { headline: string; detail: string } {
-  const sendPos = yourEdge[0]?.pos;
-  const getPos = theirEdge[0]?.pos;
-  const posClause =
-    sendPos && getPos
-      ? ` Make it concrete: package your ${sendPos} depth to land their ${getPos}.`
-      : sendPos
-        ? ` Your ${sendPos} surplus is the asset to move.`
-        : getPos
-          ? ` Their ${getPos} strength is your most realistic target.`
-          : "";
-
-  const key = `${you}|${them}`;
-  const base: Record<string, { headline: string; detail: string }> = {
-    "Contender|Rebuilding": {
-      headline: "Buy now — they're selling.",
-      detail: "You're chasing a title and they're stocking the future. Offer picks and younger upside for their proven win-now production.",
-    },
-    "Contender|Contender": {
-      headline: "Pry value through need, not window.",
-      detail: "You're both buying, so neither will sell a star cheap. Trade from a positional surplus to fix a mutual gap rather than chasing their best players.",
-    },
-    "Contender|Bubble": {
-      headline: "Push them off the fence.",
-      detail: "They're undecided. Offer to consolidate their depth into one of your win-now upgrades, or buy a productive veteran with a pick before they commit to a push.",
-    },
-    "Rebuilding|Contender": {
-      headline: "Sell the present for the future.",
-      detail: "They want to win now and you're building. Move your aging, productive starters to them for picks and young assets.",
-    },
-    "Rebuilding|Rebuilding": {
-      headline: "Swap for fit, not urgency.",
-      detail: "Neither of you is in a hurry. Trade overlapping young pieces or picks to round out positional needs — there's no leverage on either side.",
-    },
-    "Rebuilding|Bubble": {
-      headline: "Fuel their push, bank the future.",
-      detail: "Sell your veterans to a team chasing the playoffs in exchange for picks and youth that fit your timeline.",
-    },
-    "Bubble|Contender": {
-      headline: "Decide if you're buying or selling.",
-      detail: "If you're fading, cash win-now pieces in for their picks and youth. If you're pushing, swap a surplus for the one piece that closes the gap.",
-    },
-    "Bubble|Rebuilding": {
-      headline: "Consolidate for a push.",
-      detail: "Buy their veterans with depth or picks to tip a fence-sitting roster toward contention.",
-    },
-    "Bubble|Bubble": {
-      headline: "Edge out a coin-flip rival.",
-      detail: "Marginal moves decide it. Exploit the positional mismatch to gain a small but real weekly edge over a team at your level.",
-    },
-  };
-  const chosen = base[key] ?? {
-    headline: "Trade off the positional mismatch.",
-    detail: "Lean on where your rosters differ most.",
-  };
-  return { headline: chosen.headline, detail: chosen.detail + posClause };
+function StrengthCard({
+  icon,
+  label,
+  rank,
+  total,
+  themLabel,
+  them,
+  you,
+  avg,
+  best,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  rank: number;
+  total: number;
+  themLabel: string;
+  them: number;
+  you: number | null;
+  avg: number;
+  best: number;
+}) {
+  const tier = strengthTier(rank, total);
+  return (
+    <div className="rounded-lg border border-white/8 bg-white/[0.02] p-3 flex flex-col">
+      <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-white/45">
+        {icon}
+        <span>{label}</span>
+      </div>
+      <p className="mt-1.5 text-xl font-bold text-white leading-none">#{rank}</p>
+      <p className={cn("mt-1 text-[11px] font-medium", tier.cls)}>{tier.label}</p>
+      <StrengthBar themLabel={themLabel} them={them} you={you} avg={avg} best={best} />
+    </div>
+  );
 }
 
-// Trade Analysis: classifies both teams' competitive windows, recommends a
-// strategy off that pairing, then grounds it in the You-vs-Them dynasty rank
-// gaps — which positions you can sell from, which to target, and the cleanest
-// angle — alongside the league's precomputed trade-opportunity note.
-function TradeAnalysisSection({
+function RosterStrengthProfile({
+  rosters,
+  targetOwnerId,
+  targetName,
   viewer,
-  target,
-  total,
-  tradeOpportunity,
-  relativeWeakness,
 }: {
-  viewer: LeagueRosterRank;
-  target: LeagueRosterRank;
-  total: number;
-  tradeOpportunity: string;
-  relativeWeakness: string | null;
+  rosters: LeagueRosterRank[];
+  targetOwnerId: string;
+  /** Display name of the profiled manager — labels their bar (was "You"). */
+  targetName: string;
+  /** Viewer's row, present only when they share this league. */
+  viewer?: LeagueRosterRank | null;
 }) {
-  const yourWindow = classifyWindow(viewer, total).window;
-  const theirWindow = classifyWindow(target, total).window;
-  // Lower rank = stronger, so diff = theirRank - yourRank; a position is a real
-  // mismatch only once the two sides are at least EDGE_GAP apart.
-  //
-  // The value axis depends on YOUR window. A contender shops for win-now help
-  // and spends dynasty/future depth to get it; a rebuilder does the reverse —
-  // buying long-term dynasty value and selling off win-now veterans. A bubble
-  // team has no strong lean, so it stays on dynasty for both sides (the prior
-  // behavior). Targeting on the right axis is what makes "assets to target"
-  // surface players that actually move your window's needle.
-  const acquireMetric: Metric = yourWindow === "Contender" ? "winNow" : "dynasty";
-  const sellMetric: Metric =
-    yourWindow === "Contender" ? "dynasty" : yourWindow === "Rebuilding" ? "winNow" : "dynasty";
-  const acquireAxis = acquireMetric === "winNow" ? "win-now" : "dynasty";
-  const sellAxis = sellMetric === "winNow" ? "win-now" : "dynasty";
+  const target = rosters.find((r) => r.ownerId === targetOwnerId);
+  // Back-compat: older cached payloads predate these raw value fields. Render
+  // nothing rather than a grid of zeros.
+  if (!target || target.contenderValue == null) return null;
 
-  const EDGE_GAP = 2;
-  const fitsOn = (metric: Metric): PositionFit[] => {
-    const rankFor = metric === "winNow" ? winNowRankFor : dynRankFor;
-    return TRADE_POSITIONS.map((pos) => {
-      const you = rankFor(viewer, pos);
-      const them = rankFor(target, pos);
-      return { pos, you, them, diff: them - you };
-    });
+  // Only show the "You" bar when the viewer is a *different* roster in this league.
+  const viewerRow = viewer && viewer.ownerId !== targetOwnerId ? viewer : null;
+
+  const total = rosters.length;
+  const metric = (pick: (r: LeagueRosterRank) => number) => {
+    const vals = rosters.map((r) => pick(r) || 0);
+    const mine = pick(target) || 0;
+    const rank = vals.filter((v) => v > mine).length + 1;
+    const avg = Math.round(vals.reduce((s, v) => s + v, 0) / Math.max(1, vals.length));
+    const best = Math.max(0, ...vals);
+    const you = viewerRow ? Math.round(pick(viewerRow) || 0) : null;
+    return { them: Math.round(mine), rank, avg, best, you };
   };
-
-  // Sell from positions where you hold a surplus on your sell axis.
-  const yourEdge = fitsOn(sellMetric)
-    .filter((f) => f.diff >= EDGE_GAP)
-    .sort((a, b) => b.diff - a.diff);
-
-  // Target positions where they're stronger on your acquire axis. When you're
-  // rebuilding, soft-de-prioritize RB — injury attrition and a short shelf life
-  // make it a poor long-term store of value — so an RB only tops the list when
-  // its edge is big enough to overcome the down-weight. It still appears.
-  const RB_REBUILD_WEIGHT = 0.7;
-  const deprioritizeRb = yourWindow === "Rebuilding";
-  const targetScore = (f: PositionFit) =>
-    deprioritizeRb && f.pos === "RB" ? f.diff * RB_REBUILD_WEIGHT : f.diff;
-  const theirEdge = fitsOn(acquireMetric)
-    .filter((f) => f.diff <= -EDGE_GAP)
-    .sort((a, b) => targetScore(a) - targetScore(b));
-
-  const sendPos = yourEdge[0]?.pos;
-  const getPos = theirEdge[0]?.pos;
-  const angle =
-    sendPos && getPos
-      ? `Sell from your ${sendPos} ${sellAxis} surplus to target their ${getPos} — the clearest mismatch for your window.`
-      : sendPos
-        ? `You hold a ${sellAxis} edge at ${yourEdge.map((f) => f.pos).join(", ")}. Shop that surplus to fill gaps elsewhere.`
-        : getPos
-          ? `They're stronger at ${theirEdge.map((f) => f.pos).join(", ")} on ${acquireAxis} value — your most realistic acquisition targets.`
-          : "Rosters are evenly matched on the axis that fits your window — no obvious mismatch to exploit.";
-
-  const strategy = tradeStrategy(yourWindow, theirWindow, yourEdge, theirEdge);
+  const contender = metric((r) => r.contenderValue ?? 0);
+  const bench = metric((r) => r.benchValue ?? 0);
+  const dynasty = metric((r) => r.dynastyTotalValue ?? 0);
+  const picks = metric((r) => r.pickCapitalValue ?? 0);
 
   return (
-    <SectionCard title="Trade Analysis" icon={<Handshake className="w-3.5 h-3.5" />}>
-      {/* Competitive windows — the lens for everything below. */}
-      <div className="grid grid-cols-2 gap-3 mb-3">
-        <WindowBadge who="You" window={yourWindow} />
-        <WindowBadge who="Them" window={theirWindow} />
-      </div>
-
-      {/* Strategy driven by the window pairing + positional edges. */}
-      <div className="mb-3 rounded-md border border-[#d4af37]/25 bg-[#d4af37]/[0.06] px-3 py-2.5">
-        <div className="flex items-center gap-1.5 text-[9px] font-semibold uppercase tracking-wider text-[#d4af37] mb-1">
-          <Target className="w-3 h-3" />
-          <span>Strategy</span>
-        </div>
-        <p className="text-[13.5px] font-bold text-white leading-snug">{strategy.headline}</p>
-        <p className="text-[13px] text-white/75 mt-1 leading-relaxed">{strategy.detail}</p>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <EdgeColumn
-          title="Your edge — assets to send"
-          subtitle={`${sellAxis} surplus`}
-          tone="you"
-          fits={yourEdge}
+    <SectionCard
+      title="Roster Strength Profile"
+      icon={<Zap className="w-3.5 h-3.5" />}
+      subtitle="Starters, depth, dynasty value & draft capital"
+    >
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <StrengthCard
+          icon={<Zap className="w-3.5 h-3.5 text-[#d4af37]" />}
+          label="Contender Strength"
+          rank={contender.rank}
+          total={total}
+          themLabel={targetName}
+          them={contender.them}
+          you={contender.you}
+          avg={contender.avg}
+          best={contender.best}
         />
-        <EdgeColumn
-          title="Their edge — assets to target"
-          subtitle={deprioritizeRb ? `${acquireAxis} value · RB de-prioritized` : `${acquireAxis} value`}
-          tone="them"
-          fits={theirEdge}
+        <StrengthCard
+          icon={<Shield className="w-3.5 h-3.5 text-sky-400" />}
+          label="Bench Depth"
+          rank={bench.rank}
+          total={total}
+          themLabel={targetName}
+          them={bench.them}
+          you={bench.you}
+          avg={bench.avg}
+          best={bench.best}
+        />
+        <StrengthCard
+          icon={<TrendingUp className="w-3.5 h-3.5 text-sky-400" />}
+          label="Dynasty Rank"
+          rank={dynasty.rank}
+          total={total}
+          themLabel={targetName}
+          them={dynasty.them}
+          you={dynasty.you}
+          avg={dynasty.avg}
+          best={dynasty.best}
+        />
+        <StrengthCard
+          icon={<Star className="w-3.5 h-3.5 text-violet-400" />}
+          label="Rookie Pick Strength"
+          rank={picks.rank}
+          total={total}
+          themLabel={targetName}
+          them={picks.them}
+          you={picks.you}
+          avg={picks.avg}
+          best={picks.best}
         />
       </div>
-
-      <div className="mt-3 rounded-md border border-white/10 bg-white/[0.025] px-3 py-2">
-        <div className="flex items-center gap-1.5 text-[9px] font-semibold uppercase tracking-wider text-white/45 mb-1">
-          <ArrowRightLeft className="w-3 h-3" />
-          <span>Suggested angle</span>
-        </div>
-        <p className="text-[13px] text-white/80 leading-relaxed">{angle}</p>
-      </div>
-
-      {tradeOpportunity && (
-        <p className="text-[12.5px] text-white/60 mt-2 leading-relaxed">{tradeOpportunity}</p>
-      )}
-      {relativeWeakness && (
-        <p className="text-[12px] text-white/45 mt-1 leading-relaxed">
-          <span className="text-white/55 font-semibold">What they're light on: </span>
-          {relativeWeakness}
-        </p>
-      )}
     </SectionCard>
   );
 }
-
-function EdgeColumn({ title, subtitle, tone, fits }: { title: string; subtitle?: string; tone: "you" | "them"; fits: PositionFit[] }) {
-  const accent = tone === "you" ? "text-emerald-300" : "text-rose-300";
-  return (
-    <div className="rounded-lg border border-white/8 bg-white/[0.025] p-3">
-      <div
-        className={cn(
-          "flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider",
-          subtitle ? "mb-0.5" : "mb-2",
-          tone === "you" ? "text-emerald-300/70" : "text-rose-300/70",
-        )}
-      >
-        <span>{title}</span>
-      </div>
-      {subtitle && <div className="text-[9px] text-white/35 mb-2">{subtitle}</div>}
-      {fits.length === 0 ? (
-        <p className="text-[12px] text-white/40 py-1">No clear edge.</p>
-      ) : (
-        <div className="text-[12.5px]">
-          {fits.map((f) => (
-            <div
-              key={f.pos}
-              className="flex items-center justify-between py-1 border-t border-white/[0.05] first:border-t-0"
-            >
-              <span className="font-semibold text-white/80">{f.pos}</span>
-              <span className="text-white/55 tabular-nums">
-                #{f.you} <span className="text-white/30">vs</span> #{f.them}
-              </span>
-              <span className={cn("font-bold tabular-nums", accent)}>{Math.abs(f.diff)} ranks</span>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// Donut color per position (+ picks for the dynasty view).
-const POS_COLORS: Record<string, string> = {
-  QB: "#f87171",
-  RB: "#34d399",
-  WR: "#38bdf8",
-  TE: "#fbbf24",
-  Picks: "#a855f7",
-};
 
 function ValueByPosition({
   dynasty,
   winNow,
   pickValue,
+  target,
+  viewer,
+  totalTeams,
 }: {
   dynasty: PositionScore[];
   winNow: PositionScore[];
   pickValue: number;
+  /** The profiled manager's per-roster ranks (for the "Them" rank column). */
+  target?: LeagueRosterRank | null;
+  /** The viewer's ranks, present only when they're in this same league. */
+  viewer?: LeagueRosterRank | null;
+  totalTeams?: number;
 }) {
   const dynastyData = [
-    ...dynasty.map((p) => ({ name: p.position, value: p.value })),
-    ...(pickValue > 0 ? [{ name: "Picks", value: pickValue }] : []),
+    ...dynasty.map((p) => ({
+      name: p.position,
+      value: p.value,
+      rank: target ? dynRankFor(target, p.position) : p.leagueRank ?? null,
+      viewerRank: viewer ? dynRankFor(viewer, p.position) : null,
+    })),
+    ...(pickValue > 0
+      ? [{ name: "Picks", value: pickValue, rank: target?.pickRank ?? null, viewerRank: viewer?.pickRank ?? null }]
+      : []),
   ].filter((d) => d.value > 0);
-  const winNowData = winNow.map((p) => ({ name: p.position, value: p.value })).filter((d) => d.value > 0);
+  const winNowData = winNow
+    .map((p) => ({
+      name: p.position,
+      value: p.value,
+      rank: target ? winNowRankFor(target, p.position) : p.leagueRank ?? null,
+      viewerRank: viewer ? winNowRankFor(viewer, p.position) : null,
+    }))
+    .filter((d) => d.value > 0);
 
   return (
     <SectionCard title="Value by position" icon={<TrendingUp className="w-3.5 h-3.5" />}>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <ValueDonut title="Dynasty (incl. picks)" data={dynastyData} />
-        <ValueDonut title="Win-Now" data={winNowData} />
+        <ValueDonut title="Dynasty (incl. picks)" data={dynastyData} totalTeams={totalTeams} />
+        <ValueDonut title="Win-Now" data={winNowData} totalTeams={totalTeams} />
       </div>
     </SectionCard>
   );
 }
 
-function ValueDonut({ title, data }: { title: string; data: Array<{ name: string; value: number }> }) {
+// League rank → tier color, matched to the strength-profile tiers above.
+function donutRankColor(rank: number | null | undefined, total: number): string {
+  if (rank == null || total <= 1) return "text-white/50";
+  const pct = rank / total;
+  if (rank === 1 || pct <= 0.34) return "text-emerald-300";
+  if (pct <= 0.66) return "text-amber-300";
+  return "text-rose-300";
+}
+
+interface DonutDatum {
+  name: string;
+  value: number;
+  /** Profiled manager's league rank at this category (1 = best). */
+  rank?: number | null;
+  /** Viewer's league rank — present only when they share this league. */
+  viewerRank?: number | null;
+}
+
+// Styled to match the My Team "Dynasty Value by Position" chart: a thick donut
+// with the total in the center, followed by a per-position breakdown (color
+// swatch → share bar → share % → raw value → league rank). When the viewer is
+// in the same league, the rank column splits into Them vs You.
+function ValueDonut({ title, data, totalTeams }: { title: string; data: DonutDatum[]; totalTeams?: number }) {
   const total = data.reduce((s, d) => s + d.value, 0);
+  const teams = totalTeams ?? 0;
+  const showRank = teams > 0 && data.some((d) => d.rank != null);
+  const showViewer = showRank && data.some((d) => d.viewerRank != null);
   return (
     <div className="rounded-lg border border-white/8 bg-white/[0.025] p-3">
       <div className="text-[10px] font-semibold uppercase tracking-wider text-white/45 mb-1 text-center">{title}</div>
-      {data.length === 0 ? (
+      {data.length === 0 || total === 0 ? (
         <p className="text-[12px] text-white/45 py-8 text-center">No value data.</p>
       ) : (
-        <div className="h-[230px] w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <PieChart margin={{ top: 18, right: 18, bottom: 0, left: 18 }}>
-              <Pie
-                data={data}
-                dataKey="value"
-                nameKey="name"
-                cx="50%"
-                cy="50%"
-                innerRadius={40}
-                outerRadius={60}
-                paddingAngle={2}
-                stroke="none"
-                label={(e: any) => `${e.name} ${Math.round((e.value / total) * 100)}%`}
-                labelLine={false}
-              >
-                {data.map((d) => (
-                  <Cell key={d.name} fill={POS_COLORS[d.name] ?? "#94a3b8"} />
-                ))}
-              </Pie>
-              <RechartsTooltip
-                contentStyle={{ background: "rgba(8,16,32,0.96)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, fontSize: 11 }}
-                formatter={(v: any, n: any) => [`${Math.round(Number(v)).toLocaleString()} (${Math.round((Number(v) / total) * 100)}%)`, n]}
-              />
-              <Legend verticalAlign="bottom" height={20} iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 10 }} />
-            </PieChart>
-          </ResponsiveContainer>
+        <div className="space-y-3">
+          <div className="relative h-[200px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={data}
+                  dataKey="value"
+                  nameKey="name"
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={58}
+                  outerRadius={84}
+                  paddingAngle={2}
+                  stroke="none"
+                >
+                  {data.map((d) => (
+                    <Cell key={d.name} fill={POS_COLORS[d.name] ?? "#94a3b8"} />
+                  ))}
+                </Pie>
+              </PieChart>
+            </ResponsiveContainer>
+            {/* center total */}
+            <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+              <span className="text-lg font-bold tabular-nums text-white leading-none">
+                {total.toLocaleString()}
+              </span>
+              <span className="text-[10px] uppercase tracking-wider text-white/40 mt-0.5">Total value</span>
+            </div>
+          </div>
+
+          {/* breakdown: share + raw value (+ league rank) per category */}
+          <div className="space-y-1.5">
+            {showRank && (
+              <div className="flex items-center gap-2 text-[9px] uppercase tracking-wider text-white/35 font-semibold">
+                <span className="w-2.5 flex-shrink-0" />
+                <span className="w-9">Pos</span>
+                <span className="flex-1" />
+                <span className="w-9 text-right">Share</span>
+                <span className="w-12 text-right">Value</span>
+                {showViewer ? (
+                  <>
+                    <span className="w-11 text-right">Them</span>
+                    <span className="w-11 text-right">You</span>
+                  </>
+                ) : (
+                  <span className="w-14 text-right">Lg rank</span>
+                )}
+              </div>
+            )}
+            {data
+              .slice()
+              .sort((a, b) => b.value - a.value)
+              .map((d) => (
+                <div key={d.name} className="flex items-center gap-2 text-xs">
+                  <span
+                    className="w-2.5 h-2.5 rounded-sm flex-shrink-0"
+                    style={{ background: POS_COLORS[d.name] ?? "#94a3b8" }}
+                  />
+                  <span className="w-9 font-semibold text-white/80">{d.name}</span>
+                  <div className="flex-1 h-1.5 bg-white/10 rounded-full overflow-hidden">
+                    <div
+                      className="h-full rounded-full"
+                      style={{ width: `${(d.value / total) * 100}%`, background: POS_COLORS[d.name] ?? "#94a3b8" }}
+                    />
+                  </div>
+                  <span className="w-9 text-right tabular-nums text-white/45">
+                    {Math.round((d.value / total) * 100)}%
+                  </span>
+                  <span className="w-12 text-right tabular-nums font-medium text-white/80">
+                    {d.value.toLocaleString()}
+                  </span>
+                  {showRank &&
+                    (showViewer ? (
+                      <>
+                        <span className={cn("w-11 text-right tabular-nums font-bold", donutRankColor(d.rank, teams))}>
+                          {d.rank != null ? `#${d.rank}` : "—"}
+                        </span>
+                        <span className={cn("w-11 text-right tabular-nums font-medium", donutRankColor(d.viewerRank, teams))}>
+                          {d.viewerRank != null ? `#${d.viewerRank}` : "—"}
+                        </span>
+                      </>
+                    ) : (
+                      <span className={cn("w-14 text-right tabular-nums font-bold", donutRankColor(d.rank, teams))}>
+                        {d.rank != null ? (
+                          <>
+                            #{d.rank}
+                            <span className="text-white/35 font-normal">/{teams}</span>
+                          </>
+                        ) : (
+                          "—"
+                        )}
+                      </span>
+                    ))}
+                </div>
+              ))}
+          </div>
         </div>
       )}
     </div>
@@ -2039,47 +1958,6 @@ function ExposureLeaders({ players }: { players: PlayerExposure[] }) {
         </ul>
       )}
     </SectionCard>
-  );
-}
-
-function GroupedList({
-  primaryLabel,
-  primary,
-  secondaryLabel,
-  secondary,
-  secondaryTone = "neutral",
-}: {
-  primaryLabel: string;
-  primary: string[];
-  secondaryLabel: string;
-  secondary: string[];
-  secondaryTone?: "neutral" | "muted";
-}) {
-  return (
-    <div className="space-y-2.5">
-      {primary.length > 0 && (
-        <div>
-          <div className="text-[9px] font-bold uppercase tracking-wider text-emerald-300/80 mb-1">{primaryLabel}</div>
-          <ul className="space-y-1">
-            {primary.map((t, i) => (
-              <li key={i} className="text-[12.5px] text-white/80 leading-snug">• {t}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-      {secondary.length > 0 && (
-        <div>
-          <div className={cn("text-[9px] font-bold uppercase tracking-wider mb-1", secondaryTone === "muted" ? "text-white/35" : "text-white/45")}>
-            {secondaryLabel}
-          </div>
-          <ul className="space-y-1">
-            {secondary.map((t, i) => (
-              <li key={i} className="text-[12.5px] text-white/55 leading-snug">• {t}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-    </div>
   );
 }
 

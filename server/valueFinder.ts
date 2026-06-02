@@ -211,11 +211,14 @@ function pointsOf(row: SleeperStatsRow, scoring: ScoringKey): number | undefined
   return num(row.pts_ppr) ?? num(row.pts_half_ppr) ?? num(row.pts_std);
 }
 
-/** PPG for a season-stats row, or undefined when the player had no games. */
+/** PPG for a season-stats row, or undefined when the player had no games.
+ *  Denominator is games actually PLAYED (gp); Sleeper's gms_active counts every
+ *  week on the active roster (17 even for a player lost to injury in week 4),
+ *  which would wildly deflate per-game production for injured players. */
 function ppgOf(row: SleeperStatsRow | undefined, scoring: ScoringKey): number | undefined {
   if (!row) return undefined;
   const fp = pointsOf(row, scoring);
-  const games = num(row.gms_active) ?? num(row.gp) ?? 0;
+  const games = num(row.gp) ?? num(row.gms_active) ?? 0;
   if (fp == null || games <= 0) return undefined;
   return fp / games;
 }
@@ -232,7 +235,9 @@ function applyProduction(
     const row = stats[p.playerId];
     if (!row) continue;
     const fp = pointsOf(row, scoring);
-    const games = num(row.gms_active) ?? num(row.gp) ?? 0;
+    // Games PLAYED, not gms_active (which counts full roster weeks even after a
+    // season-ending injury) — see ppgOf for the per-game rationale.
+    const games = num(row.gp) ?? num(row.gms_active) ?? 0;
     if (fp != null) p.fantasyPoints = Math.round(fp);
     if (games > 0) p.gamesPlayed = games;
     if (fp != null && games > 0) {

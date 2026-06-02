@@ -221,7 +221,9 @@ export async function getPlayerProduction(
     const seasonStats = seasonStatsList[si];
     const myRow = seasonStats[playerId];
     if (!myRow) continue;
-    const games = (myRow.gms_active ?? myRow.gp ?? 0) as number;
+    // Games PLAYED (gp), not gms_active — gms_active counts every active-roster
+    // week (17 even after a season-ending injury), which deflates PPG.
+    const games = (myRow.gp ?? myRow.gms_active ?? 0) as number;
     const myStd = pickPoints(myRow, "std");
     const myHalf = pickPoints(myRow, "half_ppr");
     const myPpr = pickPoints(myRow, "ppr");
@@ -239,7 +241,7 @@ export async function getPlayerProduction(
         const peerPos = (allPlayers[pid] as unknown as Record<string, unknown> | undefined)?.position;
         if (peerPos !== myPos) continue;
         const row = seasonStats[pid];
-        const g = (row?.gms_active ?? row?.gp ?? 0) as number;
+        const g = (row?.gp ?? row?.gms_active ?? 0) as number;
         if (g < MIN_GAMES_FOR_RANK && pid !== playerId) continue;
         const std = pickPoints(row, "std"), half = pickPoints(row, "half_ppr"), ppr = pickPoints(row, "ppr");
         if (std <= 0 && half <= 0 && ppr <= 0 && pid !== playerId) continue;

@@ -7,6 +7,7 @@ import {
   ZAxis,
   Cell,
   ReferenceLine,
+  ReferenceArea,
   Tooltip,
   ResponsiveContainer,
   CartesianGrid,
@@ -15,6 +16,8 @@ import type { ValueFinderPlayer, TrendWindow } from "@/lib/value-finder/types";
 import { POSITION_COLORS } from "@/lib/value-finder/types";
 import { getMarketTrend, getRoleTrend } from "@/lib/value-finder/trends";
 import { PlayerValueTooltip } from "./PlayerValueTooltip";
+import { useBoxZoom } from "./useBoxZoom";
+import { ZoomResetButton } from "./ZoomResetButton";
 
 // Quadrant scatter: role/production trend (x) vs market value trend (y). The
 // quadrant region labels (below) describe each corner; dots are colored by
@@ -40,6 +43,8 @@ export function TrendRadarChart({
     [players, trendWindow],
   );
 
+  const zoom = useBoxZoom();
+
   if (!data.length) {
     return (
       <p className="py-10 text-center text-[12px] text-muted-foreground">
@@ -53,7 +58,8 @@ export function TrendRadarChart({
   );
 
   return (
-    <div className="relative">
+    <div className={zoom.enabled ? "relative select-none" : "relative"}>
+      {zoom.isZoomed && <ZoomResetButton onReset={zoom.reset} />}
       {/* Quadrant labels */}
       <div className="pointer-events-none absolute inset-0 z-10 hidden sm:block">
         <div className="absolute top-2 right-3">{label("Legit Riser", "text-emerald-500")}</div>
@@ -62,12 +68,14 @@ export function TrendRadarChart({
         <div className="absolute bottom-8 left-12">{label("Falling Asset", "text-red-500")}</div>
       </div>
       <ResponsiveContainer width="100%" aspect={2.31}>
-        <ScatterChart margin={{ top: 8, right: 16, bottom: 24, left: 8 }}>
+        <ScatterChart margin={{ top: 8, right: 16, bottom: 24, left: 8 }} {...zoom.zoomProps}>
           <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border)/0.4)" />
           <XAxis
             type="number"
             dataKey="x"
             name="Role Trend"
+            domain={zoom.xDomain}
+            allowDataOverflow
             tick={{ fontSize: 10 }}
             tickFormatter={(v) => `${v > 0 ? "+" : ""}${v}%`}
             label={{ value: "Role / Production Trend", position: "insideBottom", offset: -12, fontSize: 11 }}
@@ -76,6 +84,8 @@ export function TrendRadarChart({
             type="number"
             dataKey="y"
             name="Value Trend"
+            domain={zoom.yDomain}
+            allowDataOverflow
             tick={{ fontSize: 10 }}
             width={48}
             tickFormatter={(v) => `${v > 0 ? "+" : ""}${v}%`}
@@ -90,6 +100,17 @@ export function TrendRadarChart({
               <Cell key={d.player.playerId} fill={POSITION_COLORS[d.player.position]} />
             ))}
           </Scatter>
+          {zoom.dragRect && (
+            <ReferenceArea
+              x1={zoom.dragRect.x1}
+              x2={zoom.dragRect.x2}
+              y1={zoom.dragRect.y1}
+              y2={zoom.dragRect.y2}
+              strokeOpacity={0.3}
+              fill="hsl(var(--foreground))"
+              fillOpacity={0.08}
+            />
+          )}
         </ScatterChart>
       </ResponsiveContainer>
     </div>

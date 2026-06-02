@@ -48,23 +48,17 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
 /**
  * The single Value Finder filter bar, shared across every sub-tab (production /
  * usage / trend + the market-driven Value vs Production / Age Curve views). The
- * Source control is wired up to the global value-model source (so the market
- * pipeline switches too) via `onSelectSource`.
+ * value source is controlled globally from the app header, so there is no
+ * source control here.
  */
 export function ValueFinderFilters({
   filters,
   setFilters,
   maxMarket,
-  sources,
-  sourceId,
-  onSelectSource,
 }: {
   filters: Filters;
   setFilters: (f: Filters) => void;
   maxMarket: number;
-  sources: Array<{ id: string; label: string; active: boolean }>;
-  sourceId: string;
-  onSelectSource: (id: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const set = (patch: Partial<Filters>) => setFilters({ ...filters, ...patch });
@@ -146,16 +140,6 @@ export function ValueFinderFilters({
               {AGE_LABELS[a]}
             </button>
           ))}
-        </Row>
-
-        <Row label="Source">
-          {sources
-            .filter((s) => s.active)
-            .map((s) => (
-              <button key={s.id} className={chip(sourceId === s.id)} onClick={() => onSelectSource(s.id)}>
-                {s.label}
-              </button>
-            ))}
         </Row>
 
         {/* Min market value */}

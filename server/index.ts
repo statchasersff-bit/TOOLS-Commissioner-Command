@@ -185,6 +185,14 @@ const sessionPool = new pg.Pool({
   max: Number(process.env.PG_SESSION_POOL_MAX || 5),
   idleTimeoutMillis: 30_000,
   connectionTimeoutMillis: 10_000,
+  // Same per-query timeouts as the app pool (see server/db.ts for the full
+  // rationale). The session store touches the DB on every request, so an
+  // unbounded session query is the single most likely thing to hang the whole
+  // site. Failing a session query fast (→ 500, process stays up) beats every
+  // request queuing forever behind one wedged connection.
+  statement_timeout: Number(process.env.PG_STATEMENT_TIMEOUT_MS || 30_000),
+  query_timeout: Number(process.env.PG_STATEMENT_TIMEOUT_MS || 30_000),
+  idle_in_transaction_session_timeout: Number(process.env.PG_IDLE_TXN_TIMEOUT_MS || 60_000),
 });
 sessionPool.on("error", (err) => {
   console.error("[session-store] idle client error (pool will recycle):", err instanceof Error ? err.message : err);

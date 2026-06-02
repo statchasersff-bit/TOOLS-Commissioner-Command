@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
 import type { ValueFinderPlayer } from "@/lib/value-finder/types";
-import { getValueSignal } from "@/lib/value-finder/valueFinderScoring";
 import {
   fmtValue,
   fmtSignedPct,
@@ -9,9 +8,6 @@ import {
   fmtScore,
   fmtPct,
 } from "@/lib/value-finder/format";
-import { ValueSignalBadge } from "./ValueSignalBadge";
-import { ValueLabelBadge } from "./ValueLabelBadge";
-
 export type TooltipMetric =
   | "ppg"
   | "usage"
@@ -42,12 +38,6 @@ export function PlayerValueTooltip({
   const datum = payload[0].payload;
   const p = datum?.player;
   if (!p) return null;
-
-  const comparison = datum.comparisonValue ?? p.modelValue;
-  const { signal } = getValueSignal({
-    marketValue: p.marketValue,
-    comparisonValue: comparison,
-  });
 
   const metricRow = (() => {
     switch (metric) {
@@ -82,23 +72,6 @@ export function PlayerValueTooltip({
       <div className="space-y-0.5">
         {row("Market", fmtValue(p.marketValue))}
         {metricRow && row(metricRow[0], metricRow[1])}
-      </div>
-      {p.buySignals?.length ? (
-        <div className="mt-1.5 text-[10px] text-emerald-600 dark-any:text-emerald-400">
-          ▲ {p.buySignals.slice(0, 3).join(" · ")}
-        </div>
-      ) : null}
-      {p.riskSignals?.length ? (
-        <div className="mt-0.5 text-[10px] text-red-600 dark-any:text-red-400">
-          ▼ {p.riskSignals.slice(0, 3).join(" · ")}
-        </div>
-      ) : null}
-      <div className="mt-1.5">
-        {p.finalLabel ? (
-          <ValueLabelBadge label={p.finalLabel} />
-        ) : (
-          <ValueSignalBadge signal={signal} />
-        )}
       </div>
     </div>
   );
