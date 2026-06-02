@@ -7,6 +7,7 @@
 // raw inputs, exactly as it did for the bundled sample pool.
 
 import { useQuery } from "@tanstack/react-query";
+import { API_BASE } from "@/lib/apiBase";
 import {
   loadPositionCompositeScores,
   type PositionCompositeScore,
@@ -35,7 +36,7 @@ export async function fetchValueFinderPlayers(
   scoring: ScoringFormat = "ppr",
 ): Promise<ValueFinderPlayer[]> {
   const res = await fetch(
-    `/api/value-finder/players?season=${season}&format=${format}&scoring=${scoring}`,
+    `${API_BASE}/api/value-finder/players?season=${season}&format=${format}&scoring=${scoring}`,
     { credentials: "include" },
   );
   if (!res.ok) throw new Error(`Value Finder request failed: ${res.status}`);

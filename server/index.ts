@@ -185,6 +185,14 @@ const sessionPool = new pg.Pool({
   max: Number(process.env.PG_SESSION_POOL_MAX || 5),
   idleTimeoutMillis: 30_000,
   connectionTimeoutMillis: 10_000,
+  // TCP keepalive + connection max-lifetime so a connection severed by a DB
+  // restart/network blip is detected and recycled instead of occupying a slot
+  // forever (the "timeout exceeded when trying to connect" wedge — see the full
+  // rationale in server/db.ts). The session store is the most request-critical
+  // pool, so self-healing it matters most.
+  keepAlive: true,
+  keepAliveInitialDelayMillis: Number(process.env.PG_KEEPALIVE_DELAY_MS || 10_000),
+  maxLifetimeSeconds: Number(process.env.PG_MAX_LIFETIME_SEC || 300),
   // Same per-query timeouts as the app pool (see server/db.ts for the full
   // rationale). The session store touches the DB on every request, so an
   // unbounded session query is the single most likely thing to hang the whole
@@ -193,7 +201,9 @@ const sessionPool = new pg.Pool({
   statement_timeout: Number(process.env.PG_STATEMENT_TIMEOUT_MS || 30_000),
   query_timeout: Number(process.env.PG_STATEMENT_TIMEOUT_MS || 30_000),
   idle_in_transaction_session_timeout: Number(process.env.PG_IDLE_TXN_TIMEOUT_MS || 60_000),
-});
+  // `maxLifetimeSeconds` is implemented by pg-pool at runtime but not yet in
+  // @types/pg, so widen the config type to pass it through (see server/db.ts).
+} as pg.PoolConfig & { maxLifetimeSeconds?: number });
 sessionPool.on("error", (err) => {
   console.error("[session-store] idle client error (pool will recycle):", err instanceof Error ? err.message : err);
 });

@@ -22,21 +22,53 @@
 import pg from "pg";
 import { drizzle } from "drizzle-orm/node-postgres";
 
+// `@types/pg` (8.x) hasn't caught up to pg-pool, which implements
+// `maxLifetimeSeconds` at runtime (see node_modules/pg-pool/index.js). Extend the
+// config type so we can pass it through while keeping full type-checking on every
+// other field. Exported so the session pool in server/index.ts uses the same type.
+export type PoolConfigWithLifetime = pg.PoolConfig & { maxLifetimeSeconds?: number };
+
 // Cap the whole app at PG_POOL_MAX connections (default 40). Override via env if
 // the database's ceiling allows more headroom. Keep this comfortably below
 // `max_connections` so the session store and vitals monitor always get a slot.
 //
-// WHY 40 (raised from 10) — every server module now shares THIS one pool (see the
-// consolidation note above), so the old "23 pools × 10 = 230 connections" math no
-// longer applies; the whole app's app-query footprint is bounded by this single
-// number. Production `max_connections` is ~450 and steady-state usage sits under
-// 20, so 10 left almost all of that headroom unused while artificially starving
-// normal traffic: a single slow endpoint (e.g. the user/trade ingest crawl) could
-// pin the handful of slots and queue hundreds of requests behind them — including
-// /api/sc-auth/me and /login, which then time out (→ 500, spinner, "Login
-// failed"). 40 app + 5 session + the vitals monitor stays far under 450 while
-// giving auth and normal reads room to get a connection even while a crawl runs.
-const POOL_MAX = Number(process.env.PG_POOL_MAX || 40);
+// WHY 25 — every server module now shares THIS one pool (see the consolidation
+// note above), so the old "23 pools × 10 = 230 connections" math no longer
+// applies; the whole app's app-query footprint is bounded by this single number.
+// The DB's actual `max_connections` is 112 (measured against the live TimescaleDB
+// instance — NOT the ~450 an earlier comment assumed). Steady-state usage sits
+// under 20, so 10 artificially starved normal traffic: a single slow endpoint
+// (e.g. the user/trade ingest crawl) could pin the handful of slots and queue
+// hundreds of requests behind them — including /api/sc-auth/me and /login, which
+// then time out (→ 500, spinner, "Login failed"). 25 app + 3 auth + 5 session +
+// 1 vitals = 34 per instance, so even TWO overlapping instances during a deploy
+// (~68) plus TimescaleDB's own background workers stay comfortably under 112,
+// while giving auth and normal reads room to get a connection even while a crawl
+// runs. (40 would have left only ~14 headroom under a deploy overlap.)
+const POOL_MAX = Number(process.env.PG_POOL_MAX || 25);
+
+// ── Stale-connection self-healing — the "timeout exceeded when trying to connect"
+// fix. ── A pg.Pool counts a checked-out client against `max` until that client
+// is released or emits 'error'. When the DB restarts or a network path drops
+// (TimescaleDB maintenance, a transient blip), already-open connections can be
+// severed at the TCP layer WITHOUT node-postgres noticing — the socket just goes
+// quiet. Those dead clients keep occupying pool slots forever, so every new
+// pool.query() waits the full connectionTimeoutMillis (10s) for a slot that never
+// frees, then rejects with "timeout exceeded when trying to connect". The DB
+// itself is fine and nearly idle; only the app's pool is wedged, which is why a
+// republish (fresh, empty pool) was the only known fix. Two options make the pool
+// recover on its own:
+//   • keepAlive                — turns on TCP keepalive so the OS probes idle
+//                                connections and surfaces a severed one as an
+//                                error; the pool then evicts it instead of
+//                                counting it as live indefinitely.
+//   • maxLifetimeSeconds       — proactively retires each connection after this
+//                                long regardless of health, so even a dead-but-
+//                                undetected connection is rotated out within the
+//                                window. This bounds how long a wedge can last to
+//                                ~maxLifetime instead of "until the next deploy".
+const KEEPALIVE_DELAY_MS = Number(process.env.PG_KEEPALIVE_DELAY_MS || 10_000);
+const MAX_LIFETIME_SEC = Number(process.env.PG_MAX_LIFETIME_SEC || 300);
 
 // ── Per-query timeouts — the OTHER half of the "hangs every few hours" fix. ──
 // Capping the pool size bounds how MANY connections we open, but a single query
@@ -68,10 +100,13 @@ export const pool = new pg.Pool({
   max: POOL_MAX,
   idleTimeoutMillis: 30_000,
   connectionTimeoutMillis: 10_000,
+  keepAlive: true,
+  keepAliveInitialDelayMillis: KEEPALIVE_DELAY_MS,
+  maxLifetimeSeconds: MAX_LIFETIME_SEC,
   statement_timeout: STATEMENT_TIMEOUT_MS,
   query_timeout: STATEMENT_TIMEOUT_MS,
   idle_in_transaction_session_timeout: IDLE_TXN_TIMEOUT_MS,
-});
+} as PoolConfigWithLifetime);
 
 // A pool-level 'error' fires when an idle client dies (e.g. the DB dropped the
 // connection during maintenance). Swallow + log it so it can't bubble up to the
@@ -100,10 +135,13 @@ export const authPool = new pg.Pool({
   max: 3,
   idleTimeoutMillis: 30_000,
   connectionTimeoutMillis: 4_000,
+  keepAlive: true,
+  keepAliveInitialDelayMillis: KEEPALIVE_DELAY_MS,
+  maxLifetimeSeconds: MAX_LIFETIME_SEC,
   statement_timeout: STATEMENT_TIMEOUT_MS,
   query_timeout: STATEMENT_TIMEOUT_MS,
   idle_in_transaction_session_timeout: IDLE_TXN_TIMEOUT_MS,
-});
+} as PoolConfigWithLifetime);
 authPool.on("error", (err) => {
   console.error("[auth-db] idle client error (pool will recycle):", err instanceof Error ? err.message : err);
 });
