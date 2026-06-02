@@ -1504,15 +1504,85 @@ function PickAdder({ onAdd, side }: PickAdderProps) {
 }
 
 // ── Quick Trade Calculator (no login / no league) ─────────────────────────────
-// One side of the quick calculator: a value total, asset chips, a searchable
-// player dropdown, and a compact draft-pick adder.
-function QuickCalcSide({ label, assets, total, players, onAddPlayer, onAddPick }: {
+// A spacious, visual trade builder: a result summary on top, then two equal
+// side panels (search + selected rows + a top-values quick-add rail). All value
+// math is shared with the My League calculator; only the layout differs.
+
+const PICK_ORD = (r: number) => (r === 1 ? "1st" : r === 2 ? "2nd" : r === 3 ? "3rd" : `${r}th`);
+
+// One selected player/pick as a full-width row: headshot, name, pos/team, value,
+// and a remove control on the far right.
+function SelectedAssetRow({ asset, onRemove, testId }: {
+  asset: TradeAsset;
+  onRemove: () => void;
+  testId?: string;
+}) {
+  return (
+    <div
+      className="flex items-center gap-3 rounded-xl border border-border/50 bg-muted/20 px-3 py-2.5 hover:border-border transition-colors"
+      data-testid={testId}
+    >
+      {asset.type === "player" && asset.player ? (
+        <div className="min-w-0 flex-1">
+          <PlayerAvatar id={asset.player.sleeperId || asset.player.id} name={asset.player.name} pos={asset.player.pos} team={asset.player.team ?? ""} size="md" />
+        </div>
+      ) : (
+        <div className="min-w-0 flex-1 flex items-center gap-3">
+          <span className="w-11 h-11 rounded-full bg-purple-900/40 border border-purple-700/40 flex items-center justify-center flex-shrink-0 text-xs font-bold text-purple-400">
+            {PICK_ORD(asset.pickRound ?? 1)}
+          </span>
+          <div className="min-w-0">
+            <p className="font-bold text-foreground truncate text-sm md:text-[15px] leading-tight">{asset.label}</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Draft Pick</p>
+          </div>
+        </div>
+      )}
+      <span className="flex-shrink-0 text-sm md:text-base font-extrabold tabular-nums text-[#d4af37]">{Math.round(asset.value).toLocaleString()}</span>
+      <button
+        type="button"
+        onClick={onRemove}
+        className="flex-shrink-0 flex items-center justify-center w-6 h-6 rounded-full text-muted-foreground/40 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+        aria-label="Remove asset"
+        data-testid={testId ? `${testId}-remove` : undefined}
+      >
+        <X className="w-4 h-4" />
+      </button>
+    </div>
+  );
+}
+
+// A selectable player card for the horizontal "Top Values" rail.
+function PlayerQuickAddCard({ player, onAdd, testId }: {
+  player: RankedPlayer;
+  onAdd: () => void;
+  testId?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onAdd}
+      className="group flex-shrink-0 w-[116px] md:w-[124px] rounded-2xl border border-border/50 bg-muted/20 hover:border-[#d4af37]/50 hover:bg-[#d4af37]/[0.06] active:scale-[0.98] p-3 flex flex-col items-center gap-2 text-center transition-all"
+      data-testid={testId}
+    >
+      <PlayerAvatar id={player.sleeperId} name={player.name} pos={player.pos} team={player.team} size="md" compact />
+      <div className="w-full min-w-0">
+        <p className="text-[12px] font-bold text-foreground truncate leading-tight">{player.name}</p>
+        <p className="text-[10px] text-muted-foreground truncate mt-0.5">{player.pos}{player.team ? ` · ${player.team}` : ""}</p>
+      </div>
+      <span className="text-[12px] font-extrabold tabular-nums text-[#d4af37]">{Math.round(player.value).toLocaleString()}</span>
+    </button>
+  );
+}
+
+// One trade side: large search, full-width selected rows, and a top-values rail.
+function TradeSidePanel({ label, assets, total, players, onAddPlayer, onAddPick, onRemove }: {
   label: string;
   assets: TradeAsset[];
   total: number;
   players: RankedPlayer[];
   onAddPlayer: (rp: RankedPlayer) => void;
   onAddPick: (year: number, round: number) => void;
+  onRemove: (id: string) => void;
 }) {
   const [search, setSearch] = useState("");
   const [searchFocused, setSearchFocused] = useState(false);
@@ -1522,21 +1592,21 @@ function QuickCalcSide({ label, assets, total, players, onAddPlayer, onAddPick }
     [assets],
   );
 
-  // Rookie/draft picks live in the same search box as players. Every year ×
+  // Rookie/draft picks live in the same search box as players. Every year and
   // round combo is a searchable option (match on year, round, or "pick").
-  const pickOptions = useMemo(() => {
-    const ord = (r: number) => (r === 1 ? "1st" : r === 2 ? "2nd" : r === 3 ? "3rd" : `${r}th`);
-    return ["2026", "2027", "2028"].flatMap((y) =>
+  const pickOptions = useMemo(
+    () => ["2026", "2027", "2028"].flatMap((y) =>
       [1, 2, 3, 4].map((r) => ({
         year: Number(y),
         round: r,
-        label: `${y} ${ord(r)} Round Pick`,
+        label: `${y} ${PICK_ORD(r)} Round Pick`,
         value: getStaticPickValue(Number(y), r, "mid"),
       })),
-    );
-  }, []);
+    ),
+    [],
+  );
 
-  // Unified search results — players and picks together. With a query we match
+  // Unified search results: players and picks together. With a query we match
   // names / pick labels; with an empty (but focused) box we surface the top
   // players plus the full pick list so both are discoverable without typing.
   const results = useMemo(() => {
@@ -1553,68 +1623,69 @@ function QuickCalcSide({ label, assets, total, players, onAddPlayer, onAddPick }
     return [...playerItems, ...pickItems];
   }, [players, search, chosenIds, pickOptions]);
 
-  // Top 50 players by dynasty value (highest → lowest), already-added removed —
-  // rendered as a horizontally sliding quick-add row under the header.
+  // Top 50 players by dynasty value (highest to lowest), already-added removed.
   const topPlayers = useMemo(
     () => [...players].sort((a, b) => b.value - a.value).filter((p) => !chosenIds.has(p.sleeperId)).slice(0, 50),
     [players, chosenIds],
   );
 
   return (
-    <div className="flex flex-col rounded-xl border border-border/30 bg-muted/5 p-3 md:p-3.5">
-      {/* Header — mirrors the My League side column (avatar + "sends" + underline). */}
-      <div className="mb-3">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-full bg-muted/40 border border-border/40 flex items-center justify-center flex-shrink-0">
-            <Scale className="w-4 h-4 text-muted-foreground" />
-          </div>
-          <h3 className="text-sm font-bold truncate">{label} sends</h3>
-          <span className="ml-auto text-[12px] font-black tabular-nums text-[#d4af37]">{Math.round(total).toLocaleString()}</span>
+    <Card className="p-4 md:p-5 flex flex-col gap-4" data-testid={`quick-side-${label}`}>
+      {/* Header: title + total value top-right + gold underline. */}
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <h3 className="text-lg md:text-xl font-extrabold text-foreground leading-none">{label}</h3>
+          <span className="block h-[3px] w-12 bg-[#d4af37] rounded-full mt-2" />
         </div>
-        <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
+        <div className="text-right flex-shrink-0">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">Total</p>
+          <p className="text-xl md:text-2xl font-extrabold tabular-nums text-[#d4af37] leading-none mt-0.5">{Math.round(total).toLocaleString()}</p>
+        </div>
       </div>
 
-      {/* Player search dropdown */}
+      {/* Large search input + dropdown. */}
       <div className="relative">
-        <div className="flex items-center gap-1.5 rounded-lg border border-border bg-background/60 px-2">
-          <Search className="w-3.5 h-3.5 text-muted-foreground/60 flex-shrink-0" />
+        <div className="flex items-center gap-2.5 rounded-xl border border-border bg-background/60 px-3.5 focus-within:border-[#d4af37]/60 transition-colors">
+          <Search className="w-4 h-4 text-muted-foreground/60 flex-shrink-0" />
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             onFocus={() => setSearchFocused(true)}
             onBlur={() => setTimeout(() => setSearchFocused(false), 120)}
-            placeholder="Add a player or pick…"
-            className="flex-1 bg-transparent py-1.5 text-[12px] focus:outline-none"
+            placeholder="Search players or picks..."
+            className="flex-1 bg-transparent py-3 text-sm focus:outline-none placeholder:text-muted-foreground/50"
             data-testid={`quick-search-${label}`}
           />
         </div>
         {searchFocused && results.length > 0 && (
-          <div className="absolute z-20 left-0 right-0 mt-1 rounded-lg border border-border bg-popover shadow-lg max-h-56 overflow-y-auto">
+          <div className="absolute z-20 left-0 right-0 mt-2 rounded-xl border border-border bg-popover shadow-xl max-h-72 overflow-y-auto scrollbar-hide p-1">
             {results.map((item) =>
               item.kind === "player" ? (
                 <button
                   key={item.player.sleeperId}
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => { onAddPlayer(item.player); setSearch(""); }}
-                  className="w-full flex items-center gap-2 px-2 py-1.5 hover:bg-muted/50 text-left transition-colors"
+                  className="w-full flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-muted/50 text-left transition-colors"
                   data-testid={`quick-result-${item.player.sleeperId}`}
                 >
-                  <PlayerAvatar id={item.player.sleeperId} name={item.player.name} pos={item.player.pos} team={item.player.team} size="xs" />
-                  <span className="ml-auto text-[11px] font-bold tabular-nums text-muted-foreground">{Math.round(item.player.value).toLocaleString()}</span>
+                  <div className="min-w-0 flex-1">
+                    <PlayerAvatar id={item.player.sleeperId} name={item.player.name} pos={item.player.pos} team={item.player.team} size="sm" />
+                  </div>
+                  <span className="flex-shrink-0 text-[12px] font-bold tabular-nums text-[#d4af37]">{Math.round(item.player.value).toLocaleString()}</span>
                 </button>
               ) : (
                 <button
                   key={`pick-${item.pick.year}-${item.pick.round}`}
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => { onAddPick(item.pick.year, item.pick.round); setSearch(""); }}
-                  className="w-full flex items-center gap-2 px-2 py-1.5 hover:bg-muted/50 text-left transition-colors"
+                  className="w-full flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-muted/50 text-left transition-colors"
                   data-testid={`quick-result-pick-${item.pick.year}-${item.pick.round}`}
                 >
-                  <span className="w-7 h-7 rounded-full bg-purple-900/40 border border-purple-700/40 flex items-center justify-center flex-shrink-0 text-[10px] font-bold text-purple-400">
-                    {item.pick.round === 1 ? "1st" : item.pick.round === 2 ? "2nd" : item.pick.round === 3 ? "3rd" : `${item.pick.round}th`}
+                  <span className="w-9 h-9 rounded-full bg-purple-900/40 border border-purple-700/40 flex items-center justify-center flex-shrink-0 text-[11px] font-bold text-purple-400">
+                    {PICK_ORD(item.pick.round)}
                   </span>
-                  <span className="text-[12px] font-semibold text-foreground">{item.pick.label}</span>
-                  <span className="ml-auto text-[11px] font-bold tabular-nums text-muted-foreground">{Math.round(item.pick.value).toLocaleString()}</span>
+                  <span className="flex-1 text-[13px] font-semibold text-foreground truncate">{item.pick.label}</span>
+                  <span className="flex-shrink-0 text-[12px] font-bold tabular-nums text-[#d4af37]">{Math.round(item.pick.value).toLocaleString()}</span>
                 </button>
               ),
             )}
@@ -1622,37 +1693,93 @@ function QuickCalcSide({ label, assets, total, players, onAddPlayer, onAddPick }
         )}
       </div>
 
-      {/* Sliding quick-add row — top 50 by dynasty value, highest → lowest. */}
+      {/* Selected assets: full-width rows. */}
+      <div className="space-y-2">
+        {assets.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-border/50 px-4 py-6 text-center">
+            <p className="text-sm font-semibold text-muted-foreground/70">No assets yet</p>
+            <p className="text-[12px] text-muted-foreground/50 mt-0.5">Search above or tap a card below to add.</p>
+          </div>
+        ) : (
+          assets.map((a) => (
+            <SelectedAssetRow key={a.id} asset={a} onRemove={() => onRemove(a.id)} testId={`quick-asset-${label}-${a.id}`} />
+          ))
+        )}
+      </div>
+
+      {/* Top-values quick-add rail. */}
       {topPlayers.length > 0 && (
-        <div className="mt-3">
-          <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70 mb-1.5">Top values · tap to add</p>
-          <div className="flex gap-2 overflow-x-auto pb-1.5 -mx-0.5 px-0.5">
+        <div className="mt-auto">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70 mb-2">Top Values</p>
+          <div className="flex gap-2.5 overflow-x-auto scrollbar-hide pb-1 -mx-1 px-1">
             {topPlayers.map((p) => (
-              <button
-                key={p.sleeperId}
-                onClick={() => onAddPlayer(p)}
-                className="group flex-shrink-0 flex items-center gap-2 rounded-full border border-border/50 bg-background/50 hover:border-[#d4af37]/50 hover:bg-[#d4af37]/5 pl-1 pr-3 py-1 transition-colors"
-                data-testid={`quick-top-${label}-${p.sleeperId}`}
-              >
-                <PlayerAvatar id={p.sleeperId} name={p.name} pos={p.pos} team={p.team} size="xs" compact />
-                <div className="flex flex-col items-start leading-tight">
-                  <span className="text-[11px] font-semibold text-foreground whitespace-nowrap">{p.name}</span>
-                  <span className="text-[9px] text-muted-foreground/80 tabular-nums whitespace-nowrap">
-                    {p.pos}{p.team ? " · " + p.team : ""}
-                    <span className="ml-1 text-[#d4af37]/90">{Math.round(p.value).toLocaleString()}</span>
-                  </span>
-                </div>
-              </button>
+              <PlayerQuickAddCard key={p.sleeperId} player={p} onAdd={() => onAddPlayer(p)} testId={`quick-add-${label}-${p.sleeperId}`} />
             ))}
           </div>
         </div>
       )}
+    </Card>
+  );
+}
+
+// The large centered result header + value-comparison bar above both panels.
+function TradeResultSummary({ bothSides, headline, verdictLabel, badgeStyle, barColor, fair, fillPctA, valA, valB, diff }: {
+  bothSides: boolean;
+  headline: string;
+  verdictLabel: string;
+  badgeStyle: string;
+  barColor: string;
+  fair: boolean;
+  fillPctA: number;
+  valA: number;
+  valB: number;
+  diff: number;
+}) {
+  if (!bothSides) {
+    return (
+      <div className="text-center py-6 md:py-8">
+        <p className="text-xl md:text-2xl font-extrabold tracking-tight text-foreground" data-testid="quick-calc-empty">Trade not yet complete</p>
+        <p className="text-sm text-muted-foreground mt-2">Add at least one asset to each side to see the verdict.</p>
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-5">
+      <div className="text-center space-y-2.5">
+        <h2 className="text-2xl md:text-3xl font-extrabold tracking-tight text-foreground leading-tight" data-testid="quick-calc-verdict">
+          {headline}
+        </h2>
+        <Badge className={`text-xs md:text-sm px-3 py-1 font-bold border ${badgeStyle}`} data-testid="quick-calc-verdict-badge">
+          {verdictLabel}
+        </Badge>
+      </div>
+
+      <div className="max-w-2xl mx-auto space-y-2">
+        <div className="flex items-center justify-between gap-2 text-[10px] md:text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+          <span>Side A</span>
+          <span className="normal-case tracking-normal font-semibold text-muted-foreground/60">
+            {fair ? "Balanced" : `Value difference ${Math.round(diff).toLocaleString()}`}
+          </span>
+          <span>Side B</span>
+        </div>
+        <div className="relative h-7 md:h-8 rounded-full overflow-hidden ring-1 ring-white/10" style={{ background: "#12284a" }}>
+          <div
+            className="absolute inset-y-0 left-0 transition-all duration-700"
+            style={{ width: `${fillPctA}%`, background: barColor }}
+          />
+          <div className="absolute top-0 bottom-0 w-px bg-white/40 z-10" style={{ left: "50%" }} />
+        </div>
+        <div className="flex justify-between text-base md:text-lg font-extrabold tabular-nums">
+          <span className="text-[#d4af37]">{Math.round(valA).toLocaleString()}</span>
+          <span className="text-[#d4af37]">{Math.round(valB).toLocaleString()}</span>
+        </div>
+      </div>
     </div>
   );
 }
 
 // No-login calculator: compares two player/pick packages using bundled dynasty
-// values. No rosters, no trade partner — just dropdown selection.
+// values. No rosters, no trade partner; just search-driven selection.
 function QuickTradeCalculator() {
   const { dynastyPlayerList } = useValueModel();
   const [sideA, setSideA] = useState<TradeAsset[]>([]);
@@ -1694,8 +1821,6 @@ function QuickTradeCalculator() {
   const favored = valA === valB ? null : valA > valB ? "A" : "B";
   const bothSides = sideA.length > 0 && sideB.length > 0;
 
-  // Verdict presentation — mirrors the "My League" Trade Verdict styling,
-  // but league-agnostic (no teams, no position impact, no Sleeper send).
   const total = valA + valB;
   const fillPctA = total > 0 ? Math.max(5, Math.min(95, (valA / total) * 100)) : 50;
   const headline = fair ? "Dead Even Trade" : `Side ${favored} Wins The Trade`;
@@ -1711,121 +1836,46 @@ function QuickTradeCalculator() {
       ? "linear-gradient(90deg, #059669 0%, #10b981 100%)"
       : "linear-gradient(90deg, #1d4ed8 0%, #3b82f6 100%)";
 
-  // Compact asset chip for the per-side "sends" summary (click to remove).
-  const renderQuickChip = (asset: TradeAsset, side: "a" | "b") => (
-    <button
-      type="button"
-      key={asset.id}
-      onClick={() => removeAsset(side, asset.id)}
-      className="group flex items-center gap-2 pl-1 pr-2.5 py-1 rounded-full border border-border/60 bg-muted/20 hover:bg-red-500/10 hover:border-red-500/40 transition-colors max-w-full"
-      data-testid={`quick-chip-${side}-${asset.id}`}
-    >
-      {asset.type === "player" && asset.player ? (
-        <PlayerAvatar id={asset.player.sleeperId || asset.player.id} name={asset.player.name} pos={asset.player.pos} team={asset.player.team ?? ""} size="sm" compact />
-      ) : (
-        <span className="w-7 h-7 rounded-full bg-purple-900/40 border border-purple-700/40 flex items-center justify-center flex-shrink-0 text-[10px] font-bold text-purple-400">
-          {asset.pickRound === 1 ? "1st" : asset.pickRound === 2 ? "2nd" : asset.pickRound === 3 ? "3rd" : `${asset.pickRound}th`}
-        </span>
-      )}
-      <div className="flex flex-col items-start leading-tight min-w-0">
-        <span className="text-[11px] font-semibold text-foreground truncate max-w-[110px]">
-          {asset.type === "player" && asset.player ? asset.player.name : asset.label}
-        </span>
-        <span className="text-[9px] text-muted-foreground/80 tabular-nums">
-          {asset.type === "player" ? `${asset.pos ?? ""}${asset.player?.team ? " · " + asset.player.team : ""}` : "Pick"}
-          {asset.value > 0 && <span className="ml-1 text-[#d4af37]/90">{Math.round(asset.value).toLocaleString()}</span>}
-        </span>
-      </div>
-      <X className="w-3 h-3 text-muted-foreground/30 group-hover:text-red-400 transition-colors flex-shrink-0" />
-    </button>
-  );
-
   return (
-    <div className="space-y-4 md:space-y-5">
-      {/* ── Unified Quick Trade Builder card — mirrors the My League layout:
-         header → verdict panel → two builder columns. League-agnostic, so no
-         trade partner, no Position Impact, no rosters — players come from the
-         searchable dynasty list instead.                                    */}
-      <Card className="p-3.5 md:p-6" data-testid="card-quick-trade-builder">
-
-        {/* ── Header: title + subtitle + gold underline; Clear on the right ── */}
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h2 className="text-base md:text-lg font-bold flex items-center gap-2">
-              <ArrowRightLeft className="w-4 h-4 text-[#0b3a7a] dark:text-blue-400" />
-              Quick Trade Calculator
-            </h2>
-            <p className="text-[12px] text-muted-foreground mt-0.5">Search any two packages to evaluate the trade. No login or league needed.</p>
-            <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
-          </div>
-          {(sideA.length > 0 || sideB.length > 0) && (
-            <button onClick={() => { setSideA([]); setSideB([]); }} className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors flex-shrink-0" data-testid="quick-calc-clear">
-              <RotateCcw className="w-3 h-3" /> Clear
-            </button>
-          )}
+    <div className="space-y-5 md:space-y-6">
+      {/* Header: title + subtitle + gold underline; Clear on the right. */}
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-xl md:text-2xl font-extrabold text-foreground flex items-center gap-2">
+            <ArrowRightLeft className="w-5 h-5 text-[#0b3a7a] dark:text-blue-400" />
+            Quick Trade Calculator
+          </h2>
+          <p className="text-sm text-muted-foreground mt-1">Compare any two trade packages. No login or league required.</p>
+          <span className="block h-[3px] w-12 bg-[#d4af37] rounded-full mt-2" />
         </div>
+        {(sideA.length > 0 || sideB.length > 0) && (
+          <button onClick={() => { setSideA([]); setSideB([]); }} className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors flex-shrink-0 rounded-full border border-border/50 px-3 py-1.5" data-testid="quick-calc-clear">
+            <RotateCcw className="w-3.5 h-3.5" /> Clear
+          </button>
+        )}
+      </div>
 
-        {/* ── Verdict panel (directly under the header) ── */}
-        <div className="mt-4">
-          {bothSides ? (
-            <div className="space-y-2.5">
-              <div className="space-y-1.5 text-center">
-                <p className="text-[15px] font-extrabold tracking-tight text-foreground uppercase leading-tight" data-testid="quick-calc-verdict">
-                  {headline}
-                </p>
-                <Badge className={`text-[11px] px-2.5 py-0.5 font-bold border ${badgeStyle}`} data-testid="quick-calc-verdict-badge">
-                  {verdictLabel}
-                </Badge>
-              </div>
-              <div className="space-y-1">
-                <div className="flex items-center justify-between text-[9px] font-bold text-muted-foreground uppercase tracking-wider">
-                  <span>Side A</span>
-                  <span className="text-muted-foreground/40">Fair</span>
-                  <span>Side B</span>
-                </div>
-                <div className="relative h-3 rounded-full overflow-hidden" style={{ background: "#12284a" }}>
-                  <div
-                    className="absolute inset-y-0 left-0 rounded-l-full transition-all duration-700"
-                    style={{ width: `${fillPctA}%`, background: barColor }}
-                  />
-                  <div className="absolute top-0 bottom-0 w-0.5 bg-white/30 z-10" style={{ left: "50%" }} />
-                </div>
-                <div className="flex justify-between text-[10px] tabular-nums text-muted-foreground/80">
-                  <span>{Math.round(valA).toLocaleString()}</span>
-                  <span>{Math.round(valB).toLocaleString()}</span>
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="rounded-lg border border-dashed border-border/50 px-3 py-3">
-              <p className="text-xs font-semibold text-foreground">Trade not yet complete</p>
-              <p className="text-[11px] text-muted-foreground mt-1">Add at least one asset to each side to see the verdict.</p>
-            </div>
-          )}
-
-          {/* Per-side asset summaries — what each side sends. */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-3 md:mt-4">
-            {(["a", "b"] as const).map((side) => {
-              const assets = side === "a" ? sideA : sideB;
-              return (
-                <div key={side} className="rounded-lg border border-border/60 bg-muted/10 overflow-hidden">
-                  <div className="px-2.5 py-2 flex flex-wrap gap-1.5 min-h-[44px] items-center">
-                    {assets.length === 0
-                      ? <p className="text-[11px] text-muted-foreground/60 italic">Nothing added yet</p>
-                      : assets.map(a => renderQuickChip(a, side))}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* ── Builder columns (search + draft-pick adder per side) ── */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4 mt-4">
-          <QuickCalcSide label="Side A" assets={sideA} total={valA} players={dynastyPlayerList} onAddPlayer={(rp) => addPlayer("a", rp)} onAddPick={(y, r) => addPick("a", y, r)} />
-          <QuickCalcSide label="Side B" assets={sideB} total={valB} players={dynastyPlayerList} onAddPlayer={(rp) => addPlayer("b", rp)} onAddPick={(y, r) => addPick("b", y, r)} />
-        </div>
+      {/* Result summary (above both panels). */}
+      <Card className="p-5 md:p-7" data-testid="card-quick-result">
+        <TradeResultSummary
+          bothSides={bothSides}
+          headline={headline}
+          verdictLabel={verdictLabel}
+          badgeStyle={badgeStyle}
+          barColor={barColor}
+          fair={fair}
+          fillPctA={fillPctA}
+          valA={valA}
+          valB={valB}
+          diff={diff}
+        />
       </Card>
+
+      {/* Two equal side panels. */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 items-stretch">
+        <TradeSidePanel label="Side A" assets={sideA} total={valA} players={dynastyPlayerList} onAddPlayer={(rp) => addPlayer("a", rp)} onAddPick={(y, r) => addPick("a", y, r)} onRemove={(id) => removeAsset("a", id)} />
+        <TradeSidePanel label="Side B" assets={sideB} total={valB} players={dynastyPlayerList} onAddPlayer={(rp) => addPlayer("b", rp)} onAddPick={(y, r) => addPick("b", y, r)} onRemove={(id) => removeAsset("b", id)} />
+      </div>
     </div>
   );
 }
