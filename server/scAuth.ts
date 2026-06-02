@@ -2,15 +2,16 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import { eq, and, gt, isNull, desc } from "drizzle-orm";
-import { db } from "./db";
+import { authDb } from "./db";
 import { scUsers, emailVerificationCodes, scConnectedAccounts, type UserPreferences } from "@shared/schema";
 
 const JWT_SECRET = process.env.SESSION_SECRET || "fallback-dev-secret";
 const CIPHER_KEY = crypto.createHash("sha256").update(JWT_SECRET).digest();
 
-// Shared, capped pool (see server/db.ts). getDb() retained for call-site compat.
+// Dedicated auth pool (see server/db.ts). Isolated from the main app pool so
+// login/me/register can never be starved by background crawlers or snapshots.
 function getDb() {
-  return db;
+  return authDb;
 }
 
 // ── Encryption (AES-256-CBC) ──────────────────────────────────────────────────

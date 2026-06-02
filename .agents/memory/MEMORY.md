@@ -1,1 +1,2 @@
 - [Stale Vite HMR after checkpoint](stale-vite-hmr.md) — checkpoint merges cause Vite to serve old compiled modules; fix is always a workflow restart.
+- [Auth pool isolation](auth-pool-isolation.md) — login/me use dedicated 3-conn pool so background crawlers can't cause login 500s

@@ -1832,6 +1832,59 @@ export async function getCachedAdp(f: AdpFilters): Promise<{
 // Snapshots without date filters are managed by the 6-hour scheduler.
 const SNAPSHOT_DATE_RANGE_TTL_MS = 60 * 60 * 1000; // 1 hour
 
+// ── Single-flight guard for live ADP computes ────────────────────────────────
+// computeAdp() is a heavy aggregation (multiple seconds, sometimes 20s+ on a
+// cold filter). The frontend loads /api/adp for the same default filter on
+// every visit, so on a cache miss DOZENS of identical requests would each kick
+// off their OWN compute, each pinning a DB connection for the full duration —
+// which exhausted the connection pool and 500'd auth (the recurring
+// "spinner / Login failed" outage, second offender after the trade ingest).
+// Collapsing concurrent identical computes onto one shared promise means N
+// simultaneous misses cost ONE compute and ONE connection instead of N.
+const inFlightAdpComputes = new Map<string, Promise<{ rows: AdpRow[]; draftCount: number; pickCount: number }>>();
+
+// Compute ADP for `f`, de-duplicating concurrent identical computes and
+// persisting the result as a snapshot so the NEXT read is a cheap cache hit
+// instead of yet another full recompute.
+async function computeAndCacheAdp(
+  f: AdpFilters,
+  key: string,
+): Promise<{ rows: AdpRow[]; draftCount: number; pickCount: number }> {
+  const existing = inFlightAdpComputes.get(key);
+  if (existing) return existing;
+
+  const work = (async () => {
+    const fresh = await computeAdp(f);
+    // Persist so subsequent requests for this filter hit getCachedAdp(). Date-
+    // range snapshots self-expire via SNAPSHOT_DATE_RANGE_TTL_MS; default-combo
+    // snapshots are refreshed by the scheduler. Best-effort — a write failure
+    // must not fail the read the user is waiting on.
+    //
+    // Skip empty results: getAdp() only treats a snapshot as a hit when it has
+    // rows (an empty snapshot means "no data yet", not a valid cache), so
+    // persisting 0 rows would never serve a hit and would just accumulate
+    // duplicate empty snapshots on every call. An empty compute is also cheap.
+    if (fresh.rows.length > 0) {
+      try {
+        await db.insert(adpSnapshots).values({
+          filterKey: key,
+          filters: f as any,
+          rows: fresh.rows as any,
+          draftCount: fresh.draftCount,
+          snapshotDate: todayStr(),
+          computedAt: new Date(),
+        });
+      } catch (err) {
+        console.warn(`[ADP getAdp] snapshot persist failed (key=${key}):`, (err as Error).message);
+      }
+    }
+    return fresh;
+  })().finally(() => inFlightAdpComputes.delete(key));
+
+  inFlightAdpComputes.set(key, work);
+  return work;
+}
+
 /**
  * Read-time entry point: returns the cached snapshot when available, falls
  * back to a live computation against our own draft_picks table when no
@@ -1891,7 +1944,7 @@ export async function getAdp(f: AdpFilters): Promise<{
       `[ADP getAdp] date-range snapshot expired (>1h old, key=${key}). Recomputing from DB.`,
     );
   }
-  const fresh = await computeAdp(f);
+  const fresh = await computeAndCacheAdp(f, key);
   return {
     rows: fresh.rows,
     draftCount: fresh.draftCount,

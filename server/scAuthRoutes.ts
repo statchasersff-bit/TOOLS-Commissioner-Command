@@ -211,7 +211,10 @@ export function registerScAuthRoutes(app: Express): void {
       setJwtCookie(res, token);
       res.json({ ok: true, token });
     } catch (err: any) {
-      console.error("[sc-auth] login error:", err.message);
+      // Log the full error code + message so production logs reveal the root
+      // cause (e.g. "TimeoutError: timeout exceeded when trying to connect"
+      // means the auth pool was exhausted; "ECONNREFUSED" means DB unreachable).
+      console.error("[sc-auth] login error:", err?.code ?? "(no code)", err?.message ?? err);
       res.status(500).json({ error: "Login failed. Please try again." });
     }
   });

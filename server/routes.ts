@@ -25,6 +25,7 @@ import {
   fetchCrossLeagueTrades,
   fetchLeagueTransactions,
   fetchManagerRoster,
+  type SleeperLeagueSummary,
 } from "./sleeper";
 import {
   startCrawl,
@@ -172,15 +173,44 @@ function parsePlayerProfileFilters(q: Record<string, unknown>): AdpFilters {
 interface CacheEntry<T> { data: T; expiresAt: number; }
 function makeCache<T>(ttlMs: number) {
   const store = new Map<string, CacheEntry<T>>();
-  return {
+  // In-flight computes for single-flight (see getOrCompute). Keyed identically
+  // to the data store so a miss can find an already-running compute.
+  const inflight = new Map<string, Promise<T>>();
+  const api = {
     get(key: string): T | null {
       const e = store.get(key);
       if (!e || Date.now() > e.expiresAt) { store.delete(key); return null; }
       return e.data;
     },
     set(key: string, data: T) { store.set(key, { data, expiresAt: Date.now() + ttlMs }); },
-    invalidate(key: string) { store.delete(key); },
+    invalidate(key: string) { store.delete(key); inflight.delete(key); },
+    /**
+     * Cache-aside WITH single-flight. On a hit, returns the cached value. On a
+     * miss, the FIRST caller runs `fn()`; any concurrent callers for the same
+     * key await that same promise instead of each launching their own compute.
+     *
+     * This is the pool-exhaustion fix generalized: a slow, frequently-hit
+     * endpoint (heavy SQL, Sleeper fan-out) can otherwise be stampeded into N
+     * parallel computes — each holding a DB connection for seconds — the moment
+     * its cache is cold or its TTL lapses. Single-flight collapses that to one
+     * compute + one connection. A throwing `fn()` rejects all awaiters and is
+     * NOT cached (the inflight entry is cleared in finally).
+     */
+    async getOrCompute(key: string, fn: () => Promise<T>): Promise<T> {
+      const cached = api.get(key);
+      if (cached !== null) return cached;
+      const existing = inflight.get(key);
+      if (existing) return existing;
+      const work = (async () => {
+        const data = await fn();
+        api.set(key, data);
+        return data;
+      })().finally(() => inflight.delete(key));
+      inflight.set(key, work);
+      return work;
+    },
   };
+  return api;
 }
 
 const statsCache   = makeCache<any>(5 * 60 * 1000);   // 5-min TTL
@@ -190,6 +220,15 @@ const playoffCalcCache = makeCache<any>(10 * 60 * 1000); // 10-min TTL
 const weeklyMatchupsCache = makeCache<any>(5 * 60 * 1000); // 5-min TTL — live scores need fresher data
 const statChasersDataCache = makeCache<any>(10 * 60 * 1000); // 10-min TTL — public-data repo JSON
 const scheduleCache = makeCache<any>(5 * 60 * 1000); // 5-min TTL — NFL week schedule (kickoff/lock state)
+const adpStatsCache = makeCache<any>(5 * 60 * 1000); // 5-min TTL — two count(*) queries, hit on every Draft tab load
+// Sleeper fan-out endpoints: not DB-pool bound, but each does several (or N-per-
+// league) rate-limited Sleeper calls and is hit on page load, so concurrent
+// duplicates pile up long-held requests and burn Sleeper rate budget. Short TTL
+// + single-flight (via getOrCompute) collapses duplicates; data is read-mostly
+// analytics where 30–60s staleness is fine.
+const leagueFullCache = makeCache<any>(30 * 1000);        // 30s — keyed leagueId:userId
+const portfolioSummaryCache = makeCache<any>(60 * 1000);  // 60s — keyed userId:season (N-league fan-out)
+const portfolioUserCache = makeCache<{ userId: string; leagues: SleeperLeagueSummary[]; leagueNames: Record<string, string> }>(60 * 1000); // 60s — resolvePortfolioUser, shared by 5 portfolio endpoints
 
 // Allowed axes for the StatChasers public-data proxy. Kept in lock-step with
 // client/src/lib/statChasersDataConfig.ts. If the data repo grows new
@@ -422,7 +461,10 @@ export async function registerRoutes(
       if (!userId) {
         return res.status(400).json({ error: "userId query param is required" });
       }
-      const data = await fetchSleeperLeagueFull(req.params.leagueId, userId);
+      const data = await leagueFullCache.getOrCompute(
+        `${req.params.leagueId}:${userId}`,
+        () => fetchSleeperLeagueFull(req.params.leagueId, userId),
+      );
       res.json(data);
     } catch (err: any) {
       console.error("Sleeper league full fetch error:", err);
@@ -433,8 +475,13 @@ export async function registerRoutes(
   app.get("/api/sleeper/user/:userId/portfolio-summary", requireReadOnlySleeperContext, async (req, res) => {
     try {
       const season = (req.query.season as string) || "2026";
-      const leagues = await fetchSleeperLeagues(req.params.userId, season);
-      const summary = await fetchPortfolioSummary(req.params.userId, leagues);
+      const summary = await portfolioSummaryCache.getOrCompute(
+        `${req.params.userId}:${season}`,
+        async () => {
+          const leagues = await fetchSleeperLeagues(req.params.userId, season);
+          return fetchPortfolioSummary(req.params.userId, leagues);
+        },
+      );
       res.json(summary);
     } catch (err: any) {
       console.error("Portfolio summary error:", err);
@@ -445,14 +492,19 @@ export async function registerRoutes(
   // ── Portfolio Timeline ──────────────────────────────────────────────────
   // Asset-ledger reconstruction of a manager's dynasty portfolio value over
   // time. :sleeperUsername accepts a username or a Sleeper user_id.
-  const resolvePortfolioUser = async (handle: string) => {
-    const user = await fetchSleeperUser(handle);
-    const season = String(new Date().getFullYear());
-    const leagues = await fetchSleeperLeagues(user.userId, season).catch(() => []);
-    const leagueNames: Record<string, string> = {};
-    for (const lg of leagues) leagueNames[lg.leagueId] = lg.name;
-    return { userId: user.userId, leagues, leagueNames };
-  };
+  // Memoized + single-flighted: the Portfolio page loads 5 endpoints in
+  // parallel on open, each of which calls this. Without dedup that's 5×
+  // (fetchSleeperUser + fetchSleeperLeagues) — up to 10 Sleeper calls — for one
+  // page view. getOrCompute collapses them to one resolve per handle per 60s.
+  const resolvePortfolioUser = (handle: string) =>
+    portfolioUserCache.getOrCompute(handle, async () => {
+      const user = await fetchSleeperUser(handle);
+      const season = String(new Date().getFullYear());
+      const leagues = await fetchSleeperLeagues(user.userId, season).catch(() => []);
+      const leagueNames: Record<string, string> = {};
+      for (const lg of leagues) leagueNames[lg.leagueId] = lg.name;
+      return { userId: user.userId, leagues, leagueNames };
+    });
 
   app.get("/api/portfolio/:sleeperUsername/timeline", requireReadOnlySleeperContext, async (req, res) => {
     try {
@@ -708,13 +760,10 @@ export async function registerRoutes(
     }
     try {
       const cacheKey = `${leagueId}:${simulations}`;
-      const cached = playoffCalcCache.get(cacheKey);
-      if (cached) {
-        res.setHeader("Cache-Control", "public, max-age=600");
-        return res.json(cached);
-      }
-      const result = await computePlayoffCalculator(leagueId, simulations);
-      playoffCalcCache.set(cacheKey, result);
+      const result = await playoffCalcCache.getOrCompute(
+        cacheKey,
+        () => computePlayoffCalculator(leagueId, simulations),
+      );
       res.setHeader("Cache-Control", "public, max-age=600");
       res.json(result);
     } catch (err: any) {
@@ -736,13 +785,10 @@ export async function registerRoutes(
     const weekArg = Number.isFinite(week) && week > 0 ? week : undefined;
     try {
       const cacheKey = `${leagueId}:${weekArg ?? "auto"}`;
-      const cached = weeklyMatchupsCache.get(cacheKey);
-      if (cached) {
-        res.setHeader("Cache-Control", "public, max-age=300");
-        return res.json(cached);
-      }
-      const result = await computeWeeklyMatchups(leagueId, weekArg);
-      weeklyMatchupsCache.set(cacheKey, result);
+      const result = await weeklyMatchupsCache.getOrCompute(
+        cacheKey,
+        () => computeWeeklyMatchups(leagueId, weekArg),
+      );
       res.setHeader("Cache-Control", "public, max-age=300");
       res.json(result);
     } catch (err: any) {
@@ -872,13 +918,7 @@ export async function registerRoutes(
         limit: req.query.limit ? parseInt(req.query.limit as string) : 50,
       };
       const cacheKey = JSON.stringify(params);
-      const cached = searchCache.get(cacheKey);
-      if (cached) {
-        res.setHeader("Cache-Control", "public, max-age=120");
-        return res.json(cached);
-      }
-      const result = await searchTrades(params);
-      searchCache.set(cacheKey, result);
+      const result = await searchCache.getOrCompute(cacheKey, () => searchTrades(params));
       res.setHeader("Cache-Control", "public, max-age=120");
       res.json(result);
     } catch (err: any) {
@@ -924,13 +964,7 @@ export async function registerRoutes(
 
   app.get("/api/trades/stats", async (_req, res) => {
     try {
-      const cached = statsCache.get("stats");
-      if (cached) {
-        res.setHeader("Cache-Control", "public, max-age=300");
-        return res.json(cached);
-      }
-      const stats = await getTradeStats();
-      statsCache.set("stats", stats);
+      const stats = await statsCache.getOrCompute("stats", () => getTradeStats());
       res.setHeader("Cache-Control", "public, max-age=300");
       res.json(stats);
     } catch (err: any) {
@@ -940,14 +974,9 @@ export async function registerRoutes(
 
   app.get("/api/trades/most-traded-players", async (_req, res) => {
     try {
-      const cached = mostTradedCache.get("week");
-      if (cached) {
-        res.setHeader("Cache-Control", "public, max-age=600");
-        return res.json(cached);
-      }
-      const players = await getMostTradedPlayers(7, 10);
-      const payload = { players };
-      mostTradedCache.set("week", payload);
+      const payload = await mostTradedCache.getOrCompute("week", async () => ({
+        players: await getMostTradedPlayers(7, 10),
+      }));
       res.setHeader("Cache-Control", "public, max-age=600");
       res.json(payload);
     } catch (err: any) {
@@ -1436,7 +1465,7 @@ export async function registerRoutes(
   // Defined before the /api/adp catch-all so it isn't shadowed. Cached briefly.
   app.get("/api/adp/stats", async (_req, res) => {
     try {
-      const stats = await getAdpStats();
+      const stats = await adpStatsCache.getOrCompute("stats", () => getAdpStats());
       res.setHeader("Cache-Control", "public, max-age=300");
       res.json(stats);
     } catch (err: any) {

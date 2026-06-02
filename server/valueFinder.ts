@@ -369,6 +369,14 @@ async function buildBase(
   return players;
 }
 
+// Single-flight guard for buildBase. Without it, every request that arrives
+// during a cold or just-expired base window (the base TTL lapses every 30 min)
+// kicks off its OWN buildBase — a heavy multi-source fetch (FantasyCalc + KTC +
+// season-stats + trend queries) that holds DB/HTTP work for seconds. Under load
+// that stampede is a connection-pool exhauster (same failure mode as /api/adp).
+// Keyed WITHOUT userId so all users share the one in-flight base build.
+const baseInflight = new Map<string, Promise<ValueFinderRawPlayer[]>>();
+
 async function getBase(
   season: number,
   format: "sf" | "1qb",
@@ -377,9 +385,17 @@ async function getBase(
   const key = `${season}:${format}:${scoring}`;
   const hit = baseCache.get(key);
   if (hit && Date.now() - hit.builtAt < BASE_TTL_MS) return hit.players;
-  const players = await buildBase(season, format, scoring);
-  baseCache.set(key, { builtAt: Date.now(), players });
-  return players;
+
+  const existing = baseInflight.get(key);
+  if (existing) return existing;
+
+  const work = (async () => {
+    const players = await buildBase(season, format, scoring);
+    baseCache.set(key, { builtAt: Date.now(), players });
+    return players;
+  })().finally(() => baseInflight.delete(key));
+  baseInflight.set(key, work);
+  return work;
 }
 
 export interface ValueFinderQuery {

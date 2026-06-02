@@ -81,3 +81,31 @@ pool.on("error", (err) => {
 });
 
 export const db = drizzle(pool);
+
+// ── Dedicated auth pool ───────────────────────────────────────────────────────
+// Login, /me, register, and password-reset are the most user-visible routes.
+// They share the main pool above with ADP crawlers, snapshot jobs, news ingest,
+// and trade ingestion — all of which can hold connections for seconds at a time.
+// When those background jobs saturate the main pool the auth routes queue behind
+// them, wait the full connectionTimeoutMillis (10s), then return a 500 — which
+// the user sees as "Login failed / spinner stuck". The same structural fix used
+// for the session store (its own capped pool in server/index.ts): give auth its
+// own tiny pool that background work can never touch.
+// 3 connections is plenty: login + /me + register are fast point queries and
+// rarely concurrent. connectionTimeoutMillis is intentionally short (4s) so a
+// DB hiccup returns a real error quickly rather than holding the login button
+// in a 10s spin.
+export const authPool = new pg.Pool({
+  connectionString: process.env.DATABASE_URL,
+  max: 3,
+  idleTimeoutMillis: 30_000,
+  connectionTimeoutMillis: 4_000,
+  statement_timeout: STATEMENT_TIMEOUT_MS,
+  query_timeout: STATEMENT_TIMEOUT_MS,
+  idle_in_transaction_session_timeout: IDLE_TXN_TIMEOUT_MS,
+});
+authPool.on("error", (err) => {
+  console.error("[auth-db] idle client error (pool will recycle):", err instanceof Error ? err.message : err);
+});
+
+export const authDb = drizzle(authPool);
