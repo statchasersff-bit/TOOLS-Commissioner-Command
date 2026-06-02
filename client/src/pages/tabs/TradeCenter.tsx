@@ -2766,9 +2766,17 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
       a.pickOriginalRosterId != null ? `${a.pickYear}-${a.pickRound}-${a.pickOriginalRosterId}` : `${a.pickYear}-${a.pickRound}`
     ));
 
+    // Selected-asset chips for this side — shown near the top of the column
+    // (desktop) so the current package is visible above the roster table.
+    // Mobile already surfaces chips inside RosterCollapsible's picker block.
+    const rdLabelShort = (r?: number) => r === 1 ? "1st" : r === 2 ? "2nd" : r === 3 ? "3rd" : `${r}th`;
+
     return (
-      <Card className="p-5 flex-1">
-        <div className="mb-4">
+      <div
+        className="flex flex-col rounded-xl border border-border/30 bg-muted/5 p-3 md:p-3.5"
+        data-testid={`column-side-${side}`}
+      >
+        <div className="mb-3">
           <div className="flex items-center gap-2.5" data-testid={`text-side-${side}-header`}>
             {rosterTeam ? (
               <img
@@ -2783,8 +2791,8 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
                 <Scale className="w-4 h-4 text-muted-foreground" />
               </div>
             )}
-            <h3 className="text-sm font-bold">
-              {rosterTeam ? `${rosterTeam.owner} Sends...` : `Side ${sideLabel} Sends...`}
+            <h3 className="text-sm font-bold truncate">
+              {rosterTeam ? `${rosterTeam.owner} sends` : `Side ${sideLabel} sends`}
             </h3>
             {side === "a" && (
               <Select value={sideARosterId} onValueChange={handleSideATeamChange}>
@@ -2825,10 +2833,37 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
           <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
         </div>
 
+        {/* Selected assets — chips near the top of the column (desktop). */}
+        {assets.length > 0 && (
+          <div className="hidden md:flex flex-wrap gap-1.5 mb-3" data-testid={`selected-assets-${side}`}>
+            {assets.map((asset) => (
+              <button
+                key={asset.id}
+                type="button"
+                onClick={() => removeAsset(side, asset.id)}
+                className="group flex items-center gap-1.5 pl-1 pr-2 py-0.5 rounded-full border border-[#d4af37]/35 bg-[#d4af37]/10 hover:bg-red-500/10 hover:border-red-500/40 transition-colors max-w-full"
+                data-testid={`chip-selected-${side}-${asset.id}`}
+              >
+                {asset.type === "player" && asset.player ? (
+                  <PlayerAvatar id={asset.player.sleeperId || asset.player.id} name={asset.player.name} pos={asset.player.pos} team={asset.player.team ?? ""} size="sm" compact />
+                ) : (
+                  <span className="w-6 h-6 rounded-full bg-purple-900/40 border border-purple-700/40 flex items-center justify-center flex-shrink-0 text-[9px] font-bold text-purple-400">
+                    {rdLabelShort(asset.pickRound)}
+                  </span>
+                )}
+                <span className="text-[11px] font-semibold text-foreground truncate max-w-[120px]">
+                  {asset.type === "player" && asset.player ? asset.player.name : asset.label}
+                </span>
+                <X className="w-3 h-3 text-muted-foreground/40 group-hover:text-red-400 transition-colors flex-shrink-0" />
+              </button>
+            ))}
+          </div>
+        )}
+
         <div className="space-y-3">
           {side === "b" && !tradePartnerId && (
-            <div className="flex flex-col items-center justify-center py-10 gap-2 text-center">
-              <Scale className="w-8 h-8 text-muted-foreground/30" />
+            <div className="flex flex-col items-center justify-center py-6 gap-1.5 text-center">
+              <Scale className="w-7 h-7 text-muted-foreground/30" />
               <p className="text-sm font-semibold text-muted-foreground/60">No trade partner selected</p>
               <p className="text-xs text-muted-foreground/40">Use the dropdown above to choose a team</p>
             </div>
@@ -2870,7 +2905,7 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
             />
           )}
         </div>
-      </Card>
+      </div>
     );
   };
 
@@ -2901,14 +2936,48 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
 
   return (
     <div className="space-y-4 md:space-y-5">
-      {/* ── Compact Trade Verdict + Action panel ─────────────────────────
-         One card that fuses the four old sections (verdict / proposal /
-         position impact / save) so the user can read the trade and act on
-         it without scrolling. The shell renders by default — before any
-         asset is picked it shows the "Trade not yet complete" empty state
-         and per-side "Nothing added yet" boxes; the send-trade controls
-         only appear once at least one asset is on the board.             */}
-      {(() => {
+      {/* ── Unified Trade Builder card ────────────────────────────────────
+         One outer card fuses the builder (two side columns) with the verdict
+         panel below it, so the user builds the trade and reads the result in
+         the same place instead of glancing between two disconnected cards.  */}
+      <Card className="p-3.5 md:p-6" data-testid="card-trade-builder">
+
+        {/* ── Header: title + subtitle + gold underline; export on the right ── */}
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-base md:text-lg font-bold flex items-center gap-2">
+              <ArrowRightLeft className="w-4 h-4 text-[#0b3a7a] dark:text-blue-400" />
+              Trade Builder
+            </h2>
+            <p className="text-[12px] text-muted-foreground mt-0.5">Select assets from each side to evaluate the trade.</p>
+            <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
+          </div>
+          {sideA.length > 0 && sideB.length > 0 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={saveVerdictPng}
+              disabled={savingPng}
+              title="Save verdict as PNG"
+              className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground flex-shrink-0"
+              data-testid="button-save-verdict-png"
+            >
+              {savingPng ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+            </Button>
+          )}
+        </div>
+
+        {/* ── Trade sides grid: My side (A) | Partner side (B) ── */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4 mt-4" data-testid="trade-sides-grid">
+          {renderSide("a", sideA, rawA)}
+          {renderSide("b", sideB, rawB)}
+        </div>
+
+        {/* ── Trade Verdict panel (full width, below the two sides) ─────────
+           The shell renders by default — before any asset is picked it shows
+           the "Trade not yet complete" empty state; the send-trade controls
+           only appear once at least one asset is on the board.             */}
+        {(() => {
         const bothSidesSelected = sideA.length > 0 && sideB.length > 0;
         const missingIds = [...sideA, ...sideB].some(a => a.type === "player" && !a.player?.sleeperId);
         const canSubmit = !!sleeperJwt && !!sideBRosterId && !missingIds && (sideA.length > 0 || sideB.length > 0) && !proposing && !proposedTrade;
@@ -2973,27 +3042,19 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
         };
 
         return (
-          <Card className="p-4 md:p-5" ref={verdictCardRef} data-testid="card-trade-verdict-action">
-            {/* Header — title + Save PNG icon button (secondary). */}
-            <div className="flex items-start justify-between mb-3">
-              <div>
-                <h3 className="text-sm font-bold flex items-center gap-2">
-                  <ArrowRightLeft className="w-4 h-4 text-[#0b3a7a] dark:text-blue-400" />
-                  Trade Verdict
-                </h3>
-                <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1" />
-              </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={saveVerdictPng}
-                disabled={savingPng}
-                title="Save verdict as PNG"
-                className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
-                data-testid="button-save-verdict-png"
-              >
-                {savingPng ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-              </Button>
+          <div
+            className="mt-[18px] pt-[18px] border-t border-border/40"
+            ref={verdictCardRef}
+            data-testid="trade-verdict-panel"
+          >
+            {/* Panel eyebrow — the verdict reads as the output of the builder
+                above it; the export action lives in the card header. */}
+            <div className="mb-3">
+              <h3 className="text-sm font-bold flex items-center gap-2">
+                <ArrowRightLeft className="w-4 h-4 text-[#0b3a7a] dark:text-blue-400" />
+                Trade Verdict
+              </h3>
+              <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1" />
             </div>
 
             {/* Verdict headline + badge + value bar (full width). */}
@@ -3316,16 +3377,10 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
               )}
             </div>
             )}
-          </Card>
+          </div>
         );
       })()}
 
-      {/* ── Roster selectors (always visible) ─────────────────────────── */}
-      <Card className="p-4 md:p-5" data-testid="card-roster-selectors">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
-          {renderSide("a", sideA, rawA)}
-          {renderSide("b", sideB, rawB)}
-        </div>
       </Card>
     </div>
   );
