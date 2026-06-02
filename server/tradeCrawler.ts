@@ -25,6 +25,18 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// ── Per-user ingest de-duplication ──────────────────────────────────────────
+// The client fires /api/trades/ingest-user fire-and-forget on EVERY app load
+// (see DynastyCommandCenter), and the crawl itself runs 90s+ of rate-limited
+// Sleeper calls. Without a guard, every page view (and every user) stacks
+// another concurrent 90s crawl, which is what exhausted the DB pool and 500'd
+// auth (the "stuck on spinner / Login failed" outage). These two guards make a
+// repeated trigger cheap: a username already crawling is skipped outright, and
+// a username crawled within the cooldown is skipped until it expires.
+const ingestInFlight = new Set<string>();
+const ingestLastRunAt = new Map<string, number>();
+const INGEST_COOLDOWN_MS = Number(process.env.USER_INGEST_COOLDOWN_MS || 30 * 60 * 1000);
+
 async function fetchJson<T>(url: string): Promise<T | null> {
   try {
     const response = await fetch(url);
@@ -1034,7 +1046,31 @@ export async function ingestLeagueTrades(params: {
   return { inserted, skipped, alreadyIndexed: false };
 }
 
-export async function ingestUserLeagues(username: string): Promise<{ started: number; alreadyIndexed: number }> {
+export async function ingestUserLeagues(
+  username: string,
+): Promise<{ started: number; alreadyIndexed: number; skipped?: "in-flight" | "cooldown" }> {
+  // Skip if a crawl for this user is already running or ran recently — the
+  // client re-triggers this on every load, and each run is a long, expensive
+  // Sleeper sweep. See the ingestInFlight/ingestLastRunAt note above.
+  const key = username.toLowerCase();
+  if (ingestInFlight.has(key)) {
+    console.log(`[UserIngest] ${username} already in flight — skipping`);
+    return { started: 0, alreadyIndexed: 0, skipped: "in-flight" };
+  }
+  const lastRun = ingestLastRunAt.get(key);
+  if (lastRun !== undefined && Date.now() - lastRun < INGEST_COOLDOWN_MS) {
+    return { started: 0, alreadyIndexed: 0, skipped: "cooldown" };
+  }
+  ingestInFlight.add(key);
+  try {
+    return await runUserLeaguesIngest(username);
+  } finally {
+    ingestLastRunAt.set(key, Date.now());
+    ingestInFlight.delete(key);
+  }
+}
+
+async function runUserLeaguesIngest(username: string): Promise<{ started: number; alreadyIndexed: number }> {
   const d = getDb();
   const SIX_MONTHS_MS = 6 * 30 * 24 * 60 * 60 * 1000;
   const sinceMs = Date.now() - SIX_MONTHS_MS;

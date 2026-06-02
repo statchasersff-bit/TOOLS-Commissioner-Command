@@ -161,8 +161,9 @@ export async function getVitals(): Promise<Vitals> {
       total: appPool.totalCount,
       idle: appPool.idleCount,
       waiting: appPool.waitingCount,
-      // Mirrors the cap set in server/db.ts (same env, same default).
-      max: Number(process.env.PG_POOL_MAX || 10),
+      // Read the real cap off the pool itself so this can't drift from the
+      // default set in server/db.ts (it previously hardcoded its own `|| 10`).
+      max: (appPool as unknown as { options: { max?: number } }).options.max ?? 0,
     },
   };
 }

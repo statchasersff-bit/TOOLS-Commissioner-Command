@@ -22,10 +22,21 @@
 import pg from "pg";
 import { drizzle } from "drizzle-orm/node-postgres";
 
-// Cap the whole app at PG_POOL_MAX connections (default 10). Override via env if
+// Cap the whole app at PG_POOL_MAX connections (default 40). Override via env if
 // the database's ceiling allows more headroom. Keep this comfortably below
 // `max_connections` so the session store and vitals monitor always get a slot.
-const POOL_MAX = Number(process.env.PG_POOL_MAX || 10);
+//
+// WHY 40 (raised from 10) — every server module now shares THIS one pool (see the
+// consolidation note above), so the old "23 pools × 10 = 230 connections" math no
+// longer applies; the whole app's app-query footprint is bounded by this single
+// number. Production `max_connections` is ~450 and steady-state usage sits under
+// 20, so 10 left almost all of that headroom unused while artificially starving
+// normal traffic: a single slow endpoint (e.g. the user/trade ingest crawl) could
+// pin the handful of slots and queue hundreds of requests behind them — including
+// /api/sc-auth/me and /login, which then time out (→ 500, spinner, "Login
+// failed"). 40 app + 5 session + the vitals monitor stays far under 450 while
+// giving auth and normal reads room to get a connection even while a crawl runs.
+const POOL_MAX = Number(process.env.PG_POOL_MAX || 40);
 
 // ── Per-query timeouts — the OTHER half of the "hangs every few hours" fix. ──
 // Capping the pool size bounds how MANY connections we open, but a single query

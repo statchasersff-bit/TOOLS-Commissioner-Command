@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useValueModel } from "@/contexts/ValueModelContext";
+import { HowToReadCard } from "@/components/value-finder/HowToReadCard";
 import {
   buildMarketPlayers, applyFilters, relevantPool,
   POSITION_COLORS,
@@ -56,24 +56,6 @@ const GAP_COLUMNS: MarketColumn[] = [
   { key: "morank", header: "Mdl Rk", align: "right", cell: (p) => p.modelRank ?? "—" },
   signalCol(),
 ];
-
-// ── How to read ───────────────────────────────────────────────────────────────
-function HowToRead({ children }: { children: string }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div className="rounded-lg border border-border/60 bg-muted/10">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="w-full flex items-center justify-between px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground"
-      >
-        How to read this
-        <ChevronDown className={cn("w-3.5 h-3.5 transition-transform", open && "rotate-180")} />
-      </button>
-      {open && <p className="px-3 pb-2.5 text-[12px] text-muted-foreground leading-snug">{children}</p>}
-    </div>
-  );
-}
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 // Embeddable market-inefficiency panels. The active panel (value / gap / age)
@@ -164,8 +146,7 @@ export function MarketInsights({ activeTab, filters, format, season }: {
   if (format === "sf" && !sfPlayers.length) {
     return (
       <div className="rounded-xl border border-border bg-card/40 p-8 text-center">
-        <h2 className="text-base font-bold text-foreground">Market Inefficiencies</h2>
-        <p className="text-[13px] text-muted-foreground mt-2 max-w-md mx-auto">
+        <p className="text-[13px] text-muted-foreground max-w-md mx-auto">
           No market values found. Connect a value source or wait for values to load to unlock these charts.
         </p>
       </div>
@@ -193,29 +174,25 @@ export function MarketInsights({ activeTab, filters, format, season }: {
       )}
       {!showPanels && !oqbLoading && !oqbError && (
         <div className="rounded-xl border border-border bg-card/40 p-8 text-center text-[13px] text-muted-foreground">
-          Not enough data to calculate market inefficiencies for this format.
+          Not enough data to show these views for this format.
         </div>
       )}
 
       {showPanels && activeTab === "value" && (
         <div className="space-y-3">
-          <HowToRead>
-            Players below the expected value curve may be underpriced because their production is stronger than
-            their market cost. Players above the curve may be overpriced because their market value is higher than
-            their production profile.
-          </HowToRead>
           <div className="rounded-xl border border-border bg-card/40 p-3">
             <ValueProductionScatter players={filtered} />
           </div>
+          <HowToReadCard>
+            Players below the expected value curve may be underpriced because their production is stronger than
+            their market cost. Players above the curve may be overpriced because their market value is higher than
+            their production profile.
+          </HowToReadCard>
         </div>
       )}
 
       {showPanels && activeTab === "gap" && (
         <div className="space-y-3">
-          <HowToRead>
-            This compares market value against Dynasty Command’s internal model. Positive gaps may indicate
-            buy-low targets. Negative gaps may indicate sell-high candidates.
-          </HowToRead>
           <div className="flex gap-1.5">
             {([["all", "All"], ["buys", "Biggest Buys"], ["sells", "Biggest Sells"]] as Array<[GapView, string]>).map(([id, label]) => (
               <button
@@ -235,18 +212,22 @@ export function MarketInsights({ activeTab, filters, format, season }: {
           </div>
           <MarketInefficiencyTable title="Largest Market Gaps" rows={largestGaps} columns={GAP_COLUMNS} testId="table-market-gaps"
             emptyText="Not enough data to rank market gaps." />
+          <HowToReadCard>
+            This compares market value against Dynasty Command’s internal model. Positive gaps may indicate
+            buy-low targets. Negative gaps may indicate sell-high candidates.
+          </HowToReadCard>
         </div>
       )}
 
       {showPanels && activeTab === "age" && (
         <div className="space-y-3">
-          <HowToRead>
-            Dynasty markets often price players differently by age and position. Use this chart to find productive
-            veterans being discounted or young assets whose market value may already be inflated.
-          </HowToRead>
           <div className="rounded-xl border border-border bg-card/40 p-3">
             <AgeCurveChart players={filtered} />
           </div>
+          <HowToReadCard>
+            Dynasty markets often price players differently by age and position. Use this chart to find productive
+            veterans being discounted or young assets whose market value may already be inflated.
+          </HowToReadCard>
         </div>
       )}
     </div>

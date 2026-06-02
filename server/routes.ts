@@ -888,15 +888,18 @@ export async function registerRoutes(
   });
 
   app.post("/api/trades/ingest-user", async (req, res) => {
-    try {
-      const { username } = req.body;
-      if (!username) return res.status(400).json({ error: "username is required" });
-      const result = await ingestUserLeagues(username);
-      res.json(result);
-    } catch (err: any) {
-      console.error("User ingest error:", err);
-      res.status(500).json({ error: err.message || "Failed to ingest user leagues" });
-    }
+    const { username } = req.body;
+    if (!username) return res.status(400).json({ error: "username is required" });
+    // Fire-and-forget: the discovery + crawl is a 90s+ rate-limited Sleeper
+    // sweep, and the client triggers this on every load and ignores the body.
+    // Awaiting it here held a request open for the whole sweep and contended
+    // for DB connections, starving auth (/me, /login) → the spinner/login-500
+    // outage. ingestUserLeagues() is internally de-duplicated per user, so the
+    // immediate 202 plus a background run is safe to call repeatedly.
+    ingestUserLeagues(username).catch((err: any) => {
+      console.error("User ingest error:", err?.message || err);
+    });
+    res.status(202).json({ accepted: true });
   });
 
   app.post("/api/trades/ingest-league", async (req, res) => {
