@@ -1,15 +1,9 @@
 import { and, eq, asc } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/node-postgres";
-import pg from "pg";
+import { db } from "./db";
 import { teamValueSnapshots } from "@shared/schema";
 
-let db: ReturnType<typeof drizzle> | null = null;
-
+// Shared, capped pool (see server/db.ts). getDb() retained for call-site compat.
 function getDb() {
-  if (!db) {
-    const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
-    db = drizzle(pool);
-  }
   return db;
 }
 

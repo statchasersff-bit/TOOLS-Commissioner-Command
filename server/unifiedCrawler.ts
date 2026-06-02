@@ -20,8 +20,7 @@
  *      so existing trade/draft data is preserved and never re-fetched.
  *   5. Re-schedules itself every randomized 30–60 minutes.
  */
-import pg from "pg";
-import { drizzle } from "drizzle-orm/node-postgres";
+import { db } from "./db";
 import { desc, eq, sql } from "drizzle-orm";
 import { unifiedCrawlRuns, trades, drafts } from "@shared/schema";
 import {
@@ -33,8 +32,7 @@ import {
 import { ingestLeagueDrafts } from "./adp";
 
 const SLEEPER_API = "https://api.sleeper.app/v1";
-const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
-const db = drizzle(pool);
+// Shared, capped Postgres pool (see server/db.ts).
 
 // ── Tunables ───────────────────────────────────────────────────────────────
 // Drafts can go back to April 2023, so we fetch leagues for the 2023–2026

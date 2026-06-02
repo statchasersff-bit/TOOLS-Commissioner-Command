@@ -12,14 +12,12 @@
  * Values use the SF-dynasty scale by default (comparable to FantasyCalc/KTC).
  */
 
-import pg from "pg";
-import { drizzle } from "drizzle-orm/node-postgres";
+import { db } from "./db";
 import { inArray, and, eq, asc } from "drizzle-orm";
 import { playerValueSnapshots, pickValueHistory } from "@shared/schema";
 import { getFantasyCalcValues } from "./fantasycalc";
 
-const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
-const db = drizzle(pool);
+// Shared, capped Postgres pool (see server/db.ts).
 
 export type Confidence = "exact" | "interpolated" | "nearest" | "estimated" | "replacement" | "unknown";
 

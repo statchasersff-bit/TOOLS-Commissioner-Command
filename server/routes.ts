@@ -111,6 +111,7 @@ import {
   repairIncompleteDrafts,
 } from "./adpCrawlRepair";
 import { getUser } from "./scAuth";
+import { pool } from "./db";
 import { isAdminByEmail } from "@shared/admin";
 import {
   confirmSleeperToken,
@@ -295,10 +296,13 @@ export async function registerRoutes(
   app.get("/api/value-finder/players", async (req, res) => {
     try {
       const format = (req.query.format as string) === "1qb" ? "1qb" : "sf";
+      const scoringRaw = String(req.query.scoring ?? "ppr");
+      const scoring =
+        scoringRaw === "half_ppr" || scoringRaw === "std" ? scoringRaw : "ppr";
       const seasonRaw = parseInt(String(req.query.season ?? "2025"), 10);
       const season = Number.isFinite(seasonRaw) ? seasonRaw : 2025;
       const userId = getUserIdFromRequest(req) ?? undefined;
-      const players = await getValueFinderPlayerPool({ season, format, userId });
+      const players = await getValueFinderPlayerPool({ season, format, scoring, userId });
       res.json({ players });
     } catch (err: any) {
       console.error("Value Finder pool error:", err);
@@ -1823,10 +1827,8 @@ export async function registerRoutes(
   app.post("/api/admin/adp/cache-clear", async (req, res) => {
     if (!(await requireAdmin(req, res))) return;
     try {
-      const pg = await import("pg");
-      const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+      // Uses the shared app pool (server/db.ts) — never call pool.end() on it.
       const result = await pool.query("DELETE FROM adp_snapshots");
-      await pool.end();
       console.info(`[Admin] adp/cache-clear deleted ${result.rowCount ?? 0} snapshot rows`);
       res.json({ deleted: result.rowCount ?? 0 });
     } catch (err: any) {
@@ -1936,9 +1938,7 @@ export async function registerRoutes(
           picksMade,
         };
 
-        // Check storage state
-        const pg = await import("pg");
-        const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+        // Check storage state — shared app pool (server/db.ts); never end it.
         const storedQ = await pool.query(
           "SELECT draft_id, season, status, draft_type, excluded_from_adp FROM drafts WHERE draft_id = $1",
           [targetDraftId],
@@ -1947,7 +1947,6 @@ export async function registerRoutes(
           "SELECT COUNT(*)::int AS n FROM draft_picks WHERE draft_id = $1",
           [targetDraftId],
         );
-        await pool.end();
         trace.steps.storedState = {
           draftRow: storedQ.rows[0] ?? null,
           storedPickCount: picksStoredQ.rows[0]?.n ?? 0,

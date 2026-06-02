@@ -12,8 +12,7 @@
  * (userId, leagueId, season) for 6h on top so the cost is paid rarely.
  */
 
-import pg from "pg";
-import { drizzle } from "drizzle-orm/node-postgres";
+import { db } from "./db";
 import { and, eq, desc } from "drizzle-orm";
 import { managerIntelCache } from "@shared/schema";
 import {
@@ -25,8 +24,7 @@ import {
 } from "./sleeper";
 import { getFantasyCalcValues, getFantasyCalcRedraftValues } from "./fantasycalc";
 
-const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
-const db = drizzle(pool);
+// Shared, capped Postgres pool (see server/db.ts).
 
 const SLEEPER_API = "https://api.sleeper.app/v1";
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6h

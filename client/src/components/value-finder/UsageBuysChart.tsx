@@ -11,18 +11,13 @@ import {
   CartesianGrid,
 } from "recharts";
 import type { ValueFinderPlayer } from "@/lib/value-finder/types";
-import { getValueSignal } from "@/lib/value-finder/valueFinderScoring";
+import { POSITION_COLORS } from "@/lib/value-finder/types";
 import { PlayerValueTooltip } from "./PlayerValueTooltip";
-
-const COLOR: Record<string, string> = {
-  buy: "hsl(150, 65%, 45%)",
-  sell: "hsl(0, 70%, 55%)",
-  neutral: "hsl(220, 12%, 55%)",
-};
 
 // Usage score (role strength) vs market value. Strong usage at a low price reads
 // as a buy window before production catches up. `usageValue` is the
-// usage-implied expected value computed during enrichment.
+// usage-implied expected value computed during enrichment. Dots are colored by
+// position; the buy/sell read is surfaced in the tooltip.
 export function UsageBuysChart({
   players,
 }: {
@@ -32,23 +27,13 @@ export function UsageBuysChart({
     () =>
       players
         .filter((p) => p.marketValue != null && p.usageScore != null)
-        .map((p) => {
-          const expected = p.usageValue;
-          const sig = getValueSignal({
-            marketValue: p.marketValue,
-            comparisonValue: expected,
-          });
-          const tone =
-            sig.gapPercent >= 10 ? "buy" : sig.gapPercent <= -10 ? "sell" : "neutral";
-          return {
-            x: Math.round((p.usageScore ?? 0) * 100),
-            y: p.marketValue,
-            player: p,
-            comparisonValue: expected,
-            comparisonLabel: "Expected",
-            tone,
-          };
-        }),
+        .map((p) => ({
+          x: Math.round((p.usageScore ?? 0) * 100),
+          y: p.marketValue,
+          player: p,
+          comparisonValue: p.usageValue,
+          comparisonLabel: "Expected",
+        })),
     [players],
   );
 
@@ -78,13 +63,13 @@ export function UsageBuysChart({
           name="Market"
           tick={{ fontSize: 10 }}
           width={48}
-          label={{ value: "Market Value", angle: -90, position: "insideLeft", fontSize: 11 }}
+          label={{ value: "Dynasty Market Value", angle: -90, position: "insideLeft", fontSize: 11 }}
         />
         <ZAxis range={[40, 40]} />
         <Tooltip cursor={{ strokeDasharray: "3 3" }} content={<PlayerValueTooltip metric="usage" />} />
         <Scatter data={data} isAnimationActive={false}>
           {data.map((d) => (
-            <Cell key={d.player.playerId} fill={COLOR[d.tone]} />
+            <Cell key={d.player.playerId} fill={POSITION_COLORS[d.player.position]} />
           ))}
         </Scatter>
       </ScatterChart>

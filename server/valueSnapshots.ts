@@ -1,11 +1,9 @@
-import pg from "pg";
-import { drizzle } from "drizzle-orm/node-postgres";
+import { db } from "./db";
 import { eq, sql, desc } from "drizzle-orm";
 import { playerValueSnapshots } from "@shared/schema";
 import { getFantasyCalcValues, getFantasyCalcRedraftValues } from "./fantasycalc";
 
-const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
-const db = drizzle(pool);
+// Shared, capped Postgres pool (see server/db.ts).
 
 function todayStr(): string {
   return new Date().toISOString().slice(0, 10);

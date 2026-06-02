@@ -6,14 +6,12 @@
  * into the player_news table. Player profile pages query by player_id. We never
  * store article bodies/analysis — only the public headline + outbound link.
  */
-import pg from "pg";
-import { drizzle } from "drizzle-orm/node-postgres";
+import { db } from "./db";
 import { eq, desc } from "drizzle-orm";
 import { playerNews } from "@shared/schema";
 import { fetchRotowireNfl, getNflNameIndex, matchSleeperId, playerNameFromTitle } from "./nflNews";
 
-const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
-const db = drizzle(pool);
+// Shared, capped Postgres pool (see server/db.ts).
 
 export type PlayerNewsRow = typeof playerNews.$inferSelect;
 

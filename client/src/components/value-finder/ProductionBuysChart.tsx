@@ -11,38 +11,24 @@ import {
   CartesianGrid,
 } from "recharts";
 import type { ValueFinderPlayer } from "@/lib/value-finder/types";
-import { getValueSignal } from "@/lib/value-finder/valueFinderScoring";
+import { POSITION_COLORS } from "@/lib/value-finder/types";
 import { PlayerValueTooltip } from "./PlayerValueTooltip";
 
-const COLOR: Record<string, string> = {
-  buy: "hsl(150, 65%, 45%)",
-  sell: "hsl(0, 70%, 55%)",
-  neutral: "hsl(220, 12%, 55%)",
-};
-
 // Production vs market value. Players below the production-implied curve (high
-// PPG, low price) read as buys; above it as sells.
+// PPG, low price) read as buys; above it as sells. Dots are colored by position;
+// the buy/sell read is surfaced in the tooltip.
 export function ProductionBuysChart({ players }: { players: ValueFinderPlayer[] }) {
   const data = useMemo(
     () =>
       players
         .filter((p) => p.marketValue != null && p.pointsPerGame != null)
-        .map((p) => {
-          const sig = getValueSignal({
-            marketValue: p.marketValue,
-            comparisonValue: p.expectedValue,
-          });
-          const tone =
-            sig.gapPercent >= 10 ? "buy" : sig.gapPercent <= -10 ? "sell" : "neutral";
-          return {
-            x: p.pointsPerGame,
-            y: p.marketValue,
-            player: p,
-            comparisonValue: p.expectedValue,
-            comparisonLabel: "Expected",
-            tone,
-          };
-        }),
+        .map((p) => ({
+          x: p.pointsPerGame,
+          y: p.marketValue,
+          player: p,
+          comparisonValue: p.expectedValue,
+          comparisonLabel: "Expected",
+        })),
     [players],
   );
 
@@ -71,13 +57,13 @@ export function ProductionBuysChart({ players }: { players: ValueFinderPlayer[] 
           name="Market"
           tick={{ fontSize: 10 }}
           width={48}
-          label={{ value: "Market Value", angle: -90, position: "insideLeft", fontSize: 11 }}
+          label={{ value: "Dynasty Market Value", angle: -90, position: "insideLeft", fontSize: 11 }}
         />
         <ZAxis range={[40, 40]} />
         <Tooltip cursor={{ strokeDasharray: "3 3" }} content={<PlayerValueTooltip metric="ppg" />} />
         <Scatter data={data} isAnimationActive={false}>
           {data.map((d) => (
-            <Cell key={d.player.playerId} fill={COLOR[d.tone]} />
+            <Cell key={d.player.playerId} fill={POSITION_COLORS[d.player.position]} />
           ))}
         </Scatter>
       </ScatterChart>

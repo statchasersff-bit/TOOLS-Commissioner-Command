@@ -174,10 +174,14 @@ export type AgeRange = "All" | "Under 23" | "23-25" | "26-28" | "29+";
 export type SeasonFilter = "2025" | "2024" | "2023";
 export type FormatFilter = "All" | "1QB" | "Superflex" | "TEP";
 export type TrendWindow = "7D" | "30D" | "90D";
+// Scoring format for the production feed (Sleeper season points). Drives which
+// of the pts_ppr / pts_half_ppr / pts_std totals the production charts use.
+export type ScoringFormat = "ppr" | "half_ppr" | "std";
 
 export interface ValueFinderFilters {
   position: Position | "All";
   format: FormatFilter;
+  scoring: ScoringFormat;
   season: SeasonFilter;
   valueSource: ValueSourceVF;
   ageRange: AgeRange;
@@ -208,6 +212,11 @@ export const VALUE_SOURCES: ValueSourceVF[] = [
 export const AGE_RANGES: AgeRange[] = ["All", "Under 23", "23-25", "26-28", "29+"];
 export const SEASONS: SeasonFilter[] = ["2025", "2024", "2023"];
 export const FORMATS: FormatFilter[] = ["All", "1QB", "Superflex", "TEP"];
+export const SCORING_FORMATS: Array<{ value: ScoringFormat; label: string }> = [
+  { value: "ppr", label: "PPR" },
+  { value: "half_ppr", label: "Half PPR" },
+  { value: "std", label: "Standard" },
+];
 export const MIN_GAMES: Array<0 | 4 | 8 | 12> = [0, 4, 8, 12];
 
 export const TREND_WINDOWS: Array<{ value: TrendWindow; label: string }> = [
@@ -216,12 +225,13 @@ export const TREND_WINDOWS: Array<{ value: TrendWindow; label: string }> = [
   { value: "90D", label: "90 Days" },
 ];
 
-// Shared with market feature for visual consistency.
+// Position palette (QB red / RB green / WR blue / TE yellow). Kept in sync with
+// the market feature's POSITION_COLORS for visual consistency across the tool.
 export const POSITION_COLORS: Record<Position, string> = {
-  QB: "hsl(280, 65%, 60%)",
-  RB: "hsl(150, 60%, 45%)",
-  WR: "hsl(210, 70%, 55%)",
-  TE: "hsl(30, 80%, 55%)",
+  QB: "#ef4444",
+  RB: "#10b981",
+  WR: "#3b82f6",
+  TE: "#eab308",
 };
 
 export const SIGNAL_COLORS: Record<ValueSignal, string> = {

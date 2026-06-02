@@ -8,7 +8,7 @@ import type {
   Position,
   AgeRange,
 } from "@/lib/value-finder/types";
-import { POSITIONS, SEASONS, MIN_GAMES } from "@/lib/value-finder/types";
+import { POSITIONS, SEASONS, MIN_GAMES, SCORING_FORMATS } from "@/lib/value-finder/types";
 
 const fmtNum = (n: number) => Math.round(n).toLocaleString();
 
@@ -110,6 +110,19 @@ export function ValueFinderFilters({
           {FORMAT_OPTIONS.map((f) => (
             <button key={f} className={chip(filters.format === f)} onClick={() => set({ format: f })}>
               {f}
+            </button>
+          ))}
+        </Row>
+
+        <Row label="Scoring">
+          {SCORING_FORMATS.map((s) => (
+            <button
+              key={s.value}
+              className={chip(filters.scoring === s.value)}
+              onClick={() => set({ scoring: s.value })}
+              data-testid={`vf-scoring-${s.value}`}
+            >
+              {s.label}
             </button>
           ))}
         </Row>

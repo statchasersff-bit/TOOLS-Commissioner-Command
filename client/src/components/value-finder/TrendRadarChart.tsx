@@ -12,26 +12,15 @@ import {
   CartesianGrid,
 } from "recharts";
 import type { ValueFinderPlayer, TrendWindow } from "@/lib/value-finder/types";
+import { POSITION_COLORS } from "@/lib/value-finder/types";
 import { getMarketTrend, getRoleTrend } from "@/lib/value-finder/trends";
 import { PlayerValueTooltip } from "./PlayerValueTooltip";
 
-// Quadrant scatter: role/production trend (x) vs market value trend (y).
+// Quadrant scatter: role/production trend (x) vs market value trend (y). The
+// quadrant region labels (below) describe each corner; dots are colored by
+// position.
 //  ┌ Hype Riser     │ Legit Riser ┐
 //  └ Falling Asset  │ Hidden Riser┘
-const COLOR = {
-  legit: "hsl(150, 65%, 45%)", // top-right
-  hype: "hsl(35, 85%, 55%)", // top-left
-  hidden: "hsl(205, 75%, 52%)", // bottom-right
-  falling: "hsl(0, 70%, 55%)", // bottom-left
-};
-
-function quadrant(role: number, value: number): keyof typeof COLOR {
-  if (value >= 0 && role >= 0) return "legit";
-  if (value >= 0 && role < 0) return "hype";
-  if (value < 0 && role >= 0) return "hidden";
-  return "falling";
-}
-
 export function TrendRadarChart({
   players,
   trendWindow,
@@ -41,18 +30,13 @@ export function TrendRadarChart({
 }) {
   const data = useMemo(
     () =>
-      players.map((p) => {
-        const role = getRoleTrend(p);
-        const value = getMarketTrend(p, trendWindow);
-        return {
-          x: role,
-          y: value,
-          player: p,
-          comparisonValue: p.modelValue,
-          comparisonLabel: "Model",
-          q: quadrant(role, value),
-        };
-      }),
+      players.map((p) => ({
+        x: getRoleTrend(p),
+        y: getMarketTrend(p, trendWindow),
+        player: p,
+        comparisonValue: p.modelValue,
+        comparisonLabel: "Model",
+      })),
     [players, trendWindow],
   );
 
@@ -95,7 +79,7 @@ export function TrendRadarChart({
             tick={{ fontSize: 10 }}
             width={48}
             tickFormatter={(v) => `${v > 0 ? "+" : ""}${v}%`}
-            label={{ value: "Market Value Trend", angle: -90, position: "insideLeft", fontSize: 11 }}
+            label={{ value: "Dynasty Market Value Trend", angle: -90, position: "insideLeft", fontSize: 11 }}
           />
           <ZAxis range={[45, 45]} />
           <ReferenceLine x={0} stroke="hsl(var(--border))" />
@@ -103,7 +87,7 @@ export function TrendRadarChart({
           <Tooltip cursor={{ strokeDasharray: "3 3" }} content={<PlayerValueTooltip metric="trend" />} />
           <Scatter data={data} isAnimationActive={false}>
             {data.map((d) => (
-              <Cell key={d.player.playerId} fill={COLOR[d.q]} />
+              <Cell key={d.player.playerId} fill={POSITION_COLORS[d.player.position]} />
             ))}
           </Scatter>
         </ScatterChart>

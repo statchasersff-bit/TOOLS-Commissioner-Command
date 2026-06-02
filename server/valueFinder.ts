@@ -7,7 +7,8 @@
  * only supplies the *raw inputs*:
  *
  *   market values   FantasyCalc + KTC + (optional) user custom set, by sleeperId
- *   production      Sleeper season totals (PPR points, games, PPG)
+ *   production      Sleeper season totals (points, games, PPG) for the requested
+ *                   scoring format (PPR / Half-PPR / Standard)
  *   vor             derived: points over a positional replacement baseline
  *   usage           StatChasers public data (keyed by Sleeper ID directly) —
  *                   the precomputed composite usageScore (0–1) plus the raw
@@ -21,13 +22,18 @@
  * gracefully (reweights the metrics it does have).
  *
  * The non-user-specific base (everything except custom values) is cached
- * in-memory per (season, format); custom values are overlaid per request.
+ * in-memory per (season, format, scoring); custom values are overlaid per
+ * request.
  */
 
 import { getFantasyCalcValues } from "./fantasycalc";
 import { getKtcValues } from "./ktc";
 import { getResolvedValues } from "./customValues";
-import { getSeasonStatsMap, type SleeperStatsRow } from "./sleeperPlayerProfile";
+import {
+  getSeasonStatsMap,
+  type SleeperStatsRow,
+  type ScoringKey,
+} from "./sleeperPlayerProfile";
 import { getValueChanges } from "./valueSnapshots";
 
 export type VfPosition = "QB" | "RB" | "WR" | "TE";
@@ -78,7 +84,8 @@ const STATCHASERS_BASE =
   "https://raw.githubusercontent.com/statchasersff-bit/statchasers-data/master/statchasers-data/output";
 
 // Replacement-level rank per position for a 12-team league (≈ last startable
-// player). VOR = season PPR points minus this baseline. Indices are 0-based.
+// player). VOR = season fantasy points (in the active scoring format) minus
+// this baseline. Indices are 0-based.
 const REPLACEMENT_RANK: Record<VfPosition, number> = { QB: 11, RB: 23, WR: 35, TE: 11 };
 
 type StatChasersRow = Record<string, unknown>;
@@ -196,10 +203,18 @@ function applyUsage(p: ValueFinderRawPlayer, row: StatChasersRow): void {
   }
 }
 
+/** Season fantasy points for the requested scoring format, falling back across
+ *  formats so a player with only one populated column still scores. */
+function pointsOf(row: SleeperStatsRow, scoring: ScoringKey): number | undefined {
+  if (scoring === "half_ppr") return num(row.pts_half_ppr) ?? num(row.pts_ppr) ?? num(row.pts_std);
+  if (scoring === "std") return num(row.pts_std) ?? num(row.pts_half_ppr) ?? num(row.pts_ppr);
+  return num(row.pts_ppr) ?? num(row.pts_half_ppr) ?? num(row.pts_std);
+}
+
 /** PPG for a season-stats row, or undefined when the player had no games. */
-function ppgOf(row: SleeperStatsRow | undefined): number | undefined {
+function ppgOf(row: SleeperStatsRow | undefined, scoring: ScoringKey): number | undefined {
   if (!row) return undefined;
-  const fp = num(row.pts_ppr);
+  const fp = pointsOf(row, scoring);
   const games = num(row.gms_active) ?? num(row.gp) ?? 0;
   if (fp == null || games <= 0) return undefined;
   return fp / games;
@@ -211,11 +226,12 @@ function applyProduction(
   players: ValueFinderRawPlayer[],
   stats: Record<string, SleeperStatsRow>,
   prevStats: Record<string, SleeperStatsRow>,
+  scoring: ScoringKey,
 ): void {
   for (const p of players) {
     const row = stats[p.playerId];
     if (!row) continue;
-    const fp = num(row.pts_ppr);
+    const fp = pointsOf(row, scoring);
     const games = num(row.gms_active) ?? num(row.gp) ?? 0;
     if (fp != null) p.fantasyPoints = Math.round(fp);
     if (games > 0) p.gamesPlayed = games;
@@ -226,8 +242,8 @@ function applyProduction(
     }
 
     // Year-over-year PPG change — a real production trajectory signal.
-    const curPpg = ppgOf(row);
-    const prevPpg = ppgOf(prevStats[p.playerId]);
+    const curPpg = ppgOf(row, scoring);
+    const prevPpg = ppgOf(prevStats[p.playerId], scoring);
     if (curPpg != null && prevPpg != null && prevPpg > 0) {
       p.productionTrend = Math.round(((curPpg - prevPpg) / prevPpg) * 100);
     }
@@ -282,6 +298,7 @@ const baseCache = new Map<string, CacheEntry>();
 async function buildBase(
   season: number,
   format: "sf" | "1qb",
+  scoring: ScoringKey,
 ): Promise<ValueFinderRawPlayer[]> {
   const [fc, ktc, stats, prevStats, trends, usageByPos] = await Promise.all([
     getFantasyCalcValues(format),
@@ -326,7 +343,7 @@ async function buildBase(
   const players = Array.from(byId.values());
 
   // Production + VOR + year-over-year production trend.
-  applyProduction(players, stats, prevStats);
+  applyProduction(players, stats, prevStats, scoring);
 
   // Usage.
   for (const p of players) {
@@ -350,11 +367,12 @@ async function buildBase(
 async function getBase(
   season: number,
   format: "sf" | "1qb",
+  scoring: ScoringKey,
 ): Promise<ValueFinderRawPlayer[]> {
-  const key = `${season}:${format}`;
+  const key = `${season}:${format}:${scoring}`;
   const hit = baseCache.get(key);
   if (hit && Date.now() - hit.builtAt < BASE_TTL_MS) return hit.players;
-  const players = await buildBase(season, format);
+  const players = await buildBase(season, format, scoring);
   baseCache.set(key, { builtAt: Date.now(), players });
   return players;
 }
@@ -362,6 +380,7 @@ async function getBase(
 export interface ValueFinderQuery {
   season?: number;
   format?: "sf" | "1qb";
+  scoring?: ScoringKey;
   userId?: string;
 }
 
@@ -375,7 +394,8 @@ export async function getValueFinderPlayers(
 ): Promise<ValueFinderRawPlayer[]> {
   const season = query.season ?? 2025;
   const format = query.format === "1qb" ? "1qb" : "sf";
-  const base = await getBase(season, format);
+  const scoring = query.scoring ?? "ppr";
+  const base = await getBase(season, format, scoring);
 
   let customById: Record<string, number> | null = null;
   if (query.userId) {

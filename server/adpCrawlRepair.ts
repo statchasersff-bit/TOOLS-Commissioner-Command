@@ -25,8 +25,7 @@
  * All functions are idempotent — running them repeatedly is safe.
  */
 
-import pg from "pg";
-import { drizzle } from "drizzle-orm/node-postgres";
+import { db } from "./db";
 import { and, eq, lt, sql } from "drizzle-orm";
 import {
   adpCrawlLog,
@@ -35,8 +34,7 @@ import {
   draftPicks,
 } from "@shared/schema";
 
-const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
-const db = drizzle(pool);
+// Shared, capped Postgres pool (see server/db.ts).
 
 /** A scan that hasn't written a terminal row within this window is treated
  *  as crashed. 30 min is generous — even a depth-2 crawl finishes well under

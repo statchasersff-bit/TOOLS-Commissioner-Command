@@ -12,8 +12,7 @@
  */
 import type { Express } from "express";
 import { randomBytes } from "crypto";
-import pg from "pg";
-import { drizzle } from "drizzle-orm/node-postgres";
+import { db } from "./db";
 import { and, eq } from "drizzle-orm";
 import { commandersReports } from "@shared/schema";
 import { getUserIdFromRequest } from "./scAuthRoutes";
@@ -42,8 +41,7 @@ async function generateArticle(
   return { article: narrateReportTemplate(recap, seed), model: TEMPLATE_NARRATOR_ID };
 }
 
-const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
-const db = drizzle(pool);
+// Shared, capped Postgres pool (see server/db.ts).
 
 const DEFAULT_TONE: ToneId = "full_chaos";
 

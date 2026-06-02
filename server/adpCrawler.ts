@@ -1,5 +1,4 @@
-import pg from "pg";
-import { drizzle } from "drizzle-orm/node-postgres";
+import { db } from "./db";
 import { and, asc, desc, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import {
   adpCrawlSeeds,
@@ -13,8 +12,7 @@ import { ingestDraftById, rateLimitedFetchJson } from "./adp";
 
 const SLEEPER_API = "https://api.sleeper.app/v1";
 
-const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
-const db = drizzle(pool);
+// Shared, capped Postgres pool (see server/db.ts).
 
 // Seasons we automatically expand into when given a user-level seed. The
 // caller can override per-seed but most operators will want the default to

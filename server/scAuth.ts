@@ -2,20 +2,15 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import { eq, and, gt, isNull, desc } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/node-postgres";
-import pg from "pg";
+import { db } from "./db";
 import { scUsers, emailVerificationCodes, scConnectedAccounts, type UserPreferences } from "@shared/schema";
 
 const JWT_SECRET = process.env.SESSION_SECRET || "fallback-dev-secret";
 const CIPHER_KEY = crypto.createHash("sha256").update(JWT_SECRET).digest();
 
-let _db: ReturnType<typeof drizzle> | null = null;
+// Shared, capped pool (see server/db.ts). getDb() retained for call-site compat.
 function getDb() {
-  if (!_db) {
-    const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
-    _db = drizzle(pool);
-  }
-  return _db;
+  return db;
 }
 
 // ── Encryption (AES-256-CBC) ──────────────────────────────────────────────────

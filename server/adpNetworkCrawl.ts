@@ -25,8 +25,7 @@
  *   - safety caps stop the crawl gracefully and log the reason.
  */
 
-import pg from "pg";
-import { drizzle } from "drizzle-orm/node-postgres";
+import { db } from "./db";
 import { eq } from "drizzle-orm";
 import { adpCrawlLog } from "@shared/schema";
 import {
@@ -35,8 +34,7 @@ import {
   refreshDefaultSnapshots,
 } from "./adp";
 
-const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
-const db = drizzle(pool);
+// Shared, capped Postgres pool (see server/db.ts).
 
 const SLEEPER_API = "https://api.sleeper.app/v1";
 

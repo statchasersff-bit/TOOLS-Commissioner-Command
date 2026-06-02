@@ -1,11 +1,9 @@
-import pg from "pg";
-import { drizzle } from "drizzle-orm/node-postgres";
+import { db } from "./db";
 import { and, desc, eq } from "drizzle-orm";
 import { userValueSets, userPlayerValues } from "@shared/schema";
 import { getSleeperPlayers } from "./sleeper";
 
-const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
-const db = drizzle(pool);
+// Shared, capped Postgres pool (see server/db.ts).
 
 export type ValueType = "dynasty" | "redraft";
 

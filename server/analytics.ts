@@ -14,15 +14,13 @@
  *    never throws back to the client — analytics must not break the app.
  */
 import type { Express, Request, Response } from "express";
-import pg from "pg";
-import { drizzle } from "drizzle-orm/node-postgres";
+import { pool, db } from "./db";
 import { sql } from "drizzle-orm";
 import { analyticsSessions, analyticsPageViews } from "@shared/schema";
 import { getUserIdFromRequest } from "./scAuthRoutes";
 import { requireAdmin } from "./adminAuth";
 
-const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
-const db = drizzle(pool);
+// Shared, capped Postgres pool (see server/db.ts).
 
 const clip = (s: unknown, n: number): string | null => {
   if (typeof s !== "string") return null;

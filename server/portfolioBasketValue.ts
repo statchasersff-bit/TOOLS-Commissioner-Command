@@ -21,8 +21,7 @@
  * yet (see the Portfolio Timeline plan).
  */
 
-import pg from "pg";
-import { drizzle } from "drizzle-orm/node-postgres";
+import { db } from "./db";
 import { and, eq, gte, inArray, isNotNull, sql } from "drizzle-orm";
 import { drafts, draftPicks, portfolioValueSnapshots } from "@shared/schema";
 import { buildDraftWhere, computeAdp } from "./adp";
@@ -30,8 +29,7 @@ import { getFantasyCalcValues } from "./fantasycalc";
 import { getSleeperPlayers } from "./sleeper";
 import { valueFromSeries, aggregateConfidence, type Confidence, type ValuePoint } from "./portfolioValueService";
 
-const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
-const db = drizzle(pool);
+// Shared, capped Postgres pool (see server/db.ts).
 
 const SLEEPER_API = "https://api.sleeper.app/v1";
 const CALC_VERSION = 2; // 2 = ADP-derived fixed-basket model

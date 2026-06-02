@@ -31,11 +31,11 @@ type TabId =
   | "age-curve";
 
 const TABS: Array<{ id: TabId; label: string }> = [
-  { id: "production-buys", label: "Production Discounts" },
-  { id: "usage-buys", label: "Usage Buys" },
-  { id: "trend-radar", label: "Trend Radar" },
-  { id: "value-vs-production", label: "Value vs Production" },
-  { id: "age-curve", label: "Age Curve" },
+  { id: "production-buys", label: "Dyn x PPG" },
+  { id: "usage-buys", label: "Dyn x Usage" },
+  { id: "trend-radar", label: "Dyn x Trend" },
+  { id: "value-vs-production", label: "Dyn x Production" },
+  { id: "age-curve", label: "Dyn x Age" },
 ];
 
 // The trailing tabs are the relocated Market Inefficiency views; they run on
@@ -49,6 +49,7 @@ const MARKET_TAB_VIEW: Partial<Record<TabId, "value" | "gap" | "age">> = {
 const DEFAULT_FILTERS: Filters = {
   position: "All",
   format: "Superflex",
+  scoring: "ppr",
   season: "2025",
   valueSource: "FantasyCalc",
   ageRange: "All",
@@ -122,7 +123,7 @@ export function ValueFinder() {
   // join). This is the only source — there is no fake-data fallback, so if the
   // request fails or returns nothing we surface that explicitly rather than
   // showing fabricated players.
-  const playersQuery = useValueFinderPlayers(filters.season, filters.format);
+  const playersQuery = useValueFinderPlayers(filters.season, filters.format, filters.scoring);
 
   const loading = playersQuery.isLoading;
 

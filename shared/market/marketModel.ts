@@ -16,12 +16,12 @@ import { getMarketSignal, type MarketSignal, type MarketTone } from "./marketSig
 export const MARKET_POSITIONS = ["QB", "RB", "WR", "TE"] as const;
 export type MktPos = (typeof MARKET_POSITIONS)[number];
 
-/** Chart dot colors — muted brand-ish, per the spec (QB blue / RB green / WR purple / TE orange). */
+/** Chart dot colors by position (QB red / RB green / WR blue / TE yellow). */
 export const POSITION_COLORS: Record<MktPos, string> = {
-  QB: "#3b82f6",
+  QB: "#ef4444",
   RB: "#10b981",
-  WR: "#8b5cf6",
-  TE: "#f97316",
+  WR: "#3b82f6",
+  TE: "#eab308",
 };
 
 /**

@@ -1,6 +1,5 @@
 import { eq, and, sql, asc, count } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/node-postgres";
-import pg from "pg";
+import { db } from "./db";
 import {
   crawledLeagues,
   crawledUsers,
@@ -15,14 +14,10 @@ const SLEEPER_API = "https://api.sleeper.app/v1";
 const RATE_LIMIT_MS = 500;
 const MAX_SEASONS_BACK = 5;
 
-let db: ReturnType<typeof drizzle> | null = null;
 let isProcessing = false;
 
+// Shared, capped pool (see server/db.ts). getDb() retained for call-site compat.
 function getDb() {
-  if (!db) {
-    const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
-    db = drizzle(pool);
-  }
   return db;
 }
 

@@ -7,8 +7,7 @@
  * the read path doesn't recompute the ledger on every page load.
  */
 
-import pg from "pg";
-import { drizzle } from "drizzle-orm/node-postgres";
+import { db } from "./db";
 import { and, eq, desc } from "drizzle-orm";
 import { assetPositions, portfolioEvents, portfolioValueSnapshots } from "@shared/schema";
 import {
@@ -20,8 +19,7 @@ import {
   type Confidence,
 } from "./portfolioValueService";
 
-const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
-const db = drizzle(pool);
+// Shared, capped Postgres pool (see server/db.ts).
 
 const CALC_VERSION = 1;
 

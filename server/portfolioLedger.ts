@@ -16,8 +16,7 @@
  * (multi-season history) is a documented future extension.
  */
 
-import pg from "pg";
-import { drizzle } from "drizzle-orm/node-postgres";
+import { db } from "./db";
 import { eq } from "drizzle-orm";
 import { assetPositions, portfolioEvents } from "@shared/schema";
 import { getSleeperPlayers } from "./sleeper";
@@ -31,8 +30,7 @@ import {
   type PickRef,
 } from "./portfolioValueService";
 
-const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
-const db = drizzle(pool);
+// Shared, capped Postgres pool (see server/db.ts).
 
 const SLEEPER_API = "https://api.sleeper.app/v1";
 // Power users can roster players in 100+ leagues; cap high enough to cover

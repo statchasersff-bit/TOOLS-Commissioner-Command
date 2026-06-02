@@ -7,6 +7,7 @@ import { serveStatic } from "./static";
 import { installVitals, startVitalsHeartbeat, getVitals } from "./vitals";
 import { createServer } from "http";
 import { readFileSync, readdirSync, readlinkSync } from "fs";
+import pg from "pg";
 
 /**
  * Find the PID holding `port` via /proc/net/tcp, then SIGKILL it.
@@ -173,11 +174,27 @@ declare module "express-session" {
   }
 }
 
+// Dedicated, capped pool for the session store. The session middleware runs on
+// EVERY request and acquires a connection each time, so it gets its own small
+// pool isolated from heavy app/background query load. Capping it (plus the
+// shared app pool in server/db.ts) keeps the server's total connection
+// footprint well under Postgres' max_connections — the fix for the "every few
+// hours the app hangs on the loading spinner" bug. See docs/PRODUCTION_RESILIENCE.md.
+const sessionPool = new pg.Pool({
+  connectionString: process.env.DATABASE_URL,
+  max: Number(process.env.PG_SESSION_POOL_MAX || 5),
+  idleTimeoutMillis: 30_000,
+  connectionTimeoutMillis: 10_000,
+});
+sessionPool.on("error", (err) => {
+  console.error("[session-store] idle client error (pool will recycle):", err instanceof Error ? err.message : err);
+});
+
 const PgStore = connectPgSimple(session);
 app.use(
   session({
     store: new PgStore({
-      conString: process.env.DATABASE_URL,
+      pool: sessionPool,
       createTableIfMissing: true,
       tableName: "sc_sessions",
     }),

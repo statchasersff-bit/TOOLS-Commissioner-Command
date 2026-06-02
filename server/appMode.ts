@@ -10,8 +10,7 @@
  */
 
 import type { Request, Response, NextFunction } from "express";
-import pg from "pg";
-import { drizzle } from "drizzle-orm/node-postgres";
+import { db } from "./db";
 import { eq } from "drizzle-orm";
 import { scUsers } from "@shared/schema";
 import {
@@ -25,8 +24,7 @@ import {
   SUBSCRIPTION_REQUIRED_ERROR,
 } from "@shared/appMode";
 
-const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
-const db = drizzle(pool);
+// Shared, capped Postgres pool (see server/db.ts).
 
 /**
  * Extract the canonical host for the inbound request. Trust order:

@@ -12,14 +12,12 @@
  * data.
  */
 
-import pg from "pg";
-import { drizzle } from "drizzle-orm/node-postgres";
+import { db } from "./db";
 import { and, eq, inArray } from "drizzle-orm";
 import { drafts, draftPicks } from "@shared/schema";
 import { buildDraftWhere, type AdpFilters } from "./adp";
 
-const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
-const db = drizzle(pool);
+// Shared, capped Postgres pool (see server/db.ts).
 
 function safePickDate(d: { completedAt: number | null; startTime: number | null; createdAt: number | null }): number | null {
   return d.completedAt ?? d.startTime ?? d.createdAt ?? null;
