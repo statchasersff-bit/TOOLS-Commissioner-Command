@@ -64,15 +64,15 @@ export function ValueProductionScatter({ players }: { players: MarketPlayer[] })
   const positions = MARKET_POSITIONS.filter((pos) => pts.some((p) => p.position === pos));
 
   return (
-    <div className="h-[360px] w-full" data-testid="chart-value-production">
-      <ResponsiveContainer width="100%" height="100%">
+    <div className="w-full" data-testid="chart-value-production">
+      <ResponsiveContainer width="100%" aspect={2.31}>
         <ScatterChart margin={{ top: 10, right: 16, bottom: 28, left: 8 }}>
           <CartesianGrid strokeDasharray="3 3" stroke={PALETTE.grid} />
           <XAxis
             type="number" dataKey="production" name="Production" domain={["dataMin", "dataMax"]}
             tick={{ fill: PALETTE.axis, fontSize: 10 }} tickLine={{ stroke: PALETTE.axis }} axisLine={{ stroke: PALETTE.axis }}
           >
-            <Label value="Production (win-now value) →" position="insideBottom" offset={-16} style={{ fill: PALETTE.label, fontSize: 11, fontWeight: 600 }} />
+            <Label value="Redraft Market Value →" position="insideBottom" offset={-16} style={{ fill: PALETTE.label, fontSize: 11, fontWeight: 600 }} />
           </XAxis>
           <YAxis
             type="number" dataKey="marketValue" name="Market Value" width={48}
@@ -88,7 +88,7 @@ export function ValueProductionScatter({ players }: { players: MarketPlayer[] })
             ifOverflow="extendDomain"
           />
           <RechartsTooltip content={<VPTooltip />} cursor={{ strokeDasharray: "3 3" }} />
-          <Legend wrapperStyle={{ fontSize: 11 }} />
+          <Legend verticalAlign="top" align="right" height={24} wrapperStyle={{ fontSize: 11 }} />
           {positions.map((pos) => (
             <Scatter
               key={pos}

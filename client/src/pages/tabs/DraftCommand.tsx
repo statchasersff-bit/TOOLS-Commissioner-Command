@@ -214,8 +214,11 @@ export function DraftCommand() {
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [meta, setMeta] = useState<AdpResponseMeta | null>(null);
-  // Separate fetch for MoversPanel — always uses a fixed 7-day window so the
-  // "Biggest ADP movers" section is unaffected by the date range filter.
+  // Separate fetch for MoversPanel — independent of the date range filter, and
+  // always pulls a fixed 44-day window. The panel's 14-day trend compares the
+  // last 14 days against the 30 days before it (days 15–44), so the fetch must
+  // cover the full 44 days or the prior window comes up empty and every trend
+  // collapses to 0 (which hides the panel entirely).
   const [moversRows, setMoversRows] = useState<ADPResult[]>([]);
   const [moversMeta, setMoversMeta] = useState<AdpResponseMeta | null>(null);
   // Corpus-wide ADP totals (real picks + dynasty drafts scanned). Global + cached.
@@ -309,11 +312,11 @@ export function DraftCommand() {
     };
   }, [filters, retryNonce]);
 
-  // Movers fetch — always 7-day window, re-runs only when non-date filters change.
+  // Movers fetch — always 44-day window, re-runs only when non-date filters change.
   useEffect(() => {
     const end = new Date();
     const start = new Date();
-    start.setDate(end.getDate() - 7);
+    start.setDate(end.getDate() - 44);
     const moversFilters: typeof filters = {
       ...filters,
       dateRange: { start: toIsoDate(start), end: toIsoDate(end) },

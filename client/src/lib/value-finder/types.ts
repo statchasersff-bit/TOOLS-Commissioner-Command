@@ -171,7 +171,7 @@ export type ValueFinderTab =
   | "rebuild";
 
 export type AgeRange = "All" | "Under 23" | "23-25" | "26-28" | "29+";
-export type SeasonFilter = "2025" | "2024" | "2023" | "All";
+export type SeasonFilter = "2025" | "2024" | "2023";
 export type FormatFilter = "All" | "1QB" | "Superflex" | "TEP";
 export type TrendWindow = "7D" | "30D" | "90D";
 
@@ -206,7 +206,7 @@ export const VALUE_SOURCES: ValueSourceVF[] = [
 ];
 
 export const AGE_RANGES: AgeRange[] = ["All", "Under 23", "23-25", "26-28", "29+"];
-export const SEASONS: SeasonFilter[] = ["2025", "2024", "2023", "All"];
+export const SEASONS: SeasonFilter[] = ["2025", "2024", "2023"];
 export const FORMATS: FormatFilter[] = ["All", "1QB", "Superflex", "TEP"];
 export const MIN_GAMES: Array<0 | 4 | 8 | 12> = [0, 4, 8, 12];
 

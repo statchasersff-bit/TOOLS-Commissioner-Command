@@ -113,6 +113,7 @@ export type AdpRow = {
   positional_rank: number;
   overall_rank: number;
   trend_7d: number;
+  trend_14d: number;
   trend_30d: number;
   sample_size_warning: boolean;
 };
@@ -1422,11 +1423,16 @@ export async function computeAdp(f: AdpFilters): Promise<{ rows: AdpRow[]; draft
     // Trend = recent window mean − prior (non-overlapping) window mean. Negative
     // means the player is going earlier than before (riser); positive means
     // slipping later (faller). Windows must not overlap, or the delta is diluted
-    // by shared picks: 7d vs the prior 7d (days 8–14), 30d vs the prior 30d.
+    // by shared picks. The prior window is wider than the recent one so it forms
+    // a stable baseline: 7d vs the 30 days before it (days 8–37), 14d vs the 30
+    // days before it (days 15–44), 30d vs the 60 days before it (days 31–90).
+    // Means (not sums) are compared, so the unequal window lengths are fine.
     const last7 = a.timed.filter((x) => now - x.t <= 7 * DAY).map((x) => x.p);
-    const prev7 = a.timed.filter((x) => now - x.t > 7 * DAY && now - x.t <= 14 * DAY).map((x) => x.p);
+    const prev7 = a.timed.filter((x) => now - x.t > 7 * DAY && now - x.t <= 37 * DAY).map((x) => x.p);
+    const last14 = a.timed.filter((x) => now - x.t <= 14 * DAY).map((x) => x.p);
+    const prev14 = a.timed.filter((x) => now - x.t > 14 * DAY && now - x.t <= 44 * DAY).map((x) => x.p);
     const last30 = a.timed.filter((x) => now - x.t <= 30 * DAY).map((x) => x.p);
-    const prior30 = a.timed.filter((x) => now - x.t > 30 * DAY && now - x.t <= 60 * DAY).map((x) => x.p);
+    const prior30 = a.timed.filter((x) => now - x.t > 30 * DAY && now - x.t <= 90 * DAY).map((x) => x.p);
 
     // Mean of a window only once it clears MIN_TREND_PICKS, else null — no
     // fallback to the all-time average, which used to fabricate a delta whenever
@@ -1442,6 +1448,7 @@ export async function computeAdp(f: AdpFilters): Promise<{ rows: AdpRow[]; draft
     };
 
     const trend7 = trendBetween(last7, prev7);
+    const trend14 = trendBetween(last14, prev14);
     const trend30 = trendBetween(last30, prior30);
 
     const validPos = (["QB", "RB", "WR", "TE", "K", "PICK"] as const).includes(a.position as any)
@@ -1465,6 +1472,7 @@ export async function computeAdp(f: AdpFilters): Promise<{ rows: AdpRow[]; draft
       positional_rank: 0,
       overall_rank: 0,
       trend_7d: trend7,
+      trend_14d: trend14,
       trend_30d: trend30,
       sample_size_warning: sorted.length < 8,
     };

@@ -2,20 +2,15 @@ import { useState, type ReactNode } from "react";
 import { Search, SlidersHorizontal } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
+import { Slider } from "@/components/ui/slider";
 import type {
   ValueFinderFilters as Filters,
   Position,
-  ValueSourceVF,
+  AgeRange,
 } from "@/lib/value-finder/types";
-import {
-  POSITIONS,
-  VALUE_SOURCES,
-  AGE_RANGES,
-  SEASONS,
-  FORMATS,
-  MIN_GAMES,
-  TREND_WINDOWS,
-} from "@/lib/value-finder/types";
+import { POSITIONS, SEASONS, MIN_GAMES } from "@/lib/value-finder/types";
+
+const fmtNum = (n: number) => Math.round(n).toLocaleString();
 
 const chip = (active: boolean) =>
   cn(
@@ -24,6 +19,20 @@ const chip = (active: boolean) =>
       ? "bg-[#d4af37]/15 border-[#d4af37]/40 text-[var(--sc-gold-deep)] dark-any:text-[#d4af37]"
       : "border-border text-muted-foreground hover:text-foreground",
   );
+
+// Only the two supported market formats are selectable here; the data pipeline
+// understands the wider FormatFilter union, but Superflex / 1QB are what the
+// market + production feeds are keyed on.
+const FORMAT_OPTIONS: Array<Filters["format"]> = ["Superflex", "1QB"];
+
+const AGE_LABELS: Record<AgeRange, string> = {
+  All: "All ages",
+  "Under 23": "Under 23",
+  "23-25": "23–25",
+  "26-28": "26–28",
+  "29+": "29+",
+};
+const AGE_OPTIONS: AgeRange[] = ["All", "Under 23", "23-25", "26-28", "29+"];
 
 function Row({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -36,12 +45,26 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
+/**
+ * The single Value Finder filter bar, shared across every sub-tab (production /
+ * usage / trend + the market-driven Value vs Production / Age Curve views). The
+ * Source control is wired up to the global value-model source (so the market
+ * pipeline switches too) via `onSelectSource`.
+ */
 export function ValueFinderFilters({
   filters,
   setFilters,
+  maxMarket,
+  sources,
+  sourceId,
+  onSelectSource,
 }: {
   filters: Filters;
   setFilters: (f: Filters) => void;
+  maxMarket: number;
+  sources: Array<{ id: string; label: string; active: boolean }>;
+  sourceId: string;
+  onSelectSource: (id: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const set = (patch: Partial<Filters>) => setFilters({ ...filters, ...patch });
@@ -70,64 +93,83 @@ export function ValueFinderFilters({
         </button>
       </div>
 
-      {/* Always visible (mobile + desktop): Position, Value Source */}
-      <Row label="Position">
-        <button className={chip(filters.position === "All")} onClick={() => set({ position: "All" })}>
-          All
-        </button>
-        {POSITIONS.map((pos: Position) => (
-          <button key={pos} className={chip(filters.position === pos)} onClick={() => set({ position: pos })}>
-            {pos}
-          </button>
-        ))}
-      </Row>
-
-      <Row label="Source">
-        {VALUE_SOURCES.map((src: ValueSourceVF) => (
-          <button key={src} className={chip(filters.valueSource === src)} onClick={() => set({ valueSource: src })}>
-            {src}
-          </button>
-        ))}
-      </Row>
-
       {/* Collapsible on mobile; always shown on sm+ */}
       <div className={cn("flex-col gap-2.5", open ? "flex" : "hidden", "sm:flex")}>
+        <Row label="Position">
+          <button className={chip(filters.position === "All")} onClick={() => set({ position: "All" })}>
+            All
+          </button>
+          {POSITIONS.map((pos: Position) => (
+            <button key={pos} className={chip(filters.position === pos)} onClick={() => set({ position: pos })}>
+              {pos}
+            </button>
+          ))}
+        </Row>
+
         <Row label="Format">
-          {FORMATS.map((f) => (
+          {FORMAT_OPTIONS.map((f) => (
             <button key={f} className={chip(filters.format === f)} onClick={() => set({ format: f })}>
               {f}
             </button>
           ))}
         </Row>
+
         <Row label="Season">
           {SEASONS.map((s) => (
-            <button key={s} className={chip(filters.season === s)} onClick={() => set({ season: s })}>
+            <button
+              key={s}
+              className={chip(filters.season === s)}
+              onClick={() => set({ season: s })}
+              data-testid={`vf-season-${s}`}
+            >
               {s}
             </button>
           ))}
         </Row>
+
         <Row label="Age">
-          {AGE_RANGES.map((a) => (
+          {AGE_OPTIONS.map((a) => (
             <button key={a} className={chip(filters.ageRange === a)} onClick={() => set({ ageRange: a })}>
-              {a}
+              {AGE_LABELS[a]}
             </button>
           ))}
         </Row>
+
+        <Row label="Source">
+          {sources
+            .filter((s) => s.active)
+            .map((s) => (
+              <button key={s.id} className={chip(sourceId === s.id)} onClick={() => onSelectSource(s.id)}>
+                {s.label}
+              </button>
+            ))}
+        </Row>
+
+        {/* Min market value */}
+        <div className="flex items-center gap-3">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground w-16">Min value</span>
+          <Slider
+            value={[filters.minMarketValue ?? 0]}
+            onValueChange={([v]) => set({ minMarketValue: v })}
+            min={0}
+            max={Math.max(1000, Math.round(maxMarket))}
+            step={100}
+            className="flex-1 max-w-[280px]"
+          />
+          <span className="text-[11px] tabular-nums text-foreground w-14 text-right">
+            {fmtNum(filters.minMarketValue ?? 0)}
+          </span>
+        </div>
+
         <Row label="Min GP">
           {MIN_GAMES.map((g) => (
-            <button key={g} className={chip(filters.minGamesPlayed === g)} onClick={() => set({ minGamesPlayed: g })}>
-              {g === 0 ? "Any" : `${g}+`}
-            </button>
-          ))}
-        </Row>
-        <Row label="Trend">
-          {TREND_WINDOWS.map((t) => (
             <button
-              key={t.value}
-              className={chip(filters.trendWindow === t.value)}
-              onClick={() => set({ trendWindow: t.value })}
+              key={g}
+              className={chip(filters.minGamesPlayed === g)}
+              onClick={() => set({ minGamesPlayed: g })}
+              data-testid={`vf-min-gp-${g}`}
             >
-              {t.value}
+              {g === 0 ? "Any" : `${g}+`}
             </button>
           ))}
         </Row>

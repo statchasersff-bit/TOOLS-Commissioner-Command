@@ -77,7 +77,7 @@ export function TrendRadarChart({
         <div className="absolute bottom-8 right-3">{label("Hidden Riser", "text-sky-500")}</div>
         <div className="absolute bottom-8 left-12">{label("Falling Asset", "text-red-500")}</div>
       </div>
-      <ResponsiveContainer width="100%" height={340}>
+      <ResponsiveContainer width="100%" aspect={2.31}>
         <ScatterChart margin={{ top: 8, right: 16, bottom: 24, left: 8 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border)/0.4)" />
           <XAxis

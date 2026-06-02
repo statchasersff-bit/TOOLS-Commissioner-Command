@@ -89,6 +89,8 @@ export interface SleeperLeagueSummary {
   scoringFormat: string;
   format: string;
   status: string;
+  /** League type from Sleeper settings.type (0=redraft, 1=keeper, 2=dynasty). */
+  type: "DYNASTY" | "KEEPER" | "REDRAFT";
 }
 
 function deriveFormat(rosterPositions: string[]): string {
@@ -152,6 +154,7 @@ export async function fetchSleeperLeagues(
     scoringFormat: deriveScoringFormat(lg.scoring_settings),
     format: deriveFormat(lg.roster_positions || []),
     status: lg.status,
+    type: lg.settings?.type === 1 ? "KEEPER" : lg.settings?.type === 0 ? "REDRAFT" : "DYNASTY",
   }));
 }
 

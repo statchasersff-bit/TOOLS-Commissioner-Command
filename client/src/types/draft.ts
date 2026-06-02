@@ -71,6 +71,7 @@ export interface ADPResult {
   positional_rank: number;
   overall_rank: number;
   trend_7d: number;           // negative = rising (ADP getting smaller); positive = falling
+  trend_14d: number;          // used by the "Biggest ADP movers" panel
   trend_30d: number;
   sample_size_warning: boolean;
 }

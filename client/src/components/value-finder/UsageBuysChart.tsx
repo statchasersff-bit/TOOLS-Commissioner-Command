@@ -61,7 +61,7 @@ export function UsageBuysChart({
   }
 
   return (
-    <ResponsiveContainer width="100%" height={320}>
+    <ResponsiveContainer width="100%" aspect={2.31}>
       <ScatterChart margin={{ top: 8, right: 16, bottom: 24, left: 8 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border)/0.4)" />
         <XAxis

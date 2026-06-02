@@ -95,7 +95,8 @@ function buildMockAdp(): ADPResult[] {
     const draftCount = overall % 9 === 0 ? 4 : 30 + ((overall * 13) % 90);
     // Pseudo-random but deterministic trends in [-12, +12].
     const trend7 = ((overall * 37) % 25) - 12;
-    const trend30 = ((overall * 19) % 25) - 12;
+    const trend14 = ((overall * 19) % 25) - 12;
+    const trend30 = ((overall * 23) % 25) - 12;
 
     return {
       player_id: s.isRookiePlaceholder
@@ -114,6 +115,7 @@ function buildMockAdp(): ADPResult[] {
       positional_rank: positional,
       overall_rank: overall,
       trend_7d: trend7,
+      trend_14d: trend14,
       trend_30d: trend30,
       sample_size_warning: draftCount < 8,
     };

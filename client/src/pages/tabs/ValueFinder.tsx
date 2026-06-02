@@ -3,36 +3,25 @@ import { cn } from "@/lib/utils";
 import type {
   ValueFinderPlayer,
   ValueFinderFilters as Filters,
+  AgeRange,
 } from "@/lib/value-finder/types";
-import { getValueFinderPlayers as getMockValueFinderPlayers } from "@/lib/value-finder/mockPlayers";
 import { useValueFinderPlayers } from "@/lib/value-finder/loadPlayers";
 import {
   enrichPlayers,
   filterPlayers,
   hasMarketValues,
 } from "@/lib/value-finder/enrich";
-import { getValueSignal } from "@/lib/value-finder/valueFinderScoring";
-import { getMarketTrend, getRoleTrend, getProductionTrend } from "@/lib/value-finder/trends";
-import {
-  fmtValue,
-  fmtSignedPct,
-  fmtPpg,
-  fmtScore,
-  fmtAge,
-} from "@/lib/value-finder/format";
-
+import { useValueModel } from "@/contexts/ValueModelContext";
+import type {
+  MarketFilters,
+  AgeRange as MarketAgeRange,
+} from "@/lib/market/marketModel";
 import { ValueFinderFilters } from "@/components/value-finder/ValueFinderFilters";
 import { HowToReadCard } from "@/components/value-finder/HowToReadCard";
-import { ValueLabelBadge } from "@/components/value-finder/ValueLabelBadge";
-import {
-  ValueFinderTable,
-  PlayerNameCell,
-  type VFColumn,
-} from "@/components/value-finder/ValueFinderTable";
 import { ProductionBuysChart } from "@/components/value-finder/ProductionBuysChart";
 import { UsageBuysChart } from "@/components/value-finder/UsageBuysChart";
 import { TrendRadarChart } from "@/components/value-finder/TrendRadarChart";
-import { MarketInsights } from "@/pages/tabs/MarketInefficiencies";
+import { MarketInsights, type MarketFormat } from "@/pages/tabs/MarketInefficiencies";
 
 type TabId =
   | "production-buys"
@@ -64,82 +53,33 @@ const DEFAULT_FILTERS: Filters = {
   valueSource: "FantasyCalc",
   ageRange: "All",
   minGamesPlayed: 0,
+  minMarketValue: 0,
   search: "",
   trendWindow: "30D",
 };
 
-// Attach gap/gapPercent/signal for a given comparison metric.
-function withSignal(
-  p: ValueFinderPlayer,
-  comparison?: number,
-): ValueFinderPlayer {
-  const sig = getValueSignal({ marketValue: p.marketValue, comparisonValue: comparison });
-  return { ...p, gap: sig.gap, gapPercent: sig.gapPercent, signal: sig.signal, tone: sig.tone };
+// The market pipeline (Value vs Production / Age Curve) speaks its own filter
+// shape. Translate the shared Value Finder filters into it so both pipelines
+// react to the same bar. Age ranges differ only in the "Under 23" id.
+const AGE_TO_MARKET: Record<AgeRange, MarketAgeRange> = {
+  All: "All",
+  "Under 23": "u23",
+  "23-25": "23-25",
+  "26-28": "26-28",
+  "29+": "29+",
+};
+
+function toMarketFilters(f: Filters): MarketFilters {
+  return {
+    position: f.position,
+    ageRange: AGE_TO_MARKET[f.ageRange],
+    minMarketValue: f.minMarketValue ?? 0,
+    minGamesPlayed: f.minGamesPlayed,
+    search: f.search,
+  };
 }
 
-// ── Shared cell renderers ─────────────────────────────────────────────────
-const GapPctCell = ({ p }: { p: ValueFinderPlayer }) => (
-  <span
-    className={cn(
-      "font-semibold",
-      (p.gapPercent ?? 0) >= 0
-        ? "text-emerald-600 dark-any:text-emerald-400"
-        : "text-red-600 dark-any:text-red-400",
-    )}
-  >
-    {fmtSignedPct(p.gapPercent)}
-  </span>
-);
-
-const playerCol = (): VFColumn => ({
-  key: "player",
-  header: "Player",
-  mobile: true,
-  cell: (p) => <PlayerNameCell p={p} />,
-});
-const posCol = (): VFColumn => ({ key: "pos", header: "Pos", cell: (p) => p.position });
-const ageCol = (): VFColumn => ({
-  key: "age",
-  header: "Age",
-  align: "right",
-  cell: (p) => fmtAge(p.age),
-  sortValue: (p) => p.age ?? 0,
-});
-const gapCol = (): VFColumn => ({
-  key: "gap",
-  header: "Gap %",
-  align: "right",
-  mobile: true,
-  cell: (p) => <GapPctCell p={p} />,
-  sortValue: (p) => p.gapPercent ?? 0,
-});
-const labelCol = (): VFColumn => ({
-  key: "label",
-  header: "Label",
-  align: "right",
-  mobile: true,
-  cell: (p) => <ValueLabelBadge label={p.finalLabel} />,
-});
-const bestFitCol = (): VFColumn => ({
-  key: "bestfit",
-  header: "Best Fit",
-  align: "right",
-  cell: (p) => p.bestFit ?? "—",
-});
-const longevityCol = (): VFColumn => ({
-  key: "longevity",
-  header: "Longevity",
-  align: "right",
-  cell: (p) => fmtScore(p.longevityScore),
-  sortValue: (p) => p.longevityScore ?? 0,
-});
-const marketCol = (): VFColumn => ({
-  key: "market",
-  header: "Market",
-  align: "right",
-  cell: (p) => fmtValue(p.marketValue),
-  sortValue: (p) => p.marketValue ?? 0,
-});
+const toMarketFormat = (f: Filters["format"]): MarketFormat => (f === "1QB" ? "1qb" : "sf");
 
 // ── Tab switcher ──────────────────────────────────────────────────────────
 function TabBar({ tab, setTab }: { tab: TabId; setTab: (t: TabId) => void }) {
@@ -169,83 +109,103 @@ const Panel = ({ children }: { children: ReactNode }) => (
 );
 
 export function ValueFinder() {
-  const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
+  const vm = useValueModel();
+  // Seed the client-side source from the (possibly persisted) global source so
+  // the Source chip and the Value Finder pipeline agree on first paint.
+  const [filters, setFilters] = useState<Filters>(() => ({
+    ...DEFAULT_FILTERS,
+    valueSource: vm.sourceId === "ktc" ? "KTC" : "FantasyCalc",
+  }));
   const [tab, setTab] = useState<TabId>("production-buys");
 
   // Fetch the real, server-aggregated pool (season + market format drive the
-  // join). Falls back to the bundled sample pool if the request fails or
-  // returns nothing, so the page never blanks out.
+  // join). This is the only source — there is no fake-data fallback, so if the
+  // request fails or returns nothing we surface that explicitly rather than
+  // showing fabricated players.
   const playersQuery = useValueFinderPlayers(filters.season, filters.format);
 
   const loading = playersQuery.isLoading;
 
-  // Enrich the full pool (cohort percentiles need every player), then filter.
-  // While the request is in flight we hold off (empty pool) rather than flash
-  // the sample data; once it settles we use the real pool, falling back to the
-  // bundled sample only if the request failed or returned nothing.
-  const { enriched, error } = useMemo(() => {
-    if (loading) return { enriched: [] as ValueFinderPlayer[], error: false };
-    const pool =
-      playersQuery.data && playersQuery.data.length > 0
-        ? playersQuery.data
-        : getMockValueFinderPlayers();
+  // Enrich the full real pool (cohort percentiles need every player), then
+  // filter. While the request is in flight we hold off (empty pool) rather than
+  // flash stale content.
+  const { enriched, enrichError } = useMemo(() => {
+    const pool = playersQuery.data ?? [];
+    if (pool.length === 0) return { enriched: [] as ValueFinderPlayer[], enrichError: false };
     try {
-      return { enriched: enrichPlayers(pool, filters.valueSource), error: false };
+      return { enriched: enrichPlayers(pool, filters.valueSource), enrichError: false };
     } catch (e) {
       console.error("[ValueFinder] enrichment failed:", e);
-      return { enriched: [] as ValueFinderPlayer[], error: true };
+      return { enriched: [] as ValueFinderPlayer[], enrichError: true };
     }
-  }, [playersQuery.data, loading, filters.valueSource]);
+  }, [playersQuery.data, filters.valueSource]);
 
   const filtered = useMemo(() => filterPlayers(enriched, filters), [enriched, filters]);
+
+  // Upper bound for the Min value slider — derived from the enriched pool so the
+  // slider scales to whatever value source is active.
+  const maxMarket = useMemo(
+    () => enriched.reduce((m, p) => Math.max(m, p.marketValue ?? 0), 0),
+    [enriched],
+  );
+
+  // The request errored, or it succeeded but the server returned no players —
+  // either way there's no real data to show.
+  const dataError = playersQuery.isError || enrichError;
+  const noData = !loading && !dataError && (playersQuery.data?.length ?? 0) === 0;
 
   const noMarket = !hasMarketValues(filtered);
   const empty = filtered.length === 0;
 
+  // The market-driven tabs share the same source as the rest of the app, so the
+  // Source control drives the global value-model source (which the market pool
+  // is built from) and the client-side Value Finder source in one click.
+  const onSelectSource = (id: string) => {
+    vm.setSourceId(id as typeof vm.sourceId);
+    setFilters((prev) => ({ ...prev, valueSource: id === "ktc" ? "KTC" : "FantasyCalc" }));
+  };
+
   // ── Market Inefficiency tabs ──────────────────────────────────────────────
-  // These run on their own market data pipeline (own filters + value source),
-  // so they render independently of the Value Finder's player fetch above.
+  // These run on their own market data pipeline but are now driven by the same
+  // shared filter bar (translated into the market filter shape).
   const marketView = MARKET_TAB_VIEW[tab];
-  if (marketView) {
-    return (
-      <div className="space-y-4 pb-12">
-        <TabBar tab={tab} setTab={setTab} />
-        <MarketInsights activeTab={marketView} />
-      </div>
-    );
-  }
-
-  // ── Loading state ─────────────────────────────────────────────────────────
-  if (loading) {
-    return (
-      <div className="space-y-4 pb-12">
-        <ValueFinderFilters filters={filters} setFilters={setFilters} />
-        <div className="rounded-xl border border-border bg-card/40 p-8 text-center text-[13px] text-muted-foreground">
-          Loading live player values…
-        </div>
-      </div>
-    );
-  }
-
-  // ── Error state ──────────────────────────────────────────────────────────
-  if (error) {
-    return (
-      <div className="space-y-4 pb-12">
-        <div className="rounded-xl border border-border bg-card/40 p-8 text-center">
-          <p className="text-[13px] text-muted-foreground max-w-md mx-auto">
-            Unable to load Value Finder data. Try refreshing or changing filters.
-          </p>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-4 pb-12">
-      <ValueFinderFilters filters={filters} setFilters={setFilters} />
+      <ValueFinderFilters
+        filters={filters}
+        setFilters={setFilters}
+        maxMarket={maxMarket}
+        sources={vm.sources}
+        sourceId={vm.sourceId}
+        onSelectSource={onSelectSource}
+      />
       <TabBar tab={tab} setTab={setTab} />
 
-      {empty ? (
+      {marketView ? (
+        <MarketInsights
+          activeTab={marketView}
+          filters={toMarketFilters(filters)}
+          format={toMarketFormat(filters.format)}
+          season={filters.season}
+        />
+      ) : loading ? (
+        <div className="rounded-xl border border-border bg-card/40 p-8 text-center text-[13px] text-muted-foreground">
+          Loading live player values…
+        </div>
+      ) : dataError ? (
+        <div className="rounded-xl border border-border bg-card/40 p-8 text-center">
+          <p className="text-[13px] text-muted-foreground max-w-md mx-auto">
+            Unable to load live Value Finder data. Try refreshing or changing the season/format.
+          </p>
+        </div>
+      ) : noData ? (
+        <div className="rounded-xl border border-border bg-card/40 p-8 text-center">
+          <p className="text-[13px] text-muted-foreground max-w-md mx-auto">
+            No live player values are available right now. Please try again shortly.
+          </p>
+        </div>
+      ) : empty ? (
         <div className="rounded-xl border border-border bg-card/40 p-8 text-center text-[13px] text-muted-foreground">
           No players match these filters.
         </div>
@@ -257,7 +217,13 @@ export function ValueFinder() {
         <>
           {tab === "production-buys" && <ProductionBuysTab players={filtered} />}
           {tab === "usage-buys" && <UsageBuysTab players={filtered} />}
-          {tab === "trend-radar" && <TrendRadarTab players={filtered} window={filters.trendWindow} />}
+          {tab === "trend-radar" && (
+            <TrendRadarTab
+              players={filtered}
+              window={filters.trendWindow}
+              setWindow={(w) => setFilters((prev) => ({ ...prev, trendWindow: w }))}
+            />
+          )}
         </>
       )}
     </div>
@@ -282,26 +248,6 @@ function ProductionBuysTab({ players }: { players: ValueFinderPlayer[] }) {
 
 // ── Tab 3: Usage Buys ───────────────────────────────────────────────────────
 function UsageBuysTab({ players }: { players: ValueFinderPlayer[] }) {
-  const rows = useMemo(
-    () => players.map((p) => withSignal(p, p.usageValue)),
-    [players],
-  );
-  const buys = rows.filter((p) => (p.gapPercent ?? 0) > 0 && p.usageScore != null).sort((a, b) => (b.gapPercent ?? 0) - (a.gapPercent ?? 0)).slice(0, 12);
-  const sells = rows.filter((p) => (p.gapPercent ?? 0) < 0 && p.usageScore != null).sort((a, b) => (a.gapPercent ?? 0) - (b.gapPercent ?? 0)).slice(0, 12);
-
-  const usageCol: VFColumn = {
-    key: "usage",
-    header: "Usage",
-    align: "right",
-    cell: (p) => fmtScore(p.usageScore),
-    sortValue: (p) => p.usageScore ?? 0,
-  };
-  // Player · Age · Usage · Market · Longevity · Best Fit · Label
-  const columns: VFColumn[] = [
-    playerCol(), posCol(), ageCol(), usageCol, marketCol(),
-    longevityCol(), bestFitCol(), labelCol(),
-  ];
-
   return (
     <div className="space-y-3">
       <HowToReadCard defaultOpen>
@@ -312,47 +258,24 @@ function UsageBuysTab({ players }: { players: ValueFinderPlayer[] }) {
       <Panel>
         <UsageBuysChart players={players} />
       </Panel>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-        <ValueFinderTable title="Usage-Based Buys" rows={buys} columns={columns} defaultSortKey="gap" testId="vf-table-usage-buys" emptyText="No usage-based buys in this filter set." />
-        <ValueFinderTable title="Role-Based Sells" rows={sells} columns={columns} defaultSortKey="gap" defaultSortDir="asc" testId="vf-table-usage-sells" emptyText="No role-based sells in this filter set." />
-      </div>
     </div>
   );
 }
 
 // ── Tab 4: Trend Radar ──────────────────────────────────────────────────────
+// The trend window lives here (not in the shared filter bar) since it only
+// applies to this view.
+const TREND_WINDOWS: Array<Filters["trendWindow"]> = ["7D", "30D", "90D"];
+
 function TrendRadarTab({
   players,
   window,
+  setWindow,
 }: {
   players: ValueFinderPlayer[];
   window: Filters["trendWindow"];
+  setWindow: (w: Filters["trendWindow"]) => void;
 }) {
-  const rows = useMemo(
-    () =>
-      players.map((p) => {
-        const valueTrend = getMarketTrend(p, window);
-        const roleTrend = getRoleTrend(p);
-        return { ...withSignal(p, p.modelValue), _value: valueTrend, _role: roleTrend, _prod: getProductionTrend(p) };
-      }),
-    [players, window],
-  );
-  // Hidden risers: role up, value flat/down. Hype risers: value up, role flat/down.
-  const hidden = rows.filter((r) => r._role > 0 && r._value <= 0).sort((a, b) => b._role - a._role).slice(0, 12);
-  const hype = rows.filter((r) => r._value > 0 && r._role <= 0).sort((a, b) => b._value - a._value).slice(0, 12);
-
-  const trendColumns: VFColumn[] = [
-    playerCol(),
-    posCol(),
-    ageCol(),
-    { key: "vtrend", header: "Value", align: "right", cell: (p) => <TrendNum v={getMarketTrend(p, window)} /> },
-    { key: "rtrend", header: "Role", align: "right", cell: (p) => <TrendNum v={getRoleTrend(p)} /> },
-    { key: "ptrend", header: "Prod", align: "right", cell: (p) => <TrendNum v={getProductionTrend(p)} /> },
-    longevityCol(),
-    bestFitCol(),
-    labelCol(),
-  ];
-
   return (
     <div className="space-y-3">
       <HowToReadCard defaultOpen>
@@ -361,21 +284,29 @@ function TrendRadarTab({
         role improvement. Longevity and Best Fit matter here: a 30-year-old whose role is rising is not
         the same asset as a 22-year-old with the same trend.
       </HowToReadCard>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground w-16">Trend</span>
+        {TREND_WINDOWS.map((w) => (
+          <button
+            key={w}
+            onClick={() => setWindow(w)}
+            data-testid={`vf-trend-${w}`}
+            className={cn(
+              "px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-colors whitespace-nowrap",
+              window === w
+                ? "bg-[#d4af37]/15 border-[#d4af37]/40 text-[var(--sc-gold-deep)] dark-any:text-[#d4af37]"
+                : "border-border text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {w}
+          </button>
+        ))}
+      </div>
       <Panel>
         <TrendRadarChart players={players} trendWindow={window} />
       </Panel>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-        <ValueFinderTable title="Hidden Risers" rows={hidden} columns={trendColumns} testId="vf-table-hidden-risers" emptyText="No hidden risers in this window." />
-        <ValueFinderTable title="Hype Risers" rows={hype} columns={trendColumns} testId="vf-table-hype-risers" emptyText="No hype risers in this window." />
-      </div>
     </div>
   );
 }
-
-const TrendNum = ({ v }: { v: number }) => (
-  <span className={cn("font-semibold", v >= 0 ? "text-emerald-600 dark-any:text-emerald-400" : "text-red-600 dark-any:text-red-400")}>
-    {fmtSignedPct(v)}
-  </span>
-);
 
 export default ValueFinder;

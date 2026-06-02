@@ -4,7 +4,7 @@
  * The premium, command-center counterpart to the old quick-preview drawer.
  * Reuses the same data source (GET /api/manager-intel/:userId?leagueId=…,
  * cached server-side for 6h) reframed into five tabs:
- *   Overview  — Manager Read hero, archetype, scorecard, key tendencies.
+ *   Overview  — roster identity, scorecard, snapshot.
  *   League    — strengths/needs + rank snapshot + team identity for this league.
  *   Cross     — per-position exposure, favorite player types, portfolio identity.
  *   Trade     — how to deal with them + opening offers + (if you have an active
@@ -32,21 +32,15 @@ import {
   Compass,
   Crown,
   Gauge,
-  Ghost,
   Handshake,
-  Info,
   Layers,
-  Repeat,
-  RefreshCw,
   Scale,
-  Sparkles,
   Sprout,
   Swords,
   Target,
   TrendingUp,
   Trophy,
   Users,
-  Waves,
   type LucideIcon,
 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -171,6 +165,8 @@ interface CareerFinishes {
 interface CareerHistory {
   available: boolean;
   seasonsActive: number;
+  firstSeason: string | null;
+  latestSeason: string | null;
   leagueSeasonsPlayed: number;
   record: { wins: number; losses: number; ties: number } | null;
   winPct: number | null;
@@ -183,11 +179,7 @@ interface CareerHistory {
 interface ManagerIntelPayload {
   user: { user_id: string; username: string; display_name: string; avatar: string | null };
   careerHistory?: CareerHistory;
-  archetype?: { key: string; label: string; blurb: string; why?: string };
-  managerRead?: string;
   rosterIdentity?: string;
-  keyTendencies?: string[];
-  headerBadges?: string[];
   confidence?: { level: Rating3; basis: string };
   scorecard?: ScorecardRow[];
   preferences?: {
@@ -222,6 +214,12 @@ interface ManagerIntelPayload {
     mostRosteredPlayers: PlayerExposure[];
     mostRosteredByPosition?: { QB: PlayerExposure[]; RB: PlayerExposure[]; WR: PlayerExposure[]; TE: PlayerExposure[] };
     mostDraftedPlayers: PlayerExposure[] | null;
+    valueByPosition?: {
+      leagueCount: number;
+      dynasty: Array<{ position: "QB" | "RB" | "WR" | "TE"; value: number }>;
+      redraft: Array<{ position: "QB" | "RB" | "WR" | "TE"; value: number }>;
+    } | null;
+    topLeaguemates?: Array<{ ownerId: string; displayName: string; avatar: string | null; sharedLeagues: number }>;
     commonRosterBuild: string;
     averageTeamAge: number | null;
     positionStrengthProfile: string;
@@ -229,7 +227,6 @@ interface ManagerIntelPayload {
     portfolioType?: string;
     portfolioIdentity?: string;
     positionBias?: Array<{ position: "QB" | "RB" | "WR" | "TE"; signal: string; interpretation: string }>;
-    managerTendencies?: string[];
     tradeImplications?: { likelyValues: string[]; unlikelyValues: string[]; bestAngle: string };
   };
   performance: {
@@ -258,7 +255,7 @@ interface ManagerIntelPayload {
     last90Days?: number;
     activityTrend?: "Increasing" | "Stable" | "Declining" | "Unknown";
     recent?: Array<{ date: string; league: string; type: string }>;
-    tradeHistory?: Array<{ date: string; league: string; added: string[]; dropped: string[]; partner: string }>;
+    tradeHistory?: Array<{ date: string; league: string; leagueType?: string; week?: number | null; added: string[]; dropped: string[]; partner: string }>;
     waiverHistory?: Array<{ date: string; league: string; kind: "waiver" | "free_agent"; added: string[]; dropped: string[] }>;
   };
   tradeApproach: {
@@ -318,12 +315,10 @@ export default function ManagerPage({
   const [basicUser, setBasicUser] = useState<{ username: string; displayName: string; avatar: string | null } | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
 
   const fetchIntel = useCallback(
     async (refresh: boolean) => {
-      if (refresh) setRefreshing(true);
-      else setLoading(true);
+      if (!refresh) setLoading(true);
       setError(null);
       try {
         const leagueId = new URLSearchParams(window.location.search).get("leagueId");
@@ -341,7 +336,6 @@ export default function ManagerPage({
         setError(err?.message || "Failed to load manager intel");
       } finally {
         setLoading(false);
-        setRefreshing(false);
       }
     },
     [userId],
@@ -367,11 +361,6 @@ export default function ManagerPage({
     return () => { cancelled = true; };
   }, [userId, fetchIntel]);
 
-  const handleRefresh = () => {
-    if (refreshing) return;
-    void fetchIntel(true);
-  };
-
   return (
     <div className={cn("manager-intel", !embedded && "min-h-screen bg-background", "text-foreground")}>
       <div
@@ -394,13 +383,7 @@ export default function ManagerPage({
       </div>
 
       <div className="max-w-7xl mx-auto px-4 pb-12">
-        <IntelHero
-          data={data}
-          basicUser={basicUser}
-          loading={loading}
-          onRefresh={handleRefresh}
-          refreshing={refreshing}
-        />
+        <IntelHero data={data} basicUser={basicUser} />
 
         {loading && !data ? (
           <LoadingState />
@@ -441,15 +424,9 @@ export default function ManagerPage({
 function IntelHero({
   data,
   basicUser,
-  loading,
-  onRefresh,
-  refreshing,
 }: {
   data: ManagerIntelPayload | null;
   basicUser: { username: string; displayName: string; avatar: string | null } | null;
-  loading: boolean;
-  onRefresh: () => void;
-  refreshing: boolean;
 }) {
   const name =
     data?.user.display_name || data?.user.username ||
@@ -462,20 +439,23 @@ function IntelHero({
       : `https://sleepercdn.com/avatars/thumbs/${rawAvatar}`
     : null;
   const initial = (name || "?").charAt(0).toUpperCase();
-  const archetype = data?.archetype;
-  const badges = data?.headerBadges ?? [];
-  const confidence = data?.confidence;
 
   // Compact "Manager Snapshot" — fills the header's right side with the most
   // decision-relevant facts at a glance.
+  const career = data?.careerHistory;
+  const careerSpan =
+    career?.available && career.firstSeason
+      ? career.latestSeason && career.latestSeason !== career.firstSeason
+        ? `${career.firstSeason}–${career.latestSeason}`
+        : career.firstSeason
+      : null;
   const snapshot = data
     ? [
         { label: "Leagues", value: String(data.crossLeague.dynastyLeagueCount) },
-        { label: "Direction", value: data.currentLeague?.teamDirection ?? "Unknown" },
-        {
-          label: "Trade style",
-          value: data.tradeApproach.tradeProfile?.tradeStyle ?? data.crossLeague.tradeActivityRating,
-        },
+        ...(career?.available
+          ? [{ label: "Career Leagues", value: String(career.leagueSeasonsPlayed) }]
+          : []),
+        ...(careerSpan ? [{ label: "Active", value: careerSpan }] : []),
       ]
     : [];
 
@@ -500,22 +480,10 @@ function IntelHero({
           <div className="text-2xl font-bold text-white truncate tracking-tight" data-testid="manager-page-name">
             {name}
           </div>
-          <div className="text-[12px] text-white/55 mt-1 flex items-center gap-2 flex-wrap">
-            {archetype?.label ? (
-              <Badge variant="outline" className="text-[10px] font-bold text-[#d4af37] border-[#d4af37]/40">
-                {archetype.label}
-              </Badge>
-            ) : (
-              <Badge variant="outline" className="text-[10px] font-medium text-white/40 border-white/15">
-                {loading ? "Analyzing manager…" : "Manager Intel"}
-              </Badge>
-            )}
-            {confidence && <ConfidenceBadge level={confidence.level} basis={confidence.basis} />}
-          </div>
         </div>
 
         {snapshot.length > 0 && (
-          <div className="hidden md:flex items-stretch gap-4 pr-4 mr-1 border-r border-white/10">
+          <div className="hidden md:flex items-stretch gap-4">
             {snapshot.map((s) => (
               <div key={s.label} className="text-right">
                 <div className="text-[9px] uppercase tracking-wider text-white/40">{s.label}</div>
@@ -524,51 +492,8 @@ function IntelHero({
             ))}
           </div>
         )}
-
-        <button
-          type="button"
-          onClick={onRefresh}
-          disabled={loading || refreshing}
-          className="flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-2 rounded-md border border-white/10 hover:bg-white/[0.06] disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-[12px] text-white/70"
-          title="Refresh: bypass cache"
-          data-testid="manager-page-refresh"
-        >
-          <RefreshCw className={cn("w-3.5 h-3.5", refreshing && "animate-spin")} />
-          <span className="hidden sm:inline">Refresh</span>
-        </button>
       </div>
-
-      {/* Header chips — kept subtle since the snapshot above carries the key facts. */}
-      {badges.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 mt-3">
-          {badges.map((b, i) => (
-            <Badge
-              key={`${b}-${i}`}
-              variant="outline"
-              className="text-[10px] font-medium border-white/10 text-white/55"
-            >
-              {b}
-            </Badge>
-          ))}
-        </div>
-      )}
     </div>
-  );
-}
-
-function ConfidenceBadge({ level, basis }: { level: Rating3; basis: string }) {
-  const tone =
-    level === "High"
-      ? "text-emerald-300 border-emerald-500/40"
-      : level === "Medium"
-      ? "text-amber-300 border-amber-500/40"
-      : "text-white/55 border-white/15";
-  return (
-    <span className="inline-flex items-center gap-1" title={basis}>
-      <Badge variant="outline" className={cn("text-[10px] font-bold", tone)}>
-        Confidence: {level}
-      </Badge>
-    </span>
   );
 }
 
@@ -602,101 +527,6 @@ function ErrorState({ message, onRetry }: { message: string; onRetry: () => void
         </button>
       </div>
     </div>
-  );
-}
-
-const ARCHETYPE_ICONS: Record<string, LucideIcon> = {
-  rebuilder: Sprout,
-  contender: Trophy,
-  trader: Repeat,
-  "waiver-grinder": Waves,
-  "qb-collector": Crown,
-  "prospect-chaser": Sparkles,
-  hoarder: Layers,
-  "value-shark": TrendingUp,
-  ghost: Ghost,
-  balanced: Scale,
-};
-
-function ManagerReadCard({
-  archetype,
-  managerRead,
-  takeaway,
-}: {
-  archetype?: { key: string; label: string; blurb: string; why?: string };
-  managerRead: string;
-  takeaway?: string;
-}) {
-  const Icon = (archetype && ARCHETYPE_ICONS[archetype.key]) || Sparkles;
-  return (
-    <div className="rounded-xl border border-[#d4af37]/35 bg-gradient-to-br from-[#d4af37]/[0.10] to-transparent p-5 sm:p-6">
-      <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-[#d4af37] mb-3">
-        <Sparkles className="w-3.5 h-3.5" />
-        <span>Manager Read</span>
-      </div>
-
-      {archetype && (
-        <div className="flex items-start gap-3 mb-3">
-          <span className="w-11 h-11 rounded-lg bg-[#d4af37]/15 flex items-center justify-center flex-shrink-0">
-            <Icon className="w-5 h-5 text-[#d4af37]" />
-          </span>
-          <div className="min-w-0">
-            <div className="text-[22px] font-extrabold text-white leading-tight tracking-tight">
-              {archetype.label}
-            </div>
-            <div className="text-[12.5px] text-white/55 leading-snug">{archetype.blurb}</div>
-            {archetype.why && <ArchetypeWhy why={archetype.why} />}
-          </div>
-        </div>
-      )}
-
-      <p className="text-[14px] text-white/85 leading-relaxed">{managerRead}</p>
-
-      {takeaway && (
-        <div className="mt-4 pt-3 border-t border-[#d4af37]/20">
-          <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-[#d4af37] mb-1">
-            <Target className="w-3.5 h-3.5" />
-            <span>Actionable takeaway</span>
-          </div>
-          <p className="text-[13px] text-white/85 leading-relaxed">{takeaway}</p>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function ArchetypeWhy({ why }: { why: string }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div className="mt-1.5">
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#d4af37]/80 hover:text-[#d4af37] transition-colors"
-        data-testid="archetype-why-toggle"
-      >
-        <Info className="w-3 h-3" /> Why this archetype?
-      </button>
-      {open && <p className="text-[11.5px] text-white/60 mt-1 leading-relaxed">{why}</p>}
-    </div>
-  );
-}
-
-function KeyTendencies({ items }: { items: string[] }) {
-  return (
-    <ul className="space-y-2">
-      {items.map((t, i) => {
-        const idx = t.indexOf(": ");
-        const label = idx > 0 ? t.slice(0, idx) : null;
-        const detail = idx > 0 ? t.slice(idx + 2) : t;
-        return (
-          <li key={i} className="text-[13px] text-white/75 leading-relaxed">
-            {label && <span className="font-bold text-white">{label}: </span>}
-            {detail}
-          </li>
-        );
-      })}
-    </ul>
   );
 }
 
@@ -1763,6 +1593,82 @@ function ValueDonut({ title, data }: { title: string; data: Array<{ name: string
   );
 }
 
+// Cross-league variant: two donuts (dynasty + redraft) showing the manager's
+// average per-position value across all of their visible leagues this season.
+function CrossLeagueValueByPosition({
+  vbp,
+}: {
+  vbp: NonNullable<ManagerIntelPayload["crossLeague"]["valueByPosition"]>;
+}) {
+  const dynastyData = vbp.dynasty.map((p) => ({ name: p.position, value: p.value })).filter((d) => d.value > 0);
+  const redraftData = vbp.redraft.map((p) => ({ name: p.position, value: p.value })).filter((d) => d.value > 0);
+  if (dynastyData.length === 0 && redraftData.length === 0) return null;
+  return (
+    <SectionCard
+      title="Value by position"
+      icon={<TrendingUp className="w-3.5 h-3.5" />}
+      subtitle={`Avg per roster across ${vbp.leagueCount} ${vbp.leagueCount === 1 ? "league" : "leagues"}`}
+    >
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <ValueDonut title="Dynasty" data={dynastyData} />
+        <ValueDonut title="Win-Now" data={redraftData} />
+      </div>
+    </SectionCard>
+  );
+}
+
+// Managers who share the most of this user's active leagues, with avatar +
+// shared-league count.
+function TopLeaguemates({
+  mates,
+}: {
+  mates: NonNullable<ManagerIntelPayload["crossLeague"]["topLeaguemates"]>;
+}) {
+  return (
+    <SectionCard
+      title="Top leaguemates"
+      icon={<Users className="w-3.5 h-3.5" />}
+      subtitle="Most-shared managers across their active leagues"
+    >
+      <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        {mates.map((m) => {
+          const src = m.avatar
+            ? m.avatar.startsWith("http")
+              ? m.avatar
+              : `https://sleepercdn.com/avatars/thumbs/${m.avatar}`
+            : null;
+          const initial = (m.displayName || "?").charAt(0).toUpperCase();
+          return (
+            <li
+              key={m.ownerId}
+              className="flex items-center gap-2.5 rounded-md border border-white/8 bg-white/[0.02] px-3 py-2"
+            >
+              {src ? (
+                <img
+                  src={src}
+                  alt={m.displayName}
+                  className="w-8 h-8 rounded-full object-cover flex-shrink-0"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).style.display = "none";
+                  }}
+                />
+              ) : (
+                <span className="w-8 h-8 rounded-full bg-[#d4af37]/15 flex items-center justify-center text-[12px] font-bold text-[#d4af37] flex-shrink-0">
+                  {initial}
+                </span>
+              )}
+              <span className="text-[12.5px] font-semibold text-white truncate flex-1 min-w-0">{m.displayName}</span>
+              <span className="text-[11px] font-bold text-[#d4af37] tabular-nums flex-shrink-0">
+                {m.sharedLeagues} {m.sharedLeagues === 1 ? "league" : "leagues"}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    </SectionCard>
+  );
+}
+
 function StrengthsCard({
   title,
   subtitle,
@@ -1923,9 +1829,9 @@ function CareerFeatureCards({ career }: { career: CareerHistory }) {
 function CrossLeagueTab({ data }: { data: ManagerIntelPayload }) {
   const cl = data.crossLeague;
   const byPos = cl.mostRosteredByPosition;
+  const vbp = cl.valueByPosition;
+  const leaguemates = cl.topLeaguemates ?? [];
   const positionBias = cl.positionBias ?? [];
-  const ta = data.tradeApproach;
-  const managerRead = data.managerRead || ta.summary;
 
   // Activity breakdown + transaction history (moved here from the Activity tab),
   // covering all visible dynasty leagues.
@@ -1936,17 +1842,8 @@ function CrossLeagueTab({ data }: { data: ManagerIntelPayload }) {
 
   return (
     <div className="space-y-4">
-      {/* Manager Read hero (moved here from the Overview tab) */}
-      <ManagerReadCard archetype={data.archetype} managerRead={managerRead} takeaway={ta.actionableTakeaway} />
-
       {/* Featured all-time career stats */}
       {data.careerHistory?.available && <CareerFeatureCards career={data.careerHistory} />}
-
-      {data.keyTendencies && data.keyTendencies.length > 0 && (
-        <SectionCard title="Key tendencies" icon={<Target className="w-3.5 h-3.5" />}>
-          <KeyTendencies items={data.keyTendencies} />
-        </SectionCard>
-      )}
 
       {data.draftProfile?.available && (
         <SectionCard
@@ -1999,24 +1896,10 @@ function CrossLeagueTab({ data }: { data: ManagerIntelPayload }) {
         </SectionCard>
       )}
 
-      {/* Manager Tendencies — scannable two-column table (Tendency | Read) */}
-      {cl.managerTendencies && cl.managerTendencies.length > 0 && (
-        <SectionCard title="Manager tendencies" icon={<Target className="w-3.5 h-3.5" />}>
-          <div className="divide-y divide-white/[0.06]">
-            {cl.managerTendencies.map((t, i) => {
-              const idx = t.indexOf(": ");
-              const label = idx > 0 ? t.slice(0, idx) : t;
-              const read = idx > 0 ? t.slice(idx + 2) : null;
-              return (
-                <div key={i} className="grid grid-cols-[38%_62%] gap-3 py-2">
-                  <span className="text-[12.5px] font-bold text-white">{label}</span>
-                  {read && <span className="text-[12px] text-white/65 leading-snug">{read}</span>}
-                </div>
-              );
-            })}
-          </div>
-        </SectionCard>
-      )}
+      {/* Value by position — avg dynasty + redraft value per roster across leagues */}
+      {vbp && <CrossLeagueValueByPosition vbp={vbp} />}
+
+      {leaguemates.length > 0 && <TopLeaguemates mates={leaguemates} />}
 
       {/* Activity Breakdown — trade vs waiver share. */}
       {act && actTotal > 0 && (
@@ -2030,15 +1913,17 @@ function CrossLeagueTab({ data }: { data: ManagerIntelPayload }) {
       {act && (
         <SectionCard title={`Trade history (${act.tradeHistory?.length ?? 0})`} icon={<ArrowRightLeft className="w-3.5 h-3.5" />} collapsible>
           {act.tradeHistory && act.tradeHistory.length > 0 ? (
-            <div className="space-y-1.5 max-h-[440px] overflow-y-auto pr-1">
+            <div className="space-y-2 max-h-[440px] overflow-y-auto pr-1">
               {act.tradeHistory.map((t, i) => (
-                <TxnRow
+                <TradeRow
                   key={i}
                   date={t.date}
                   league={t.league}
-                  added={t.added}
-                  dropped={t.dropped}
-                  subtitle={t.partner ? `with ${t.partner}` : undefined}
+                  leagueType={t.leagueType}
+                  week={t.week}
+                  partner={t.partner}
+                  sent={t.dropped}
+                  received={t.added}
                 />
               ))}
             </div>
@@ -2238,6 +2123,77 @@ function TxnRow({
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// Expanded trade card for the Cross-League "Trade history" section: league +
+// type tag, week + partner, date, then Sent / Received columns with arrows.
+function TradeRow({
+  date,
+  league,
+  leagueType,
+  week,
+  partner,
+  sent,
+  received,
+}: {
+  date: string;
+  league: string;
+  leagueType?: string;
+  week?: number | null;
+  partner?: string;
+  sent: string[];
+  received: string[];
+}) {
+  const fmtDate = (iso: string) => {
+    try {
+      return new Date(iso).toLocaleDateString("en-US", { month: "numeric", day: "numeric", year: "numeric" });
+    } catch {
+      return "—";
+    }
+  };
+  const meta = [week != null ? `Week ${week}` : null, partner ? `with ${partner}` : null].filter(Boolean).join(" • ");
+  return (
+    <div className="rounded-md border border-white/8 bg-white/[0.02] px-3 py-2.5">
+      <div className="flex items-baseline gap-1.5">
+        <span className="text-[13px] font-semibold text-white truncate">{league}</span>
+        {leagueType && (
+          <span className="text-[9px] font-bold uppercase tracking-wider text-[#d4af37]/80 flex-shrink-0">
+            [{leagueType}]
+          </span>
+        )}
+      </div>
+      {meta && <div className="text-[11px] text-white/50 mt-0.5">{meta}</div>}
+      <div className="text-[10px] text-white/35 tabular-nums mt-0.5">{fmtDate(date)}</div>
+
+      {sent.length > 0 && (
+        <div className="mt-2">
+          <div className="text-[10px] font-bold uppercase tracking-wider text-rose-300/70 mb-0.5">Sent</div>
+          <ul className="space-y-0.5">
+            {sent.map((p, i) => (
+              <li key={i} className="flex items-center gap-1.5 text-[12.5px] text-white/60">
+                <span className="text-rose-300/70 flex-shrink-0">→</span>
+                <span className="truncate">{p}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {received.length > 0 && (
+        <div className="mt-1.5">
+          <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-300/70 mb-0.5">Received</div>
+          <ul className="space-y-0.5">
+            {received.map((p, i) => (
+              <li key={i} className="flex items-center gap-1.5 text-[12.5px] text-white/85">
+                <span className="text-emerald-300/70 flex-shrink-0">←</span>
+                <span className="truncate">{p}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }

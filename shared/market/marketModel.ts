@@ -35,6 +35,8 @@ export interface MarketInput {
   team?: string;
   value: number;
   age?: number;
+  /** Games played in the selected season (drives the Min GP filter). */
+  gamesPlayed?: number;
 }
 
 export interface MarketPlayer {
@@ -43,6 +45,8 @@ export interface MarketPlayer {
   position: MktPos;
   team?: string;
   age?: number;
+  /** Games played in the selected season (drives the Min GP filter). */
+  gamesPlayed?: number;
 
   marketValue: number;
   marketRank?: number;
@@ -92,6 +96,7 @@ export function buildMarketPlayers(
       position: r.pos as MktPos,
       team: r.team || undefined,
       age: r.age && r.age > 0 ? r.age : undefined,
+      gamesPlayed: r.gamesPlayed,
       marketValue: r.value,
       valueSource: sourceLabel,
       production: redraftBySleeperId[r.sleeperId] ?? 0,
@@ -141,6 +146,7 @@ export function buildMarketPlayers(
       position: p.position,
       team: p.team,
       age: p.age,
+      gamesPlayed: p.gamesPlayed,
       marketValue: p.marketValue,
       marketRank: marketRank.get(p.playerId),
       valueSource: p.valueSource,
@@ -203,6 +209,8 @@ export interface MarketFilters {
   position: "All" | MktPos;
   ageRange: AgeRange;
   minMarketValue: number;
+  /** Minimum games played in the selected season; 0 = no minimum. */
+  minGamesPlayed: number;
   search: string;
 }
 
@@ -210,6 +218,7 @@ export const DEFAULT_FILTERS: MarketFilters = {
   position: "All",
   ageRange: "All",
   minMarketValue: 0,
+  minGamesPlayed: 0,
   search: "",
 };
 
@@ -218,6 +227,7 @@ export function applyFilters(players: MarketPlayer[], f: MarketFilters): MarketP
   return players.filter((p) => {
     if (f.position !== "All" && p.position !== f.position) return false;
     if (p.marketValue < f.minMarketValue) return false;
+    if (f.minGamesPlayed > 0 && (p.gamesPlayed ?? 0) < f.minGamesPlayed) return false;
     if (q && !p.playerName.toLowerCase().includes(q)) return false;
     if (f.ageRange !== "All") {
       const age = p.age;

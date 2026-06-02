@@ -56,8 +56,8 @@ export function AgeCurveChart({ players }: { players: MarketPlayer[] }) {
   const positions = MARKET_POSITIONS.filter((pos) => pts.some((p) => p.position === pos));
 
   return (
-    <div className="h-[360px] w-full" data-testid="chart-age-curve">
-      <ResponsiveContainer width="100%" height="100%">
+    <div className="w-full" data-testid="chart-age-curve">
+      <ResponsiveContainer width="100%" aspect={2.31}>
         <ScatterChart margin={{ top: 10, right: 16, bottom: 28, left: 8 }}>
           <CartesianGrid strokeDasharray="3 3" stroke={PALETTE.grid} />
           <XAxis
@@ -73,7 +73,7 @@ export function AgeCurveChart({ players }: { players: MarketPlayer[] }) {
             <Label value="Dynasty Market Value →" angle={-90} position="insideLeft" offset={6} style={{ fill: PALETTE.label, fontSize: 11, fontWeight: 600, textAnchor: "middle" }} />
           </YAxis>
           <RechartsTooltip content={<AgeTooltip />} cursor={{ strokeDasharray: "3 3" }} />
-          <Legend wrapperStyle={{ fontSize: 11 }} />
+          <Legend verticalAlign="top" align="right" height={24} wrapperStyle={{ fontSize: 11 }} />
           {positions.map((pos) => (
             <Scatter
               key={pos}
