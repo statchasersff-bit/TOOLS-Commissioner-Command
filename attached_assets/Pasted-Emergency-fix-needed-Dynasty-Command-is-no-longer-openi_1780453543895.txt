@@ -1,0 +1,132 @@
+Emergency fix needed. Dynasty Command is no longer opening because the global auth/session check is blocked by CORS.
+
+Current error:
+
+Access to fetch at `https://dynasty-command.replit.app/api/sc-auth/me` from origin `https://statchasers.com` has been blocked by CORS policy because no `Access-Control-Allow-Origin` header is present.
+
+The frontend then logs:
+
+`[sc-auth] session check failed — token preserved, retry 1/5 TypeError: Failed to fetch`
+
+This is now a global backend/CORS issue, not an ADP-specific issue.
+
+Immediate priority:
+Restore app access first. Do not debug ADP, Trade Database, Value Finder, or analytics until `/api/sc-auth/me` works from `https://statchasers.com`.
+
+Tasks:
+
+1. Fix CORS globally in the Replit backend.
+   CORS middleware must be registered before:
+
+* auth middleware
+* admin middleware
+* analytics routes
+* API routes
+* error handlers
+* static file handlers if applicable
+
+2. Allowed origins must include:
+
+* `https://statchasers.com`
+* `https://www.statchasers.com`
+* `https://dynasty-command.replit.app`
+* local dev origins if used, such as `http://localhost:5173`, `http://localhost:3000`, or the Replit dev URL
+
+3. OPTIONS preflight requests must succeed before auth checks.
+   Do not require auth, cookies, admin secrets, or tokens for OPTIONS requests.
+
+4. Add this or equivalent near the very top of the server setup file:
+
+```js
+import cors from "cors";
+
+const allowedOrigins = new Set([
+  "https://statchasers.com",
+  "https://www.statchasers.com",
+  "https://dynasty-command.replit.app",
+  "http://localhost:5173",
+  "http://localhost:3000",
+]);
+
+app.use(cors({
+  origin(origin, callback) {
+    if (!origin || allowedOrigins.has(origin)) {
+      return callback(null, true);
+    }
+    return callback(new Error(`CORS blocked origin: ${origin}`));
+  },
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: [
+    "Content-Type",
+    "Authorization",
+    "X-Admin-Secret",
+    "X-Requested-With"
+  ],
+}));
+
+app.options("*", cors());
+```
+
+5. Confirm no route is manually overriding or omitting CORS headers.
+
+6. Confirm the global error handler also returns CORS headers.
+   A backend 500 should still include `Access-Control-Allow-Origin`, otherwise the browser hides the real error behind CORS.
+
+7. Fix `/api/sc-auth/me` specifically:
+
+* It must respond to OPTIONS successfully.
+* It must return JSON.
+* If unauthenticated, return 401 JSON with CORS headers.
+* If authenticated, return 200 JSON with CORS headers.
+* It must not crash if the token is missing, expired, or invalid.
+
+Expected unauthenticated response:
+
+```json
+{
+  "ok": false,
+  "authenticated": false
+}
+```
+
+8. Test directly after deployment:
+
+```bash
+curl -i -X OPTIONS "https://dynasty-command.replit.app/api/sc-auth/me" \
+  -H "Origin: https://statchasers.com" \
+  -H "Access-Control-Request-Method: GET" \
+  -H "Access-Control-Request-Headers: Content-Type,Authorization"
+```
+
+Expected response must include:
+
+```txt
+Access-Control-Allow-Origin: https://statchasers.com
+Access-Control-Allow-Credentials: true
+```
+
+Then test:
+
+```bash
+curl -i "https://dynasty-command.replit.app/api/sc-auth/me" \
+  -H "Origin: https://statchasers.com"
+```
+
+This should return JSON, not an HTML error page and not a CORS failure.
+
+9. Temporarily disable non-essential failing global calls until auth works:
+
+* `/api/admin/adp/crawl-network/progress`
+* `/api/analytics/collect`
+
+These should not block app startup.
+
+10. Rebuild and redeploy the frontend only after the backend CORS/auth issue is fixed.
+
+Success criteria:
+
+* Dynasty Command opens from `https://statchasers.com`.
+* `/api/sc-auth/me` no longer shows a CORS error.
+* Auth/session check either succeeds or gracefully returns unauthenticated JSON.
+* Trade Database, Value Finder, and ADP Explorer can load without global CORS failures.

@@ -62,6 +62,68 @@ async function freePort(port: number): Promise<void> {
 const app = express();
 const httpServer = createServer(app);
 
+// ── CORS ──────────────────────────────────────────────────────────────────────
+// MUST be registered before every other middleware (installVitals, session,
+// body-parser, auth, routes). This guarantees that:
+//   • OPTIONS preflights respond with 204 + CORS headers before auth runs.
+//   • Regular responses already carry the CORS headers even if a later
+//     middleware throws (the error handler applies cors again as a safety net).
+//
+// Allowed origins: hardcoded production domains + CORS_ORIGIN env var overrides
+// + any *.replit.dev / *.replit.app preview domain + localhost for dev.
+const BUILTIN_ORIGINS = [
+  "https://dynastycommandff.com",
+  "https://www.dynastycommandff.com",
+  "https://statchasers.com",
+  "https://www.statchasers.com",
+  "https://dynasty-command.pages.dev",
+  "https://dynasty-command.replit.app",
+];
+const CORS_ORIGINS = [
+  ...BUILTIN_ORIGINS,
+  ...(process.env.CORS_ORIGIN
+    ? process.env.CORS_ORIGIN.split(",").map((s) => s.trim())
+    : []),
+];
+
+const corsOptions: cors.CorsOptions = {
+  origin(origin, callback) {
+    // Allow requests with no origin (server-to-server, curl, Replit health checks)
+    if (!origin) return callback(null, true);
+    // Allow known production domains + Replit dev/preview subdomains + localhost
+    if (
+      CORS_ORIGINS.includes(origin) ||
+      /\.replit\.dev$/.test(origin) ||
+      /\.replit\.app$/.test(origin) ||
+      /^https?:\/\/localhost(:\d+)?$/.test(origin)
+    ) {
+      return callback(null, true);
+    }
+    // Unknown origin — no CORS headers, but don't throw/500
+    callback(null, false);
+  },
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: [
+    "Content-Type",
+    "Authorization",
+    "x-admin-secret",
+    "x-requested-with",
+  ],
+  maxAge: 86400,
+};
+
+// Pre-create one middleware instance so we can reuse it in the error handler.
+const corsMiddleware = cors(corsOptions);
+
+// 1. Global CORS headers on every response.
+app.use(corsMiddleware);
+
+// 2. Explicit OPTIONS responder — uses a RegExp path to avoid the
+//    path-to-regexp v8 wildcard syntax ("/{*path}" / "*") that crashes
+//    this version of Express. OPTIONS preflights never touch session/auth.
+app.options(/.*/, corsMiddleware);
+
 // Track in-flight requests as early as possible — registered before the session
 // and body middleware so a request that hangs *inside* that middleware (the
 // suspected pool-exhaustion failure mode) is still counted and surfaced.
@@ -115,59 +177,6 @@ app.get(["/health/db", "/api/health/db"], async (_req, res) => {
   const health = await checkDbHealth();
   res.status(health.connected ? 200 : 503).json({ ok: health.connected, ...health });
 });
-
-// CORS — always allow the production domains plus any additional origins
-// from CORS_ORIGIN env var. statchasers.com is included as a first-class
-// production origin (see TEMPORARY note in shared/appMode.ts — when the
-// temporary write-access promotion is reverted, statchasers.com should
-// still keep CORS for read-only features).
-const BUILTIN_ORIGINS = [
-  "https://dynastycommandff.com",
-  "https://www.dynastycommandff.com",
-  "https://statchasers.com",
-  "https://www.statchasers.com",
-  "https://dynasty-command.pages.dev",
-  "https://dynasty-command.replit.app",
-];
-const CORS_ORIGINS = [
-  ...BUILTIN_ORIGINS,
-  ...(process.env.CORS_ORIGIN
-    ? process.env.CORS_ORIGIN.split(",").map((s) => s.trim())
-    : []),
-];
-
-const corsOptions: cors.CorsOptions = {
-  origin(origin, callback) {
-    // Allow requests with no origin (server-to-server, curl, etc.)
-    if (!origin) return callback(null, true);
-    // Allow known origins + Replit dev/preview domains
-    if (
-      CORS_ORIGINS.includes(origin) ||
-      /\.replit\.dev$/.test(origin) ||
-      /\.replit\.app$/.test(origin) ||
-      /^https?:\/\/localhost(:\d+)?$/.test(origin)
-    ) {
-      return callback(null, true);
-    }
-    // Unknown origin — no CORS headers, but don't 500
-    callback(null, false);
-  },
-  credentials: true,
-  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-  // x-admin-secret is sent by the admin panel when the secret override
-  // field is filled in. Without it here, the browser preflight (OPTIONS)
-  // rejects the request even though the origin is allowed.
-  allowedHeaders: ["Content-Type", "Authorization", "x-admin-secret"],
-  maxAge: 86400,
-};
-
-// Apply CORS middleware globally. The cors package, with preflightContinue
-// defaulting to false, intercepts OPTIONS preflight requests and returns
-// 204 No Content (with the correct Allow headers) before any route handler
-// runs — so admin routes that call requireAdmin() never see OPTIONS requests.
-// No explicit app.options() handler is needed (and bare "*" breaks on the
-// path-to-regexp v8+ that ships with this project).
-app.use(cors(corsOptions));
 
 declare module "http" {
   interface IncomingMessage {
@@ -334,7 +343,7 @@ process.on("uncaughtException", (err) => {
     });
   });
 
-  app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
+  app.use((err: any, req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
 
@@ -344,7 +353,14 @@ process.on("uncaughtException", (err) => {
       return next(err);
     }
 
-    return res.status(status).json({ message });
+    // Re-apply CORS headers on error responses. The global corsMiddleware at
+    // the top of the chain already set them for normal requests, but if an
+    // error short-circuits before the response is flushed the headers may be
+    // absent. A 500 without Access-Control-Allow-Origin is indistinguishable
+    // from a CORS failure in the browser and hides the real error message.
+    corsMiddleware(req, res, () => {
+      res.status(status).json({ message });
+    });
   });
 
   // importantly only setup vite in development and after
