@@ -1,2 +1,3 @@
 - [sc-auth/me hang root cause](sc-auth-me-hang.md) — /me used main db pool (saturated by crawlers); fixed to authDb + Promise.all.
 - [Express 5 wildcard crash](express5-wildcard.md) — never use "/{*path}" or bare "*" in app.use/app.options; use regex /.*/ or no-path form.
+- [Crash-loop on ETIMEDOUT/ENETUNREACH](crash-loop-network-errors.md) — isBenignConnectionError must cover all transient TCP codes or process.exit(1) kills server.

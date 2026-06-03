@@ -316,14 +316,44 @@ app.use((req, res, next) => {
   next();
 });
 
-// Benign connection-abort errors (browser disconnected mid-request) come from
-// raw-body/express.json() and are not server bugs — never log/act on them.
+// Transient TCP/network errors that do NOT corrupt process state and should
+// never cause a supervisor restart. These happen constantly in production:
+// clients disconnect, outbound HTTP times out, DNS blips, Replit network
+// maintenance, etc. Killing the server on these is strictly worse than logging
+// and continuing to serve the remaining healthy connections.
+//
+// Codes we intentionally do NOT list here (they DO warrant a restart):
+//   - EADDRINUSE — port conflict at bind time, can't serve anything
+//   - EACCES     — permission denied, structural problem
+const BENIGN_NETWORK_CODES = new Set([
+  "ECONNABORTED",  // client aborted mid-request (body parsers)
+  "ECONNRESET",    // client reset the TCP connection
+  "ECONNREFUSED",  // outbound request refused by remote
+  "ETIMEDOUT",     // outbound request / DB connect timed out
+  "ENETUNREACH",   // no route to host (transient Replit network blip)
+  "EHOSTUNREACH",  // same as above, different layer
+  "ENOTFOUND",     // DNS lookup failed (transient)
+  "EAI_AGAIN",     // DNS temporary failure
+  "EPIPE",         // write to closed socket (client gone)
+  "ENOENT",        // occasionally from tmp-file ops on aborted requests
+]);
+
 function isBenignConnectionError(e: unknown): boolean {
+  if (!(e instanceof Error)) return false;
+  const code = (e as NodeJS.ErrnoException).code;
+  if (code && BENIGN_NETWORK_CODES.has(code)) return true;
+  const msg = e.message ?? "";
   return (
-    e instanceof Error &&
-    ((e as any).code === "ECONNABORTED" ||
-      (e as any).type === "request.aborted" ||
-      e.message?.includes("request aborted"))
+    (e as any).type === "request.aborted" ||
+    msg.includes("request aborted") ||
+    msg.includes("socket hang up") ||
+    msg.includes("socket closed") ||
+    msg.includes("write after end") ||
+    msg.includes("read ECONNRESET") ||
+    msg.includes("connect ETIMEDOUT") ||
+    msg.includes("connect ENETUNREACH") ||
+    msg.includes("HPE_INVALID_CHUNK_EXTENSION") ||
+    msg.includes("aborted")
   );
 }
 
