@@ -1,0 +1,1122 @@
+Access to fetch at 'https://dynasty-command.replit.app/api/news/nfl' from origin 'https://statchasers.com' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource.Understand this error
+index-CVpYgN_S.js:111  GET https://dynasty-command.replit.app/api/news/nfl net::ERR_FAILED 502 (Bad Gateway)
+(anonymous) @ index-CVpYgN_S.js:111
+(anonymous) @ index-CVpYgN_S.js:111
+Hl @ index-CVpYgN_S.js:9
+ts @ index-CVpYgN_S.js:9
+Tg @ index-CVpYgN_S.js:9
+Ir @ index-CVpYgN_S.js:7
+Y3 @ index-CVpYgN_S.js:9
+fa @ index-CVpYgN_S.js:9
+Ng @ index-CVpYgN_S.js:9
+A @ index-CVpYgN_S.js:2
+M @ index-CVpYgN_S.js:2
+postMessage
+X @ index-CVpYgN_S.js:2
+te @ index-CVpYgN_S.js:2
+e.unstable_scheduleCallback @ index-CVpYgN_S.js:2
+Bg @ index-CVpYgN_S.js:9
+rn @ index-CVpYgN_S.js:9
+An @ index-CVpYgN_S.js:9
+P3 @ index-CVpYgN_S.js:7
+(anonymous) @ index-CVpYgN_S.js:111
+await in (anonymous)
+(anonymous) @ index-CVpYgN_S.js:111
+setTimeout
+(anonymous) @ index-CVpYgN_S.js:111
+await in (anonymous)
+(anonymous) @ index-CVpYgN_S.js:111
+setTimeout
+(anonymous) @ index-CVpYgN_S.js:111
+await in (anonymous)
+(anonymous) @ index-CVpYgN_S.js:111
+setTimeout
+(anonymous) @ index-CVpYgN_S.js:111
+await in (anonymous)
+(anonymous) @ index-CVpYgN_S.js:111
+setTimeout
+(anonymous) @ index-CVpYgN_S.js:111
+await in (anonymous)
+(anonymous) @ index-CVpYgN_S.js:111
+setTimeout
+(anonymous) @ index-CVpYgN_S.js:111
+await in (anonymous)
+(anonymous) @ index-CVpYgN_S.js:111
+Hl @ index-CVpYgN_S.js:9
+ts @ index-CVpYgN_S.js:9
+Tg @ index-CVpYgN_S.js:9
+Ir @ index-CVpYgN_S.js:7
+Y3 @ index-CVpYgN_S.js:9
+fa @ index-CVpYgN_S.js:9
+Ng @ index-CVpYgN_S.js:9
+A @ index-CVpYgN_S.js:2
+M @ index-CVpYgN_S.js:2
+postMessage
+X @ index-CVpYgN_S.js:2
+te @ index-CVpYgN_S.js:2
+e.unstable_scheduleCallback @ index-CVpYgN_S.js:2
+Bg @ index-CVpYgN_S.js:9
+rn @ index-CVpYgN_S.js:9
+An @ index-CVpYgN_S.js:9
+ni @ index-CVpYgN_S.js:9
+ai.render.Nd.render @ index-CVpYgN_S.js:9
+(anonymous) @ index-CVpYgN_S.js:247Understand this error
+/dynasty-command/launch/draft/adp-explorer:1 Access to fetch at 'https://dynasty-command.replit.app/api/analytics/collect' from origin 'https://statchasers.com' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource.Understand this error
+index-CVpYgN_S.js:9  POST https://dynasty-command.replit.app/api/analytics/collect net::ERR_FAILED
+Ci @ index-CVpYgN_S.js:9
+g_ @ index-CVpYgN_S.js:9
+(anonymous) @ index-CVpYgN_S.js:247
+Hl @ index-CVpYgN_S.js:9
+ts @ index-CVpYgN_S.js:9
+Tg @ index-CVpYgN_S.js:9
+Ir @ index-CVpYgN_S.js:7
+Y3 @ index-CVpYgN_S.js:9
+fa @ index-CVpYgN_S.js:9
+Ng @ index-CVpYgN_S.js:9
+A @ index-CVpYgN_S.js:2
+M @ index-CVpYgN_S.js:2
+postMessage
+X @ index-CVpYgN_S.js:2
+te @ index-CVpYgN_S.js:2
+e.unstable_scheduleCallback @ index-CVpYgN_S.js:2
+Bg @ index-CVpYgN_S.js:9
+rn @ index-CVpYgN_S.js:9
+An @ index-CVpYgN_S.js:9
+P3 @ index-CVpYgN_S.js:7
+(anonymous) @ index-CVpYgN_S.js:111
+await in (anonymous)
+(anonymous) @ index-CVpYgN_S.js:111
+setTimeout
+(anonymous) @ index-CVpYgN_S.js:111
+await in (anonymous)
+(anonymous) @ index-CVpYgN_S.js:111
+setTimeout
+(anonymous) @ index-CVpYgN_S.js:111
+await in (anonymous)
+(anonymous) @ index-CVpYgN_S.js:111
+setTimeout
+(anonymous) @ index-CVpYgN_S.js:111
+await in (anonymous)
+(anonymous) @ index-CVpYgN_S.js:111
+setTimeout
+(anonymous) @ index-CVpYgN_S.js:111
+await in (anonymous)
+(anonymous) @ index-CVpYgN_S.js:111
+setTimeout
+(anonymous) @ index-CVpYgN_S.js:111
+await in (anonymous)
+(anonymous) @ index-CVpYgN_S.js:111
+Hl @ index-CVpYgN_S.js:9
+ts @ index-CVpYgN_S.js:9
+Tg @ index-CVpYgN_S.js:9
+Ir @ index-CVpYgN_S.js:7
+Y3 @ index-CVpYgN_S.js:9
+fa @ index-CVpYgN_S.js:9
+Ng @ index-CVpYgN_S.js:9
+A @ index-CVpYgN_S.js:2
+M @ index-CVpYgN_S.js:2
+postMessage
+X @ index-CVpYgN_S.js:2
+te @ index-CVpYgN_S.js:2
+e.unstable_scheduleCallback @ index-CVpYgN_S.js:2
+Bg @ index-CVpYgN_S.js:9
+rn @ index-CVpYgN_S.js:9
+An @ index-CVpYgN_S.js:9
+ni @ index-CVpYgN_S.js:9
+ai.render.Nd.render @ index-CVpYgN_S.js:9
+(anonymous) @ index-CVpYgN_S.js:247Understand this error
+/dynasty-command/launch/draft/adp-explorer:1 Access to fetch at 'https://dynasty-command.replit.app/api/analytics/collect' from origin 'https://statchasers.com' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource.Understand this error
+index-CVpYgN_S.js:9  POST https://dynasty-command.replit.app/api/analytics/collect net::ERR_FAILED
+Ci @ index-CVpYgN_S.js:9
+g_ @ index-CVpYgN_S.js:9
+(anonymous) @ index-CVpYgN_S.js:247
+Hl @ index-CVpYgN_S.js:9
+ts @ index-CVpYgN_S.js:9
+Y3 @ index-CVpYgN_S.js:9
+fa @ index-CVpYgN_S.js:9
+Tg @ index-CVpYgN_S.js:9
+Ir @ index-CVpYgN_S.js:7
+Y3 @ index-CVpYgN_S.js:9
+fa @ index-CVpYgN_S.js:9
+Ng @ index-CVpYgN_S.js:9
+A @ index-CVpYgN_S.js:2
+M @ index-CVpYgN_S.js:2
+postMessage
+X @ index-CVpYgN_S.js:2
+te @ index-CVpYgN_S.js:2
+e.unstable_scheduleCallback @ index-CVpYgN_S.js:2
+Bg @ index-CVpYgN_S.js:9
+rn @ index-CVpYgN_S.js:9
+An @ index-CVpYgN_S.js:9
+P3 @ index-CVpYgN_S.js:7
+(anonymous) @ index-CVpYgN_S.js:111
+await in (anonymous)
+(anonymous) @ index-CVpYgN_S.js:111
+setTimeout
+(anonymous) @ index-CVpYgN_S.js:111
+await in (anonymous)
+(anonymous) @ index-CVpYgN_S.js:111
+setTimeout
+(anonymous) @ index-CVpYgN_S.js:111
+await in (anonymous)
+(anonymous) @ index-CVpYgN_S.js:111
+setTimeout
+(anonymous) @ index-CVpYgN_S.js:111
+await in (anonymous)
+(anonymous) @ index-CVpYgN_S.js:111
+setTimeout
+(anonymous) @ index-CVpYgN_S.js:111
+await in (anonymous)
+(anonymous) @ index-CVpYgN_S.js:111
+setTimeout
+(anonymous) @ index-CVpYgN_S.js:111
+await in (anonymous)
+(anonymous) @ index-CVpYgN_S.js:111
+Hl @ index-CVpYgN_S.js:9
+ts @ index-CVpYgN_S.js:9
+Tg @ index-CVpYgN_S.js:9
+Ir @ index-CVpYgN_S.js:7
+Y3 @ index-CVpYgN_S.js:9
+fa @ index-CVpYgN_S.js:9
+Ng @ index-CVpYgN_S.js:9
+A @ index-CVpYgN_S.js:2
+M @ index-CVpYgN_S.js:2
+postMessage
+X @ index-CVpYgN_S.js:2
+te @ index-CVpYgN_S.js:2
+e.unstable_scheduleCallback @ index-CVpYgN_S.js:2
+Bg @ index-CVpYgN_S.js:9
+rn @ index-CVpYgN_S.js:9
+An @ index-CVpYgN_S.js:9
+ni @ index-CVpYgN_S.js:9
+ai.render.Nd.render @ index-CVpYgN_S.js:9
+(anonymous) @ index-CVpYgN_S.js:247Understand this error
+/dynasty-command/launch/draft/adp-explorer:1 Access to fetch at 'https://dynasty-command.replit.app/api/values/fantasycalc?format=sf' from origin 'https://statchasers.com' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource.Understand this error
+index-CVpYgN_S.js:9  GET https://dynasty-command.replit.app/api/values/fantasycalc?format=sf net::ERR_FAILED 502 (Bad Gateway)
+vx @ index-CVpYgN_S.js:9
+Sf @ index-CVpYgN_S.js:9
+(anonymous) @ index-CVpYgN_S.js:53
+Hl @ index-CVpYgN_S.js:9
+ts @ index-CVpYgN_S.js:9
+Tg @ index-CVpYgN_S.js:9
+Ir @ index-CVpYgN_S.js:7
+Y3 @ index-CVpYgN_S.js:9
+fa @ index-CVpYgN_S.js:9
+Ng @ index-CVpYgN_S.js:9
+A @ index-CVpYgN_S.js:2
+M @ index-CVpYgN_S.js:2
+postMessage
+X @ index-CVpYgN_S.js:2
+te @ index-CVpYgN_S.js:2
+e.unstable_scheduleCallback @ index-CVpYgN_S.js:2
+Bg @ index-CVpYgN_S.js:9
+rn @ index-CVpYgN_S.js:9
+An @ index-CVpYgN_S.js:9
+P3 @ index-CVpYgN_S.js:7
+(anonymous) @ index-CVpYgN_S.js:111
+await in (anonymous)
+(anonymous) @ index-CVpYgN_S.js:111
+setTimeout
+(anonymous) @ index-CVpYgN_S.js:111
+await in (anonymous)
+(anonymous) @ index-CVpYgN_S.js:111
+setTimeout
+(anonymous) @ index-CVpYgN_S.js:111
+await in (anonymous)
+(anonymous) @ index-CVpYgN_S.js:111
+setTimeout
+(anonymous) @ index-CVpYgN_S.js:111
+await in (anonymous)
+(anonymous) @ index-CVpYgN_S.js:111
+setTimeout
+(anonymous) @ index-CVpYgN_S.js:111
+await in (anonymous)
+(anonymous) @ index-CVpYgN_S.js:111
+setTimeout
+(anonymous) @ index-CVpYgN_S.js:111
+await in (anonymous)
+(anonymous) @ index-CVpYgN_S.js:111
+Hl @ index-CVpYgN_S.js:9
+ts @ index-CVpYgN_S.js:9
+Tg @ index-CVpYgN_S.js:9
+Ir @ index-CVpYgN_S.js:7
+Y3 @ index-CVpYgN_S.js:9
+fa @ index-CVpYgN_S.js:9
+Ng @ index-CVpYgN_S.js:9
+A @ index-CVpYgN_S.js:2
+M @ index-CVpYgN_S.js:2
+postMessage
+X @ index-CVpYgN_S.js:2
+te @ index-CVpYgN_S.js:2
+e.unstable_scheduleCallback @ index-CVpYgN_S.js:2
+Bg @ index-CVpYgN_S.js:9
+rn @ index-CVpYgN_S.js:9
+An @ index-CVpYgN_S.js:9
+ni @ index-CVpYgN_S.js:9
+ai.render.Nd.render @ index-CVpYgN_S.js:9
+(anonymous) @ index-CVpYgN_S.js:247Understand this error
+index-CVpYgN_S.js:9 [fantasycalc] dynasty fetch failed — using bundled snapshot TypeError: Failed to fetch
+    at vx (index-CVpYgN_S.js:9:278510)
+    at Sf (index-CVpYgN_S.js:9:278606)
+    at index-CVpYgN_S.js:53:5848
+    at Hl (index-CVpYgN_S.js:9:24477)
+    at ts (index-CVpYgN_S.js:9:42924)
+    at Tg (index-CVpYgN_S.js:9:36975)
+    at Ir (index-CVpYgN_S.js:7:3272)
+    at Y3 (index-CVpYgN_S.js:9:41733)
+    at fa (index-CVpYgN_S.js:9:40698)
+    at Ng (index-CVpYgN_S.js:9:35760)
+Sf @ index-CVpYgN_S.js:9
+await in Sf
+(anonymous) @ index-CVpYgN_S.js:53
+Hl @ index-CVpYgN_S.js:9
+ts @ index-CVpYgN_S.js:9
+Tg @ index-CVpYgN_S.js:9
+Ir @ index-CVpYgN_S.js:7
+Y3 @ index-CVpYgN_S.js:9
+fa @ index-CVpYgN_S.js:9
+Ng @ index-CVpYgN_S.js:9
+A @ index-CVpYgN_S.js:2
+M @ index-CVpYgN_S.js:2
+postMessage
+X @ index-CVpYgN_S.js:2
+te @ index-CVpYgN_S.js:2
+e.unstable_scheduleCallback @ index-CVpYgN_S.js:2
+Bg @ index-CVpYgN_S.js:9
+rn @ index-CVpYgN_S.js:9
+An @ index-CVpYgN_S.js:9
+P3 @ index-CVpYgN_S.js:7
+(anonymous) @ index-CVpYgN_S.js:111
+await in (anonymous)
+(anonymous) @ index-CVpYgN_S.js:111
+setTimeout
+(anonymous) @ index-CVpYgN_S.js:111
+await in (anonymous)
+(anonymous) @ index-CVpYgN_S.js:111
+setTimeout
+(anonymous) @ index-CVpYgN_S.js:111
+await in (anonymous)
+(anonymous) @ index-CVpYgN_S.js:111
+setTimeout
+(anonymous) @ index-CVpYgN_S.js:111
+await in (anonymous)
+(anonymous) @ index-CVpYgN_S.js:111
+setTimeout
+(anonymous) @ index-CVpYgN_S.js:111
+await in (anonymous)
+(anonymous) @ index-CVpYgN_S.js:111
+setTimeout
+(anonymous) @ index-CVpYgN_S.js:111
+await in (anonymous)
+(anonymous) @ index-CVpYgN_S.js:111
+Hl @ index-CVpYgN_S.js:9
+ts @ index-CVpYgN_S.js:9
+Tg @ index-CVpYgN_S.js:9
+Ir @ index-CVpYgN_S.js:7
+Y3 @ index-CVpYgN_S.js:9
+fa @ index-CVpYgN_S.js:9
+Ng @ index-CVpYgN_S.js:9
+A @ index-CVpYgN_S.js:2
+M @ index-CVpYgN_S.js:2
+postMessage
+X @ index-CVpYgN_S.js:2
+te @ index-CVpYgN_S.js:2
+e.unstable_scheduleCallback @ index-CVpYgN_S.js:2
+Bg @ index-CVpYgN_S.js:9
+rn @ index-CVpYgN_S.js:9
+An @ index-CVpYgN_S.js:9
+ni @ index-CVpYgN_S.js:9
+ai.render.Nd.render @ index-CVpYgN_S.js:9
+(anonymous) @ index-CVpYgN_S.js:247Understand this warning
+/dynasty-command/launch/draft/adp-explorer:1 Access to fetch at 'https://dynasty-command.replit.app/api/values/fantasycalc/redraft?format=sf' from origin 'https://statchasers.com' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource.Understand this error
+index-CVpYgN_S.js:9  GET https://dynasty-command.replit.app/api/values/fantasycalc/redraft?format=sf net::ERR_FAILED 502 (Bad Gateway)
+vx @ index-CVpYgN_S.js:9
+Cf @ index-CVpYgN_S.js:9
+(anonymous) @ index-CVpYgN_S.js:53
+Hl @ index-CVpYgN_S.js:9
+ts @ index-CVpYgN_S.js:9
+Tg @ index-CVpYgN_S.js:9
+Ir @ index-CVpYgN_S.js:7
+Y3 @ index-CVpYgN_S.js:9
+fa @ index-CVpYgN_S.js:9
+Ng @ index-CVpYgN_S.js:9
+A @ index-CVpYgN_S.js:2
+M @ index-CVpYgN_S.js:2
+postMessage
+X @ index-CVpYgN_S.js:2
+te @ index-CVpYgN_S.js:2
+e.unstable_scheduleCallback @ index-CVpYgN_S.js:2
+Bg @ index-CVpYgN_S.js:9
+rn @ index-CVpYgN_S.js:9
+An @ index-CVpYgN_S.js:9
+P3 @ index-CVpYgN_S.js:7
+(anonymous) @ index-CVpYgN_S.js:111
+await in (anonymous)
+(anonymous) @ index-CVpYgN_S.js:111
+setTimeout
+(anonymous) @ index-CVpYgN_S.js:111
+await in (anonymous)
+(anonymous) @ index-CVpYgN_S.js:111
+setTimeout
+(anonymous) @ index-CVpYgN_S.js:111
+await in (anonymous)
+(anonymous) @ index-CVpYgN_S.js:111
+setTimeout
+(anonymous) @ index-CVpYgN_S.js:111
+await in (anonymous)
+(anonymous) @ index-CVpYgN_S.js:111
+setTimeout
+(anonymous) @ index-CVpYgN_S.js:111
+await in (anonymous)
+(anonymous) @ index-CVpYgN_S.js:111
+setTimeout
+(anonymous) @ index-CVpYgN_S.js:111
+await in (anonymous)
+(anonymous) @ index-CVpYgN_S.js:111
+Hl @ index-CVpYgN_S.js:9
+ts @ index-CVpYgN_S.js:9
+Tg @ index-CVpYgN_S.js:9
+Ir @ index-CVpYgN_S.js:7
+Y3 @ index-CVpYgN_S.js:9
+fa @ index-CVpYgN_S.js:9
+Ng @ index-CVpYgN_S.js:9
+A @ index-CVpYgN_S.js:2
+M @ index-CVpYgN_S.js:2
+postMessage
+X @ index-CVpYgN_S.js:2
+te @ index-CVpYgN_S.js:2
+e.unstable_scheduleCallback @ index-CVpYgN_S.js:2
+Bg @ index-CVpYgN_S.js:9
+rn @ index-CVpYgN_S.js:9
+An @ index-CVpYgN_S.js:9
+ni @ index-CVpYgN_S.js:9
+ai.render.Nd.render @ index-CVpYgN_S.js:9
+(anonymous) @ index-CVpYgN_S.js:247Understand this error
+index-CVpYgN_S.js:9 [fantasycalc] redraft fetch failed — using bundled snapshot TypeError: Failed to fetch
+    at vx (index-CVpYgN_S.js:9:278510)
+    at Cf (index-CVpYgN_S.js:9:278929)
+    at index-CVpYgN_S.js:53:5873
+    at Hl (index-CVpYgN_S.js:9:24477)
+    at ts (index-CVpYgN_S.js:9:42924)
+    at Tg (index-CVpYgN_S.js:9:36975)
+    at Ir (index-CVpYgN_S.js:7:3272)
+    at Y3 (index-CVpYgN_S.js:9:41733)
+    at fa (index-CVpYgN_S.js:9:40698)
+    at Ng (index-CVpYgN_S.js:9:35760)
+Cf @ index-CVpYgN_S.js:9
+await in Cf
+(anonymous) @ index-CVpYgN_S.js:53
+Hl @ index-CVpYgN_S.js:9
+ts @ index-CVpYgN_S.js:9
+Tg @ index-CVpYgN_S.js:9
+Ir @ index-CVpYgN_S.js:7
+Y3 @ index-CVpYgN_S.js:9
+fa @ index-CVpYgN_S.js:9
+Ng @ index-CVpYgN_S.js:9
+A @ index-CVpYgN_S.js:2
+M @ index-CVpYgN_S.js:2
+postMessage
+X @ index-CVpYgN_S.js:2
+te @ index-CVpYgN_S.js:2
+e.unstable_scheduleCallback @ index-CVpYgN_S.js:2
+Bg @ index-CVpYgN_S.js:9
+rn @ index-CVpYgN_S.js:9
+An @ index-CVpYgN_S.js:9
+P3 @ index-CVpYgN_S.js:7
+(anonymous) @ index-CVpYgN_S.js:111
+await in (anonymous)
+(anonymous) @ index-CVpYgN_S.js:111
+setTimeout
+(anonymous) @ index-CVpYgN_S.js:111
+await in (anonymous)
+(anonymous) @ index-CVpYgN_S.js:111
+setTimeout
+(anonymous) @ index-CVpYgN_S.js:111
+await in (anonymous)
+(anonymous) @ index-CVpYgN_S.js:111
+setTimeout
+(anonymous) @ index-CVpYgN_S.js:111
+await in (anonymous)
+(anonymous) @ index-CVpYgN_S.js:111
+setTimeout
+(anonymous) @ index-CVpYgN_S.js:111
+await in (anonymous)
+(anonymous) @ index-CVpYgN_S.js:111
+setTimeout
+(anonymous) @ index-CVpYgN_S.js:111
+await in (anonymous)
+(anonymous) @ index-CVpYgN_S.js:111
+Hl @ index-CVpYgN_S.js:9
+ts @ index-CVpYgN_S.js:9
+Tg @ index-CVpYgN_S.js:9
+Ir @ index-CVpYgN_S.js:7
+Y3 @ index-CVpYgN_S.js:9
+fa @ index-CVpYgN_S.js:9
+Ng @ index-CVpYgN_S.js:9
+A @ index-CVpYgN_S.js:2
+M @ index-CVpYgN_S.js:2
+postMessage
+X @ index-CVpYgN_S.js:2
+te @ index-CVpYgN_S.js:2
+e.unstable_scheduleCallback @ index-CVpYgN_S.js:2
+Bg @ index-CVpYgN_S.js:9
+rn @ index-CVpYgN_S.js:9
+An @ index-CVpYgN_S.js:9
+ni @ index-CVpYgN_S.js:9
+ai.render.Nd.render @ index-CVpYgN_S.js:9
+(anonymous) @ index-CVpYgN_S.js:247Understand this warning
+/dynasty-command/launch/draft/adp-explorer:1 Access to fetch at 'https://dynasty-command.replit.app/api/values/custom/resolved' from origin 'https://statchasers.com' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource.Understand this error
+index-CVpYgN_S.js:9  GET https://dynasty-command.replit.app/api/values/custom/resolved net::ERR_FAILED
+xa @ index-CVpYgN_S.js:9
+(anonymous) @ index-CVpYgN_S.js:53
+(anonymous) @ index-CVpYgN_S.js:53
+Hl @ index-CVpYgN_S.js:9
+ts @ index-CVpYgN_S.js:9
+Tg @ index-CVpYgN_S.js:9
+Ir @ index-CVpYgN_S.js:7
+Y3 @ index-CVpYgN_S.js:9
+fa @ index-CVpYgN_S.js:9
+Ng @ index-CVpYgN_S.js:9
+A @ index-CVpYgN_S.js:2
+M @ index-CVpYgN_S.js:2
+postMessage
+X @ index-CVpYgN_S.js:2
+te @ index-CVpYgN_S.js:2
+e.unstable_scheduleCallback @ index-CVpYgN_S.js:2
+Bg @ index-CVpYgN_S.js:9
+rn @ index-CVpYgN_S.js:9
+An @ index-CVpYgN_S.js:9
+P3 @ index-CVpYgN_S.js:7
+(anonymous) @ index-CVpYgN_S.js:111
+await in (anonymous)
+(anonymous) @ index-CVpYgN_S.js:111
+setTimeout
+(anonymous) @ index-CVpYgN_S.js:111
+await in (anonymous)
+(anonymous) @ index-CVpYgN_S.js:111
+setTimeout
+(anonymous) @ index-CVpYgN_S.js:111
+await in (anonymous)
+(anonymous) @ index-CVpYgN_S.js:111
+setTimeout
+(anonymous) @ index-CVpYgN_S.js:111
+await in (anonymous)
+(anonymous) @ index-CVpYgN_S.js:111
+setTimeout
+(anonymous) @ index-CVpYgN_S.js:111
+await in (anonymous)
+(anonymous) @ index-CVpYgN_S.js:111
+setTimeout
+(anonymous) @ index-CVpYgN_S.js:111
+await in (anonymous)
+(anonymous) @ index-CVpYgN_S.js:111
+Hl @ index-CVpYgN_S.js:9
+ts @ index-CVpYgN_S.js:9
+Tg @ index-CVpYgN_S.js:9
+Ir @ index-CVpYgN_S.js:7
+Y3 @ index-CVpYgN_S.js:9
+fa @ index-CVpYgN_S.js:9
+Ng @ index-CVpYgN_S.js:9
+A @ index-CVpYgN_S.js:2
+M @ index-CVpYgN_S.js:2
+postMessage
+X @ index-CVpYgN_S.js:2
+te @ index-CVpYgN_S.js:2
+e.unstable_scheduleCallback @ index-CVpYgN_S.js:2
+Bg @ index-CVpYgN_S.js:9
+rn @ index-CVpYgN_S.js:9
+An @ index-CVpYgN_S.js:9
+ni @ index-CVpYgN_S.js:9
+ai.render.Nd.render @ index-CVpYgN_S.js:9
+(anonymous) @ index-CVpYgN_S.js:247Understand this error
+index-CVpYgN_S.js:53 [ValueModel] resolve custom values failed: TypeError: Failed to fetch
+    at xa (index-CVpYgN_S.js:9:280375)
+    at index-CVpYgN_S.js:53:5367
+    at index-CVpYgN_S.js:53:5607
+    at Hl (index-CVpYgN_S.js:9:24477)
+    at ts (index-CVpYgN_S.js:9:42924)
+    at Tg (index-CVpYgN_S.js:9:36975)
+    at Ir (index-CVpYgN_S.js:7:3272)
+    at Y3 (index-CVpYgN_S.js:9:41733)
+    at fa (index-CVpYgN_S.js:9:40698)
+    at Ng (index-CVpYgN_S.js:9:35760)
+(anonymous) @ index-CVpYgN_S.js:53
+await in (anonymous)
+(anonymous) @ index-CVpYgN_S.js:53
+Hl @ index-CVpYgN_S.js:9
+ts @ index-CVpYgN_S.js:9
+Tg @ index-CVpYgN_S.js:9
+Ir @ index-CVpYgN_S.js:7
+Y3 @ index-CVpYgN_S.js:9
+fa @ index-CVpYgN_S.js:9
+Ng @ index-CVpYgN_S.js:9
+A @ index-CVpYgN_S.js:2
+M @ index-CVpYgN_S.js:2
+postMessage
+X @ index-CVpYgN_S.js:2
+te @ index-CVpYgN_S.js:2
+e.unstable_scheduleCallback @ index-CVpYgN_S.js:2
+Bg @ index-CVpYgN_S.js:9
+rn @ index-CVpYgN_S.js:9
+An @ index-CVpYgN_S.js:9
+P3 @ index-CVpYgN_S.js:7
+(anonymous) @ index-CVpYgN_S.js:111
+await in (anonymous)
+(anonymous) @ index-CVpYgN_S.js:111
+setTimeout
+(anonymous) @ index-CVpYgN_S.js:111
+await in (anonymous)
+(anonymous) @ index-CVpYgN_S.js:111
+setTimeout
+(anonymous) @ index-CVpYgN_S.js:111
+await in (anonymous)
+(anonymous) @ index-CVpYgN_S.js:111
+setTimeout
+(anonymous) @ index-CVpYgN_S.js:111
+await in (anonymous)
+(anonymous) @ index-CVpYgN_S.js:111
+setTimeout
+(anonymous) @ index-CVpYgN_S.js:111
+await in (anonymous)
+(anonymous) @ index-CVpYgN_S.js:111
+setTimeout
+(anonymous) @ index-CVpYgN_S.js:111
+await in (anonymous)
+(anonymous) @ index-CVpYgN_S.js:111
+Hl @ index-CVpYgN_S.js:9
+ts @ index-CVpYgN_S.js:9
+Tg @ index-CVpYgN_S.js:9
+Ir @ index-CVpYgN_S.js:7
+Y3 @ index-CVpYgN_S.js:9
+fa @ index-CVpYgN_S.js:9
+Ng @ index-CVpYgN_S.js:9
+A @ index-CVpYgN_S.js:2
+M @ index-CVpYgN_S.js:2
+postMessage
+X @ index-CVpYgN_S.js:2
+te @ index-CVpYgN_S.js:2
+e.unstable_scheduleCallback @ index-CVpYgN_S.js:2
+Bg @ index-CVpYgN_S.js:9
+rn @ index-CVpYgN_S.js:9
+An @ index-CVpYgN_S.js:9
+ni @ index-CVpYgN_S.js:9
+ai.render.Nd.render @ index-CVpYgN_S.js:9
+(anonymous) @ index-CVpYgN_S.js:247Understand this warning
+DraftCommand-CYw-oakv.js:5 [ADP] fetch URL: https://dynasty-command.replit.app/api/adp?season=2026&draftType=startup&draftFormat=snake&rookieMode=direct&leagueMode=dynasty&scoring=ppr&superflex=yes&tePremium=yes&bestBall=no&teams=12&startDate=2026-05-04&endDate=2026-06-03
+/dynasty-command/launch/draft/adp-explorer:1 Access to fetch at 'https://dynasty-command.replit.app/api/adp/stats' from origin 'https://statchasers.com' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource.Understand this error
+DraftCommand-CYw-oakv.js:5  GET https://dynasty-command.replit.app/api/adp/stats net::ERR_FAILED 502 (Bad Gateway)
+(anonymous) @ DraftCommand-CYw-oakv.js:5
+Hl @ index-CVpYgN_S.js:9
+ts @ index-CVpYgN_S.js:9
+Tg @ index-CVpYgN_S.js:9
+Ir @ index-CVpYgN_S.js:7
+Y3 @ index-CVpYgN_S.js:9
+fa @ index-CVpYgN_S.js:9
+Ng @ index-CVpYgN_S.js:9
+A @ index-CVpYgN_S.js:2
+M @ index-CVpYgN_S.js:2
+postMessage
+X @ index-CVpYgN_S.js:2
+M @ index-CVpYgN_S.js:2
+postMessage
+X @ index-CVpYgN_S.js:2
+M @ index-CVpYgN_S.js:2
+postMessage
+X @ index-CVpYgN_S.js:2
+M @ index-CVpYgN_S.js:2
+postMessage
+X @ index-CVpYgN_S.js:2
+te @ index-CVpYgN_S.js:2
+e.unstable_scheduleCallback @ index-CVpYgN_S.js:2
+Bg @ index-CVpYgN_S.js:9
+rn @ index-CVpYgN_S.js:9
+Og @ index-CVpYgN_S.js:9
+X3 @ index-CVpYgN_S.js:9
+Promise.then
+(anonymous) @ index-CVpYgN_S.js:9
+Rg @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Y3 @ index-CVpYgN_S.js:9
+fa @ index-CVpYgN_S.js:9
+Tg @ index-CVpYgN_S.js:9
+Ir @ index-CVpYgN_S.js:7
+Y3 @ index-CVpYgN_S.js:9
+fa @ index-CVpYgN_S.js:9
+Ng @ index-CVpYgN_S.js:9
+A @ index-CVpYgN_S.js:2
+M @ index-CVpYgN_S.js:2
+postMessage
+X @ index-CVpYgN_S.js:2
+te @ index-CVpYgN_S.js:2
+e.unstable_scheduleCallback @ index-CVpYgN_S.js:2
+Bg @ index-CVpYgN_S.js:9
+rn @ index-CVpYgN_S.js:9
+An @ index-CVpYgN_S.js:9
+P3 @ index-CVpYgN_S.js:7
+(anonymous) @ index-CVpYgN_S.js:111
+await in (anonymous)
+(anonymous) @ index-CVpYgN_S.js:111
+setTimeout
+(anonymous) @ index-CVpYgN_S.js:111
+await in (anonymous)
+(anonymous) @ index-CVpYgN_S.js:111
+setTimeout
+(anonymous) @ index-CVpYgN_S.js:111
+await in (anonymous)
+(anonymous) @ index-CVpYgN_S.js:111
+setTimeout
+(anonymous) @ index-CVpYgN_S.js:111
+await in (anonymous)
+(anonymous) @ index-CVpYgN_S.js:111
+setTimeout
+(anonymous) @ index-CVpYgN_S.js:111
+await in (anonymous)
+(anonymous) @ index-CVpYgN_S.js:111
+setTimeout
+(anonymous) @ index-CVpYgN_S.js:111
+await in (anonymous)
+(anonymous) @ index-CVpYgN_S.js:111
+Hl @ index-CVpYgN_S.js:9
+ts @ index-CVpYgN_S.js:9
+Tg @ index-CVpYgN_S.js:9
+Ir @ index-CVpYgN_S.js:7
+Y3 @ index-CVpYgN_S.js:9
+fa @ index-CVpYgN_S.js:9
+Ng @ index-CVpYgN_S.js:9
+A @ index-CVpYgN_S.js:2
+M @ index-CVpYgN_S.js:2
+postMessage
+X @ index-CVpYgN_S.js:2
+te @ index-CVpYgN_S.js:2
+e.unstable_scheduleCallback @ index-CVpYgN_S.js:2
+Bg @ index-CVpYgN_S.js:9
+rn @ index-CVpYgN_S.js:9
+An @ index-CVpYgN_S.js:9
+ni @ index-CVpYgN_S.js:9
+ai.render.Nd.render @ index-CVpYgN_S.js:9
+(anonymous) @ index-CVpYgN_S.js:247Understand this error
+/dynasty-command/launch/draft/adp-explorer:1 Access to fetch at 'https://dynasty-command.replit.app/api/adp?season=2026&draftType=startup&draftFormat=snake&rookieMode=direct&leagueMode=dynasty&scoring=ppr&superflex=yes&tePremium=yes&bestBall=no&teams=12&startDate=2026-05-04&endDate=2026-06-03' from origin 'https://statchasers.com' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource.Understand this error
+DraftCommand-CYw-oakv.js:5  GET https://dynasty-command.replit.app/api/adp?season=2026&draftType=startup&draftFormat=snake&rookieMode=direct&leagueMode=dynasty&scoring=ppr&superflex=yes&tePremium=yes&bestBall=no&teams=12&startDate=2026-05-04&endDate=2026-06-03 net::ERR_FAILED 502 (Bad Gateway)
+(anonymous) @ DraftCommand-CYw-oakv.js:5
+Hl @ index-CVpYgN_S.js:9
+ts @ index-CVpYgN_S.js:9
+Tg @ index-CVpYgN_S.js:9
+Ir @ index-CVpYgN_S.js:7
+Y3 @ index-CVpYgN_S.js:9
+fa @ index-CVpYgN_S.js:9
+Ng @ index-CVpYgN_S.js:9
+A @ index-CVpYgN_S.js:2
+M @ index-CVpYgN_S.js:2
+postMessage
+X @ index-CVpYgN_S.js:2
+M @ index-CVpYgN_S.js:2
+postMessage
+X @ index-CVpYgN_S.js:2
+M @ index-CVpYgN_S.js:2
+postMessage
+X @ index-CVpYgN_S.js:2
+M @ index-CVpYgN_S.js:2
+postMessage
+X @ index-CVpYgN_S.js:2
+te @ index-CVpYgN_S.js:2
+e.unstable_scheduleCallback @ index-CVpYgN_S.js:2
+Bg @ index-CVpYgN_S.js:9
+rn @ index-CVpYgN_S.js:9
+Og @ index-CVpYgN_S.js:9
+X3 @ index-CVpYgN_S.js:9
+Promise.then
+(anonymous) @ index-CVpYgN_S.js:9
+Rg @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Y3 @ index-CVpYgN_S.js:9
+fa @ index-CVpYgN_S.js:9
+Tg @ index-CVpYgN_S.js:9
+Ir @ index-CVpYgN_S.js:7
+Y3 @ index-CVpYgN_S.js:9
+fa @ index-CVpYgN_S.js:9
+Ng @ index-CVpYgN_S.js:9
+A @ index-CVpYgN_S.js:2
+M @ index-CVpYgN_S.js:2
+postMessage
+X @ index-CVpYgN_S.js:2
+te @ index-CVpYgN_S.js:2
+e.unstable_scheduleCallback @ index-CVpYgN_S.js:2
+Bg @ index-CVpYgN_S.js:9
+rn @ index-CVpYgN_S.js:9
+An @ index-CVpYgN_S.js:9
+P3 @ index-CVpYgN_S.js:7
+(anonymous) @ index-CVpYgN_S.js:111
+await in (anonymous)
+(anonymous) @ index-CVpYgN_S.js:111
+setTimeout
+(anonymous) @ index-CVpYgN_S.js:111
+await in (anonymous)
+(anonymous) @ index-CVpYgN_S.js:111
+setTimeout
+(anonymous) @ index-CVpYgN_S.js:111
+await in (anonymous)
+(anonymous) @ index-CVpYgN_S.js:111
+setTimeout
+(anonymous) @ index-CVpYgN_S.js:111
+await in (anonymous)
+(anonymous) @ index-CVpYgN_S.js:111
+setTimeout
+(anonymous) @ index-CVpYgN_S.js:111
+await in (anonymous)
+(anonymous) @ index-CVpYgN_S.js:111
+setTimeout
+(anonymous) @ index-CVpYgN_S.js:111
+await in (anonymous)
+(anonymous) @ index-CVpYgN_S.js:111
+Hl @ index-CVpYgN_S.js:9
+ts @ index-CVpYgN_S.js:9
+Tg @ index-CVpYgN_S.js:9
+Ir @ index-CVpYgN_S.js:7
+Y3 @ index-CVpYgN_S.js:9
+fa @ index-CVpYgN_S.js:9
+Ng @ index-CVpYgN_S.js:9
+A @ index-CVpYgN_S.js:2
+M @ index-CVpYgN_S.js:2
+postMessage
+X @ index-CVpYgN_S.js:2
+te @ index-CVpYgN_S.js:2
+e.unstable_scheduleCallback @ index-CVpYgN_S.js:2
+Bg @ index-CVpYgN_S.js:9
+rn @ index-CVpYgN_S.js:9
+An @ index-CVpYgN_S.js:9
+ni @ index-CVpYgN_S.js:9
+ai.render.Nd.render @ index-CVpYgN_S.js:9
+(anonymous) @ index-CVpYgN_S.js:247Understand this error
+DraftCommand-CYw-oakv.js:5 [DraftCommand] /api/adp fetch failed: TypeError: Failed to fetch
+    at DraftCommand-CYw-oakv.js:5:29726
+    at Hl (index-CVpYgN_S.js:9:24477)
+    at ts (index-CVpYgN_S.js:9:42924)
+    at Tg (index-CVpYgN_S.js:9:36975)
+    at Ir (index-CVpYgN_S.js:7:3272)
+    at Y3 (index-CVpYgN_S.js:9:41733)
+    at fa (index-CVpYgN_S.js:9:40698)
+    at Ng (index-CVpYgN_S.js:9:36079)
+    at A (index-CVpYgN_S.js:2:10359)
+    at MessagePort.M (index-CVpYgN_S.js:2:10722)
+(anonymous) @ DraftCommand-CYw-oakv.js:5
+Promise.catch
+(anonymous) @ DraftCommand-CYw-oakv.js:5
+Hl @ index-CVpYgN_S.js:9
+ts @ index-CVpYgN_S.js:9
+Tg @ index-CVpYgN_S.js:9
+Ir @ index-CVpYgN_S.js:7
+Y3 @ index-CVpYgN_S.js:9
+fa @ index-CVpYgN_S.js:9
+Ng @ index-CVpYgN_S.js:9
+A @ index-CVpYgN_S.js:2
+M @ index-CVpYgN_S.js:2
+postMessage
+X @ index-CVpYgN_S.js:2
+M @ index-CVpYgN_S.js:2
+postMessage
+X @ index-CVpYgN_S.js:2
+M @ index-CVpYgN_S.js:2
+postMessage
+X @ index-CVpYgN_S.js:2
+M @ index-CVpYgN_S.js:2
+postMessage
+X @ index-CVpYgN_S.js:2
+te @ index-CVpYgN_S.js:2
+e.unstable_scheduleCallback @ index-CVpYgN_S.js:2
+Bg @ index-CVpYgN_S.js:9
+rn @ index-CVpYgN_S.js:9
+Og @ index-CVpYgN_S.js:9
+X3 @ index-CVpYgN_S.js:9
+Promise.then
+(anonymous) @ index-CVpYgN_S.js:9
+Rg @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Tn @ index-CVpYgN_S.js:9
+_g @ index-CVpYgN_S.js:9
+Y3 @ index-CVpYgN_S.js:9
+fa @ index-CVpYgN_S.js:9
+Tg @ index-CVpYgN_S.js:9
+Ir @ index-CVpYgN_S.js:7
+Y3 @ index-CVpYgN_S.js:9
+fa @ index-CVpYgN_S.js:9
+Ng @ index-CVpYgN_S.js:9
+A @ index-CVpYgN_S.js:2
+M @ index-CVpYgN_S.js:2
+postMessage
+X @ index-CVpYgN_S.js:2
+te @ index-CVpYgN_S.js:2
+e.unstable_scheduleCallback @ index-CVpYgN_S.js:2
+Bg @ index-CVpYgN_S.js:9
+rn @ index-CVpYgN_S.js:9
+An @ index-CVpYgN_S.js:9
+P3 @ index-CVpYgN_S.js:7
+(anonymous) @ index-CVpYgN_S.js:111
+await in (anonymous)
+(anonymous) @ index-CVpYgN_S.js:111
+setTimeout
+(anonymous) @ index-CVpYgN_S.js:111
+await in (anonymous)
+(anonymous) @ index-CVpYgN_S.js:111
+setTimeout
+(anonymous) @ index-CVpYgN_S.js:111
+await in (anonymous)
+(anonymous) @ index-CVpYgN_S.js:111
+setTimeout
+(anonymous) @ index-CVpYgN_S.js:111
+await in (anonymous)
+(anonymous) @ index-CVpYgN_S.js:111
+setTimeout
+(anonymous) @ index-CVpYgN_S.js:111
+await in (anonymous)
+(anonymous) @ index-CVpYgN_S.js:111
+setTimeout
+(anonymous) @ index-CVpYgN_S.js:111
+await in (anonymous)
+(anonymous) @ index-CVpYgN_S.js:111
+Hl @ index-CVpYgN_S.js:9
+ts @ index-CVpYgN_S.js:9
+Tg @ index-CVpYgN_S.js:9
+Ir @ index-CVpYgN_S.js:7
+Y3 @ index-CVpYgN_S.js:9
+fa @ index-CVpYgN_S.js:9
+Ng @ index-CVpYgN_S.js:9
+A @ index-CVpYgN_S.js:2
+M @ index-CVpYgN_S.js:2
+postMessage
+X @ index-CVpYgN_S.js:2
+te @ index-CVpYgN_S.js:2
+e.unstable_scheduleCallback @ index-CVpYgN_S.js:2
+Bg @ index-CVpYgN_S.js:9
+rn @ index-CVpYgN_S.js:9
+An @ index-CVpYgN_S.js:9
+ni @ index-CVpYgN_S.js:9
+ai.render.Nd.render @ index-CVpYgN_S.js:9
+(anonymous) @ index-CVpYgN_S.js:247Understand this error
+/dynasty-command/launch/draft/adp-explorer:1 Access to fetch at 'https://dynasty-command.replit.app/api/adp?season=2026&draftType=startup&draftFormat=snake&rookieMode=direct&leagueMode=dynasty&scoring=ppr&superflex=yes&tePremium=yes&bestBall=no&teams=12&startDate=2026-04-20&endDate=2026-06-03' from origin 'https://statchasers.com' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource.Understand this error
+DraftCommand-CYw-oakv.js:5  GET https://dynasty-command.replit.app/api/adp?season=2026&draftType=startup&draftFormat=snake&rookieMode=direct&leagueMode=dynasty&scoring=ppr&superflex=yes&tePremium=yes&bestBall=no&teams=12&startDate=2026-04-20&endDate=2026-06-03 net::ERR_FAILED 502 (Bad Gateway)

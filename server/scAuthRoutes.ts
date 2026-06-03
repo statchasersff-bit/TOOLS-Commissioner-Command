@@ -243,7 +243,13 @@ export function registerScAuthRoutes(app: Express): void {
         req.session.destroy(() => {});
         return res.status(401).json({ error: "Session expired. Please log in again." });
       }
-      const sleeper = await getConnectedSleeper(userId);
+      // Run the three independent lookups in parallel — they all hit the
+      // dedicated authPool and have no ordering dependency on each other.
+      const [sleeper, subscription, preferences] = await Promise.all([
+        getConnectedSleeper(userId),
+        getSubscriptionStatusForUser(userId),
+        getPreferences(userId),
+      ]);
       const sleeperInfo = sleeper
         ? {
             username: sleeper.sleeperUsername,
@@ -254,7 +260,7 @@ export function registerScAuthRoutes(app: Express): void {
       // Surface app-mode and subscription so the client can hide write
       // controls preemptively. The backend still enforces these on every
       // mutating request — this is UX only.
-      let subscription = await getSubscriptionStatusForUser(userId);
+      let subscriptionResult = subscription;
       const appMode = getAppModeFromRequest(req);
 
       // Dev-only overrides — never applied in production. Mirror the
@@ -262,7 +268,7 @@ export function registerScAuthRoutes(app: Express): void {
       // the same "subscribed / connected" state the backend will honor.
       const devActive = anyDevOverrideActive();
       if (isDevRuntime() && isDevSubscriptionOverride()) {
-        subscription = { ...subscription, status: "active", plan: subscription.plan ?? "dev_override", active: true };
+        subscriptionResult = { ...subscriptionResult, status: "active", plan: subscriptionResult.plan ?? "dev_override", active: true };
       }
       const devOverrides = isDevRuntime()
         ? {
@@ -286,12 +292,12 @@ export function registerScAuthRoutes(app: Express): void {
           favoriteNflTeam: user.favoriteNflTeam ?? null,
           // Defensive: returns {} if the preferences column isn't migrated yet,
           // so /me never fails (which would log the user out).
-          preferences: await getPreferences(userId),
+          preferences,
         },
         sleeper: sleeperInfo,
         isAdmin: isAdminByEmail(user.email),
         appMode,
-        subscription,
+        subscription: subscriptionResult,
         devOverrides,
         // Present when auth succeeded via the JWT cookie but localStorage was
         // empty. The client uses this to restore sc_auth_token so subsequent

@@ -1,0 +1,58 @@
+[sc-auth] auth check started
+index-CVpYgN_S.js:111 [sc-auth] session check timed out — token preserved, retry 1/5 AbortError: signal is aborted without reason
+    at index-CVpYgN_S.js:111:5169
+(anonymous) @ index-CVpYgN_S.js:111
+await in (anonymous)
+(anonymous) @ index-CVpYgN_S.js:111
+Hl @ index-CVpYgN_S.js:9
+ts @ index-CVpYgN_S.js:9
+Tg @ index-CVpYgN_S.js:9
+Ir @ index-CVpYgN_S.js:7
+Y3 @ index-CVpYgN_S.js:9
+fa @ index-CVpYgN_S.js:9
+Ng @ index-CVpYgN_S.js:9
+A @ index-CVpYgN_S.js:2
+M @ index-CVpYgN_S.js:2
+postMessage
+X @ index-CVpYgN_S.js:2
+te @ index-CVpYgN_S.js:2
+e.unstable_scheduleCallback @ index-CVpYgN_S.js:2
+Bg @ index-CVpYgN_S.js:9
+rn @ index-CVpYgN_S.js:9
+An @ index-CVpYgN_S.js:9
+ni @ index-CVpYgN_S.js:9
+ai.render.Nd.render @ index-CVpYgN_S.js:9
+(anonymous) @ index-CVpYgN_S.js:247Understand this warning
+index-CVpYgN_S.js:111 [sc-auth] scheduling retry 1 in 5s
+index-CVpYgN_S.js:111 [sc-auth] auth check finished — status: loading
+index-CVpYgN_S.js:111 [sc-auth] auth check started
+index-CVpYgN_S.js:111 [sc-auth] session check timed out — token preserved, retry 2/5 AbortError: signal is aborted without reason
+    at index-CVpYgN_S.js:111:5169
+(anonymous) @ index-CVpYgN_S.js:111
+await in (anonymous)
+(anonymous) @ index-CVpYgN_S.js:111
+setTimeout
+(anonymous) @ index-CVpYgN_S.js:111
+await in (anonymous)
+(anonymous) @ index-CVpYgN_S.js:111
+Hl @ index-CVpYgN_S.js:9
+ts @ index-CVpYgN_S.js:9
+Tg @ index-CVpYgN_S.js:9
+Ir @ index-CVpYgN_S.js:7
+Y3 @ index-CVpYgN_S.js:9
+fa @ index-CVpYgN_S.js:9
+Ng @ index-CVpYgN_S.js:9
+A @ index-CVpYgN_S.js:2
+M @ index-CVpYgN_S.js:2
+postMessage
+X @ index-CVpYgN_S.js:2
+te @ index-CVpYgN_S.js:2
+e.unstable_scheduleCallback @ index-CVpYgN_S.js:2
+Bg @ index-CVpYgN_S.js:9
+rn @ index-CVpYgN_S.js:9
+An @ index-CVpYgN_S.js:9
+ni @ index-CVpYgN_S.js:9
+ai.render.Nd.render @ index-CVpYgN_S.js:9
+(anonymous) @ index-CVpYgN_S.js:247Understand this warning
+index-CVpYgN_S.js:111 [sc-auth] scheduling retry 2 in 10s
+index-CVpYgN_S.js:111 [sc-auth] auth check finished — status: loading

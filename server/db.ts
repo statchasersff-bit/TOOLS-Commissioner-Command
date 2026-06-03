@@ -129,13 +129,14 @@ export const db = drizzle(pool);
 // the user sees as "Login failed / spinner stuck". The same structural fix used
 // for the session store (its own capped pool in server/index.ts): give auth its
 // own tiny pool that background work can never touch.
-// 3 connections is plenty: login + /me + register are fast point queries and
-// rarely concurrent. connectionTimeoutMillis is intentionally short (4s) so a
-// DB hiccup returns a real error quickly rather than holding the login button
-// in a 10s spin.
+// 5 connections: /me now runs 3 queries in parallel (sleeper + subscription +
+// preferences), so max=3 would be fully consumed by a single concurrent request.
+// 5 gives 1 extra slot for a concurrent login or register without contention.
+// connectionTimeoutMillis is intentionally short (4s) so a DB hiccup returns a
+// real error quickly rather than holding the login button in a 10s spin.
 export const authPool = new pg.Pool({
   connectionString: process.env.DATABASE_URL,
-  max: 3,
+  max: 5,
   idleTimeoutMillis: 30_000,
   connectionTimeoutMillis: 4_000,
   keepAlive: true,

@@ -10,7 +10,7 @@
  */
 
 import type { Request, Response, NextFunction } from "express";
-import { db } from "./db";
+import { authDb } from "./db";
 import { eq } from "drizzle-orm";
 import { scUsers } from "@shared/schema";
 import {
@@ -172,7 +172,7 @@ export async function requireActiveSubscription(req: Request, res: Response, nex
   }
 
   try {
-    const rows = await db
+    const rows = await authDb
       .select({
         status: scUsers.subscriptionStatus,
         end: scUsers.subscriptionCurrentPeriodEnd,
@@ -215,7 +215,7 @@ export async function getSubscriptionStatusForUser(dcUserId: string): Promise<{
   active: boolean;
 }> {
   try {
-    const rows = await db
+    const rows = await authDb
       .select({
         status: scUsers.subscriptionStatus,
         end: scUsers.subscriptionCurrentPeriodEnd,
