@@ -258,13 +258,14 @@ sessionPool.on("error", (err) => {
 
 const PgStore = connectPgSimple(session);
 console.log("[startup] before session middleware");
-// Restrict session middleware to ONLY the sc-auth routes that actually use
-// req.session. Running it globally means every ADP request (160+ concurrent)
-// acquires a sessionPool slot, saturating the pool (max=5) and blocking the
-// very /api/sc-auth/me requests that need it. Non-sc-auth routes resolve
-// identity from the JWT cookie alone — no session store needed.
+// Restrict session middleware to ONLY the three routes that actually
+// read/write req.session: register (sets session), login (sets session),
+// logout (destroys session). Every other sc-auth route — including /me —
+// authenticates via JWT alone. Keeping the session store off /me is
+// critical: in production the sessionPool DB read was blocking the entire
+// /me handler before it even started, causing 8-25s timeouts.
 app.use(
-  "/api/sc-auth",
+  ["/api/sc-auth/register", "/api/sc-auth/login", "/api/sc-auth/logout"],
   session({
     store: new PgStore({
       pool: sessionPool,

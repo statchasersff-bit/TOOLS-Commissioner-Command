@@ -425,13 +425,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSleeperSource(readOnly ? "read-only" : "none");
 
       if (isAbort) {
-        // Hard timeout — backend didn't respond within the abort window.
-        // Don't spin through 5 retries keeping the user on the loading screen.
-        // Show login/guest mode immediately so the app is usable.
-        // eslint-disable-next-line no-console
-        console.info("[sc-auth] timeout — falling back to unauthenticated immediately");
-        retryCountRef.current = 0;
-        finalStatus = "unauthenticated";
+        // Hard timeout — backend didn't respond within 8 s.
+        // Allow exactly ONE retry (with a 4 s warm-up gap) to recover from a
+        // cold Replit deployment boot. If it times out again, bail immediately
+        // so the user sees the login prompt rather than a stuck spinner.
+        const MAX_ABORT_RETRIES = 1;
+        if (storedToken && retryCountRef.current < MAX_ABORT_RETRIES) {
+          retryCountRef.current += 1;
+          // eslint-disable-next-line no-console
+          console.info("[sc-auth] timeout — cold-boot retry in 4s");
+          retryTimerRef.current = setTimeout(() => { void checkSession(); }, 4_000);
+          finalStatus = "loading";
+        } else {
+          // eslint-disable-next-line no-console
+          console.info("[sc-auth] timeout — falling back to unauthenticated (no more retries)");
+          retryCountRef.current = 0;
+          finalStatus = "unauthenticated";
+        }
       } else if (storedToken && retryCountRef.current < MAX_RETRIES) {
         // Network / 5xx error but a valid JWT exists — retry for server-restart
         // recovery (overnight VM restarts, transient DB blips, etc.)

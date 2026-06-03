@@ -1,0 +1,523 @@
+[sc-auth] auth check started
+index-B7BdhcVO.js:111 [sc-auth] session check timed out — token preserved, retry 1/5 AbortError: signal is aborted without reason
+    at index-B7BdhcVO.js:111:5169
+(anonymous) @ index-B7BdhcVO.js:111Understand this warning
+index-B7BdhcVO.js:111 [sc-auth] timeout — falling back to unauthenticated immediately
+index-B7BdhcVO.js:111 [sc-auth] auth check finished — status: unauthenticated
+index-B7BdhcVO.js:245 [app] DynastyCommandCenter mounted
+index-B7BdhcVO.js:53 [app] ValueModelProvider mounted
+index-B7BdhcVO.js:247 [app] rendering authenticated shell — probe: app
+index-B7BdhcVO.js:111 [sleeper] loading leagues for Sleeper user: makitrain (sleeper_user_id: 1126320389791096832 source: read-only )
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded league {league_id: '1321214089342517248', league_name: '🦍 Empire D4', reason: 'user has no roster (spectator / commissioner-only)'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded league {league_id: '1316161558975381504', league_name: '🦍 RBrown D11', reason: 'user has no roster (spectator / commissioner-only)'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] {draft_id: '1312653537255100416', league_id: '1312653537242525696', league_name: ' The Blueprint 2.1*', status: 'pre_draft', type: 'linear', …}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] included {draft_id: '1312653537255100416', league_id: '1312653537242525696', status: 'pre_draft', kind: 'unknown', resolved_category: 'rookie', …}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded league {league_id: '1365454452441481216', league_name: 'OG Most Bestest DFFL Ever', reason: 'template/empty league, only 3 roster(s) have owners'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] {draft_id: '1312678538096181248', league_id: '1312678538087796736', league_name: 'Fade', status: 'pre_draft', type: 'linear', …}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] included {draft_id: '1312678538096181248', league_id: '1312678538087796736', status: 'pre_draft', kind: 'unknown', resolved_category: 'rookie', …}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] {draft_id: '1363744593216045057', league_id: '1363744591383113728', league_name: 'ShaDynasty', status: 'pre_draft', type: 'snake', …}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] included {draft_id: '1363744593216045057', league_id: '1363744591383113728', status: 'pre_draft', kind: 'unknown', resolved_category: 'startup', …}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] {draft_id: '1354603774731104256', league_id: '1354603773925806080', league_name: 'The Only League That Matters', status: 'pre_draft', type: 'auction', …}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] included {draft_id: '1354603774731104256', league_id: '1354603773925806080', status: 'pre_draft', kind: 'unknown', resolved_category: 'startup', …}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] {draft_id: '1362120798390738944', league_id: '1362120798386528256', league_name: '🦍 Mak D2', status: 'drafting', type: 'linear', …}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded league {league_id: '1335431942211907584', league_name: 'Bake SeaZyn', reason: 'user has no roster (spectator / commissioner-only)'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded league {league_id: '1326761519509180417', league_name: 'Draft & Trade', reason: 'user has no roster (spectator / commissioner-only)'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded league {league_id: '1315206456932339713', league_name: 'Devy it up ', reason: 'user has no roster (spectator / commissioner-only)'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] {draft_id: '1302803787282415616', league_id: '1302803785369800704', league_name: 'Who Loves IDP, I Do', status: 'pre_draft', type: 'snake', …}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] included {draft_id: '1302803787282415616', league_id: '1302803785369800704', status: 'pre_draft', kind: 'unknown', resolved_category: 'startup', …}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] {draft_id: '1349769966580146178', league_id: '1349769964302667776', league_name: 'ORPHANS AVAILABLE - starters draft capital shown in well organized leagues', status: 'pre_draft', type: 'snake', …}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] included {draft_id: '1349769966580146178', league_id: '1349769964302667776', status: 'pre_draft', kind: 'unknown', resolved_category: 'startup', …}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] {draft_id: '1341842009341591552', league_id: '1341842009337401344', league_name: 'TheMadness ', status: 'complete', type: 'linear', …}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded {draft_id: '1341842009341591552', league_id: '1341842009337401344', reasons: Array(1)}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] {draft_id: '1337576095578349568', league_id: '1337576095565750272', league_name: '🦍 Mak D17', status: 'pre_draft', type: 'linear', …}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] included {draft_id: '1337576095578349568', league_id: '1337576095565750272', status: 'pre_draft', kind: 'unknown', resolved_category: 'rookie', …}
+index-B7BdhcVO.js:245 [app] league load start {leagueId: '1312325046022205440', sleeperUserId: '1126320389791096832'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] {draft_id: '1331816816279818240', league_id: '1324866143764086784', league_name: '🦍 StatChasers D61 [DYNASTY]', status: 'complete', type: 'linear', …}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded {draft_id: '1331816816279818240', league_id: '1324866143764086784', reasons: Array(1)}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] {draft_id: '1324866179201798144', league_id: '1324866143764086784', league_name: '🦍 StatChasers D61 [DYNASTY]', status: 'complete', type: 'snake', …}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded {draft_id: '1324866179201798144', league_id: '1324866143764086784', reasons: Array(1)}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] {draft_id: '1331814600898793472', league_id: '1322052265149739008', league_name: 'BestBall & Chill 23.0 [DYNASTY BB]', status: 'complete', type: 'linear', …}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded {draft_id: '1331814600898793472', league_id: '1322052265149739008', reasons: Array(1)}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] {draft_id: '1322052268505202688', league_id: '1322052265149739008', league_name: 'BestBall & Chill 23.0 [DYNASTY BB]', status: 'complete', type: 'snake', …}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded {draft_id: '1322052268505202688', league_id: '1322052265149739008', reasons: Array(1)}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded league {league_id: '1334330792741986304', league_name: '🦍 Mak D13', reason: 'user has no roster (spectator / commissioner-only)'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] {draft_id: '1329599065259806720', league_id: '1321973637611278336', league_name: '🦍 StatChasers D60 [DYNASTY]', status: 'complete', type: 'snake', …}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded {draft_id: '1329599065259806720', league_id: '1321973637611278336', reasons: Array(1)}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] {draft_id: '1321973639842656256', league_id: '1321973637611278336', league_name: '🦍 StatChasers D60 [DYNASTY]', status: 'complete', type: 'snake', …}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded {draft_id: '1321973639842656256', league_id: '1321973637611278336', reasons: Array(1)}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] {draft_id: '1329562217502216192', league_id: '1320986043016560640', league_name: '🦍 StatChasers D59 [DYNASTY]', status: 'complete', type: 'linear', …}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded {draft_id: '1329562217502216192', league_id: '1320986043016560640', reasons: Array(1)}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] {draft_id: '1320986045721899008', league_id: '1320986043016560640', league_name: '🦍 StatChasers D59 [DYNASTY]', status: 'complete', type: 'snake', …}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded {draft_id: '1320986045721899008', league_id: '1320986043016560640', reasons: Array(1)}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] {draft_id: '1324408429166497792', league_id: '1320649386589442048', league_name: '🦍 StatChasers D58 [DYNASTY]', status: 'complete', type: 'linear', …}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded {draft_id: '1324408429166497792', league_id: '1320649386589442048', reasons: Array(1)}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] {draft_id: '1320649388770488320', league_id: '1320649386589442048', league_name: '🦍 StatChasers D58 [DYNASTY]', status: 'complete', type: 'snake', …}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded {draft_id: '1320649388770488320', league_id: '1320649386589442048', reasons: Array(1)}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] {draft_id: '1320430680848502784', league_id: '1320430680831688704', league_name: '🦍 Mak D1', status: 'complete', type: 'linear', …}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded {draft_id: '1320430680848502784', league_id: '1320430680831688704', reasons: Array(1)}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] {draft_id: '1317221390012674048', league_id: '1317221390008475648', league_name: '25 STAYIN ALIVE', status: 'complete', type: 'linear', …}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded {draft_id: '1317221390012674048', league_id: '1317221390008475648', reasons: Array(1)}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] {draft_id: '1314472355954696192', league_id: '1314472355937931264', league_name: 'Dynasty Degenerate 6.0 ($25)', status: 'complete', type: 'linear', …}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded {draft_id: '1314472355954696192', league_id: '1314472355937931264', reasons: Array(1)}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded league {league_id: '1314094520907882496', league_name: '🐐 StatChasers D1 [DYNASTY] $45', reason: 'user has no roster (spectator / commissioner-only)'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded league {league_id: '1314093911135752192', league_name: '🐐 StatChasers D2 [DYNASTY] $45', reason: 'user has no roster (spectator / commissioner-only)'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded league {league_id: '1314074443798024192', league_name: '🦍 StatChasers D3 [DYNASTY] $45', reason: 'user has no roster (spectator / commissioner-only)'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded league {league_id: '1314070760955867136', league_name: '🦍 StatChasers D4 [DYNASTY] $45', reason: 'user has no roster (spectator / commissioner-only)'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded league {league_id: '1314070345749118976', league_name: '🐐 StatChasers D5 [DYNASTY] $45', reason: 'user has no roster (spectator / commissioner-only)'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded league {league_id: '1314029649835077632', league_name: '🐐 StatChasers D6 [DYNASTY] $45', reason: 'user has no roster (spectator / commissioner-only)'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded league {league_id: '1314029256472264704', league_name: '🐐 StatChasers D7 [DYNASTY] $45', reason: 'user has no roster (spectator / commissioner-only)'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded league {league_id: '1313302454665748480', league_name: '🦍 StatChasers D26 [DYNASTY] $25', reason: 'user has no roster (spectator / commissioner-only)'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded league {league_id: '1313294487962800128', league_name: '🦍 StatChasers D27 [DYNASTY] $45', reason: 'user has no roster (spectator / commissioner-only)'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded league {league_id: '1314028880889139200', league_name: '🐐 StatChasers D8 [DYNASTY] $45', reason: 'user has no roster (spectator / commissioner-only)'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded league {league_id: '1314024657363435520', league_name: '🐐 StatChasers D9 [DYNASTY] $45', reason: 'user has no roster (spectator / commissioner-only)'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded league {league_id: '1313293885778169856', league_name: '🦍 StatChasers D28 [DYNASTY] $30', reason: 'user has no roster (spectator / commissioner-only)'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded league {league_id: '1313292996619288576', league_name: '🦍 StatChasers D29 [DYNASTY] $45', reason: 'user has no roster (spectator / commissioner-only)'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded league {league_id: '1314024214851776512', league_name: '🦍 StatChasers D10 [DYNASTY] $35', reason: 'user has no roster (spectator / commissioner-only)'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded league {league_id: '1314023758998040576', league_name: '🐐 StatChasers D11 [DYNASTY] $45', reason: 'user has no roster (spectator / commissioner-only)'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] {draft_id: '1314976962329976832', league_id: '1314976962317389824', league_name: 'Dyno Nugs ', status: 'pre_draft', type: 'linear', …}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] included {draft_id: '1314976962329976832', league_id: '1314976962317389824', status: 'pre_draft', kind: 'unknown', resolved_category: 'rookie', …}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded league {league_id: '1313311536831270912', league_name: '🐐 StatChasers D18 [DYNASTY] $45', reason: 'user has no roster (spectator / commissioner-only)'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded league {league_id: '1313303396349931520', league_name: '🦍 StatChasers D24 [DYNASTY] $100', reason: 'user has no roster (spectator / commissioner-only)'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded league {league_id: '1313302941020475392', league_name: '🐐 StatChasers D25 [DYNASTY] $55', reason: 'user has no roster (spectator / commissioner-only)'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded league {league_id: '1313282222928707584', league_name: '🦍 StatChasers D33 [DYNASTY] $35', reason: 'user has no roster (spectator / commissioner-only)'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded league {league_id: '1313281658329239552', league_name: '🦍 StatChasers D34 [DYNASTY] $50', reason: 'user has no roster (spectator / commissioner-only)'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded league {league_id: '1313310051368202240', league_name: '🦍 StatChasers D21 [DYNASTY] $30', reason: 'user has no roster (spectator / commissioner-only)'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded league {league_id: '1313282799066701824', league_name: '🦍 StatChasers D32 [DYNASTY] $45', reason: 'user has no roster (spectator / commissioner-only)'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded league {league_id: '1314023306134835200', league_name: '🦍 StatChasers D12 [DYNASTY] $100', reason: 'user has no roster (spectator / commissioner-only)'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded league {league_id: '1313230319259758592', league_name: '🦍 StatChasers D43 [DYNASTY] $40', reason: 'user has no roster (spectator / commissioner-only)'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] {draft_id: '1317720752136404992', league_id: '1314372839360442368', league_name: '🦍 StatChasers D51 [DYNASTY]', status: 'complete', type: 'linear', …}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded {draft_id: '1317720752136404992', league_id: '1314372839360442368', reasons: Array(1)}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] {draft_id: '1314372840820072448', league_id: '1314372839360442368', league_name: '🦍 StatChasers D51 [DYNASTY]', status: 'complete', type: 'snake', …}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded {draft_id: '1314372840820072448', league_id: '1314372839360442368', reasons: Array(1)}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded league {league_id: '1312811261599186944', league_name: 'StatChasers BestBall & Chill 7.0 [DYNASTY BB] $35', reason: 'user has no roster (spectator / commissioner-only)'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded league {league_id: '1313309525033365504', league_name: '🦍 StatChasers D22 [DYNASTY] $40', reason: 'user has no roster (spectator / commissioner-only)'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded league {league_id: '1313231064868622336', league_name: '🦍 StatChasers D42 [DYNASTY] $50', reason: 'user has no roster (spectator / commissioner-only)'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded league {league_id: '1312814896009736192', league_name: 'StatChasers BestBall & Chill 4.0 [DYNASTY BB] $35', reason: 'user has no roster (spectator / commissioner-only)'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded league {league_id: '1313055786661875712', league_name: 'StatChasers BestBall & Chill 6.0 [DYNASTY BB] $35', reason: 'user has no roster (spectator / commissioner-only)'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded league {league_id: '1312813651031261184', league_name: 'StatChasers BestBall & Chill 5.0 [DYNASTY BB] $35', reason: 'user has no roster (spectator / commissioner-only)'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded league {league_id: '1313385641471401984', league_name: '🦍 StatChasers D15 [DYNASTY] $45', reason: 'user has no roster (spectator / commissioner-only)'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded league {league_id: '1313310432743653376', league_name: '🐐 StatChasers D20 [DYNASTY] $45', reason: 'user has no roster (spectator / commissioner-only)'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded league {league_id: '1312661433103691776', league_name: 'StatChasers Bestball & Chill 22.0 [DYNASTY BB] $35', reason: 'user has no roster (spectator / commissioner-only)'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded league {league_id: '1312675338060333056', league_name: 'StatChasers BestBall & Chill 21.0 [DYNASTY BB] $35', reason: 'user has no roster (spectator / commissioner-only)'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded league {league_id: '1313235885960986624', league_name: '🦍 StatChasers D41 [DYNASTY] $50', reason: 'user has no roster (spectator / commissioner-only)'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] {draft_id: '1312883933532160000', league_id: '1312883933527965696', league_name: 'Second Place Is The First Loser', status: 'complete', type: 'linear', …}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded {draft_id: '1312883933532160000', league_id: '1312883933527965696', reasons: Array(1)}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded league {league_id: '1312951894812917760', league_name: '🦍 StatChasers D49 [DYNASTY] $50', reason: 'user has no roster (spectator / commissioner-only)'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] {draft_id: '1312629533945393152', league_id: '1312629533941186560', league_name: 'Bricked up ', status: 'complete', type: 'linear', …}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded {draft_id: '1312629533945393152', league_id: '1312629533941186560', reasons: Array(1)}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded league {league_id: '1312952827361914880', league_name: '🦍 StatChasers D48x [DYNASTY] $50', reason: 'user has no roster (spectator / commissioner-only)'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] {draft_id: '1312575721599668224', league_id: '1312575721591304192', league_name: 'Avengers Assemble', status: 'complete', type: 'linear', …}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded {draft_id: '1312575721599668224', league_id: '1312575721591304192', reasons: Array(1)}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] {draft_id: '1312478846359969792', league_id: '1312478846347395072', league_name: 'Best Ball Hogs', status: 'complete', type: 'linear', …}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded {draft_id: '1312478846359969792', league_id: '1312478846347395072', reasons: Array(1)}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] {draft_id: '1312286128753119232', league_id: '1312286128744722432', league_name: '$5 BB AutoPick Dynasty ➡️ Winner-Take-All 💵', status: 'pre_draft', type: 'linear', …}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] included {draft_id: '1312286128753119232', league_id: '1312286128744722432', status: 'pre_draft', kind: 'unknown', resolved_category: 'rookie', …}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] {draft_id: '1312325046030569472', league_id: '1312325046022205440', league_name: 'Superbowl Dynasty League Draft ', status: 'pre_draft', type: 'linear', …}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] included {draft_id: '1312325046030569472', league_id: '1312325046022205440', status: 'pre_draft', kind: 'unknown', resolved_category: 'rookie', …}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] {draft_id: '1317717764718206976', league_id: '1314660964511019008', league_name: '🦍 StatChasers D52 [DYNASTY]', status: 'complete', type: 'linear', …}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded {draft_id: '1317717764718206976', league_id: '1314660964511019008', reasons: Array(1)}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] {draft_id: '1314660969187647488', league_id: '1314660964511019008', league_name: '🦍 StatChasers D52 [DYNASTY]', status: 'complete', type: 'snake', …}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded {draft_id: '1314660969187647488', league_id: '1314660964511019008', reasons: Array(1)}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] {draft_id: '1320241636285878272', league_id: '1316102542689595392', league_name: '🦍 StatChasers D54 [DYNASTY]', status: 'complete', type: 'linear', …}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded {draft_id: '1320241636285878272', league_id: '1316102542689595392', reasons: Array(1)}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] {draft_id: '1316102545772380160', league_id: '1316102542689595392', league_name: '🦍 StatChasers D54 [DYNASTY]', status: 'complete', type: 'snake', …}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded {draft_id: '1316102545772380160', league_id: '1316102542689595392', reasons: Array(1)}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] {draft_id: '1317327945290756096', league_id: '1313725720991629312', league_name: '🦍 StatChasers D50 [DYNASTY] $100', status: 'complete', type: 'linear', …}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded {draft_id: '1317327945290756096', league_id: '1313725720991629312', reasons: Array(1)}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] {draft_id: '1313725722975535104', league_id: '1313725720991629312', league_name: '🦍 StatChasers D50 [DYNASTY] $100', status: 'complete', type: 'snake', …}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded {draft_id: '1313725722975535104', league_id: '1313725720991629312', reasons: Array(1)}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] {draft_id: '1317640096031215616', league_id: '1314993089454014464', league_name: '🦍 StatChasers D53 [DYNASTY]', status: 'complete', type: 'linear', …}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded {draft_id: '1317640096031215616', league_id: '1314993089454014464', reasons: Array(1)}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] {draft_id: '1314993091089825792', league_id: '1314993089454014464', league_name: '🦍 StatChasers D53 [DYNASTY]', status: 'complete', type: 'snake', …}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded {draft_id: '1314993091089825792', league_id: '1314993089454014464', reasons: Array(1)}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] {draft_id: '1322983268236148736', league_id: '1319358265515065344', league_name: '🦍 StatChasers D56 [DYNASTY]', status: 'complete', type: 'linear', …}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded {draft_id: '1322983268236148736', league_id: '1319358265515065344', reasons: Array(1)}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] {draft_id: '1319358268316856320', league_id: '1319358265515065344', league_name: '🦍 StatChasers D56 [DYNASTY]', status: 'complete', type: 'snake', …}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded {draft_id: '1319358268316856320', league_id: '1319358265515065344', reasons: Array(1)}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded league {league_id: '1312817012652662784', league_name: 'StatChasers BestBall & Chill 2.0 [DYNASTY BB] $30', reason: 'user has no roster (spectator / commissioner-only)'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded league {league_id: '1312816513970900992', league_name: 'StatChasers BestBall & Chill 3.0 [DYNASTY BB] $30', reason: 'user has no roster (spectator / commissioner-only)'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded league {league_id: '1313303872487301120', league_name: '🐐 StatChasers D23 [DYNASTY] $30', reason: 'user has no roster (spectator / commissioner-only)'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded league {league_id: '1312786769078398976', league_name: 'StatChasers BestBall & Chill 17.0 [DYNASTY BB] $35', reason: 'user has no roster (spectator / commissioner-only)'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded league {league_id: '1312676131031236608', league_name: 'StatChasers BestBall & Chill 20.0 [DYNASTY BB] $35', reason: 'user has no roster (spectator / commissioner-only)'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] {draft_id: '1312075673942110208', league_id: '1312075673925345280', league_name: 'To Be Determined', status: 'complete', type: 'linear', …}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded {draft_id: '1312075673942110208', league_id: '1312075673925345280', reasons: Array(1)}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] {draft_id: '1312021337828511744', league_id: '1312021337820119040', league_name: '☠️Skull & Bones ☠️', status: 'complete', type: 'linear', …}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded {draft_id: '1312021337828511744', league_id: '1312021337820119040', reasons: Array(1)}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] {draft_id: '1312021297428971520', league_id: '1312021297420578816', league_name: 'Junkies 💉', status: 'complete', type: 'linear', …}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded {draft_id: '1312021297428971520', league_id: '1312021297420578816', reasons: Array(1)}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] {draft_id: '1312021251232923648', league_id: '1312021251224535040', league_name: '❕Fight Club ❕', status: 'complete', type: 'linear', …}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded {draft_id: '1312021251232923648', league_id: '1312021251224535040', reasons: Array(1)}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] {draft_id: '1312020749170536448', league_id: '1312020749153763328', league_name: 'Age of Aquarius ♒️', status: 'complete', type: 'linear', …}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded {draft_id: '1312020749170536448', league_id: '1312020749153763328', reasons: Array(1)}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] {draft_id: '1317947262751494144', league_id: '1317947262747303936', league_name: 'Mak D3 (Empire)', status: 'complete', type: 'linear', …}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded {draft_id: '1317947262751494144', league_id: '1317947262747303936', reasons: Array(1)}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded league {league_id: '1321964716813221888', league_name: '!🦍 Mak D8', reason: 'user has no roster (spectator / commissioner-only)'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded league {league_id: '1320431787175866368', league_name: '!🦍 HANK D6', reason: 'user has no roster (spectator / commissioner-only)'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded league {league_id: '1315726645776093184', league_name: '🦍JOKA D7', reason: 'user has no roster (spectator / commissioner-only)'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded league {league_id: '1312789988991049728', league_name: 'StatChasers BestBall & Chill 14.0 [DYNASTY BB] $35', reason: 'user has no roster (spectator / commissioner-only)'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded league {league_id: '1316223925625028608', league_name: '🦍 TinyRanch D10', reason: 'user has no roster (spectator / commissioner-only)'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded league {league_id: '1322990657517649920', league_name: 'StatChasers BestBall & Chill 8.0 [DYNASTY BB] $35', reason: 'user has no roster (spectator / commissioner-only)'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded league {league_id: '1312796760401276928', league_name: 'StatChasers BestBall & Chill 9.0 [DYNASTY BB] $35', reason: 'user has no roster (spectator / commissioner-only)'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded league {league_id: '1312788015420051456', league_name: 'StatChasers BestBall & Chill 15.0 [DYNASTY BB] $35', reason: 'user has no roster (spectator / commissioner-only)'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded league {league_id: '1312794103154503680', league_name: 'StatChasers BestBall & Chill 10.0 [DYNASTY BB] $35', reason: 'user has no roster (spectator / commissioner-only)'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded league {league_id: '1312787388350623744', league_name: 'StatChasers BestBall & Chill 16.0 [DYNASTY BB] $35', reason: 'user has no roster (spectator / commissioner-only)'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded league {league_id: '1313292502119219200', league_name: '🦍 StatChasers D30 [DYNASTY]', reason: 'user has no roster (spectator / commissioner-only)'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded league {league_id: '1313284277886005248', league_name: '🦍 StatChasers D31 [DYNASTY]', reason: 'user has no roster (spectator / commissioner-only)'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded league {league_id: '1313724173851316224', league_name: '🐐 StatChasers D13 [DYNASTY] $45', reason: 'user has no roster (spectator / commissioner-only)'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded league {league_id: '1313386070267686912', league_name: '🐐 StatChasers D14 [DYNASTY] $100', reason: 'user has no roster (spectator / commissioner-only)'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded league {league_id: '1312662845506195456', league_name: '🦍 StatChasers D36 [DYNASTY] $50', reason: 'user has no roster (spectator / commissioner-only)'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded league {league_id: '1313281029766664192', league_name: '🦍 StatChasers D35 [DYNASTY] $40', reason: 'user has no roster (spectator / commissioner-only)'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded league {league_id: '1313280325471731712', league_name: '🦍 StatChasers D37 [DYNASTY] $50', reason: 'user has no roster (spectator / commissioner-only)'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded league {league_id: '1313228951618846720', league_name: '🦍 StatChasers D45x [DYNASTY] $50', reason: 'user has no roster (spectator / commissioner-only)'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded league {league_id: '1312954826006491136', league_name: '🦍 StatChasers D46x [DYNASTY] $50', reason: 'user has no roster (spectator / commissioner-only)'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded league {league_id: '1313238486144266240', league_name: '🦍 StatChasers D39 [DYNASTY] $50', reason: 'user has no roster (spectator / commissioner-only)'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded league {league_id: '1312793532209049600', league_name: 'StatChasers BestBall & Chill 11.0 [DYNASTY BB] $35', reason: 'user has no roster (spectator / commissioner-only)'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded league {league_id: '1312953851065700352', league_name: '🦍 StatChasers D47x [DYNASTY] $40', reason: 'user has no roster (spectator / commissioner-only)'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded league {league_id: '1313385172686635008', league_name: '🐐 StatChasers D16 [DYNASTY] $100', reason: 'user has no roster (spectator / commissioner-only)'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded league {league_id: '1313384645697495040', league_name: '🦍 StatChasers D17 [DYNASTY] $45', reason: 'user has no roster (spectator / commissioner-only)'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded league {league_id: '1313311036220125185', league_name: '🐐 StatChasers D19 [DYNASTY] $45', reason: 'user has no roster (spectator / commissioner-only)'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded league {league_id: '1312786316672401408', league_name: 'StatChasers BestBall & Chill 18.0 [DYNASTY BB] $35', reason: 'user has no roster (spectator / commissioner-only)'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded league {league_id: '1313237811729551360', league_name: '🦍 StatChasers D40 [DYNASTY] $40', reason: 'user has no roster (spectator / commissioner-only)'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded league {league_id: '1313224130379677696', league_name: 'StatChasers BestBall & Chill 19.0 [DYNASTY BB] $35', reason: 'user has no roster (spectator / commissioner-only)'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded league {league_id: '1312792929001021440', league_name: 'StatChasers BestBall & Chill 13.0 [DYNASTY BB] $35', reason: 'user has no roster (spectator / commissioner-only)'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded league {league_id: '1313056228988981248', league_name: 'StatChasers BestBall & Chill 12.0 [DYNASTY BB] $35', reason: 'user has no roster (spectator / commissioner-only)'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded league {league_id: '1312658337531195392', league_name: 'StatChasers BestBall & Chill 1.0 [DYNASTY BB] $25', reason: 'user has no roster (spectator / commissioner-only)'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] {draft_id: '1324219371291148288', league_id: '1320220659996979201', league_name: '🦍 StatChasers D57 [DYNASTY]', status: 'complete', type: 'linear', …}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded {draft_id: '1324219371291148288', league_id: '1320220659996979201', reasons: Array(1)}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] {draft_id: '1320220663327227904', league_id: '1320220659996979201', league_name: '🦍 StatChasers D57 [DYNASTY]', status: 'complete', type: 'snake', …}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded {draft_id: '1320220663327227904', league_id: '1320220659996979201', reasons: Array(1)}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] {draft_id: '1320238097882951680', league_id: '1316615664034676736', league_name: '🦍 StatChasers D55 [DYNASTY]', status: 'complete', type: 'linear', …}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded {draft_id: '1320238097882951680', league_id: '1316615664034676736', reasons: Array(1)}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] {draft_id: '1316615665829810176', league_id: '1316615664034676736', league_name: '🦍 StatChasers D55 [DYNASTY]', status: 'complete', type: 'snake', …}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded {draft_id: '1316615665829810176', league_id: '1316615664034676736', reasons: Array(1)}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded league {league_id: '1313229682476326912', league_name: '🦍 StatChasers D44 [DYNASTY] $50', reason: 'user has no roster (spectator / commissioner-only)'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] excluded league {league_id: '1313239806959976448', league_name: '🦍 StatChasers D38 [DYNASTY] $35', reason: 'user has no roster (spectator / commissioner-only)'}
+index-B7BdhcVO.js:53 [LIVE DRAFT DISCOVERY] included {draft_id: '1362120798390738944', league_id: '1362120798386528256', status: 'drafting', kind: 'unknown', resolved_category: 'rookie', …}
+index-B7BdhcVO.js:245 [app] league load ok {leagueId: '1312325046022205440', teams: 12, userTeamId: 'roster_12'}
+index-B7BdhcVO.js:245 [app] league load finished — isLeagueLoading: false
+index-B7BdhcVO.js:9 [fantasycalc] dynasty fetch failed — using bundled snapshot AbortError: signal is aborted without reason
+    at index-B7BdhcVO.js:9:278482
+Sf @ index-B7BdhcVO.js:9
+await in Sf
+(anonymous) @ index-B7BdhcVO.js:53
+Hl @ index-B7BdhcVO.js:9
+ts @ index-B7BdhcVO.js:9
+Tg @ index-B7BdhcVO.js:9
+Ir @ index-B7BdhcVO.js:7
+Y3 @ index-B7BdhcVO.js:9
+fa @ index-B7BdhcVO.js:9
+Ng @ index-B7BdhcVO.js:9
+A @ index-B7BdhcVO.js:2
+M @ index-B7BdhcVO.js:2
+postMessage
+X @ index-B7BdhcVO.js:2
+te @ index-B7BdhcVO.js:2
+e.unstable_scheduleCallback @ index-B7BdhcVO.js:2
+Bg @ index-B7BdhcVO.js:9
+rn @ index-B7BdhcVO.js:9
+An @ index-B7BdhcVO.js:9
+P3 @ index-B7BdhcVO.js:7
+(anonymous) @ index-B7BdhcVO.js:111Understand this warning
+index-B7BdhcVO.js:9 [fantasycalc] redraft fetch failed — using bundled snapshot AbortError: signal is aborted without reason
+    at index-B7BdhcVO.js:9:278482
+Cf @ index-B7BdhcVO.js:9
+await in Cf
+(anonymous) @ index-B7BdhcVO.js:53
+Hl @ index-B7BdhcVO.js:9
+ts @ index-B7BdhcVO.js:9
+Tg @ index-B7BdhcVO.js:9
+Ir @ index-B7BdhcVO.js:7
+Y3 @ index-B7BdhcVO.js:9
+fa @ index-B7BdhcVO.js:9
+Ng @ index-B7BdhcVO.js:9
+A @ index-B7BdhcVO.js:2
+M @ index-B7BdhcVO.js:2
+postMessage
+X @ index-B7BdhcVO.js:2
+te @ index-B7BdhcVO.js:2
+e.unstable_scheduleCallback @ index-B7BdhcVO.js:2
+Bg @ index-B7BdhcVO.js:9
+rn @ index-B7BdhcVO.js:9
+An @ index-B7BdhcVO.js:9
+P3 @ index-B7BdhcVO.js:7
+(anonymous) @ index-B7BdhcVO.js:111Understand this warning
+index-B7BdhcVO.js:9 [fantasycalc] dynasty fetch failed — using bundled snapshot AbortError: signal is aborted without reason
+    at index-B7BdhcVO.js:9:278482
+Sf @ index-B7BdhcVO.js:9
+await in Sf
+QI @ index-B7BdhcVO.js:53
+await in QI
+(anonymous) @ Portfolio-C_t8lb0U.js:3
+Promise.then
+(anonymous) @ Portfolio-C_t8lb0U.js:3
+Hl @ index-B7BdhcVO.js:9
+ts @ index-B7BdhcVO.js:9
+Tg @ index-B7BdhcVO.js:9
+Ir @ index-B7BdhcVO.js:7
+Y3 @ index-B7BdhcVO.js:9
+fa @ index-B7BdhcVO.js:9
+Ng @ index-B7BdhcVO.js:9
+A @ index-B7BdhcVO.js:2
+M @ index-B7BdhcVO.js:2
+postMessage
+X @ index-B7BdhcVO.js:2
+te @ index-B7BdhcVO.js:2
+e.unstable_scheduleCallback @ index-B7BdhcVO.js:2
+Bg @ index-B7BdhcVO.js:9
+rn @ index-B7BdhcVO.js:9
+An @ index-B7BdhcVO.js:9
+P3 @ index-B7BdhcVO.js:7
+(anonymous) @ index-B7BdhcVO.js:111
+await in (anonymous)
+(anonymous) @ index-B7BdhcVO.js:111
+Hl @ index-B7BdhcVO.js:9
+ts @ index-B7BdhcVO.js:9
+(anonymous) @ index-B7BdhcVO.js:9
+A @ index-B7BdhcVO.js:2
+M @ index-B7BdhcVO.js:2
+postMessage
+X @ index-B7BdhcVO.js:2
+te @ index-B7BdhcVO.js:2
+e.unstable_scheduleCallback @ index-B7BdhcVO.js:2
+Bg @ index-B7BdhcVO.js:9
+rn @ index-B7BdhcVO.js:9
+q3 @ index-B7BdhcVO.js:9
+Promise.then
+tg @ index-B7BdhcVO.js:9
+Ag @ index-B7BdhcVO.js:9
+Xl @ index-B7BdhcVO.js:9
+Ng @ index-B7BdhcVO.js:9
+A @ index-B7BdhcVO.js:2
+M @ index-B7BdhcVO.js:2
+postMessage
+X @ index-B7BdhcVO.js:2
+te @ index-B7BdhcVO.js:2
+e.unstable_scheduleCallback @ index-B7BdhcVO.js:2
+Bg @ index-B7BdhcVO.js:9
+rn @ index-B7BdhcVO.js:9
+An @ index-B7BdhcVO.js:9
+P3 @ index-B7BdhcVO.js:7
+(anonymous) @ index-B7BdhcVO.js:111
+await in (anonymous)
+y @ index-B7BdhcVO.js:114
+hk @ index-B7BdhcVO.js:6
+vk @ index-B7BdhcVO.js:6
+yk @ index-B7BdhcVO.js:6
+sh @ index-B7BdhcVO.js:6
+oh @ index-B7BdhcVO.js:6
+(anonymous) @ index-B7BdhcVO.js:6
+bd @ index-B7BdhcVO.js:9
+fm @ index-B7BdhcVO.js:6
+bu @ index-B7BdhcVO.js:6
+ru @ index-B7BdhcVO.js:6
+Mk @ index-B7BdhcVO.js:6Understand this warning
+index-B7BdhcVO.js:9 [fantasycalc] dynasty fetch failed — using bundled snapshot AbortError: signal is aborted without reason
+    at index-B7BdhcVO.js:9:278482
+Sf @ index-B7BdhcVO.js:9
+await in Sf
+QI @ index-B7BdhcVO.js:53
+await in QI
+(anonymous) @ Portfolio-C_t8lb0U.js:3
+Promise.then
+(anonymous) @ Portfolio-C_t8lb0U.js:3
+Hl @ index-B7BdhcVO.js:9
+ts @ index-B7BdhcVO.js:9
+Tg @ index-B7BdhcVO.js:9
+Ir @ index-B7BdhcVO.js:7
+Y3 @ index-B7BdhcVO.js:9
+fa @ index-B7BdhcVO.js:9
+Ng @ index-B7BdhcVO.js:9
+A @ index-B7BdhcVO.js:2
+M @ index-B7BdhcVO.js:2
+postMessage
+X @ index-B7BdhcVO.js:2
+te @ index-B7BdhcVO.js:2
+e.unstable_scheduleCallback @ index-B7BdhcVO.js:2
+Bg @ index-B7BdhcVO.js:9
+rn @ index-B7BdhcVO.js:9
+An @ index-B7BdhcVO.js:9
+P3 @ index-B7BdhcVO.js:7
+(anonymous) @ index-B7BdhcVO.js:111
+await in (anonymous)
+(anonymous) @ index-B7BdhcVO.js:111
+Hl @ index-B7BdhcVO.js:9
+ts @ index-B7BdhcVO.js:9
+(anonymous) @ index-B7BdhcVO.js:9
+A @ index-B7BdhcVO.js:2
+M @ index-B7BdhcVO.js:2
+postMessage
+X @ index-B7BdhcVO.js:2
+te @ index-B7BdhcVO.js:2
+e.unstable_scheduleCallback @ index-B7BdhcVO.js:2
+Bg @ index-B7BdhcVO.js:9
+rn @ index-B7BdhcVO.js:9
+q3 @ index-B7BdhcVO.js:9
+Promise.then
+tg @ index-B7BdhcVO.js:9
+Ag @ index-B7BdhcVO.js:9
+Xl @ index-B7BdhcVO.js:9
+Ng @ index-B7BdhcVO.js:9
+A @ index-B7BdhcVO.js:2
+M @ index-B7BdhcVO.js:2
+postMessage
+X @ index-B7BdhcVO.js:2
+te @ index-B7BdhcVO.js:2
+e.unstable_scheduleCallback @ index-B7BdhcVO.js:2
+Bg @ index-B7BdhcVO.js:9
+rn @ index-B7BdhcVO.js:9
+An @ index-B7BdhcVO.js:9
+P3 @ index-B7BdhcVO.js:7
+(anonymous) @ index-B7BdhcVO.js:111
+await in (anonymous)
+y @ index-B7BdhcVO.js:114
+hk @ index-B7BdhcVO.js:6
+vk @ index-B7BdhcVO.js:6
+yk @ index-B7BdhcVO.js:6
+sh @ index-B7BdhcVO.js:6
+oh @ index-B7BdhcVO.js:6
+(anonymous) @ index-B7BdhcVO.js:6
+bd @ index-B7BdhcVO.js:9
+fm @ index-B7BdhcVO.js:6
+bu @ index-B7BdhcVO.js:6
+ru @ index-B7BdhcVO.js:6
+Mk @ index-B7BdhcVO.js:6Understand this warning
+index-B7BdhcVO.js:9 [fantasycalc] redraft fetch failed — using bundled snapshot AbortError: signal is aborted without reason
+    at index-B7BdhcVO.js:9:278482
+Cf @ index-B7BdhcVO.js:9
+await in Cf
+QI @ index-B7BdhcVO.js:53
+await in QI
+(anonymous) @ Portfolio-C_t8lb0U.js:3
+Promise.then
+(anonymous) @ Portfolio-C_t8lb0U.js:3
+Hl @ index-B7BdhcVO.js:9
+ts @ index-B7BdhcVO.js:9
+Tg @ index-B7BdhcVO.js:9
+Ir @ index-B7BdhcVO.js:7
+Y3 @ index-B7BdhcVO.js:9
+fa @ index-B7BdhcVO.js:9
+Ng @ index-B7BdhcVO.js:9
+A @ index-B7BdhcVO.js:2
+M @ index-B7BdhcVO.js:2
+postMessage
+X @ index-B7BdhcVO.js:2
+te @ index-B7BdhcVO.js:2
+e.unstable_scheduleCallback @ index-B7BdhcVO.js:2
+Bg @ index-B7BdhcVO.js:9
+rn @ index-B7BdhcVO.js:9
+An @ index-B7BdhcVO.js:9
+P3 @ index-B7BdhcVO.js:7
+(anonymous) @ index-B7BdhcVO.js:111
+await in (anonymous)
+(anonymous) @ index-B7BdhcVO.js:111
+Hl @ index-B7BdhcVO.js:9
+ts @ index-B7BdhcVO.js:9
+(anonymous) @ index-B7BdhcVO.js:9
+A @ index-B7BdhcVO.js:2
+M @ index-B7BdhcVO.js:2
+postMessage
+X @ index-B7BdhcVO.js:2
+te @ index-B7BdhcVO.js:2
+e.unstable_scheduleCallback @ index-B7BdhcVO.js:2
+Bg @ index-B7BdhcVO.js:9
+rn @ index-B7BdhcVO.js:9
+q3 @ index-B7BdhcVO.js:9
+Promise.then
+tg @ index-B7BdhcVO.js:9
+Ag @ index-B7BdhcVO.js:9
+Xl @ index-B7BdhcVO.js:9
+Ng @ index-B7BdhcVO.js:9
+A @ index-B7BdhcVO.js:2
+M @ index-B7BdhcVO.js:2
+postMessage
+X @ index-B7BdhcVO.js:2
+te @ index-B7BdhcVO.js:2
+e.unstable_scheduleCallback @ index-B7BdhcVO.js:2
+Bg @ index-B7BdhcVO.js:9
+rn @ index-B7BdhcVO.js:9
+An @ index-B7BdhcVO.js:9
+P3 @ index-B7BdhcVO.js:7
+(anonymous) @ index-B7BdhcVO.js:111
+await in (anonymous)
+y @ index-B7BdhcVO.js:114
+hk @ index-B7BdhcVO.js:6
+vk @ index-B7BdhcVO.js:6
+yk @ index-B7BdhcVO.js:6
+sh @ index-B7BdhcVO.js:6
+oh @ index-B7BdhcVO.js:6
+(anonymous) @ index-B7BdhcVO.js:6
+bd @ index-B7BdhcVO.js:9
+fm @ index-B7BdhcVO.js:6
+bu @ index-B7BdhcVO.js:6
+ru @ index-B7BdhcVO.js:6
+Mk @ index-B7BdhcVO.js:6Understand this warning
+index-B7BdhcVO.js:9 [fantasycalc] redraft fetch failed — using bundled snapshot AbortError: signal is aborted without reason
+    at index-B7BdhcVO.js:9:278482
+Cf @ index-B7BdhcVO.js:9
+await in Cf
+QI @ index-B7BdhcVO.js:53
+await in QI
+(anonymous) @ Portfolio-C_t8lb0U.js:3
+Promise.then
+(anonymous) @ Portfolio-C_t8lb0U.js:3
+Hl @ index-B7BdhcVO.js:9
+ts @ index-B7BdhcVO.js:9
+Tg @ index-B7BdhcVO.js:9
+Ir @ index-B7BdhcVO.js:7
+Y3 @ index-B7BdhcVO.js:9
+fa @ index-B7BdhcVO.js:9
+Ng @ index-B7BdhcVO.js:9
+A @ index-B7BdhcVO.js:2
+M @ index-B7BdhcVO.js:2
+postMessage
+X @ index-B7BdhcVO.js:2
+te @ index-B7BdhcVO.js:2
+e.unstable_scheduleCallback @ index-B7BdhcVO.js:2
+Bg @ index-B7BdhcVO.js:9
+rn @ index-B7BdhcVO.js:9
+An @ index-B7BdhcVO.js:9
+P3 @ index-B7BdhcVO.js:7
+(anonymous) @ index-B7BdhcVO.js:111
+await in (anonymous)
+(anonymous) @ index-B7BdhcVO.js:111
+Hl @ index-B7BdhcVO.js:9
+ts @ index-B7BdhcVO.js:9
+(anonymous) @ index-B7BdhcVO.js:9
+A @ index-B7BdhcVO.js:2
+M @ index-B7BdhcVO.js:2
+postMessage
+X @ index-B7BdhcVO.js:2
+te @ index-B7BdhcVO.js:2
+e.unstable_scheduleCallback @ index-B7BdhcVO.js:2
+Bg @ index-B7BdhcVO.js:9
+rn @ index-B7BdhcVO.js:9
+q3 @ index-B7BdhcVO.js:9
+Promise.then
+tg @ index-B7BdhcVO.js:9
+Ag @ index-B7BdhcVO.js:9
+Xl @ index-B7BdhcVO.js:9
+Ng @ index-B7BdhcVO.js:9
+A @ index-B7BdhcVO.js:2
+M @ index-B7BdhcVO.js:2
+postMessage
+X @ index-B7BdhcVO.js:2
+te @ index-B7BdhcVO.js:2
+e.unstable_scheduleCallback @ index-B7BdhcVO.js:2
+Bg @ index-B7BdhcVO.js:9
+rn @ index-B7BdhcVO.js:9
+An @ index-B7BdhcVO.js:9
+P3 @ index-B7BdhcVO.js:7
+(anonymous) @ index-B7BdhcVO.js:111
+await in (anonymous)
+y @ index-B7BdhcVO.js:114
+hk @ index-B7BdhcVO.js:6
+vk @ index-B7BdhcVO.js:6
+yk @ index-B7BdhcVO.js:6
+sh @ index-B7BdhcVO.js:6
+oh @ index-B7BdhcVO.js:6
+(anonymous) @ index-B7BdhcVO.js:6
+bd @ index-B7BdhcVO.js:9
+fm @ index-B7BdhcVO.js:6
+bu @ index-B7BdhcVO.js:6
+ru @ index-B7BdhcVO.js:6
+Mk @ index-B7BdhcVO.js:6Understand this warning
