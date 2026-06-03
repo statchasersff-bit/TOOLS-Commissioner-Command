@@ -129,7 +129,9 @@ export function getAuthResult(req: Request): {
   }
 
   // ── 3. Session cookie ─────────────────────────────────────────────────────
-  const sessionUserId = (req.session as any).scUserId ?? null;
+  // Session middleware is restricted to /api/sc-auth paths; on other paths
+  // req.session may be undefined — guard to avoid a TypeError.
+  const sessionUserId = req.session ? ((req.session as any).scUserId ?? null) : null;
   return { userId: sessionUserId, jwtVerifyFailed, cookieToken: null };
 }
 

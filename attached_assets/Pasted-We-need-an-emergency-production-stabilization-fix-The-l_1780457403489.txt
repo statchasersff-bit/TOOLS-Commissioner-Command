@@ -1,0 +1,110 @@
+We need an emergency production stabilization fix.
+
+The latest logs show the main DB pool is fully saturated:
+
+pool=60/60 idle=0 waiting=160
+
+Even after moving some sc-auth code to authDb, /api/sc-auth/me still times out. This means some middleware, helper, session/app-mode logic, or route dependency is still touching the saturated main pool before or during auth.
+
+Do not keep patching individual routes first. Stabilize production by disabling all background ADP/crawler/snapshot work from the API web server.
+
+Immediate tasks:
+
+1. Add production-safe feature flags:
+
+DISABLE_BACKGROUND_JOBS=true
+DISABLE_ADP_CRAWLER=true
+DISABLE_ADP_STARTUP_REFRESH=true
+DISABLE_INITIAL_SNAPSHOT_REFRESH=true
+DISABLE_PASSIVE_ADP_EVENTS=true
+
+Use whatever names fit the codebase, but the goal is clear: no crawler, no snapshot builder, no passive events, no initial ADP refresh should run automatically inside the web server.
+
+2. Search for every startup/background job:
+
+- initial snapshot refresh
+- ADP crawler
+- unified crawl
+- passive ADP events
+- analytics processing
+- scheduled snapshot builder
+- setInterval
+- setTimeout
+- cron
+- refreshSnapshots
+- crawlNetwork
+- crawlDrafts
+- buildAdp
+- initialRefresh
+
+3. Wrap every background startup call like this:
+
+if (process.env.DISABLE_BACKGROUND_JOBS !== "true") {
+  startBackgroundJobs();
+} else {
+  console.log("[background] disabled in production web server");
+}
+
+4. Specifically disable the ADP initial snapshot refresh that previously threw:
+
+AggregateError [ETIMEDOUT]: ENETUNREACH
+
+This should not be running inside the web server.
+
+5. The API web server should start with only:
+- CORS
+- health routes
+- auth routes
+- public API routes
+- route handlers
+
+It should not start crawlers or build ADP snapshots on boot.
+
+6. Add DB pool health endpoints:
+
+/api/health/db/main
+/api/health/db/auth
+/api/health/db/session
+
+Each should return:
+- ok
+- latencyMs
+- pool total
+- pool idle
+- pool waiting
+
+7. Add request timing logs specifically for /api/sc-auth/me:
+
+Log:
+- request start
+- before session middleware if possible
+- after session middleware
+- route handler start
+- after getUser
+- after getConnectedSleeper
+- after getSubscriptionStatusForUser
+- after getPreferences
+- response end
+- total duration
+
+8. Put a hard timeout around /api/sc-auth/me.
+If any dependency takes over 2 seconds, return a safe unauthenticated/read-only response instead of hanging for 25 seconds.
+
+9. After disabling background jobs, redeploy and test:
+
+curl -i "https://dynasty-command.replit.app/api/health/light"
+
+curl -i "https://dynasty-command.replit.app/api/health/db/main"
+
+curl -i "https://dynasty-command.replit.app/api/health/db/auth"
+
+curl -i "https://dynasty-command.replit.app/api/sc-auth/me" \
+  -H "Origin: https://statchasers.com"
+
+Expected:
+- health/light returns instantly
+- db main pool is not 60/60 saturated
+- auth pool has idle connections
+- sc-auth/me returns 200 or 401 JSON quickly, not a timeout
+
+10. Only after the app opens again, move ADP crawling/snapshot building into a separate worker process or separate deployment.
