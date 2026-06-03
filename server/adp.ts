@@ -113,6 +113,10 @@ export type AdpRow = {
   trend_7d: number;
   trend_14d: number;
   trend_30d: number;
+  // Mean of picks in the most-recent 14-day window (null when fewer than
+  // MIN_TREND_PICKS in that window). Used by the movers panel so it can
+  // display "ADP 19.0 ↓17" (current market) instead of the 44-day blend.
+  recent_14d_avg: number | null;
   sample_size_warning: boolean;
 };
 
@@ -1449,6 +1453,12 @@ export async function computeAdp(f: AdpFilters): Promise<{ rows: AdpRow[]; draft
     const trend14 = trendBetween(last14, prev14);
     const trend30 = trendBetween(last30, prior30);
 
+    // The mean of picks in just the last 14 days — used by the movers panel
+    // so it can show the *current* market price ("ADP 19.0 ↓17") rather than
+    // the blended all-window average which is confusingly between the two eras.
+    const last14Mean = meanIf(last14);
+    const recent14dAvg = last14Mean !== null ? Math.round(last14Mean * 10) / 10 : null;
+
     const validPos = (["QB", "RB", "WR", "TE", "K", "PICK"] as const).includes(a.position as any)
       ? (a.position as AdpRow["position"])
       : "QB";
@@ -1472,6 +1482,7 @@ export async function computeAdp(f: AdpFilters): Promise<{ rows: AdpRow[]; draft
       trend_7d: trend7,
       trend_14d: trend14,
       trend_30d: trend30,
+      recent_14d_avg: recent14dAvg,
       sample_size_warning: sorted.length < 8,
     };
   });

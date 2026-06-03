@@ -73,6 +73,10 @@ export interface ADPResult {
   trend_7d: number;           // negative = rising (ADP getting smaller); positive = falling
   trend_14d: number;          // used by the "Biggest ADP movers" panel
   trend_30d: number;
+  // Mean pick in just the last 14 days. Present on rows from date-windowed
+  // fetches; null/absent on older cached snapshots. Used by MoversPanel to
+  // show current market price ("ADP 19.0 ↓17") not the blended window avg.
+  recent_14d_avg?: number | null;
   sample_size_warning: boolean;
 }
 
