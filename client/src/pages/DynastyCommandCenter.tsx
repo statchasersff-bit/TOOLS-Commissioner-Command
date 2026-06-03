@@ -1,4 +1,31 @@
-import { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense, startTransition } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense, startTransition, Component, type ReactNode, type ErrorInfo } from "react";
+
+// Lightweight error boundary isolating TradeDatabase so a render crash there
+// never takes down the whole Dynasty Command Center.
+class TradeSectionBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
+  state = { error: null as Error | null };
+  static getDerivedStateFromError(e: Error) { return { error: e }; }
+  componentDidCatch(e: Error, info: ErrorInfo) {
+    console.error("[TradeSectionBoundary] caught:", e.message, info.componentStack);
+  }
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="flex flex-col items-center justify-center gap-4 py-16 text-center">
+          <p className="text-sm font-semibold text-red-400">Trade Database encountered an error</p>
+          <p className="text-xs text-muted-foreground max-w-xs">One or more trade records had unexpected data. The rest of the app is unaffected.</p>
+          <button
+            className="text-xs px-3 py-1.5 rounded bg-[#0b3a7a] text-white hover:bg-[#0b3a7a]/80 transition-colors"
+            onClick={() => this.setState({ error: null })}
+          >
+            Try again
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 import { useRoute, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -621,7 +648,7 @@ export default function DynastyCommandCenter({ params, playerProfileId, managerP
       case "league-analyzer:playoff-calculator": return <PlayoffCalculator />;
       case "league-analyzer:transactions":       return <Transactions leagueId={selectedLeagueId!} />;
       case "league-analyzer:commanders-report":  return <CommandersReport leagueId={selectedLeagueId!} leagueName={league.name} />;
-      case "trade-center:trade-database":        return <TradeDatabase league={league} />;
+      case "trade-center:trade-database":        return <TradeSectionBoundary><TradeDatabase league={league} /></TradeSectionBoundary>;
       case "trade-center:positional-analysis":   return <PositionalAnalysis league={league} userTeam={userTeam} />;
       case "trade-center:trade-block":           return <TradeBlockScanner league={league} />;
       case "league-market:market-value":         return <MarketValue league={league} />;

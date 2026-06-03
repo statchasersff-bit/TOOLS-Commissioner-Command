@@ -3,6 +3,12 @@ import { cn } from "@/lib/utils";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import type { AssetPlayer, AssetPick } from "./TradeActionModal";
 
+
+// Safe number formatter
+function fmtN(v: unknown, fallback = '—'): string {
+  const n = Number(v);
+  return Number.isFinite(n) ? n.toLocaleString() : fallback;
+}
 function posColor(pos: string): string {
   switch (pos) {
     case "QB": return "text-red-400";
@@ -32,7 +38,7 @@ export function PlayerAssetCard({
       </div>
       {player.value > 0 && (
         <span className="text-[11px] text-white/30 tabular-nums flex-shrink-0">
-          {player.value.toLocaleString()}
+          {fmtN(player.value)}
         </span>
       )}
       {onRemove && (
@@ -62,7 +68,7 @@ export function PickAssetCard({
       <span className="text-[13px] text-white/85 flex-1 truncate">{pick.label}</span>
       {pick.value > 0 && (
         <span className="text-[11px] text-white/30 tabular-nums flex-shrink-0">
-          {pick.value.toLocaleString()}
+          {fmtN(pick.value)}
         </span>
       )}
       {onRemove && (
@@ -112,7 +118,7 @@ export function RosterPlayerRow({
         {player.name}
       </span>
       <span className="text-[10px] text-white/25 tabular-nums flex-shrink-0">
-        {player.value > 0 ? player.value.toLocaleString() : "—"}
+        {player.value > 0 ? fmtN(player.value) : "—"}
       </span>
       {selected && <X className="w-3 h-3 text-red-400/60 flex-shrink-0" />}
     </button>
@@ -144,7 +150,7 @@ export function PickSelectRow({
         {pick.label}
       </span>
       {pick.value > 0 && (
-        <span className="text-[10px] text-white/25 tabular-nums flex-shrink-0">{pick.value.toLocaleString()}</span>
+        <span className="text-[10px] text-white/25 tabular-nums flex-shrink-0">{fmtN(pick.value)}</span>
       )}
       {selected && <X className="w-3 h-3 text-red-400/60 flex-shrink-0" />}
     </button>

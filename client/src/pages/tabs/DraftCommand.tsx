@@ -84,6 +84,10 @@ interface AdpResponseMeta {
   snapshot_date: string | null;
   message?: string;
   error?: boolean;
+  // Serving a previous (expired) snapshot while a fresh one builds in background.
+  stale?: boolean;
+  // No snapshot yet; rows are being built in the background — client retries.
+  computing?: boolean;
 }
 
 interface AdpResponse {
@@ -253,6 +257,7 @@ export function DraftCommand() {
 
   useEffect(() => {
     const controller = new AbortController();
+    let computingTimer: ReturnType<typeof setTimeout> | undefined;
     setScanController(controller);
     setIsLoading(true);
     setErrorMessage(null);
@@ -289,6 +294,13 @@ export function DraftCommand() {
         if (controller.signal.aborted) return;
         setRows(Array.isArray(data.items) ? data.items : []);
         setMeta(data.meta ?? null);
+        // The backend builds heavy/date-range snapshots in the background and
+        // returns meta.computing=true with empty rows instead of blocking the
+        // request (which used to saturate the DB pool). Poll again shortly so
+        // the user gets real data once the snapshot lands — no manual refresh.
+        if (data.meta?.computing && !controller.signal.aborted) {
+          computingTimer = setTimeout(() => setRetryNonce((n) => n + 1), 4000);
+        }
       })
       .catch((err) => {
         if (controller.signal.aborted) {
@@ -308,6 +320,7 @@ export function DraftCommand() {
       });
 
     return () => {
+      if (computingTimer) clearTimeout(computingTimer);
       controller.abort();
     };
   }, [filters, retryNonce]);

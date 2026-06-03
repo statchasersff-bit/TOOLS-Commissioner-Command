@@ -31,6 +31,18 @@ import { usePlayerProfile } from "@/contexts/PlayerProfileContext";
 import { TradeBlockCandidates } from "@/components/trade/TradeBlockCandidates";
 import { ArrowRightLeft, TrendingUp, TrendingDown, Target, X, Plus, Search, Scale, RotateCcw, Database, Play, Pause, Loader2, ChevronLeft, ChevronRight, ChevronDown, Download, Tag, Clock, ArrowRight, Send, CheckCircle2, DollarSign, Undo2, Globe, Trophy } from "lucide-react";
 
+
+// ── Safe number formatting ──────────────────────────────────────────────────
+// Guards every .toLocaleString() call against undefined/NaN/null so a single
+// malformed trade record can never crash the Trade Center (or the whole app).
+function fmtN(v: unknown, fallback = '—'): string {
+  const n = Number(v);
+  return Number.isFinite(n) ? n.toLocaleString() : fallback;
+}
+function fmtRound(v: unknown, fallback = '—'): string {
+  const n = Number(v);
+  return Number.isFinite(n) ? Math.round(n).toLocaleString() : fallback;
+}
 const SLEEPER_JWT_KEY = "dc-sleeper-draft-jwt";
 const SLEEPER_API_BASE = "https://api.sleeper.app/v1";
 
@@ -90,7 +102,7 @@ function PlayerChip({ player, value }: { player: Player; value: number }) {
         pos={player.pos}
         team={player.team ?? ""}
         size="sm"
-        sub={value.toLocaleString()}
+        sub={fmtN(value, "0")}
         onClick={() => openPlayerProfile(sid)}
       />
     </div>
@@ -196,25 +208,25 @@ function TradeProposalCard({ proposal, mode, userTeam, league }: { proposal: Tra
                 )}
               >
                 {proposal.dynNet > 0
-                  ? `+${Math.round(proposal.dynNet).toLocaleString()} dynasty`
+                  ? `+${fmtRound(proposal.dynNet)} dynasty`
                   : proposal.dynNet > -200
                     ? "Even dynasty"
-                    : `-${Math.round(Math.abs(proposal.dynNet)).toLocaleString()} dynasty`}
+                    : `-${fmtRound(Math.abs(proposal.dynNet))} dynasty`}
               </Badge>
               {proposal.rdNet !== undefined && proposal.rdNet > 0 && (
                 <Badge variant="outline" className="text-[10px] text-blue-400 border-blue-400/40">
-                  partner +{Math.round(proposal.rdNet).toLocaleString()} W-N
+                  partner +{fmtRound(proposal.rdNet)} W-N
                 </Badge>
               )}
             </div>
           ) : (
             <div className="flex items-center gap-1.5 flex-shrink-0">
-              <span className="text-[10px] text-muted-foreground">{proposal.giveVal.toLocaleString()} → {proposal.getVal.toLocaleString()}</span>
+              <span className="text-[10px] text-muted-foreground">{fmtN(proposal.giveVal)} → {fmtN(proposal.getVal)}</span>
               <Badge
                 variant={isEven ? "secondary" : isFavorable ? "default" : "outline"}
                 className={cn("text-[10px]", isFavorable && !isEven && "bg-emerald-600 dark:bg-emerald-700 text-white border-0", !isFavorable && !isEven && "text-amber-600 dark:text-amber-400 border-amber-400")}
               >
-                {isEven ? "Even" : isFavorable ? `+${Math.round(Math.abs(valueDiff)).toLocaleString()} for you` : `+${Math.round(Math.abs(valueDiff)).toLocaleString()} for them`}
+                {isEven ? "Even" : isFavorable ? `+${fmtRound(Math.abs(valueDiff))} for you` : `+${fmtRound(Math.abs(valueDiff))} for them`}
               </Badge>
             </div>
           )}
@@ -473,8 +485,8 @@ export function TradeFinder({ league, userTeam }: TradeProps) {
           const diff      = Math.abs(dynGive - dynGet) / Math.max(dynGive, dynGet, 1);
 
           const parts: string[] = [];
-          if (dynNet > 0)   parts.push(`+${Math.round(dynNet).toLocaleString()} dynasty`);
-          if (rdNet > 200)  parts.push(`partner +${Math.round(rdNet).toLocaleString()} win-now`);
+          if (dynNet > 0)   parts.push(`+${fmtRound(dynNet)} dynasty`);
+          if (rdNet > 200)  parts.push(`partner +${fmtRound(rdNet)} win-now`);
           else if (rdNet >= 0) parts.push("partner neutral win-now");
           if (giveAge > getAge + 1) parts.push(`${Math.round(giveAge - getAge)}yr younger`);
           const rationale = parts.length > 0 ? parts.slice(0, 2).join(" · ") : "Dynasty value exchange";
@@ -821,7 +833,7 @@ export function TradeFinder({ league, userTeam }: TradeProps) {
                       {c.player.starter ? "Starter" : "Bench"}
                     </Badge>
                     <span className="text-xs font-bold tabular-nums text-[#0b3a7a] dark:text-blue-400">
-                      {c.dynVal.toLocaleString()}
+                      {fmtN(c.dynVal)}
                     </span>
                   </div>
                 </div>
@@ -1010,7 +1022,7 @@ export function TradeFinder({ league, userTeam }: TradeProps) {
                 onClick={() => openPlayerProfile(p.sleeperId || p.id)}
               />
               <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                <span className="text-xs font-bold text-[#0b3a7a] dark:text-blue-400 tabular-nums">{p.redraftVal.toLocaleString()}</span>
+                <span className="text-xs font-bold text-[#0b3a7a] dark:text-blue-400 tabular-nums">{fmtN(p.redraftVal)}</span>
                 <Badge variant="outline" className={cn("text-[9px] px-1.5 py-0 h-4", p.reason === "Rebuilder" ? getTierColor("Future Powerhouse") : "text-amber-600 dark:text-amber-400 border-amber-300 dark:border-amber-700")} data-testid={`trade-block-reason-${p.sleeperId || p.id}`}>
                   {p.reason}
                 </Badge>
@@ -1537,7 +1549,7 @@ function SelectedAssetRow({ asset, onRemove, testId }: {
           </div>
         </div>
       )}
-      <span className="flex-shrink-0 text-sm md:text-base font-extrabold tabular-nums text-[#d4af37]">{Math.round(asset.value).toLocaleString()}</span>
+      <span className="flex-shrink-0 text-sm md:text-base font-extrabold tabular-nums text-[#d4af37]">{fmtRound(asset.value)}</span>
       <button
         type="button"
         onClick={onRemove}
@@ -1569,7 +1581,7 @@ function PlayerQuickAddCard({ player, onAdd, testId }: {
         <p className="text-[12px] font-bold text-foreground truncate leading-tight">{player.name}</p>
         <p className="text-[10px] text-muted-foreground truncate mt-0.5">{player.pos}{player.team ? ` · ${player.team}` : ""}</p>
       </div>
-      <span className="text-[12px] font-extrabold tabular-nums text-[#d4af37]">{Math.round(player.value).toLocaleString()}</span>
+      <span className="text-[12px] font-extrabold tabular-nums text-[#d4af37]">{fmtRound(player.value)}</span>
     </button>
   );
 }
@@ -1639,7 +1651,7 @@ function TradeSidePanel({ label, assets, total, players, onAddPlayer, onAddPick,
         </div>
         <div className="text-right flex-shrink-0">
           <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">Total</p>
-          <p className="text-xl md:text-2xl font-extrabold tabular-nums text-[#d4af37] leading-none mt-0.5">{Math.round(total).toLocaleString()}</p>
+          <p className="text-xl md:text-2xl font-extrabold tabular-nums text-[#d4af37] leading-none mt-0.5">{fmtRound(total)}</p>
         </div>
       </div>
 
@@ -1671,7 +1683,7 @@ function TradeSidePanel({ label, assets, total, players, onAddPlayer, onAddPick,
                   <div className="min-w-0 flex-1">
                     <PlayerAvatar id={item.player.sleeperId} name={item.player.name} pos={item.player.pos} team={item.player.team} size="sm" />
                   </div>
-                  <span className="flex-shrink-0 text-[12px] font-bold tabular-nums text-[#d4af37]">{Math.round(item.player.value).toLocaleString()}</span>
+                  <span className="flex-shrink-0 text-[12px] font-bold tabular-nums text-[#d4af37]">{fmtRound(item.player.value)}</span>
                 </button>
               ) : (
                 <button
@@ -1685,7 +1697,7 @@ function TradeSidePanel({ label, assets, total, players, onAddPlayer, onAddPick,
                     {PICK_ORD(item.pick.round)}
                   </span>
                   <span className="flex-1 text-[13px] font-semibold text-foreground truncate">{item.pick.label}</span>
-                  <span className="flex-shrink-0 text-[12px] font-bold tabular-nums text-[#d4af37]">{Math.round(item.pick.value).toLocaleString()}</span>
+                  <span className="flex-shrink-0 text-[12px] font-bold tabular-nums text-[#d4af37]">{fmtRound(item.pick.value)}</span>
                 </button>
               ),
             )}
@@ -1758,7 +1770,7 @@ function TradeResultSummary({ bothSides, headline, verdictLabel, badgeStyle, bar
         <div className="flex items-center justify-between gap-2 text-[10px] md:text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
           <span>Side A</span>
           <span className="normal-case tracking-normal font-semibold text-muted-foreground/60">
-            {fair ? "Balanced" : `Value difference ${Math.round(diff).toLocaleString()}`}
+            {fair ? "Balanced" : `Value difference ${fmtRound(diff)}`}
           </span>
           <span>Side B</span>
         </div>
@@ -1770,8 +1782,8 @@ function TradeResultSummary({ bothSides, headline, verdictLabel, badgeStyle, bar
           <div className="absolute top-0 bottom-0 w-px bg-white/40 z-10" style={{ left: "50%" }} />
         </div>
         <div className="flex justify-between text-base md:text-lg font-extrabold tabular-nums">
-          <span className="text-[#d4af37]">{Math.round(valA).toLocaleString()}</span>
-          <span className="text-[#d4af37]">{Math.round(valB).toLocaleString()}</span>
+          <span className="text-[#d4af37]">{fmtRound(valA)}</span>
+          <span className="text-[#d4af37]">{fmtRound(valB)}</span>
         </div>
       </div>
     </div>
@@ -2773,7 +2785,7 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
                         <div className="flex-1 min-w-0" />
                         {val > 0 && (
                           <span className="text-[11px] font-bold tabular-nums flex-shrink-0" style={{ color: isAdded ? "#d4af37" : "rgba(203,213,225,0.35)" }}>
-                            {val.toLocaleString()}
+                            {fmtN(val)}
                           </span>
                         )}
                         <div className="flex items-center justify-center w-6 h-6 rounded-full flex-shrink-0 transition-all" style={{ background: isAdded ? "rgba(212,175,55,0.20)" : "rgba(255,255,255,0.05)", border: isAdded ? "1.5px solid rgba(212,175,55,0.55)" : "1.5px solid rgba(255,255,255,0.08)" }}>
@@ -3095,7 +3107,7 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
                 </span>
                 <span className="text-[9px] text-muted-foreground/80 tabular-nums">
                   {asset.type === "player" ? `${asset.pos ?? ""}${team ? " · " + team : ""}` : "Pick"}
-                  {asset.value > 0 && <span className="ml-1 text-[#d4af37]/90">{asset.value.toLocaleString()}</span>}
+                  {asset.value > 0 && <span className="ml-1 text-[#d4af37]/90">{fmtN(asset.value)}</span>}
                 </span>
               </div>
               <X className="w-3 h-3 text-muted-foreground/30 group-hover:text-red-400 transition-colors flex-shrink-0" />
@@ -3142,8 +3154,8 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
                         <div className="absolute top-0 bottom-0 w-0.5 bg-white/30 z-10" style={{ left: "50%" }} />
                       </div>
                       <div className="flex justify-between text-[10px] tabular-nums text-muted-foreground/80">
-                        <span>{finalA.toLocaleString()}</span>
-                        <span>{finalB.toLocaleString()}</span>
+                        <span>{fmtN(finalA)}</span>
+                        <span>{fmtN(finalB)}</span>
                       </div>
                     </div>
                   </>
@@ -3654,9 +3666,9 @@ export function TradeDatabase({ league }: { league: League }) {
         <Database className="w-4 h-4 text-[#0b3a7a] dark:text-blue-400 flex-shrink-0 mt-0.5" />
         {stats ? (
           <p className="text-sm leading-snug text-center md:text-left">
-            <span className="font-bold text-[#d4af37]" data-testid="text-total-trades">{stats.totalTrades.toLocaleString()}</span>
+            <span className="font-bold text-[#d4af37]" data-testid="text-total-trades">{fmtN(stats.totalTrades)}</span>
             <span className="text-muted-foreground"> Real Trades | </span>
-            <span className="font-bold text-[#d4af37]" data-testid="text-total-leagues">{stats.totalLeagues.toLocaleString()}</span>
+            <span className="font-bold text-[#d4af37]" data-testid="text-total-leagues">{fmtN(stats.totalLeagues)}</span>
             <span className="text-muted-foreground"> Leagues Scanned</span>
           </p>
         ) : (
@@ -3751,7 +3763,7 @@ export function TradeDatabase({ league }: { league: League }) {
                     pos={p.pos}
                     team={p.team ?? ""}
                     size="sm"
-                    sub={p.value.toLocaleString()}
+                    sub={fmtN(p.value, "0")}
                   />
                 </button>
               ))}
@@ -3884,14 +3896,14 @@ export function TradeDatabase({ league }: { league: League }) {
         <p className="text-xs text-muted-foreground text-center md:text-left" data-testid="text-results-count">
           {shapeFilterActive ? (
             <>
-              Showing {displayedTrades.length.toLocaleString()} matching{" "}
+              Showing {fmtN(displayedTrades.length)} matching{" "}
               <span className="font-semibold text-foreground/80">
                 {TRADE_SHAPE_OPTIONS.find((o) => o.value === tradeShape)?.label}
               </span>{" "}
-              · {tradeResults.length.toLocaleString()} of {total.toLocaleString()} loaded
+              · {fmtN(tradeResults.length)} of {fmtN(total)} loaded
             </>
           ) : (
-            <>Showing {tradeResults.length.toLocaleString()} of {total.toLocaleString()} trades</>
+            <>Showing {fmtN(tradeResults.length)} of {fmtN(total)} trades</>
           )}
         </p>
       )}
@@ -4101,7 +4113,7 @@ function TradeCard({
                       )}
                       data-testid={`text-side-total-${side.rosterId}`}
                     >
-                      {sideTotal.toLocaleString()}
+                      {fmtN(sideTotal, "0")}
                     </p>
                     {isWinner && (
                       <span
@@ -4109,7 +4121,7 @@ function TradeCard({
                         data-testid={`badge-value-winner-${side.rosterId}`}
                       >
                         <Trophy className="w-2.5 h-2.5" />
-                        +{valueDelta.toLocaleString()} Value
+                        +{fmtN(valueDelta, "0")} Value
                       </span>
                     )}
                   </div>
@@ -4142,7 +4154,7 @@ function TradeCard({
                           )}
                           data-testid={`text-player-value-${p.sleeperId}`}
                         >
-                          {val > 0 ? val.toLocaleString() : "0"}
+                          {val > 0 ? fmtN(val, "0") : "0"}
                         </span>
                       </div>
                     );
@@ -4192,7 +4204,7 @@ function TradeCard({
                             (!isStartup && val > 0) ? "" : "opacity-0",
                           )}
                         >
-                          {!isStartup && val > 0 ? val.toLocaleString() : "0"}
+                          {!isStartup && val > 0 ? fmtN(val, "0") : "0"}
                         </span>
                       </div>
                     );

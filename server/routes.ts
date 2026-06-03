@@ -119,7 +119,7 @@ import {
   repairIncompleteDrafts,
 } from "./adpCrawlRepair";
 import { getUser } from "./scAuth";
-import { pool, classifyDbError } from "./db";
+import { pool, classifyDbError, POOL_MAX } from "./db";
 import { isAdminByEmail } from "@shared/admin";
 import {
   confirmSleeperToken,
@@ -228,6 +228,11 @@ const weeklyMatchupsCache = makeCache<any>(5 * 60 * 1000); // 5-min TTL — live
 const statChasersDataCache = makeCache<any>(10 * 60 * 1000); // 10-min TTL — public-data repo JSON
 const scheduleCache = makeCache<any>(5 * 60 * 1000); // 5-min TTL — NFL week schedule (kickoff/lock state)
 const adpStatsCache = makeCache<any>(5 * 60 * 1000); // 5-min TTL — two count(*) queries, hit on every Draft tab load
+// Per-user resolved custom values. Hit on every page load (and by several
+// widgets at once), each call running getResolvedValues' DB queries. Short-TTL
+// + single-flight (keyed by userId) collapses the page-load burst to one query
+// per user and stops it competing for pool slots with /api/adp.
+const resolvedValuesCache = makeCache<any>(60 * 1000); // 60s TTL, keyed by userId
 // Sleeper fan-out endpoints: not DB-pool bound, but each does several (or N-per-
 // league) rate-limited Sleeper calls and is hit on page load, so concurrent
 // duplicates pile up long-held requests and burn Sleeper rate budget. Short TTL
@@ -1370,6 +1375,7 @@ export async function registerRoutes(
       });
 
       previewCache.delete(token);
+      resolvedValuesCache.invalidate(userId);
       res.json({ ok: true, ...result });
     } catch (err: any) {
       console.error("[custom-values/save] error:", err.message);
@@ -1396,6 +1402,7 @@ export async function registerRoutes(
       const id = parseInt(req.params.id, 10);
       if (!Number.isFinite(id)) return res.status(400).json({ error: "invalid id" });
       await activateValueSet(userId, id);
+      resolvedValuesCache.invalidate(userId);
       res.json({ ok: true });
     } catch (err: any) {
       res.status(500).json({ error: err.message || "Failed to activate value set" });
@@ -1409,6 +1416,7 @@ export async function registerRoutes(
       const { valueType } = req.body as { valueType?: string };
       if (!isValueType(valueType)) return res.status(400).json({ error: "valueType must be 'dynasty' or 'redraft'" });
       await deactivateValueSet(userId, valueType);
+      resolvedValuesCache.invalidate(userId);
       res.json({ ok: true });
     } catch (err: any) {
       res.status(500).json({ error: err.message || "Failed to deactivate" });
@@ -1422,6 +1430,7 @@ export async function registerRoutes(
       const id = parseInt(req.params.id, 10);
       if (!Number.isFinite(id)) return res.status(400).json({ error: "invalid id" });
       await deleteValueSet(userId, id);
+      resolvedValuesCache.invalidate(userId);
       res.json({ ok: true });
     } catch (err: any) {
       res.status(500).json({ error: err.message || "Failed to delete value set" });
@@ -1439,11 +1448,12 @@ export async function registerRoutes(
       return res.json({ dynasty: null, redraft: null });
     }
     try {
-      const resolved = await getResolvedValues(userId);
+      const resolved = await resolvedValuesCache.getOrCompute(userId, () => getResolvedValues(userId));
       res.json(resolved);
     } catch (err: any) {
-      console.error("[custom-values/resolved] error:", err.message);
-      res.status(500).json({ error: err.message || "Failed to resolve values" });
+      const c = classifyDbError(err);
+      console.error(`[custom-values/resolved] FAILED [${c.kind}] waiting=${pool.waitingCount} :: ${c.detail}`);
+      res.status(500).json({ ok: false, error: c.error, detail: c.detail, kind: c.kind });
     }
   });
 
@@ -1513,7 +1523,7 @@ export async function registerRoutes(
       const c = classifyDbError(err);
       console.error(
         `[ADP /api/adp/stats] FAILED [${c.kind}] in ${Date.now() - startMs}ms ` +
-        `pool=${pool.totalCount}/${pool.options.max} waiting=${pool.waitingCount} :: ${c.detail}`,
+        `pool=${pool.totalCount}/${POOL_MAX} waiting=${pool.waitingCount} :: ${c.detail}`,
       );
       res.status(500).json({ ok: false, error: c.error, detail: c.detail, kind: c.kind });
     }
@@ -1593,14 +1603,21 @@ export async function registerRoutes(
       // would serve stale data after a refresh).
       const result = await getAdp(filters);
 
+      // Pool diagnostics on every ADP read so saturation is visible in the logs
+      // (totalCount = open connections, waitingCount = requests queued for a slot).
       console.log(
         `[ADP /api/adp] key=${result.filterKey} cached=${result.cached} ` +
+        `${result.stale ? "stale " : ""}${result.computing ? "computing " : ""}` +
         `drafts=${result.draftCount} picks=${result.pickCount} rows=${result.rows.length} ` +
-        `in ${Date.now() - startMs}ms`
+        `in ${Date.now() - startMs}ms ` +
+        `pool=${pool.totalCount}/${POOL_MAX} idle=${pool.idleCount} waiting=${pool.waitingCount}`
       );
 
       const isEmpty = result.rows.length === 0;
-      res.setHeader("Cache-Control", "public, max-age=300");
+      // A "computing" placeholder must NOT be cached by the browser/CDN — it
+      // would pin the empty state past the few seconds the background compute
+      // needs. Real results stay cacheable for 5 minutes.
+      res.setHeader("Cache-Control", result.computing ? "no-store" : "public, max-age=300");
       res.json({
         items: result.rows,
         meta: {
@@ -1610,10 +1627,15 @@ export async function registerRoutes(
           filter_key: result.filterKey,
           is_empty: isEmpty,
           cached: result.cached,
+          stale: result.stale ?? false,
+          // True → rows are being built in the background; client should retry.
+          computing: result.computing ?? false,
           snapshot_date: result.snapshotDate,
-          message: isEmpty && result.draftCount === 0
-            ? "No ADP data has been ingested yet."
-            : undefined,
+          message: result.computing
+            ? "Building ADP for this filter… retry in a few seconds."
+            : isEmpty && result.draftCount === 0
+              ? "No ADP data has been ingested yet."
+              : undefined,
           filters,
         },
       });
@@ -1627,7 +1649,7 @@ export async function registerRoutes(
       console.error(
         `[ADP /api/adp] FAILED [${c.kind}] in ${durationMs}ms ` +
         `params=${JSON.stringify(req.query)} ` +
-        `pool=${pool.totalCount}/${pool.options.max} waiting=${pool.waitingCount} ` +
+        `pool=${pool.totalCount}/${POOL_MAX} waiting=${pool.waitingCount} ` +
         `:: ${c.detail}`,
       );
       const userMessage =

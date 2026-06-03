@@ -42,6 +42,12 @@ import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { getPositionColor } from "@/data/mockData";
 import type { Player, Pick, Team, League } from "@/types";
 
+
+// Safe number formatter — prevents .toLocaleString() crashes on undefined/NaN
+function fmtN(v: unknown, fallback = '—'): string {
+  const n = Number(v);
+  return Number.isFinite(n) ? n.toLocaleString() : fallback;
+}
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 type RowStatus =
@@ -233,7 +239,7 @@ function PlayerAutocomplete({
             <div className="text-sm font-semibold truncate">{value.name}</div>
             <div className="text-[10px] text-muted-foreground">
               <span className={cn("font-bold mr-1", getPositionColor(value.pos))}>{value.pos}</span>
-              · {value.team || "FA"} · <span className="text-[#d4af37] tabular-nums">{value.value.toLocaleString()}</span>
+              · {value.team || "FA"} · <span className="text-[#d4af37] tabular-nums">{fmtN(value.value)}</span>
             </div>
           </div>
           <button
@@ -291,7 +297,7 @@ function PlayerAutocomplete({
                     </div>
                   </div>
                   <span className="text-[11px] text-[#d4af37] font-semibold tabular-nums shrink-0">
-                    {p.value.toLocaleString()}
+                    {fmtN(p.value)}
                   </span>
                 </button>
               ))}
@@ -1454,7 +1460,7 @@ function AssetPicker({
               <span className="text-xs font-medium truncate flex-1">{pl.name}</span>
               <span className="text-[10px] text-muted-foreground">{pl.team || "FA"}</span>
               {pl.value > 0 && (
-                <span className="text-[10px] text-[#d4af37] tabular-nums">{pl.value.toLocaleString()}</span>
+                <span className="text-[10px] text-[#d4af37] tabular-nums">{fmtN(pl.value)}</span>
               )}
             </button>
           );
@@ -1477,7 +1483,7 @@ function AssetPicker({
               <span className="text-[10px] font-bold uppercase px-1 rounded bg-blue-500/15 text-blue-600 dark:text-blue-400">PICK</span>
               <span className="text-xs font-medium flex-1">{pickLabel(pk)}</span>
               {pk.value > 0 && (
-                <span className="text-[10px] text-[#d4af37] tabular-nums">{pk.value.toLocaleString()}</span>
+                <span className="text-[10px] text-[#d4af37] tabular-nums">{fmtN(pk.value)}</span>
               )}
             </button>
           );

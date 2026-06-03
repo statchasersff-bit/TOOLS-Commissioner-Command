@@ -1878,6 +1878,9 @@ async function computeAndCacheAdp(
           snapshotDate: todayStr(),
           computedAt: new Date(),
         });
+        // Drop any short-lived "computing"/stale placeholder so the very next
+        // read picks up this fresh snapshot instead of the empty placeholder.
+        invalidateAdpMemCache(key);
       } catch (err) {
         console.warn(`[ADP getAdp] snapshot persist failed (key=${key}):`, (err as Error).message);
       }
@@ -1911,6 +1914,12 @@ interface _AdpMemEntry {
     snapshotDate: string | null;
     computedAt: string;
     cached: boolean;
+    // True when we're serving a previous (expired) snapshot while a fresh
+    // compute runs in the background — the data is real but not current.
+    stale?: boolean;
+    // True when no snapshot exists yet and a compute was kicked off in the
+    // background; rows are empty and the client should retry shortly.
+    computing?: boolean;
   };
   expiresAt: number;
 }
@@ -1930,15 +1939,7 @@ export function invalidateAdpMemCache(key?: string) {
  * snapshot exists yet for that filter key. We never reach back out to
  * Sleeper here — the cost ceiling is a single Postgres query.
  */
-export async function getAdp(f: AdpFilters): Promise<{
-  rows: AdpRow[];
-  draftCount: number;
-  pickCount: number;
-  filterKey: string;
-  snapshotDate: string | null;
-  computedAt: string;
-  cached: boolean;
-}> {
+export async function getAdp(f: AdpFilters): Promise<_AdpMemEntry["result"]> {
   const key = filterKey(f);
 
   // 1. Hot path: serve from RAM if still fresh.
@@ -1949,13 +1950,19 @@ export async function getAdp(f: AdpFilters): Promise<{
   const flying = _adpInFlight.get(key);
   if (flying) return flying;
 
-  // 3. Cold path: fetch from DB (or recompute).  Wrap in a shared promise so
-  //    any concurrent requests that arrive while this is pending use the same
-  //    DB call rather than spawning their own.
+  // 3. Cold path: read the cached snapshot (fast SELECT) — never a live compute
+  //    on the request path; misses are computed in the background by
+  //    _getAdpFromDb. Wrap in a shared promise so concurrent requests for this
+  //    key share one DB read rather than each issuing their own.
   const work: Promise<_AdpMemEntry["result"]> = (async () => {
     try {
       const result = await _getAdpFromDb(f, key);
-      _adpMemCache.set(key, { result, expiresAt: Date.now() + ADP_MEM_TTL_MS });
+      // Vary TTL by result kind so transient placeholders are re-checked soon:
+      //   computing → 10s  (a background compute is in flight; pick it up fast)
+      //   stale     → 30s  (serving expired data while it refreshes)
+      //   fresh     → full 5-min TTL
+      const ttl = result.computing ? 10_000 : result.stale ? 30_000 : ADP_MEM_TTL_MS;
+      _adpMemCache.set(key, { result, expiresAt: Date.now() + ttl });
       return result;
     } finally {
       _adpInFlight.delete(key);
@@ -1965,16 +1972,41 @@ export async function getAdp(f: AdpFilters): Promise<{
   return work;
 }
 
-/** Internal: performs the actual DB read / compute.  Never called directly. */
-async function _getAdpFromDb(f: AdpFilters, key: string): Promise<{
-  rows: AdpRow[];
-  draftCount: number;
-  pickCount: number;
-  filterKey: string;
-  snapshotDate: string | null;
-  computedAt: string;
-  cached: boolean;
-}> {
+// Bound how many cold/stale ADP computes run in the background at once. Each
+// computeAdp holds ONE pool connection for the duration of a heavy aggregation
+// (≈10–30s when the drafts table isn't indexed for the filter). Without a cap,
+// a burst of distinct date-range filters — each a unique key the single-flight
+// map can't dedup — would spawn one compute per key and re-saturate the pool,
+// the exact failure we're fixing. Excess requests serve stale/empty instantly
+// and the compute happens on a later request once a slot frees. Tune via env.
+const MAX_CONCURRENT_ADP_COMPUTES = Number(process.env.ADP_MAX_CONCURRENT_COMPUTES || 3);
+let activeAdpComputes = 0;
+
+/** Fire a snapshot compute in the BACKGROUND (never awaited on the read path).
+ *  De-duped per-key by computeAndCacheAdp's single-flight map; the counter caps
+ *  how many DISTINCT keys may compute at once so background work can't exhaust
+ *  the pool the way the old synchronous read-path compute did. */
+function triggerBackgroundAdpCompute(f: AdpFilters, key: string): void {
+  if (inFlightAdpComputes.has(key)) return; // already computing this exact key
+  if (activeAdpComputes >= MAX_CONCURRENT_ADP_COMPUTES) {
+    console.warn(
+      `[ADP] background compute deferred (key=${key}); ` +
+      `${activeAdpComputes}/${MAX_CONCURRENT_ADP_COMPUTES} compute slots busy`,
+    );
+    return;
+  }
+  activeAdpComputes++;
+  void computeAndCacheAdp(f, key)
+    .catch((err) => console.error(`[ADP] background compute failed (key=${key}):`, (err as Error).message))
+    .finally(() => { activeAdpComputes--; });
+}
+
+/** Internal: reads the cached snapshot (a fast keyed SELECT) and, on a
+ *  miss/stale/expired snapshot, kicks the heavy recompute to the BACKGROUND so
+ *  the request never holds a pool connection for the multi-second compute.
+ *  Returns the best data available right now (fresh, stale, or empty+computing).
+ *  Never called directly — go through getAdp(). */
+async function _getAdpFromDb(f: AdpFilters, key: string): Promise<_AdpMemEntry["result"]> {
   const cached = await getCachedAdp(f);
 
   // Stale-cache guard 1: under the new Direct-Rookies rule, kicker rows must
@@ -2010,23 +2042,50 @@ async function _getAdpFromDb(f: AdpFilters, key: string): Promise<{
   if (cacheHasForbiddenKickers) {
     console.warn(
       `[ADP getAdp] stale snapshot dropped — contained K rows under ` +
-      `Direct Rookies (key=${key}). Recomputing.`,
+      `Direct Rookies (key=${key}). Recomputing in background.`,
     );
   }
   if (cacheExpired) {
     console.info(
-      `[ADP getAdp] date-range snapshot expired (>1h old, key=${key}). Recomputing from DB.`,
+      `[ADP getAdp] date-range snapshot expired (>1h old, key=${key}). Recomputing in background.`,
     );
   }
-  const fresh = await computeAndCacheAdp(f, key);
+
+  // Cache miss / stale / expired. DO NOT block the request on computeAndCacheAdp:
+  // a date-range compute can hold a pool connection for 10–30s, and a burst of
+  // them is exactly what saturates the pool ("timeout exceeded when trying to
+  // connect"). Kick the recompute to the background (single-flighted +
+  // concurrency-capped) and return the best data we have RIGHT NOW so the read
+  // path costs only the fast getCachedAdp() SELECT above.
+  triggerBackgroundAdpCompute(f, key);
+
+  // Serve the previous snapshot if we have one with usable rows (even if expired
+  // or being recomputed for kickers) — real, slightly-stale ADP beats a spinner.
+  if (cached && cached.rows.length > 0 && !cacheHasForbiddenKickers) {
+    return {
+      rows: cached.rows,
+      draftCount: cached.draftCount,
+      pickCount: cached.rows.reduce((s, r) => s + r.draft_count, 0),
+      filterKey: key,
+      snapshotDate: cached.snapshotDate,
+      computedAt: cached.computedAt,
+      cached: true,
+      stale: true,
+    };
+  }
+
+  // Nothing usable cached yet — return an explicit "computing" empty result
+  // instead of hanging on the compute. The client shows a "building…" state and
+  // the next request (after the background compute persists) gets real rows.
   return {
-    rows: fresh.rows,
-    draftCount: fresh.draftCount,
-    pickCount: fresh.pickCount,
+    rows: [],
+    draftCount: cached?.draftCount ?? 0,
+    pickCount: 0,
     filterKey: key,
-    snapshotDate: null,
+    snapshotDate: cached?.snapshotDate ?? null,
     computedAt: new Date().toISOString(),
     cached: false,
+    computing: true,
   };
 }
 

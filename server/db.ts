@@ -48,7 +48,7 @@ export type PoolConfigWithLifetime = pg.PoolConfig & { maxLifetimeSeconds?: numb
 // queue. Footprint: 60 app + 3 auth + 5 session + 1 vitals = 69 per instance, so
 // even TWO overlapping instances during a deploy (~138) stay well under ~450.
 // Tune via PG_POOL_MAX if the DB shows CPU/connection pressure.
-const POOL_MAX = Number(process.env.PG_POOL_MAX || 60);
+export const POOL_MAX = Number(process.env.PG_POOL_MAX || 60);
 
 // ── Stale-connection self-healing — the "timeout exceeded when trying to connect"
 // fix. ── A pg.Pool counts a checked-out client against `max` until that client

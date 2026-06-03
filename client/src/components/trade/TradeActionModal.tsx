@@ -19,6 +19,12 @@ import type { SleeperDmMessage, SleeperTransactionPick, ProposeTradeResult } fro
 import { TradeEditTab, type EditAssetsWithFaab } from "./TradeEditTab";
 import { FeatureDisabledError } from "@/components/FeatureDisabledDialog";
 
+
+// Safe number formatter
+function fmtN(v: unknown, fallback = '—'): string {
+  const n = Number(v);
+  return Number.isFinite(n) ? n.toLocaleString() : fallback;
+}
 // ─── Exported Types ───────────────────────────────────────────────────────────
 
 export interface AssetPlayer {
@@ -237,7 +243,7 @@ function PlayerAssetRow({ player, onRemove }: { player: AssetPlayer; onRemove?: 
       </div>
       {player.value > 0 && (
         <span className="text-[11px] text-white/30 tabular-nums flex-shrink-0">
-          {player.value.toLocaleString()}
+          {fmtN(player.value)}
         </span>
       )}
       {onRemove && (
@@ -267,7 +273,7 @@ function PickAssetRow({ pick, onRemove }: { pick: AssetPick; onRemove?: () => vo
       <span className="text-[13px] text-white/85 flex-1 truncate">{pick.label}</span>
       {pick.value > 0 && (
         <span className="text-[11px] text-white/30 tabular-nums flex-shrink-0">
-          {pick.value.toLocaleString()}
+          {fmtN(pick.value)}
         </span>
       )}
       {onRemove && (

@@ -1176,7 +1176,16 @@ export function PortfolioSummary({ onNavigate }: { onNavigate?: (mainTab: string
                 <div className="space-y-0.5">
                   {summaryData.playerExposure.filter((p: any) => p.exposure >= 50).map((p: any) => (
                     <p key={p.playerId} className="text-xs text-amber-700 dark:text-amber-400">
-                      {p.name}: {p.exposure}% exposure across your portfolio
+                      <button
+                        type="button"
+                        onClick={() => openPlayerProfile(p.playerId)}
+                        className="font-semibold text-left hover:underline cursor-pointer"
+                        data-testid={`player-link-${p.playerId}`}
+                        title={`View ${p.name}`}
+                      >
+                        {p.name}
+                      </button>
+                      : {p.exposure}% exposure across your portfolio
                     </p>
                   ))}
                 </div>

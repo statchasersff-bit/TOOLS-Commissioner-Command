@@ -1,0 +1,118 @@
+The Trade Database is crashing the Dynasty Command router.
+
+Error:
+
+Crashed: Router/DynastyCommandCenter
+Cannot read properties of undefined (reading 'toLocaleString')
+
+Stack trace points to:
+TradeCenter-Bi6bKJ9f.js
+
+This means TradeCenter is calling `.toLocaleString()` on an undefined value.
+
+Please fix this as a frontend data-safety bug and do not allow one malformed/missing trade field to crash the whole app.
+
+Tasks:
+
+1. Search the Trade Center source code for every use of:
+
+.toLocaleString(
+
+Especially inside:
+- TradeCenter
+- Trade Database
+- trade table rows
+- trade cards
+- trade value formatting
+- date formatting
+- count formatting
+- player value formatting
+- pick value formatting
+
+Use:
+
+grep -R "toLocaleString" -n src client app components
+
+2. Replace direct unsafe calls like this:
+
+value.toLocaleString()
+
+with safe helper functions.
+
+Add helpers such as:
+
+function formatNumber(value, fallback = "—") {
+  const num = Number(value);
+  return Number.isFinite(num) ? num.toLocaleString() : fallback;
+}
+
+function formatCurrencyLike(value, fallback = "—") {
+  const num = Number(value);
+  return Number.isFinite(num) ? num.toLocaleString() : fallback;
+}
+
+function formatDateTime(value, fallback = "—") {
+  if (!value) return fallback;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? fallback : date.toLocaleString();
+}
+
+3. Then update all TradeCenter rendering code:
+
+Bad:
+trade.totalValue.toLocaleString()
+
+Good:
+formatNumber(trade.totalValue)
+
+Bad:
+trade.timestamp.toLocaleString()
+
+Good:
+formatDateTime(trade.timestamp)
+
+Bad:
+trade.tradeCount.toLocaleString()
+
+Good:
+formatNumber(trade.tradeCount)
+
+4. Add normalization for trade rows before rendering.
+
+Example:
+
+function normalizeTradeRow(trade) {
+  return {
+    ...trade,
+    totalValue: Number(trade.totalValue ?? trade.total_value ?? 0),
+    valueGiven: Number(trade.valueGiven ?? trade.value_given ?? 0),
+    valueReceived: Number(trade.valueReceived ?? trade.value_received ?? 0),
+    tradeCount: Number(trade.tradeCount ?? trade.trade_count ?? 0),
+    createdAt: trade.createdAt ?? trade.created_at ?? trade.timestamp ?? null,
+  };
+}
+
+5. Check the Trade Database API response shape.
+
+The frontend may expect camelCase while the backend returns snake_case.
+
+Examples:
+- totalValue vs total_value
+- valueGiven vs value_given
+- valueReceived vs value_received
+- tradeCount vs trade_count
+- createdAt vs created_at
+
+Make sure the frontend supports both or the backend consistently returns camelCase.
+
+6. Add defensive rendering around the Trade Database table.
+
+If one row is missing a field, show "—" instead of crashing.
+
+7. Add an error boundary specifically around TradeCenter so the entire Dynasty Command Center does not crash.
+
+Expected behavior:
+- Trade Database loads even if some rows have missing fields.
+- Missing numeric/date fields display "—".
+- No `.toLocaleString()` call should ever run on undefined.
+- The route should not crash the full Dynasty Command app.
