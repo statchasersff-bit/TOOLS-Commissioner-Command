@@ -78,3 +78,9 @@ id = "AR8QSIF6Q8ISTFNnrJjkQ"
 uri = "file://dynasty-command-static.tar.gz"
 type = "unspecified"
 title = "dynasty-command-static.tar.gz"
+
+[[outputs]]
+id = "yFEGW62FLQ1dJqd3gvvhG"
+uri = "file://statchasers-deploy.tar.gz"
+type = "unspecified"
+title = "statchasers-deploy.tar.gz — Upload public/ to Bluehost"

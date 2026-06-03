@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { API_BASE } from "@/lib/apiBase";
 
 /**
@@ -173,14 +173,6 @@ export function AdpCrawlPanel() {
   // Live progress for the in-flight server-side crawl. Populated by the
   // initial POST response and refreshed every ~1.5s by the polling effect.
   const [liveProgress, setLiveProgress] = useState<CrawlLiveState | null>(null);
-  const pollRef = useRef<number | null>(null);
-  // Ref kept in sync with runState so the interval callback can read the
-  // current value without a stale closure. The effect only re-creates when
-  // adminSecretOverride changes (to pick up a new token), but runState can
-  // change at any time — reading from a ref avoids re-mounting the interval
-  // on every state transition.
-  const runStateRef = useRef<RunState>(runState);
-  runStateRef.current = runState;
   const running = runState === "running";
 
   // ── Status state ────────────────────────────────────────────────────────
@@ -277,75 +269,86 @@ export function AdpCrawlPanel() {
     // ticking from state.startedAt, and clears it when the crawl terminates.
   }, [seedUsername, seasons, categories, refreshSnapshots, maxUsers, maxLeagues, maxDrafts, tradeLookbackDays, adminSecretOverride]);
 
-  // ── Live-progress polling ───────────────────────────────────────────────
-  // Single long-lived poller. Fires once on mount (to detect a crawl that
-  // started before the panel opened) and then on a 1.5s interval while the
-  // panel is mounted. When no crawl is running the tick is skipped every
-  // 9 out of 10 iterations (~15s effective rate) to avoid hammering the
-  // endpoint cross-origin for no reason. When running, every tick fires
-  // for responsive live-updates. All state transitions go through functional
-  // setters so the closure doesn't capture stale values. The interval does
-  // NOT clear on terminal states — clicking "Run" again immediately resumes
-  // live updates without needing to re-create the effect.
+  // ── Shared progress-state applier ──────────────────────────────────────────
+  // All state transitions use functional setters so this callback is stable
+  // (no deps) and safe to call from either effect below.
+  const applyProgressState = useCallback((state: CrawlLiveState) => {
+    setLiveProgress(state);
+    if (state.status === "running") {
+      setRunState((prev) => (prev === "running" ? prev : "running"));
+      setRunStartedAt(state.startedAt);
+    } else if (state.status === "completed") {
+      setResult(state);
+      setRunState((prev) => (prev === "success" ? prev : "success"));
+    } else if (state.status === "cancelled") {
+      // Cancelled = user stopped the crawl; treat as success so partial
+      // counters are surfaced (capsHit / phaseLabel say "Cancelled").
+      setResult(state);
+      setRunState((prev) => (prev === "success" ? prev : "success"));
+    } else if (state.status === "failed") {
+      setResult(state);
+      setRunState((prev) => (prev === "error" ? prev : "error"));
+      if (state.errors.length > 0) {
+        setError((prev) => prev || state.errors[state.errors.length - 1]);
+      }
+    }
+  }, []);
+
+  // ── Mount-check effect ──────────────────────────────────────────────────────
+  // ONE fetch on mount (or when adminSecretOverride changes) to detect a crawl
+  // that was started before this panel was opened. After this single check the
+  // UI is purely event-driven: the live-interval below takes over only if a
+  // crawl is actually running. This means ZERO idle polling — the endpoint is
+  // never called from Trade Database, Value Finder, or any non-draft page.
   useEffect(() => {
-    let cancelled = false;
-    let tickCount = 0;
-
-    const tick = async () => {
-      tickCount++;
-      // Throttle to 1 in 10 ticks (~15s) when idle; every tick when running.
-      // tickCount === 1 is always the on-mount check.
-      const isRunning = runStateRef.current === "running";
-      if (!isRunning && tickCount > 1 && tickCount % 10 !== 0) return;
-
+    let alive = true;
+    (async () => {
       try {
         const res = await fetch(`${API_BASE}/api/admin/adp/crawl-network/progress`, {
           credentials: "include",
           headers: buildAdminHeaders(adminSecretOverride),
         });
-        if (!res.ok) return; // 403 / 404 silent — usually means signed out
+        if (!res.ok || !alive) return;
         const ct = res.headers.get("content-type") || "";
         if (!ct.includes("application/json")) return;
         const state = (await res.json()) as CrawlLiveState;
-        if (cancelled) return;
+        if (alive) applyProgressState(state);
+      } catch { /* transient */ }
+    })();
+    return () => { alive = false; };
+  }, [adminSecretOverride, applyProgressState]);
 
-        setLiveProgress(state);
+  // ── Live-update interval ────────────────────────────────────────────────────
+  // This effect ONLY exists while runState === "running". React creates the
+  // interval when a crawl starts (runState flips to "running" from either the
+  // POST response or the mount-check above) and tears it down the moment the
+  // crawl transitions to any terminal state. When idle there is no interval
+  // at all — guaranteed zero cross-origin requests on non-draft pages.
+  useEffect(() => {
+    if (runState !== "running") return;
 
-        if (state.status === "running") {
-          setRunState((prev) => (prev === "running" ? prev : "running"));
-          setRunStartedAt(state.startedAt);
-        } else if (state.status === "completed") {
-          setResult(state);
-          setRunState((prev) => (prev === "success" ? prev : "success"));
-        } else if (state.status === "cancelled") {
-          // Cancelled = the user stopped the crawl. Treat it as a "success"
-          // for the result panel so partial counters are surfaced; the
-          // capsHit / phaseLabel already say "Cancelled" so the user knows.
-          setResult(state);
-          setRunState((prev) => (prev === "success" ? prev : "success"));
-        } else if (state.status === "failed") {
-          setResult(state);
-          setRunState((prev) => (prev === "error" ? prev : "error"));
-          if (state.errors.length > 0) {
-            setError((prev) => prev || state.errors[state.errors.length - 1]);
-          }
-        }
-      } catch {
-        /* transient — ignore and let the next tick retry */
-      }
+    let alive = true;
+    const tick = async () => {
+      if (!alive) return;
+      try {
+        const res = await fetch(`${API_BASE}/api/admin/adp/crawl-network/progress`, {
+          credentials: "include",
+          headers: buildAdminHeaders(adminSecretOverride),
+        });
+        if (!res.ok || !alive) return;
+        const ct = res.headers.get("content-type") || "";
+        if (!ct.includes("application/json")) return;
+        const state = (await res.json()) as CrawlLiveState;
+        if (alive) applyProgressState(state);
+      } catch { /* transient */ }
     };
 
-    tick();
-    pollRef.current = window.setInterval(tick, 1500);
-
+    const id = window.setInterval(tick, 1500);
     return () => {
-      cancelled = true;
-      if (pollRef.current !== null) {
-        clearInterval(pollRef.current);
-        pollRef.current = null;
-      }
+      alive = false;
+      clearInterval(id);
     };
-  }, [adminSecretOverride]);
+  }, [runState, adminSecretOverride, applyProgressState]);
 
   const cancelCrawl = useCallback(async () => {
     setError("");

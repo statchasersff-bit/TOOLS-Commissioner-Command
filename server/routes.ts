@@ -2278,7 +2278,13 @@ export async function registerRoutes(
    */
   app.get("/api/admin/adp/crawl-network/progress", async (req, res) => {
     if (!(await requireAdmin(req, res))) return;
-    res.json(getCrawlLiveState());
+    try {
+      res.json(getCrawlLiveState());
+    } catch {
+      // Defensive fallback — getCrawlLiveState() is in-memory and should
+      // never throw, but ensure we never return a 500 for a missing crawl.
+      res.json({ ok: true, running: false, status: "idle", progress: null, message: "No active crawl" });
+    }
   });
 
   /**
