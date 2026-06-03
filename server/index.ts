@@ -116,6 +116,8 @@ const corsOptions: cors.CorsOptions = {
 // Pre-create one middleware instance so we can reuse it in the error handler.
 const corsMiddleware = cors(corsOptions);
 
+console.log("[startup] before cors");
+
 // 1. Global CORS headers on every response.
 app.use(corsMiddleware);
 
@@ -124,10 +126,22 @@ app.use(corsMiddleware);
 //    this version of Express. OPTIONS preflights never touch session/auth.
 app.options(/.*/, corsMiddleware);
 
+// ── Ultra-light health probe ─────────────────────────────────────────────────
+// Registered immediately after CORS — before installVitals, session, body
+// parsers, auth, and all routes — so it responds in <1 ms regardless of
+// database / background-worker health. Use this to confirm the server is
+// listening before diagnosing any other endpoint.
+app.get("/api/health/light", (_req, res) => {
+  res.json({ ok: true, time: new Date().toISOString(), uptime: process.uptime() });
+});
+
+console.log("[startup] after cors + health/light registered");
+
 // Track in-flight requests as early as possible — registered before the session
 // and body middleware so a request that hangs *inside* that middleware (the
 // suspected pool-exhaustion failure mode) is still counted and surfaced.
 installVitals(app);
+console.log("[startup] after installVitals");
 
 // Build/runtime identity. BUILD_TIME and GIT_COMMIT are inlined at build time
 // by esbuild (see script/build.ts). In dev (tsx) they're undefined and fall
@@ -198,6 +212,7 @@ app.use(
 app.use(express.urlencoded({ extended: false, limit: "5mb" }));
 
 // ── Session middleware ─────────────────────────────────────────────────────────
+console.log("[startup] before session pool");
 declare module "express-session" {
   interface SessionData {
     scUserId?: string;
@@ -214,7 +229,10 @@ const sessionPool = new pg.Pool({
   connectionString: process.env.DATABASE_URL,
   max: Number(process.env.PG_SESSION_POOL_MAX || 5),
   idleTimeoutMillis: 30_000,
-  connectionTimeoutMillis: 10_000,
+  // 3 s instead of 10 s: a session-store timeout should fail fast so the
+  // request returns a 500 quickly rather than hanging for 10 s. The /api/health/light
+  // probe above bypasses sessions entirely, so uptime monitors still work.
+  connectionTimeoutMillis: 3_000,
   // TCP keepalive + connection max-lifetime so a connection severed by a DB
   // restart/network blip is detected and recycled instead of occupying a slot
   // forever (the "timeout exceeded when trying to connect" wedge — see the full
@@ -239,6 +257,7 @@ sessionPool.on("error", (err) => {
 });
 
 const PgStore = connectPgSimple(session);
+console.log("[startup] before session middleware");
 app.use(
   session({
     store: new PgStore({
@@ -258,6 +277,7 @@ app.use(
     },
   }),
 );
+console.log("[startup] after session middleware");
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
@@ -330,7 +350,9 @@ process.on("uncaughtException", (err) => {
 });
 
 (async () => {
+  console.log("[startup] before registerRoutes");
   await registerRoutes(httpServer, app);
+  console.log("[startup] after registerRoutes");
 
   // Any /api request that falls through here did not match an Express route.
   // Without this, the SPA catch-all would respond with index.html, which the
@@ -366,12 +388,14 @@ process.on("uncaughtException", (err) => {
   // importantly only setup vite in development and after
   // setting up all the other routes so the catch-all route
   // doesn't interfere with the other routes
+  console.log("[startup] before vite/static setup");
   if (process.env.NODE_ENV === "production") {
     serveStatic(app);
   } else {
     const { setupVite } = await import("./vite");
     await setupVite(httpServer, app);
   }
+  console.log("[startup] after vite/static setup");
 
   // ALWAYS serve the app on the port specified in the environment variable PORT
   // Other ports are firewalled. Default to 5000 if not specified.
@@ -380,7 +404,9 @@ process.on("uncaughtException", (err) => {
   const port = parseInt(process.env.PORT || "5000", 10);
 
   // Kill whatever is currently holding the port, then bind.
+  console.log(`[startup] before freePort(${port})`);
   await freePort(port);
+  console.log(`[startup] after freePort — about to listen on :${port}`);
 
   httpServer.on("error", (err: NodeJS.ErrnoException) => {
     console.error("[server] fatal listen error:", err);

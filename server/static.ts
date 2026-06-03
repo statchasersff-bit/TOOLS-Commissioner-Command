@@ -72,7 +72,11 @@ export function serveStatic(app: Express) {
   // /assets/<hash>.js MUST 404 (so the browser surfaces the missing-file
   // error) rather than getting back HTML with text/html, which yields the
   // confusing "disallowed MIME type" message and bricks the SPA load.
-  app.use("/{*path}", (req, res, next) => {
+  //
+  // NOTE: No path argument — registered after all routes so it catches
+  // everything that fell through. Avoids the path-to-regexp v8 wildcard
+  // crash ("/{*path}" / "*" both throw in Express 5 + path-to-regexp 8.x).
+  app.use((req, res, next) => {
     if (req.path.includes("/assets/")) return next();
     const lastDot = req.path.lastIndexOf(".");
     if (lastDot > -1) {

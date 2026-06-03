@@ -1,0 +1,86 @@
+Emergency issue: the live Replit backend is timing out with 0 bytes received.
+
+Both tests time out:
+
+GET /api/sc-auth/me
+OPTIONS /api/sc-auth/me
+
+This is not a CORS header issue anymore. OPTIONS should return immediately, before auth/session/DB. If OPTIONS times out, Express is either not receiving the request, not reaching the CORS middleware, not reaching app.listen, or the event loop/server is blocked.
+
+Immediate priority: restore server responsiveness.
+
+Tasks:
+
+1. Check Replit deployment logs immediately.
+Look for:
+- app startup errors
+- app.listen reached or not reached
+- server restarting
+- out of memory
+- uncaught exceptions
+- database pool saturation
+- crawler running on startup
+- long blocking startup task
+- session store connection timeout
+- installVitals issue
+- path-to-regexp error
+- middleware hanging
+
+2. Confirm the server logs "listening on port ___".
+If not, the app is failing during startup before it can serve requests.
+
+3. Temporarily disable all nonessential startup tasks:
+- ADP crawler
+- unified crawl
+- analytics startup
+- passive events
+- background workers
+- scheduled jobs
+- database warmups
+- large imports
+- snapshot builds
+- installVitals if it does anything async/heavy
+
+The server should start first. Background jobs should start after the API is healthy, or behind an admin action.
+
+4. Add a dead-simple health route at the very top of server/index.ts, immediately after CORS and before sessions/body parsers/routes:
+
+app.get("/api/health/light", (req, res) => {
+  res.json({ ok: true, time: new Date().toISOString() });
+});
+
+5. Add a log before and after major startup sections:
+
+console.log("[startup] before cors");
+console.log("[startup] after cors");
+console.log("[startup] before sessions");
+console.log("[startup] after sessions");
+console.log("[startup] before routes");
+console.log("[startup] after routes");
+console.log("[startup] before listen");
+console.log("[startup] listening", port);
+
+This will show exactly where startup is hanging.
+
+6. Test:
+
+curl -i -m 10 "https://dynasty-command.replit.app/api/health/light" -H "Origin: https://statchasers.com"
+
+This endpoint must respond instantly. If it does not, the server/deployment is unhealthy.
+
+7. Make sure no middleware before /api/health/light can hang:
+- no DB calls
+- no session calls
+- no auth calls
+- no analytics calls
+- no crawler calls
+
+8. If the server still times out, rollback server/index.ts to the last known working version and re-apply the CORS fix carefully.
+
+9. Do not continue debugging ADP, Trade Database, Value Finder, or auth until /api/health/light and OPTIONS /api/sc-auth/me respond instantly.
+
+Success criteria:
+- /api/health/light returns 200 in under 1 second
+- OPTIONS /api/sc-auth/me returns 204 in under 1 second
+- GET /api/sc-auth/me returns 200 or 401 JSON in under 1 second
+- No endpoint times out with 0 bytes received
