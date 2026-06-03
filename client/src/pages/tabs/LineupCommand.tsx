@@ -753,7 +753,19 @@ function LeagueRow({ analysis, preseason, onApplied }: { analysis: LeagueAnalysi
                   return (
                     <div key={i} className={cn("flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[10px]", typeCls[iss.type])}>
                       <AlertTriangle className="w-3 h-3 flex-shrink-0" />
-                      <span className="font-bold">{iss.playerName}</span>
+                      {/^\d+$/.test(iss.pid) ? (
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); openPlayerProfile(iss.pid); }}
+                          className="font-bold text-left hover:underline cursor-pointer"
+                          data-testid={`player-link-${iss.pid}`}
+                          title={`View ${iss.playerName}`}
+                        >
+                          {iss.playerName}
+                        </button>
+                      ) : (
+                        <span className="font-bold">{iss.playerName}</span>
+                      )}
                       <span className="opacity-70">({iss.pos})</span>
                       <span className="font-medium">· {typeLabel[iss.type]}</span>
                     </div>
