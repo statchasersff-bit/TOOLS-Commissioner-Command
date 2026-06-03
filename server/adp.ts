@@ -2136,14 +2136,21 @@ async function findNearestDateRangeSnapshot(exactKey: string): Promise<{
   const sdIdx = exactKey.indexOf("|sd=");
   if (sdIdx === -1) return null; // no date segment — shouldn't happen here
 
+  // Parse the requested start date so we can validate the fallback later.
+  // Key format: "...|sd=YYYY-MM-DD|ed=YYYY-MM-DD|_ver=vN"
+  const afterSd = exactKey.slice(sdIdx + 4);
+  const nextPipe = afterSd.indexOf("|");
+  const requestedStart = nextPipe !== -1 ? afterSd.slice(0, nextPipe) : afterSd;
+
   // e.g. "se=2026|dt=startup|...|pt=all"
   const staticPrefix = exactKey.slice(0, sdIdx);
-  // The version suffix is always at the end: "|_ver=v9"
   const verSuffix = `|_ver=${FILTER_KEY_VERSION}`;
 
-  // LIKE pattern: same static prefix, any sd/ed values, same version.
-  // e.g. "se=2026|...|pt=all|sd=%|_ver=v9"  ← covers any date range
-  const pattern = `${staticPrefix}|sd=%${verSuffix}`;
+  // Require sd=2... to exclude all-time/default snapshots whose key has
+  // an empty sd ("|sd=|ed=|"). Without this the pattern matched the default
+  // snapshot and served all-time pick counts as "7-day" or "30-day" data,
+  // making the date filter appear to have *more* data than longer windows.
+  const pattern = `${staticPrefix}|sd=2%${verSuffix}`;
 
   const result = await db
     .select()
@@ -2156,6 +2163,30 @@ async function findNearestDateRangeSnapshot(exactKey: string): Promise<{
   const row = result[0];
   const rows = (row.rows as AdpRow[]) ?? [];
   if (!rows.length) return null;
+
+  // Validate that the found snapshot's start date is within 5 days of the
+  // requested start date. Without this check a 30-day snapshot was served
+  // for a 90-day request (or vice versa) because both share the same static
+  // filter prefix and the query just returned the most-recently-computed one.
+  // A 5-day tolerance covers the normal "yesterday's snapshot for today's
+  // request" case (1-day drift) while rejecting completely different windows.
+  const foundKey = row.filterKey ?? "";
+  const foundSdIdx = foundKey.indexOf("|sd=");
+  if (foundSdIdx !== -1 && requestedStart) {
+    const foundAfterSd = foundKey.slice(foundSdIdx + 4);
+    const foundNextPipe = foundAfterSd.indexOf("|");
+    const foundStart = foundNextPipe !== -1 ? foundAfterSd.slice(0, foundNextPipe) : foundAfterSd;
+    if (foundStart) {
+      const diffMs = Math.abs(new Date(requestedStart).getTime() - new Date(foundStart).getTime());
+      const FIVE_DAYS_MS = 5 * 24 * 60 * 60 * 1000;
+      if (diffMs > FIVE_DAYS_MS) {
+        // Date ranges are too different — serving this snapshot would show the
+        // wrong time window. Return null so the client renders "computing…"
+        // while the background compute finishes.
+        return null;
+      }
+    }
+  }
 
   return {
     rows,
