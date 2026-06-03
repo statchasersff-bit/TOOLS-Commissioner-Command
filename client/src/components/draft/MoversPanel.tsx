@@ -16,10 +16,12 @@ function MoverRow({ r, i, dir }: { r: ADPResult; i: number; dir: "up" | "down" }
   const Arrow = dir === "up" ? TrendingUp : TrendingDown;
   const color = dir === "up" ? "text-emerald-600 dark-any:text-emerald-400" : "text-rose-600 dark-any:text-rose-400";
   const trend = r.trend_14d;
-  // Show the recent (last-14-day) ADP so the label reads "ADP 19.0 ↓17"
-  // (where he goes *now*) rather than the blended window average which is
-  // confusingly between the old and new market price.
-  const displayAdp = r.recent_14d_avg ?? r.avg_pick;
+  // Show prior → recent so the full shift is visible at a glance.
+  // "2.4 → 19.0" is immediately legible as "fell from 2.4 to 19.0" and
+  // makes implausible data (e.g. prior ADP 2 for a backup QB) self-evident.
+  // Fall back to avg_pick on older cached snapshots that lack these fields.
+  const recentAdp = r.recent_14d_avg ?? r.avg_pick;
+  const priorAdp = r.prior_14d_avg ?? null;
   return (
     <div className="flex items-center gap-2.5 py-1" data-testid={`adp-mover-${dir}-${i}`}>
       <span className="text-xs font-bold text-muted-foreground w-5 flex-shrink-0 text-right">{i + 1}</span>
@@ -30,13 +32,21 @@ function MoverRow({ r, i, dir }: { r: ADPResult; i: number; dir: "up" | "down" }
           pos={r.position}
           team={r.team ?? ""}
           size="sm"
-          // Placeholder rookie picks have no profile to open (mirrors the
-          // list/board views, which also leave them non-clickable).
           onClick={r.is_rookie_placeholder ? undefined : () => openPlayerProfile(r.player_id)}
           metaTrailing={
-            <span className="flex items-center gap-1.5 tabular-nums">
-              <span className="text-muted-foreground">ADP {displayAdp.toFixed(1)}</span>
-              <span className={cn("font-bold flex items-center gap-0.5", color)}><Arrow className="w-3 h-3" />{Math.abs(trend).toFixed(1)}</span>
+            <span className="flex items-center gap-1.5 tabular-nums text-xs">
+              {priorAdp != null ? (
+                <span className="text-muted-foreground">
+                  {priorAdp.toFixed(1)}
+                  <span className="mx-0.5 opacity-50">→</span>
+                  {recentAdp.toFixed(1)}
+                </span>
+              ) : (
+                <span className="text-muted-foreground">ADP {recentAdp.toFixed(1)}</span>
+              )}
+              <span className={cn("font-bold flex items-center gap-0.5", color)}>
+                <Arrow className="w-3 h-3" />{Math.abs(trend).toFixed(1)}
+              </span>
             </span>
           }
         />

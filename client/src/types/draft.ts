@@ -74,9 +74,11 @@ export interface ADPResult {
   trend_14d: number;          // used by the "Biggest ADP movers" panel
   trend_30d: number;
   // Mean pick in just the last 14 days. Present on rows from date-windowed
-  // fetches; null/absent on older cached snapshots. Used by MoversPanel to
-  // show current market price ("ADP 19.0 ↓17") not the blended window avg.
+  // fetches; null/absent on older cached snapshots.
   recent_14d_avg?: number | null;
+  // Mean pick in the prior window (days 15–44). Paired with recent_14d_avg,
+  // lets MoversPanel show "2.4 → 19.0 ↓17" so the full shift is visible.
+  prior_14d_avg?: number | null;
   sample_size_warning: boolean;
 }
 

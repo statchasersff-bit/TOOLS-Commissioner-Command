@@ -115,8 +115,12 @@ export type AdpRow = {
   trend_30d: number;
   // Mean of picks in the most-recent 14-day window (null when fewer than
   // MIN_TREND_PICKS in that window). Used by the movers panel so it can
-  // display "ADP 19.0 ↓17" (current market) instead of the 44-day blend.
+  // display the current market price ("ADP 19.0") instead of the 44-day blend.
   recent_14d_avg: number | null;
+  // Mean of picks in the prior window (days 15–44). Combined with recent_14d_avg
+  // this lets the movers panel show "2.4 → 19.0 ↓17" so the full picture is
+  // visible and bad-data cases (implausible prior) are immediately obvious.
+  prior_14d_avg: number | null;
   sample_size_warning: boolean;
 };
 
@@ -1391,9 +1395,10 @@ export async function computeAdp(f: AdpFilters): Promise<{ rows: AdpRow[]; draft
   const DAY = 24 * 60 * 60 * 1000;
   // A window needs at least this many observed picks before its mean is trusted
   // to define a trend. Below it, a single stray draft could masquerade as a
-  // "mover", so we report no movement instead. Tune down (→2) on sparse slices
-  // if the movers panel comes up empty.
-  const MIN_TREND_PICKS = 3;
+  // "mover", so we report no movement instead. 5 picks per window means at
+  // least 10 total data points across the two periods — enough to smooth out
+  // one or two outlier drafts that briefly hype a backup QB.
+  const MIN_TREND_PICKS = 5;
 
   // Nearest-rank percentile (no interpolation) — keeps values aligned to a
   // real observed pick. q in [0,1].
@@ -1454,10 +1459,14 @@ export async function computeAdp(f: AdpFilters): Promise<{ rows: AdpRow[]; draft
     const trend30 = trendBetween(last30, prior30);
 
     // The mean of picks in just the last 14 days — used by the movers panel
-    // so it can show the *current* market price ("ADP 19.0 ↓17") rather than
-    // the blended all-window average which is confusingly between the two eras.
+    // so it can show the *current* market price rather than the blended avg.
     const last14Mean = meanIf(last14);
     const recent14dAvg = last14Mean !== null ? Math.round(last14Mean * 10) / 10 : null;
+    // The mean of picks in the prior window (days 15–44). Paired with
+    // recent14dAvg, lets the movers panel show "2.4 → 19.0 ↓17" so bad-data
+    // cases (implausible prior ADP like "pick 2") are immediately visible.
+    const prev14Mean = meanIf(prev14);
+    const prior14dAvg = prev14Mean !== null ? Math.round(prev14Mean * 10) / 10 : null;
 
     const validPos = (["QB", "RB", "WR", "TE", "K", "PICK"] as const).includes(a.position as any)
       ? (a.position as AdpRow["position"])
@@ -1483,6 +1492,7 @@ export async function computeAdp(f: AdpFilters): Promise<{ rows: AdpRow[]; draft
       trend_14d: trend14,
       trend_30d: trend30,
       recent_14d_avg: recent14dAvg,
+      prior_14d_avg: prior14dAvg,
       sample_size_warning: sorted.length < 8,
     };
   });
