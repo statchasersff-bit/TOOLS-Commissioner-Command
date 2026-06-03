@@ -2013,62 +2013,136 @@ function EmptyBlock({ icon: Icon, text }: { icon: typeof Activity; text: string 
   );
 }
 
-// Latest News — stored Rotowire headlines matched to this player. Headline +
-// source + date + outbound link only (no article bodies); links open in a new
-// tab. Clean empty state when nothing has been ingested for the player yet.
+const newsSourceLabel = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
+const fmtNewsDate = (s: string | null) => {
+  if (!s) return null;
+  const d = new Date(s);
+  return Number.isNaN(d.getTime()) ? null : d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+};
+const NEWS_CATEGORY_LABEL: Record<string, string> = {
+  injury: "Injury",
+  transaction: "Transaction",
+  depth_chart: "Depth Chart",
+  practice: "Practice",
+  quote: "Quote",
+  performance: "Performance",
+  other: "News",
+};
+
+// Player News tab. Two stacked sources, each clearly attributed:
+//   1. Dynasty Command News — original items we generate from credited sources
+//      and attribute back to the original source (with an outbound link).
+//   2. Latest News — public Rotowire headline metadata + outbound link.
+// Clean empty state only when BOTH are empty.
 function NewsTab({ playerId }: { playerId: string | null }) {
   const [items, setItems] = useState<PlayerNewsItem[] | null>(null);
+  const [curated, setCurated] = useState<CuratedNewsItem[] | null>(null);
 
   useEffect(() => {
-    if (!playerId) { setItems([]); return; }
+    if (!playerId) { setItems([]); setCurated([]); return; }
     let cancelled = false;
     setItems(null);
+    setCurated(null);
     fetchPlayerNews(playerId, 8)
       .then((rows) => { if (!cancelled) setItems(rows); })
       .catch(() => { if (!cancelled) setItems([]); });
+    fetchCuratedPlayerNews(playerId, 6)
+      .then((rows) => { if (!cancelled) setCurated(rows); })
+      .catch(() => { if (!cancelled) setCurated([]); });
     return () => { cancelled = true; };
   }, [playerId]);
 
-  if (items === null) return <Card className="p-6"><SkeletonLines n={5} /></Card>;
-  if (!items.length) {
-    return <ComingSoon icon={Newspaper} title="No recent news found" body="The latest Rotowire headlines for this player will appear here as they're published." />;
+  // Still loading either source.
+  if (items === null || curated === null) return <Card className="p-6"><SkeletonLines n={5} /></Card>;
+
+  if (!items.length && !curated.length) {
+    return <ComingSoon icon={Newspaper} title="No recent news found" body="Dynasty Command news and the latest headlines for this player will appear here as they're published." />;
   }
 
-  const sourceLabel = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
-  const fmtDate = (s: string | null) => {
-    if (!s) return null;
-    const d = new Date(s);
-    return Number.isNaN(d.getTime()) ? null : d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
-  };
-
   return (
-    <Card className="divide-y divide-border/40 overflow-hidden">
-      <div className="px-4 py-3 flex items-center gap-2">
+    <div className="space-y-4">
+      {curated.length > 0 && <DynastyNewsSection items={curated} />}
+
+      {items.length > 0 && (
+        <Card className="divide-y divide-border/40 overflow-hidden">
+          <div className="px-4 py-3 flex items-center gap-2">
+            <Newspaper className="w-4 h-4 text-[#d4af37]" />
+            <p className="text-sm font-bold text-foreground">Latest News</p>
+          </div>
+          {items.map((it) => {
+            const date = fmtNewsDate(it.publishedAt);
+            return (
+              <a
+                key={it.id}
+                href={it.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block px-4 py-3 hover:bg-muted/30 transition-colors group"
+                data-testid={`player-news-${it.id}`}
+              >
+                <p className="text-sm font-semibold text-foreground group-hover:text-[#d4af37] transition-colors leading-snug">{it.title}</p>
+                <div className="mt-1 flex items-center gap-2 text-[11px] text-muted-foreground">
+                  <span>{newsSourceLabel(it.source)}</span>
+                  {date && <><span aria-hidden>·</span><span>{date}</span></>}
+                  <span className="ml-auto inline-flex items-center gap-1 text-[#d4af37]/80 group-hover:text-[#d4af37] whitespace-nowrap">
+                    View on {newsSourceLabel(it.source)} <ExternalLink className="w-3 h-3" />
+                  </span>
+                </div>
+              </a>
+            );
+          })}
+        </Card>
+      )}
+    </div>
+  );
+}
+
+// Dynasty Command News — our original write-ups. Each card shows our headline +
+// summary + a one-line dynasty/fantasy impact, then attributes the ORIGINAL
+// credited source with an outbound link. No third-party blurb text is shown.
+function DynastyNewsSection({ items }: { items: CuratedNewsItem[] }) {
+  return (
+    <Card className="overflow-hidden">
+      <div className="px-4 py-3 flex items-center gap-2 border-b border-border/40">
         <Newspaper className="w-4 h-4 text-[#d4af37]" />
-        <p className="text-sm font-bold text-foreground">Latest News</p>
+        <p className="text-sm font-bold text-foreground">Dynasty Command News</p>
       </div>
-      {items.map((it) => {
-        const date = fmtDate(it.publishedAt);
-        return (
-          <a
-            key={it.id}
-            href={it.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="block px-4 py-3 hover:bg-muted/30 transition-colors group"
-            data-testid={`player-news-${it.id}`}
-          >
-            <p className="text-sm font-semibold text-foreground group-hover:text-[#d4af37] transition-colors leading-snug">{it.title}</p>
-            <div className="mt-1 flex items-center gap-2 text-[11px] text-muted-foreground">
-              <span>{sourceLabel(it.source)}</span>
-              {date && <><span aria-hidden>·</span><span>{date}</span></>}
-              <span className="ml-auto inline-flex items-center gap-1 text-[#d4af37]/80 group-hover:text-[#d4af37] whitespace-nowrap">
-                View on {sourceLabel(it.source)} <ExternalLink className="w-3 h-3" />
-              </span>
+      <div className="divide-y divide-border/40">
+        {items.map((it) => {
+          const date = fmtNewsDate(it.publishedAt);
+          const cat = it.category ? (NEWS_CATEGORY_LABEL[it.category] ?? it.category) : null;
+          return (
+            <div key={it.id} className="px-4 py-3.5" data-testid={`dynasty-news-${it.id}`}>
+              <div className="flex items-start gap-2">
+                {cat && (
+                  <span className="mt-0.5 shrink-0 rounded-full bg-[#d4af37]/15 text-[#d4af37] text-[10px] font-bold uppercase tracking-wide px-2 py-0.5">
+                    {cat}
+                  </span>
+                )}
+                <p className="text-sm font-semibold text-foreground leading-snug">{it.headline}</p>
+              </div>
+              {it.summary && <p className="mt-1.5 text-[13px] text-muted-foreground leading-relaxed">{it.summary}</p>}
+              {it.fantasyImpact && (
+                <p className="mt-1.5 text-[13px] text-foreground/90 leading-relaxed">
+                  <span className="font-semibold text-[#d4af37]">Dynasty impact:</span> {it.fantasyImpact}
+                </p>
+              )}
+              <div className="mt-2 flex items-center gap-2 text-[11px] text-muted-foreground">
+                <span>Source: {it.sourceName}</span>
+                {date && <><span aria-hidden>·</span><span>{date}</span></>}
+                <a
+                  href={it.sourceUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="ml-auto inline-flex items-center gap-1 text-[#d4af37]/80 hover:text-[#d4af37] whitespace-nowrap"
+                >
+                  Read at {it.sourceName} <ExternalLink className="w-3 h-3" />
+                </a>
+              </div>
             </div>
-          </a>
-        );
-      })}
+          );
+        })}
+      </div>
     </Card>
   );
 }

@@ -34,7 +34,11 @@ export interface ApprovedFeed {
  * RotoWire is discovery-only (player name + timestamp signal, no text).
  */
 export const APPROVED_FEEDS: ApprovedFeed[] = [
-  { key: "espn", name: "ESPN", url: "https://www.espn.com/espn/rss/nfl/news", role: "primary" },
+  // ESPN's public RSS (https://www.espn.com/espn/rss/nfl/news) is currently
+  // served behind AWS WAF and returns an "x-amzn-waf-action: challenge" bot
+  // gate. Our compliance rules forbid bypassing bot protections, so ESPN stays
+  // DISABLED until we have a permitted access path (e.g. a licensed feed/API).
+  // { key: "espn", name: "ESPN", url: "https://www.espn.com/espn/rss/nfl/news", role: "primary" },
   { key: "pft", name: "ProFootballTalk", url: "https://profootballtalk.nbcsports.com/feed/", role: "primary" },
   { key: "yahoo", name: "Yahoo Sports", url: "https://sports.yahoo.com/nfl/rss.xml", role: "primary" },
   { key: "cbs", name: "CBS Sports", url: "https://www.cbssports.com/rss/headlines/nfl/", role: "primary" },

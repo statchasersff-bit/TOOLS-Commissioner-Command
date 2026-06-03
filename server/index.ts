@@ -5,6 +5,7 @@ import connectPgSimple from "connect-pg-simple";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { installVitals, startVitalsHeartbeat, getVitals } from "./vitals";
+import { checkDbHealth } from "./db";
 import { createServer } from "http";
 import { readFileSync, readdirSync, readlinkSync } from "fs";
 import pg from "pg";
@@ -101,6 +102,18 @@ app.get(["/health/vitals", "/healthz/vitals"], async (_req, res) => {
   } catch (err) {
     res.status(200).json({ status: "vitals-error", error: err instanceof Error ? err.message : String(err) });
   }
+});
+
+// ── DB connectivity probe ─────────────────────────────────────────────────────
+// Answers the single question "can the app talk to Postgres right now, and how
+// fast?" and — crucially — distinguishes "DB unreachable" from "app pool
+// saturated". Both surface to users as a connection timeout, so this endpoint
+// is the fastest way to tell them apart: if connected=true but pool.waiting is
+// high, the DB is fine and the pool is the bottleneck (the ADP-compute
+// stampede), not DATABASE_URL/SSL/the DB being asleep.
+app.get(["/health/db", "/api/health/db"], async (_req, res) => {
+  const health = await checkDbHealth();
+  res.status(health.connected ? 200 : 503).json({ ok: health.connected, ...health });
 });
 
 // CORS — always allow the production domains plus any additional origins
@@ -362,6 +375,20 @@ process.on("uncaughtException", (err) => {
     // requests, Postgres connection census). Surfaces resource saturation in
     // the deploy logs in the minutes before a hang.
     startVitalsHeartbeat();
+    // ── Startup DB connectivity check ─────────────────────────────────────────
+    // Run once on boot (non-blocking) so the deploy logs immediately show
+    // whether Postgres is reachable and how fast, instead of discovering it only
+    // when the first user request fails. Logs the provider + latency on success,
+    // or the classified failure (connect vs pool-acquire) on error.
+    checkDbHealth()
+      .then((h) => {
+        if (h.connected) {
+          log(`  db:          OK (${h.provider}, SELECT 1 in ${h.latencyMs}ms, pool ${h.pool.total}/${h.pool.max})`);
+        } else {
+          console.error(`[server] DB health check FAILED on startup [${h.kind}]: ${h.error} :: ${h.detail}`);
+        }
+      })
+      .catch((err) => console.error("[server] DB health check threw on startup:", err));
     // Kick a self-request so Vite compiles the module graph immediately on
     // startup rather than on the first real browser request (which causes a
     // white screen while Vite cold-compiles).

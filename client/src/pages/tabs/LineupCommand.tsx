@@ -48,6 +48,7 @@ type IssueType = "out" | "ir" | "doubtful" | "questionable" | "bye";
 
 interface LineupIssue {
   type: IssueType;
+  pid: string;
   playerName: string;
   pos: string;
 }
@@ -418,12 +419,12 @@ export function analyzeLineup(
     const name = lastName(playerDb, pid);
     const pos  = playerPos(playerDb, pid);
     const onBye = isTeamOnBye(team, schedule) || projFor(pid) < 0.5;
-    if      (inj === "IR")           issues.push({ type: "ir",           playerName: name, pos });
-    else if (inj === "Out")          issues.push({ type: "out",          playerName: name, pos });
-    else if (inj === "Doubtful")     issues.push({ type: "doubtful",     playerName: name, pos });
-    else if (inj === "Questionable") issues.push({ type: "questionable", playerName: name, pos });
+    if      (inj === "IR")           issues.push({ type: "ir",           pid, playerName: name, pos });
+    else if (inj === "Out")          issues.push({ type: "out",          pid, playerName: name, pos });
+    else if (inj === "Doubtful")     issues.push({ type: "doubtful",     pid, playerName: name, pos });
+    else if (inj === "Questionable") issues.push({ type: "questionable", pid, playerName: name, pos });
     else if (onBye && team && pos !== "DEF" && pos !== "K")
-                                     issues.push({ type: "bye",          playerName: name, pos });
+                                     issues.push({ type: "bye",          pid, playerName: name, pos });
   }
 
   const optimalStarters = optimalSlots
@@ -507,6 +508,7 @@ function KpiCard({
 function LeagueRow({ analysis, preseason, onApplied }: { analysis: LeagueAnalysis; preseason?: boolean; onApplied: (leagueId: string) => void }) {
   const [expanded, setExpanded] = useState(false);
   const [applying, setApplying] = useState(false);
+  const { openPlayerProfile } = usePlayerProfile();
   const { leagueName, format, scoringFormat, avatar, currentProj, gain, issues, swaps, rosterAlert, loading, error } = analysis;
 
   // Push the optimal lineup straight to Sleeper for this league. One click, no
@@ -808,6 +810,27 @@ function MatchupSkeletonRow() {
 function MatchupBattleCard({ m, preseason }: { m: MatchupAnalysis; preseason?: boolean }) {
   const [expanded, setExpanded] = useState(false);
   const [, setLocation] = useLocation();
+  const { openPlayerProfile } = usePlayerProfile();
+
+  // Starter name: clickable to the player profile when the id is a real Sleeper
+  // player id (numeric). K/DEF and synthetic ids stay plain text. Click stops
+  // propagation so it doesn't toggle the card's expand handler.
+  const StarterName = ({ s, className }: { s: StarterDetail; className: string }) => {
+    if (!/^\d+$/.test(s.pid)) {
+      return <span className={className}>{s.name}</span>;
+    }
+    return (
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); openPlayerProfile(s.pid); }}
+        className={cn(className, "text-left hover:text-[#d4af37] transition-colors cursor-pointer")}
+        data-testid={`player-link-${s.pid}`}
+        title={`View ${s.name}`}
+      >
+        {s.name}
+      </button>
+    );
+  };
 
   const predraft  = m.predraft;
   // A predraft league has no opponent yet, but it's NOT a bye — treat it separately.
@@ -1037,7 +1060,7 @@ function MatchupBattleCard({ m, preseason }: { m: MatchupAnalysis; preseason?: b
                   return (
                     <div key={i} className="flex items-center gap-1.5">
                       <span className="text-[8px] font-bold text-[var(--sc-text-muted)] dark-any:text-white/30 w-7 flex-shrink-0">{s.pos}</span>
-                      <span className="text-[11px] text-[var(--sc-text)] dark-any:text-white/80 flex-1 truncate">{s.name}</span>
+                      <StarterName s={s} className="text-[11px] text-[var(--sc-text)] dark-any:text-white/80 flex-1 truncate" />
                       {inj && (
                         <span className={cn(
                           "text-[7px] font-bold flex-shrink-0 px-1 rounded",
@@ -1058,7 +1081,7 @@ function MatchupBattleCard({ m, preseason }: { m: MatchupAnalysis; preseason?: b
                   return (
                     <div key={i} className="flex items-center gap-1.5">
                       <span className="text-[8px] font-bold text-[var(--sc-text-muted)] dark-any:text-white/22 w-7 flex-shrink-0">{s.pos}</span>
-                      <span className="text-[11px] text-[var(--sc-text-muted)] dark-any:text-white/50 flex-1 truncate">{s.name}</span>
+                      <StarterName s={s} className="text-[11px] text-[var(--sc-text-muted)] dark-any:text-white/50 flex-1 truncate" />
                       {inj && (
                         <span className={cn(
                           "text-[7px] font-bold flex-shrink-0 px-1 rounded",

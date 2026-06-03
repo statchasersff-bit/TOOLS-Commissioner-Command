@@ -119,7 +119,7 @@ import {
   repairIncompleteDrafts,
 } from "./adpCrawlRepair";
 import { getUser } from "./scAuth";
-import { pool } from "./db";
+import { pool, classifyDbError } from "./db";
 import { isAdminByEmail } from "@shared/admin";
 import {
   confirmSleeperToken,
@@ -1504,13 +1504,18 @@ export async function registerRoutes(
   // Corpus-wide ADP totals for the explorer banner (total drafts ingested).
   // Defined before the /api/adp catch-all so it isn't shadowed. Cached briefly.
   app.get("/api/adp/stats", async (_req, res) => {
+    const startMs = Date.now();
     try {
       const stats = await adpStatsCache.getOrCompute("stats", () => getAdpStats());
       res.setHeader("Cache-Control", "public, max-age=300");
       res.json(stats);
     } catch (err: any) {
-      console.error("[ADP /api/adp/stats] error:", err);
-      res.status(500).json({ error: err?.message || "Failed to load ADP stats" });
+      const c = classifyDbError(err);
+      console.error(
+        `[ADP /api/adp/stats] FAILED [${c.kind}] in ${Date.now() - startMs}ms ` +
+        `pool=${pool.totalCount}/${pool.options.max} waiting=${pool.waitingCount} :: ${c.detail}`,
+      );
+      res.status(500).json({ ok: false, error: c.error, detail: c.detail, kind: c.kind });
     }
   });
 
@@ -1613,8 +1618,32 @@ export async function registerRoutes(
         },
       });
     } catch (err: any) {
-      console.error("[ADP /api/adp] error:", err?.stack || err);
+      // Classify so a pool-acquire timeout (DB fine, pool saturated) reads
+      // differently from a real DB-unreachable / slow-query failure — and so
+      // the user-facing banner says something actionable instead of the raw,
+      // misleading "timeout exceeded when trying to connect".
+      const c = classifyDbError(err);
+      const durationMs = Date.now() - startMs;
+      console.error(
+        `[ADP /api/adp] FAILED [${c.kind}] in ${durationMs}ms ` +
+        `params=${JSON.stringify(req.query)} ` +
+        `pool=${pool.totalCount}/${pool.options.max} waiting=${pool.waitingCount} ` +
+        `:: ${c.detail}`,
+      );
+      const userMessage =
+        c.kind === "pool-acquire-timeout"
+          ? "Could not connect to the ADP database (server busy — connection pool saturated). Please retry."
+          : c.kind === "connect"
+            ? "Could not reach the ADP database. Please check server logs."
+            : c.kind === "query-timeout"
+              ? "The ADP query timed out. Try a narrower date range or fewer filters."
+              : c.error;
       res.status(500).json({
+        // New, explicit error contract (see also meta.* kept for back-compat).
+        ok: false,
+        error: userMessage,
+        detail: c.detail,
+        kind: c.kind,
         items: [],
         meta: {
           computed_at: null,
@@ -1624,7 +1653,7 @@ export async function registerRoutes(
           is_empty: true,
           cached: false,
           snapshot_date: null,
-          message: err?.message || "Failed to fetch ADP",
+          message: userMessage,
           error: true,
         },
       });
@@ -1798,8 +1827,9 @@ export async function registerRoutes(
       const events = await getPassiveCrawlEvents(limit);
       res.json({ events });
     } catch (err: any) {
-      console.error("[Admin] adp/passive-events error:", err);
-      res.status(500).json({ error: err.message || "List passive events failed" });
+      const c = classifyDbError(err);
+      console.error(`[Admin] adp/passive-events FAILED [${c.kind}] waiting=${pool.waitingCount} :: ${c.detail}`);
+      res.status(500).json({ ok: false, error: c.error, detail: c.detail, kind: c.kind });
     }
   });
 
@@ -2303,7 +2333,9 @@ export async function registerRoutes(
         runs,
       });
     } catch (err: any) {
-      res.status(500).json({ error: err.message || "Failed to get unified-crawl status" });
+      const c = classifyDbError(err);
+      console.error(`[Admin] unified-crawl/status FAILED [${c.kind}] waiting=${pool.waitingCount} :: ${c.detail}`);
+      res.status(500).json({ ok: false, error: c.error, detail: c.detail, kind: c.kind });
     }
   });
 

@@ -150,3 +150,124 @@ authPool.on("error", (err) => {
 });
 
 export const authDb = drizzle(authPool);
+
+// ── Error classification ──────────────────────────────────────────────────────
+// node-postgres surfaces several very different failures with confusingly
+// similar messages. The most important distinction for THIS app:
+//
+//   "timeout exceeded when trying to connect"  — pg-pool's pool-ACQUIRE timeout.
+//       Every slot in our capped pool (max=PG_POOL_MAX) is checked out and the
+//       request waited connectionTimeoutMillis for a free one. The DATABASE is
+//       fine and reachable — the APP POOL is saturated. This is the symptom of
+//       a slow/stampeding endpoint (e.g. live ADP computes), NOT a DB outage,
+//       NOT a bad DATABASE_URL, NOT SSL. Reported by the frontend as a generic
+//       "connection timeout", which misleads everyone into chasing DB config.
+//   ECONNREFUSED / ENOTFOUND / EAI_AGAIN / "getaddrinfo"  — a real TCP/DNS
+//       failure reaching the database host (wrong URL, DB asleep, network).
+//   statement/query timeout  — the connection was acquired fine but the QUERY
+//       itself ran past statement_timeout/query_timeout.
+//
+// Returning the right `kind` lets routes emit an actionable message instead of
+// the raw, misleading string.
+export type DbErrorKind =
+  | "pool-acquire-timeout"
+  | "connect"
+  | "query-timeout"
+  | "auth"
+  | "other";
+
+export function classifyDbError(err: unknown): {
+  kind: DbErrorKind;
+  /** Human-readable, actionable headline. */
+  error: string;
+  /** Sanitized original message (no connection string / credentials). */
+  detail: string;
+} {
+  const raw = err instanceof Error ? err.message : String(err ?? "unknown error");
+  const code = (err as any)?.code as string | undefined;
+  // Strip anything that looks like a postgres URL / password from the detail.
+  const detail = raw.replace(/postgres(?:ql)?:\/\/[^\s"']+/gi, "postgres://***");
+
+  if (/timeout exceeded when trying to connect/i.test(raw)) {
+    return {
+      kind: "pool-acquire-timeout",
+      error:
+        "Database connection pool is saturated (could not acquire a connection). " +
+        "The database itself is reachable; the app's pool is full.",
+      detail,
+    };
+  }
+  if (code === "ECONNREFUSED" || code === "ENOTFOUND" || code === "EAI_AGAIN" || /getaddrinfo|ECONNREFUSED|ENOTFOUND/i.test(raw)) {
+    return { kind: "connect", error: "Cannot reach the database host (TCP/DNS failure).", detail };
+  }
+  if (/statement timeout|query.*timeout|canceling statement due to statement timeout/i.test(raw)) {
+    return { kind: "query-timeout", error: "Database query exceeded the statement timeout.", detail };
+  }
+  if (/password authentication failed|no pg_hba|role .* does not exist/i.test(raw)) {
+    return { kind: "auth", error: "Database authentication failed (check DATABASE_URL credentials).", detail };
+  }
+  return { kind: "other", error: "Database error.", detail };
+}
+
+/** Best-effort provider name from the DATABASE_URL host (no secrets leaked). */
+function dbProvider(): string {
+  try {
+    const host = new URL(process.env.DATABASE_URL ?? "").hostname;
+    if (/neon\.tech$/i.test(host)) return "neon";
+    if (/supabase\./i.test(host)) return "supabase";
+    if (/render\.com$/i.test(host)) return "render";
+    if (/\.rds\.amazonaws\.com$/i.test(host)) return "rds";
+    if (/localhost|127\.0\.0\.1/.test(host)) return "local";
+    return host ? "postgres" : "unknown";
+  } catch {
+    return "unknown";
+  }
+}
+
+export interface DbHealth {
+  connected: boolean;
+  /** Round-trip latency of a `SELECT 1`, in ms. */
+  latencyMs: number | null;
+  provider: string;
+  /** Live census of the main app pool. */
+  pool: { total: number; idle: number; waiting: number; max: number };
+  error?: string;
+  detail?: string;
+  kind?: DbErrorKind;
+}
+
+/**
+ * Lightweight DB connectivity probe: acquires a connection and runs `SELECT 1`,
+ * timing the round-trip. Reports the main pool's live census so a caller can
+ * tell "DB unreachable" apart from "pool saturated" (the two failure modes that
+ * both surface as a connection timeout). Never throws — failures are returned.
+ */
+export async function checkDbHealth(): Promise<DbHealth> {
+  const started = Date.now();
+  const census = () => ({
+    total: pool.totalCount,
+    idle: pool.idleCount,
+    waiting: pool.waitingCount,
+    max: POOL_MAX,
+  });
+  try {
+    await pool.query("SELECT 1");
+    return {
+      connected: true,
+      latencyMs: Date.now() - started,
+      provider: dbProvider(),
+      pool: census(),
+    };
+  } catch (err) {
+    const c = classifyDbError(err);
+    return {
+      connected: false,
+      latencyMs: Date.now() - started,
+      provider: dbProvider(),
+      pool: census(),
+      error: c.error,
+      detail: c.detail,
+      kind: c.kind,
+    };
+  }
+}

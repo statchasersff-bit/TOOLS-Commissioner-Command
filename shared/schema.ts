@@ -362,7 +362,19 @@ export const drafts = pgTable("drafts", {
   excludedFromAdp: boolean("excluded_from_adp").notNull().default(false),
   exclusionReason: text("exclusion_reason"),
   ingestedAt: timestamp("ingested_at").defaultNow(),
-});
+}, (table) => ({
+  // ADP reads (computeAdp → buildDraftWhere) filter the drafts table by these
+  // equality columns on every cold compute, then range-scan draftDate for the
+  // date-windowed Draft Command queries. Without these the ~24k-row drafts
+  // table is seq-scanned per request, and date-range computes (which never hit
+  // a precomputed snapshot) are the slow queries that pin pool connections for
+  // 9–36s and saturate the pool. Equality columns first, range column last so
+  // the planner can use the composite for both the filter and the date window.
+  adpFilterIdx: index("drafts_adp_filter_idx").on(
+    table.status, table.excludedFromAdp, table.leagueMode, table.draftType, table.season,
+  ),
+  draftDateIdx: index("drafts_draft_date_idx").on(table.draftDate),
+}));
 
 export const draftPicks = pgTable("draft_picks", {
   id: serial("id").primaryKey(),

@@ -14,7 +14,7 @@
  *    never throws back to the client — analytics must not break the app.
  */
 import type { Express, Request, Response } from "express";
-import { pool, db } from "./db";
+import { pool, db, classifyDbError } from "./db";
 import { sql } from "drizzle-orm";
 import { analyticsSessions, analyticsPageViews } from "@shared/schema";
 import { getUserIdFromRequest } from "./scAuthRoutes";
@@ -226,8 +226,9 @@ export function registerAnalyticsRoutes(app: Express): void {
       }
       res.json({ count: rows.length, users: rows });
     } catch (err: any) {
-      console.error("[analytics] admin readout failed:", err?.message);
-      res.status(500).json({ error: err?.message || "Analytics query failed" });
+      const c = classifyDbError(err);
+      console.error(`[analytics] admin readout FAILED [${c.kind}] waiting=${pool.waitingCount} :: ${c.detail}`);
+      res.status(500).json({ ok: false, error: c.error, detail: c.detail, kind: c.kind });
     }
   });
 }

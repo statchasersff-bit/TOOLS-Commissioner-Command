@@ -48,7 +48,7 @@ export function isBlockedHost(rawUrl: string): boolean {
     const u = new URL(rawUrl);
     const host = hostKey(u);
     const pathHost = `${host}${u.pathname}`.toLowerCase();
-    for (const blocked of BLOCKED_HOSTS) {
+    for (const blocked of Array.from(BLOCKED_HOSTS)) {
       if (host === blocked || pathHost.startsWith(blocked)) return true;
     }
     return false;

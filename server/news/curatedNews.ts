@@ -197,7 +197,7 @@ export async function runCuratedIngestion(): Promise<IngestStats> {
   }
 
   // Drop ones we already have (dedup) before doing any expensive AI work.
-  const hashes = [...candidates.keys()];
+  const hashes = Array.from(candidates.keys());
   if (hashes.length) {
     const existing = await db
       .select({ id: curatedPlayerNews.id })
@@ -209,7 +209,7 @@ export async function runCuratedIngestion(): Promise<IngestStats> {
     }
   }
 
-  let fresh = [...candidates.values()];
+  let fresh = Array.from(candidates.values());
   if (fresh.length > MAX_NEW_PER_RUN) {
     stats.capped = fresh.length - MAX_NEW_PER_RUN;
     fresh = fresh.slice(0, MAX_NEW_PER_RUN);
