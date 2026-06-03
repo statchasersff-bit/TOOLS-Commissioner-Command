@@ -26,6 +26,36 @@ import {
   isDevSleeperConnectedOverride,
   anyDevOverrideActive,
 } from "@shared/appMode";
+import { pool, authPool } from "./db";
+
+// ── /me helpers ───────────────────────────────────────────────────────────────
+
+/**
+ * Race a promise against a wall-clock deadline. If `p` hasn't settled in `ms`,
+ * resolve to `fallback` instead. The timer is cleared eagerly on settlement to
+ * avoid holding the event loop open.
+ */
+function withTimeout<T>(p: Promise<T>, ms: number, fallback: T): Promise<T> {
+  let timerId: ReturnType<typeof setTimeout> | null = null;
+  const timeoutP = new Promise<T>((resolve) => {
+    timerId = setTimeout(() => {
+      console.warn(`[sc-auth/me] dependency timeout after ${ms}ms — using fallback`);
+      resolve(fallback);
+    }, ms);
+  });
+  return Promise.race([
+    p.then(
+      (v) => { if (timerId !== null) { clearTimeout(timerId); timerId = null; } return v; },
+      (e) => { if (timerId !== null) { clearTimeout(timerId); timerId = null; } throw e; },
+    ),
+    timeoutP,
+  ]);
+}
+
+/** Compact pool telemetry for log lines. */
+function pStats(p: { totalCount: number; idleCount: number; waitingCount: number }): string {
+  return `total=${p.totalCount} idle=${p.idleCount} q=${p.waitingCount}`;
+}
 
 const JWT_SECRET = process.env.SESSION_SECRET || "fallback-dev-secret";
 const JWT_EXPIRES = "30d";
@@ -232,26 +262,75 @@ export function registerScAuthRoutes(app: Express): void {
 
   // GET /api/sc-auth/me
   app.get("/api/sc-auth/me", async (req, res) => {
+    // Wall-clock lap logger with pool telemetry — every step is visible in
+    // deploy logs even under ADP load. Each line shows elapsed ms and the
+    // current authPool + main pool stats so the slow step is pinpointable.
+    const t0 = Date.now();
+    const lap = (label: string) =>
+      console.info(
+        `[sc-auth/me] ${label} +${Date.now() - t0}ms`,
+        `| auth(${pStats(authPool)})`,
+        `| main(${pStats(pool)})`,
+      );
+
     try {
+      lap("start");
+
+      // ── Token / session resolution (synchronous, no DB) ───────────────────
       const { userId, jwtVerifyFailed, cookieToken } = getAuthResult(req);
+      lap(
+        `getAuthResult — userId=${userId ? "present" : "null"}` +
+        ` jwtBad=${jwtVerifyFailed}` +
+        ` hasBearer=${!!req.headers.authorization}` +
+        ` hasCookie=${!!(req.cookies?.["sc.jwt"])}`,
+      );
+
       if (!userId) {
         // jwtBad=true tells the client its stored token is cryptographically
         // invalid and should be cleared. Without this flag the client MUST
         // preserve the token — the server may simply be warming up.
         return res.status(401).json({ error: "Not authenticated", jwtBad: jwtVerifyFailed });
       }
-      const user = await getUser(userId);
+
+      // ── getUser — 3 s hard cap ────────────────────────────────────────────
+      lap("before getUser");
+      const user = await withTimeout(getUser(userId), 3_000, null);
+      lap(`after getUser — found=${user !== null}`);
+
       if (!user) {
-        req.session.destroy(() => {});
+        req.session?.destroy(() => {});
         return res.status(401).json({ error: "Session expired. Please log in again." });
       }
-      // Run the three independent lookups in parallel — they all hit the
-      // dedicated authPool and have no ordering dependency on each other.
+
+      // ── Parallel lookups — all on authPool, all with 3 s hard cap ─────────
+      // If any single lookup is slow (pool contention, slow query), the
+      // per-lookup timeout fires and a safe default is substituted so the
+      // response is still sent quickly. The client interprets:
+      //   subscription.status === "unknown"  → treat as inactive (read-only UI)
+      //   preferences === {}                → use client-side defaults
+      //   sleeper === null                  → not linked (read-only mode)
+      const SUB_FALLBACK = {
+        status: "unknown",
+        plan: null as string | null,
+        currentPeriodEnd: null as number | null,
+        active: false,
+      };
+      lap("before parallel lookups");
       const [sleeper, subscription, preferences] = await Promise.all([
-        getConnectedSleeper(userId),
-        getSubscriptionStatusForUser(userId),
-        getPreferences(userId),
+        withTimeout(
+          getConnectedSleeper(userId),
+          3_000,
+          null as Awaited<ReturnType<typeof getConnectedSleeper>>,
+        ),
+        withTimeout(getSubscriptionStatusForUser(userId), 3_000, { ...SUB_FALLBACK }),
+        withTimeout(
+          getPreferences(userId),
+          3_000,
+          {} as Awaited<ReturnType<typeof getPreferences>>,
+        ),
       ]);
+      lap("after parallel lookups");
+
       const sleeperInfo = sleeper
         ? {
             username: sleeper.sleeperUsername,
@@ -259,15 +338,14 @@ export function registerScAuthRoutes(app: Express): void {
             token: sleeper.encryptedToken ? decryptToken(sleeper.encryptedToken) : null,
           }
         : null;
+
       // Surface app-mode and subscription so the client can hide write
       // controls preemptively. The backend still enforces these on every
       // mutating request — this is UX only.
       let subscriptionResult = subscription;
       const appMode = getAppModeFromRequest(req);
 
-      // Dev-only overrides — never applied in production. Mirror the
-      // server-side gate behavior into the /me payload so the UI sees
-      // the same "subscribed / connected" state the backend will honor.
+      // Dev-only overrides — never applied in production.
       const devActive = anyDevOverrideActive();
       if (isDevRuntime() && isDevSubscriptionOverride()) {
         subscriptionResult = { ...subscriptionResult, status: "active", plan: subscriptionResult.plan ?? "dev_override", active: true };
@@ -284,16 +362,15 @@ export function registerScAuthRoutes(app: Express): void {
       // Refresh the JWT cookie on every successful /me so the 30-day expiry
       // slides forward with each visit, not just from the original login.
       if (cookieToken) {
-        setJwtCookie(res, cookieToken); // already have the raw token from cookie
+        setJwtCookie(res, cookieToken);
       }
 
+      lap("sending 200");
       res.json({
         user: {
           id: user.id,
           email: user.email,
           favoriteNflTeam: user.favoriteNflTeam ?? null,
-          // Defensive: returns {} if the preferences column isn't migrated yet,
-          // so /me never fails (which would log the user out).
           preferences,
         },
         sleeper: sleeperInfo,
@@ -301,13 +378,10 @@ export function registerScAuthRoutes(app: Express): void {
         appMode,
         subscription: subscriptionResult,
         devOverrides,
-        // Present when auth succeeded via the JWT cookie but localStorage was
-        // empty. The client uses this to restore sc_auth_token so subsequent
-        // requests use the Authorization header path again.
         freshToken: cookieToken ?? undefined,
       });
     } catch (err: any) {
-      console.error("[sc-auth] me error:", err.message);
+      console.error(`[sc-auth] me error +${Date.now() - t0}ms:`, err.message);
       res.status(500).json({ error: "Failed to load session." });
     }
   });

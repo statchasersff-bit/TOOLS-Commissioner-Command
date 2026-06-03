@@ -1,0 +1,71 @@
+Curl now confirms /api/sc-auth/me works quickly without a token:
+
+HTTP/2 401
+access-control-allow-origin: https://statchasers.com
+{"error":"Not authenticated","jwtBad":false}
+
+But the browser still times out:
+
+[sc-auth] session check timed out — token preserved, retry 1/5
+AbortError: signal is aborted without reason
+
+This means the unauthenticated path is fixed, but the authenticated-token path is still hanging. The browser has a saved token/session and is taking a different backend path than curl.
+
+Please debug /api/sc-auth/me specifically when Authorization/cookie is present.
+
+Tasks:
+
+1. Add detailed timing logs inside /api/sc-auth/me for the token-present path.
+
+Log these checkpoints with elapsed milliseconds:
+- request start
+- has Authorization header true/false
+- has cookie/session true/false
+- before JWT verify
+- after JWT verify
+- before getUser
+- after getUser
+- before getConnectedSleeper
+- after getConnectedSleeper
+- before getSubscriptionStatusForUser
+- after getSubscriptionStatusForUser
+- before getPreferences
+- after getPreferences
+- response sent
+
+2. Confirm which exact step hangs in production.
+
+3. Add a hard timeout around each auth dependency.
+
+Do not let /api/sc-auth/me hang for 25 seconds. If any dependency is slow, return a safe JSON response instead.
+
+Example behavior:
+- invalid/expired token: return 401 quickly
+- user lookup timeout: return 401 or degraded auth JSON quickly
+- subscription lookup timeout: return user as authenticated but subscriptionStatus: "unknown"
+- preferences timeout: return default preferences
+
+4. Make /api/sc-auth/me resilient.
+
+The app should never stay stuck at status: loading because one optional auth dependency is slow.
+
+5. Verify that all auth-path lookups use isolated pools:
+- getUser must use authDb/authPool
+- getConnectedSleeper must use authDb/authPool
+- getSubscriptionStatusForUser must use authDb/authPool
+- getPreferences must use authDb/authPool
+- session middleware must not be blocked by ADP traffic
+
+6. Add temporary production logs for pool stats during /api/sc-auth/me:
+- main pool total/idle/waiting
+- auth pool total/idle/waiting
+- session pool total/idle/waiting
+
+7. Frontend fix:
+If /api/sc-auth/me times out once, do not keep the app stuck on loading.
+Fallback to logged-out/read-only mode and show a login prompt.
+
+Expected result:
+- Browser token-present /api/sc-auth/me returns within 1-2 seconds.
+- Bad/stale tokens do not hang the app.
+- Optional subscription/preferences lookups cannot block app startup.

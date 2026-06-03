@@ -245,13 +245,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const headers = { "Content-Type": "application/json", ...authHeaders() };
 
-      // Generous timeout. Replit deployments can take ~15s to cold-boot;
-      // the previous 10s was tripping on healthy-but-warming backends and
-      // surfacing as the "AbortError: signal is aborted without reason"
-      // the user saw. 25s lets the server wake; the finally block still
-      // guarantees the splash releases.
+      // 8 s is enough for a cold-boot Replit wake; the backend now returns
+      // in < 1 s under normal load. Keeping it short means a genuine hang
+      // surfaces as "unauthenticated" in 8 s instead of 25 s × 5 retries.
       const ac = new AbortController();
-      const timeoutId = setTimeout(() => ac.abort(), 25_000);
+      const timeoutId = setTimeout(() => ac.abort(), 8_000);
       let res: Response;
       try {
         res = await fetch(`${API_BASE}/api/sc-auth/me`, {
@@ -426,19 +424,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setServerIsAdmin(false);
       setSleeperSource(readOnly ? "read-only" : "none");
 
-      // If a JWT exists and we haven't exhausted retries, keep showing the
-      // loading screen and retry automatically. This recovers from overnight
-      // VM restarts without forcing the user to manually refresh or log in.
-      if (storedToken && retryCountRef.current < MAX_RETRIES) {
+      if (isAbort) {
+        // Hard timeout — backend didn't respond within the abort window.
+        // Don't spin through 5 retries keeping the user on the loading screen.
+        // Show login/guest mode immediately so the app is usable.
+        // eslint-disable-next-line no-console
+        console.info("[sc-auth] timeout — falling back to unauthenticated immediately");
+        retryCountRef.current = 0;
+        finalStatus = "unauthenticated";
+      } else if (storedToken && retryCountRef.current < MAX_RETRIES) {
+        // Network / 5xx error but a valid JWT exists — retry for server-restart
+        // recovery (overnight VM restarts, transient DB blips, etc.)
         retryCountRef.current += 1;
         const delayMs = Math.min(5_000 * retryCountRef.current, 20_000);
         // eslint-disable-next-line no-console
         console.info(`[sc-auth] scheduling retry ${retryCountRef.current} in ${delayMs / 1000}s`);
         retryTimerRef.current = setTimeout(() => { void checkSession(); }, delayMs);
-        finalStatus = "loading"; // keep the splash, not the login screen
+        finalStatus = "loading";
       } else {
-        // No token or retries exhausted — surface guest mode so the user
-        // can at least use the app as a guest.
+        // No token or retries exhausted — surface guest mode.
         retryCountRef.current = 0;
         finalStatus = "unauthenticated";
       }
