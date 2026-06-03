@@ -290,31 +290,8 @@ export default function DynastyCommandCenter({ params, playerProfileId, managerP
     return league.teams.find((t) => t.id === fetchedLeague.userTeamId) || league.teams[0] || null;
   }, [league, fetchedLeague]);
 
-  useEffect(() => {
-    if (!sleeper.user?.username) return;
-    fetch(`${API_BASE}/api/trades/ingest-user`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username: sleeper.user.username }),
-    }).catch(() => {});
-  }, [sleeper.user?.userId]);
-
-  useEffect(() => {
-    if (!fetchedLeague || !selectedLeagueId) return;
-    const summary = sleeper.leagues.find((l) => l.leagueId === selectedLeagueId);
-    if (!summary) return;
-    fetch(`${API_BASE}/api/trades/ingest-league`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        leagueId: selectedLeagueId,
-        season: summary.season,
-        teamCount: summary.totalRosters || fetchedLeague.league.teams.length,
-        format: summary.format || fetchedLeague.league.format || "1QB",
-        scoringFormat: summary.scoringFormat || fetchedLeague.league.scoringFormat || "PPR",
-      }),
-    }).catch(() => {});
-  }, [fetchedLeague, selectedLeagueId, sleeper.leagues]);
+  // Background trade ingestion removed — was saturating the DB connection pool.
+  // Trades are now ingested manually via the admin panel (DraftCommand → Admin Tools).
 
   const currentMainConfig = NAV_CONFIG.find((t) => t.id === activeMainTab);
 

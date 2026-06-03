@@ -157,29 +157,12 @@ export function SleeperProvider({ children }: { children: React.ReactNode }) {
         identify({ sleeperUserId: userData.userId, sleeperUsername: userData.username });
       }
 
-      // Fire the passive ADP enrichment POST on explicit read-only connects
-      // (i.e. the user typed a username in the header). The auth-flow path
-      // already kicks off enqueueSleeperUser server-side via
-      // /api/sc-auth/connect-sleeper, so we skip on those (callers omit the
-      // flag). Cooldown enforcement lives on the server, so repeat connects
-      // within 7 days are a no-op there too — but we still surface the toast
-      // so users get the same affordance every time.
+      // Passive ADP enrichment removed — was saturating the DB connection pool.
+      // ADP crawling is now manual-only via the admin panel.
       if (opts.triggerPassiveEnrich && userData?.userId) {
-        void fetch(`${API_BASE}/api/adp/passive-enrich`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            sleeperUserId: userData.userId,
-            sleeperUsername: userData.username,
-          }),
-        }).catch((err) => {
-          // Never surface — enrichment is best-effort background work.
-          console.warn("[sleeper] passive-enrich post failed:", err?.message);
-        });
         toast({
           title: "Sleeper connected",
-          description:
-            "We'll scan eligible dynasty drafts in the background to improve ADP.",
+          description: `Loaded leagues for ${userData.username}.`,
         });
       }
 
