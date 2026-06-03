@@ -1,0 +1,93 @@
+Tasks:
+
+1. Find the login endpoint used by the frontend.
+Search for:
+- sc-auth/login
+- auth/login
+- signin
+- login
+- handleLogin
+- setAuthStatus
+- status: "loading"
+
+2. Add request timing logs to the backend login route:
+- login request received
+- body parsed
+- user lookup start/end
+- password/JWT verification start/end
+- token creation start/end
+- session write start/end if used
+- response sent
+- total duration
+
+3. The login endpoint must never hang.
+Add a hard timeout. If something fails, return JSON quickly.
+
+4. Check whether login uses the main DB pool.
+If it does, move it to the isolated authDb/authPool, same as /api/sc-auth/me.
+
+5. Check whether login uses session middleware.
+Since session middleware was restricted to /api/sc-auth, make sure the login route is actually under /api/sc-auth. If login is outside /api/sc-auth but expects req.session, it may now be broken.
+
+6. Confirm the frontend handles all outcomes:
+- success
+- invalid credentials
+- network failure
+- timeout
+- 500
+- non-JSON response
+
+It should not stay loading forever.
+
+7. Add a frontend login timeout:
+If login takes more than 10 seconds, stop loading and show:
+"Login timed out. Please try again."
+
+8. After successful login, confirm:
+- token is stored in localStorage/cookie
+- /api/sc-auth/me is called again
+- /api/sc-auth/me returns 200
+- auth state changes from loading to authenticated
+
+9. If login fails, auth state should become unauthenticated, not loading.
+
+10. Temporarily log the login endpoint URL in the browser console:
+console.log("[sc-auth] login endpoint:", url)
+
+Expected result:
+- login either succeeds within a few seconds or shows a clear error
+- no infinite loading cycle
+- stale/bad credentials do not keep the app stuck
+Important possibility
+
+When Claude changed:
+
+app.use(session(...))
+
+to:
+
+app.use("/api/sc-auth", session(...))
+
+that was probably correct. But if your login route is not under /api/sc-auth and still expects session access, that could explain why login broke.
+
+So have Claude check this immediately:
+
+Is the login route under /api/sc-auth?
+
+If login is currently something like:
+
+/api/auth/login
+
+but session middleware now only applies to:
+
+/api/sc-auth/*
+
+then login may be missing req.session.
+
+The fix would be either:
+
+app.use(["/api/sc-auth", "/api/auth"], sessionMiddleware)
+
+or move/alias the login route under /api/sc-auth.
+
+Do not re-enable global session middleware. That would bring back the pool starvation problem.

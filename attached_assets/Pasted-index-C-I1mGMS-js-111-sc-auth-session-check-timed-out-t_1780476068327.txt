@@ -1,0 +1,162 @@
+index-C_I1mGMS.js:111 [sc-auth] session check timed out — token preserved, retry 1/5 AbortError: signal is aborted without reason
+    at index-C_I1mGMS.js:111:5169
+(anonymous) @ index-C_I1mGMS.js:111
+await in (anonymous)
+(anonymous) @ index-C_I1mGMS.js:111
+Hl @ index-C_I1mGMS.js:9
+ts @ index-C_I1mGMS.js:9
+Tg @ index-C_I1mGMS.js:9
+Ir @ index-C_I1mGMS.js:7
+Q3 @ index-C_I1mGMS.js:9
+fa @ index-C_I1mGMS.js:9
+Ng @ index-C_I1mGMS.js:9
+A @ index-C_I1mGMS.js:2
+M @ index-C_I1mGMS.js:2
+postMessage
+X @ index-C_I1mGMS.js:2
+te @ index-C_I1mGMS.js:2
+e.unstable_scheduleCallback @ index-C_I1mGMS.js:2
+Bg @ index-C_I1mGMS.js:9
+rn @ index-C_I1mGMS.js:9
+An @ index-C_I1mGMS.js:9
+ni @ index-C_I1mGMS.js:9
+ai.render.Nd.render @ index-C_I1mGMS.js:9
+(anonymous) @ index-C_I1mGMS.js:247Understand this warning
+index-C_I1mGMS.js:111 [sc-auth] timeout — cold-boot retry in 4s
+index-C_I1mGMS.js:111 [sc-auth] auth check finished — status: loading
+3adp-explorer:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was receivedUnderstand this error
+index-C_I1mGMS.js:111 [sc-auth] auth check started
+index-C_I1mGMS.js:111 [sc-auth] session check timed out — token preserved, retry 2/5 AbortError: signal is aborted without reason
+    at index-C_I1mGMS.js:111:5169
+(anonymous) @ index-C_I1mGMS.js:111
+await in (anonymous)
+(anonymous) @ index-C_I1mGMS.js:111
+setTimeout
+(anonymous) @ index-C_I1mGMS.js:111
+await in (anonymous)
+(anonymous) @ index-C_I1mGMS.js:111
+Hl @ index-C_I1mGMS.js:9
+ts @ index-C_I1mGMS.js:9
+Tg @ index-C_I1mGMS.js:9
+Ir @ index-C_I1mGMS.js:7
+Q3 @ index-C_I1mGMS.js:9
+fa @ index-C_I1mGMS.js:9
+Ng @ index-C_I1mGMS.js:9
+A @ index-C_I1mGMS.js:2
+M @ index-C_I1mGMS.js:2
+postMessage
+X @ index-C_I1mGMS.js:2
+te @ index-C_I1mGMS.js:2
+e.unstable_scheduleCallback @ index-C_I1mGMS.js:2
+Bg @ index-C_I1mGMS.js:9
+rn @ index-C_I1mGMS.js:9
+An @ index-C_I1mGMS.js:9
+ni @ index-C_I1mGMS.js:9
+ai.render.Nd.render @ index-C_I1mGMS.js:9
+(anonymous) @ index-C_I1mGMS.js:247Understand this warning
+index-C_I1mGMS.js:111 [sc-auth] timeout — falling back to unauthenticated (no more retries)
+index-C_I1mGMS.js:111 [sc-auth] auth check finished — status: unauthenticated
+index-C_I1mGMS.js:245 [app] DynastyCommandCenter mounted
+index-C_I1mGMS.js:53 [app] ValueModelProvider mounted
+index-C_I1mGMS.js:247 [app] rendering authenticated shell — probe: app
+DraftCommand-C3kG71Zg.js:5 [ADP] fetch URL: https://dynasty-command.replit.app/api/adp?season=2026&draftType=startup&draftFormat=snake&rookieMode=direct&leagueMode=dynasty&scoring=ppr&superflex=yes&tePremium=yes&bestBall=no&teams=12&startDate=2026-05-04&endDate=2026-06-03
+index-C_I1mGMS.js:9 [fantasycalc] dynasty fetch failed — using bundled snapshot AbortError: signal is aborted without reason
+    at index-C_I1mGMS.js:9:278231
+Sf @ index-C_I1mGMS.js:9
+await in Sf
+(anonymous) @ index-C_I1mGMS.js:53
+Hl @ index-C_I1mGMS.js:9
+ts @ index-C_I1mGMS.js:9
+Tg @ index-C_I1mGMS.js:9
+Ir @ index-C_I1mGMS.js:7
+Q3 @ index-C_I1mGMS.js:9
+fa @ index-C_I1mGMS.js:9
+Ng @ index-C_I1mGMS.js:9
+A @ index-C_I1mGMS.js:2
+M @ index-C_I1mGMS.js:2
+postMessage
+X @ index-C_I1mGMS.js:2
+te @ index-C_I1mGMS.js:2
+e.unstable_scheduleCallback @ index-C_I1mGMS.js:2
+Bg @ index-C_I1mGMS.js:9
+rn @ index-C_I1mGMS.js:9
+An @ index-C_I1mGMS.js:9
+j3 @ index-C_I1mGMS.js:7
+(anonymous) @ index-C_I1mGMS.js:111
+await in (anonymous)
+(anonymous) @ index-C_I1mGMS.js:111
+setTimeout
+(anonymous) @ index-C_I1mGMS.js:111
+await in (anonymous)
+(anonymous) @ index-C_I1mGMS.js:111
+Hl @ index-C_I1mGMS.js:9
+ts @ index-C_I1mGMS.js:9
+Tg @ index-C_I1mGMS.js:9
+Ir @ index-C_I1mGMS.js:7
+Q3 @ index-C_I1mGMS.js:9
+fa @ index-C_I1mGMS.js:9
+Ng @ index-C_I1mGMS.js:9
+A @ index-C_I1mGMS.js:2
+M @ index-C_I1mGMS.js:2
+postMessage
+X @ index-C_I1mGMS.js:2
+te @ index-C_I1mGMS.js:2
+e.unstable_scheduleCallback @ index-C_I1mGMS.js:2
+Bg @ index-C_I1mGMS.js:9
+rn @ index-C_I1mGMS.js:9
+An @ index-C_I1mGMS.js:9
+ni @ index-C_I1mGMS.js:9
+ai.render.Nd.render @ index-C_I1mGMS.js:9
+(anonymous) @ index-C_I1mGMS.js:247Understand this warning
+index-C_I1mGMS.js:9 [fantasycalc] redraft fetch failed — using bundled snapshot AbortError: signal is aborted without reason
+    at index-C_I1mGMS.js:9:278231
+Cf @ index-C_I1mGMS.js:9
+await in Cf
+(anonymous) @ index-C_I1mGMS.js:53
+Hl @ index-C_I1mGMS.js:9
+ts @ index-C_I1mGMS.js:9
+Tg @ index-C_I1mGMS.js:9
+Ir @ index-C_I1mGMS.js:7
+Q3 @ index-C_I1mGMS.js:9
+fa @ index-C_I1mGMS.js:9
+Ng @ index-C_I1mGMS.js:9
+A @ index-C_I1mGMS.js:2
+M @ index-C_I1mGMS.js:2
+postMessage
+X @ index-C_I1mGMS.js:2
+te @ index-C_I1mGMS.js:2
+e.unstable_scheduleCallback @ index-C_I1mGMS.js:2
+Bg @ index-C_I1mGMS.js:9
+rn @ index-C_I1mGMS.js:9
+An @ index-C_I1mGMS.js:9
+j3 @ index-C_I1mGMS.js:7
+(anonymous) @ index-C_I1mGMS.js:111
+await in (anonymous)
+(anonymous) @ index-C_I1mGMS.js:111
+setTimeout
+(anonymous) @ index-C_I1mGMS.js:111
+await in (anonymous)
+(anonymous) @ index-C_I1mGMS.js:111
+Hl @ index-C_I1mGMS.js:9
+ts @ index-C_I1mGMS.js:9
+Tg @ index-C_I1mGMS.js:9
+Ir @ index-C_I1mGMS.js:7
+Q3 @ index-C_I1mGMS.js:9
+fa @ index-C_I1mGMS.js:9
+Ng @ index-C_I1mGMS.js:9
+A @ index-C_I1mGMS.js:2
+M @ index-C_I1mGMS.js:2
+postMessage
+X @ index-C_I1mGMS.js:2
+te @ index-C_I1mGMS.js:2
+e.unstable_scheduleCallback @ index-C_I1mGMS.js:2
+Bg @ index-C_I1mGMS.js:9
+rn @ index-C_I1mGMS.js:9
+An @ index-C_I1mGMS.js:9
+ni @ index-C_I1mGMS.js:9
+ai.render.Nd.render @ index-C_I1mGMS.js:9
+(anonymous) @ index-C_I1mGMS.js:247Understand this warning
+index-C_I1mGMS.js:111 [sleeper] loading leagues for Sleeper user: makitrain (sleeper_user_id: 1126320389791096832 source: read-only )
+index-C_I1mGMS.js:245 [app] league load start {leagueId: '1312325046022205440', sleeperUserId: '1126320389791096832'}
+index-C_I1mGMS.js:245 [app] league load ok {leagueId: '1312325046022205440', teams: 12, userTeamId: 'roster_12'}
+index-C_I1mGMS.js:245 [app] league load finished — isLeagueLoading: false

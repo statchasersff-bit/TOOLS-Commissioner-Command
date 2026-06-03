@@ -35,11 +35,12 @@ import { pool, authPool } from "./db";
  * resolve to `fallback` instead. The timer is cleared eagerly on settlement to
  * avoid holding the event loop open.
  */
-function withTimeout<T>(p: Promise<T>, ms: number, fallback: T): Promise<T> {
+function withTimeout<T>(p: Promise<T>, ms: number, fallback: T, onTimeout?: () => void): Promise<T> {
   let timerId: ReturnType<typeof setTimeout> | null = null;
   const timeoutP = new Promise<T>((resolve) => {
     timerId = setTimeout(() => {
       console.warn(`[sc-auth/me] dependency timeout after ${ms}ms — using fallback`);
+      onTimeout?.();
       resolve(fallback);
     }, ms);
   });
@@ -294,12 +295,19 @@ export function registerScAuthRoutes(app: Express): void {
 
       // ── getUser — 3 s hard cap ────────────────────────────────────────────
       lap("before getUser");
-      const user = await withTimeout(getUser(userId), 3_000, null);
-      lap(`after getUser — found=${user !== null}`);
+      let getUserTimedOut = false;
+      const user = await withTimeout(getUser(userId), 3_000, null, () => { getUserTimedOut = true; });
+      lap(`after getUser — found=${user !== null} timedOut=${getUserTimedOut}`);
 
       if (!user) {
+        if (getUserTimedOut) {
+          // DB temporarily unavailable — tell the client to retry shortly rather
+          // than treating this as a bad token and showing the login form.
+          console.warn("[sc-auth/me] getUser timed out — returning 503 for short retry");
+          return res.status(503).json({ error: "Service temporarily unavailable. Please try again in a moment.", retryable: true });
+        }
         req.session?.destroy(() => {});
-        return res.status(401).json({ error: "Session expired. Please log in again." });
+        return res.status(401).json({ error: "Session expired. Please log in again.", jwtBad: true });
       }
 
       // ── Parallel lookups — all on authPool, all with 3 s hard cap ─────────

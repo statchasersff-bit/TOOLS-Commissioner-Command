@@ -264,6 +264,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // eslint-disable-next-line no-console
       console.info(`[sc-auth] /api/sc-auth/me status: ${res.status}`);
 
+      if (res.status === 503) {
+        // DB temporarily unavailable (getUser timed out server-side). Retry
+        // quickly — 2 attempts × 3 s each = 6 s max before showing the
+        // login form. Much shorter than the old 401 retry chain (up to 70 s).
+        const body503 = await res.json().catch(() => null);
+        const is503Retryable = !!(body503 as any)?.retryable;
+        // eslint-disable-next-line no-console
+        console.info(`[sc-auth] 503 from /me — retryable=${is503Retryable}`);
+        failClosedNoDc("503 from /me - DB temporarily unavailable");
+        const MAX_503_RETRIES = 2;
+        if (is503Retryable && getStoredToken() && retryCountRef.current < MAX_503_RETRIES) {
+          retryCountRef.current += 1;
+          // eslint-disable-next-line no-console
+          console.info(`[sc-auth] 503 retry ${retryCountRef.current}/${MAX_503_RETRIES} in 3s`);
+          retryTimerRef.current = setTimeout(() => { void checkSession(); }, 3_000);
+          finalStatus = "loading";
+        } else {
+          retryCountRef.current = 0;
+          finalStatus = "unauthenticated";
+        }
+        return;
+      }
+
       if (res.status === 401) {
         // The server may be warming up and the session is simply empty —
         // that's NOT a reason to wipe a perfectly valid JWT. We only clear
@@ -278,14 +301,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         failClosedNoDc("401 from /me", tokenIsBad);
         if (!tokenIsBad && getStoredToken()) {
           // Server said "not authenticated" but the JWT looks fine locally —
-          // treat this like a network hiccup and retry.
-          if (retryCountRef.current < 5) {
+          // treat this like a network hiccup and retry with a short backoff.
+          // Cap at 2 retries (3 s + 6 s = max 9 s) so the user sees the
+          // login form quickly instead of waiting 70 s.
+          const MAX_401_RETRIES = 2;
+          if (retryCountRef.current < MAX_401_RETRIES) {
             retryCountRef.current += 1;
-            const delayMs = Math.min(5_000 * retryCountRef.current, 20_000);
+            const delayMs = Math.min(3_000 * retryCountRef.current, 10_000);
             // eslint-disable-next-line no-console
-            console.info(`[sc-auth] 401 without jwtBad — retry ${retryCountRef.current} in ${delayMs / 1000}s`);
+            console.info(`[sc-auth] 401 without jwtBad — retry ${retryCountRef.current}/${MAX_401_RETRIES} in ${delayMs / 1000}s`);
             retryTimerRef.current = setTimeout(() => { void checkSession(); }, delayMs);
             finalStatus = "loading";
+          } else {
+            retryCountRef.current = 0;
+            finalStatus = "unauthenticated";
           }
         }
         return;
