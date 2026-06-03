@@ -174,6 +174,13 @@ export function AdpCrawlPanel() {
   // initial POST response and refreshed every ~1.5s by the polling effect.
   const [liveProgress, setLiveProgress] = useState<CrawlLiveState | null>(null);
   const pollRef = useRef<number | null>(null);
+  // Ref kept in sync with runState so the interval callback can read the
+  // current value without a stale closure. The effect only re-creates when
+  // adminSecretOverride changes (to pick up a new token), but runState can
+  // change at any time — reading from a ref avoids re-mounting the interval
+  // on every state transition.
+  const runStateRef = useRef<RunState>(runState);
+  runStateRef.current = runState;
   const running = runState === "running";
 
   // ── Status state ────────────────────────────────────────────────────────
@@ -271,15 +278,26 @@ export function AdpCrawlPanel() {
   }, [seedUsername, seasons, categories, refreshSnapshots, maxUsers, maxLeagues, maxDrafts, tradeLookbackDays, adminSecretOverride]);
 
   // ── Live-progress polling ───────────────────────────────────────────────
-  // Single long-lived poller. Fires once on mount (so a crawl started in a
-  // previous tab/component instance is picked up) and then every 1.5s while
-  // the panel is mounted. All state transitions go through functional
-  // setters so the closure doesn't capture stale runState. The interval
-  // does NOT clear on terminal — that way clicking "Run" again immediately
-  // resumes live updates without needing to re-create the effect.
+  // Single long-lived poller. Fires once on mount (to detect a crawl that
+  // started before the panel opened) and then on a 1.5s interval while the
+  // panel is mounted. When no crawl is running the tick is skipped every
+  // 9 out of 10 iterations (~15s effective rate) to avoid hammering the
+  // endpoint cross-origin for no reason. When running, every tick fires
+  // for responsive live-updates. All state transitions go through functional
+  // setters so the closure doesn't capture stale values. The interval does
+  // NOT clear on terminal states — clicking "Run" again immediately resumes
+  // live updates without needing to re-create the effect.
   useEffect(() => {
     let cancelled = false;
+    let tickCount = 0;
+
     const tick = async () => {
+      tickCount++;
+      // Throttle to 1 in 10 ticks (~15s) when idle; every tick when running.
+      // tickCount === 1 is always the on-mount check.
+      const isRunning = runStateRef.current === "running";
+      if (!isRunning && tickCount > 1 && tickCount % 10 !== 0) return;
+
       try {
         const res = await fetch(`${API_BASE}/api/admin/adp/crawl-network/progress`, {
           credentials: "include",

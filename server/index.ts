@@ -154,12 +154,20 @@ const corsOptions: cors.CorsOptions = {
   },
   credentials: true,
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"],
+  // x-admin-secret is sent by the admin panel when the secret override
+  // field is filled in. Without it here, the browser preflight (OPTIONS)
+  // rejects the request even though the origin is allowed.
+  allowedHeaders: ["Content-Type", "Authorization", "x-admin-secret"],
   maxAge: 86400,
 };
 
+// Apply CORS middleware globally. The cors package, with preflightContinue
+// defaulting to false, intercepts OPTIONS preflight requests and returns
+// 204 No Content (with the correct Allow headers) before any route handler
+// runs — so admin routes that call requireAdmin() never see OPTIONS requests.
+// No explicit app.options() handler is needed (and bare "*" breaks on the
+// path-to-regexp v8+ that ships with this project).
 app.use(cors(corsOptions));
-app.options("/{*path}", cors(corsOptions));
 
 declare module "http" {
   interface IncomingMessage {
