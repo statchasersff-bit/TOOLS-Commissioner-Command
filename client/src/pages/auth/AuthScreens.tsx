@@ -395,25 +395,46 @@ export function LoginScreen({ onNavigate, onLoginSuccess }: ScreenProps) {
     e.preventDefault();
     setLoading(true);
     setError("");
+    const loginUrl = `${API_BASE}/api/sc-auth/login`;
+    console.log("[sc-auth] login endpoint:", loginUrl);
+
+    // 12 s hard cap — server has its own 10 s timeout so the server-side
+    // error message arrives before this fires under normal conditions.
+    const ac = new AbortController();
+    const timeoutId = setTimeout(() => ac.abort(), 12_000);
     try {
-      const res = await fetchWithRetry(
-        `${API_BASE}/api/sc-auth/login`,
-        { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ email, password }) },
-        () => setError("Server is waking up, please wait…"),
-      );
+      let res: Response;
+      try {
+        res = await fetch(loginUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ email, password }),
+          signal: ac.signal,
+        });
+      } finally {
+        clearTimeout(timeoutId);
+      }
       setError("");
-      const data = await res.json();
-      console.log("[auth] login response status:", res.status);
-      if (!res.ok) { setError(data.error || "Login failed."); return; }
-      const token: string = data.token || data.accessToken || "";
+      const data = await res.json().catch(() => null);
+      console.log("[auth] login response status:", res.status, "ok:", res.ok);
+      if (!res.ok) { setError((data as any)?.error || "Login failed."); return; }
+      const token: string = (data as any)?.token || (data as any)?.accessToken || "";
       if (!token) { setError("Login error: server did not return an auth token."); return; }
       console.log("[auth] login success — token length:", token.length);
       localStorage.setItem("sc_auth_token", token);
       console.log("[auth] token saved");
       onLoginSuccess(token);
     } catch (err) {
-      console.error("[sc-auth] login error:", err);
-      setError("Network error. Please try again.");
+      clearTimeout(timeoutId);
+      const isAbort = err instanceof DOMException && err.name === "AbortError";
+      if (isAbort) {
+        console.warn("[sc-auth] login timed out after 12s");
+        setError("Login timed out. Please try again.");
+      } else {
+        console.error("[sc-auth] login network error:", err);
+        setError("Network error. Please try again.");
+      }
     } finally {
       setLoading(false);
     }

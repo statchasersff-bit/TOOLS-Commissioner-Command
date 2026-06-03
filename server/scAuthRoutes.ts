@@ -233,21 +233,50 @@ export function registerScAuthRoutes(app: Express): void {
 
   // POST /api/sc-auth/login
   app.post("/api/sc-auth/login", async (req, res) => {
+    const t0 = Date.now();
+    const loginLap = (label: string) =>
+      console.info(`[sc-auth/login] ${label} +${Date.now() - t0}ms | auth(${pStats(authPool)}) | main(${pStats(pool)})`);
+
+    loginLap("request received");
     try {
       const { email, password } = req.body as { email?: string; password?: string };
       if (!email || !password) return res.status(400).json({ error: "email and password are required" });
-      const result = await loginUser(email, password);
-      if (!result.ok) return res.status(401).json({ error: result.error });
+      loginLap("body parsed — starting loginUser");
+
+      // 10 s hard cap: if authDb is slow on a cold connection, fail fast
+      // rather than hanging the login button indefinitely.
+      let loginTimedOut = false;
+      const result = await withTimeout(
+        loginUser(email, password),
+        10_000,
+        { ok: false as const, error: "Login timed out. Please try again." },
+        () => { loginTimedOut = true; },
+      );
+      loginLap(`loginUser complete — ok=${result.ok} timedOut=${loginTimedOut}`);
+
+      if (loginTimedOut) {
+        console.warn("[sc-auth/login] loginUser timed out after 10s");
+        return res.status(503).json({ error: "Login timed out. Please try again in a moment." });
+      }
+      if (!result.ok) {
+        loginLap("returning 401 (bad credentials)");
+        return res.status(401).json({ error: result.error });
+      }
+
+      // Write session (fire-and-forget — does not block the response)
+      loginLap("credentials verified — writing session + signing JWT");
       (req.session as any).scUserId = result.userId;
       req.session.save(() => {});
-      const token = signUserJwt(result.userId);
+
+      const token = signUserJwt(result.userId!);
       setJwtCookie(res, token);
+      loginLap("sending 200");
       res.json({ ok: true, token });
     } catch (err: any) {
       // Log the full error code + message so production logs reveal the root
       // cause (e.g. "TimeoutError: timeout exceeded when trying to connect"
       // means the auth pool was exhausted; "ECONNREFUSED" means DB unreachable).
-      console.error("[sc-auth] login error:", err?.code ?? "(no code)", err?.message ?? err);
+      console.error(`[sc-auth/login] error +${Date.now() - t0}ms:`, err?.code ?? "(no code)", err?.message ?? err);
       res.status(500).json({ error: "Login failed. Please try again." });
     }
   });
