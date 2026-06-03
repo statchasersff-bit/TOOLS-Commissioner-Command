@@ -330,9 +330,18 @@ export function DraftCommand() {
     const end = new Date();
     const start = new Date();
     start.setDate(end.getDate() - 44);
+    // Movers represent broad market movement, not format-specific trends.
+    // Dropping tePremium / bestBall / scoring gives the snapshot enough picks
+    // in both windows (last 14 days vs prior 30) to surface real trends.
+    // A typical te=yes + bb=no + snake filter leaves only 3 picks in the last
+    // 14 days — just enough to fire the old MIN_TREND_PICKS=3 threshold and
+    // produce completely spurious ↓17 signals from 3 late-round outlier picks.
     const moversFilters: typeof filters = {
       ...filters,
       dateRange: { start: toIsoDate(start), end: toIsoDate(end) },
+      tePremium: "all",
+      bestBall: "all",
+      scoring: "all",
     };
     const url = buildAdpUrl(moversFilters);
     const controller = new AbortController();
