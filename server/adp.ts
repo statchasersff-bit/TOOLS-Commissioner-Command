@@ -2074,6 +2074,32 @@ async function _getAdpFromDb(f: AdpFilters, key: string): Promise<_AdpMemEntry["
     };
   }
 
+  // For date-range queries with no snapshot at all, fall back to the most
+  // recent snapshot for the SAME static filters but ANY date window. The
+  // date range shifts by 1 day each day (endDate = today), so there's
+  // always a yesterday-keyed snapshot but never a today-keyed one until
+  // the background compute finishes. Serving yesterday's result as stale
+  // beats showing a spinner — the data is essentially identical.
+  if (hasDateFilter) {
+    const approx = await findNearestDateRangeSnapshot(key);
+    if (approx && approx.rows.length > 0) {
+      console.info(
+        `[ADP getAdp] date-range miss — serving nearest snapshot as stale ` +
+        `while exact compute runs (key=${key})`,
+      );
+      return {
+        rows: approx.rows,
+        draftCount: approx.draftCount,
+        pickCount: approx.rows.reduce((s, r) => s + r.draft_count, 0),
+        filterKey: key,
+        snapshotDate: approx.snapshotDate,
+        computedAt: approx.computedAt,
+        cached: true,
+        stale: true,
+      };
+    }
+  }
+
   // Nothing usable cached yet — return an explicit "computing" empty result
   // instead of hanging on the compute. The client shows a "building…" state and
   // the next request (after the background compute persists) gets real rows.
@@ -2086,6 +2112,56 @@ async function _getAdpFromDb(f: AdpFilters, key: string): Promise<_AdpMemEntry["
     computedAt: new Date().toISOString(),
     cached: false,
     computing: true,
+  };
+}
+
+/**
+ * When a date-range filter key has no exact snapshot, find the most recent
+ * snapshot with the same static filters and any date window. Used as a stale
+ * fallback so users see real data (yesterday's result) instead of a spinner
+ * while the exact compute runs in the background.
+ *
+ * The filterKey format is:
+ *   se=...|dt=...|df=...|...|pt=...|sd=<start>|ed=<end>|_ver=vN
+ *
+ * We match everything up to the first `|sd=` so the LIKE pattern covers any
+ * date range with the same static dimensions.
+ */
+async function findNearestDateRangeSnapshot(exactKey: string): Promise<{
+  rows: AdpRow[];
+  draftCount: number;
+  snapshotDate: string;
+  computedAt: string;
+} | null> {
+  const sdIdx = exactKey.indexOf("|sd=");
+  if (sdIdx === -1) return null; // no date segment — shouldn't happen here
+
+  // e.g. "se=2026|dt=startup|...|pt=all"
+  const staticPrefix = exactKey.slice(0, sdIdx);
+  // The version suffix is always at the end: "|_ver=v9"
+  const verSuffix = `|_ver=${FILTER_KEY_VERSION}`;
+
+  // LIKE pattern: same static prefix, any sd/ed values, same version.
+  // e.g. "se=2026|...|pt=all|sd=%|_ver=v9"  ← covers any date range
+  const pattern = `${staticPrefix}|sd=%${verSuffix}`;
+
+  const result = await db
+    .select()
+    .from(adpSnapshots)
+    .where(sql`${adpSnapshots.filterKey} LIKE ${pattern}`)
+    .orderBy(desc(adpSnapshots.computedAt))
+    .limit(1);
+
+  if (!result.length) return null;
+  const row = result[0];
+  const rows = (row.rows as AdpRow[]) ?? [];
+  if (!rows.length) return null;
+
+  return {
+    rows,
+    draftCount: row.draftCount,
+    snapshotDate: row.snapshotDate,
+    computedAt: row.computedAt?.toISOString() ?? new Date().toISOString(),
   };
 }
 
@@ -2114,6 +2190,31 @@ export async function refreshDefaultSnapshots(): Promise<{ combos: number; rows:
   return { combos: DEFAULT_COMBOS.length, rows: totalRows };
 }
 
+// ── Index self-provisioning ──────────────────────────────────────────────────
+// The drafts-table indexes that make computeAdp fast (filter equality + a
+// date-range scan) are declared in shared/schema.ts, but `drizzle-kit push`
+// only applies them to whichever DB DATABASE_URL points at — and the WORKSPACE
+// DATABASE_URL is the dev database, NOT production (see the dev-ceiling note in
+// server/db.ts). So a `db:push` run from the workspace silently leaves prod
+// un-indexed. Creating them idempotently here guarantees they exist in whatever
+// DB the app actually connects to (prod when deployed). drafts is ~24k rows, so
+// these build in milliseconds; IF NOT EXISTS makes repeat boots a no-op. Index
+// names match schema.ts so a later real migration sees them as already-present.
+export async function ensureAdpIndexes(): Promise<void> {
+  const statements = [
+    sql`CREATE INDEX IF NOT EXISTS drafts_adp_filter_idx ON drafts (status, excluded_from_adp, league_mode, draft_type, season)`,
+    sql`CREATE INDEX IF NOT EXISTS drafts_draft_date_idx ON drafts (draft_date)`,
+  ];
+  for (const stmt of statements) {
+    try {
+      await db.execute(stmt);
+    } catch (err) {
+      console.error("[ADP] ensureAdpIndexes failed (continuing):", (err as Error).message);
+    }
+  }
+  console.log("[ADP] draft indexes ensured (drafts_adp_filter_idx, drafts_draft_date_idx)");
+}
+
 // ── Scheduler ────────────────────────────────────────────────────────────────
 
 let adpInterval: NodeJS.Timeout | null = null;
@@ -2121,6 +2222,11 @@ let adpInterval: NodeJS.Timeout | null = null;
 const SNAPSHOT_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6h
 
 export function startAdpScheduler() {
+  // Make sure the ADP query indexes exist in THIS deployment's database before
+  // any heavy compute runs (workspace db:push can't reach the prod DB). Fire
+  // immediately on boot; it's idempotent and finishes in ms on the small table.
+  ensureAdpIndexes().catch((err) => console.error("[ADP] ensureAdpIndexes threw:", err));
+
   // Delay the first refresh by 45 seconds so it doesn't compete with the
   // initial burst of user traffic right after a fresh deploy. The pool has
   // 40 connections but backfillLeagueScoring + refreshDefaultSnapshots can

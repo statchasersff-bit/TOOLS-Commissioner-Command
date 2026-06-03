@@ -1,0 +1,72 @@
+ADP Explorer is still failing, and the browser console now shows CORS errors for:
+
+https://dynasty-command.replit.app/api/admin/adp/crawl-network/progress
+
+Error:
+
+Access to fetch at this URL from origin https://statchasers.com has been blocked by CORS policy because no Access-Control-Allow-Origin header is present.
+
+The request also sometimes returns 500.
+
+This is likely causing ADP Explorer to get stuck showing:
+"No matching drafts found"
+"Building ADP for this filter… retry in a few seconds."
+
+Please fix this as both a frontend routing issue and backend CORS/error-handling issue.
+
+Main diagnosis:
+The public ADP Explorer page should not automatically call an admin endpoint:
+`/api/admin/adp/crawl-network/progress`
+
+Tasks:
+
+1. Frontend fix:
+- Search DraftCommand / ADP Explorer for:
+  - crawl-network/progress
+  - /api/admin/adp
+  - progress polling
+  - setInterval
+- Do not call `/api/admin/adp/crawl-network/progress` on the public ADP Explorer page.
+- Only call this endpoint if:
+  - the user is an admin
+  - the admin panel is open
+  - the user has a valid admin token/secret
+- If this endpoint is only for internal admin tools, remove it entirely from normal ADP Explorer loading.
+- Make sure progress polling is cleaned up on unmount.
+- Make sure repeated failed requests do not spam the server.
+
+2. Backend CORS fix:
+- Apply CORS middleware globally before all API routes.
+- Include these allowed origins:
+  - https://statchasers.com
+  - https://www.statchasers.com
+  - https://dynasty-command.replit.app
+- Make sure OPTIONS preflight requests are handled before auth middleware.
+- Make sure 500/error responses also include CORS headers.
+- Return JSON errors instead of crashing without headers.
+
+Example Express setup:
+
+```js
+import cors from "cors";
+
+const allowedOrigins = [
+  "https://statchasers.com",
+  "https://www.statchasers.com",
+  "https://dynasty-command.replit.app",
+];
+
+app.use(cors({
+  origin(origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+
+    return callback(new Error(`CORS blocked origin: ${origin}`));
+  },
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-Admin-Secret"],
+}));
+
+app.options("*", cors());

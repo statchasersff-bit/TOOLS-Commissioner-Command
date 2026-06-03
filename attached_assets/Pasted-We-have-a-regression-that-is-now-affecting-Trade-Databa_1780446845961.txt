@@ -1,0 +1,117 @@
+We have a regression that is now affecting Trade Database, Value Finder, and ADP Explorer.
+
+The browser console shows that every page is trying to call:
+
+https://dynasty-command.replit.app/api/admin/adp/crawl-network/progress
+
+This is happening even on:
+- /trade-center/trade-database
+- /league-market/value-finder
+- /adp-explorer
+
+This admin ADP crawl progress endpoint should not be called globally. It should not run on Trade Database or Value Finder.
+
+There is also a CORS failure on:
+
+https://dynasty-command.replit.app/api/analytics/collect
+
+Main diagnosis:
+An ADP admin progress poller or DraftCommand effect was added to a shared/global component, router, provider, layout, or app shell. It is now firing across unrelated pages and causing CORS/500 errors.
+
+Immediate fix required:
+
+1. Search the frontend for:
+
+crawl-network/progress
+/api/admin/adp/crawl-network/progress
+setInterval
+progress polling
+DraftCommand
+useEffect
+
+2. Find where `/api/admin/adp/crawl-network/progress` is being called.
+
+3. Remove it from any shared/global component, including:
+- DynastyCommandCenter
+- Router
+- App
+- Layout
+- global provider
+- route wrapper
+- shared hook
+- analytics hook
+- page preload logic
+
+4. This endpoint should only be called when all of these are true:
+- user is on the ADP admin/crawl tools page
+- user is an admin
+- admin panel is open
+- valid admin token/secret is available
+
+5. Do not call `/api/admin/adp/crawl-network/progress` from:
+- Trade Database
+- Value Finder
+- normal ADP Explorer public view
+- main Dynasty Command Center route
+- global navigation/layout
+
+6. Stop the polling loop from spamming requests:
+- clearInterval on unmount
+- abort fetches on route change
+- do not retry forever after failure
+- add a max retry/backoff
+- do not poll if the previous request failed with 401, 403, 500, or CORS/network error
+
+7. For the normal ADP Explorer page:
+- call only the public ADP endpoints:
+  - /api/adp
+  - /api/adp/stats
+- do not call admin crawl endpoints unless the admin tools UI is opened
+
+8. Fix CORS globally on the backend:
+- CORS middleware must be registered before all routes
+- OPTIONS requests must be handled before auth middleware
+- 500/error responses must still include CORS headers
+- allowed origins should include:
+  - https://statchasers.com
+  - https://www.statchasers.com
+  - https://dynasty-command.replit.app
+
+9. Fix `/api/analytics/collect`:
+- Apply the same CORS handling to this endpoint
+- If analytics fails, it should never break Trade Database, Value Finder, or ADP Explorer
+- Make analytics fire-and-forget on the frontend
+- Temporarily disable analytics collection if needed until CORS is fixed
+
+10. Add a backend safe response for:
+
+/api/admin/adp/crawl-network/progress
+
+If no crawl is running, return:
+
+{
+  "ok": true,
+  "running": false,
+  "progress": null,
+  "message": "No active crawl"
+}
+
+Do not throw 500 just because no crawl exists.
+
+11. After fixing, verify in browser Network tab:
+
+On /trade-center/trade-database:
+- there should be zero requests to /api/admin/adp/crawl-network/progress
+
+On /league-market/value-finder:
+- there should be zero requests to /api/admin/adp/crawl-network/progress
+
+On normal /adp-explorer:
+- there should be zero requests to /api/admin/adp/crawl-network/progress unless admin tools are open
+
+12. Rebuild and redeploy the frontend bundle to statchasers.com.
+Important: The current broken bundle is:
+
+DraftCommand-bALk0AQP.js
+
+After deployment, confirm the asset hash changes and hard refresh the browser.

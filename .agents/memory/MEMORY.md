@@ -1,3 +1,4 @@
 - [Stale Vite HMR after checkpoint](stale-vite-hmr.md) — checkpoint merges cause Vite to serve old compiled modules; fix is always a workflow restart.
 - [Auth pool isolation](auth-pool-isolation.md) — login/me use dedicated 3-conn pool so background crawlers can't cause login 500s
 - [ADP pool exhaustion fix](adp-pool-exhaustion.md) — getCachedAdp() had no coalescing; 9-36s DB reads × concurrent users = all 40 pool slots gone. Fixed with in-process memory cache + Promise dedup in getAdp().
+- [ADP date-range cache miss](adp-date-range-cache.md) — "last 30 days" endDate shifts daily, new filterKey each day; fix: findNearestDateRangeSnapshot() LIKE fallback serves yesterday's snapshot as stale while exact compute runs.

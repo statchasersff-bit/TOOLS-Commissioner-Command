@@ -1,0 +1,144 @@
+
+After recent fixes for ADP crashes/database pool saturation, the app no longer crashes, but ADP Explorer now shows:
+
+"No matching drafts found"
+"Building ADP for this filter… retry in a few seconds."
+
+This is a regression. The same filters previously returned drafts.
+
+Please debug what changed in the ADP backend/data path.
+
+Current failing request:
+
+/api/adp?season=2026&draftType=startup&draftFormat=snake&rookieMode=direct&leagueMode=dynasty&scoring=ppr&superflex=yes&tePremium=yes&bestBall=no&teams=12&startDate=2026-05-04&endDate=2026-06-03
+
+Main goal:
+Find why this exact filter combo used to return ADP data but now returns zero.
+
+Do not solve this by removing filters or changing the UI message. Find the backend/data regression.
+
+Check these areas:
+
+1. Compare old vs current /api/adp logic
+- Did /api/adp previously query raw draft_picks directly?
+- Does it now query only adp_snapshots?
+- Did the table/source change?
+- Did the WHERE clause change?
+- Did field names change?
+- Did parameter names change?
+- Did normalization change?
+- Did the query start requiring metadata fields that are null for older drafts?
+
+2. Verify production database
+Confirm the production deployment is connected to the same database that contained the working ADP data.
+
+Add a debug log on /api/adp showing:
+- database host/name, sanitized
+- total drafts in DB
+- total draft picks in DB
+- total 2026 drafts
+- total 2026 startup drafts
+- earliest and latest draft date
+- whether adp_snapshots has rows
+- whether draft_picks has rows
+
+3. Check if snapshot logic broke
+If /api/adp now reads from precomputed ADP snapshots:
+- Confirm snapshots exist for the requested filter.
+- Confirm the snapshot builder runs.
+- Confirm the builder writes rows.
+- Confirm the next /api/adp request reads the completed snapshot.
+- If no snapshot exists, fall back to raw draft_picks temporarily instead of returning empty data.
+
+4. Check whether the build job is real
+The UI says "Building ADP for this filter… retry in a few seconds."
+
+Verify:
+- Is a job actually created?
+- Is it queued?
+- Is a worker running?
+- Does the worker complete?
+- Does it fail silently?
+- Does it write results to the expected table?
+- Are errors logged?
+
+If no real build job is running, stop showing this message and return a real backend error.
+
+5. Check recently changed pool/client code
+During the pool saturation fix, make sure the code did not:
+- switch to the wrong DB client
+- query before the DB connection is ready
+- return empty arrays when connection acquisition fails
+- catch DB errors and convert them into "no matching drafts"
+- skip expensive queries after a timeout
+- use a fallback empty dataset
+
+6. Check parameter/field mismatches
+The frontend sends:
+
+- draftType=startup
+- draftFormat=snake
+- rookieMode=direct
+- leagueMode=dynasty
+- scoring=ppr
+- superflex=yes
+- tePremium=yes
+- bestBall=no
+- teams=12
+
+Verify the backend now maps these correctly to stored fields.
+
+Potential regression examples:
+- frontend sends `tePremium`, backend now expects `tightEndPremium`
+- frontend sends `superflex=yes`, DB stores `true`
+- frontend sends `draftFormat=snake`, DB stores `startup` or null
+- frontend sends `draftType=startup`, DB stores `type=startup`
+- frontend sends `teams=12`, DB stores string `"12"` or null
+- date filter uses `created_at`, but old logic used `start_time`
+
+7. Add filter drop-off debug counts
+For this exact request, log counts after each filtering step:
+
+- raw drafts
+- after season
+- after draftType
+- after draftFormat
+- after leagueMode
+- after scoring
+- after superflex
+- after tePremium
+- after bestBall
+- after teams
+- after date range
+- final draft count
+- final pick count
+
+This will show exactly where the regression occurs.
+
+8. Test broad-to-specific
+Run these in order and log counts:
+
+/api/adp?season=2026
+/api/adp?season=2026&draftType=startup
+/api/adp?season=2026&draftType=startup&draftFormat=snake
+/api/adp?season=2026&draftType=startup&draftFormat=snake&teams=12
+/api/adp?season=2026&draftType=startup&draftFormat=snake&teams=12&superflex=yes
+/api/adp?season=2026&draftType=startup&draftFormat=snake&teams=12&superflex=yes&tePremium=yes
+/api/adp?season=2026&draftType=startup&draftFormat=snake&teams=12&superflex=yes&tePremium=yes&bestBall=no
+
+Whichever step drops to zero is the broken filter or broken field mapping.
+
+9. Do not treat this as a valid empty result yet
+Because these filters worked before, "No matching drafts found" is probably masking a backend/data issue.
+
+Expected result:
+- Identify the exact code or data-path change that caused ADP to stop finding drafts.
+- Restore the previous working query behavior.
+- If snapshots are missing, rebuild them or fall back to raw picks.
+- If the app is connected to the wrong DB, fix the production environment variable.
+- If a field mapping changed, normalize old and new field names.
+- ADP Explorer should again return drafts for the same filters that worked before.
+
+The biggest thing I’d have Claude check now is this:
+
+Did /api/adp switch from reading raw draft picks to reading only adp_snapshots?
