@@ -107,6 +107,7 @@ import { registerDiscordRoutes } from "./discord";
 import { registerCommandersReportRoutes } from "./commandersReportRoutes";
 import { registerAnalyticsRoutes } from "./analytics";
 import { requireReadOnlySleeperContext } from "./accessMiddleware";
+import { tryAcquire, release, registerCrawlJob, getJob, listRecentJobs } from "./jobQueue";
 import { getManagerIntel } from "./managerIntel";
 import {
   startCrawlInBackground,
@@ -972,22 +973,28 @@ export async function registerRoutes(
     }
   });
 
+  // Admin-only + concurrency-limited. Was previously a public fire-and-forget
+  // endpoint called on every app load. Now only accessible to admins and capped
+  // at 2 concurrent ingest jobs so it cannot saturate the DB pool.
   app.post("/api/trades/ingest-user", async (req, res) => {
+    if (!(await requireAdmin(req, res))) return;
     const { username } = req.body;
     if (!username) return res.status(400).json({ error: "username is required" });
-    // Fire-and-forget: the discovery + crawl is a 90s+ rate-limited Sleeper
-    // sweep, and the client triggers this on every load and ignores the body.
-    // Awaiting it here held a request open for the whole sweep and contended
-    // for DB connections, starving auth (/me, /login) → the spinner/login-500
-    // outage. ingestUserLeagues() is internally de-duplicated per user, so the
-    // immediate 202 plus a background run is safe to call repeatedly.
-    ingestUserLeagues(username).catch((err: any) => {
-      console.error("User ingest error:", err?.message || err);
-    });
+    if (!tryAcquire("trade-ingest")) {
+      return res.status(429).json({ error: "Too many trade ingest jobs running. Wait for one to finish." });
+    }
+    ingestUserLeagues(username)
+      .catch((err: any) => console.error("[trade-ingest] user ingest error:", err?.message || err))
+      .finally(() => release("trade-ingest"));
     res.status(202).json({ accepted: true });
   });
 
+  // Admin-only + concurrency-limited.
   app.post("/api/trades/ingest-league", async (req, res) => {
+    if (!(await requireAdmin(req, res))) return;
+    if (!tryAcquire("trade-ingest")) {
+      return res.status(429).json({ error: "Too many trade ingest jobs running. Wait for one to finish." });
+    }
     try {
       const { leagueId, season, teamCount, format, scoringFormat } = req.body;
       if (!leagueId) {
@@ -1002,8 +1009,10 @@ export async function registerRoutes(
       });
       res.json(result);
     } catch (err: any) {
-      console.error("Trade ingest error:", err);
+      console.error("[trade-ingest] league ingest error:", err);
       res.status(500).json({ error: err.message || "Failed to ingest trades" });
+    } finally {
+      release("trade-ingest");
     }
   });
 
@@ -1814,13 +1823,14 @@ export async function registerRoutes(
     }
   });
 
-  // ── Passive ADP enrichment (public — no auth required) ───────────────────
-  // Called by the read-only Sleeper header connect after the client resolves
-  // a username to a Sleeper user_id. The authed connect path
-  // (/api/sc-auth/connect-sleeper) calls enqueueSleeperUser directly. Both
-  // routes share the same 7-day cooldown gate inside enqueueSleeperUser so
-  // repeated calls for the same user don't double-queue or pile up events.
+  // ── Passive ADP enrichment (admin-only) ──────────────────────────────────
+  // Was previously public — any browser could trigger DB writes on every app
+  // load. Now admin-gated: only admin tooling should call this directly.
+  // The authed connect path (/api/sc-auth/connect-sleeper) remains the normal
+  // user-facing trigger, which goes through enqueueSleeperUser with its own
+  // 7-day cooldown guard.
   app.post("/api/adp/passive-enrich", async (req, res) => {
+    if (!(await requireAdmin(req, res))) return;
     try {
       const { sleeperUserId, sleeperUsername } = (req.body ?? {}) as {
         sleeperUserId?: string;
@@ -2330,6 +2340,170 @@ export async function registerRoutes(
       console.error("[Admin] adp/crawl-network/repair error:", err);
       res.status(500).json({ error: err?.message || "Repair failed" });
     }
+  });
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // Unified job queue API
+  //   POST /api/admin/jobs/adp-crawl      — start a crawl job
+  //   GET  /api/admin/jobs                — list recent jobs
+  //   GET  /api/admin/jobs/:jobId         — poll a specific job
+  //   POST /api/admin/jobs/:jobId/cancel  — cancel a running job
+  //
+  // NOTE: specific routes (/api/admin/jobs/adp-crawl) MUST be registered before
+  // the param route (/api/admin/jobs/:jobId) so Express matches them correctly.
+  // ════════════════════════════════════════════════════════════════════════════
+
+  /**
+   * POST /api/admin/jobs/adp-crawl
+   *
+   * Unified entry point for starting an ADP/trade network crawl. Identical
+   * validation to /api/admin/adp/crawl-network but returns the normalized
+   * job-queue response shape: { jobId, liveState }.
+   *
+   * Enforces max 1 concurrent ADP crawl (guarded both here and inside
+   * startCrawlInBackground). Returns 409 if one is already running.
+   */
+  app.post("/api/admin/jobs/adp-crawl", async (req, res) => {
+    if (!(await requireAdmin(req, res))) return;
+    try {
+      const body = (req.body ?? {}) as {
+        seedUsername?: string;
+        seasons?: unknown;
+        maxDepth?: unknown;
+        draftCategories?: unknown;
+        refreshSnapshots?: unknown;
+        maxUsers?: unknown;
+        maxLeagues?: unknown;
+        maxDrafts?: unknown;
+        maxRequests?: unknown;
+        mode?: unknown;
+        tradeSinceMs?: unknown;
+      };
+
+      const isTradeMode = body.mode === "trade";
+
+      if (!body.seedUsername || typeof body.seedUsername !== "string" || !body.seedUsername.trim()) {
+        return res.status(400).json({ error: "seedUsername is required" });
+      }
+
+      const rawSeasons = Array.isArray(body.seasons)
+        ? body.seasons.filter((s): s is string => typeof s === "string" && /^\d{4}$/.test(s))
+        : [];
+      if (rawSeasons.length === 0) {
+        return res.status(400).json({ error: "At least one season is required" });
+      }
+
+      const validCats: DraftCategory[] = ["startup", "rookie", "unknown"];
+      const rawCats = Array.isArray(body.draftCategories)
+        ? body.draftCategories.filter((c: any): c is DraftCategory => validCats.includes(c))
+        : [];
+      if (rawCats.length === 0 && !isTradeMode) {
+        return res.status(400).json({ error: "At least one draft category is required" });
+      }
+
+      const rawDepth = Number(body.maxDepth);
+      const maxDepth = Number.isFinite(rawDepth) ? Math.min(2, Math.max(0, Math.floor(rawDepth))) : 2;
+
+      // Guard: reject if already running (startCrawlInBackground also guards,
+      // but returning 409 here gives the client the existing jobId to poll).
+      const existing = getCrawlLiveState();
+      if (existing.status === "running") {
+        return res.status(409).json({
+          error: "An ADP crawl is already running. Poll the existing job for progress.",
+          jobId: existing.jobId,
+          liveState: existing,
+        });
+      }
+
+      const state = startCrawlInBackground({
+        seedUsername: body.seedUsername.trim(),
+        seasons: rawSeasons,
+        maxDepth,
+        draftCategories: rawCats,
+        ingestDrafts: !isTradeMode,
+        ingestTrades: isTradeMode,
+        tradeSinceMs: isTradeMode && typeof body.tradeSinceMs === "number" ? body.tradeSinceMs : undefined,
+        refreshSnapshots: isTradeMode ? false : body.refreshSnapshots !== false,
+        maxUsers: typeof body.maxUsers === "number" ? body.maxUsers : undefined,
+        maxLeagues: typeof body.maxLeagues === "number" ? body.maxLeagues : undefined,
+        maxDrafts: typeof body.maxDrafts === "number" ? body.maxDrafts : undefined,
+        maxRequests: typeof body.maxRequests === "number" ? body.maxRequests : undefined,
+      });
+
+      // Register in the job registry so it shows up in GET /api/admin/jobs.
+      registerCrawlJob(state.jobId);
+
+      console.log("[jobs/adp-crawl] started", { jobId: state.jobId, mode: isTradeMode ? "trade" : "adp" });
+      res.json({ jobId: state.jobId, liveState: state });
+    } catch (err: any) {
+      console.error("[jobs/adp-crawl] error:", err?.message ?? err);
+      res.status(500).json({ error: err?.message || "Failed to start crawl" });
+    }
+  });
+
+  /**
+   * GET /api/admin/jobs
+   * List the most recent jobs from the in-memory job registry.
+   * Includes the current ADP crawl live state merged in.
+   */
+  app.get("/api/admin/jobs", async (req, res) => {
+    if (!(await requireAdmin(req, res))) return;
+    const jobs = listRecentJobs(30);
+    // Merge live ADP crawl state into its registry entry so callers see fresh data.
+    const liveCrawl = getCrawlLiveState();
+    const enriched = jobs.map((j) => {
+      if (j.type === "adp-crawl" && j.id === liveCrawl.jobId) {
+        return { ...j, status: liveCrawl.status, progress: liveCrawl.overallPct, message: liveCrawl.currentActivity, liveState: liveCrawl };
+      }
+      return j;
+    });
+    res.json({ jobs: enriched, activeCrawl: liveCrawl.status === "running" ? liveCrawl : null });
+  });
+
+  /**
+   * GET /api/admin/jobs/:jobId
+   * Poll a specific job. For ADP crawl jobs (jobId starts with "crawl-"),
+   * reads from the live state singleton. Returns { id, type, liveState, stale }
+   * where stale=true means the server restarted or a new crawl took over —
+   * the client should stop polling.
+   */
+  app.get("/api/admin/jobs/:jobId", async (req, res) => {
+    if (!(await requireAdmin(req, res))) return;
+    const { jobId } = req.params;
+
+    if (jobId.startsWith("crawl-")) {
+      const liveState = getCrawlLiveState();
+      const stale = liveState.jobId !== jobId;
+      return res.json({ id: jobId, type: "adp-crawl", liveState, stale });
+    }
+
+    const job = getJob(jobId);
+    if (!job) return res.status(404).json({ error: "Job not found. It may have expired (server restart)." });
+    res.json(job);
+  });
+
+  /**
+   * POST /api/admin/jobs/:jobId/cancel
+   * Cancel a running job. For ADP crawl jobs, sets the cancel flag so the
+   * crawl loop exits gracefully after the current BFS iteration.
+   */
+  app.post("/api/admin/jobs/:jobId/cancel", async (req, res) => {
+    if (!(await requireAdmin(req, res))) return;
+    const { jobId } = req.params;
+
+    if (jobId.startsWith("crawl-")) {
+      const flagged = requestCrawlCancel();
+      return res.json({ ok: true, flagged, liveState: getCrawlLiveState() });
+    }
+
+    const job = getJob(jobId);
+    if (!job) return res.status(404).json({ error: "Job not found." });
+    if (job.status !== "running" && job.status !== "queued") {
+      return res.status(400).json({ error: `Job is already ${job.status}.` });
+    }
+    // For non-crawl jobs the cancel flag is advisory — the worker must honour it.
+    const updated = Object.assign(job, { status: "cancelled" as const, updatedAt: Date.now() });
+    res.json({ ok: true, job: updated });
   });
 
   app.post("/api/admin/cleanup-one-sided-trades", async (req, res) => {

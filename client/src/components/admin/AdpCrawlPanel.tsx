@@ -175,6 +175,13 @@ export function AdpCrawlPanel() {
   const [liveProgress, setLiveProgress] = useState<CrawlLiveState | null>(null);
   const running = runState === "running";
 
+  // Track the active job ID so we can poll /api/admin/jobs/:jobId.
+  // Persisted in sessionStorage so a page refresh can resume polling.
+  const JOB_ID_KEY = "adp_crawl_last_job_id";
+  const [currentJobId, setCurrentJobId] = useState<string>(() => {
+    try { return sessionStorage.getItem(JOB_ID_KEY) || ""; } catch { return ""; }
+  });
+
   // ── Status state ────────────────────────────────────────────────────────
   const [statusLoading, setStatusLoading] = useState(false);
   const [status, setStatus] = useState<CrawlStatus | null>(null);
@@ -218,7 +225,7 @@ export function AdpCrawlPanel() {
     };
 
     try {
-      const res = await fetch(`${API_BASE}/api/admin/adp/crawl-network`, {
+      const res = await fetch(`${API_BASE}/api/admin/jobs/adp-crawl`, {
         method: "POST",
         credentials: "include",
         headers: {
@@ -241,23 +248,28 @@ export function AdpCrawlPanel() {
         setRunState("error");
         return;
       }
-      // New response shape: { jobId, state }. The crawl now runs in the
-      // background on the server; we hold "running" UI state and poll the
-      // /progress endpoint for live updates.
-      const state = (json && typeof json === "object" && json.state) ? json.state as CrawlLiveState : null;
-      if (!state || typeof state.status !== "string") {
+      // Response shape: { jobId, liveState }. The crawl runs in the background;
+      // we store the jobId and poll /api/admin/jobs/:jobId for live updates.
+      const liveState = (json && typeof json === "object" && json.liveState) ? json.liveState as CrawlLiveState : null;
+      const jobId: string = (json && typeof json === "object" && typeof json.jobId === "string") ? json.jobId : "";
+      if (!liveState || typeof liveState.status !== "string") {
         setError("Response did not match the expected crawl-state shape. See raw response below.");
         setRunState("error");
         return;
       }
-      setLiveProgress(state);
+      // Persist jobId so the polling effect and page-refresh recovery can use it.
+      if (jobId) {
+        setCurrentJobId(jobId);
+        try { sessionStorage.setItem(JOB_ID_KEY, jobId); } catch { /* ignore */ }
+      }
+      setLiveProgress(liveState);
       // The polling effect (below) will pick up "running" status and start
       // refreshing. If the server returned a state that's already terminal
       // (rare — caps tripped, snapshot-only paths), reflect that here.
-      if (state.status === "completed" || state.status === "failed") {
-        setResult(state);
-        setRunState(state.status === "completed" ? "success" : "error");
-        if (state.status === "failed") setError(state.errors[0] ?? "Crawl failed");
+      if (liveState.status === "completed" || liveState.status === "failed") {
+        setResult(liveState);
+        setRunState(liveState.status === "completed" ? "success" : "error");
+        if (liveState.status === "failed") setError(liveState.errors[0] ?? "Crawl failed");
       }
     } catch (err: any) {
       setError(err?.message || "Request failed");
@@ -295,51 +307,57 @@ export function AdpCrawlPanel() {
   }, []);
 
   // ── Mount-check effect ──────────────────────────────────────────────────────
-  // ONE fetch on mount (or when adminSecretOverride changes) to detect a crawl
-  // that was started before this panel was opened. After this single check the
-  // UI is purely event-driven: the live-interval below takes over only if a
-  // crawl is actually running. This means ZERO idle polling — the endpoint is
-  // never called from Trade Database, Value Finder, or any non-draft page.
+  // If sessionStorage has a job ID from a previous crawl, ONE fetch checks
+  // whether that crawl is still running. Zero polling when no jobId exists —
+  // no requests fire from non-admin pages at all.
   useEffect(() => {
+    if (!currentJobId) return;
     let alive = true;
     (async () => {
       try {
-        const res = await fetch(`${API_BASE}/api/admin/adp/crawl-network/progress`, {
+        const res = await fetch(`${API_BASE}/api/admin/jobs/${currentJobId}`, {
           credentials: "include",
           headers: buildAdminHeaders(adminSecretOverride),
         });
         if (!res.ok || !alive) return;
         const ct = res.headers.get("content-type") || "";
         if (!ct.includes("application/json")) return;
-        const state = (await res.json()) as CrawlLiveState;
-        if (alive) applyProgressState(state);
+        const body = (await res.json()) as { liveState?: CrawlLiveState; stale?: boolean };
+        if (alive && body.liveState) applyProgressState(body.liveState);
       } catch { /* transient */ }
     })();
     return () => { alive = false; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [adminSecretOverride, applyProgressState]);
+  // Note: currentJobId intentionally excluded — only re-check when auth changes,
+  // not every time a new crawl starts (the polling effect handles that).
 
   // ── Live-update interval ────────────────────────────────────────────────────
-  // This effect ONLY exists while runState === "running". React creates the
-  // interval when a crawl starts (runState flips to "running" from either the
-  // POST response or the mount-check above) and tears it down the moment the
-  // crawl transitions to any terminal state. When idle there is no interval
-  // at all — guaranteed zero cross-origin requests on non-draft pages.
+  // Exists ONLY while runState === "running". Zero idle polling guaranteed.
   useEffect(() => {
-    if (runState !== "running") return;
+    if (runState !== "running" || !currentJobId) return;
 
     let alive = true;
     const tick = async () => {
       if (!alive) return;
       try {
-        const res = await fetch(`${API_BASE}/api/admin/adp/crawl-network/progress`, {
+        const res = await fetch(`${API_BASE}/api/admin/jobs/${currentJobId}`, {
           credentials: "include",
           headers: buildAdminHeaders(adminSecretOverride),
         });
         if (!res.ok || !alive) return;
         const ct = res.headers.get("content-type") || "";
         if (!ct.includes("application/json")) return;
-        const state = (await res.json()) as CrawlLiveState;
-        if (alive) applyProgressState(state);
+        const body = (await res.json()) as { liveState?: CrawlLiveState; stale?: boolean };
+        if (!alive) return;
+        if (body.liveState) {
+          applyProgressState(body.liveState);
+          // If the server says this job ID is stale (server restarted, new crawl
+          // took over), stop polling — we'll never get a terminal state for it.
+          if (body.stale && body.liveState.status !== "running") {
+            setRunState("idle");
+          }
+        }
       } catch { /* transient */ }
     };
 
@@ -348,12 +366,15 @@ export function AdpCrawlPanel() {
       alive = false;
       clearInterval(id);
     };
-  }, [runState, adminSecretOverride, applyProgressState]);
+  }, [runState, currentJobId, adminSecretOverride, applyProgressState]);
 
   const cancelCrawl = useCallback(async () => {
     setError("");
     try {
-      const res = await fetch(`${API_BASE}/api/admin/adp/crawl-network/cancel`, {
+      const url = currentJobId
+        ? `${API_BASE}/api/admin/jobs/${currentJobId}/cancel`
+        : `${API_BASE}/api/admin/adp/crawl-network/cancel`;
+      const res = await fetch(url, {
         method: "POST",
         credentials: "include",
         headers: buildAdminHeaders(adminSecretOverride),
@@ -362,13 +383,11 @@ export function AdpCrawlPanel() {
         const { json, text, isHtml } = await readResponse(res);
         setError(describeFailure(res.status, isHtml, json, text));
       }
-      // The /progress poller will surface the new "cancelled" status within
-      // ~1.5s — no need to setRunState here. Showing "Stopping…" is handled
-      // server-side via state.currentActivity.
+      // The polling interval will surface "cancelled" within ~1.5s.
     } catch (err: any) {
       setError(err?.message || "Cancel request failed");
     }
-  }, [adminSecretOverride]);
+  }, [currentJobId, adminSecretOverride]);
 
   const refreshStatus = useCallback(async () => {
     setStatusLoading(true);
