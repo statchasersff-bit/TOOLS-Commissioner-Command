@@ -3565,21 +3565,29 @@ export function TradeDatabase({ league }: { league: League }) {
   }, [query]);
 
   useEffect(() => {
-    fetch(`${API_BASE}/api/trades/stats`)
+    const ac = new AbortController();
+    const t = setTimeout(() => ac.abort(), 10_000);
+    fetch(`${API_BASE}/api/trades/stats`, { signal: ac.signal })
       .then((r) => r.json())
       .then((data) => setStats(data))
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => clearTimeout(t));
   }, []);
 
   useEffect(() => {
-    fetch(`${API_BASE}/api/trades/most-traded-players`)
+    const ac = new AbortController();
+    const t = setTimeout(() => ac.abort(), 10_000);
+    fetch(`${API_BASE}/api/trades/most-traded-players`, { signal: ac.signal })
       .then((r) => r.json())
       .then((data) => setMostTraded(data.players || []))
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => clearTimeout(t));
   }, []);
 
   useEffect(() => {
     let cancelled = false;
+    const ac = new AbortController();
+    const t = setTimeout(() => ac.abort(), 10_000);
     setIsSearching(true);
     setPage(1);
 
@@ -3590,7 +3598,7 @@ export function TradeDatabase({ league }: { league: League }) {
     if (teamSize !== "all") params.set("leagueSize", teamSize);
     if (bestBall !== "all") params.set("bestBall", bestBall);
 
-    fetch(`${API_BASE}/api/trades/search?${params}`)
+    fetch(`${API_BASE}/api/trades/search?${params}`, { signal: ac.signal })
       .then((r) => r.json())
       .then((data) => {
         if (cancelled) return;
@@ -3600,9 +3608,10 @@ export function TradeDatabase({ league }: { league: League }) {
       })
       .catch(() => {
         if (!cancelled) setIsSearching(false);
-      });
+      })
+      .finally(() => clearTimeout(t));
 
-    return () => { cancelled = true; };
+    return () => { cancelled = true; ac.abort(); };
   }, [debouncedQuery, format, scoring, teamSize, bestBall]);
 
   const loadMore = useCallback(() => {
