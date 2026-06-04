@@ -5,7 +5,6 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ValueModelProvider } from "@/contexts/ValueModelContext";
-import { PlayerProfileProvider, PlayerProfileNavigator } from "@/contexts/PlayerProfileContext";
 import { ManagerIntelProvider, ManagerIntelNavigator } from "@/contexts/ManagerIntelContext";
 import { SleeperProvider } from "@/contexts/SleeperContext";
 import { AuthProvider } from "@/contexts/AuthContext";
@@ -77,16 +76,10 @@ function Router() {
   return (
     <WouterRouter base={BASE_PATH}>
       <AnalyticsTracker />
-      <PlayerProfileNavigator />
       <ManagerIntelNavigator />
       <Switch>
-        {/* Player profiles render inside the Command Center shell so the app
-            header / mega-menu stays visible. DCC renders <PlayerPage embedded>
-            as its content when given a playerProfileId. */}
-        <Route path="/players/:playerId">
-          {(params) => <DynastyCommandCenter playerProfileId={params?.playerId} />}
-        </Route>
-        {/* Manager profiles follow the same embedded-shell pattern as players.
+        {/* Manager profiles render inside the Command Center shell so the app
+            header / mega-menu stays visible.
             DCC renders <ManagerPage embedded> when given a managerProfileId. */}
         <Route path="/managers/:userId">
           {(params) => <DynastyCommandCenter managerProfileId={params?.userId} />}
@@ -181,14 +174,12 @@ function AuthenticatedTree({ probe }: { probe: Probe }) {
   return (
     <SleeperProvider>
       <ValueModelProvider>
-        <PlayerProfileProvider>
-          <ManagerIntelProvider>
-            <Toaster />
-            <ErrorBoundary label="Router/DynastyCommandCenter">
-              <Router />
-            </ErrorBoundary>
-          </ManagerIntelProvider>
-        </PlayerProfileProvider>
+        <ManagerIntelProvider>
+          <Toaster />
+          <ErrorBoundary label="Router/DynastyCommandCenter">
+            <Router />
+          </ErrorBoundary>
+        </ManagerIntelProvider>
       </ValueModelProvider>
     </SleeperProvider>
   );

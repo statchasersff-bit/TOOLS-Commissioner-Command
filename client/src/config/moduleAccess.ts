@@ -35,10 +35,6 @@ export const MODULE_ACCESS: Record<string, AccessRequirement> = {
   "portfolio:lineup-command": "full",
   "portfolio:waiver-command": "full",
 
-  // My Team
-  "dashboard:my-team": "readonly",
-  "dashboard:share-team": "readonly",
-
   // League Analyzer
   "league-analyzer:power-rankings": "readonly",
   "league-analyzer:roster-comparison": "readonly",
@@ -71,6 +67,7 @@ export const MODULE_ACCESS: Record<string, AccessRequirement> = {
   // an action tool requiring a logged-in StatChasers account (full).
   "draft:adp-explorer": "public",
   "draft:player-availability": "public", // ADP-derived (startup + rookie toggle), no league required
+  "draft:pick-tracker": "public", // public Sleeper data; self-contained username/league-ID search
   "draft:draft-board":  "full",
 
   // Static pages

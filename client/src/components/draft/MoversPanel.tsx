@@ -2,7 +2,6 @@ import { useMemo } from "react";
 import { cn } from "@/lib/utils";
 import { TrendingUp, TrendingDown } from "lucide-react";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
-import { usePlayerProfile } from "@/contexts/PlayerProfileContext";
 import type { ADPResult } from "@/types/draft";
 
 // Movers are meant to surface meaningful draft-capital shifts, not deep-bench
@@ -12,7 +11,6 @@ const MOVERS_DEPTH_ROUNDS = 12; // eligible if overall_rank ≤ teams × this (~
 const MOVERS_MIN_PRESENCE = 0.25; // and drafted in ≥25% of the slice's drafts
 
 function MoverRow({ r, i, dir }: { r: ADPResult; i: number; dir: "up" | "down" }) {
-  const { openPlayerProfile } = usePlayerProfile();
   const Arrow = dir === "up" ? TrendingUp : TrendingDown;
   const color = dir === "up" ? "text-emerald-600 dark-any:text-emerald-400" : "text-rose-600 dark-any:text-rose-400";
   const trend = r.trend_14d;
@@ -32,7 +30,6 @@ function MoverRow({ r, i, dir }: { r: ADPResult; i: number; dir: "up" | "down" }
           pos={r.position}
           team={r.team ?? ""}
           size="sm"
-          onClick={r.is_rookie_placeholder ? undefined : () => openPlayerProfile(r.player_id)}
           metaTrailing={
             <span className="flex items-center gap-1.5 tabular-nums text-xs">
               {priorAdp != null ? (

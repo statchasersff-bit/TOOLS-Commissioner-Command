@@ -5,8 +5,8 @@
  *   useManagerIntel().openManagerIntel({ userId, username, avatar, leagueId })
  * to open a manager. As of the full Manager Page rollout this NAVIGATES to
  * /managers/:userId rather than popping a drawer — the page is the single deep
- * experience. Mirrors the PlayerProfileContext pattern: the context stays as a
- * thin request bus so the many existing call sites don't have to change, and
+ * experience. The context stays as a thin request bus so the many existing
+ * call sites don't have to change, and
  * `<ManagerIntelNavigator />` (mounted inside the wouter Router for base-aware
  * navigation) performs the actual redirect.
  */

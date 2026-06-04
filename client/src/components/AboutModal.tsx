@@ -1,4 +1,4 @@
-import { Crosshair, Waves, Users, Share2, Trophy, ArrowLeftRight, Search, Inbox, Calculator, Database, MessageSquare, Lock, ChevronRight, Package, Heart } from "lucide-react";
+import { Crosshair, Waves, Share2, Trophy, ArrowLeftRight, Search, Inbox, Calculator, Database, MessageSquare, Lock, ChevronRight, Package, Heart } from "lucide-react";
 
 interface FeatureDef {
   id: string;
@@ -55,35 +55,6 @@ const FEATURES: FeatureDef[] = [
     ],
     tab: "portfolio",
     sub: "waiver-command",
-  },
-  {
-    id: "my-team",
-    category: "My Team",
-    title: "My Team",
-    icon: Users,
-    description: "A full overview of your roster: team value, positional strengths, picks, age curve, and dynasty outlook.",
-    bullets: [
-      "Roster value breakdown by position and tier",
-      "Pick capital valuation and draft asset overview",
-      "Age curve analysis and dynasty window projection",
-      "Team tier classification (Juggernaut, Rebuilder, etc.)",
-    ],
-    tab: "dashboard",
-    sub: "my-team",
-  },
-  {
-    id: "share-team",
-    category: "My Team",
-    title: "Share My Team",
-    icon: Share2,
-    description: "Generate a clean, shareable snapshot of your roster, picks, team value, and dynasty profile.",
-    bullets: [
-      "Export a visual team card with roster and value summary",
-      "Share your dynasty profile with commissioners or trade partners",
-      "Includes team tier, record, and key metrics",
-    ],
-    tab: "dashboard",
-    sub: "share-team",
   },
   {
     id: "league-analyzer",

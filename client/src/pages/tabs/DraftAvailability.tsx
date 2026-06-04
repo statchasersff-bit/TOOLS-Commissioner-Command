@@ -3,7 +3,6 @@ import { Card } from "@/components/ui/card";
 import { SectionHeader } from "@/components/SectionHeader";
 import { cn } from "@/lib/utils";
 import { API_BASE } from "@/lib/apiBase";
-import { usePlayerProfile } from "@/contexts/PlayerProfileContext";
 import { ResponsivePlayerName } from "@/components/ResponsivePlayerName";
 import { PlayerHeadshot } from "@/components/PlayerHeadshot";
 import type { ADPResult } from "@/types/draft";
@@ -108,7 +107,7 @@ function MovementTag({ change }: { change: number }) {
 }
 
 // ── Matrix (sticky player column + sticky pick header, virtualized rows) ─────
-function AvailabilityMatrix({ result, onPlayer }: { result: AvailabilityResult; onPlayer: (id: string) => void }) {
+function AvailabilityMatrix({ result }: { result: AvailabilityResult }) {
   const { players, rounds, teams } = result;
   const picks = players[0]?.availabilityByPick ?? [];
   const totalCols = picks.length;
@@ -254,8 +253,7 @@ function AvailabilityMatrix({ result, onPlayer }: { result: AvailabilityResult; 
                 <tr key={p.playerId} ref={vi === 0 ? firstRowRef : undefined} className="group">
                   <th
                     scope="row"
-                    onClick={() => onPlayer(p.playerId)}
-                    className="sticky left-0 z-10 bg-card group-hover:bg-muted/40 text-left px-3 py-1 border-b border-r border-border cursor-pointer transition-colors overflow-hidden"
+                    className="sticky left-0 z-10 bg-card group-hover:bg-muted/40 text-left px-3 py-1 border-b border-r border-border transition-colors overflow-hidden"
                     style={{ width: PLAYER_COL_W, minWidth: PLAYER_COL_W, height: ROW_H }}
                   >
                     <div className="flex items-center gap-2">
@@ -305,7 +303,7 @@ function AvailabilityMatrix({ result, onPlayer }: { result: AvailabilityResult; 
 }
 
 // ── Mobile card view ─────────────────────────────────────────────────────────
-function AvailabilityCards({ players, onPlayer }: { players: DraftAvailabilityPlayer[]; onPlayer: (id: string) => void }) {
+function AvailabilityCards({ players }: { players: DraftAvailabilityPlayer[] }) {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
       {players.map((p) => {
@@ -315,7 +313,7 @@ function AvailabilityCards({ players, onPlayer }: { players: DraftAvailabilityPl
         const start = Math.max(0, Math.min(centerIdx - 4, p.availabilityByPick.length - 9));
         const strip = p.availabilityByPick.slice(start, start + 9);
         return (
-          <Card key={p.playerId} className="p-3" onClick={() => onPlayer(p.playerId)}>
+          <Card key={p.playerId} className="p-3">
             <div className="flex items-center gap-2">
               <PlayerHeadshot id={p.playerId} name={p.name} team={p.team} className="w-9 h-9" />
               <div className="min-w-0 flex-1">
@@ -363,7 +361,6 @@ function Legend() {
 }
 
 export function DraftAvailability() {
-  const { openPlayerProfile } = usePlayerProfile();
   const [mode, setMode] = useState<AdpMode>("startup");
   const [position, setPosition] = useState<(typeof POSITIONS)[number]>("ALL");
   const [format, setFormat] = useState<Format>("SF");
@@ -526,8 +523,8 @@ export function DraftAvailability() {
       ) : (
         <>
           {view === "matrix"
-            ? <AvailabilityMatrix result={displayResult} onPlayer={openPlayerProfile} />
-            : <AvailabilityCards players={displayResult.players} onPlayer={openPlayerProfile} />}
+            ? <AvailabilityMatrix result={displayResult} />
+            : <AvailabilityCards players={displayResult.players} />}
           <Legend />
           <p className="text-[10px] text-muted-foreground text-center">
             {usingReal

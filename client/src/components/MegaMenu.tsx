@@ -2,11 +2,11 @@ import { useState, useRef, useCallback } from "react";
 import { useSleeper } from "@/contexts/SleeperContext";
 import { cn } from "@/lib/utils";
 import {
-  BarChart2, LayoutDashboard, Users, Share2,
+  BarChart2,
   Trophy, GitCompare, Coins, ArrowLeftRight, Database, Search,
   Calculator, Eye, LineChart, TrendingUp, Zap, ChevronDown, BarChart3,
   LucideIcon, Waves, Crosshair, LayoutGrid, Inbox, MessageCircle,
-  Hexagon, ClipboardList, Target, ScrollText, Scale,
+  Hexagon, ClipboardList, Target, ScrollText, Scale, ListOrdered,
 } from "lucide-react";
 import type { MainTabConfig } from "../types";
 import logoDark from "@assets/statchasers_logo_transparent_dark_1772764844282.png";
@@ -35,15 +35,6 @@ const MEGA_DATA: Record<string, MegaSection[]> = {
         { subId: "portfolio-summary", label: "My Portfolio",     description: "Cross-league exposure, finances & metrics",    icon: BarChart2  },
         { subId: "lineup-command",    label: "Lineup Command",   description: "Cross-league lineup war room & swap finder",   icon: Crosshair  },
         { subId: "waiver-command",    label: "Waiver Command",   description: "Cross-league waiver wire & FAAB dashboard",    icon: Waves      },
-      ],
-    },
-  ],
-  dashboard: [
-    {
-      title: "My Team",
-      items: [
-        { subId: "my-team",    label: "Overview",      description: "Team snapshot, KPIs & roster strength",          icon: Users          },
-        { subId: "share-team", label: "Share My Team", description: "Export & share your roster report & field view",  icon: Share2         },
       ],
     },
   ],
@@ -93,6 +84,7 @@ const MEGA_DATA: Record<string, MegaSection[]> = {
         { subId: "draft-board",  label: "Draft Board",  description: "Dynasty rankings board & live draft integration",     icon: Zap          },
         { subId: "adp-explorer", label: "ADP Explorer", description: "Sleeper startup ADP, rookie picks & market trends",   icon: ClipboardList },
         { subId: "player-availability", label: "Player Availability", description: "Probability each player is still on the board at every pick (startup & rookie)", icon: LayoutGrid },
+        { subId: "pick-tracker", label: "Pick Tracker", description: "Rookie picks derived from kicker draft order, live during your startup draft", icon: ListOrdered },
       ],
     },
   ],
@@ -349,7 +341,6 @@ export function MegaMenuNav({ tabs, activeTab, activeSub, setActiveTab, onNaviga
 
 const TAB_ICONS: Record<string, typeof BarChart2> = {
   portfolio: BarChart2,
-  dashboard: LayoutDashboard,
   "league-analyzer": Trophy,
   "trade-center": ArrowLeftRight,
   "league-market": LineChart,
@@ -358,7 +349,6 @@ const TAB_ICONS: Record<string, typeof BarChart2> = {
 
 const TAB_SHORT_LABELS: Record<string, string> = {
   portfolio: "Home",
-  dashboard: "Team",
   "league-analyzer": "League",
   "trade-center": "Trades",
   "league-market": "Research",

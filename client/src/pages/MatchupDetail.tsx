@@ -19,7 +19,6 @@ import {
   AlertTriangle, CalendarX, Zap, Info, Target, Activity, Ban,
 } from "lucide-react";
 import { useSleeper } from "@/contexts/SleeperContext";
-import { usePlayerProfile } from "@/contexts/PlayerProfileContext";
 import { ResponsivePlayerName } from "@/components/ResponsivePlayerName";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 import { getSleeperPlayers } from "@/lib/sleeperApi";
@@ -89,10 +88,6 @@ function injLabel(inj?: string): string | null {
   if (inj === "Doubtful") return "DBT";
   if (inj === "Questionable") return "Q";
   return null;
-}
-function isClickablePid(pid: string, pos: string): boolean {
-  // Sleeper offensive players have numeric ids; DEF ids are team codes (no profile).
-  return pos !== "DEF" && /^\d+$/.test(pid);
 }
 function headshot(p: SlotPlayer): string {
   return p.pos === "DEF" && p.team
@@ -724,7 +719,6 @@ function MobilePlayerLine({ label, player, highlight, mine }: { label: string; p
 
 // ─── Player cell ─────────────────────────────────────────────────────────────
 function PlayerCell({ player, align }: { player: SlotPlayer | null; align: "left" | "right" }) {
-  const { openPlayerProfile } = usePlayerProfile();
   if (!player) {
     return (
       <div className={cn("flex items-center gap-2 min-w-0 flex-1", align === "right" && "flex-row-reverse text-right")}>
@@ -735,7 +729,6 @@ function PlayerCell({ player, align }: { player: SlotPlayer | null; align: "left
       </div>
     );
   }
-  const clickable = isClickablePid(player.pid, player.pos);
   const inj = injLabel(player.injury);
   const meta = [player.pos, player.team || null, player.onBye ? "BYE" : null].filter(Boolean).join(" · ");
 
@@ -743,17 +736,9 @@ function PlayerCell({ player, align }: { player: SlotPlayer | null; align: "left
     <div className={cn("flex items-center gap-2 min-w-0 flex-1", align === "right" && "flex-row-reverse text-right")}>
       <Headshot player={player} />
       <div className="min-w-0">
-        {clickable ? (
-          <button
-            onClick={() => openPlayerProfile(player.pid)}
-            data-testid={`player-${player.pid}`}
-            className={cn("block max-w-full text-[12px] md:text-[13px] font-semibold text-[var(--sc-text)] dark-any:text-white/90 hover:text-[var(--sc-gold-deep)] dark-any:hover:text-[#d4af37] transition-colors leading-tight", align === "right" && "ml-auto")}
-          >
-            <ResponsivePlayerName name={player.name} />
-          </button>
-        ) : (
-          <span className="block text-[12px] md:text-[13px] font-semibold text-[var(--sc-text)] dark-any:text-white/85 leading-tight truncate" title={player.name}>{player.name}</span>
-        )}
+        <span className={cn("block text-[12px] md:text-[13px] font-semibold text-[var(--sc-text)] dark-any:text-white/85 leading-tight truncate", align === "right" && "ml-auto")} title={player.name}>
+          <ResponsivePlayerName name={player.name} />
+        </span>
         <div className={cn("flex items-center gap-1 mt-0.5", align === "right" && "justify-end")}>
           <span className="text-[9px] md:text-[10px] text-[var(--sc-text-muted)] dark-any:text-white/40 truncate">{meta}</span>
           {inj && (

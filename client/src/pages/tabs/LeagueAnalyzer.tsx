@@ -12,7 +12,6 @@ import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { ManagerNameButton } from "@/components/ManagerNameButton";
 import { getLeagueTeamTiers, getTierColor, getTierBg, getTierEmoji, getTierTooltip } from "@/data/mockData";
 import { useValueModel } from "@/contexts/ValueModelContext";
-import { usePlayerProfile } from "@/contexts/PlayerProfileContext";
 import { formatPickLabel } from "@/types";
 import type { League, Team, Tier, Player, Pick } from "@/types";
 import { cn } from "@/lib/utils";
@@ -1210,7 +1209,6 @@ function PlayerRow({
 }) {
   const showDyn = valueMode === "dynasty" || valueMode === "both";
   const showRed = valueMode === "redraft" || valueMode === "both";
-  const { openPlayerProfile } = usePlayerProfile();
   // Non-desktop shows "F. Last" (first initial + last name) to save horizontal
   // space; falls back to the raw name when it isn't a simple two-part name.
   const nameParts = player.name.trim().split(/\s+/);
@@ -1219,11 +1217,7 @@ function PlayerRow({
     : player.name;
   return (
     <div
-      role="button"
-      tabIndex={0}
-      onClick={() => openPlayerProfile(player.sleeperId || player.id)}
-      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openPlayerProfile(player.sleeperId || player.id); } }}
-      className="flex items-center gap-2 py-1 px-1 rounded-md hover:bg-muted/40 cursor-pointer transition-colors"
+      className="flex items-center gap-2 py-1 px-1 rounded-md transition-colors"
       data-testid={`compare-player-${player.id}`}
     >
       <span className="hidden md:block text-[10px] text-muted-foreground w-4 tabular-nums flex-shrink-0">{index}.</span>

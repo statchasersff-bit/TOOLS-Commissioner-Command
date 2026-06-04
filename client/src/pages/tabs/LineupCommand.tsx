@@ -5,7 +5,6 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useSleeper } from "@/contexts/SleeperContext";
-import { usePlayerProfile } from "@/contexts/PlayerProfileContext";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { getSleeperPlayers } from "@/lib/sleeperApi";
 import { cn } from "@/lib/utils";
@@ -508,7 +507,6 @@ function KpiCard({
 function LeagueRow({ analysis, preseason, onApplied }: { analysis: LeagueAnalysis; preseason?: boolean; onApplied: (leagueId: string) => void }) {
   const [expanded, setExpanded] = useState(false);
   const [applying, setApplying] = useState(false);
-  const { openPlayerProfile } = usePlayerProfile();
   const { leagueName, format, scoringFormat, avatar, currentProj, gain, issues, swaps, rosterAlert, loading, error } = analysis;
 
   // Push the optimal lineup straight to Sleeper for this league. One click, no
@@ -753,19 +751,7 @@ function LeagueRow({ analysis, preseason, onApplied }: { analysis: LeagueAnalysi
                   return (
                     <div key={i} className={cn("flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[10px]", typeCls[iss.type])}>
                       <AlertTriangle className="w-3 h-3 flex-shrink-0" />
-                      {/^\d+$/.test(iss.pid) ? (
-                        <button
-                          type="button"
-                          onClick={(e) => { e.stopPropagation(); openPlayerProfile(iss.pid); }}
-                          className="font-bold text-left hover:underline cursor-pointer"
-                          data-testid={`player-link-${iss.pid}`}
-                          title={`View ${iss.playerName}`}
-                        >
-                          {iss.playerName}
-                        </button>
-                      ) : (
-                        <span className="font-bold">{iss.playerName}</span>
-                      )}
+                      <span className="font-bold">{iss.playerName}</span>
                       <span className="opacity-70">({iss.pos})</span>
                       <span className="font-medium">· {typeLabel[iss.type]}</span>
                     </div>
@@ -822,27 +808,10 @@ function MatchupSkeletonRow() {
 function MatchupBattleCard({ m, preseason }: { m: MatchupAnalysis; preseason?: boolean }) {
   const [expanded, setExpanded] = useState(false);
   const [, setLocation] = useLocation();
-  const { openPlayerProfile } = usePlayerProfile();
 
-  // Starter name: clickable to the player profile when the id is a real Sleeper
-  // player id (numeric). K/DEF and synthetic ids stay plain text. Click stops
-  // propagation so it doesn't toggle the card's expand handler.
-  const StarterName = ({ s, className }: { s: StarterDetail; className: string }) => {
-    if (!/^\d+$/.test(s.pid)) {
-      return <span className={className}>{s.name}</span>;
-    }
-    return (
-      <button
-        type="button"
-        onClick={(e) => { e.stopPropagation(); openPlayerProfile(s.pid); }}
-        className={cn(className, "text-left hover:text-[#d4af37] transition-colors cursor-pointer")}
-        data-testid={`player-link-${s.pid}`}
-        title={`View ${s.name}`}
-      >
-        {s.name}
-      </button>
-    );
-  };
+  const StarterName = ({ s, className }: { s: StarterDetail; className: string }) => (
+    <span className={className}>{s.name}</span>
+  );
 
   const predraft  = m.predraft;
   // A predraft league has no opponent yet, but it's NOT a bye — treat it separately.
@@ -1127,9 +1096,7 @@ function MatchupBattleCard({ m, preseason }: { m: MatchupAnalysis; preseason?: b
 // ─── IR / Taxi view ────────────────────────────────────────────────────────────
 // One row of player chips, clickable into the player profile.
 function IrTaxiPlayerChip({ p, tone }: { p: IrTaxiPlayer; tone?: "danger" | "good" | "muted" }) {
-  const { openPlayerProfile } = usePlayerProfile();
   const inj = p.injury;
-  const clickable = /^\d+$/.test(p.pid);
   const border =
     tone === "danger" ? "border-red-500/30 bg-red-500/[0.05]" :
     tone === "good" ? "border-emerald-500/25 bg-emerald-500/[0.05]" :
@@ -1142,7 +1109,6 @@ function IrTaxiPlayerChip({ p, tone }: { p: IrTaxiPlayer; tone?: "danger" | "goo
         pos={p.pos}
         team={p.team}
         size="sm"
-        onClick={clickable ? () => openPlayerProfile(p.pid) : undefined}
         metaTrailing={inj ? (
           <span className={cn(
             "text-[8px] font-bold px-1 rounded",

@@ -1,14 +1,5 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { fetchRotowireNfl, getNflNameIndex, matchSleeperId, playerNameFromTitle, sleeperHeadshot } from "./nflNews";
-import { getPlayerNews, startPlayerNewsIngestion } from "./playerNews";
-import {
-  getCuratedPlayerNews,
-  listCuratedNewsByStatus,
-  setCuratedNewsStatus,
-  runCuratedIngestion,
-  startCuratedNewsIngestion,
-} from "./news/curatedNews";
 import { getFantasyCalcValues, getFantasyCalcRedraftValues } from "./fantasycalc";
 import { getKtcValues, getKtcRedraftValues } from "./ktc";
 import { getValueFinderPlayers as getValueFinderPlayerPool } from "./valueFinder";
@@ -22,8 +13,7 @@ import {
   getValueSourceBreakdown,
 } from "./portfolioSnapshots";
 import { computePlayoffCalculator, computeWeeklyMatchups } from "./playoffCalculator";
-import { getAdpHistory, getAdpAvailability, getAdpAvailabilityMatrix } from "./adpPlayerProfile";
-import { getPlayerMetadata, getPlayerProduction, getPlayerGameLogs, type ScoringKey, type GameLogSeasonType } from "./sleeperPlayerProfile";
+import { getAdpAvailabilityMatrix } from "./adpPlayerProfile";
 import {
   fetchSleeperUser,
   fetchSleeperLeagues,
@@ -106,6 +96,7 @@ import { registerSleeperDraftPickRoutes } from "./sleeperDraftPickRoutes";
 import { registerDiscordRoutes } from "./discord";
 import { registerCommandersReportRoutes } from "./commandersReportRoutes";
 import { registerAnalyticsRoutes } from "./analytics";
+import { registerYahooRoutes } from "./yahooRoutes";
 import { requireReadOnlySleeperContext } from "./accessMiddleware";
 import { tryAcquire, release, registerCrawlJob, getJob, listRecentJobs } from "./jobQueue";
 import { getManagerIntel } from "./managerIntel";
@@ -265,101 +256,11 @@ export async function registerRoutes(
   registerDiscordRoutes(app);
   registerCommandersReportRoutes(app);
   registerAnalyticsRoutes(app);
+  registerYahooRoutes(app);
 
   app.get("/api/health", (_req, res) => {
     res.json({ status: "ok", ts: Date.now() });
   });
-
-  // ─── NFL News ticker — Rotowire RSS, fetched server-side + cached ──────────
-  // We only ever expose the headline title + outbound Rotowire link (never the
-  // article body), fetch server-side to dodge CORS, and cache for 10 minutes.
-  // On failure we return 200 with the last good items (or empty) so the client
-  // ticker hides itself instead of breaking the page.
-  const NFL_NEWS_TTL_MS = 10 * 60 * 1000;
-  type NflTickerItem = {
-    id: string; title: string; link: string; pubDate: string | null;
-    playerName: string | null; image: string | null;
-  };
-  let nflNewsCache: { items: NflTickerItem[]; ts: number } | null = null;
-
-  app.get("/api/news/nfl", async (_req, res) => {
-    try {
-      if (nflNewsCache && Date.now() - nflNewsCache.ts < NFL_NEWS_TTL_MS) {
-        res.set("Cache-Control", "public, max-age=600");
-        return res.json({ items: nflNewsCache.items });
-      }
-      const [items, nameIndex] = await Promise.all([fetchRotowireNfl(), getNflNameIndex()]);
-      const mapped: NflTickerItem[] = items.slice(0, 10).map((it, index) => {
-        const sleeperId = matchSleeperId(it.title, nameIndex);
-        return {
-          id: it.guid || it.link || `nfl-news-${index}`,
-          title: it.title,
-          link: it.link,
-          pubDate: it.pubDate,
-          playerName: playerNameFromTitle(it.title),
-          image: sleeperId ? sleeperHeadshot(sleeperId) : null,
-        };
-      });
-      nflNewsCache = { items: mapped, ts: Date.now() };
-      res.set("Cache-Control", "public, max-age=600");
-      res.json({ items: mapped });
-    } catch (error) {
-      console.error("[news/nfl] feed fetch failed:", error instanceof Error ? error.message : error);
-      // Serve stale cache if we have one; otherwise empty so the ticker hides.
-      res.json({ items: nflNewsCache?.items ?? [] });
-    }
-  });
-
-  // Persistent player news for profile pages — newest stored headlines for a
-  // Sleeper player_id (metadata only). Empty array on any error so the UI can
-  // show a clean empty state instead of breaking.
-  app.get("/api/news/player/:playerId", async (req, res) => {
-    try {
-      const limit = parseInt(String(req.query.limit ?? "10"), 10) || 10;
-      const items = await getPlayerNews(req.params.playerId, limit);
-      res.set("Cache-Control", "public, max-age=300");
-      res.json({ items });
-    } catch (error) {
-      console.error("[news/player] query failed:", error instanceof Error ? error.message : error);
-      res.json({ items: [] });
-    }
-  });
-
-  // Kick off the background RSS → player_news ingestion loop (idempotent).
-  startPlayerNewsIngestion();
-
-  // Curated, compliance-first "Dynasty Command News" for a player. Only ever
-  // returns a SAFE public projection — original headline/summary/impact +
-  // attribution to the credited source. Internal audit fields (discovery_source,
-  // discovery_url, raw_facts_json, ai_model, external_hash) are NEVER exposed to
-  // the browser, per the no-scraping-URLs/keys rule.
-  app.get("/api/news/curated/player/:playerId", async (req, res) => {
-    try {
-      const limit = parseInt(String(req.query.limit ?? "8"), 10) || 8;
-      const rows = await getCuratedPlayerNews(req.params.playerId, limit);
-      const items = rows.map((r) => ({
-        id: r.id,
-        playerName: r.playerName,
-        team: r.team,
-        position: r.position,
-        headline: r.headline,
-        summary: r.summary,
-        fantasyImpact: r.fantasyImpact,
-        category: r.category,
-        sourceName: r.sourceName, // credited original source
-        sourceUrl: r.sourceUrl,   // attribution link to that source
-        publishedAt: r.publishedAt,
-      }));
-      res.set("Cache-Control", "public, max-age=300");
-      res.json({ items });
-    } catch (error) {
-      console.error("[news/curated] query failed:", error instanceof Error ? error.message : error);
-      res.json({ items: [] });
-    }
-  });
-
-  // Kick off the background curated-news ingestion loop (idempotent).
-  startCuratedNewsIngestion();
 
   app.get("/api/values/fantasycalc", async (req, res) => {
     try {
@@ -670,101 +571,6 @@ export async function registerRoutes(
       res.status(500).json({
         error: err?.message || "Failed to compute manager intel",
       });
-    }
-  });
-
-  // Player profile analytics for the ADP Explorer drawer. Both endpoints
-  // accept the same filter query string as /api/adp so the modal reflects
-  // the currently selected DraftCommand filters (rookie vs startup, SF,
-  // TEP, scoring, date range, etc.). Without filters they fall back to
-  // current-year startup defaults — matching the original behavior.
-  app.get("/api/adp/player/:playerId/history", async (req, res) => {
-    try {
-      const { playerId } = req.params;
-      if (!playerId) return res.status(400).json({ error: "playerId is required" });
-      const filters = parsePlayerProfileFilters(req.query);
-      const data = await getAdpHistory(playerId, filters);
-      res.setHeader("Cache-Control", "public, max-age=300");
-      res.json(data);
-    } catch (err: any) {
-      console.error("[AdpPlayerProfile/history] error:", err);
-      res.status(500).json({ error: err?.message || "Failed to load ADP history" });
-    }
-  });
-
-  // Single-player metadata read from the cached Sleeper /players/nfl
-  // payload. Cheap — no network call once the cache is warm. Header tabs
-  // in the ADP Explorer modal hit this on every player open.
-  app.get("/api/sleeper/player/:playerId", async (req, res) => {
-    try {
-      const { playerId } = req.params;
-      if (!playerId) return res.status(400).json({ error: "playerId is required" });
-      const meta = await getPlayerMetadata(playerId);
-      if (!meta) return res.status(404).json({ error: "Player not found" });
-      res.setHeader("Cache-Control", "public, max-age=3600");
-      res.json(meta);
-    } catch (err: any) {
-      console.error("[SleeperPlayer/metadata] error:", err);
-      res.status(500).json({ error: err?.message || "Failed to load player metadata" });
-    }
-  });
-
-  // Per-season fantasy production. Backed by Sleeper's public
-  // /stats/nfl/regular/{season} endpoint with on-disk caching per season.
-  // Scoring defaults to PPR — front-end can pass scoring=half_ppr|std to
-  // match the ADP Explorer view the user is looking at.
-  app.get("/api/players/:playerId/production", async (req, res) => {
-    try {
-      const { playerId } = req.params;
-      if (!playerId) return res.status(400).json({ error: "playerId is required" });
-      const raw = String(req.query.scoring ?? "ppr").toLowerCase();
-      const scoring: ScoringKey =
-        raw === "std" || raw === "standard"  ? "std" :
-        raw === "half" || raw === "half_ppr" ? "half_ppr" :
-        "ppr";
-      const seasons = await getPlayerProduction(playerId, scoring);
-      res.setHeader("Cache-Control", "public, max-age=3600");
-      res.json({ playerId, scoring, seasons });
-    } catch (err: any) {
-      console.error("[Player/production] error:", err);
-      res.status(500).json({ error: err?.message || "Failed to load production" });
-    }
-  });
-
-  // Week-by-week game logs from Sleeper's (unofficial) per-player weekly stats
-  // endpoint, disk-cached. Returns 502 on upstream failure so the UI can show a
-  // "temporarily unavailable" message without breaking the page.
-  app.get("/api/players/:playerId/game-logs", async (req, res) => {
-    try {
-      const { playerId } = req.params;
-      if (!playerId) return res.status(400).json({ error: "playerId is required" });
-      const season = parseInt(String(req.query.season ?? ""), 10);
-      if (!season || season < 2000 || season > 2100) {
-        return res.status(400).json({ error: "valid season is required" });
-      }
-      const seasonType: GameLogSeasonType = String(req.query.type ?? "regular").toLowerCase() === "post" ? "post" : "regular";
-      const logs = await getPlayerGameLogs(playerId, season, seasonType);
-      res.setHeader("Cache-Control", "public, max-age=900");
-      res.json({ playerId, season, seasonType, logs });
-    } catch (err: any) {
-      console.error("[Player/game-logs] error:", err);
-      res.status(502).json({ error: err?.message || "Failed to load game logs" });
-    }
-  });
-
-  app.get("/api/adp/player/:playerId/availability", async (req, res) => {
-    try {
-      const { playerId } = req.params;
-      const teams = Math.max(4, Math.min(20, parseInt(String(req.query.teams ?? "12"), 10) || 12));
-      const rounds = Math.max(1, Math.min(20, parseInt(String(req.query.rounds ?? "5"), 10) || 5));
-      if (!playerId) return res.status(400).json({ error: "playerId is required" });
-      const filters = parsePlayerProfileFilters(req.query);
-      const data = await getAdpAvailability(playerId, filters, teams, rounds);
-      res.setHeader("Cache-Control", "public, max-age=300");
-      res.json(data);
-    } catch (err: any) {
-      console.error("[AdpPlayerProfile/availability] error:", err);
-      res.status(500).json({ error: err?.message || "Failed to load availability" });
     }
   });
 
@@ -1729,52 +1535,6 @@ export async function registerRoutes(
     res.status(403).json({ error: "Forbidden", reason });
     return false;
   };
-
-  // ── Curated player news (admin) ─────────────────────────────────────────────
-  // Full audit-trail access for review: discovery_source vs summary_source,
-  // raw extracted facts, model used. Admin-only; never exposed publicly.
-  app.get("/api/admin/news/curated", async (req, res) => {
-    if (!(await requireAdmin(req, res))) return;
-    try {
-      const status = typeof req.query.status === "string" ? req.query.status : "needs_review";
-      const limit = parseInt(String(req.query.limit ?? "100"), 10) || 100;
-      const items = await listCuratedNewsByStatus(status, limit);
-      res.json({ items });
-    } catch (err: any) {
-      console.error("[Admin] news/curated list error:", err);
-      res.status(500).json({ error: err.message || "Query failed" });
-    }
-  });
-
-  // Approve / reject / re-queue an item. body: { status: "published"|"rejected"|"needs_review"|"auto" }
-  app.post("/api/admin/news/curated/:id/status", async (req, res) => {
-    if (!(await requireAdmin(req, res))) return;
-    try {
-      const allowed = ["auto", "published", "needs_review", "rejected"];
-      const status = String(req.body?.status ?? "");
-      if (!allowed.includes(status)) {
-        return res.status(400).json({ error: `status must be one of ${allowed.join(", ")}` });
-      }
-      const ok = await setCuratedNewsStatus(req.params.id, status);
-      if (!ok) return res.status(404).json({ error: "Item not found" });
-      res.json({ ok: true, id: req.params.id, status });
-    } catch (err: any) {
-      console.error("[Admin] news/curated status error:", err);
-      res.status(500).json({ error: err.message || "Update failed" });
-    }
-  });
-
-  // Manually trigger an ingestion pass (handy for testing / backfill).
-  app.post("/api/admin/news/curated/run", async (req, res) => {
-    if (!(await requireAdmin(req, res))) return;
-    try {
-      const stats = await runCuratedIngestion();
-      res.json({ ok: true, stats });
-    } catch (err: any) {
-      console.error("[Admin] news/curated run error:", err);
-      res.status(500).json({ error: err.message || "Ingestion failed" });
-    }
-  });
 
   app.post("/api/admin/adp/ingest-draft/:draftId", async (req, res) => {
     if (!(await requireAdmin(req, res))) return;

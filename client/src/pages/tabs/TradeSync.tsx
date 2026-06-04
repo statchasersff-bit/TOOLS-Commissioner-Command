@@ -20,7 +20,6 @@ import {
 } from "lucide-react";
 import { ShareTradeToDiscordButton } from "@/components/trade/ShareTradeToDiscordButton";
 import { showFeatureDisabled } from "@/components/FeatureDisabledDialog";
-import { usePlayerProfile } from "@/contexts/PlayerProfileContext";
 import {
   TradeActionModal,
   type NormalizedTrade,
@@ -451,7 +450,6 @@ function PlayerHeadshot({ playerId, name }: { playerId: string; name: string }) 
 // ─── Player row for card layout ───────────────────────────────────────────────
 
 function PlayerCardRow({ player, showValue }: { player: AssetPlayer; showValue?: boolean }) {
-  const { openPlayerProfile } = usePlayerProfile();
   return (
     <div className="flex items-center gap-2 py-0.5">
       <PlayerAvatar
@@ -460,7 +458,6 @@ function PlayerCardRow({ player, showValue }: { player: AssetPlayer; showValue?:
         pos={player.pos}
         team={player.team}
         size="sm"
-        onClick={() => openPlayerProfile(player.playerId)}
       />
       {showValue && (
         <span className="ml-auto text-sm font-semibold tabular-nums text-muted-foreground flex-shrink-0">

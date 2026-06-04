@@ -27,7 +27,6 @@ import {
 } from "@/lib/tradeValue";
 import { ShareTradeToDiscordButton, type PollAsset } from "@/components/trade/ShareTradeToDiscordButton";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
-import { usePlayerProfile } from "@/contexts/PlayerProfileContext";
 import { TradeBlockCandidates } from "@/components/trade/TradeBlockCandidates";
 import { ArrowRightLeft, TrendingUp, TrendingDown, Target, X, Plus, Search, Scale, RotateCcw, Database, Play, Pause, Loader2, ChevronLeft, ChevronRight, ChevronDown, Download, Tag, Clock, ArrowRight, Send, CheckCircle2, DollarSign, Undo2, Globe, Trophy } from "lucide-react";
 
@@ -92,7 +91,6 @@ interface TradeProposal {
 }
 
 function PlayerChip({ player, value }: { player: Player; value: number }) {
-  const { openPlayerProfile } = usePlayerProfile();
   const sid = player.sleeperId ?? player.id;
   return (
     <div className="flex items-center gap-1.5 py-1">
@@ -103,7 +101,6 @@ function PlayerChip({ player, value }: { player: Player; value: number }) {
         team={player.team ?? ""}
         size="sm"
         sub={fmtN(value, "0")}
-        onClick={() => openPlayerProfile(sid)}
       />
     </div>
   );
@@ -275,7 +272,6 @@ function TradeProposalCard({ proposal, mode, userTeam, league }: { proposal: Tra
 
 export function TradeFinder({ league, userTeam }: TradeProps) {
   const { getPlayerValue, getRedraftValue, optimizeLineup } = useValueModel();
-  const { openPlayerProfile } = usePlayerProfile();
   const tradeFinderTierMap = useMemo(() => getLeagueTeamTiers(league.teams), [league.teams]);
   const [proposalMode, setProposalMode] = useState<"dynasty" | "redraft">("dynasty");
   const [posFilter, setPosFilter] = useState<string>("all");
@@ -819,7 +815,7 @@ export function TradeFinder({ league, userTeam }: TradeProps) {
                 <div key={sid} className="flex items-center gap-3 py-2.5 border-b border-border/20 last:border-0" data-testid={`chip-row-${sid}`}>
                   <span className="text-xs text-muted-foreground w-5 text-right flex-shrink-0">{i + 1}.</span>
                   <div className="flex-1 min-w-0">
-                    <PlayerAvatar id={sid} name={c.player.name} pos={c.player.pos} team={c.player.team ?? ""} size="sm" onClick={() => openPlayerProfile(sid)} />
+                    <PlayerAvatar id={sid} name={c.player.name} pos={c.player.pos} team={c.player.team ?? ""} size="sm" />
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
                     <Badge
@@ -1019,7 +1015,6 @@ export function TradeFinder({ league, userTeam }: TradeProps) {
                 team={p.team ?? ""}
                 size="sm"
                 sub={`${p.ownerName} · Age ${p.age}`}
-                onClick={() => openPlayerProfile(p.sleeperId || p.id)}
               />
               <div className="flex flex-col items-end gap-1 flex-shrink-0">
                 <span className="text-xs font-bold text-[#0b3a7a] dark:text-blue-400 tabular-nums">{fmtN(p.redraftVal)}</span>
@@ -1039,7 +1034,6 @@ export function TradeFinder({ league, userTeam }: TradeProps) {
 type UserScanState = { status: "loading" | "done" | "error"; trades: import("@/lib/sleeperApi").CrossLeagueTradeResult[]; leaguesScanned: number; error?: string };
 
 function CrossLeagueTradeIntel({ league }: { league: League }) {
-  const { openPlayerProfile } = usePlayerProfile();
   const teamsWithOwner = useMemo(() => league.teams.filter(t => t.ownerId), [league.teams]);
   const [scanResults, setScanResults] = useState<Map<string, UserScanState>>(new Map());
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -1164,7 +1158,7 @@ function CrossLeagueTradeIntel({ league }: { league: League }) {
                               <div className="space-y-1">
                                 {trade.sent.map((p, j) => (
                                   <div key={`sent-${p.playerId}-${j}`} className="flex items-center gap-1.5">
-                                    <PlayerAvatar id={p.playerId} name={p.name} pos={p.pos} team={(p as any).team ?? ""} size="xs" compact onClick={() => openPlayerProfile(p.playerId)} />
+                                    <PlayerAvatar id={p.playerId} name={p.name} pos={p.pos} team={(p as any).team ?? ""} size="xs" compact />
                                     <span className="text-[11px] truncate flex-1">{p.name}</span>
                                     <Badge variant="outline" className={`text-[8px] px-0.5 py-0 h-3.5 flex-shrink-0 ${getPositionColor(p.pos)}`}>{p.pos}</Badge>
                                   </div>
@@ -1183,7 +1177,7 @@ function CrossLeagueTradeIntel({ league }: { league: League }) {
                               <div className="space-y-1">
                                 {trade.received.map((p, j) => (
                                   <div key={`recv-${p.playerId}-${j}`} className="flex items-center gap-1.5">
-                                    <PlayerAvatar id={p.playerId} name={p.name} pos={p.pos} team={(p as any).team ?? ""} size="xs" compact onClick={() => openPlayerProfile(p.playerId)} />
+                                    <PlayerAvatar id={p.playerId} name={p.name} pos={p.pos} team={(p as any).team ?? ""} size="xs" compact />
                                     <span className="text-[11px] truncate flex-1">{p.name}</span>
                                     <Badge variant="outline" className={`text-[8px] px-0.5 py-0 h-3.5 flex-shrink-0 ${getPositionColor(p.pos)}`}>{p.pos}</Badge>
                                   </div>
@@ -3520,7 +3514,6 @@ function FilterGroup({ label, children }: { label: string; children: ReactNode }
 
 export function TradeDatabase({ league }: { league: League }) {
   const { valuesBySleeperId, dynastyPlayerList } = useValueModel();
-  const { openPlayerProfile } = usePlayerProfile();
 
   const [stats, setStats] = useState<{ totalTrades: number; totalLeagues: number } | null>(null);
   const [mostTraded, setMostTraded] = useState<
@@ -3716,7 +3709,6 @@ export function TradeDatabase({ league }: { league: League }) {
                             pos={p.pos}
                             team={p.team ?? ""}
                             size="sm"
-                            onClick={() => openPlayerProfile(p.sleeperId)}
                           />
                         </div>
                       </div>
@@ -3995,7 +3987,6 @@ function TradeCard({
   getPlayerValue: (sleeperId: string) => number;
   formatDate: (ts: number) => string;
 }) {
-  const { openPlayerProfile } = usePlayerProfile();
   const sideValues = trade.sides.map((side) => {
     const playerValue = side.playersReceived.reduce((sum, p) => sum + getPlayerValue(p.sleeperId), 0);
     const pickValue = side.picksReceived.reduce((sum, p) => {
@@ -4153,7 +4144,6 @@ function TradeCard({
                             pos={p.pos}
                             team={p.team ?? ""}
                             size="sm"
-                            onClick={() => p.sleeperId && openPlayerProfile(p.sleeperId)}
                           />
                         </div>
                         <span

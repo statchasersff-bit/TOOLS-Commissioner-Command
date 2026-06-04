@@ -33,7 +33,6 @@ import { Badge } from "@/components/ui/badge";
 import { MegaMenuNav, MobileBottomNav } from "@/components/MegaMenu";
 import { LeagueSelector } from "@/components/LeagueSelector";
 import { HeaderValueSourceBadge } from "@/components/ValueSourceSelector";
-import { NFLNewsTicker } from "@/components/NFLNewsTicker";
 import { ValueSourceManager, ValueSourcePage } from "@/components/ValueSourceManager";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useValueModel } from "@/contexts/ValueModelContext";
@@ -60,15 +59,12 @@ import { WhatsNewModal } from "@/components/WhatsNewModal";
 // ── Lazy-loaded tab components ─────────────────────────────────────────────
 // Each tab is split into its own async chunk so the initial bundle only
 // contains the shell + header. Tabs load on first navigation.
-const PlayerPage        = lazy(() => import("@/pages/PlayerPage"));
 const ManagerPage       = lazy(() => import("@/pages/ManagerPage"));
 const MatchupDetail     = lazy(() => import("@/pages/MatchupDetail"));
 const PortfolioConnect  = lazy(() => import("./tabs/Portfolio").then(m => ({ default: m.PortfolioConnect })));
 const PortfolioSummary  = lazy(() => import("./tabs/Portfolio").then(m => ({ default: m.PortfolioSummary })));
 const WaiverCommand     = lazy(() => import("./tabs/WaiverCommand"));
 const DashboardSnapshot = lazy(() => import("./tabs/Dashboard").then(m => ({ default: m.DashboardSnapshot })));
-const MyTeam            = lazy(() => import("./tabs/Dashboard").then(m => ({ default: m.MyTeam })));
-const ShareTeam         = lazy(() => import("./tabs/ShareTeam").then(m => ({ default: m.ShareTeam })));
 const RosterComparison  = lazy(() => import("./tabs/LeagueAnalyzer").then(m => ({ default: m.RosterComparison })));
 const PlayoffCalculator = lazy(() => import("./tabs/PlayoffCalculator").then(m => ({ default: m.PlayoffCalculator })));
 const Transactions      = lazy(() => import("./tabs/Transactions"));
@@ -87,6 +83,7 @@ const LineupCommand     = lazy(() => import("./tabs/LineupCommand").then(m => ({
 const PositionStats     = lazy(() => import("./tabs/PositionStats"));
 const DraftCommand      = lazy(() => import("./tabs/DraftCommand").then(m => ({ default: m.DraftCommand })));
 const DraftAvailability = lazy(() => import("./tabs/DraftAvailability").then(m => ({ default: m.DraftAvailability })));
+const PickTracker       = lazy(() => import("./tabs/PickTracker").then(m => ({ default: m.PickTracker })));
 const AboutPage         = lazy(() => import("@/components/AboutModal").then(m => ({ default: m.AboutPage })));
 const FeedbackPage      = lazy(() => import("@/components/FeedbackPage").then(m => ({ default: m.FeedbackPage })));
 const RedraftCommandPage       = lazy(() => import("@/components/ComingSoonCommand").then(m => ({ default: m.RedraftCommandPage })));
@@ -122,6 +119,14 @@ function getInitialState(pathTab?: string, pathSub?: string) {
     requestedSub = "draft-board";
   }
 
+  // Legacy redirect — the "My Team" module (dashboard tab, Overview +
+  // Share My Team) was removed. Send any stale URL / saved state back to the
+  // portfolio landing so the user isn't dropped on a nav-less, unrenderable tab.
+  if (requestedTab === "dashboard") {
+    requestedTab = "portfolio";
+    requestedSub = "portfolio-summary";
+  }
+
   // Draft module temporarily hidden — see FEATURES.SHOW_DRAFT_MODULE.
   // Any stale URL/saved state that targets `draft` falls back to portfolio
   // so the user isn't dropped on a nav-less, unrenderable tab.
@@ -137,7 +142,7 @@ function getInitialState(pathTab?: string, pathSub?: string) {
 }
 
 
-export default function DynastyCommandCenter({ params, playerProfileId, managerProfileId, valueSourcesPage, matchupDetailLeagueId }: { params?: { tab?: string; sub?: string }; playerProfileId?: string; managerProfileId?: string; valueSourcesPage?: boolean; matchupDetailLeagueId?: string }) {
+export default function DynastyCommandCenter({ params, managerProfileId, valueSourcesPage, matchupDetailLeagueId }: { params?: { tab?: string; sub?: string }; managerProfileId?: string; valueSourcesPage?: boolean; matchupDetailLeagueId?: string }) {
   useEffect(() => { console.log("[app] DynastyCommandCenter mounted"); }, []);
 
   // ── Background chunk preloading ────────────────────────────────────────────
@@ -166,8 +171,7 @@ export default function DynastyCommandCenter({ params, playerProfileId, managerP
       p(() => import("./tabs/TradeSync"));
       p(() => import("./tabs/LineupCommand"));
       p(() => import("./tabs/DraftAvailability"));
-      p(() => import("./tabs/ShareTeam"));
-      p(() => import("@/pages/PlayerPage"));
+      p(() => import("./tabs/PickTracker"));
       p(() => import("@/components/AboutModal"));
       p(() => import("@/components/FeedbackPage"));
       p(() => import("@/components/ComingSoonCommand"));
@@ -559,6 +563,7 @@ export default function DynastyCommandCenter({ params, playerProfileId, managerP
         />
       );
       if (activeSubTab === "player-availability") return <DraftAvailability />;
+      if (activeSubTab === "pick-tracker") return <PickTracker />;
       return <DraftCommand />;
     }
 
@@ -618,8 +623,6 @@ export default function DynastyCommandCenter({ params, playerProfileId, managerP
 
     const key = `${activeMainTab}:${activeSubTab}`;
     switch (key) {
-      case "dashboard:my-team":                  return <MyTeam league={league} userTeam={userTeam} onNavigate={navigateToSubTab} />;
-      case "dashboard:share-team":               return <ShareTeam league={league} userTeam={userTeam} />;
       case "league-analyzer:power-rankings":     return <DashboardSnapshot league={league} userTeam={userTeam} />;
       case "league-analyzer:roster-comparison":  return <RosterComparison league={league} />;
       case "league-analyzer:playoff-calculator": return <PlayoffCalculator />;
@@ -636,10 +639,8 @@ export default function DynastyCommandCenter({ params, playerProfileId, managerP
   };
 
   const renderContent = () => {
-    // Player profile is rendered inside the shell (header/mega-menu stay
-    // visible) when the route is /players/:id.
-    if (playerProfileId) return <PlayerPage params={{ playerId: playerProfileId }} embedded />;
-    // Manager profile uses the same embedded-shell pattern at /managers/:userId.
+    // Manager profile is rendered inside the shell (header/mega-menu stay
+    // visible) at /managers/:userId.
     // Pass the viewer's team so the Trade tab can match their roster to the
     // target manager's tendencies (null when no active league is loaded).
     if (managerProfileId) return <ManagerPage userId={managerProfileId} embedded viewerTeam={userTeam} />;
@@ -1019,8 +1020,6 @@ export default function DynastyCommandCenter({ params, playerProfileId, managerP
         setActiveTab={handleMainTabChange}
         onNavigate={(tab, sub) => { handleMainTabChange(tab); handleSubTabChange(sub); }}
       />
-
-      <NFLNewsTicker />
 
       <main className="max-w-7xl mx-auto px-2 sm:px-3 md:px-4 pt-5 pb-4 sm:py-6 md:py-8 md:pb-8 relative" style={{ paddingBottom: "calc(80px + env(safe-area-inset-bottom, 0px))" }}>
         {showLoadingOverlay && (

@@ -30,7 +30,6 @@ import { UnifiedCrawlerPanel } from "@/components/admin/UnifiedCrawlerPanel";
 import { MoversPanel } from "@/components/draft/MoversPanel";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAuth } from "@/contexts/AuthContext";
-import { usePlayerProfile } from "@/contexts/PlayerProfileContext";
 
 // The frontend never queries Sleeper for ADP — it reads our cached endpoint
 // which serves the most recent adp_snapshots row for the active filter set.
@@ -245,15 +244,6 @@ export function DraftCommand() {
   // it, every filter change would briefly mark the explorer "cancelled"
   // because the cleanup also aborts the in-flight fetch.
   const userCancelledRef = useRef(false);
-
-  // Clicking a player opens the full-page profile (/players/:slug) via the
-  // global navigator, rather than the old in-explorer side drawer. Rookie-pick
-  // placeholders have no NFL profile page, so they stay non-navigating.
-  const { openPlayerProfile } = usePlayerProfile();
-  const handlePlayerClick = useCallback((row: ADPResult) => {
-    if (row.is_rookie_placeholder) return;
-    openPlayerProfile(row.player_id);
-  }, [openPlayerProfile]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -598,9 +588,9 @@ export function DraftCommand() {
             </div>
           )}
 
-          {view === "list" && <ListView rows={filtered} filters={filters} onPlayerClick={handlePlayerClick} />}
-          {view === "box"  && <BoxView  rows={filtered} teams={typeof filters.teams === "number" ? filters.teams : 12} filters={filters} onPlayerClick={handlePlayerClick} />}
-          {view === "hex"  && <HexView  rows={filtered} teams={typeof filters.teams === "number" ? filters.teams : 12} draftFormat={filters.draftFormat} filters={filters} onPlayerClick={handlePlayerClick} />}
+          {view === "list" && <ListView rows={filtered} filters={filters} />}
+          {view === "box"  && <BoxView  rows={filtered} teams={typeof filters.teams === "number" ? filters.teams : 12} filters={filters} />}
+          {view === "hex"  && <HexView  rows={filtered} teams={typeof filters.teams === "number" ? filters.teams : 12} draftFormat={filters.draftFormat} filters={filters} />}
         </>
       )}
 
@@ -783,7 +773,7 @@ function formatDraftLabel(f: DraftFilters): string {
   return parts.join(" · ");
 }
 
-function ListView({ rows, filters, onPlayerClick }: { rows: ADPResult[]; filters: DraftFilters; onPlayerClick?: (row: ADPResult) => void }) {
+function ListView({ rows, filters }: { rows: ADPResult[]; filters: DraftFilters }) {
   const [sortKey, setSortKey] = useState<ListSortKey>("overall_rank");
   const [sortAsc, setSortAsc] = useState(true);
   const [visibleCount, setVisibleCount] = useState(LIST_PAGE_SIZE);
@@ -842,7 +832,7 @@ function ListView({ rows, filters, onPlayerClick }: { rows: ADPResult[]; filters
       {/* Mobile: card-list */}
       <div className="md:hidden divide-y divide-border/20">
         {visible.map((r) => (
-          <MobileListRow key={r.player_id} row={r} onPlayerClick={onPlayerClick} />
+          <MobileListRow key={r.player_id} row={r} />
         ))}
       </div>
 
@@ -879,9 +869,8 @@ function ListView({ rows, filters, onPlayerClick }: { rows: ADPResult[]; filters
             {visible.map((r) => (
               <tr
                 key={r.player_id}
-                className={cn("hover:bg-muted/20", onPlayerClick && "cursor-pointer")}
+                className="hover:bg-muted/20"
                 data-testid={`row-adp-${r.player_id}`}
-                onClick={() => onPlayerClick?.(r)}
               >
                 <td className="px-2 py-2.5 text-center font-semibold tabular-nums">{r.overall_rank}</td>
                 <td className="px-3 py-2.5">
@@ -929,12 +918,11 @@ function ListView({ rows, filters, onPlayerClick }: { rows: ADPResult[]; filters
   );
 }
 
-function MobileListRow({ row, onPlayerClick }: { row: ADPResult; onPlayerClick?: (row: ADPResult) => void }) {
+function MobileListRow({ row }: { row: ADPResult }) {
   return (
     <div
-      className={cn("flex items-center gap-2.5 px-3 py-2.5", onPlayerClick && "cursor-pointer hover:bg-muted/20")}
+      className="flex items-center gap-2.5 px-3 py-2.5"
       data-testid={`row-adp-mobile-${row.player_id}`}
-      onClick={() => onPlayerClick?.(row)}
     >
       <PlayerAvatar
         compact
@@ -995,7 +983,7 @@ function PlayerCell({ row }: { row: ADPResult }) {
 // - HEX_POS_THEME (defined further down) is the single source of truth for
 //   board palette — shared between Hex and Box for visual consistency.
 
-function BoxView({ rows, teams, filters, onPlayerClick }: { rows: ADPResult[]; teams: number; filters: DraftFilters; onPlayerClick?: (row: ADPResult) => void }) {
+function BoxView({ rows, teams, filters }: { rows: ADPResult[]; teams: number; filters: DraftFilters }) {
   const draftLabel = formatDraftLabel(filters);
   const isMobile = useIsMobile();
   // Sleeper / OTC / FFPC density: short tiles, ~1px gutter, dark navy body
@@ -1093,7 +1081,6 @@ function BoxView({ rows, teams, filters, onPlayerClick }: { rows: ADPResult[]; t
                     pickInRound={isOdd ? slotIdx + 1 : teams - slotIdx}
                     width={cellW}
                     height={cellH}
-                    onPlayerClick={onPlayerClick}
                   />
                 ))}
               </div>
@@ -1172,14 +1159,13 @@ const BOX_POS_ACCENT: Record<Position, {
 };
 
 function DraftPickCell({
-  pick, round, pickInRound, width, height, onPlayerClick,
+  pick, round, pickInRound, width, height,
 }: {
   pick: ADPResult | null;
   round: number;
   pickInRound: number;
   width: number;
   height: number;
-  onPlayerClick?: (row: ADPResult) => void;
 }) {
   const pickLabel = `${round}.${String(pickInRound).padStart(2, "0")}`;
 
@@ -1213,17 +1199,13 @@ function DraftPickCell({
       className="p-px"
       style={{ width, minHeight: height, flexShrink: 0 }}
     >
-    <button
-      type="button"
-      onClick={() => onPlayerClick?.(pick)}
+    <div
       className={cn(
-        "group relative w-full h-full rounded-[2px] border cursor-pointer text-left overflow-hidden",
+        "group relative w-full h-full rounded-[2px] border text-left overflow-hidden",
         "transition-colors duration-150",
         accent.bg,
-        accent.hoverBg,
         accent.border,
       )}
-      title={`${pickLabel} · ${pick.player_name} · ${pick.position}${pick.positional_rank}`}
       data-testid={`board-cell-${round}-${pickInRound}`}
     >
       {/* Thin position-tinted top stripe — Sleeper's main scan cue. */}
@@ -1282,7 +1264,7 @@ function DraftPickCell({
           isPick={isPick}
         />
       </div>
-    </button>
+    </div>
     </div>
   );
 }
@@ -1330,7 +1312,7 @@ function PlayerImageCircle({
 // are typically snake but reading order matches the natural pick sequence —
 // the slot column tells you the team). Sorted by avg_pick ascending so the
 // first card in each round is the earliest pick on average.
-function RoundBoardView({ rows, teams, onPlayerClick }: { rows: ADPResult[]; teams: number; onPlayerClick?: (row: ADPResult) => void }) {
+function RoundBoardView({ rows, teams }: { rows: ADPResult[]; teams: number }) {
   const grouped = useMemo(() => {
     const sorted = [...rows].sort((a, b) => a.avg_pick - b.avg_pick);
     const byRound = new Map<number, ADPResult[]>();
@@ -1366,7 +1348,7 @@ function RoundBoardView({ rows, teams, onPlayerClick }: { rows: ADPResult[]; tea
             </div>
             <div className="grid gap-1.5 grid-cols-[repeat(auto-fill,minmax(168px,1fr))]">
               {picks.map((p, idx) => (
-                <RoundBoardCard key={`${round}-${p.player_id}`} pick={p} slot={idx + 1} round={round} onClick={() => onPlayerClick?.(p)} />
+                <RoundBoardCard key={`${round}-${p.player_id}`} pick={p} slot={idx + 1} round={round} />
               ))}
             </div>
           </div>
@@ -1376,19 +1358,17 @@ function RoundBoardView({ rows, teams, onPlayerClick }: { rows: ADPResult[]; tea
   );
 }
 
-function RoundBoardCard({ pick, slot, round, onClick }: { pick: ADPResult; slot: number; round: number; onClick?: () => void }) {
+function RoundBoardCard({ pick, slot, round }: { pick: ADPResult; slot: number; round: number }) {
   const accent = BOX_POS_ACCENT[pick.position];
   const isPick = pick.is_rookie_placeholder;
   const posLine = isPick
     ? (pick.rookie_pick_label ? `Rookie Pick · ${pick.rookie_pick_label}` : "Rookie Pick")
     : `${pick.position}${pick.positional_rank}${pick.team ? ` · ${pick.team}` : ""}`;
   return (
-    <button
-      type="button"
-      onClick={onClick}
+    <div
       className={cn(
-        "group relative text-left rounded-[3px] border overflow-hidden transition-colors duration-150",
-        accent.bg, accent.hoverBg, accent.border,
+        "group relative text-left rounded-[3px] border overflow-hidden",
+        accent.bg, accent.border,
         "px-2 py-1.5",
       )}
       data-testid={`round-board-card-${round}-${slot}`}
@@ -1410,7 +1390,7 @@ function RoundBoardCard({ pick, slot, round, onClick }: { pick: ADPResult; slot:
         <span>ADP <span className="tabular-nums text-[var(--sc-text)] dark-any:text-white/80">{pick.avg_pick.toFixed(1)}</span></span>
         <span className="tabular-nums">{pick.draft_count} {pick.draft_count === 1 ? "draft" : "drafts"}</span>
       </div>
-    </button>
+    </div>
   );
 }
 
@@ -1507,7 +1487,7 @@ const HEX_POS_THEME: Record<Position, PosTheme> = {
 
 const ELITE_RANK_CUTOFF = 12;
 
-function HexView({ rows, teams, draftFormat, filters, onPlayerClick }: { rows: ADPResult[]; teams: number; draftFormat: DraftFilters["draftFormat"]; filters: DraftFilters; onPlayerClick?: (row: ADPResult) => void }) {
+function HexView({ rows, teams, draftFormat, filters }: { rows: ADPResult[]; teams: number; draftFormat: DraftFilters["draftFormat"]; filters: DraftFilters }) {
   const draftLabel = formatDraftLabel(filters);
   // Tile sizing is driven by CSS variables set on the board wrapper with
   // responsive Tailwind classes — see the `[--hex-w:..]` arbitrary-property
@@ -1611,7 +1591,6 @@ function HexView({ rows, teams, draftFormat, filters, onPlayerClick }: { rows: A
               slots={slots}
               rowIdx={rowIdx}
               isSnake={isSnake}
-              onPlayerClick={onPlayerClick}
               selectedPositions={selectedPositions}
             />
           ))}
@@ -1622,7 +1601,7 @@ function HexView({ rows, teams, draftFormat, filters, onPlayerClick }: { rows: A
 }
 
 function HexRow({
-  round, slots, rowIdx, isSnake, onPlayerClick, selectedPositions,
+  round, slots, rowIdx, isSnake, selectedPositions,
 }: {
   round: number;
   slots: Array<ADPResult | null>;
@@ -1630,7 +1609,6 @@ function HexRow({
   /** Snake-format board: even rounds reverse, so the pick number counts back
    *  down the row (slot 12 in round 2 is pick 2.01, sitting under 1.12). */
   isSnake: boolean;
-  onPlayerClick?: (row: ADPResult) => void;
   /** Positions currently shown. Anything else renders as an empty slot,
    *  preserving pick-number alignment across the board. */
   selectedPositions?: Set<LegendKey>;
@@ -1682,7 +1660,7 @@ function HexRow({
       >
         {slots.map((p, i) => (
           p && isVisible(p)
-            ? <HexTile key={`${round}-${i}-${p.player_id}`} row={p} round={round} pickInRound={pickAt(i)} onClick={onPlayerClick} />
+            ? <HexTile key={`${round}-${i}-${p.player_id}`} row={p} round={round} pickInRound={pickAt(i)} />
             : <HexEmpty key={`${round}-${i}-empty`} pickInRound={pickAt(i)} />
         ))}
       </div>
@@ -1767,7 +1745,7 @@ const HEX_POS_SHELL: Record<Position, {
   },
 };
 
-function HexTile({ row, round, pickInRound, onClick }: { row: ADPResult; round: number; pickInRound: number; onClick?: (row: ADPResult) => void }) {
+function HexTile({ row, round, pickInRound }: { row: ADPResult; round: number; pickInRound: number }) {
   const theme = HEX_POS_THEME[row.position];
   const isPick = row.is_rookie_placeholder;
   const badge = HEX_BADGE_COLOR[row.position];
@@ -1778,13 +1756,9 @@ function HexTile({ row, round, pickInRound, onClick }: { row: ADPResult; round: 
     // Outer wrapper is NOT clipped — so the hover panel can render outside
     // the hexagon bounds. The clipping lives one level in.
     <div
-      className="relative group cursor-pointer hover:z-30 snap-start [touch-action:manipulation]"
+      className="relative group hover:z-30 snap-start [touch-action:manipulation]"
       style={{ width: "var(--hex-w)", height: "var(--hex-h)", flexShrink: 0 }}
       data-testid={`hex-${row.player_id}`}
-      onClick={() => onClick?.(row)}
-      role={onClick ? "button" : undefined}
-      tabIndex={onClick ? 0 : undefined}
-      onKeyDown={onClick ? (e) => { if (e.key === "Enter" || e.key === " ") onClick(row); } : undefined}
     >
       {/* Position-tinted hex shell — dark base + soft positional wash and
            border. Inset a few px inside the layout cell so each tile has a

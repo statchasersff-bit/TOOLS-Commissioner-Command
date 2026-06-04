@@ -16,7 +16,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import { useScrollEdges } from "@/hooks/useResponsive";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
-import { usePlayerProfile } from "@/contexts/PlayerProfileContext";
 import { useSleeper } from "@/contexts/SleeperContext";
 import { useValueModel } from "@/contexts/ValueModelContext";
 import type { RankedPlayer } from "@/contexts/ValueModelContext";
@@ -753,7 +752,6 @@ export default function WaiverCommand() {
 }
 
 function WaiverTableRow({ row, onClaim, onView }: { row: WaiverRow; onClaim: () => void; onView: () => void }) {
-  const { openPlayerProfile } = usePlayerProfile();
   const diffColor = row.difference > 300
     ? "text-emerald-600 dark:text-emerald-400"
     : row.difference > 0
@@ -878,7 +876,6 @@ function WaiverTableRow({ row, onClaim, onView }: { row: WaiverRow; onClaim: () 
             team={row.bestAvailable.team}
             size="sm"
             sub={row.bestAvailable.value.toLocaleString()}
-            onClick={() => openPlayerProfile(row.bestAvailable!.id)}
           />
         ) : (
           <span className="text-xs text-muted-foreground">—</span>
@@ -895,7 +892,6 @@ function WaiverTableRow({ row, onClaim, onView }: { row: WaiverRow; onClaim: () 
             team={row.lowestOnTeam.team}
             size="sm"
             sub={row.lowestOnTeam.value.toLocaleString()}
-            onClick={() => openPlayerProfile(row.lowestOnTeam!.id)}
           />
         ) : (
           <span className="text-xs text-muted-foreground">—</span>
@@ -2019,7 +2015,6 @@ function TopAddCard({
   accent: "gold" | "blue" | "green" | "purple";
   onClaim: () => void;
 }) {
-  const { openPlayerProfile } = usePlayerProfile();
   const accentMap = {
     gold:   { icon: "text-[#d4af37]",  bg: "bg-[#d4af37]/10",   ring: "ring-[#d4af37]/20",  btn: "bg-[#d4af37]/15 text-[#d4af37] border-[#d4af37]/30 hover:bg-[#d4af37]/25" },
     blue:   { icon: "text-blue-400",   bg: "bg-blue-400/10",    ring: "ring-blue-400/20",    btn: "bg-blue-400/10 text-blue-400 border-blue-400/20 hover:bg-blue-400/20" },
@@ -2044,7 +2039,6 @@ function TopAddCard({
             pos={player.pos}
             team={player.team}
             size="md"
-            onClick={() => openPlayerProfile(player.sleeperId)}
           />
           <div className="text-[11px] text-muted-foreground">{sub}</div>
           <button
@@ -2075,7 +2069,6 @@ function LeagueWaiverDetail({
   onClaim: (preAddId: string) => void;
   claimModal: React.ReactNode;
 }) {
-  const { openPlayerProfile } = usePlayerProfile();
   const { dynastyPlayerList, valuesBySleeperId, redraftValuesBySleeperId } = useValueModel();
   const [search, setSearch] = useState("");
   const [posFilter, setPosFilter] = useState<string>("ALL");
@@ -2318,7 +2311,6 @@ function LeagueWaiverDetail({
                       pos={p.pos}
                       team={p.team}
                       size="sm"
-                      onClick={() => openPlayerProfile(p.sleeperId)}
                     />
                   </td>
                   <td className="px-4 py-3 text-center">

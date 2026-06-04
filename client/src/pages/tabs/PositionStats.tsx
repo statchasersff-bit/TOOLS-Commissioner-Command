@@ -13,7 +13,6 @@ import { Input } from "@/components/ui/input";
 import { SectionHeader } from "@/components/SectionHeader";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useScrollEdges } from "@/hooks/useResponsive";
-import { usePlayerProfile } from "@/contexts/PlayerProfileContext";
 import { cn } from "@/lib/utils";
 import {
   ChevronDown,
@@ -633,7 +632,6 @@ function SuperHeaderRow({ segments, className }: { segments: SuperHeaderSeg[]; c
 
 // ── Component ─────────────────────────────────────────────────────────────────
 export default function PositionStats() {
-  const { openPlayerProfile } = usePlayerProfile();
   // Edge-fade affordance for the horizontally-scrollable stats table.
   const { ref: tableScrollRef, refresh: refreshTableEdges } = useScrollEdges<HTMLDivElement>();
   const [subTab, setSubTab]         = useState<"data" | "compare">("data");
@@ -1180,7 +1178,6 @@ export default function PositionStats() {
           rows={scoredData.rows}
           categories={scoreCategories}
           qualify={QUALIFIERS[position]}
-          onPlayerClick={(row) => openPlayerProfile(getPlayerKey(row))}
         />
       )}
 
@@ -1498,15 +1495,12 @@ export default function PositionStats() {
                         >
                           {rank ?? idx + 1}
                         </td>
-                        {/* Player name — opens the full player profile. */}
+                        {/* Player name */}
                         <td
                           style={{ background: stickyBg }}
                           className="sticky left-10 z-10 px-3 py-2 font-semibold text-foreground whitespace-nowrap border-r border-border/25 min-w-[148px]"
                         >
-                          <button
-                            type="button"
-                            onClick={() => openPlayerProfile(getPlayerKey(row))}
-                            className="text-left hover:text-[#d4af37] hover:underline transition-colors"
+                          <span
                             data-testid={`row-player-name-${idx}`}
                           >
                             {/* Desktop: full name. Non-desktop: "F. Last" + faint team. */}
@@ -1515,7 +1509,7 @@ export default function PositionStats() {
                               {shortName}
                               <span className="ml-1.5 font-normal text-muted-foreground/60">{team}</span>
                             </span>
-                          </button>
+                          </span>
                         </td>
                         {/* Team badge (hidden on mobile — shown inline next to name) */}
                         <td className="hidden md:table-cell px-3 py-2 whitespace-nowrap border-r border-border/25">

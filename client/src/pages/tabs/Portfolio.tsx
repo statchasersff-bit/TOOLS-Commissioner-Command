@@ -15,7 +15,6 @@ import { SleeperAuthCard } from "@/components/SleeperAuthCard";
 import { PortfolioValueChart } from "@/components/PortfolioValueChart";
 import { getPortfolioTimeline, type TimelinePoint } from "@/lib/portfolioApi";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
-import { usePlayerProfile } from "@/contexts/PlayerProfileContext";
 import {
   Link,
   CheckCircle,
@@ -260,7 +259,7 @@ export function PortfolioMyLeagues({ onSelectLeague, onNavigate }: PortfolioMyLe
   const handleLeagueClick = (leagueId: string) => {
     setActiveLeague(leagueId);
     onSelectLeague(leagueId);
-    onNavigate("dashboard", "overview");
+    onNavigate("league-analyzer", "power-rankings");
   };
 
   if (!isConnected) {
@@ -581,7 +580,6 @@ function MobileLeagueRow({ rec, rankCell }: { rec: any; rankCell: (rank: number,
 
 export function PortfolioSummary({ onNavigate }: { onNavigate?: (mainTab: string, subTab: string) => void } = {}) {
   const { isConnected, user, leagues } = useSleeper();
-  const { openPlayerProfile } = usePlayerProfile();
   const { valuesBySleeperId, sourceId, sources } = useValueModel();
   const activeSourceLabel = sources.find(s => s.id === sourceId)?.label ?? sourceId;
 
@@ -1134,7 +1132,6 @@ export function PortfolioSummary({ onNavigate }: { onNavigate?: (mainTab: string
                               pos={player.pos}
                               team={player.team}
                               size="sm"
-                              onClick={() => openPlayerProfile(player.playerId)}
                             />
                           </div>
                           <div className="w-8 md:w-10 flex justify-center">
@@ -1176,15 +1173,12 @@ export function PortfolioSummary({ onNavigate }: { onNavigate?: (mainTab: string
                 <div className="space-y-0.5">
                   {summaryData.playerExposure.filter((p: any) => p.exposure >= 50).map((p: any) => (
                     <p key={p.playerId} className="text-xs text-amber-700 dark:text-amber-400">
-                      <button
-                        type="button"
-                        onClick={() => openPlayerProfile(p.playerId)}
-                        className="font-semibold text-left hover:underline cursor-pointer"
+                      <span
+                        className="font-semibold"
                         data-testid={`player-link-${p.playerId}`}
-                        title={`View ${p.name}`}
                       >
                         {p.name}
-                      </button>
+                      </span>
                       : {p.exposure}% exposure across your portfolio
                     </p>
                   ))}

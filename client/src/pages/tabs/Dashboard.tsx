@@ -8,7 +8,6 @@ import { InsightCallout } from "@/components/InsightCallout";
 import { SectionHeader } from "@/components/SectionHeader";
 import { getLeagueTeamTiers, getTierColor, getTierEmoji, getTierTooltip, isContenderTier, isRebuilderTier, generateInsights, computeNowScore, computeFutureScore, getDynastyWindowLabel, getDynastyWindowSubtitle, getDynastyWindowColor } from "@/data/mockData";
 import { useValueModel } from "@/contexts/ValueModelContext";
-import { usePlayerProfile } from "@/contexts/PlayerProfileContext";
 import type { League, Team, Player, Pick } from "@/types";
 import { formatPickLabel } from "@/types";
 import { cn } from "@/lib/utils";
@@ -807,7 +806,6 @@ function ScoringSettingsTable({ settings }: { settings: Record<string, number> }
 export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
   const teams = league.teams;
   const { getPlayerValue, getRedraftValue, optimizeLineup } = useValueModel();
-  const { openPlayerProfile } = usePlayerProfile();
   const [sortKey, setSortKey] = useState<SortKey>("overall");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
@@ -1258,9 +1256,7 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
                                       {visible.map((p, i) => (
                                         <li
                                           key={p.sleeperId ?? i}
-                                          onClick={(e) => { e.stopPropagation(); openPlayerProfile(p.sleeperId ?? p.id); }}
-                                          className="flex items-center gap-1 min-w-0 cursor-pointer hover:bg-muted/30 rounded px-0.5 transition-colors"
-                                          title={`${p.name} · ${(getPlayerValue(p) / 1000).toFixed(1)}k`}
+                                          className="flex items-center gap-1 min-w-0 rounded px-0.5"
                                         >
                                           <span className="text-[9px] text-muted-foreground/40 w-3 flex-shrink-0 tabular-nums">{i + 1}</span>
                                           <span className="text-[11px] text-foreground truncate flex-1">{p.name}</span>
@@ -1667,9 +1663,7 @@ export function DashboardSnapshot({ league, userTeam }: DashboardProps) {
                                           visible.map((p, i) => (
                                             <li
                                               key={p.sleeperId ?? i}
-                                              onClick={(e) => { e.stopPropagation(); openPlayerProfile(p.sleeperId ?? p.id); }}
-                                              className="flex items-center gap-1 min-w-0 cursor-pointer hover:bg-muted/30 rounded px-0.5 transition-colors"
-                                              title={`${p.name} · ${(getPlayerValue(p) / 1000).toFixed(1)}k`}
+                                              className="flex items-center gap-1 min-w-0 rounded px-0.5"
                                             >
                                               <span className="text-[9px] text-muted-foreground/40 w-3 flex-shrink-0 tabular-nums">{i + 1}</span>
                                               <span className="text-[11px] text-foreground truncate flex-1">{p.name}</span>
@@ -1808,18 +1802,13 @@ function percentileLabel(rank: number, total: number): string {
   return `Bot ${100 - pct}%`;
 }
 
-// One clickable roster row, shared by every sub-section of a position column
+// Roster row, shared by every sub-section of a position column
 // (Starters, Bench, IR, Taxi). `muted` dims non-starters; `testIdPrefix` keeps
 // the per-section test ids distinct.
 function GroupPlayerRow({ p, posTextColor, muted, testIdPrefix }: { p: Player; posTextColor: string; muted: boolean; testIdPrefix: string }) {
-  const { openPlayerProfile } = usePlayerProfile();
   return (
     <div
-      role="button"
-      tabIndex={0}
-      onClick={() => openPlayerProfile(p.sleeperId ?? p.id)}
-      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openPlayerProfile(p.sleeperId ?? p.id); } }}
-      className="flex items-center justify-between py-1.5 border-b border-border/10 last:border-0 cursor-pointer rounded -mx-1 px-1 hover:bg-muted/40 transition-colors"
+      className="flex items-center justify-between py-1.5 border-b border-border/10 last:border-0 rounded -mx-1 px-1"
       data-testid={`${testIdPrefix}-${p.id}`}
     >
       <div className="flex items-center gap-1.5 min-w-0">

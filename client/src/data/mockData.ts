@@ -537,14 +537,6 @@ export const NAV_CONFIG: MainTabConfig[] = [
     ],
   },
   {
-    id: "dashboard",
-    label: "My Team",
-    subTabs: [
-      { id: "my-team", label: "Overview" },
-      { id: "share-team", label: "Share My Team" },
-    ],
-  },
-  {
     id: "league-analyzer",
     label: "League Analyzer",
     subTabs: [
@@ -583,6 +575,7 @@ export const NAV_CONFIG: MainTabConfig[] = [
       { id: "draft-board", label: "Draft Board" },
       { id: "adp-explorer", label: "ADP Explorer" },
       { id: "player-availability", label: "Player Availability" },
+      { id: "pick-tracker", label: "Pick Tracker" },
     ],
   },
 ].filter((tab) => tab.id !== "draft" || FEATURES.SHOW_DRAFT_MODULE);

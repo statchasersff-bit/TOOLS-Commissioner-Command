@@ -2,7 +2,6 @@ import { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
-import { usePlayerProfile } from "@/contexts/PlayerProfileContext";
 import { getTierColor } from "@/data/mockData";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
@@ -57,7 +56,6 @@ export function TradeBlockCandidates({
 }: TradeBlockCandidatesProps) {
   const isActual = mode === "actualTradeBlock";
   const isMobile = useIsMobile();
-  const { openPlayerProfile } = usePlayerProfile();
 
   // Default sort: actual-block view leads with most-recently added; otherwise
   // lead with highest dynasty value.
@@ -262,7 +260,6 @@ export function TradeBlockCandidates({
                           team={p.team ?? ""}
                           size="sm"
                           sub={isMobile ? mobileSubLine : ""}
-                          onClick={() => openPlayerProfile(sleeperId)}
                         />
                       </div>
                       <span
