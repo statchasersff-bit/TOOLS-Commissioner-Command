@@ -53,6 +53,7 @@ export const MODULE_ACCESS: Record<string, AccessRequirement> = {
   "trade-center:bulk-trade": "readonly",
   "trade-center:bulk-trades": "readonly",
   "trade-center:trade-block": "readonly",           // Intel
+  "trade-center:trade-review": "readonly",          // Review Center — needs a league
 
   // Research (league-market). Resources (analysis) is self-contained and
   // viewable by anyone. Market Value is league-scoped, so it needs a Sleeper

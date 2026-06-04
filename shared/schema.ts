@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, bigint, boolean, timestamp, serial, jsonb, index } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, bigint, boolean, timestamp, serial, jsonb, numeric, index, unique } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -862,3 +862,526 @@ export const analyticsPageViews = pgTable("analytics_page_views", {
 
 export type AnalyticsSession = typeof analyticsSessions.$inferSelect;
 export type AnalyticsPageView = typeof analyticsPageViews.$inferSelect;
+
+// ── League Activity Monitoring (Commissioner Command) ─────────────────────────
+// Phase 1: scan Sleeper for transactions, rosters, users, and matchups; compute
+// per-manager and league-wide activity / inactivity-risk scores; raise alerts so
+// a commissioner can see at a glance which managers and leagues need attention.
+// DECISION-SUPPORT only — never writes back to Sleeper or messages managers.
+// See server/services/commissionerActivity/.
+
+// One row per league/season/week scan summarizing league-wide activity.
+export const commissionerActivitySnapshots = pgTable("commissioner_activity_snapshots", {
+  id: serial("id").primaryKey(),
+  leagueId: text("league_id").notNull(),
+  season: text("season").notNull(),
+  week: integer("week").notNull(),
+
+  totalTransactions: integer("total_transactions").default(0),
+  totalTrades: integer("total_trades").default(0),
+  totalWaivers: integer("total_waivers").default(0),
+  totalFreeAgentMoves: integer("total_free_agent_moves").default(0),
+  totalLineupChanges: integer("total_lineup_changes").default(0),
+  totalEmptyStarterSlots: integer("total_empty_starter_slots").default(0),
+
+  activeManagerCount: integer("active_manager_count").default(0),
+  inactiveManagerCount: integer("inactive_manager_count").default(0),
+
+  leagueActivityScore: integer("league_activity_score").default(0),
+  leagueActivityLabel: text("league_activity_label").default("unknown"),
+
+  rawSummary: jsonb("raw_summary").default(sql`'{}'::jsonb`),
+
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (t) => ({
+  uniq: unique("commissioner_activity_snapshots_key").on(t.leagueId, t.season, t.week),
+  leagueIdx: index("commissioner_activity_snapshots_league_idx").on(t.leagueId),
+}));
+
+// One row per manager (roster) per league/season/week.
+export const commissionerManagerActivity = pgTable("commissioner_manager_activity", {
+  id: serial("id").primaryKey(),
+  leagueId: text("league_id").notNull(),
+  season: text("season").notNull(),
+  week: integer("week").notNull(),
+
+  rosterId: integer("roster_id").notNull(),
+  ownerId: text("owner_id"),
+  managerName: text("manager_name"),
+  teamName: text("team_name"),
+
+  transactionsCount: integer("transactions_count").default(0),
+  tradesCount: integer("trades_count").default(0),
+  waiverCount: integer("waiver_count").default(0),
+  freeAgentCount: integer("free_agent_count").default(0),
+  addsCount: integer("adds_count").default(0),
+  dropsCount: integer("drops_count").default(0),
+
+  lineupChanged: boolean("lineup_changed").default(false),
+  lineupChangeCount: integer("lineup_change_count").default(0),
+  emptyStarterSlots: integer("empty_starter_slots").default(0),
+
+  lastTransactionTs: bigint("last_transaction_ts", { mode: "number" }),
+  lastLineupChangeTs: bigint("last_lineup_change_ts", { mode: "number" }),
+
+  weeksSinceTransaction: integer("weeks_since_transaction"),
+  weeksSinceLineupChange: integer("weeks_since_lineup_change"),
+
+  activityScore: integer("activity_score").default(0),
+  inactivityRiskScore: integer("inactivity_risk_score").default(0),
+  activityLabel: text("activity_label").default("unknown"),
+
+  flags: jsonb("flags").default(sql`'[]'::jsonb`),
+
+  rawRoster: jsonb("raw_roster").default(sql`'{}'::jsonb`),
+  rawMatchup: jsonb("raw_matchup").default(sql`'{}'::jsonb`),
+
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (t) => ({
+  uniq: unique("commissioner_manager_activity_key").on(t.leagueId, t.season, t.week, t.rosterId),
+  leagueIdx: index("commissioner_manager_activity_league_idx").on(t.leagueId),
+}));
+
+// Detailed normalized activity events (trades, waivers, FA moves, lineup events).
+export const commissionerActivityEvents = pgTable("commissioner_activity_events", {
+  id: serial("id").primaryKey(),
+  leagueId: text("league_id").notNull(),
+  season: text("season").notNull(),
+  week: integer("week").notNull(),
+
+  rosterId: integer("roster_id"),
+  ownerId: text("owner_id"),
+
+  eventType: text("event_type").notNull(),
+  eventTitle: text("event_title").notNull(),
+  eventDescription: text("event_description"),
+
+  transactionId: text("transaction_id"),
+  relatedPlayerIds: jsonb("related_player_ids").default(sql`'[]'::jsonb`),
+  relatedRosterIds: jsonb("related_roster_ids").default(sql`'[]'::jsonb`),
+
+  eventTs: bigint("event_ts", { mode: "number" }),
+  severity: text("severity").default("info"),
+
+  rawEvent: jsonb("raw_event").default(sql`'{}'::jsonb`),
+
+  createdAt: timestamp("created_at").defaultNow(),
+}, (t) => ({
+  leagueWeekIdx: index("commissioner_activity_events_league_week_idx").on(t.leagueId, t.season, t.week),
+  txnIdx: index("commissioner_activity_events_txn_idx").on(t.transactionId),
+}));
+
+// Unresolved (and historical) alerts for commissioner action.
+export const commissionerActivityAlerts = pgTable("commissioner_activity_alerts", {
+  id: serial("id").primaryKey(),
+  leagueId: text("league_id").notNull(),
+  season: text("season").notNull(),
+  week: integer("week"),
+
+  rosterId: integer("roster_id"),
+  ownerId: text("owner_id"),
+
+  alertType: text("alert_type").notNull(),
+  severity: text("severity").notNull(),
+
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+
+  // open | acknowledged | resolved | dismissed
+  status: text("status").default("open"),
+  notes: text("notes"),
+
+  createdAt: timestamp("created_at").defaultNow(),
+  resolvedAt: timestamp("resolved_at"),
+}, (t) => ({
+  leagueIdx: index("commissioner_activity_alerts_league_idx").on(t.leagueId),
+  statusIdx: index("commissioner_activity_alerts_status_idx").on(t.status),
+  // One alert per (league, season, week, roster, alertType) so re-scans update
+  // rather than duplicate.
+  dedupe: unique("commissioner_activity_alerts_dedupe_key").on(
+    t.leagueId, t.season, t.week, t.rosterId, t.alertType,
+  ),
+}));
+
+// League-level activity thresholds (one row per league).
+export const commissionerActivitySettings = pgTable("commissioner_activity_settings", {
+  id: serial("id").primaryKey(),
+  leagueId: text("league_id").notNull().unique(),
+
+  inactiveTransactionWeeks: integer("inactive_transaction_weeks").default(3),
+  inactiveLineupWeeks: integer("inactive_lineup_weeks").default(2),
+  unchangedLineupWeeks: integer("unchanged_lineup_weeks").default(2),
+
+  flagEmptyStarters: boolean("flag_empty_starters").default(true),
+  flagNoTransactions: boolean("flag_no_transactions").default(true),
+  flagUnchangedLineups: boolean("flag_unchanged_lineups").default(true),
+  flagLowLeagueActivity: boolean("flag_low_league_activity").default(true),
+
+  lowActivityScoreThreshold: integer("low_activity_score_threshold").default(40),
+  inactiveManagerScoreThreshold: integer("inactive_manager_score_threshold").default(60),
+
+  ignoreLineupChecksInOffseason: boolean("ignore_lineup_checks_in_offseason").default(true),
+  ignoreLineupChecksForBestBall: boolean("ignore_lineup_checks_for_best_ball").default(true),
+  includeTradesInActivityScore: boolean("include_trades_in_activity_score").default(true),
+  includeWaiversInActivityScore: boolean("include_waivers_in_activity_score").default(true),
+  includeFreeAgentMovesInActivityScore: boolean("include_free_agent_moves_in_activity_score").default(true),
+
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export type CommissionerActivitySnapshot = typeof commissionerActivitySnapshots.$inferSelect;
+export type InsertCommissionerActivitySnapshot = typeof commissionerActivitySnapshots.$inferInsert;
+export type CommissionerManagerActivity = typeof commissionerManagerActivity.$inferSelect;
+export type InsertCommissionerManagerActivity = typeof commissionerManagerActivity.$inferInsert;
+export type CommissionerActivityEvent = typeof commissionerActivityEvents.$inferSelect;
+export type InsertCommissionerActivityEvent = typeof commissionerActivityEvents.$inferInsert;
+export type CommissionerActivityAlert = typeof commissionerActivityAlerts.$inferSelect;
+export type InsertCommissionerActivityAlert = typeof commissionerActivityAlerts.$inferInsert;
+export type CommissionerActivitySettings = typeof commissionerActivitySettings.$inferSelect;
+export type InsertCommissionerActivitySettings = typeof commissionerActivitySettings.$inferInsert;
+
+// ── Trade Review Center (Commissioner decision-support) ───────────────────────
+// Phase 1 of the Trade Review Center: ingest Sleeper trade transactions, store
+// them locally, normalize the assets moved (players / picks / FAAB), score value
+// + risk, raise review flags, and let a commissioner record review decisions and
+// notes. This is a DECISION-SUPPORT system only — nothing here approves, rejects,
+// reverses, or writes back to Sleeper. See server/services/commissionerTrades/.
+
+// One row per Sleeper trade transaction (deduped on sleeperTransactionId).
+export const commissionerTrades = pgTable("commissioner_trades", {
+  id: serial("id").primaryKey(),
+  leagueId: text("league_id").notNull(),
+  // Sleeper's transaction_id — the natural unique key used to ignore re-ingests.
+  sleeperTransactionId: text("sleeper_transaction_id").notNull().unique(),
+  season: text("season"),
+  week: integer("week"),
+  // Sleeper transaction status ("complete", etc).
+  status: text("status"),
+  type: text("type").default("trade"),
+  // Sleeper epoch-millis timestamps (created / status_updated).
+  createdTs: bigint("created_ts", { mode: "number" }),
+  statusUpdatedTs: bigint("status_updated_ts", { mode: "number" }),
+  // Roster ids involved + the roster ids that consented (Sleeper consenter_ids).
+  rosterIds: jsonb("roster_ids").notNull().default(sql`'[]'::jsonb`),
+  consenterIds: jsonb("consenter_ids").notNull().default(sql`'[]'::jsonb`),
+  // The raw Sleeper transaction, kept verbatim for re-parsing / audit.
+  rawTransaction: jsonb("raw_transaction").notNull(),
+  // Computed value received by each roster, keyed by roster id (string).
+  totalValueByRoster: jsonb("total_value_by_roster").notNull().default(sql`'{}'::jsonb`),
+  valueDiffAbs: numeric("value_diff_abs").default("0"),
+  valueDiffPct: numeric("value_diff_pct").default("0"),
+  riskScore: integer("risk_score").default(0),
+  fairnessScore: integer("fairness_score").default(100),
+  // unreviewed | reviewed | watchlist | disputed | no_action
+  reviewStatus: text("review_status").default("unreviewed"),
+  summary: text("summary"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (t) => ({
+  leagueIdx: index("commissioner_trades_league_idx").on(t.leagueId),
+  reviewIdx: index("commissioner_trades_review_idx").on(t.reviewStatus),
+}));
+
+// One row per player / pick / FAAB asset moved within a trade.
+export const commissionerTradeAssets = pgTable("commissioner_trade_assets", {
+  id: serial("id").primaryKey(),
+  tradeId: integer("trade_id")
+    .notNull()
+    .references(() => commissionerTrades.id, { onDelete: "cascade" }),
+  leagueId: text("league_id").notNull(),
+  // player | pick | faab
+  assetType: text("asset_type").notNull(),
+  playerId: text("player_id"),
+  playerName: text("player_name"),
+  position: text("position"),
+  team: text("team"),
+  pickSeason: text("pick_season"),
+  pickRound: integer("pick_round"),
+  pickOriginalRosterId: integer("pick_original_roster_id"),
+  faabAmount: numeric("faab_amount"),
+  fromRosterId: integer("from_roster_id"),
+  toRosterId: integer("to_roster_id"),
+  assetValue: numeric("asset_value").default("0"),
+  // Where the value came from: "fantasycalc" | "pick_table" | "faab" | "fallback"
+  assetValueSource: text("asset_value_source"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (t) => ({
+  tradeIdx: index("commissioner_trade_assets_trade_idx").on(t.tradeId),
+}));
+
+// Review flags raised for a trade (lopsided, future pick, repeat partner, etc).
+export const commissionerTradeFlags = pgTable("commissioner_trade_flags", {
+  id: serial("id").primaryKey(),
+  tradeId: integer("trade_id")
+    .notNull()
+    .references(() => commissionerTrades.id, { onDelete: "cascade" }),
+  flagType: text("flag_type").notNull(),
+  // info | low | medium | high | critical
+  severity: text("severity").notNull(),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (t) => ({
+  tradeIdx: index("commissioner_trade_flags_trade_idx").on(t.tradeId),
+}));
+
+// Audit log of commissioner review decisions + notes for a trade.
+export const commissionerTradeReviews = pgTable("commissioner_trade_reviews", {
+  id: serial("id").primaryKey(),
+  tradeId: integer("trade_id")
+    .notNull()
+    .references(() => commissionerTrades.id, { onDelete: "cascade" }),
+  reviewerUserId: text("reviewer_user_id"),
+  reviewStatus: text("review_status").notNull(),
+  notes: text("notes"),
+  decisionReason: text("decision_reason"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (t) => ({
+  tradeIdx: index("commissioner_trade_reviews_trade_idx").on(t.tradeId),
+}));
+
+// Aggregated manager-to-manager trade history. The pair is normalized so the
+// lower roster id is always rosterIdA — one row per unordered pair per league.
+export const commissionerManagerTradeStats = pgTable("commissioner_manager_trade_stats", {
+  id: serial("id").primaryKey(),
+  leagueId: text("league_id").notNull(),
+  rosterIdA: integer("roster_id_a").notNull(),
+  rosterIdB: integer("roster_id_b").notNull(),
+  tradeCount: integer("trade_count").default(0),
+  lastTradeTs: bigint("last_trade_ts", { mode: "number" }),
+  totalValueMoved: numeric("total_value_moved").default("0"),
+  avgValueDiffPct: numeric("avg_value_diff_pct").default("0"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (t) => ({
+  pairUnique: unique("commissioner_manager_trade_stats_pair_key").on(t.leagueId, t.rosterIdA, t.rosterIdB),
+}));
+
+export type CommissionerTrade = typeof commissionerTrades.$inferSelect;
+export type InsertCommissionerTrade = typeof commissionerTrades.$inferInsert;
+export type CommissionerTradeAsset = typeof commissionerTradeAssets.$inferSelect;
+export type CommissionerTradeFlag = typeof commissionerTradeFlags.$inferSelect;
+export type CommissionerTradeReview = typeof commissionerTradeReviews.$inferSelect;
+export type CommissionerManagerTradeStat = typeof commissionerManagerTradeStats.$inferSelect;
+
+// ── Lineup Integrity & Anti-Tanking (Commissioner decision-support) ───────────
+// Phase 1: scan weekly Sleeper matchups/rosters, detect empty/bye/inactive/IR
+// starters and suspicious benchings, estimate an optimal lineup, score lineup
+// integrity + tanking risk, raise alerts, and let a commissioner record notes,
+// strikes, and decisions. DECISION-SUPPORT ONLY — nothing here changes lineups,
+// messages managers, or alters standings. Neutral language by design: the
+// system surfaces "potential signals", never accusations. See
+// server/services/lineupIntegrity/.
+
+// One lineup check per roster per week.
+export const commissionerLineupChecks = pgTable("commissioner_lineup_checks", {
+  id: serial("id").primaryKey(),
+
+  leagueId: text("league_id").notNull(),
+  season: text("season").notNull(),
+  week: integer("week").notNull(),
+
+  rosterId: integer("roster_id").notNull(),
+  ownerId: text("owner_id"),
+  managerName: text("manager_name"),
+  teamName: text("team_name"),
+
+  starters: jsonb("starters").default(sql`'[]'::jsonb`),
+  benchPlayers: jsonb("bench_players").default(sql`'[]'::jsonb`),
+  allPlayers: jsonb("all_players").default(sql`'[]'::jsonb`),
+
+  emptyStarterSlots: integer("empty_starter_slots").default(0),
+  byeStarters: integer("bye_starters").default(0),
+  inactiveStarters: integer("inactive_starters").default(0),
+  irStarters: integer("ir_starters").default(0),
+  doubtfulStarters: integer("doubtful_starters").default(0),
+
+  suspiciousBenchings: integer("suspicious_benchings").default(0),
+  optimalityGap: numeric("optimality_gap").default("0"),
+  optimalityGapPct: numeric("optimality_gap_pct").default("0"),
+
+  projectedStarterPoints: numeric("projected_starter_points").default("0"),
+  projectedOptimalPoints: numeric("projected_optimal_points").default("0"),
+
+  lineupIntegrityScore: integer("lineup_integrity_score").default(100),
+  tankingRiskScore: integer("tanking_risk_score").default(0),
+
+  // low | medium | high | critical (tanking) — stored as a quick filter label.
+  riskLabel: text("risk_label").default("low"),
+  // none | needs_review | reviewed | warning_sent | strike_issued | dismissed | resolved
+  reviewStatus: text("review_status").default("none"),
+
+  flags: jsonb("flags").default(sql`'[]'::jsonb`),
+  rawMatchup: jsonb("raw_matchup").default(sql`'{}'::jsonb`),
+
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (t) => ({
+  leagueWeekIdx: index("commissioner_lineup_checks_league_week_idx").on(t.leagueId, t.season, t.week),
+  reviewIdx: index("commissioner_lineup_checks_review_idx").on(t.reviewStatus),
+  rosterWeekUnique: unique("commissioner_lineup_checks_roster_week_key").on(t.leagueId, t.season, t.week, t.rosterId),
+}));
+
+// One row per evaluated starter/bench player within a lineup check.
+export const commissionerLineupPlayerChecks = pgTable("commissioner_lineup_player_checks", {
+  id: serial("id").primaryKey(),
+
+  lineupCheckId: integer("lineup_check_id")
+    .references(() => commissionerLineupChecks.id, { onDelete: "cascade" }),
+
+  leagueId: text("league_id").notNull(),
+  season: text("season").notNull(),
+  week: integer("week").notNull(),
+
+  rosterId: integer("roster_id").notNull(),
+  playerId: text("player_id").notNull(),
+  playerName: text("player_name"),
+  position: text("position"),
+  team: text("team"),
+
+  lineupSlot: text("lineup_slot"),
+  isStarter: boolean("is_starter").default(false),
+  isBench: boolean("is_bench").default(false),
+
+  injuryStatus: text("injury_status"),
+  activeStatus: text("active_status"),
+  isOnBye: boolean("is_on_bye").default(false),
+  isInactive: boolean("is_inactive").default(false),
+  isIr: boolean("is_ir").default(false),
+  isDoubtful: boolean("is_doubtful").default(false),
+
+  projection: numeric("projection").default("0"),
+  playerValue: numeric("player_value").default("0"),
+  rankScore: numeric("rank_score").default("0"),
+
+  betterBenchOption: boolean("better_bench_option").default(false),
+  betterBenchPlayerId: text("better_bench_player_id"),
+  betterBenchPlayerName: text("better_bench_player_name"),
+  valueGapVsBench: numeric("value_gap_vs_bench").default("0"),
+  projectionGapVsBench: numeric("projection_gap_vs_bench").default("0"),
+
+  flags: jsonb("flags").default(sql`'[]'::jsonb`),
+
+  createdAt: timestamp("created_at").defaultNow(),
+}, (t) => ({
+  checkIdx: index("commissioner_lineup_player_checks_check_idx").on(t.lineupCheckId),
+}));
+
+// Actionable alerts derived from lineup checks.
+export const commissionerLineupAlerts = pgTable("commissioner_lineup_alerts", {
+  id: serial("id").primaryKey(),
+
+  leagueId: text("league_id").notNull(),
+  season: text("season").notNull(),
+  week: integer("week").notNull(),
+
+  lineupCheckId: integer("lineup_check_id")
+    .references(() => commissionerLineupChecks.id, { onDelete: "cascade" }),
+
+  rosterId: integer("roster_id").notNull(),
+  ownerId: text("owner_id"),
+
+  // empty_starter | bye_starter | inactive_starter | ir_starter | doubtful_starter
+  // | suspicious_benching | large_optimality_gap | repeat_lineup_issue
+  // | potential_tanking | playoff_integrity
+  alertType: text("alert_type").notNull(),
+  // info | low | medium | high | critical
+  severity: text("severity").notNull(),
+
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+
+  suggestedAction: text("suggested_action"),
+
+  // open | acknowledged | resolved | dismissed
+  status: text("status").default("open"),
+  notes: text("notes"),
+
+  createdAt: timestamp("created_at").defaultNow(),
+  acknowledgedAt: timestamp("acknowledged_at"),
+  resolvedAt: timestamp("resolved_at"),
+}, (t) => ({
+  leagueWeekIdx: index("commissioner_lineup_alerts_league_week_idx").on(t.leagueId, t.season, t.week),
+  statusIdx: index("commissioner_lineup_alerts_status_idx").on(t.status),
+}));
+
+// Official commissioner warnings / strikes issued to a manager.
+export const commissionerLineupStrikes = pgTable("commissioner_lineup_strikes", {
+  id: serial("id").primaryKey(),
+
+  leagueId: text("league_id").notNull(),
+  season: text("season").notNull(),
+  week: integer("week").notNull(),
+
+  rosterId: integer("roster_id").notNull(),
+  ownerId: text("owner_id"),
+  managerName: text("manager_name"),
+  teamName: text("team_name"),
+
+  // empty_lineup | invalid_starter | repeat_issue | tanking_review | manual
+  strikeType: text("strike_type").notNull(),
+  // info | low | medium | high | critical
+  severity: text("severity").notNull(),
+
+  reason: text("reason").notNull(),
+  evidence: jsonb("evidence").default(sql`'{}'::jsonb`),
+
+  commissionerUserId: text("commissioner_user_id"),
+  commissionerNotes: text("commissioner_notes"),
+
+  // active | overturned | resolved | expired
+  status: text("status").default("active"),
+
+  createdAt: timestamp("created_at").defaultNow(),
+  resolvedAt: timestamp("resolved_at"),
+}, (t) => ({
+  leagueIdx: index("commissioner_lineup_strikes_league_idx").on(t.leagueId, t.season),
+  rosterIdx: index("commissioner_lineup_strikes_roster_idx").on(t.leagueId, t.rosterId),
+}));
+
+// League-level lineup integrity rules / thresholds.
+export const commissionerLineupSettings = pgTable("commissioner_lineup_settings", {
+  id: serial("id").primaryKey(),
+
+  leagueId: text("league_id").notNull().unique(),
+
+  enableEmptySlotChecks: boolean("enable_empty_slot_checks").default(true),
+  enableByeStarterChecks: boolean("enable_bye_starter_checks").default(true),
+  enableInactiveStarterChecks: boolean("enable_inactive_starter_checks").default(true),
+  enableSuspiciousBenchingChecks: boolean("enable_suspicious_benching_checks").default(true),
+  enableTankingRiskChecks: boolean("enable_tanking_risk_checks").default(true),
+
+  suspiciousBenchingValueGap: numeric("suspicious_benching_value_gap").default("1500"),
+  suspiciousBenchingProjectionGap: numeric("suspicious_benching_projection_gap").default("6"),
+  optimalityGapWarning: numeric("optimality_gap_warning").default("12"),
+  optimalityGapCritical: numeric("optimality_gap_critical").default("25"),
+
+  repeatIssueWeeks: integer("repeat_issue_weeks").default(2),
+  strikeAfterRepeatIssues: integer("strike_after_repeat_issues").default(2),
+
+  playoffIntegrityStartWeek: integer("playoff_integrity_start_week").default(10),
+
+  ignoreLineupChecksInOffseason: boolean("ignore_lineup_checks_in_offseason").default(true),
+  ignoreLineupChecksForBestBall: boolean("ignore_lineup_checks_for_best_ball").default(true),
+
+  autoCreateAlerts: boolean("auto_create_alerts").default(true),
+  autoCreateStrikes: boolean("auto_create_strikes").default(false),
+
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export type CommissionerLineupCheck = typeof commissionerLineupChecks.$inferSelect;
+export type InsertCommissionerLineupCheck = typeof commissionerLineupChecks.$inferInsert;
+export type CommissionerLineupPlayerCheck = typeof commissionerLineupPlayerChecks.$inferSelect;
+export type InsertCommissionerLineupPlayerCheck = typeof commissionerLineupPlayerChecks.$inferInsert;
+export type CommissionerLineupAlert = typeof commissionerLineupAlerts.$inferSelect;
+export type InsertCommissionerLineupAlert = typeof commissionerLineupAlerts.$inferInsert;
+export type CommissionerLineupStrike = typeof commissionerLineupStrikes.$inferSelect;
+export type InsertCommissionerLineupStrike = typeof commissionerLineupStrikes.$inferInsert;
+export type CommissionerLineupSettings = typeof commissionerLineupSettings.$inferSelect;
+export type InsertCommissionerLineupSettings = typeof commissionerLineupSettings.$inferInsert;

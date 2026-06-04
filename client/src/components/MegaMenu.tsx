@@ -62,6 +62,7 @@ const MEGA_DATA: Record<string, MegaSection[]> = {
         { subId: "positional-analysis", label: "Finder",     description: "Find trade targets by position & value",      icon: Search     },
         { subId: "trade-calculator",    label: "Calculator", description: "Value-based trade evaluator",                 icon: Calculator },
         { subId: "trade-block",         label: "Intel",      description: "Trade block activity & hot markets",          icon: Eye        },
+        { subId: "trade-review",        label: "Review Center", description: "Auto-track league trades, flag risk & document commissioner reviews", icon: ClipboardList },
       ],
     },
   ],

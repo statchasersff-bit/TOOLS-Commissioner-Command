@@ -72,6 +72,7 @@ const CommandersReport  = lazy(() => import("./tabs/CommandersReport").then(m =>
 const TradeBlockScanner    = lazy(() => import("./tabs/TradeCenter").then(m => ({ default: m.TradeBlockScanner })));
 const TradeCalculatorView  = lazy(() => import("./tabs/TradeCenter").then(m => ({ default: m.TradeCalculatorView })));
 const TradeDatabase        = lazy(() => import("./tabs/TradeCenter").then(m => ({ default: m.TradeDatabase })));
+const TradeReviewCenter    = lazy(() => import("./tabs/TradeReviewCenter").then(m => ({ default: m.TradeReviewCenter })));
 const TradeSync         = lazy(() => import("./tabs/TradeSync"));
 const PositionalAnalysis= lazy(() => import("./tabs/PositionalAnalysis").then(m => ({ default: m.PositionalAnalysis })));
 const MarketValue       = lazy(() => import("./tabs/LeagueMarket").then(m => ({ default: m.MarketValue })));
@@ -88,6 +89,8 @@ const AboutPage         = lazy(() => import("@/components/AboutModal").then(m =>
 const FeedbackPage      = lazy(() => import("@/components/FeedbackPage").then(m => ({ default: m.FeedbackPage })));
 const RedraftCommandPage       = lazy(() => import("@/components/ComingSoonCommand").then(m => ({ default: m.RedraftCommandPage })));
 const CommissionerCommandPage  = lazy(() => import("@/components/ComingSoonCommand").then(m => ({ default: m.CommissionerCommandPage })));
+const CommissionerActivity     = lazy(() => import("./tabs/CommissionerActivity"));
+const CommissionerCommand      = lazy(() => import("./tabs/CommissionerCommand"));
 const ManageAccount            = lazy(() => import("./tabs/ManageAccount").then(m => ({ default: m.ManageAccount })));
 const SettingsPage             = lazy(() => import("./tabs/SettingsPage").then(m => ({ default: m.SettingsPage })));
 const TermsPage         = lazy(() => import("@/components/LegalModals").then(m => ({ default: m.TermsPage })));
@@ -545,7 +548,7 @@ export default function DynastyCommandCenter({ params, managerProfileId, valueSo
     if (activeMainTab === "manage-account") return <ManageAccount />;
     if (activeMainTab === "settings") return <SettingsPage initialTab={activeSubTab === "leagues" ? "leagues" : "general"} />;
     if (activeMainTab === "redraft-command") return <RedraftCommandPage onBack={() => handleMainTabChange("portfolio")} />;
-    if (activeMainTab === "commissioner-command") return <CommissionerCommandPage onBack={() => handleMainTabChange("portfolio")} />;
+    if (activeMainTab === "commissioner-command") return <CommissionerCommand league={league} onBack={() => handleMainTabChange("portfolio")} />;
     if (activeMainTab === "terms") return <TermsPage onNavigate={handleMainTabChange} />;
     if (activeMainTab === "privacy") return <PrivacyPage onNavigate={handleMainTabChange} />;
     if (activeMainTab === "cookies") return <CookiesPage onNavigate={handleMainTabChange} />;
@@ -631,6 +634,7 @@ export default function DynastyCommandCenter({ params, managerProfileId, valueSo
       case "trade-center:trade-database":        return <TradeSectionBoundary><TradeDatabase league={league} /></TradeSectionBoundary>;
       case "trade-center:positional-analysis":   return <PositionalAnalysis league={league} userTeam={userTeam} />;
       case "trade-center:trade-block":           return <TradeBlockScanner league={league} />;
+      case "trade-center:trade-review":          return <TradeSectionBoundary><TradeReviewCenter league={league} /></TradeSectionBoundary>;
       case "league-market:market-value":         return <MarketValue league={league} />;
       case "league-market:analysis":             return <Analysis />;
       case "league-market:position-stats":       return <PositionStats />;

@@ -95,6 +95,9 @@ import { registerBillingRoutes } from "./billingRoutes";
 import { registerSleeperDraftPickRoutes } from "./sleeperDraftPickRoutes";
 import { registerDiscordRoutes } from "./discord";
 import { registerCommandersReportRoutes } from "./commandersReportRoutes";
+import { registerCommissionerActivityRoutes } from "./routes/commissionerActivityRoutes";
+import { registerCommissionerTradesRoutes } from "./commissionerTradesRoutes";
+import { registerLineupIntegrityRoutes } from "./lineupIntegrityRoutes";
 import { registerAnalyticsRoutes } from "./analytics";
 import { registerYahooRoutes } from "./yahooRoutes";
 import { requireReadOnlySleeperContext } from "./accessMiddleware";
@@ -255,6 +258,9 @@ export async function registerRoutes(
   registerSleeperDraftPickRoutes(app);
   registerDiscordRoutes(app);
   registerCommandersReportRoutes(app);
+  registerCommissionerActivityRoutes(app);
+  registerCommissionerTradesRoutes(app);
+  registerLineupIntegrityRoutes(app);
   registerAnalyticsRoutes(app);
   registerYahooRoutes(app);
 
